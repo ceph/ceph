@@ -20,6 +20,11 @@ add_executable(unittest_http_manager test_http_manager.cc)
 add_ceph_unittest(unittest_http_manager)
 target_link_libraries(unittest_http_manager rgw_a)
 
+# unitttest_rgw_reshard_wait
+add_executable(unittest_rgw_reshard_wait test_rgw_reshard_wait.cc)
+add_ceph_unittest(unittest_rgw_reshard_wait)
+target_link_libraries(unittest_rgw_reshard_wait rgw_a)
+
 set(test_rgw_a_src
   test_rgw_common.cc)
 add_library(test_rgw_a STATIC ${test_rgw_a_src})

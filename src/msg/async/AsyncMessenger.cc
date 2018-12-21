@@ -578,6 +578,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(
     // FIXME: for ipv4 vs ipv6, check whether local host can handle ipv6 before
     // trying it?  for now, just pick whichever is listed first.
     target = a;
+    break;
   }
 
   // create connection

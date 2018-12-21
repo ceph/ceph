@@ -31,7 +31,7 @@ class Module(MgrModule):
             "distro"
     ]
 
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {
             'name': 'url',
             'default': 'https://telemetry.ceph.com/report'
@@ -92,7 +92,7 @@ class Module(MgrModule):
 
     @property
     def config_keys(self):
-        return dict((o['name'], o.get('default', None)) for o in self.OPTIONS)
+        return dict((o['name'], o.get('default', None)) for o in self.MODULE_OPTIONS)
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
@@ -159,7 +159,7 @@ class Module(MgrModule):
 
     def init_module_config(self):
         for key, default in self.config_keys.items():
-            self.set_config_option(key, self.get_config(key, default))
+            self.set_config_option(key, self.get_module_option(key, default))
 
         self.last_upload = self.get_store('last_upload', None)
         if self.last_upload is not None:
@@ -308,7 +308,7 @@ class Module(MgrModule):
 
             self.log.debug('Setting configuration option %s to %s', key, value)
             self.set_config_option(key, value)
-            self.set_config(key, value)
+            self.set_module_option(key, value)
             return 0, 'Configuration option {0} updated'.format(key), ''
         elif command['prefix'] == 'telemetry send':
             self.last_report = self.compile_report()

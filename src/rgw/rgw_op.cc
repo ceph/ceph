@@ -46,6 +46,7 @@
 #include "rgw_role.h"
 #include "rgw_tag_s3.h"
 #include "rgw_putobj_processor.h"
+#include "rgw_crypt.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -267,11 +268,11 @@ static int get_obj_policy_from_attr(CephContext *cct,
  * object: name of the object to get the ACL for.
  * Returns: 0 on success, -ERR# otherwise.
  */
-static int get_bucket_policy_from_attr(CephContext *cct,
-				       RGWRados *store,
-				       RGWBucketInfo& bucket_info,
-				       map<string, bufferlist>& bucket_attrs,
-				       RGWAccessControlPolicy *policy)
+int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
+                                       RGWRados *store,
+                                       RGWBucketInfo& bucket_info,
+                                       map<string, bufferlist>& bucket_attrs,
+                                       RGWAccessControlPolicy *policy)
 {
   return get_bucket_instance_policy_from_attr(cct, store, bucket_info, bucket_attrs, policy);
 }
@@ -350,7 +351,7 @@ static int read_bucket_policy(RGWRados *store,
     return 0;
   }
 
-  int ret = get_bucket_policy_from_attr(s->cct, store, bucket_info, bucket_attrs, policy);
+  int ret = rgw_op_get_bucket_policy_from_attr(s->cct, store, bucket_info, bucket_attrs, policy);
   if (ret == -ENOENT) {
       ret = -ERR_NO_SUCH_BUCKET;
   }
@@ -395,7 +396,7 @@ static int read_obj_policy(RGWRados *store,
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
     RGWAccessControlPolicy bucket_policy(s->cct);
-    ret = get_bucket_policy_from_attr(s->cct, store, bucket_info, bucket_attrs, &bucket_policy);
+    ret = rgw_op_get_bucket_policy_from_attr(s->cct, store, bucket_info, bucket_attrs, &bucket_policy);
     if (ret < 0) {
       return ret;
     }
@@ -2831,8 +2832,8 @@ void RGWCreateBucket::execute()
   s->bucket_owner.set_id(s->user->user_id);
   s->bucket_owner.set_name(s->user->display_name);
   if (s->bucket_exists) {
-    int r = get_bucket_policy_from_attr(s->cct, store, s->bucket_info,
-                                        s->bucket_attrs, &old_policy);
+    int r = rgw_op_get_bucket_policy_from_attr(s->cct, store, s->bucket_info,
+                                               s->bucket_attrs, &old_policy);
     if (r >= 0)  {
       if (old_policy.get_owner().get_id().compare(s->user->user_id) != 0) {
         op_ret = -EEXIST;
@@ -4932,18 +4933,6 @@ void RGWPutACLs::execute()
   }
 }
 
-static void get_lc_oid(struct req_state *s, string& oid)
-{
-  string shard_id = s->bucket.name + ':' +s->bucket.bucket_id;
-  int max_objs = (s->cct->_conf->rgw_lc_max_objs > HASH_PRIME)?HASH_PRIME:s->cct->_conf->rgw_lc_max_objs;
-  int index = ceph_str_hash_linux(shard_id.c_str(), shard_id.size()) % HASH_PRIME % max_objs;
-  oid = lc_oid_prefix;
-  char buf[32];
-  snprintf(buf, 32, ".%d", index);
-  oid.append(buf);
-  return;
-}
-
 void RGWPutLC::execute()
 {
   bufferlist bl;
@@ -5017,45 +5006,11 @@ void RGWPutLC::execute()
     new_config.to_xml(*_dout);
     *_dout << dendl;
   }
-  
-  new_config.encode(bl);
-  map<string, bufferlist> attrs;
-  attrs = s->bucket_attrs;
-  attrs[RGW_ATTR_LC] = bl;
-  op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
-  if (op_ret < 0)
+
+  op_ret = store->get_lc()->set_bucket_config(s->bucket_info, s->bucket_attrs, &new_config);
+  if (op_ret < 0) {
     return;
-  string shard_id = s->bucket.tenant + ':' + s->bucket.name + ':' + s->bucket.bucket_id;  
-  string oid; 
-  get_lc_oid(s, oid);
-  pair<string, int> entry(shard_id, lc_uninitial);
-  int max_lock_secs = s->cct->_conf->rgw_lc_lock_max_time;
-  rados::cls::lock::Lock l(lc_index_lock_name); 
-  utime_t time(max_lock_secs, 0);
-  l.set_duration(time);
-  l.set_cookie(cookie);
-  librados::IoCtx *ctx = store->get_lc_pool_ctx();
-  do {
-    op_ret = l.lock_exclusive(ctx, oid);
-    if (op_ret == -EBUSY) {
-      ldpp_dout(this, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
-          << oid << ", sleep 5, try again" << dendl;
-      sleep(5); // XXX: return retryable error
-      continue;
-    }
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
-          << oid << ", ret=" << op_ret << dendl;
-      break;
-    }
-    op_ret = cls_rgw_lc_set_entry(*ctx, oid, entry);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::RGWPutLC() failed to set entry on "
-          << oid << ", ret=" << op_ret << dendl;
-    }
-    break;
-  }while(1);
-  l.unlock(ctx, oid);
+  }
   return;
 }
 
@@ -5070,36 +5025,11 @@ void RGWDeleteLC::execute()
         << s->bucket.name << " returned err=" << op_ret << dendl;
     return;
   }
-  string shard_id = s->bucket.tenant + ':' + s->bucket.name + ':' + s->bucket.bucket_id;
-  pair<string, int> entry(shard_id, lc_uninitial);
-  string oid; 
-  get_lc_oid(s, oid);
-  int max_lock_secs = s->cct->_conf->rgw_lc_lock_max_time;
-  librados::IoCtx *ctx = store->get_lc_pool_ctx();
-  rados::cls::lock::Lock l(lc_index_lock_name);
-  utime_t time(max_lock_secs, 0);
-  l.set_duration(time);
-  do {
-    op_ret = l.lock_exclusive(ctx, oid);
-    if (op_ret == -EBUSY) {
-      ldpp_dout(this, 0) << "RGWLC::RGWDeleteLC() failed to acquire lock on "
-          << oid << ", sleep 5, try again" << dendl;
-      sleep(5); // XXX: return retryable error
-      continue;
-    }
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::RGWDeleteLC() failed to acquire lock on "
-          << oid << ", ret=" << op_ret << dendl;
-      break;
-    }
-    op_ret = cls_rgw_lc_rm_entry(*ctx, oid, entry);
-    if (op_ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::RGWDeleteLC() failed to rm entry on "
-          << oid << ", ret=" << op_ret << dendl;
-    }
-    break;
-  }while(1);
-  l.unlock(ctx, oid);
+
+  op_ret = store->get_lc()->remove_bucket_config(s->bucket_info, s->bucket_attrs);
+  if (op_ret < 0) {
+    return;
+  }
   return;
 }
 
@@ -6362,8 +6292,8 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
 
   if (bucket_exists) {
     RGWAccessControlPolicy old_policy(s->cct);
-    int r = get_bucket_policy_from_attr(s->cct, store, binfo,
-                                        battrs, &old_policy);
+    int r = rgw_op_get_bucket_policy_from_attr(s->cct, store, binfo,
+                                               battrs, &old_policy);
     if (r >= 0)  {
       if (old_policy.get_owner().get_id().compare(s->user->user_id) != 0) {
         op_ret = -EEXIST;
@@ -7018,6 +6948,14 @@ std::ostream& RGWOp::gen_prefix(std::ostream& out) const
 {
   // append <dialect>:<op name> to the prefix
   return s->gen_prefix(out) << s->dialect << ':' << name() << ' ';
+}
+
+void RGWDefaultResponseOp::send_response() {
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
 }
 
 void RGWPutBucketPolicy::send_response()

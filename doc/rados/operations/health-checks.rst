@@ -420,7 +420,7 @@ ___________
 The number of PGs in use in the cluster is below the configurable
 threshold of ``mon_pg_warn_min_per_osd`` PGs per OSD.  This can lead
 to suboptimal distribution and balance of data across the OSDs in
-the cluster, and similar reduce overall performance.
+the cluster, and similarly reduce overall performance.
 
 This may be an expected condition if data pools have not yet been
 created.
@@ -428,6 +428,33 @@ created.
 The PG count for existing pools can be increased or new pools can be created.
 Please refer to :ref:`choosing-number-of-placement-groups` for more
 information.
+
+POOL_TOO_FEW_PGS
+________________
+
+One or more pools should probably have more PGs, based on the amount
+of data that is currently stored in the pool.  This can lead to
+suboptimal distribution and balance of data across the OSDs in the
+cluster, and similarly reduce overall performance.  This warning is
+generated if the ``pg_autoscale_mode`` property on the pool is set to
+``warn``.
+
+To disable the warning, you can disable auto-scaling of PGs for the
+pool entirely with::
+
+  ceph osd pool set <pool-name> pg_autoscale_mode off
+
+To allow the cluster to automatically adjust the number of PGs,::
+
+  ceph osd pool set <pool-name> pg_autoscale_mode on
+
+You can also manually set the number of PGs for the pool to the
+recommended amount with::
+
+  ceph osd pool set <pool-name> pg_num <new-pg-num>
+
+Please refer to :ref:`choosing-number-of-placement-groups` and
+:ref:`pg-autoscaler` for more information.
 
 TOO_MANY_PGS
 ____________
@@ -450,6 +477,63 @@ so marking "out" OSDs "in" (if there are any) can also help::
 
 Please refer to :ref:`choosing-number-of-placement-groups` for more
 information.
+
+POOL_TOO_MANY_PGS
+_________________
+
+One or more pools should probably have more PGs, based on the amount
+of data that is currently stored in the pool.  This can lead to higher
+memory utilization for OSD daemons, slower peering after cluster state
+changes (like OSD restarts, additions, or removals), and higher load
+on the Manager and Monitor daemons.  This warning is generated if the
+``pg_autoscale_mode`` property on the pool is set to ``warn``.
+
+To disable the warning, you can disable auto-scaling of PGs for the
+pool entirely with::
+
+  ceph osd pool set <pool-name> pg_autoscale_mode off
+
+To allow the cluster to automatically adjust the number of PGs,::
+
+  ceph osd pool set <pool-name> pg_autoscale_mode on
+
+You can also manually set the number of PGs for the pool to the
+recommended amount with::
+
+  ceph osd pool set <pool-name> pg_num <new-pg-num>
+
+Please refer to :ref:`choosing-number-of-placement-groups` and
+:ref:`pg-autoscaler` for more information.
+
+POOL_TARGET_SIZE_RATIO_OVERCOMMITTED
+____________________________________
+
+One or more pools have a ``target_size_ratio`` property set to
+estimate the expected size of the pool as a fraction of total storage,
+but the value(s) exceed the total available storage (either by
+themselves or in combination with other pools' actual usage).
+
+This is usually an indication that the ``target_size_ratio`` value for
+the pool is too large and should be reduced or set to zero with::
+
+  ceph osd pool set <pool-name> target_size_ratio 0
+
+For more information, see :ref:`specifying_pool_target_size`.
+
+POOL_TARGET_SIZE_BYTES_OVERCOMMITTED
+____________________________________
+
+One or more pools have a ``target_size_bytes`` property set to
+estimate the expected size of the pool,
+but the value(s) exceed the total available storage (either by
+themselves or in combination with other pools' actual usage).
+
+This is usually an indication that the ``target_size_bytes`` value for
+the pool is too large and should be reduced or set to zero with::
+
+  ceph osd pool set <pool-name> target_size_bytes 0
+
+For more information, see :ref:`specifying_pool_target_size`.
 
 SMALLER_PGP_NUM
 _______________
@@ -482,6 +566,7 @@ not contain as much data have too many PGs.  See the discussion of
 
 The threshold can be raised to silence the health warning by adjusting
 the ``mon_pg_warn_max_object_skew`` config option on the monitors.
+
 
 POOL_APP_NOT_ENABLED
 ____________________

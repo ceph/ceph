@@ -357,6 +357,7 @@ class TokenBucketThrottle {
   };
 
   CephContext *m_cct;
+  const std::string m_name;
   Bucket m_throttle;
   uint64_t m_avg = 0;
   uint64_t m_burst = 0;
@@ -406,10 +407,15 @@ class TokenBucketThrottle {
   double m_schedule_tick = 1.0;
 
 public:
-  TokenBucketThrottle(CephContext *cct, uint64_t capacity, uint64_t avg,
+  TokenBucketThrottle(CephContext *cct, const std::string &name,
+                      uint64_t capacity, uint64_t avg,
                       SafeTimer *timer, Mutex *timer_lock);
   
   ~TokenBucketThrottle();
+
+  const std::string &get_name() {
+    return m_name;
+  }
 
   template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
   void add_blocker(uint64_t c, T *handler, I *item, uint64_t flag) {

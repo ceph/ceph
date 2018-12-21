@@ -210,7 +210,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">595</context>
+          <context context-type="linenumber">598</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/auth/role-form/role-form.component.html</context>
@@ -419,31 +419,31 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">98</context>
+          <context context-type="linenumber">101</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">163</context>
+          <context context-type="linenumber">166</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">195</context>
+          <context context-type="linenumber">198</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">446</context>
+          <context context-type="linenumber">449</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">483</context>
+          <context context-type="linenumber">486</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">539</context>
+          <context context-type="linenumber">542</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">576</context>
+          <context context-type="linenumber">579</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/auth/role-form/role-form.component.html</context>
@@ -659,11 +659,11 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">232</context>
+          <context context-type="linenumber">235</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">371</context>
+          <context context-type="linenumber">374</context>
         </context-group>
       </trans-unit><trans-unit id="eec715de352a6b114713b30b640d319fa78207a0" datatype="html">
         <source>Description</source>
@@ -1041,20 +1041,20 @@
   <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="&lt;strong&gt;"/><x id="INTERPOLATION_1" equiv-text="{{ markActionDescription }}"/><x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="&lt;/strong&gt;"/> if you proceed.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-list/osd-list.component.html</context>
-          <context context-type="linenumber">74</context>
+          <context context-type="linenumber">68</context>
         </context-group>
       </trans-unit><trans-unit id="2d3a73f6440a7d896d74356fe0a725d731e71cbb" datatype="html">
         <source>The OSD is not safe to destroy!</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-list/osd-list.component.html</context>
-          <context context-type="linenumber">83</context>
+          <context context-type="linenumber">77</context>
         </context-group>
       </trans-unit><trans-unit id="9d08116242443953ebbfe10bc2092e0a694b4adf" datatype="html">
         <source><x id="START_TAG_STRONG" ctype="x-strong" equiv-text="&lt;strong&gt;"/>OSD <x id="INTERPOLATION" equiv-text="{{ selection.first().id }}"/><x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="&lt;/strong&gt;"/> will be
   <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="&lt;strong&gt;"/><x id="INTERPOLATION_1" equiv-text="{{ actionDescription }}"/><x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="&lt;/strong&gt;"/> if you proceed.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-list/osd-list.component.html</context>
-          <context context-type="linenumber">85</context>
+          <context context-type="linenumber">79</context>
         </context-group>
       </trans-unit><trans-unit id="d2bcd3296d2850de762fb943060b7e086a893181" datatype="html">
         <source>Health</source>
@@ -1607,11 +1607,11 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">449</context>
+          <context context-type="linenumber">452</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">542</context>
+          <context context-type="linenumber">545</context>
         </context-group>
       </trans-unit><trans-unit id="eabb4db920d9f9b2480cf438468b86e1bea02a9b" datatype="html">
         <source>The chosen name is already in use.</source>
@@ -1655,7 +1655,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">590</context>
+          <context context-type="linenumber">593</context>
         </context-group>
       </trans-unit><trans-unit id="479488ab6e91ecb375484edc78bee3d13467f33f" datatype="html">
         <source>Daemons List</source>
@@ -1713,7 +1713,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">120</context>
+          <context context-type="linenumber">123</context>
         </context-group>
       </trans-unit><trans-unit id="08c74dc9762957593b91f6eb5d65efdfc975bf48" datatype="html">
         <source>Username</source>
@@ -1755,7 +1755,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">130</context>
+          <context context-type="linenumber">133</context>
         </context-group>
       </trans-unit><trans-unit id="2f1c1c0f2bce4c9f92d1a2061e8161cb0006c31a" datatype="html">
         <source>Access key</source>
@@ -1765,7 +1765,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">141</context>
+          <context context-type="linenumber">144</context>
         </context-group>
       </trans-unit><trans-unit id="b864acb67296a9819c1db0069c4c47d8b5ce8f44" datatype="html">
         <source>Secret key</source>
@@ -1783,7 +1783,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">173</context>
+          <context context-type="linenumber">176</context>
         </context-group>
       </trans-unit><trans-unit id="b2841767821d6b66238c34d07e413b0af67aee92" datatype="html">
         <source>Subuser</source>
@@ -1877,31 +1877,37 @@
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
           <context context-type="linenumber">79</context>
         </context-group>
+      </trans-unit><trans-unit id="ca271adf154956b8fcb28f4f50a37acb3057ff7c" datatype="html">
+        <source>The chosen email address is already in use.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
+          <context context-type="linenumber">82</context>
+        </context-group>
       </trans-unit><trans-unit id="030197cebe938edf35422e92fe14183d06eb670b" datatype="html">
         <source>Max. buckets</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">88</context>
+          <context context-type="linenumber">91</context>
         </context-group>
       </trans-unit><trans-unit id="623ac50f37a26caec6fd7cd519b653e3315cba25" datatype="html">
         <source>The entered value must be &gt;= 0.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">101</context>
+          <context context-type="linenumber">104</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">486</context>
+          <context context-type="linenumber">489</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">579</context>
+          <context context-type="linenumber">582</context>
         </context-group>
       </trans-unit><trans-unit id="92f3f203270a29b3001871153f02c063484a1574" datatype="html">
         <source>Suspended</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">113</context>
+          <context context-type="linenumber">116</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
@@ -1911,7 +1917,7 @@
         <source>Subusers</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">202</context>
+          <context context-type="linenumber">205</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
@@ -1921,33 +1927,33 @@
         <source>There are no subusers.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">208</context>
+          <context context-type="linenumber">211</context>
         </context-group>
       </trans-unit><trans-unit id="826b25211922a1b46436589233cb6f1a163d89b7" datatype="html">
         <source>Delete</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">239</context>
+          <context context-type="linenumber">242</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">293</context>
+          <context context-type="linenumber">296</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">378</context>
+          <context context-type="linenumber">381</context>
         </context-group>
       </trans-unit><trans-unit id="1c9f46392d9b25bfb9afe74c87ddfe94f44c0b60" datatype="html">
         <source>Add subuser</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">253</context>
+          <context context-type="linenumber">256</context>
         </context-group>
       </trans-unit><trans-unit id="0bcd5ef19af0f1b814141ca8c57df623d8270088" datatype="html">
         <source>Keys</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">261</context>
+          <context context-type="linenumber">264</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
@@ -1957,27 +1963,27 @@
         <source>S3</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">265</context>
+          <context context-type="linenumber">268</context>
         </context-group>
       </trans-unit><trans-unit id="d6819038d608623503918fb2553f53d68231ec3a" datatype="html">
         <source>There are no keys.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">270</context>
+          <context context-type="linenumber">273</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">320</context>
+          <context context-type="linenumber">323</context>
         </context-group>
       </trans-unit><trans-unit id="2aba1e87039819aca3b70faa9aa848c12bf139ca" datatype="html">
         <source>Show</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">286</context>
+          <context context-type="linenumber">289</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">336</context>
+          <context context-type="linenumber">339</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
@@ -1987,19 +1993,19 @@
         <source>Add S3 key</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">307</context>
+          <context context-type="linenumber">310</context>
         </context-group>
       </trans-unit><trans-unit id="6ddb5e991a3ecd2659fb520bc5acc81b67e08ddd" datatype="html">
         <source>Swift</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">315</context>
+          <context context-type="linenumber">318</context>
         </context-group>
       </trans-unit><trans-unit id="17bb3082e6fe5003203ef992a3714172334631a1" datatype="html">
         <source>Capabilities</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">349</context>
+          <context context-type="linenumber">352</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
@@ -2009,19 +2015,19 @@
         <source>There are no capabilities.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">355</context>
+          <context context-type="linenumber">358</context>
         </context-group>
       </trans-unit><trans-unit id="60a495bec6eae04c9b7570956a6673069e8e47d6" datatype="html">
         <source>Add capability</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">392</context>
+          <context context-type="linenumber">395</context>
         </context-group>
       </trans-unit><trans-unit id="36ad38f9c1a1485e09b67778a28af84553290ffb" datatype="html">
         <source>User quota</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">400</context>
+          <context context-type="linenumber">403</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
@@ -2031,11 +2037,11 @@
         <source>Enabled</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">410</context>
+          <context context-type="linenumber">413</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">503</context>
+          <context context-type="linenumber">506</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-details/rgw-bucket-details.component.html</context>
@@ -2053,47 +2059,47 @@
         <source>Unlimited size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">424</context>
+          <context context-type="linenumber">427</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">517</context>
+          <context context-type="linenumber">520</context>
         </context-group>
       </trans-unit><trans-unit id="f6db8aa7c99fdce18edb33dde57729acede2b308" datatype="html">
         <source>Max. size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">435</context>
+          <context context-type="linenumber">438</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">528</context>
+          <context context-type="linenumber">531</context>
         </context-group>
       </trans-unit><trans-unit id="fc630b2093e880fffa19df99d5cd8b87605037f8" datatype="html">
         <source>Unlimited objects</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">462</context>
+          <context context-type="linenumber">465</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">555</context>
+          <context context-type="linenumber">558</context>
         </context-group>
       </trans-unit><trans-unit id="6cda5a993d06f0bb10048be9d3aba6555aa9f356" datatype="html">
         <source>Max. objects</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">473</context>
+          <context context-type="linenumber">476</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">566</context>
+          <context context-type="linenumber">569</context>
         </context-group>
       </trans-unit><trans-unit id="649a410bd0ace333d067d8fa22f12bdbdb43533b" datatype="html">
         <source>Bucket quota</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
-          <context context-type="linenumber">493</context>
+          <context context-type="linenumber">496</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-details/rgw-bucket-details.component.html</context>
@@ -3964,6 +3970,13 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="0054f5460090d6dde385e8f099d598df5d28cf54" datatype="html">
+        <source>Working</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/dashboard/health/health.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="a8059e31694578c1b0344a76a345357dd60e8f01" datatype="html">
         <source>Warning</source>
         <context-group purpose="location">
@@ -3973,13 +3986,6 @@
       </trans-unit>
       <trans-unit id="e5d8bb389c702588877f039d72178f219453a72d" datatype="html">
         <source>Unknown</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/dashboard/health/health.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="0054f5460090d6dde385e8f099d598df5d28cf54" datatype="html">
-        <source>Working</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/dashboard/health/health.component.ts</context>
           <context context-type="linenumber">1</context>
@@ -4110,13 +4116,6 @@
         <source>erasure code profile</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-form/pool-form.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="1d1174ec0fd282599b9feb00fc7a770e12ee7294" datatype="html">
-        <source>Placement Groups</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/pool/pool-list/pool-list.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>

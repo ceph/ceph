@@ -77,6 +77,7 @@ set(librgw_common_srcs
   rgw_metadata.cc
   rgw_multi.cc
   rgw_multi_del.cc
+  rgw_pubsub.cc
   rgw_sync.cc
   rgw_data_sync.cc
   rgw_sync_module.cc
@@ -84,6 +85,8 @@ set(librgw_common_srcs
   rgw_sync_module_es.cc
   rgw_sync_module_es_rest.cc
   rgw_sync_module_log.cc
+  rgw_sync_module_pubsub.cc
+  rgw_sync_module_pubsub_rest.cc
   rgw_sync_log_trim.cc
   rgw_sync_trace.cc
   rgw_period_history.cc
@@ -92,6 +95,7 @@ set(librgw_common_srcs
   rgw_coroutine.cc
   rgw_cr_rados.cc
   rgw_cr_rest.cc
+  rgw_cr_tools.cc
   rgw_object_expirer_core.cc
   rgw_op.cc
   rgw_otp.cc

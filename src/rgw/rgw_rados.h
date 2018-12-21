@@ -576,7 +576,8 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(list<RGWObjManifest*>& o);
 
-  int append(RGWObjManifest& m, RGWZoneGroup& zonegroup, RGWZoneParams& zone_params);
+  int append(RGWObjManifest& m, const RGWZoneGroup& zonegroup,
+             const RGWZoneParams& zone_params);
   int append(RGWObjManifest& m, RGWSI_Zone *zone_svc);
 
   bool get_rule(uint64_t ofs, RGWObjManifestRule *rule);
@@ -1316,6 +1317,10 @@ public:
     return *this;
   }
 
+  RGWLC *get_lc() {
+    return lc;
+  }
+
   RGWRados& set_run_gc_thread(bool _use_gc_thread) {
     use_gc_thread = _use_gc_thread;
     return *this;
@@ -1450,7 +1455,7 @@ public:
   bool get_obj_data_pool(const string& placement_rule, const rgw_obj& obj, rgw_pool *pool);
   bool obj_to_raw(const string& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj);
 
-  int create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
+  int create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
                             const string& placement_rule,
                             const string& swift_ver_location,
@@ -2044,7 +2049,8 @@ public:
 		    std::function<int(BucketShard *)> call);
   int block_while_resharding(RGWRados::BucketShard *bs,
 			     string *new_bucket_id,
-			     const RGWBucketInfo& bucket_info);
+			     const RGWBucketInfo& bucket_info,
+                             optional_yield y);
 
   void bucket_index_guard_olh_op(RGWObjState& olh_state, librados::ObjectOperation& op);
   int olh_init_modification(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, string *op_tag);
@@ -2259,8 +2265,8 @@ public:
                        const string& from_marker = std::string(),
                        const string& to_marker   = std::string());
 
-  int lock_exclusive(rgw_pool& pool, const string& oid, ceph::timespan& duration, string& zone_id, string& owner_id);
-  int unlock(rgw_pool& pool, const string& oid, string& zone_id, string& owner_id);
+  int lock_exclusive(const rgw_pool& pool, const string& oid, ceph::timespan& duration, string& zone_id, string& owner_id);
+  int unlock(const rgw_pool& pool, const string& oid, string& zone_id, string& owner_id);
 
   void update_gc_chain(rgw_obj& head_obj, RGWObjManifest& manifest, cls_rgw_obj_chain *chain);
   int send_chain_to_gc(cls_rgw_obj_chain& chain, const string& tag, bool sync);

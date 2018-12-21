@@ -2434,7 +2434,7 @@ cdef class ConfigPoolIterator(object):
         self.num_options = 32
         while True:
             self.options = <rbd_config_option_t *>realloc_chk(
-                self.options, self.num_options * sizeof(rbd_mirror_peer_t))
+                self.options, self.num_options * sizeof(rbd_config_option_t))
             with nogil:
                 ret = rbd_config_pool_list(_ioctx, self.options, &self.num_options)
             if ret < 0:
@@ -4374,7 +4374,7 @@ cdef class ImageIterator(object):
     def __init__(self, ioctx):
         self.ioctx = convert_ioctx(ioctx)
         self.images = NULL
-        self.num_images = 32
+        self.num_images = 1024
         while True:
             self.images = <rbd_image_spec_t*>realloc_chk(
                 self.images, self.num_images * sizeof(rbd_image_spec_t))
@@ -4382,7 +4382,9 @@ cdef class ImageIterator(object):
                 ret = rbd_list2(self.ioctx, self.images, &self.num_images)
             if ret >= 0:
                 break
-            elif ret != -errno.ERANGE:
+            elif ret == -errno.ERANGE:
+                self.num_images *= 2
+            else:
                 raise make_ex(ret, 'error listing images.')
 
     def __iter__(self):
@@ -4763,7 +4765,7 @@ cdef class ConfigImageIterator(object):
         self.num_options = 32
         while True:
             self.options = <rbd_config_option_t *>realloc_chk(
-                self.options, self.num_options * sizeof(rbd_mirror_peer_t))
+                self.options, self.num_options * sizeof(rbd_config_option_t))
             with nogil:
                 ret = rbd_config_image_list(image.image, self.options,
                                             &self.num_options)

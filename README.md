@@ -59,6 +59,11 @@ Build instructions:
 	cd build
 	make
 
+(Note: do_cmake.sh now defaults to creating a debug build of ceph that can
+be up to 5x slower with some workloads. Please pass 
+"-DCMAKE_BUILD_TYPE=RelWithDebInfo" to do_cmake.sh to create a non-debug 
+release.)
+
 This assumes you make your build dir a subdirectory of the ceph.git
 checkout. If you put it elsewhere, just replace `..` in do_cmake.sh with a
 correct path to the checkout. Any additional CMake args can be specified

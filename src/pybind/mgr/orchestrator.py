@@ -45,6 +45,13 @@ class ReadCompletion(_Completion):
     def is_read(self):
         return True
 
+    @property
+    def should_wait(self):
+        """Could the external operation be deemed as complete,
+        or should we wait?
+        We must wait for a read operation only if it is not complete.
+        """
+        return not self.is_complete
 
 class WriteCompletion(_Completion):
     """
@@ -83,6 +90,14 @@ class WriteCompletion(_Completion):
     def is_read(self):
         return False
 
+    @property
+    def should_wait(self):
+        """Could the external operation be deemed as complete,
+        or should we wait?
+        We must wait for a write operation only if we know
+        it is not persistent yet.
+        """
+        return not self.is_persistent
 
 class Orchestrator(object):
     """
@@ -333,6 +348,37 @@ class ServiceDescription(object):
         # The type of service (osd, mon, mgr, etc.)
         self.service_type = None
 
+        # Service version that was deployed
+        self.version = None
+
+        # Location of the service configuration when stored in rados
+        # object. Format: "rados://<pool>/[<namespace/>]<object>"
+        self.rados_config_location = None
+
+        # If the service exposes REST-like API, this attribute should hold
+        # the URL.
+        self.service_url = None
+
+        # Service status: -1 error, 0 stopped, 1 running
+        self.status = None
+
+        # Service status description when status == -1.
+        self.status_desc = None
+
+    def to_json(self):
+        out = {
+            'nodename': self.nodename,
+            'container_id': self.container_id,
+            'daemon_name': self.daemon_name,
+            'service_type': self.service_type,
+            'version': self.version,
+            'rados_config_location': self.rados_config_location,
+            'service_url': self.service_url,
+            'status': self.status,
+            'status_desc': self.status_desc,
+        }
+        return {k:v for (k,v) in out.items() if v is not None}
+
 
 class DriveGroupSpec(object):
     """
@@ -444,9 +490,19 @@ class InventoryDevice(object):
         # how much space is available.
         self.metadata_space_free = None
 
+    def to_json(self):
+        return dict(type=self.type, blank=self.blank, id=self.id, size=self.size, **self.extended)
+
 
 class InventoryNode(object):
+    """
+    When fetching inventory, all Devices are groups inside of an
+    InventoryNode.
+    """
     def __init__(self, name, devices):
         assert isinstance(devices, list)
         self.name = name  # unique within cluster.  For example a hostname.
-        self.devices = devices  # list of InventoryDevice
+        self.devices = devices  # type: List[InventoryDevice]
+
+    def to_json(self):
+       return {'name': self.name, 'devices': [d.to_json() for d in self.devices]}

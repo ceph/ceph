@@ -231,6 +231,21 @@
   on the intended OSDs).  You can reenable the old warning by setting
   ``mon_warn_on_misplaced`` to ``true``.
 
+* The ``ceph-create-keys`` tool is now obsolete.  The monitors
+  automatically create these keys on their own.  For now the script
+  prints a warning message and exits, but it will be removed in the
+  next release.  Note that ``ceph-create-keys`` would also write the
+  admin and bootstrap keys to /etc/ceph and /var/lib/ceph, but this
+  script no longer does that.  Any deployment tools that relied on
+  this behavior should instead make use of the ``ceph auth export
+  <entity-name>`` command for whichever key(s) they need.
+
+* The ``mon_osd_pool_ec_fast_read`` option has been renamed
+  ``osd_pool_default_ec_fast_read`` to be more consistent with other
+  ``osd_pool_default_*`` options that affect default values for newly
+  created RADOS pools.
+
+
 Upgrading from Luminous
 -----------------------
 

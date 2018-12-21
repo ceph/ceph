@@ -113,18 +113,6 @@ namespace buffer CEPH_BUFFER_API {
   };
 
 
-  /// total bytes allocated
-  int get_total_alloc();
-
-  /// history total bytes allocated
-  uint64_t get_history_alloc_bytes();
-
-  /// total num allocated
-  uint64_t get_history_alloc_num();
-
-  /// enable/disable alloc tracking
-  void track_alloc(bool b);
-
   /// count of cached crc hits (matching input)
   int get_cached_crc();
   /// count of cached crc hits (mismatching input, required adjustment)
@@ -291,9 +279,6 @@ namespace buffer CEPH_BUFFER_API {
     }
 
     // misc
-    bool at_buffer_head() const { return _off == 0; }
-    bool at_buffer_tail() const;
-
     bool is_aligned(unsigned align) const {
       return ((long)c_str() & (align-1)) == 0;
     }
@@ -723,6 +708,7 @@ namespace buffer CEPH_BUFFER_API {
       char operator*() const;
       iterator_impl& operator++();
       ptr get_current_ptr() const;
+      bool is_pointing_same_raw(const ptr& other) const;
 
       bl_t& get_bl() const { return *bl; }
 

@@ -35,6 +35,7 @@
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
 #include "osd/PG.h"
+#include "osd/ECUtil.h"
 
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
@@ -534,7 +535,7 @@ int do_trim_pg_log(ObjectStore *store, const coll_t &coll,
     ObjectMap::ObjectMapIterator p = store->get_omap_iterator(ch, oid);
     if (!p)
       break;
-    for (p->seek_to_first(); p->valid(); p->next(false)) {
+    for (p->seek_to_first(); p->valid(); p->next()) {
       if (p->key()[0] == '_')
 	continue;
       if (p->key() == "can_rollback_to")
@@ -2415,6 +2416,22 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
       formatter->open_object_section("SnapSet");
       ss.dump(formatter);
       formatter->close_section();
+    }
+  }
+  bufferlist hattr;
+  gr = store->getattr(ch, ghobj, ECUtil::get_hinfo_key(), hattr);
+  if (gr == 0) {
+    ECUtil::HashInfo hinfo;
+    auto hp = hattr.cbegin();
+    try {
+      decode(hinfo, hp);
+      formatter->open_object_section("hinfo");
+      hinfo.dump(formatter);
+      formatter->close_section();
+    } catch (...) {
+      r = -EINVAL;
+      cerr << "Error decoding hinfo on : " << make_pair(coll, ghobj) << ", "
+           << cpp_strerror(r) << std::endl;
     }
   }
   formatter->close_section();

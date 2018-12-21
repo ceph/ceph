@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -298,9 +299,14 @@ int main(int argc, const char **argv)
   FCGX_Init();
 #endif
 
-  RGWRados *store = RGWStoreManager::get_storage(g_ceph_context,
-      g_conf()->rgw_enable_gc_threads, g_conf()->rgw_enable_lc_threads, g_conf()->rgw_enable_quota_threads,
-      g_conf()->rgw_run_sync_thread, g_conf()->rgw_dynamic_resharding, g_conf()->rgw_cache_enabled);
+  RGWRados *store =
+    RGWStoreManager::get_storage(g_ceph_context,
+				 g_conf()->rgw_enable_gc_threads,
+				 g_conf()->rgw_enable_lc_threads,
+				 g_conf()->rgw_enable_quota_threads,
+				 g_conf()->rgw_run_sync_thread,
+				 g_conf().get_val<bool>("rgw_dynamic_resharding"),
+				 g_conf()->rgw_cache_enabled);
   if (!store) {
     mutex.Lock();
     init_timer.cancel_all_events();

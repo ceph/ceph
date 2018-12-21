@@ -46,6 +46,16 @@ if [ "$BASE_URL" == "" ]; then
     MGR=2 RGW=1 ../src/vstart.sh -n -d
     sleep 10
 
+    # Create an Object Gateway User
+    ./bin/radosgw-admin user create --uid=dev --display-name=Developer --system
+    # Set the user-id
+    ./bin/ceph dashboard set-rgw-api-user-id dev
+    # Obtain and set access and secret key for the previously created user
+    ./bin/ceph dashboard set-rgw-api-access-key `./bin/radosgw-admin user info --uid=dev | jq .keys[0].access_key | sed -e 's/^"//' -e 's/"$//'`
+    ./bin/ceph dashboard set-rgw-api-secret-key `./bin/radosgw-admin user info --uid=dev | jq .keys[0].secret_key | sed -e 's/^"//' -e 's/"$//'`
+    # Set SSL verify to False
+    ./bin/ceph dashboard set-rgw-api-ssl-verify False
+
     BASE_URL=`./bin/ceph mgr services | jq .dashboard`
 fi
 

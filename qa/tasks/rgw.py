@@ -12,7 +12,7 @@ import util.rgw as rgw_utils
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
 from teuthology import contextutil
-from teuthology.orchestra.run import CommandFailedError
+from teuthology.exceptions import ConfigError
 from util import get_remote_for_role
 from util.rgw import rgwadmin, wait_for_radosgw
 from util.rados import (rados, create_ec_pool,

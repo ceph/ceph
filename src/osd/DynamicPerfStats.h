@@ -152,8 +152,11 @@ public:
           if (!std::regex_search(match_string, match, d.regex)) {
             return false;
           }
-          for (auto &sub_match : match) {
-            sub_key->push_back(sub_match.str());
+          if (match.size() <= 1) {
+            return false;
+          }
+          for (size_t i = 1; i < match.size(); i++) {
+            sub_key->push_back(match[i].str());
           }
           return true;
         };

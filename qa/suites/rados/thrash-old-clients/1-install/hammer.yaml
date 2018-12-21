@@ -9,6 +9,7 @@ overrides:
 tasks:
 - install:
     branch: hammer
+    downgrade_packages: ['librbd1', 'librados2']
     exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev', 'librados3', 'libradospp-devel']
     extra_packages: ['librados2']
 - install.upgrade:

@@ -62,15 +62,6 @@ class Messenger {
     return ++global_seq;
   }
 
-  // @returns a tuple of <is_valid, auth_reply, session_key>
-  virtual seastar::future<msgr_tag_t,    /// tag for error, 0 if authorized
-                          bufferlist>    /// auth_reply
-  verify_authorizer(peer_type_t peer_type,
-		    auth_proto_t protocol,
-		    bufferlist& auth) = 0;
-  virtual seastar::future<std::unique_ptr<AuthAuthorizer>>
-  get_authorizer(peer_type_t peer_type,
-		 bool force_new) = 0;
   uint32_t get_crc_flags() const {
     return crc_flags;
   }

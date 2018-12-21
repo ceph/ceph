@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_CR_RADOS_H
 #define CEPH_RGW_CR_RADOS_H
 
@@ -98,6 +101,120 @@ public:
 
   bool is_going_down() {
     return going_down;
+  }
+};
+
+template <class P>
+class RGWSimpleWriteOnlyAsyncCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+
+  P params;
+
+  class Request : public RGWAsyncRadosRequest {
+    RGWRados *store;
+    P params;
+  protected:
+    int _send_request() override;
+  public:
+    Request(RGWCoroutine *caller,
+            RGWAioCompletionNotifier *cn,
+            RGWRados *store,
+            const P& _params) : RGWAsyncRadosRequest(caller, cn),
+                                store(store),
+                                params(_params) {}
+  } *req{nullptr};
+
+ public:
+  RGWSimpleWriteOnlyAsyncCR(RGWAsyncRadosProcessor *_async_rados,
+			    RGWRados *_store,
+			    const P& _params) : RGWSimpleCoroutine(_store->ctx()),
+                                                async_rados(_async_rados),
+                                                store(_store),
+				                params(_params) {}
+
+  ~RGWSimpleWriteOnlyAsyncCR() override {
+    request_cleanup();
+  }
+  void request_cleanup() override {
+    if (req) {
+      req->finish();
+      req = NULL;
+    }
+  }
+
+  int send_request() override {
+    req = new Request(this,
+                      stack->create_completion_notifier(),
+                      store,
+                      params);
+
+    async_rados->queue(req);
+    return 0;
+  }
+  int request_complete() override {
+    return req->get_ret_status();
+  }
+};
+
+
+template <class P, class R>
+class RGWSimpleAsyncCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  RGWRados *store;
+
+  P params;
+  std::shared_ptr<R> result;
+
+  class Request : public RGWAsyncRadosRequest {
+    RGWRados *store;
+    P params;
+    std::shared_ptr<R> result;
+  protected:
+    int _send_request() override;
+  public:
+    Request(RGWCoroutine *caller,
+            RGWAioCompletionNotifier *cn,
+            RGWRados *_store,
+            const P& _params,
+            std::shared_ptr<R>& _result) : RGWAsyncRadosRequest(caller, cn),
+                                           store(_store),
+                                           params(_params),
+                                           result(_result) {}
+  } *req{nullptr};
+
+ public:
+  RGWSimpleAsyncCR(RGWAsyncRadosProcessor *_async_rados,
+                   RGWRados *_store,
+                   const P& _params,
+                   std::shared_ptr<R>& _result) : RGWSimpleCoroutine(_store->ctx()),
+                                                  async_rados(_async_rados),
+                                                  store(_store),
+                                                  params(_params),
+                                                  result(_result) {}
+
+  ~RGWSimpleAsyncCR() override {
+    request_cleanup();
+  }
+  void request_cleanup() override {
+    if (req) {
+      req->finish();
+      req = NULL;
+    }
+  }
+
+  int send_request() override {
+    req = new Request(this,
+                      stack->create_completion_notifier(),
+                      store,
+                      params,
+                      result);
+
+    async_rados->queue(req);
+    return 0;
+  }
+  int request_complete() override {
+    return req->get_ret_status();
   }
 };
 

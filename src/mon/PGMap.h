@@ -48,6 +48,7 @@ public:
   mempool::pgmap::map<int64_t,int64_t> num_pg_by_pool;
   pool_stat_t pg_sum;
   osd_stat_t osd_sum;
+  mempool::pgmap::map<string,osd_stat_t> osd_sum_by_class;
   mempool::pgmap::unordered_map<uint64_t,int32_t> num_pg_by_state;
   struct pg_count {
     int32_t acting = 0;
@@ -163,7 +164,7 @@ public:
    */
   virtual void dump_pool_stats_full(const OSDMap &osd_map, stringstream *ss,
 				    Formatter *f, bool verbose) const;
-  void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const;
+  void dump_cluster_stats(stringstream *ss, Formatter *f, bool verbose) const;
   static void dump_object_stat_sum(TextTable &tbl, Formatter *f,
 			    const pool_stat_t &pool_stat,
 			    uint64_t avail,
@@ -406,6 +407,7 @@ public:
   bool stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
   void calc_purged_snaps();
+  void calc_osd_sum_by_class(const OSDMap& osdmap);
   void stat_osd_add(int osd, const osd_stat_t &s);
   void stat_osd_sub(int osd, const osd_stat_t &s);
   

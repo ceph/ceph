@@ -221,7 +221,7 @@ def handle_sso_command(cmd):
             except Exception:
                 return -errno.EINVAL, '', 'Invalid parameter `idp_metadata`.'
 
-        url_prefix = prepare_url_prefix(mgr.get_config('url_prefix', default=''))
+        url_prefix = prepare_url_prefix(mgr.get_module_option('url_prefix', default=''))
         settings = {
             'sp': {
                 'entityId': '{}{}/auth/saml2/metadata'.format(ceph_dashboard_base_url, url_prefix),

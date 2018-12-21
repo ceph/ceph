@@ -2227,13 +2227,13 @@ static int rgw_bi_get_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
   string idx;
 
   switch (op.type) {
-    case PlainIdx:
+    case BIIndexType::Plain:
       idx = op.key.name;
       break;
-    case InstanceIdx:
+    case BIIndexType::Instance:
       encode_obj_index_key(op.key, &idx);
       break;
-    case OLHIdx:
+    case BIIndexType::OLH:
       encode_olh_data_key(op.key, &idx);
       break;
     default:
@@ -2308,7 +2308,7 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
     }
 
     rgw_cls_bi_entry entry;
-    entry.type = PlainIdx;
+    entry.type = BIIndexType::Plain;
     entry.idx = iter->first;
     entry.data = iter->second;
 
@@ -2386,7 +2386,7 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
   map<string, bufferlist>::iterator iter;
   for (iter = keys.begin(); iter != keys.end(); ++iter) {
     rgw_cls_bi_entry entry;
-    entry.type = InstanceIdx;
+    entry.type = BIIndexType::Instance;
     entry.idx = iter->first;
     entry.data = iter->second;
 
@@ -2471,7 +2471,7 @@ static int list_olh_entries(cls_method_context_t hctx, const string& name, const
   map<string, bufferlist>::iterator iter;
   for (iter = keys.begin(); iter != keys.end(); ++iter) {
     rgw_cls_bi_entry entry;
-    entry.type = OLHIdx;
+    entry.type = BIIndexType::OLH;
     entry.idx = iter->first;
     entry.data = iter->second;
 

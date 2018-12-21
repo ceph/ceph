@@ -204,9 +204,9 @@ public:
     pair<uint64_t,uint64_t> read_avg() const {
       uint64_t sum, count;
       do {
-	count = avgcount;
+	count = avgcount2;
 	sum = u64;
-      } while (avgcount2 != count);
+      } while (avgcount != count);
       return make_pair(sum, count);
     }
   };

@@ -1030,6 +1030,26 @@ void RGWHTTPArgs::get_bool(const char *name, bool *val, bool def_val)
   }
 }
 
+int RGWHTTPArgs::get_int(const char *name, int *val, int def_val)
+{
+  bool exists = false;
+  string val_str;
+  val_str = get(name, &exists);
+  if (!exists) {
+    *val = def_val;
+    return 0;
+  }
+
+  string err;
+
+  *val = (int)strict_strtol(val_str.c_str(), 10, &err);
+  if (!err.empty()) {
+    *val = def_val;
+    return -EINVAL;
+  }
+  return 0;
+}
+
 string RGWHTTPArgs::sys_get(const string& name, bool * const exists) const
 {
   const auto iter = sys_val_map.find(name);

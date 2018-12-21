@@ -110,6 +110,14 @@ class Device(object):
         if not sys_info.devices:
             sys_info.devices = disk.get_devices()
         self.sys_api = sys_info.devices.get(self.abspath, {})
+        if not self.sys_api:
+            # if no device was found check if we are a partition
+            partname = self.abspath.split('/')[-1]
+            for device, info in sys_info.devices.items():
+                part = info['partitions'].get(partname, {})
+                if part:
+                    self.sys_api = part
+                    break
 
         # start with lvm since it can use an absolute or relative path
         lv = lvm.get_lv_from_argument(self.path)
@@ -192,10 +200,10 @@ class Device(object):
                  'ID_SCSI_SERIAL']
         p = disk.udevadm_property(self.abspath, props)
         if 'ID_VENDOR' in p and 'ID_MODEL' in p and 'ID_SCSI_SERIAL' in p:
-            dev_id = '_'.join(p['ID_VENDOR'], p['ID_MODEL'],
-                              p['ID_SCSI_SERIAL'])
+            dev_id = '_'.join([p['ID_VENDOR'], p['ID_MODEL'],
+                              p['ID_SCSI_SERIAL']])
         elif 'ID_MODEL' in p and 'ID_SERIAL_SHORT' in p:
-            dev_id = '_'.join(p['ID_MODEL'], p['ID_SERIAL_SHORT'])
+            dev_id = '_'.join([p['ID_MODEL'], p['ID_SERIAL_SHORT']])
         elif 'ID_SERIAL' in p:
             dev_id = p['ID_SERIAL']
             if dev_id.startswith('MTFD'):

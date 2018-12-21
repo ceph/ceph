@@ -417,7 +417,10 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   int64_t old_pool = inode.layout.pool_id;
 
   mark_dirty(front.inode.version, ls);
+  bool new_export_pin = inode.export_pin != front.inode.export_pin;
   inode = front.inode;
+  if (new_export_pin)
+    maybe_export_pin(true);
 
   if (inode.is_backtrace_updated())
     mark_dirty_parent(ls, old_pool != inode.layout.pool_id);
@@ -4858,7 +4861,6 @@ void CInode::set_export_pin(mds_rank_t rank)
   ceph_assert(is_dir());
   ceph_assert(is_projected());
   get_projected_inode()->export_pin = rank;
-  maybe_export_pin(true);
 }
 
 mds_rank_t CInode::get_export_pin(bool inherit) const
@@ -4872,15 +4874,14 @@ mds_rank_t CInode::get_export_pin(bool inherit) const
   while (true) {
     if (in->is_system())
       break;
-    const CDentry *pdn = in->get_projected_parent_dn();
+    const CDentry *pdn = in->get_parent_dn();
     if (!pdn)
       break;
-    const mempool_inode *pi = in->get_projected_inode();
     // ignore export pin for unlinked directory
-    if (pi->nlink == 0)
+    if (in->get_inode().nlink == 0)
       break;
-    if (pi->export_pin >= 0)
-      return pi->export_pin;
+    if (in->get_inode().export_pin >= 0)
+      return in->get_inode().export_pin;
 
     if (!inherit)
       break;

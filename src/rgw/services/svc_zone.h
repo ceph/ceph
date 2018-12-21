@@ -59,12 +59,12 @@ public:
   RGWSI_Zone(CephContext *cct);
   ~RGWSI_Zone();
 
-  RGWZoneParams& get_zone_params();
-  RGWPeriod& get_current_period();
-  RGWRealm& get_realm();
-  RGWZoneGroup& get_zonegroup();
-  int get_zonegroup(const string& id, RGWZoneGroup& zonegroup);
-  RGWZone& get_zone();
+  const RGWZoneParams& get_zone_params() const;
+  const RGWPeriod& get_current_period() const;
+  const RGWRealm& get_realm() const;
+  const RGWZoneGroup& get_zonegroup() const;
+  int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) const;
+  const RGWZone& get_zone() const;
 
   const string& zone_name();
   const string& zone_id();
@@ -74,7 +74,7 @@ public:
   bool has_zonegroup_api(const std::string& api) const;
 
   bool zone_is_writeable();
-  bool zone_syncs_from(RGWZone& target_zone, RGWZone& source_zone);
+  bool zone_syncs_from(const RGWZone& target_zone, const RGWZone& source_zone) const;
   bool get_redirect_zone_endpoint(string *endpoint);
 
   RGWRESTConn *get_master_conn() {
@@ -103,10 +103,10 @@ public:
   RGWRESTConn *get_zone_conn_by_name(const string& name);
   bool find_zone_id_by_name(const string& name, string *id);
 
-  int select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
+  int select_bucket_placement(const RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
                               string *pselected_rule_name, RGWZonePlacementInfo *rule_info);
   int select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info);
-  int select_new_bucket_location(RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
+  int select_new_bucket_location(const RGWUserInfo& user_info, const string& zonegroup_id, const string& rule,
                                  string *pselected_rule_name, RGWZonePlacementInfo *rule_info);
   int select_bucket_location_by_rule(const string& location_rule, RGWZonePlacementInfo *rule_info);
 

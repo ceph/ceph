@@ -63,12 +63,6 @@
   </tab>
 </tabset>
 
-<ng-template #osdUsageTpl
-             let-row="row">
-  <cd-usage-bar [totalBytes]="row.stats.stat_bytes"
-                [usedBytes]="row.stats.stat_bytes_used"></cd-usage-bar>
-</ng-template>
-
 <ng-template #markOsdConfirmationTpl
              let-markActionDescription="markActionDescription">
   <ng-container i18n><strong>OSD {{ selection.first().id }}</strong> will be marked

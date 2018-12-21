@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "common/errno.h"
 
 #include "rgw_common.h"
@@ -560,11 +563,11 @@ struct AWSSyncConfig {
   void expand_target(RGWDataSyncEnv *sync_env, const string& sid, const string& path, string *dest) {
       apply_meta_param(path, "sid", sid, dest);
 
-      RGWZoneGroup& zg = sync_env->store->svc.zone->get_zonegroup();
+      const RGWZoneGroup& zg = sync_env->store->svc.zone->get_zonegroup();
       apply_meta_param(path, "zonegroup", zg.get_name(), dest);
       apply_meta_param(path, "zonegroup_id", zg.get_id(), dest);
 
-      RGWZone& zone = sync_env->store->svc.zone->get_zone();
+      const RGWZone& zone = sync_env->store->svc.zone->get_zone();
       apply_meta_param(path, "zone", zone.name, dest);
       apply_meta_param(path, "zone_id", zone.id, dest);
   }

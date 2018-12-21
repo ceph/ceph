@@ -161,6 +161,13 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert not disk.used_by_ceph
 
+    def test_get_device_id(self, device_info):
+        udev = {k:k for k in ['ID_VENDOR', 'ID_MODEL', 'ID_SCSI_SERIAL']}
+        device_info(udevadm=udev)
+        disk = device.Device("/dev/sda")
+        assert disk._get_device_id() == 'ID_VENDOR_ID_MODEL_ID_SCSI_SERIAL'
+
+
 
 class TestDeviceEncryption(object):
 

@@ -27,9 +27,11 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
-  uint8_t v = 3;
+  uint8_t v = 4;
   if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
     v = 1;
+  } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+    v = 3;
   }
   ENCODE_START(v, 1, bl);
   encode(num_pg, bl);
@@ -60,12 +62,15 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   if (struct_v >= 3) {
     encode(purged_snaps, bl);
   }
+  if (struct_v >= 4) {
+    encode(osd_sum_by_class, bl, features);
+  }
   ENCODE_FINISH(bl);
 }
 
 void PGMapDigest::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START(3, p);
+  DECODE_START(4, p);
   decode(num_pg, p);
   decode(num_pg_active, p);
   decode(num_pg_unknown, p);
@@ -94,6 +99,9 @@ void PGMapDigest::decode(bufferlist::const_iterator& p)
   if (struct_v >= 3) {
     decode(purged_snaps, p);
   }
+  if (struct_v >= 4) {
+    decode(osd_sum_by_class, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -105,6 +113,13 @@ void PGMapDigest::dump(Formatter *f) const
   f->dump_unsigned("num_osd", num_osd);
   f->dump_object("pool_sum", pg_sum);
   f->dump_object("osd_sum", osd_sum);
+
+  f->open_object_section("osd_sum_by_class");
+  for (auto& i : osd_sum_by_class) {
+    f->dump_object(i.first.c_str(), i.second);
+  }
+  f->close_section();
+
   f->open_array_section("pool_stats");
   for (auto& p : pg_pool_sum) {
     f->open_object_section("pool_stat");
@@ -688,37 +703,6 @@ void PGMapDigest::pool_cache_io_rate_summary(Formatter *f, ostream *out,
   cache_io_rate_summary(f, out, p->second.first, ts->second);
 }
 
-static float pool_raw_used_rate(const OSDMap &osd_map, int64_t poolid)
-{
-  const pg_pool_t *pool = osd_map.get_pg_pool(poolid);
-
-  switch (pool->get_type()) {
-  case pg_pool_t::TYPE_REPLICATED:
-    return pool->get_size();
-    break;
-  case pg_pool_t::TYPE_ERASURE:
-  {
-    auto& ecp =
-      osd_map.get_erasure_code_profile(pool->erasure_code_profile);
-    auto pm = ecp.find("m");
-    auto pk = ecp.find("k");
-    if (pm != ecp.end() && pk != ecp.end()) {
-      int k = atoi(pk->second.c_str());
-      int m = atoi(pm->second.c_str());
-      int mk = m + k;
-      ceph_assert(mk != 0);
-      ceph_assert(k != 0);
-      return (float)mk / k;
-    } else {
-      return 0.0;
-    }
-  }
-  break;
-  default:
-    ceph_abort_msg("unrecognized pool type");
-  }
-}
-
 ceph_statfs PGMapDigest::get_statfs(OSDMap &osdmap,
 				    boost::optional<int64_t> data_pool) const
 {
@@ -761,8 +745,8 @@ void PGMapDigest::dump_pool_stats_full(
   if (f) {
     f->open_array_section("pools");
   } else {
-    tbl.define_column("NAME", TextTable::LEFT, TextTable::LEFT);
-    tbl.define_column("ID", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("ID", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("STORED", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
@@ -811,7 +795,7 @@ void PGMapDigest::dump_pool_stats_full(
       tbl << pool_name
           << pool_id;
     }
-    float raw_used_rate = ::pool_raw_used_rate(osd_map, pool_id);
+    float raw_used_rate = osd_map.pool_raw_used_rate(pool_id);
     dump_object_stat_sum(tbl, f, stat, avail, raw_used_rate, verbose, pool);
     if (f) {
       f->close_section();  // stats
@@ -830,48 +814,59 @@ void PGMapDigest::dump_pool_stats_full(
   }
 }
 
-void PGMapDigest::dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const
+void PGMapDigest::dump_cluster_stats(stringstream *ss,
+				     Formatter *f,
+				     bool verbose) const
 {
-  auto total = osd_sum.statfs.total;
-  auto used_raw = osd_sum.statfs.get_used_raw();
-  float used = 0.0;
-  if (total > 0) {
-    used = ((float)used_raw / total);
-  }
-
   if (f) {
     f->open_object_section("stats");
-    f->dump_int("total_bytes", total);
+    f->dump_int("total_bytes", osd_sum.statfs.total);
     f->dump_int("total_avail_bytes", osd_sum.statfs.available);
     f->dump_int("total_used_bytes", osd_sum.statfs.get_used());
-    f->dump_int("total_used_raw_bytes", used_raw);
-    f->dump_float("total_percent_used", used * 100);
-    if (verbose) {
-      f->dump_int("total_objects", pg_sum.stats.sum.num_objects);
+    f->dump_int("total_used_raw_bytes", osd_sum.statfs.get_used_raw());
+    f->dump_float("total_used_raw_ratio", osd_sum.statfs.get_used_raw_ratio());
+    f->close_section();
+    f->open_object_section("stats_by_class");
+    for (auto& i : osd_sum_by_class) {
+      f->open_object_section(i.first.c_str());
+      f->dump_int("total_bytes", i.second.statfs.total);
+      f->dump_int("total_avail_bytes", i.second.statfs.available);
+      f->dump_int("total_used_bytes", i.second.statfs.get_used());
+      f->dump_int("total_used_raw_bytes", i.second.statfs.get_used_raw());
+      f->dump_float("total_used_raw_ratio",
+		    i.second.statfs.get_used_raw_ratio());
+      f->close_section();
     }
     f->close_section();
   } else {
     ceph_assert(ss != nullptr);
     TextTable tbl;
+    tbl.define_column("CLASS", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("SIZE", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("AVAIL", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("RAW USED", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("%RAW USED", TextTable::LEFT, TextTable::RIGHT);
-    if (verbose) {
-      tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
+
+
+    for (auto& i : osd_sum_by_class) {
+      tbl << i.first;
+      tbl << stringify(byte_u_t(i.second.statfs.total))
+	  << stringify(byte_u_t(i.second.statfs.available))
+	  << stringify(byte_u_t(i.second.statfs.get_used()))
+	  << stringify(byte_u_t(i.second.statfs.get_used_raw()))
+	  << percentify(i.second.statfs.get_used_raw_ratio()*100.0)
+	  << TextTable::endrow;
     }
-    tbl << stringify(byte_u_t(total))
+    tbl << "TOTAL";
+    tbl << stringify(byte_u_t(osd_sum.statfs.total))
         << stringify(byte_u_t(osd_sum.statfs.available))
         << stringify(byte_u_t(osd_sum.statfs.get_used()))
-        << stringify(byte_u_t(used_raw));
-    tbl << percentify(used*100);
-    if (verbose) {
-      tbl << stringify(si_u_t(pg_sum.stats.sum.num_objects));
-    }
-    tbl << TextTable::endrow;
+        << stringify(byte_u_t(osd_sum.statfs.get_used_raw()))
+	<< percentify(osd_sum.statfs.get_used_raw_ratio()*100.0)
+	<< TextTable::endrow;
 
-    *ss << "GLOBAL:\n";
+    *ss << "RAW STORAGE:\n";
     tbl.set_indent(4);
     *ss << tbl;
   }
@@ -960,7 +955,7 @@ int64_t PGMapDigest::get_pool_free_space(const OSDMap &osd_map,
   if (avail < 0)
     avail = 0;
 
-  return avail / ::pool_raw_used_rate(osd_map, poolid);
+  return avail / osd_map.pool_raw_used_rate(poolid);
 }
 
 int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
@@ -1235,6 +1230,7 @@ void PGMap::calc_stats()
   pg_by_osd.clear();
   pg_sum = pool_stat_t();
   osd_sum = osd_stat_t();
+  osd_sum_by_class.clear();
   num_pg_by_state.clear();
   num_pg_by_pool_state.clear();
   num_pg_by_osd.clear();
@@ -1408,6 +1404,17 @@ void PGMap::calc_purged_snaps()
   }
 }
 
+void PGMap::calc_osd_sum_by_class(const OSDMap& osdmap)
+{
+  osd_sum_by_class.clear();
+  for (auto& i : osd_stat) {
+    const char *class_name = osdmap.crush->get_item_class(i.first);
+    if (class_name) {
+      osd_sum_by_class[class_name].add(i.second);
+    }
+  }
+}
+
 void PGMap::stat_osd_add(int osd, const osd_stat_t &s)
 {
   num_osd++;
@@ -1430,6 +1437,7 @@ void PGMap::encode_digest(const OSDMap& osdmap,
 			  bufferlist& bl, uint64_t features)
 {
   get_rules_avail(osdmap, &avail_space_by_rule);
+  calc_osd_sum_by_class(osdmap);
   calc_purged_snaps();
   PGMapDigest::encode(bl, features);
 }

@@ -65,6 +65,55 @@ arg_desc_t cmddesc_get_args(const String& cmddesc)
   return arg_desc;
 }
 
+std::string cmddesc_get_prenautilus_compat(const std::string &cmddesc)
+{
+  std::vector<std::string> out;
+  stringstream ss(cmddesc);
+  std::string word;
+  bool changed = false;
+  while (std::getline(ss, word, ' ')) {
+    // if no , or =, must be a plain word to put out
+    if (word.find_first_of(",=") == string::npos) {
+      out.push_back(word);
+      continue;
+    }
+    auto desckv = cmddesc_get_args(word);
+    auto j = desckv.find("type");
+    if (j != desckv.end() && j->second == "CephBool") {
+      // Instruct legacy clients or mons to send --foo-bar string in place
+      // of a 'true'/'false' value
+      std::ostringstream oss;
+      oss << std::string("--") << desckv["name"];
+      std::string val = oss.str();
+      std::replace(val.begin(), val.end(), '_', '-');
+      desckv["type"] = "CephChoices";
+      desckv["strings"] = val;
+      std::ostringstream fss;
+      for (auto k = desckv.begin(); k != desckv.end(); ++k) {
+	if (k != desckv.begin()) {
+	  fss << ",";
+	}
+	fss << k->first << "=" << k->second;
+      }
+      out.push_back(fss.str());
+      changed = true;
+    } else {
+      out.push_back(word);
+    }
+  }
+  if (!changed) {
+    return cmddesc;
+  }
+  std::string o;
+  for (auto i = out.begin(); i != out.end(); ++i) {
+    if (i != out.begin()) {
+      o += " ";
+    }
+    o += *i;
+  }
+  return o;
+}
+
 /**
  * Read a command description list out of cmd, and dump it to f.
  * A signature description is a set of space-separated words;

@@ -277,16 +277,10 @@ include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
 if(WITH_SEASTAR)
-  find_package(fmt 4.0.0 QUIET)
+  find_package(fmt 5.2.1 QUIET)
   if(NOT fmt_FOUND)
     message(STATUS "Could not find fmt, will build it")
-    add_subdirectory(fmt)
-  elseif(fmt_VERSION VERSION_GREATER_EQUAL 5.0.0)
-    message(WARNING "Could NOT find fmt: "
-      "Found unsuitable version \"${fmt_VERSION}\", "
-      "but required is at most \"5.0.0\" (found ${fmt_INCLUDE_DIR}). "
-      "Will build it")
-    add_subdirectory(fmt)
+    add_subdirectory(seastar/fmt)
   endif()
   find_package(c-ares 1.13.0 QUIET)
   if(NOT c-ares_FOUND)
@@ -300,10 +294,11 @@ if(WITH_SEASTAR)
     endif()
   endmacro ()
   set(Seastar_HWLOC OFF CACHE BOOL "" FORCE)
+  set(Seastar_STD_OPTIONAL_VARIANT_STRINGVIEW ON CACHE BOOL "" FORCE)
   add_subdirectory(seastar)
   # create the directory so cmake won't complain when looking at the imported
   # target: Seastar exports this directory created at build-time
-  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen")
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen/include")
   add_subdirectory(crimson)
 endif()
 
@@ -759,6 +754,10 @@ endif(WITH_LTTNG)
 
 if(WITH_MGR AND WITH_MGR_DASHBOARD_FRONTEND AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
   add_dependencies(vstart mgr-dashboard-frontend-build)
+endif()
+
+if(WITH_MGR)
+  add_dependencies(vstart ceph-volume-venv-setup)
 endif()
 
 # Everything you need to run CephFS tests

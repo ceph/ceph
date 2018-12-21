@@ -199,7 +199,7 @@ class CommandsRequest(object):
 
 
 class Module(MgrModule):
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {'name': 'server_addr'},
         {'name': 'server_port'},
         {'name': 'key_file'},
@@ -279,11 +279,11 @@ class Module(MgrModule):
             separators=(',', ': '),
         )
 
-        server_addr = self.get_localized_config('server_addr', '::')
+        server_addr = self.get_localized_module_option('server_addr', '::')
         if server_addr is None:
             raise CannotServe('no server_addr configured; try "ceph config-key set mgr/restful/server_addr <ip>"')
 
-        server_port = int(self.get_localized_config('server_port', '8003'))
+        server_port = int(self.get_localized_module_option('server_port', '8003'))
         self.log.info('server_addr: %s server_port: %d',
                       server_addr, server_port)
 
@@ -303,7 +303,7 @@ class Module(MgrModule):
             pkey_tmp.flush()
             pkey_fname = pkey_tmp.name
         else:
-            pkey_fname = self.get_localized_config('key_file')
+            pkey_fname = self.get_localized_module_option('key_file')
 
         if not cert_fname or not pkey_fname:
             raise CannotServe('no certificate configured')

@@ -77,6 +77,9 @@
             <span class="help-block"
                   *ngIf="userForm.showError('email', frm, 'email')"
                   i18n>This is not a valid email address.</span>
+            <span class="help-block"
+                  *ngIf="userForm.showError('email', frm, 'notUnique')"
+                  i18n>The chosen email address is already in use.</span>
           </div>
         </div>
 

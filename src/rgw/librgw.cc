@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -11,6 +12,7 @@
  * Foundation.  See file COPYING.
  *
  */
+
 #include "include/compat.h"
 #include <sys/types.h>
 #include <string.h>
@@ -500,7 +502,7 @@ namespace rgw {
 					 g_conf()->rgw_enable_lc_threads,
 					 g_conf()->rgw_enable_quota_threads,
 					 g_conf()->rgw_run_sync_thread,
-					 g_conf()->rgw_dynamic_resharding);
+					 g_conf().get_val<bool>("rgw_dynamic_resharding"));
 
     if (!store) {
       mutex.Lock();

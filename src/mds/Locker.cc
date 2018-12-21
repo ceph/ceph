@@ -2211,7 +2211,7 @@ void Locker::request_inode_file_caps(CInode *in)
 {
   ceph_assert(!in->is_auth());
 
-  int wanted = in->get_caps_wanted() & ~CEPH_CAP_PIN;
+  int wanted = in->get_caps_wanted() & in->get_caps_allowed_ever() & ~CEPH_CAP_PIN;
   if (wanted != in->replica_caps_wanted) {
     // wait for single auth
     if (in->is_ambiguous_auth()) {
@@ -2889,9 +2889,9 @@ void Locker::handle_client_caps(const MClientCaps::const_ref &m)
 
     // filter wanted based on what we could ever give out (given auth/replica status)
     bool need_flush = m->flags & MClientCaps::FLAG_SYNC;
-    int new_wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
+    int new_wanted = m->get_wanted();
     if (new_wanted != cap->wanted()) {
-      if (!need_flush && (new_wanted & ~cap->pending())) {
+      if (!need_flush && in->is_auth() && (new_wanted & ~cap->pending())) {
 	// exapnding caps.  make sure we aren't waiting for a log flush
 	need_flush = _need_flush_mdlog(head_in, new_wanted & ~cap->pending());
       }
@@ -4910,7 +4910,7 @@ void Locker::file_eval(ScatterLock *lock, bool *need_issue)
   else if (lock->get_state() != LOCK_SYNC &&
 	   !lock->is_wrlocked() &&   // drain wrlocks first!
 	   !lock->is_waiter_for(SimpleLock::WAIT_WR) &&
-	   !(wanted & (CEPH_CAP_GWR|CEPH_CAP_GBUFFER)) &&
+	   !(wanted & CEPH_CAP_GWR) &&
 	   !((lock->get_state() == LOCK_MIX) &&
 	     in->is_dir() && in->has_subtree_or_exporting_dirfrag())  // if we are a delegation point, stay where we are
 	   //((wanted & CEPH_CAP_RD) || 

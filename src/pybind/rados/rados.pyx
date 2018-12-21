@@ -88,9 +88,6 @@ cdef extern from "rados/librados.h" nogil:
 
     cdef uint64_t _LIBRADOS_SNAP_HEAD "LIBRADOS_SNAP_HEAD"
 
-    ctypedef void* rados_t
-    ctypedef void* rados_config_t
-    ctypedef void* rados_ioctx_t
     ctypedef void* rados_xattrs_iter_t
     ctypedef void* rados_omap_iter_t
     ctypedef void* rados_list_ctx_t

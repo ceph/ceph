@@ -41,7 +41,7 @@ RGWSI_Zone::~RGWSI_Zone()
   delete current_period;
 }
 
-bool RGWSI_Zone::zone_syncs_from(RGWZone& target_zone, RGWZone& source_zone)
+bool RGWSI_Zone::zone_syncs_from(const RGWZone& target_zone, const RGWZone& source_zone) const
 {
   return target_zone.syncs_from(source_zone.name) &&
          sync_modules_svc->get_manager()->supports_data_export(source_zone.tier_type);
@@ -128,8 +128,8 @@ int RGWSI_Zone::do_start()
     lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
     return ret;
   }
-  map<string, RGWZone>::iterator zone_iter = get_zonegroup().zones.find(zone_params->get_id());
-  if (zone_iter == get_zonegroup().zones.end()) {
+  auto zone_iter = zonegroup->zones.find(zone_params->get_id());
+  if (zone_iter == zonegroup->zones.end()) {
     if (using_local) {
       lderr(cct) << "Cannot find zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << ")" << dendl;
       return -EINVAL;
@@ -139,9 +139,9 @@ int RGWSI_Zone::do_start()
     if (ret < 0) {
       return ret;
     }
-    zone_iter = get_zonegroup().zones.find(zone_params->get_id());
+    zone_iter = zonegroup->zones.find(zone_params->get_id());
   }
-  if (zone_iter != get_zonegroup().zones.end()) {
+  if (zone_iter != zonegroup->zones.end()) {
     *zone_public_config = zone_iter->second;
     ldout(cct, 20) << "zone " << zone_params->get_name() << dendl;
   } else {
@@ -151,7 +151,13 @@ int RGWSI_Zone::do_start()
 
   zone_short_id = current_period->get_map().get_zone_short_id(zone_params->get_id());
 
-  writeable_zone = (zone_public_config->tier_type.empty() || zone_public_config->tier_type == "rgw");
+  RGWSyncModuleRef sm;
+  if (!sync_modules_svc->get_manager()->get_module(zone_public_config->tier_type, &sm)) {
+    lderr(cct) << "ERROR: tier type not found: " << zone_public_config->tier_type << dendl;
+    return -EINVAL;
+  }
+
+  writeable_zone = sm->supports_writes();
 
   /* first build all zones index */
   for (auto ziter : zonegroup->zones) {
@@ -165,7 +171,7 @@ int RGWSI_Zone::do_start()
     ldout(cct, 0) << "WARNING: could not find zone config in zonegroup for local zone (" << zone_id() << "), will use defaults" << dendl;
   }
   *zone_public_config = zone_by_id[zone_id()];
-  for (auto ziter : get_zonegroup().zones) {
+  for (auto ziter : zonegroup->zones) {
     const string& id = ziter.first;
     RGWZone& z = ziter.second;
     if (id == zone_id()) {
@@ -769,38 +775,38 @@ int RGWSI_Zone::convert_regionmap()
   return 0;
 }
 
-RGWZoneParams& RGWSI_Zone::get_zone_params()
+const RGWZoneParams& RGWSI_Zone::get_zone_params() const
 {
   return *zone_params;
 }
 
-RGWZone& RGWSI_Zone::get_zone()
+const RGWZone& RGWSI_Zone::get_zone() const
 {
   return *zone_public_config;
 }
 
-RGWZoneGroup& RGWSI_Zone::get_zonegroup()
+const RGWZoneGroup& RGWSI_Zone::get_zonegroup() const
 {
   return *zonegroup;
 }
 
-int RGWSI_Zone::get_zonegroup(const string& id, RGWZoneGroup& zonegroup)
+int RGWSI_Zone::get_zonegroup(const string& id, RGWZoneGroup& zg) const
 {
   int ret = 0;
-  if (id == get_zonegroup().get_id()) {
-    zonegroup = get_zonegroup();
+  if (id == zonegroup->get_id()) {
+    zg = *zonegroup;
   } else if (!current_period->get_id().empty()) {
-    ret = current_period->get_zonegroup(zonegroup, id);
+    ret = current_period->get_zonegroup(zg, id);
   }
   return ret;
 }
 
-RGWRealm& RGWSI_Zone::get_realm()
+const RGWRealm& RGWSI_Zone::get_realm() const
 {
   return *realm;
 }
 
-RGWPeriod& RGWSI_Zone::get_current_period()
+const RGWPeriod& RGWSI_Zone::get_current_period() const
 {
   return *current_period;
 }
@@ -936,7 +942,7 @@ bool RGWSI_Zone::is_syncing_bucket_meta(const rgw_bucket& bucket)
 }
 
 
-int RGWSI_Zone::select_new_bucket_location(RGWUserInfo& user_info, const string& zonegroup_id, const string& request_rule,
+int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const string& zonegroup_id, const string& request_rule,
                                          string *pselected_rule_name, RGWZonePlacementInfo *rule_info)
 
 {
@@ -1010,19 +1016,12 @@ int RGWSI_Zone::select_bucket_location_by_rule(const string& location_rule, RGWZ
    * checking it for the local zone, because that's where this bucket object is going to
    * reside.
    */
-  map<string, RGWZonePlacementInfo>::iterator piter = get_zone_params().placement_pools.find(location_rule);
-  if (piter == get_zone_params().placement_pools.end()) {
+  auto piter = zone_params->placement_pools.find(location_rule);
+  if (piter == zone_params->placement_pools.end()) {
     /* couldn't find, means we cannot really place data for this bucket in this zone */
-    if (get_zonegroup().equals(zonegroup->get_id())) {
-      /* that's a configuration error, zone should have that rule, as we're within the requested
-       * zonegroup */
-      ldout(cct, 0) << "ERROR: This zone does not contain placement rule"
-                    << location_rule << " present in the zonegroup!" << dendl;
-      return -EINVAL;
-    } else {
-      /* oh, well, data is not going to be placed here, bucket object is just a placeholder */
-      return 0;
-    }
+    ldout(cct, 0) << "ERROR: This zone does not contain placement rule "
+                  << location_rule << " present in the zonegroup!" << dendl;
+    return -EINVAL;
   }
 
   RGWZonePlacementInfo& placement_info = piter->second;
@@ -1034,10 +1033,10 @@ int RGWSI_Zone::select_bucket_location_by_rule(const string& location_rule, RGWZ
   return 0;
 }
 
-int RGWSI_Zone::select_bucket_placement(RGWUserInfo& user_info, const string& zonegroup_id, const string& placement_rule,
+int RGWSI_Zone::select_bucket_placement(const RGWUserInfo& user_info, const string& zonegroup_id, const string& placement_rule,
                                       string *pselected_rule_name, RGWZonePlacementInfo *rule_info)
 {
-  if (!get_zone_params().placement_pools.empty()) {
+  if (!zone_params->placement_pools.empty()) {
     return select_new_bucket_location(user_info, zonegroup_id, placement_rule,
                                       pselected_rule_name, rule_info);
   }
@@ -1060,7 +1059,7 @@ int RGWSI_Zone::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info)
   string pool_name;
   bool write_map = false;
 
-  rgw_raw_obj obj(get_zone_params().domain_root, avail_pools);
+  rgw_raw_obj obj(zone_params->domain_root, avail_pools);
 
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);

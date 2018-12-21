@@ -597,7 +597,7 @@ struct rgw_cls_bi_get_op {
   cls_rgw_obj_key key;
   BIIndexType type; /* namespace: plain, instance, olh */
 
-  rgw_cls_bi_get_op() : type(PlainIdx) {}
+  rgw_cls_bi_get_op() : type(BIIndexType::Plain) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -767,7 +767,7 @@ struct rgw_cls_usage_log_trim_op {
   string bucket;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(3, 2, bl);
     encode(start_epoch, bl);
     encode(end_epoch, bl);
     encode(user, bl);
@@ -776,11 +776,11 @@ struct rgw_cls_usage_log_trim_op {
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(start_epoch, bl);
     decode(end_epoch, bl);
     decode(user, bl);
-    if (struct_v >= 2) {
+    if (struct_v >= 3) {
       decode(bucket, bl);
     }
     DECODE_FINISH(bl);

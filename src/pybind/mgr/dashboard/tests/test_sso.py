@@ -14,11 +14,11 @@ class AccessControlTest(unittest.TestCase):
     CONFIG_KEY_DICT = {}
 
     @classmethod
-    def mock_set_config(cls, attr, val):
+    def mock_set_module_option(cls, attr, val):
         cls.CONFIG_KEY_DICT[attr] = val
 
     @classmethod
-    def mock_get_config(cls, attr, default):
+    def mock_get_module_option(cls, attr, default):
         return cls.CONFIG_KEY_DICT.get(attr, default)
 
     IDP_METADATA = '''<?xml version="1.0"?>
@@ -71,10 +71,11 @@ class AccessControlTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        mgr.set_config.side_effect = cls.mock_set_config
-        mgr.get_config.side_effect = cls.mock_get_config
-        mgr.set_store.side_effect = cls.mock_set_config
-        mgr.get_store.side_effect = cls.mock_get_config
+        mgr.set_module_option.side_effect = cls.mock_set_module_option
+        mgr.get_module_option.side_effect = cls.mock_get_module_option
+        # kludge below
+        mgr.set_store.side_effect = cls.mock_set_module_option
+        mgr.get_store.side_effect = cls.mock_get_module_option
 
     def setUp(self):
         self.CONFIG_KEY_DICT.clear()

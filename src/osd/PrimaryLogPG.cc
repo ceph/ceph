@@ -7314,7 +7314,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    );
 	  ceph_assert(iter);
 	  iter->upper_bound(start_after);
-	  for (num = 0; iter->valid(); ++num, iter->next(false)) {
+	  for (num = 0; iter->valid(); ++num, iter->next()) {
 	    if (num >= max_return ||
 		bl.length() >= cct->_conf->osd_max_omap_bytes_per_request) {
 	      truncated = true;
@@ -7368,7 +7368,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  for (num = 0;
 	       iter->valid() &&
 		 iter->key().substr(0, filter_prefix.size()) == filter_prefix;
-	       ++num, iter->next(false)) {
+	       ++num, iter->next()) {
 	    dout(20) << "Found key " << iter->key() << dendl;
 	    if (num >= max_return ||
 		bl.length() >= cct->_conf->osd_max_omap_bytes_per_request) {
@@ -8774,7 +8774,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
 	osd->store->get_omap_iterator(ch, ghobject_t(oi.soid));
       ceph_assert(iter);
       iter->upper_bound(cursor.omap_offset);
-      for (; iter->valid(); iter->next(false)) {
+      for (; iter->valid(); iter->next()) {
 	++omap_keys;
 	encode(iter->key(), omap_data);
 	encode(iter->value(), omap_data);

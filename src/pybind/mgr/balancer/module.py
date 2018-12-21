@@ -201,7 +201,7 @@ class Eval:
         return r
 
 class Module(MgrModule):
-    OPTIONS = [
+    MODULE_OPTIONS = [
             {'name': 'active'},
             {'name': 'begin_time'},
             {'name': 'crush_compat_max_iterations'},
@@ -297,21 +297,21 @@ class Module(MgrModule):
             s = {
                 'plans': list(self.plans.keys()),
                 'active': self.active,
-                'mode': self.get_config('mode', default_mode),
+                'mode': self.get_module_option('mode', default_mode),
             }
             return (0, json.dumps(s, indent=4), '')
         elif command['prefix'] == 'balancer mode':
-            self.set_config('mode', command['mode'])
+            self.set_module_option('mode', command['mode'])
             return (0, '', '')
         elif command['prefix'] == 'balancer on':
             if not self.active:
-                self.set_config('active', '1')
+                self.set_module_option('active', '1')
                 self.active = True
             self.event.set()
             return (0, '', '')
         elif command['prefix'] == 'balancer off':
             if self.active:
-                self.set_config('active', '')
+                self.set_module_option('active', '')
                 self.active = False
             self.event.set()
             return (0, '', '')
@@ -399,14 +399,14 @@ class Module(MgrModule):
     def serve(self):
         self.log.info('Starting')
         while self.run:
-            self.active = self.get_config('active', '') is not ''
-            begin_time = self.get_config('begin_time') or '0000'
-            end_time = self.get_config('end_time') or '2400'
+            self.active = self.get_module_option('active', '') is not ''
+            begin_time = self.get_module_option('begin_time') or '0000'
+            end_time = self.get_module_option('end_time') or '2400'
             timeofday = time.strftime('%H%M', time.localtime())
             self.log.debug('Waking up [%s, scheduled for %s-%s, now %s]',
                            "active" if self.active else "inactive",
                            begin_time, end_time, timeofday)
-            sleep_interval = float(self.get_config('sleep_interval',
+            sleep_interval = float(self.get_module_option('sleep_interval',
                                                    default_sleep_interval))
             if self.active and self.time_in_interval(timeofday, begin_time, end_time):
                 self.log.debug('Running')
@@ -492,7 +492,7 @@ class Module(MgrModule):
                 'objects': {},
                 'bytes': {},
             }
-            for osd in pe.target_by_root[root].iterkeys():
+            for osd in pe.target_by_root[root]:
                 actual_by_root[root]['pgs'][osd] = 0
                 actual_by_root[root]['objects'][osd] = 0
                 actual_by_root[root]['bytes'][osd] = 0
@@ -516,7 +516,7 @@ class Module(MgrModule):
             objects_by_osd = {}
             bytes_by_osd = {}
             for root in pe.pool_roots[pool]:
-                for osd in pe.target_by_root[root].iterkeys():
+                for osd in pe.target_by_root[root]:
                     pgs_by_osd[osd] = 0
                     objects_by_osd[osd] = 0
                     bytes_by_osd[osd] = 0
@@ -576,7 +576,7 @@ class Module(MgrModule):
                 'objects': objects,
                 'bytes': bytes,
             }
-        for root in pe.total_by_root.iterkeys():
+        for root in pe.total_by_root:
             pe.count_by_root[root] = {
                 'pgs': {
                     k: float(v)
@@ -629,7 +629,7 @@ class Module(MgrModule):
         self.log.debug('score_by_root %s' % pe.score_by_root)
 
         # get the list of score metrics, comma separated
-        metrics = self.get_config('crush_compat_metrics', 'pgs,objects,bytes').split(',')
+        metrics = self.get_module_option('crush_compat_metrics', 'pgs,objects,bytes').split(',')
 
         # total score is just average of normalized stddevs
         pe.score = 0.0
@@ -646,8 +646,8 @@ class Module(MgrModule):
 
     def optimize(self, plan):
         self.log.info('Optimize plan %s' % plan.name)
-        plan.mode = self.get_config('mode', default_mode)
-        max_misplaced = float(self.get_option('target_max_misplaced_ratio'))
+        plan.mode = self.get_module_option('mode', default_mode)
+        max_misplaced = float(self.get_ceph_option('target_max_misplaced_ratio'))
         self.log.info('Mode %s, max misplaced %f' %
                       (plan.mode, max_misplaced))
 
@@ -692,8 +692,8 @@ class Module(MgrModule):
 
     def do_upmap(self, plan):
         self.log.info('do_upmap')
-        max_iterations = int(self.get_config('upmap_max_iterations', 10))
-        max_deviation = float(self.get_config('upmap_max_deviation', .01))
+        max_iterations = int(self.get_module_option('upmap_max_iterations', 10))
+        max_deviation = float(self.get_module_option('upmap_max_deviation', .01))
 
         ms = plan.initial
         if len(plan.pools):
@@ -725,20 +725,20 @@ class Module(MgrModule):
 
     def do_crush_compat(self, plan):
         self.log.info('do_crush_compat')
-        max_iterations = int(self.get_config('crush_compat_max_iterations', 25))
+        max_iterations = int(self.get_module_option('crush_compat_max_iterations', 25))
         if max_iterations < 1:
             return -errno.EINVAL, '"crush_compat_max_iterations" must be >= 1'
-        step = float(self.get_config('crush_compat_step', .5))
+        step = float(self.get_module_option('crush_compat_step', .5))
         if step <= 0 or step >= 1.0:
             return -errno.EINVAL, '"crush_compat_step" must be in (0, 1)'
-        max_misplaced = float(self.get_option('target_max_misplaced_ratio'))
+        max_misplaced = float(self.get_ceph_option('target_max_misplaced_ratio'))
         min_pg_per_osd = 2
 
         ms = plan.initial
         osdmap = ms.osdmap
         crush = osdmap.get_crush()
         pe = self.calc_eval(ms, plan.pools)
-        min_score_to_optimize = float(self.get_config('min_score', 0))
+        min_score_to_optimize = float(self.get_module_option('min_score', 0))
         if pe.score <= min_score_to_optimize:
             if pe.score == 0:
                 detail = 'Distribution is already perfect'
@@ -768,7 +768,7 @@ class Module(MgrModule):
         overlap = {}
         root_ids = {}
         for root, wm in six.iteritems(pe.target_by_root):
-            for osd in wm.iterkeys():
+            for osd in wm:
                 if osd in visited:
                     if osd not in overlap:
                         overlap[osd] = [ visited[osd] ]
@@ -781,7 +781,7 @@ class Module(MgrModule):
             return -errno.EOPNOTSUPP, detail
 
         # rebalance by pgs, objects, or bytes
-        metrics = self.get_config('crush_compat_metrics', 'pgs,objects,bytes').split(',')
+        metrics = self.get_module_option('crush_compat_metrics', 'pgs,objects,bytes').split(',')
         key = metrics[0] # balancing using the first score metric
         if key not in ['pgs', 'bytes', 'objects']:
             self.log.warn("Invalid crush_compat balancing key %s. Using 'pgs'." % key)

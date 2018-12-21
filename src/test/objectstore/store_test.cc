@@ -3273,7 +3273,7 @@ TEST_P(StoreTest, OmapSimple) {
   {
     map<string,bufferlist> r;
     ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(ch, hoid);
-    for (iter->seek_to_first(); iter->valid(); iter->next(false)) {
+    for (iter->seek_to_first(); iter->valid(); iter->next()) {
       r[iter->key()] = iter->value();
     }
     cout << "r: " << r << std::endl;
@@ -3283,7 +3283,7 @@ TEST_P(StoreTest, OmapSimple) {
   {
     map<string,bufferlist> r;
     ObjectMap::ObjectMapIterator iter = store->get_omap_iterator(ch, hoid);
-    for (iter->lower_bound(string()); iter->valid(); iter->next(false)) {
+    for (iter->lower_bound(string()); iter->valid(); iter->next()) {
       r[iter->key()] = iter->value();
     }
     cout << "r: " << r << std::endl;

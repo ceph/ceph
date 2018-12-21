@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -356,6 +357,7 @@ class RGWHTTPArgs {
   int get_bool(const string& name, bool *val, bool *exists);
   int get_bool(const char *name, bool *val, bool *exists);
   void get_bool(const char *name, bool *val, bool def_val);
+  int get_int(const char *name, int *val, int def_val);
 
   /** Get the value for specific system argument parameter */
   std::string sys_get(const string& name, bool *exists = nullptr) const;
@@ -529,6 +531,19 @@ enum RGWOpType {
   /* sts specific*/
   RGW_STS_ASSUME_ROLE,
   RGW_STS_GET_SESSION_TOKEN,
+  /* pubsub */
+  RGW_OP_PUBSUB_TOPIC_CREATE,
+  RGW_OP_PUBSUB_TOPICS_LIST,
+  RGW_OP_PUBSUB_TOPIC_GET,
+  RGW_OP_PUBSUB_TOPIC_DELETE,
+  RGW_OP_PUBSUB_SUB_CREATE,
+  RGW_OP_PUBSUB_SUB_GET,
+  RGW_OP_PUBSUB_SUB_DELETE,
+  RGW_OP_PUBSUB_SUB_PULL,
+  RGW_OP_PUBSUB_SUB_ACK,
+  RGW_OP_PUBSUB_NOTIF_CREATE,
+  RGW_OP_PUBSUB_NOTIF_DELETE,
+  RGW_OP_PUBSUB_NOTIF_LIST,
 };
 
 class RGWAccessControlPolicy;
@@ -1781,15 +1796,20 @@ struct rgw_obj_key {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+
+  string to_str() const {
+    if (instance.empty()) {
+      return name;
+    }
+    char buf[name.size() + instance.size() + 16];
+    snprintf(buf, sizeof(buf), "%s[%s]", name.c_str(), instance.c_str());
+    return buf;
+  }
 };
 WRITE_CLASS_ENCODER(rgw_obj_key)
 
 inline ostream& operator<<(ostream& out, const rgw_obj_key &o) {
-  if (o.instance.empty()) {
-    return out << o.name;
-  } else {
-    return out << o.name << "[" << o.instance << "]";
-  }
+  return out << o.to_str();
 }
 
 inline ostream& operator<<(ostream& out, const rgw_obj_index_key &o) {

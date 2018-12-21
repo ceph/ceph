@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  */
 
+#include "include/compat.h"
 #include "key_value_store/key_value_structure.h"
 #include "key_value_store/kv_flat_btree_async.h"
 #include "key_value_store/kvs_arg_types.h"

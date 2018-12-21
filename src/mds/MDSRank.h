@@ -97,7 +97,6 @@ enum {
   l_mdm_caps,
   l_mdm_rss,
   l_mdm_heap,
-  l_mdm_buf,
   l_mdm_last,
 };
 

@@ -3849,7 +3849,8 @@ int OSDMap::build_simple_optioned(CephContext *cct, epoch_t e, uuid_d &fsid,
       if (cct->_conf->osd_pool_default_flag_nosizechange)
 	pools[pool].set_flag(pg_pool_t::FLAG_NOSIZECHANGE);
       pools[pool].size = cct->_conf.get_val<uint64_t>("osd_pool_default_size");
-      pools[pool].min_size = cct->_conf.get_osd_pool_default_min_size();
+      pools[pool].min_size = cct->_conf.get_osd_pool_default_min_size(
+                                 pools[pool].size);
       pools[pool].crush_rule = default_replicated_rule;
       pools[pool].object_hash = CEPH_STR_HASH_RJENKINS;
       pools[pool].set_pg_num(poolbase << pg_bits);
@@ -4211,9 +4212,16 @@ int OSDMap::clean_pg_upmaps(
     pg_to_raw_osds(p.first, &raw, &primary);
     mempool::osdmap::vector<pair<int,int>> newmap;
     for (auto& q : p.second) {
-      if (std::find(raw.begin(), raw.end(), q.first) != raw.end()) {
-	newmap.push_back(q);
+      if (std::find(raw.begin(), raw.end(), q.first) == raw.end()) {
+        // cancel mapping if source osd does not exist anymore
+        continue;
       }
+      if (q.second != CRUSH_ITEM_NONE && q.second < max_osd &&
+          q.second >= 0 && osd_weight[q.second] == 0) {
+        // cancel mapping if target osd is out
+        continue;
+      }
+      newmap.push_back(q);
     }
     if (newmap.empty()) {
       ldout(cct, 10) << " removing no-op pg_upmap_items " << p.first << " "
@@ -5354,3 +5362,34 @@ void OSDMap::get_random_up_osds_by_subtree(int n,     // whoami
   }
 }
 
+float OSDMap::pool_raw_used_rate(int64_t poolid) const
+{
+  const pg_pool_t *pool = get_pg_pool(poolid);
+  assert(pool != nullptr);
+
+  switch (pool->get_type()) {
+  case pg_pool_t::TYPE_REPLICATED:
+    return pool->get_size();
+    break;
+  case pg_pool_t::TYPE_ERASURE:
+  {
+    auto& ecp =
+      get_erasure_code_profile(pool->erasure_code_profile);
+    auto pm = ecp.find("m");
+    auto pk = ecp.find("k");
+    if (pm != ecp.end() && pk != ecp.end()) {
+      int k = atoi(pk->second.c_str());
+      int m = atoi(pm->second.c_str());
+      int mk = m + k;
+      ceph_assert(mk != 0);
+      ceph_assert(k != 0);
+      return (float)mk / k;
+    } else {
+      return 0.0;
+    }
+  }
+  break;
+  default:
+    ceph_abort_msg("unrecognized pool type");
+  }
+}

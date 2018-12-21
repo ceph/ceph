@@ -44,67 +44,33 @@
 static char cmd[128];
 
 TEST(Buffer, constructors) {
-  bool ceph_buffer_track = get_env_bool("CEPH_BUFFER_TRACK");
   unsigned len = 17;
-  uint64_t history_alloc_bytes = 0;
-  uint64_t history_alloc_num = 0;
   //
   // buffer::create
   //
-  if (ceph_buffer_track) {
-    EXPECT_EQ(0, buffer::get_total_alloc());
-  }
-  
   {
     bufferptr ptr(buffer::create(len));
-    history_alloc_bytes += len;
-    history_alloc_num++;
     EXPECT_EQ(len, ptr.length());
-    if (ceph_buffer_track) {
-      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
-      EXPECT_EQ(history_alloc_bytes, buffer::get_history_alloc_bytes());
-      EXPECT_EQ(history_alloc_num, buffer::get_history_alloc_num());
-    }
   }
   //
   // buffer::claim_char
   //
-  if (ceph_buffer_track) {
-    EXPECT_EQ(0, buffer::get_total_alloc());
-  }
-  
   {
     char* str = new char[len];
     ::memset(str, 'X', len);
     bufferptr ptr(buffer::claim_char(len, str));
-    if (ceph_buffer_track) {
-      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
-      EXPECT_EQ(history_alloc_bytes, buffer::get_history_alloc_bytes());
-      EXPECT_EQ(history_alloc_num, buffer::get_history_alloc_num());
-    }
     EXPECT_EQ(len, ptr.length());
     EXPECT_EQ(str, ptr.c_str());
     bufferptr clone = ptr.clone();
-    history_alloc_bytes += len;
-    history_alloc_num++;
     EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
     delete [] str;
   }
   //
   // buffer::create_static
   //
-  if (ceph_buffer_track) {
-    EXPECT_EQ(0, buffer::get_total_alloc());
-  }
-  
   {
     char* str = new char[len];
     bufferptr ptr(buffer::create_static(len, str));
-    if (ceph_buffer_track) {
-      EXPECT_EQ(0, buffer::get_total_alloc());
-      EXPECT_EQ(history_alloc_bytes, buffer::get_history_alloc_bytes());
-      EXPECT_EQ(history_alloc_num, buffer::get_history_alloc_num());
-    }
     EXPECT_EQ(len, ptr.length());
     EXPECT_EQ(str, ptr.c_str());
     delete [] str;
@@ -112,19 +78,8 @@ TEST(Buffer, constructors) {
   //
   // buffer::create_malloc
   //
-  if (ceph_buffer_track) {
-    EXPECT_EQ(0, buffer::get_total_alloc());
-  }
-  
   {
     bufferptr ptr(buffer::create_malloc(len));
-    history_alloc_bytes += len;
-    history_alloc_num++;
-    if (ceph_buffer_track) {
-      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
-      EXPECT_EQ(history_alloc_bytes, buffer::get_history_alloc_bytes());
-      EXPECT_EQ(history_alloc_num, buffer::get_history_alloc_num());
-    }
     EXPECT_EQ(len, ptr.length());
     // this doesn't throw on my x86_64 wheezy box --sage
     //EXPECT_THROW(buffer::create_malloc((unsigned)ULLONG_MAX), buffer::bad_alloc);
@@ -132,79 +87,37 @@ TEST(Buffer, constructors) {
   //
   // buffer::claim_malloc
   //
-  if (ceph_buffer_track) {
-    EXPECT_EQ(0, buffer::get_total_alloc());
-  }
-  
   {
     char* str = (char*)malloc(len);
     ::memset(str, 'X', len);
     bufferptr ptr(buffer::claim_malloc(len, str));
-    if (ceph_buffer_track) {
-      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
-      EXPECT_EQ(history_alloc_bytes, buffer::get_history_alloc_bytes());
-      EXPECT_EQ(history_alloc_num, buffer::get_history_alloc_num());
-    }
     EXPECT_EQ(len, ptr.length());
     EXPECT_EQ(str, ptr.c_str());
     bufferptr clone = ptr.clone();
-    history_alloc_bytes += len;
-    history_alloc_num++;
     EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
   }
   //
   // buffer::copy
   //
-  if (ceph_buffer_track) {
-    EXPECT_EQ(0, buffer::get_total_alloc());
-  }
-  
   {
     const std::string expected(len, 'X');
     bufferptr ptr(buffer::copy(expected.c_str(), expected.size()));
-    history_alloc_bytes += len;
-    history_alloc_num++;
-    if (ceph_buffer_track) {
-      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
-      EXPECT_EQ(history_alloc_bytes, buffer::get_history_alloc_bytes());
-      EXPECT_EQ(history_alloc_num, buffer::get_history_alloc_num());
-    }
     EXPECT_NE(expected.c_str(), ptr.c_str());
     EXPECT_EQ(0, ::memcmp(expected.c_str(), ptr.c_str(), len));
   }
   //
   // buffer::create_page_aligned
   //
-  if (ceph_buffer_track) {
-    EXPECT_EQ(0, buffer::get_total_alloc());
-  }
-  
   {
     bufferptr ptr(buffer::create_page_aligned(len));
-    history_alloc_bytes += len;
-    history_alloc_num++;
     ::memset(ptr.c_str(), 'X', len);
-    if (ceph_buffer_track) {
-      EXPECT_EQ(len, (unsigned)buffer::get_total_alloc());
-      EXPECT_EQ(history_alloc_bytes, buffer::get_history_alloc_bytes());
-      EXPECT_EQ(history_alloc_num, buffer::get_history_alloc_num());
-    }
     // doesn't throw on my x86_64 wheezy box --sage
     //EXPECT_THROW(buffer::create_page_aligned((unsigned)ULLONG_MAX), buffer::bad_alloc);
 #ifndef DARWIN
     ASSERT_TRUE(ptr.is_page_aligned());
 #endif // DARWIN 
     bufferptr clone = ptr.clone();
-    history_alloc_bytes += len;
-    history_alloc_num++;
     EXPECT_EQ(0, ::memcmp(clone.c_str(), ptr.c_str(), len));
-    if (ceph_buffer_track) {
-      EXPECT_EQ(history_alloc_bytes, buffer::get_history_alloc_bytes());
-      EXPECT_EQ(history_alloc_num, buffer::get_history_alloc_num());
-    }
-  }
-  if (ceph_buffer_track) {
-    EXPECT_EQ(0, buffer::get_total_alloc());
   }
 }
 
@@ -462,20 +375,6 @@ TEST(BufferPtr, have_raw) {
     bufferptr ptr(1);
     EXPECT_TRUE(ptr.have_raw());
   }
-}
-
-TEST(BufferPtr, at_buffer_head) {
-  bufferptr ptr(2);
-  EXPECT_TRUE(ptr.at_buffer_head());
-  ptr.set_offset(1);
-  EXPECT_FALSE(ptr.at_buffer_head());
-}
-
-TEST(BufferPtr, at_buffer_tail) {
-  bufferptr ptr(2);
-  EXPECT_TRUE(ptr.at_buffer_tail());
-  ptr.set_length(1);
-  EXPECT_FALSE(ptr.at_buffer_tail());
 }
 
 TEST(BufferPtr, is_n_page_sized) {
@@ -2930,7 +2829,7 @@ TEST(BufferHash, all) {
 /*
  * Local Variables:
  * compile-command: "cd .. ; make unittest_bufferlist && 
- *    ulimit -s unlimited ; CEPH_BUFFER_TRACK=true valgrind \
+ *    ulimit -s unlimited ; valgrind \
  *    --max-stackframe=20000000 --tool=memcheck \
  *    ./unittest_bufferlist # --gtest_filter=BufferList.constructors"
  * End:

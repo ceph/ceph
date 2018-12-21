@@ -142,6 +142,9 @@
 /* define if cephfs enabled */
 #cmakedefine WITH_CEPHFS
 
+/*define if GSSAPI/KRB5 enabled */
+#cmakedefine HAVE_GSSAPI
+
 /* define if rbd enabled */
 #cmakedefine WITH_RBD
 
@@ -264,9 +267,6 @@
 
 /* Define if the C compiler supports __PRETTY_FUNCTION__ */
 #cmakedefine HAVE_PRETTY_FUNC
-
-/* F_SETPIPE_SZ is supported */
-#cmakedefine CEPH_HAVE_SETPIPE_SZ
 
 /* Have eventfd extension. */
 #cmakedefine HAVE_EVENTFD

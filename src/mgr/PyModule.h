@@ -81,7 +81,7 @@ private:
   // Populated if loaded, can_run or failed indicates a problem
   std::string error_string;
 
-  // Helper for loading OPTIONS and COMMANDS members
+  // Helper for loading MODULE_OPTIONS and COMMANDS members
   int walk_dict_list(
       const std::string &attr_name,
       std::function<int(PyObject*)> fn);

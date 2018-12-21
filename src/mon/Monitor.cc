@@ -29,6 +29,7 @@
 #include "Monitor.h"
 #include "common/version.h"
 #include "common/blkdev.h"
+#include "common/cmdparse.h"
 
 #include "osd/OSDMap.h"
 
@@ -237,6 +238,16 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
     local_mon_commands[i] = mon_commands[i];
   }
   MonCommand::encode_vector(local_mon_commands, local_mon_commands_bl);
+
+  prenautilus_local_mon_commands = local_mon_commands;
+  for (auto& i : prenautilus_local_mon_commands) {
+    std::string n = cmddesc_get_prenautilus_compat(i.cmdstring);
+    if (n != i.cmdstring) {
+      dout(20) << " pre-nautilus cmd " << i.cmdstring << " -> " << n << dendl;
+      i.cmdstring = n;
+    }
+  }
+  MonCommand::encode_vector(prenautilus_local_mon_commands, prenautilus_local_mon_commands_bl);
 
   // assume our commands until we have an election.  this only means
   // we won't reply with EINVAL before the election; any command that
@@ -3314,9 +3325,10 @@ void Monitor::handle_command(MonOpRequestRef op)
       if (f)
         f->open_object_section("stats");
 
-      mgrstatmon()->dump_fs_stats(&ds, f.get(), verbose);
-      if (!f)
-        ds << '\n';
+      mgrstatmon()->dump_cluster_stats(&ds, f.get(), verbose);
+      if (!f) {
+	ds << "\n \n";
+      }
       mgrstatmon()->dump_pool_stats(osdmon()->osdmap, &ds, f.get(), verbose);
 
       if (f) {

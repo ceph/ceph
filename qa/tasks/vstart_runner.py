@@ -825,6 +825,7 @@ def scan_tests(modules):
     max_required_mds = 0
     max_required_clients = 0
     max_required_mgr = 0
+    require_memstore = False
 
     for suite, case in enumerate_methods(overall_suite):
         max_required_mds = max(max_required_mds,
@@ -833,8 +834,11 @@ def scan_tests(modules):
                                getattr(case, "CLIENTS_REQUIRED", 0))
         max_required_mgr = max(max_required_mgr,
                                getattr(case, "MGRS_REQUIRED", 0))
+        require_memstore = getattr(case, "REQUIRE_MEMSTORE", False) \
+                               or require_memstore
 
-    return max_required_mds, max_required_clients, max_required_mgr
+    return max_required_mds, max_required_clients, \
+            max_required_mgr, require_memstore
 
 
 class LocalCluster(object):
@@ -896,7 +900,8 @@ def exec_test():
         log.error("Some ceph binaries missing, please build them: {0}".format(" ".join(missing_binaries)))
         sys.exit(-1)
 
-    max_required_mds, max_required_clients, max_required_mgr = scan_tests(modules)
+    max_required_mds, max_required_clients, \
+            max_required_mgr, require_memstore = scan_tests(modules)
 
     remote = LocalRemote()
 
@@ -924,8 +929,12 @@ def exec_test():
         vstart_env["OSD"] = "4"
         vstart_env["MGR"] = max(max_required_mgr, 1).__str__()
 
-        remote.run([os.path.join(SRC_PREFIX, "vstart.sh"), "-n", "-d", "--nolockdep"],
-                   env=vstart_env)
+        args = [os.path.join(SRC_PREFIX, "vstart.sh"), "-n", "-d",
+                    "--nolockdep"]
+        if require_memstore:
+            args.append("--memstore")
+
+        remote.run(args, env=vstart_env)
 
         # Wait for OSD to come up so that subsequent injectargs etc will
         # definitely succeed

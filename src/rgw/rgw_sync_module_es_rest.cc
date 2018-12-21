@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "rgw_sync_module_es.h"
 #include "rgw_sync_module_es_rest.h"
 #include "rgw_es_query.h"

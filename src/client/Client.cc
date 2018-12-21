@@ -4899,7 +4899,6 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
 	    tcap.cap_id = m->peer.cap_id;
 	    tcap.seq = m->peer.seq - 1;
 	    tcap.issue_seq = tcap.seq;
-	    tcap.mseq = m->peer.mseq;
 	    tcap.issued |= cap.issued;
 	    tcap.implemented |= cap.issued;
 	    if (&cap == in->auth_cap)
@@ -9393,6 +9392,8 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
 int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 	                const struct iovec *iov, int iovcnt)
 {
+  uint64_t fpos = 0;
+
   if ((uint64_t)(offset+size) > mdsmap->get_max_filesize()) //too large!
     return -EFBIG;
 
@@ -9409,13 +9410,6 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   if ((f->mode & CEPH_FILE_MODE_WR) == 0)
     return -EBADF;
 
-  // check quota
-  uint64_t endoff = offset + size;
-  if (endoff > in->size && is_quota_bytes_exceeded(in, endoff - in->size,
-						   f->actor_perms)) {
-    return -EDQUOT;
-  }
-
   // use/adjust fd pos?
   if (offset < 0) {
     lock_fh_pos(f);
@@ -9431,8 +9425,15 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
       }
     }
     offset = f->pos;
-    f->pos = offset+size;
+    fpos = offset+size;
     unlock_fh_pos(f);
+  }
+
+  // check quota
+  uint64_t endoff = offset + size;
+  if (endoff > in->size && is_quota_bytes_exceeded(in, endoff - in->size,
+						   f->actor_perms)) {
+    return -EDQUOT;
   }
 
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
@@ -9570,6 +9571,11 @@ success:
   lat -= start;
   logger->tinc(l_c_wrlat, lat);
 
+  if (fpos) {
+    lock_fh_pos(f);
+    f->pos = fpos;
+    unlock_fh_pos(f);
+  }
   totalwritten = size;
   r = (int64_t)totalwritten;
 

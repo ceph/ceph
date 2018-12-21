@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "rgw_common.h"
 #include "rgw_coroutine.h"
 #include "rgw_sync_module.h"
@@ -134,7 +137,7 @@ struct ElasticConfig {
     num_replicas = config["num_replicas"](ES_NUM_REPLICAS_DEFAULT);
   }
 
-  void init_instance(RGWRealm& realm, uint64_t instance_id) {
+  void init_instance(const RGWRealm& realm, uint64_t instance_id) {
     sync_instance = instance_id;
 
     if (!override_index_path.empty()) {

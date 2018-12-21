@@ -1,4 +1,5 @@
 import errno
+import json
 import time
 from mgr_module import MgrModule, HandleCommandResult
 
@@ -10,27 +11,32 @@ class NoOrchestrator(Exception):
 
 
 class OrchestratorCli(MgrModule):
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {'name': 'orchestrator'}
     ]
     COMMANDS = [
         {
             'cmd': "orchestrator device ls "
-                   "name=node,type=CephString,req=false",
+                   "name=host,type=CephString,req=false"
+                   "name=format,type=CephChoices,strings=json|plain,req=false ",
             "desc": "List devices on a node",
             "perm": "r"
         },
         {
             'cmd': "orchestrator service ls "
                    "name=host,type=CephString,req=false "
-                   "name=type,type=CephString,req=false ",
+                   "name=svc_type,type=CephString,req=false "
+                   "name=svc_id,type=CephString,req=false "
+                   "name=format,type=CephChoices,strings=json|plain,req=false ",
             "desc": "List services known to orchestrator" ,
             "perm": "r"
         },
         {
             'cmd': "orchestrator service status "
+                   "name=host,type=CephString,req=false "
                    "name=svc_type,type=CephString "
-                   "name=svc_id,type=CephString ",
+                   "name=svc_id,type=CephString "
+                   "name=format,type=CephChoices,strings=json|plain,req=false ",
             "desc": "Get orchestrator state for Ceph service",
             "perm": "r"
         },
@@ -62,7 +68,7 @@ class OrchestratorCli(MgrModule):
     ]
 
     def _select_orchestrator(self):
-        o = self.get_config("orchestrator")
+        o = self.get_module_option("orchestrator")
         if o is None:
             raise NoOrchestrator()
 
@@ -82,34 +88,19 @@ class OrchestratorCli(MgrModule):
 
         Waits for writes to be *persistent* but not *effective*.
         """
-        done = False
 
-        while done is False:
-            done = self._oremote("wait", completions) == []
+        while not self._oremote("wait", completions):
 
-            if not done:
-                any_nonpersistent = False
-                for c in completions:
-                    if c.is_read:
-                        if not c.is_complete:
-                            any_nonpersistent = True
-                            break
-                    else:
-                        if not c.is_persistent:
-                            any_nonpersistent = True
-                            break
-
-                if any_nonpersistent:
-                    time.sleep(5)
-                else:
-                    done = True
+            if any(c.should_wait for c in completions):
+                time.sleep(5)
+            else:
+                break
 
         if all(hasattr(c, 'error') and getattr(c, 'error')for c in completions):
             raise Exception([getattr(c, 'error') for c in completions])
 
     def _list_devices(self, cmd):
         """
-
         This (all lines starting with ">") is how it is supposed to work. As of
         now, it's not yet implemented:
         > :returns: Either JSON:
@@ -124,7 +115,7 @@ class OrchestratorCli(MgrModule):
         >
         > or human readable:
         >
-        >     HOST  DEV  SIZE  DEVID(vendor\_model\_serial)   IN-USE  TIMESTAMP
+        >     HOST  DEV  SIZE  DEVID(vendor\\_model\\_serial)   IN-USE  TIMESTAMP
         >
         > Note: needs ceph-volume on the host.
 
@@ -132,11 +123,11 @@ class OrchestratorCli(MgrModule):
         date hardware inventory is fine as long as hardware ultimately appears
         in the output of this command.
         """
-        node = cmd.get('node', None)
+        host = cmd.get('host', None)
 
-        if node:
+        if host:
             nf = orchestrator.InventoryFilter()
-            nf.nodes = [node]
+            nf.nodes = [host]
         else:
             nf = None
 
@@ -144,64 +135,52 @@ class OrchestratorCli(MgrModule):
 
         self._wait([completion])
 
-        # Spit out a human readable version
-        result = ""
+        if cmd.get('format', 'plain') == 'json':
+            data = [n.to_json() for n in completion.result]
+            return HandleCommandResult(odata=json.dumps(data))
+        else:
+            # Return a human readable version
+            result = ""
+            for inventory_node in completion.result:
+                result += "{0}:\n".format(inventory_node.name)
+                for d in inventory_node.devices:
+                    result += "  {0} ({1}, {2}b)\n".format(
+                        d.id, d.type, d.size)
+                result += "\n"
 
-        for inventory_node in completion.result:
-            result += "{0}:\n".format(inventory_node.name)
-            for d in inventory_node.devices:
-                result += "  {0} ({1}, {2}b)\n".format(
-                    d.id, d.type, d.size)
-            result += "\n"
-
-        return HandleCommandResult(odata=result)
+            return HandleCommandResult(odata=result)
 
     def _list_services(self, cmd):
         hostname = cmd.get('host', None)
-        service_type = cmd.get('type', None)
-
-        completion = self._oremote("describe_service", service_type, None, hostname)
-        self._wait([completion])
-        services = completion.result
-
-        if len(services) == 0:
-            return HandleCommandResult(rs="No services reported")
-        else:
-            # Sort the list for display
-            services.sort(key = lambda s: (s.service_type, s.nodename, s.daemon_name))
-            lines = []
-            for s in services:
-                lines.append("{0}.{1} {2} {3}".format(
-                    s.service_type,
-                    s.daemon_name,
-                    s.nodename,
-                    s.container_id))
-
-            return HandleCommandResult(odata="\n".join(lines))
-
-    def _service_status(self, cmd):
-        svc_type = cmd['svc_type']
-        svc_id = cmd['svc_id']
-
+        svc_id = cmd.get('svc_id', None)
+        svc_type = cmd.get('svc_type', None)
         # XXX this is kind of confusing for people because in the orchestrator
         # context the service ID for MDS is the filesystem ID, not the daemon ID
 
-        completion = self._oremote("describe_service", svc_type, svc_id, None)
+        completion = self._oremote("describe_service", svc_type, svc_id, hostname)
 
         self._wait([completion])
 
-        service_list = completion.result
+        services = completion.result
 
-        if len(service_list) == 0:
-            return HandleCommandResult(rs="No locations reported")
+        # Sort the list for display
+        services.sort(key=lambda s: (s.service_type, s.nodename, s.daemon_name))
+
+        if len(services) == 0:
+            return HandleCommandResult(rs="No services reported")
+        elif cmd.get('format', 'plain') == 'json':
+            data = [s.to_json() for s in services]
+            return HandleCommandResult(odata=json.dumps(data))
         else:
             lines = []
-            for l in service_list:
-                lines.append("{0}.{1} {2} {3}".format(
-                    svc_type,
-                    l.daemon_name,
-                    l.nodename,
-                    l.container_id))
+            for s in services:
+                lines.append("{0}.{1} {2} {3} {4} {5}".format(
+                    s.service_type,
+                    s.daemon_name,
+                    s.nodename,
+                    s.container_id,
+                    s.version,
+                    s.rados_config_location))
 
             return HandleCommandResult(odata="\n".join(lines))
 
@@ -278,7 +257,7 @@ class OrchestratorCli(MgrModule):
         module_name = cmd['module']
 
         if module_name == "":
-            self.set_config("orchestrator", None)
+            self.set_module_option("orchestrator", None)
             return HandleCommandResult()
 
         for module in mgr_map['available_modules']:
@@ -291,7 +270,9 @@ class OrchestratorCli(MgrModule):
             enabled = module['name'] in mgr_map['modules']
             if not enabled:
                 return HandleCommandResult(-errno.EINVAL,
-                                           rs="Module '{0}' is not enabled".format(module_name))
+                                           rs="Module '{module_name}' is not enabled. \n Run `ceph "
+                                              "mgr module enable {module_name}` "
+                                              "to enable.".format(module_name=module_name))
 
             try:
                 is_orchestrator = self.remote(module_name,
@@ -303,7 +284,7 @@ class OrchestratorCli(MgrModule):
                 return HandleCommandResult(-errno.EINVAL,
                                            rs="'{0}' is not an orchestrator module".format(module_name))
 
-            self.set_config("orchestrator", module_name)
+            self.set_module_option("orchestrator", module_name)
 
             return HandleCommandResult()
 
@@ -342,7 +323,7 @@ class OrchestratorCli(MgrModule):
         elif cmd['prefix'] == "orchestrator service ls":
             return self._list_services(cmd)
         elif cmd['prefix'] == "orchestrator service status":
-            return self._service_status(cmd)
+            return self._list_services(cmd)  # TODO: create more detailed output
         elif cmd['prefix'] == "orchestrator service add":
             return self._service_add(cmd)
         elif cmd['prefix'] == "orchestrator service rm":
@@ -353,3 +334,4 @@ class OrchestratorCli(MgrModule):
             return self._status()
         else:
             raise NotImplementedError()
+

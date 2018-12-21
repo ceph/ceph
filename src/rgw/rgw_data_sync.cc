@@ -1471,7 +1471,7 @@ class RGWDataSyncShardControlCR : public RGWBackoffControlCR {
 
   RGWSyncTraceNodeRef tn;
 public:
-  RGWDataSyncShardControlCR(RGWDataSyncEnv *_sync_env, rgw_pool& _pool,
+  RGWDataSyncShardControlCR(RGWDataSyncEnv *_sync_env, const rgw_pool& _pool,
 		     uint32_t _shard_id, rgw_data_sync_marker& _marker,
                      RGWSyncTraceNodeRef& _tn_parent) : RGWBackoffControlCR(_sync_env->cct, false),
                                                       sync_env(_sync_env),
@@ -1594,6 +1594,8 @@ public:
         *reset_backoff = true;
       }
 
+      yield call(data_sync_module->start_sync(sync_env));
+
       yield {
         if  ((rgw_data_sync_info::SyncState)sync_status.sync_info.state == rgw_data_sync_info::StateSync) {
           tn->log(10, SSTR("spawning " << num_shards << " shards sync"));
@@ -1649,6 +1651,9 @@ public:
   RGWDefaultSyncModuleInstance() {}
   RGWDataSyncModule *get_data_handler() override {
     return &data_handler;
+  }
+  bool supports_user_writes() override {
+    return true;
   }
 };
 
@@ -1764,7 +1769,7 @@ int RGWDataSyncStatusManager::init()
     return -ENOTSUP;
   }
 
-  RGWZoneParams& zone_params = store->svc.zone->get_zone_params();
+  const RGWZoneParams& zone_params = store->svc.zone->get_zone_params();
 
   if (sync_module == nullptr) { 
     sync_module = store->get_sync_module();

@@ -3579,8 +3579,12 @@ void BlueStore::MempoolThread::_tune_cache_size(bool interval_stats)
   uint64_t target = store->osd_memory_target;
   uint64_t base = store->osd_memory_base;
   double fragmentation = store->osd_memory_expected_fragmentation;
-  uint64_t cache_max = ((1.0 - fragmentation) * target) - base;
   uint64_t cache_min = store->osd_memory_cache_min;
+  uint64_t cache_max = cache_min;
+  uint64_t limited_target = (1.0 - fragmentation) * target;
+  if (limited_target > base + cache_min) {
+    cache_max = limited_target - base;
+  }
 
   size_t heap_size = 0;
   size_t unmapped = 0;
@@ -3796,7 +3800,7 @@ bool BlueStore::OmapIteratorImpl::valid()
   return r;
 }
 
-int BlueStore::OmapIteratorImpl::next(bool validate)
+int BlueStore::OmapIteratorImpl::next()
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.has_omap()) {
@@ -5107,6 +5111,9 @@ int BlueStore::_open_db(bool create, bool to_repair_db)
     }
 
     r = _open_bluefs(create);
+    if (r < 0) {
+      return r;
+    }
 
     if (cct->_conf->bluestore_bluefs_env_mirror) {
       rocksdb::Env *a = new BlueRocksEnv(bluefs);
@@ -11613,16 +11620,16 @@ int BlueStore::_do_alloc_write(
   }
 
   // checksum
-  int csum = csum_type.load();
+  int64_t csum = csum_type.load();
   csum = select_option(
     "csum_type",
     csum,
     [&]() {
-      int val;
+      int64_t val;
       if (coll->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
-        return  boost::optional<int>(val);
+        return boost::optional<int64_t>(val);
       }
-      return boost::optional<int>();
+      return boost::optional<int64_t>();
     }
   );
 
@@ -12007,7 +12014,7 @@ void BlueStore::_choose_write_options(
         "compression_max_blob_size",
         comp_max_blob_size.load(),
         [&]() {
-          int val;
+          int64_t val;
           if (c->pool_opts.get(pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, &val)) {
    	    return boost::optional<uint64_t>((uint64_t)val);
           }
@@ -12021,7 +12028,7 @@ void BlueStore::_choose_write_options(
         "compression_min_blob_size",
         comp_min_blob_size.load(),
         [&]() {
-          int val;
+          int64_t val;
           if (c->pool_opts.get(pool_opts_t::COMPRESSION_MIN_BLOB_SIZE, &val)) {
    	    return boost::optional<uint64_t>((uint64_t)val);
           }

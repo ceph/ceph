@@ -978,11 +978,11 @@ CEPH_RADOS_API int rados_ioctx_pool_requires_alignment(rados_ioctx_t io)
  * Test whether the specified pool requires alignment or not.
  *
  * @param io pool to query
- * @param requires 1 if alignment is supported, 0 if not. 
+ * @param req 1 if alignment is supported, 0 if not.
  * @returns 0 on success, negative error code on failure
  */
 CEPH_RADOS_API int rados_ioctx_pool_requires_alignment2(rados_ioctx_t io,
-  int *requires);
+  int *req);
 
 /* deprecated, use rados_ioctx_pool_required_alignment2 instead */
 CEPH_RADOS_API uint64_t rados_ioctx_pool_required_alignment(rados_ioctx_t io)

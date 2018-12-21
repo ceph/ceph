@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_ZONE_H
 #define CEPH_RGW_ZONE_H
 
@@ -137,11 +140,11 @@ public:
   int read();
   int write(bool exclusive);
 
-  virtual rgw_pool get_pool(CephContext *cct) = 0;
-  virtual const std::string get_default_oid(bool old_format = false) = 0;
-  virtual const std::string& get_names_oid_prefix() = 0;
-  virtual const std::string& get_info_oid_prefix(bool old_format = false) = 0;
-  virtual const std::string& get_predefined_name(CephContext *cct) = 0;
+  virtual rgw_pool get_pool(CephContext *cct) const = 0;
+  virtual const std::string get_default_oid(bool old_format = false) const = 0;
+  virtual const std::string& get_names_oid_prefix() const = 0;
+  virtual const std::string& get_info_oid_prefix(bool old_format = false) const = 0;
+  virtual const std::string& get_predefined_name(CephContext *cct) const = 0;
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -233,11 +236,11 @@ struct RGWZoneParams : RGWSystemMetaObj {
   RGWZoneParams(const std::string& id, const std::string& name, const std::string& _realm_id)
     : RGWSystemMetaObj(id, name), realm_id(_realm_id) {}
 
-  rgw_pool get_pool(CephContext *cct) override;
-  const std::string get_default_oid(bool old_format = false) override;
-  const std::string& get_names_oid_prefix() override;
-  const std::string& get_info_oid_prefix(bool old_format = false) override;
-  const std::string& get_predefined_name(CephContext *cct) override;
+  rgw_pool get_pool(CephContext *cct) const override;
+  const std::string get_default_oid(bool old_format = false) const override;
+  const std::string& get_names_oid_prefix() const override;
+  const std::string& get_info_oid_prefix(bool old_format = false) const override;
+  const std::string& get_predefined_name(CephContext *cct) const override;
 
   int init(CephContext *_cct, RGWSI_SysObj *_sysobj_svc, bool setup_obj = true,
 	   bool old_format = false);
@@ -456,7 +459,7 @@ struct RGWZone {
   void decode_json(JSONObj *obj);
   static void generate_test_instances(list<RGWZone*>& o);
 
-  bool is_read_only() { return read_only; }
+  bool is_read_only() const { return read_only; }
 
   bool syncs_from(const std::string& zone_id) const {
     return (sync_from_all || sync_from.find(zone_id) != sync_from.end());
@@ -488,7 +491,7 @@ struct RGWZoneGroupPlacementTarget {
   std::string name;
   set<std::string> tags;
 
-  bool user_permitted(list<std::string>& user_tags) const {
+  bool user_permitted(const list<std::string>& user_tags) const {
     if (tags.empty()) {
       return true;
     }
@@ -618,11 +621,11 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
                std::string *predirect_zone, RGWSyncModulesManager *sync_mgr);
   int remove_zone(const std::string& zone_id);
   int rename_zone(const RGWZoneParams& zone_params);
-  rgw_pool get_pool(CephContext *cct) override;
-  const std::string get_default_oid(bool old_region_format = false) override;
-  const std::string& get_info_oid_prefix(bool old_region_format = false) override;
-  const std::string& get_names_oid_prefix() override;
-  const std::string& get_predefined_name(CephContext *cct) override;
+  rgw_pool get_pool(CephContext *cct) const override;
+  const std::string get_default_oid(bool old_region_format = false) const override;
+  const std::string& get_info_oid_prefix(bool old_region_format = false) const override;
+  const std::string& get_names_oid_prefix() const override;
+  const std::string& get_predefined_name(CephContext *cct) const override;
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -763,11 +766,11 @@ public:
 
   int create(bool exclusive = true) override;
   int delete_obj();
-  rgw_pool get_pool(CephContext *cct) override;
-  const std::string get_default_oid(bool old_format = false) override;
-  const std::string& get_names_oid_prefix() override;
-  const std::string& get_info_oid_prefix(bool old_format = false) override;
-  const std::string& get_predefined_name(CephContext *cct) override;
+  rgw_pool get_pool(CephContext *cct) const override;
+  const std::string get_default_oid(bool old_format = false) const override;
+  const std::string& get_names_oid_prefix() const override;
+  const std::string& get_info_oid_prefix(bool old_format = false) const override;
+  const std::string& get_predefined_name(CephContext *cct) const override;
 
   using RGWSystemMetaObj::read_id; // expose as public for radosgw-admin
 
@@ -785,7 +788,7 @@ public:
   }
   epoch_t get_epoch() const { return epoch; }
 
-  std::string get_control_oid();
+  std::string get_control_oid() const;
   /// send a notify on the realm control object
   int notify_zone(bufferlist& bl);
   /// notify the zone of a new period
@@ -837,8 +840,8 @@ class RGWPeriod
   int use_latest_epoch();
   int use_current_period();
 
-  const std::string get_period_oid();
-  const std::string get_period_oid_prefix();
+  const std::string get_period_oid() const;
+  const std::string get_period_oid_prefix() const;
 
   // gather the metadata sync status for each shard; only for use on master zone
   int update_sync_status(RGWRados *store,
@@ -862,9 +865,9 @@ public:
   RGWPeriodConfig& get_config() { return period_config; }
   const RGWPeriodConfig& get_config() const { return period_config; }
   const std::vector<std::string>& get_sync_status() const { return sync_status; }
-  rgw_pool get_pool(CephContext *cct);
-  const std::string& get_latest_epoch_oid();
-  const std::string& get_info_oid_prefix();
+  rgw_pool get_pool(CephContext *cct) const;
+  const std::string& get_latest_epoch_oid() const;
+  const std::string& get_info_oid_prefix() const;
 
   void set_user_quota(RGWQuotaInfo& user_quota) {
     period_config.user_quota = user_quota;
@@ -893,7 +896,7 @@ public:
   int reflect();
 
   int get_zonegroup(RGWZoneGroup& zonegroup,
-		    const std::string& zonegroup_id);
+		    const std::string& zonegroup_id) const;
 
   bool is_single_zonegroup() const
   {
@@ -903,7 +906,7 @@ public:
   /*
     returns true if there are several zone groups with a least one zone
    */
-  bool is_multi_zonegroups_with_zones()
+  bool is_multi_zonegroups_with_zones() const
   {
     int count = 0;
     for (const auto& zg:  period_map.zonegroups) {

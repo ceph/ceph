@@ -403,7 +403,8 @@ RGWObjManifest::obj_iterator RGWObjManifest::obj_find(uint64_t ofs)
   return iter;
 }
 
-int RGWObjManifest::append(RGWObjManifest& m, RGWZoneGroup& zonegroup, RGWZoneParams& zone_params)
+int RGWObjManifest::append(RGWObjManifest& m, const RGWZoneGroup& zonegroup,
+                           const RGWZoneParams& zone_params)
 {
   if (explicit_objs || m.explicit_objs) {
     return append_explicit(m, zonegroup, zone_params);
@@ -1417,7 +1418,6 @@ int RGWRados::init_rados()
   return ret;
 }
 
-
 int RGWRados::register_to_service_map(const string& daemon_type, const map<string, string>& meta)
 {
   map<string,string> metadata = meta;
@@ -1458,19 +1458,20 @@ int RGWRados::init_complete()
 {
   int ret;
 
-  if (run_sync_thread) {
-    auto& zone_public_config = svc.zone->get_zone();
-    ret = svc.sync_modules->get_manager()->create_instance(cct, zone_public_config.tier_type, svc.zone->get_zone_params().tier_config, &sync_module);
-    if (ret < 0) {
-      lderr(cct) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
-      if (ret == -ENOENT) {
-        lderr(cct) << "ERROR: " << zone_public_config.tier_type 
-                   << " sync module does not exist. valid sync modules: " 
-                   << svc.sync_modules->get_manager()->get_registered_module_names()
-                   << dendl;
-      }
-      return ret;
+  /* 
+   * create sync module instance even if we don't run sync thread, might need it for radosgw-admin
+   */
+  auto& zone_public_config = svc.zone->get_zone();
+  ret = svc.sync_modules->get_manager()->create_instance(cct, zone_public_config.tier_type, svc.zone->get_zone_params().tier_config, &sync_module);
+  if (ret < 0) {
+    lderr(cct) << "ERROR: failed to init sync module instance, ret=" << ret << dendl;
+    if (ret == -ENOENT) {
+      lderr(cct) << "ERROR: " << zone_public_config.tier_type 
+        << " sync module does not exist. valid sync modules: " 
+        << svc.sync_modules->get_manager()->get_registered_module_names()
+        << dendl;
     }
+    return ret;
   }
 
   period_puller.reset(new RGWPeriodPuller(this));
@@ -1631,7 +1632,7 @@ int RGWRados::init_complete()
     obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
   }
 
-  reshard_wait = std::make_shared<RGWReshardWait>(this);
+  reshard_wait = std::make_shared<RGWReshardWait>();
 
   reshard = new RGWReshard(this);
 
@@ -2305,7 +2306,7 @@ int RGWRados::objexp_hint_trim(const string& oid,
   return 0;
 }
 
-int RGWRados::lock_exclusive(rgw_pool& pool, const string& oid, timespan& duration, 
+int RGWRados::lock_exclusive(const rgw_pool& pool, const string& oid, timespan& duration,
                              string& zone_id, string& owner_id) {
   librados::IoCtx io_ctx;
 
@@ -2325,7 +2326,7 @@ int RGWRados::lock_exclusive(rgw_pool& pool, const string& oid, timespan& durati
   return l.lock_exclusive(&io_ctx, oid);
 }
 
-int RGWRados::unlock(rgw_pool& pool, const string& oid, string& zone_id, string& owner_id) {
+int RGWRados::unlock(const rgw_pool& pool, const string& oid, string& zone_id, string& owner_id) {
   librados::IoCtx io_ctx;
 
   int r = rgw_init_ioctx(get_rados_handle(), pool, io_ctx);
@@ -2771,7 +2772,7 @@ void RGWRados::create_bucket_id(string *bucket_id)
   *bucket_id = buf;
 }
 
-int RGWRados::create_bucket(RGWUserInfo& owner, rgw_bucket& bucket,
+int RGWRados::create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
                             const string& zonegroup_id,
                             const string& placement_rule,
                             const string& swift_ver_location,
@@ -6239,7 +6240,8 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(BucketShard **pbs, std::functio
     }
     ldout(store->ctx(), 0) << "NOTICE: resharding operation on bucket index detected, blocking" << dendl;
     string new_bucket_id;
-    r = store->block_while_resharding(bs, &new_bucket_id, target->bucket_info);
+    r = store->block_while_resharding(bs, &new_bucket_id,
+                                      target->bucket_info, null_yield);
     if (r == -ERR_BUSY_RESHARDING) {
       continue;
     }
@@ -6851,7 +6853,7 @@ int RGWRados::guard_reshard(BucketShard *bs,
     }
     ldout(cct, 0) << "NOTICE: resharding operation on bucket index detected, blocking" << dendl;
     string new_bucket_id;
-    r = block_while_resharding(bs, &new_bucket_id, bucket_info);
+    r = block_while_resharding(bs, &new_bucket_id, bucket_info, null_yield);
     if (r == -ERR_BUSY_RESHARDING) {
       continue;
     }
@@ -6875,11 +6877,75 @@ int RGWRados::guard_reshard(BucketShard *bs,
 
 int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
 				     string *new_bucket_id,
-				     const RGWBucketInfo& bucket_info)
+                                     const RGWBucketInfo& bucket_info,
+                                     optional_yield y)
 {
-  std::shared_ptr<RGWReshardWait> waiter = reshard_wait;
+  int ret = 0;
+  cls_rgw_bucket_instance_entry entry;
 
-  return waiter->block_while_resharding(bs, new_bucket_id, bucket_info);
+  const int num_retries = 10;
+  for (int i=0; i < num_retries; i++) {
+    ret = cls_rgw_get_bucket_resharding(bs->index_ctx, bs->bucket_obj, &entry);
+    if (ret < 0) {
+      ldout(cct, 0) << __func__ << " ERROR: failed to get bucket resharding :"  <<
+	cpp_strerror(-ret)<< dendl;
+      return ret;
+    }
+    if (!entry.resharding_in_progress()) {
+      *new_bucket_id = entry.new_bucket_instance_id;
+      return 0;
+    }
+    ldout(cct, 20) << "NOTICE: reshard still in progress; " << (i < num_retries - 1 ? "retrying" : "too many retries") << dendl;
+
+    if (i == num_retries - 1) {
+      break;
+    }
+
+    // If bucket is erroneously marked as resharding (e.g., crash or
+    // other error) then fix it. If we can take the bucket reshard
+    // lock then it means no other resharding should be taking place,
+    // and we're free to clear the flags.
+    {
+      // since we expect to do this rarely, we'll do our work in a
+      // block and erase our work after each try
+
+      RGWObjectCtx obj_ctx(this);
+      const rgw_bucket& b = bs->bucket;
+      std::string bucket_id = b.get_key();
+      RGWBucketReshardLock reshard_lock(this, bucket_info, true);
+      ret = reshard_lock.lock();
+      if (ret < 0) {
+	ldout(cct, 20) << __func__ <<
+	  " INFO: failed to take reshard lock for bucket " <<
+	  bucket_id << "; expected if resharding underway" << dendl;
+      } else {
+	ldout(cct, 10) << __func__ <<
+	  " INFO: was able to take reshard lock for bucket " <<
+	  bucket_id << dendl;
+	ret = RGWBucketReshard::clear_resharding(this, bucket_info);
+	if (ret < 0) {
+	  reshard_lock.unlock();
+	  ldout(cct, 0) << __func__ <<
+	    " ERROR: failed to clear resharding flags for bucket " <<
+	    bucket_id << dendl;
+	} else {
+	  reshard_lock.unlock();
+	  ldout(cct, 5) << __func__ <<
+	    " INFO: apparently successfully cleared resharding flags for "
+	    "bucket " << bucket_id << dendl;
+	  continue; // if we apparently succeed immediately test again
+	} // if clear resharding succeeded
+      } // if taking of lock succeeded
+    } // block to encapsulate recovery from incomplete reshard
+
+    ret = reshard_wait->wait(y);
+    if (ret < 0) {
+      ldout(cct, 0) << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
+      return ret;
+    }
+  }
+  ldout(cct, 0) << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
+  return -ERR_BUSY_RESHARDING;
 }
 
 int RGWRados::bucket_index_link_olh(const RGWBucketInfo& bucket_info, RGWObjState& olh_state, const rgw_obj& obj_instance,
@@ -8418,7 +8484,7 @@ int RGWRados::bi_get_instance(const RGWBucketInfo& bucket_info, rgw_obj& obj, rg
   }
 
   rgw_cls_bi_entry bi_entry;
-  r = bi_get(obj.bucket, obj, InstanceIdx, &bi_entry);
+  r = bi_get(obj.bucket, obj, BIIndexType::Instance, &bi_entry);
   if (r < 0 && r != -ENOENT) {
     ldout(cct, 0) << "ERROR: bi_get() returned r=" << r << dendl;
   }
@@ -9394,7 +9460,7 @@ int RGWRados::cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bu
 int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bucket& bucket,
 				  RGWQuotaInfo& bucket_quota)
 {
-  if (!cct->_conf->rgw_dynamic_resharding) {
+  if (! cct->_conf.get_val<bool>("rgw_dynamic_resharding")) {
       return 0;
   }
 
@@ -9402,9 +9468,12 @@ int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bu
   int num_source_shards = (bucket_info.num_shards > 0 ? bucket_info.num_shards : 1);
   uint32_t suggested_num_shards;
 
-  int ret =  quota_handler->check_bucket_shards((uint64_t)cct->_conf->rgw_max_objs_per_shard,
-						num_source_shards,  bucket_info.owner, bucket, bucket_quota,
-						1, need_resharding, &suggested_num_shards);
+  const uint64_t max_objs_per_shard =
+    cct->_conf.get_val<uint64_t>("rgw_max_objs_per_shard");
+  int ret =
+    quota_handler->check_bucket_shards(max_objs_per_shard, num_source_shards,
+				       bucket_info.owner, bucket, bucket_quota,
+				       1, need_resharding, &suggested_num_shards);
   if (ret < 0) {
     return ret;
   }

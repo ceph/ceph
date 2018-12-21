@@ -117,6 +117,10 @@ struct denc_traits<OSDPerfMetricKeyDescriptor> {
         v.clear();
         return;
       }
+      if (d.regex.mark_count() == 0) {
+        v.clear();
+        return;
+      }
       v.push_back(std::move(d));
     }
   }

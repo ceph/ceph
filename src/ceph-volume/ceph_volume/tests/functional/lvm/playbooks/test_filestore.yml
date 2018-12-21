@@ -86,8 +86,41 @@
       environment:
         CEPH_VOLUME_DEBUG: 1
 
+    - name: find all OSD paths
+      find:
+        paths: /var/lib/ceph/osd
+        recurse: no
+        file_type: directory
+      register: osd_paths
+
+    # set all OSD paths to root:rootto ensure that the OSD will be able to
+    # activate regardless
+    - name: mangle permissions to root
+      file:
+        path: "{{ item.path }}"
+        owner: root
+        group: root
+        recurse: yes
+      with_items:
+        - "{{ osd_paths.files }}"
+
+    - name: stop ceph-osd@2 daemon
+      service:
+        name: ceph-osd@2
+        state: stopped
+
+    - name: stop ceph-osd@1 daemon
+      service:
+        name: ceph-osd@1
+        state: stopped
+
     - name: activate all to start the previously prepared osd.0
       command: "ceph-volume lvm activate --filestore --all"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: node inventory
+      command: "ceph-volume inventory"
       environment:
         CEPH_VOLUME_DEBUG: 1
 
