@@ -82,14 +82,20 @@ BlkDev::BlkDev(const std::string& devname)
   : devname(devname)
 {}
 
-int BlkDev::get_devid(dev_t *id) const {
+int BlkDev::get_devid(dev_t *id) const
+{
   struct stat st;
-
-  int r = fstat(fd, &st);
-
-  if (r < 0)
+  int r;
+  if (fd >= 0) {
+    r = fstat(fd, &st);
+  } else {
+    char path[PATH_MAX];
+    snprintf(path, sizeof(path), "/dev/%s", devname.c_str());
+    stat(path, &st);
+  }
+  if (r < 0) {
     return -errno;
-
+  }
   *id = S_ISBLK(st.st_mode) ? st.st_rdev : st.st_dev;
   return 0;
 }
