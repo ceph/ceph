@@ -20,7 +20,7 @@ function(add_ceph_test test_name test_path)
   # none of the tests should take more than 1 hour to complete
   set_property(TEST
     ${test_name}
-    PROPERTY TIMEOUT 3600)
+    PROPERTY TIMEOUT ${CEPH_TEST_TIMEOUT})
 endfunction()
 
 option(WITH_GTEST_PARALLEL "Enable running gtest based tests in parallel" OFF)
