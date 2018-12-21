@@ -3222,12 +3222,17 @@ void OSDMap::dump(Formatter *f) const
       f->dump_float("weight", get_weightf(i));
       f->dump_float("primary_affinity", get_primary_affinityf(i));
       get_info(i).dump(f);
-      f->dump_stream("public_addr") << get_addrs(i).legacy_addr();
       f->dump_object("public_addrs", get_addrs(i));
-      f->dump_stream("cluster_addr") << get_cluster_addrs(i).legacy_addr();
       f->dump_object("cluster_addrs", get_cluster_addrs(i));
       f->dump_object("heartbeat_back_addrs", get_hb_back_addrs(i));
-      f->dump_object("heartbeat_front_addr", get_hb_front_addrs(i));
+      f->dump_object("heartbeat_front_addrs", get_hb_front_addrs(i));
+      // compat
+      f->dump_stream("public_addr") << get_addrs(i).get_legacy_str();
+      f->dump_stream("cluster_addr") << get_cluster_addrs(i).get_legacy_str();
+      f->dump_stream("heartbeat_back_addr")
+	<< get_hb_back_addrs(i).get_legacy_str();
+      f->dump_stream("heartbeat_front_addr")
+	<< get_hb_front_addrs(i).get_legacy_str();
 
       set<string> st;
       get_state(i, st);
