@@ -304,9 +304,11 @@ void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
                     command == "ops" ||
                     command == "sessions");
 
-  (read_only ? audit_clog->debug() : audit_clog->info())
+  int log_level = read_only ? 5 : 0;
+
+  dout(log_level)
     << "from='admin socket' entity='admin socket' "
-    << "cmd='" << command << "' args=" << args << ": dispatch";
+    << "cmd='" << command << "' args=" << args << ": dispatch" << dendl;
 
   if (command == "mon_status") {
     get_mon_status(f.get(), ss);
@@ -375,19 +377,19 @@ void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
   } else {
     ceph_abort_msg("bad AdminSocket command binding");
   }
-  (read_only ? audit_clog->debug() : audit_clog->info())
+  dout(log_level)
     << "from='admin socket' "
     << "entity='admin socket' "
-    << "cmd=" << command << " "
-    << "args=" << args << ": finished";
+    << "cmd='" << command << "' "
+    << "args=" << args << ": finished" << dendl;
   return;
 
 abort:
-  (read_only ? audit_clog->debug() : audit_clog->info())
+  dout(log_level)
     << "from='admin socket' "
     << "entity='admin socket' "
-    << "cmd=" << command << " "
-    << "args=" << args << ": aborted";
+    << "cmd='" << command << "' "
+    << "args=" << args << ": aborted" << dendl;
 }
 
 void Monitor::handle_signal(int signum)
