@@ -306,7 +306,7 @@ networks  are unable to communicate.  Use the following procedure:
 
 #. Retrieve the monitor map, where ``{tmp}`` is the path to 
    the retrieved monitor map, and ``{filename}`` is the name of the file 
-   containing the retrieved monitor monitor map. :: 
+   containing the retrieved monitor map. :: 
 
 	ceph mon getmap -o {tmp}/{filename}
 
