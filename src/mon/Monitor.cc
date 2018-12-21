@@ -3646,17 +3646,9 @@ void Monitor::handle_command(MonOpRequestRef op)
 	"mon_smart_report_timeout");
       json_spirit::mObject json_map;
       json_spirit::mValue smart_json;
-      std::string result;
-      if (block_device_run_smartctl(("/dev/" + dev).c_str(), smart_timeout,
-				    &result)) {
-	dout(10) << "probe_smart_device failed for /dev/" << dev << dendl;
-	result = "{\"error\": \"smartctl failed\", \"dev\": \"" + dev +
-	  "\", \"smartctl_error\": \"" + result + "\"}";
-      }
-
-      if (!json_spirit::read(result, smart_json)) {
-	derr << "smartctl JSON output of /dev/" + dev + " is invalid"
-	     << dendl;
+      if (block_device_get_metrics(("/dev/" + dev).c_str(), smart_timeout,
+				    &smart_json)) {
+	dout(10) << "block_device_get_metrics failed for /dev/" << dev << dendl;
       } else {
 	json_map[devid] = smart_json;
       }

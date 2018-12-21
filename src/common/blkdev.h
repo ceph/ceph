@@ -1,8 +1,12 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef __CEPH_COMMON_BLKDEV_H
 #define __CEPH_COMMON_BLKDEV_H
 
 #include <set>
 #include <string>
+#include "json_spirit/json_spirit_value.h"
 
 enum blkdev_prop_t {
   BLKDEV_PROP_DEV,
@@ -21,6 +25,8 @@ extern std::string get_device_id(const std::string& devname);
 extern void get_dm_parents(const std::string& dev, std::set<std::string> *ls);
 extern int block_device_run_smartctl(const char *device, int timeout,
 				     std::string *result);
+extern int block_device_get_metrics(const char *device, int timeout,
+				    json_spirit::mValue *result);
 
 // for VDO
 /// return an op fd for the sysfs stats dir, if this is a VDO device
