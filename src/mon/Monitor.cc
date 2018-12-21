@@ -2342,7 +2342,10 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
   f->dump_string("quorum_leader_name", quorum.empty() ? string() : monmap->get_name(*quorum.begin()));
 
   if (!quorum.empty()) {
-    f->dump_stream("quorum_age") << (mono_clock::now() - quorum_since);
+    f->dump_int(
+      "quorum_age",
+      std::chrono::duration_cast<std::chrono::seconds>(
+	mono_clock::now() - quorum_since).count());
   }
 
   f->open_object_section("monmap");
@@ -2378,7 +2381,10 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
   f->close_section(); // quorum
 
   if (!quorum.empty()) {
-    f->dump_stream("quorum_age") << (mono_clock::now() - quorum_since);
+    f->dump_int(
+      "quorum_age",
+      std::chrono::duration_cast<std::chrono::seconds>(
+	mono_clock::now() - quorum_since).count());
   }
 
   f->open_object_section("features");
@@ -2766,7 +2772,10 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
       for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
 	f->dump_string("id", monmap->get_name(*p));
       f->close_section();
-      f->dump_stream("quorum_age") << (now - quorum_since);
+      f->dump_int(
+	"quorum_age",
+	std::chrono::duration_cast<std::chrono::seconds>(
+	  mono_clock::now() - quorum_since).count());
     }
     f->open_object_section("monmap");
     monmap->dump(f);
