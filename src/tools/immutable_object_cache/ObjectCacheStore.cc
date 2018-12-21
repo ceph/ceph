@@ -20,14 +20,14 @@ ObjectCacheStore::ObjectCacheStore(CephContext *cct, ContextWQ* work_queue)
       : m_cct(cct), m_work_queue(work_queue), m_rados(new librados::Rados()),
         m_ioctxs_lock("ceph::cache::ObjectCacheStore::m_ioctxs_lock") {
 
-  object_cache_entries =
+  object_cache_max_size =
     m_cct->_conf.get_val<Option::size_t>("immutable_object_cache_max_size");
 
   std::string cache_path = m_cct->_conf.get_val<std::string>("immutable_object_cache_path");
   m_cache_root_dir = cache_path + "/ceph_immutable_obj_cache/";
 
   //TODO(): allow to set cache level
-  m_policy = new SimplePolicy(m_cct, object_cache_entries, 0.1);
+  m_policy = new SimplePolicy(m_cct, object_cache_max_size/(4096*1024), 0.1);
 }
 
 ObjectCacheStore::~ObjectCacheStore() {
