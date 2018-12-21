@@ -170,13 +170,10 @@ void JSONObj::init(JSONObj *p, Value v, string n)
   data = v;
 
   handle_value(v);
-  if (v.type() != obj_type &&
-      v.type() != array_type) {
-    if (v.type() == str_type) {
-      val.set(v.get_str(), true);
-    } else {
-      val.set(json_spirit::write_string(v), false);
-    }
+  if (v.type() == str_type) {
+    val.set(v.get_str(), true);
+  } else {
+    val.set(json_spirit::write_string(v), false);
   }
   attr_map.insert(pair<string,data_val>(name, val));
 }
