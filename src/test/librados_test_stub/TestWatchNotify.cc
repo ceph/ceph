@@ -360,7 +360,10 @@ void TestWatchNotify::finish_notify(TestRadosClient *rados_client,
 
   ceph_assert(m_lock.is_locked());
   SharedWatcher watcher = get_watcher(pool_id, nspace, oid);
-  ceph_assert(watcher);
+  if (!watcher) {
+    ldout(cct, 1) << "oid=" << oid << ": not found" << dendl;
+    return;
+  }
 
   NotifyHandles::iterator it = watcher->notify_handles.find(notify_id);
   if (it == watcher->notify_handles.end()) {
