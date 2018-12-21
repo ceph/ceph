@@ -194,13 +194,11 @@ namespace ceph {
       ss << yr << "y";
       sec -= yr * (60 * 60 * 24 * 365);
     }
-    /* I don't like the capital M -sage
     uint64_t mn = sec / (60 * 60 * 24 * 30);
     if (mn >= 3) {
-      ss << mn << "M";
+      ss << mn << "mo";
       sec -= mn * (60 * 60 * 24 * 30);
     }
-    */
     uint64_t wk = sec / (60 * 60 * 24 * 7);
     if (wk >= 2) {
       ss << wk << "w";
@@ -255,7 +253,7 @@ namespace ceph {
       { "wk", 7*24*60*60 },
       { "week", 7*24*60*60 },
       { "weeks", 7*24*60*60 },
-      { "M", 30*24*60*60 },
+      { "mo", 30*24*60*60 },
       { "month", 30*24*60*60 },
       { "months", 30*24*60*60 },
       { "y", 365*24*60*60 },
