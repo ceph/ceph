@@ -57,22 +57,12 @@ int ObjectCacheStore::init(bool reset) {
     efs::create_directories(m_cache_root_dir);
   }
 
-  evict_thd = new std::thread([this]{this->evict_thread_body();});
   return ret;
-}
-
-void ObjectCacheStore::evict_thread_body() {
-  int ret;
-  while(m_evict_go) {
-    ret = evict_objects();
-  }
 }
 
 int ObjectCacheStore::shutdown() {
   ldout(m_cct, 20) << dendl;
 
-  m_evict_go = false;
-  evict_thd->join();
   m_rados->shutdown();
   return 0;
 }
