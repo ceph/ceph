@@ -339,6 +339,7 @@ public:
     f->dump_int("active_gid", get_active_gid());
     f->dump_string("active_name", get_active_name());
     f->dump_object("active_addrs", active_addrs);
+    f->dump_stream("active_addr") << active_addrs.get_legacy_str();
     f->dump_stream("active_change") << active_change;
     f->dump_bool("available", available);
     f->open_array_section("standbys");
