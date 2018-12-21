@@ -94,7 +94,7 @@ public:
     auto ctx = new FunctionContext([this](bool reg) {
       ASSERT_TRUE(reg);
     });
-    m_cache_client->register_volume("pool_name", "rbd_name", 4096, ctx);
+    m_cache_client->register_client(ctx);
     ASSERT_TRUE(m_cache_client->is_session_work());
   }
 
@@ -153,19 +153,19 @@ public:
          usleep(1);
        }
 
-       m_cache_client->lookup_object("test_pool", "test_rbd", "123456", ctx);
+       m_cache_client->lookup_object("test_pool", "123456", ctx);
        m_send_request_index++;
      }
      m_wait_event.wait();
    }
 
-  bool startup_lookupobject_testing(std::string pool_name, std::string volume_name, std::string object_id) {
+  bool startup_lookupobject_testing(std::string pool_name, std::string object_id) {
     bool hit;
     auto ctx = new FunctionContext([this, &hit](bool req){
        hit = req;
        m_wait_event.signal();
     });
-    m_cache_client->lookup_object(pool_name, volume_name, object_id, ctx);
+    m_cache_client->lookup_object(pool_name, object_id, ctx);
     m_wait_event.wait();
     return hit;
   }
@@ -201,9 +201,9 @@ TEST_F(TestCommunication, test_lookup_object) {
   }
   for (uint64_t i = 50; i < 100; i++) {
     if ((random_hit % i) != 0) {
-      ASSERT_FALSE(startup_lookupobject_testing("test_pool", "testing_volume", std::to_string(i)));
+      ASSERT_FALSE(startup_lookupobject_testing("test_pool", std::to_string(i)));
     } else {
-      ASSERT_TRUE(startup_lookupobject_testing("test_pool", "testing_volume", std::to_string(i)));
+      ASSERT_TRUE(startup_lookupobject_testing("test_pool", std::to_string(i)));
     }
   }
 }

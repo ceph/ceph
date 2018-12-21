@@ -68,7 +68,7 @@ void CacheController::handle_request(uint64_t session_id, std::string msg){
   switch (io_ctx->type) {
     case RBDSC_REGISTER: {
       // init cache layout for volume
-      m_object_cache_store->init_cache(io_ctx->pool_name, io_ctx->vol_name, io_ctx->vol_size);
+      m_object_cache_store->init_cache();
       io_ctx->type = RBDSC_REGISTER_REPLY;
       m_cache_server->send(session_id, std::string((char*)io_ctx, msg.size()));
 
@@ -76,7 +76,7 @@ void CacheController::handle_request(uint64_t session_id, std::string msg){
     }
     case RBDSC_READ: {
       // lookup object in local cache store
-      int ret = m_object_cache_store->lookup_object(io_ctx->pool_name, io_ctx->vol_name, io_ctx->oid);
+      int ret = m_object_cache_store->lookup_object(io_ctx->pool_name, io_ctx->oid);
       if (ret < 0) {
         io_ctx->type = RBDSC_READ_RADOS;
       } else {

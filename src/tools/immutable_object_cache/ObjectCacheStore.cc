@@ -67,29 +67,25 @@ int ObjectCacheStore::shutdown() {
   return 0;
 }
 
-int ObjectCacheStore::init_cache(std::string pool_name, std::string vol_name, uint64_t vol_size) {
-  ldout(m_cct, 20) << "pool name = " << pool_name
-                   << " volume name = " << vol_name
-                   << " volume size = " << vol_size << dendl;
-
-  std::string vol_cache_dir = m_cache_root_dir + pool_name + "_" + vol_name;
+int ObjectCacheStore::init_cache() {
+  ldout(m_cct, 20) << dendl;
+  std::string cache_dir = m_cache_root_dir;
 
   int dir = m_dir_num - 1;
   while (dir >= 0) {
-    efs::create_directories(vol_cache_dir + "/" + std::to_string(dir));
+    efs::create_directories(cache_dir + "/" + std::to_string(dir));
     dir --;
   }
   return 0;
 }
 
-int ObjectCacheStore::do_promote(std::string pool_name, std::string vol_name, std::string object_name) {
+int ObjectCacheStore::do_promote(std::string pool_name, std::string object_name) {
   ldout(m_cct, 20) << "to promote object = "
                    << object_name << " from pool: "
                    << pool_name << dendl;
 
   int ret = 0;
   std::string cache_file_name =  pool_name + object_name;
-  std::string vol_cache_dir = pool_name + "_" + vol_name;
   {
     Mutex::Locker _locker(m_ioctxs_lock);
     if (m_ioctxs.find(pool_name) == m_ioctxs.end()) {
@@ -108,20 +104,17 @@ int ObjectCacheStore::do_promote(std::string pool_name, std::string vol_name, st
   librados::IoCtx* ioctx = m_ioctxs[pool_name];
 
   librados::bufferlist* read_buf = new librados::bufferlist();
-  uint32_t object_size = 4096*1024; //TODO(): read config from image metadata
 
-  auto ctx = new FunctionContext([this, read_buf, vol_cache_dir, cache_file_name,
-    object_size](int ret) {
-      handle_promote_callback(ret, read_buf, vol_cache_dir, cache_file_name, object_size);
+  auto ctx = new FunctionContext([this, read_buf, cache_file_name](int ret) {
+      handle_promote_callback(ret, read_buf, cache_file_name);
    });
 
-   return promote_object(ioctx, object_name, read_buf, object_size, ctx);
+   return promote_object(ioctx, object_name, read_buf, ctx);
 }
 
 int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
-  std::string cache_dir, std::string cache_file_name, uint32_t object_size) {
-  ldout(m_cct, 20) << "cache dir: " << cache_dir
-                   << " cache_file_name: " << cache_file_name << dendl;
+  std::string cache_file_name) {
+  ldout(m_cct, 20) << " cache_file_name: " << cache_file_name << dendl;
 
   // rados read error
   if(ret != -ENOENT && ret < 0) {
@@ -137,20 +130,18 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
     ret = 0;
   }
 
-  if (ret < object_size) {
-    // object is partial, fill with '0'
-    read_buf->append(std::string(object_size - ret, '0'));
-  }
+  std::string cache_dir = "";
+  uint32_t file_size = ret;
 
   if (m_dir_num > 0) {
     auto const pos = cache_file_name.find_last_of('.');
-    cache_dir = cache_dir + "/" + std::to_string(stoul(cache_file_name.substr(pos+1)) % m_dir_num);
+    cache_dir = "/" + std::to_string(stoul(cache_file_name.substr(pos+1)) % m_dir_num);
   }
   // write to cache
   ObjectCacheFile cache_file(m_cct, cache_dir + "/" + cache_file_name);
   cache_file.create();
 
-  ret = cache_file.write_object_to_file(*read_buf, object_size);
+  ret = cache_file.write_object_to_file(*read_buf, file_size);
   if (ret < 0) {
     lderr(m_cct) << "fail to write cache file" << dendl;
 
@@ -171,7 +162,7 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
 }
 
 int ObjectCacheStore::lookup_object(std::string pool_name,
-    std::string vol_name, std::string object_name) {
+                                    std::string object_name) {
   ldout(m_cct, 20) << "object name = " << object_name
                    << " in pool: " << pool_name << dendl;
 
@@ -180,7 +171,7 @@ int ObjectCacheStore::lookup_object(std::string pool_name,
 
   switch(ret) {
     case OBJ_CACHE_NONE: {
-      pret = do_promote(pool_name, vol_name, object_name);
+      pret = do_promote(pool_name, object_name);
       if (pret < 0) {
         lderr(m_cct) << "fail to start promote" << dendl;
       }
@@ -196,18 +187,19 @@ int ObjectCacheStore::lookup_object(std::string pool_name,
   }
 }
 
-int ObjectCacheStore::promote_object(librados::IoCtx* ioctx, std::string object_name,
-                                     librados::bufferlist* read_buf, uint64_t read_len,
+int ObjectCacheStore::promote_object(librados::IoCtx* ioctx,
+                                     std::string object_name,
+                                     librados::bufferlist* read_buf,
                                      Context* on_finish) {
-  ldout(m_cct, 20) << "object name = " << object_name
-                   << " read len = " << read_len << dendl;
+  ldout(m_cct, 20) << "object name = " << object_name << dendl;
 
   auto ctx = new FunctionContext([on_finish](int ret) {
     on_finish->complete(ret);
   });
 
   librados::AioCompletion* read_completion = create_rados_callback(ctx);
-  int ret = ioctx->aio_read(object_name, read_completion, read_buf, read_len, 0);
+  // issue a zero-sized read req to get full obj
+  int ret = ioctx->aio_read(object_name, read_completion, read_buf, 0, 0);
   if(ret < 0) {
     lderr(m_cct) << "failed to read from rados" << dendl;
   }
@@ -230,16 +222,8 @@ int ObjectCacheStore::do_evict(std::string cache_file) {
   ldout(m_cct, 20) << "file = " << cache_file << dendl;
 
   //TODO(): need a better way to get file path
-  std::string pool_name = "rbd";
 
-  size_t pos1 = cache_file.rfind("rbd_data");
-  pool_name = cache_file.substr(0, pos1);
-
-  pos1 = cache_file.find_first_of('.');
-  size_t pos2 = cache_file.find_last_of('.');
-  std::string vol_name = cache_file.substr(pos1+1, pos2-pos1-1);
-
-  std::string cache_dir = m_cache_root_dir + pool_name + "_" + vol_name;
+  std::string cache_dir = m_cache_root_dir;
 
    if (m_dir_num > 0) {
     auto const pos = cache_file.find_last_of('.');
