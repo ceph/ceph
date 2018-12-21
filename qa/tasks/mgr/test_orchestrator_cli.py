@@ -31,3 +31,13 @@ class TestOrchestratorCli(MgrTestCase):
     def test_service_ls(self):
         ret = self._orch_cmd("service", "ls")
         self.assertIn("ceph-mgr", ret)
+
+    def test_service_action(self):
+        self._orch_cmd("service", "reload", "mds", "cephfs")
+        self._orch_cmd("service", "stop", "mds", "cephfs")
+        self._orch_cmd("service", "start", "mds", "cephfs")
+
+    def test_service_instance_action(self):
+        self._orch_cmd("service-instance", "reload", "mds", "a")
+        self._orch_cmd("service-instance", "stop", "mds", "a")
+        self._orch_cmd("service-instance", "start", "mds", "a")

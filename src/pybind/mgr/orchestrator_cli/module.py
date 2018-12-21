@@ -90,6 +90,24 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             "perm": "rw"
         },
         {
+            'cmd': "orchestrator service "
+                   "name=action,type=CephChoices,"
+                   "strings=start|stop|reload "
+                   "name=svc_type,type=CephString "
+                   "name=svc_name,type=CephString",
+            "desc": "Start, stop or reload an entire service (i.e. all daemons)",
+            "perm": "rw"
+        },
+        {
+            'cmd': "orchestrator service-instance "
+                   "name=action,type=CephChoices,"
+                   "strings=start|stop|reload "
+                   "name=svc_type,type=CephString "
+                   "name=svc_id,type=CephString",
+            "desc": "Start, stop or reload a specific service instance",
+            "perm": "rw"
+        },
+        {
             'cmd': "orchestrator set backend "
                    "name=module,type=CephString,req=true",
             "desc": "Select orchestrator module backend",
@@ -255,6 +273,26 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
     def _nfs_rm(self, cmd):
         return self._rm_stateless_svc("nfs", cmd['svc_id'])
 
+    def _service_action(self, cmd):
+        action = cmd['action']
+        svc_type = cmd['svc_type']
+        svc_name = cmd['svc_name']
+
+        completion = self.service_action(action, svc_type, service_name=svc_name)
+        self._orchestrator_wait([completion])
+
+        return HandleCommandResult()
+
+    def _service_instance_action(self, cmd):
+        action = cmd['action']
+        svc_type = cmd['svc_type']
+        svc_id = cmd['svc_id']
+
+        completion = self.service_action(action, svc_type, service_id=svc_id)
+        self._orchestrator_wait([completion])
+
+        return HandleCommandResult()
+
     def _set_backend(self, cmd):
         """
         We implement a setter command instead of just having the user
@@ -352,6 +390,10 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             return self._nfs_add(cmd)
         elif cmd['prefix'] == "orchestrator nfs rm":
             return self._nfs_rm(cmd)
+        elif cmd['prefix'] == "orchestrator service":
+            return self._service_action(cmd)
+        elif cmd['prefix'] == "orchestrator service-instance":
+            return self._service_instance_action(cmd)
         elif cmd['prefix'] == "orchestrator set backend":
             return self._set_backend(cmd)
         elif cmd['prefix'] == "orchestrator status":
