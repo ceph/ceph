@@ -29,6 +29,11 @@ extern int block_device_run_smartctl(const char *device, int timeout,
 extern int block_device_get_metrics(const char *device, int timeout,
 				    json_spirit::mValue *result);
 
+// do everything to translate a device to the raw physical devices that
+// back it, including partitions -> wholedisks and dm -> constituent devices.
+extern void get_raw_devices(const std::string& in,
+			    std::set<std::string> *ls);
+
 // for VDO
 /// return an op fd for the sysfs stats dir, if this is a VDO device
 extern int get_vdo_stats_handle(const char *devname, std::string *vdo_name);
@@ -59,6 +64,15 @@ public:
   /* virtual for testing purposes */
   virtual const char *sysfsdir() const;
   virtual int wholedisk(char* device, size_t max) const;
+  int wholedisk(std::string *s) const {
+    char out[PATH_MAX] = {0};
+    int r = wholedisk(out, sizeof(out));
+    if (r < 0) {
+      return r;
+    }
+    *s = out;
+    return r;
+  }
 
 protected:
   int64_t get_int_property(blkdev_prop_t prop) const;

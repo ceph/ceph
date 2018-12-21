@@ -310,6 +310,28 @@ void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
   }
 }
 
+void get_raw_devices(const std::string& in,
+		     std::set<std::string> *ls)
+{
+  if (in.substr(0, 3) == "dm-") {
+    std::set<std::string> o;
+    get_dm_parents(in, &o);
+    for (auto& d : o) {
+      get_raw_devices(d, ls);
+    }
+  } else {
+    BlkDev d(in);
+    std::string wholedisk;
+    if (d.wholedisk(&wholedisk) == 0) {
+      std::cout << " wholedisk of " << in << " is " << wholedisk << std::endl;
+      ls->insert(wholedisk);
+    } else {
+      std::cout << " wholedisk of " << in << " failed" << std::endl;
+      ls->insert(in);
+    }
+  }
+}
+
 int _get_vdo_stats_handle(const char *devname, std::string *vdo_name)
 {
   int vdo_fd = -1;
@@ -641,6 +663,11 @@ void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
 {
 }
 
+void get_raw_devices(const std::string& in,
+		     std::set<std::string> *ls)
+{
+}
+
 int get_vdo_stats_handle(const char *devname, std::string *vdo_name)
 {
   return -1;
@@ -791,6 +818,11 @@ void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
 {
 }
 
+void get_raw_devices(const std::string& in,
+		     std::set<std::string> *ls)
+{
+}
+
 int get_vdo_stats_handle(const char *devname, std::string *vdo_name)
 {
   return -1;
@@ -919,6 +951,11 @@ int BlkDev::wholedisk(char *wd, size_t max) const
 }
 
 void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
+{
+}
+
+void get_raw_devices(const std::string& in,
+		     std::set<std::string> *ls)
 {
 }
 
