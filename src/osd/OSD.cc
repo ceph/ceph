@@ -5753,14 +5753,16 @@ void OSD::_collect_metadata(map<string,string> *pm)
   (*pm)["devices"] = stringify(devnames);
   string devids;
   for (auto& dev : devnames) {
-    if (!devids.empty()) {
-      devids += ",";
-    }
-    string id = get_device_id(dev);
+    string err;
+    string id = get_device_id(dev, &err);
     if (id.size()) {
+      if (!devids.empty()) {
+	devids += ",";
+      }
       devids += dev + "=" + id;
     } else {
-      dout(10) << __func__ << " no unique device id for " << dev << dendl;
+      dout(10) << __func__ << " no unique device id for " << dev << ": "
+	       << err << dendl;
     }
   }
   (*pm)["device_ids"] = devids;
@@ -6621,10 +6623,11 @@ void OSD::probe_smart(const string& only_devid, ostream& ss)
       continue;
     }
 
-    string devid = get_device_id(dev);
+    string err;
+    string devid = get_device_id(dev, &err);
     if (devid.size() == 0) {
-      dout(10) << __func__ << " no unique id for dev " << dev << ", skipping"
-	       << dendl;
+      dout(10) << __func__ << " no unique id for dev " << dev << " ("
+	       << err << "), skipping" << dendl;
       continue;
     }
     if (only_devid.size() && devid != only_devid) {
