@@ -61,7 +61,7 @@ class ObjectCacheStore
 
     //TODO(): make this configurable
     int m_dir_num = 10;
-    uint64_t object_cache_entries;
+    uint64_t object_cache_max_size;
     std::string m_cache_root_dir;
 };
 
