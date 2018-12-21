@@ -424,7 +424,10 @@ int MonMap::init_with_ips(const std::string& ips,
     char n[2];
     n[0] = 'a' + i;
     n[1] = 0;
-    string name = prefix;
+    string name;
+    if (!for_mkfs) {
+      name = prefix;
+    }
     name += n;
     _add_ambiguous_addr(name, addrs[i], 0);
   }
@@ -645,11 +648,11 @@ seastar::future<> MonMap::build_monmap(const ceph::common::ConfigProxy& conf,
   // -m foo?
   if (const auto mon_host = conf.get_val<std::string>("mon_host");
       !mon_host.empty()) {
-    if (auto ret = init_with_ips(mon_host, "noname-"); ret == 0) {
+    if (auto ret = init_with_ips(mon_host, for_mkfs, "noname-"); ret == 0) {
       return make_ready_future<>();
     }
     // TODO: resolve_addrs() is a blocking call
-    if (auto ret = init_with_hosts(mon_host, "noname-"); ret == 0) {
+    if (auto ret = init_with_hosts(mon_host, for_mkfs, "noname-"); ret == 0) {
       return make_ready_future<>();
     } else {
       throw std::runtime_error(cpp_strerror(ret));
@@ -666,7 +669,7 @@ seastar::future<> MonMap::build_monmap(const ceph::common::ConfigProxy& conf,
   }
   // no info found from conf options lets try use DNS SRV records
   const string srv_name = conf.get_val<std::string>("mon_dns_srv_name");
-  return init_with_dns_srv(srv_name).then([this] {
+  return init_with_dns_srv(for_mkfs, srv_name).then([this] {
     if (size() == 0) {
       throw std::runtime_error("no monitors specified to connect to.");
     }
@@ -759,9 +762,9 @@ int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
       !mon_host.empty()) {
     // NOTE: the for_mkfs path here is dodgey.. it assumes the mons will be
     // named 'a', 'b', 'c'.
-    auto ret = init_with_ips(mon_host, for_mkfs, for_mkfs ? "" : "noname-");
+    auto ret = init_with_ips(mon_host, for_mkfs, "noname-");
     if (ret == -EINVAL) {
-      ret = init_with_hosts(mon_host, for_mkfs, for_mkfs ? "" : "noname-");
+      ret = init_with_hosts(mon_host, for_mkfs, "noname-");
     }
     if (ret < 0) {
       errout << "unable to parse addrs in '" << mon_host << "'"
