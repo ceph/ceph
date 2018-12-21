@@ -23,6 +23,8 @@ static seastar::future<> test_monc()
     conf->cluster = cluster;
     return conf.parse_config_files(conf_file_list);
   }).then([] {
+    return ceph::common::sharded_perf_coll().start();
+  }).then([] {
     return seastar::do_with(ceph::net::SocketMessenger{entity_name_t::OSD(0), "monc", 0},
                             [](ceph::net::Messenger& msgr) {
       auto& conf = ceph::common::local_conf();
@@ -51,7 +53,9 @@ static seastar::future<> test_monc()
       });
     });
   }).finally([] {
-    return ceph::common::sharded_conf().stop();
+    return ceph::common::sharded_perf_coll().stop().then([] {
+      return ceph::common::sharded_conf().stop();
+    });
   });
 }
 
