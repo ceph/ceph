@@ -395,7 +395,8 @@ bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
 
 // trying to use udev first, and if it doesn't work, we fall back to 
 // reading /sys/block/$devname/device/(vendor/model/serial).
-std::string get_device_id(const std::string& devname)
+std::string get_device_id(const std::string& devname,
+			  std::string *err)
 {
   struct udev_device *dev;
   static struct udev *udev;
@@ -403,10 +404,17 @@ std::string get_device_id(const std::string& devname)
 
   udev = udev_new();
   if (!udev) {
+    if (err) {
+      *err = "udev_new failed";
+    }
     return {};
   }
   dev = udev_device_new_from_subsystem_sysname(udev, "block", devname.c_str());
   if (!dev) {
+    if (err) {
+      *err = std::string("udev_device_new_from_subsystem_sysname failed on '")
+	+ devname + "'";
+    }
     udev_unref(udev);
     return {};
   }
@@ -474,6 +482,10 @@ std::string get_device_id(const std::string& devname)
     serial = buf;
   }
   if (!model.size() || serial.size()) {
+    if (err) {
+      *err = std::string("fallback method has serial '") + serial
+	+ "'but no model";
+    }
     return {};
   }
 
@@ -788,9 +800,13 @@ bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
   return false;
 }
 
-std::string get_device_id(const std::string& devname)
+std::string get_device_id(const std::string& devname,
+			  std::string *err)
 {
   // FIXME: implement me for freebsd
+  if (err) {
+    *err = "not implemented for FreeBSD";
+  }
   return std::string();
 }
 
@@ -915,9 +931,13 @@ bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
   return false;
 }
 
-std::string get_device_id(const std::string& devname)
+std::string get_device_id(const std::string& devname,
+			  std::string *err)
 {
   // not implemented
+  if (err) {
+    *err = "not implemented";
+  }
   return std::string();
 }
 
