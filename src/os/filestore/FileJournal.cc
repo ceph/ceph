@@ -2186,15 +2186,12 @@ off64_t FileJournal::get_journal_size_estimate()
 
 void FileJournal::get_devices(set<string> *ls)
 {
-  char dev_node[PATH_MAX];
+  string dev_node;
   BlkDev blkdev(fd);
-  if (int rc = blkdev.wholedisk(dev_node, PATH_MAX); rc) {
+  if (int rc = blkdev.wholedisk(&dev_node); rc) {
     return;
   }
-  ls->insert(dev_node);
-  if (strncmp(dev_node, "dm-", 3) == 0) {
-    get_dm_parents(dev_node, ls);
-  }
+  get_raw_devices(dev_node, ls);
 }
 
 void FileJournal::collect_metadata(map<string,string> *pm)
