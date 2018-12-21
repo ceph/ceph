@@ -7287,8 +7287,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
   SetVal(g_conf(), "bluestore_max_blob_size", 
     stringify(2 * offs_base).c_str());
   SetVal(g_conf(), "bluestore_extent_map_shard_max_size", "12000");
-  SetVal(g_conf(), "bluestore_debug_no_per_pool_stats", "true");
-  SetVal(g_conf(), "bluestore_fsck_error_on_legacy_stats", "true");
+  SetVal(g_conf(), "bluestore_no_per_pool_stats_tolerance", "enforce");
 
   StartDeferred(0x10000);
 
@@ -7432,13 +7431,12 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
 
   // enable per-pool stats collection hence causing fsck to fail
   cerr << "per-pool statfs" << std::endl;
-  SetVal(g_conf(), "bluestore_debug_no_per_pool_stats", "false");
+  SetVal(g_conf(), "bluestore_no_per_pool_stats_tolerance", "until_fsck");
   g_ceph_context->_conf.apply_changes(nullptr);
 
   ASSERT_EQ(bstore->fsck(false), 2);
   ASSERT_EQ(bstore->repair(false), 0);
   ASSERT_EQ(bstore->fsck(false), 0);
-
 
   cerr << "Completing" << std::endl;
   bstore->mount();
