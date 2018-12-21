@@ -136,58 +136,6 @@ class Batch(object):
     """)
 
     def __init__(self, argv):
-        self.argv = argv
-
-    def get_devices(self):
-        # remove devices with partitions
-        devices = [(device, details) for device, details in
-                       disk.get_devices().items() if details.get('partitions') == {}]
-        size_sort = lambda x: (x[0], x[1]['size'])
-        return device_formatter(sorted(devices, key=size_sort))
-
-    def print_help(self):
-        return self._help.format(
-            detected_devices=self.get_devices(),
-        )
-
-    def report(self, args):
-        strategy = self._get_strategy(args)
-        if args.format == 'pretty':
-            strategy.report_pretty()
-        elif args.format == 'json':
-            strategy.report_json()
-        else:
-            raise RuntimeError('report format must be "pretty" or "json"')
-
-    def execute(self, args):
-        strategy = self._get_strategy(args)
-        if not args.yes:
-            strategy.report_pretty()
-            terminal.info('The above OSDs would be created if the operation continues')
-            if not prompt_bool('do you want to proceed? (yes/no)'):
-                devices = ','.join([device.abspath for device in args.devices])
-                terminal.error('aborting OSD provisioning for %s' % devices)
-                raise SystemExit(0)
-
-        strategy.execute()
-
-    def _get_strategy(self, args):
-        strategy = get_strategy(args, args.devices)
-        unused_devices = filter_devices(args)
-        if not unused_devices and not args.format == 'json':
-            # report nothing changed
-            mlogger.info("All devices are already used by ceph. No OSDs will be created.")
-            raise SystemExit(0)
-        else:
-            new_strategy = get_strategy(args, unused_devices)
-            if new_strategy and strategy != new_strategy:
-                mlogger.error("Aborting because strategy changed from %s to %s after filtering" % (strategy.type(), new_strategy.type()))
-                raise SystemExit(1)
-
-        return strategy(unused_devices, args)
-
-    @decorators.needs_root
-    def main(self):
         parser = argparse.ArgumentParser(
             prog='ceph-volume lvm batch',
             formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -201,6 +149,33 @@ class Batch(object):
             type=arg_validators.ValidDevice(),
             default=[],
             help='Devices to provision OSDs',
+        )
+        parser.add_argument(
+            '--db-devices',
+            nargs='*',
+            type=arg_validators.ValidDevice(),
+            default=[],
+            help='Devices to provision OSDs db volumes',
+        )
+        parser.add_argument(
+            '--wal-devices',
+            nargs='*',
+            type=arg_validators.ValidDevice(),
+            default=[],
+            help='Devices to provision OSDs wal volumes',
+        )
+        parser.add_argument(
+            '--db-devices',
+            nargs='*',
+            type=arg_validators.ValidDevice(),
+            default=[],
+            help='Devices to provision OSDs journal volumes',
+        )
+        parser.add_argument(
+            '--no-auto',
+            action='store_true',
+            help=('deploy standalone OSDs if rotational and non-rotational drives'
+                  'are passed in DEVICES'),
         )
         parser.add_argument(
             '--bluestore',
@@ -265,17 +240,73 @@ class Batch(object):
             action='store_true',
             help='Only prepare all OSDs, do not activate',
         )
-        args = parser.parse_args(self.argv)
+        self.args = parser.parse_args(argv)
 
-        if not args.devices:
+    def get_devices(self):
+        # remove devices with partitions
+        devices = [(device, details) for device, details in
+                       disk.get_devices().items() if details.get('partitions') == {}]
+        size_sort = lambda x: (x[0], x[1]['size'])
+        return device_formatter(sorted(devices, key=size_sort))
+
+    def print_help(self):
+        return self._help.format(
+            detected_devices=self.get_devices(),
+        )
+
+    def report(self):
+        strategy = self._get_strategy()
+        if self.args.format == 'pretty':
+            strategy.report_pretty()
+        elif self.args.format == 'json':
+            strategy.report_json()
+        else:
+            raise RuntimeError('report format must be "pretty" or "json"')
+
+    def execute(self):
+        strategy = self._get_strategy()
+        if not self.args.yes:
+            strategy.report_pretty()
+            terminal.info('The above OSDs would be created if the operation continues')
+            if not prompt_bool('do you want to proceed? (yes/no)'):
+                devices = ','.join([device.abspath for device in self.args.devices])
+                terminal.error('aborting OSD provisioning for %s' % devices)
+                raise SystemExit(0)
+
+        strategy.execute()
+
+    def _get_strategy(self):
+        strategy = get_strategy(args, self.args.devices)
+        unused_devices = filter_devices(self.args)
+        if not unused_devices and not self.args.format == 'json':
+            # report nothing changed
+            mlogger.info("All devices are already used by ceph. No OSDs will be created.")
+            raise SystemExit(0)
+        else:
+            new_strategy = get_strategy(self.args, unused_devices)
+            if new_strategy and strategy != new_strategy:
+                mlogger.error("Aborting because strategy changed from %s to %s after filtering" % (strategy.type(), new_strategy.type()))
+                raise SystemExit(1)
+
+        return strategy(unused_devices, self.args)
+
+    @decorators.needs_root
+    def main(self):
+        if not self.args.devices:
             return parser.print_help()
 
         # Default to bluestore here since defaulting it in add_argument may
         # cause both to be True
-        if not args.bluestore and not args.filestore:
-            args.bluestore = True
+        if not self.args.bluestore and not self.args.filestore:
+            self.args.bluestore = True
 
-        if args.report:
-            self.report(args)
+        if not self.args.no_auto:
+            if self.args.report:
+                self.report()
+            else:
+                self.execute()
         else:
-            self.execute(args)
+            self.get_explicit_strategy()
+
+    def get_explicit_strategy(self):
+        raise NotImplementedError()
