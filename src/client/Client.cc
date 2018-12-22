@@ -498,6 +498,8 @@ void Client::_finish_init()
   plb.add_time_avg(l_c_reply, "reply", "Latency of receiving a reply on metadata request");
   plb.add_time_avg(l_c_lat, "lat", "Latency of processing a metadata request");
   plb.add_time_avg(l_c_wrlat, "wrlat", "Latency of a file data write operation");
+  plb.add_time_avg(l_c_read, "rdlat", "Latency of a file data read operation");
+  plb.add_time_avg(l_c_fsync, "fsync", "Latency of a file sync operation");
   logger.reset(plb.create_perf_counters());
   cct->get_perfcounters_collection()->add(logger.get());
 
@@ -9013,6 +9015,8 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   int64_t r = 0;
   const auto& conf = cct->_conf;
   Inode *in = f->inode.get();
+  utime_t lat;
+  utime_t start = ceph_clock_now(); 
 
   if ((f->mode & CEPH_FILE_MODE_RD) == 0)
     return -EBADF;
@@ -9114,10 +9118,14 @@ success:
     // adjust fd pos
     f->pos = start_pos + r;
   }
+  
+  lat = ceph_clock_now();
+  lat -= start;
+  logger->tinc(l_c_read, lat);
 
 done:
   // done!
-
+  
   if (onuninline) {
     client_lock.Unlock();
     int ret = onuninline->wait();
@@ -9705,6 +9713,8 @@ int Client::_fsync(Inode *in, bool syncdataonly)
   std::unique_ptr<C_SaferCond> object_cacher_completion = nullptr;
   ceph_tid_t flush_tid = 0;
   InodeRef tmp_ref;
+  utime_t lat;
+  utime_t start = ceph_clock_now(); 
 
   ldout(cct, 8) << "_fsync on " << *in << " " << (syncdataonly ? "(dataonly)":"(data+metadata)") << dendl;
   
@@ -9756,6 +9766,10 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     ldout(cct, 8) << "ino " << in->ino << " failed to commit to disk! "
 		  << cpp_strerror(-r) << dendl;
   }
+   
+  lat = ceph_clock_now();
+  lat -= start;
+  logger->tinc(l_c_fsync, lat);
 
   return r;
 }
