@@ -621,6 +621,7 @@ def task(ctx, config):
                 sha1=config.get('sha1'),
                 debuginfo=config.get('debuginfo'),
                 flavor=flavor,
+                downgrade_packages=config.get('downgrade_packages', []),
                 extra_packages=config.get('extra_packages', []),
                 extra_system_packages=config.get('extra_system_packages', []),
                 exclude_packages=config.get('exclude_packages', []),
