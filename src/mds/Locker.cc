@@ -2242,7 +2242,13 @@ void Locker::request_inode_file_caps(CInode *in)
 void Locker::handle_inode_file_caps(const MInodeFileCaps::const_ref &m)
 {
   // nobody should be talking to us during recovery.
-  ceph_assert(mds->is_clientreplay() || mds->is_active() || mds->is_stopping());
+  if (mds->get_state() < MDSMap::STATE_CLIENTREPLAY) {
+    if (mds->get_want_state() >= MDSMap::STATE_CLIENTREPLAY) {
+      mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
+      return;
+    }
+    ceph_abort_msg("got unexpected message during recovery");
+  }
 
   // ok
   CInode *in = mdcache->get_inode(m->get_ino());
