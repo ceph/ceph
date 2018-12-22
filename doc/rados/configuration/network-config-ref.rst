@@ -391,55 +391,6 @@ addresses.
 
 
 
-Hosts
------
-
-Ceph expects at least one monitor declared in the Ceph configuration file, with
-a ``mon addr`` setting under each declared monitor. Ceph expects a ``host``
-setting under each declared monitor, metadata server and OSD in the Ceph
-configuration file. Optionally, a monitor can be assigned with a priority, and
-the clients will always connect to the monitor with lower value of priority if
-specified.
-
-
-``mon addr``
-
-:Description: A list of ``{hostname}:{port}`` entries that clients can use to 
-              connect to a Ceph monitor. If not set, Ceph searches ``[mon.*]`` 
-              sections. 
-
-:Type: String
-:Required: No
-:Default: N/A
-
-``mon priority``
-
-:Description: The priority of the declared monitor, the lower value the more
-              preferred when a client selects a monitor when trying to connect
-              to the cluster.
-
-:Type: Unsigned 16-bit Integer
-:Required: No
-:Default: 0
-
-``host``
-
-:Description: The hostname. Use this setting for specific daemon instances 
-              (e.g., ``[osd.0]``).
-
-:Type: String
-:Required: Yes, for daemon instances.
-:Default: ``localhost``
-
-.. tip:: Do not use ``localhost``. To get your host name, execute 
-         ``hostname -s`` on your command line and use the name of your host 
-         (to the first period, not the fully-qualified domain name).
-
-.. important:: You should not specify any value for ``host`` when using a third
-               party deployment system that retrieves the host name for you.
-
-
-
 TCP
 ---
 
