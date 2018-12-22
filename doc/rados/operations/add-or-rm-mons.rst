@@ -119,9 +119,9 @@ on ``mon.a``).
 	
 
 #. Start the new monitor and it will automatically join the cluster.
-   The daemon needs to know which address to bind to, either via
-   ``--public-addr {ip:port}`` or by setting ``mon addr`` in the
-   appropriate section of ``ceph.conf``.  For example::
+   The daemon needs to know which address to bind to, via either the
+   ``--public-addr {ip}`` or ``--public-network {network}`` argument.
+   For example::
 
 	ceph-mon -i {mon-id} --public-addr {ip:port}
 
