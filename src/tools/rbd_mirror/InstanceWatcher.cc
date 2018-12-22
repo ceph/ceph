@@ -332,6 +332,7 @@ InstanceWatcher<I>::InstanceWatcher(librados::IoCtx &io_ctx,
 
 template <typename I>
 InstanceWatcher<I>::~InstanceWatcher() {
+  ceph_assert(m_requests.empty());
   ceph_assert(m_notify_ops.empty());
   ceph_assert(m_notify_op_tracker.empty());
   ceph_assert(m_suspended_ops.empty());
