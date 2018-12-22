@@ -966,9 +966,14 @@ void MDSRank::ProgressThread::shutdown()
 
 bool MDSRankDispatcher::ms_dispatch(const Message::const_ref &m)
 {
-  bool ret;
+  if (m->get_source().is_client()) {
+    Session *session = static_cast<Session*>(m->get_connection()->get_priv().get());
+    if (session)
+      session->last_seen = Session::clock::now();
+  }
+
   inc_dispatch_depth();
-  ret = _dispatch(m, true);
+  bool ret = _dispatch(m, true);
   dec_dispatch_depth();
   return ret;
 }
@@ -1293,6 +1298,7 @@ Session *MDSRank::get_session(const Message::const_ref &m)
           session->preopen_out_queue.pop_front();
         }
         imported_session->auth_caps = session->auth_caps;
+        imported_session->last_seen = session->last_seen;
         ceph_assert(session->get_nref() == 1);
         imported_session->get_connection()->set_priv(imported_session->get());
         session = imported_session;

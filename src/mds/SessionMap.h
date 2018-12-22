@@ -250,6 +250,7 @@ public:
   xlist<Capability*> caps;     // inodes with caps; front=most recently used
   xlist<ClientLease*> leases;  // metadata leases to clients
   time last_cap_renew = clock::zero();
+  time last_seen = clock::zero();
 
 public:
   version_t inc_push_seq() { return ++cap_push_seq; }
