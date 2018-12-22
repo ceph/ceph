@@ -35,7 +35,7 @@ if(WITH_BLUESTORE)
   )
 endif(WITH_BLUESTORE)
 
-if(HAVE_LIBAIO)
+if(HAVE_LIBAIO OR HAVE_POSIXAIO)
   list(APPEND libos_srcs
     bluestore/KernelDevice.cc
     bluestore/aio.cc)

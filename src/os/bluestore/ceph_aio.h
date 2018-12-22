@@ -2,7 +2,15 @@
 // vim: ts=8 sw=2 smarttab
 
 #pragma once
-# include <libaio.h>
+
+#include "acconfig.h"
+
+#if defined(HAVE_LIBAIO)
+#include <libaio.h>
+#elif defined(HAVE_POSIXAIO)
+#include <aio.h>
+#include <sys/event.h>
+#endif
 
 #include <boost/intrusive/list.hpp>
 #include <boost/container/small_vector.hpp>
@@ -11,7 +19,16 @@
 #include "include/types.h"
 
 struct aio_t {
+#if defined(HAVE_LIBAIO)
   struct iocb iocb{};  // must be first element; see shenanigans in aio_queue_t
+#elif defined(HAVE_POSIXAIO)
+  //  static long aio_listio_max = -1;
+  union {
+    struct aiocb aiocb;
+    struct aiocb *aiocbp;
+  } aio;
+  int n_aiocb;
+#endif
   void *priv;
   int fd;
   boost::container::small_vector<iovec,4> iov;
@@ -27,13 +44,34 @@ struct aio_t {
   void pwritev(uint64_t _offset, uint64_t len) {
     offset = _offset;
     length = len;
+#if defined(HAVE_LIBAIO)
     io_prep_pwritev(&iocb, fd, &iov[0], iov.size(), offset);
+#elif defined(HAVE_POSIXAIO)
+    n_aiocb = iov.size();
+    aio.aiocbp = (struct aiocb*)calloc(iov.size(), sizeof(struct aiocb));
+    for (int i = 0; i < iov.size(); i++) {
+      aio.aiocbp[i].aio_fildes = fd;
+      aio.aiocbp[i].aio_offset = offset;
+      aio.aiocbp[i].aio_buf = iov[i].iov_base;
+      aio.aiocbp[i].aio_nbytes = iov[i].iov_len;
+      aio.aiocbp[i].aio_lio_opcode = LIO_WRITE;
+      offset += iov[i].iov_len;
+    }
+#endif
   }
   void pread(uint64_t _offset, uint64_t len) {
     offset = _offset;
     length = len;
     bufferptr p = buffer::create_small_page_aligned(length);
+#if defined(HAVE_LIBAIO)
     io_prep_pread(&iocb, fd, p.c_str(), length, offset);
+#elif defined(HAVE_POSIXAIO)
+    n_aiocb = 1;
+    aio.aiocb.aio_fildes = fd;
+    aio.aiocb.aio_buf = p.c_str();
+    aio.aiocb.aio_nbytes = length;
+    aio.aiocb.aio_offset = offset;
+#endif
     bl.append(std::move(p));
   }
 
@@ -53,7 +91,11 @@ typedef boost::intrusive::list<
 
 struct aio_queue_t {
   int max_iodepth;
+#if defined(HAVE_LIBAIO)
   io_context_t ctx;
+#elif defined(HAVE_POSIXAIO)
+  int ctx;
+#endif
 
   typedef list<aio_t>::iterator aio_iter;
 
@@ -67,6 +109,7 @@ struct aio_queue_t {
 
   int init() {
     ceph_assert(ctx == 0);
+#if defined(HAVE_LIBAIO)
     int r = io_setup(max_iodepth, &ctx);
     if (r < 0) {
       if (ctx) {
@@ -75,10 +118,21 @@ struct aio_queue_t {
       }
     }
     return r;
+#elif defined(HAVE_POSIXAIO)
+    ctx = kqueue();
+    if (ctx < 0)
+      return -errno;
+    else
+      return 0;
+#endif
   }
   void shutdown() {
     if (ctx) {
+#if defined(HAVE_LIBAIO)
       int r = io_destroy(ctx);
+#elif defined(HAVE_POSIXAIO)
+      int r = close(ctx);
+#endif
       ceph_assert(r == 0);
       ctx = 0;
     }

@@ -22,7 +22,7 @@
 #include "common/Thread.h"
 #include "include/utime.h"
 
-#include "aio.h"
+#include "ceph_aio.h"
 #include "BlockDevice.h"
 
 class KernelDevice : public BlockDevice {
