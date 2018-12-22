@@ -245,6 +245,15 @@
   ``osd_pool_default_*`` options that affect default values for newly
   created RADOS pools.
 
+* The ``mon addr`` configuration option is now deprecated.  It can
+  still be used to specify an address for each monitor in the
+  ``ceph.conf`` file, but it only affects cluster creation and
+  bootstrapping, and it does not support listing multiple addresses
+  (e.g., both a v2 and v1 protocol address).  We strongly recommend
+  the option be removed and instead a single ``mon host`` option be
+  specified in the ``[global]`` section to allow daemons and clients
+  to discover the monitors.
+
 
 Upgrading from Luminous
 -----------------------
