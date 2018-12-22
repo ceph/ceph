@@ -3,6 +3,7 @@ import json
 import errno
 import math
 import os
+import re
 import socket
 import threading
 import time
@@ -538,8 +539,8 @@ class Module(MgrModule):
     def get_rbd_stats(self):
         # Per RBD image stats is collected by registering a dynamic osd perf
         # stats query that tells OSDs to group stats for requests associated
-        # with RBD objects by pool and image id, which are extracted from the
-        # request object names or other attributes.
+        # with RBD objects by pool, namespace, and image id, which are
+        # extracted from the request object names or other attributes.
         # The RBD object names have the following prefixes:
         #   - rbd_data.{image_id}. (data stored in the same pool as metadata)
         #   - rbd_data.{pool_id}.{image_id}. (data stored in a dedicated data pool)
@@ -549,23 +550,38 @@ class Module(MgrModule):
         # in the object name, the image pool is the pool where the object is
         # located.
 
-        pools = self.get_localized_module_option('rbd_stats_pools', '').split()
-        pools.sort()
+        # Parse rbd_stats_pools option, which is a comma or space separated
+        # list of pool[/namespace] entries. If no namespace is specifed the
+        # stats are collected for every namespace in the pool.
+        pools_string = self.get_localized_module_option('rbd_stats_pools', '')
+        pools = {}
+        for p in re.split('[\s,]+', pools_string):
+            s = p.split('/', 2)
+            pool_name = s[0]
+            if len(s) == 1:
+                # empty set means collect for all namespaces
+                pools[pool_name] = set()
+                continue
+            if pool_name not in pools:
+                pools[pool_name] = set()
+            elif not pools[pool_name]:
+                continue
+            pools[pool_name].add(s[1])
 
-        rbd_stats_pools = []
+        rbd_stats_pools = {}
         for pool_id in list(self.rbd_stats['pools']):
             name = self.rbd_stats['pools'][pool_id]['name']
             if name not in pools:
                 del self.rbd_stats['pools'][pool_id]
             else:
-                rbd_stats_pools.append(name)
+                rbd_stats_pools[name] = \
+                    self.rbd_stats['pools'][pool_id]['ns_names']
 
         pools_refreshed = False
         if pools:
             next_refresh = self.rbd_stats['pools_refresh_time'] + \
                 self.get_localized_module_option(
                     'rbd_stats_pools_refresh_interval', 300)
-            rbd_stats_pools.sort()
             if rbd_stats_pools != pools or time.time() >= next_refresh:
                 self.refresh_rbd_stats_pools(pools)
                 pools_refreshed = True
@@ -574,8 +590,22 @@ class Module(MgrModule):
         pool_ids.sort()
         pool_id_regex = '^(' + '|'.join([str(x) for x in pool_ids]) + ')$'
 
+        nspace_names = []
+        for pool_id, pool in self.rbd_stats['pools'].items():
+            if pool['ns_names']:
+                nspace_names.extend(pool['ns_names'])
+            else:
+                nspace_names = []
+                break
+        if nspace_names:
+            namespace_regex = '^(' + \
+                '|'.join([re.escape(x) for x in set(nspace_names)]) + ')$'
+        else:
+            namespace_regex = '^(.*)$'
+
         if 'query' in self.rbd_stats and \
-           pool_id_regex != self.rbd_stats['query']['key_descriptor'][0]['regex']:
+           (pool_id_regex != self.rbd_stats['query']['key_descriptor'][0]['regex'] or
+            namespace_regex != self.rbd_stats['query']['key_descriptor'][1]['regex']):
             self.remove_osd_perf_query(self.rbd_stats['query_id'])
             del self.rbd_stats['query_id']
             del self.rbd_stats['query']
@@ -589,6 +619,7 @@ class Module(MgrModule):
             query = {
                 'key_descriptor': [
                     {'type': 'pool_id', 'regex': pool_id_regex},
+                    {'type': 'namespace', 'regex': namespace_regex},
                     {'type': 'object_name',
                      'regex': '^(?:rbd|journal)_data\.(?:([0-9]+)\.)?([^.]+)\.'},
                 ],
@@ -605,8 +636,8 @@ class Module(MgrModule):
         for c in res['counters']:
             # if the pool id is not found in the object name use id of the
             # pool where the object is located
-            if c['k'][1][0]:
-                pool_id = int(c['k'][1][0])
+            if c['k'][2][0]:
+                pool_id = int(c['k'][2][0])
             else:
                 pool_id = int(c['k'][0][0])
             if pool_id not in self.rbd_stats['pools'] and not pools_refreshed:
@@ -614,66 +645,72 @@ class Module(MgrModule):
                 pools_refreshed = True
             if pool_id not in self.rbd_stats['pools']:
                 continue
-            image_id = c['k'][1][1]
             pool = self.rbd_stats['pools'][pool_id]
-            if image_id not in pool['images'] and not pools_refreshed:
-                self.refresh_rbd_stats_pools(pools)
-                pools_refreshed = True
-            if image_id not in pool['images']:
+            nspace_name = c['k'][1][0]
+            if nspace_name not in pool['images']:
                 continue
-            counters = pool['images'][image_id]['c']
+            image_id = c['k'][2][1]
+            if image_id not in pool['images'][nspace_name] and \
+               not pools_refreshed:
+                self.refresh_rbd_stats_pools(pools)
+                pool = self.rbd_stats['pools'][pool_id]
+                pools_refreshed = True
+            if image_id not in pool['images'][nspace_name]:
+                continue
+            counters = pool['images'][nspace_name][image_id]['c']
             for i in range(len(c['c'])):
                 counters[i][0] += c['c'][i][0]
                 counters[i][1] += c['c'][i][1]
 
+        label_names = ("pool", "namespace", "image")
         for pool_id, pool in self.rbd_stats['pools'].items():
             pool_name = pool['name']
-            for image_id in pool['images']:
-                image_name = pool['images'][image_id]['n']
-                counters = pool['images'][image_id]['c']
-                i = 0
-                for key in counters_info:
-                    counter_info = counters_info[key]
-                    stattype = self._stattype_to_str(counter_info['type'])
-                    if counter_info['type'] == self.PERFCOUNTER_COUNTER:
-                        path = 'rbd_' + key
-                        if path not in self.metrics:
-                            self.metrics[path] = Metric(
-                                stattype,
-                                path,
-                                counter_info['desc'],
-                                ("pool", "image",),
-                            )
-                        self.metrics[path].set(counters[i][0],
-                                               (pool_name, image_name,))
-                    elif counter_info['type'] == self.PERFCOUNTER_LONGRUNAVG:
-                        path = 'rbd_' + key + '_sum'
-                        if path not in self.metrics:
-                            self.metrics[path] = Metric(
-                                stattype,
-                                path,
-                                counter_info['desc'] + ' Total',
-                                ("pool", "image",),
-                            )
-                        self.metrics[path].set(counters[i][0],
-                                               (pool_name, image_name,))
-                        path = 'rbd_' + key + '_count'
-                        if path not in self.metrics:
-                            self.metrics[path] = Metric(
-                                'counter',
-                                path,
-                                counter_info['desc'] + ' Count',
-                                ("pool", "image",),
-                            )
-                        self.metrics[path].set(counters[i][1],
-                                               (pool_name, image_name,))
-                    i += 1;
+            for nspace_name, images in pool['images'].items():
+                for image_id in images:
+                    image_name = images[image_id]['n']
+                    counters = images[image_id]['c']
+                    i = 0
+                    for key in counters_info:
+                        counter_info = counters_info[key]
+                        stattype = self._stattype_to_str(counter_info['type'])
+                        labels = (pool_name, nspace_name, image_name)
+                        if counter_info['type'] == self.PERFCOUNTER_COUNTER:
+                            path = 'rbd_' + key
+                            if path not in self.metrics:
+                                self.metrics[path] = Metric(
+                                    stattype,
+                                    path,
+                                    counter_info['desc'],
+                                    label_names,
+                                )
+                            self.metrics[path].set(counters[i][0], labels)
+                        elif counter_info['type'] == self.PERFCOUNTER_LONGRUNAVG:
+                            path = 'rbd_' + key + '_sum'
+                            if path not in self.metrics:
+                                self.metrics[path] = Metric(
+                                    stattype,
+                                    path,
+                                    counter_info['desc'] + ' Total',
+                                    label_names,
+                                )
+                            self.metrics[path].set(counters[i][0], labels)
+                            path = 'rbd_' + key + '_count'
+                            if path not in self.metrics:
+                                self.metrics[path] = Metric(
+                                    'counter',
+                                    path,
+                                    counter_info['desc'] + ' Count',
+                                    label_names,
+                                )
+                            self.metrics[path].set(counters[i][1], labels)
+                        i += 1;
 
     def refresh_rbd_stats_pools(self, pools):
         self.log.debug('refreshing rbd pools %s' % (pools))
 
+        rbd = RBD()
         counters_info = self.rbd_stats['counters_info']
-        for pool_name in pools:
+        for pool_name, cfg_ns_names in pools.items():
             try:
                 pool_id = self.rados.pool_lookup(pool_name)
                 with self.rados.open_ioctx(pool_name) as ioctx:
@@ -681,16 +718,34 @@ class Module(MgrModule):
                         self.rbd_stats['pools'][pool_id] = {'images' : {}}
                     pool = self.rbd_stats['pools'][pool_id]
                     pool['name'] = pool_name
-                    images = {}
-                    for image_meta in RBD().list2(ioctx):
-                        image = {'n' : image_meta['name']}
-                        image_id = image_meta['id']
-                        if image_id in pool['images']:
-                            image['c'] = pool['images'][image_id]['c']
-                        else:
-                            image['c'] = [[0, 0] for x in counters_info]
-                        images[image_id] = image
-                    pool['images'] = images
+                    pool['ns_names'] = cfg_ns_names
+                    if cfg_ns_names:
+                        nspace_names = list(cfg_ns_names)
+                    else:
+                        nspace_names = [''] + rbd.namespace_list(ioctx)
+                    for nspace_name in pool['images']:
+                        if nspace_name not in nspace_names:
+                            del pool['images'][nspace_name]
+                    for nspace_name in nspace_names:
+                        if (nspace_name and
+                            not rbd.namespace_exists(ioctx, nspace_name)):
+                            self.log.debug('unknown namespace %s for pool %s' %
+                                           (nspace_name, pool_name))
+                            continue
+                        ioctx.set_namespace(nspace_name)
+                        if nspace_name not in pool['images']:
+                            pool['images'][nspace_name] = {}
+                        namespace = pool['images'][nspace_name]
+                        images = {}
+                        for image_meta in RBD().list2(ioctx):
+                            image = {'n' : image_meta['name']}
+                            image_id = image_meta['id']
+                            if image_id in namespace:
+                                image['c'] = namespace[image_id]['c']
+                            else:
+                                image['c'] = [[0, 0] for x in counters_info]
+                            images[image_id] = image
+                        pool['images'][nspace_name] = images
             except Exception as e:
                 self.log.error('failed listing pool %s: %s' % (pool_name, e))
         self.rbd_stats['pools_refresh_time'] = time.time()

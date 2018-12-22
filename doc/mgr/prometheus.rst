@@ -29,6 +29,23 @@ configurable with ``ceph config-key set``, with keys
 ``mgr/prometheus/server_addr`` and ``mgr/prometheus/server_port``.
 This port is registered with Prometheus's `registry <https://github.com/prometheus/prometheus/wiki/Default-port-allocations>`_.
 
+RBD IO statistics
+-----------------
+
+The module can optionally collect RBD per-image IO statistics by enabling
+dynamic OSD performance counters. The statistics are gathered for all images
+in the pools that are specified in the ``mgr/prometheus/rbd_stats_pools``
+configuration parameter. The parameter is a comma or space separated list
+of ``pool[/namespace]`` entries. If the namespace is not specified the
+statistics are collected for all namespaces in the pool.
+
+The module makes the list of all available images scanning the specified
+pools and namespaces and refreshes it periodically. The period is
+configurable via the ``mgr/prometheus/rbd_stats_pools_refresh_interval``
+parameter (in sec) and is 300 sec (5 minutes) by default. The module will
+force refresh earlier if it detects statistics from a previously unknown
+RBD image.
+
 Statistic names and labels
 ==========================
 
