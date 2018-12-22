@@ -47,9 +47,16 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
 
       // always apply the new settings synchronously on the owner shard, to
       // avoid racings with other do_change() calls in parallel.
+      ObserverMgr<ConfigObserver>::rev_obs_map rev_obs;
       owner.values.reset(new_values);
-      owner.obs_mgr.apply_changes(owner.values->changed,
-                                  owner, nullptr);
+      owner.obs_mgr.for_each_change(owner.values->changed, owner,
+                                    [&rev_obs](ConfigObserver *obs,
+                                               const std::string &key) {
+                                      rev_obs[obs].insert(key);
+                                    }, nullptr);
+      for (auto& [obs, keys] : rev_obs) {
+        obs->handle_conf_change(owner, keys);
+      }
 
       return seastar::parallel_for_each(boost::irange(1u, seastar::smp::count),
                                         [&owner, new_values] (auto cpu) {
@@ -57,8 +64,16 @@ class ConfigProxy : public seastar::peering_sharded_service<ConfigProxy>
           [foreign_values = seastar::make_foreign(new_values)](ConfigProxy& proxy) mutable {
             proxy.values.reset();
             proxy.values = std::move(foreign_values);
-            proxy.obs_mgr.apply_changes(proxy.values->changed,
-                                        proxy, nullptr);
+
+            ObserverMgr<ConfigObserver>::rev_obs_map rev_obs;
+            proxy.obs_mgr.for_each_change(proxy.values->changed, proxy,
+                                          [&rev_obs](md_config_obs_t *obs,
+                                                     const std::string &key) {
+                                            rev_obs[obs].insert(key);
+                                          }, nullptr);
+            for (auto& [obs, keys] : rev_obs) {
+              obs->handle_conf_change(proxy, keys);
+            }
           });
         }).finally([new_values] {
           new_values->changed.clear();
