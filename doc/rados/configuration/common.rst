@@ -54,13 +54,7 @@ Monitors in the quorum.
 .. note:: You may deploy Ceph with a single monitor, but if the instance fails,
 	       the lack of other monitors may interrupt data service availability.
 
-Ceph Monitors typically listen on port ``6789``. For example:
-
-.. code-block:: ini
-
-	[mon.a]
-	host = hostName
-	mon addr = 150.140.130.120:6789
+Ceph Monitors normally listen on port ``3300`` for the new v2 protocol, and ``6789`` for the old v1 protocol.
 
 By default, Ceph expects that you will store a monitor's data under the
 following path::
