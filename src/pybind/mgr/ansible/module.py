@@ -4,21 +4,13 @@ ceph-mgr Ansible orchestrator module
 The external Orchestrator is the Ansible runner service (RESTful https service)
 """
 
-# Python stuff
-from threading import Event
-import errno
 import json
 
-# Ceph stuff
 from mgr_module import MgrModule
 import orchestrator
 
-# Orchestrator stuff
-# A Client is used to communicate with the Ansible Runner service
-from ansible_runner_svc import Client, PlayBookExecution, ExecutionStatusCode,\
+from .ansible_runner_svc import Client, PlayBookExecution, ExecutionStatusCode,\
                                EVENT_DATA_URL
-
-# Constants section
 
 # Time to clean the completions list
 WAIT_PERIOD = 10
@@ -197,8 +189,6 @@ class Module(MgrModule, orchestrator.Orchestrator):
     ]
 
     def __init__(self, *args, **kwargs):
-        """
-        """
         super(Module, self).__init__(*args, **kwargs)
 
         self.run = False
