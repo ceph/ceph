@@ -128,14 +128,17 @@ public:
     }
   }
 
-  sss& get_stream() {
+  sss& operator*() {
     return *osp;
   }
-  const sss& get_stream() const {
+  sss const& operator*() const {
     return *osp;
   }
-  std::string_view strv() const {
-    return osp->strv();
+  sss* operator->() {
+    return osp.get();
+  }
+  sss const* operator->() const {
+    return osp.get();
   }
 
 private:
