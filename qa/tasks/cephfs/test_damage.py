@@ -12,6 +12,7 @@ DAMAGED_ON_START = "damaged_on_start"
 DAMAGED_ON_LS = "damaged_on_ls"
 CRASHED = "server crashed"
 NO_DAMAGE = "no damage"
+READONLY = "readonly"
 FAILED_CLIENT = "client failed"
 FAILED_SERVER = "server failed"
 
@@ -161,14 +162,22 @@ class TestDamage(CephFSTestCase):
             ))
 
         # Blatant corruptions
-        mutations.extend([
-            MetadataMutation(
-                o,
-                "Corrupt {0}".format(o),
-                lambda o=o: self.fs.rados(["put", o, "-"], stdin_data=junk),
-                DAMAGED_ON_START
-            ) for o in data_objects
-        ])
+        for obj_id in data_objects:
+            if obj_id == "500.00000000":
+                # purge queue corruption results in read-only FS
+                mutations.append(MetadataMutation(
+                    obj_id,
+                    "Corrupt {0}".format(obj_id),
+                    lambda o=obj_id: self.fs.rados(["put", o, "-"], stdin_data=junk),
+                    READONLY
+                ))
+            else:
+                mutations.append(MetadataMutation(
+                    obj_id,
+                    "Corrupt {0}".format(obj_id),
+                    lambda o=obj_id: self.fs.rados(["put", o, "-"], stdin_data=junk),
+                    DAMAGED_ON_START
+                ))
 
         # Truncations
         for o in data_objects:
@@ -316,7 +325,17 @@ class TestDamage(CephFSTestCase):
                     else:
                         log.error("Result: Failed to go damaged on mutation '{0}'".format(mutation.desc))
                         results[mutation] = FAILED_SERVER
-
+            elif mutation.expectation == READONLY:
+                proc = self.mount_a.run_shell(["mkdir", "foo"], wait=False)
+                try:
+                    proc.wait()
+                except CommandFailedError:
+                    stderr = proc.stderr.getvalue()
+                    log.info(stderr)
+                    if "Read-only file system".lower() in stderr.lower():
+                        pass
+                    else:
+                        raise
             else:
                 try:
                     wait([proc], 20)
