@@ -229,8 +229,15 @@ class FuseMount(CephFSMount):
 
         # Now that we're mounted, set permissions so that the rest of the test will have
         # unrestricted access to the filesystem mount.
-        self.client_remote.run(
-            args=['sudo', 'chmod', '1777', self.mountpoint], timeout=(15*60))
+        try:
+            stderr = StringIO()
+            self.client_remote.run(args=['sudo', 'chmod', '1777', self.mountpoint], timeout=(15*60), stderr=stderr)
+        except run.CommandFailedError:
+            stderr = stderr.getvalue()
+            if "Read-only file system".lower() in stderr.lower():
+                pass
+            else:
+                raise
 
     def _mountpoint_exists(self):
         return self.client_remote.run(args=["ls", "-d", self.mountpoint], check_status=False, timeout=(15*60)).exitstatus == 0
