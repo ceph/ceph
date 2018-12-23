@@ -5519,10 +5519,7 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     if (r >= 0)
       op.extent.length = r;
     else if (r == -EAGAIN) {
-      // EAGAIN should not change the length of extent or count the read op.
-      dout(10) << " read got " << r << " / " << op.extent.length
-              << " bytes from obj " << soid << ". try again." << dendl;
-      return -EAGAIN;
+      result = -EAGAIN;
     } else {
       result = r;
       op.extent.length = 0;
@@ -5530,11 +5527,10 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     dout(10) << " read got " << r << " / " << op.extent.length
 	     << " bytes from obj " << soid << dendl;
   }
-
-  // XXX the op.extent.length is the requested length for async read
-  // On error this length is changed to 0 after the error comes back.
-  ctx->delta_stats.num_rd_kb += shift_round_up(op.extent.length, 10);
-  ctx->delta_stats.num_rd++;
+  if (result >= 0) {
+    ctx->delta_stats.num_rd_kb += shift_round_up(op.extent.length, 10);
+    ctx->delta_stats.num_rd++;
+  }
   return result;
 }
 
