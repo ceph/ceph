@@ -2523,18 +2523,17 @@ void Migrator::handle_export_prep(const MExportDirPrep::const_ref &m, bool did_a
       ceph_assert(in);
 
       // map fragset into a frag_t list, based on the inode fragtree
-      list<frag_t> fglist;
-      for (set<frag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q)
-	in->dirfragtree.get_leaves_under(*q, fglist);
-      dout(10) << " bound inode " << p->first << " fragset " << p->second << " maps to " << fglist << dendl;
+      frag_vec_t leaves;
+      for (const auto& frag : p->second) {
+	in->dirfragtree.get_leaves_under(frag, leaves);
+      }
+      dout(10) << " bound inode " << p->first << " fragset " << p->second << " maps to " << leaves << dendl;
 
-      for (list<frag_t>::iterator q = fglist.begin();
-	   q != fglist.end();
-	   ++q) {
-	CDir *bound = cache->get_dirfrag(dirfrag_t(p->first, *q));
+      for (const auto& leaf : leaves) {
+	CDir *bound = cache->get_dirfrag(dirfrag_t(p->first, leaf));
 	if (!bound) {
-	  dout(7) << "  opening bounding dirfrag " << *q << " on " << *in << dendl;
-	  cache->open_remote_dirfrag(in, *q, cf.build());
+	  dout(7) << "  opening bounding dirfrag " << leaf << " on " << *in << dendl;
+	  cache->open_remote_dirfrag(in, leaf, cf.build());
 	  return;
 	}
 

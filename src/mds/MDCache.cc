@@ -713,13 +713,12 @@ void MDCache::populate_mydir()
     dout(20) << " stray num " << i << " is " << *strays[i] << dendl;
 
     // open all frags
-    list<frag_t> ls;
-    strays[i]->dirfragtree.get_leaves(ls);
-    for (list<frag_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
-      frag_t fg = *p;
-      CDir *dir = strays[i]->get_dirfrag(fg);
+    frag_vec_t leaves;
+    strays[i]->dirfragtree.get_leaves(leaves);
+    for (const auto& leaf : leaves) {
+      CDir *dir = strays[i]->get_dirfrag(leaf);
       if (!dir) {
-	dir = strays[i]->get_or_open_dirfrag(this, fg);
+	dir = strays[i]->get_or_open_dirfrag(this, leaf);
       }
 
       // DamageTable applies special handling to strays: it will
@@ -805,14 +804,6 @@ MDSCacheObject *MDCache::get_object(const MDSCacheObjectInfo &info)
 
 // ====================================================================
 // subtree management
-
-void MDCache::list_subtrees(list<CDir*>& ls)
-{
-  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p)
-    ls.push_back(p->first);
-}
 
 /*
  * adjust the dir_auth of a subtree.
@@ -1140,30 +1131,29 @@ void MDCache::get_force_dirfrag_bound_set(const vector<dirfrag_t>& dfs, set<CDir
     for (set<frag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q)
       tmpdft.force_to_leaf(g_ceph_context, *q);
 
-    for (set<frag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
-      frag_t fg = *q;
-      list<frag_t> fgls;
-      diri->dirfragtree.get_leaves_under(fg, fgls);
-      if (fgls.empty()) {
+    for (const auto& fg : p->second) {
+      frag_vec_t leaves;
+      diri->dirfragtree.get_leaves_under(fg, leaves);
+      if (leaves.empty()) {
 	bool all = true;
 	frag_t approx_fg = diri->dirfragtree[fg.value()];
-	list<frag_t> ls;
-	tmpdft.get_leaves_under(approx_fg, ls);
-	for (list<frag_t>::iterator r = ls.begin(); r != ls.end(); ++r) {
-	  if (p->second.get().count(*r) == 0) {
+        frag_vec_t approx_leaves;
+	tmpdft.get_leaves_under(approx_fg, approx_leaves);
+	for (const auto& leaf : approx_leaves) {
+	  if (p->second.get().count(leaf) == 0) {
 	    // not bound, so the resolve message is from auth MDS of the dirfrag
-	    force_dir_fragment(diri, *r);
+	    force_dir_fragment(diri, leaf);
 	    all = false;
 	  }
 	}
 	if (all)
-	  fgls.push_back(approx_fg);
+	  leaves.push_back(approx_fg);
 	else
-	  diri->dirfragtree.get_leaves_under(fg, fgls);
+	  diri->dirfragtree.get_leaves_under(fg, leaves);
       }
-      dout(10) << "  frag " << fg << " contains " << fgls << dendl;
-      for (list<frag_t>::iterator r = fgls.begin(); r != fgls.end(); ++r) {
-	CDir *dir = diri->get_dirfrag(*r);
+      dout(10) << "  frag " << fg << " contains " << leaves << dendl;
+      for (const auto& leaf : leaves) {
+	CDir *dir = diri->get_dirfrag(leaf);
 	if (dir)
 	  bounds.insert(dir);
       }
@@ -1199,15 +1189,16 @@ void MDCache::map_dirfrag_set(const list<dirfrag_t>& dfs, set<CDir*>& result)
     if (!in)
       continue;
 
-    list<frag_t> fglist;
-    for (set<frag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q)
-      in->dirfragtree.get_leaves_under(*q, fglist);
+    frag_vec_t fgs;
+    for (const auto& fg : p->second) {
+      in->dirfragtree.get_leaves_under(fg, fgs);
+    }
 
-    dout(15) << "map_dirfrag_set " << p->second << " -> " << fglist
+    dout(15) << "map_dirfrag_set " << p->second << " -> " << fgs
 	     << " on " << *in << dendl;
 
-    for (list<frag_t>::iterator q = fglist.begin(); q != fglist.end(); ++q) {
-      CDir *dir = in->get_dirfrag(*q);
+    for (const auto& fg : fgs) {
+      CDir *dir = in->get_dirfrag(fg);
       if (dir)
 	result.insert(dir);
     }
@@ -4419,28 +4410,27 @@ void MDCache::handle_cache_rejoin_weak(const MMDSCacheRejoin::const_ref &weak)
       dout(0) << " missing dir ino " << p.ino << dendl;
     ceph_assert(diri);
 
-    list<frag_t> ls;
+    frag_vec_t leaves;
     if (diri->dirfragtree.is_leaf(p.frag)) {
-      ls.push_back(p.frag);
+      leaves.push_back(p.frag);
     } else {
-      diri->dirfragtree.get_leaves_under(p.frag, ls);
-      if (ls.empty())
-	ls.push_back(diri->dirfragtree[p.frag.value()]);
+      diri->dirfragtree.get_leaves_under(p.frag, leaves);
+      if (leaves.empty())
+	leaves.push_back(diri->dirfragtree[p.frag.value()]);
     }
-    for (list<frag_t>::iterator q = ls.begin(); q != ls.end(); ++q) {
-      frag_t fg = *q;
-      CDir *dir = diri->get_dirfrag(fg);
+    for (const auto& leaf : leaves) {
+      CDir *dir = diri->get_dirfrag(leaf);
       if (!dir) {
-	dout(0) << " missing dir for " << p.frag << " (which maps to " << fg << ") on " << *diri << dendl;
+	dout(0) << " missing dir for " << p.frag << " (which maps to " << leaf << ") on " << *diri << dendl;
 	continue;
       }
       ceph_assert(dir);
       if (dirs_to_share.count(dir)) {
-	dout(10) << " already have " << p.frag << " -> " << fg << " " << *dir << dendl;
+	dout(10) << " already have " << p.frag << " -> " << leaf << " " << *dir << dendl;
       } else {
 	dirs_to_share.insert(dir);
 	unsigned nonce = dir->add_replica(from);
-	dout(10) << " have " << p.frag << " -> " << fg << " " << *dir << dendl;
+	dout(10) << " have " << p.frag << " -> " << leaf << " " << *dir << dendl;
 	if (ack) {
 	  ack->add_strong_dirfrag(dir->dirfrag(), nonce, dir->dir_rep);
 	  ack->add_dirfrag_base(dir);
@@ -4701,15 +4691,15 @@ void MDCache::handle_cache_rejoin_strong(const MMDSCacheRejoin::const_ref &stron
       dir->dir_rep = p.second.dir_rep;
     } else {
       dout(10) << " frag " << dirfrag << " doesn't match dirfragtree " << *diri << dendl;
-      list<frag_t> ls;
-      diri->dirfragtree.get_leaves_under(dirfrag.frag, ls);
-      if (ls.empty())
-	ls.push_back(diri->dirfragtree[dirfrag.frag.value()]);
-      dout(10) << " maps to frag(s) " << ls << dendl;
-      for (list<frag_t>::iterator q = ls.begin(); q != ls.end(); ++q) {
-	CDir *dir = diri->get_dirfrag(*q);
+      frag_vec_t leaves;
+      diri->dirfragtree.get_leaves_under(dirfrag.frag, leaves);
+      if (leaves.empty())
+	leaves.push_back(diri->dirfragtree[dirfrag.frag.value()]);
+      dout(10) << " maps to frag(s) " << leaves << dendl;
+      for (const auto& leaf : leaves) {
+	CDir *dir = diri->get_dirfrag(leaf);
 	if (!dir)
-	  dir = rejoin_invent_dirfrag(dirfrag_t(diri->ino(), *q));
+	  dir = rejoin_invent_dirfrag(dirfrag_t(diri->ino(), leaf));
 	else
 	  dout(10) << " have(approx) " << *dir << dendl;
 	dir->add_replica(from, p.second.nonce);
@@ -11485,8 +11475,8 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
     diri->verify_dirfrags();
   mds->queue_waiters(waiters);
 
-  for (list<frag_t>::iterator p = le->orig_frags.begin(); p != le->orig_frags.end(); ++p)
-    ceph_assert(!diri->dirfragtree.is_leaf(*p));
+  for (const auto& fg : le->orig_frags)
+    ceph_assert(!diri->dirfragtree.is_leaf(fg));
 
   le->metablob.add_dir_context(*info.resultfrags.begin());
   for (list<CDir*>::iterator p = info.resultfrags.begin();
@@ -11663,12 +11653,10 @@ void MDCache::_fragment_committed(dirfrag_t basedirfrag, const MDRequestRef& mdr
 
   SnapContext nullsnapc;
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
-  for (list<frag_t>::iterator p = uf.old_frags.begin();
-       p != uf.old_frags.end();
-       ++p) {
-    object_t oid = CInode::get_object_name(basedirfrag.ino, *p, "");
+  for (const auto& fg : uf.old_frags) {
+    object_t oid = CInode::get_object_name(basedirfrag.ino, fg, "");
     ObjectOperation op;
-    if (*p == frag_t()) {
+    if (fg == frag_t()) {
       // backtrace object
       dout(10) << " truncate orphan dirfrag " << oid << dendl;
       op.truncate(0);
@@ -11817,7 +11805,7 @@ void MDCache::handle_fragment_notify(const MMDSFragmentNotify::const_ref &notify
   }
 }
 
-void MDCache::add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, list<frag_t>& old_frags,
+void MDCache::add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, const frag_vec_t& old_frags,
 				       LogSegment *ls, bufferlist *rollback)
 {
   dout(10) << "add_uncommitted_fragment: base dirfrag " << basedirfrag << " bits " << bits << dendl;
@@ -11848,7 +11836,7 @@ void MDCache::finish_uncommitted_fragment(dirfrag_t basedirfrag, int op)
   }
 }
 
-void MDCache::rollback_uncommitted_fragment(dirfrag_t basedirfrag, list<frag_t>& old_frags)
+void MDCache::rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags)
 {
   dout(10) << "rollback_uncommitted_fragment: base dirfrag " << basedirfrag
            << " old_frags (" << old_frags << ")" << dendl;
@@ -11856,7 +11844,7 @@ void MDCache::rollback_uncommitted_fragment(dirfrag_t basedirfrag, list<frag_t>&
   if (it != uncommitted_fragments.end()) {
     ufragment& uf = it->second;
     if (!uf.old_frags.empty()) {
-      uf.old_frags.swap(old_frags);
+      uf.old_frags = std::move(old_frags);
       uf.committed = true;
     } else {
       uf.ls->uncommitted_fragments.erase(basedirfrag);
@@ -11887,7 +11875,7 @@ void MDCache::rollback_uncommitted_fragments()
     mds->mdlog->start_entry(le);
     bool diri_auth = (diri->authority() != CDIR_AUTH_UNDEF);
 
-    list<frag_t> old_frags;
+    frag_vec_t old_frags;
     diri->dirfragtree.get_leaves_under(p->first.frag, old_frags);
 
     list<CDir*> resultfrags;
@@ -11897,8 +11885,8 @@ void MDCache::rollback_uncommitted_fragments()
       adjust_dir_fragments(diri, p->first.frag, -uf.bits, resultfrags, waiters, true);
     } else {
       auto bp = uf.rollback.cbegin();
-      for (list<frag_t>::iterator q = uf.old_frags.begin(); q != uf.old_frags.end(); ++q) {
-	CDir *dir = force_dir_fragment(diri, *q);
+      for (const auto& fg : uf.old_frags) {
+	CDir *dir = force_dir_fragment(diri, fg);
 	resultfrags.push_back(dir);
 
 	dirfrag_rollback rollback;
@@ -11945,8 +11933,9 @@ void MDCache::rollback_uncommitted_fragments()
     if (g_conf()->mds_debug_frag)
       diri->verify_dirfrags();
 
-    for (list<frag_t>::iterator q = old_frags.begin(); q != old_frags.end(); ++q)
-      ceph_assert(!diri->dirfragtree.is_leaf(*q));
+    for (const auto& leaf : old_frags) {
+      ceph_assert(!diri->dirfragtree.is_leaf(leaf));
+    }
 
     mds->mdlog->submit_entry(le);
 
@@ -12614,7 +12603,6 @@ void MDCache::repair_inode_stats_work(MDRequestRef& mdr)
   }
 
   MutationImpl::LockOpVec lov;
-  std::list<frag_t> frags;
 
   if (mdr->ls) // already marked filelock/nestlock dirty ?
     goto do_rdlocks;
@@ -12627,17 +12615,20 @@ void MDCache::repair_inode_stats_work(MDRequestRef& mdr)
 
   // Fetch all dirfrags and mark filelock/nestlock dirty. This will tirgger
   // the scatter-gather process, which will fix any fragstat/rstat errors.
-  diri->dirfragtree.get_leaves(frags);
-  for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
-    CDir *dir = diri->get_dirfrag(*p);
-    if (!dir) {
-      ceph_assert(mdr->is_auth_pinned(diri));
-      dir = diri->get_or_open_dirfrag(this, *p);
-    }
-    if (dir->get_version() == 0) {
-      ceph_assert(dir->is_auth());
-      dir->fetch(new C_MDS_RetryRequest(this, mdr));
-      return;
+  {
+    frag_vec_t leaves;
+    diri->dirfragtree.get_leaves(leaves);
+    for (const auto& leaf : leaves) {
+      CDir *dir = diri->get_dirfrag(leaf);
+      if (!dir) {
+        ceph_assert(mdr->is_auth_pinned(diri));
+        dir = diri->get_or_open_dirfrag(this, leaf);
+      }
+      if (dir->get_version() == 0) {
+        ceph_assert(dir->is_auth());
+        dir->fetch(new C_MDS_RetryRequest(this, mdr));
+        return;
+      }
     }
   }
 
@@ -12667,13 +12658,16 @@ do_rdlocks:
   if (const sr_t *srnode = diri->get_projected_srnode(); srnode)
     nest_info.rsnaps = srnode->snaps.size();
 
-  diri->dirfragtree.get_leaves(frags);
-  for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
-    CDir *dir = diri->get_dirfrag(*p);
-    ceph_assert(dir);
-    ceph_assert(dir->get_version() > 0);
-    dir_info.add(dir->fnode.accounted_fragstat);
-    nest_info.add(dir->fnode.accounted_rstat);
+  {
+    frag_vec_t leaves;
+    diri->dirfragtree.get_leaves(leaves);
+    for (const auto& leaf : leaves) {
+      CDir *dir = diri->get_dirfrag(leaf);
+      ceph_assert(dir);
+      ceph_assert(dir->get_version() > 0);
+      dir_info.add(dir->fnode.accounted_fragstat);
+      nest_info.add(dir->fnode.accounted_rstat);
+    }
   }
 
   if (!dir_info.same_sums(diri->inode.dirstat) ||
