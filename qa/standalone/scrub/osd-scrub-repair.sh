@@ -57,6 +57,7 @@ function run() {
     CEPH_ARGS+="--mon-host=$CEPH_MON "
     CEPH_ARGS+="--osd-skip-data-digest=false "
 
+    export -n CEPH_CLI_TEST_DUP_COMMAND
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
         $func $dir || return 1
