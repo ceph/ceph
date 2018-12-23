@@ -422,13 +422,13 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
   }
 
   for (auto& it : dirty_items) {
-    list<frag_t> fgls;
+    frag_vec_t frags;
     auto p = anchor_map.find(it.first);
     if (p != anchor_map.end()) {
       for (auto q = dirfrags.lower_bound(dirfrag_t(it.first, 0));
 	   q != dirfrags.end() && q->ino == it.first;
 	   ++q)
-	fgls.push_back(q->frag);
+	frags.push_back(q->frag);
     }
 
     if (first_commit) {
@@ -439,7 +439,7 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
 	bool same = p->second == q->second;
 	if (same) {
 	  auto r = loaded_dirfrags.lower_bound(dirfrag_t(it.first, 0));
-	  for (auto fg : fgls) {
+	  for (const auto& fg : frags) {
 	    if (r == loaded_dirfrags.end() || !(*r == dirfrag_t(it.first, fg))) {
 	      same = false;
 	      break;
@@ -494,7 +494,7 @@ void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_p
     if (p != anchor_map.end()) {
       bufferlist bl;
       encode(p->second, bl);
-      encode(fgls, bl);
+      encode(frags, bl);
 
       ctl.write_size += bl.length() + len + 2 * sizeof(__u32);
       ctl.to_update[key].swap(bl);
@@ -711,9 +711,9 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
     anchor.omap_idx = idx;
     anchor.auth = MDS_RANK_NONE;
 
-    list<frag_t> fgls;
-    decode(fgls, p);
-    for (auto fg : fgls)
+    frag_vec_t frags;
+    decode(frags, p);
+    for (const auto& fg : frags)
       loaded_dirfrags.insert(loaded_dirfrags.end(), dirfrag_t(anchor.ino, fg));
 
     if (loaded_anchor_map.size() > count)
@@ -1042,13 +1042,13 @@ void OpenFileTable::_prefetch_dirfrags()
       if (dir->is_auth() && !dir->is_complete())
 	fetch_queue.push_back(dir);
     } else {
-      list<frag_t> fgls;
-      diri->dirfragtree.get_leaves_under(df.frag, fgls);
-      for (auto fg : fgls) {
+      frag_vec_t leaves;
+      diri->dirfragtree.get_leaves_under(df.frag, leaves);
+      for (const auto& leaf : leaves) {
 	if (diri->is_auth()) {
-	  dir = diri->get_or_open_dirfrag(mdcache, fg);
+	  dir = diri->get_or_open_dirfrag(mdcache, leaf);
 	} else {
-	  dir = diri->get_dirfrag(fg);
+	  dir = diri->get_dirfrag(leaf);
 	}
 	if (dir && dir->is_auth() && !dir->is_complete())
 	  fetch_queue.push_back(dir);

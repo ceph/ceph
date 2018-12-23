@@ -636,13 +636,17 @@ frag_t InodeStoreBase::pick_dirfrag(std::string_view dn)
 bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
 {
   bool all = true;
-  std::list<frag_t> fglist;
-  dirfragtree.get_leaves_under(fg, fglist);
-  for (list<frag_t>::iterator p = fglist.begin(); p != fglist.end(); ++p)
-    if (dirfrags.count(*p))
-      ls.push_back(dirfrags[*p]);
-    else 
-      all = false;
+  {
+    frag_vec_t leaves;
+    dirfragtree.get_leaves_under(fg, leaves);
+    for (const auto &leaf : leaves) {
+      if (auto it = dirfrags.find(leaf); it != dirfrags.end()) {
+        ls.push_back(it->second);
+      } else {
+        all = false;
+      }
+    }
+  }
 
   if (all)
     return all;
@@ -656,11 +660,14 @@ bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
   }
 
   all = true;
-  tmpdft.get_leaves_under(fg, fglist);
-  for (const auto &p : fglist) {
-    if (!dirfrags.count(p)) {
-      all = false;
-      break;
+  {
+    frag_vec_t leaves;
+    tmpdft.get_leaves_under(fg, leaves);
+    for (const auto& leaf : leaves) {
+      if (!dirfrags.count(leaf)) {
+        all = false;
+        break;
+      }
     }
   }
 
@@ -692,10 +699,11 @@ void CInode::force_dirfrags()
   }
 
   if (bad) {
-    list<frag_t> leaves;
+    frag_vec_t leaves;
     dirfragtree.get_leaves(leaves);
-    for (list<frag_t>::iterator p = leaves.begin(); p != leaves.end(); ++p)
-      mdcache->get_force_dirfrag(dirfrag_t(ino(),*p), true);
+    for (const auto& leaf : leaves) {
+      mdcache->get_force_dirfrag(dirfrag_t(ino(), leaf), true);
+    }
   }
 
   verify_dirfrags();
@@ -2204,13 +2212,14 @@ void CInode::finish_scatter_gather_update(int type)
       dout(20) << " final dirstat " << pi->dirstat << dendl;
 
       if (dirstat_valid && !dirstat.same_sums(pi->dirstat)) {
-	list<frag_t> ls;
-	tmpdft.get_leaves_under(frag_t(), ls);
-	for (list<frag_t>::iterator p = ls.begin(); p != ls.end(); ++p)
-	  if (!dirfrags.count(*p)) {
+        frag_vec_t leaves;
+        tmpdft.get_leaves_under(frag_t(), leaves);
+	for (const auto& leaf : leaves) {
+	  if (!dirfrags.count(leaf)) {
 	    dirstat_valid = false;
 	    break;
 	  }
+        }
 	if (dirstat_valid) {
 	  if (state_test(CInode::STATE_REPAIRSTATS)) {
 	    dout(20) << " dirstat mismatch, fixing" << dendl;
@@ -2314,13 +2323,14 @@ void CInode::finish_scatter_gather_update(int type)
       dout(20) << " final rstat " << pi->rstat << dendl;
 
       if (rstat_valid && !rstat.same_sums(pi->rstat)) {
-	list<frag_t> ls;
-	tmpdft.get_leaves_under(frag_t(), ls);
-	for (list<frag_t>::iterator p = ls.begin(); p != ls.end(); ++p)
-	  if (!dirfrags.count(*p)) {
+        frag_vec_t leaves;
+        tmpdft.get_leaves_under(frag_t(), leaves);
+        for (const auto& leaf : leaves) {
+          if (!dirfrags.count(leaf)) {
 	    rstat_valid = false;
 	    break;
 	  }
+        }
 	if (rstat_valid) {
 	  if (state_test(CInode::STATE_REPAIRSTATS)) {
 	    dout(20) << " rstat mismatch, fixing" << dendl;
@@ -4295,12 +4305,10 @@ next:
 
     bool check_dirfrag_rstats() {
       MDSGatherBuilder gather(g_ceph_context);
-      std::list<frag_t> frags;
-      in->dirfragtree.get_leaves(frags);
-      for (list<frag_t>::iterator p = frags.begin();
-          p != frags.end();
-          ++p) {
-        CDir *dir = in->get_or_open_dirfrag(in->mdcache, *p);
+      frag_vec_t leaves;
+      in->dirfragtree.get_leaves(leaves);
+      for (const auto& leaf : leaves) {
+        CDir *dir = in->get_or_open_dirfrag(in->mdcache, leaf);
 	dir->scrub_info();
 	if (!dir->scrub_infop->header)
 	  dir->scrub_infop->header = in->scrub_infop->header;
@@ -4675,15 +4683,13 @@ void CInode::scrub_initialize(CDentry *scrub_parent,
 
   if (get_projected_inode()->is_dir()) {
     // fill in dirfrag_stamps with initial state
-    std::list<frag_t> frags;
-    dirfragtree.get_leaves(frags);
-    for (std::list<frag_t>::iterator i = frags.begin();
-        i != frags.end();
-        ++i) {
+    frag_vec_t leaves;
+    dirfragtree.get_leaves(leaves);
+    for (const auto& leaf : leaves) {
       if (header->get_force())
-	scrub_infop->dirfrag_stamps[*i].reset();
+	scrub_infop->dirfrag_stamps[leaf].reset();
       else
-	scrub_infop->dirfrag_stamps[*i];
+	scrub_infop->dirfrag_stamps[leaf];
     }
   }
 
@@ -4727,7 +4733,7 @@ int CInode::scrub_dirfrag_next(frag_t* out_dirfrag)
   return ENOENT;
 }
 
-void CInode::scrub_dirfrags_scrubbing(list<frag_t>* out_dirfrags)
+void CInode::scrub_dirfrags_scrubbing(frag_vec_t* out_dirfrags)
 {
   ceph_assert(out_dirfrags != NULL);
   ceph_assert(scrub_infop != NULL);

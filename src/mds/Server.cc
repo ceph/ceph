@@ -1085,8 +1085,8 @@ void Server::kill_session(Session *session, Context *on_safe)
 size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
 {
   std::list<Session*> victims;
-  const auto sessions = mds->sessionmap.get_sessions();
-  for (const auto p : sessions)  {
+  const auto& sessions = mds->sessionmap.get_sessions();
+  for (const auto& p : sessions)  {
     if (!p.first.is_client()) {
       // Do not apply OSDMap blacklist to MDS daemons, we find out
       // about their death via MDSMap.
@@ -7515,15 +7515,13 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     dout(10) << "srci is remote dir, setting stickydirs and opening all frags" << dendl;
     mdr->set_stickydirs(srci);
 
-    list<frag_t> frags;
-    srci->dirfragtree.get_leaves(frags);
-    for (list<frag_t>::iterator p = frags.begin();
-	 p != frags.end();
-	 ++p) {
-      CDir *dir = srci->get_dirfrag(*p);
+    frag_vec_t leaves;
+    srci->dirfragtree.get_leaves(leaves);
+    for (const auto& leaf : leaves) {
+      CDir *dir = srci->get_dirfrag(leaf);
       if (!dir) {
-	dout(10) << " opening " << *p << " under " << *srci << dendl;
-	mdcache->open_remote_dirfrag(srci, *p, new C_MDS_RetryRequest(mdcache, mdr));
+	dout(10) << " opening " << leaf << " under " << *srci << dendl;
+	mdcache->open_remote_dirfrag(srci, leaf, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
     }
@@ -7781,37 +7779,36 @@ version_t Server::_rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, buff
 
 bool Server::_need_force_journal(CInode *diri, bool empty)
 {
-  list<CDir*> ls;
-  diri->get_dirfrags(ls);
+  std::vector<CDir*> dirs;
+  diri->get_dirfrags(dirs);
 
   bool force_journal = false;
   if (empty) {
-    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-      if ((*p)->is_subtree_root() && (*p)->get_dir_auth().first == mds->get_nodeid()) {
-	dout(10) << " frag " << (*p)->get_frag() << " is auth subtree dirfrag, will force journal" << dendl;
+    for (const auto& dir : dirs) {
+      if (dir->is_subtree_root() && dir->get_dir_auth().first == mds->get_nodeid()) {
+	dout(10) << " frag " << dir->get_frag() << " is auth subtree dirfrag, will force journal" << dendl;
 	force_journal = true;
 	break;
       } else
-	dout(20) << " frag " << (*p)->get_frag() << " is not auth subtree dirfrag" << dendl;
+	dout(20) << " frag " << dir->get_frag() << " is not auth subtree dirfrag" << dendl;
     }
   } else {
     // see if any children of our frags are auth subtrees.
-    list<CDir*> subtrees;
-    mdcache->list_subtrees(subtrees);
-    dout(10) << " subtrees " << subtrees << " frags " << ls << dendl;
-    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-      CDir *dir = *p;
-      for (list<CDir*>::iterator q = subtrees.begin(); q != subtrees.end(); ++q) {
-	if (dir->contains(*q)) {
-	  if ((*q)->get_dir_auth().first == mds->get_nodeid()) {
-	    dout(10) << " frag " << (*p)->get_frag() << " contains (maybe) auth subtree, will force journal "
-		     << **q << dendl;
+    std::vector<CDir*> subtrees;
+    mdcache->get_subtrees(subtrees);
+    dout(10) << " subtrees " << subtrees << " frags " << dirs << dendl;
+    for (const auto& dir : dirs) {
+      for (const auto& subtree : subtrees) {
+	if (dir->contains(subtree)) {
+	  if (subtree->get_dir_auth().first == mds->get_nodeid()) {
+	    dout(10) << " frag " << dir->get_frag() << " contains (maybe) auth subtree, will force journal "
+		     << *subtree << dendl;
 	    force_journal = true;
 	    break;
 	  } else
-	    dout(20) << " frag " << (*p)->get_frag() << " contains but isn't auth for " << **q << dendl;
+	    dout(20) << " frag " << dir->get_frag() << " contains but isn't auth for " << *subtree << dendl;
 	} else
-	  dout(20) << " frag " << (*p)->get_frag() << " does not contain " << **q << dendl;
+	  dout(20) << " frag " << dir->get_frag() << " does not contain " << *subtree << dendl;
       }
       if (force_journal)
 	break;

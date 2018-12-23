@@ -138,22 +138,20 @@ void ScrubStack::scrub_dir_inode(CInode *in,
   ceph_assert(header != nullptr);
 
   if (header->get_recursive()) {
-    list<frag_t> scrubbing_frags;
+    frag_vec_t scrubbing_frags;
     list<CDir*> scrubbing_cdirs;
     in->scrub_dirfrags_scrubbing(&scrubbing_frags);
     dout(20) << __func__ << " iterating over " << scrubbing_frags.size()
       << " scrubbing frags" << dendl;
-    for (list<frag_t>::iterator i = scrubbing_frags.begin();
-	i != scrubbing_frags.end();
-	++i) {
+    for (const auto& fg : scrubbing_frags) {
       // turn frags into CDir *
-      CDir *dir = in->get_dirfrag(*i);
+      CDir *dir = in->get_dirfrag(fg);
       if (dir) {
 	scrubbing_cdirs.push_back(dir);
 	dout(25) << __func__ << " got CDir " << *dir << " presently scrubbing" << dendl;
       } else {
-	in->scrub_dirfrag_finished(*i);
-	dout(25) << __func__ << " missing dirfrag " << *i << " skip scrubbing" << dendl;
+	in->scrub_dirfrag_finished(fg);
+	dout(25) << __func__ << " missing dirfrag " << fg << " skip scrubbing" << dendl;
       }
     }
 

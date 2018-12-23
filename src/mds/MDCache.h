@@ -314,7 +314,14 @@ protected:
   //  join/split subtrees as appropriate
 public:
   bool is_subtrees() { return !subtrees.empty(); }
-  void list_subtrees(list<CDir*>& ls);
+  template<typename T>
+  void get_subtrees(T& c) {
+    if constexpr (std::is_same_v<T, std::vector<CDir*>>)
+      c.reserve(c.size() + subtrees.size());
+    for (const auto& p : subtrees) {
+      c.push_back(p.first);
+    }
+  }
   void adjust_subtree_auth(CDir *root, mds_authority_t auth, bool adjust_pop=true);
   void adjust_subtree_auth(CDir *root, mds_rank_t a, mds_rank_t b=CDIR_AUTH_UNKNOWN) {
     adjust_subtree_auth(root, mds_authority_t(a,b));
@@ -1115,7 +1122,7 @@ private:
     bool committed;
     LogSegment *ls;
     MDSInternalContextBase::vec waiters;
-    list<frag_t> old_frags;
+    frag_vec_t old_frags;
     bufferlist rollback;
     ufragment() : bits(0), committed(false), ls(NULL) {}
   };
@@ -1176,10 +1183,10 @@ private:
   void handle_fragment_notify(const MMDSFragmentNotify::const_ref &m);
   void handle_fragment_notify_ack(const MMDSFragmentNotifyAck::const_ref &m);
 
-  void add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, list<frag_t>& old_frag,
+  void add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, const frag_vec_t& old_frag,
 				LogSegment *ls, bufferlist *rollback=NULL);
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
-  void rollback_uncommitted_fragment(dirfrag_t basedirfrag, list<frag_t>& old_frags);
+  void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
 public:
   void wait_for_uncommitted_fragment(dirfrag_t dirfrag, MDSInternalContextBase *c) {
     ceph_assert(uncommitted_fragments.count(dirfrag));
