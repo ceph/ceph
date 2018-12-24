@@ -1,8 +1,12 @@
 #include <gtest/gtest.h>
 
+#include <stdlib.h>
+#include <unistd.h>
+
 #include "log/Log.h"
 #include "common/Clock.h"
 #include "include/coredumpctl.h"
+#include "include/scope_guard.h"
 #include "SubsystemMap.h"
 
 #include "global/global_init.h"
@@ -11,6 +15,11 @@
 #include "common/dout.h"
 
 using namespace ceph::logging;
+
+char* test_foo = new char[MAXPATHLEN];
+char* test_big = new char[MAXPATHLEN];
+char* test_rec = new char[MAXPATHLEN];
+char* test_time = new char[MAXPATHLEN];
 
 TEST(Log, Simple)
 {
@@ -30,7 +39,7 @@ TEST(Log, Simple)
   Log log(&subs);
   log.start();
  
-  log.set_log_file("/tmp/foo");
+  log.set_log_file(test_foo);
   log.reopen_log_file();
 
   log.set_stderr_level(5, -1);
@@ -59,7 +68,7 @@ TEST(Log, ReuseBad)
   subs.set_gather_level(1, 1);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/foo");
+  log.set_log_file(test_foo);
   log.reopen_log_file();
 
   const int l = 0;
@@ -91,7 +100,7 @@ TEST(Log, ManyNoGather)
   subs.set_gather_level(1, 1);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file(test_big);
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -110,7 +119,7 @@ TEST(Log, ManyGatherLog)
   subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file(test_big);
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -131,7 +140,7 @@ TEST(Log, ManyGatherLogStackSpillover)
   subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file(test_big);
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -154,7 +163,7 @@ TEST(Log, ManyGather)
   subs.set_gather_level(1, 1);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file(test_big);
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -172,7 +181,7 @@ void do_segv()
   subs.set_gather_level(1, 1);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file(test_big);
   log.reopen_log_file();
 
   log.inject_segv();
@@ -198,7 +207,7 @@ TEST(Log, LargeLog)
   subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file(test_big);
   log.reopen_log_file();
   int l = 10;
   {
@@ -218,7 +227,7 @@ TEST(Log, LargeFromSmallLog)
   subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file(test_big);
   log.reopen_log_file();
   int l = 10;
   {
@@ -242,7 +251,7 @@ TEST(Log, TimeSwitch)
   subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/time_switch_log");
+  log.set_log_file(test_time);
   log.reopen_log_file();
   int l = 10;
   bool coarse = true;
@@ -343,13 +352,10 @@ TEST(Log, Speed_nogather)
 
 TEST(Log, GarbleRecovery)
 {
-  static const char* test_file="/tmp/log_for_moment";
-
   Log* saved = g_ceph_context->_log;
   Log log(&g_ceph_context->_conf->subsys);
   log.start();
-  unlink(test_file);
-  log.set_log_file(test_file);
+  log.set_log_file(test_rec);
   log.reopen_log_file();
   g_ceph_context->_log = &log;
 
@@ -362,7 +368,7 @@ TEST(Log, GarbleRecovery)
   log.flush();
   log.stop();
   struct stat file_status;
-  ASSERT_EQ(lstat(test_file, &file_status), 0);
+  ASSERT_EQ(lstat(test_rec, &file_status), 0);
   ASSERT_GT(file_status.st_size, 2000);
 }
 
@@ -370,6 +376,23 @@ int main(int argc, char **argv)
 {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
+  
+  // make sure leftover files are cleaned up after the fact
+  (void) std::strcpy(test_foo, "/tmp/foo.XXXXXX");
+  test_foo = mktemp(test_foo);
+  (void) std::strcpy(test_big, "/tmp/big.XXXXXX");
+  test_big = mktemp(test_big);
+  (void) std::strcpy(test_time, "/tmp/time_switch_log.XXXXXX");
+  test_time = mktemp(test_time);
+  (void) std::strcpy(test_rec, "/tmp/log_for_moment.XXXXXX");
+  test_rec = mktemp(test_rec);
+
+  auto remove_logs = make_scope_guard([args] {
+    unlink(test_foo);
+    unlink(test_big);
+    unlink(test_time);
+    unlink(test_rec);
+  });
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_UTILITY,
