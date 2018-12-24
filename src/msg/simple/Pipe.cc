@@ -139,6 +139,7 @@ Pipe::Pipe(SimpleMessenger *r, int st, PipeConnection *con)
     sd(-1), port(0),
     peer_type(-1),
     pipe_lock("SimpleMessenger::Pipe::pipe_lock"),
+    send_lock("SimpleMessenger::Pipe::send_lock"),
     state(st),
     connection_state(NULL),
     reader_running(false), reader_needs_join(false),
@@ -1442,7 +1443,6 @@ void Pipe::requeue_sent()
     ldout(msgr->cct,10) << "requeue_sent " << *m << " for resend seq " << out_seq
 			<< " (" << m->get_seq() << ")" << dendl;
     rq.push_front(m);
-    out_seq--;
   }
 }
 
@@ -1450,7 +1450,6 @@ void Pipe::discard_requeued_up_to(uint64_t seq)
 {
   ldout(msgr->cct, 10) << "discard_requeued_up_to " << seq << dendl;
   if (out_q.count(CEPH_MSG_PRIO_HIGHEST) == 0) {
-    out_seq = seq;
     return;
   }
   list<Message*>& rq = out_q[CEPH_MSG_PRIO_HIGHEST];
@@ -1462,7 +1461,6 @@ void Pipe::discard_requeued_up_to(uint64_t seq)
 			<< " <= " << seq << ", discarding" << dendl;
     m->put();
     rq.pop_front();
-    out_seq++;
   }
   if (rq.empty())
     out_q.erase(CEPH_MSG_PRIO_HIGHEST);
@@ -1940,7 +1938,9 @@ void Pipe::writer()
       // grab outgoing message
       Message *m = _get_next_outgoing();
       if (m) {
-	m->set_seq(++out_seq);
+        if (m->get_seq() == 0) {
+          m->set_seq(++out_seq);
+        }
 	if (!policy.lossy) {
 	  // put on sent list
 	  sent.push_back(m); 
@@ -2386,6 +2386,7 @@ int Pipe::write_keepalive2(char tag, const utime_t& t)
 
 int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& footer, bufferlist& blist)
 {
+  Mutex::Locker l(send_lock);
   int ret;
 
   // set up msghdr and iovecs
@@ -2677,4 +2678,39 @@ int Pipe::tcp_write(const char *buf, unsigned len)
     //lgeneric_dout(cct, DBL) << "tcp_write did " << did << ", " << len << " left" << dendl;
   }
   return 0;
+}
+
+void Pipe::cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops) {
+  send_lock.Lock();
+  pipe_lock.Lock();
+  auto it = out_q.begin();
+  while (it != out_q.end()) {
+    auto lit = it->second.begin();
+    while (lit != it->second.end()) {
+      auto p = ops.find((*lit)->get_tid());
+      if (p != ops.end()) {
+        (*lit)->put();
+        lit = it->second.erase(lit);
+      } else {
+        lit++;
+      }
+    }
+    if (it->second.empty()) {
+      it = out_q.erase(it);
+    } else {
+      it++;
+    }
+  }
+  auto sit = sent.begin();
+  while (sit != sent.end()) {
+    auto p = ops.find((*sit)->get_tid());
+    if (p != ops.end()) {
+      (*sit)->put();
+      sit = sent.erase(sit);
+    } else {
+      sit++;
+    }
+  }
+  pipe_lock.Unlock();
+  send_lock.Unlock();
 }

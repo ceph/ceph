@@ -47,6 +47,7 @@ public:
   void send_keepalive() override;
   void mark_down() override;
   void mark_disposable() override;
+  void cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops) override;
 
   entity_addr_t get_peer_socket_addr() const override {
     return peer_addrs.front();

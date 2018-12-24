@@ -94,3 +94,10 @@ void PipeConnection::mark_disposable()
   if (msgr)
     static_cast<SimpleMessenger*>(msgr)->mark_disposable(this);
 }
+
+void PipeConnection::cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops)
+{
+  if (pipe) {
+    pipe->cancel_ops(ops);
+  }
+}
