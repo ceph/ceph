@@ -23,7 +23,7 @@ class HealthTest(DashboardTestCase):
                     'total_avail_bytes': int,
                     'total_bytes': int,
                     'total_objects': int,
-                    'total_used_bytes': int,
+                    'total_used_raw_bytes': int,
                 })
             }),
             'fs_map': JObj({
@@ -113,9 +113,9 @@ class HealthTest(DashboardTestCase):
                     'total_avail_bytes': int,
                     'total_bytes': int,
                     'total_objects': int,
-                    'total_percent_used': float,
                     'total_used_bytes': int,
-                    'total_used_raw_bytes': int
+                    'total_used_raw_bytes': int,
+                    'total_used_raw_ratio': float
                 })
             }),
             'fs_map': JObj({
