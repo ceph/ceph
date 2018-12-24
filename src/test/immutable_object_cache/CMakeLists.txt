@@ -5,6 +5,7 @@ add_executable(unittest_ceph_immutable_obj_cache
   test_sync_file.cc
   test_DomainSocket.cc
   test_multi_session.cc
+  test_object_store.cc
   )
 add_ceph_unittest(unittest_ceph_immutable_obj_cache)
 
