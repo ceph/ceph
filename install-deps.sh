@@ -194,7 +194,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
         devel/py-virtualenv \
         databases/leveldb \
         net/openldap24-client \
-        security/nss \
         archivers/snappy \
         archivers/liblz4 \
         ftp/curl \
@@ -223,6 +222,8 @@ if [ x$(uname)x = xFreeBSDx ]; then
         www/node \
         www/npm \
         www/fcgi \
+        security/nss \
+        security/kbr5 \
         security/oath-toolkit \
         sysutils/flock \
         sysutils/fusefs-libs \
