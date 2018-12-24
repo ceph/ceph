@@ -91,13 +91,16 @@ class HealthData(object):
 
     def df(self):
         df = mgr.get('df')
+
+        del df['stats_by_class']
+
         df['stats']['total_objects'] = sum(
             [p['stats']['objects'] for p in df['pools']])
         if self._minimal:
             df = dict(stats=self._partial_dict(
                 df['stats'],
                 ['total_avail_bytes', 'total_bytes', 'total_objects',
-                 'total_used_bytes']
+                 'total_used_raw_bytes']
             ))
         return df
 
