@@ -4878,7 +4878,7 @@ void RGWPutACLs::execute()
   if (grants_num > max_num) {
     ldpp_dout(this, 4) << "An acl can have up to " << max_num
         << " grants, request acl grants num: " << grants_num << dendl;
-    op_ret = -ERR_MALFORMED_ACL_ERROR;
+    op_ret = -ERR_LIMIT_EXCEEDED;
     s->err.message = "The request is rejected, because the acl grants number you requested is larger than the maximum "
                      + std::to_string(max_num)
                      + " grants allowed in an acl.";
