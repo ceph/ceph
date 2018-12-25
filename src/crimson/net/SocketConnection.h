@@ -175,6 +175,8 @@ class SocketConnection : public Connection {
 
   seastar::future<> close() override;
 
+  void print(ostream& out) const override;
+
  public:
   /// start a handshake from the client's perspective,
   /// only call when SocketConnection first construct

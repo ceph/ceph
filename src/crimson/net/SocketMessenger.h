@@ -52,6 +52,11 @@ class SocketMessenger final : public Messenger {
 
   seastar::future<> shutdown() override;
 
+  void print(ostream& out) const override {
+    out << get_myname()
+        << " " << get_myaddr();
+  }
+
  public:
   void set_default_policy(const SocketPolicy& p);
   void set_policy(entity_type_t peer_type, const SocketPolicy& p);
