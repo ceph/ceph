@@ -893,7 +893,8 @@ void OSDService::set_injectfull(s_names type, int64_t count)
   injectfull = count;
 }
 
-void OSDService::set_statfs(const struct store_statfs_t &stbuf)
+void OSDService::set_statfs(const struct store_statfs_t &stbuf,
+			    osd_alert_list_t& alerts)
 {
   uint64_t bytes = stbuf.total;
   uint64_t avail = stbuf.available;
@@ -925,6 +926,8 @@ void OSDService::set_statfs(const struct store_statfs_t &stbuf)
 
   std::lock_guard l(stat_lock);
   osd_stat.statfs = stbuf;
+  osd_stat.os_alerts.clear();
+  osd_stat.os_alerts[whoami].swap(alerts);
   if (cct->_conf->fake_statfs_for_testing) {
     osd_stat.statfs.total = bytes;
     osd_stat.statfs.available = avail;
@@ -2996,7 +2999,7 @@ int OSD::init()
     osd_alert_list_t alerts;
     int r = store->statfs(&stbuf, &alerts);
     ceph_assert(r == 0);
-    service.set_statfs(stbuf);
+    service.set_statfs(stbuf, alerts);
   }
 
   // i'm ready!
@@ -5295,7 +5298,7 @@ void OSD::tick_without_osd_lock()
   osd_alert_list_t alerts;
   int r = store->statfs(&stbuf, &alerts);
   ceph_assert(r == 0);
-  service.set_statfs(stbuf);
+  service.set_statfs(stbuf, alerts);
 
   // osd_lock is not being held, which means the OSD state
   // might change when doing the monitor report
