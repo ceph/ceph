@@ -5930,7 +5930,7 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
 
   r = _mount_for_bluefs();
 
-  int reserved;
+  int reserved = 0;
   if (id == BlueFS::BDEV_NEWWAL) {
     string p = path + "/block.wal";
     r = _setup_block_symlink_or_file("block.wal", dev_path,
