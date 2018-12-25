@@ -71,6 +71,15 @@ class Messenger {
   void set_crc_header() {
     crc_flags |= MSG_CRC_HEADER;
   }
+
+  virtual void print(ostream& out) const = 0;
 };
+
+inline ostream& operator<<(ostream& out, const Messenger& msgr) {
+  out << "[";
+  msgr.print(out);
+  out << "]";
+  return out;
+}
 
 } // namespace ceph::net

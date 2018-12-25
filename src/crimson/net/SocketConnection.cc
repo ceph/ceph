@@ -95,7 +95,7 @@ void SocketConnection::read_tags_until_next_message()
             return handle_keepalive2_ack()
               .then([this] { return stop_t::no; });
           case CEPH_MSGR_TAG_CLOSE:
-            std::cout << "close" << std::endl;
+            logger().info("{} got tag close", *this);
             break;
           }
           return seastar::make_ready_future<stop_t>(stop_t::no);
@@ -322,6 +322,7 @@ seastar::future<> SocketConnection::close()
     ceph_assert(state == state_t::connecting);
     close_ready = pending_dispatch.close().finally(std::move(cleanup));
   }
+  logger().debug("{} trigger closing, was {}", *this, static_cast<int>(state));
   state = state_t::closing;
   return close_ready.get_future();
 }
@@ -543,7 +544,7 @@ SocketConnection::handle_keepalive2()
   return socket->read_exactly(sizeof(ceph_timespec))
     .then([this] (auto buf) {
       k.ack.stamp = *reinterpret_cast<const ceph_timespec*>(buf.get());
-      std::cout << "keepalive2 " << k.ack.stamp.tv_sec << std::endl;
+      logger().info("{} keepalive2 {}", *this, k.ack.stamp.tv_sec);
       return socket->write_flush(make_static_packet(k.ack));
     });
 }
@@ -555,7 +556,7 @@ SocketConnection::handle_keepalive2_ack()
     .then([this] (auto buf) {
       auto t = reinterpret_cast<const ceph_timespec*>(buf.get());
       k.ack_stamp = *t;
-      std::cout << "keepalive2 ack " << t->tv_sec << std::endl;
+      logger().info("{} keepalive2 ack {}", *this, t->tv_sec);
     });
 }
 
@@ -778,6 +779,7 @@ SocketConnection::start_connect(const entity_addr_t& _peer_addr,
   peer_addr = _peer_addr;
   peer_type = _peer_type;
   messenger.register_conn(this);
+  logger().debug("{} trigger connecting, was {}", *this, static_cast<int>(state));
   state = state_t::connecting;
   seastar::with_gate(pending_dispatch, [this] {
       return seastar::connect(peer_addr.in4_addr())
@@ -826,6 +828,7 @@ SocketConnection::start_connect(const entity_addr_t& _peer_addr,
           execute_open();
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the connecting state
+          logger().warn("{} connecting fault: {}", *this, eptr);
           close();
         });
     });
@@ -840,6 +843,7 @@ SocketConnection::start_accept(seastar::connected_socket&& fd,
   peer_addr = _peer_addr;
   socket.emplace(std::move(fd));
   messenger.accept_conn(this);
+  logger().debug("{} trigger accepting, was {}", *this, static_cast<int>(state));
   state = state_t::accepting;
   seastar::with_gate(pending_dispatch, [this] {
       // encode/send server's handshake header
@@ -878,6 +882,7 @@ SocketConnection::start_accept(seastar::connected_socket&& fd,
           execute_open();
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the accepting state
+          logger().warn("{} accepting fault: {}", *this, eptr);
           close();
         });
     });
@@ -886,6 +891,7 @@ SocketConnection::start_accept(seastar::connected_socket&& fd,
 void
 SocketConnection::execute_open()
 {
+  logger().debug("{} trigger open, was {}", *this, static_cast<int>(state));
   state = state_t::open;
   seastar::with_gate(pending_dispatch, [this] {
       // start background processing of tags
@@ -910,8 +916,9 @@ SocketConnection::execute_open()
           } else {
             throw e;
           }
-        }).handle_exception([] (std::exception_ptr eptr) {
+        }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the open state
+          logger().warn("{} open fault: {}", *this, eptr);
         });
     });
 }
@@ -930,4 +937,9 @@ seastar::future<> SocketConnection::fault()
     h.backoff = conf.ms_max_backoff;
   }
   return seastar::sleep(h.backoff);
+}
+
+void SocketConnection::print(ostream& out) const {
+    messenger.print(out);
+    out << " >> " << peer_addr;
 }
