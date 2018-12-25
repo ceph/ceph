@@ -139,7 +139,6 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
   }
   // write to cache
   ObjectCacheFile cache_file(m_cct, cache_dir + "/" + cache_file_name);
-  cache_file.create();
 
   ret = cache_file.write_object_to_file(*read_buf, file_size);
   if (ret < 0) {
