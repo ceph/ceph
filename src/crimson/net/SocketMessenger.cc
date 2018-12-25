@@ -22,8 +22,9 @@
 
 using namespace ceph::net;
 
-SocketMessenger::SocketMessenger(const entity_name_t& myname)
-  : Messenger{myname}
+SocketMessenger::SocketMessenger(const entity_name_t& myname,
+                                 const std::string& logic_name)
+  : Messenger{myname}, logic_name{logic_name}
 {}
 
 void SocketMessenger::bind(const entity_addr_t& addr)
