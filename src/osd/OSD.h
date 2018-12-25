@@ -903,7 +903,8 @@ public:
   osd_stat_t osd_stat;
   uint32_t seq = 0;
 
-  void set_statfs(const struct store_statfs_t &stbuf);
+  void set_statfs(const struct store_statfs_t &stbuf,
+    osd_alert_list_t& alerts);
   osd_stat_t set_osd_stat(vector<int>& hb_peers, int num_pgs);
   float compute_adjusted_ratio(osd_stat_t new_stat, float *pratio, uint64_t adjust_used = 0);
   osd_stat_t get_osd_stat() {
