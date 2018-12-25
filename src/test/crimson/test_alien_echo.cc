@@ -39,7 +39,7 @@ struct DummyAuthAuthorizer : public AuthAuthorizer {
 struct Server {
   ceph::thread::Throttle byte_throttler;
   static constexpr int64_t server_num = 0;
-  ceph::net::SocketMessenger msgr{entity_name_t::OSD(server_num)};
+  ceph::net::SocketMessenger msgr{entity_name_t::OSD(server_num), "server"};
   struct ServerDispatcher : ceph::net::Dispatcher {
     unsigned count = 0;
     seastar::condition_variable on_reply;
@@ -76,7 +76,7 @@ struct Server {
 struct Client {
   ceph::thread::Throttle byte_throttler;
   static constexpr int64_t client_num = 1;
-  ceph::net::SocketMessenger msgr{entity_name_t::OSD(client_num)};
+  ceph::net::SocketMessenger msgr{entity_name_t::OSD(client_num), "client"};
   struct ClientDispatcher : ceph::net::Dispatcher {
     unsigned count = 0;
     seastar::condition_variable on_reply;

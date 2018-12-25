@@ -22,7 +22,7 @@ static seastar::future<> test_echo(unsigned rounds,
     entity_addr_t addr;
 
     struct {
-      ceph::net::SocketMessenger messenger{entity_name_t::OSD(1)};
+      ceph::net::SocketMessenger messenger{entity_name_t::OSD(1), "server1"};
       struct ServerDispatcher : ceph::net::Dispatcher {
         seastar::future<> ms_dispatch(ceph::net::ConnectionRef c,
                                       MessageRef m) override {
@@ -38,7 +38,7 @@ static seastar::future<> test_echo(unsigned rounds,
     struct {
       unsigned rounds;
       std::bernoulli_distribution keepalive_dist{};
-      ceph::net::SocketMessenger messenger{entity_name_t::OSD(0)};
+      ceph::net::SocketMessenger messenger{entity_name_t::OSD(0), "client1"};
       struct ClientDispatcher : ceph::net::Dispatcher {
         seastar::promise<MessageRef> reply;
         unsigned count = 0u;
@@ -127,7 +127,7 @@ static seastar::future<> test_concurrent_dispatch()
     entity_addr_t addr;
 
     struct {
-      ceph::net::SocketMessenger messenger{entity_name_t::OSD(1)};
+      ceph::net::SocketMessenger messenger{entity_name_t::OSD(1), "server2"};
       class ServerDispatcher : public ceph::net::Dispatcher {
         int count = 0;
         seastar::promise<> on_second; // satisfied on second dispatch
@@ -151,7 +151,7 @@ static seastar::future<> test_concurrent_dispatch()
     } server;
 
     struct {
-      ceph::net::SocketMessenger messenger{entity_name_t::OSD(0)};
+      ceph::net::SocketMessenger messenger{entity_name_t::OSD(0), "client2"};
       ceph::net::Dispatcher dispatcher;
     } client;
   };
