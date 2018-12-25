@@ -19,6 +19,7 @@
 
 #include "osd_types.h"
 #include "include/ceph_features.h"
+#include "include/stringify.h"
 extern "C" {
 #include "crush/hash.h"
 }
@@ -163,6 +164,23 @@ ostream &operator<<(ostream &lhs, const pg_shard_t &rhs)
   if (rhs.shard == shard_id_t::NO_SHARD)
     return lhs << rhs.get_osd();
   return lhs << rhs.get_osd() << '(' << (unsigned)(rhs.shard) << ')';
+}
+
+void dump(Formatter* f, const osd_alerts_t& alerts)
+{
+  for (auto& a : alerts) {
+    string s0 = " osd: ";
+    s0 += stringify(a.first);
+    string s;
+    for (auto& aa : a.second) {
+      s = s0;
+      s += " ";
+      s += aa.first;
+      s += ":";
+      s += aa.second;
+      f->dump_string("alert", s);
+    }
+  }
 }
 
 // -- osd_reqid_t --
@@ -369,11 +387,14 @@ void osd_stat_t::dump(Formatter *f) const
   f->open_object_section("perf_stat");
   os_perf_stat.dump(f);
   f->close_section();
+  f->open_array_section("alerts");
+  ::dump(f, os_alerts);
+  f->close_section();
 }
 
 void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(9, 2, bl);
+  ENCODE_START(10, 2, bl);
 
   //////// for compatibility ////////
   int64_t kb = statfs.kb();
@@ -403,7 +424,7 @@ void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
   encode(kb_used_meta, bl);
   encode(statfs, bl);
   ///////////////////////////////////
-
+  encode(os_alerts, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -411,7 +432,7 @@ void osd_stat_t::decode(bufferlist::const_iterator &bl)
 {
   int64_t kb, kb_used,kb_avail;
   int64_t kb_used_data, kb_used_omap, kb_used_meta;
-  DECODE_START_LEGACY_COMPAT_LEN(9, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(10, 2, 2, bl);
   decode(kb, bl);
   decode(kb_used, bl);
   decode(kb_avail, bl);
@@ -461,6 +482,11 @@ void osd_stat_t::decode(bufferlist::const_iterator &bl)
     statfs.omap_allocated = kb_used_omap << 10;
     statfs.internal_metadata = kb_used_meta << 10;
   }
+  if (struct_v >= 10) {
+    decode(os_alerts, bl);
+  } else {
+    os_alerts.clear();
+  }
   DECODE_FINISH(bl);
 }
 
@@ -475,6 +501,10 @@ void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
   o.back()->hb_peers.push_back(7);
   o.back()->snap_trim_queue_len = 8;
   o.back()->num_snap_trimming = 99;
+  o.back()->os_alerts[0].emplace(
+    "some alert", "some alert details");
+  o.back()->os_alerts[1].emplace(
+    "some alert2", "some alert2 details");
 }
 
 // -- pg_t --
