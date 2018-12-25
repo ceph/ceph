@@ -28,26 +28,6 @@ ObjectCacheFile::ObjectCacheFile(CephContext *cct, const std::string &name)
 
 ObjectCacheFile::~ObjectCacheFile() {
   // TODO force proper cleanup
-  if (m_fd != -1) {
-    ::close(m_fd);
-  }
-}
-
-int ObjectCacheFile::open_file() {
-  m_fd = ::open(m_name.c_str(), O_RDONLY);
-  if(m_fd == -1) {
-    lderr(cct) << "open fails : " << std::strerror(errno) << dendl;
-  }
-  return m_fd;
-}
-
-int ObjectCacheFile::create() {
-  m_fd = ::open(m_name.c_str(), O_CREAT | O_NOATIME | O_RDWR | O_SYNC,
-                  S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
-  if(m_fd == -1) {
-    lderr(cct) << "create fails : " << std::strerror(errno) << dendl;
-  }
-  return m_fd;
 }
 
 void ObjectCacheFile::read(uint64_t offset, uint64_t length, ceph::bufferlist *bl, Context *on_finish) {
@@ -59,52 +39,63 @@ void ObjectCacheFile::write(uint64_t offset, ceph::bufferlist &&bl, bool fdatasy
 }
 
 int ObjectCacheFile::write_object_to_file(ceph::bufferlist read_buf, uint64_t object_len) {
-
   ldout(cct, 20) << "cache file name:" << m_name
                  << ", length:" << object_len <<  dendl;
 
-  // TODO(): aio
-  int ret = pwrite(m_fd, read_buf.c_str(), object_len, 0);
+  int ret = read_buf.write_file(m_name.c_str()); 
   if(ret < 0) {
     lderr(cct)<<"write file fail:" << std::strerror(errno) << dendl;
     return ret;
-  }
+  } 
 
-  return ret;
+  return object_len;
 }
 
 int ObjectCacheFile::read_object_from_file(ceph::bufferlist* read_buf, uint64_t object_off, uint64_t object_len) {
 
   ldout(cct, 20) << "offset:" << object_off
-                 << ", length:" << object_len <<  dendl;
+                 << ", length:" << object_len << dendl;
 
-  bufferptr buf(object_len);
-
-  // TODO(): aio
-  int ret = pread(m_fd, buf.c_str(), object_len, object_off);
-  if(ret < 0) {
-    lderr(cct)<<"read file fail:" << std::strerror(errno) << dendl;
-    return ret;
+  bufferlist temp_bl;
+  std::string error_str;
+  // TODO : optimization
+  int ret = temp_bl.read_file(m_name.c_str(), &error_str);
+  if (ret < 0) {
+    lderr(cct)<<"read file fail:" << error_str << dendl;
+    return -1;
   }
-  read_buf->append(std::move(buf));
 
-  return ret;
+  if(object_off >= temp_bl.length()) {
+    return 0;
+  }
+
+  if((temp_bl.length() - object_off) < object_len) {
+    object_len = temp_bl.length() - object_off;
+  }
+
+  read_buf->substr_of(temp_bl, object_off, object_len);
+
+  return read_buf->length();
 }
 
 uint64_t ObjectCacheFile::get_file_size() {
   struct stat buf;
-  if(m_fd == -1) {
-    lderr(cct)<<"get_file_size fail: file is closed status." << dendl;
-    assert(0);
+  int temp_fd = ::open(m_name.c_str(), O_RDONLY);
+  if(temp_fd < 0) {
+    lderr(cct)<<"get_file_size fail: open file is fails." << std::strerror(errno) << dendl;
+    return -1;
   }
-  int ret = fstat(m_fd, &buf);
+
+  int ret = fstat(temp_fd, &buf);
   if(ret == -1) {
     lderr(cct)<<"fstat fail:" << std::strerror(errno) << dendl;
-    assert(0);
+    return -1;
   }
-  return buf.st_size;
-}
 
+  ret = buf.st_size; 
+  ::close(temp_fd);
+  return ret;
+}
 
 } // namespace immutable_obj_cache
 } // namespace cache
