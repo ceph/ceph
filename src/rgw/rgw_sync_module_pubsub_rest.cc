@@ -203,7 +203,7 @@ void RGWPSDeleteTopicOp::execute()
   ups = make_unique<RGWUserPubSub>(store, s->owner.get_id());
   op_ret = ups->remove_topic(topic_name);
   if (op_ret < 0) {
-    ldout(s->cct, 20) << "failed to create topic, ret=" << op_ret << dendl;
+    ldout(s->cct, 20) << "failed to remove topic, ret=" << op_ret << dendl;
     return;
   }
 }
@@ -316,6 +316,7 @@ public:
     dest.push_endpoint = s->info.args.get("push-endpoint");
     dest.bucket_name = string(conf["data_bucket_prefix"]) + s->owner.get_id().to_str() + "-" + topic_name;
     dest.oid_prefix = string(conf["data_oid_prefix"]) + sub_name + "/";
+    dest.push_endpoint_args = s->info.args.get_str();
 
     return 0;
   }
@@ -383,6 +384,7 @@ public:
       Formatter::ObjectSection section(*s->formatter, "result");
       encode_json("topic", result.topic, s->formatter);
       encode_json("push_endpoint", result.dest.push_endpoint, s->formatter);
+      encode_json("args", result.dest.push_endpoint_args, s->formatter);
     }
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
@@ -470,7 +472,7 @@ void RGWPSAckSubEventOp::execute()
   auto sub = ups->get_sub(sub_name);
   op_ret = sub->remove_event(event_id);
   if (op_ret < 0) {
-    ldout(s->cct, 20) << "failed to remove event, ret=" << op_ret << dendl;
+    ldout(s->cct, 20) << "failed to ack event, ret=" << op_ret << dendl;
     return;
   }
 }

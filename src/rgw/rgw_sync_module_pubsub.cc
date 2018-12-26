@@ -10,6 +10,7 @@
 #include "rgw_cr_tools.h"
 #include "rgw_op.h"
 #include "rgw_pubsub.h"
+#include "rgw_pubsub_push.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -44,6 +45,7 @@ config:
             "name": <subscription-name>,
             "topic": <topic>,
             "push_endpoint": <endpoint>,
+            "args:" <arg list>.            # any push endpoint specific args (include all args)
             "data_bucket": <bucket>,       # override name of bucket where subscription data will be store
             "data_oid_prefix": <prefix>    # set prefix for subscription data object ids
         },
@@ -77,6 +79,7 @@ config:
             "name": <subscription-name>,
             "topic": <topic>,
             "push_endpoint": <endpoint>,
+            "args:" <arg list>.            # any push endpoint specific args (include all args)
             "data_bucket": <bucket>,       # override name of bucket where subscription data will be store
             "data_oid_prefix": <prefix>    # set prefix for subscription data object ids
         },
@@ -86,26 +89,45 @@ config:
 
 */
 
+// utility function to convert the args list from string format 
+// (ampresend separated with equal sign) to prased structure
+RGWHTTPArgs string_to_args(const std::string& str_args) {
+  RGWHTTPArgs args;
+  args.set(str_args);
+  args.parse();
+  return args;
+}
+
 struct PSSubConfig { /* subscription config */
   string name;
   string topic;
-  string push_endpoint;
+  string push_endpoint_name;
+  string push_endpoint_args;
+  RGWPubSubEndpoint::Ptr push_endpoint;
 
   string data_bucket_name;
   string data_oid_prefix;
 
-  void from_user_conf(const rgw_pubsub_sub_config& uc) {
+  void from_user_conf(CephContext *cct, const rgw_pubsub_sub_config& uc) {
     name = uc.name;
     topic = uc.topic;
-    push_endpoint = uc.dest.push_endpoint;
+    push_endpoint_name = uc.dest.push_endpoint;
     data_bucket_name = uc.dest.bucket_name;
     data_oid_prefix = uc.dest.oid_prefix;
+    if (push_endpoint_name != "") {
+      push_endpoint_args = uc.dest.push_endpoint_args;
+      push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args));
+      if (!push_endpoint) {
+        ldout(cct, 0) << "ERROR: failed to create push endpoint: " << push_endpoint_name << dendl;
+      }
+    }
   }
 
   void dump(Formatter *f) const {
     encode_json("name", name, f);
     encode_json("topic", topic, f);
-    encode_json("push_endpoint", push_endpoint, f);
+    encode_json("push_endpoint", push_endpoint_name, f);
+    encode_json("args", push_endpoint_args, f);
     encode_json("data_bucket_name", data_bucket_name, f);
     encode_json("data_oid_prefix", data_oid_prefix, f);
   }
@@ -115,10 +137,17 @@ struct PSSubConfig { /* subscription config */
             const string& default_oid_prefix) {
     name = config["name"];
     topic = config["topic"];
-    push_endpoint = config["push_endpoint"];
+    push_endpoint_name = config["push_endpoint"];
     string default_bucket_name = data_bucket_prefix + name;
     data_bucket_name = config["data_bucket"](default_bucket_name.c_str());
     data_oid_prefix = config["data_oid_prefix"](default_oid_prefix.c_str());
+    if (push_endpoint_name != "") {
+      push_endpoint_args = config["push_endpoint_args"];
+      push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args));
+      if (!push_endpoint) {
+        ldout(cct, 0) << "ERROR: failed to create push endpoint: " << push_endpoint_name << dendl;
+      }
+    }
   }
 };
 
@@ -753,8 +782,6 @@ class PSSubscription {
     }
   };
 
-  using PushCR = RGWPostRESTResourceCR<rgw_pubsub_event, int>;
-
   class StoreEventCR : public RGWCoroutine {
     RGWDataSyncEnv *sync_env;
     PSSubscriptionRef sub;
@@ -802,16 +829,13 @@ class PSSubscription {
           return set_cr_error(retcode);
         }
 
-        if (sub->push.conn) {
-          yield {
-            rgw_http_param_pair params[] = {
-              { nullptr, nullptr }
-            };
-
-            call(new PushCR(sync_env->cct, sub->push.conn.get(),
-                            sync_env->http_manager,
-                            sub->push.path,
-                            params, *event, nullptr));
+        if (sub_conf->push_endpoint) {
+          yield call(sub_conf->push_endpoint->send_to_completion_async(*event.get(), sync_env));
+          
+          if (retcode < 0) {
+            ldout(sync_env->cct, 0) << "ERROR: failed to push event: " << put_obj.bucket << "/" << put_obj.key <<
+              " to endpoint: " << sub_conf->push_endpoint_name << " ret=" << retcode << dendl;
+            return set_cr_error(retcode);
           }
         }
 
@@ -835,7 +859,7 @@ public:
                                       env(_env),
                                       sub_conf(std::make_shared<PSSubConfig>()),
                                       data_access(std::make_shared<RGWDataAccess>(sync_env->store)) {
-    sub_conf->from_user_conf(user_sub_conf);
+    sub_conf->from_user_conf(sync_env->cct, user_sub_conf);
   }
   virtual ~PSSubscription() {
     if (init_cr) {
