@@ -65,6 +65,11 @@ namespace crimson {
       std::numeric_limits<double>::lowest();
     constexpr uint tag_modulo = 1000000;
 
+    constexpr auto standard_idle_age  = std::chrono::seconds(300);
+    constexpr auto standard_erase_age = std::chrono::seconds(600);
+    constexpr auto standard_check_time = std::chrono::seconds(60);
+    constexpr auto aggressive_check_time = std::chrono::seconds(5);
+
     enum class AtLimit {
       // requests are delayed until the limit is restored
       Wait,
@@ -1303,9 +1308,9 @@ namespace crimson {
 			AtLimitParam at_limit_param = AtLimit::Wait,
 			double _anticipation_timeout = 0.0) :
 	PullPriorityQueue(_client_info_f,
-			  std::chrono::minutes(10),
-			  std::chrono::minutes(15),
-			  std::chrono::minutes(6),
+			  standard_idle_age,
+			  standard_erase_age,
+			  standard_check_time,
 			  at_limit_param,
 			  _anticipation_timeout)
       {
@@ -1542,9 +1547,9 @@ namespace crimson {
 	PushPriorityQueue(_client_info_f,
 			  _can_handle_f,
 			  _handle_f,
-			  std::chrono::minutes(10),
-			  std::chrono::minutes(15),
-			  std::chrono::minutes(6),
+			  standard_idle_age,
+			  standard_erase_age,
+			  standard_check_time,
 			  at_limit_param,
 			  _anticipation_timeout)
       {
