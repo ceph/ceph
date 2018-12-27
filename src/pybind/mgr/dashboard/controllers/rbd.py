@@ -12,13 +12,14 @@ import six
 
 import rbd
 
-from . import ApiController, RESTController, Task, UpdatePermission, DeletePermission
+from . import ApiController, RESTController, Task, UpdatePermission, \
+              DeletePermission, CreatePermission
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..tools import ViewCache, str_to_bool
 from ..services.exception import handle_rados_error, handle_rbd_error, \
-    serialize_dashboard_exception
+                                 serialize_dashboard_exception
 
 
 # pylint: disable=not-callable
@@ -519,7 +520,7 @@ class RbdTrash(RESTController):
 
     @RbdTask('trash/restore', ['{pool_name}', '{image_id}', '{new_image_name}'], 2.0)
     @RESTController.Resource('POST')
-    @UpdatePermission
+    @CreatePermission
     def restore(self, pool_name, image_id, new_image_name):
         """Restore an image from trash."""
         return _rbd_call(pool_name, self.rbd_inst.trash_restore, image_id, new_image_name)
