@@ -868,6 +868,8 @@ if [ -n "$MON_ADDR" ]; then
 	CMON_ARGS=" -m "$MON_ADDR
 	COSD_ARGS=" -m "$MON_ADDR
 	CMDS_ARGS=" -m "$MON_ADDR
+	ip="$(echo $MON_ADDR|awk -F':' '{print $1}')"
+	CEPH_PORT="$(echo $MON_ADDR|awk -F':' '{print $2}')"
 fi
 
 if [ -z "$CEPH_PORT" ]
