@@ -197,7 +197,7 @@ public:
 				    const bufferlist &bl,
 				    ceph::real_time mtime, uint64_t trunc_size,
 				    __u32 trunc_seq, ceph_tid_t journal_tid,
-                                    const ZTracer::Trace &parent_trace,
+            const ZTracer::Trace &parent_trace,
 				    Context *oncommit)
   {
     write_result_d *result = new write_result_d(oid.name, oncommit);
@@ -227,22 +227,16 @@ public:
     }
 
     uint64_t object_no = oid_to_object_no(req->oid.name, m_ictx->object_prefix);
-    C_OrderedWrite *req_comp = new C_OrderedWrite(m_ictx->cct, req->result, trace,
-                                                  m_wb_handler);
-
-    // all IO operations are flushed prior to closing the journal
-    assert(req->journal_tid == 0 || m_ictx->journal != NULL);
-    if (req->journal_tid != 0) {
-      m_ictx->journal->flush_event(
-        req->journal_tid, new C_WriteJournalCommit(
-	  m_ictx, req->oid.name, object_no, req->off, req->bl, req->snapc, req->journal_tid, trace,
-          req_comp));
-    } else {
-      auto r = new io::ObjectWriteRequest(
-	m_ictx, req->oid.name, object_no, req->off, req->bl, req->snapc, 0, trace, req_comp);
-      r->send();
-    }
+    Context *ctx = new C_OrderedWrite(m_ictx->cct, result, trace, m_wb_handler);
+    ctx = util::create_async_context_callback(*m_ictx, ctx);
+    auto r = io::ObjectDispatchSpec::create_write(
+      m_ictx, io::OBJECT_DISPATCH_LAYER_CACHE, req->oid.name, object_no, req->off,
+      std::move(req->bl), req->snapc, 0, req->journal_tid, trace, ctx);
     delete req;
+    r->object_dispatch_flags = (
+      io::OBJECT_DISPATCH_FLAG_FLUSH |
+      io::OBJECT_DISPATCH_FLAG_WILL_RETRY_ON_ERROR);
+    r->send();
   }
 
   void LibrbdWriteback::overwrite_extent(const object_t& oid, uint64_t off,
