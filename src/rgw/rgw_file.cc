@@ -1420,7 +1420,7 @@ namespace rgw {
 
     perfcounter->inc(l_rgw_put);
     op_ret = -EINVAL;
-    rgw_obj obj{s->bucket, s->object};
+    head_obj.init(s->bucket, s->object.name);
 
     if (s->object.empty()) {
       ldout(s->cct, 0) << __func__ << " called on empty object" << dendl;
@@ -1445,16 +1445,16 @@ namespace rgw {
 
     if (s->bucket_info.versioning_enabled()) {
       if (!version_id.empty()) {
-        obj.key.set_instance(version_id);
+        head_obj.key.set_instance(version_id);
       } else {
-        get_store()->gen_rand_obj_instance_name(&obj);
-        version_id = obj.key.instance;
+        get_store()->gen_rand_obj_instance_name(&head_obj);
+        version_id = head_obj.key.instance;
       }
     }
     processor.emplace(&*aio, get_store(), s->bucket_info,
                       s->bucket_owner.get_id(),
                       *static_cast<RGWObjectCtx *>(s->obj_ctx),
-                      obj, olh_epoch, s->req_id);
+                      head_obj, olh_epoch, s->req_id);
 
     op_ret = processor->prepare();
     if (op_ret < 0) {

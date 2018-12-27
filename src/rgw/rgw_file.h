@@ -2331,6 +2331,7 @@ public:
   std::optional<rgw::putobj::AtomicObjectProcessor> processor;
   rgw::putobj::DataProcessor* filter;
   boost::optional<RGWPutObj_Compress> compressor;
+  rgw_obj head_obj;
   CompressorRef plugin;
   buffer::list data;
   uint64_t timer_id;
