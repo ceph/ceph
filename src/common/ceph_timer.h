@@ -137,7 +137,9 @@ namespace ceph {
 	      delete &e;
 	    } // Otherwise the event requeued itself
 	  }
-
+          
+          if (suspended)
+            break;
 	  if (schedule.empty())
 	    cond.wait(l);
 	  else
