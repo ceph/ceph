@@ -68,6 +68,8 @@ bool SocketConnection::is_connected()
 
 seastar::future<> SocketConnection::send(MessageRef msg)
 {
+  if (state == state_t::closing)
+    return seastar::now();
   return seastar::with_gate(pending_dispatch, [this, msg=std::move(msg)] {
       return do_send(std::move(msg))
         .handle_exception([this] (std::exception_ptr eptr) {
@@ -79,6 +81,8 @@ seastar::future<> SocketConnection::send(MessageRef msg)
 
 seastar::future<> SocketConnection::keepalive()
 {
+  if (state == state_t::closing)
+    return seastar::now();
   return seastar::with_gate(pending_dispatch, [this] {
       return do_keepalive()
         .handle_exception([this] (std::exception_ptr eptr) {
@@ -285,6 +289,8 @@ seastar::future<> SocketConnection::do_send(MessageRef msg)
   // TODO: retry send for lossless connection
   seastar::shared_future<> f = send_ready.then(
     [this, msg = std::move(msg)] {
+      if (state == state_t::closing)
+        return seastar::now();
       return write_message(std::move(msg));
     });
 
@@ -298,6 +304,8 @@ seastar::future<> SocketConnection::do_keepalive()
 {
   // TODO: retry keepalive for lossless connection
   seastar::shared_future<> f = send_ready.then([this] {
+      if (state == state_t::closing)
+        return seastar::now();
       k.req.stamp = ceph::coarse_real_clock::to_ceph_timespec(
         ceph::coarse_real_clock::now());
       return socket->write_flush(make_static_packet(k.req));
