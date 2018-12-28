@@ -165,6 +165,9 @@ class SocketConnection : public Connection {
 
   void execute_open();
 
+  seastar::future<> do_send(MessageRef msg);
+  seastar::future<> do_keepalive();
+
  public:
   SocketConnection(SocketMessenger& messenger,
                    Dispatcher& dispatcher);
