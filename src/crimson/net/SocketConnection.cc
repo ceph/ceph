@@ -75,9 +75,6 @@ void SocketConnection::read_tags_until_next_message()
       // read the next tag
       return socket->read_exactly(1)
         .then([this] (auto buf) {
-          if (buf.empty()) {
-            throw std::system_error(make_error_code(error::read_eof));
-          }
           switch (buf[0]) {
           case CEPH_MSGR_TAG_MSG:
             // stop looping and notify read_header()
