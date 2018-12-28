@@ -864,7 +864,6 @@ SocketConnection::start_accept(seastar::connected_socket&& fd,
           peer_addr.set_type(addr.get_type());
           peer_addr.set_port(addr.get_port());
           peer_addr.set_nonce(addr.get_nonce());
-        }).then([this] {
           return seastar::repeat([this] {
             return repeat_handle_connect();
           });
