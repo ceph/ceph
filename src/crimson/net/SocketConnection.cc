@@ -813,11 +813,6 @@ SocketConnection::start_connect(const entity_addr_t& _peer_addr,
           return seastar::repeat([this] {
             return repeat_connect();
           });
-        }).then_wrapped([this] (auto fut) {
-          // TODO: do not forward the exception
-          //       and let the reconnect happen transparently inside connection
-          // satisfy the handshake's promise
-          fut.forward_to(std::move(h.promise));
         }).then([this] {
           // notify the dispatcher and allow them to reject the connection
           return dispatcher.ms_handle_connect(this);
@@ -826,6 +821,7 @@ SocketConnection::start_connect(const entity_addr_t& _peer_addr,
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the connecting state
           logger().warn("{} connecting fault: {}", *this, eptr);
+          h.promise.set_value();
           close();
         });
     });
@@ -867,11 +863,6 @@ SocketConnection::start_accept(seastar::connected_socket&& fd,
           return seastar::repeat([this] {
             return repeat_handle_connect();
           });
-        }).then_wrapped([this] (auto fut) {
-          // TODO: do not forward the exception
-          //       and let the reconnect happen transparently inside connection
-          // satisfy the handshake's promise
-          fut.forward_to(std::move(h.promise));
         }).then([this] {
           // notify the dispatcher and allow them to reject the connection
           return dispatcher.ms_handle_accept(this);
@@ -882,6 +873,7 @@ SocketConnection::start_accept(seastar::connected_socket&& fd,
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the accepting state
           logger().warn("{} accepting fault: {}", *this, eptr);
+          h.promise.set_value();
           close();
         });
     });
@@ -892,6 +884,8 @@ SocketConnection::execute_open()
 {
   logger().debug("{} trigger open, was {}", *this, static_cast<int>(state));
   state = state_t::open;
+  // satisfy the handshake's promise
+  h.promise.set_value();
   seastar::with_gate(pending_dispatch, [this] {
       // start background processing of tags
       read_tags_until_next_message();
