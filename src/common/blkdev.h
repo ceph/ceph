@@ -18,10 +18,12 @@ extern int get_device_by_path(const char *path, char* partition, char* device, s
 
 
 extern std::string get_device_id(const std::string& devname);
+extern std::string get_device_vendor(const std::string& devname);
 extern void get_dm_parents(const std::string& dev, std::set<std::string> *ls);
 extern int block_device_run_smartctl(const char *device, int timeout,
 				     std::string *result);
-
+extern int block_device_run_nvme(const char *device, const char *vendor, int timeout,
+             std::string *result);
 // for VDO
 /// return an op fd for the sysfs stats dir, if this is a VDO device
 extern int get_vdo_stats_handle(const char *devname, std::string *vdo_name);

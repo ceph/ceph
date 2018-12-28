@@ -479,6 +479,70 @@ std::string get_device_id(const std::string& devname)
   return device_id;
 }
 
+std::string get_device_vendor(const std::string& devname)
+{
+  struct udev_device *dev;
+  static struct udev *udev;
+  const char *data;
+
+  udev = udev_new();
+  if (!udev) {
+    return {};
+  }
+  dev = udev_device_new_from_subsystem_sysname(udev, "block", devname.c_str());
+  if (!dev) {
+    udev_unref(udev);
+    return {};
+  }
+
+  std::string id_vendor, id_model;
+  data = udev_device_get_property_value(dev, "ID_VENDOR");
+  if (data) {
+    id_vendor = data;
+  }
+  data = udev_device_get_property_value(dev, "ID_MODEL");
+  if (data) {
+    id_model = data;
+  }
+  udev_device_unref(dev);
+  udev_unref(udev);
+
+  if (id_vendor.size()) {
+    return id_vendor;
+  }
+  if (id_model.size()) {
+    int pos = id_model.find(" ");
+    if (pos > 0) {
+      return id_model.substr(0, pos);
+    } else {
+      return id_model;
+    }
+  }
+
+  std::string vendor, model;
+  char buf[1024] = {0};
+  BlkDev blkdev(devname);
+  if (!blkdev.vendor(buf, sizeof(buf))) {
+    vendor = buf;
+  }
+  if (!blkdev.model(buf, sizeof(buf))) {
+    model = buf;
+  }
+  if (vendor.size()) {
+    return vendor;
+  }
+  if (model.size()) {
+     int pos = model.find(" ");
+    if (pos > 0) {
+      return model.substr(0, pos);
+    } else {
+      return model;
+    }   
+  }
+
+  return {};
+}
+
 int block_device_run_smartctl(const char *device, int timeout,
 			      std::string *result)
 {
@@ -517,6 +581,46 @@ int block_device_run_smartctl(const char *device, int timeout,
   return ret;
 }
 
+int block_device_run_nvme(const char *device, const char *vendor, int timeout,
+             std::string *result)
+{
+  // when using --json, smartctl will report its errors in JSON format to stdout 
+  SubProcessTimed nvmecli(
+    "sudo", SubProcess::CLOSE, SubProcess::PIPE, SubProcess::CLOSE,
+    timeout);
+  nvmecli.add_cmd_args(
+    "nvme",
+    vendor,
+    "smart-log-add",
+    device,
+    "-json",
+    NULL);
+
+  int ret = nvmecli.spawn();
+  if (ret != 0) {
+    *result = std::string("error spawning nvme command: ") + nvmecli.err();
+    return ret;
+  }
+
+  bufferlist output;
+  ret = output.read_fd(nvmecli.get_stdout(), 100*1024);
+  if (ret < 0) {
+    // *result = std::string("failed read nvme output: ") + cpp_strerror(-ret);
+    bufferlist err;
+    err.read_fd(nvmecli.get_stderr(), 100 * 1024);
+    *result = std::string("failed to execute nvme: ") + err.to_str();
+  } else {
+    ret = 0;
+    *result = output.to_str();
+  }
+
+  if (nvmecli.join() != 0) {
+    *result = std::string("nvme returned an error:") + nvmecli.err();
+    return -EINVAL;
+  }
+
+  return ret;
+}
 
 #elif defined(__APPLE__)
 #include <sys/disk.h>
@@ -768,11 +872,22 @@ std::string get_device_id(const std::string& devname)
   return std::string();
 }
 
+std::string get_device_vendor(const std::string& devname)
+{
+  return std::string();
+}
+
 int block_device_run_smartctl(const char *device, int timeout,
 			      std::string *result)
 {
   // FIXME: implement me for freebsd
   return -EOPNOTSUPP;  
+}
+
+int block_device_run_nvme(const char *device, const char *vendor, int timeout,
+             std::string *result)
+{
+  return -EOPNOTSUPP;
 }
 
 static int block_device_devname(int fd, char *devname, size_t max)
@@ -895,8 +1010,19 @@ std::string get_device_id(const std::string& devname)
   return std::string();
 }
 
+std::string get_device_vendor(const std::string& devname)
+{
+  return std::string();
+}
+
 int block_device_run_smartctl(const char *device, int timeout,
 			      std::string *result)
+{
+  return -EOPNOTSUPP;
+}
+
+int block_device_run_nvme(const char *device, const char *vendor, int timeout,
+            std::string *result)
 {
   return -EOPNOTSUPP;
 }
