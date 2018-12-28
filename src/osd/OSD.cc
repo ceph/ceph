@@ -6635,7 +6635,7 @@ void OSD::probe_smart(const string& only_devid, ostream& ss)
     }
 
     json_spirit::mValue smart_json;
-    if (block_device_get_metrics(("/dev/" + dev).c_str(), smart_timeout,
+    if (block_device_get_metrics(dev, smart_timeout,
 				 &smart_json)) {
       dout(10) << "block_device_get_metrics failed for /dev/" << dev << dendl;
       continue;

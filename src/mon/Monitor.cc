@@ -3660,7 +3660,7 @@ void Monitor::handle_command(MonOpRequestRef op)
 	continue;
       }
       json_spirit::mValue smart_json;
-      if (block_device_get_metrics(("/dev/" + devname).c_str(), smart_timeout,
+      if (block_device_get_metrics(devname, smart_timeout,
 				   &smart_json)) {
 	dout(10) << "block_device_get_metrics failed for /dev/" << devname
 		 << dendl;
