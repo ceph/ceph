@@ -163,6 +163,7 @@ function(do_build_boost version)
   include(ExternalProject)
   ExternalProject_Add(Boost
     ${source_dir}
+    PATCH_COMMAND patch -p1 < ${CMAKE_CURRENT_SOURCE_DIR}/patches/boost_context_asm_arm_syntax_unified.patch
     CONFIGURE_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${configure_command}
     BUILD_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${build_command}
     BUILD_IN_SOURCE 1
