@@ -1,0 +1,3 @@
+lib/systemd/system/ceph-immutable-object-cache*
+usr/bin/ceph-immutable-object-cache
+usr/share/man/man8/ceph-immutable-object-cache.8
