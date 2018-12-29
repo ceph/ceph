@@ -1,0 +1,36 @@
+diff --git a/libs/context/src/asm/jump_arm_aapcs_elf_gas.S b/src/Boost/libs/context/src/asm/jump_arm_aapcs_elf_gas.S
+index d0f7fa2..58d11b0 100644
+--- a/libs/context/src/asm/jump_arm_aapcs_elf_gas.S
++++ b/libs/context/src/asm/jump_arm_aapcs_elf_gas.S
+@@ -42,6 +42,7 @@
+ .globl jump_fcontext
+ .align 2
+ .type jump_fcontext,%function
++.syntax unified
+ jump_fcontext:
+     @ save LR as PC
+     push {lr}
+diff --git a/libs/context/src/asm/make_arm_aapcs_elf_gas.S b/src/Boost/libs/context/src/asm/make_arm_aapcs_elf_gas.S
+index 98819a2..b88ff68 100644
+--- a/libs/context/src/asm/make_arm_aapcs_elf_gas.S
++++ b/libs/context/src/asm/make_arm_aapcs_elf_gas.S
+@@ -42,6 +42,7 @@
+ .globl make_fcontext
+ .align 2
+ .type make_fcontext,%function
++.syntax unified
+ make_fcontext:
+     @ shift address in A1 to lower 16 byte boundary
+     bic  a1, a1, #15
+diff --git a/libs/context/src/asm/ontop_arm_aapcs_elf_gas.S b/src/Boost/libs/context/src/asm/ontop_arm_aapcs_elf_gas.S
+index 9d9198f..2efebbb 100644
+--- a/libs/context/src/asm/ontop_arm_aapcs_elf_gas.S
++++ b/libs/context/src/asm/ontop_arm_aapcs_elf_gas.S
+@@ -42,6 +42,7 @@
+ .globl ontop_fcontext
+ .align 2
+ .type ontop_fcontext,%function
++.syntax unified
+ ontop_fcontext:
+     @ save LR as PC
+     push {lr}

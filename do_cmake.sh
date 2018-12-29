@@ -27,6 +27,15 @@ if [ "$PYBUILD" = "3" ] ; then
     ARGS="$ARGS -DWITH_PYTHON2=OFF -DWITH_PYTHON3=ON -DMGR_PYTHON_VERSION=3"
 fi
 
+#ARGS="${ARGS} -DCMAKE_BUILD_TYPE=Release"
+args_build_type=$(echo $ARGS | sed 's/^.*\?-DCMAKE_BUILD_TYPE=\(\w\+\).*\?$/\1/')
+if [ "$args_build_type" = "" ]; then
+	echo "No cmake build type provided in ARGS, using default => Debug"
+	ARGS="-DCMAKE_BUILD_TYPE=Debug $ARGS"
+else
+	echo "Using cmake build type $args_build_type"
+fi
+
 if type ccache > /dev/null 2>&1 ; then
     echo "enabling ccache"
     ARGS="$ARGS -DWITH_CCACHE=ON"
@@ -39,7 +48,7 @@ if type cmake3 > /dev/null 2>&1 ; then
 else
     CMAKE=cmake
 fi
-${CMAKE} -DCMAKE_BUILD_TYPE=Debug $ARGS "$@" .. || exit 1
+${CMAKE} $ARGS "$@" .. || exit 1
 
 # minimal config to find plugins
 cat <<EOF > ceph.conf

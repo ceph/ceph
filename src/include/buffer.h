@@ -703,7 +703,9 @@ namespace buffer CEPH_BUFFER_API {
 
       void advance(int o) = delete;
       void advance(unsigned o);
+#if UINT_WIDTH != SIZE_WIDTH
       void advance(size_t o) { advance(static_cast<unsigned>(o)); }
+#endif
       void seek(unsigned o);
       char operator*() const;
       iterator_impl& operator++();
