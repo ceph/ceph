@@ -438,6 +438,21 @@ Description: Ceph daemon for mirroring RBD images
  daemon for mirroring RBD images between Ceph clusters, streaming
  changes asynchronously.
 
+Package: ceph-immutable-object-cache
+Architecture: linux-any
+Depends: ceph-common (= ${binary:Version}),
+         librados3 (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+Description: Ceph daemon for mirroring RBD images
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a
+ daemon for mirroring RBD images between Ceph clusters, streaming
+ changes asynchronously.
+
+
+
 Package: rbd-mirror-dbg
 Architecture: linux-any
 Section: debug
