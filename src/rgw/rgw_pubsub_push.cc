@@ -11,6 +11,9 @@
 #include "rgw_data_sync.h"
 #include "rgw_pubsub.h"
 #include "rgw_amqp.h"
+#include <boost/asio/yield.hpp>
+
+#include <iostream>
 
 std::string json_format_pubsub_event(const rgw_pubsub_event& event) {
   std::stringstream ss;
@@ -24,22 +27,27 @@ class RGWPubSubHTTPEndpoint : public RGWPubSubEndpoint {
 private:
   const std::string endpoint;
   std::string str_ack_level;
-  unsigned ack_level;
-  static const unsigned ACK_LEVEL_ANY = 0;
-  static const unsigned ACK_LEVEL_NON_ERROR = 1;
+  typedef unsigned ack_level_t;
+  ack_level_t ack_level;
+  static const ack_level_t ACK_LEVEL_ANY = 0;
+  static const ack_level_t ACK_LEVEL_NON_ERROR = 1;
 
   // PostCR implements async execution of RGWPostHTTPData via coroutine
   class PostCR : public RGWPostHTTPData, public RGWSimpleCoroutine {
   private:
     RGWDataSyncEnv* const sync_env;
     bufferlist read_bl;
+    const ack_level_t ack_level;
 
   public:
     PostCR(const std::string& _post_data,
         RGWDataSyncEnv* _sync_env,
-        const std::string& endpoint) :
+        const std::string& endpoint,
+        ack_level_t _ack_level) :
       RGWPostHTTPData(_sync_env->cct, "POST", endpoint, &read_bl, false),
-      RGWSimpleCoroutine(_sync_env->cct), sync_env(_sync_env) {
+      RGWSimpleCoroutine(_sync_env->cct), 
+      sync_env(_sync_env),
+      ack_level (_ack_level) {
       // ctor also set the data to send
       set_post_data(_post_data);
       set_send_length(_post_data.length());
@@ -55,9 +63,14 @@ private:
 
     // wait for reply
     int request_complete() override {
-      // TODO: check result and return accordingly
-      // this should be dependent with the configured ack level
-      return 0;
+      if (ack_level == ACK_LEVEL_ANY) {
+        return 0;
+      } else if (ack_level == ACK_LEVEL_NON_ERROR) {
+        // TODO check result code to be non-error
+      } else {
+        // TODO: check that result code == ack_level
+      }
+      return -1;
     }
   };
 
@@ -68,27 +81,26 @@ public:
       bool exists;
       str_ack_level = args.get("http-ack-level", &exists);
       if (!exists || str_ack_level == "any") {
+        // "any" is default
         ack_level = ACK_LEVEL_ANY;
       } else if (str_ack_level == "non-error") {
         ack_level = ACK_LEVEL_NON_ERROR;
       } else {
         ack_level = std::atoi(str_ack_level.c_str());
         if (ack_level < 100 || ack_level >= 600) {
-          last_error = "configuration: invalid ack level.";
+          throw configuration_error("HTTP: invalid http-ack-level " + str_ack_level);
         }
       }
     }
 
   RGWCoroutine* send_to_completion_async(const rgw_pubsub_event& event, RGWDataSyncEnv* env) override {
-    if (has_error()) return nullptr;
-    return new PostCR(json_format_pubsub_event(event), env, endpoint);
+    return new PostCR(json_format_pubsub_event(event), env, endpoint, ack_level);
   }
 
   std::string to_str() const override {
     std::string str("HTTP Endpoint");
     str += "\nURI: " + endpoint;
     str += "\nAck Level: " + str_ack_level;
-    str += "\nLast Error: " + last_error;
     return str;
 
   }
@@ -96,48 +108,53 @@ public:
 
 class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
   private:
-    enum AckLevel {
+    enum ack_level_t {
       ACK_LEVEL_NONE,
       ACK_LEVEL_BROKER,
       ACK_LEVEL_ROUTEABLE
     };
     const std::string endpoint;
     const std::string topic;
-    std::string exchange;
-    amqp_connection_state_t conn;
-    AckLevel ack_level;
+    const amqp::connection_t& conn;
+    ack_level_t ack_level;
     std::string str_ack_level;
 
-  // PublishCR implements async amqp publishing via coroutine
-  class PublishCR : public RGWSimpleCoroutine {
+    static std::string get_exchange(const RGWHTTPArgs& args) {
+      bool exists;
+      const auto exchange = args.get("amqp-exchange", &exists);
+      if (!exists) {
+        throw configuration_error("AMQP: missing amqp-exchange");
+      }
+      return exchange;
+    }
+
+  // NoAckPublishCR implements async amqp publishing via coroutine
+  // This coroutine ends when it send the message and does not wait for an ack
+  class NoAckPublishCR : public RGWCoroutine {
   private:
     RGWDataSyncEnv* const sync_env;
     const std::string topic;
-    const std::string exchange;
-    amqp_connection_state_t conn;
+    const amqp::connection_t& conn;
     std::string message;
 
   public:
-    PublishCR(RGWDataSyncEnv* _sync_env,
-              const std::string _topic,
-              const std::string _exchange,
-              amqp_connection_state_t _conn,
+    NoAckPublishCR(RGWDataSyncEnv* _sync_env,
+              const std::string& _topic,
+              const amqp::connection_t& _conn,
               const std::string& _message) :
-      RGWSimpleCoroutine(_sync_env->cct), sync_env(_sync_env),
-      topic(_topic), exchange(_exchange),
-      conn(_conn), message(_message) { }
+      RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+      topic(_topic), conn(_conn), message(_message) {}
 
-    // send message to endpoint
-    int send_request() override {
-      const auto rc = amqp::publish(conn, exchange, topic, message);
-      // return zero on sucess, -1 o/w
-      return rc ? 0 : -1;
-    }
-
-    // wait for reply
-    int request_complete() override {
-      // TODO: check result and return accordingly
-      // this should be dependent with hthe configured ack level
+    // send message to endpoint, without waiting for reply
+    int operate() override {
+      reenter(this) {
+        const auto rc = amqp::publish(conn, topic, message);
+        if (rc < 0) {
+          std::cout << "publish error: " << amqp::status_to_string(rc) << std::endl;;
+          return set_cr_error(rc);
+        }
+        return set_cr_done();
+      }
       return 0;
     }
   };
@@ -145,35 +162,32 @@ class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
   public:
     RGWPubSubAMQPEndpoint(const std::string& _endpoint,
         const std::string& _topic,
-        const RGWHTTPArgs& args) :
-      endpoint(_endpoint), topic(_topic) {
-        bool exists;
-        // get exchange
-        exchange = args.get("amqp-exchange", &exists);
-        if (!exists) {
-          last_error = "configuration: missing exchange.";
-        }
-        // get ack level
-        str_ack_level = args.get("amqp-ack-level", &exists);
-        if (!exists || str_ack_level == "broker") {
-          ack_level = ACK_LEVEL_BROKER;
-        } else if (str_ack_level == "none") {
-          ack_level = ACK_LEVEL_NONE;
-        } else if (str_ack_level == "routable") {
-          ack_level = ACK_LEVEL_ROUTEABLE;
-        } else {
-          last_error += "configuration: invalid ack level.";
-        }
-        // connect to broker, if connection already exists it will be reused
-        conn = amqp::connect(endpoint, exchange);
-        if (!conn) {
-          last_error += "configuration: failed to connect to amqp broker.";
-        }
+        const RGWHTTPArgs& args) : 
+          endpoint(_endpoint), 
+          topic(_topic), 
+          conn(amqp::connect(endpoint, get_exchange(args))) {
+      bool exists;
+      // get ack level
+      str_ack_level = args.get("amqp-ack-level", &exists);
+      if (!exists || str_ack_level == "broker") {
+        // "broker" is default
+        ack_level = ACK_LEVEL_BROKER;
+      } else if (str_ack_level == "none") {
+        ack_level = ACK_LEVEL_NONE;
+      } else if (str_ack_level == "routable") {
+        ack_level = ACK_LEVEL_ROUTEABLE;
+      } else {
+        throw configuration_error("HTTP: invalid amqp-ack-level " + str_ack_level);
       }
+    }
 
     RGWCoroutine* send_to_completion_async(const rgw_pubsub_event& event, RGWDataSyncEnv* env) override {
-      if (has_error()) return nullptr;
-      return new PublishCR(env, topic, exchange, conn, json_format_pubsub_event(event));
+      if (ack_level == ACK_LEVEL_NONE) {
+        return new NoAckPublishCR(env, topic, conn, json_format_pubsub_event(event));
+      } else {
+        // TODO implement the couroutines that wait for the ack
+        return nullptr;
+      }
     }
 
     std::string to_str() const override {
@@ -181,7 +195,6 @@ class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
       str += "\nURI: " + endpoint;
       str += "\nTopic: " + topic;
       str += "\nAck Level: " + str_ack_level;
-      str += "\nLast Error: " + last_error;
       return str;
     }
 };
@@ -192,14 +205,14 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
   //fetch the schema from the endpoint
   const auto pos = endpoint.find(':');
   if (pos == std::string::npos) {
-    // unknowm schema
+    throw configuration_error("malformed endpoint " + endpoint);
     return nullptr;
   }
   const auto& schema = endpoint.substr(0,pos);
   if (schema == "http") {
     return Ptr(new RGWPubSubHTTPEndpoint(endpoint, args));
   } else if (schema == "https") {
-    // not supported yet
+    throw configuration_error("https not supported");
     return nullptr;
   } else if (schema == "amqp") {
     bool exists;
@@ -210,18 +223,18 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
     if (version == "0-9-1") {
       return Ptr(new RGWPubSubAMQPEndpoint(endpoint, topic, args));
     } else if (version == "1-0") {
-      // not supported yet
+      throw configuration_error("amqp v1.0 not supported");
       return nullptr;
     } else {
-      // unknown version
+      throw configuration_error("unknown amqp version " + version);
       return nullptr;
     }
   } else if (schema == "amqps") {
-    // not supported yet
+    throw configuration_error("amqps not supported");
     return nullptr;
   }
 
-  // unknown schema
+  throw configuration_error("unknown schema " + schema);
   return nullptr;
 }
 
