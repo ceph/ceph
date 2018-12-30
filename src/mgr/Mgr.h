@@ -85,6 +85,7 @@ public:
   void handle_osd_map();
   void handle_log(MLog *m);
   void handle_service_map(MServiceMap *m);
+  void handle_mon_map();
 
   bool got_mgr_map(const MgrMap& m);
 

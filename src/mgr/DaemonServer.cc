@@ -553,7 +553,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
 
     // issue metadata request in background
     if (!daemon_state.is_updating(key) && 
-	(key.first == "osd" || key.first == "mds")) {
+	(key.first == "osd" || key.first == "mds" || key.first == "mon")) {
 
       std::ostringstream oss;
       auto c = new MetadataUpdate(daemon_state, key);
@@ -566,6 +566,9 @@ bool DaemonServer::handle_report(MMgrReport *m)
         oss << "{\"prefix\": \"mds metadata\", \"who\": \""
             << key.second << "\"}";
  
+      } else if (key.first == "mon") {
+        oss << "{\"prefix\": \"mon metadata\", \"id\": \""
+            << key.second << "\"}";
       } else {
 	ceph_abort();
       }
