@@ -161,6 +161,11 @@ int MgrStandby::init()
     client_messenger->wait();
     return r;
   }
+  // only forward monmap updates after authentication finishes, otherwise
+  // monc.authenticate() will be waiting for MgrStandy::ms_dispatch()
+  // to acquire the lock forever, as it is already locked in the beginning of
+  // this method.
+  monc.set_passthrough_monmap();
 
   client_t whoami = monc.get_global_id();
   client_messenger->set_myname(entity_name_t::MGR(whoami.v));
