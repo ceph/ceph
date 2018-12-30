@@ -6194,6 +6194,22 @@ COMMAND("smart",
         "osd", "rw", "cli,rest")
 };
 
+namespace {
+  class unlock_guard {
+    Mutex& m;
+  public:
+    explicit unlock_guard(Mutex& mutex)
+      : m(mutex)
+    {
+      m.Unlock();
+    }
+    unlock_guard(unlock_guard&) = delete;
+    ~unlock_guard() {
+      m.Lock();
+    }
+  };
+}
+
 void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, bufferlist& data)
 {
   int r = 0;
@@ -6267,37 +6283,34 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     string args = argsvec.front();
     for (vector<string>::iterator a = ++argsvec.begin(); a != argsvec.end(); ++a)
       args += " " + *a;
-    osd_lock.Unlock();
+    unlock_guard unlock{osd_lock};
     r = cct->_conf->injectargs(args, &ss);
-    osd_lock.Lock();
   }
   else if (prefix == "config set") {
     std::string key;
     std::string val;
     cmd_getval(cct, cmdmap, "key", key);
     cmd_getval(cct, cmdmap, "value", val);
-    osd_lock.Unlock();
+    unlock_guard unlock{osd_lock};
     r = cct->_conf->set_val(key, val, &ss);
     if (r == 0) {
       cct->_conf->apply_changes(nullptr);
     }
-    osd_lock.Lock();
   }
   else if (prefix == "config get") {
     std::string key;
     cmd_getval(cct, cmdmap, "key", key);
-    osd_lock.Unlock();
+    unlock_guard unlock{osd_lock};
     std::string val;
     r = cct->_conf->get_val(key, &val);
     if (r == 0) {
       ds << val;
     }
-    osd_lock.Lock();
   }
   else if (prefix == "config unset") {
     std::string key;
     cmd_getval(cct, cmdmap, "key", key);
-    osd_lock.Unlock();
+    unlock_guard unlock{osd_lock};
     r = cct->_conf->rm_val(key);
     if (r == 0) {
       cct->_conf->apply_changes(nullptr);
@@ -6305,7 +6318,6 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     if (r == -ENOENT) {
       r = 0;  // make command idempotent
     }
-    osd_lock.Lock();
   }
   else if (prefix == "cluster_log") {
     vector<string> msg;
