@@ -6127,6 +6127,22 @@ void OSD::do_command(
   }
 }
 
+namespace {
+  class unlock_guard {
+    Mutex& m;
+  public:
+    explicit unlock_guard(Mutex& mutex)
+      : m(mutex)
+    {
+      m.unlock();
+    }
+    unlock_guard(unlock_guard&) = delete;
+    ~unlock_guard() {
+      m.lock();
+    }
+  };
+}
+
 int OSD::_do_command(
   Connection *con, cmdmap_t& cmdmap, ceph_tid_t tid, bufferlist& data,
   bufferlist& odata, stringstream& ss, stringstream& ds)
@@ -6186,37 +6202,34 @@ int OSD::_do_command(
     string args = argsvec.front();
     for (vector<string>::iterator a = ++argsvec.begin(); a != argsvec.end(); ++a)
       args += " " + *a;
-    osd_lock.Unlock();
+    unlock_guard unlock{osd_lock};
     r = cct->_conf.injectargs(args, &ss);
-    osd_lock.Lock();
   }
   else if (prefix == "config set") {
     std::string key;
     std::string val;
     cmd_getval(cct, cmdmap, "key", key);
     cmd_getval(cct, cmdmap, "value", val);
-    osd_lock.Unlock();
+    unlock_guard unlock{osd_lock};
     r = cct->_conf.set_val(key, val, &ss);
     if (r == 0) {
       cct->_conf.apply_changes(nullptr);
     }
-    osd_lock.Lock();
   }
   else if (prefix == "config get") {
     std::string key;
     cmd_getval(cct, cmdmap, "key", key);
-    osd_lock.Unlock();
+    unlock_guard unlock{osd_lock};
     std::string val;
     r = cct->_conf.get_val(key, &val);
     if (r == 0) {
       ds << val;
     }
-    osd_lock.Lock();
   }
   else if (prefix == "config unset") {
     std::string key;
     cmd_getval(cct, cmdmap, "key", key);
-    osd_lock.Unlock();
+    unlock_guard unlock{osd_lock};
     r = cct->_conf.rm_val(key);
     if (r == 0) {
       cct->_conf.apply_changes(nullptr);
@@ -6224,7 +6237,6 @@ int OSD::_do_command(
     if (r == -ENOENT) {
       r = 0;  // make command idempotent
     }
-    osd_lock.Lock();
   }
   else if (prefix == "cluster_log") {
     vector<string> msg;
@@ -7514,9 +7526,8 @@ void OSD::handle_osd_map(MOSDMap *m)
 		   << ", map cache is " << cct->_conf->osd_map_cache_size
 		   << ", max_lag_factor " << m_osd_pg_epoch_max_lag_factor
 		   << ")" << dendl;
-          osd_lock.Unlock();
+	  unlock_guard unlock{osd_lock};
 	  shard->wait_min_pg_epoch(need);
-          osd_lock.Lock();
 	}
       }
     }
