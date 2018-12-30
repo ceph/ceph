@@ -118,9 +118,18 @@ struct PSSubConfig { /* subscription config */
     data_oid_prefix = uc.dest.oid_prefix;
     if (push_endpoint_name != "") {
       push_endpoint_args = uc.dest.push_endpoint_args;
-      push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args));
-      if (!push_endpoint) {
-        ldout(cct, 0) << "ERROR: failed to create push endpoint: " << push_endpoint_name << dendl;
+      try {
+        push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args));
+      } catch (const RGWPubSubEndpoint::configuration_error& e) {
+          std::cout << "ERROR: failed to create push endpoint: " 
+            << push_endpoint_name << " due to: " << e.what() << std::endl;
+          ldout(cct, 0) << "ERROR: failed to create push endpoint: " 
+            << push_endpoint_name << " due to: " << e.what() << dendl;
+      } catch (const std::runtime_error& e) {
+        std::cout << "ERROR: failed to connect to push endpoint: " 
+          << push_endpoint_name << " due to: " << e.what() << std::endl;
+        ldout(cct, 0) << "ERROR: failed to connect to push endpoint: " 
+          << push_endpoint_name << " due to: " << e.what() << dendl;
       }
     }
   }
@@ -145,9 +154,18 @@ struct PSSubConfig { /* subscription config */
     data_oid_prefix = config["data_oid_prefix"](default_oid_prefix.c_str());
     if (push_endpoint_name != "") {
       push_endpoint_args = config["push_endpoint_args"];
-      push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args));
-      if (!push_endpoint) {
-        ldout(cct, 0) << "ERROR: failed to create push endpoint: " << push_endpoint_name << dendl;
+      try {
+        push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args));
+      } catch (const RGWPubSubEndpoint::configuration_error& e) {
+        std::cout << "ERROR: failed to create push endpoint: " 
+          << push_endpoint_name << " due to: " << e.what() << std::endl;
+        ldout(cct, 0) << "ERROR: failed to create push endpoint: " 
+          << push_endpoint_name << " due to: " << e.what() << dendl;
+      } catch (const std::runtime_error& e) {
+        std::cout << "ERROR: failed to connect to push endpoint: " 
+          << push_endpoint_name << " due to: " << e.what() << std::endl;
+        ldout(cct, 0) << "ERROR: failed to connect to push endpoint: " 
+          << push_endpoint_name << " due to: " << e.what() << dendl;
       }
     }
   }
@@ -792,6 +810,8 @@ class PSSubscription {
           yield call(sub_conf->push_endpoint->send_to_completion_async(*event.get(), sync_env));
           
           if (retcode < 0) {
+            std::cout << "ERROR: failed to push event: " << put_obj.bucket << "/" << put_obj.key <<
+              " to endpoint: " << sub_conf->push_endpoint_name << " ret=" << retcode << std::endl;
             ldout(sync_env->cct, 0) << "ERROR: failed to push event: " << put_obj.bucket << "/" << put_obj.key <<
               " to endpoint: " << sub_conf->push_endpoint_name << " ret=" << retcode << dendl;
             return set_cr_error(retcode);
