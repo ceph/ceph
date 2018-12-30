@@ -6583,6 +6583,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     cmd_getval(cct, cmdmap, "delay", delay);
     ostringstream oss;
     oss << delay;
+    unlock_guard unlock{osd_lock};
     r = cct->_conf->set_val("osd_recovery_delay_start", oss.str().c_str());
     if (r != 0) {
       ss << "kick_recovery_wq: error setting "
