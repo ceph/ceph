@@ -230,6 +230,7 @@ using ceph::crypto::MD5;
 
 // STS Errors
 #define ERR_PACKED_POLICY_TOO_LARGE 2400
+#define ERR_INVALID_IDENTITY_TOKEN  2401
 
 #ifndef UINT32_MAX
 #define UINT32_MAX (0xffffffffu)
@@ -525,6 +526,7 @@ enum RGWOpType {
   /* sts specific*/
   RGW_STS_ASSUME_ROLE,
   RGW_STS_GET_SESSION_TOKEN,
+  RGW_STS_ASSUME_ROLE_WEB_IDENTITY,
   /* pubsub */
   RGW_OP_PUBSUB_TOPIC_CREATE,
   RGW_OP_PUBSUB_TOPICS_LIST,
@@ -647,7 +649,8 @@ enum RGWIdentityType
   TYPE_RGW=1,
   TYPE_KEYSTONE=2,
   TYPE_LDAP=3,
-  TYPE_ROLE=4
+  TYPE_ROLE=4,
+  TYPE_WEB=5,
 };
 
 static string RGW_STORAGE_CLASS_STANDARD = "STANDARD";

@@ -1835,8 +1835,8 @@ public:
 extern int rgw_build_bucket_policies(RGWRados* store, struct req_state* s);
 extern int rgw_build_object_policies(RGWRados *store, struct req_state *s,
 				     bool prefetch_data);
-extern rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
-						       struct req_state* s);
+extern void rgw_build_iam_environment(RGWRados* store,
+						                          struct req_state* s);
 extern vector<rgw::IAM::Policy> get_iam_user_policy_from_attr(CephContext* cct,
                         RGWRados* store,
                         map<string, bufferlist>& attrs,
