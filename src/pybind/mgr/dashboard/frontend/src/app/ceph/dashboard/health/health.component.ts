@@ -61,14 +61,15 @@ export class HealthComponent implements OnInit, OnDestroy {
   prepareRawUsage(chart, data) {
     const percentAvailable = Math.round(
       100 *
-        ((data.df.stats.total_bytes - data.df.stats.total_used_bytes) / data.df.stats.total_bytes)
+        ((data.df.stats.total_bytes - data.df.stats.total_used_raw_bytes) /
+          data.df.stats.total_bytes)
     );
 
     const percentUsed = Math.round(
-      100 * (data.df.stats.total_used_bytes / data.df.stats.total_bytes)
+      100 * (data.df.stats.total_used_raw_bytes / data.df.stats.total_bytes)
     );
 
-    chart.dataset[0].data = [data.df.stats.total_used_bytes, data.df.stats.total_avail_bytes];
+    chart.dataset[0].data = [data.df.stats.total_used_raw_bytes, data.df.stats.total_avail_bytes];
     if (chart === 'doughnut') {
       chart.options.cutoutPercentage = 65;
     }
