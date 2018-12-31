@@ -1381,7 +1381,7 @@ public:
     pool_opts_t pool_opts;
     ContextQueue *commit_queue;
 
-    OnodeRef get_onode(const ghobject_t& oid, bool create, bool is_createop=false);
+    OnodeRef get_onode(const ghobject_t& oid, bool create);
 
     // the terminology is confusing here, sorry!
     //

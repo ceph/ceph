@@ -667,7 +667,6 @@ void MemStore::_do_transaction(Transaction& t)
     switch (op->op) {
     case Transaction::OP_NOP:
       break;
-    case Transaction::OP_CREATE:
     case Transaction::OP_TOUCH:
       {
         coll_t cid = i.get_cid(op->cid);

@@ -2760,7 +2760,6 @@ void FileStore::_do_transaction(
     switch (op->op) {
     case Transaction::OP_NOP:
       break;
-    case Transaction::OP_CREATE:
     case Transaction::OP_TOUCH:
       {
         const coll_t &_cid = i.get_cid(op->cid);
