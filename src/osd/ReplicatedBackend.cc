@@ -322,7 +322,7 @@ void generate_transaction(
 	[&](const PGTransaction::ObjectOperation::Init::None &) {
 	},
 	[&](const PGTransaction::ObjectOperation::Init::Create &op) {
-	  t->touch(coll, goid);
+	  t->create(coll, goid);
 	},
 	[&](const PGTransaction::ObjectOperation::Init::Clone &op) {
 	  t->clone(

@@ -19,6 +19,16 @@ void ObjectStore::Transaction::dump(ceph::Formatter *f)
     case Transaction::OP_NOP:
       f->dump_string("op_name", "nop");
       break;
+    case Transaction::OP_CREATE:
+      {
+	coll_t cid = i.get_cid(op->cid);
+	ghobject_t oid = i.get_oid(op->oid);
+	f->dump_string("op_name", "create");
+	f->dump_stream("collection") << cid;
+	f->dump_stream("oid") << oid;
+      }
+      break;
+
     case Transaction::OP_TOUCH:
       {
         coll_t cid = i.get_cid(op->cid);
