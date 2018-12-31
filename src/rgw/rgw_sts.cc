@@ -161,38 +161,26 @@ int AssumedRoleUser::generateAssumedRoleUser(CephContext* cct,
   return 0;
 }
 
-AssumeRoleRequest::AssumeRoleRequest(string& _duration, string& _externalId, string& _iamPolicy,
-                    string& _roleArn, string& _roleSessionName, string& _serialNumber,
-                    string& _tokenCode)
-    : externalId(_externalId), iamPolicy(_iamPolicy),
-      roleArn(_roleArn), roleSessionName(_roleSessionName),
-      serialNumber(_serialNumber), tokenCode(_tokenCode)
+AssumeRoleRequestBase::AssumeRoleRequestBase( const string& duration,
+                                              const string& iamPolicy,
+                                              const string& roleArn,
+                                              const string& roleSessionName)
+  : iamPolicy(iamPolicy), roleArn(roleArn), roleSessionName(roleSessionName)
 {
-  if (_duration.empty()) {
-    duration = DEFAULT_DURATION_IN_SECS;
+  if (duration.empty()) {
+    this->duration = DEFAULT_DURATION_IN_SECS;
   } else {
-    duration = std::stoull(_duration);
+    this->duration = std::stoull(duration);
   }
 }
 
-int AssumeRoleRequest::validate_input() const
+int AssumeRoleRequestBase::validate_input() const
 {
   if (duration < MIN_DURATION_IN_SECS ||
           duration > MAX_DURATION_IN_SECS) {
     return -EINVAL;
   }
 
-  if (! externalId.empty()) {
-    if (externalId.length() < MIN_EXTERNAL_ID_LEN ||
-          externalId.length() > MAX_EXTERNAL_ID_LEN) {
-      return -EINVAL;
-    }
-
-    std::regex regex_externalId("[A-Za-z0-9_=,.@:/-]+");
-    if (! std::regex_match(externalId, regex_externalId)) {
-      return -EINVAL;
-    }
-  }
   if (! iamPolicy.empty() &&
           (iamPolicy.size() < MIN_POLICY_SIZE || iamPolicy.size() > MAX_POLICY_SIZE)) {
     return -ERR_PACKED_POLICY_TOO_LARGE;
@@ -213,6 +201,34 @@ int AssumeRoleRequest::validate_input() const
       return -EINVAL;
     }
   }
+
+  return 0;
+}
+
+int AssumeRoleWithWebIdentityRequest::validate_input() const
+{
+  if (! providerId.empty()) {
+    if (providerId.length() < MIN_PROVIDER_ID_LEN ||
+          providerId.length() > MAX_PROVIDER_ID_LEN) {
+      return -EINVAL;
+    }
+  }
+  return AssumeRoleRequestBase::validate_input();
+}
+
+int AssumeRoleRequest::validate_input() const
+{
+  if (! externalId.empty()) {
+    if (externalId.length() < MIN_EXTERNAL_ID_LEN ||
+          externalId.length() > MAX_EXTERNAL_ID_LEN) {
+      return -EINVAL;
+    }
+
+    std::regex regex_externalId("[A-Za-z0-9_=,.@:/-]+");
+    if (! std::regex_match(externalId, regex_externalId)) {
+      return -EINVAL;
+    }
+  }
   if (! serialNumber.empty()){
     if (serialNumber.size() < MIN_SERIAL_NUMBER_SIZE || serialNumber.size() > MAX_SERIAL_NUMBER_SIZE) {
       return -EINVAL;
@@ -227,7 +243,7 @@ int AssumeRoleRequest::validate_input() const
     return -EINVAL;
   }
 
-  return 0;
+  return AssumeRoleRequestBase::validate_input();
 }
 
 std::tuple<int, RGWRole> STSService::getRoleInfo(const string& arn)
@@ -268,56 +284,114 @@ int STSService::storeARN(string& arn)
   return ret;
 }
 
-AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
+AssumeRoleWithWebIdentityResponse STSService::assumeRoleWithWebIdentity(AssumeRoleWithWebIdentityRequest& req)
 {
-  uint64_t packedPolicySize = 0, roleMaxSessionDuration = 0;
-  AssumedRoleUser user;
-  Credentials cred;
-  string roleId;
+  AssumeRoleWithWebIdentityResponse response;
+  response.assumeRoleResp.packedPolicySize = 0;
+
+  if (req.getProviderId().empty()) {
+    response.providerId = req.getIss();
+  }
+  response.aud = req.getAud();
+  response.sub = req.getSub();
 
   //Get the role info which is being assumed
-  boost::optional<rgw::IAM::ARN> r_arn;
-  if (r_arn = rgw::IAM::ARN::parse(req.getRoleARN()); r_arn == boost::none) {
-    return make_tuple(-EINVAL, user, cred, packedPolicySize);
+  boost::optional<rgw::IAM::ARN> r_arn = rgw::IAM::ARN::parse(req.getRoleARN());
+  if (r_arn == boost::none) {
+    response.assumeRoleResp.retCode = -EINVAL;
+    return response;
   }
 
-  roleId = role.get_id();
-  roleMaxSessionDuration = role.get_max_session_duration();
+  string roleId = role.get_id();
+  uint64_t roleMaxSessionDuration = role.get_max_session_duration();
   req.setMaxDuration(roleMaxSessionDuration);
 
   //Validate input
-  int ret = 0;
-  if (ret = req.validate_input(); ret < 0) {
-    return make_tuple(ret, user, cred, packedPolicySize);
+  response.assumeRoleResp.retCode = req.validate_input();
+  if (response.assumeRoleResp.retCode < 0) {
+    return response;
   }
 
   //Calculate PackedPolicySize
   string policy = req.getPolicy();
-  packedPolicySize = (policy.size() / req.getMaxPolicySize()) * 100;
+  response.assumeRoleResp.packedPolicySize = (policy.size() / req.getMaxPolicySize()) * 100;
 
   //Generate Assumed Role User
-  if (ret = user.generateAssumedRoleUser(cct, store, roleId, r_arn.get(), req.getRoleSessionName()); ret < 0) {
-    return make_tuple(ret, user, cred, packedPolicySize);
+  response.assumeRoleResp.retCode = response.assumeRoleResp.user.generateAssumedRoleUser(cct,
+                                                                                          store,
+                                                                                          roleId,
+                                                                                          r_arn.get(),
+                                                                                          req.getRoleSessionName());
+  if (response.assumeRoleResp.retCode < 0) {
+    return response;
   }
 
   //Generate Credentials
   //Role and Policy provide the authorization info, user id and applier info are not needed
-  if (ret = cred.generateCredentials(cct, req.getDuration(),
-                                      req.getPolicy(), roleId,
-                                      user_id, nullptr); ret < 0) {
-    return make_tuple(ret, user, cred, packedPolicySize);
+  response.assumeRoleResp.retCode = response.assumeRoleResp.creds.generateCredentials(cct, req.getDuration(),
+                                                                                      req.getPolicy(), roleId,
+                                                                                      user_id, nullptr);
+  if (response.assumeRoleResp.retCode < 0) {
+    return response;
+  }
+
+  response.assumeRoleResp.retCode = 0;
+  return response;
+}
+
+AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
+{
+  AssumeRoleResponse response;
+  response.packedPolicySize = 0;
+
+  //Get the role info which is being assumed
+  boost::optional<rgw::IAM::ARN> r_arn = rgw::IAM::ARN::parse(req.getRoleARN());
+  if (r_arn == boost::none) {
+    response.retCode = -EINVAL;
+    return response;
+  }
+
+  string roleId = role.get_id();
+  uint64_t roleMaxSessionDuration = role.get_max_session_duration();
+  req.setMaxDuration(roleMaxSessionDuration);
+
+  //Validate input
+  response.retCode = req.validate_input();
+  if (response.retCode < 0) {
+    return response;
+  }
+
+  //Calculate PackedPolicySize
+  string policy = req.getPolicy();
+  response.packedPolicySize = (policy.size() / req.getMaxPolicySize()) * 100;
+
+  //Generate Assumed Role User
+  response.retCode = response.user.generateAssumedRoleUser(cct, store, roleId, r_arn.get(), req.getRoleSessionName());
+  if (response.retCode < 0) {
+    return response;
+  }
+
+  //Generate Credentials
+  //Role and Policy provide the authorization info, user id and applier info are not needed
+  response.retCode = response.creds.generateCredentials(cct, req.getDuration(),
+                                              req.getPolicy(), roleId,
+                                              user_id, nullptr);
+  if (response.retCode < 0) {
+    return response;
   }
 
   //Save ARN with the user
-  string arn = user.getARN();
-  if (ret = storeARN(arn); ret < 0) {
-    return make_tuple(ret, user, cred, packedPolicySize);
+  string arn = response.user.getARN();
+  response.retCode = storeARN(arn);
+  if (response.retCode < 0) {
+    return response;
   }
 
-  return make_tuple(0, user, cred, packedPolicySize);
+  response.retCode = 0;
+  return response;
 }
 
-GetSessionTokenRequest::GetSessionTokenRequest(string& duration, string& serialNumber, string& tokenCode)
+GetSessionTokenRequest::GetSessionTokenRequest(const string& duration, const string& serialNumber, const string& tokenCode)
 {
   if (duration.empty()) {
     this->duration = DEFAULT_DURATION_IN_SECS;

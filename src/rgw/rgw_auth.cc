@@ -320,6 +320,54 @@ rgw::auth::Strategy::add_engine(const Control ctrl_flag,
   auth_stack.push_back(std::make_pair(std::cref(engine), ctrl_flag));
 }
 
+void rgw::auth::WebIdentityApplier::to_str(std::ostream& out) const
+{
+  out << "rgw::auth::WebIdentityApplier(sub =" << token_claims.sub
+      << ", user_name=" << token_claims.user_name
+      << ", aud =" << token_claims.aud
+      << ", provider_id =" << token_claims.iss << ")";
+}
+
+string rgw::auth::WebIdentityApplier::get_idp_url() const
+{
+  string idp_url = token_claims.iss;
+  auto pos = idp_url.find("http://");
+  if (pos == std::string::npos) {
+      pos = idp_url.find("https://");
+      if (pos != std::string::npos) {
+        idp_url.erase(pos, 8);
+    }
+  } else {
+    idp_url.erase(pos, 7);
+  }
+  return idp_url;
+}
+
+void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
+{
+  s->info.args.append("sub", token_claims.sub);
+  s->info.args.append("aud", token_claims.aud);
+  s->info.args.append("provider_id", token_claims.iss);
+
+  string idp_url = get_idp_url();
+  string condition = idp_url + ":app_id";
+  s->env.emplace(condition, token_claims.aud);
+}
+
+bool rgw::auth::WebIdentityApplier::is_identity(const idset_t& ids) const
+{
+  if (ids.size() > 1) {
+    return false;
+  }
+
+  for (auto id : ids) {
+    string idp_url = get_idp_url();
+    if (id.is_oidc_provider() && id.get_idp_url() == idp_url) {
+      return true;
+    }
+  }
+    return false;
+}
 
 /* rgw::auth::RemoteAuthApplier */
 uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
