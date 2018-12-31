@@ -3315,7 +3315,8 @@ uint64_t BlueStore::Collection::make_blob_unshared(SharedBlob *sb)
 
 BlueStore::OnodeRef BlueStore::Collection::get_onode(
   const ghobject_t& oid,
-  bool create)
+  bool create,
+  bool is_createop)
 {
   ceph_assert(create ? lock.is_wlocked() : lock.is_locked());
 
@@ -3328,9 +3329,12 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     }
   }
 
-  OnodeRef o = onode_map.lookup(oid);
-  if (o)
-    return o;
+  OnodeRef o = OnodeRef();
+  if (!is_createop) {
+    o = onode_map.lookup(oid);
+    if (o)
+      return o;
+  }
 
   mempool::bluestore_cache_other::string key;
   get_object_key(store->cct, oid, &key);
@@ -3339,9 +3343,12 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
 			<< pretty_binary_string(key) << dendl;
 
   bufferlist v;
-  int r = store->db->get(PREFIX_OBJ, key.c_str(), key.size(), &v);
-  ldout(store->cct, 20) << " r " << r << " v.len " << v.length() << dendl;
+  int r = -ENOENT;
   Onode *on;
+  if (!is_createop) {
+    r = store->db->get(PREFIX_OBJ, key.c_str(), key.size(), &v);
+    ldout(store->cct, 20) << " r " << r << " v.len " << v.length() << dendl;
+  }
   if (v.length() == 0) {
     ceph_assert(r == -ENOENT);
     if (!store->cct->_conf->bluestore_debug_misc &&
@@ -10784,6 +10791,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     // these operations implicity create the object
     bool create = false;
     if (op->op == Transaction::OP_TOUCH ||
+	op->op == Transaction::OP_CREATE ||
 	op->op == Transaction::OP_WRITE ||
 	op->op == Transaction::OP_ZERO) {
       create = true;
@@ -10794,7 +10802,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     OnodeRef &o = ovec[op->oid];
     if (!o) {
       ghobject_t oid = i.get_oid(op->oid);
-      o = c->get_onode(oid, create);
+      o = c->get_onode(oid, create, op->op == Transaction::OP_CREATE);
     }
     if (!create && (!o || !o->exists)) {
       dout(10) << __func__ << " op " << op->op << " got ENOENT on "
@@ -10804,6 +10812,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     }
 
     switch (op->op) {
+    case Transaction::OP_CREATE:
     case Transaction::OP_TOUCH:
       r = _touch(txc, c, o);
       break;
