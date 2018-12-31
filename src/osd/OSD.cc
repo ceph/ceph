@@ -1028,11 +1028,45 @@ void OSDService::send_pg_temp()
 
 void OSDService::send_pg_created(pg_t pgid)
 {
+  std::lock_guard l(pg_created_lock);
   dout(20) << __func__ << dendl;
-  if (osdmap->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+  auto o = get_osdmap();
+  if (o->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    pg_created.insert(pgid);
     monc->send_mon_message(new MOSDPGCreated(pgid));
   }
 }
+
+void OSDService::send_pg_created()
+{
+  std::lock_guard l(pg_created_lock);
+  dout(20) << __func__ << dendl;
+  auto o = get_osdmap();
+  if (o->require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+    for (auto pgid : pg_created) {
+      monc->send_mon_message(new MOSDPGCreated(pgid));
+    }
+  }
+}
+
+void OSDService::prune_pg_created()
+{
+  std::lock_guard l(pg_created_lock);
+  dout(20) << __func__ << dendl;
+  auto o = get_osdmap();
+  auto i = pg_created.begin();
+  while (i != pg_created.end()) {
+    auto p = o->get_pg_pool(i->pool());
+    if (!p || !p->has_flag(pg_pool_t::FLAG_CREATING)) {
+      dout(20) << __func__ << " pruning " << *i << dendl;
+      i = pg_created.erase(i);
+    } else {
+      dout(20) << __func__ << " keeping " << *i << dendl;
+      ++i;
+    }
+  }
+}
+
 
 // --------------------------------------
 // dispatch
@@ -5395,6 +5429,7 @@ void OSD::ms_handle_connect(Connection *con)
       service.clear_sent_ready_to_merge();
       service.send_pg_temp();
       service.send_ready_to_merge();
+      service.send_pg_created();
       requeue_failures();
       send_failures();
 
@@ -8372,6 +8407,8 @@ void OSD::consume_map()
     }
     ceph_assert(merge_pgs.empty());
   }
+
+  service.prune_pg_created();
 
   unsigned pushes_to_free = 0;
   for (auto& shard : shards) {

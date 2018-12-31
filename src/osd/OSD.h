@@ -748,7 +748,11 @@ public:
   void requeue_pg_temp();
   void send_pg_temp();
 
+  ceph::mutex pg_created_lock = ceph::make_mutex("OSDService::pg_created_lock");
+  set<pg_t> pg_created;
   void send_pg_created(pg_t pgid);
+  void prune_pg_created();
+  void send_pg_created();
 
   AsyncReserver<spg_t> snap_reserver;
   void queue_recovery_context(PG *pg, GenContext<ThreadPool::TPHandle&> *c);
