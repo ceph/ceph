@@ -1048,11 +1048,8 @@ void MDSDaemon::suicide()
 
   //because add_observer is called after set_up_admin_socket
   //so we can use asok_hook to avoid assert in the remove_observer
-  if (asok_hook != NULL) {
-    mds_lock.Unlock();
+  if (asok_hook != NULL)
     g_conf().remove_observer(this);
-    mds_lock.Lock();
-  }
 
   clean_up_admin_socket();
 

@@ -404,9 +404,7 @@ void Objecter::shutdown()
 
   initialized = false;
 
-  wl.unlock();
   cct->_conf.remove_observer(this);
-  wl.lock();
 
   map<int,OSDSession*>::iterator p;
   while (!osd_sessions.empty()) {

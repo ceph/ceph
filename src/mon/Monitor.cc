@@ -952,9 +952,7 @@ void Monitor::shutdown()
 
   state = STATE_SHUTDOWN;
 
-  lock.Unlock();
   g_conf().remove_observer(this);
-  lock.Lock();
 
   if (admin_hook) {
     cct->get_admin_socket()->unregister_commands(admin_hook);

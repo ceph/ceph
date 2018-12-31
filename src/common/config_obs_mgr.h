@@ -17,11 +17,11 @@ class ObserverMgr : public ConfigTracker {
   // Maps configuration options to the observer listening for them.
   using obs_map_t = std::multimap<std::string, ConfigObs*>;
   obs_map_t observers;
+  /* Maps observers to the configuration options that they care about which
+   * have changed. */
+  using rev_obs_map_t = std::map<ConfigObs*, std::set<std::string>>;
 
 public:
-  typedef std::map<ConfigObs*, std::set<std::string>> rev_obs_map;
-  typedef std::function<void(ConfigObs*, const std::string&)> config_gather_cb;
-
   // Adds a new observer to this configuration. You can do this at any time,
   // but it will only receive notifications for the changes that happen after
   // you attach it, obviously.
@@ -38,13 +38,12 @@ public:
   // This function will assert if you try to delete an observer that isn't
   // there.
   void remove_observer(ConfigObs* observer);
-  // invoke callback for every observers tracking keys
-  void for_each_observer(config_gather_cb callback);
-  // invoke callback for observers keys tracking the provided change set
   template<class ConfigProxyT>
-  void for_each_change(const std::set<std::string>& changes,
-                       ConfigProxyT& proxy,
-                       config_gather_cb callback, std::ostream *oss);
+  void call_all_observers(const ConfigProxyT& proxy);
+  template<class ConfigProxyT>
+  void apply_changes(const std::set<std::string>& changes,
+		     const ConfigProxyT& proxy,
+		     std::ostream *oss);
   bool is_tracking(const std::string& name) const override;
 };
 
@@ -81,21 +80,27 @@ void ObserverMgr<ConfigObs>::remove_observer(ConfigObs* observer)
 }
 
 template<class ConfigObs>
-void ObserverMgr<ConfigObs>::for_each_observer(config_gather_cb callback)
+template<class ConfigProxyT>
+void ObserverMgr<ConfigObs>::call_all_observers(const ConfigProxyT& proxy)
 {
+  rev_obs_map_t rev_obs;
   for (const auto& [key, obs] : observers) {
-    callback(obs, key);
+    rev_obs[obs].insert(key);
+  }
+  for (auto& [obs, keys] : rev_obs) {
+    obs->handle_conf_change(proxy, keys);
   }
 }
 
 template<class ConfigObs>
-template<class ConfigProxyT>
-void ObserverMgr<ConfigObs>::for_each_change(const std::set<std::string>& changes,
-                                             ConfigProxyT& proxy,
-                                             config_gather_cb callback, std::ostream *oss)
+template<class ConfigProxy>
+void ObserverMgr<ConfigObs>::apply_changes(const std::set<std::string>& changes,
+                                           const ConfigProxy& proxy,
+                                           std::ostream *oss)
 {
   // create the reverse observer mapping, mapping observers to the set of
   // changed keys that they'll get.
+  rev_obs_map_t robs;
   string val;
   for (auto& key : changes) {
     auto [first, last] = observers.equal_range(key);
@@ -106,8 +111,13 @@ void ObserverMgr<ConfigObs>::for_each_change(const std::set<std::string>& change
       }
     }
     for (auto r = first; r != last; ++r) {
-      callback(r->second, key);
+      auto obs = r->second;
+      robs[obs].insert(key);
     }
+  }
+  // Make any pending observer callbacks
+  for (auto& [obs, keys] : robs) {
+    obs->handle_conf_change(proxy, keys);
   }
 }
 
