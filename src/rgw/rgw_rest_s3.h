@@ -509,15 +509,13 @@ public:
   explicit RGWHandler_REST_S3(const rgw::auth::StrategyRegistry& auth_registry)
     : RGWHandler_REST(),
       auth_registry(auth_registry) {
-  }
+    }
   ~RGWHandler_REST_S3() override = default;
 
   int init(RGWRados *store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
-  int authorize(const DoutPrefixProvider *dpp) override {
-    return RGW_Auth_S3::authorize(dpp, store, auth_registry, s);
-  }
+  int authorize(const DoutPrefixProvider *dpp) override;
   int postauth_init() override;
 };
 

@@ -17,7 +17,6 @@
 #include "common/sstring.hh"
 #include "rgw_common.h"
 #include "rgw_rest_s3.h"
-
 #include "rgw_auth.h"
 #include "rgw_auth_filters.h"
 #include "rgw_auth_keystone.h"
@@ -71,6 +70,7 @@ class STSAuthStrategy : public rgw::auth::Strategy,
       rgw::auth::RoleApplier(cct, role_name, user_id, role_policies));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
+
 public:
   STSAuthStrategy(CephContext* const cct,
                        RGWRados* const store,
