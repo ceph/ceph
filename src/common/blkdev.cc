@@ -683,6 +683,16 @@ bool get_vdo_utilization(int fd, uint64_t *total, uint64_t *avail)
   return false;
 }
 
+std::string get_device_id(const std::string& devname,
+			  std::string *err)
+{
+  // FIXME: implement me
+  if (err) {
+    *err = "not implemented";
+  }
+  return std::string();
+}
+
 #elif defined(__FreeBSD__)
 
 const char *BlkDev::sysfsdir() const {
