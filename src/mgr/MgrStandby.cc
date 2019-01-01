@@ -195,6 +195,7 @@ void MgrStandby::send_beacon()
     info.name = module->get_name();
     info.error_string = module->get_error_string();
     info.can_run = module->get_can_run();
+    info.module_options = module->get_options();
     module_info.push_back(std::move(info));
   }
 

@@ -10,12 +10,28 @@ from threading import Event
 
 
 class Hello(MgrModule):
+    # these are CLI commands we implement
     COMMANDS = [
         {
             "cmd": "hello "
                    "name=person_name,type=CephString,req=false",
             "desc": "Prints hello world to mgr.x.log",
             "perm": "r"
+        },
+    ]
+
+    # these are module options we understand.  These can be set with
+    # 'ceph config set global mgr/hello/<name> <value>'.  e.g.,
+    # 'ceph config set global mgr/hello/place Earth'
+    MODULE_OPTIONS = [
+        {
+            'name': 'place',
+            'default': 'world',
+        },
+        {
+            'name': 'emphatic',
+            'type': 'bool',
+            'default': True,
         },
     ]
 
@@ -34,10 +50,12 @@ class Hello(MgrModule):
         status_code = 0
         output_buffer = "Output buffer is for data results"
         output_string = "Output string is for informative text"
-        message = "hello world!"
-
         if 'person_name' in cmd:
-            message = "hello, " + cmd['person_name'] + "!"
+            message = "Hello, " + cmd['person_name']
+        else:
+            message = "Hello " + self.get_module_option('place');
+        if self.get_module_option('emphatic'):
+            message += '!'
 
         return HandleCommandResult(retval=status_code, stdout=output_buffer,
                                    stderr=message + "\n" + output_string)

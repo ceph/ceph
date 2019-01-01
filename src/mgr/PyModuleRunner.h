@@ -26,10 +26,11 @@
  */
 class PyModuleRunner
 {
-protected:
+public:
   // Info about the module we're going to run
   PyModuleRef py_module;
 
+protected:
   // Populated by descendent class
   PyObject *pClassInstance = nullptr;
 

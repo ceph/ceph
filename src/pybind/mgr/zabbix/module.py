@@ -68,6 +68,7 @@ class Module(MgrModule):
             },
             {
                 'name': 'zabbix_port',
+                'type': 'int',
                 'default': 10051
             },
             {
@@ -76,6 +77,7 @@ class Module(MgrModule):
             },
             {
                 'name': 'interval',
+                'type': 'secs',
                 'default': 60
             }
     ]

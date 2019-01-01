@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #pragma once
 
 #include <Python.h>
@@ -25,4 +28,11 @@ inline PyObject* PyInt_FromLong(long ival) {
 inline int PyString_Check(PyObject *o) {
   return PyUnicode_Check(o);
 }
+inline PyObject* PyFloat_FromString(PyObject *s, void *arg) {
+  return PyFloat_FromString(s);
+}
+inline PyObject* PyInt_FromString(const char *str, char **pend, int base) {
+  return PyLong_FromString(str, pend, base);
+}
+#define PyString_Type PyUnicode_Type
 #endif
