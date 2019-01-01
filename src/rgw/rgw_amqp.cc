@@ -87,8 +87,10 @@ std::string to_string(const amqp_rpc_reply_t& reply) {
             ss << "server unknown error: ";
             break;
         }
-        amqp_connection_close_t* m = (amqp_connection_close_t*)reply.reply.decoded;
-        ss << m->reply_code << " text: " << std::string((char*)m->reply_text.bytes, m->reply_text.len);
+        if (reply.reply.decoded) {
+          amqp_connection_close_t* m = (amqp_connection_close_t*)reply.reply.decoded;
+          ss << m->reply_code << " text: " << std::string((char*)m->reply_text.bytes, m->reply_text.len);
+        }
         return ss.str();
       }
     default:
@@ -348,6 +350,10 @@ class Manager : public std::thread {
         ConnectionGuard guard(conn.second.state);
       }
     }
+
+    unsigned get_connection_number() const {
+      return connection_number;
+    }
 };
 
 // singleton manager for caching connections
@@ -370,6 +376,10 @@ int publish(const connection_t& conn,
       0, // not immediate
       nullptr,
       amqp_cstring_bytes(message.c_str()));
+}
+
+unsigned get_connection_number() {
+  return s_manager.get_connection_number();
 }
 
 } // namespace amqp
