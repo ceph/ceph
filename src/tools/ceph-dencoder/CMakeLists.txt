@@ -56,5 +56,6 @@ target_link_libraries(ceph-dencoder
   cls_journal_client
   cls_timeindex_client
   ${EXTRALIBS}
-  ${CMAKE_DL_LIBS})
+  ${CMAKE_DL_LIBS}
+  rabbitmq)
 install(TARGETS ceph-dencoder DESTINATION bin)
