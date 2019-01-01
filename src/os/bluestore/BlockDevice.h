@@ -37,11 +37,11 @@
 #include "include/interval_set.h"
 #define SPDK_PREFIX "spdk:"
 
+#if defined(__linux__)
 #if !defined(F_SET_FILE_RW_HINT)
 #define F_LINUX_SPECIFIC_BASE 1024
 #define F_SET_FILE_RW_HINT         (F_LINUX_SPECIFIC_BASE + 14)
 #endif
-
 // These values match Linux definition
 // https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/fcntl.h#n56
 #define  WRITE_LIFE_NOT_SET  	0 	// No hint information set
@@ -51,6 +51,17 @@
 #define  WRITE_LIFE_LONG  	4       // Data written has a long life time
 #define  WRITE_LIFE_EXTREME  	5     	// Data written has an extremely long life time
 #define  WRITE_LIFE_MAX  	6
+#else
+// On systems don't have WRITE_LIFE_* only use one FD 
+// And all files are created equal
+#define  WRITE_LIFE_NOT_SET  	0 	// No hint information set
+#define  WRITE_LIFE_NONE  	0       // No hints about write life time
+#define  WRITE_LIFE_SHORT  	0       // Data written has a short life time
+#define  WRITE_LIFE_MEDIUM  	0    	// Data written has a medium life time
+#define  WRITE_LIFE_LONG  	0       // Data written has a long life time
+#define  WRITE_LIFE_EXTREME  	0    	// Data written has an extremely long life time
+#define  WRITE_LIFE_MAX  	1
+#endif
 
 class CephContext;
 
