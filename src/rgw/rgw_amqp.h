@@ -21,6 +21,9 @@ int publish(const connection_t& conn,
 // convert the integer status returned from the "publish" function to a string
 std::string status_to_string(int s);
 
+// return the number of open connections
+unsigned get_connection_number();
+
 // exception object for connection establishment error
 struct connection_error : public std::runtime_error {
   connection_error(const std::string& what_arg) : 

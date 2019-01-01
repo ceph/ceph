@@ -1,3 +1,8 @@
+# amqp mock library
+set(amqp_mock_src
+  amqp_mock.cc amqp_url.c)
+add_library(amqp_mock STATIC ${amqp_mock_src})
+
 #unittest_rgw_bencode
 add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
 add_ceph_unittest(unittest_rgw_bencode)
@@ -6,7 +11,7 @@ target_link_libraries(unittest_rgw_bencode rgw_a)
 #unitttest_rgw_period_history
 add_executable(unittest_rgw_period_history test_rgw_period_history.cc)
 add_ceph_unittest(unittest_rgw_period_history)
-target_link_libraries(unittest_rgw_period_history rgw_a)
+target_link_libraries(unittest_rgw_period_history rgw_a amqp_mock)
 
 # unitttest_rgw_compression
 add_executable(unittest_rgw_compression
@@ -23,7 +28,7 @@ target_link_libraries(unittest_http_manager rgw_a)
 # unitttest_rgw_reshard_wait
 add_executable(unittest_rgw_reshard_wait test_rgw_reshard_wait.cc)
 add_ceph_unittest(unittest_rgw_reshard_wait)
-target_link_libraries(unittest_rgw_reshard_wait rgw_a)
+target_link_libraries(unittest_rgw_reshard_wait rgw_a amqp_mock)
 
 set(test_rgw_a_src
   test_rgw_common.cc)
@@ -137,3 +142,10 @@ if(WITH_BOOST_CONTEXT)
   target_compile_definitions(unittest_rgw_dmclock_scheduler PRIVATE BOOST_COROUTINES_NO_DEPRECATION_WARNING)
   target_link_libraries(unittest_rgw_dmclock_scheduler Boost::coroutine Boost::context)
 endif()
+
+# unittest_rgw_amqp
+add_executable(unittest_rgw_amqp test_rgw_amqp.cc)
+add_ceph_unittest(unittest_rgw_amqp)
+
+target_link_libraries(unittest_rgw_amqp rgw amqp_mock)
+
