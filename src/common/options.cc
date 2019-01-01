@@ -2400,8 +2400,8 @@ std::vector<Option> get_global_options() {
     .add_service("mon"),
 
     Option("osd_pool_default_pgp_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(8)
-    .set_description("number of PGs for placement purposes. Should be equal to pg_num")
+    .set_default(0)
+    .set_description("number of PGs for placement purposes (0 to match pg_num)")
     .add_see_also("osd_pool_default_pg_num")
     .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon"),

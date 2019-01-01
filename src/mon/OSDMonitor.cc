@@ -6686,6 +6686,8 @@ int OSDMonitor::prepare_new_pool(string& name,
     pg_num = g_conf().get_val<uint64_t>("osd_pool_default_pg_num");
   if (pgp_num == 0)
     pgp_num = g_conf().get_val<uint64_t>("osd_pool_default_pgp_num");
+  if (!pgp_num)
+    pgp_num = pg_num;
   if (pg_num > g_conf().get_val<uint64_t>("mon_max_pool_pg_num")) {
     *ss << "'pg_num' must be greater than 0 and less than or equal to "
         << g_conf().get_val<uint64_t>("mon_max_pool_pg_num")
