@@ -3,13 +3,13 @@ add_executable(ceph_rgw_jsonparser
   rgw_jsonparser.cc)
 target_link_libraries(ceph_rgw_jsonparser
   rgw_a
-  global)
+  global rabbitmq)
 
 add_executable(ceph_rgw_multiparser
   rgw_multiparser.cc)
 target_link_libraries(ceph_rgw_multiparser
   rgw_a
-  global)
+  global rabbitmq)
 
 install(TARGETS
   ceph_rgw_jsonparser
@@ -195,8 +195,7 @@ target_link_libraries(rgw_a PRIVATE
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS}
-  OATH::OATH
-  rabbitmq)
+  OATH::OATH)
 
 if(WITH_CURL_OPENSSL)
   # used by rgw_http_client_curl.cc
@@ -238,7 +237,7 @@ target_link_libraries(radosgw radosgw_a librados
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
-  ${ALLOC_LIBS})
+  ${ALLOC_LIBS} rabbitmq)
 install(TARGETS radosgw DESTINATION bin)
 
 set(radosgw_admin_srcs
@@ -250,7 +249,7 @@ target_link_libraries(radosgw-admin rgw_a librados
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES} rabbitmq)
 install(TARGETS radosgw-admin DESTINATION bin)
 
 set(radosgw_es_srcs
@@ -261,7 +260,7 @@ target_link_libraries(radosgw-es rgw_a librados
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES} rabbitmq)
 install(TARGETS radosgw-es DESTINATION bin)
 
 set(radosgw_token_srcs
@@ -279,7 +278,7 @@ target_link_libraries(radosgw-object-expirer rgw_a librados
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} rabbitmq)
 install(TARGETS radosgw-object-expirer DESTINATION bin)
 
 set(librgw_srcs
@@ -329,8 +328,7 @@ target_link_libraries(rgw_admin_user PRIVATE
   global
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
-  ${OPENLDAP_LIBRARIES}
-  rabbitmq)
+  ${OPENLDAP_LIBRARIES})
 set_target_properties(rgw_admin_user PROPERTIES OUTPUT_NAME rgw_admin_user VERSION 1.0.0
   SOVERSION 0)
 install(TARGETS rgw_admin_user DESTINATION ${CMAKE_INSTALL_LIBDIR})
