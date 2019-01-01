@@ -307,7 +307,6 @@ public:
   public:
     enum {
       OP_NOP =          0,
-      OP_CREATE =	7,   // cid, oid
       OP_TOUCH =        9,   // cid, oid
       OP_WRITE =        10,  // cid, oid, offset, len, bl
       OP_ZERO =         11,  // cid, oid, offset, len
@@ -602,7 +601,6 @@ public:
       case OP_NOP:
         break;
 
-      case OP_CREATE:
       case OP_TOUCH:
       case OP_REMOVE:
       case OP_SETATTR:
@@ -992,19 +990,6 @@ public:
     void nop() {
       Op* _op = _get_next_op();
       _op->op = OP_NOP;
-      data.ops++;
-    }
-    /**
-     * create
-     *
-     * create an object that does not yet exist
-     * (behavior is undefined if the object already exists)
-     */
-    void create(const coll_t& cid, const ghobject_t& oid) {
-      Op* _op = _get_next_op();
-      _op->op = OP_CREATE;
-      _op->cid = _get_coll_id(cid);
-      _op->oid = _get_object_id(oid);
       data.ops++;
     }
     /**
