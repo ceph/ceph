@@ -861,7 +861,11 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
   int r = ::pread(buffered ? fd_buffereds[WRITE_LIFE_NOT_SET] : fd_directs[WRITE_LIFE_NOT_SET],
 		  p->c_str(), len, off);
   if (r < 0) {
-    r = -errno;
+    if (ioc->allow_eio && is_expected_ioerr(r)) {
+      r = -EIO;
+    } else {
+      r = -errno;
+    }
     goto out;
   }
   ceph_assert((uint64_t)r == len);
