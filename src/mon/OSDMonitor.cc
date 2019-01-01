@@ -4997,7 +4997,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	 ++p) {
       if (f) {
 	f->open_object_section("entry");
-	f->dump_stream("addr") << p->first;
+	f->dump_string("addr", p->first.get_legacy_str());
 	f->dump_stream("until") << p->second;
 	f->close_section();
       } else {
