@@ -601,14 +601,11 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
 
 bool MonCap::parse(const string& str, ostream *err)
 {
-  string s = str;
-  string::iterator iter = s.begin();
-  string::iterator end = s.end();
+  auto iter = str.begin();
+  auto end = str.end();
 
-  MonCapParser<string::iterator> g;
-  bool r = qi::parse(iter, end, g, *this);
-  //MonCapGrant foo;
-  //bool r = qi::phrase_parse(iter, end, g, ascii::space, foo);
+  MonCapParser<string::const_iterator> exp;
+  bool r = qi::parse(iter, end, exp, *this);
   if (r && iter == end) {
     text = str;
     for (auto& g : grants) {
