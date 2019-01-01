@@ -5,12 +5,47 @@ import threading
 class Module(MgrModule):
 
     MODULE_OPTIONS = [
-            {'name': 'failure_domain'},
-            {'name': 'min_size'},
-            {'name': 'num_rep'},
-            {'name': 'pg_num'},
-            {'name': 'prefix'},
-            {'name': 'subtree'},
+        {
+            'name': 'subtree',
+            'type': 'str',
+            'default': 'rack',
+            'desc': 'CRUSH level for which to create a local pool',
+            'runtime': True,
+        },
+        {
+            'name': 'failure_domain',
+            'type': 'str',
+            'default': 'host',
+            'desc': 'failure domain for any created local pool',
+            'runtime': True,
+        },
+        {
+            'name': 'min_size',
+            'type': 'int',
+            'desc': 'default min_size for any created local pool',
+            'runtime': True,
+        },
+        {
+            'name': 'num_rep',
+            'type': 'int',
+            'default': 3,
+            'desc': 'default replica count for any created local pool',
+            'runtime': True,
+        },
+        {
+            'name': 'pg_num',
+            'type': 'int',
+            'default': 128,
+            'desc': 'default pg_num for any created local pool',
+            'runtime': True,
+        },
+        {
+            'name': 'prefix',
+            'type': 'str',
+            'default': '',
+            'desc': 'name prefix for any created local pool',
+            'runtime': True,
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -25,10 +60,10 @@ class Module(MgrModule):
         """
         Check pools on each OSDMap change
         """
-        subtree_type = self.get_module_option('subtree') or 'rack'
-        failure_domain = self.get_module_option('failure_domain') or 'host'
-        pg_num = self.get_module_option('pg_num') or '128'
-        num_rep = self.get_module_option('num_rep') or '3'
+        subtree_type = self.get_module_option('subtree')
+        failure_domain = self.get_module_option('failure_domain')
+        pg_num = self.get_module_option('pg_num')
+        num_rep = self.get_module_option('num_rep')
         min_size = self.get_module_option('min_size')
         prefix = self.get_module_option('prefix') or 'by-' + subtree_type + '-'
 
@@ -65,7 +100,7 @@ class Module(MgrModule):
                         "pool": pool_name,
                         'rule': pool_name,
                         "pool_type": 'replicated',
-                        'pg_num': int(pg_num),
+                        'pg_num': pg_num,
                     }), "")
                     r, outb, outs = result.wait()
 

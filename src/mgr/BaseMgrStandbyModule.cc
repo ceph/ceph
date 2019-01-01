@@ -73,7 +73,7 @@ ceph_get_module_option(BaseMgrStandbyModule *self, PyObject *args)
   bool found = self->this_module->get_config(what, &value);
   if (found) {
     dout(10) << __func__ << " " << what << " found: " << value.c_str() << dendl;
-    return PyString_FromString(value.c_str());
+    return self->this_module->py_module->get_typed_option_value(what, value);
   } else {
     dout(4) << __func__ << " " << what << " not found " << dendl;
     Py_RETURN_NONE;
