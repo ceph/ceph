@@ -3438,6 +3438,10 @@ public:
   pair<epoch_t, epoch_t> get_bounds() const override {
     return make_pair(first, last + 1);
   }
+  void adjust_start_backwards(epoch_t last_epoch_clean) {
+    first = last_epoch_clean;
+  }
+
   set<pg_shard_t> get_all_participants(
     bool ec_pool) const override {
     return all_participants;
