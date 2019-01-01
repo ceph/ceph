@@ -1215,7 +1215,7 @@ class CephManager:
         :param wait_for_mon: wait for mon to be synced with mgr. 0 to disable
                              it. (5 min by default)
         """
-        seq = {osd: self.raw_cluster_cmd('tell', 'osd.%d' % osd, 'flush_pg_stats')
+        seq = {osd: int(self.raw_cluster_cmd('tell', 'osd.%d' % osd, 'flush_pg_stats'))
                for osd in osds}
         if not wait_for_mon:
             return
@@ -1226,7 +1226,7 @@ class CephManager:
                 continue
             got = 0
             while wait_for_mon > 0:
-                got = self.raw_cluster_cmd('osd', 'last-stat-seq', 'osd.%d' % osd)
+                got = int(self.raw_cluster_cmd('osd', 'last-stat-seq', 'osd.%d' % osd))
                 self.log('need seq {need} got {got} for osd.{osd}'.format(
                     need=need, got=got, osd=osd))
                 if got >= need:
