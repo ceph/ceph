@@ -300,10 +300,20 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
     from their active peer), and to configuration settings (read only).
     """
 
+    MODULE_OPTIONS = []
+    MODULE_OPTION_DEFAULTS = {}
+
     def __init__(self, module_name, capsule):
         super(MgrStandbyModule, self).__init__(capsule)
         self.module_name = module_name
         self._logger = configure_logger(self, module_name)
+        # see also MgrModule.__init__()
+        for o in self.MODULE_OPTIONS:
+            if 'default' in o:
+                if 'type' in o:
+                    self.MODULE_OPTION_DEFAULTS[o['name']] = o['default']
+                else:
+                    self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
     def __del__(self):
         unconfigure_logger(self, self.module_name)
