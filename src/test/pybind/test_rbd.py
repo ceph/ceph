@@ -1339,8 +1339,8 @@ class TestClone(object):
         deduped = set([(pool_name, image[1]) for image in actual])
         eq(deduped, set(expected))
 
-    def check_children2(self, expected):
-        actual = list(self.image.list_children2())
+    def check_children3(self, expected):
+        actual = list(self.image.list_children3())
         eq(actual, expected)
 
     def get_image_id(self, ioctx, name):
@@ -1352,61 +1352,61 @@ class TestClone(object):
         global features
         self.image.set_snap('snap1')
         self.check_children([(pool_name, self.clone_name)])
-        self.check_children2(
+        self.check_children3(
             [{'pool': pool_name, 'pool_namespace': '',
               'image': self.clone_name, 'trash': False,
               'id': self.get_image_id(ioctx, self.clone_name)}])
         self.clone.close()
         self.rbd.remove(ioctx, self.clone_name)
         eq(self.image.list_children(), [])
-        eq(list(self.image.list_children2()), [])
+        eq(list(self.image.list_children3()), [])
 
         clone_name = get_temp_image_name() + '_'
         expected_children = []
-        expected_children2 = []
+        expected_children3 = []
         for i in range(10):
             self.rbd.clone(ioctx, image_name, 'snap1', ioctx,
                            clone_name + str(i), features)
             expected_children.append((pool_name, clone_name + str(i)))
-            expected_children2.append(
+            expected_children3.append(
                 {'pool': pool_name, 'pool_namespace': '',
                  'image': clone_name + str(i), 'trash': False,
                  'id': self.get_image_id(ioctx, clone_name + str(i))})
             self.check_children(expected_children)
-            self.check_children2(expected_children2)
+            self.check_children3(expected_children3)
 
         image6_id = self.get_image_id(ioctx, clone_name + str(5))
         RBD().trash_move(ioctx, clone_name + str(5), 0)
         expected_children.remove((pool_name, clone_name + str(5)))
-        for item in expected_children2:
+        for item in expected_children3:
           for k, v in item.items():
             if v == image6_id:
               item["trash"] = True
         self.check_children(expected_children)
-        self.check_children2(expected_children2)
+        self.check_children3(expected_children3)
 
         RBD().trash_restore(ioctx, image6_id, clone_name + str(5))
         expected_children.append((pool_name, clone_name + str(5)))
-        for item in expected_children2:
+        for item in expected_children3:
           for k, v in item.items():
             if v == image6_id:
               item["trash"] = False
         self.check_children(expected_children)
-        self.check_children2(expected_children2)
+        self.check_children3(expected_children3)
 
         for i in range(10):
             self.rbd.remove(ioctx, clone_name + str(i))
             expected_children.remove((pool_name, clone_name + str(i)))
-            expected_children2.pop(0)
+            expected_children3.pop(0)
             self.check_children(expected_children)
-            self.check_children2(expected_children2)
+            self.check_children3(expected_children3)
 
         eq(self.image.list_children(), [])
-        eq(list(self.image.list_children2()), [])
+        eq(list(self.image.list_children3()), [])
         self.rbd.clone(ioctx, image_name, 'snap1', ioctx, self.clone_name,
                        features)
         self.check_children([(pool_name, self.clone_name)])
-        self.check_children2(
+        self.check_children3(
             [{'pool': pool_name, 'pool_namespace': '',
               'image': self.clone_name, 'trash': False,
               'id': self.get_image_id(ioctx, self.clone_name)}])

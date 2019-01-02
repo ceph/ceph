@@ -3728,6 +3728,14 @@ written." % (self.name, ret, length))
 
         :returns: :class:`ChildIterator`
         """
+        return ChildIterator(self, old_format=True)
+
+    def list_children3(self):
+        """
+        Iterate over the children of a snapshot.
+
+        :returns: :class:`ChildIterator`
+        """
         return ChildIterator(self)
 
     def list_lockers(self):
@@ -4664,9 +4672,11 @@ cdef class ChildIterator(object):
     cdef rbd_linked_image_spec_t *children
     cdef size_t num_children
     cdef object image
+    cdef object old_format
 
-    def __init__(self, Image image):
+    def __init__(self, Image image, old_format=False):
         self.image = image
+        self.old_format = old_format
         self.children = NULL
         self.num_children = 10
         while True:
@@ -4681,12 +4691,20 @@ cdef class ChildIterator(object):
 
     def __iter__(self):
         for i in range(self.num_children):
-            yield {
-                'pool'           : decode_cstr(self.children[i].pool_name),
-                'pool_namespace' : decode_cstr(self.children[i].pool_namespace),
-                'image'          : decode_cstr(self.children[i].image_name),
-                'id'             : decode_cstr(self.children[i].image_id),
-                'trash'          : self.children[i].trash
+            if self.old_format:
+                yield {
+                    'pool'           : decode_cstr(self.children[i].pool_name),
+                    'image'          : decode_cstr(self.children[i].image_name),
+                    'id'             : decode_cstr(self.children[i].image_id),
+                    'trash'          : self.children[i].trash
+                }
+            else:
+                yield {
+                    'pool'           : decode_cstr(self.children[i].pool_name),
+                    'pool_namespace' : decode_cstr(self.children[i].pool_namespace),
+                    'image'          : decode_cstr(self.children[i].image_name),
+                    'id'             : decode_cstr(self.children[i].image_id),
+                    'trash'          : self.children[i].trash
                 }
 
     def __dealloc__(self):
