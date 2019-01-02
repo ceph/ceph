@@ -292,7 +292,7 @@ void add_create_journal_options(po::options_description *opt) {
     (JOURNAL_SPLAY_WIDTH.c_str(), po::value<uint64_t>(),
      "number of active journal objects")
     (JOURNAL_OBJECT_SIZE.c_str(), po::value<JournalObjectSize>(),
-     "size of journal objects")
+     "size of journal objects [4K <= size <= 64M]")
     (JOURNAL_POOL.c_str(), po::value<std::string>(),
      "pool for journal objects");
 }
@@ -506,7 +506,7 @@ void validate(boost::any& v, const std::vector<std::string>& values,
 
   std::string parse_error;
   uint64_t size = strict_iecstrtoll(s.c_str(), &parse_error);
-  if (parse_error.empty() && (size >= (1 << 12))) {
+  if (parse_error.empty() && (size >= (1 << 12)) && (size <= (1 << 26))) {
     v = boost::any(size);
     return;
   }

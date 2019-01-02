@@ -182,7 +182,7 @@ Skip test on FreeBSD as it generates different output there.
     --stripe-count arg        stripe count
     --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
     --journal-pool arg        pool for journal objects
   
   Image Features:
@@ -229,7 +229,7 @@ Skip test on FreeBSD as it generates different output there.
     --stripe-count arg           stripe count
     --data-pool arg              data pool
     --journal-splay-width arg    number of active journal objects
-    --journal-object-size arg    size of journal objects
+    --journal-object-size arg    size of journal objects [4K <= size <= 64M]
     --journal-pool arg           pool for journal objects
     --sparse-size arg            sparse size in B/K/M [default: 4K]
     --no-progress                disable progress output
@@ -274,7 +274,7 @@ Skip test on FreeBSD as it generates different output there.
     --stripe-count arg        stripe count
     --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
     --journal-pool arg        pool for journal objects
     -s [ --size ] arg         image size (in M/G/T) [default: M]
   
@@ -406,7 +406,7 @@ Skip test on FreeBSD as it generates different output there.
     -p [ --pool ] arg         pool name
     --image arg               image name
     --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
     --journal-pool arg        pool for journal objects
   
   rbd help flatten
@@ -527,7 +527,7 @@ Skip test on FreeBSD as it generates different output there.
     --stripe-count arg        stripe count
     --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
     --journal-pool arg        pool for journal objects
     --sparse-size arg         sparse size in B/K/M [default: 4K]
     --no-progress             disable progress output
