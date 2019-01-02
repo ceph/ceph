@@ -145,6 +145,9 @@ struct obj_refcount {
     }
     DECODE_FINISH(bl);
   }
+
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(list<obj_refcount*>& ls);
 };
 WRITE_CLASS_ENCODER(obj_refcount)
 
