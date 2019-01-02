@@ -2487,11 +2487,25 @@ void Client::handle_osd_map(MOSDMap *m)
 
   const auto myaddrs = messenger->get_myaddrs();
   bool new_blacklist = false;
+  bool prenautilus = objecter->with_osdmap(
+    [&](const OSDMap& o) {
+      return o.require_osd_release < CEPH_RELEASE_NAUTILUS;
+    });
   if (!blacklisted) {
-    for (auto& a : myaddrs.v) {
+    for (auto a : myaddrs.v) {
+      // blacklist entries are always TYPE_ANY for nautilus+
+      a.set_type(entity_addr_t::TYPE_ANY);
       if (new_blacklists.count(a)) {
 	new_blacklist = true;
 	break;
+      }
+      if (prenautilus) {
+	// ...except pre-nautilus, they were TYPE_LEGACY
+	a.set_type(entity_addr_t::TYPE_LEGACY);
+	if (new_blacklists.count(a)) {
+	  new_blacklist = true;
+	  break;
+	}
       }
     }
   }
