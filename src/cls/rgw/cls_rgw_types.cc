@@ -41,7 +41,7 @@ void cls_rgw_obj_key::decode_json(JSONObj *obj) {
 void rgw_bucket_dir_entry_meta::generate_test_instances(list<rgw_bucket_dir_entry_meta*>& o)
 {
   rgw_bucket_dir_entry_meta *m = new rgw_bucket_dir_entry_meta;
-  m->category = 1;
+  m->category = RGWObjCategory::Main;
   m->size = 100;
   m->etag = "etag";
   m->owner = "owner";
@@ -68,7 +68,7 @@ void rgw_bucket_dir_entry_meta::dump(Formatter *f) const
 void rgw_bucket_dir_entry_meta::decode_json(JSONObj *obj) {
   int val;
   JSONDecoder::decode_json("category", val, obj);
-  category = (uint8_t)val;
+  category = static_cast<RGWObjCategory>(val);
   JSONDecoder::decode_json("size", size, obj);
   utime_t ut;
   JSONDecoder::decode_json("mtime", ut, obj);
@@ -242,7 +242,9 @@ void rgw_cls_bi_entry::dump(Formatter *f) const
   dump_bi_entry(data, type, f);
 }
 
-bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_bucket_category_stats *accounted_stats)
+bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
+                                RGWObjCategory *category,
+                                rgw_bucket_category_stats *accounted_stats)
 {
   bool account = false;
   auto iter = data.cbegin();
@@ -509,9 +511,10 @@ void rgw_bucket_dir_header::generate_test_instances(list<rgw_bucket_dir_header*>
 
   uint8_t i;
   for (i = 0, iter = l.begin(); iter != l.end(); ++iter, ++i) {
+    RGWObjCategory c = static_cast<RGWObjCategory>(i);
     rgw_bucket_dir_header *h = new rgw_bucket_dir_header;
     rgw_bucket_category_stats *s = *iter;
-    h->stats[i] = *s;
+    h->stats[c] = *s;
 
     o.push_back(h);
 
@@ -525,10 +528,9 @@ void rgw_bucket_dir_header::dump(Formatter *f) const
 {
   f->dump_int("ver", ver);
   f->dump_int("master_ver", master_ver);
-  map<uint8_t, struct rgw_bucket_category_stats>::const_iterator iter = stats.begin();
   f->open_array_section("stats");
-  for (; iter != stats.end(); ++iter) {
-    f->dump_int("category", (int)iter->first);
+  for (auto iter = stats.begin(); iter != stats.end(); ++iter) {
+    f->dump_int("category", int(iter->first));
     f->open_object_section("category_stats");
     iter->second.dump(f);
     f->close_section();
@@ -571,7 +573,7 @@ void rgw_bucket_dir::dump(Formatter *f) const
   f->open_object_section("header");
   header.dump(f);
   f->close_section();
-  map<string, struct rgw_bucket_dir_entry>::const_iterator iter = m.begin();
+  map<string, rgw_bucket_dir_entry>::const_iterator iter = m.begin();
   f->open_array_section("map");
   for (; iter != m.end(); ++iter) {
     f->dump_string("key", iter->first);

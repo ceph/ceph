@@ -85,7 +85,7 @@ struct rgw_cls_obj_complete_op
   cls_rgw_obj_key key;
   string locator;
   rgw_bucket_entry_ver ver;
-  struct rgw_bucket_dir_entry_meta meta;
+  rgw_bucket_dir_entry_meta meta;
   string tag;
   bool log_op;
   uint16_t bilog_flags;
@@ -167,7 +167,7 @@ struct rgw_cls_link_olh_op {
   string olh_tag;
   bool delete_marker;
   string op_tag;
-  struct rgw_bucket_dir_entry_meta meta;
+  rgw_bucket_dir_entry_meta meta;
   uint64_t olh_epoch;
   bool log_op;
   uint16_t bilog_flags;
@@ -303,7 +303,7 @@ WRITE_CLASS_ENCODER(rgw_cls_read_olh_log_op)
 
 struct rgw_cls_read_olh_log_ret
 {
-  map<uint64_t, vector<struct rgw_bucket_olh_log_entry> > log;
+  map<uint64_t, vector<rgw_bucket_olh_log_entry> > log;
   bool is_truncated;
 
   rgw_cls_read_olh_log_ret() : is_truncated(false) {}
@@ -463,7 +463,7 @@ WRITE_CLASS_ENCODER(rgw_cls_check_index_ret)
 struct rgw_cls_bucket_update_stats_op
 {
   bool absolute{false};
-  map<uint8_t, rgw_bucket_category_stats> stats;
+  map<RGWObjCategory, rgw_bucket_category_stats> stats;
 
   rgw_cls_bucket_update_stats_op() {}
 

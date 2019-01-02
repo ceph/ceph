@@ -602,7 +602,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        RGWRados::ATTRSMOD_NONE,
                        copy_if_newer,
                        attrs,
-                       RGW_OBJ_CATEGORY_MAIN,
+                       RGWObjCategory::Main,
                        versioned_epoch,
                        real_time(), /* delete_at */
                        NULL, /* string *ptag, */
