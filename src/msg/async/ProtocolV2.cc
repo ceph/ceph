@@ -2426,6 +2426,7 @@ CtPtr ProtocolV2::open(ceph_msg_connect_reply &reply,
                   << dendl;
     ceph_assert(state == CLOSED || state == NONE);
     ldout(cct, 10) << "accept fault after register" << dendl;
+    messenger->unregister_conn(connection);
     connection->inject_delay();
     return _fault();
   }
