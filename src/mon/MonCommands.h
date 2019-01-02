@@ -1131,7 +1131,8 @@ COMMAND("mgr versions", \
 COMMAND("config set" \
 	" name=who,type=CephString" \
 	" name=name,type=CephString" \
-	" name=value,type=CephString", \
+	" name=value,type=CephString" \
+	" name=force,type=CephBool,req=false",
 	"Set a configuration option for one or more entities",
 	"config", "rw")
 COMMAND("config rm"						\
