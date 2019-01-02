@@ -2438,7 +2438,9 @@ private:
 
     friend ostream& operator<<(ostream& out, const region_t& r) {
       return out << "0x" << std::hex << r.logical_offset << ":"
-        << r.blob_xoffset << "~" << r.length << std::dec;
+        << r.blob_xoffset << "~" << r.length
+        << "@" << r.front
+        << std::dec;
     }
   };
 
@@ -2453,8 +2455,14 @@ private:
 
     friend ostream& operator<<(ostream& out, const read_req_t& r) {
       out << "{<0x" << std::hex << r.r_off << ", 0x" << r.r_len << "> : [";
-      for (const auto& reg : r.regs)
+      bool first = true;
+      for (const auto& reg : r.regs) {
+        if (!first) {
+	  out <<",";
+        }
+        first = false;
         out << reg;
+      }
       return out << "]}" << std::dec;
     }
   };

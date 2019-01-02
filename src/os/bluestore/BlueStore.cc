@@ -9009,8 +9009,7 @@ int BlueStore::_prepare_read_ioc(
 	uint64_t offs = rrf.logical_offset - rrf.blob_xoffset;
 	get_kv_blob_key(o->key, offs, &key);
 	dout(20) << __func__ << " blob @kv read for " << o->oid << std::hex
-		 << " offset 0x"<< offs
-		 << " " << rrf.logical_offset << " " << rrf.blob_xoffset
+	         << reg
 		 << std::dec << dendl;
 
 	int r = db->get(PREFIX_OBJ, key, &reg.bl);
