@@ -332,30 +332,6 @@ static bool obj_has_expired(CephContext *cct, ceph::real_time mtime, int days, c
   return (timediff >= cmp);
 }
 
-static int remove_expired_obj(CephContext *cct, RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj_key obj_key,
-                              const string& owner, const string& owner_display_name, bool remove_indeed)
-{
-  if (remove_indeed) {
-    return rgw_remove_object(store, bucket_info, bucket_info.bucket, obj_key);
-  } else {
-    obj_key.instance.clear();
-    RGWObjectCtx rctx(store);
-    rgw_obj obj(bucket_info.bucket, obj_key);
-    ACLOwner obj_owner;
-    obj_owner.set_id(rgw_user {owner});
-    obj_owner.set_name(owner_display_name);
-
-    RGWRados::Object del_target(store, bucket_info, rctx, obj);
-    RGWRados::Object::Delete del_op(&del_target);
-
-    del_op.params.bucket_owner = bucket_info.owner;
-    del_op.params.versioning_status = bucket_info.versioning_status();
-    del_op.params.obj_owner = obj_owner;
-
-    return del_op.delete_obj();
-  }
-}
-
 int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map)
 {
   MultipartMetaFilter mp_filter;
@@ -548,6 +524,36 @@ struct lc_op_ctx {
                  obj(env.bucket_info.bucket, o.key), rctx(env.store) {}
 };
 
+static int remove_expired_obj(lc_op_ctx& oc, bool remove_indeed)
+{
+  auto& store = oc.store;
+  auto& bucket_info = oc.bucket_info;
+  auto& o = oc.o;
+  auto obj_key = o.key;
+  auto& meta = o.meta;
+
+  if (!remove_indeed) {
+    obj_key.instance.clear();
+  } else if (obj_key.instance.empty()) {
+    obj_key.instance = "null";
+  }
+
+  rgw_obj obj(bucket_info.bucket, obj_key);
+  ACLOwner obj_owner;
+  obj_owner.set_id(rgw_user {meta.owner});
+  obj_owner.set_name(meta.owner_display_name);
+
+  RGWRados::Object del_target(store, bucket_info, oc.rctx, obj);
+  RGWRados::Object::Delete del_op(&del_target);
+
+  del_op.params.bucket_owner = bucket_info.owner;
+  del_op.params.versioning_status = bucket_info.versioning_status();
+  del_op.params.obj_owner = obj_owner;
+  del_op.params.unmod_since = meta.mtime;
+
+  return del_op.delete_obj();
+}
+
 class LCOpAction {
 public:
   virtual ~LCOpAction() {}
@@ -673,7 +679,7 @@ public:
 
   int process(lc_op_ctx& oc) {
     auto& o = oc.o;
-    int r = remove_expired_obj(oc.cct, oc.store, oc.bucket_info, o.key, o.meta.owner, o.meta.owner_display_name, !oc.bucket_info.versioned());
+    int r = remove_expired_obj(oc, !oc.bucket_info.versioned());
     if (r < 0) {
       ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << dendl;
       return r;
@@ -702,7 +708,7 @@ public:
 
   int process(lc_op_ctx& oc) {
     auto& o = oc.o;
-    int r = remove_expired_obj(oc.cct, oc.store, oc.bucket_info, o.key, o.meta.owner, o.meta.owner_display_name, true);
+    int r = remove_expired_obj(oc, true);
     if (r < 0) {
       ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << dendl;
       return r;
@@ -733,7 +739,7 @@ public:
 
   int process(lc_op_ctx& oc) {
     auto& o = oc.o;
-    int r = remove_expired_obj(oc.cct, oc.store, oc.bucket_info, o.key, o.meta.owner, o.meta.owner_display_name, true);
+    int r = remove_expired_obj(oc, true);
     if (r < 0) {
       ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << dendl;
       return r;
