@@ -19,6 +19,7 @@
 #include "include/buffer.h"
 
 #include <set>
+#include <limits>
 #include <boost/format.hpp>
 
 // -----------------------
@@ -262,6 +263,7 @@ template <class T>
 void JSONFormatter::add_value(const char *name, T val)
 {
   std::stringstream ss;
+  ss.precision(std::numeric_limits<T>::max_digits10);
   ss << val;
   add_value(name, ss.str(), false);
 }
@@ -291,9 +293,7 @@ void JSONFormatter::dump_int(const char *name, int64_t s)
 
 void JSONFormatter::dump_float(const char *name, double d)
 {
-  char foo[30];
-  snprintf(foo, sizeof(foo), "%lf", d);
-  add_value(name, foo, false);
+  add_value(name, d);
 }
 
 void JSONFormatter::dump_string(const char *name, std::string_view s)
@@ -426,40 +426,33 @@ void XMLFormatter::close_section()
     m_ss << "\n";
 }
 
-void XMLFormatter::dump_unsigned(const char *name, uint64_t u)
+template <class T>
+void XMLFormatter::add_value(const char *name, T val)
 {
   std::string e(name);
   std::transform(e.begin(), e.end(), e.begin(),
       [this](char c) { return this->to_lower_underscore(c); });
 
   print_spaces();
-  m_ss << "<" << e << ">" << u << "</" << e << ">";
+  m_ss.precision(std::numeric_limits<T>::max_digits10);
+  m_ss << "<" << e << ">" << val << "</" << e << ">";
   if (m_pretty)
     m_ss << "\n";
 }
 
-void XMLFormatter::dump_int(const char *name, int64_t u)
+void XMLFormatter::dump_unsigned(const char *name, uint64_t u)
 {
-  std::string e(name);
-  std::transform(e.begin(), e.end(), e.begin(),
-      [this](char c) { return this->to_lower_underscore(c); });
+  add_value(name, u);
+}
 
-  print_spaces();
-  m_ss << "<" << e << ">" << u << "</" << e << ">";
-  if (m_pretty)
-    m_ss << "\n";
+void XMLFormatter::dump_int(const char *name, int64_t s)
+{
+  add_value(name, s);
 }
 
 void XMLFormatter::dump_float(const char *name, double d)
 {
-  std::string e(name);
-  std::transform(e.begin(), e.end(), e.begin(),
-      [this](char c) { return this->to_lower_underscore(c); });
-
-  print_spaces();
-  m_ss << "<" << e << ">" << d << "</" << e << ">";
-  if (m_pretty)
-    m_ss << "\n";
+  add_value(name, d);
 }
 
 void XMLFormatter::dump_string(const char *name, std::string_view s)
@@ -817,35 +810,31 @@ std::string TableFormatter::get_section_name(const char* name)
   }
 }
 
-void TableFormatter::dump_unsigned(const char *name, uint64_t u)
-{
+template <class T>
+void TableFormatter::add_value(const char *name, T val) {
   finish_pending_string();
   size_t i = m_vec_index(name);
-  m_ss << u;
+  m_ss.precision(std::numeric_limits<double>::max_digits10);
+  m_ss << val;
+
   m_vec[i].push_back(std::make_pair(get_section_name(name), m_ss.str()));
   m_ss.clear();
   m_ss.str("");
 }
 
-void TableFormatter::dump_int(const char *name, int64_t u)
+void TableFormatter::dump_unsigned(const char *name, uint64_t u)
 {
-  finish_pending_string();
-  size_t i = m_vec_index(name);
-  m_ss << u;
-  m_vec[i].push_back(std::make_pair(get_section_name(name), m_ss.str()));
-  m_ss.clear();
-  m_ss.str("");
+  add_value(name, u);
+}
+
+void TableFormatter::dump_int(const char *name, int64_t s)
+{
+  add_value(name, s);
 }
 
 void TableFormatter::dump_float(const char *name, double d)
 {
-  finish_pending_string();
-  size_t i = m_vec_index(name);
-  m_ss << d;
-
-  m_vec[i].push_back(std::make_pair(get_section_name(name), m_ss.str()));
-  m_ss.clear();
-  m_ss.str("");
+  add_value(name, d);
 }
 
 void TableFormatter::dump_string(const char *name, std::string_view s)
