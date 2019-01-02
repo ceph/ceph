@@ -3,6 +3,7 @@ Rados benchmarking
 """
 import contextlib
 import logging
+import time
 
 from teuthology.orchestra import run
 from teuthology import misc as teuthology
