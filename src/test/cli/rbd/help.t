@@ -232,7 +232,7 @@
     --stripe-count arg        stripe count
     --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
     --journal-pool arg        pool for journal objects
   
   Image Features:
@@ -436,7 +436,7 @@
     --stripe-count arg           stripe count
     --data-pool arg              data pool
     --journal-splay-width arg    number of active journal objects
-    --journal-object-size arg    size of journal objects
+    --journal-object-size arg    size of journal objects [4K <= size <= 64M]
     --journal-pool arg           pool for journal objects
     --sparse-size arg            sparse size in B/K/M [default: 4K]
     --no-progress                disable progress output
@@ -483,7 +483,7 @@
     --stripe-count arg        stripe count
     --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
     --journal-pool arg        pool for journal objects
     --thick-provision         fully allocate storage and zero image
     -s [ --size ] arg         image size (in M/G/T) [default: M]
@@ -538,7 +538,7 @@
     --stripe-count arg           stripe count
     --data-pool arg              data pool
     --journal-splay-width arg    number of active journal objects
-    --journal-object-size arg    size of journal objects
+    --journal-object-size arg    size of journal objects [4K <= size <= 64M]
     --journal-pool arg           pool for journal objects
     --flatten                    fill clone with parent data (make it independent)
     --no-progress                disable progress output
@@ -741,7 +741,7 @@
     --namespace arg           namespace name
     --image arg               image name
     --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
     --journal-pool arg        pool for journal objects
   
   rbd help flatten
@@ -1113,7 +1113,7 @@
     --stripe-count arg        stripe count
     --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
     --journal-pool arg        pool for journal objects
     --sparse-size arg         sparse size in B/K/M [default: 4K]
     --no-progress             disable progress output
@@ -1500,7 +1500,7 @@
     --stripe-count arg        stripe count
     --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
     --journal-pool arg        pool for journal objects
     --flatten                 fill clone with parent data (make it independent)
   
