@@ -453,6 +453,7 @@ public:
 
   void set_prefix(const string& p) {
     prefix = p;
+    list_op.params.prefix = prefix;
   }
 
   int init() {
@@ -648,6 +649,7 @@ public:
   bool check(lc_op_ctx& oc, ceph::real_time *exp_time) override {
     auto& o = oc.o;
     if (!o.is_current()) {
+      ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": not current, skipping" << dendl;
       return false;
     }
 
@@ -656,6 +658,7 @@ public:
     auto& op = oc.op;
     if (op.expiration <= 0) {
       if (op.expiration_date == boost::none) {
+        ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": no expiration set in rule, skipping" << dendl;
         return false;
       }
       is_expired = ceph_clock_now() >= ceph::real_clock::to_time_t(*op.expiration_date);
@@ -664,6 +667,7 @@ public:
       is_expired = obj_has_expired(oc.cct, mtime, op.expiration, exp_time);
     }
 
+    ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": is_expired=" << (int)is_expired << dendl;
     return is_expired;
   }
 
@@ -683,7 +687,8 @@ class LCOpAction_NonCurrentExpiration : public LCOpAction {
 public:
   bool check(lc_op_ctx& oc, ceph::real_time *exp_time) override {
     auto& o = oc.o;
-    if (!o.is_current()) {
+    if (o.is_current()) {
+      ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": current version, skipping" << dendl;
       return false;
     }
 
@@ -691,6 +696,7 @@ public:
     bool expiration = oc.op.noncur_expiration;
     bool is_expired = obj_has_expired(oc.cct, mtime, expiration, exp_time);
 
+    ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": is_expired=" << is_expired << dendl;
     return is_expired;
   }
 
@@ -711,10 +717,12 @@ public:
   bool check(lc_op_ctx& oc, ceph::real_time *exp_time) override {
     auto& o = oc.o;
     if (!o.is_delete_marker()) {
+      ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": not a delete marker, skipping" << dendl;
       return false;
     }
 
     if (oc.ol.next_has_same_name()) {
+      ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": next is same object, skipping" << dendl;
       return false;
     }
 
@@ -769,7 +777,7 @@ int LCOpRule::process(rgw_bucket_dir_entry& o)
   }
 
   if (!cont) {
-    ldout(env.store->ctx(), 20) << __func__ << "(): skipping entry: " << o.key << dendl;
+    ldout(env.store->ctx(), 20) << __func__ << "(): key=" << o.key << ": no rule match, skipping" << dendl;
     return 0;
   }
 
@@ -849,6 +857,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
     if (!is_valid_op(op)) {
       continue;
     }
+    ldpp_dout(this, 20) << __func__ << "(): prefix=" << prefix_iter->first << dendl;
     if (prefix_iter != prefix_map.begin() && 
         (prefix_iter->first.compare(0, prev(prefix_iter)->first.length(), prev(prefix_iter)->first) == 0)) {
       next_marker = pre_marker;
@@ -875,6 +884,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
     ceph::real_time mtime;
     rgw_bucket_dir_entry o;
     for (; ol.get_obj(&o); ol.next()) {
+      ldpp_dout(this, 20) << __func__ << "(): key=" << o.key << dendl;
       int ret = orule.process(o);
       if (ret < 0) {
         ldpp_dout(this, 20) << "ERROR: orule.process() returned ret=" << ret << dendl;
