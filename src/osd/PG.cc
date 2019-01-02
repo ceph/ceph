@@ -3387,10 +3387,6 @@ void PG::publish_stats_to_osd()
     if ((state & (PG_STATE_ACTIVE|PG_STATE_PEERED)) &&
 	!(info.stats.state & (PG_STATE_ACTIVE|PG_STATE_PEERED)))
       info.stats.last_became_peered = now;
-    if (!(state & PG_STATE_CREATING) &&
-	(info.stats.state & PG_STATE_CREATING)) {
-      osd->send_pg_created(get_pgid().pgid);
-    }
     info.stats.state = state;
   }
 
@@ -8488,8 +8484,7 @@ boost::statechart::result PG::RecoveryState::Active::react(const AllReplicasActi
     pg->state_set(PG_STATE_ACTIVE);
   }
 
-  // info.last_epoch_started is set during activate()
-  if (pg->info.history.last_epoch_started == 0) {
+  if (pg->pool.info.has_flag(pg_pool_t::FLAG_CREATING)) {
     pg->osd->send_pg_created(pgid);
   }
 
