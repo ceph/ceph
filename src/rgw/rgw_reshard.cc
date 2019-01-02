@@ -32,7 +32,7 @@ class BucketReshardShard {
   int num_shard;
   RGWRados::BucketShard bs;
   vector<rgw_cls_bi_entry> entries;
-  map<uint8_t, rgw_bucket_category_stats> stats;
+  map<RGWObjCategory, rgw_bucket_category_stats> stats;
   deque<librados::AioCompletion *>& aio_completions;
   uint64_t max_aio_completions;
   uint64_t reshard_shard_batch_size;
@@ -88,7 +88,7 @@ public:
     return num_shard;
   }
 
-  int add_entry(rgw_cls_bi_entry& entry, bool account, uint8_t category,
+  int add_entry(rgw_cls_bi_entry& entry, bool account, RGWObjCategory category,
                 const rgw_bucket_category_stats& entry_stats) {
     entries.push_back(entry);
     if (account) {
@@ -178,7 +178,7 @@ public:
   }
 
   int add_entry(int shard_index,
-                rgw_cls_bi_entry& entry, bool account, uint8_t category,
+                rgw_cls_bi_entry& entry, bool account, RGWObjCategory category,
                 const rgw_bucket_category_stats& entry_stats) {
     int ret = target_shards[shard_index]->add_entry(entry, account, category,
 						    entry_stats);
@@ -568,7 +568,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 
 	int target_shard_id;
 	cls_rgw_obj_key cls_key;
-	uint8_t category;
+	RGWObjCategory category;
 	rgw_bucket_category_stats stats;
 	bool account = entry.get_info(&cls_key, &category, &stats);
 	rgw_obj_key key(cls_key);
