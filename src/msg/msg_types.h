@@ -453,7 +453,18 @@ struct entity_addr_t {
     }
     encode((__u8)1, bl);
     ENCODE_START(1, 1, bl);
-    encode(type, bl);
+    if (HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      encode(type, bl);
+    } else {
+      // map any -> legacy for old clients.  this is primary for the benefit
+      // of OSDMap's blacklist, but is reasonable in general since any: is
+      // meaningless for pre-nautilus clients or daemons.
+      auto t = type;
+      if (t == TYPE_ANY) {
+	t = TYPE_LEGACY;
+      }
+      encode(t, bl);
+    }
     encode(nonce, bl);
     __u32 elen = get_sockaddr_len();
     encode(elen, bl);
