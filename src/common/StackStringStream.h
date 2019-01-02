@@ -92,7 +92,7 @@ template<std::size_t SIZE>
 class StackStringStream : public std::basic_ostream<char>
 {
 public:
-  StackStringStream() : basic_ostream<char>(&ssb) {}
+  StackStringStream() : basic_ostream<char>(&ssb), default_fmtflags(flags()) {}
   StackStringStream(const StackStringStream& o) = delete;
   StackStringStream& operator=(const StackStringStream& o) = delete;
   StackStringStream(StackStringStream&& o) = delete;
@@ -101,6 +101,7 @@ public:
 
   void reset() {
     clear(); /* reset state flags */
+    flags(default_fmtflags); /* reset fmtflags to constructor defaults */
     ssb.clear();
   }
 
@@ -110,6 +111,7 @@ public:
 
 private:
   StackStringBuf<SIZE> ssb;
+  fmtflags const default_fmtflags;
 };
 
 /* In an ideal world, we could use StackStringStream indiscriminately, but alas
