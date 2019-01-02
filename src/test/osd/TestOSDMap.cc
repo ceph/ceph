@@ -13,15 +13,17 @@
 using namespace std;
 
 int main(int argc, char **argv) {
+  map<string,string> defaults = {
+    // make sure we have 3 copies, or some tests won't work
+    { "osd_pool_default_size", "3" },
+    // our map is flat, so just try and split across OSDs, not hosts or whatever
+    { "osd_crush_chooseleaf_type", "0" },
+  };
   std::vector<const char*> args(argv, argv+argc);
-  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  // make sure we have 3 copies, or some tests won't work
-  g_ceph_context->_conf.set_val("osd_pool_default_size", "3");
-  // our map is flat, so just try and split across OSDs, not hosts or whatever
-  g_ceph_context->_conf.set_val("osd_crush_chooseleaf_type", "0");
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
