@@ -2237,6 +2237,7 @@ std::vector<Option> get_global_options() {
     .set_min(2)
     .set_description("Number of striping periods to zero head of MDS journal write position"),
 
+    // -- OSD --
     Option("osd_smart_report_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_description("Timeout (in seconds) for smarctl to run, default is set to 5"),
@@ -2247,77 +2248,82 @@ std::vector<Option> get_global_options() {
 
     Option("osd_max_backfills", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
-    .set_description(""),
+    .set_description("maximum number of concurrent backfills per OSD"),
 
     Option("osd_min_recovery_priority", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("minimum priority below which recovery is not performed")
+    .set_long_description("The purpose here is to prevent the cluster from doing *any* lower priority work (e.g., rebalancing) below this threshold and focus solely on higher priority work (e.g., replicating degraded objects)."),
 
     Option("osd_backfill_retry_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(30.0)
-    .set_description(""),
+    .set_description("how frequently to retry backfill reservations after being denied (e.g., due to a full OSD)"),
 
     Option("osd_recovery_retry_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(30.0)
-    .set_description(""),
+    .set_description("how frequently to retry recovery reservations after being denied (e.g., due to a full OSD)"),
 
     Option("osd_agent_max_ops", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(4)
-    .set_description(""),
+    .set_description("maximum concurrent tiering operations for tiering agent"),
 
     Option("osd_agent_max_low_ops", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(2)
-    .set_description(""),
+    .set_description("maximum concurrent low-priority tiering operations for tiering agent"),
 
     Option("osd_agent_min_evict_effort", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.1)
-    .set_description(""),
+    .set_min_max(0.0, .99)
+    .set_description("minimum effort to expend evicting clean objects"),
 
     Option("osd_agent_quantize_effort", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.1)
-    .set_description(""),
+    .set_description("size of quantize unit for eviction effort"),
 
     Option("osd_agent_delay_time", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5.0)
-    .set_description(""),
+    .set_description("how long agent should sleep if it has no work to do"),
 
-    Option("osd_find_best_info_ignore_history_les", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("osd_find_best_info_ignore_history_les", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
-    .set_description(""),
+    .set_description("ignore last_epoch_started value when peering AND PROBABLY LOSE DATA")
+    .set_long_description("THIS IS AN EXTREMELY DANGEROUS OPTION THAT SHOULD ONLY BE USED AT THE DIRECTION OF A DEVELOPER.  It makes peering ignore the last_epoch_started value when peering, which can allow the OSD to believe an OSD has an authoritative view of a PG's contents even when it is in fact old and stale, typically leading to data loss (by believing a stale PG is up to date)."),
 
     Option("osd_agent_hist_halflife", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
-    .set_description(""),
+    .set_description("halflife of agent atime and temp histograms"),
 
     Option("osd_agent_slop", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.02)
-    .set_description(""),
+    .set_description("slop factor to avoid switching tiering flush and eviction mode"),
 
     Option("osd_uuid", Option::TYPE_UUID, Option::LEVEL_ADVANCED)
     .set_default(uuid_d())
-    .set_description(""),
+    .set_flag(Option::FLAG_CREATE)
+    .set_description("uuid label for a new OSD"),
 
     Option("osd_data", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/osd/$cluster-$id")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
-    .set_description(""),
+    .set_description("path to OSD data"),
 
     Option("osd_journal", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/var/lib/ceph/osd/$cluster-$id/journal")
     .set_flag(Option::FLAG_NO_MON_UPDATE)
-    .set_description(""),
+    .set_description("path to OSD journal (when FileStore backend is in use)"),
 
     Option("osd_journal_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(5120)
-    .set_description(""),
+    .set_flag(Option::FLAG_CREATE)
+    .set_description("size of FileStore journal (in MiB)"),
 
     Option("osd_journal_flush_on_shutdown", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("flush FileStore journal contents during clean OSD shutdown"),
 
-    Option("osd_os_flags", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("osd_os_flags", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_description(""),
+    .set_description("flags to skip filestore omap or journal initialization"),
 
     Option("osd_max_write_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_min(4)
@@ -2330,47 +2336,54 @@ std::vector<Option> get_global_options() {
 
     Option("osd_max_pgls", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1024)
-    .set_description(""),
+    .set_description("maximum number of results when listing objects in a pool"),
 
     Option("osd_client_message_size_cap", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(500_M)
-    .set_description(""),
+    .set_description("maximum memory to devote to in-flight client requests")
+    .set_long_description("If this value is exceeded, the OSD will not read any new client data off of the network until memory is freed."),
 
     Option("osd_client_message_cap", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
-    .set_description(""),
+    .set_description("maximum number of in-flight client requests"),
 
     Option("osd_crush_update_weight_set", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("update CRUSH weight-set weights when updating weights")
+    .set_long_description("If this setting is true, we will update the weight-set weights when adjusting an item's weight, effectively making changes take effect immediately, and discarding any previous optimization in the weight-set value.  Setting this value to false will leave it to the balancer to (slowly, presumably) adjust weights to approach the new target value."),
 
-    Option("osd_crush_chooseleaf_type", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_crush_chooseleaf_type", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(1)
-    .set_description(""),
+    .set_flag(Option::FLAG_CREATE)
+    .set_description("default chooseleaf type for osdmaptool --create"),
 
-    Option("osd_pool_use_gmt_hitset", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("osd_pool_use_gmt_hitset", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
-    .set_description(""),
+    .set_description("use UTC for hitset timestamps")
+    .set_long_description("This setting only exists for compatibility with hammer (and older) clusters."),
 
     Option("osd_crush_update_on_start", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("update OSD CRUSH location on startup"),
 
     Option("osd_class_update_on_start", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("set OSD device class on startup"),
 
     Option("osd_crush_initial_weight", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(-1)
-    .set_description(""),
+    .set_description("if >= 0, initial CRUSH weight for newly created OSDs")
+    .set_long_description("If this value is negative, the size of the OSD in TiB is used."),
 
     Option("osd_pool_default_ec_fast_read", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("set ec_fast_read for new erasure-coded pools")
+    .add_service("mon"),
 
     Option("osd_pool_default_crush_rule", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(-1)
-    .set_description(""),
+    .set_description("CRUSH rule for newly created pools")
+    .add_service("mon"),
 
     Option("osd_pool_erasure_code_stripe_unit", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(4_K)
@@ -2379,29 +2392,29 @@ std::vector<Option> get_global_options() {
 
     Option("osd_pool_default_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3)
-    .set_min_max(0, 255)
+    .set_min_max(0, 10)
     .set_flag(Option::FLAG_RUNTIME)
-    .set_description("the number of copies of an object")
+    .set_description("the number of copies of an object for new replicated pools")
     .add_service("mon"),
 
     Option("osd_pool_default_min_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_min_max(0, 255)
     .set_flag(Option::FLAG_RUNTIME)
-    .set_description("the minimal number of copies allowed to write to a degraded pool")
+    .set_description("the minimal number of copies allowed to write to a degraded pool for new replicated pools")
     .set_long_description("0 means no specific default; ceph will use size-size/2")
     .add_see_also("osd_pool_default_size")
     .add_service("mon"),
 
     Option("osd_pool_default_pg_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(8)
-    .set_description("number of PGs for new pools. Configure in global or mon section of ceph.conf")
+    .set_description("number of PGs for new pools")
     .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon"),
 
     Option("osd_pool_default_pgp_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(8)
-    .set_description("number of PGs for placement purposes. Should be equal to pg_num")
+    .set_default(0)
+    .set_description("number of PGs for placement purposes (0 to match pg_num)")
     .add_see_also("osd_pool_default_pg_num")
     .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon"),
@@ -2410,13 +2423,14 @@ std::vector<Option> get_global_options() {
     .set_default("replicated")
     .set_enum_allowed({"replicated", "erasure"})
     .set_flag(Option::FLAG_RUNTIME)
-    .set_description("")
+    .set_description("default type of pool to create")
     .add_service("mon"),
 
     Option("osd_pool_default_erasure_code_profile", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("plugin=jerasure technique=reed_sol_van k=2 m=1")
     .set_flag(Option::FLAG_RUNTIME)
-    .set_description("default properties of osd pool create"),
+    .set_description("default erasure code profile for new erasure-coded pools")
+    .add_service("mon"),
 
     Option("osd_erasure_code_plugins", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("jerasure lrc"
@@ -2425,36 +2439,45 @@ std::vector<Option> get_global_options() {
   #endif
         )
     .set_flag(Option::FLAG_STARTUP)
-    .set_description(""),
+    .set_description("erasure code plugins to load")
+    .add_service("mon")
+    .add_service("osd"),
 
-    Option("osd_allow_recovery_below_min_size", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    Option("osd_allow_recovery_below_min_size", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
-    .set_description(""),
+    .set_description("allow replicated pools to recover with < min_size active members")
+    .add_service("osd"),
 
-    Option("osd_pool_default_flags", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_pool_default_flags", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_description(""),
+    .set_description("(integer) flags to set on new pools")
+    .add_service("mon"),
 
     Option("osd_pool_default_flag_hashpspool", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
+    .set_description("set hashpspool (better hashing scheme) flag on new pools")
+    .add_service("mon"),
 
     Option("osd_pool_default_flag_nodelete", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("set nodelete flag on new pools")
+    .add_service("mon"),
 
     Option("osd_pool_default_flag_nopgchange", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("set nopgchange flag on new pools")
+    .add_service("mon"),
 
     Option("osd_pool_default_flag_nosizechange", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
-    .set_description(""),
+    .set_description("set nosizechange flag on new pools")
+    .add_service("mon"),
 
     Option("osd_pool_default_hit_set_bloom_fpp", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.05)
     .set_description("")
-    .add_see_also("osd_tier_default_cache_hit_set_type"),
+    .add_see_also("osd_tier_default_cache_hit_set_type")
+    .add_service("mon"),
 
     Option("osd_pool_default_cache_target_dirty_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.4)
