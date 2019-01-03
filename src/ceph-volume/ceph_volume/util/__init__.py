@@ -30,10 +30,21 @@ def str_to_int(string, round_down=True):
     """
     Parses a string number into an integer, optionally converting to a float
     and rounding down.
+
+    Some LVM values may come with a comma instead of a dot to define decimals.
+    This function normalizes a comma into a dot
     """
     error_msg = "Unable to convert to integer: '%s'" % str(string)
     try:
-        integer = float(string)
+        integer = float(string.replace(',', '.'))
+    except AttributeError:
+        # this might be a integer already, so try to use it, otherwise raise
+        # the original exception
+        if isinstance(string, (int, float)):
+            integer = string
+        else:
+            logger.exception(error_msg)
+            raise RuntimeError(error_msg)
     except (TypeError, ValueError):
         logger.exception(error_msg)
         raise RuntimeError(error_msg)
