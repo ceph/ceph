@@ -1090,6 +1090,22 @@ static void show_roles_info(vector<RGWRole>& roles, Formatter* formatter)
   formatter->flush(cout);
 }
 
+static void show_reshard_status(
+  const list<cls_rgw_bucket_instance_entry>& status, Formatter *formatter)
+{
+  formatter->open_array_section("status");
+  for (const auto& entry : status) {
+    formatter->open_object_section("entry");
+    formatter->dump_string("reshard_status", to_string(entry.reshard_status));
+    formatter->dump_string("new_bucket_instance_id",
+			   entry.new_bucket_instance_id);
+    formatter->dump_unsigned("num_shards", entry.num_shards);
+    formatter->close_section();
+  }
+  formatter->close_section();
+  formatter->flush(cout);
+}
+
 class StoreDestructor {
   RGWRados *store;
 public:
@@ -6200,8 +6216,7 @@ next:
       return -r;
     }
 
-    encode_json("status", status, formatter);
-    formatter->flush(cout);
+    show_reshard_status(status, formatter);
   }
 
   if (opt_cmd == OPT_RESHARD_PROCESS) {
