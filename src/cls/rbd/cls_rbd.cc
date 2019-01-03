@@ -3130,7 +3130,7 @@ int dir_remove_image(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
  */
 int dir_state_assert(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  cls::rbd::DirectoryState directory_state;
+  cls::rbd::DirectoryState directory_state = cls::rbd::DIRECTORY_STATE_READY;
   try {
     auto iter = in->cbegin();
     decode(directory_state, iter);
