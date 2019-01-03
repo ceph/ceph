@@ -127,7 +127,7 @@ def _downgrade_packages(ctx, remote, pkgs, pkg_version, config):
     first_pkg = downgrade_pkgs[0]
     installed_version = packaging.get_package_version(remote, first_pkg)
     assert installed_version, "failed to get version of {}".format(first_pkg)
-    assert LooseVersion(installed_version) < LooseVersion(pkg_version)
+    assert LooseVersion(installed_version) > LooseVersion(pkg_version)
     # to compose package name like "librados2-0.94.10-87.g116a558.el7"
     pkgs_opt = ['-'.join([pkg, pkg_version]) for pkg in downgrade_pkgs]
     remote.run(args='sudo yum -y downgrade {}'.format(' '.join(pkgs_opt)))
