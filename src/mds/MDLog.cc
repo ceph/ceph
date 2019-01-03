@@ -64,7 +64,8 @@ void MDLog::create_logger()
   plb.add_u64(l_mdl_evexd, "evexd", "Current expired events");
   plb.add_u64(l_mdl_segexg, "segexg", "Expiring segments");
   plb.add_u64(l_mdl_segexd, "segexd", "Current expired segments");
-  plb.add_u64_counter(l_mdl_replayed, "replayed", "Events replayed");
+  plb.add_u64_counter(l_mdl_replayed, "replayed", "Events replayed",
+		      "repl", PerfCountersBuilder::PRIO_INTERESTING);
   plb.add_time_avg(l_mdl_jlat, "jlat", "Journaler flush latency");
   plb.add_u64_counter(l_mdl_evex, "evex", "Total expired events");
   plb.add_u64_counter(l_mdl_evtrm, "evtrm", "Trimmed events");
@@ -904,6 +905,8 @@ void MDLog::replay(MDSInternalContextBase *c)
   if (journaler->get_read_pos() == journaler->get_write_pos()) {
     dout(10) << "replay - journal empty, done." << dendl;
     mds->mdcache->trim();
+    if (mds->is_standby_replay())
+      mds->update_mlogger();
     if (c) {
       c->complete(0);
     }

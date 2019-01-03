@@ -196,7 +196,7 @@ class Module(MgrModule):
                 dns = self.get_latest("mds", daemon_info['name'], "mds_mem.dn")
 
                 activity = "Evts: " + self.format_dimless(
-                    self.get_rate("mds", daemon_info['name'], "mds_log.replay"),
+                    self.get_rate("mds", daemon_info['name'], "mds_log.replayed"),
                     5
                 ) + "/s"
 
