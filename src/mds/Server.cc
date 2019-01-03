@@ -436,13 +436,8 @@ void Server::handle_client_session(MClientSession *m)
       sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
       mds->sessionmap.touch_session(session);
       auto fin = new FunctionContext([log_session_status = std::move(log_session_status)](int r){
-        if (r == 0) {
-          log_session_status("ACCEPTED", "");
-        } else {
-          std::stringstream ss;
-          ss << "(internal) r = " << r;
-          log_session_status("REJECTED", ss.str());
-        }
+        assert(r == 0);
+        log_session_status("ACCEPTED", "");
       });
       mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv, client_metadata),
 				new C_MDS_session_finish(this, session, sseq, true, pv, fin));
