@@ -189,7 +189,7 @@ target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
 target_link_libraries(rgw_a PRIVATE
   librados-cxx cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_timeindex_client cls_version_client
-  cls_user_client ceph-common common_utf8 global
+  cls_user_client ceph-common common_utf8 global dmclock::dmclock
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS}
