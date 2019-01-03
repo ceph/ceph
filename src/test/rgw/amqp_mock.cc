@@ -21,12 +21,18 @@ struct amqp_connection_state_t_ {
   amqp_socket_t* socket;
   amqp_channel_open_ok_t* channel;
   amqp_exchange_declare_ok_t* exchange;
+  amqp_queue_declare_ok_t* queue;
+  amqp_confirm_select_ok_t* confirm;
+  amqp_basic_consume_ok_t* consume;
   bool login_called;
   // ctor
   amqp_connection_state_t_() : 
     socket(nullptr), 
     channel(nullptr),
     exchange(nullptr),
+    queue(nullptr),
+    confirm(nullptr),
+    consume(nullptr),
     login_called(false) {
     }
 };
@@ -47,6 +53,9 @@ int amqp_destroy_connection(amqp_connection_state_t state) {
   delete state->socket;
   delete state->channel;
   delete state->exchange;
+  delete state->queue;
+  delete state->confirm;
+  delete state->consume;
   delete state;
   return 0;
 }
@@ -109,16 +118,6 @@ amqp_channel_open_ok_t* amqp_channel_open(amqp_connection_state_t state, amqp_ch
   return state->channel;
 }
 
-#include <string.h>
-
-// actual implementation copied from rabbitmq-c library
-amqp_bytes_t amqp_cstring_bytes(char const *cstr) {
-  amqp_bytes_t result;
-  result.len = strlen(cstr);
-  result.bytes = (void *)cstr;
-  return result;
-}
-
 amqp_exchange_declare_ok_t* amqp_exchange_declare(
     amqp_connection_state_t state, 
     amqp_channel_t channel,
@@ -132,13 +131,6 @@ amqp_exchange_declare_ok_t* amqp_exchange_declare(
   state->exchange = new amqp_exchange_declare_ok_t;
   return state->exchange;
 }
-
-const char* amqp_error_string2(int code) {
-  static const char* str = "amqp error";
-  return str;
-}
-
-// amqp_parse_url() is linked via the actual rabbitmq-c library code. see: amqp_url.c
 
 amqp_rpc_reply_t amqp_get_rpc_reply(amqp_connection_state_t state) {
   amqp_rpc_reply_t reply;
@@ -164,4 +156,70 @@ int amqp_basic_publish(
 }
 
 const amqp_table_t amqp_empty_table = {0, NULL};
+const amqp_bytes_t amqp_empty_bytes = {0, NULL};
+
+const char* amqp_error_string2(int code) {
+  static const char* str = "mock error";
+  return str;
+}
+
+char const* amqp_method_name(amqp_method_number_t methodNumber) {
+  static const char* str = "mock method";
+  return str;
+}
+
+amqp_queue_declare_ok_t* amqp_queue_declare(
+    amqp_connection_state_t state, amqp_channel_t channel, amqp_bytes_t queue,
+    amqp_boolean_t passive, amqp_boolean_t durable, amqp_boolean_t exclusive,
+    amqp_boolean_t auto_delete, amqp_table_t arguments) {
+  state->queue = new amqp_queue_declare_ok_t;
+  return state->queue;
+}
+
+amqp_confirm_select_ok_t* amqp_confirm_select(amqp_connection_state_t state, amqp_channel_t channel) {
+  state->confirm = new amqp_confirm_select_ok_t;
+  return state->confirm;
+}
+
+int amqp_simple_wait_frame(amqp_connection_state_t state, amqp_frame_t *decoded_frame) {
+  if (state->socket && state->socket->open_called &&
+      state->login_called && state->channel && state->exchange &&
+      state->queue && state->consume && state->confirm) {
+    return 0;
+  }
+  return -1;
+}
+
+amqp_basic_consume_ok_t* amqp_basic_consume(
+    amqp_connection_state_t state, amqp_channel_t channel, amqp_bytes_t queue,
+    amqp_bytes_t consumer_tag, amqp_boolean_t no_local, amqp_boolean_t no_ack,
+    amqp_boolean_t exclusive, amqp_table_t arguments) {
+  state->consume = new amqp_basic_consume_ok_t;
+  return state->consume;
+}
+
+// amqp_parse_url() is linked via the actual rabbitmq-c library code. see: amqp_url.c
+
+// following functions are the actual implementation copied from rabbitmq-c library
+
+#include <string.h>
+
+amqp_bytes_t amqp_cstring_bytes(const char* cstr) {
+  amqp_bytes_t result;
+  result.len = strlen(cstr);
+  result.bytes = (void *)cstr;
+  return result;
+}
+
+void amqp_bytes_free(amqp_bytes_t bytes) { free(bytes.bytes); }
+
+amqp_bytes_t amqp_bytes_malloc_dup(amqp_bytes_t src) {
+  amqp_bytes_t result;
+  result.len = src.len;
+  result.bytes = malloc(src.len);
+  if (result.bytes != NULL) {
+    memcpy(result.bytes, src.bytes, src.len);
+  }
+  return result;
+}
 

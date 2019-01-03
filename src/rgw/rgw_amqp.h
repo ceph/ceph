@@ -4,11 +4,15 @@
 #pragma once
 
 #include <string>
+//#include <memory>
+#include <functional>
 #include <stdexcept>
 
 namespace amqp {
 // farward declaration of coonection object
 struct connection_t;
+
+typedef std::function<void(int)> reply_callback_t;
 
 // connect to an amqp endpoint
 const connection_t& connect(const std::string& url, const std::string& exchange);
@@ -17,6 +21,14 @@ const connection_t& connect(const std::string& url, const std::string& exchange)
 int publish(const connection_t& conn,
     const std::string& topic,
     const std::string& message);
+
+// publish a message over a connection that was already created
+// and pass a callback that will be invoked (async) when broker confirms
+// receiving the message
+int publish_with_confirm(const connection_t& conn, 
+    const std::string& topic,
+    const std::string& message,
+    reply_callback_t cb);
 
 // convert the integer status returned from the "publish" function to a string
 std::string status_to_string(int s);
