@@ -163,11 +163,13 @@ void RGWSTSAssumeRole::execute()
   if (op_ret == 0) {
     s->formatter->open_object_section("AssumeRoleResponse");
     s->formatter->open_object_section("AssumeRoleResult");
-    s->formatter->open_object_section("AssumeRole");
-    assumedRoleUser.dump(s->formatter);
+    s->formatter->open_object_section("Credentials");
     creds.dump(s->formatter);
-    encode_json("PackedPolicySize", packedPolicySize , s->formatter);
     s->formatter->close_section();
+    s->formatter->open_object_section("AssumedRoleUser");
+    assumedRoleUser.dump(s->formatter);
+    s->formatter->close_section();
+    encode_json("PackedPolicySize", packedPolicySize , s->formatter);
     s->formatter->close_section();
     s->formatter->close_section();
   }
@@ -192,6 +194,9 @@ RGWOp *RGWHandler_REST_STS::op_post()
         if (pos != string::npos) {
            std::string key = t.substr(0, pos);
            std::string value = t.substr(pos + 1, t.size() - 1);
+           if (key == "RoleArn") {
+            value = url_decode(value);
+           }
            ldout(s->cct, 10) << "Key: " << key << "Value: " << value << dendl;
            s->info.args.append(key, value);
          }
