@@ -31,6 +31,7 @@
 #include "include/uuid.h"
 #include "include/stringify.h"
 #include "blkdev.h"
+#include "numa.h"
 
 #include "json_spirit/json_spirit_reader.h"
 
@@ -108,6 +109,8 @@ static const char *blkdev_props2strings[] = {
   [BLKDEV_PROP_ROTATIONAL]          = "queue/rotational",
   [BLKDEV_PROP_SERIAL]              = "device/serial",
   [BLKDEV_PROP_VENDOR]              = "device/device/vendor",
+  [BLKDEV_PROP_NUMA_NODE]           = "device/device/numa_node",
+  [BLKDEV_PROP_NUMA_CPUS]           = "device/device/local_cpulist",
 };
 
 const char *BlkDev::sysfsdir() const {
@@ -226,6 +229,15 @@ bool BlkDev::is_nvme() const
 bool BlkDev::is_rotational() const
 {
   return get_int_property(BLKDEV_PROP_ROTATIONAL) > 0;
+}
+
+int BlkDev::get_numa_node(int *node) const
+{
+  int numa = get_int_property(BLKDEV_PROP_NUMA_NODE);
+  if (numa < 0)
+    return -1;
+  *node = numa;
+  return 0;
 }
 
 int BlkDev::dev(char *dev, size_t max) const
