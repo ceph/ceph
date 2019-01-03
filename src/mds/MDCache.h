@@ -1181,7 +1181,7 @@ public:
   int dump_cache(Formatter *f);
   int dump_cache(boost::string_view dump_root, int depth, Formatter *f);
 
-  int cache_status(Formatter *f);
+  void cache_status(Formatter *f);
 
   void dump_resolve_status(Formatter *f) const;
   void dump_rejoin_status(Formatter *f) const;
