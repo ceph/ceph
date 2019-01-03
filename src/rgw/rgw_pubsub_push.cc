@@ -12,8 +12,7 @@
 #include "rgw_pubsub.h"
 #include "rgw_amqp.h"
 #include <boost/asio/yield.hpp>
-
-#include <iostream>
+#include <functional>
 
 std::string json_format_pubsub_event(const rgw_pubsub_event& event) {
   std::stringstream ss;
@@ -28,7 +27,7 @@ private:
   const std::string endpoint;
   std::string str_ack_level;
   typedef unsigned ack_level_t;
-  ack_level_t ack_level;
+  ack_level_t ack_level; // TODO: not used for now
   static const ack_level_t ACK_LEVEL_ANY = 0;
   static const ack_level_t ACK_LEVEL_NON_ERROR = 1;
 
@@ -135,7 +134,7 @@ class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
     RGWDataSyncEnv* const sync_env;
     const std::string topic;
     const amqp::connection_t& conn;
-    std::string message;
+    const std::string message;
 
   public:
     NoAckPublishCR(RGWDataSyncEnv* _sync_env,
@@ -150,12 +149,72 @@ class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
       reenter(this) {
         const auto rc = amqp::publish(conn, topic, message);
         if (rc < 0) {
-          std::cout << "publish error: " << amqp::status_to_string(rc) << std::endl;;
           return set_cr_error(rc);
         }
         return set_cr_done();
       }
       return 0;
+    }
+  };
+
+  // AckPublishCR implements async amqp publishing via coroutine
+  // This coroutine ends when an ack is received from the borker 
+  // note that it does not wait for an ack fron the end client
+  class AckPublishCR : public RGWCoroutine, public RGWIOProvider {
+  private:
+    RGWDataSyncEnv* const sync_env;
+    const std::string topic;
+    const amqp::connection_t& conn;
+    const std::string message;
+    const ack_level_t ack_level; // TODO not used for now
+
+  public:
+    AckPublishCR(RGWDataSyncEnv* _sync_env,
+              const std::string& _topic,
+              const amqp::connection_t& _conn,
+              const std::string& _message,
+              ack_level_t _ack_level) :
+      RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+      topic(_topic), conn(_conn), message(_message), ack_level(_ack_level) {}
+
+    // send message to endpoint, waiting for reply
+    int operate() override {
+      reenter(this) {
+        yield {
+          init_new_io(this);
+          const auto rc = amqp::publish_with_confirm(conn, 
+              topic,
+              message,
+              std::bind(&AckPublishCR::request_complete, this, std::placeholders::_1));
+          if (rc < 0) {
+            // failed to publish, does not wait for reply
+            return set_cr_error(rc);
+          }
+          // mark as blocked on the amqp answer
+          io_block();
+          return 0;
+        }
+        return set_cr_done();
+      }
+      return 0;
+    }
+
+    // callback invoked from the amqp manager thread when ack/nack is received
+    void request_complete(int status) {
+      ceph_assert(!is_done());
+      if (status != 0) {
+        // server replied with a nack
+        set_cr_error(status);
+      }
+      io_complete();
+    }
+   
+    // TODO: why are these mandatory in RGWIOProvider?
+    void set_io_user_info(void *_user_info) override {
+    }
+
+    void *get_io_user_info() override {
+      return nullptr;
     }
   };
 
@@ -185,8 +244,9 @@ class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
       if (ack_level == ACK_LEVEL_NONE) {
         return new NoAckPublishCR(env, topic, conn, json_format_pubsub_event(event));
       } else {
-        // TODO implement the couroutines that wait for the ack
-        return nullptr;
+        // TODO: currently broker and routable are the same - this will require different flags
+        // but the same mechanism
+        return new AckPublishCR(env, topic, conn, json_format_pubsub_event(event), ack_level);
       }
     }
 
