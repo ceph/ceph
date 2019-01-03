@@ -638,12 +638,15 @@ void encode_json(const char *name, const RGWUserCaps& val, Formatter *f);
 
 void decode_json_obj(obj_version& v, JSONObj *obj);
 
-enum RGWUserSourceType
+
+
+enum RGWIdentityType
 {
   TYPE_NONE=0,
   TYPE_RGW=1,
   TYPE_KEYSTONE=2,
-  TYPE_LDAP=3
+  TYPE_LDAP=3,
+  TYPE_ROLE=4
 };
 
 struct RGWUserInfo

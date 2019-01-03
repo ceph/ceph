@@ -1814,8 +1814,28 @@ static http_op op_from_method(const char *method)
 
 int RGWHandler_REST::init_permissions(RGWOp* op)
 {
-  if (op->get_type() == RGW_OP_CREATE_BUCKET)
+  if (op->get_type() == RGW_OP_CREATE_BUCKET) {
+    // We don't need user policies in case of STS token returned by AssumeRole, hence the check for user type
+    if (! s->user->user_id.empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
+      try {
+        map<string, bufferlist> uattrs;
+        if (auto ret = rgw_get_user_attrs_by_uid(store, s->user->user_id, uattrs); ! ret) {
+          if (s->iam_user_policies.empty()) {
+            s->iam_user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->user_id.tenant);
+          } else {
+          // This scenario can happen when a STS token has a policy, then we need to append other user policies
+          // to the existing ones. (e.g. token returned by GetSessionToken)
+          auto user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->user_id.tenant);
+          s->iam_user_policies.insert(s->iam_user_policies.end(), user_policies.begin(), user_policies.end());
+          }
+        }
+      } catch (const std::exception& e) {
+        lderr(s->cct) << "Error reading IAM User Policy: " << e.what() << dendl;
+      }
+    }
+    s->env = rgw_build_iam_environment(store, s);
     return 0;
+  }
 
   return do_init_permissions();
 }
