@@ -187,6 +187,7 @@ add_library(rgw_a STATIC
 add_dependencies(rgw_a civetweb_h)
 
 target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
+target_include_directories(rgw_common PUBLIC ${CMAKE_SOURCE_DIR}/src/dmclock/support/src)
 
 target_link_libraries(rgw_a PRIVATE
   librados-cxx cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
