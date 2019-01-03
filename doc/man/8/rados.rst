@@ -90,6 +90,9 @@ Pool specific commands
 
 :command:`put` *name* *infile* [--offset offset]
   Write object name with start offset (default:0) to the cluster with contents from infile.
+  **Warning:** The put command creates a single RADOS object, sized just as
+  large as your input file. Unless your objects are of reasonable and consistent sizes, that
+  is probably not what you want -- consider using RGW/S3, CephFS, or RBD instead.
 
 :command:`append` *name* *infile*
   Append object name to the cluster with contents from infile.
