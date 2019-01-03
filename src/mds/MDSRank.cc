@@ -3197,11 +3197,21 @@ bool MDSRank::evict_client(int64_t session_id,
     return false;
   }
 
+  auto& addr = session->info.inst.addr;
+  {
+    CachedStackStringStream _ss;
+    auto& ss = _ss.get_stream();
+    ss << "Evicting " << (blacklist ? "(and blacklisting) " : "")
+       << "client session " << session_id << " (" << addr << ")";
+    dout(1) << ss.strv() << dendl;
+    clog->info() << ss.strv();
+  }
+
   dout(4) << "Preparing blacklist command... (wait=" << wait << ")" << dendl;
   stringstream ss;
   ss << "{\"prefix\":\"osd blacklist\", \"blacklistop\":\"add\",";
   ss << "\"addr\":\"";
-  ss << session->info.inst.addr;
+  ss << addr;
   ss << "\"}";
   std::string tmp = ss.str();
   std::vector<std::string> cmd = {tmp};
