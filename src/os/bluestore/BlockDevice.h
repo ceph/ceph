@@ -182,6 +182,9 @@ public:
     }
     return 0;
   }
+  virtual int get_numa_node(int *node) const {
+    return -EOPNOTSUPP;
+  }
 
   virtual int read(
     uint64_t off,
