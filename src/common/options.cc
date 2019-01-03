@@ -7078,6 +7078,10 @@ std::vector<Option> get_mds_options() {
     Option("mds_request_load_average_decay_rate", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(60)
     .set_description("rate of decay in seconds for calculating request load average"),
+
+    Option("mds_max_retries_on_remount_failure", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+     .set_default(5)
+     .set_description("number of consecutive failed remount attempts for invalidating kernel dcache after which client would abort."),
   });
 }
 
