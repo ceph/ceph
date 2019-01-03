@@ -36,6 +36,8 @@
 #include "auth/Crypto.h"
 #include "common/EventTrace.h"
 #include "perfglue/heap_profiler.h"
+#include "common/blkdev.h"
+#include "common/numa.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
@@ -7772,6 +7774,63 @@ void BlueStore::collect_metadata(map<string,string> *pm)
   } else {
     (*pm)["bluefs"] = "0";
   }
+
+  // report numa mapping for underlying devices
+  int node = -1;
+  set<int> nodes;
+  set<string> failed;
+  int r = get_numa_node(&node, &nodes, &failed);
+  if (r >= 0) {
+    if (!failed.empty()) {
+      (*pm)["objectstore_numa_unknown_devices"] = stringify(failed);
+    }
+    if (!nodes.empty()) {
+      dout(1) << __func__ << " devices span numa nodes " << nodes << dendl;
+      (*pm)["objectstore_numa_nodes"] = stringify(nodes);
+    }
+    if (node >= 0) {
+      (*pm)["objectstore_numa_node"] = stringify(node);
+    }
+  }
+}
+
+int BlueStore::get_numa_node(
+  int *final_node,
+  set<int> *out_nodes,
+  set<string> *out_failed)
+{
+  int node = -1;
+  set<string> devices;
+  get_devices(&devices);
+  set<int> nodes;
+  set<string> failed;
+  for (auto& devname : devices) {
+    int n;
+    BlkDev bdev(devname);
+    int r = bdev.get_numa_node(&n);
+    if (r < 0) {
+      dout(10) << __func__ << " bdev " << devname << " can't detect numa_node"
+	       << dendl;
+      failed.insert(devname);
+      continue;
+    }
+    dout(10) << __func__ << " bdev " << devname << " on numa_node " << n
+	     << dendl;
+    nodes.insert(n);
+    if (node < 0) {
+      node = n;
+    }
+  }
+  if (node >= 0 && nodes.size() == 1 && failed.empty()) {
+    *final_node = node;
+  }
+  if (out_nodes) {
+    *out_nodes = nodes;
+  }
+  if (out_failed) {
+    *out_failed = failed;
+  }
+  return 0;
 }
 
 int BlueStore::get_devices(set<string> *ls)

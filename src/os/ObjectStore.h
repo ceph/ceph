@@ -1546,6 +1546,14 @@ public:
     return is_rotational() ? "hdd" : "ssd";
   }
 
+  virtual int get_numa_node(
+    int *numa_node,
+    set<int> *nodes,
+    set<string> *failed) {
+    return -EOPNOTSUPP;
+  }
+
+
   virtual bool can_sort_nibblewise() {
     return false;   // assume a backend cannot, unless it says otherwise
   }

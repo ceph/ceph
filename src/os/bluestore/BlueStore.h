@@ -2362,8 +2362,6 @@ public:
 
   int get_numa_node(
     int *numa_node,
-    size_t *cpu_set_size,
-    cpu_set_t *cpu_set,
     set<int> *nodes,
     set<string> *failed) override;
 
