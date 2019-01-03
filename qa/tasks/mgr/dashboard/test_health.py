@@ -81,7 +81,24 @@ class HealthTest(DashboardTestCase):
         module_info_schema = JObj({
             'can_run': bool,
             'error_string': str,
-            'name': str
+            'name': str,
+            'module_options': JObj(
+                {},
+                allow_unknown=True,
+                unknown_schema=JObj({
+                    'name': str,
+                    'type': str,
+                    'level': str,
+                    'flags': int,
+                    'default_value': str,
+                    'min': str,
+                    'max': str,
+                    'enum_allowed': JList(str),
+                    'see_also': JList(str),
+                    'desc': str,
+                    'long_desc': str,
+                    'tags': JList(str),
+                })),
         })
         schema = JObj({
             'client_perf': JObj({
