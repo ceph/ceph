@@ -154,6 +154,9 @@
 * librados::IoCtx::nobjects_begin() and librados::NObjectIterator now communicate
   errors by throwing a std::system_error exception instead of std::runtime_error.
 
+* the callback function passed to LibRGWFS.readdir() now accepts a ``flags``
+  parameter. it will be the last parameter passed to  ``readdir()` method.
+
 >=13.1.0
 --------
 
