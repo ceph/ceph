@@ -1974,6 +1974,13 @@ public:
 	       ceph::real_time delete_at,
                string *petag);
   
+  int transition_obj(RGWObjectCtx& obj_ctx,
+                     RGWBucketInfo& bucket_info,
+                     rgw_obj& obj,
+                     const rgw_placement_rule& placement_rule,
+                     const real_time& mtime,
+                     uint64_t olh_epoch);
+
   int check_bucket_empty(RGWBucketInfo& bucket_info);
 
   /**

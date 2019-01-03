@@ -106,7 +106,7 @@ bool RGWLifecycleConfiguration::_add_rule(const LCRule& rule)
     } else {
       action.date = ceph::from_iso_8601(elem.second.get_date());
     }
-    action.storage_class = elem.first;
+    action.storage_class = rgw_placement_rule::get_canonical_storage_class(elem.first);
     op.transitions.emplace(elem.first, std::move(action));
   }
   for (const auto &elem : rule.get_noncur_transitions()) {
@@ -402,7 +402,9 @@ static bool is_valid_op(const lc_op& op)
               (op.expiration > 0 
                || op.expiration_date != boost::none
                || op.noncur_expiration > 0
-               || op.dm_expiration));
+               || op.dm_expiration
+               || !op.transitions.empty()
+               || !op.noncur_transitions.empty()));
 }
 
 class LCObjsLister {
@@ -749,6 +751,61 @@ public:
   }
 };
 
+class LCOpAction_Transition : public LCOpAction {
+  const transition_action& transition;
+public:
+  LCOpAction_Transition(const transition_action& _transition) : transition(_transition) {}
+
+  bool check(lc_op_ctx& oc, ceph::real_time *exp_time) override {
+    auto& o = oc.o;
+
+    if (o.is_delete_marker()) {
+      return false;
+    }
+
+    if (!o.is_current()) {
+      return false;
+    }
+
+    if (rgw_placement_rule::get_canonical_storage_class(o.meta.storage_class) == transition.storage_class) {
+      /* already at target storage class */
+      return false;
+    }
+
+    auto& mtime = o.meta.mtime;
+    bool is_expired;
+    if (transition.days <= 0) {
+      if (transition.date == boost::none) {
+        ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": no transition day/date set in rule, skipping" << dendl;
+        return false;
+      }
+      is_expired = ceph_clock_now() >= ceph::real_clock::to_time_t(*transition.date);
+      *exp_time = *transition.date;
+    } else {
+      is_expired = obj_has_expired(oc.cct, mtime, transition.days, exp_time);
+    }
+
+    return is_expired;
+  }
+
+  int process(lc_op_ctx& oc) {
+    auto& o = oc.o;
+
+    rgw_placement_rule target_placement;
+    target_placement.inherit_from(oc.bucket_info.placement_rule);
+    target_placement.storage_class = transition.storage_class;
+
+    int r = oc.store->transition_obj(oc.rctx, oc.bucket_info, oc.obj,
+                                     target_placement, o.meta.mtime, o.versioned_epoch);
+    if (r < 0) {
+      ldout(oc.cct, 0) << "ERROR: failed to transition obj (r=" << r << ")" << dendl;
+      return r;
+    }
+    ldout(oc.cct, 2) << "TRANSITIONED:" << oc.bucket_info.bucket << ":" << o.key << " -> " << transition.storage_class << dendl;
+    return 0;
+  }
+};
+
 void LCOpRule::build()
 {
   filters.emplace_back(new LCOpFilter_Tags);
@@ -767,6 +824,15 @@ void LCOpRule::build()
   if (op.noncur_expiration > 0) {
     actions.emplace_back(new LCOpAction_NonCurrentExpiration);
   }
+
+  for (auto& iter : op.transitions) {
+    actions.emplace_back(new LCOpAction_Transition(iter.second));
+  }
+#if 0
+  for (auto& t : op.noncur_transitions) {
+    actions.emplace_back(new LOpAction_Transition);
+  }
+#endif
 }
 
 int LCOpRule::process(rgw_bucket_dir_entry& o)

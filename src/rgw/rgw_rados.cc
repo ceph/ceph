@@ -4852,6 +4852,53 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                             nullptr, nullptr, nullptr, nullptr, nullptr);
 }
 
+int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
+                             RGWBucketInfo& bucket_info,
+                             rgw_obj& obj,
+                             const rgw_placement_rule& placement_rule,
+                             const real_time& mtime,
+                             uint64_t olh_epoch)
+{
+  map<string, bufferlist> attrs;
+  real_time read_mtime;
+  uint64_t obj_size;
+
+  RGWRados::Object op_target(this, bucket_info, obj_ctx, obj);
+  RGWRados::Object::Read read_op(&op_target);
+
+  read_op.params.attrs = &attrs;
+  read_op.params.lastmod = &read_mtime;
+  read_op.params.obj_size = &obj_size;
+
+  int ret = read_op.prepare();
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (read_mtime != mtime) {
+    /* raced */
+    return -ECANCELED;
+  }
+
+  ret = copy_obj_data(obj_ctx,
+                      bucket_info,
+                      placement_rule,
+                      read_op,
+                      obj_size - 1,
+                      obj,
+                      nullptr /* pmtime */,
+                      mtime,
+                      attrs,
+                      olh_epoch,
+                      real_time(),
+                      nullptr /* petag */);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
+
 int RGWRados::check_bucket_empty(RGWBucketInfo& bucket_info)
 {
   std::vector<rgw_bucket_dir_entry> ent_list;
