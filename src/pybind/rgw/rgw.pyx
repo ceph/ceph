@@ -144,7 +144,7 @@ cdef extern from "rados/rgw_file.h" nogil:
 
     int rgw_readdir(rgw_fs *fs,
                     rgw_file_handle *parent_fh, uint64_t *offset,
-                    bool (*cb)(const char *name, void *arg, uint64_t offset) nogil except? -9000,
+                    bool (*cb)(const char *name, void *arg, uint64_t offset, uint32_t flags) nogil except? -9000,
                     void *cb_arg, bool *eof, uint32_t flags) except? -9000
 
     int rgw_getattr(rgw_fs *fs,
@@ -314,11 +314,11 @@ cdef make_ex(ret, msg):
         return Error(msg + (": error code %d" % ret))
 
 
-cdef bool readdir_cb(const char *name, void *arg, uint64_t offset) \
+cdef bool readdir_cb(const char *name, void *arg, uint64_t offset, uint32_t flags) \
 except? -9000 with gil:
     if exc.PyErr_Occurred():
         return False
-    (<object>arg)(name, offset)
+    (<object>arg)(name, offset, flags)
     return True
 
 
