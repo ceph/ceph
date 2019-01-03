@@ -78,6 +78,11 @@ class HealthTest(DashboardTestCase):
     def test_full_health(self):
         data = self._get('/api/health/full')
         self.assertStatus(200)
+        module_info_schema = JObj({
+            'can_run': bool,
+            'error_string': str,
+            'name': str
+        })
         schema = JObj({
             'client_perf': JObj({
                 'read_bytes_sec': int,
@@ -169,11 +174,7 @@ class HealthTest(DashboardTestCase):
                     allow_unknown=True, unknown_schema=JList(str)
                 ),
                 'available': bool,
-                'available_modules': JList(JObj({
-                    'can_run': bool,
-                    'error_string': str,
-                    'name': str
-                })),
+                'available_modules': JList(module_info_schema),
                 'epoch': int,
                 'modules': JList(str),
                 'services': JObj(
@@ -181,11 +182,7 @@ class HealthTest(DashboardTestCase):
                     allow_unknown=True, unknown_schema=str
                 ),
                 'standbys': JList(JObj({
-                    'available_modules': JList(JObj({
-                        'can_run': bool,
-                        'error_string': str,
-                        'name': str
-                    })),
+                    'available_modules': JList(module_info_schema),
                     'gid': int,
                     'name': str
                 }))
