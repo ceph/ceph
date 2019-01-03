@@ -53,6 +53,10 @@ static int wait_for_dmclock(rgw::dmclock::PriorityQueue *dmclock_queue,
   dmclock_queue->async_request(client, {}, req_state::Clock::to_double(s->time),
                                cost, yield[ec]);
 
+  if (ec == boost::system::errc::resource_unavailable_try_again) {
+    lderr(s->cct) << "dmclock client over rate limit" << dendl;
+    return -ERR_RATE_LIMITED;
+  }
   if (ec) {
     lderr(s->cct) << "dmclock queue failed with " << ec.message() << dendl;
     return -ec.value();
