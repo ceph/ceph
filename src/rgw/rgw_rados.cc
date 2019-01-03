@@ -3360,6 +3360,11 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
   }
 
   rgw_obj dest_obj(dest_bucket_info.bucket, buf);
+
+  if (dest_bucket_info.versioning_enabled()){
+    gen_rand_obj_instance_name(&dest_obj);
+  }
+
   obj_ctx.set_atomic(dest_obj);
 
   string no_zone;
@@ -3447,6 +3452,11 @@ int RGWRados::swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
     std::map<std::string, ceph::bufferlist> no_attrs;
 
     rgw_obj archive_obj(archive_binfo.bucket, entry.key);
+
+    if (bucket_info.versioning_enabled()){
+      gen_rand_obj_instance_name(&obj);
+    }
+
     obj_ctx.set_atomic(archive_obj);
     obj_ctx.set_atomic(obj);
 
@@ -4605,12 +4615,6 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
     if (iter != attrs.end()) {
       *petag = iter->second.to_str();
     }
-  }
-
-  if (version_id && !version_id->empty()) {
-    dest_obj.key.set_instance(*version_id);
-  } else if (dest_bucket_info.versioning_enabled()) {
-    gen_rand_obj_instance_name(&dest_obj);
   }
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */

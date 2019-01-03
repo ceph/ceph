@@ -4676,6 +4676,12 @@ void RGWCopyObj::execute()
   rgw_obj dst_obj(dest_bucket, dest_object);
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
+  if ( ! version_id.empty()) {
+    dst_obj.key.set_instance(version_id);
+  } else if (dest_bucket_info.versioning_enabled()) {
+    store->gen_rand_obj_instance_name(&dst_obj);
+  }
+
   obj_ctx.set_atomic(src_obj);
   obj_ctx.set_atomic(dst_obj);
 
