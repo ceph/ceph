@@ -163,7 +163,7 @@ seastar::future<bool> Connection::do_auth()
     return reply.get_future();
   }).then([this] (Ref<MAuthReply> m) {
     logger().info("mon {} => {} returns {}: {}",
-                   conn->get_my_addr(),
+                   conn->get_messenger()->get_myaddr(),
                    conn->get_peer_addr(), *m, m->result);
     reply = decltype(reply){};
     auto p = m->result_bl.cbegin();
@@ -360,7 +360,7 @@ seastar::future<> Client::handle_auth_reply(ceph::net::ConnectionRef conn,
                                                Ref<MAuthReply> m)
 {
   logger().info("mon {} => {} returns {}: {}",
-                conn->get_my_addr(),
+                conn->get_messenger()->get_myaddr(),
                 conn->get_peer_addr(), *m, m->result);
   auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
                             [peer_addr = conn->get_peer_addr()](auto& mc) {
