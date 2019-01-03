@@ -134,3 +134,20 @@ TEST(AMQP_Connection, ExchangeMismatch)
   }
 }
 
+void my_callback_expect_ack(int rc) {
+  EXPECT_EQ(0, rc);
+}
+
+TEST(AMQP_PublishAndWait, ReceiveAck)
+{
+  try {
+    // create connection for the first time
+    const amqp::connection_t& conn = amqp::connect("amqp://localhost", "ex1");
+    auto rc = publish_with_confirm(conn, "topic", "message", my_callback_expect_ack);
+    EXPECT_EQ(rc, 0);
+  } catch (const amqp::connection_error& e) {
+    // make sure exception dont happen
+    EXPECT_TRUE(false);
+  }
+}
+
