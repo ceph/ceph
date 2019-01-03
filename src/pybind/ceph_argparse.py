@@ -1287,7 +1287,7 @@ class RadosThread(threading.Thread):
 def run_in_thread(func, *args, **kwargs):
     interrupt = False
     timeout = kwargs.pop('timeout', 0)
-    if timeout == 0:
+    if timeout == 0 or timeout == None:
         # python threading module will just get blocked if timeout is `None`,
         # otherwise it will keep polling until timeout or thread stops.
         timeout = 2 ** 32
