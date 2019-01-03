@@ -29,6 +29,7 @@
 #endif
 #include "common/debug.h"
 #include "common/align.h"
+#include "common/numa.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bdev
@@ -305,6 +306,13 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
 
     if (blkdev.is_nvme())
       (*pm)[prefix + "type"] = "nvme";
+
+    // numa
+    int node;
+    r = blkdev.get_numa_node(&node);
+    if (r >= 0) {
+      (*pm)[prefix + "numa_node"] = stringify(node);
+    }
   } else {
     (*pm)[prefix + "access_mode"] = "file";
     (*pm)[prefix + "path"] = path;
