@@ -1298,9 +1298,9 @@ public:
   /// last epoch that forced clients to resend (pre-luminous clients only)
   epoch_t last_force_op_resend_preluminous = 0;
 
-  ///< last_epoch_started preceding pg_num decrement request
+  /// last_epoch_started preceding pg_num decrement request
   epoch_t pg_num_dec_last_epoch_started = 0;
-  ///< last_epoch_clean preceding pg_num decrement request
+  /// last_epoch_clean preceding pg_num decrement request
   epoch_t pg_num_dec_last_epoch_clean = 0;
   snapid_t snap_seq;        ///< seq for per-pool snapshot
   epoch_t snap_epoch;       ///< osdmap epoch of last snap
@@ -1366,7 +1366,7 @@ public:
   uint64_t target_max_objects; ///< tiering: target max pool size
 
   uint32_t cache_target_dirty_ratio_micro; ///< cache: fraction of target to leave dirty
-  uint32_t cache_target_dirty_high_ratio_micro; ///<cache: fraction of  target to flush with high speed
+  uint32_t cache_target_dirty_high_ratio_micro; ///< cache: fraction of  target to flush with high speed
   uint32_t cache_target_full_ratio_micro;  ///< cache: fraction of target to fill before we evict in earnest
 
   uint32_t cache_min_flush_age;  ///< minimum age (seconds) before we can flush
@@ -1379,9 +1379,9 @@ public:
   uint32_t min_read_recency_for_promote;   ///< minimum number of HitSet to check before promote on read
   uint32_t min_write_recency_for_promote;  ///< minimum number of HitSet to check before promote on write
   uint32_t hit_set_grade_decay_rate;   ///< current hit_set has highest priority on objects
-                                       ///temperature count,the follow hit_set's priority decay 
-                                       ///by this params than pre hit_set
-  uint32_t hit_set_search_last_n;   ///<accumulate atmost N hit_sets for temperature
+                                       ///< temperature count,the follow hit_set's priority decay 
+                                       ///< by this params than pre hit_set
+  uint32_t hit_set_search_last_n;   ///< accumulate atmost N hit_sets for temperature
 
   uint32_t stripe_width;        ///< erasure coded stripe size in bytes
 
@@ -3072,7 +3072,7 @@ public:
     std::shared_ptr<const OSDMap> osdmap,      ///< [in] current map
     std::shared_ptr<const OSDMap> lastmap,     ///< [in] last map
     pg_t pgid,                                  ///< [in] pgid for pg
-    IsPGRecoverablePredicate *could_have_gone_active, /// [in] predicate whether the pg can be active
+    IsPGRecoverablePredicate *could_have_gone_active, ///< [in] predicate whether the pg can be active
     PastIntervals *past_intervals,              ///< [out] intervals
     ostream *out = 0                            ///< [out] debug ostream
     );
@@ -3153,11 +3153,11 @@ public:
   };
   struct PriorSet {
     bool ec_pool = false;
-    set<pg_shard_t> probe; /// current+prior OSDs we need to probe.
-    set<int> down;  /// down osds that would normally be in @a probe and might be interesting.
-    map<int, epoch_t> blocked_by;  /// current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
+    set<pg_shard_t> probe; ///< current+prior OSDs we need to probe.
+    set<int> down;  ///< down osds that would normally be in @a probe and might be interesting.
+    map<int, epoch_t> blocked_by;  ///< current lost_at values for any OSDs in cur set for which (re)marking them lost would affect cur set
 
-    bool pg_down = false;   /// some down osds are included in @a cur; the DOWN pg state bit should be set.
+    bool pg_down = false;   ///< some down osds are included in @a cur; the DOWN pg state bit should be set.
     unique_ptr<IsPGRecoverablePredicate> pcontdec;
 
     PriorSet() = default;
@@ -3663,7 +3663,7 @@ struct pg_log_entry_t {
   osd_reqid_t reqid;  // caller+tid to uniquely identify request
   mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > extra_reqids;
 
-  ///< map extra_reqids by index to error return code (if any)
+  /// map extra_reqids by index to error return code (if any)
   mempool::osd_pglog::map<uint32_t, int> extra_reqid_return_codes;
 
   eversion_t version, prior_version, reverting_to;
@@ -4659,13 +4659,13 @@ struct object_copy_data_t {
 
   /// which snaps we are defined for (if a snap and not the head)
   vector<snapid_t> snaps;
-  ///< latest snap seq for the object (if head)
+  /// latest snap seq for the object (if head)
   snapid_t snap_seq;
 
-  ///< recent reqids on this object
+  /// recent reqids on this object
   mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > reqids;
 
-  ///< map reqids by index to error return code (if any)
+  /// map reqids by index to error return code (if any)
   mempool::osd_pglog::map<uint32_t, int> reqid_return_codes;
 
   uint64_t truncate_seq;
