@@ -192,10 +192,10 @@ class Device(object):
                  'ID_SCSI_SERIAL']
         p = disk.udevadm_property(self.abspath, props)
         if 'ID_VENDOR' in p and 'ID_MODEL' in p and 'ID_SCSI_SERIAL' in p:
-            dev_id = '_'.join(p['ID_VENDOR'], p['ID_MODEL'],
-                              p['ID_SCSI_SERIAL'])
+            dev_id = '_'.join([p['ID_VENDOR'], p['ID_MODEL'],
+                              p['ID_SCSI_SERIAL']])
         elif 'ID_MODEL' in p and 'ID_SERIAL_SHORT' in p:
-            dev_id = '_'.join(p['ID_MODEL'], p['ID_SERIAL_SHORT'])
+            dev_id = '_'.join([p['ID_MODEL'], p['ID_SERIAL_SHORT']])
         elif 'ID_SERIAL' in p:
             dev_id = p['ID_SERIAL']
             if dev_id.startswith('MTFD'):
