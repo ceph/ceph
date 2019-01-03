@@ -28,6 +28,27 @@ static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
   return *_dout << "mds." << mds->get_nodeid() << ".scrubstack ";
 }
 
+std::ostream &operator<<(std::ostream &os, const ScrubStack::State &state) {
+  switch(state) {
+  case ScrubStack::STATE_RUNNING:
+    os << "RUNNING";
+    break;
+  case ScrubStack::STATE_IDLE:
+    os << "IDLE";
+    break;
+  case ScrubStack::STATE_PAUSING:
+    os << "PAUSING";
+    break;
+  case ScrubStack::STATE_PAUSED:
+    os << "PAUSED";
+    break;
+  default:
+    ceph_abort();
+  }
+
+  return os;
+}
+
 void ScrubStack::push_inode(CInode *in)
 {
   dout(20) << "pushing " << *in << " on top of ScrubStack" << dendl;
@@ -75,18 +96,59 @@ void ScrubStack::_enqueue_inode(CInode *in, CDentry *parent,
 void ScrubStack::enqueue_inode(CInode *in, ScrubHeaderRef& header,
                                MDSInternalContextBase *on_finish, bool top)
 {
+  // abort in progress
+  if (clear_inode_stack) {
+    on_finish->complete(-EAGAIN);
+    return;
+  }
+
   _enqueue_inode(in, NULL, header, on_finish, top);
   kick_off_scrubs();
 }
 
 void ScrubStack::kick_off_scrubs()
 {
+  ceph_assert(mdcache->mds->mds_lock.is_locked());
+  dout(20) << __func__ << ": state=" << state << dendl;
+
+  if (clear_inode_stack || state == STATE_PAUSING || state == STATE_PAUSED) {
+    if (scrubs_in_progress == 0) {
+      dout(10) << __func__ << ": in progress scrub operations finished, "
+               << stack_size << " in the stack" << dendl;
+
+      State final_state = state;
+      if (clear_inode_stack) {
+        abort_pending_scrubs();
+        final_state = STATE_IDLE;
+      }
+      if (state == STATE_PAUSING) {
+        final_state = STATE_PAUSED;
+      }
+
+      set_state(final_state);
+      complete_control_contexts(0);
+    }
+
+    return;
+  }
+
   dout(20) << __func__ << " entering with " << scrubs_in_progress << " in "
               "progress and " << stack_size << " in the stack" << dendl;
   bool can_continue = true;
   elist<CInode*>::iterator i = inode_stack.begin();
   while (g_conf()->mds_max_scrub_ops_in_progress > scrubs_in_progress &&
-      can_continue && !i.end()) {
+         can_continue) {
+    if (i.end()) {
+      if (scrubs_in_progress == 0) {
+        set_state(STATE_IDLE);
+      }
+
+      return;
+    }
+
+    assert(state == STATE_RUNNING || state == STATE_IDLE);
+    set_state(STATE_RUNNING);
+
     CInode *curi = *i;
     ++i; // we have our reference, push iterator forward
 
@@ -418,13 +480,16 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
   MDSInternalContextBase *c = NULL;
   in->scrub_finished(&c);
 
-  if (!header->get_recursive() && in == header->get_origin()) {
-    if (r >= 0) { // we got into the scrubbing dump it
-      result.dump(&(header->get_formatter()));
-    } else { // we failed the lookup or something; dump ourselves
-      header->get_formatter().open_object_section("results");
-      header->get_formatter().dump_int("return_code", r);
-      header->get_formatter().close_section(); // results
+  if (in == header->get_origin()) {
+    scrub_origins.erase(in);
+    if (!header->get_recursive()) {
+      if (r >= 0) { // we got into the scrubbing dump it
+        result.dump(&(header->get_formatter()));
+      } else { // we failed the lookup or something; dump ourselves
+        header->get_formatter().open_object_section("results");
+        header->get_formatter().dump_int("return_code", r);
+        header->get_formatter().close_section(); // results
+      }
     }
   }
   if (c) {
@@ -434,3 +499,191 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
 
 ScrubStack::C_KickOffScrubs::C_KickOffScrubs(MDCache *mdcache, ScrubStack *s)
   : MDSInternalContext(mdcache->mds), stack(s) { }
+
+void ScrubStack::complete_control_contexts(int r) {
+  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
+
+  for (auto &ctx : control_ctxs) {
+    ctx->complete(r);
+  }
+  control_ctxs.clear();
+}
+
+void ScrubStack::set_state(State next_state) {
+    if (state != next_state) {
+      dout(20) << __func__ << ", from state=" << state << ", to state="
+               << next_state << dendl;
+      state = next_state;
+    }
+}
+
+bool ScrubStack::scrub_in_transition_state() {
+  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
+  dout(20) << __func__ << ": state=" << state << dendl;
+
+  // STATE_RUNNING is considered as a transition state so as to
+  // "delay" the scrub control operation.
+  if (state == STATE_RUNNING || state == STATE_PAUSING) {
+    return true;
+  }
+
+  return false;
+}
+
+void ScrubStack::scrub_status(Formatter *f) {
+  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
+
+  f->open_object_section("result");
+
+  std::stringstream ss;
+  bool have_more = false;
+
+  if (state == STATE_IDLE) {
+    ss << "no active scrubs running";
+  } else if (state == STATE_RUNNING) {
+    if (clear_inode_stack) {
+      ss << "ABORTING";
+    } else {
+      ss << "scrub active";
+    }
+    ss << " (" << stack_size << " inodes in the stack)";
+  } else {
+    if (state == STATE_PAUSING || state == STATE_PAUSED) {
+      have_more = true;
+      ss << state;
+    }
+    if (clear_inode_stack) {
+      if (have_more) {
+        ss << "+";
+      }
+      ss << "ABORTING";
+    }
+
+    ss << " (" << stack_size << " inodes in the stack)";
+  }
+  f->dump_string("status", ss.str());
+
+  f->open_object_section("scrubs");
+  for (auto &inode : scrub_origins) {
+    have_more = false;
+    ScrubHeaderRefConst header = inode->get_scrub_header();
+
+    std::string tag(header->get_tag());
+    f->open_object_section(tag.c_str()); // scrub id
+
+    std::string path;
+    inode->make_path_string(path, true);
+    f->dump_string("path", path.empty() ? "/" : path.c_str());
+
+    std::stringstream optss;
+    if (header->get_recursive()) {
+      optss << "recursive";
+      have_more = true;
+    }
+    if (header->get_repair()) {
+      if (have_more) {
+        optss << ",";
+      }
+      optss << "repair";
+      have_more = true;
+    }
+    if (header->get_force()) {
+      if (have_more) {
+        optss << ",";
+      }
+      optss << "force";
+    }
+
+    f->dump_string("options", optss.str());
+    f->close_section(); // scrub id
+  }
+  f->close_section(); // scrubs
+  f->close_section(); // result
+}
+
+void ScrubStack::abort_pending_scrubs() {
+  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
+  ceph_assert(clear_inode_stack);
+
+  for (auto inode = inode_stack.begin(); !inode.end(); ++inode) {
+    CInode *in = *inode;
+    if (in == in->scrub_info()->header->get_origin()) {
+      scrub_origins.erase(in);
+    }
+
+    MDSInternalContextBase *ctx = nullptr;
+    in->scrub_aborted(&ctx);
+    if (ctx != nullptr) {
+      ctx->complete(-ECANCELED);
+    }
+  }
+
+  stack_size = 0;
+  inode_stack.clear();
+  clear_inode_stack = false;
+}
+
+void ScrubStack::scrub_abort(Context *on_finish) {
+  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
+  ceph_assert(on_finish != nullptr);
+
+  dout(10) << __func__ << ": aborting with " << scrubs_in_progress
+           << " scrubs in progress and " << stack_size << " in the"
+           << " stack" << dendl;
+
+  clear_inode_stack = true;
+  if (scrub_in_transition_state()) {
+    control_ctxs.push_back(on_finish);
+    return;
+  }
+
+  abort_pending_scrubs();
+  if (state != STATE_PAUSED) {
+    set_state(STATE_IDLE);
+  }
+  on_finish->complete(0);
+}
+
+void ScrubStack::scrub_pause(Context *on_finish) {
+  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
+  ceph_assert(on_finish != nullptr);
+
+  dout(10) << __func__ << ": pausing with " << scrubs_in_progress
+           << " scrubs in progress and " << stack_size << " in the"
+           << " stack" << dendl;
+
+  // abort is in progress
+  if (clear_inode_stack) {
+    on_finish->complete(-EINVAL);
+    return;
+  }
+
+  bool done = scrub_in_transition_state();
+  if (done) {
+    set_state(STATE_PAUSING);
+    control_ctxs.push_back(on_finish);
+    return;
+  }
+
+  set_state(STATE_PAUSED);
+  on_finish->complete(0);
+}
+
+bool ScrubStack::scrub_resume() {
+  ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
+  dout(20) << __func__ << ": state=" << state << dendl;
+
+  int r = 0;
+
+  if (clear_inode_stack) {
+    r = -EINVAL;
+  } else if (state == STATE_PAUSING) {
+    set_state(STATE_RUNNING);
+    complete_control_contexts(-ECANCELED);
+  } else if (state == STATE_PAUSED) {
+    set_state(STATE_RUNNING);
+    kick_off_scrubs();
+  }
+
+  return r;
+}

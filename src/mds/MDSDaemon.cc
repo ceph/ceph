@@ -682,6 +682,12 @@ const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
         "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats",
         "show heap usage info (available only if compiled with tcmalloc)"),
     MDSCommand("cache drop name=timeout,type=CephInt,range=0,req=false", "trim cache and optionally request client to release all caps and flush the journal"),
+    MDSCommand("scrub start name=path,type=CephString name=scrubops,type=CephChoices,strings=force|recursive|repair,n=N,req=false name=tag,type=CephString,req=false",
+               "scrub an inode and output results"),
+    MDSCommand("scrub abort", "Abort in progress scrub operation(s)"),
+    MDSCommand("scrub pause", "Pause in progress scrub operation(s)"),
+    MDSCommand("scrub resume", "Resume paused scrub operation(s)"),
+    MDSCommand("scrub status", "Status of scrub operation"),
   };
   return commands;
 };

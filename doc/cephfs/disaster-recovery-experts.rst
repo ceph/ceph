@@ -259,4 +259,4 @@ run a forward scrub to repair them. Ensure you have an MDS running and issue:
 
 ::
 
-    ceph daemon mds.a scrub_path / recursive repair
+    ceph tell mds.a scrub start / recursive repair

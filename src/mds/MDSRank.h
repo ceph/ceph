@@ -119,6 +119,7 @@ class MonClient;
 class Finisher;
 class ScrubStack;
 class C_MDS_Send_Command_Reply;
+class C_ExecAndReply;
 
 /**
  * The public part of this class's interface is what's exposed to all
@@ -137,6 +138,10 @@ class MDSRank {
 
     friend class C_Flush_Journal;
     friend class C_Drop_Cache;
+
+    friend class C_CacheDropExecAndReply;
+    friend class C_ScrubExecAndReply;
+    friend class C_ScrubControlExecAndReply;
 
     mds_rank_t get_nodeid() const { return whoami; }
     int64_t get_metadata_pool();
@@ -456,9 +461,17 @@ class MDSRank {
 
   protected:
     void dump_clientreplay_status(Formatter *f) const;
-    void command_scrub_path(Formatter *f, std::string_view path, vector<string>& scrubop_vec);
+    void command_scrub_start(Formatter *f,
+                             std::string_view path, std::string_view tag,
+                             const vector<string>& scrubop_vec, Context *on_finish);
     void command_tag_path(Formatter *f, std::string_view path,
                           std::string_view tag);
+    // scrub control commands
+    void command_scrub_abort(Formatter *f, Context *on_finish);
+    void command_scrub_pause(Formatter *f, Context *on_finish);
+    void command_scrub_resume(Formatter *f);
+    void command_scrub_status(Formatter *f);
+
     void command_flush_path(Formatter *f, std::string_view path);
     void command_flush_journal(Formatter *f);
     void command_get_subtrees(Formatter *f);
@@ -481,8 +494,6 @@ class MDSRank {
     void command_openfiles_ls(Formatter *f);
     void command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f);
     void command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
-
-    void cache_drop_send_reply(Formatter *f, C_MDS_Send_Command_Reply *reply, int r);
     void command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish);
 
   protected:
@@ -559,6 +570,9 @@ class MDSRank {
     void set_mdsmap_multimds_snaps_allowed();
 private:
     mono_time starttime = mono_clock::zero();
+
+protected:
+  Context *create_async_exec_context(C_ExecAndReply *ctx);
 };
 
 /* This expects to be given a reference which it is responsible for.

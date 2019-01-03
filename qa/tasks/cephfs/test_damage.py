@@ -434,7 +434,7 @@ class TestDamage(CephFSTestCase):
         self.mount_a.umount_wait()
 
         # Now repair the stats
-        scrub_json = self.fs.mds_asok(["scrub_path", "/subdir", "repair"])
+        scrub_json = self.fs.rank_tell(["scrub", "start", "/subdir", "repair"])
         log.info(json.dumps(scrub_json, indent=2))
 
         self.assertEqual(scrub_json["passed_validation"], False)

@@ -4110,7 +4110,8 @@ void CInode::validate_disk_state(CInode::validated_data *results,
     /**
      * Fetch backtrace and set tag if tag is non-empty
      */
-    void fetch_backtrace_and_tag(CInode *in, std::string_view tag,
+    void fetch_backtrace_and_tag(CInode *in,
+                                 std::string_view tag, bool is_internal,
                                  Context *fin, int *bt_r, bufferlist *bt)
     {
       const int64_t pool = in->get_backtrace_pool();
@@ -4121,8 +4122,8 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       in->mdcache->mds->objecter->read(oid, object_locator_t(pool), fetch, CEPH_NOSNAP,
 				       NULL, 0, fin);
       using ceph::encode;
-      if (!tag.empty()) {
-	ObjectOperation scrub_tag;
+      if (!is_internal) {
+        ObjectOperation scrub_tag;
         bufferlist tag_bl;
         encode(tag, tag_bl);
         scrub_tag.setxattr("scrub_tag", tag_bl);
@@ -4153,10 +4154,11 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 					    in->mdcache->mds->finisher);
 
       std::string_view tag = in->scrub_infop->header->get_tag();
+      bool is_internal = in->scrub_infop->header->is_internal_tag();
       // Rather than using the usual CInode::fetch_backtrace,
       // use a special variant that optionally writes a tag in the same
       // operation.
-      fetch_backtrace_and_tag(in, tag, conf, &results->backtrace.ondisk_read_retval, &bl);
+      fetch_backtrace_and_tag(in, tag, is_internal, conf, &results->backtrace.ondisk_read_retval, &bl);
       return false;
     }
 
@@ -4768,6 +4770,24 @@ void CInode::scrub_dirfrag_finished(frag_t dirfrag)
   si.last_scrub_version = si.scrub_start_version;
 }
 
+void CInode::scrub_aborted(MDSInternalContextBase **c) {
+  dout(20) << __func__ << dendl;
+  ceph_assert(scrub_is_in_progress());
+
+  *c = nullptr;
+  std::swap(*c, scrub_infop->on_finish);
+
+  if (scrub_infop->scrub_parent) {
+    CDentry *dn = scrub_infop->scrub_parent;
+    scrub_infop->scrub_parent = NULL;
+    dn->dir->scrub_dentry_finished(dn);
+    dn->put(CDentry::PIN_SCRUBPARENT);
+  }
+
+  delete scrub_infop;
+  scrub_infop = nullptr;
+}
+
 void CInode::scrub_finished(MDSInternalContextBase **c) {
   dout(20) << __func__ << dendl;
   ceph_assert(scrub_is_in_progress());
@@ -4800,12 +4820,8 @@ void CInode::scrub_finished(MDSInternalContextBase **c) {
   if (scrub_infop->header->get_origin() == this) {
     // We are at the point that a tagging scrub was initiated
     LogChannelRef clog = mdcache->mds->clog;
-    if (scrub_infop->header->get_tag().empty()) {
-      clog->info() << "scrub complete";
-    } else {
-      clog->info() << "scrub complete with tag '"
-                   << scrub_infop->header->get_tag() << "'";
-    }
+    clog->info() << "scrub complete with tag '"
+                 << scrub_infop->header->get_tag() << "'";
   }
 }
 
