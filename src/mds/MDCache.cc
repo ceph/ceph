@@ -12310,12 +12310,13 @@ void C_MDS_RetryRequest::finish(int r)
 
 class C_MDS_EnqueueScrub : public Context
 {
+  std::string tag;
   Formatter *formatter;
   Context *on_finish;
 public:
   ScrubHeaderRef header;
-  C_MDS_EnqueueScrub(Formatter *f, Context *fin) :
-    formatter(f), on_finish(fin), header(nullptr) {}
+  C_MDS_EnqueueScrub(std::string_view tag, Formatter *f, Context *fin) :
+    tag(tag), formatter(f), on_finish(fin), header(nullptr) {}
 
   Context *take_finisher() {
     Context *fin = on_finish;
@@ -12324,10 +12325,21 @@ public:
   }
 
   void finish(int r) override {
-    if (r < 0) { // we failed the lookup or something; dump ourselves
+    if (r == 0) {
+      // since recursive scrub is asynchronous, dump minimal output
+      // to not upset cli tools.
+      if (header && header->get_recursive()) {
+        formatter->open_object_section("results");
+        formatter->dump_int("return_code", 0);
+        formatter->dump_string("scrub_tag", tag);
+        formatter->dump_string("mode", "asynchronous");
+        formatter->close_section(); // results
+      }
+    } else { // we failed the lookup or something; dump ourselves
       formatter->open_object_section("results");
       formatter->dump_int("return_code", r);
       formatter->close_section(); // results
+      r = 0; // already dumped in formatter
     }
     if (on_finish)
       on_finish->complete(r);
@@ -12350,19 +12362,21 @@ void MDCache::enqueue_scrub(
     mdr->set_filepath(path);
   }
 
-  C_MDS_EnqueueScrub *cs = new C_MDS_EnqueueScrub(f, fin);
+  bool is_internal = false;
+  std::string tag_str(tag);
+  if (tag_str.empty()) {
+    uuid_d uuid_gen;
+    uuid_gen.generate_random();
+    tag_str = uuid_gen.to_string();
+    is_internal = true;
+  }
+
+  C_MDS_EnqueueScrub *cs = new C_MDS_EnqueueScrub(tag_str, f, fin);
   cs->header = std::make_shared<ScrubHeader>(
-      tag, force, recursive, repair, f);
+    tag_str, is_internal, force, recursive, repair, f);
 
   mdr->internal_op_finish = cs;
   enqueue_scrub_work(mdr);
-
-  // since recursive scrub is asynchronous, dump minimal output
-  // to not upset cli tools.
-  if (recursive) {
-    f->open_object_section("results");
-    f->close_section(); // results
-  }
 }
 
 void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
@@ -12383,7 +12397,7 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
   ScrubHeaderRef header = cs->header;
 
   // Cannot scrub same dentry twice at same time
-  if (in->scrub_infop && in->scrub_infop->scrub_in_progress) {
+  if (in->scrub_is_in_progress()) {
     mds->server->respond_to_request(mdr, -EBUSY);
     return;
   } else {

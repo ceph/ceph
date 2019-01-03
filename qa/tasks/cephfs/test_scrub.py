@@ -103,7 +103,7 @@ class DupInodeWorkload(Workload):
         self._filesystem.wait_for_daemons()
 
     def validate(self):
-        out_json = self._filesystem.mds_asok(["scrub_path", "/", "recursive", "repair"])
+        out_json = self._filesystem.rank_tell(["scrub", "start", "/", "recursive", "repair"])
         self.assertNotEqual(out_json, None)
         self.assertTrue(self._filesystem.are_daemons_healthy())
         return self._errors
@@ -129,7 +129,7 @@ class TestScrub(CephFSTestCase):
         # Apply any data damage the workload wants
         workload.damage()
 
-        out_json = self.fs.mds_asok(["scrub_path", "/", "recursive", "repair"])
+        out_json = self.fs.rank_tell(["scrub", "start", "/", "recursive", "repair"])
         self.assertNotEqual(out_json, None)
 
         # See that the files are present and correct

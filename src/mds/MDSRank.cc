@@ -2453,7 +2453,10 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
     vector<string> scrubop_vec;
     cmd_getval(g_ceph_context, cmdmap, "scrubops", scrubop_vec);
     cmd_getval(g_ceph_context, cmdmap, "path", path);
-    command_scrub_path(f, path, scrubop_vec);
+
+    C_SaferCond cond;
+    command_scrub_start(f, path, "", scrubop_vec, &cond);
+    cond.wait();
   } else if (command == "tag path") {
     string path;
     cmd_getval(g_ceph_context, cmdmap, "path", path);
@@ -2578,6 +2581,91 @@ public:
   }
 };
 
+class C_ExecAndReply : public C_MDS_Send_Command_Reply {
+public:
+  C_ExecAndReply(MDSRank *mds, const MCommand::const_ref &m)
+    : C_MDS_Send_Command_Reply(mds, m), f(true) {
+  }
+
+  void finish(int r) override {
+    std::stringstream ds;
+    std::stringstream ss;
+    if (r != 0) {
+      f.flush(ss);
+    } else {
+      f.flush(ds);
+    }
+
+    send(r, ss.str(), ds);
+  }
+
+  virtual void exec() = 0;
+
+protected:
+  JSONFormatter f;
+};
+
+class C_CacheDropExecAndReply : public C_ExecAndReply {
+public:
+  C_CacheDropExecAndReply(MDSRank *mds, const MCommand::const_ref &m,
+                          uint64_t timeout)
+    : C_ExecAndReply(mds, m), timeout(timeout) {
+  }
+
+  void exec() override {
+    mds->command_cache_drop(timeout, &f, this);
+  }
+
+private:
+  uint64_t timeout;
+};
+
+class C_ScrubExecAndReply : public C_ExecAndReply {
+public:
+  C_ScrubExecAndReply(MDSRank *mds, const MCommand::const_ref &m,
+                      const std::string &path, const std::string &tag,
+                      const std::vector<std::string> &scrubop)
+    : C_ExecAndReply(mds, m), path(path), tag(tag), scrubop(scrubop) {
+  }
+
+  void exec() override {
+    mds->command_scrub_start(&f, path, tag, scrubop, this);
+  }
+
+private:
+  std::string path;
+  std::string tag;
+  std::vector<std::string> scrubop;
+};
+
+class C_ScrubControlExecAndReply : public C_ExecAndReply {
+public:
+  C_ScrubControlExecAndReply(MDSRank *mds, const MCommand::const_ref &m,
+                             const std::string &command)
+    : C_ExecAndReply(mds, m), command(command) {
+  }
+
+  void exec() override {
+    if (command == "abort") {
+      mds->command_scrub_abort(&f, this);
+    } else if (command == "pause") {
+      mds->command_scrub_pause(&f, this);
+    } else {
+      ceph_abort();
+    }
+  }
+
+  void finish(int r) override {
+    f.open_object_section("result");
+    f.dump_int("return_code", r);
+    f.close_section();
+    C_ExecAndReply::finish(r);
+  }
+
+private:
+  std::string command;
+};
+
 /**
  * This function drops the mds_lock, so don't do anything with
  * MDSRank after calling it (we could have gone into shutdown): just
@@ -2663,25 +2751,24 @@ void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f)
   f->close_section(); //sessions
 }
 
-void MDSRank::command_scrub_path(Formatter *f, std::string_view path, vector<string>& scrubop_vec)
+void MDSRank::command_scrub_start(Formatter *f,
+                                  std::string_view path, std::string_view tag,
+                                  const vector<string>& scrubop_vec, Context *on_finish)
 {
   bool force = false;
   bool recursive = false;
   bool repair = false;
-  for (vector<string>::iterator i = scrubop_vec.begin() ; i != scrubop_vec.end(); ++i) {
-    if (*i == "force")
+  for (auto &op : scrubop_vec) {
+    if (op == "force")
       force = true;
-    else if (*i == "recursive")
+    else if (op == "recursive")
       recursive = true;
-    else if (*i == "repair")
+    else if (op == "repair")
       repair = true;
   }
-  C_SaferCond scond;
-  {
-    std::lock_guard l(mds_lock);
-    mdcache->enqueue_scrub(path, "", force, recursive, repair, f, &scond);
-  }
-  scond.wait();
+
+  std::lock_guard l(mds_lock);
+  mdcache->enqueue_scrub(path, tag, force, recursive, repair, f, on_finish);
   // scrub_dentry() finishers will dump the data for us; we're done!
 }
 
@@ -2694,6 +2781,28 @@ void MDSRank::command_tag_path(Formatter *f,
     mdcache->enqueue_scrub(path, tag, true, true, false, f, &scond);
   }
   scond.wait();
+}
+
+void MDSRank::command_scrub_abort(Formatter *f, Context *on_finish) {
+  std::lock_guard l(mds_lock);
+  scrubstack->scrub_abort(on_finish);
+}
+
+void MDSRank::command_scrub_pause(Formatter *f, Context *on_finish) {
+  std::lock_guard l(mds_lock);
+  scrubstack->scrub_pause(on_finish);
+}
+
+void MDSRank::command_scrub_resume(Formatter *f) {
+  int r = scrubstack->scrub_resume();
+
+  f->open_object_section("result");
+  f->dump_int("return_code", r);
+  f->close_section();
+}
+
+void MDSRank::command_scrub_status(Formatter *f) {
+  scrubstack->scrub_status(f);
 }
 
 void MDSRank::command_flush_path(Formatter *f, std::string_view path)
@@ -3309,6 +3418,12 @@ void MDSRank::bcast_mds_map()
   last_client_mdsmap_bcast = mdsmap->get_epoch();
 }
 
+Context *MDSRank::create_async_exec_context(C_ExecAndReply *ctx) {
+  return new C_OnFinisher(new FunctionContext([ctx](int _) {
+        ctx->exec();
+      }), finisher);
+}
+
 MDSRankDispatcher::MDSRankDispatcher(
     mds_rank_t whoami_,
     Mutex &mds_lock_,
@@ -3391,38 +3506,45 @@ bool MDSRankDispatcher::handle_command(
       timeout = 0;
     }
 
-    JSONFormatter *f = new JSONFormatter(true);
-    C_MDS_Send_Command_Reply *reply = new C_MDS_Send_Command_Reply(this, m);
-    Context *on_finish = new FunctionContext([this, f, reply](int r) {
-        cache_drop_send_reply(f, reply, r);
-        delete f;
-        delete reply;
-      });
+    *need_reply = false;
+    *run_later = create_async_exec_context(new C_CacheDropExecAndReply
+                                           (this, m, (uint64_t)timeout));
+    return true;
+  } else if (prefix == "scrub start") {
+    string path;
+    string tag;
+    vector<string> scrubop_vec;
+    cmd_getval(g_ceph_context, cmdmap, "scrubops", scrubop_vec);
+    cmd_getval(g_ceph_context, cmdmap, "path", path);
+    cmd_getval(g_ceph_context, cmdmap, "tag", tag);
 
     *need_reply = false;
-    *run_later = new C_OnFinisher(
-      new FunctionContext([this, timeout, f, on_finish](int _) {
-          command_cache_drop((uint64_t)timeout, f, on_finish);
-        }), finisher);
-
+    *run_later = create_async_exec_context(new C_ScrubExecAndReply
+                                           (this, m, path, tag, scrubop_vec));
+    return true;
+  } else if (prefix == "scrub abort") {
+    *need_reply = false;
+    *run_later = create_async_exec_context(new C_ScrubControlExecAndReply
+                                           (this, m, "abort"));
+    return true;
+  } else if (prefix == "scrub pause") {
+    *need_reply = false;
+    *run_later = create_async_exec_context(new C_ScrubControlExecAndReply
+                                           (this, m, "pause"));
+    return true;
+  } else if (prefix == "scrub resume") {
+    JSONFormatter f(true);
+    command_scrub_resume(&f);
+    f.flush(*ds);
+    return true;
+  } else if (prefix == "scrub status") {
+    JSONFormatter f(true);
+    command_scrub_status(&f);
+    f.flush(*ds);
     return true;
   } else {
     return false;
   }
-}
-
-void MDSRank::cache_drop_send_reply(Formatter *f, C_MDS_Send_Command_Reply *reply, int r) {
-  dout(20) << __func__ << ": r=" << r << dendl;
-
-  std::stringstream ds;
-  std::stringstream ss;
-  if (r != 0) {
-    f->flush(ss);
-  } else {
-    f->flush(ds);
-  }
-
-  reply->send(r, ss.str(), ds);
 }
 
 void MDSRank::command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish) {
