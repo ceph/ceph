@@ -466,6 +466,9 @@ def remove_vg(vg_name):
     """
     Removes a volume group.
     """
+    if not vg_name:
+        logger.warning('Skipping removal of invalid VG name: "%s"', vg_name)
+        return
     fail_msg = "Unable to remove vg %s" % vg_name
     process.run(
         [
