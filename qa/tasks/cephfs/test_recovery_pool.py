@@ -149,7 +149,7 @@ class TestRecoveryPool(CephFSTestCase):
         if False:
             with self.assertRaises(CommandFailedError):
                 # Normal reset should fail when no objects are present, we'll use --force instead
-                self.fs.journal_tool(["journal", "reset"])
+                self.fs.journal_tool(["journal", "reset"], 0)
 
         self.fs.mds_stop()
         self.fs.data_scan(['scan_extents', '--alternate-pool',
@@ -159,22 +159,18 @@ class TestRecoveryPool(CephFSTestCase):
                            recovery_pool, '--filesystem', self.fs.name,
                            '--force-corrupt', '--force-init',
                            self.fs.get_data_pool_name()])
-        self.fs.journal_tool(['--rank=' + self.fs.name + ":0", 'event',
-                              'recover_dentries', 'list',
-                              '--alternate-pool', recovery_pool])
+        self.fs.journal_tool(['event', 'recover_dentries', 'list',
+                              '--alternate-pool', recovery_pool], 0)
 
         self.fs.data_scan(['init', '--force-init', '--filesystem',
                            self.fs.name])
         self.fs.data_scan(['scan_inodes', '--filesystem', self.fs.name,
                            '--force-corrupt', '--force-init',
                            self.fs.get_data_pool_name()])
-        self.fs.journal_tool(['--rank=' + self.fs.name + ":0", 'event',
-                              'recover_dentries', 'list'])
+        self.fs.journal_tool(['event', 'recover_dentries', 'list'], 0)
 
-        self.fs.journal_tool(['--rank=' + recovery_fs + ":0", 'journal',
-                              'reset', '--force'])
-        self.fs.journal_tool(['--rank=' + self.fs.name + ":0", 'journal',
-                              'reset', '--force'])
+        self.recovery_fs.journal_tool(['journal', 'reset', '--force'], 0)
+        self.fs.journal_tool(['journal', 'reset', '--force'], 0)
         self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired',
                                             recovery_fs + ":0")
 
