@@ -278,6 +278,7 @@ Package: ceph-fuse
 Architecture: linux-any
 Depends: ${misc:Depends},
          ${shlibs:Depends},
+         ${python3:Depends},
          fuse,
 Description: FUSE-based client for the Ceph distributed file system
  Ceph is a massively scalable, open-source, distributed
