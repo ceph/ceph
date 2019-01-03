@@ -26,6 +26,7 @@
 
 // For ::config_prefix
 #include "PyModule.h"
+#include "PyModuleRegistry.h"
 
 #include "ActivePyModules.h"
 #include "DaemonServer.h"
@@ -40,11 +41,12 @@ ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
           DaemonStateIndex &ds, ClusterState &cs,
           MonClient &mc, LogChannelRef clog_,
           LogChannelRef audit_clog_, Objecter &objecter_,
-          Client &client_, Finisher &f, DaemonServer &server)
+          Client &client_, Finisher &f, DaemonServer &server,
+          PyModuleRegistry &pmr)
   : module_config(module_config_), daemon_state(ds), cluster_state(cs),
     monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
     client(client_), finisher(f),
-    server(server), lock("ActivePyModules")
+    server(server), py_module_registry(pmr), lock("ActivePyModules")
 {
   store_cache = std::move(store_data);
 }
@@ -517,6 +519,27 @@ bool ActivePyModules::get_config(const std::string &module_name,
   } else {
     return false;
   }
+}
+
+PyObject *ActivePyModules::get_typed_config(
+  const std::string &module_name,
+  const std::string &key) const
+{
+  if (!py_module_registry.module_exists(module_name)) {
+    derr << "Module '" << module_name << "' is not available" << dendl;
+    Py_RETURN_NONE;
+  }
+
+  std::string value;
+  bool found = get_config(module_name, key, &value);
+  if (found) {
+    PyModuleRef module = py_module_registry.get_module(module_name);
+    dout(10) << __func__ << " " << key << " found: " << value << dendl;
+    return module->get_typed_option_value(key, value);
+  }
+
+  dout(4) << __func__ << " " << key << " not found " << dendl;
+  Py_RETURN_NONE;
 }
 
 PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
