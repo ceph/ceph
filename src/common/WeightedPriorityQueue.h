@@ -67,8 +67,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
         K key;		// klass
         ListPairs lp;
         Klass(K& k) :
-          key(k)
-          {}
+          key(k) {
+        }
+        ~Klass() {
+          lp.clear_and_dispose(DelItem<ListPair>());
+        }
       friend bool operator< (const Klass &a, const Klass &b)
         { return a.key < b.key; }
       friend bool operator> (const Klass &a, const Klass &b)
@@ -129,8 +132,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	Kit next;
 	SubQueue(unsigned& p) :
 	  key(p),
-	  next(klasses.begin())
-	  {}
+	  next(klasses.begin()) {
+	}
+	~SubQueue() {
+	  klasses.clear_and_dispose(DelItem<Klass>());
+	}
       friend bool operator< (const SubQueue &a, const SubQueue &b)
         { return a.key < b.key; }
       friend bool operator> (const SubQueue &a, const SubQueue &b)
@@ -195,8 +201,11 @@ class WeightedPriorityQueue :  public OpQueue <T, K>
 	Queue() :
 	  total_prio(0),
 	  max_cost(0),
-	  size(0)
-	  {}
+	  size(0) {
+	}
+	~Queue() {
+	  queues.clear_and_dispose(DelItem<SubQueue>());
+	}
 	bool empty() const {
 	  return !size;
 	}
