@@ -289,7 +289,7 @@ static boost::optional<Policy> get_iam_policy_from_attr(CephContext* cct,
   }
 }
 
-static vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
+vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
                         RGWRados* store,
                         map<string, bufferlist>& attrs,
                         const string& tenant) {
@@ -571,12 +571,20 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
       return ret;
     }
   }
-
-  if (! s->user->user_id.empty()) {
+  // We don't need user policies in case of STS token returned by AssumeRole,
+  // hence the check for user type
+  if (! s->user->user_id.empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
     try {
       map<string, bufferlist> uattrs;
       if (ret = rgw_get_user_attrs_by_uid(store, s->user->user_id, uattrs); ! ret) {
-        s->iam_user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->user_id.tenant);
+        if (s->iam_user_policies.empty()) {
+          s->iam_user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->user_id.tenant);
+        } else {
+          // This scenario can happen when a STS token has a policy, then we need to append other user policies
+          // to the existing ones. (e.g. token returned by GetSessionToken)
+          auto user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->user_id.tenant);
+          s->iam_user_policies.insert(s->iam_user_policies.end(), user_policies.begin(), user_policies.end());
+        }
       } else {
         if (ret == -ENOENT)
           ret = 0;
@@ -910,7 +918,14 @@ int RGWPutObjTags::verify_permission()
     auto obj = rgw_obj(s->bucket, s->object);
     rgw_iam_add_existing_objtags(store, s, obj, iam_action);
   }
-
+  if (! s->iam_user_policies.empty()) {
+    for (auto& user_policy : s->iam_user_policies) {
+      if (user_policy.has_partial_conditional(S3_EXISTING_OBJTAG)) {
+        rgw_obj obj = rgw_obj(s->bucket, s->object);
+        rgw_iam_add_existing_objtags(store, s, obj, iam_action);
+      }
+    }
+  }
   if (!verify_object_permission(this, s,iam_action))
     return -EACCES;
   return 0;
@@ -1992,7 +2007,10 @@ int RGWGetObj::init_common()
 
 int RGWListBuckets::verify_permission()
 {
-  if (!verify_user_permission(this, s, ARN(), rgw::IAM::s3ListAllMyBuckets)) {
+  rgw::IAM::Partition partition = rgw::IAM::Partition::aws;
+  rgw::IAM::Service service = rgw::IAM::Service::s3;
+
+  if (!verify_user_permission(this, s, ARN(partition, service, "", s->user->user_id.tenant, "*"), rgw::IAM::s3ListAllMyBuckets)) {
     return -EACCES;
   }
 
@@ -2544,7 +2562,11 @@ int RGWCreateBucket::verify_permission()
     return -EACCES;
   }
 
-  if (!verify_user_permission(this, s, ARN(s->bucket), rgw::IAM::s3CreateBucket)) {
+  rgw_bucket bucket;
+  bucket.name = s->bucket_name;
+  bucket.tenant = s->bucket_tenant;
+  ARN arn = ARN(bucket);
+  if (!verify_user_permission(this, s, arn, rgw::IAM::s3CreateBucket)) {
     return -EACCES;
   }
 
@@ -3181,11 +3203,14 @@ int RGWPutObj::verify_permission()
           else if (usr_policy_res == Effect::Allow)
             break;
         }
-	auto e = policy->eval(s->env, *s->auth.identity,
+  rgw::IAM::Effect e = Effect::Pass;
+  if (policy) {
+	  e = policy->eval(s->env, *s->auth.identity,
 			      cs_object.instance.empty() ?
 			      rgw::IAM::s3GetObject :
 			      rgw::IAM::s3GetObjectVersion,
 			      rgw::IAM::ARN(obj));
+  }
 	if (e == Effect::Deny) {
 	  return -EACCES; 
 	} else if (usr_policy_res == Effect::Pass && e == Effect::Pass &&
@@ -3233,15 +3258,18 @@ int RGWPutObj::verify_permission()
     }
 
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                            *s->auth.identity,
+                                            boost::none,
                                             rgw::IAM::s3PutObject,
                                             rgw_obj(s->bucket, s->object));
     if (usr_policy_res == Effect::Deny)
       return -EACCES;
 
-    auto e = s->iam_policy->eval(s->env, *s->auth.identity,
-				 rgw::IAM::s3PutObject,
-				 rgw_obj(s->bucket, s->object));
+    rgw::IAM::Effect e = Effect::Pass;
+    if (s->iam_policy) {
+      e = s->iam_policy->eval(s->env, *s->auth.identity,
+          rgw::IAM::s3PutObject,
+          rgw_obj(s->bucket, s->object));
+    }
     if (e == Effect::Allow) {
       return 0;
     } else if (e == Effect::Deny) {
@@ -3742,16 +3770,20 @@ void RGWPostObj::execute()
 
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                            *s->auth.identity,
+                                            boost::none,
                                             rgw::IAM::s3PutObject,
                                             rgw_obj(s->bucket, s->object));
     if (usr_policy_res == Effect::Deny) {
       op_ret = -EACCES;
       return;
     }
-    auto e = s->iam_policy->eval(s->env, *s->auth.identity,
+
+    rgw::IAM::Effect e = Effect::Pass;
+    if (s->iam_policy) {
+      e = s->iam_policy->eval(s->env, *s->auth.identity,
 				 rgw::IAM::s3PutObject,
 				 rgw_obj(s->bucket, s->object));
+    }
     if (e == Effect::Deny) {
       op_ret = -EACCES;
       return;
@@ -4270,7 +4302,7 @@ int RGWDeleteObj::verify_permission()
 {
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                              *s->auth.identity,
+                                              boost::none,
                                               s->object.instance.empty() ?
                                               rgw::IAM::s3DeleteObject :
                                               rgw::IAM::s3DeleteObjectVersion,
@@ -4278,11 +4310,15 @@ int RGWDeleteObj::verify_permission()
     if (usr_policy_res == Effect::Deny) {
       return false;
     }
-    auto r = s->iam_policy->eval(s->env, *s->auth.identity,
+
+    rgw::IAM::Effect r = Effect::Pass;
+    if (s->iam_policy) {
+      r = s->iam_policy->eval(s->env, *s->auth.identity,
 				 s->object.instance.empty() ?
 				 rgw::IAM::s3DeleteObject :
 				 rgw::IAM::s3DeleteObjectVersion,
 				 ARN(s->bucket, s->object.name));
+    }
     if (r == Effect::Allow)
       return true;
     else if (r == Effect::Deny)
@@ -5210,15 +5246,19 @@ int RGWInitMultipart::verify_permission()
 {
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                              *s->auth.identity,
+                                              boost::none,
                                               rgw::IAM::s3PutObject,
                                               rgw_obj(s->bucket, s->object));
     if (usr_policy_res == Effect::Deny) {
       return -EACCES;
     }
-    auto e = s->iam_policy->eval(s->env, *s->auth.identity,
+
+    rgw::IAM::Effect e = Effect::Pass;
+    if (s->iam_policy) {
+      e = s->iam_policy->eval(s->env, *s->auth.identity,
 				 rgw::IAM::s3PutObject,
 				 rgw_obj(s->bucket, s->object));
+    }
     if (e == Effect::Allow) {
       return 0;
     } else if (e == Effect::Deny) {
@@ -5339,15 +5379,19 @@ int RGWCompleteMultipart::verify_permission()
 {
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                              *s->auth.identity,
+                                              boost::none,
                                               rgw::IAM::s3PutObject,
                                               rgw_obj(s->bucket, s->object));
     if (usr_policy_res == Effect::Deny) {
       return -EACCES;
     }
-    auto e = s->iam_policy->eval(s->env, *s->auth.identity,
+
+    rgw::IAM::Effect e = Effect::Pass;
+    if (s->iam_policy) {
+      e = s->iam_policy->eval(s->env, *s->auth.identity,
 				 rgw::IAM::s3PutObject,
 				 rgw_obj(s->bucket, s->object));
+    }
     if (e == Effect::Allow) {
       return 0;
     } else if (e == Effect::Deny) {
@@ -5668,16 +5712,19 @@ int RGWAbortMultipart::verify_permission()
 {
   if (s->iam_policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                              *s->auth.identity,
+                                              boost::none,
                                               rgw::IAM::s3AbortMultipartUpload,
                                               rgw_obj(s->bucket, s->object));
     if (usr_policy_res == Effect::Deny) {
       return -EACCES;
     }
 
-    auto e = s->iam_policy->eval(s->env, *s->auth.identity,
+    rgw::IAM::Effect e = Effect::Pass;
+    if (s->iam_policy) {
+      e = s->iam_policy->eval(s->env, *s->auth.identity,
 				 rgw::IAM::s3AbortMultipartUpload,
 				 rgw_obj(s->bucket, s->object));
+    }
     if (e == Effect::Allow) {
       return 0;
     } else if (e == Effect::Deny) {
@@ -5914,7 +5961,7 @@ void RGWDeleteMultiObj::execute()
     rgw_obj obj(bucket, *iter);
     if (s->iam_policy || ! s->iam_user_policies.empty()) {
       auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                              *s->auth.identity,
+                                              boost::none,
                                               iter->instance.empty() ?
                                               rgw::IAM::s3DeleteObject :
                                               rgw::IAM::s3DeleteObjectVersion,
@@ -5923,12 +5970,16 @@ void RGWDeleteMultiObj::execute()
         send_partial_response(*iter, false, "", -EACCES);
         continue;
       }
-      auto e = s->iam_policy->eval(s->env,
+
+      rgw::IAM::Effect e = Effect::Pass;
+      if (s->iam_policy) {
+        e = s->iam_policy->eval(s->env,
 				   *s->auth.identity,
 				   iter->instance.empty() ?
 				   rgw::IAM::s3DeleteObject :
 				   rgw::IAM::s3DeleteObjectVersion,
 				   obj);
+      }
       if ((e == Effect::Deny) ||
 	  (usr_policy_res == Effect::Pass && e == Effect::Pass && !acl_allowed)) {
 	send_partial_response(*iter, false, "", -EACCES);
@@ -6437,7 +6488,7 @@ bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
   bucket_owner = bacl.get_owner();
   if (policy || ! s->iam_user_policies.empty()) {
     auto usr_policy_res = eval_user_policies(s->iam_user_policies, s->env,
-                                              *s->auth.identity,
+                                              boost::none,
                                               rgw::IAM::s3PutObject, obj);
     if (usr_policy_res == Effect::Deny) {
       return false;

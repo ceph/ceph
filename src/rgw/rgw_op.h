@@ -1831,7 +1831,10 @@ extern int rgw_build_object_policies(RGWRados *store, struct req_state *s,
 				     bool prefetch_data);
 extern rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
 						       struct req_state* s);
-
+extern vector<rgw::IAM::Policy> get_iam_user_policy_from_attr(CephContext* cct,
+                        RGWRados* store,
+                        map<string, bufferlist>& attrs,
+                        const string& tenant);
 
 static inline int get_system_versioning_params(req_state *s,
 					      uint64_t *olh_epoch,

@@ -4361,7 +4361,7 @@ rgw::auth::s3::LocalEngine::authenticate(
     return result_t::deny(-ERR_SIGNATURE_NO_MATCH);
   }
 
-  auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser, boost::none, boost::none);
+  auto apl = apl_factory->create_apl_local(cct, s, user_info, k.subuser, boost::none);
   return result_t::grant(std::move(apl), completer_factory(k.key));
 }
 
@@ -4481,7 +4481,9 @@ rgw::auth::s3::STSEngine::authenticate(
 
   // Get all the authorization info
   RGWUserInfo user_info;
+  rgw_user user_id;
   vector<string> role_policies;
+  string role_name;
   if (! token.roleId.empty()) {
     RGWRole role(s->cct, store, token.roleId);
     if (role.get_by_id() < 0) {
@@ -4494,9 +4496,15 @@ rgw::auth::s3::STSEngine::authenticate(
         role_policies.push_back(std::move(perm_policy));
       }
     }
-    role_policies.push_back(std::move(token.policy));
+    if (! token.policy.empty()) {
+      role_policies.push_back(std::move(token.policy));
+    }
+    // This is mostly needed to assign the owner of a bucket during its creation
+    user_id = token.user;
+    role_name = role.get_name();
   }
-  if (! token.user.empty()) {
+
+  if (! token.user.empty() && token.acct_type != TYPE_ROLE) {
     // get user info
     int ret = rgw_get_user_info_by_uid(store, token.user, user_info, NULL);
     if (ret < 0) {
@@ -4509,9 +4517,12 @@ rgw::auth::s3::STSEngine::authenticate(
     auto apl = remote_apl_factory->create_apl_remote(cct, s, get_acl_strategy(),
                                             get_creds_info(token));
     return result_t::grant(std::move(apl), completer_factory(boost::none));
-  } else {
+  } else if (token.acct_type == TYPE_ROLE) {
+    auto apl = role_apl_factory->create_apl_role(cct, s, role_name, user_id, role_policies);
+    return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
+  } else { // This is for all local users of type TYPE_RGW or TYPE_NONE
     string subuser;
-    auto apl = local_apl_factory->create_apl_local(cct, s, user_info, subuser, role_policies, token.perm_mask);
+    auto apl = local_apl_factory->create_apl_local(cct, s, user_info, subuser, token.perm_mask);
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
   }
 }

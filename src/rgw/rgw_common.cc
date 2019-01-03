@@ -1130,18 +1130,16 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
     return false;
   }
 
+  if (usr_policy_res == Effect::Allow) {
+    return true;
+  }
+
   if (op == rgw::IAM::s3CreateBucket || op == rgw::IAM::s3ListAllMyBuckets) {
     auto perm = op_to_perm(op);
 
     return verify_user_permission_no_policy(dpp, s, user_acl, perm);
   }
 
-  if (usr_policy_res == Effect::Pass) {
-    return false;
-  }
-  else if (usr_policy_res == Effect::Allow) {
-    return true;
-  }
   return false;
 }
 
@@ -1149,6 +1147,9 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp, struct req_
                             RGWAccessControlPolicy * const user_acl,
                             const int perm)
 {
+  if (s->auth.identity->get_identity_type() == TYPE_ROLE)
+    return false;
+
   /* S3 doesn't support account ACLs. */
   if (!user_acl)
     return true;
