@@ -2179,6 +2179,7 @@ void PGMap::dump_filtered_pg_stats(Formatter *f, set<pg_t>& pgs) const
 void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
 {
   TextTable tab;
+  utime_t now = ceph_clock_now();
 
   tab.define_column("PG", TextTable::LEFT, TextTable::LEFT);
   tab.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
@@ -2188,7 +2189,7 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
   tab.define_column("BYTES", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("STATE", TextTable::LEFT, TextTable::RIGHT);
-  tab.define_column("STATE_STAMP", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("SINCE", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("VERSION", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("REPORTED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("UP", TextTable::LEFT, TextTable::RIGHT);
@@ -2213,7 +2214,7 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
         << st.stats.sum.num_bytes
         << st.log_size
         << pg_state_string(st.state)
-        << st.last_change
+        << utimespan_str(now - st.last_change)
         << st.version
         << reported.str()
         << upstr.str()
