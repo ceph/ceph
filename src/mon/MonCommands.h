@@ -497,6 +497,9 @@ COMMAND("osd count-metadata name=property,type=CephString",
 COMMAND("osd versions", \
 	"check running versions of OSDs",
 	"osd", "r")
+COMMAND("osd numa-status",
+	"show NUMA status of OSDs",
+	"osd", "r")
 COMMAND("osd map " \
 	"name=pool,type=CephPoolname " \
 	"name=object,type=CephObjectname " \
