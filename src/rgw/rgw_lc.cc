@@ -886,21 +886,7 @@ void LCOpRule::build()
 
 int LCOpRule::process(rgw_bucket_dir_entry& o)
 {
-  bool cont = false;
-
   lc_op_ctx ctx(env, o);
-
-  for (auto& f : filters) {
-    if (f->check(ctx)) {
-      cont = true;
-      break;
-    }
-  }
-
-  if (!cont) {
-    ldout(env.store->ctx(), 20) << __func__ << "(): key=" << o.key << ": no rule match, skipping" << dendl;
-    return 0;
-  }
 
   unique_ptr<LCOpAction> *selected = nullptr;
   real_time exp;
@@ -918,6 +904,29 @@ int LCOpRule::process(rgw_bucket_dir_entry& o)
 
   if (selected &&
       (*selected)->should_process()) {
+
+    /*
+     * Calling filter checks after action checks because
+     * all action checks (as they are implemented now) do
+     * not access the objects themselves, but return result
+     * from info from bucket index listing. The current tags filter
+     * check does access the objects, so we avoid unnecessary rados calls
+     * having filters check later in the process.
+     */
+
+    bool cont = false;
+    for (auto& f : filters) {
+      if (f->check(ctx)) {
+        cont = true;
+        break;
+      }
+    }
+
+    if (!cont) {
+      ldout(env.store->ctx(), 20) << __func__ << "(): key=" << o.key << ": no rule match, skipping" << dendl;
+      return 0;
+    }
+
     int r = (*selected)->process(ctx);
     if (r < 0) {
       ldout(ctx.cct, 0) << "ERROR: remove_expired_obj " << dendl;
