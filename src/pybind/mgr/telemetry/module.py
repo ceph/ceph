@@ -34,6 +34,7 @@ class Module(MgrModule):
     MODULE_OPTIONS = [
         {
             'name': 'url',
+            'type': 'str',
             'default': 'https://telemetry.ceph.com/report'
         },
         {
@@ -48,18 +49,22 @@ class Module(MgrModule):
         },
         {
             'name': 'description',
+            'type': 'str',
             'default': None
         },
         {
             'name': 'contact',
+            'type': 'str',
             'default': None
         },
         {
             'name': 'organization',
+            'type': 'str',
             'default': None
         },
         {
             'name': 'proxy',
+            'type': 'str',
             'default': None
         },
         {
@@ -131,7 +136,7 @@ class Module(MgrModule):
 
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():
-            raise RuntimeError('{0} is a unknown configuration '
+            raise RuntimeError('{} is a unknown configuration '
                                'option'.format(option))
 
         if option == 'interval':
@@ -149,13 +154,13 @@ class Module(MgrModule):
 
         if option == 'contact':
             if value and not self.is_valid_email(value):
-                raise RuntimeError('%s is not a valid e-mail address as a '
-                                   'contact', value)
+                raise RuntimeError('{} is not a valid e-mail address as a '
+                                   'contact'.format(value))
 
         if option in ['description', 'organization']:
             if value and len(value) > 256:
-                raise RuntimeError('%s should be limited to 256 '
-                                   'characters', option)
+                raise RuntimeError('{} should be limited to 256 '
+                                   'characters'.format(option))
 
         self.config[option] = value
         return True
