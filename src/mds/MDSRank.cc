@@ -3072,9 +3072,9 @@ bool MDSRank::command_dirfrag_ls(
     f->open_object_section("frag");
     f->dump_int("value", leaf.value());
     f->dump_int("bits", leaf.bits());
-    CachedStackStringStream ss;
-    ss.get_stream() << std::hex << leaf.value() << "/" << std::dec << leaf.bits();
-    f->dump_string("str", ss.strv());
+    CachedStackStringStream css;
+    *css << std::hex << leaf.value() << "/" << std::dec << leaf.bits();
+    f->dump_string("str", css->strv());
     f->close_section();
   }
   f->close_section();
@@ -3323,12 +3323,11 @@ bool MDSRank::evict_client(int64_t session_id,
 
   auto& addr = session->info.inst.addr;
   {
-    CachedStackStringStream _ss;
-    auto& ss = _ss.get_stream();
-    ss << "Evicting " << (blacklist ? "(and blacklisting) " : "")
-       << "client session " << session_id << " (" << addr << ")";
-    dout(1) << ss.strv() << dendl;
-    clog->info() << ss.strv();
+    CachedStackStringStream css;
+    *css << "Evicting " << (blacklist ? "(and blacklisting) " : "")
+         << "client session " << session_id << " (" << addr << ")";
+    dout(1) << css->strv() << dendl;
+    clog->info() << css->strv();
   }
 
   dout(4) << "Preparing blacklist command... (wait=" << wait << ")" << dendl;
