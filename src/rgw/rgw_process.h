@@ -200,7 +200,7 @@ extern int process_request(RGWRados* store,
                            const rgw_auth_registry_t& auth_registry,
                            RGWRestfulIO* client_io,
                            OpsLogSocket* olog,
-                           optional_yield_context y,
+                           optional_yield y,
                            rgw::dmclock::Scheduler *scheduler,
                            int* http_ret = nullptr);
 

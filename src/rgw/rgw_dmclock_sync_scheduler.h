@@ -53,7 +53,7 @@ public:
 private:
   int schedule_request_impl(const client_id& client, const ReqParams& params,
 			    const Time& time, const Cost& cost,
-			    optional_yield_context _y [[maybe_unused]]) override
+			    optional_yield _y [[maybe_unused]]) override
   {
     return add_request(client, params, time, cost);
   }

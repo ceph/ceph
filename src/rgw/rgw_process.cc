@@ -147,7 +147,7 @@ int process_request(RGWRados* const store,
                     const rgw_auth_registry_t& auth_registry,
                     RGWRestfulIO* const client_io,
                     OpsLogSocket* const olog,
-                    optional_yield_context yield,
+                    optional_yield yield,
 		    rgw::dmclock::Scheduler *scheduler,
                     int* http_ret)
 {
