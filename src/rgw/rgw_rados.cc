@@ -118,7 +118,6 @@ static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZonePa
     }
 
     if (!obj.in_extra_data) {
-#warning zonegroup default placement backward compatibility json decode/encode
       *pool = placement.get_data_pool(zonegroup.default_placement.storage_class);
     } else {
       *pool = placement.get_data_extra_pool();
