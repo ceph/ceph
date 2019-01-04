@@ -3509,7 +3509,6 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
 static CompressorRef get_compressor_plugin(const req_state *s,
                                            const std::string& compression_type)
 {
-#warning FIXME different compression types per placement rule + storage_class
   if (compression_type != "random") {
     return Compressor::create(s->cct, compression_type);
   }
@@ -3625,6 +3624,8 @@ void RGWPutObj::execute()
                                                sizeof(AtomicObjectProcessor));
   ceph::static_ptr<ObjectProcessor, max_processor_size> processor;
 
+  rgw_placement_rule *pdest_placement;
+
   if (multipart) {
     RGWMPObj mp(s->object.name, multipart_upload_id);
 
@@ -3638,9 +3639,10 @@ void RGWPutObj::execute()
       }
       return;
     }
+    pdest_placement = &upload_info.dest_placement;
     ldpp_dout(this, 20) << "dest_placement for part=" << upload_info.dest_placement << dendl;
     processor.emplace<MultipartObjectProcessor>(
-        &aio, store, s->bucket_info, &upload_info.dest_placement,
+        &aio, store, s->bucket_info, pdest_placement,
         s->owner.get_id(), obj_ctx, obj,
         multipart_upload_id, multipart_part_num, multipart_part_str);
   } else {
@@ -3652,8 +3654,9 @@ void RGWPutObj::execute()
         version_id = obj.key.instance;
       }
     }
+    pdest_placement = &s->dest_placement;
     processor.emplace<AtomicObjectProcessor>(
-        &aio, store, s->bucket_info, &s->dest_placement,
+        &aio, store, s->bucket_info, pdest_placement,
         s->bucket_owner.get_id(), obj_ctx, obj, olh_epoch, s->req_id);
   }
 
@@ -3689,8 +3692,7 @@ void RGWPutObj::execute()
   // no filters by default
   DataProcessor *filter = processor.get();
 
-  const auto& compression_type = store->svc.zone->get_zone_params().get_compression_type(
-      s->bucket_info.placement_rule);
+  const auto& compression_type = store->svc.zone->get_zone_params().get_compression_type(*pdest_placement);
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
 
@@ -4000,7 +4002,7 @@ void RGWPostObj::execute()
       filter = encrypt.get();
     } else {
       const auto& compression_type = store->svc.zone->get_zone_params().get_compression_type(
-          s->bucket_info.placement_rule);
+          s->dest_placement);
       if (compression_type != "none") {
         plugin = Compressor::create(s->cct, compression_type);
         if (!plugin) {
@@ -6675,6 +6677,9 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
     store->gen_rand_obj_instance_name(&obj);
   }
 
+  rgw_placement_rule dest_placement = s->dest_placement;
+  dest_placement.inherit_from(binfo.placement_rule);
+
   rgw::AioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
 
   using namespace rgw::putobj;
@@ -6692,7 +6697,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   DataProcessor *filter = &processor;
 
   const auto& compression_type = store->svc.zone->get_zone_params().get_compression_type(
-      binfo.placement_rule);
+      dest_placement);
   CompressorRef plugin;
   boost::optional<RGWPutObj_Compress> compressor;
   if (compression_type != "none") {
