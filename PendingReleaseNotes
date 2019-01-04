@@ -132,3 +132,15 @@
   a clean upgrade path is added to the pg log hard limit patches.
 
   See also: http://tracker.ceph.com/issues/36686
+
+12.2.11
+-------
+
+* The default memory utilization for the mons has been increased
+  somewhat.  Rocksdb now uses 512 MB of RAM by default, which should
+  be sufficient for small to medium-sized clusters; large clusters
+  should tune this up.  Also, the ``mon_osd_cache_size`` has been
+  increase from 10 OSDMaps to 500, which will translate to an
+  additional 500 MB to 1 GB of RAM for large clusters, and much less
+  for small clusters.
+
