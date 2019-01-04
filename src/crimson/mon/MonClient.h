@@ -74,6 +74,12 @@ public:
   get_version_t get_version(const std::string& map);
   command_result_t run_command(const std::vector<std::string>& cmd,
 			       const bufferlist& bl);
+  seastar::future<> send_message(MessageRef);
+  bool sub_want(const std::string& what, version_t start, unsigned flags);
+  void sub_got(const std::string& what, version_t have);
+  void sub_unwant(const std::string& what);
+  bool sub_want_increment(const std::string& what, version_t start, unsigned flags);
+  seastar::future<> renew_subs();
 
 private:
   void tick();

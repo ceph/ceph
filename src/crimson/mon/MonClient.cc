@@ -10,6 +10,8 @@
 #include "auth/AuthMethodList.h"
 #include "auth/RotatingKeyRing.h"
 
+#include "common/hostname.h"
+
 #include "crimson/auth/KeyRing.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/common/log.h"
@@ -26,6 +28,7 @@
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonMap.h"
+#include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 
 namespace {
@@ -540,6 +543,49 @@ Client::run_command(const std::vector<std::string>& cmd,
   auto& req = mon_commands[tid];
   return active_con->get_conn()->send(m).then([&req] {
     return req.get_future();
+  });
+}
+
+seastar::future<> Client::send_message(MessageRef m)
+{
+  return active_con->get_conn()->send(m);
+}
+
+bool Client::sub_want(const std::string& what, version_t start, unsigned flags)
+{
+  return sub.want(what, start, flags);
+}
+
+void Client::sub_got(const std::string& what, version_t have)
+{
+  sub.got(what, have);
+}
+
+void Client::sub_unwant(const std::string& what)
+{
+  sub.unwant(what);
+}
+
+bool Client::sub_want_increment(const std::string& what,
+                                version_t start,
+                                unsigned flags)
+{
+  return sub.inc_want(what, start, flags);
+}
+
+seastar::future<> Client::renew_subs()
+{
+  if (!sub.have_new()) {
+    logger().warn("{} - empty", __func__);
+    return seastar::now();
+  }
+  logger().trace("{}", __func__);
+
+  auto m = make_message<MMonSubscribe>();
+  m->what = sub.get_subs();
+  m->hostname = ceph_get_short_hostname();
+  return active_con->get_conn()->send(m).then([this] {
+    sub.renewed();
   });
 }
 
