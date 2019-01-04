@@ -105,7 +105,7 @@ void GetLockerRequest<I>::handle_get_lockers(int r) {
 
   m_locker->entity = iter->first.locker;
   m_locker->cookie = iter->first.cookie;
-  m_locker->address = stringify(iter->second.addr);
+  m_locker->address = iter->second.addr.get_legacy_str();
   if (m_locker->cookie.empty() || m_locker->address.empty()) {
     ldout(m_cct, 20) << "no valid lockers detected" << dendl;
     finish(-ENOENT);
