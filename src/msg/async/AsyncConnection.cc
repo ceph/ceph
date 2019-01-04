@@ -213,7 +213,7 @@ ssize_t AsyncConnection::read_until(unsigned len, char *p)
 
   recv_end = recv_start = 0;
   /* nothing left in the prefetch buffer */
-  if (len > recv_max_prefetch) {
+  if (left > (uint64_t)recv_max_prefetch) {
     /* this was a large read, we don't prefetch for these */
     do {
       r = read_bulk(p+state_offset, left);
