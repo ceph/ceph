@@ -1711,7 +1711,8 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
 	auto p = pg_num_history.pg_nums.find(pgid.pgid.m_pool);
 	if (p != pg_num_history.pg_nums.end() &&
 	    !p->second.empty()) {
-	  unsigned pg_num = ms.osdmap.get_pg_num(pgid.pgid.pool());
+	  unsigned start_pg_num = ms.osdmap.get_pg_num(pgid.pgid.pool());
+	  unsigned pg_num = start_pg_num;
 	  for (auto q = p->second.lower_bound(ms.map_epoch);
 	       q != p->second.end();
 	       ++q) {
@@ -1734,7 +1735,8 @@ int ObjectStoreTool::do_import(ObjectStore *store, OSDSuperblock& sb,
 
 	    // check for split children
 	    set<spg_t> children;
-	    if (pgid.is_split(pg_num, new_pg_num, &children)) {
+	    if (pgid.is_split(start_pg_num, new_pg_num, &children)) {
+	      cerr << " children are " << children << std::endl;
 	      for (auto child : children) {
 		coll_t coll(child);
 		if (store->collection_exists(coll)) {
