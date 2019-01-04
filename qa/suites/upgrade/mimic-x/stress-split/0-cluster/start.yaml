@@ -3,6 +3,9 @@ meta:
    Run ceph on two nodes,
    with a separate client-only node.
    Use xfs beneath the osds.
+   #Note-To enable RHEL runs on ovh nodes, add the following to overrides
+   #ansible.cephlab:
+   # skip_tags: entitlements,packages,repos
 overrides:
   ceph:
     fs: xfs
@@ -15,9 +18,6 @@ overrides:
         enable experimental unrecoverable data corrupting features: "*"
       mon:
         mon warn on osd down out interval zero: false
-  #enable RHEL runs on ovh nodes
-  ansible.cephlab:
-    skip_tags: entitlements,packages,repos
 roles:
 - - mon.a
   - mon.b
