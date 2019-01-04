@@ -328,6 +328,7 @@ static bool obj_has_expired(CephContext *cct, ceph::real_time mtime, int days, c
   if (expire_time) {
     *expire_time = mtime + make_timespan(cmp);
   }
+  ldout(cct, 20) << __func__ << "(): mtime=" << mtime << " days=" << days << " base_time=" << base_time << " timediff=" << timediff << " cmp=" << cmp << dendl;
 
   return (timediff >= cmp);
 }
@@ -564,6 +565,21 @@ public:
     return false;
   };
 
+  /* called after check(). Check should tell us whether this action
+   * is applicable. If there are multiple actions, we'll end up executing
+   * the latest applicable action
+   * For example:
+   *   one action after 10 days, another after 20, third after 40.
+   *   After 10 days, the latest applicable action would be the first one,
+   *   after 20 days it will be the second one. After 21 days it will still be the
+   *   second one. So check() should return true for the second action at that point,
+   *   but should_process() if the action has already been applied. In object removal
+   *   it doesn't matter, but in object transition it does.
+   */
+  virtual bool should_process() {
+    return true;
+  }
+
   virtual int process(lc_op_ctx& oc) {
     return 0;
   }
@@ -701,7 +717,7 @@ public:
     }
 
     auto mtime = oc.ol.get_prev_obj().meta.mtime;
-    bool expiration = oc.op.noncur_expiration;
+    int expiration = oc.op.noncur_expiration;
     bool is_expired = obj_has_expired(oc.cct, mtime, expiration, exp_time);
 
     ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": is_expired=" << is_expired << dendl;
@@ -715,7 +731,7 @@ public:
       ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << dendl;
       return r;
     }
-    ldout(oc.cct, 2) << "DELETED:" << oc.bucket_info.bucket << ":" << o.key << dendl;
+    ldout(oc.cct, 2) << "DELETED:" << oc.bucket_info.bucket << ":" << o.key << " (non-current expiration)" << dendl;
     return 0;
   }
 };
@@ -746,13 +762,18 @@ public:
       ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << dendl;
       return r;
     }
-    ldout(oc.cct, 2) << "DELETED:" << oc.bucket_info.bucket << ":" << o.key << dendl;
+    ldout(oc.cct, 2) << "DELETED:" << oc.bucket_info.bucket << ":" << o.key << " (delete marker expiration)" << dendl;
     return 0;
   }
 };
 
 class LCOpAction_Transition : public LCOpAction {
   const transition_action& transition;
+  bool need_to_process{false};
+
+protected:
+  virtual bool check_current_state(bool is_current) = 0;
+  virtual ceph::real_time get_effective_mtime(lc_op_ctx& oc) = 0;
 public:
   LCOpAction_Transition(const transition_action& _transition) : transition(_transition) {}
 
@@ -763,16 +784,11 @@ public:
       return false;
     }
 
-    if (!o.is_current()) {
+    if (!check_current_state(o.is_current())) {
       return false;
     }
 
-    if (rgw_placement_rule::get_canonical_storage_class(o.meta.storage_class) == transition.storage_class) {
-      /* already at target storage class */
-      return false;
-    }
-
-    auto& mtime = o.meta.mtime;
+    auto mtime = get_effective_mtime(oc);
     bool is_expired;
     if (transition.days <= 0) {
       if (transition.date == boost::none) {
@@ -785,7 +801,15 @@ public:
       is_expired = obj_has_expired(oc.cct, mtime, transition.days, exp_time);
     }
 
+    ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": is_expired=" << is_expired << dendl;
+
+    need_to_process = (rgw_placement_rule::get_canonical_storage_class(o.meta.storage_class) != transition.storage_class);
+
     return is_expired;
+  }
+
+  bool should_process() override {
+    return need_to_process;
   }
 
   int process(lc_op_ctx& oc) {
@@ -804,6 +828,32 @@ public:
     ldout(oc.cct, 2) << "TRANSITIONED:" << oc.bucket_info.bucket << ":" << o.key << " -> " << transition.storage_class << dendl;
     return 0;
   }
+};
+
+class LCOpAction_CurrentTransition : public LCOpAction_Transition {
+protected:
+  bool check_current_state(bool is_current) override {
+    return is_current;
+  }
+
+  ceph::real_time get_effective_mtime(lc_op_ctx& oc) override {
+    return oc.o.meta.mtime;
+  }
+public:
+  LCOpAction_CurrentTransition(const transition_action& _transition) : LCOpAction_Transition(_transition) {}
+};
+
+class LCOpAction_NonCurrentTransition : public LCOpAction_Transition {
+protected:
+  bool check_current_state(bool is_current) override {
+    return !is_current;
+  }
+
+  ceph::real_time get_effective_mtime(lc_op_ctx& oc) override {
+    return oc.ol.get_prev_obj().meta.mtime;
+  }
+public:
+  LCOpAction_NonCurrentTransition(const transition_action& _transition) : LCOpAction_Transition(_transition) {}
 };
 
 void LCOpRule::build()
@@ -826,13 +876,12 @@ void LCOpRule::build()
   }
 
   for (auto& iter : op.transitions) {
-    actions.emplace_back(new LCOpAction_Transition(iter.second));
+    actions.emplace_back(new LCOpAction_CurrentTransition(iter.second));
   }
-#if 0
-  for (auto& t : op.noncur_transitions) {
-    actions.emplace_back(new LOpAction_Transition);
+
+  for (auto& iter : op.noncur_transitions) {
+    actions.emplace_back(new LCOpAction_NonCurrentTransition(iter.second));
   }
-#endif
 }
 
 int LCOpRule::process(rgw_bucket_dir_entry& o)
@@ -867,13 +916,14 @@ int LCOpRule::process(rgw_bucket_dir_entry& o)
     }
   }
 
-  if (selected) {
+  if (selected &&
+      (*selected)->should_process()) {
     int r = (*selected)->process(ctx);
     if (r < 0) {
       ldout(ctx.cct, 0) << "ERROR: remove_expired_obj " << dendl;
       return r;
     }
-    ldout(ctx.cct, 2) << "DELETED:" << env.bucket_info.bucket << ":" << o.key << dendl;
+    ldout(ctx.cct, 20) << "processed:" << env.bucket_info.bucket << ":" << o.key << dendl;
   }
 
   return 0;
