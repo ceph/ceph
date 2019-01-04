@@ -3433,8 +3433,12 @@ void BlueStore::MempoolThread::_tune_cache_size(bool interval_stats)
   uint64_t target = store->osd_memory_target;
   uint64_t base = store->osd_memory_base;
   double fragmentation = store->osd_memory_expected_fragmentation;
-  uint64_t cache_max = ((1.0 - fragmentation) * target) - base;
   uint64_t cache_min = store->osd_memory_cache_min;
+  uint64_t cache_max = cache_min;
+  uint64_t limited_target = (1.0 - fragmentation) * target;
+  if (limited_target > base + cache_min) {
+    cache_max = limited_target - base;
+  }
 
   size_t heap_size = 0;
   size_t unmapped = 0;
