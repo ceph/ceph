@@ -323,10 +323,8 @@ void get_raw_devices(const std::string& in,
     BlkDev d(in);
     std::string wholedisk;
     if (d.wholedisk(&wholedisk) == 0) {
-      std::cout << " wholedisk of " << in << " is " << wholedisk << std::endl;
       ls->insert(wholedisk);
     } else {
-      std::cout << " wholedisk of " << in << " failed" << std::endl;
       ls->insert(in);
     }
   }
