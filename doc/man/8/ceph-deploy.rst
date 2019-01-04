@@ -186,7 +186,7 @@ Subcommand ``add`` is used to add a monitor to an existing cluster. It first
 detects platform and distro for desired host and checks if hostname is compatible
 for deployment. It then uses the monitor keyring, ensures configuration for new
 monitor host and adds the monitor to the cluster. If the section for the monitor
-exists and defines a mon addr that will be used, otherwise it will fallback by
+exists and defines a monitor address that will be used, otherwise it will fallback by
 resolving the hostname to an IP. If :option:`--address` is used it will override
 all other options. After adding the monitor to the cluster, it gives it some time
 to start. It then looks for any monitor errors and checks monitor status. Monitor

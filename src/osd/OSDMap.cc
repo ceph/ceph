@@ -1195,21 +1195,31 @@ void OSDMap::set_epoch(epoch_t e)
     pool.second.last_change = e;
 }
 
-bool OSDMap::is_blacklisted(const entity_addr_t& a) const
+bool OSDMap::is_blacklisted(const entity_addr_t& orig) const
 {
-  if (blacklist.empty())
+  if (blacklist.empty()) {
     return false;
+  }
+
+  // all blacklist entries are type ANY for nautilus+
+  // FIXME: avoid this copy!
+  entity_addr_t a = orig;
+  if (require_osd_release < CEPH_RELEASE_NAUTILUS) {
+    a.set_type(entity_addr_t::TYPE_LEGACY);
+  } else {
+    a.set_type(entity_addr_t::TYPE_ANY);
+  }
 
   // this specific instance?
-  if (blacklist.count(a))
+  if (blacklist.count(a)) {
     return true;
+  }
 
   // is entire ip blacklisted?
   if (a.is_ip()) {
-    entity_addr_t b = a;
-    b.set_port(0);
-    b.set_nonce(0);
-    if (blacklist.count(b)) {
+    a.set_port(0);
+    a.set_nonce(0);
+    if (blacklist.count(a)) {
       return true;
     }
   }
@@ -1223,18 +1233,8 @@ bool OSDMap::is_blacklisted(const entity_addrvec_t& av) const
     return false;
 
   for (auto& a : av.v) {
-    // this specific instance?
-    if (blacklist.count(a))
+    if (is_blacklisted(a)) {
       return true;
-
-    // is entire ip blacklisted?
-    if (a.is_ip()) {
-      entity_addr_t b = a;
-      b.set_port(0);
-      b.set_nonce(0);
-      if (blacklist.count(b)) {
-	return true;
-      }
     }
   }
 
@@ -3230,12 +3230,17 @@ void OSDMap::dump(Formatter *f) const
       f->dump_float("weight", get_weightf(i));
       f->dump_float("primary_affinity", get_primary_affinityf(i));
       get_info(i).dump(f);
-      f->dump_stream("public_addr") << get_addrs(i).legacy_addr();
       f->dump_object("public_addrs", get_addrs(i));
-      f->dump_stream("cluster_addr") << get_cluster_addrs(i).legacy_addr();
       f->dump_object("cluster_addrs", get_cluster_addrs(i));
       f->dump_object("heartbeat_back_addrs", get_hb_back_addrs(i));
-      f->dump_object("heartbeat_front_addr", get_hb_front_addrs(i));
+      f->dump_object("heartbeat_front_addrs", get_hb_front_addrs(i));
+      // compat
+      f->dump_stream("public_addr") << get_addrs(i).get_legacy_str();
+      f->dump_stream("cluster_addr") << get_cluster_addrs(i).get_legacy_str();
+      f->dump_stream("heartbeat_back_addr")
+	<< get_hb_back_addrs(i).get_legacy_str();
+      f->dump_stream("heartbeat_front_addr")
+	<< get_hb_front_addrs(i).get_legacy_str();
 
       set<string> st;
       get_state(i, st);

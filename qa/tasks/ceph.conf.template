@@ -1,0 +1,91 @@
+[global]
+	chdir = ""
+	pid file = /var/run/ceph/$cluster-$name.pid
+        auth supported = cephx
+
+	filestore xattr use omap = true
+
+	mon clock drift allowed = 1.000
+
+	osd crush chooseleaf type = 0
+        auth debug = true
+
+	ms die on old message = true
+
+	mon pg warn min per osd = 1
+	mon pg warn max per osd = 10000   # <= luminous
+	mon max pg per osd = 10000        # >= luminous
+	mon pg warn max object skew = 0
+
+	osd pool default size = 2
+
+	mon osd allow primary affinity = true
+	mon osd allow pg remap = true
+	mon warn on legacy crush tunables = false
+	mon warn on crush straw calc version zero = false
+	mon warn on no sortbitwise = false
+	mon warn on osd down out interval zero = false
+
+        osd pool default erasure code profile = "plugin=jerasure technique=reed_sol_van k=2 m=1 ruleset-failure-domain=osd crush-failure-domain=osd"
+
+	osd default data pool replay window = 5
+
+	mon allow pool delete = true
+
+	mon cluster log file level = debug
+	debug asserts on shutdown = true
+
+[osd]
+        osd journal size = 100
+
+        osd scrub load threshold = 5.0
+	osd scrub max interval = 600
+
+	osd recover clone overlap = true
+	osd recovery max chunk = 1048576
+
+	osd debug shutdown = true
+        osd debug op order = true
+        osd debug verify stray on activate = true
+
+	osd open classes on start = true
+        osd debug pg log writeout = true
+
+	osd deep scrub update digest min age = 30
+
+	osd map max advance = 10
+
+        journal zero on create = true
+
+	filestore ondisk finisher threads = 3
+	filestore apply finisher threads = 3
+
+	bdev debug aio = true
+	osd debug misdirected ops = true
+
+[mgr]
+	debug ms = 1
+	debug mgr = 20
+	debug mon = 20
+	debug auth = 20
+	mon reweight min pgs per osd = 4
+	mon reweight min bytes per osd = 10
+
+[mon]
+	debug ms = 1
+	debug mon = 20
+	debug paxos = 20
+	debug auth = 20
+	mon data avail warn = 5
+	mon mgr mkfs grace = 240
+	mon reweight min pgs per osd = 4
+	mon osd reporter subtree level = osd
+	mon osd prime pg temp = true
+	mon reweight min bytes per osd = 10
+
+[client]
+	rgw cache enabled = true
+	rgw enable ops log = true
+	rgw enable usage log = true
+	log file = /var/log/ceph/$cluster-$name.$pid.log
+	admin socket = /var/run/ceph/$cluster-$name.$pid.asok

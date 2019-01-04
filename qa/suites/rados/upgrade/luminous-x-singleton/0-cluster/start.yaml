@@ -5,13 +5,17 @@ meta:
    Use xfs beneath the osds.
 overrides:
   ceph:
+    mon_bind_addrvec: false
+    mon_bind_msgr2: false
     fs: xfs
     conf:
       global:
         ms dump corrupt message level: 0
+      mds:
+        debug ms: 1
+        debug mds: 20
 roles:
 - - mon.a
-  - mon.b
   - mon.c
   - mgr.x
   - mgr.y
@@ -19,7 +23,8 @@ roles:
   - osd.0
   - osd.1
   - osd.2
-- - osd.3
+- - mon.b
+  - osd.3
   - osd.4
   - osd.5
 - - client.0

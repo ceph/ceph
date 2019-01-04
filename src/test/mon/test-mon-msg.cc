@@ -314,7 +314,7 @@ TEST_F(MonMsgTest, MRouteTest)
 TEST_F(MonMsgTest, MMonJoin)
 {
   Message *m = new MMonJoin(get_monmap()->fsid, string("client"),
-                            msg->get_myaddr());
+                            msg->get_myaddrs());
   send_wait_reply(m, MSG_MON_PAXOS, 10.0);
 
   int r = monc.get_monmap();

@@ -46,22 +46,28 @@ struct mon_info_t {
    */
   string name;
   /**
-   * monitor's public address
+   * monitor's public address(es)
    *
-   * public facing address, traditionally used to communicate with all clients
-   * and other monitors.
+   * public facing address(es), used to communicate with all clients
+   * and with other monitors.
    */
-  entity_addr_t public_addr;
+  entity_addrvec_t public_addrs;
   /**
    * the priority of the mon, the lower value the more preferred
    */
   uint16_t priority{0};
 
+  // <REMOVE ME>
   mon_info_t(const string& n, const entity_addr_t& p_addr, uint16_t p)
-    : name(n), public_addr(p_addr), priority(p)
+    : name(n), public_addrs(p_addr), priority(p)
   {}
-  mon_info_t(const string &n, const entity_addr_t& p_addr)
-    : name(n), public_addr(p_addr)
+  // </REMOVE ME>
+
+  mon_info_t(const string& n, const entity_addrvec_t& p_addrs, uint16_t p)
+    : name(n), public_addrs(p_addrs), priority(p)
+  {}
+  mon_info_t(const string &n, const entity_addrvec_t& p_addrs)
+    : name(n), public_addrs(p_addrs)
   { }
 
   mon_info_t() { }
@@ -125,13 +131,19 @@ class MonMap {
     return (persistent_features | optional_features);
   }
 
+  void _add_ambiguous_addr(const string& name,
+			   entity_addr_t addr,
+			   int priority);
+
 public:
   void calc_legacy_ranks();
   void calc_addr_mons() {
     // populate addr_mons
     addr_mons.clear();
     for (auto& p : mon_info) {
-      addr_mons[p.second.public_addr] = p.first;
+      for (auto& a : p.second.public_addrs.v) {
+	addr_mons[a] = p.first;
+      }
     }
   }
 
@@ -154,10 +166,10 @@ public:
    * @param ls list to populate with the monitors' addresses
    */
   void list_addrs(list<entity_addr_t>& ls) const {
-    for (map<string,mon_info_t>::const_iterator p = mon_info.begin();
-         p != mon_info.end();
-         ++p) {
-      ls.push_back(p->second.public_addr);
+    for (auto& i : mon_info) {
+      for (auto& j : i.second.public_addrs.v) {
+	ls.push_back(j);
+      }
     }
   }
 
@@ -168,7 +180,9 @@ public:
    */
   void add(const mon_info_t& m) {
     ceph_assert(mon_info.count(m.name) == 0);
-    ceph_assert(addr_mons.count(m.public_addr) == 0);
+    for (auto& a : m.public_addrs.v) {
+      ceph_assert(addr_mons.count(a) == 0);
+    }
     mon_info[m.name] = m;
     if (get_required_features().contains_all(
 	  ceph::features::mon::FEATURE_NAUTILUS)) {
@@ -186,8 +200,9 @@ public:
    * @param name Monitor name (i.e., 'foo' in 'mon.foo')
    * @param addr Monitor's public address
    */
-  void add(const string &name, const entity_addr_t &addr) {
-    add(mon_info_t(name, addr));
+  void add(const string &name, const entity_addrvec_t &addrv,
+	   int priority=0) {
+    add(mon_info_t(name, addrv, priority));
   }
 
   /**
@@ -260,11 +275,24 @@ public:
    *          false otherwise.
    */
   bool contains(const entity_addr_t &a) const {
-    for (map<string,mon_info_t>::const_iterator p = mon_info.begin();
-         p != mon_info.end();
-         ++p) {
-      if (p->second.public_addr == a)
-        return true;
+    for (auto& i : mon_info) {
+      for (auto& j : i.second.public_addrs.v) {
+	if (j == a) {
+	  return true;
+	}
+      }
+    }
+    return false;
+  }
+  bool contains(const entity_addrvec_t &av) const {
+    for (auto& i : mon_info) {
+      for (auto& j : i.second.public_addrs.v) {
+	for (auto& k : av.v) {
+	  if (j == k) {
+	    return true;
+	  }
+	}
+      }
     }
     return false;
   }
@@ -279,6 +307,14 @@ public:
       return string();
     else
       return p->second;
+  }
+  string get_name(const entity_addrvec_t& av) const {
+    for (auto& i : av.v) {
+      map<entity_addr_t,string>::const_iterator p = addr_mons.find(i);
+      if (p != addr_mons.end())
+	return p->second;
+    }
+    return string();
   }
 
   int get_rank(const string& n) const {
@@ -303,25 +339,18 @@ public:
     return true;
   }
 
-  entity_addrvec_t get_addrs(const string& n) const {
-    return entity_addrvec_t(get_addr(n));
-  }
-  entity_addrvec_t get_addrs(unsigned m) const {
-    return entity_addrvec_t(get_addr(m));
-  }
-
-  const entity_addr_t& get_addr(const string& n) const {
+  const entity_addrvec_t& get_addrs(const string& n) const {
     ceph_assert(mon_info.count(n));
     map<string,mon_info_t>::const_iterator p = mon_info.find(n);
-    return p->second.public_addr;
+    return p->second.public_addrs;
   }
-  const entity_addr_t& get_addr(unsigned m) const {
+  const entity_addrvec_t& get_addrs(unsigned m) const {
     ceph_assert(m < ranks.size());
-    return get_addr(ranks[m]);
+    return get_addrs(ranks[m]);
   }
-  void set_addr(const string& n, const entity_addr_t& a) {
+  void set_addrvec(const string& n, const entity_addrvec_t& a) {
     ceph_assert(mon_info.count(n));
-    mon_info[n].public_addr = a;
+    mon_info[n].public_addrs = a;
   }
 
   void encode(bufferlist& blist, uint64_t con_features) const;
@@ -353,9 +382,9 @@ public:
    * @param errout ostream to send error messages too
    */
 #ifdef WITH_SEASTAR
-  seastar::future<> build_initial(const ceph::common::ConfigProxy& conf);
+  seastar::future<> build_initial(const ceph::common::ConfigProxy& conf, bool for_mkfs);
 #else
-  int build_initial(CephContext *cct, ostream& errout);
+  int build_initial(CephContext *cct, bool for_mkfs, ostream& errout);
 #endif
   /**
    * filter monmap given a set of initial members.
@@ -372,7 +401,8 @@ public:
    */
   void set_initial_members(CephContext *cct,
 			   list<std::string>& initial_members,
-			   string my_name, const entity_addr_t& my_addr,
+			   string my_name,
+			   const entity_addrvec_t& my_addrs,
 			   set<entity_addr_t> *removed);
 
   void print(ostream& out) const;
@@ -391,7 +421,8 @@ protected:
    * @return 0 for success, -errno on error
    */
   int init_with_ips(const std::string& ips,
-			 const std::string &prefix);
+		    bool for_mkfs,
+		    const std::string &prefix);
   /**
    * build a monmap from a list of hostnames
    *
@@ -402,19 +433,20 @@ protected:
    * @return 0 for success, -errno on error
    */
   int init_with_hosts(const std::string& hostlist,
-			 const std::string& prefix);
+		      bool for_mkfs,
+		      const std::string& prefix);
   int init_with_config_file(const ConfigProxy& conf, std::ostream& errout);
 #if WITH_SEASTAR
   seastar::future<> read_monmap(const std::string& monmap);
   /// try to build monmap with different settings, like
   /// mon_host, mon* sections, and mon_dns_srv_name
-  seastar::future<> build_monmap(const ceph::common::ConfigProxy& conf);
+  seastar::future<> build_monmap(const ceph::common::ConfigProxy& conf, bool for_mkfs);
   /// initialize monmap by resolving given service name
-  seastar::future<> init_with_dns_srv(const std::string& name);
+  seastar::future<> init_with_dns_srv(bool for_mkfs, const std::string& name);
 #else
   /// read from encoded monmap file
   int init_with_monmap(const std::string& monmap, std::ostream& errout);
-  int init_with_dns_srv(CephContext* cct, std::string srv_name,
+  int init_with_dns_srv(CephContext* cct, std::string srv_name, bool for_mkfs,
 			std::ostream& errout);
 #endif
 };

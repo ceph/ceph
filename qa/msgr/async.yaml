@@ -2,4 +2,4 @@ overrides:
   ceph:
     conf:
       global:
-        ms type: simple
+        ms type: async

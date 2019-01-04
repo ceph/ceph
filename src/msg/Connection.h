@@ -153,6 +153,7 @@ public:
    */
   virtual void mark_disposable() = 0;
 
+  // WARNING / FIXME: this is not populated for loopback connections
   AuthCapsInfo& get_peer_caps_info() {
     return peer_caps_info;
   }
