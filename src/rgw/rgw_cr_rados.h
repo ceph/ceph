@@ -851,6 +851,7 @@ class RGWAsyncFetchRemoteObj : public RGWAsyncRadosRequest {
   string source_zone;
 
   RGWBucketInfo bucket_info;
+  std::optional<rgw_placement_rule> dest_placement_rule;
 
   rgw_obj_key key;
   std::optional<uint64_t> versioned_epoch;
@@ -866,11 +867,13 @@ public:
   RGWAsyncFetchRemoteObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
                          const string& _source_zone,
                          RGWBucketInfo& _bucket_info,
+			 std::optional<rgw_placement_rule> _dest_placement_rule,
                          const rgw_obj_key& _key,
                          std::optional<uint64_t> _versioned_epoch,
                          bool _if_newer, rgw_zone_set *_zones_trace) : RGWAsyncRadosRequest(caller, cn), store(_store),
                                                       source_zone(_source_zone),
                                                       bucket_info(_bucket_info),
+						      dest_placement_rule(_dest_placement_rule),
                                                       key(_key),
                                                       versioned_epoch(_versioned_epoch),
                                                       copy_if_newer(_if_newer)
@@ -888,6 +891,7 @@ class RGWFetchRemoteObjCR : public RGWSimpleCoroutine {
   string source_zone;
 
   RGWBucketInfo bucket_info;
+  std::optional<rgw_placement_rule> dest_placement_rule;
 
   rgw_obj_key key;
   std::optional<uint64_t> versioned_epoch;
@@ -903,12 +907,14 @@ public:
   RGWFetchRemoteObjCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
                       const string& _source_zone,
                       RGWBucketInfo& _bucket_info,
+		      std::optional<rgw_placement_rule> _dest_placement_rule,
                       const rgw_obj_key& _key,
                       std::optional<uint64_t> _versioned_epoch,
                       bool _if_newer, rgw_zone_set *_zones_trace) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
                                        async_rados(_async_rados), store(_store),
                                        source_zone(_source_zone),
                                        bucket_info(_bucket_info),
+				       dest_placement_rule(_dest_placement_rule),
                                        key(_key),
                                        versioned_epoch(_versioned_epoch),
                                        copy_if_newer(_if_newer), req(NULL), zones_trace(_zones_trace) {}
@@ -926,7 +932,8 @@ public:
   }
 
   int send_request() override {
-    req = new RGWAsyncFetchRemoteObj(this, stack->create_completion_notifier(), store, source_zone, bucket_info,
+    req = new RGWAsyncFetchRemoteObj(this, stack->create_completion_notifier(), store,
+				     source_zone, bucket_info, dest_placement_rule,
                                      key, versioned_epoch, copy_if_newer, zones_trace);
     async_rados->queue(req);
     return 0;
