@@ -3828,18 +3828,21 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   void (*progress_cb)(off_t, void *);
   void *progress_data;
   bufferlist extra_data_bl;
-  uint64_t extra_data_left;
-  uint64_t data_len;
+  uint64_t extra_data_left{0};
+  bool need_to_process_attrs{false};
+  uint64_t data_len{0};
   map<string, bufferlist> src_attrs;
   uint64_t ofs{0};
   uint64_t lofs{0}; /* logical ofs */
+  std::function<int(const map<string, bufferlist>&)> attrs_handler;
 public:
   RGWRadosPutObj(CephContext* cct,
                  CompressorRef& plugin,
                  boost::optional<RGWPutObj_Compress>& compressor,
                  rgw::putobj::ObjectProcessor *p,
                  void (*_progress_cb)(off_t, void *),
-                 void *_progress_data) :
+                 void *_progress_data,
+                 std::function<int(const map<string, bufferlist>&)> _attrs_handler) :
                        cct(cct),
                        filter(p),
                        compressor(compressor),
@@ -3847,8 +3850,7 @@ public:
                        processor(p),
                        progress_cb(_progress_cb),
                        progress_data(_progress_data),
-                       extra_data_left(0),
-                       data_len(0) {}
+                       attrs_handler(_attrs_handler) {}
 
   int process_attrs(void) {
     if (extra_data_bl.length()) {
@@ -3864,6 +3866,11 @@ public:
       src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
     }
 
+    int ret = attrs_handler(src_attrs);
+    if (ret < 0) {
+      return ret;
+    }
+
     if (plugin && src_attrs.find(RGW_ATTR_CRYPT_MODE) == src_attrs.end()) {
       //do not compress if object is encrypted
       compressor = boost::in_place(cct, plugin, filter);
@@ -3874,6 +3881,7 @@ public:
       buffering = boost::in_place(&*compressor, buffer_size);
       filter = &*buffering;
     }
+
     return 0;
   }
 
@@ -3900,6 +3908,17 @@ public:
       if (bl.length() == 0) {
         return 0;
       }
+    } else if (need_to_process_attrs) {
+      /* need to call process_attrs() even if we don't get any attrs,
+       * need it to call attrs_handler(). At the moment this
+       * will never happenas all callers will have extra_data_len > 0, but need
+       * to have it for sake of completeness.
+       */
+      int res = process_attrs();
+      if (res < 0) {
+        return res;
+      }
+      need_to_process_attrs = false;
     }
 
     ceph_assert(uint64_t(ofs) >= extra_data_len);
@@ -3923,6 +3942,9 @@ public:
 
   void set_extra_data_len(uint64_t len) override {
     extra_data_left = len;
+    if (len == 0) {
+      need_to_process_attrs = true;
+    }
     RGWHTTPStreamRWRequest::ReceiveCB::set_extra_data_len(len);
   }
 
@@ -4206,6 +4228,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_obj& src_obj,
                RGWBucketInfo& dest_bucket_info,
                RGWBucketInfo& src_bucket_info,
+               std::optional<rgw_placement_rule> dest_placement_rule,
                real_time *src_mtime,
                real_time *mtime,
                const real_time *mod_ptr,
@@ -4233,18 +4256,13 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   append_rand_alpha(cct, tag, tag, 32);
   obj_time_weight set_mtime_weight;
   set_mtime_weight.high_precision = high_precision_time;
+  int ret;
 
   rgw::AioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
-  rgw_placement_rule *ptail_rule{nullptr};
-#warning FIXME ptail_rule
+  const rgw_placement_rule *ptail_rule = (dest_placement_rule ? &(*dest_placement_rule) : nullptr);
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, ptail_rule, user_id,
                                   obj_ctx, dest_obj, olh_epoch, tag);
-  int ret = processor.prepare();
-  if (ret < 0) {
-    return ret;
-  }
-
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
@@ -4284,7 +4302,24 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     }
   }
 
-  RGWRadosPutObj cb(cct, plugin, compressor, &processor, progress_cb, progress_data);
+  RGWRadosPutObj cb(cct, plugin, compressor, &processor, progress_cb, progress_data,
+                    [&](const map<string, bufferlist>& obj_attrs) {
+                      if (!ptail_rule) {
+                        auto iter = obj_attrs.find(RGW_ATTR_STORAGE_CLASS);
+                        if (iter != obj_attrs.end()) {
+                          rgw_placement_rule dest_rule;
+                          dest_rule.storage_class = iter->second.to_str();
+                          dest_rule.inherit_from(dest_bucket_info.placement_rule);
+                          processor.set_tail_placement(std::move(dest_rule));
+                        }
+                      }
+
+                      int ret = processor.prepare();
+                      if (ret < 0) {
+                        return ret;
+                      }
+                      return 0;
+                    });
 
   string etag;
   real_time set_mtime;
@@ -4538,7 +4573,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (remote_src || !source_zone.empty()) {
     return fetch_remote_obj(obj_ctx, user_id, info, source_zone,
-               dest_obj, src_obj, dest_bucket_info, src_bucket_info, src_mtime, mtime, mod_ptr,
+               dest_obj, src_obj, dest_bucket_info, src_bucket_info,
+               dest_placement, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
                if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
                olh_epoch, delete_at, ptag, petag, progress_cb, progress_data);

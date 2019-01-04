@@ -1902,6 +1902,7 @@ public:
                        const rgw_obj& src_obj,
                        RGWBucketInfo& dest_bucket_info,
                        RGWBucketInfo& src_bucket_info,
+		       std::optional<rgw_placement_rule> dest_placement,
                        ceph::real_time *src_mtime,
                        ceph::real_time *mtime,
                        const ceph::real_time *mod_ptr,
