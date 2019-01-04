@@ -12,6 +12,7 @@
   monmaptool: monmap file mymonmap
   monmaptool: map already contains mon.foo
    usage: [--print] [--create [--clobber][--fsid uuid]]
+          [--enable-all-features]
           [--generate] [--set-initial-members]
           [--add name 1.2.3.4:567] [--rm name]
           [--feature-list [plain|parseable]]
@@ -25,7 +26,7 @@
   fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
   last_changed \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
   created \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
-  0: 2.3.4.5:6789/0 mon.foo
+  0: v1:2.3.4.5:6789/0 mon.foo
 
   $ NEW_FSID="$(monmaptool --print mymonmap|grep ^fsid)"
   $ [ "$ORIG_FSID" = "$NEW_FSID" ]

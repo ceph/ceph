@@ -1,6 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      global:
-        ms type: async
-        enable experimental unrecoverable data corrupting features: '*'

@@ -436,11 +436,11 @@ ConnectionRef SimpleMessenger::connect_to(int type,
 
   // remote
   while (true) {
-    Pipe *pipe = _lookup_pipe(addrs.front());
+    Pipe *pipe = _lookup_pipe(addrs.legacy_addr());
     if (pipe) {
       ldout(cct, 10) << "get_connection " << addrs << " existing " << pipe << dendl;
     } else {
-      pipe = connect_rank(addrs.front(), type, NULL, NULL);
+      pipe = connect_rank(addrs.legacy_addr(), type, NULL, NULL);
       ldout(cct, 10) << "get_connection " << addrs << " new " << pipe << dendl;
     }
     Mutex::Locker l(pipe->pipe_lock);

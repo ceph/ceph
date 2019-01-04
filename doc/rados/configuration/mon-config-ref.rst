@@ -212,10 +212,8 @@ these under ``[mon]`` or under the entry for a specific monitor.
 
 .. code-block:: ini
 
-	[mon]
-		mon host = hostname1,hostname2,hostname3
-		mon addr = 10.0.0.10:6789,10.0.0.11:6789,10.0.0.12:6789
-
+	[global]
+		mon host = 10.0.0.2,10.0.0.3,10.0.0.4
 
 .. code-block:: ini
 

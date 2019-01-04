@@ -1387,6 +1387,12 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	  pending_inc.new_pools[i.first].flags |= pg_pool_t::FLAG_CREATING;
 	}
       }
+      // adjust blacklist items to all be TYPE_ANY
+      for (auto& i : tmp.blacklist) {
+	auto a = i.first;
+	a.set_type(entity_addr_t::TYPE_ANY);
+	pending_inc.new_blacklist[a] = i.second;
+      }
     }
   }
 
@@ -3031,7 +3037,8 @@ void OSDMonitor::_booted(MonOpRequestRef op, bool logit)
 	  << " w " << m->sb.weight << " from " << m->sb.current_epoch << dendl;
 
   if (logit) {
-    mon->clog->info() << m->get_orig_source_inst() << " boot";
+    mon->clog->info() << m->get_source() << " " << m->get_orig_source_addrs()
+		      << " boot";
   }
 
   send_latest(op, m->sb.current_epoch+1);
@@ -4007,14 +4014,24 @@ int OSDMonitor::get_version_full(version_t ver, uint64_t features,
 epoch_t OSDMonitor::blacklist(const entity_addrvec_t& av, utime_t until)
 {
   dout(10) << "blacklist " << av << " until " << until << dendl;
-  for (auto& a : av.v) {
+  for (auto a : av.v) {
+    if (osdmap.require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+      a.set_type(entity_addr_t::TYPE_ANY);
+    } else {
+      a.set_type(entity_addr_t::TYPE_LEGACY);
+    }
     pending_inc.new_blacklist[a] = until;
   }
   return pending_inc.epoch;
 }
 
-epoch_t OSDMonitor::blacklist(const entity_addr_t& a, utime_t until)
+epoch_t OSDMonitor::blacklist(entity_addr_t a, utime_t until)
 {
+  if (osdmap.require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+    a.set_type(entity_addr_t::TYPE_ANY);
+  } else {
+    a.set_type(entity_addr_t::TYPE_LEGACY);
+  }
   dout(10) << "blacklist " << a << " until " << until << dendl;
   pending_inc.new_blacklist[a] = until;
   return pending_inc.epoch;
@@ -4980,7 +4997,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	 ++p) {
       if (f) {
 	f->open_object_section("entry");
-	f->dump_stream("addr") << p->first;
+	f->dump_string("addr", p->first.get_legacy_str());
 	f->dump_stream("until") << p->second;
 	f->close_section();
       } else {
@@ -10180,6 +10197,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     if (rel == CEPH_RELEASE_MIMIC) {
+      if (!mon->monmap->get_required_features().contains_all(
+	    ceph::features::mon::FEATURE_MIMIC)) {
+	ss << "not all mons are mimic";
+	err = -EPERM;
+	goto reply;
+      }
       if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_MIMIC))
            && !sure) {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_MIMIC feature";
@@ -10187,6 +10210,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply;
       }
     } else if (rel == CEPH_RELEASE_NAUTILUS) {
+      if (!mon->monmap->get_required_features().contains_all(
+	    ceph::features::mon::FEATURE_NAUTILUS)) {
+	ss << "not all mons are nautilus";
+	err = -EPERM;
+	goto reply;
+      }
       if ((!HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_NAUTILUS))
            && !sure) {
 	ss << "not all up OSDs have CEPH_FEATURE_SERVER_NAUTILUS feature";
@@ -11374,6 +11403,13 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     else {
+      if (osdmap.require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+	// always blacklist type ANY
+	addr.set_type(entity_addr_t::TYPE_ANY);
+      } else {
+	addr.set_type(entity_addr_t::TYPE_LEGACY);
+      }
+
       string blacklistop;
       cmd_getval(cct, cmdmap, "blacklistop", blacklistop);
       if (blacklistop == "add") {

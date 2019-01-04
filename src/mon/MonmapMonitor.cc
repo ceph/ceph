@@ -516,10 +516,34 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
       goto reply;
     }
 
-    if (addr.get_port() == 0) {
-      ss << "port defaulted to " << CEPH_MON_PORT_LEGACY;
-      addr.set_port(CEPH_MON_PORT_LEGACY);
+    entity_addrvec_t addrs;
+    if (monmap.persistent_features.contains_all(
+	  ceph::features::mon::FEATURE_NAUTILUS)) {
+      if (addr.get_port() == CEPH_MON_PORT_IANA) {
+	addr.set_type(entity_addr_t::TYPE_MSGR2);
+      }
+      if (addr.get_port() == CEPH_MON_PORT_LEGACY) {
+	// if they specified the *old* default they probably don't care
+	addr.set_port(0);
+      }
+      if (addr.get_port()) {
+	addrs.v.push_back(addr);
+      } else {
+	addr.set_type(entity_addr_t::TYPE_MSGR2);
+	addr.set_port(CEPH_MON_PORT_IANA);
+	addrs.v.push_back(addr);
+	addr.set_type(entity_addr_t::TYPE_LEGACY);
+	addr.set_port(CEPH_MON_PORT_LEGACY);
+	addrs.v.push_back(addr);
+      }
+    } else {
+      if (addr.get_port() == 0) {
+	addr.set_port(CEPH_MON_PORT_LEGACY);
+      }
+      addr.set_type(entity_addr_t::TYPE_LEGACY);
+      addrs.v.push_back(addr);
     }
+    dout(20) << __func__ << " addr " << addr << " -> addrs " << addrs << dendl;
 
     /**
      * If we have a monitor with the same name and different addr, then EEXIST
@@ -535,19 +559,19 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 
     do {
       if (monmap.contains(name)) {
-        if (monmap.get_addr(name) == addr) {
+        if (monmap.get_addrs(name) == addrs) {
           // stable map contains monitor with the same name at the same address.
           // serialize before current pending map.
           err = 0; // for clarity; this has already been set above.
-          ss << "mon." << name << " at " << addr << " already exists";
+          ss << "mon." << name << " at " << addrs << " already exists";
           goto reply;
         } else {
           ss << "mon." << name
-             << " already exists at address " << monmap.get_addr(name);
+             << " already exists at address " << monmap.get_addrs(name);
         }
-      } else if (monmap.contains(addr)) {
+      } else if (monmap.contains(addrs)) {
         // we established on the previous branch that name is different
-        ss << "mon." << monmap.get_name(addr)
+        ss << "mon." << monmap.get_name(addrs)
            << " already exists at address " << addr;
       } else {
         // go ahead and add
@@ -565,9 +589,9 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
      * we can simply go ahead and add the monitor.
      */
 
-    pending_map.add(name, addr);
+    pending_map.add(name, addrs);
     pending_map.last_changed = ceph_clock_now();
-    ss << "adding mon." << name << " at " << addr;
+    ss << "adding mon." << name << " at " << addrs;
     propose = true;
     dout(0) << __func__ << " proposing new mon." << name << dendl;
 
@@ -616,10 +640,10 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
      * introduced.
      */
 
-    entity_addr_t addr = pending_map.get_addr(name);
+    entity_addrvec_t addrs = pending_map.get_addrs(name);
     pending_map.remove(name);
     pending_map.last_changed = ceph_clock_now();
-    ss << "removing mon." << name << " at " << addr
+    ss << "removing mon." << name << " at " << addrs
        << ", there will be " << pending_map.size() << " monitors" ;
     propose = true;
     err = 0;
@@ -723,7 +747,7 @@ reply:
 bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
 {
   MMonJoin *join = static_cast<MMonJoin*>(op->get_req());
-  dout(10) << __func__ << " " << join->name << " at " << join->addr << dendl;
+  dout(10) << __func__ << " " << join->name << " at " << join->addrs << dendl;
 
   MonSession *session = op->get_session();
   if (!session ||
@@ -732,12 +756,14 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
     return true;
   }
 
-  if (pending_map.contains(join->name) && !pending_map.get_addr(join->name).is_blank_ip()) {
+  if (pending_map.contains(join->name) &&
+      !pending_map.get_addrs(join->name).front().is_blank_ip()) {
     dout(10) << " already have " << join->name << dendl;
     return true;
   }
-  if (pending_map.contains(join->addr) && pending_map.get_name(join->addr) == join->name) {
-    dout(10) << " already have " << join->addr << dendl;
+  if (pending_map.contains(join->addrs) &&
+      pending_map.get_name(join->addrs) == join->name) {
+    dout(10) << " already have " << join->addrs << dendl;
     return true;
   }
   return false;
@@ -745,12 +771,13 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
 bool MonmapMonitor::prepare_join(MonOpRequestRef op)
 {
   MMonJoin *join = static_cast<MMonJoin*>(op->get_req());
-  dout(0) << "adding/updating " << join->name << " at " << join->addr << " to monitor cluster" << dendl;
+  dout(0) << "adding/updating " << join->name
+	  << " at " << join->addrs << " to monitor cluster" << dendl;
   if (pending_map.contains(join->name))
     pending_map.remove(join->name);
-  if (pending_map.contains(join->addr))
-    pending_map.remove(pending_map.get_name(join->addr));
-  pending_map.add(join->name, join->addr);
+  if (pending_map.contains(join->addrs))
+    pending_map.remove(pending_map.get_name(join->addrs));
+  pending_map.add(join->name, join->addrs);
   pending_map.last_changed = ceph_clock_now();
   return true;
 }

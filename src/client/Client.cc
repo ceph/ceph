@@ -465,8 +465,9 @@ void Client::dump_status(Formatter *f)
     f->dump_int("id", get_nodeid().v);
     entity_inst_t inst(messenger->get_myname(), messenger->get_myaddr());
     f->dump_object("inst", inst);
-    f->dump_stream("inst_str") << inst;
-    f->dump_stream("addr_str") << inst.addr;
+    f->dump_object("addr", inst.addr);
+    f->dump_stream("inst_str") << inst.name << " " << inst.addr.get_legacy_str();
+    f->dump_string("addr_str", inst.addr.get_legacy_str());
     f->dump_int("inode_count", inode_map.size());
     f->dump_int("mds_epoch", mdsmap->get_epoch());
     f->dump_int("osd_epoch", osd_epoch);
@@ -2488,11 +2489,25 @@ void Client::handle_osd_map(MOSDMap *m)
 
   const auto myaddrs = messenger->get_myaddrs();
   bool new_blacklist = false;
+  bool prenautilus = objecter->with_osdmap(
+    [&](const OSDMap& o) {
+      return o.require_osd_release < CEPH_RELEASE_NAUTILUS;
+    });
   if (!blacklisted) {
-    for (auto& a : myaddrs.v) {
+    for (auto a : myaddrs.v) {
+      // blacklist entries are always TYPE_ANY for nautilus+
+      a.set_type(entity_addr_t::TYPE_ANY);
       if (new_blacklists.count(a)) {
 	new_blacklist = true;
 	break;
+      }
+      if (prenautilus) {
+	// ...except pre-nautilus, they were TYPE_LEGACY
+	a.set_type(entity_addr_t::TYPE_LEGACY);
+	if (new_blacklists.count(a)) {
+	  new_blacklist = true;
+	  break;
+	}
       }
     }
   }

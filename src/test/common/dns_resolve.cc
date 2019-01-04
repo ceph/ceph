@@ -64,7 +64,7 @@ TEST_F(DNSResolverTest, resolve_ip_addr) {
 
   std::ostringstream os;
   os << addr;
-  ASSERT_EQ(os.str(), "192.168.1.11:0/0");
+  ASSERT_EQ(os.str(), "v2:192.168.1.11:0/0");
 }
 
 TEST_F(DNSResolverTest, resolve_ip_addr_fail) {
@@ -146,17 +146,17 @@ TEST_F(DNSResolverTest, resolve_srv_hosts_empty_domain) {
   ASSERT_NE(it, records.end());
   std::ostringstream os;
   os << it->second.addr;
-  ASSERT_EQ(os.str(), "192.168.1.11:6789/0");
+  ASSERT_EQ(os.str(), "v2:192.168.1.11:6789/0");
   os.str("");
   it = records.find("mon.b");
   ASSERT_NE(it, records.end());
   os << it->second.addr;
-  ASSERT_EQ(os.str(), "192.168.1.12:6789/0");
+  ASSERT_EQ(os.str(), "v2:192.168.1.12:6789/0");
   os.str("");
   it = records.find("mon.c");
   ASSERT_NE(it, records.end());
   os << it->second.addr;
-  ASSERT_EQ(os.str(), "192.168.1.13:6789/0");
+  ASSERT_EQ(os.str(), "v2:192.168.1.13:6789/0");
 }
 
 TEST_F(DNSResolverTest, resolve_srv_hosts_full_domain) {
@@ -216,17 +216,17 @@ TEST_F(DNSResolverTest, resolve_srv_hosts_full_domain) {
   ASSERT_NE(it, records.end());
   std::ostringstream os;
   os << it->second.addr;
-  ASSERT_EQ(os.str(), "192.168.1.11:6789/0");
+  ASSERT_EQ(os.str(), "v2:192.168.1.11:6789/0");
   os.str("");
   it = records.find("mon.b");
   ASSERT_NE(it, records.end());
   os << it->second.addr;
-  ASSERT_EQ(os.str(), "192.168.1.12:6789/0");
+  ASSERT_EQ(os.str(), "v2:192.168.1.12:6789/0");
   os.str("");
   it = records.find("mon.c");
   ASSERT_NE(it, records.end());
   os << it->second.addr;
-  ASSERT_EQ(os.str(), "192.168.1.13:6789/0");
+  ASSERT_EQ(os.str(), "v2:192.168.1.13:6789/0");
 }
 
 TEST_F(DNSResolverTest, resolve_srv_hosts_fail) {

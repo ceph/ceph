@@ -185,7 +185,7 @@ TEST_P(NetworkWorkerTest, SimpleTest) {
     EventCenter *center = &worker->center;
     ssize_t r = 0;
     if (stack->support_local_listen_table() || worker->id == 0)
-      r = worker->listen(bind_addr, options, &bind_socket);
+      r = worker->listen(bind_addr, 0, options, &bind_socket);
     ASSERT_EQ(0, r);
 
     ConnectedSocket cli_socket, srv_socket;
@@ -287,7 +287,7 @@ TEST_P(NetworkWorkerTest, ConnectFailedTest) {
     ServerSocket bind_socket;
     int r = 0;
     if (stack->support_local_listen_table() || worker->id == 0)
-      r = worker->listen(bind_addr, options, &bind_socket);
+      r = worker->listen(bind_addr, 0, options, &bind_socket);
     ASSERT_EQ(0, r);
 
     ConnectedSocket cli_socket1, cli_socket2;
@@ -328,10 +328,10 @@ TEST_P(NetworkWorkerTest, ListenTest) {
   ASSERT_TRUE(bind_addr.parse(get_addr().c_str()));
   SocketOptions options;
   ServerSocket bind_socket1, bind_socket2;
-  int r = worker->listen(bind_addr, options, &bind_socket1);
+  int r = worker->listen(bind_addr, 0, options, &bind_socket1);
   ASSERT_EQ(0, r);
 
-  r = worker->listen(bind_addr, options, &bind_socket2);
+  r = worker->listen(bind_addr, 0, options, &bind_socket2);
   ASSERT_EQ(-EADDRINUSE, r);
 }
 
@@ -350,7 +350,7 @@ TEST_P(NetworkWorkerTest, AcceptAndCloseTest) {
     {
       ServerSocket bind_socket;
       if (stack->support_local_listen_table() || worker->id == 0)
-        r = worker->listen(bind_addr, options, &bind_socket);
+        r = worker->listen(bind_addr, 0, options, &bind_socket);
       ASSERT_EQ(0, r);
 
       ConnectedSocket srv_socket, cli_socket;
@@ -457,7 +457,7 @@ TEST_P(NetworkWorkerTest, ComplexTest) {
     ServerSocket bind_socket;
     int r = 0;
     if (stack->support_local_listen_table() || worker->id == 0) {
-      r = worker->listen(bind_addr, options, &bind_socket);
+      r = worker->listen(bind_addr, 0, options, &bind_socket);
       ASSERT_EQ(0, r);
       *listen_p = true;
     }
@@ -1010,7 +1010,7 @@ class StressFactory {
     t_data.worker = worker;
     ServerSocket bind_socket;
     if (stack->support_local_listen_table() || worker->id == 0) {
-      r = worker->listen(bind_addr, options, &bind_socket);
+      r = worker->listen(bind_addr, 0, options, &bind_socket);
       ASSERT_EQ(0, r);
       already_bind = true;
     }

@@ -72,7 +72,7 @@ The monitor peers are provided in several ways:
 
 #. via the initial monmap, provided via ``--monmap <filename>``
 #. via the bootstrap monmap generated from ``--mon-host <list>``
-#. via the bootstrap monmap generated from ``[mon.*]`` sections with ``mon addr`` in the config file
+#. via the bootstrap monmap generated from ``[mon.*]`` sections with the deprecated ``mon addr`` options in the config file (note that this method is *not* recommended and does not support binding to both v1 and v2 protocol addresses)
 #. dynamically via the admin socket
 
 However, these methods are not completely interchangeable because of

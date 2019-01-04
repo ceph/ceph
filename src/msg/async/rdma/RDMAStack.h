@@ -147,7 +147,9 @@ class RDMAWorker : public Worker {
   PerfCounters *perf_logger;
   explicit RDMAWorker(CephContext *c, unsigned i);
   virtual ~RDMAWorker();
-  virtual int listen(entity_addr_t &addr, const SocketOptions &opts, ServerSocket *) override;
+  virtual int listen(entity_addr_t &addr,
+		     unsigned addr_slot,
+		     const SocketOptions &opts, ServerSocket *) override;
   virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
   virtual void initialize() override;
   RDMAStack *get_stack() { return stack; }
@@ -309,7 +311,7 @@ class RDMAServerSocketImpl : public ServerSocketImpl {
 
  public:
   RDMAServerSocketImpl(CephContext *cct, Infiniband* i, RDMADispatcher *s,
-      RDMAWorker *w, entity_addr_t& a);
+		       RDMAWorker *w, entity_addr_t& a, unsigned slot);
 
   virtual int listen(entity_addr_t &sa, const SocketOptions &opt);
   virtual int accept(ConnectedSocket *s, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
@@ -320,7 +322,9 @@ class RDMAServerSocketImpl : public ServerSocketImpl {
 
 class RDMAIWARPServerSocketImpl : public RDMAServerSocketImpl {
   public:
-    RDMAIWARPServerSocketImpl(CephContext *cct, Infiniband *i, RDMADispatcher *s, RDMAWorker *w, entity_addr_t& a);
+    RDMAIWARPServerSocketImpl(
+      CephContext *cct, Infiniband *i, RDMADispatcher *s, RDMAWorker *w,
+      entity_addr_t& addr, unsigned addr_slot);
     virtual int listen(entity_addr_t &sa, const SocketOptions &opt) override;
     virtual int accept(ConnectedSocket *s, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
     virtual void abort_accept() override;

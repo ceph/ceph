@@ -47,8 +47,10 @@ struct SocketOptions {
 /// \cond internal
 class ServerSocketImpl {
  public:
-  int addr_type = 0;
-  ServerSocketImpl(int t) : addr_type(t) {}
+  unsigned addr_type; ///< entity_addr_t::TYPE_*
+  unsigned addr_slot; ///< position of our addr in myaddrs().v
+  ServerSocketImpl(unsigned type, unsigned slot)
+    : addr_type(type), addr_slot(slot) {}
   virtual ~ServerSocketImpl() {}
   virtual int accept(ConnectedSocket *sock, const SocketOptions &opt, entity_addr_t *out, Worker *w) = 0;
   virtual void abort_accept() = 0;
@@ -178,6 +180,11 @@ class ServerSocket {
     return _ssi->fd();
   }
 
+  /// get listen/bind addr
+  unsigned get_addr_slot() {
+    return _ssi->addr_slot;
+  }
+
   explicit operator bool() const {
     return _ssi.get();
   }
@@ -250,7 +257,7 @@ class Worker {
     }
   }
 
-  virtual int listen(entity_addr_t &addr,
+  virtual int listen(entity_addr_t &addr, unsigned addr_slot,
                      const SocketOptions &opts, ServerSocket *) = 0;
   virtual int connect(const entity_addr_t &addr,
                       const SocketOptions &opts, ConnectedSocket *socket) = 0;

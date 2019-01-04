@@ -701,8 +701,9 @@ int Monitor::preinit()
     if (!initial_members.empty()) {
       dout(1) << " initial_members " << initial_members << ", filtering seed monmap" << dendl;
 
-      monmap->set_initial_members(g_ceph_context, initial_members, name, messenger->get_myaddr(),
-				  &extra_probe_peers);
+      monmap->set_initial_members(
+	g_ceph_context, initial_members, name, messenger->get_myaddrs(),
+	&extra_probe_peers);
 
       dout(10) << " monmap is " << *monmap << dendl;
       dout(10) << " extra probe peers " << extra_probe_peers << dendl;
@@ -1819,9 +1820,10 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
   // new initial peer?
   if (monmap->get_epoch() == 0 &&
       monmap->contains(m->name) &&
-      monmap->get_addr(m->name).is_blank_ip()) {
-    dout(1) << " learned initial mon " << m->name << " addr " << m->get_source_addr() << dendl;
-    monmap->set_addr(m->name, m->get_source_addr());
+      monmap->get_addrs(m->name).front().is_blank_ip()) {
+    dout(1) << " learned initial mon " << m->name
+	    << " addrs " << m->get_source_addrs() << dendl;
+    monmap->set_addrvec(m->name, m->get_source_addrs());
 
     bootstrap();
     return;
@@ -1896,13 +1898,13 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
              << dendl;
 
     if (monmap->contains(name) &&
-        !monmap->get_addr(name).is_blank_ip()) {
+        !monmap->get_addrs(name).front().is_blank_ip()) {
       // i'm part of the cluster; just initiate a new election
       start_election();
     } else {
       dout(10) << " ready to join, but i'm not in the monmap or my addr is blank, trying to join" << dendl;
       send_mon_message(
-	new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
+	new MMonJoin(monmap->fsid, name, messenger->get_myaddrs()),
 	*m->quorum.begin());
     }
   } else {
@@ -2171,7 +2173,7 @@ void Monitor::finish_election()
   if (cur_name != name) {
     dout(10) << " renaming myself from " << cur_name << " -> " << name << dendl;
     send_mon_message(
-      new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
+      new MMonJoin(monmap->fsid, name, messenger->get_myaddrs()),
       *quorum.begin());
   }
 }

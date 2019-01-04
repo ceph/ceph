@@ -73,7 +73,11 @@ MonClient::~MonClient()
 int MonClient::build_initial_monmap()
 {
   ldout(cct, 10) << __func__ << dendl;
-  return monmap.build_initial(cct, cerr);
+  int r = monmap.build_initial(cct, false, cerr);
+  ldout(cct,10) << "monmap:\n";
+  monmap.print(*_dout);
+  *_dout << dendl;
+  return r;
 }
 
 int MonClient::get_monmap()
@@ -344,27 +348,49 @@ void MonClient::flush_log()
 void MonClient::handle_monmap(MMonMap *m)
 {
   ldout(cct, 10) << __func__ << " " << *m << dendl;
-  auto peer = m->get_source_addr();
-  string cur_mon = monmap.get_name(peer);
+  auto con_addrs = m->get_source_addrs();
+  string old_name = monmap.get_name(con_addrs);
 
+  // NOTE: we're not paying attention to the epoch, here.
   auto p = m->monmapbl.cbegin();
   decode(monmap, p);
 
   ldout(cct, 10) << " got monmap " << monmap.epoch
- 		 << ", mon." << cur_mon << " is now rank " << monmap.get_rank(cur_mon)
+		 << " from mon." << old_name
+		 << " (according to old e" << monmap.get_epoch() << ")"
  		 << dendl;
   ldout(cct, 10) << "dump:\n";
   monmap.print(*_dout);
   *_dout << dendl;
 
-  sub.got("monmap", monmap.get_epoch());
-
-  if (!monmap.get_addr_name(peer, cur_mon)) {
-    ldout(cct, 10) << "mon." << cur_mon << " went away" << dendl;
-    // can't find the mon we were talking to (above)
-    _reopen_session();
+  if (monmap.get_epoch() > 0 &&
+      !monmap.get_required_features().contains_all(
+	ceph::features::mon::FEATURE_NAUTILUS) &&
+      cct->_conf.get_val<bool>("ms_bind_msgr2")) {
+    ldout(cct,1) << " disabling ms_bind_msgr2 because monmap does not have"
+		 << " NAUTILUS feature set" << dendl;
+    cct->_conf.set_val("ms_bind_msgr2", "false");
   }
 
+  if (old_name.size() == 0) {
+    ldout(cct,10) << " can't identify which mon we were connected to" << dendl;
+    _reopen_session();
+  } else {
+    if (monmap.get_rank(old_name) < 0) {
+      ldout(cct, 10) << "mon." << old_name << " went away" << dendl;
+      // can't find the mon we were talking to (above)
+      _reopen_session();
+    } else if (monmap.get_addrs(old_name) != con_addrs) {
+      // FIXME: we might make this a more sophisticated check later if we do
+      // multiprotocol IPV4/IPV6 and have a strict preference
+      ldout(cct,10) << " mon." << old_name << " has addrs "
+		    << monmap.get_addrs(old_name) << " but i'm connected to "
+		    << con_addrs << dendl;
+      _reopen_session();
+    }
+  }
+
+  sub.got("monmap", monmap.get_epoch());
   map_cond.Signal();
   want_monmap = false;
 }
@@ -577,6 +603,10 @@ void MonClient::handle_auth(MAuthReply *m)
     send_log(true);
     if (active_con) {
       std::swap(auth, active_con->get_auth());
+      if (global_id && global_id != active_con->get_global_id()) {
+	lderr(cct) << __func__ << " global_id changed from " << global_id
+		   << " to " << active_con->get_global_id() << dendl;
+      }
       global_id = active_con->get_global_id();
     }
   }
@@ -662,13 +692,13 @@ void MonClient::_reopen_session(int rank)
 
 MonConnection& MonClient::_add_conn(unsigned rank, uint64_t global_id)
 {
-  auto peer = monmap.get_addr(rank);
-  auto conn = messenger->connect_to_mon(monmap.get_addrs(rank));
+  auto peer = monmap.get_addrs(rank);
+  auto conn = messenger->connect_to_mon(peer);
   MonConnection mc(cct, conn, global_id);
   auto inserted = pending_cons.insert(make_pair(peer, move(mc)));
   ldout(cct, 10) << "picked mon." << monmap.get_name(rank)
                  << " con " << conn
-                 << " addr " << conn->get_peer_addr()
+                 << " addr " << peer
                  << dendl;
   return inserted.first->second;
 }
@@ -707,19 +737,23 @@ bool MonClient::ms_handle_reset(Connection *con)
     return false;
 
   if (_hunting()) {
-    if (pending_cons.count(con->get_peer_addr())) {
-      ldout(cct, 10) << __func__ << " hunted mon " << con->get_peer_addr() << dendl;
+    if (pending_cons.count(con->get_peer_addrs())) {
+      ldout(cct, 10) << __func__ << " hunted mon " << con->get_peer_addrs()
+		     << dendl;
     } else {
-      ldout(cct, 10) << __func__ << " stray mon " << con->get_peer_addr() << dendl;
+      ldout(cct, 10) << __func__ << " stray mon " << con->get_peer_addrs()
+		     << dendl;
     }
     return true;
   } else {
     if (active_con && con == active_con->get_con()) {
-      ldout(cct, 10) << __func__ << " current mon " << con->get_peer_addr() << dendl;
+      ldout(cct, 10) << __func__ << " current mon " << con->get_peer_addrs()
+		     << dendl;
       _reopen_session();
       return false;
     } else {
-      ldout(cct, 10) << "ms_handle_reset stray mon " << con->get_peer_addr() << dendl;
+      ldout(cct, 10) << "ms_handle_reset stray mon " << con->get_peer_addrs()
+		     << dendl;
       return true;
     }
   }

@@ -62,25 +62,30 @@ void entity_inst_t::generate_test_instances(list<entity_inst_t*>& o)
   o.push_back(a);
 }
 
-bool entity_addr_t::parse(const char *s, const char **end)
+bool entity_addr_t::parse(const char *s, const char **end, int default_type)
 {
   *this = entity_addr_t();
 
   const char *start = s;
 
-  int newtype = TYPE_DEFAULT;
-  if (strncmp("legacy:", s, 7) == 0) {
-    start += 7;
+  int newtype;
+  if (strncmp("v1:", s, 3) == 0) {
+    start += 3;
     newtype = TYPE_LEGACY;
-  } else if (strncmp("msgr2:", s, 6) == 0) {
-    start += 6;
+  } else if (strncmp("v2:", s, 3) == 0) {
+    start += 3;
     newtype = TYPE_MSGR2;
+  } else if (strncmp("any:", s, 4) == 0) {
+    start += 4;
+    newtype = TYPE_ANY;
   } else if (*s == '-') {
-    *this = entity_addr_t();
+    newtype = TYPE_NONE;
     if (end) {
       *end = s + 1;
     }
     return true;
+  } else {
+    newtype = default_type ? default_type : TYPE_DEFAULT;
   }
 
   bool brackets = false;
@@ -172,10 +177,8 @@ ostream& operator<<(ostream& out, const entity_addr_t &addr)
   if (addr.type == entity_addr_t::TYPE_NONE) {
     return out << "-";
   }
-  if (addr.type != entity_addr_t::TYPE_DEFAULT) {
-    out << entity_addr_t::get_type_name(addr.type) << ":";
-  }
-  out << addr.get_sockaddr() << '/' << addr.nonce;
+  out << entity_addr_t::get_type_name(addr.type) << ":"
+      << addr.get_sockaddr() << '/' << addr.nonce;
   return out;
 }
 
@@ -223,6 +226,10 @@ ostream& operator<<(ostream& out, const sockaddr *sa)
 
 bool entity_addrvec_t::parse(const char *s, const char **end)
 {
+  const char *static_end;
+  if (!end) {
+    end = &static_end;
+  }
   v.clear();
   while (*s) {
     entity_addr_t a;

@@ -1592,7 +1592,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 	locker_t locker;
 	locker.client = stringify(it->first.locker);
 	locker.cookie = it->first.cookie;
-	locker.address = stringify(it->second.addr);
+	locker.address = it->second.addr.get_legacy_str();
 	lockers->push_back(locker);
       }
     }
@@ -1688,7 +1688,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       for (Lockers::iterator it = lockers.begin();
            it != lockers.end(); ++it) {
         if (it->first.locker == lock_client) {
-          client_address = stringify(it->second.addr);
+          client_address = it->second.addr.get_legacy_str();
           break;
         }
       }
