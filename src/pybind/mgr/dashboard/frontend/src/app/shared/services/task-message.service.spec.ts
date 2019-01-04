@@ -239,5 +239,36 @@ describe('TaskManagerMessageService', () => {
         );
       });
     });
+    describe('rbd tasks', () => {
+      let metadata;
+      let modeMsg: string;
+      let peerMsg: string;
+
+      beforeEach(() => {
+        metadata = {
+          pool_name: 'somePool'
+        };
+        modeMsg = `mirror mode for pool '${metadata.pool_name}'`;
+        peerMsg = `mirror peer for pool '${metadata.pool_name}'`;
+        finishedTask.metadata = metadata;
+      });
+      it('tests rbd/mirroring/pool/edit messages', () => {
+        finishedTask.name = 'rbd/mirroring/pool/edit';
+        testUpdate(modeMsg);
+        testErrorCode(16, 'Cannot disable mirroring because it contains a peer.');
+      });
+      it('tests rbd/mirroring/peer/edit messages', () => {
+        finishedTask.name = 'rbd/mirroring/peer/edit';
+        testUpdate(peerMsg);
+      });
+      it('tests rbd/mirroring/peer/add messages', () => {
+        finishedTask.name = 'rbd/mirroring/peer/add';
+        testCreate(peerMsg);
+      });
+      it('tests rbd/mirroring/peer/delete messages', () => {
+        finishedTask.name = 'rbd/mirroring/peer/delete';
+        testDelete(peerMsg);
+      });
+    });
   });
 });

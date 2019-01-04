@@ -181,6 +181,11 @@ class ViewCache(object):
             self.exception = None
             self.lock = threading.Lock()
 
+        def reset(self):
+            with self.lock:
+                self.value_when = None
+                self.value = None
+
         def run(self, fn, args, kwargs):
             """
             If data less than `stale_period` old is available, return it
@@ -237,7 +242,12 @@ class ViewCache(object):
                 rvc = ViewCache.RemoteViewCache(self.timeout)
                 self.cache_by_args[args] = rvc
             return rvc.run(fn, args, kwargs)
+        wrapper.reset = self.reset
         return wrapper
+
+    def reset(self):
+        for _, rvc in self.cache_by_args.items():
+            rvc.reset()
 
 
 class NotificationQueue(threading.Thread):

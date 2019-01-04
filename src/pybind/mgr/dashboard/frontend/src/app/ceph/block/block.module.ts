@@ -12,8 +12,7 @@ import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { SharedModule } from '../../shared/shared.module';
 import { IscsiComponent } from './iscsi/iscsi.component';
-import { MirrorHealthColorPipe } from './mirror-health-color.pipe';
-import { MirroringComponent } from './mirroring/mirroring.component';
+import { MirroringModule } from './mirroring/mirroring.module';
 import { RbdDetailsComponent } from './rbd-details/rbd-details.component';
 import { RbdFormComponent } from './rbd-form/rbd-form.component';
 import { RbdImagesComponent } from './rbd-images/rbd-images.component';
@@ -35,6 +34,7 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
   ],
   imports: [
     CommonModule,
+    MirroringModule,
     FormsModule,
     ReactiveFormsModule,
     TabsModule.forRoot(),
@@ -49,8 +49,6 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
   declarations: [
     RbdListComponent,
     IscsiComponent,
-    MirroringComponent,
-    MirrorHealthColorPipe,
     RbdDetailsComponent,
     RbdFormComponent,
     RbdSnapshotListComponent,
