@@ -619,7 +619,7 @@ class PSSubscription {
           }
         }
 
-        lc_config.config.add_rule(&rule);
+        lc_config.config.add_rule(rule);
         yield call(new RGWBucketLifecycleConfigCR(sync_env->async_rados,
                                                   sync_env->store,
                                                   lc_config));

@@ -110,10 +110,8 @@ int RGWBucketCreateLocalCR::Request::_send_request()
   const auto& bucket_name = params.bucket_name;
   auto& placement_rule = params.placement_rule;
 
-  const auto& zonegroup = zone_svc->get_zonegroup();
-
   if (!placement_rule.empty() &&
-      !zonegroup.placement_targets.count(placement_rule)) {
+      !zone_svc->get_zone_params().valid_placement(placement_rule)) {
     ldout(cct, 0) << "placement target (" << placement_rule << ")"
       << " doesn't exist in the placement targets of zonegroup"
       << " (" << zone_svc->get_zonegroup().api_name << ")" << dendl;
@@ -154,7 +152,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
   string zonegroup_id = zone_svc->get_zonegroup().get_id();
 
   if (bucket_exists) {
-    string selected_placement_rule;
+    rgw_placement_rule selected_placement_rule;
     rgw_bucket bucket;
     bucket.tenant = user.tenant;
     bucket.name = bucket_name;
