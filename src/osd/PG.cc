@@ -378,6 +378,10 @@ std::string PG::gen_prefix() const
     out << "osd." << osd->whoami
 	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)
 	<< " " << *this << " ";
+    assert(info.history.last_epoch_clean >= info.epoch_created);
+    assert(info.history.last_epoch_clean >= info.epoch_pool_created);
+    assert(info.last_epoch_clean >= info.epoch_created);
+    assert(info.last_epoch_clean >= info.epoch_pool_created);
   } else {
     out << "osd." << osd->whoami
 	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)
