@@ -92,8 +92,7 @@ class SAIDiskAgent(MetricsAgent):
                     str('%s_%s'
                         % (cluster_id, osds_meta.get('hostname', 'None')))
                 d_data.fields['agenthost'] = str(socket.gethostname())
-                d_data.tags['agenthost_domain_id'] = \
-                    str('%s_%s' % (cluster_id, d_data.fields['agenthost']))
+                d_data.tags['agenthost_domain_id'] = cluster_id
                 serial_number = s_val.get('serial_number')
                 wwn = s_val.get('wwn', {})
                 wwpn = ''

@@ -50,8 +50,7 @@ class SAIAgent(MetricsAgent):
             cluster_id = obj_api.get_cluster_id()
             c_data.fields['cluster_domain_id'] = str(cluster_id)
             c_data.fields['agenthost'] = str(socket.gethostname())
-            c_data.tags['agenthost_domain_id'] = \
-                str('%s_%s' % (cluster_id, c_data.fields['agenthost']))
+            c_data.tags['agenthost_domain_id'] = cluster_id
             c_data.fields['heartbeat_interval'] = \
                 int(obj_api.get_configuration('diskprediction_upload_metrics_interval'))
             c_data.fields['host_ip'] = str(mgr_meta.get('addr', '127.0.0.1'))

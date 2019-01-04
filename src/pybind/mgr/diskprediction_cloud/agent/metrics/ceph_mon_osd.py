@@ -117,7 +117,7 @@ class CephMonOsdAgent(MetricsAgent):
                 e_osd.fields['name'] = n
                 e_osd.tags['cluster_id'] = cluster_id
                 e_osd.fields['agenthost'] = socket.gethostname()
-                e_osd.tags['agenthost_domain_id'] = '%s_%s' % (cluster_id, socket.gethostname())
+                e_osd.tags['agenthost_domain_id'] = cluster_id
                 e_osd.tags['host_domain_id'] = '%s_%s' % (cluster_id, socket.gethostname())
                 for k in n_value.keys():
                     e_osd.fields[k] = str(n_value[k])
@@ -131,7 +131,7 @@ class CephMonOsdAgent(MetricsAgent):
                 n_node = CephOsdTree()
                 n_node.tags['cluster_id'] = cluster_id
                 n_node.fields['agenthost'] = socket.gethostname()
-                n_node.tags['agenthost_domain_id'] = '%s_%s' % (cluster_id, socket.gethostname())
+                n_node.tags['agenthost_domain_id'] = cluster_id
                 n_node.tags['host_domain_id'] = '%s_%s' % (cluster_id, socket.gethostname())
                 n_node.fields['children'] = ','.join(str(x) for x in node.get('children', []))
                 n_node.fields['type_id'] = str(node.get('type_id', ''))
@@ -153,8 +153,7 @@ class CephMonOsdAgent(MetricsAgent):
         d_osd.tags['cluster_id'] = cluster_id
         d_osd.tags['osd_id'] = service_name[4:]
         d_osd.fields['agenthost'] = socket.gethostname()
-        d_osd.tags['agenthost_domain_id'] = \
-            '%s_%s' % (cluster_id, d_osd.fields['agenthost'])
+        d_osd.tags['agenthost_domain_id'] = cluster_id
         d_osd.tags['host_domain_id'] = \
             '%s_%s' % (cluster_id,
                        obj_api.get_osd_hostname(d_osd.tags['osd_id']))
@@ -177,7 +176,7 @@ class CephMonOsdAgent(MetricsAgent):
 
         if stat_bytes and stat_bytes_used:
             d_osd.fields['stat_bytes_used_percentage'] = \
-                round(float(stat_bytes_used) / float(stat_bytes) * 100, 4)
+                round((float(stat_bytes_used) / float(stat_bytes)) * 100, 4)
         else:
             d_osd.fields['stat_bytes_used_percentage'] = 0.0000
         self.data.append(d_osd)
@@ -187,8 +186,7 @@ class CephMonOsdAgent(MetricsAgent):
         d_mon.tags['cluster_id'] = cluster_id
         d_mon.tags['mon_id'] = service_name[4:]
         d_mon.fields['agenthost'] = socket.gethostname()
-        d_mon.tags['agenthost_domain_id'] = \
-            '%s_%s' % (cluster_id, d_mon.fields['agenthost'])
+        d_mon.tags['agenthost_domain_id'] = cluster_id
         d_mon.fields['num_sessions'] = \
             perf_counts.get('mon.num_sessions', {}).get('value', 0)
         d_mon.fields['session_add'] = \
