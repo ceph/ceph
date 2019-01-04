@@ -138,6 +138,8 @@ set(librgw_common_srcs
 add_library(rgw_common OBJECT ${librgw_common_srcs})
 
 target_include_directories(rgw_common SYSTEM PUBLIC "services")
+target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
+
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
@@ -189,12 +191,13 @@ add_library(rgw_a STATIC
 add_dependencies(rgw_a civetweb_h)
 
 target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
-target_include_directories(rgw_common PUBLIC ${CMAKE_SOURCE_DIR}/src/dmclock/support/src)
 
-target_link_libraries(rgw_a PRIVATE
+target_link_libraries(rgw_a
+  PUBLIC dmclock::dmclock
+  PRIVATE
   librados-cxx cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_timeindex_client cls_version_client
-  cls_user_client ceph-common common_utf8 global dmclock::dmclock
+  cls_user_client ceph-common common_utf8 global
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS}
@@ -238,7 +241,8 @@ target_link_libraries(radosgw radosgw_a librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
-  global ${FCGI_LIBRARY} ${LIB_RESOLV}
+  global dmclock::dmclock
+  ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
   ${ALLOC_LIBS})
 install(TARGETS radosgw DESTINATION bin)
@@ -288,7 +292,9 @@ set(librgw_srcs
   librgw.cc
   rgw_file.cc)
 add_library(rgw SHARED ${librgw_srcs})
-target_link_libraries(rgw PRIVATE
+target_link_libraries(rgw
+  PUBLIC dmclock::dmclock
+  PRIVATE
   rgw_a
   librados
   cls_rgw_client
@@ -331,6 +337,7 @@ target_link_libraries(rgw_admin_user PRIVATE
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES}
+  dmclock::dmclock
   )
 set_target_properties(rgw_admin_user PROPERTIES OUTPUT_NAME rgw_admin_user VERSION 1.0.0
   SOVERSION 0)
