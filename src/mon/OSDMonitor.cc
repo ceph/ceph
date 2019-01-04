@@ -979,7 +979,8 @@ void OSDMonitor::prime_pg_temp(
   int next_up_primary, next_acting_primary;
   next.pg_to_up_acting_osds(pgid, &next_up, &next_up_primary,
 			    &next_acting, &next_acting_primary);
-  if (acting == next_acting && next_up != next_acting)
+  if (acting == next_acting &&
+      !(up != acting && next_up == next_acting))
     return;  // no change since last epoch
 
   if (acting.empty())
