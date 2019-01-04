@@ -1,0 +1,12 @@
+<cd-table [data]="data"
+          columnMode="flex"
+          [columns]="columns"
+          [autoReload]="0"
+          (fetchData)="refresh()">
+</cd-table>
+
+<ng-template #healthTmpl
+             let-row="row"
+             let-value="value">
+  <span [ngClass]="row.health_color | mirrorHealthColor">{{ value }}</span>
+</ng-template>

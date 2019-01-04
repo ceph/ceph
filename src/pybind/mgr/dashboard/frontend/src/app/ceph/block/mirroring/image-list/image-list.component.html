@@ -1,0 +1,47 @@
+<tabset>
+  <tab heading="Issues"
+       i18n-heading>
+    <cd-table [data]="image_error.data"
+              columnMode="flex"
+              [columns]="image_error.columns"
+              [autoReload]="0"
+              (fetchData)="refresh()">
+    </cd-table>
+  </tab>
+  <tab heading="Syncing"
+       i18n-heading>
+    <cd-table [data]="image_syncing.data"
+              columnMode="flex"
+              [columns]="image_syncing.columns"
+              [autoReload]="0"
+              (fetchData)="refresh()">
+    </cd-table>
+  </tab>
+  <tab heading="Ready"
+       i18n-heading>
+    <cd-table [data]="image_ready.data"
+              columnMode="flex"
+              [columns]="image_ready.columns"
+              [autoReload]="0"
+              (fetchData)="refresh()">
+    </cd-table>
+  </tab>
+</tabset>
+
+<ng-template #stateTmpl
+             let-row="row"
+             let-value="value">
+  <span [ngClass]="row.state_color | mirrorHealthColor">{{ value }}</span>
+</ng-template>
+
+<ng-template #syncTmpl>
+  <span class="label label-info" i18n>Syncing</span>
+</ng-template>
+
+<ng-template #progressTmpl
+             let-value="value">
+  <progressbar type="info"
+               [value]="value">
+  </progressbar>
+</ng-template>
+
