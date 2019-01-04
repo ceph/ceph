@@ -743,7 +743,7 @@ start_mgr() {
 EOF
 
             if $with_mgr_dashboard ; then
-                ceph_adm config set mgr mgr/dashboard/$name/server_port $MGR_PORT
+                ceph_adm config set mgr mgr/dashboard/$name/server_port $MGR_PORT --force
                 if [ $mgr -eq 1 ]; then
                     DASH_URLS="https://$IP:$MGR_PORT"
                 else
@@ -752,7 +752,7 @@ EOF
             fi
 	    MGR_PORT=$(($MGR_PORT + 1000))
 
-	    ceph_adm config set mgr mgr/restful/$name/server_port $MGR_PORT
+	    ceph_adm config set mgr mgr/restful/$name/server_port $MGR_PORT --force
             if [ $mgr -eq 1 ]; then
                 RESTFUL_URLS="https://$IP:$MGR_PORT"
             else
