@@ -245,20 +245,14 @@ OSDService::OSDService(OSD *osd) :
   next_notif_id(0),
   recovery_request_lock("OSDService::recovery_request_lock"),
   recovery_request_timer(cct, recovery_request_lock, false),
-  recovery_sleep_lock("OSDService::recovery_sleep_lock"),
-  recovery_sleep_timer(cct, recovery_sleep_lock, false),
+  sleep_lock("OSDService::sleep_lock"),
+  sleep_timer(cct, sleep_lock, false),
   reserver_finisher(cct),
   local_reserver(cct, &reserver_finisher, cct->_conf->osd_max_backfills,
 		 cct->_conf->osd_min_recovery_priority),
   remote_reserver(cct, &reserver_finisher, cct->_conf->osd_max_backfills,
 		  cct->_conf->osd_min_recovery_priority),
   pg_temp_lock("OSDService::pg_temp_lock"),
-  snap_sleep_lock("OSDService::snap_sleep_lock"),
-  snap_sleep_timer(
-    osd->client_messenger->cct, snap_sleep_lock, false /* relax locking */),
-  scrub_sleep_lock("OSDService::scrub_sleep_lock"),
-  scrub_sleep_timer(
-    osd->client_messenger->cct, scrub_sleep_lock, false /* relax locking */),
   snap_reserver(cct, &reserver_finisher,
 		cct->_conf->osd_max_trimming_pgs),
   recovery_lock("OSDService::recovery_lock"),
@@ -377,8 +371,8 @@ void OSDService::start_shutdown()
   }
 
   {
-    Mutex::Locker l(recovery_sleep_lock);
-    recovery_sleep_timer.shutdown();
+    Mutex::Locker l(sleep_lock);
+    sleep_timer.shutdown();
   }
 }
 
@@ -406,16 +400,6 @@ void OSDService::shutdown()
     recovery_request_timer.shutdown();
   }
 
-  {
-    Mutex::Locker l(snap_sleep_lock);
-    snap_sleep_timer.shutdown();
-  }
-
-  {
-    Mutex::Locker l(scrub_sleep_lock);
-    scrub_sleep_timer.shutdown();
-  }
-
   osdmap = OSDMapRef();
   next_osdmap = OSDMapRef();
 }
@@ -433,8 +417,6 @@ void OSDService::init()
 
   watch_timer.init();
   agent_timer.init();
-  snap_sleep_timer.init();
-  scrub_sleep_timer.init();
 
   agent_thread.create("osd_srv_agent");
 
@@ -2388,6 +2370,18 @@ float OSD::get_osd_recovery_sleep()
     return cct->_conf->osd_recovery_sleep_hdd;
 }
 
+float OSD::get_osd_delete_sleep()
+{
+  float osd_delete_sleep = cct->_conf->get_val<double>("osd_delete_sleep");
+  if (osd_delete_sleep > 0)
+    return osd_delete_sleep;
+  if (!store_is_rotational && !journal_is_rotational)
+    return cct->_conf->get_val<double>("osd_delete_sleep_ssd");
+  if (store_is_rotational && !journal_is_rotational)
+    return cct->_conf->get_val<double>("osd_delete_sleep_hybrid");
+  return cct->_conf->get_val<double>("osd_delete_sleep_hdd");
+}
+
 int OSD::init()
 {
   CompatSet initial, diff;
@@ -2398,7 +2392,7 @@ int OSD::init()
   tick_timer.init();
   tick_timer_without_osd_lock.init();
   service.recovery_request_timer.init();
-  service.recovery_sleep_timer.init();
+  service.sleep_timer.init();
 
   // mount.
   dout(2) << "init " << dev_path
@@ -8685,14 +8679,14 @@ void OSD::do_recovery(
    */
   float recovery_sleep = get_osd_recovery_sleep();
   {
-    Mutex::Locker l(service.recovery_sleep_lock);
+    Mutex::Locker l(service.sleep_lock);
     if (recovery_sleep > 0 && service.recovery_needs_sleep) {
       PGRef pgref(pg);
       auto recovery_requeue_callback = new FunctionContext([this, pgref, queued, reserved_pushes](int r) {
         dout(20) << "do_recovery wake up at "
                  << ceph_clock_now()
 	         << ", re-queuing recovery" << dendl;
-	Mutex::Locker l(service.recovery_sleep_lock);
+	Mutex::Locker l(service.sleep_lock);
         service.recovery_needs_sleep = false;
         service.queue_recovery_after_sleep(pgref.get(), queued, reserved_pushes);
       });
@@ -8704,7 +8698,7 @@ void OSD::do_recovery(
         service.recovery_schedule_time = ceph_clock_now();
       }
       service.recovery_schedule_time += recovery_sleep;
-      service.recovery_sleep_timer.add_event_at(service.recovery_schedule_time,
+      service.sleep_timer.add_event_at(service.recovery_schedule_time,
 	                                        recovery_requeue_callback);
       dout(20) << "Recovery event scheduled at "
                << service.recovery_schedule_time << dendl;
@@ -8714,7 +8708,7 @@ void OSD::do_recovery(
 
   {
     {
-      Mutex::Locker l(service.recovery_sleep_lock);
+      Mutex::Locker l(service.sleep_lock);
       service.recovery_needs_sleep = true;
     }
 

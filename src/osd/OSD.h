@@ -700,8 +700,9 @@ public:
   bool recovery_needs_sleep = true;
   utime_t recovery_schedule_time = utime_t();
 
-  Mutex recovery_sleep_lock;
-  SafeTimer recovery_sleep_timer;
+  // For recovery & scrub & snap
+  Mutex sleep_lock;
+  SafeTimer sleep_timer;
 
   // -- tids --
   // for ops i issue
@@ -734,12 +735,6 @@ public:
   void send_pg_temp();
 
   void send_pg_created(pg_t pgid);
-
-  Mutex snap_sleep_lock;
-  SafeTimer snap_sleep_timer;
-
-  Mutex scrub_sleep_lock;
-  SafeTimer scrub_sleep_timer;
 
   AsyncReserver<spg_t> snap_reserver;
   void queue_recovery_context(PG *pg, GenContext<ThreadPool::TPHandle&> *c);
@@ -2217,6 +2212,7 @@ private:
   int get_num_op_threads();
 
   float get_osd_recovery_sleep();
+  float get_osd_delete_sleep();
 
   void probe_smart(ostream& ss);
   int probe_smart_device(const char *device, int timeout, std::string *result);
