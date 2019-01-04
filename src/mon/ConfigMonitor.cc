@@ -416,11 +416,13 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
       prefix == "config rm") {
     string who;
     string name, value;
+    bool force = false;
     cmd_getval(g_ceph_context, cmdmap, "who", who);
     cmd_getval(g_ceph_context, cmdmap, "name", name);
     cmd_getval(g_ceph_context, cmdmap, "value", value);
+    cmd_getval(g_ceph_context, cmdmap, "force", force);
 
-    if (prefix == "config set") {
+    if (prefix == "config set" && !force) {
       const Option *opt = g_conf().find_option(name);
       if (!opt) {
 	opt = mon->mgrmon()->find_module_option(name);
@@ -430,13 +432,15 @@ bool ConfigMonitor::prepare_command(MonOpRequestRef op)
 	err = -EINVAL;
 	goto reply;
       }
-	
-      Option::value_t real_value;
-      string errstr;
-      err = opt->parse_value(value, &real_value, &errstr, &value);
-      if (err < 0) {
-	ss << "error parsing value: " << errstr;
-	goto reply;
+
+      if (opt) {
+	Option::value_t real_value;
+	string errstr;
+	err = opt->parse_value(value, &real_value, &errstr, &value);
+	if (err < 0) {
+	  ss << "error parsing value: " << errstr;
+	  goto reply;
+	}
       }
     }
 
