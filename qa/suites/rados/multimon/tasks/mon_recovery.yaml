@@ -1,3 +1,8 @@
+override:
+  ceph:
+    conf:
+      mon:
+        debug ms: 20
 tasks:
 - install:
 - ceph:
