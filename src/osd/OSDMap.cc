@@ -3931,9 +3931,16 @@ int OSDMap::clean_pg_upmaps(
     pg_to_raw_osds(p.first, &raw, &primary);
     mempool::osdmap::vector<pair<int,int>> newmap;
     for (auto& q : p.second) {
-      if (std::find(raw.begin(), raw.end(), q.first) != raw.end()) {
-	newmap.push_back(q);
+      if (std::find(raw.begin(), raw.end(), q.first) == raw.end()) {
+        // cancel mapping if source osd does not exist anymore
+        continue;
       }
+      if (q.second != CRUSH_ITEM_NONE && q.second < max_osd &&
+          q.second >= 0 && osd_weight[q.second] == 0) {
+        // cancel mapping if target osd is out
+        continue;
+      }
+      newmap.push_back(q);
     }
     if (newmap.empty()) {
       ldout(cct, 10) << " removing no-op pg_upmap_items " << p.first << " "
