@@ -2,20 +2,25 @@ import json
 
 class Strategy(object):
 
-    def __init__(self, data_devs, db_devs, wal_devs, args):
+    def __init__(self, data_devs, db_or_journal_devs, wal_devs, args):
+        '''
+        Note that this ctor is used by both bluestore and filestore strategies
+        to reduce code duplication. A filestore strategy will always pass an
+        empty list for wal_devs.
+        '''
         self.args = args
         self.osds_per_device = args.osds_per_device
-        self.devices = data_devs + wal_devs + db_devs
+        self.devices = data_devs + wal_devs + db_or_journal_devs
         self.data_devs = data_devs
-        self.db_devs = db_devs
+        self.db_or_journal_devs = db_or_journal_devs
         self.wal_devs = wal_devs
         self.computed = {'osds': [], 'vgs': []}
 
     @staticmethod
     def split_devices_rotational(devices):
         data_devs = [device for device in devices if device.sys_api['rotational'] == '1']
-        db_devs = [device for device in devices if device.sys_api['rotational'] == '0']
-        return data_devs, db_devs
+        db_or_journal_devs = [device for device in devices if device.sys_api['rotational'] == '0']
+        return data_devs, db_or_journal_devs
 
 
     def validate_compute(self):
@@ -48,7 +53,7 @@ class MixedStrategy(Strategy):
 
     def get_common_vg(self):
         # find all the vgs associated with the current device
-        for ssd in self.db_devs:
+        for ssd in self.db_or_journal_devs:
             for pv in ssd.pvs_api:
                 vg = self.system_vgs.get(vg_name=pv.vg_name)
                 if not vg:
