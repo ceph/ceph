@@ -10,8 +10,9 @@ class entity_addr_t;
  * is system-dependent and should not be relied on.
  */
 const struct ifaddrs *find_ip_in_subnet(const struct ifaddrs *addrs,
-					 const struct sockaddr *net,
-					 unsigned int prefix_len);
+					const struct sockaddr *net,
+					unsigned int prefix_len,
+					int numa_node = -1);
 
 /*
  * Validate and parse IPv4 or IPv6 network

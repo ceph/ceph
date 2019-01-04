@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #ifndef CEPH_PICK_ADDRESS_H
 #define CEPH_PICK_ADDRESS_H
 
@@ -37,9 +39,11 @@ class entity_addrvec_t;
  */
 void pick_addresses(CephContext *cct, int needs);
 
-int pick_addresses(CephContext *cct, unsigned flags, entity_addrvec_t *addrs);
+int pick_addresses(CephContext *cct, unsigned flags, entity_addrvec_t *addrs,
+		   int preferred_numa_node = -1);
 int pick_addresses(CephContext *cct, unsigned flags, struct ifaddrs *ifa,
-		   entity_addrvec_t *addrs);
+		   entity_addrvec_t *addrs,
+		   int preferred_numa_node = -1);
 
 /**
  * Find a network interface whose address matches the address/netmask
@@ -64,6 +68,11 @@ const struct sockaddr *find_ip_in_subnet_list(
   const struct ifaddrs *ifa,
   unsigned ipv,
   const std::string &networks,
-  const std::string &interfaces);
+  const std::string &interfaces,
+  int numa_node=-1);
+
+int get_iface_numa_node(
+  const std::string& iface,
+  int *node);
 
 #endif
