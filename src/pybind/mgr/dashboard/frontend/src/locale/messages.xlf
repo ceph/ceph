@@ -240,6 +240,14 @@
           <context context-type="sourcefile">app/shared/components/grafana/grafana.component.html</context>
           <context context-type="linenumber">6</context>
         </context-group>
+      </trans-unit><trans-unit id="160a9e80dc089792df42e2400b1e81b9e7025aa7" datatype="html">
+        <source>Grafana Dashboard doesn&apos;t exist. Please refer to
+  <x id="START_LINK" ctype="x-a" equiv-text="&lt;a&gt;"/>documentation<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a&gt;"/> on how to
+  add dashboards to Grafana.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/shared/components/grafana/grafana.component.html</context>
+          <context context-type="linenumber">11</context>
+        </context-group>
       </trans-unit><trans-unit id="012741ee52b3c050e4a977c37cc2334f7974f141" datatype="html">
         <source>Failed to load data.</source>
         <context-group purpose="location">
@@ -753,7 +761,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-list/pool-list.component.html</context>
-          <context context-type="linenumber">39</context>
+          <context context-type="linenumber">40</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-daemon-list/rgw-daemon-list.component.html</context>
@@ -1039,20 +1047,20 @@
   <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="&lt;strong&gt;"/><x id="INTERPOLATION_1" equiv-text="{{ markActionDescription }}"/><x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="&lt;/strong&gt;"/> if you proceed.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-list/osd-list.component.html</context>
-          <context context-type="linenumber">68</context>
+          <context context-type="linenumber">69</context>
         </context-group>
       </trans-unit><trans-unit id="2d3a73f6440a7d896d74356fe0a725d731e71cbb" datatype="html">
         <source>The OSD is not safe to destroy!</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-list/osd-list.component.html</context>
-          <context context-type="linenumber">77</context>
+          <context context-type="linenumber">78</context>
         </context-group>
       </trans-unit><trans-unit id="9d08116242443953ebbfe10bc2092e0a694b4adf" datatype="html">
         <source><x id="START_TAG_STRONG" ctype="x-strong" equiv-text="&lt;strong&gt;"/>OSD <x id="INTERPOLATION" equiv-text="{{ selection.first().id }}"/><x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="&lt;/strong&gt;"/> will be
   <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="&lt;strong&gt;"/><x id="INTERPOLATION_1" equiv-text="{{ actionDescription }}"/><x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="&lt;/strong&gt;"/> if you proceed.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-list/osd-list.component.html</context>
-          <context context-type="linenumber">79</context>
+          <context context-type="linenumber">80</context>
         </context-group>
       </trans-unit><trans-unit id="d2bcd3296d2850de762fb943060b7e086a893181" datatype="html">
         <source>Health</source>
