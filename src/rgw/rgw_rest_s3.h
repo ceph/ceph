@@ -846,6 +846,7 @@ public:
     return "rgw::auth::s3::LDAPEngine";
   }
 
+  static bool valid();
   static void shutdown();
 };
 
