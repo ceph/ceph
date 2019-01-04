@@ -50,6 +50,7 @@
 #include "common/version.h"
 #include "common/pick_address.h"
 #include "common/blkdev.h"
+#include "common/numa.h"
 
 #include "os/ObjectStore.h"
 #ifdef HAVE_LIBFUSE
@@ -5785,6 +5786,43 @@ void OSD::_collect_metadata(map<string,string> *pm)
     cct,
     cluster_messenger->get_myaddrs().front().get_sockaddr_storage());
 
+  // network numa
+  {
+    int node = -1;
+    set<int> nodes;
+    string cpu_list;
+    set<string> unknown;
+    for (auto nm : { "front_iface", "back_iface" }) {
+      if (!(*pm)[nm].size()) {
+	unknown.insert(nm);
+	continue;
+      }
+      cpu_set_t cpu_set;
+      size_t cpu_set_size;
+      int n = -1;
+      int r = get_iface_numa_node((*pm)[nm], &n, &cpu_set_size, &cpu_set);
+      if (r < 0) {
+	unknown.insert((*pm)[nm]);
+	continue;
+      }
+      nodes.insert(n);
+      if (node < 0) {
+	node = n;
+	cpu_list = cpu_set_to_str_list(cpu_set_size, &cpu_set);
+      }
+    }
+    if (unknown.size()) {
+      (*pm)["network_numa_unknown_ifaces"] = stringify(unknown);
+    }
+    if (!nodes.empty()) {
+      (*pm)["network_numa_nodes"] = stringify(nodes);
+    }
+    if (node >= 0 && nodes.size() == 1 && unknown.empty()) {
+      (*pm)["network_numa_node"] = stringify(node);
+      (*pm)["network_numa_node_cpus"] = cpu_list;
+    }
+  }
+  
   set<string> devnames;
   store->get_devices(&devnames);
   (*pm)["devices"] = stringify(devnames);
