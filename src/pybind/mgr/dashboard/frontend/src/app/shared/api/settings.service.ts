@@ -27,4 +27,8 @@ export class SettingsService {
   private getSettingsValue(data: any): string {
     return data.value || data.instance || '';
   }
+
+  validateGrafanaDashboardUrl(uid) {
+    return this.http.get(`api/grafana/validation/${uid}`);
+  }
 }

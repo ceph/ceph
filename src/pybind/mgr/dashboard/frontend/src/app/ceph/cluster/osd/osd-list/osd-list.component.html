@@ -57,7 +57,8 @@
   <tab i18n-heading
        *ngIf="permissions.grafana.read"
        heading="Overall Performance">
-    <cd-grafana [grafanaPath]="'lo02I1Aiz/osd-overview?'"
+    <cd-grafana [grafanaPath]="'osd-overview?'"
+                uid="lo02I1Aiz"
                 grafanaStyle="three">
     </cd-grafana>
   </tab>

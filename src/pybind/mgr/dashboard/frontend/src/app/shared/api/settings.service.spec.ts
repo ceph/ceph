@@ -29,6 +29,12 @@ describe('SettingsService', () => {
     expect(service).toBeTruthy();
   });
 
+  it('should call validateGrafanaDashboardUrl', () => {
+    service.validateGrafanaDashboardUrl('s').subscribe();
+    const req = httpTesting.expectOne('api/grafana/validation/s');
+    expect(req.request.method).toBe('GET');
+  });
+
   describe('getSettingsValue', () => {
     const testMethod = (data, expected: string) => {
       expect(service['getSettingsValue'](data)).toBe(expected);
