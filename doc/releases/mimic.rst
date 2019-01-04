@@ -1,3 +1,17 @@
+v13.2.4 Mimic
+=============
+
+This is the fourth bugfix release of the Mimic v13.2.x long term
+stable release series.  This release includes two security fixes that
+were tested but inadvertently excluded from the final v13.2.3 release
+build.
+
+Changelog
+---------
+
+* CVE-2018-16846: rgw: enforce bounds on max-keys/max-uploads/max-parts (`issue#35994 <http://tracker.ceph.com/issues/35994>`_)
+* CVE-2018-14662: mon: limit caps allowed to access the config store
+
 v13.2.3 Mimic
 =============
 
