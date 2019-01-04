@@ -1,3 +1,10 @@
 tasks:
 - install:
 - ceph:
+
+# prime some random pool data, in the hopes of reproducing
+# http://tracker.ceph.com/issues/21142
+- exec:
+    mon.a:
+      - ceph osd pool create xyz 16
+      - rados -p xyz bench 5 write -b 1 --no-cleanup
