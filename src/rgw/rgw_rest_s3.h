@@ -847,6 +847,8 @@ public:
   const char* get_name() const noexcept override {
     return "rgw::auth::s3::LDAPEngine";
   }
+
+  static bool valid();
 };
 
 
