@@ -2173,6 +2173,23 @@ std::vector<Option> get_global_options() {
     .set_description("Number of striping periods to zero head of MDS journal write position"),
 
     // -- OSD --
+    Option("osd_numa_prefer_iface", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_flag(Option::FLAG_STARTUP)
+    .set_description("prefer IP on network interface on same numa node as storage")
+    .add_see_also("osd_numa_auto_affinity"),
+
+    Option("osd_numa_auto_affinity", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_flag(Option::FLAG_STARTUP)
+    .set_description("automatically set affinity to numa node when storage and network match"),
+
+    Option("osd_numa_node", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(-1)
+    .set_flag(Option::FLAG_STARTUP)
+    .set_description("set affinity to a numa node (-1 for none)")
+    .add_see_also("osd_numa_auto_affinity"),
+
     Option("osd_smart_report_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_description("Timeout (in seconds) for smarctl to run, default is set to 5"),
