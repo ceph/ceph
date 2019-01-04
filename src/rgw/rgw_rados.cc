@@ -4930,9 +4930,21 @@ int RGWRados::open_bucket_index_ctx(const RGWBucketInfo& bucket_info, librados::
  */
 int RGWRados::list_buckets_init(RGWAccessHandle *handle)
 {
-  librados::NObjectIterator *state = new librados::NObjectIterator(root_pool_ctx.nobjects_begin());
-  *handle = (RGWAccessHandle)state;
-  return 0;
+  try {
+    auto iter = root_pool_ctx.nobjects_begin();
+    librados::NObjectIterator *state = new librados::NObjectIterator(iter);
+    *handle = (RGWAccessHandle)state;
+    return 0;
+  } catch (const std::system_error& e) {
+    int r = -e.code().value();
+    ldout(cct, 10) << "nobjects_begin threw " << e.what()
+       << ", returning " << r << dendl;
+    return r;
+  } catch (const std::exception& e) {
+    ldout(cct, 10) << "nobjects_begin threw " << e.what()
+       << ", returning -5" << dendl;
+    return -EIO;
+  }
 }
 
 /** 
@@ -4955,8 +4967,18 @@ int RGWRados::list_buckets_next(rgw_bucket_dir_entry& obj, RGWAccessHandle *hand
     if (obj.key.name[0] == '_') {
       obj.key.name = obj.key.name.substr(1);
     }
-
-    (*state)++;
+    try {
+      (*state)++;
+    } catch (const std::system_error& e) {
+      int r = -e.code().value();
+      ldout(cct, 10) << "nobjects_begin threw " << e.what()
+         << ", returning " << r << dendl;
+      return r;
+    } catch (const std::exception& e) {
+      ldout(cct, 10) << "nobjects_begin threw " << e.what()
+         << ", returning -5" << dendl;
+      return -EIO;
+    }
   } while (obj.key.name[0] == '.'); /* skip all entries starting with '.' */
 
   return 0;
@@ -12644,9 +12666,19 @@ int RGWRados::pool_iterate_begin(const rgw_pool& pool, const string& cursor, RGW
     return -EINVAL;
   }
 
-  iter = io_ctx.nobjects_begin(oc);
-
-  return 0;
+  try {
+    iter = io_ctx.nobjects_begin(oc);
+    return 0;
+  } catch (const std::system_error& e) {
+    r = -e.code().value();
+    ldout(cct, 10) << "nobjects_begin threw " << e.what()
+       << ", returning " << r << dendl;
+    return r;
+  } catch (const std::exception& e) {
+    ldout(cct, 10) << "nobjects_begin threw " << e.what()
+       << ", returning -5" << dendl;
+    return -EIO;
+  }
 }
 
 string RGWRados::pool_iterate_get_cursor(RGWPoolIterCtx& ctx)
@@ -12654,7 +12686,8 @@ string RGWRados::pool_iterate_get_cursor(RGWPoolIterCtx& ctx)
   return ctx.iter.get_cursor().to_str();
 }
 
-int RGWRados::pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<rgw_bucket_dir_entry>& objs,
+static int do_pool_iterate(CephContext* cct, RGWPoolIterCtx& ctx, uint32_t num,
+                           vector<rgw_bucket_dir_entry>& objs,
                            bool *is_truncated, RGWAccessListFilter *filter)
 {
   librados::IoCtx& io_ctx = ctx.io_ctx;
@@ -12692,6 +12725,24 @@ struct RGWAccessListFilterPrefix : public RGWAccessListFilter {
     return (prefix.compare(key.substr(0, prefix.size())) == 0);
   }
 };
+
+int RGWRados::pool_iterate(RGWPoolIterCtx& ctx, uint32_t num, vector<rgw_bucket_dir_entry>& objs,
+                           bool *is_truncated, RGWAccessListFilter *filter)
+{
+  // catch exceptions from NObjectIterator::operator++()
+  try {
+    return do_pool_iterate(cct, ctx, num, objs, is_truncated, filter);
+  } catch (const std::system_error& e) {
+    int r = -e.code().value();
+    ldout(cct, 10) << "NObjectIterator threw exception " << e.what()
+       << ", returning " << r << dendl;
+    return r;
+  } catch (const std::exception& e) {
+    ldout(cct, 10) << "NObjectIterator threw exception " << e.what()
+       << ", returning -5" << dendl;
+    return -EIO;
+  }
+}
 
 int RGWRados::list_raw_objects_init(const rgw_pool& pool, const string& marker, RGWListRawObjsCtx *ctx)
 {

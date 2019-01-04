@@ -110,18 +110,19 @@ namespace librados
     bool operator!=(const NObjectIterator& rhs) const;
     const ListObject& operator*() const;
     const ListObject* operator->() const;
-    NObjectIterator &operator++(); // Preincrement
-    NObjectIterator operator++(int); // Postincrement
+    NObjectIterator &operator++(); //< Preincrement; errors are thrown as exceptions
+    NObjectIterator operator++(int); //< Postincrement; errors are thrown as exceptions
     friend class IoCtx;
     friend class NObjectIteratorImpl;
 
     /// get current hash position of the iterator, rounded to the current pg
     uint32_t get_pg_hash_position() const;
 
-    /// move the iterator to a given hash position.  this may (will!) be rounded to the nearest pg.
+    /// move the iterator to a given hash position. this may (will!) be rounded
+    /// to the nearest pg. errors are thrown as exceptions
     uint32_t seek(uint32_t pos);
 
-    /// move the iterator to a given cursor position
+    /// move the iterator to a given cursor position. errors are thrown as exceptions
     uint32_t seek(const ObjectCursor& cursor);
 
     /// get current cursor position
@@ -890,14 +891,16 @@ namespace librados
 		     std::list<librados::locker_t> *lockers);
 
 
-    /// Start enumerating objects for a pool
+    /// Start enumerating objects for a pool. Errors are thrown as exceptions.
     NObjectIterator nobjects_begin();
     NObjectIterator nobjects_begin(const bufferlist &filter);
-    /// Start enumerating objects for a pool starting from a hash position
+    /// Start enumerating objects for a pool starting from a hash position.
+    /// Errors are thrown as exceptions.
     NObjectIterator nobjects_begin(uint32_t start_hash_position);
     NObjectIterator nobjects_begin(uint32_t start_hash_position,
                                    const bufferlist &filter);
-    /// Start enumerating objects for a pool starting from cursor
+    /// Start enumerating objects for a pool starting from cursor. Errors are
+    /// thrown as exceptions.
     NObjectIterator nobjects_begin(const librados::ObjectCursor& cursor);
     NObjectIterator nobjects_begin(const librados::ObjectCursor& cursor,
                                    const bufferlist &filter);
