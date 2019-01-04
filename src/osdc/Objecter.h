@@ -530,9 +530,8 @@ struct ObjectOperation {
 	    for (list<watch_item_t>::iterator i = resp.entries.begin() ;
 		 i != resp.entries.end() ; ++i) {
 	      obj_watch_t ow;
-	      ostringstream sa;
-	      sa << i->addr;
-	      strncpy(ow.addr, sa.str().c_str(), 256);
+	      string sa = i->addr.get_legacy_str();
+	      strncpy(ow.addr, sa.c_str(), 256);
 	      ow.watcher_id = i->name.num();
 	      ow.cookie = i->cookie;
 	      ow.timeout_seconds = i->timeout_seconds;
