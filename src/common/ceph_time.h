@@ -487,6 +487,8 @@ inline timespan to_timespan(signedspan z) {
 }
 
 std::string timespan_str(timespan t);
+std::string exact_timespan_str(timespan t);
+std::chrono::seconds parse_timespan(const std::string& s);
 
 // detects presence of Clock::to_timespec() and from_timespec()
 template <typename Clock, typename = std::void_t<>>
