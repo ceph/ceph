@@ -5790,14 +5790,16 @@ void OSD::_collect_metadata(map<string,string> *pm)
   (*pm)["devices"] = stringify(devnames);
   string devids;
   for (auto& dev : devnames) {
-    if (!devids.empty()) {
-      devids += ",";
-    }
-    string id = get_device_id(dev);
+    string err;
+    string id = get_device_id(dev, &err);
     if (id.size()) {
+      if (!devids.empty()) {
+	devids += ",";
+      }
       devids += dev + "=" + id;
     } else {
-      dout(10) << __func__ << " no unique device id for " << dev << dendl;
+      dout(10) << __func__ << " no unique device id for " << dev << ": "
+	       << err << dendl;
     }
   }
   (*pm)["device_ids"] = devids;
@@ -6664,7 +6666,6 @@ void OSD::probe_smart(const string& only_devid, ostream& ss)
 
   // == typedef std::map<std::string, mValue> mObject;
   json_spirit::mObject json_map;
-  json_spirit::mValue smart_json;
 
   for (auto dev : devnames) {
     // smartctl works only on physical devices; filter out any logical device
@@ -6672,32 +6673,24 @@ void OSD::probe_smart(const string& only_devid, ostream& ss)
       continue;
     }
 
-    string devid = get_device_id(dev);
+    string err;
+    string devid = get_device_id(dev, &err);
     if (devid.size() == 0) {
-      dout(10) << __func__ << " no unique id for dev " << dev << ", skipping"
-	       << dendl;
+      dout(10) << __func__ << " no unique id for dev " << dev << " ("
+	       << err << "), skipping" << dendl;
       continue;
     }
     if (only_devid.size() && devid != only_devid) {
       continue;
     }
 
-    std::string result;
-    if (block_device_run_smartctl(("/dev/" + dev).c_str(), smart_timeout,
-				  &result)) {
-      dout(10) << "probe_smart_device failed for /dev/" << dev << dendl;
-      //continue;
-      result = "{\"error\": \"smartctl failed\", \"dev\": \"" + dev +
-	"\", \"smartctl_error\": \"" + result + "\"}";
+    json_spirit::mValue smart_json;
+    if (block_device_get_metrics(dev, smart_timeout,
+				 &smart_json)) {
+      dout(10) << "block_device_get_metrics failed for /dev/" << dev << dendl;
+      continue;
     }
-
-    // TODO: change to read_or_throw?
-    if (!json_spirit::read(result, smart_json)) {
-      derr << "smartctl JSON output of /dev/" + dev + " is invalid" << dendl;
-    } else { //json is valid, assigning
-      json_map[devid] = smart_json;
-    }
-    // no need to result.clear() or clear smart_json
+    json_map[devid] = smart_json;
   }
   json_spirit::write(json_map, ss, json_spirit::pretty_print);
 }
