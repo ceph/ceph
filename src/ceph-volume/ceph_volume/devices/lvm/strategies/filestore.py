@@ -196,7 +196,7 @@ class MixedType(MixedStrategy):
             target='journal',
             total_lv_size=str(self.total_available_journal_space),
             total_lvs=self.journals_needed,
-            block_db_devices=', '.join([d.path for d in self.db_devs]),
+            block_db_devices=', '.join([d.path for d in self.db_or_journal_devs]),
             lv_size=str(self.journal_size),
             total_osds=self.journals_needed
         )
@@ -232,7 +232,7 @@ class MixedType(MixedStrategy):
         validators.no_lvm_membership(self.data_devs)
 
         # do not allow non-common VG to continue
-        validators.has_common_vg(self.db_devs)
+        validators.has_common_vg(self.db_or_journal_devs)
 
         # find the common VG to calculate how much is available
         self.common_vg = self.get_common_vg()
@@ -244,8 +244,8 @@ class MixedType(MixedStrategy):
             common_vg_size = disk.Size(gb=0)
 
         # non-VG SSDs
-        self.vg_ssds = set([d for d in self.db_devs if d.is_lvm_member])
-        self.blank_ssds = set(self.db_devs).difference(self.vg_ssds)
+        self.vg_ssds = set([d for d in self.db_or_journal_devs if d.is_lvm_member])
+        self.blank_ssds = set(self.db_or_journal_devs).difference(self.vg_ssds)
         self.total_blank_ssd_size = disk.Size(b=0)
         for blank_ssd in self.blank_ssds:
             self.total_blank_ssd_size += disk.Size(b=blank_ssd.lvm_size.b)
