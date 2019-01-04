@@ -1001,6 +1001,13 @@ int block_device_run_smartctl(const char *device, int timeout,
   return -EOPNOTSUPP;  
 }
 
+int block_device_get_metrics(const string& devname, int timeout,
+                             json_spirit::mValue *result)
+{
+  // FIXME: implement me for freebsd
+  return -EOPNOTSUPP;  
+}
+
 int block_device_run_nvme(const char *device, const char *vendor, int timeout,
              std::string *result)
 {
@@ -1138,6 +1145,12 @@ std::string get_device_id(const std::string& devname,
 
 int block_device_run_smartctl(const char *device, int timeout,
 			      std::string *result)
+{
+  return -EOPNOTSUPP;
+}
+
+int block_device_get_metrics(const string& devname, int timeout,
+                             json_spirit::mValue *result)
 {
   return -EOPNOTSUPP;
 }
