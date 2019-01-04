@@ -47,7 +47,7 @@ using RGWGetBucketInfoCR = RGWSimpleAsyncCR<rgw_get_bucket_info_params, rgw_get_
 struct rgw_bucket_create_local_params {
   shared_ptr<RGWUserInfo> user_info;
   std::string bucket_name;
-  std::string placement_rule;
+  rgw_placement_rule placement_rule;
 };
 
 using RGWBucketCreateLocalCR = RGWSimpleWriteOnlyAsyncCR<rgw_bucket_create_local_params>;
