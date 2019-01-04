@@ -58,7 +58,8 @@ struct command_registry
  virtual ~command_registry() = default;
 
  public:
- auto find_cmd_for_tag(std::string_view candidate_tag) const
+ // Get a tag if found, or return end(commands):
+ auto get_cmd_for_tag(std::string_view candidate_tag) const
  {
     using std::end;
     using std::begin;
@@ -74,26 +75,24 @@ struct command_registry
  // True if a "tag" is found:
  bool in_registry(std::string_view tag) const
  {
-    return end(commands) != find_cmd_for_tag(tag);
+    return end(commands) != get_cmd_for_tag(tag);
  }
 
- // True if any tag in the "tags" sequence is found:
- template <typename K, typename A, template <typename, typename> typename SeqT = std::vector>
- bool in_registry(const SeqT<K, A>& tags) const
+ template <typename InIter0, typename InIter1>
+ constexpr bool in_registry(InIter0 b, InIter1 e)
  {
-    return std::end(tags) != std::find_if(std::begin(tags), std::end(tags), 
-                                         [this](const auto& tag) {
-                                           return this->in_registry(tag);
-                                        });
+    return e != std::find_if(b, e, [this](const auto& tag) {
+                                return this->in_registry(tag);
+                            });
  }
-
+ 
  void add_command(std::unique_ptr<CommandType> cmd) 
  {
     using namespace std;
 
     auto tags(cmd->tags());
 
-    if (in_registry(tags)) {
+    if (in_registry(begin(tags), end(tags))) {
       ostringstream os;
       os << "already in registry: ";
       copy(begin(tags), end(tags), experimental::ostream_joiner(os, ','));
@@ -109,7 +108,7 @@ struct command_registry
                    std::string_view cmd_prefix, 
                    const typename CommandType::state_type& state)
  {
-    auto cmd = find_cmd_for_tag(cmd_prefix);
+    auto cmd = get_cmd_for_tag(cmd_prefix);
 
     // Command not found:
     if (std::end(commands) != cmd) 
