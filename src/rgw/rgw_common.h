@@ -2079,7 +2079,7 @@ struct req_state : DoutPrefixProvider {
   bool mfa_verified{false};
 
   /// optional coroutine context
-  optional_yield_context yield{null_yield};
+  optional_yield yield{null_yield};
 
   req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u, uint64_t id);
   ~req_state();

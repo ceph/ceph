@@ -152,7 +152,7 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
                                   rgw::io::add_conlen_controlling(
                                     &real_client))));
       RGWRestfulIO client(cct, &real_client_io);
-      auto y = optional_yield_context{&socket.get_io_context(), &yield};
+      auto y = optional_yield{socket.get_io_context(), yield};
       process_request(env.store, env.rest, &req, env.uri_prefix,
                       *env.auth_registry, &client, env.olog, y, scheduler);
     }
