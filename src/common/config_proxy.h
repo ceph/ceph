@@ -266,7 +266,7 @@ public:
   int set_val(const std::string& key, const std::string& s,
               std::stringstream* err_ss=nullptr) {
     std::lock_guard l{lock};
-    return config.set_val(values, obs_mgr, key, s);
+    return config.set_val(values, obs_mgr, key, s, err_ss);
   }
   void set_val_default(const std::string& key, const std::string& val) {
     std::lock_guard l{lock};
