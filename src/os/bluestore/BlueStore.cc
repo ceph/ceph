@@ -4907,7 +4907,7 @@ bool BlueStore::test_mount_in_use()
   return ret;
 }
 
-int BlueStore::_open_bluefs(bool create)
+int BlueStore::_minimal_open_bluefs(bool create)
 {
   int r;
   bluefs = new BlueFS(cct);
@@ -5030,17 +5030,8 @@ int BlueStore::_open_bluefs(bool create)
       goto free_bluefs;
     }
   }
-
-  if (create) {
-    bluefs->mkfs(fsid);
-  }
-  r = bluefs->mount();
-  if (r < 0) {
-    derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
-    goto free_bluefs;
-  }
-  
   return 0;
+
 free_bluefs:
   ceph_assert(bluefs);
   delete bluefs;
@@ -5048,12 +5039,34 @@ free_bluefs:
   return r;
 }
 
+int BlueStore::_open_bluefs(bool create)
+{
+  int r = _minimal_open_bluefs(create);
+  if (r < 0) {
+    return r;
+  }
+  if (create) {
+    bluefs->mkfs(fsid);
+  }
+  r = bluefs->mount();
+  if (r < 0) {
+    derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
+  }
+  return r;
+}
+
 void BlueStore::_close_bluefs()
 {
   bluefs->umount();
+  _minimal_close_bluefs();
+}
+
+void BlueStore::_minimal_close_bluefs()
+{
   delete bluefs;
   bluefs = NULL;
 }
+
 int BlueStore::_open_db(bool create, bool to_repair_db)
 {
   int r;
@@ -7763,11 +7776,47 @@ void BlueStore::collect_metadata(map<string,string> *pm)
 
 int BlueStore::get_devices(set<string> *ls)
 {
+  if (bdev) {
+    bdev->get_devices(ls);
+    if (bluefs) {
+      bluefs->get_devices(ls);
+    }
+    return 0;
+  }
+  
+  // grumble, we haven't started up yet.
+  int r = _open_path();
+  if (r < 0)
+    goto out;
+  r = _open_fsid(false);
+  if (r < 0)
+    goto out_path;
+  r = _read_fsid(&fsid);
+  if (r < 0)
+    goto out_fsid;
+  r = _lock_fsid();
+  if (r < 0)
+    goto out_fsid;
+  r = _open_bdev(false);
+  if (r < 0)
+    goto out_fsid;
+  r = _minimal_open_bluefs(false);
+  if (r < 0)
+    goto out_bdev;
   bdev->get_devices(ls);
   if (bluefs) {
     bluefs->get_devices(ls);
   }
-  return 0;
+  r = 0;
+  _minimal_close_bluefs();
+ out_bdev:
+  _close_bdev();
+ out_fsid:
+  _close_fsid();
+ out_path:
+  _close_path();
+ out:
+  return r;
 }
 
 void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
