@@ -39,8 +39,7 @@ class CephPoolAgent(MetricsAgent):
             d_pool.tags['cluster_id'] = cluster_id
             d_pool.tags['pool_id'] = p_id
             d_pool.fields['agenthost'] = socket.gethostname()
-            d_pool.tags['agenthost_domain_id'] = \
-                '%s_%s' % (cluster_id, d_pool.fields['agenthost'])
+            d_pool.tags['agenthost_domain_id'] = cluster_id
             d_pool.fields['bytes_used'] = \
                 pool.get('stats', {}).get('bytes_used', 0)
             d_pool.fields['max_avail'] = \

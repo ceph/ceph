@@ -54,8 +54,7 @@ class CephClusterAgent(MetricsAgent):
         c_data.tags['cluster_id'] = cluster_id
         c_data.fields['cluster_health'] = str(cluster_state)
         c_data.fields['agenthost'] = socket.gethostname()
-        c_data.tags['agenthost_domain_id'] = \
-            '%s_%s' % (cluster_id, c_data.fields['agenthost'])
+        c_data.tags['agenthost_domain_id'] = cluster_id
         c_data.fields['osd_epoch'] = obj_api.get_osd_epoch()
         c_data.fields['num_mon'] = len(obj_api.get_mons())
         c_data.fields['num_mon_quorum'] = \
@@ -86,7 +85,7 @@ class CephClusterAgent(MetricsAgent):
         c_data.fields['osd_bytes_avail'] = total_avail_bytes
         if total_bytes and total_avail_bytes:
             c_data.fields['osd_bytes_used_percentage'] = \
-                round(float(total_used_bytes) / float(total_bytes) * 100, 4)
+                round((float(total_used_bytes) / float(total_bytes)) * 100, 4)
         else:
             c_data.fields['osd_bytes_used_percentage'] = 0.0000
 
