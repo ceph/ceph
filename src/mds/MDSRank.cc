@@ -1245,7 +1245,8 @@ void MDSRank::heartbeat_reset()
   // NB not enabling suicide grace, because the mon takes care of killing us
   // (by blacklisting us) when we fail to send beacons, and it's simpler to
   // only have one way of dying.
-  g_ceph_context->get_heartbeat_map()->reset_timeout(hb, g_conf()->mds_beacon_grace, 0);
+  auto grace = g_conf().get_val<double>("mds_heartbeat_grace");
+  g_ceph_context->get_heartbeat_map()->reset_timeout(hb, grace, 0);
 }
 
 bool MDSRank::is_stale_message(const Message::const_ref &m) const
