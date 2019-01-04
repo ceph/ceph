@@ -71,7 +71,7 @@ class AsyncScheduler : public md_config_obs_t, public Scheduler {
  private:
   int schedule_request_impl(const client_id& client, const ReqParams& params,
                             const Time& time, const Cost& cost,
-                            optional_yield_context yield_ctx) override;
+                            optional_yield yield_ctx) override;
 
   static constexpr bool IsDelayed = false;
   using Queue = crimson::dmclock::PullPriorityQueue<client_id, Request, IsDelayed>;
@@ -189,7 +189,7 @@ public:
 private:
   int schedule_request_impl(const client_id&, const ReqParams&,
                             const Time&, const Cost&,
-                            optional_yield_context) override {
+                            optional_yield) override {
     return outstanding_requests++ >= max_requests ? -EAGAIN : 0 ;
   }
 

@@ -20,7 +20,7 @@
 #include "common/config.h"
 #include "common/perf_counters.h"
 #include "rgw_dmclock.h"
-#include "rgw_yield_context.h"
+#include "common/async/yield_context.h"
 
 namespace rgw::dmclock {
 
@@ -88,7 +88,7 @@ class Scheduler  {
 public:
   auto schedule_request(const client_id& client, const ReqParams& params,
 			const Time& time, const Cost& cost,
-			optional_yield_context yield)
+			optional_yield yield)
   {
     int r = schedule_request_impl(client,params,time,cost,yield);
     return std::make_pair(r,SchedulerCompleter(std::bind(&Scheduler::request_complete,this)));
@@ -99,7 +99,7 @@ public:
 private:
   virtual int schedule_request_impl(const client_id&, const ReqParams&,
 				    const Time&, const Cost&,
-				    optional_yield_context) = 0;
+				    optional_yield) = 0;
 };
 
 /// array of per-client counters to serve as GetClientCounters
