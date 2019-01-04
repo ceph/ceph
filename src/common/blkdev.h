@@ -24,7 +24,7 @@ extern int get_device_by_path(const char *path, char* partition, char* device, s
 extern std::string get_device_id(const std::string& devname,
 				 std::string *err=0);
 extern void get_dm_parents(const std::string& dev, std::set<std::string> *ls);
-extern int block_device_get_metrics(const string& devname, int timeout,
+extern int block_device_get_metrics(const std::string& devname, int timeout,
 				    json_spirit::mValue *result);
 
 // do everything to translate a device to the raw physical devices that
