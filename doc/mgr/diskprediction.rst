@@ -4,7 +4,10 @@ DISKPREDICTION PLUGIN
 
 The *diskprediction* plugin supports two modes: cloud mode and local mode. In cloud mode, the disk and Ceph operating status information is collected from Ceph cluster and sent to a cloud-based DiskPrediction server over the Internet. DiskPrediction server analyzes the data and provides the analytics and prediction results of performance and disk health states for Ceph clusters. 
 
-Local mode doesn't require any external server for data analysis and output results. In local mode, the *diskprediction* plugin uses an internal predictor module for disk prediction service, and then returns the disk prediction result to the Ceph system. 
+Local mode doesn't require any external server for data analysis and output results. In local mode, the *diskprediction* plugin uses an internal predictor module for disk prediction service, and then returns the disk prediction result to the Ceph system.
+
+| Local predictor: 70% accuracy
+| Cloud predictor for free: 95% accuracy
 
 Enabling
 ========
