@@ -1324,6 +1324,8 @@ protected:
   boost::optional<ceph::real_time> delete_at;
   bool copy_if_newer;
 
+  bool need_to_check_storage_class = false;
+
   int init_common();
 
 public:
@@ -1359,6 +1361,10 @@ public:
   void pre_exec() override;
   void execute() override;
   void progress_cb(off_t ofs);
+
+  virtual int check_storage_class(const rgw_placement_rule& src_placement) {
+    return 0;
+  }
 
   virtual int init_dest_policy() { return 0; }
   virtual int get_params() = 0;

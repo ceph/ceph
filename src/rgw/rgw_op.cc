@@ -234,6 +234,7 @@ static int get_obj_policy_from_attr(CephContext *cct,
 				    RGWBucketInfo& bucket_info,
 				    map<string, bufferlist>& bucket_attrs,
 				    RGWAccessControlPolicy *policy,
+                                    string *storage_class,
 				    rgw_obj& obj)
 {
   bufferlist bl;
@@ -257,6 +258,17 @@ static int get_obj_policy_from_attr(CephContext *cct,
 
     policy->create_default(bucket_info.owner, uinfo.display_name);
   }
+
+  if (storage_class) {
+    bufferlist scbl;
+    int r = rop.get_attr(RGW_ATTR_STORAGE_CLASS, scbl);
+    if (r >= 0) {
+      *storage_class = scbl.to_str();
+    } else {
+      storage_class->clear();
+    }
+  }
+
   return ret;
 }
 
@@ -473,6 +485,7 @@ static int read_obj_policy(RGWRados *store,
                            RGWBucketInfo& bucket_info,
                            map<string, bufferlist>& bucket_attrs,
                            RGWAccessControlPolicy* acl,
+                           string *storage_class,
 			   boost::optional<Policy>& policy,
                            rgw_bucket& bucket,
                            rgw_obj_key& object)
@@ -500,7 +513,7 @@ static int read_obj_policy(RGWRados *store,
 
   RGWObjectCtx *obj_ctx = static_cast<RGWObjectCtx *>(s->obj_ctx);
   int ret = get_obj_policy_from_attr(s->cct, store, *obj_ctx,
-                                     bucket_info, bucket_attrs, acl, obj);
+                                     bucket_info, bucket_attrs, acl, storage_class, obj);
   if (ret == -ENOENT) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
@@ -759,7 +772,7 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
       store->set_prefetch_data(s->obj_ctx, obj);
     }
     ret = read_obj_policy(store, s, s->bucket_info, s->bucket_attrs,
-			  s->object_acl.get(), s->iam_policy, s->bucket,
+			  s->object_acl.get(), nullptr, s->iam_policy, s->bucket,
                           s->object);
   }
 
@@ -3305,7 +3318,7 @@ int RGWPutObj::verify_permission()
     store->set_prefetch_data(s->obj_ctx, obj);
 
     /* check source object permissions */
-    if (read_obj_policy(store, s, copy_source_bucket_info, cs_attrs, &cs_acl,
+    if (read_obj_policy(store, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
 			policy, cs_bucket, cs_object) < 0) {
       return -EACCES;
     }
@@ -4659,11 +4672,23 @@ int RGWCopyObj::verify_permission()
     store->set_atomic(s->obj_ctx, src_obj);
     store->set_prefetch_data(s->obj_ctx, src_obj);
 
+    rgw_placement_rule src_placement;
+
     /* check source object permissions */
-    op_ret = read_obj_policy(store, s, src_bucket_info, src_attrs, &src_acl,
+    op_ret = read_obj_policy(store, s, src_bucket_info, src_attrs, &src_acl, &src_placement.storage_class,
 			     src_policy, src_bucket, src_object);
     if (op_ret < 0) {
       return op_ret;
+    }
+
+    /* follow up on previous checks that required reading source object head */
+    if (need_to_check_storage_class) {
+      src_placement.inherit_from(src_bucket_info.placement_rule);
+
+      op_ret  = check_storage_class(src_placement);
+      if (op_ret < 0) {
+        return op_ret;
+      }
     }
 
     /* admin request overrides permission checks */
