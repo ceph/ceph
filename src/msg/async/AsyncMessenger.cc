@@ -155,10 +155,10 @@ void Processor::start()
   worker->center.submit_to(worker->center.get_id(), [this]() {
       for (auto& l : listen_sockets) {
 	if (l) {   
-     if (l.fd() == -1) {
-       ldout(msgr->cct, 1) << __func__ << " Erro: processor restart after listen_socket.fd closed. " << this << dendl;
-       return;
-     }
+          if (l.fd() == -1) {
+            ldout(msgr->cct, 1) << __func__ << " Erro: processor restart after listen_socket.fd closed. " << this << dendl;
+            return;
+          }
 	  worker->center.create_file_event(l.fd(), EVENT_READABLE,
 					   listen_handler); }
       }
