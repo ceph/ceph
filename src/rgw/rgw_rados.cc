@@ -4291,25 +4291,18 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   boost::optional<RGWPutObj_Compress> compressor;
   CompressorRef plugin;
 
-  const auto& compression_type = svc.zone->get_zone_params().get_compression_type(
-      dest_bucket_info.placement_rule);
-  if (compression_type != "none") {
-    plugin = Compressor::create(cct, compression_type);
-    if (!plugin) {
-      ldout(cct, 1) << "Cannot load plugin for compression type "
-          << compression_type << dendl;
-    }
-  }
-
+  rgw_placement_rule dest_rule;
   RGWRadosPutObj cb(cct, plugin, compressor, &processor, progress_cb, progress_data,
                     [&](const map<string, bufferlist>& obj_attrs) {
                       if (!ptail_rule) {
                         auto iter = obj_attrs.find(RGW_ATTR_STORAGE_CLASS);
                         if (iter != obj_attrs.end()) {
-                          rgw_placement_rule dest_rule;
                           dest_rule.storage_class = iter->second.to_str();
                           dest_rule.inherit_from(dest_bucket_info.placement_rule);
                           processor.set_tail_placement(std::move(dest_rule));
+                          ptail_rule = &dest_rule;
+                        } else {
+                          ptail_rule = &dest_bucket_info.placement_rule;
                         }
                       }
 
@@ -4319,6 +4312,16 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                       }
                       return 0;
                     });
+
+  const auto& compression_type = svc.zone->get_zone_params().get_compression_type(
+      *ptail_rule);
+  if (compression_type != "none") {
+    plugin = Compressor::create(cct, compression_type);
+    if (!plugin) {
+      ldout(cct, 1) << "Cannot load plugin for compression type "
+          << compression_type << dendl;
+    }
+  }
 
   string etag;
   real_time set_mtime;
