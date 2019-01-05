@@ -2198,12 +2198,20 @@ int RGWCopyObj_ObjStore_S3::get_params()
       (dest_bucket_name.compare(src_bucket_name) == 0) &&
       (dest_object.compare(src_object.name) == 0) &&
       src_object.instance.empty() &&
-      s->info.storage_class.empty() &&
       (attrs_mod != RGWRados::ATTRSMOD_REPLACE)) {
+    need_to_check_storage_class = true;
+  }
+
+  return 0;
+}
+
+int RGWCopyObj_ObjStore_S3::check_storage_class(const rgw_placement_rule& src_placement)
+{
+  if (src_placement == s->dest_placement) {
     /* can only copy object into itself if replacing attrs */
     s->err.message = "This copy request is illegal because it is trying to copy "
-                     "an object to itself without changing the object's metadata, "
-                     "storage class, website redirect location or encryption attributes.";
+      "an object to itself without changing the object's metadata, "
+      "storage class, website redirect location or encryption attributes.";
     ldout(s->cct, 0) << s->err.message << dendl;
     return -ERR_INVALID_REQUEST;
   }
