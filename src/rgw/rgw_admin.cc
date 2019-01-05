@@ -4766,7 +4766,27 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-        if (opt_cmd == OPT_ZONE_PLACEMENT_ADD) {
+        if (opt_cmd == OPT_ZONE_PLACEMENT_ADD ||
+	    opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
+	  RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+	  ret = zonegroup.init(g_ceph_context, store->svc.sysobj);
+	  if (ret < 0) {
+	    cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+	    return -ret;
+	  }
+
+	  auto ptiter = zonegroup.placement_targets.find(placement_id);
+	  if (ptiter == zonegroup.placement_targets.end()) {
+	    cerr << "ERROR: placement id '" << placement_id << "' is not configured in zonegroup placement targets" << std::endl;
+	    return EINVAL;
+	  }
+
+	  storage_class = rgw_placement_rule::get_canonical_storage_class(storage_class);
+	  if (ptiter->second.storage_classes.find(storage_class) == ptiter->second.storage_classes.end()) {
+	    cerr << "ERROR: storage class '" << storage_class << "' is not defined in zonegroup '" << placement_id << "' placement target" << std::endl;
+	    return EINVAL;
+	  }
+
           RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
 
 	  string opt_index_pool = index_pool.value_or(string());
@@ -4804,33 +4824,6 @@ int main(int argc, const char **argv)
 	    info.index_type = placement_index_type;
           }
 
-          ret = check_pool_support_omap(info.get_data_extra_pool());
-          if (ret < 0) {
-             cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool() 
-                 << "' does not support omap" << std::endl;
-             return ret;
-          }
-        } else if (opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
-          auto p = zone.placement_pools.find(placement_id);
-          if (p == zone.placement_pools.end()) {
-            cerr << "ERROR: zone placement target '" << placement_id
-                << "' not found" << std::endl;
-            return -ENOENT;
-          }
-          auto& info = p->second;
-          if (index_pool && !index_pool->empty()) {
-            info.index_pool = *index_pool;
-          }
-          rgw_pool dp = data_pool.get();
-          info.storage_classes.set_storage_class(storage_class, &dp, compression_type.get_ptr());
-
-          if (data_extra_pool) {
-            info.data_extra_pool = *data_extra_pool;
-          }
-          if (index_type_specified) {
-            info.index_type = placement_index_type;
-          }
-          
           ret = check_pool_support_omap(info.get_data_extra_pool());
           if (ret < 0) {
              cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool() 
