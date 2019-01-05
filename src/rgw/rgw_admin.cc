@@ -4767,24 +4767,41 @@ int main(int argc, const char **argv)
 	}
 
         if (opt_cmd == OPT_ZONE_PLACEMENT_ADD) {
-          // pool names are required
-          if (!index_pool || index_pool->empty() ||
-              !data_pool || data_pool->empty()) {
-            cerr << "ERROR: need to specify both --index-pool and --data-pool" << std::endl;
-            return EINVAL;
-          }
-
           RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
 
-          info.index_pool = *index_pool;
-          rgw_pool dp = data_pool.get();
+	  string opt_index_pool = index_pool.value_or(string());
+	  string opt_data_pool = data_pool.value_or(string());
+
+	  if (!opt_index_pool.empty()) {
+	    info.index_pool = opt_index_pool;
+	  }
+
+	  if (info.index_pool.empty()) {
+            cerr << "ERROR: index pool not configured, need to specify --index-pool" << std::endl;
+            return EINVAL;
+	  }
+
+	  if (opt_data_pool.empty()) {
+	    const RGWZoneStorageClass *porig_sc{nullptr};
+	    if (info.storage_classes.find(storage_class, &porig_sc)) {
+	      if (porig_sc->data_pool) {
+		opt_data_pool = porig_sc->data_pool->to_str();
+	      }
+	    }
+	    if (opt_data_pool.empty()) {
+	      cerr << "ERROR: data pool not configured, need to specify --data-pool" << std::endl;
+	      return EINVAL;
+	    }
+	  }
+
+          rgw_pool dp = opt_data_pool;
           info.storage_classes.set_storage_class(storage_class, &dp, compression_type.get_ptr());
 
           if (data_extra_pool) {
             info.data_extra_pool = *data_extra_pool;
           }
           if (index_type_specified) {
-            info.index_type = placement_index_type;
+	    info.index_type = placement_index_type;
           }
 
           ret = check_pool_support_omap(info.get_data_extra_pool());
