@@ -15,6 +15,8 @@
 #ifndef CEPH_MSG_TYPES_H
 #define CEPH_MSG_TYPES_H
 
+#include <sstream>
+
 #include <netinet/in.h>
 
 #include "include/ceph_features.h"
