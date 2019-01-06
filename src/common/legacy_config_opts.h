@@ -366,6 +366,7 @@ OPTION(client_readahead_max_bytes, OPT_LONGLONG)  // default unlimited
 OPTION(client_readahead_max_periods, OPT_LONGLONG)  // as multiple of file layout period (object size * num stripes)
 OPTION(client_reconnect_stale, OPT_BOOL)  // automatically reconnect stale session
 OPTION(client_snapdir, OPT_STR)
+OPTION(client_snap_read_caps_retry, OPT_INT) // max times of request read caps of snap file to mds
 OPTION(client_mountpoint, OPT_STR)
 OPTION(client_mount_uid, OPT_INT)
 OPTION(client_mount_gid, OPT_INT)

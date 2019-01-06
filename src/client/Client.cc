@@ -937,6 +937,10 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     }
   } else {
     in->snap_caps |= st->cap.caps;
+    ldout(cct, 10) << __func__ << ": add new snap cap "
+       << ccap_string(st->cap.caps)
+       << " total snap caps " << ccap_string(in->snap_caps)
+       << " for snap inode " << *in << dendl;
   }
 
   return in;
@@ -3159,6 +3163,7 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
   if (r < 0)
     return r;
 
+  int snap_read_cap_retries = 0;
   while (1) {
     int file_wanted = in->caps_file_wanted();
     if ((file_wanted & need) != need) {
@@ -3166,6 +3171,14 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 		     << " file_wanted " << ccap_string(file_wanted) << ", EBADF "
 		     << dendl;
       return -EBADF;
+    }
+
+    if (snap_read_cap_retries > cct->_conf->client_snap_read_caps_retry) {
+      lderr(cct) << __func__ << ": get read caps failed reaches max tries "
+               << cct->_conf->client_snap_read_caps_retry
+               << ", return -EINVAL " << (-EINVAL)
+               << dendl;
+      return -EINVAL;
     }
 
     int implemented;
@@ -3218,6 +3231,17 @@ int Client::get_caps(Inode *in, int need, int want, int *phave, loff_t endoff)
 	  in->get_cap_ref(need);
 	  return 0;
 	}
+      } else if (in->snapid != CEPH_NOSNAP && (need & CEPH_CAP_FILE_RD)) {
+	// snap file doesn't have read caps
+	ldout(cct, 10) << __func__ << ": have " << ccap_string(have)
+               << " need " << ccap_string(need) << " want " << ccap_string(want)
+               << " get read caps for snapped file: "
+               << *in << dendl;
+	int ret = _renew_caps(in);
+	snap_read_cap_retries++;
+	if (ret < 0) // get read caps for snap file failed
+	  return ret;
+	continue;
       }
       ldout(cct, 10) << "waiting for caps " << *in << " need " << ccap_string(need) << " want " << ccap_string(want) << dendl;
       waitfor_caps = true;

@@ -6588,6 +6588,10 @@ std::vector<Option> get_mds_client_options() {
     .set_default(".snap")
     .set_description("pseudo directory for snapshot access to a directory"),
 
+    Option("client_snap_read_caps_retry", Option::TYPE_INT, Option::LEVEL_BASIC)
+    .set_default(3)
+    .set_description("max times of request read caps of snap file to mds"),
+
     Option("client_mountpoint", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("/")
     .set_description("default mount-point"),
