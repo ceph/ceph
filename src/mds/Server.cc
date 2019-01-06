@@ -3288,7 +3288,7 @@ void Server::_lookup_snap_ino(MDRequestRef& mdr)
 
   const snapid_t min_snap = 2;
 
-  if (vino.snapid < min_snap || vino.snapid > CEPH_MAXSNAP) {
+  if (vino.snapid < min_snap) {
     respond_to_request(mdr, -EINVAL);
     return;
   }
@@ -3333,7 +3333,7 @@ void Server::_lookup_snap_ino(MDRequestRef& mdr)
       } else {
        dout(7) << __func__ << ": head is dir "  << dendl;
        lookup_hardlink = false;
-       if (!in->has_snap_data(vino.snapid)) {
+       if (!in->has_snap_data(vino.snapid) && vino.snapid != CEPH_SNAPDIR) {
        dout(1) << __func__ << ": head dir invalid snap "
                << vino.snapid << dendl;
        respond_to_request(mdr, -ESTALE);
@@ -3369,7 +3369,7 @@ void Server::_lookup_snap_ino(MDRequestRef& mdr)
        respond_to_request(mdr, -ESTALE);
        return;
       }
-    } else if (!in->has_snap_data(vino.snapid)) {
+    } else if (!in->has_snap_data(vino.snapid) && vino.snapid != CEPH_SNAPDIR) {
       dout(1) << __func__ << ": found snap dir but invalid snap "
        << vino.snapid << dendl;
       respond_to_request(mdr, -ESTALE);
