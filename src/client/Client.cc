@@ -3471,7 +3471,9 @@ void Client::check_caps(Inode *in, unsigned flags)
     ldout(cct, 10) << " cap mds." << mds
 	     << " issued " << ccap_string(cap->issued)
 	     << " implemented " << ccap_string(cap->implemented)
-	     << " revoking " << ccap_string(revoking) << dendl;
+	     << " revoking " << ccap_string(revoking)
+	     << " wanted " << ccap_string(cap->wanted)
+	     << dendl;
 
     if (in->wanted_max_size > in->max_size &&
 	in->wanted_max_size > in->requested_max_size &&
@@ -5091,6 +5093,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   const int new_caps = m->get_caps();
   ldout(cct, 5) << "handle_cap_grant on in " << m->get_ino() 
 		<< " mds." << mds << " seq " << m->get_seq()
+		<< " op " << ceph_cap_op_name(m->get_op())
 		<< " caps now " << ccap_string(new_caps)
 		<< " was " << ccap_string(old_caps) << dendl;
   cap->seq = m->get_seq();
@@ -5192,6 +5195,23 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
     }
   } else if (old_caps == new_caps) {
     ldout(cct, 10) << "  caps unchanged at " << ccap_string(old_caps) << dendl;
+    if (m->get_op() == CEPH_CAP_OP_REVOKE) {
+      ldout(cct, 0) << __func__
+		<< ": CEPH_CAP_OP_REVOKE NULL need to respond cap to mds."
+		<< mds
+		<< dendl;
+      MetaSession *session = mds_sessions[mds];
+      assert(session);
+      int retain = cap->implemented | cap->issued | CEPH_CAP_PIN;
+      send_cap(in, session, cap, 0, used, 0, retain, false, 0);
+      ldout(cct, 5) << __func__
+		<< " op " << ceph_cap_op_name(m->get_op())
+		<< " after send cap to mds." << mds
+		<< " retain " << ccap_string(retain)
+		<< " issued " << ccap_string(cap->issued)
+		<< " implemented " << ccap_string(cap->implemented)
+		<< dendl;
+    }
   } else {
     ldout(cct, 10) << "  grant, new caps are " << ccap_string(new_caps & ~old_caps) << dendl;
     cap->issued = new_caps;
