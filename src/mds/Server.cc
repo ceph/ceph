@@ -3281,16 +3281,78 @@ void Server::_lookup_snap_ino(MDRequestRef& mdr)
   vino.snapid = (__u64)req->head.args.lookupino.snapid;
   inodeno_t parent_ino = (__u64)req->head.args.lookupino.parent;
   __u32 hash = req->head.args.lookupino.hash;
+  CInode *in = NULL;
+  bool lookup_hardlink = false;
 
   dout(7) << "lookup_snap_ino " << vino << " parent " << parent_ino << " hash " << hash << dendl;
 
-  CInode *in = mdcache->lookup_snap_inode(vino);
-  if (!in) {
+  const snapid_t min_snap = 2;
+
+  if (vino.snapid < min_snap || vino.snapid > CEPH_MAXSNAP) {
+    respond_to_request(mdr, -EINVAL);
+    return;
+  }
+
+  // lookup for snap file
+  in = mdcache->lookup_snap_inode(vino);
+  dout(7) << __func__  << ": lookup_snap_inode for vino " << vino
+       << ", result inode = " << in
+       << dendl;
+
+  if (!in) { // file or dir snap inode not found currently
+    lookup_hardlink = true;
+    // lookup head for dir/file (impilict from parent dir)
     in = mdcache->get_inode(vino.ino);
-    if (in) {
-      if (in->state_test(CInode::STATE_PURGING) ||
-	  !in->has_snap_data(vino.snapid)) {
-	if (in->is_dir() || !parent_ino) {
+    if (in) { // found head from parent dir (dir is fetched)
+      dout(7) << __func__ << ": vino " << vino << " found head = "
+       << *in << dendl;
+
+      if (!in->is_dir()) { // head file
+        lookup_hardlink = false;
+       dout(7) << __func__ << ": head is file "  << dendl;
+       if (!in->is_valid_snap(vino.snapid)) {
+         dout(7) << __func__ << ": head file invalid snap "
+               << ", primary dentry = " << in->get_parent_dn()
+               << ", remote dn nums = " << in->num_remote_parents()
+               << dendl;
+         if (in->get_parent_dn()) { // primary dentry
+           dout(1) << __func__ << " primary dentry = " << *(in->get_parent_dn())
+               << ", is_primary = "
+               << in->get_parent_dn()->get_linkage()->is_primary()
+               << ", head invalid snap, return -ESTALE"
+               << dendl;
+           respond_to_request(mdr, -ESTALE);
+           return;
+         } else { // remote dentry
+           lookup_hardlink = true;
+           dout(1) << __func__ << ": " << vino.snapid << " will find hardlink "
+               << dendl;
+           in = NULL;
+         }
+       }
+      } else {
+       dout(7) << __func__ << ": head is dir "  << dendl;
+       lookup_hardlink = false;
+       if (!in->has_snap_data(vino.snapid)) {
+       dout(1) << __func__ << ": head dir invalid snap "
+               << vino.snapid << dendl;
+       respond_to_request(mdr, -ESTALE);
+       return;
+       }
+      }
+
+      if (in && in->state_test(CInode::STATE_PURGING)) {
+       // dir has load its dentry by parent dir
+       // removed dir has no snap
+       if (in->is_dir()) {
+          dout(1) << __func__ << ": found purging head: head is stale dir"
+               << dendl;
+         respond_to_request(mdr, -ESTALE);
+         return;
+       } else if (!parent_ino) {
+          dout(1) << __func__
+               << ": found purging head: head file will not load from parent dir"
+               << dendl;
 	  respond_to_request(mdr, -ESTALE);
 	  return;
 	}
@@ -3299,19 +3361,44 @@ void Server::_lookup_snap_ino(MDRequestRef& mdr)
     }
   }
 
-  if (in) {
-    dout(10) << "reply to lookup_snap_ino " << *in << dendl;
+  if (in) { // found snap inode
+    if (!in->is_dir()) {
+      if (!in->is_valid_snap(vino.snapid)) {
+       dout(1) << __func__ << ": found snap file but invalid snap "
+               << vino.snapid << dendl;
+       respond_to_request(mdr, -ESTALE);
+       return;
+      }
+    } else if (!in->has_snap_data(vino.snapid)) {
+      dout(1) << __func__ << ": found snap dir but invalid snap "
+       << vino.snapid << dendl;
+      respond_to_request(mdr, -ESTALE);
+      return;
+    }
+    //dout(10) << "reply to lookup_snap_ino " << *in << dendl;
+    if (in->is_dir())
+      dout(7) << __func__ << ": reply to dir snap inode " << *in << dendl;
+    else
+      dout(7) << __func__ << ": reply to file snap inode " << *in << dendl;
     mdr->snapid = vino.snapid;
     mdr->tracei = in;
     respond_to_request(mdr, 0);
     return;
   }
 
+  // lookup for snap inode need more info from parent dir
+  // if parent dir not loaded/fetched, load/fetch it
   CInode *diri = NULL;
   if (parent_ino) {
+    // get parent dir head inode
     diri = mdcache->get_inode(parent_ino);
+    // load parent dir
     if (!diri) {
       mdcache->open_ino(parent_ino, mds->mdsmap->get_metadata_pool(), new C_MDS_LookupIno2(this, mdr));
+      dout(7) << __func__ << ": parent_dir: open ino for parent ino "
+       << parent_ino << dendl;
+      mdcache->open_ino(parent_ino, mds->mdsmap->get_metadata_pool(),
+                       new C_MDS_LookupIno2(this, mdr));
       return;
     }
 
@@ -3330,6 +3417,9 @@ void Server::_lookup_snap_ino(MDRequestRef& mdr)
     if (!dir)
       return;
 
+    // fetch parent dir to get snap file dentry & head dir/file dentry
+    // then snap file dentry is put to MDCache::snap_inode_map []
+    // head dentry is put to MDCache::inode_map []
     if (!dir->is_complete()) {
       if (dir->is_frozen()) {
 	mds->locker->drop_locks(mdr.get());
@@ -3337,13 +3427,61 @@ void Server::_lookup_snap_ino(MDRequestRef& mdr)
 	dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
+      dout(7) << __func__ << ": parent_dir: will fetch for parent ino "
+             << parent_ino << dendl;
       dir->fetch(new C_MDS_RetryRequest(mdcache, mdr), true);
       return;
     }
 
+    if (lookup_hardlink && dir->is_complete()) {
+      lookup_hardlink = false;
+      dout(7) << __func__
+             << ": snap NOT found: lookup hardlink from parent dir"
+             << dendl;
+      CDentry *tmp_dentry = NULL;
+      CDentry::linkage_t *tlinkage = NULL;
+      std::map<dentry_key_t, CDentry*>::iterator itr = dir->begin();
+
+      // lookup for remote dentry
+      for (; itr != dir->end(); itr++) {
+       tmp_dentry = itr->second;
+       tlinkage = tmp_dentry->get_linkage();
+       if (tlinkage->is_remote() && (tlinkage->get_remote_ino() == vino.ino)) {
+         int dtype = (int) tlinkage->get_remote_d_type();
+         mode_t mtype = DTTOIF(dtype);
+          dout(7) << __func__ << ": parent_dir: found similar remote "
+                 << vino.ino << ", dtype = 0" << std::oct << dtype
+                 << dendl;
+         int64_t poolid = -1; // default use the first data pool
+         if (S_ISDIR(mtype)) {
+             dout(7) << __func__ << ": parent_dir: remote ino is dir "
+                     << dendl;
+             poolid = mds->mdsmap->get_metadata_pool();
+         } else {
+             dout(7) << __func__ << ": parent_dir: remote ino is NOT dir "
+                     << dendl;
+             poolid = -1;
+         }
+         dout(7) << __func__ << ": parent_dir: open ino for remote ino "
+               << vino.ino << ", in pool " << poolid
+               << dendl;
+         mdcache->open_ino(vino.ino, poolid,
+                           new C_MDS_LookupIno2(this, mdr), false);
+         return;
+       }
+      } // end for
+    } // end if
+
+    dout(1) << __func__ << ": parent_dir: vino " << vino
+           << " finally NOT found" << dendl;
+
     respond_to_request(mdr, -ESTALE);
   } else {
-    mdcache->open_ino(vino.ino, mds->mdsmap->get_metadata_pool(), new C_MDS_LookupIno2(this, mdr), false);
+    dout(7) << __func__ << ": parent_ino not supplied: open ino for vino "
+       << vino.ino << ", in meta pool "
+       << dendl;
+    mdcache->open_ino(vino.ino, mds->mdsmap->get_metadata_pool(),
+                     new C_MDS_LookupIno2(this, mdr), false);
   }
 }
 

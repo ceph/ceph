@@ -500,6 +500,9 @@ public:
   void split_old_inode(snapid_t snap);
   mempool_old_inode *pick_old_inode(snapid_t last);
   void pre_cow_old_inode();
+  const set<snapid_t> get_valid_snaps();
+  bool is_valid_snap(const set<snapid_t>& snaps, snapid_t s);
+  bool is_valid_snap(snapid_t s);
   bool has_snap_data(snapid_t s);
   void purge_stale_snap_data(const std::set<snapid_t>& snaps);
 

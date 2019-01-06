@@ -2561,21 +2561,73 @@ void CInode::pre_cow_old_inode()
     cow_old_inode(follows, true);
 }
 
+const set<snapid_t> CInode::get_valid_snaps()
+{
+  open_snaprealm();
+  if (!snaprealm->is_open())
+    snaprealm->_open_parents(NULL);
+  SnapRealm *realm = find_snaprealm();
+  assert(realm);
+
+  map<snapid_t, SnapInfo *> infomap;
+  realm->get_snap_info(infomap, get_oldest_snap());
+  dout(10) << __func__ << ": infomap.size() = " << infomap.size() << dendl;
+
+  set<snapid_t> snaps;
+  for (auto p : infomap) {
+    dout(15) << __func__ << ": infomap.first = " << p.first << dendl;
+    snaps.insert(p.first);
+  }
+
+  return snaps;
+}
+
+bool CInode::is_valid_snap(const set<snapid_t>& snaps, snapid_t snapid)
+{
+  // if snapid in snaprealm
+  auto itr = snaps.find(snapid);
+  if (itr != snaps.end())
+    return true;
+  return false;
+}
+
+bool CInode::is_valid_snap(snapid_t snapid)
+{
+  const set<snapid_t>& snaps = get_valid_snaps();
+  return is_valid_snap(snaps, snapid);
+}
+
 bool CInode::has_snap_data(snapid_t snapid)
 {
   bool found = snapid >= first && snapid <= last;
+  dout(10) << __func__ << ": first = " << first
+       << ", last = " << last
+       << ", snapid = " << snapid
+       << ", start found = " << found
+       << dendl;
+
+  const set<snapid_t>& snaps = get_valid_snaps();
+
+  if (!is_valid_snap(snaps, snapid)) {
+    dout(10) << __func__ << ": end found = 0" << dendl;
+    return false;
+  }
+
   if (!found && is_multiversion()) {
+    purge_stale_snap_data(snaps);
     auto p = old_inodes.lower_bound(snapid);
     if (p != old_inodes.end()) {
       if (p->second.first > snapid) {
 	if  (p != old_inodes.begin())
 	  --p;
       }
+      dout(10) << __func__ << ": found old inode = " << p->first << dendl;
       if (p->second.first <= snapid && snapid <= p->first) {
 	found = true;
       }
     }
   }
+  dout(10) << __func__ << ": end found = " << found << dendl;
   return found;
 }
 
