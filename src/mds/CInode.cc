@@ -3265,8 +3265,19 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
      * multiversion.
      */
     ecap.caps = valid ? get_caps_allowed_by_type(CAP_ANY) : CEPH_STAT_CAP_INODE;
+    if (is_file() && client == get_loner()) { // inode is taken lonely by client
+      int loner_caps = get_caps_allowed_for_client(session, file_i);
+      ecap.caps = ecap.caps |
+           (loner_caps & (CEPH_CAP_ANY_SHARED | CEPH_CAP_FILE_RD));
+      dout(7) << __func__ << " inode = " << file_i->ino << "." << snapid
+			<< ", client " << client << " is loner"
+			<< dendl;
+    }
     if (last == CEPH_NOSNAP || is_any_caps())
       ecap.caps = ecap.caps & get_caps_allowed_for_client(session, file_i);
+    dout(7) << __func__ << " inode = " << file_i->ino << "." << snapid
+			<< " snap allowed caps = " << ccap_string(ecap.caps)
+			<< dendl;
     ecap.seq = 0;
     ecap.mseq = 0;
     ecap.realm = 0;
