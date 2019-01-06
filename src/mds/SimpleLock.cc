@@ -22,6 +22,8 @@ void SimpleLock::dump(Formatter *f) const {
     return;
   }
 
+  f->dump_string("state", get_state_name(get_state()));
+
   f->open_array_section("gather_set");
   if (have_more()) {
     for(const auto &i : more()->gather_set) {
