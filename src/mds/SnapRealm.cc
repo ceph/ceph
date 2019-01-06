@@ -377,11 +377,16 @@ snapid_t SnapRealm::resolve_snapname(boost::string_view n, inodeno_t atino, snap
   if (!actual) {
     if (!n.length() ||
 	n[0] != '_') return 0;
-    int next_ = n.find('_', 1);
-    if (next_ < 0) return 0;
-    pname = std::string(n.substr(1, next_ - 1));
-    pino = atoll(n.data() + next_ + 1);
-    dout(10) << " " << n << " parses to name '" << pname << "' dirino " << pino << dendl;
+    int last_ = n.find_last_of("_");
+    if (last_ < 0)
+      return 0;
+    pname = std::string(n.substr(1, last_ - 1));
+    pino = atoll(n.data() + last_ + 1);
+    dout(10) << __func__ << ": last_ = " << last_
+	<< " parent inostr = " << (n.data() + last_ + 1)
+	<< " str " << n << " parses to name '" << pname
+	<< "' dirino " << pino
+	<< dendl;
   }
 
   for (map<snapid_t, SnapInfo>::iterator p = srnode.snaps.lower_bound(first); // first element >= first
