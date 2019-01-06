@@ -12010,19 +12010,19 @@ void MDCache::cache_status(Formatter *f)
   f->close_section();
 }
 
-int MDCache::dump_cache(boost::string_view file_name)
+int MDCache::dump_cache(boost::string_view file_name, inodeno_t ino)
 {
-  return dump_cache(file_name, NULL);
+  return dump_cache(file_name, NULL, boost::string_view(""), ino);
 }
 
-int MDCache::dump_cache(Formatter *f)
+int MDCache::dump_cache(Formatter *f, inodeno_t ino)
 {
-  return dump_cache(boost::string_view(""), f);
+  return dump_cache(boost::string_view(""), f, boost::string_view(""), ino);
 }
 
 int MDCache::dump_cache(boost::string_view dump_root, int depth, Formatter *f)
 {
-  return dump_cache(boost::string_view(""), f, dump_root, depth);
+  return dump_cache(boost::string_view(""), f, dump_root, 0, depth);
 }
 
 /**
@@ -12030,7 +12030,7 @@ int MDCache::dump_cache(boost::string_view dump_root, int depth, Formatter *f)
  * provided, else to a plain text file.
  */
 int MDCache::dump_cache(boost::string_view fn, Formatter *f,
-			 boost::string_view dump_root, int depth)
+			 boost::string_view dump_root, inodeno_t ino, int depth)
 {
   int r = 0;
   int fd = -1;
@@ -12138,6 +12138,17 @@ int MDCache::dump_cache(boost::string_view fn, Formatter *f,
     }
     return 1;
   };
+
+  if (ino > 0) {
+    CInode *in = get_inode(ino);
+    if (!in)
+      r = -ENOENT;
+    else {
+      r = dump_func(in);
+      r = r > 0 ? 0 : r;
+    }
+    goto out;
+  }
 
   for (auto &p : inode_map) {
     r = dump_func(p.second);

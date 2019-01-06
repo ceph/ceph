@@ -2384,11 +2384,20 @@ bool MDSRankDispatcher::handle_asok_command(
   } else if (command == "dump cache") {
     Mutex::Locker l(mds_lock);
     string path;
+    int64_t ino = 0;
     int r;
+
+    if (!cmd_getval(g_ceph_context, cmdmap, "ino", ino)) {
+      ino = 0;
+    } else if (ino <= 0) {
+      ss << "invalid ino";
+      return true;
+    }
+
     if(!cmd_getval(g_ceph_context, cmdmap, "path", path)) {
-      r = mdcache->dump_cache(f);
+      r = mdcache->dump_cache(f, (inodeno_t)ino);
     } else {
-      r = mdcache->dump_cache(path);
+      r = mdcache->dump_cache(path, (inodeno_t)ino);
     }
 
     if (r != 0) {
