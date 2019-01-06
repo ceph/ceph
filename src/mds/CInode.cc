@@ -2563,17 +2563,31 @@ void CInode::pre_cow_old_inode()
 
 const set<snapid_t> CInode::get_valid_snaps()
 {
-  open_snaprealm();
-  if (!snaprealm->is_open())
-    snaprealm->_open_parents(NULL);
-  SnapRealm *realm = find_snaprealm();
-  assert(realm);
+  SnapRealm *realm = NULL;
+  set<snapid_t> snaps;
+
+  dout(10) << __func__ << ": find snaprealm for "
+           << ((is_dir()) ? "dir" : "file")
+           << " inode " << *this
+           << dendl;
+
+  realm = find_snaprealm();
+  if (!realm) {
+    dout(10) << __func__ << ": find NO snaprealm for inode "
+             << *this << dendl;
+    return snaps;
+  }
+
+  dout(10) << __func__ << ": found snaprealm addr = " << realm
+           << ", realm = " << *realm << dendl;
+
+  if (!realm->is_open())
+    realm->_open_parents(NULL);
 
   map<snapid_t, SnapInfo *> infomap;
   realm->get_snap_info(infomap, get_oldest_snap());
   dout(10) << __func__ << ": infomap.size() = " << infomap.size() << dendl;
 
-  set<snapid_t> snaps;
   for (auto p : infomap) {
     dout(15) << __func__ << ": infomap.first = " << p.first << dendl;
     snaps.insert(p.first);
