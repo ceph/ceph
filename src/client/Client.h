@@ -541,8 +541,8 @@ protected:
   void _invalidate_kernel_dcache();
   void _trim_negative_child_dentries(InodeRef& in);
   
-  void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected);
-  void dump_cache(Formatter *f);  // debug
+  void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected, bool recursive = true);
+  void dump_cache(Formatter *f, inodeno_t ino = 0);  // debug
 
   // force read-only
   void force_session_readonly(MetaSession *s);
