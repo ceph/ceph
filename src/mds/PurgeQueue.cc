@@ -175,6 +175,10 @@ void PurgeQueue::open(Context *completion)
       journaler.set_writeable();
       recovered = true;
       finish_contexts(g_ceph_context, waiting_for_recovery);
+    } else if (r == -ESHUTDOWN) { // journal open hits shutdown by signal ...
+      derr << "PurgeQueue.journaler is shutdown,"
+        << ", ignore error " << r
+        << " and return" << dendl;
     } else {
       derr << "Error " << r << " loading Journaler" << dendl;
       on_error->complete(r);
