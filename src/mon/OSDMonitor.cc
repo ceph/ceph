@@ -2832,6 +2832,8 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     goto ignore;
   }
 
+  // The release check here is required because for OSD_PGLOG_HARDLIMIT,
+  // we are reusing a jewel feature bit that was retired in luminous.
   if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
       osdmap.test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT) &&
       !(m->osd_features & CEPH_FEATURE_OSD_PGLOG_HARDLIMIT)) {
@@ -10094,6 +10096,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         err = -EPERM;
         goto reply;
       }
+      // The release check here is required because for OSD_PGLOG_HARDLIMIT,
+      // we are reusing a jewel feature bit that was retired in luminous.
       if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
          (HAVE_FEATURE(osdmap.get_up_osd_features(), OSD_PGLOG_HARDLIMIT)
           || sure)) {
