@@ -8,6 +8,7 @@
 
 #include "civetweb/civetweb.h"
 #include "rgw_civetweb.h"
+#include "rgw_perf_counters.h"
 
 
 #define dout_subsys ceph_subsys_rgw

@@ -53,6 +53,7 @@
 #include "rgw_lib_frontend.h"
 #include "rgw_http_client.h"
 #include "rgw_http_client_curl.h"
+#include "rgw_perf_counters.h"
 
 #include <errno.h>
 #include <thread>
