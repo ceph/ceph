@@ -2476,6 +2476,12 @@ void Client::handle_osd_map(MOSDMap *m)
         return o.is_blacklisted(myaddr);});
   }
 
+  // Always subscribe to next osdmap for blacklisted client
+  // until this client is not blacklisted.
+  if (blacklisted) {
+    objecter->maybe_request_map();
+  }
+
   if (objecter->osdmap_full_flag()) {
     _handle_full_flag(-1);
   } else {
