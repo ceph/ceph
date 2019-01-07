@@ -31,11 +31,10 @@
 
 /*
  * messenger V2 connection banner prefix.
- * The full banner string should have the form: "ceph %x %x" the first hex
- * bytes are the features supported mask and the second hex bytes are the
- * features required mask.
+ * The full banner string should have the form: "ceph v2\n<le16>"
+ * the 2 bytes are the length of the remaining banner.
  */
-#define CEPH_BANNER_V2_PREFIX "ceph v2"
+#define CEPH_BANNER_V2_PREFIX "ceph v2\n"
 
 /*
  * messenger V2 features
