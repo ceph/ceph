@@ -20,10 +20,10 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
     const rgw_usage_data& usage = uiter->second;
     formatter->open_object_section("entry");
     formatter->dump_string("category", uiter->first);
-    formatter->dump_int("bytes_sent", usage.bytes_sent);
-    formatter->dump_int("bytes_received", usage.bytes_received);
-    formatter->dump_int("ops", usage.ops);
-    formatter->dump_int("successful_ops", usage.successful_ops);
+    formatter->dump_unsigned("bytes_sent", usage.bytes_sent);
+    formatter->dump_unsigned("bytes_received", usage.bytes_received);
+    formatter->dump_unsigned("ops", usage.ops);
+    formatter->dump_unsigned("successful_ops", usage.successful_ops);
     formatter->close_section(); // entry
   }
   formatter->close_section(); // categories
