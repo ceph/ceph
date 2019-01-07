@@ -5,6 +5,7 @@
 #include <boost/asio/write.hpp>
 
 #include "rgw_asio_client.h"
+#include "rgw_perf_counters.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

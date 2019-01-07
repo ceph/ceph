@@ -134,7 +134,8 @@ set(librgw_common_srcs
   rgw_rest_user_policy.cc
   rgw_zone.cc
   rgw_sts.cc
-  rgw_rest_sts.cc)
+  rgw_rest_sts.cc
+  rgw_perf_counters.cc)
 
 add_library(rgw_common OBJECT ${librgw_common_srcs})
 
