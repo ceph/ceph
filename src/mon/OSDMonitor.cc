@@ -1723,7 +1723,14 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
   switch (m->get_type()) {
     // READs
   case MSG_MON_COMMAND:
-    return preprocess_command(op);
+    try {
+      return preprocess_command(op);
+    }
+    catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
   case CEPH_MSG_MON_GET_OSDMAP:
     return preprocess_get_osdmap(op);
 
@@ -1783,7 +1790,14 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
     return prepare_beacon(op);
 
   case MSG_MON_COMMAND:
-    return prepare_command(op);
+    try {
+      return prepare_command(op);
+    }
+    catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
 
   case CEPH_MSG_POOLOP:
     return prepare_pool_op(op);
@@ -4260,10 +4274,10 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   }
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval_throws(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   if (prefix == "osd stat") {
@@ -4288,7 +4302,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 
     epoch_t epoch = 0;
     int64_t epochnum;
-    cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum, (int64_t)osdmap.get_epoch());
+    cmd_getval_throws(g_ceph_context, cmdmap, "epoch", epochnum, (int64_t)osdmap.get_epoch());
     epoch = epochnum;
     
     bufferlist osdmap_bl;
@@ -4352,7 +4366,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       rdata.append(ds);
     } else if (prefix == "osd tree") {
       vector<string> states;
-      cmd_getval(g_ceph_context, cmdmap, "states", states);
+      cmd_getval_throws(g_ceph_context, cmdmap, "states", states);
       unsigned filter = 0;
       for (auto& s : states) {
 	if (s == "up") {
@@ -4404,7 +4418,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       ss << p->get_crush_version();
     } else if (prefix == "osd ls-tree") {
       string bucket_name;
-      cmd_getval(g_ceph_context, cmdmap, "name", bucket_name);
+      cmd_getval_throws(g_ceph_context, cmdmap, "name", bucket_name);
       set<int> osds;
       r = p->get_osds_by_bucket_name(bucket_name, &osds);
       if (r == -ENOENT) {
@@ -4466,7 +4480,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     goto reply;
   } else if (prefix  == "osd find") {
     int64_t osd;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", osd)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "id", osd)) {
       ss << "unable to parse osd id value '"
          << cmd_vartype_stringify(cmdmap["id"]) << "'";
       r = -EINVAL;
@@ -4478,7 +4492,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       goto reply;
     }
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    cmd_getval_throws(g_ceph_context, cmdmap, "format", format);
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_object_section("osd_location");
     f->dump_int("osd", osd);
@@ -4493,7 +4507,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   } else if (prefix == "osd metadata") {
     int64_t osd = -1;
     if (cmd_vartype_stringify(cmdmap["id"]).size() &&
-        !cmd_getval(g_ceph_context, cmdmap, "id", osd)) {
+        !cmd_getval_throws(g_ceph_context, cmdmap, "id", osd)) {
       ss << "unable to parse osd id value '"
          << cmd_vartype_stringify(cmdmap["id"]) << "'";
       r = -EINVAL;
@@ -4505,7 +4519,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       goto reply;
     }
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    cmd_getval_throws(g_ceph_context, cmdmap, "format", format);
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     if (osd >= 0) {
       f->open_object_section("osd_metadata");
@@ -4546,15 +4560,15 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     if (!f)
       f.reset(Formatter::create("json-pretty"));
     string field;
-    cmd_getval(g_ceph_context, cmdmap, "property", field);
+    cmd_getval_throws(g_ceph_context, cmdmap, "property", field);
     count_metadata(field, f.get());
     f->flush(rdata);
     r = 0;
   } else if (prefix == "osd map") {
     string poolstr, objstr, namespacestr;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
-    cmd_getval(g_ceph_context, cmdmap, "object", objstr);
-    cmd_getval(g_ceph_context, cmdmap, "nspace", namespacestr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "object", objstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "nspace", namespacestr);
 
     int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
     if (pool < 0) {
@@ -4608,7 +4622,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
   } else if (prefix == "pg map") {
     pg_t pgid;
     string pgidstr;
-    cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pgid", pgidstr);
     if (!pgid.parse(pgidstr.c_str())) {
       ss << "invalid pgid '" << pgidstr << "'";
       r = -EINVAL;
@@ -4685,7 +4699,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
   } else if (prefix == "osd lspools") {
     int64_t auid;
-    cmd_getval(g_ceph_context, cmdmap, "auid", auid, int64_t(0));
+    cmd_getval_throws(g_ceph_context, cmdmap, "auid", auid, int64_t(0));
     if (f)
       f->open_array_section("pools");
     for (map<int64_t, pg_pool_t>::iterator p = osdmap.pools.begin();
@@ -4736,7 +4750,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 
   } else if (prefix == "osd pool ls") {
     string detail;
-    cmd_getval(g_ceph_context, cmdmap, "detail", detail);
+    cmd_getval_throws(g_ceph_context, cmdmap, "detail", detail);
     if (!f && detail == "detail") {
       ostringstream ss;
       osdmap.print_pools(ss);
@@ -4768,7 +4782,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 
   } else if (prefix == "osd crush get-tunable") {
     string tunable;
-    cmd_getval(g_ceph_context, cmdmap, "tunable", tunable);
+    cmd_getval_throws(g_ceph_context, cmdmap, "tunable", tunable);
     ostringstream rss;
     if (f)
       f->open_object_section("tunable");
@@ -4791,7 +4805,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 
   } else if (prefix == "osd pool get") {
     string poolstr;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
     if (pool < 0) {
       ss << "unrecognized pool '" << poolstr << "'";
@@ -4801,7 +4815,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 
     const pg_pool_t *p = osdmap.get_pg_pool(pool);
     string var;
-    cmd_getval(g_ceph_context, cmdmap, "var", var);
+    cmd_getval_throws(g_ceph_context, cmdmap, "var", var);
 
     typedef std::map<std::string, osd_pool_get_choices> choices_map_t;
     const choices_map_t ALL_CHOICES = {
@@ -5241,7 +5255,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 					   osdmap, f.get(), &ss, &rdata);
   } else if (prefix == "osd pool get-quota") {
     string pool_name;
-    cmd_getval(g_ceph_context, cmdmap, "pool", pool_name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", pool_name);
 
     int64_t poolid = osdmap.lookup_pg_pool_name(pool_name);
     if (poolid < 0) {
@@ -5292,7 +5306,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
   } else if (prefix == "osd crush rule ls-by-class") {
     string class_name;
-    cmd_getval(g_ceph_context, cmdmap, "class", class_name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "class", class_name);
     if (class_name.empty()) {
       ss << "no class specified";
       r = -EINVAL;
@@ -5320,9 +5334,9 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
   } else if (prefix == "osd crush rule dump") {
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    cmd_getval_throws(g_ceph_context, cmdmap, "format", format);
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     if (name == "") {
       f->open_array_section("rules");
@@ -5343,7 +5357,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     rdata.append(rs.str());
   } else if (prefix == "osd crush dump") {
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    cmd_getval_throws(g_ceph_context, cmdmap, "format", format);
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_object_section("crush_map");
     osdmap.crush->dump(f.get());
@@ -5354,7 +5368,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     rdata.append(rs.str());
   } else if (prefix == "osd crush show-tunables") {
     string format;
-    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    cmd_getval_throws(g_ceph_context, cmdmap, "format", format);
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty", "json-pretty"));
     f->open_object_section("crush_map_tunables");
     osdmap.crush->dump_tunables(f.get());
@@ -5365,7 +5379,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     rdata.append(rs.str());
   } else if (prefix == "osd crush tree") {
     string shadow;
-    cmd_getval(g_ceph_context, cmdmap, "shadow", shadow);
+    cmd_getval_throws(g_ceph_context, cmdmap, "shadow", shadow);
     bool show_shadow = shadow == "--show-shadow";
     boost::scoped_ptr<Formatter> f(Formatter::create(format));
     if (f) {
@@ -5386,7 +5400,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     }
   } else if (prefix == "osd crush ls") {
     string name;
-    if (!cmd_getval(g_ceph_context, cmdmap, "node", name)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "node", name)) {
       ss << "no node specified";
       r = -EINVAL;
       goto reply;
@@ -5430,7 +5444,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     f->flush(rdata);
   } else if (prefix == "osd crush class ls-osd") {
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "class", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "class", name);
     set<int> osds;
     osdmap.crush->get_devices_by_class(name, &osds);
     if (f) {
@@ -5499,7 +5513,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     f->flush(rdata);
   } else if (prefix == "osd erasure-code-profile get") {
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
     if (!osdmap.has_erasure_code_profile(name)) {
       ss << "unknown erasure code profile '" << name << "'";
       r = -ENOENT;
@@ -5527,11 +5541,11 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty",
                                                      "json-pretty"));
     string pool_name;
-    cmd_getval(g_ceph_context, cmdmap, "pool", pool_name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", pool_name);
     string app;
-    cmd_getval(g_ceph_context, cmdmap, "app", app);
+    cmd_getval_throws(g_ceph_context, cmdmap, "app", app);
     string key;
-    cmd_getval(g_ceph_context, cmdmap, "key", key);
+    cmd_getval_throws(g_ceph_context, cmdmap, "key", key);
 
     if (pool_name.empty()) {
       // all
@@ -6413,14 +6427,14 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
                                          stringstream& ss)
 {
   string poolstr;
-  cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+  cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolstr);
   int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
   if (pool < 0) {
     ss << "unrecognized pool '" << poolstr << "'";
     return -ENOENT;
   }
   string var;
-  cmd_getval(g_ceph_context, cmdmap, "var", var);
+  cmd_getval_throws(g_ceph_context, cmdmap, "var", var);
 
   pg_pool_t p = *osdmap.get_pg_pool(pool);
   if (pending_inc.new_pools.count(pool))
@@ -6436,17 +6450,12 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   int64_t n = 0;
   double f = 0;
   int64_t uf = 0;  // micro-f
-  if (!cmd_getval(g_ceph_context, cmdmap, "val", val)) {
-    // wasn't a string; maybe an older mon forwarded json with an int?
-    if (!cmd_getval(g_ceph_context, cmdmap, "val", n))
-      return -EINVAL;  // no value!
-  } else {
-    // we got a string.  see if it contains an int.
-    n = strict_strtoll(val.c_str(), 10, &interr);
-    // or a float
-    f = strict_strtod(val.c_str(), &floaterr);
-    uf = llrintl(f * (double)1000000.0);
-  }
+  cmd_getval(g_ceph_context, cmdmap, "val", val);
+
+  // parse string as both int and float; different fields use different types.
+  n = strict_strtoll(val.c_str(), 10, &interr);
+  f = strict_strtod(val.c_str(), &floaterr);
+  uf = llrintl(f * (double)1000000.0);
 
   if (!p.is_tier() &&
       (var == "hit_set_type" || var == "hit_set_period" ||
@@ -6555,7 +6564,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
       return r;
     }
     string force;
-    cmd_getval(g_ceph_context,cmdmap, "force", force);
+    cmd_getval_throws(g_ceph_context,cmdmap, "force", force);
     if (p.cache_mode != pg_pool_t::CACHEMODE_NONE &&
 	force != "--yes-i-really-mean-it") {
       ss << "splits in cache pools must be followed by scrubs and leave sufficient free space to avoid overfilling.  use --yes-i-really-mean-it to force.";
@@ -6622,7 +6631,7 @@ int OSDMonitor::prepare_command_pool_set(map<string,cmd_vartype> &cmdmap,
   } else if (var == "hashpspool") {
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
     string force;
-    cmd_getval(g_ceph_context, cmdmap, "force", force);
+    cmd_getval_throws(g_ceph_context, cmdmap, "force", force);
     if (force != "--yes-i-really-mean-it") {
       ss << "are you SURE?  this will remap all placement groups in this pool,"
 	    " this triggers large data movement,"
@@ -6918,7 +6927,7 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
                                                  stringstream& ss)
 {
   string pool_name;
-  cmd_getval(g_ceph_context, cmdmap, "pool", pool_name);
+  cmd_getval_throws(g_ceph_context, cmdmap, "pool", pool_name);
   int64_t pool = osdmap.lookup_pg_pool_name(pool_name.c_str());
   if (pool < 0) {
     ss << "unrecognized pool '" << pool_name << "'";
@@ -6931,7 +6940,7 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
   }
 
   string app;
-  cmd_getval(g_ceph_context, cmdmap, "app", app);
+  cmd_getval_throws(g_ceph_context, cmdmap, "app", app);
   bool app_exists = (p.application_metadata.count(app) > 0);
 
   if (boost::algorithm::ends_with(prefix, "enable")) {
@@ -6946,7 +6955,7 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
     }
 
     string force;
-    cmd_getval(g_ceph_context, cmdmap, "force", force);
+    cmd_getval_throws(g_ceph_context, cmdmap, "force", force);
 
     if (!app_exists && !p.application_metadata.empty() &&
         force != "--yes-i-really-mean-it") {
@@ -6974,7 +6983,7 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
 
   } else if (boost::algorithm::ends_with(prefix, "disable")) {
     string force;
-    cmd_getval(g_ceph_context, cmdmap, "force", force);
+    cmd_getval_throws(g_ceph_context, cmdmap, "force", force);
 
     if (force != "--yes-i-really-mean-it") {
       ss << "Are you SURE? Disabling an application within a pool might result "
@@ -7005,7 +7014,7 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
     }
 
     string key;
-    cmd_getval(g_ceph_context, cmdmap, "key", key);
+    cmd_getval_throws(g_ceph_context, cmdmap, "key", key);
 
     if (key.empty()) {
       ss << "key must be provided";
@@ -7027,7 +7036,7 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
     }
 
     string value;
-    cmd_getval(g_ceph_context, cmdmap, "value", value);
+    cmd_getval_throws(g_ceph_context, cmdmap, "value", value);
     if (value.length() > MAX_POOL_APPLICATION_LENGTH) {
       ss << "value '" << value << "' too long; max length "
          << MAX_POOL_APPLICATION_LENGTH;
@@ -7045,7 +7054,7 @@ int OSDMonitor::prepare_command_pool_application(const string &prefix,
     }
 
     string key;
-    cmd_getval(g_ceph_context, cmdmap, "key", key);
+    cmd_getval_throws(g_ceph_context, cmdmap, "key", key);
     auto it = p.application_metadata[app].find(key);
     if (it == p.application_metadata[app].end()) {
       ss << "application '" << app << "' on pool '" << pool_name
@@ -7360,7 +7369,7 @@ int OSDMonitor::prepare_command_osd_new(
    * If `id` is specified, and the osd has been previously marked
    * as destroyed, then the `id` will be reused.
    */
-  if (!cmd_getval(g_ceph_context, cmdmap, "uuid", uuidstr)) {
+  if (!cmd_getval_throws(g_ceph_context, cmdmap, "uuid", uuidstr)) {
     ss << "requires the OSD's UUID to be specified.";
     return -EINVAL;
   } else if (!uuid.parse(uuidstr.c_str())) {
@@ -7368,7 +7377,7 @@ int OSDMonitor::prepare_command_osd_new(
     return -EINVAL;
   }
 
-  if (cmd_getval(g_ceph_context, cmdmap, "id", id) &&
+  if (cmd_getval_throws(g_ceph_context, cmdmap, "id", id) &&
       (id < 0)) {
     ss << "invalid OSD id; must be greater or equal than zero.";
     return -EINVAL;
@@ -7614,7 +7623,7 @@ static int parse_reweights(CephContext *cct,
 			   map<int32_t, uint32_t>* weights)
 {
   string weights_str;
-  if (!cmd_getval(g_ceph_context, cmdmap, "weights", weights_str)) {
+  if (!cmd_getval_throws(g_ceph_context, cmdmap, "weights", weights_str)) {
     return -EINVAL;
   }
   std::replace(begin(weights_str), end(weights_str), '\'', '"');
@@ -7797,11 +7806,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   int err = 0;
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  cmd_getval_throws(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
   string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  cmd_getval_throws(g_ceph_context, cmdmap, "prefix", prefix);
 
   int64_t osdid;
   string name;
@@ -7809,7 +7818,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   if (prefix != "osd pg-temp" &&
       prefix != "osd pg-upmap" &&
       prefix != "osd pg-upmap-items") {  // avoid commands with non-int id arg
-    osdid_present = cmd_getval(g_ceph_context, cmdmap, "id", osdid);
+    osdid_present = cmd_getval_throws(g_ceph_context, cmdmap, "id", osdid);
   }
   if (osdid_present) {
     ostringstream oss;
@@ -7868,7 +7877,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
   
     int64_t prior_version = 0;
-    if (cmd_getval(g_ceph_context, cmdmap, "prior_version", prior_version)) {
+    if (cmd_getval_throws(g_ceph_context, cmdmap, "prior_version", prior_version)) {
       if (prior_version == osdmap.get_crush_version() - 1) {
 	// see if we are a resend of the last update.  this is imperfect
 	// (multiple racing updaters may not both get reliable success)
@@ -7963,14 +7972,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     string device_class;
-    if (!cmd_getval(g_ceph_context, cmdmap, "class", device_class)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "class", device_class)) {
       err = -EINVAL; // no value!
       goto reply;
     }
 
     bool stop = false;
     vector<string> idvec;
-    cmd_getval(g_ceph_context, cmdmap, "ids", idvec);
+    cmd_getval_throws(g_ceph_context, cmdmap, "ids", idvec);
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
     set<int> updated;
@@ -8046,7 +8055,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
  } else if (prefix == "osd crush rm-device-class") {
     bool stop = false;
     vector<string> idvec;
-    cmd_getval(g_ceph_context, cmdmap, "ids", idvec);
+    cmd_getval_throws(g_ceph_context, cmdmap, "ids", idvec);
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
     set<int> updated;
@@ -8106,11 +8115,11 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
   } else if (prefix == "osd crush class rename") {
     string srcname, dstname;
-    if (!cmd_getval(g_ceph_context, cmdmap, "srcname", srcname)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "srcname", srcname)) {
       err = -EINVAL;
       goto reply;
     }
-    if (!cmd_getval(g_ceph_context, cmdmap, "dstname", dstname)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "dstname", dstname)) {
       err = -EINVAL;
       goto reply;
     }
@@ -8139,8 +8148,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd crush add-bucket") {
     // os crush add-bucket <name> <type>
     string name, typestr;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
-    cmd_getval(g_ceph_context, cmdmap, "type", typestr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "type", typestr);
 
     if (!_have_pending_crush() &&
 	_get_stable_crush().name_exists(name)) {
@@ -8187,8 +8196,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     goto update;
   } else if (prefix == "osd crush rename-bucket") {
     string srcname, dstname;
-    cmd_getval(g_ceph_context, cmdmap, "srcname", srcname);
-    cmd_getval(g_ceph_context, cmdmap, "dstname", dstname);
+    cmd_getval_throws(g_ceph_context, cmdmap, "srcname", srcname);
+    cmd_getval_throws(g_ceph_context, cmdmap, "dstname", dstname);
 
     err = crush_rename_bucket(srcname, dstname, &ss);
     if (err == -EALREADY) // equivalent to success for idempotency
@@ -8220,14 +8229,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	goto reply;
       }
       string poolname, mode;
-      cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
+      cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolname);
       pool = osdmap.lookup_pg_pool_name(poolname.c_str());
       if (pool < 0) {
 	ss << "pool '" << poolname << "' not found";
 	err = -ENOENT;
 	goto reply;
       }
-      cmd_getval(g_ceph_context, cmdmap, "mode", mode);
+      cmd_getval_throws(g_ceph_context, cmdmap, "mode", mode);
       if (mode != "flat" && mode != "positional") {
 	ss << "unrecognized weight-set mode '" << mode << "'";
 	err = -EINVAL;
@@ -8250,7 +8259,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     int64_t pool;
     if (prefix == "osd crush weight-set rm") {
       string poolname;
-      cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
+      cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolname);
       pool = osdmap.lookup_pg_pool_name(poolname.c_str());
       if (pool < 0) {
 	ss << "pool '" << poolname << "' not found";
@@ -8269,9 +8278,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	     prefix == "osd crush weight-set reweight-compat") {
     string poolname, item;
     vector<double> weight;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolname);
-    cmd_getval(g_ceph_context, cmdmap, "item", item);
-    cmd_getval(g_ceph_context, cmdmap, "weight", weight);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolname);
+    cmd_getval_throws(g_ceph_context, cmdmap, "item", item);
+    cmd_getval_throws(g_ceph_context, cmdmap, "weight", weight);
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
     int64_t pool;
@@ -8333,7 +8342,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     double weight;
-    if (!cmd_getval(g_ceph_context, cmdmap, "weight", weight)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "weight", weight)) {
       ss << "unable to parse weight value '"
          << cmd_vartype_stringify(cmdmap["weight"]) << "'";
       err = -EINVAL;
@@ -8342,7 +8351,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     string args;
     vector<string> argvec;
-    cmd_getval(g_ceph_context, cmdmap, "args", argvec);
+    cmd_getval_throws(g_ceph_context, cmdmap, "args", argvec);
     map<string,string> loc;
     CrushWrapper::parse_loc_map(argvec, &loc);
 
@@ -8401,7 +8410,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
 
       double weight;
-      if (!cmd_getval(g_ceph_context, cmdmap, "weight", weight)) {
+      if (!cmd_getval_throws(g_ceph_context, cmdmap, "weight", weight)) {
         ss << "unable to parse weight value '"
            << cmd_vartype_stringify(cmdmap["weight"]) << "'";
         err = -EINVAL;
@@ -8410,7 +8419,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
       string args;
       vector<string> argvec;
-      cmd_getval(g_ceph_context, cmdmap, "args", argvec);
+      cmd_getval_throws(g_ceph_context, cmdmap, "args", argvec);
       map<string,string> loc;
       CrushWrapper::parse_loc_map(argvec, &loc);
 
@@ -8444,8 +8453,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
       string args;
       vector<string> argvec;
-      cmd_getval(g_ceph_context, cmdmap, "name", name);
-      cmd_getval(g_ceph_context, cmdmap, "args", argvec);
+      cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
+      cmd_getval_throws(g_ceph_context, cmdmap, "args", argvec);
       map<string,string> loc;
       CrushWrapper::parse_loc_map(argvec, &loc);
 
@@ -8482,9 +8491,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     } while (false);
   } else if (prefix == "osd crush swap-bucket") {
     string source, dest, force;
-    cmd_getval(g_ceph_context, cmdmap, "source", source);
-    cmd_getval(g_ceph_context, cmdmap, "dest", dest);
-    cmd_getval(g_ceph_context, cmdmap, "force", force);
+    cmd_getval_throws(g_ceph_context, cmdmap, "source", source);
+    cmd_getval_throws(g_ceph_context, cmdmap, "dest", dest);
+    cmd_getval_throws(g_ceph_context, cmdmap, "force", force);
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
     if (!newcrush.name_exists(source)) {
@@ -8530,9 +8539,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd crush link") {
     // osd crush link <name> <loc1> [<loc2> ...]
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
     vector<string> argvec;
-    cmd_getval(g_ceph_context, cmdmap, "args", argvec);
+    cmd_getval_throws(g_ceph_context, cmdmap, "args", argvec);
     map<string,string> loc;
     CrushWrapper::parse_loc_map(argvec, &loc);
 
@@ -8593,7 +8602,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       _get_pending_crush(newcrush);
 
       string name;
-      cmd_getval(g_ceph_context, cmdmap, "name", name);
+      cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
 
       if (!osdmap.crush->name_exists(name)) {
 	err = 0;
@@ -8613,7 +8622,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
       bool unlink_only = prefix == "osd crush unlink";
       string ancestor_str;
-      if (cmd_getval(g_ceph_context, cmdmap, "ancestor", ancestor_str)) {
+      if (cmd_getval_throws(g_ceph_context, cmdmap, "ancestor", ancestor_str)) {
 	if (!newcrush.name_exists(ancestor_str)) {
 	  err = -ENOENT;
 	  ss << "ancestor item '" << ancestor_str
@@ -8660,7 +8669,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     _get_pending_crush(newcrush);
 
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
     if (!newcrush.name_exists(name)) {
       err = -ENOENT;
       ss << "device '" << name << "' does not appear in the crush map";
@@ -8674,7 +8683,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     double w;
-    if (!cmd_getval(g_ceph_context, cmdmap, "weight", w)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "weight", w)) {
       ss << "unable to parse weight value '"
 	 << cmd_vartype_stringify(cmdmap["weight"]) << "'";
       err = -EINVAL;
@@ -8698,7 +8707,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     _get_pending_crush(newcrush);
 
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
     if (!newcrush.name_exists(name)) {
       err = -ENOENT;
       ss << "device '" << name << "' does not appear in the crush map";
@@ -8712,7 +8721,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     double w;
-    if (!cmd_getval(g_ceph_context, cmdmap, "weight", w)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "weight", w)) {
       ss << "unable to parse weight value '"
 	 << cmd_vartype_stringify(cmdmap["weight"]) << "'";
       err = -EINVAL;
@@ -8736,7 +8745,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     err = 0;
     string profile;
-    cmd_getval(g_ceph_context, cmdmap, "profile", profile);
+    cmd_getval_throws(g_ceph_context, cmdmap, "profile", profile);
     if (profile == "legacy" || profile == "argonaut") {
       newcrush.set_tunables_legacy();
     } else if (profile == "bobtail") {
@@ -8775,10 +8784,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     err = 0;
     string tunable;
-    cmd_getval(g_ceph_context, cmdmap, "tunable", tunable);
+    cmd_getval_throws(g_ceph_context, cmdmap, "tunable", tunable);
 
     int64_t value = -1;
-    if (!cmd_getval(g_ceph_context, cmdmap, "value", value)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "value", value)) {
       err = -EINVAL;
       ss << "failed to parse integer value " << cmd_vartype_stringify(cmdmap["value"]);
       goto reply;
@@ -8812,10 +8821,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   } else if (prefix == "osd crush rule create-simple") {
     string name, root, type, mode;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
-    cmd_getval(g_ceph_context, cmdmap, "root", root);
-    cmd_getval(g_ceph_context, cmdmap, "type", type);
-    cmd_getval(g_ceph_context, cmdmap, "mode", mode);
+    cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "root", root);
+    cmd_getval_throws(g_ceph_context, cmdmap, "type", type);
+    cmd_getval_throws(g_ceph_context, cmdmap, "mode", mode);
     if (mode == "")
       mode = "firstn";
 
@@ -8853,10 +8862,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   } else if (prefix == "osd crush rule create-replicated") {
     string name, root, type, device_class;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
-    cmd_getval(g_ceph_context, cmdmap, "root", root);
-    cmd_getval(g_ceph_context, cmdmap, "type", type);
-    cmd_getval(g_ceph_context, cmdmap, "class", device_class);
+    cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "root", root);
+    cmd_getval_throws(g_ceph_context, cmdmap, "type", type);
+    cmd_getval_throws(g_ceph_context, cmdmap, "class", device_class);
 
     if (!device_class.empty()) {
       if (osdmap.require_osd_release < CEPH_RELEASE_LUMINOUS) {
@@ -8902,7 +8911,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   } else if (prefix == "osd erasure-code-profile rm") {
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
 
     if (erasure_code_profile_in_use(pending_inc.new_pools, name, &ss))
       goto wait;
@@ -8933,9 +8942,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   } else if (prefix == "osd erasure-code-profile set") {
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
     vector<string> profile;
-    cmd_getval(g_ceph_context, cmdmap, "profile", profile);
+    cmd_getval_throws(g_ceph_context, cmdmap, "profile", profile);
     bool force;
     if (profile.size() > 0 && profile.back() == "--force") {
       profile.pop_back();
@@ -9015,9 +9024,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (err)
       goto reply;
     string name, poolstr;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
     string profile;
-    cmd_getval(g_ceph_context, cmdmap, "profile", profile);
+    cmd_getval_throws(g_ceph_context, cmdmap, "profile", profile);
     if (profile == "")
       profile = "default";
     if (profile == "default") {
@@ -9071,7 +9080,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   } else if (prefix == "osd crush rule rm") {
     string name;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "name", name);
 
     if (!osdmap.crush->rule_exists(name)) {
       ss << "rule " << name << " does not exist";
@@ -9115,8 +9124,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd crush rule rename") {
     string srcname;
     string dstname;
-    cmd_getval(g_ceph_context, cmdmap, "srcname", srcname);
-    cmd_getval(g_ceph_context, cmdmap, "dstname", dstname);
+    cmd_getval_throws(g_ceph_context, cmdmap, "srcname", srcname);
+    cmd_getval_throws(g_ceph_context, cmdmap, "dstname", dstname);
     if (srcname.empty() || dstname.empty()) {
       ss << "must specify both source rule name and destination rule name";
       err = -EINVAL;
@@ -9153,7 +9162,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   } else if (prefix == "osd setmaxosd") {
     int64_t newmax;
-    if (!cmd_getval(g_ceph_context, cmdmap, "newmax", newmax)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "newmax", newmax)) {
       ss << "unable to parse 'newmax' value '"
          << cmd_vartype_stringify(cmdmap["newmax"]) << "'";
       err = -EINVAL;
@@ -9201,7 +9210,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     double n;
-    if (!cmd_getval(g_ceph_context, cmdmap, "ratio", n)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "ratio", n)) {
       ss << "unable to parse 'ratio' value '"
          << cmd_vartype_stringify(cmdmap["ratio"]) << "'";
       err = -EINVAL;
@@ -9226,7 +9235,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     string v;
-    cmd_getval(g_ceph_context, cmdmap, "version", v);
+    cmd_getval_throws(g_ceph_context, cmdmap, "version", v);
     int vno = ceph_release_from_name(v.c_str());
     if (vno <= 0) {
       ss << "version " << v << " is not recognized";
@@ -9247,7 +9256,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     string sure;
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
+    cmd_getval_throws(g_ceph_context, cmdmap, "sure", sure);
     if (sure != "--yes-i-really-mean-it") {
       FeatureMap m;
       mon->get_combined_feature_map(&m);
@@ -9299,9 +9308,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   } else if (prefix == "osd set") {
     string sure;
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
+    cmd_getval_throws(g_ceph_context, cmdmap, "sure", sure);
     string key;
-    cmd_getval(g_ceph_context, cmdmap, "key", key);
+    cmd_getval_throws(g_ceph_context, cmdmap, "key", key);
     if (key == "full")
       return prepare_set_flag(op, CEPH_OSDMAP_FULL);
     else if (key == "pause")
@@ -9410,7 +9419,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   } else if (prefix == "osd unset") {
     string key;
-    cmd_getval(g_ceph_context, cmdmap, "key", key);
+    cmd_getval_throws(g_ceph_context, cmdmap, "key", key);
     if (key == "full")
       return prepare_unset_flag(op, CEPH_OSDMAP_FULL);
     else if (key == "pause")
@@ -9442,9 +9451,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
   } else if (prefix == "osd require-osd-release") {
     string release;
-    cmd_getval(g_ceph_context, cmdmap, "release", release);
+    cmd_getval_throws(g_ceph_context, cmdmap, "release", release);
     string sure;
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
+    cmd_getval_throws(g_ceph_context, cmdmap, "sure", sure);
     if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
       ss << "the sortbitwise flag must be set first";
       err = -EPERM;
@@ -9503,7 +9512,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool verbose = true;
 
     vector<string> idvec;
-    cmd_getval(g_ceph_context, cmdmap, "ids", idvec);
+    cmd_getval_throws(g_ceph_context, cmdmap, "ids", idvec);
     for (unsigned j = 0; j < idvec.size() && !stop; j++) {
       set<int> osds;
 
@@ -9637,7 +9646,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool stop = false;
 
     vector<string> idvec;
-    cmd_getval(g_ceph_context, cmdmap, "ids", idvec);
+    cmd_getval_throws(g_ceph_context, cmdmap, "ids", idvec);
     for (unsigned j = 0; j < idvec.size() && !stop; j++) {
 
       set<int> osds;
@@ -9771,7 +9780,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool stop = false;
 
     vector<string> idvec;
-    cmd_getval(g_ceph_context, cmdmap, "ids", idvec);
+    cmd_getval_throws(g_ceph_context, cmdmap, "ids", idvec);
 
     for (unsigned j = 0; j < idvec.size() && !stop; j++) {
 
@@ -9915,7 +9924,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
   } else if (prefix == "osd pg-temp") {
     string pgidstr;
-    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "pgid", pgidstr)) {
       ss << "unable to parse 'pgid' value '"
          << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
       err = -EINVAL;
@@ -9940,7 +9949,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     vector<int64_t> id_vec;
     vector<int32_t> new_pg_temp;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "id", id_vec)) {
       ss << "unable to parse 'id' value(s) '"
          << cmd_vartype_stringify(cmdmap["id"]) << "'";
       err = -EINVAL;
@@ -9977,7 +9986,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     goto update;
   } else if (prefix == "osd primary-temp") {
     string pgidstr;
-    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "pgid", pgidstr)) {
       ss << "unable to parse 'pgid' value '"
          << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
       err = -EINVAL;
@@ -9996,7 +10005,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     int64_t osd;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", osd)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "id", osd)) {
       ss << "unable to parse 'id' value '"
          << cmd_vartype_stringify(cmdmap["id"]) << "'";
       err = -EINVAL;
@@ -10049,7 +10058,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (err < 0)
       goto reply;
     string pgidstr;
-    if (!cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "pgid", pgidstr)) {
       ss << "unable to parse 'pgid' value '"
          << cmd_vartype_stringify(cmdmap["pgid"]) << "'";
       err = -EINVAL;
@@ -10124,7 +10133,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     case OP_PG_UPMAP:
       {
         vector<int64_t> id_vec;
-        if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
+        if (!cmd_getval_throws(g_ceph_context, cmdmap, "id", id_vec)) {
           ss << "unable to parse 'id' value(s) '"
              << cmd_vartype_stringify(cmdmap["id"]) << "'";
           err = -EINVAL;
@@ -10184,7 +10193,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     case OP_PG_UPMAP_ITEMS:
       {
         vector<int64_t> id_vec;
-        if (!cmd_getval(g_ceph_context, cmdmap, "id", id_vec)) {
+        if (!cmd_getval_throws(g_ceph_context, cmdmap, "id", id_vec)) {
           ss << "unable to parse 'id' value(s) '"
              << cmd_vartype_stringify(cmdmap["id"]) << "'";
           err = -EINVAL;
@@ -10266,14 +10275,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     goto update;
   } else if (prefix == "osd primary-affinity") {
     int64_t id;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "id", id)) {
       ss << "invalid osd id value '"
          << cmd_vartype_stringify(cmdmap["id"]) << "'";
       err = -EINVAL;
       goto reply;
     }
     double w;
-    if (!cmd_getval(g_ceph_context, cmdmap, "weight", w)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "weight", w)) {
       ss << "unable to parse 'weight' value '"
            << cmd_vartype_stringify(cmdmap["weight"]) << "'";
       err = -EINVAL;
@@ -10316,14 +10325,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
   } else if (prefix == "osd reweight") {
     int64_t id;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "id", id)) {
       ss << "unable to parse osd id value '"
          << cmd_vartype_stringify(cmdmap["id"]) << "'";
       err = -EINVAL;
       goto reply;
     }
     double w;
-    if (!cmd_getval(g_ceph_context, cmdmap, "weight", w)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "weight", w)) {
       ss << "unable to parse weight value '"
          << cmd_vartype_stringify(cmdmap["weight"]) << "'";
       err = -EINVAL;
@@ -10362,14 +10371,14 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return true;
   } else if (prefix == "osd lost") {
     int64_t id;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "id", id)) {
       ss << "unable to parse osd id value '"
          << cmd_vartype_stringify(cmdmap["id"]) << "'";
       err = -EINVAL;
       goto reply;
     }
     string sure;
-    if (!cmd_getval(g_ceph_context, cmdmap, "sure", sure) || sure != "--yes-i-really-mean-it") {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "sure", sure) || sure != "--yes-i-really-mean-it") {
       ss << "are you SURE?  this might mean real, permanent data loss.  pass "
 	    "--yes-i-really-mean-it if you really do.";
       err = -EPERM;
@@ -10414,7 +10423,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     int64_t id;
-    if (!cmd_getval(g_ceph_context, cmdmap, "id", id)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "id", id)) {
       ss << "unable to parse osd id value '"
          << cmd_vartype_stringify(cmdmap["id"]) << "";
       err = -EINVAL;
@@ -10427,7 +10436,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     string sure;
-    if (!cmd_getval(g_ceph_context, cmdmap, "sure", sure) ||
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "sure", sure) ||
         sure != "--yes-i-really-mean-it") {
       ss << "Are you SURE? This will mean real, permanent data loss, as well "
          << "as cephx and lockbox keys. Pass --yes-i-really-mean-it if you "
@@ -10533,7 +10542,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     // optional id provided?
     int64_t id = -1, cmd_id = -1;
-    if (cmd_getval(g_ceph_context, cmdmap, "id", cmd_id)) {
+    if (cmd_getval_throws(g_ceph_context, cmdmap, "id", cmd_id)) {
       if (cmd_id < 0) {
 	ss << "invalid osd id value '" << cmd_id << "'";
 	err = -EINVAL;
@@ -10544,7 +10553,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     uuid_d uuid;
     string uuidstr;
-    if (cmd_getval(g_ceph_context, cmdmap, "uuid", uuidstr)) {
+    if (cmd_getval_throws(g_ceph_context, cmdmap, "uuid", uuidstr)) {
       if (!uuid.parse(uuidstr.c_str())) {
         ss << "invalid uuid value '" << uuidstr << "'";
         err = -EINVAL;
@@ -10611,7 +10620,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return true;
   } else if (prefix == "osd blacklist") {
     string addrstr;
-    cmd_getval(g_ceph_context, cmdmap, "addr", addrstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "addr", addrstr);
     entity_addr_t addr;
     if (!addr.parse(addrstr.c_str(), 0)) {
       ss << "unable to parse address " << addrstr;
@@ -10620,12 +10629,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     else {
       string blacklistop;
-      cmd_getval(g_ceph_context, cmdmap, "blacklistop", blacklistop);
+      cmd_getval_throws(g_ceph_context, cmdmap, "blacklistop", blacklistop);
       if (blacklistop == "add") {
 	utime_t expires = ceph_clock_now();
 	double d;
 	// default one hour
-	cmd_getval(g_ceph_context, cmdmap, "expire", d,
+	cmd_getval_throws(g_ceph_context, cmdmap, "expire", d,
           g_conf->mon_osd_blacklist_default_expire);
 	expires += d;
 
@@ -10665,7 +10674,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
   } else if (prefix == "osd pool mksnap") {
     string poolstr;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
     if (pool < 0) {
       ss << "unrecognized pool '" << poolstr << "'";
@@ -10673,7 +10682,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     string snapname;
-    cmd_getval(g_ceph_context, cmdmap, "snap", snapname);
+    cmd_getval_throws(g_ceph_context, cmdmap, "snap", snapname);
     const pg_pool_t *p = osdmap.get_pg_pool(pool);
     if (p->is_unmanaged_snaps_mode()) {
       ss << "pool " << poolstr << " is in unmanaged snaps mode";
@@ -10708,7 +10717,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return true;
   } else if (prefix == "osd pool rmsnap") {
     string poolstr;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
     if (pool < 0) {
       ss << "unrecognized pool '" << poolstr << "'";
@@ -10716,7 +10725,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     string snapname;
-    cmd_getval(g_ceph_context, cmdmap, "snap", snapname);
+    cmd_getval_throws(g_ceph_context, cmdmap, "snap", snapname);
     const pg_pool_t *p = osdmap.get_pg_pool(pool);
     if (p->is_unmanaged_snaps_mode()) {
       ss << "pool " << poolstr << " is in unmanaged snaps mode";
@@ -10749,16 +10758,16 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd pool create") {
     int64_t  pg_num;
     int64_t pgp_num;
-    cmd_getval(g_ceph_context, cmdmap, "pg_num", pg_num, int64_t(0));
-    cmd_getval(g_ceph_context, cmdmap, "pgp_num", pgp_num, pg_num);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pg_num", pg_num, int64_t(0));
+    cmd_getval_throws(g_ceph_context, cmdmap, "pgp_num", pgp_num, pg_num);
 
     string pool_type_str;
-    cmd_getval(g_ceph_context, cmdmap, "pool_type", pool_type_str);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool_type", pool_type_str);
     if (pool_type_str.empty())
       pool_type_str = g_conf->osd_pool_default_type;
 
     string poolstr;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
     if (pool_id >= 0) {
       const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
@@ -10793,9 +10802,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool implicit_rule_creation = false;
     int64_t expected_num_objects = 0;
     string rule_name;
-    cmd_getval(g_ceph_context, cmdmap, "rule", rule_name);
+    cmd_getval_throws(g_ceph_context, cmdmap, "rule", rule_name);
     string erasure_code_profile;
-    cmd_getval(g_ceph_context, cmdmap, "erasure_code_profile", erasure_code_profile);
+    cmd_getval_throws(g_ceph_context, cmdmap, "erasure_code_profile", erasure_code_profile);
 
     if (pool_type == pg_pool_t::TYPE_ERASURE) {
       if (erasure_code_profile == "")
@@ -10829,7 +10838,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  rule_name = poolstr;
 	}
       }
-      cmd_getval(g_ceph_context, cmdmap, "expected_num_objects",
+      cmd_getval_throws(g_ceph_context, cmdmap, "expected_num_objects",
                  expected_num_objects, int64_t(0));
     } else {
       //NOTE:for replicated pool,cmd_map will put rule_name to erasure_code_profile field
@@ -10846,7 +10855,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         }
         rule_name = erasure_code_profile;
       } else { // cmd is well-formed
-        cmd_getval(g_ceph_context, cmdmap, "expected_num_objects",
+        cmd_getval_throws(g_ceph_context, cmdmap, "expected_num_objects",
                    expected_num_objects, int64_t(0));
       }
     }
@@ -10888,7 +10897,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     int64_t fast_read_param;
-    cmd_getval(g_ceph_context, cmdmap, "fast_read", fast_read_param, int64_t(-1));
+    cmd_getval_throws(g_ceph_context, cmdmap, "fast_read", fast_read_param, int64_t(-1));
     FastReadType fast_read = FAST_READ_DEFAULT;
     if (fast_read_param == 0)
       fast_read = FAST_READ_OFF;
@@ -10929,9 +10938,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
              prefix == "osd pool rm") {
     // osd pool delete/rm <poolname> <poolname again> --yes-i-really-really-mean-it
     string poolstr, poolstr2, sure;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
-    cmd_getval(g_ceph_context, cmdmap, "pool2", poolstr2);
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool2", poolstr2);
+    cmd_getval_throws(g_ceph_context, cmdmap, "sure", sure);
     int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
     if (pool < 0) {
       ss << "pool '" << poolstr << "' does not exist";
@@ -10958,8 +10967,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     goto update;
   } else if (prefix == "osd pool rename") {
     string srcpoolstr, destpoolstr;
-    cmd_getval(g_ceph_context, cmdmap, "srcpool", srcpoolstr);
-    cmd_getval(g_ceph_context, cmdmap, "destpool", destpoolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "srcpool", srcpoolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "destpool", destpoolstr);
     int64_t pool_src = osdmap.lookup_pg_pool_name(srcpoolstr.c_str());
     int64_t pool_dst = osdmap.lookup_pg_pool_name(destpoolstr.c_str());
 
@@ -11016,7 +11025,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (err)
       goto reply;
     string poolstr;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
     if (pool_id < 0) {
       ss << "unrecognized pool '" << poolstr << "'";
@@ -11024,7 +11033,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     string tierpoolstr;
-    cmd_getval(g_ceph_context, cmdmap, "tierpool", tierpoolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "tierpool", tierpoolstr);
     int64_t tierpool_id = osdmap.lookup_pg_pool_name(tierpoolstr);
     if (tierpool_id < 0) {
       ss << "unrecognized pool '" << tierpoolstr << "'";
@@ -11042,7 +11051,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     // make sure new tier is empty
     string force_nonempty;
-    cmd_getval(g_ceph_context, cmdmap, "force_nonempty", force_nonempty);
+    cmd_getval_throws(g_ceph_context, cmdmap, "force_nonempty", force_nonempty);
     const pool_stat_t *pstats = mon->pgservice->get_pool_stat(tierpool_id);
     if (pstats && pstats->stats.sum.num_objects != 0 &&
 	force_nonempty != "--force-nonempty") {
@@ -11080,7 +11089,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd tier remove" ||
              prefix == "osd tier rm") {
     string poolstr;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
     if (pool_id < 0) {
       ss << "unrecognized pool '" << poolstr << "'";
@@ -11088,7 +11097,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     string tierpoolstr;
-    cmd_getval(g_ceph_context, cmdmap, "tierpool", tierpoolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "tierpool", tierpoolstr);
     int64_t tierpool_id = osdmap.lookup_pg_pool_name(tierpoolstr);
     if (tierpool_id < 0) {
       ss << "unrecognized pool '" << tierpoolstr << "'";
@@ -11144,7 +11153,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (err)
       goto reply;
     string poolstr;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
     if (pool_id < 0) {
       ss << "unrecognized pool '" << poolstr << "'";
@@ -11152,7 +11161,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     string overlaypoolstr;
-    cmd_getval(g_ceph_context, cmdmap, "overlaypool", overlaypoolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "overlaypool", overlaypoolstr);
     int64_t overlaypool_id = osdmap.lookup_pg_pool_name(overlaypoolstr);
     if (overlaypool_id < 0) {
       ss << "unrecognized pool '" << overlaypoolstr << "'";
@@ -11197,7 +11206,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd tier remove-overlay" ||
              prefix == "osd tier rm-overlay") {
     string poolstr;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
     if (pool_id < 0) {
       ss << "unrecognized pool '" << poolstr << "'";
@@ -11242,7 +11251,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (err)
       goto reply;
     string poolstr;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
     if (pool_id < 0) {
       ss << "unrecognized pool '" << poolstr << "'";
@@ -11257,7 +11266,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     string modestr;
-    cmd_getval(g_ceph_context, cmdmap, "mode", modestr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "mode", modestr);
     pg_pool_t::cache_mode_t mode = pg_pool_t::get_cache_mode_from_str(modestr);
     if (mode < 0) {
       ss << "'" << modestr << "' is not a valid cache mode";
@@ -11266,7 +11275,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     string sure;
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
+    cmd_getval_throws(g_ceph_context, cmdmap, "sure", sure);
     if ((mode != pg_pool_t::CACHEMODE_WRITEBACK &&
 	 mode != pg_pool_t::CACHEMODE_NONE &&
 	 mode != pg_pool_t::CACHEMODE_PROXY &&
@@ -11392,7 +11401,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     if (err)
       goto reply;
     string poolstr;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
     if (pool_id < 0) {
       ss << "unrecognized pool '" << poolstr << "'";
@@ -11400,7 +11409,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply;
     }
     string tierpoolstr;
-    cmd_getval(g_ceph_context, cmdmap, "tierpool", tierpoolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "tierpool", tierpoolstr);
     int64_t tierpool_id = osdmap.lookup_pg_pool_name(tierpoolstr);
     if (tierpool_id < 0) {
       ss << "unrecognized pool '" << tierpoolstr << "'";
@@ -11417,7 +11426,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     int64_t size = 0;
-    if (!cmd_getval(g_ceph_context, cmdmap, "size", size)) {
+    if (!cmd_getval_throws(g_ceph_context, cmdmap, "size", size)) {
       ss << "unable to parse 'size' value '"
          << cmd_vartype_stringify(cmdmap["size"]) << "'";
       err = -EINVAL;
@@ -11482,7 +11491,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     return true;
   } else if (prefix == "osd pool set-quota") {
     string poolstr;
-    cmd_getval(g_ceph_context, cmdmap, "pool", poolstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pool", poolstr);
     int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
     if (pool_id < 0) {
       ss << "unrecognized pool '" << poolstr << "'";
@@ -11491,7 +11500,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     string field;
-    cmd_getval(g_ceph_context, cmdmap, "field", field);
+    cmd_getval_throws(g_ceph_context, cmdmap, "field", field);
     if (field != "max_objects" && field != "max_bytes") {
       ss << "unrecognized field '" << field << "'; should be 'max_bytes' or 'max_objects'";
       err = -EINVAL;
@@ -11500,7 +11509,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     // val could contain unit designations, so we treat as a string
     string val;
-    cmd_getval(g_ceph_context, cmdmap, "val", val);
+    cmd_getval_throws(g_ceph_context, cmdmap, "val", val);
     string tss;
     int64_t value;
     if (field == "max_objects") {
@@ -11615,7 +11624,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
   } else if (prefix == "osd force-create-pg") {
     pg_t pgid;
     string pgidstr;
-    cmd_getval(g_ceph_context, cmdmap, "pgid", pgidstr);
+    cmd_getval_throws(g_ceph_context, cmdmap, "pgid", pgidstr);
     if (!pgid.parse(pgidstr.c_str())) {
       ss << "invalid pgid '" << pgidstr << "'";
       err = -EINVAL;
