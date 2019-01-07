@@ -149,7 +149,7 @@ public:
   MonMap *monmap;
   uuid_d fingerprint;
 
-  set<entity_addr_t> extra_probe_peers;
+  set<entity_addrvec_t> extra_probe_peers;
 
   LogClient log_client;
   LogChannelRef clog;
@@ -302,7 +302,7 @@ private:
    * @} // provider state
    */
   struct SyncProvider {
-    entity_inst_t entity;  ///< who
+    entity_addrvec_t addrs;
     uint64_t cookie;       ///< unique cookie for this sync attempt
     utime_t timeout;       ///< when we give up and expire this attempt
     version_t last_committed; ///< last paxos version on peer
@@ -324,7 +324,7 @@ private:
   /**
    * @} // requester state
    */
-  entity_inst_t sync_provider;   ///< who we are syncing from
+  entity_addrvec_t sync_provider;  ///< who we are syncing from
   uint64_t sync_cookie;          ///< 0 if we are starting, non-zero otherwise
   bool sync_full;                ///< true if we are a full sync, false for recent catch-up
   version_t sync_start_version;  ///< last_committed at sync start
@@ -398,7 +398,7 @@ private:
    * @param entity where to pull committed state from
    * @param full whether to do a full sync or just catch up on recent paxos
    */
-  void sync_start(entity_inst_t &entity, bool full);
+  void sync_start(entity_addrvec_t &addrs, bool full);
 
 public:
   /**
