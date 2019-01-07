@@ -1437,13 +1437,15 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       if (ret < 0) {
         return ret;
       }
+    }
+
+    removing = existed && op.delete_marker;
+    if (!removing) {
       ret = other_obj.unlink();
       if (ret < 0) {
         return ret;
       }
     }
-
-    removing = existed && op.delete_marker;
   } else {
     removing = (existed && !obj.is_delete_marker() && op.delete_marker);
   }
