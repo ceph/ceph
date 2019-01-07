@@ -15,14 +15,14 @@ class SingleType(Strategy):
     Support for all SSDs, or all HDDS
     """
 
-    def __init__(self, data_devs, args):
-        super(SingleType, self).__init__(data_devs, [], [], args)
+    def __init__(self, args, data_devs):
+        super(SingleType, self).__init__(args, data_devs)
         self.validate_compute()
 
     @classmethod
-    def with_auto_devices(cls, devices, args):
+    def with_auto_devices(cls, args, devices):
         #SingleType only deploys standalone OSDs
-        return cls(devices, args)
+        return cls(args, devices)
 
     @staticmethod
     def type():
@@ -117,8 +117,8 @@ class SingleType(Strategy):
 
 class MixedType(MixedStrategy):
 
-    def __init__(self, data_devs, db_devs, wal_devs, args):
-        super(MixedType, self).__init__(data_devs, db_devs, wal_devs, args)
+    def __init__(self, args, data_devs, db_devs, wal_devs=[]):
+        super(MixedType, self).__init__(args, data_devs, db_devs, wal_devs)
         self.block_db_size = self.get_block_size()
         self.system_vgs = lvm.VolumeGroups()
         self.dbs_needed = len(self.data_devs) * self.osds_per_device
@@ -126,9 +126,9 @@ class MixedType(MixedStrategy):
         self.validate_compute()
 
     @classmethod
-    def with_auto_devices(cls, devices, args):
+    def with_auto_devices(cls, args, devices):
         data_devs, db_devs = cls.split_devices_rotational(devices)
-        return cls(data_devs, db_devs, [], args)
+        return cls(args, data_devs, db_devs)
 
     @staticmethod
     def type():

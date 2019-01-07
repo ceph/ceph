@@ -287,7 +287,7 @@ class Batch(object):
                 mlogger.error("Aborting because strategy changed from %s to %s after filtering" % (strategy.type(), new_strategy.type()))
                 raise SystemExit(1)
 
-        self.strategy = strategy.with_auto_devices(unused_devices, self.args)
+        self.strategy = strategy.with_auto_devices(self.args, unused_devices)
 
     @decorators.needs_root
     def main(self):
@@ -317,27 +317,23 @@ class Batch(object):
         if self.args.bluestore:
             if self.db_usable:
                 self.strategy = strategies.bluestore.MixedType(
+                    self.args,
                     self.usable,
-                    self.db_usable,
-                    [],
-                    self.args)
+                    self.db_usable)
             else:
                 self.strategy = strategies.bluestore.SingleType(
-                    self.usable,
-                    self.db_usable,
-                    [],
-                    self.args)
+                    self.args,
+                    self.usable)
         else:
             if self.journal_usable:
                 self.strategy = strategies.filestore.MixedType(
+                    self.args,
                     self.usable,
-                    self.journal_usable,
-                    self.args)
+                    self.journal_usable)
             else:
                 self.strategy = strategies.filestore.SingleType(
-                    self.usable,
-                    self.journal_usable,
-                    self.args)
+                    self.args,
+                    self.usable)
 
 
     def _filter_devices(self):

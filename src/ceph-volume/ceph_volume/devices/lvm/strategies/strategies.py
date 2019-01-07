@@ -2,7 +2,7 @@ import json
 
 class Strategy(object):
 
-    def __init__(self, data_devs, db_or_journal_devs, wal_devs, args):
+    def __init__(self, args, data_devs, db_or_journal_devs=[], wal_devs=[]):
         '''
         Note that this ctor is used by both bluestore and filestore strategies
         to reduce code duplication. A filestore strategy will always pass an
