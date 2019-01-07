@@ -257,20 +257,46 @@ unsigned short parse_port(const char *input, boost::system::error_code& ec)
 }
 
 tcp::endpoint parse_endpoint(BOOST_ASIO_STRING_VIEW_PARAM input,
+                             unsigned short default_port,
                              boost::system::error_code& ec)
 {
   tcp::endpoint endpoint;
 
-  auto colon = input.find(':');
-  if (colon != input.npos) {
-    auto port_str = input.substr(colon + 1);
-    endpoint.port(parse_port(port_str.data(), ec));
-  } else {
-    endpoint.port(80);
+  if (input.empty()) {
+    ec = boost::asio::error::invalid_argument;
+    return endpoint;
   }
-  if (!ec) {
+
+  if (input[0] == '[') { // ipv6
+    const size_t addr_begin = 1;
+    const size_t addr_end = input.find(']');
+    if (addr_end == input.npos) { // no matching ]
+      ec = boost::asio::error::invalid_argument;
+      return endpoint;
+    }
+    if (addr_end + 1 < input.size()) {
+      // :port must must follow [ipv6]
+      if (input[addr_end + 1] != ':') {
+        ec = boost::asio::error::invalid_argument;
+        return endpoint;
+      } else {
+        auto port_str = input.substr(addr_end + 2);
+        endpoint.port(parse_port(port_str.data(), ec));
+      }
+    }
+    auto addr = input.substr(addr_begin, addr_end - addr_begin);
+    endpoint.address(boost::asio::ip::make_address_v6(addr, ec));
+  } else { // ipv4
+    auto colon = input.find(':');
+    if (colon != input.npos) {
+      auto port_str = input.substr(colon + 1);
+      endpoint.port(parse_port(port_str.data(), ec));
+      if (ec) {
+        return endpoint;
+      }
+    }
     auto addr = input.substr(0, colon);
-    endpoint.address(boost::asio::ip::make_address(addr, ec));
+    endpoint.address(boost::asio::ip::make_address_v4(addr, ec));
   }
   return endpoint;
 }
@@ -324,7 +350,7 @@ int AsioFrontend::init()
 
   auto endpoints = config.equal_range("endpoint");
   for (auto i = endpoints.first; i != endpoints.second; ++i) {
-    auto endpoint = parse_endpoint(i->second, ec);
+    auto endpoint = parse_endpoint(i->second, 80, ec);
     if (ec) {
       lderr(ctx()) << "failed to parse endpoint=" << i->second << dendl;
       return -ec.value();
@@ -427,7 +453,7 @@ int AsioFrontend::init_ssl()
       lderr(ctx()) << "no ssl_certificate configured for ssl_endpoint" << dendl;
       return -EINVAL;
     }
-    auto endpoint = parse_endpoint(i->second, ec);
+    auto endpoint = parse_endpoint(i->second, 443, ec);
     if (ec) {
       lderr(ctx()) << "failed to parse ssl_endpoint=" << i->second << dendl;
       return -ec.value();
