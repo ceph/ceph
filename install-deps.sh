@@ -226,6 +226,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         security/oath-toolkit \
         sysutils/flock \
         sysutils/fusefs-libs \
+        net/rabbitmq-c-devel \
 
 	# Now use pip to install some extra python modules
 	pip install pecan
@@ -238,6 +239,7 @@ else
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
+        $SUDO apt-get install -y librabbitmq-dev
         case "$VERSION" in
             *Trusty*)
                 ensure_decent_gcc_on_ubuntu 7 trusty
