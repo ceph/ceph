@@ -1182,11 +1182,14 @@ CtPtr ProtocolV2::_banner_exchange(CtPtr callback) {
   __le64 required_features = CEPH_MSGR2_REQUIRED_FEATURES;
 
   size_t banner_prefix_len = strlen(CEPH_BANNER_V2_PREFIX);
-  size_t banner_len = banner_prefix_len + sizeof(uint8_t) + 2 * sizeof(__le64);
+  __le16 banner_payload_len = sizeof(uint8_t) + 2 * sizeof(__le64);
+  size_t banner_len = banner_prefix_len + sizeof(__le16) + banner_payload_len;
   char banner[banner_len];
   uint8_t offset = 0;
   memcpy(banner, CEPH_BANNER_V2_PREFIX, banner_prefix_len);
   offset += banner_prefix_len;
+  memcpy(banner + offset, (void *)&banner_payload_len, sizeof(__le16));
+  offset += sizeof(__le16);
   memcpy(banner + offset, (void *)&type, sizeof(uint8_t));
   offset += sizeof(uint8_t);
   memcpy(banner + offset, (void *)&supported_features, sizeof(__le64));
@@ -1200,8 +1203,8 @@ CtPtr ProtocolV2::_banner_exchange(CtPtr callback) {
 }
 
 CtPtr ProtocolV2::_wait_for_peer_banner() {
-  unsigned banner_len =
-      strlen(CEPH_BANNER_V2_PREFIX) + sizeof(uint8_t) + 2 * sizeof(__le64);
+  unsigned banner_len = strlen(CEPH_BANNER_V2_PREFIX) + sizeof(__le16) +
+                        sizeof(uint8_t) + 2 * sizeof(__le64);
   return READ(banner_len, _banner_exchange_handle_peer_banner);
 }
 
@@ -1231,6 +1234,16 @@ unsigned banner_prefix_len = strlen(CEPH_BANNER_V2_PREFIX);
   __le64 peer_required_features;
 
   uint8_t offset = banner_prefix_len;
+  __le16 banner_payload_len = *(__le16 *)(buffer + offset);
+
+  // V2 banner len check
+  if (banner_payload_len != (sizeof(uint8_t) + 2 * sizeof(__le64))) {
+    lderr(cct) << __func__ << " bad banner length: " << banner_payload_len
+               << dendl;
+    return _fault();
+  }
+  offset += sizeof(__le16);
+
   peer_type = *(uint8_t *)(buffer + offset);
   offset += sizeof(uint8_t);
   peer_supported_features = *(__le64 *)(buffer + offset);
