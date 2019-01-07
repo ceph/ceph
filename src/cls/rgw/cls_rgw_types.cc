@@ -124,6 +124,21 @@ void rgw_bucket_entry_ver::generate_test_instances(list<rgw_bucket_entry_ver*>& 
   ls.back()->epoch = 12322;
 }
 
+void RGWMetadataLogHistory::dump(Formatter *f) const {
+  encode_json("oldest_realm_epoch", oldest_realm_epoch, f);
+  encode_json("oldest_period_id", oldest_period_id, f);
+}
+
+void RGWMetadataLogHistory::decode_json(JSONObj *obj) {
+  JSONDecoder::decode_json("oldest_realm_epoch", oldest_realm_epoch, obj);
+  JSONDecoder::decode_json("oldest_period_id", oldest_period_id, obj);
+}
+
+void RGWMetadataLogHistory::generate_test_instances(list<RGWMetadataLogHistory*> &h)
+{
+  h.push_back(new RGWMetadataLogHistory);
+  h.push_back(new RGWMetadataLogHistory);
+}
 
 void rgw_bucket_dir_entry::dump(Formatter *f) const
 {

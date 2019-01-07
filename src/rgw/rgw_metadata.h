@@ -285,6 +285,9 @@ struct RGWMetadataLogHistory {
     decode(oldest_period_id, p);
     DECODE_FINISH(p);
   }
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+  static void generate_test_instances(list<RGWMetadataLogHistory*>& o);
 
   static const std::string oid;
 };

@@ -352,6 +352,7 @@ TYPE(RGWZone)
 TYPE(RGWZoneGroup)
 TYPE(RGWRealm)
 TYPE(RGWPeriod)
+TYPE(RGWMetadataLogHistory)
 
 #include "rgw/rgw_acl.h"
 TYPE(ACLPermission)
