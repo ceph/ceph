@@ -7,6 +7,7 @@ import errno
 import time
 import json
 import logging
+import time
 
 log = logging.getLogger(__name__)
 
@@ -42,6 +43,16 @@ class TestMisc(CephFSTestCase):
         self.mount_b.run_shell(["cat", "testfile"])
 
         self.mount_a.kill_background(p)
+
+    def test_root_rctime(self):
+        """
+        Check that the root inode has a non-default rctime on startup.
+        """
+
+        t = time.time()
+        rctime = self.mount_a.getfattr(".", "ceph.dir.rctime")
+        log.info("rctime = {}".format(rctime))
+        self.assertGreaterEqual(rctime, t-10)
 
     def test_fs_new(self):
         data_pool_name = self.fs.get_data_pool_name()

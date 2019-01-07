@@ -399,7 +399,8 @@ void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir()) {
     in->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
-    ++in->inode.rstat.rsubdirs;
+    in->inode.rstat.rsubdirs = 1; /* itself */
+    in->inode.rstat.rctime = in->inode.ctime;
   } else {
     in->inode.layout = default_file_layout;
     ++in->inode.rstat.rfiles;
@@ -446,13 +447,12 @@ void MDCache::create_empty_hierarchy(MDSGather *gather)
   adjust_subtree_auth(rootdir, mds->get_nodeid());   
   rootdir->dir_rep = CDir::REP_ALL;   //NONE;
 
-  rootdir->fnode.accounted_fragstat = rootdir->fnode.fragstat;
-  rootdir->fnode.accounted_rstat = rootdir->fnode.rstat;
-
-  root->inode.dirstat = rootdir->fnode.fragstat;
-  root->inode.rstat = rootdir->fnode.rstat;
-  ++root->inode.rstat.rsubdirs;
-  root->inode.accounted_rstat = root->inode.rstat;
+  assert(rootdir->fnode.accounted_fragstat == rootdir->fnode.fragstat);
+  assert(rootdir->fnode.fragstat == root->inode.dirstat);
+  assert(rootdir->fnode.accounted_rstat == rootdir->fnode.rstat);
+  /* Do no update rootdir rstat information of the fragment, rstat upkeep magic
+   * assume version 0 is stale/invalid.
+   */
 
   rootdir->mark_complete();
   rootdir->mark_dirty(rootdir->pre_dirty(), mds->mdlog->get_current_segment());
