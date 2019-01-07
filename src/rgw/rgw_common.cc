@@ -22,7 +22,6 @@
 #include "common/errno.h"
 #include "common/Clock.h"
 #include "common/Formatter.h"
-#include "common/perf_counters.h"
 #include "common/convenience.h"
 #include "common/strtol.h"
 #include "include/str_list.h"
@@ -38,8 +37,6 @@ using rgw::IAM::ARN;
 using rgw::IAM::Effect;
 using rgw::IAM::op_to_perm;
 using rgw::IAM::Policy;
-
-PerfCounters *perfcounter = NULL;
 
 const uint32_t RGWBucketInfo::NUM_SHARDS_BLIND_BUCKET(UINT32_MAX);
 
@@ -141,45 +138,6 @@ rgw_http_errors rgw_http_swift_errors({
 rgw_http_errors rgw_http_sts_errors({
     { ERR_PACKED_POLICY_TOO_LARGE, {400, "PackedPolicyTooLarge" }},
 });
-
-int rgw_perf_start(CephContext *cct)
-{
-  PerfCountersBuilder plb(cct, "rgw", l_rgw_first, l_rgw_last);
-
-  // RGW emits comparatively few metrics, so let's be generous
-  // and mark them all USEFUL to get transmission to ceph-mgr by default.
-  plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
-
-  plb.add_u64_counter(l_rgw_req, "req", "Requests");
-  plb.add_u64_counter(l_rgw_failed_req, "failed_req", "Aborted requests");
-
-  plb.add_u64_counter(l_rgw_get, "get", "Gets");
-  plb.add_u64_counter(l_rgw_get_b, "get_b", "Size of gets");
-  plb.add_time_avg(l_rgw_get_lat, "get_initial_lat", "Get latency");
-  plb.add_u64_counter(l_rgw_put, "put", "Puts");
-  plb.add_u64_counter(l_rgw_put_b, "put_b", "Size of puts");
-  plb.add_time_avg(l_rgw_put_lat, "put_initial_lat", "Put latency");
-
-  plb.add_u64(l_rgw_qlen, "qlen", "Queue length");
-  plb.add_u64(l_rgw_qactive, "qactive", "Active requests queue");
-
-  plb.add_u64_counter(l_rgw_cache_hit, "cache_hit", "Cache hits");
-  plb.add_u64_counter(l_rgw_cache_miss, "cache_miss", "Cache miss");
-
-  plb.add_u64_counter(l_rgw_keystone_token_cache_hit, "keystone_token_cache_hit", "Keystone token cache hits");
-  plb.add_u64_counter(l_rgw_keystone_token_cache_miss, "keystone_token_cache_miss", "Keystone token cache miss");
-
-  perfcounter = plb.create_perf_counters();
-  cct->get_perfcounters_collection()->add(perfcounter);
-  return 0;
-}
-
-void rgw_perf_stop(CephContext *cct)
-{
-  ceph_assert(perfcounter);
-  cct->get_perfcounters_collection()->remove(perfcounter);
-  delete perfcounter;
-}
 
 using namespace ceph::crypto;
 

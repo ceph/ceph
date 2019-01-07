@@ -18,6 +18,7 @@
 #include "common/ceph_crypto_cms.h"
 #include "common/armor.h"
 #include "common/Cond.h"
+#include "rgw_perf_counters.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
