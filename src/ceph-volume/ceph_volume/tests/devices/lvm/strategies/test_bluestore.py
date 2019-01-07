@@ -9,7 +9,7 @@ class TestSingleType(object):
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
         ]
-        computed_osd = bluestore.SingleType.with_auto_devices(devices, args).computed['osds'][0]
+        computed_osd = bluestore.SingleType.with_auto_devices(args, devices).computed['osds'][0]
         assert computed_osd['data']['percentage'] == 100
         assert computed_osd['data']['parts'] == 1
         assert computed_osd['data']['human_readable_size'] == '5.66 GB'
@@ -20,7 +20,7 @@ class TestSingleType(object):
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
         ]
-        computed_osd = bluestore.SingleType.with_auto_devices(devices, args).computed['osds'][0]
+        computed_osd = bluestore.SingleType.with_auto_devices(args, devices).computed['osds'][0]
         assert computed_osd['data']['percentage'] == 100
         assert computed_osd['data']['parts'] == 1
         assert computed_osd['data']['human_readable_size'] == '5.66 GB'
@@ -32,7 +32,7 @@ class TestSingleType(object):
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
-            bluestore.SingleType.with_auto_devices(devices, args)
+            bluestore.SingleType.with_auto_devices(args, devices)
         assert 'Unable to use device 5.66 GB /dev/sda' in str(error)
 
     def test_device_is_lvm_member_fails(self, fakedevice, factory):
@@ -41,7 +41,7 @@ class TestSingleType(object):
             fakedevice(used_by_ceph=False, is_lvm_member=True, sys_api=dict(rotational='1', size=6073740000))
         ]
         with pytest.raises(RuntimeError) as error:
-            bluestore.SingleType.with_auto_devices(devices, args)
+            bluestore.SingleType.with_auto_devices(args, devices)
         assert 'Unable to use device, already a member of LVM' in str(error)
 
 
@@ -57,7 +57,7 @@ class TestMixedTypeConfiguredSize(object):
         hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
         devices = [ssd, hdd]
 
-        osd = bluestore.MixedType.with_auto_devices(devices, args).computed['osds'][0]
+        osd = bluestore.MixedType.with_auto_devices(args, devices).computed['osds'][0]
         assert osd['data']['percentage'] == 100
         assert osd['data']['human_readable_size'] == '5.66 GB'
         assert osd['data']['path'] == '/dev/sda'
@@ -74,7 +74,7 @@ class TestMixedTypeConfiguredSize(object):
         devices = [ssd, hdd]
 
         with pytest.raises(RuntimeError) as error:
-            bluestore.MixedType.with_auto_devices(devices, args).computed['osds'][0]
+            bluestore.MixedType.with_auto_devices(args, devices).computed['osds'][0]
         expected = 'Not enough space in fast devices (5.66 GB) to create 1 x 7.22 GB block.db LV'
         assert expected in str(error)
 
@@ -87,7 +87,7 @@ class TestMixedTypeConfiguredSize(object):
         devices = [ssd, hdd]
 
         with pytest.raises(RuntimeError) as error:
-            bluestore.MixedType.with_auto_devices(devices, args)
+            bluestore.MixedType.with_auto_devices(args, devices)
         expected = 'Unable to use device 5.66 GB /dev/sda, LVs would be smaller than 5GB'
         assert expected in str(error)
 
@@ -101,7 +101,7 @@ class TestMixedTypeLargeAsPossible(object):
         hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
         devices = [ssd, hdd]
 
-        osd = bluestore.MixedType.with_auto_devices(devices, args).computed['osds'][0]
+        osd = bluestore.MixedType.with_auto_devices(args, devices).computed['osds'][0]
         assert osd['data']['percentage'] == 100
         assert osd['data']['human_readable_size'] == '5.66 GB'
         assert osd['data']['path'] == '/dev/sda'
@@ -117,7 +117,7 @@ class TestMixedTypeLargeAsPossible(object):
         hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=60073740000))
         devices = [ssd, hdd]
 
-        osd = bluestore.MixedType.with_auto_devices(devices, args).computed['osds'][0]
+        osd = bluestore.MixedType.with_auto_devices(args, devices).computed['osds'][0]
         assert osd['data']['percentage'] == 50
         assert osd['data']['human_readable_size'] == '27.97 GB'
         assert osd['data']['path'] == '/dev/sda'
@@ -134,6 +134,6 @@ class TestMixedTypeLargeAsPossible(object):
         devices = [ssd, hdd]
 
         with pytest.raises(RuntimeError) as error:
-            bluestore.MixedType.with_auto_devices(devices, args)
+            bluestore.MixedType.with_auto_devices(args, devices)
         expected = 'Unable to use device 5.66 GB /dev/sda, LVs would be smaller than 5GB'
         assert expected in str(error)

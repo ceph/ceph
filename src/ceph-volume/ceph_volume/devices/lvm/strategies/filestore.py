@@ -28,14 +28,14 @@ class SingleType(Strategy):
     """
 
 
-    def __init__(self, data_devs, args):
-        super(SingleType, self).__init__(data_devs, [], [], args)
+    def __init__(self, args, data_devs):
+        super(SingleType, self).__init__(args, data_devs)
         self.journal_size = get_journal_size(args)
         self.validate_compute()
 
     @classmethod
-    def with_auto_devices(cls, devices, args):
-        return cls(devices, args)
+    def with_auto_devices(cls, args, devices):
+        return cls(args, devices)
 
     @staticmethod
     def type():
@@ -167,8 +167,8 @@ class MixedType(MixedStrategy):
     """
 
 
-    def __init__(self, data_devs, journal_devs, args):
-        super(MixedType, self).__init__(data_devs, journal_devs, [], args)
+    def __init__(self, args, data_devs, journal_devs):
+        super(MixedType, self).__init__(args, data_devs, journal_devs)
         self.blank_ssds = []
         self.journals_needed = len(self.data_devs) * self.osds_per_device
         self.journal_size = get_journal_size(args)
@@ -176,9 +176,9 @@ class MixedType(MixedStrategy):
         self.validate_compute()
 
     @classmethod
-    def with_auto_devices(cls, devices, args):
+    def with_auto_devices(cls, args, devices):
         data_devs, journal_devs = cls.split_devices_rotational(devices)
-        return cls(data_devs, journal_devs, args)
+        return cls(args, data_devs, journal_devs)
 
     @staticmethod
     def type():
