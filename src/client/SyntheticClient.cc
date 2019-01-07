@@ -312,7 +312,7 @@ string SyntheticClient::get_sarg(int seq)
 
 int SyntheticClient::run()
 {
-  UserPerm perms = client->pick_my_perms();
+  UserPerm perms(pick_my_perms());
   dout(15) << "initing" << dendl;
   int err = client->init();
   if (err < 0) {
