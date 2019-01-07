@@ -2178,8 +2178,17 @@ CtPtr ProtocolV2::send_client_ident() {
     flags |= CEPH_MSG_CONNECT_LOSSY;
   }
 
-  ClientIdentFrame client_ident(this, messenger->get_myaddrs(),
-                                messenger->get_myname().num(), global_seq,
+  entity_addrvec_t maddrs = messenger->get_myaddrs();
+  if (!messenger->get_myaddrs().front().is_msgr2()) {
+    entity_addr_t a = messenger->get_myaddrs().front();
+    a.set_type(entity_addr_t::TYPE_MSGR2);
+    ldout(cct, 20) << "encoding addr " << a << " instead of non-v2 myaddrs "
+                   << messenger->get_myaddrs() << dendl;
+    maddrs.v.push_back(a);
+  }
+
+  ClientIdentFrame client_ident(this, maddrs, messenger->get_myname().num(),
+                                global_seq,
                                 connection->policy.features_supported,
                                 connection->policy.features_required, flags);
 
