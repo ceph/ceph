@@ -38,7 +38,8 @@ public:
 
   explicit ThreadPoolSingleton(CephContext *cct)
     : ThreadPool(cct, "librbd::writeback_thread_pool", "tp_writeback",
-                 cct->_conf->get_val<uint64_t>("rbd_cache_writeback_threads"), "rbd_cache_writeback_threads") {
+                 g_conf().get_val<uint64_t>("rbd_cache_writeback_threads"),
+                 "rbd_cache_writeback_threads") {
     start();
   }
   ~ThreadPoolSingleton() override {
@@ -128,7 +129,7 @@ public:
     ictx->cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
       thread_pool_singleton, "librbd::writeback_thread_pool");
     writeback_queue = new WritebackQueue(this, ictx, "librbd::writeback_work_queue",
-                                  m_ictx->cct->_conf->get_val<int64_t>("rbd_op_thread_timeout"),
+                                  g_conf().get_val<int64_t>("rbd_op_thread_timeout"),
                                   thread_pool_singleton);
     thread_pool_singleton->writeback_queue = writeback_queue;
   }
