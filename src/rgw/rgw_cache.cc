@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_cache.h"
+#include "rgw_perf_counters.h"
 
 #include <errno.h>
 
