@@ -10,6 +10,7 @@ ExternalProject_Add(zstd_ext
              -DCMAKE_C_COMPILER=${CMAKE_C_COMPILER}
              -DCMAKE_C_FLAGS=${ZSTD_C_FLAGS}
              -DCMAKE_AR=${CMAKE_AR}
+             -DCMAKE_POSITION_INDEPENDENT_CODE=${ENABLE_SHARED}
   BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/libzstd
   BUILD_COMMAND $(MAKE) libzstd_static
   INSTALL_COMMAND "true")

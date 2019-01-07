@@ -28,7 +28,7 @@ function TEST_import_after_merge_and_gap() {
     wait_for_clean || return 1
     rados -p foo bench 3 write -b 1024 --no-cleanup || return 1
 
-    kill_daemons $dir TERM osd.0
+    kill_daemons $dir TERM osd.0 || return 1
     ceph-objectstore-tool --data-path $dir/0 --op export --pgid 1.1 --file $dir/1.1  --force || return 1
     ceph-objectstore-tool --data-path $dir/0 --op export --pgid 1.0 --file $dir/1.0  --force || return 1
     activate_osd $dir 0 || return 1
@@ -39,7 +39,7 @@ function TEST_import_after_merge_and_gap() {
     wait_for_clean || return 1
 
     #
-    kill_daemons $dir TERM osd.0
+    kill_daemons $dir TERM osd.0 || return 1
     ceph-objectstore-tool --data-path $dir/0 --op remove --pgid 1.0 --force || return 1
     # this will import both halves the original pg
     ceph-objectstore-tool --data-path $dir/0 --op import --pgid 1.1 --file $dir/1.1 || return 1
@@ -58,7 +58,7 @@ function TEST_import_after_merge_and_gap() {
     sleep 3
     wait_for_clean || return 1
 
-    kill_daemons $dir TERM osd.0
+    kill_daemons $dir TERM osd.0 || return 1
 
     # this should fail.. 1.1 still doesn't exist
     ! ceph-objectstore-tool --data-path $dir/0 --op import --pgid 1.1 --file $dir/1.1 || return 1
@@ -85,7 +85,7 @@ function TEST_import_after_split() {
     wait_for_clean || return 1
     rados -p foo bench 3 write -b 1024 --no-cleanup || return 1
 
-    kill_daemons $dir TERM osd.0
+    kill_daemons $dir TERM osd.0 || return 1
     ceph-objectstore-tool --data-path $dir/0 --op export --pgid 1.0 --file $dir/1.0  --force || return 1
     activate_osd $dir 0 || return 1
 
@@ -94,7 +94,7 @@ function TEST_import_after_split() {
     while ceph daemon osd.0 perf dump | jq '.osd.numpg' | grep 1 ; do sleep 1 ; done
     wait_for_clean || return 1
 
-    kill_daemons $dir TERM osd.0
+    kill_daemons $dir TERM osd.0 || return 1
 
     ceph-objectstore-tool --data-path $dir/0 --op remove --pgid 1.0 --force || return 1
 

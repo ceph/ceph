@@ -21,7 +21,7 @@ class TempURLApplier : public rgw::auth::LocalApplier {
 public:
   TempURLApplier(CephContext* const cct,
                  const RGWUserInfo& user_info)
-    : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, boost::none, boost::none) {
+    : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, boost::none) {
   };
 
   void modify_request_state(const DoutPrefixProvider* dpp, req_state * s) const override; /* in/out */
@@ -46,6 +46,7 @@ class TempURLEngine : public rgw::auth::Engine {
   void get_owner_info(const DoutPrefixProvider* dpp, 
                       const req_state* s,
                       RGWUserInfo& owner_info) const;
+  std::string convert_from_iso8601(std::string expires) const;
   bool is_applicable(const req_state* s) const noexcept;
   bool is_expired(const std::string& expires) const;
 
@@ -204,12 +205,11 @@ class DefaultStrategy : public rgw::auth::Strategy,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
                             const std::string& subuser,
-                            const boost::optional<vector<std::string> >& role_policies,
                             const boost::optional<uint32_t>& perm_mask) const override {
     auto apl = \
       rgw::auth::add_3rdparty(store, s->account_name,
         rgw::auth::add_sysreq(cct, store, s,
-          rgw::auth::LocalApplier(cct, user_info, subuser, role_policies, perm_mask)));
+          rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask)));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }

@@ -1,5 +1,7 @@
 import { Component, Input, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
+
 import { PerformanceCounterService } from '../../../shared/api/performance-counter.service';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
@@ -31,22 +33,22 @@ export class TablePerformanceCounterComponent implements OnInit {
   @Input()
   serviceId: string;
 
-  constructor(private performanceCounterService: PerformanceCounterService) {}
+  constructor(private performanceCounterService: PerformanceCounterService, private i18n: I18n) {}
 
   ngOnInit() {
     this.columns = [
       {
-        name: 'Name',
+        name: this.i18n('Name'),
         prop: 'name',
         flexGrow: 1
       },
       {
-        name: 'Description',
+        name: this.i18n('Description'),
         prop: 'description',
         flexGrow: 1
       },
       {
-        name: 'Value',
+        name: this.i18n('Value'),
         cellTemplate: this.valueTpl,
         flexGrow: 1
       }

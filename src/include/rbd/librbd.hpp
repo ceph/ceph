@@ -29,17 +29,38 @@ namespace librbd {
 
   class Image;
   class ImageOptions;
+  class PoolStats;
   typedef void *image_ctx_t;
   typedef void *completion_t;
   typedef void (*callback_t)(completion_t cb, void *arg);
+
+  typedef struct {
+    std::string id;
+    std::string name;
+  } image_spec_t;
+
+  typedef struct {
+    int64_t pool_id;
+    std::string pool_name;
+    std::string pool_namespace;
+    std::string image_id;
+    std::string image_name;
+    bool trash;
+  } linked_image_spec_t;
+
+  typedef rbd_snap_namespace_type_t snap_namespace_type_t;
+
+  typedef struct {
+    uint64_t id;
+    snap_namespace_type_t namespace_type;
+    std::string name;
+  } snap_spec_t;
 
   typedef struct {
     uint64_t id;
     uint64_t size;
     std::string name;
   } snap_info_t;
-
-  typedef rbd_snap_namespace_type_t snap_namespace_type_t;
 
   typedef struct {
     int64_t group_pool;
@@ -132,9 +153,11 @@ namespace librbd {
 
   typedef struct {
     int64_t source_pool_id;
+    std::string source_pool_namespace;
     std::string source_image_name;
     std::string source_image_id;
     int64_t dest_pool_id;
+    std::string dest_pool_namespace;
     std::string dest_image_name;
     std::string dest_image_id;
     image_migration_state_t state;
@@ -187,7 +210,11 @@ public:
 			 const char *snapname, RBD::AioCompletion *c);
   int aio_open_by_id_read_only(IoCtx& io_ctx, Image& image, const char *id,
                                const char *snapname, RBD::AioCompletion *c);
-  int list(IoCtx& io_ctx, std::vector<std::string>& names);
+
+  int list(IoCtx& io_ctx, std::vector<std::string>& names)
+    __attribute__((deprecated));
+  int list2(IoCtx& io_ctx, std::vector<image_spec_t>* images);
+
   int create(IoCtx& io_ctx, const char *name, uint64_t size, int *order);
   int create2(IoCtx& io_ctx, const char *name, uint64_t size,
 	      uint64_t features, int *order);
@@ -244,10 +271,19 @@ public:
                              const std::string &client_name);
   int mirror_peer_set_cluster(IoCtx& io_ctx, const std::string &uuid,
                               const std::string &cluster_name);
+  int mirror_peer_get_attributes(
+      IoCtx& io_ctx, const std::string &uuid,
+      std::map<std::string, std::string> *key_vals);
+  int mirror_peer_set_attributes(
+      IoCtx& io_ctx, const std::string &uuid,
+      const std::map<std::string, std::string>& key_vals);
+
   int mirror_image_status_list(IoCtx& io_ctx, const std::string &start_id,
       size_t max, std::map<std::string, mirror_image_status_t> *images);
   int mirror_image_status_summary(IoCtx& io_ctx,
       std::map<mirror_image_status_state_t, int> *states);
+  int mirror_image_instance_id_list(IoCtx& io_ctx, const std::string &start_id,
+      size_t max, std::map<std::string, std::string> *sevice_ids);
 
   // RBD groups support functions
   int group_create(IoCtx& io_ctx, const char *group_name);
@@ -285,6 +321,9 @@ public:
   int namespace_remove(IoCtx& ioctx, const char *namespace_name);
   int namespace_list(IoCtx& io_ctx, std::vector<std::string>* namespace_names);
   int namespace_exists(IoCtx& io_ctx, const char *namespace_name, bool *exists);
+
+  int pool_init(IoCtx& io_ctx, bool force);
+  int pool_stats_get(IoCtx& io_ctx, PoolStats *pool_stats);
 
   int pool_metadata_get(IoCtx &io_ctx, const std::string &key,
                         std::string *value);
@@ -325,6 +364,22 @@ private:
   rbd_image_options_t opts;
 };
 
+class CEPH_RBD_API PoolStats {
+public:
+  PoolStats();
+  ~PoolStats();
+
+  PoolStats(const PoolStats&) = delete;
+  PoolStats& operator=(const PoolStats&) = delete;
+
+  int add(rbd_pool_stat_option_t option, uint64_t* opt_val);
+
+private:
+  friend class RBD;
+
+  rbd_pool_stats_t pool_stats;
+};
+
 class CEPH_RBD_API UpdateWatchCtx {
 public:
   virtual ~UpdateWatchCtx() {}
@@ -352,9 +407,13 @@ public:
   std::string get_block_name_prefix();
   int64_t get_data_pool_id();
   int parent_info(std::string *parent_poolname, std::string *parent_name,
-		  std::string *parent_snapname);
+		  std::string *parent_snapname)
+      __attribute__((deprecated));
   int parent_info2(std::string *parent_poolname, std::string *parent_name,
-                   std::string *parent_id, std::string *parent_snapname);
+                   std::string *parent_id, std::string *parent_snapname)
+      __attribute__((deprecated));
+  int get_parent(linked_image_spec_t *parent_image, snap_spec_t *parent_snap);
+
   int old_format(uint8_t *old);
   int size(uint64_t *size);
   int get_group(group_info_t *group_info, size_t group_info_size);
@@ -411,12 +470,15 @@ public:
    * Returns a pair of poolname, imagename for each clone
    * of this image at the currently set snapshot.
    */
-  int list_children(std::set<std::pair<std::string, std::string> > *children);
+  int list_children(std::set<std::pair<std::string, std::string> > *children)
+      __attribute__((deprecated));
   /**
   * Returns a structure of poolname, imagename, imageid and trash flag
   * for each clone of this image at the currently set snapshot.
   */
-  int list_children2(std::vector<librbd::child_info_t> *children);
+  int list_children2(std::vector<librbd::child_info_t> *children)
+      __attribute__((deprecated));
+  int list_children3(std::vector<linked_image_spec_t> *images);
 
   /* advisory locking (see librbd.h for details) */
   int list_lockers(std::list<locker_t> *lockers,
@@ -568,6 +630,7 @@ public:
                             size_t info_size);
   int mirror_image_get_status(mirror_image_status_t *mirror_image_status,
 			      size_t status_size);
+  int mirror_image_get_instance_id(std::string *instance_id);
   int aio_mirror_image_promote(bool force, RBD::AioCompletion *c);
   int aio_mirror_image_demote(RBD::AioCompletion *c);
   int aio_mirror_image_get_info(mirror_image_info_t *mirror_image_info,

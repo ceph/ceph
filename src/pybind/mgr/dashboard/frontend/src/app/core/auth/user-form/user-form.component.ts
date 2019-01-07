@@ -2,8 +2,9 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { AuthService } from '../../../shared/api/auth.service';
 import { RoleService } from '../../../shared/api/role.service';
@@ -46,7 +47,8 @@ export class UserFormComponent implements OnInit {
     private modalService: BsModalService,
     private roleService: RoleService,
     private userService: UserService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private i18n: I18n
   ) {
     this.createForm();
   }
@@ -123,7 +125,7 @@ export class UserFormComponent implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          `Created user "${userFormModel.username}"`
+          this.i18n('Created user "{{username}}"', { username: userFormModel.username })
         );
         this.router.navigate(['/user-management/users']);
       },
@@ -136,8 +138,8 @@ export class UserFormComponent implements OnInit {
   editAction() {
     if (this.isUserRemovingNeededRolePermissions()) {
       const initialState = {
-        titleText: 'Update user',
-        buttonText: 'Continue',
+        titleText: this.i18n('Update user'),
+        buttonText: this.i18n('Continue'),
         bodyTpl: this.removeSelfUserReadUpdatePermissionTpl,
         onSubmit: () => {
           this.modalRef.hide();
@@ -192,14 +194,13 @@ export class UserFormComponent implements OnInit {
           this.authService.logout(() => {
             this.notificationService.show(
               NotificationType.info,
-              'You were automatically logged out because your roles have been changed.'
+              this.i18n('You were automatically logged out because your roles have been changed.')
             );
-            this.router.navigate(['/login']);
           });
         } else {
           this.notificationService.show(
             NotificationType.success,
-            `Updated user "${userFormModel.username}"`
+            this.i18n('Updated user "{{username}}"', { username: userFormModel.username })
           );
           this.router.navigate(['/user-management/users']);
         }

@@ -1,8 +1,8 @@
 :orphan:
 
-========================================
- ceph-volume -- Ceph OSD deployment tool
-========================================
+=======================================================
+ ceph-volume -- Ceph OSD deployment and inspection tool
+=======================================================
 
 .. program:: ceph-volume
 
@@ -11,6 +11,8 @@ Synopsis
 
 | **ceph-volume** [-h] [--cluster CLUSTER] [--log-level LOG_LEVEL]
 |                 [--log-path LOG_PATH]
+
+| **ceph-volume** **inventory**
 
 | **ceph-volume** **lvm** [ *trigger* | *create* | *activate* | *prepare*
 | *zap* | *list* | *batch*]
@@ -33,6 +35,27 @@ them.
 
 Commands
 ========
+
+inventory
+---------
+
+This subcommand provides information about a host's physical disc inventory and
+reports metadata about these discs. Among this metadata one can find disc
+specific data items (like model, size, rotational or solid state) as well as
+data items specific to ceph using a device, such as if it is available for
+use with ceph or if logical volumes are present.
+
+Examples::
+
+    ceph-volume inventory
+    ceph-volume inventory /dev/sda
+    ceph-volume inventory --format json-pretty
+
+Optional arguments:
+
+* [-h, --help]          show the help message and exit
+* [--format]            report format, valid values are ``plain`` (default),
+                        ``json`` and ``json-pretty``
 
 lvm
 ---
@@ -58,6 +81,7 @@ Optional arguments:
 * [--bluestore]         Use the bluestore objectstore (default)
 * [--filestore]         Use the filestore objectstore
 * [--yes]               Skip the report and prompt to continue provisioning
+* [--prepare]           Only prepare OSDs, do not activate
 * [--dmcrypt]           Enable encryption for the underlying OSD devices
 * [--crush-device-class] Define a CRUSH device class to assign the OSD to
 * [--no-systemd]         Do not enable or create any systemd units
@@ -201,6 +225,17 @@ Usage, for logical volumes::
 Usage, for logical partitions::
 
       ceph-volume lvm zap /dev/sdc1
+
+For full removal of the device use the ``--destroy`` flag (allowed for all
+device types)::
+
+      ceph-volume lvm zap --destroy /dev/sdc1
+
+Multiple devices can be removed by specifying the OSD ID and/or the OSD FSID::
+
+      ceph-volume lvm zap --destroy --osd-id 1
+      ceph-volume lvm zap --destroy --osd-id 1 --osd-fsid C9605912-8395-4D76-AFC0-7DFDAC315D59
+
 
 Positional arguments:
 

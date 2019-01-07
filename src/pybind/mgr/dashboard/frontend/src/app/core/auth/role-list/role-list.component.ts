@@ -1,11 +1,12 @@
 import { Component, OnInit } from '@angular/core';
 
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { I18n } from '@ngx-translate/i18n-polyfill';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin } from 'rxjs';
 
 import { RoleService } from '../../../shared/api/role.service';
 import { ScopeService } from '../../../shared/api/scope.service';
-import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
+import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { EmptyPipe } from '../../../shared/empty.pipe';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
@@ -37,14 +38,15 @@ export class RoleListComponent implements OnInit {
     private emptyPipe: EmptyPipe,
     private authStorageService: AuthStorageService,
     private modalService: BsModalService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private i18n: I18n
   ) {
     this.permission = this.authStorageService.getPermissions().user;
     const addAction: CdTableAction = {
       permission: 'create',
       icon: 'fa-plus',
       routerLink: () => '/user-management/roles/add',
-      name: 'Add'
+      name: this.i18n('Add')
     };
     const editAction: CdTableAction = {
       permission: 'update',
@@ -52,14 +54,14 @@ export class RoleListComponent implements OnInit {
       disable: () => !this.selection.hasSingleSelection || this.selection.first().system,
       routerLink: () =>
         this.selection.first() && `/user-management/roles/edit/${this.selection.first().name}`,
-      name: 'Edit'
+      name: this.i18n('Edit')
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
       icon: 'fa-times',
       disable: () => !this.selection.hasSingleSelection || this.selection.first().system,
       click: () => this.deleteRoleModal(),
-      name: 'Delete'
+      name: this.i18n('Delete')
     };
     this.tableActions = [addAction, editAction, deleteAction];
   }
@@ -67,18 +69,18 @@ export class RoleListComponent implements OnInit {
   ngOnInit() {
     this.columns = [
       {
-        name: 'Name',
+        name: this.i18n('Name'),
         prop: 'name',
         flexGrow: 3
       },
       {
-        name: 'Description',
+        name: this.i18n('Description'),
         prop: 'description',
         flexGrow: 5,
         pipe: this.emptyPipe
       },
       {
-        name: 'System Role',
+        name: this.i18n('System Role'),
         prop: 'system',
         cellClass: 'text-center',
         flexGrow: 1,
@@ -105,7 +107,10 @@ export class RoleListComponent implements OnInit {
       () => {
         this.getRoles();
         this.modalRef.hide();
-        this.notificationService.show(NotificationType.success, `Deleted role '${role}'`);
+        this.notificationService.show(
+          NotificationType.success,
+          this.i18n(`Deleted role '{{role_name}}'`, { role_name: role })
+        );
       },
       () => {
         this.modalRef.content.stopLoadingSpinner();
@@ -115,7 +120,7 @@ export class RoleListComponent implements OnInit {
 
   deleteRoleModal() {
     const name = this.selection.first().name;
-    this.modalRef = this.modalService.show(DeletionModalComponent, {
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: 'Role',
         submitAction: () => this.deleteRole(name)

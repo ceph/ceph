@@ -4,9 +4,9 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import { BsModalRef } from 'ngx-bootstrap';
+import { BsModalRef } from 'ngx-bootstrap/modal';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { Permission } from '../../../shared/models/permissions';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -26,7 +26,7 @@ describe('RbdTrashPurgeModalComponent', () => {
       RouterTestingModule
     ],
     declarations: [RbdTrashPurgeModalComponent],
-    providers: [BsModalRef]
+    providers: [BsModalRef, i18nProviders]
   });
 
   beforeEach(() => {
@@ -40,27 +40,24 @@ describe('RbdTrashPurgeModalComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it(
-    'should finish ngOnInit',
-    fakeAsync(() => {
-      component.poolPermission = new Permission(['read', 'create', 'update', 'delete']);
-      fixture.detectChanges();
-      const req = httpTesting.expectOne('api/pool?attrs=pool_name,application_metadata');
-      req.flush([
-        {
-          application_metadata: ['foo'],
-          pool_name: 'bar'
-        },
-        {
-          application_metadata: ['rbd'],
-          pool_name: 'baz'
-        }
-      ]);
-      tick();
-      expect(component.pools).toEqual(['baz']);
-      expect(component.purgeForm).toBeTruthy();
-    })
-  );
+  it('should finish ngOnInit', fakeAsync(() => {
+    component.poolPermission = new Permission(['read', 'create', 'update', 'delete']);
+    fixture.detectChanges();
+    const req = httpTesting.expectOne('api/pool?attrs=pool_name,application_metadata');
+    req.flush([
+      {
+        application_metadata: ['foo'],
+        pool_name: 'bar'
+      },
+      {
+        application_metadata: ['rbd'],
+        pool_name: 'baz'
+      }
+    ]);
+    tick();
+    expect(component.pools).toEqual(['baz']);
+    expect(component.purgeForm).toBeTruthy();
+  }));
 
   it('should call ngOnInit without pool permissions', () => {
     component.poolPermission = new Permission([]);

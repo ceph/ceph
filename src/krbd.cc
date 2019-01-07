@@ -162,7 +162,7 @@ static int build_map_buf(CephContext *cct, const krbd_spec& spec,
   int r;
 
   MonMap monmap;
-  r = monmap.build_initial(cct, cerr);
+  r = monmap.build_initial(cct, false, cerr);
   if (r < 0)
     return r;
 

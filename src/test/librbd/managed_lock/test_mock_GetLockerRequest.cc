@@ -62,9 +62,9 @@ public:
 
       cls_lock_get_info_reply reply;
       if (r != -ENOENT) {
-        reply.lockers = decltype(reply.lockers){
-          {rados::cls::lock::locker_id_t(entity, locker_cookie),
-           rados::cls::lock::locker_info_t(utime_t(), entity_addr, "")}};
+        reply.lockers.emplace(
+          rados::cls::lock::locker_id_t(entity, locker_cookie),
+          rados::cls::lock::locker_info_t(utime_t(), entity_addr, ""));
         reply.tag = lock_tag;
         reply.lock_type = lock_type;
       }

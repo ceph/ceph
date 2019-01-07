@@ -21,7 +21,7 @@
 
 #include "os/fs/FS.h"
 #include "include/interval_set.h"
-#include "aio.h"
+#include "ceph_aio.h"
 #include "BlockDevice.h"
 
 class PMEMDevice : public BlockDevice {
@@ -50,10 +50,11 @@ public:
 	       IOContext *ioc) override;
 
   int read_random(uint64_t off, uint64_t len, char *buf, bool buffered) override;
-  int write(uint64_t off, bufferlist& bl, bool buffered) override;
+  int write(uint64_t off, bufferlist& bl, bool buffered, int write_hint = WRITE_LIFE_NOT_SET) override;
   int aio_write(uint64_t off, bufferlist& bl,
 		IOContext *ioc,
-		bool buffered) override;
+		bool buffered,
+		int write_hint = WRITE_LIFE_NOT_SET) override;
   int flush() override;
 
   // for managing buffered readers/writers

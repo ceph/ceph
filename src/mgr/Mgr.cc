@@ -94,19 +94,18 @@ void MetadataUpdate::finish(int r)
       DaemonStatePtr state;
       if (daemon_state.exists(key)) {
         state = daemon_state.get(key);
-	Mutex::Locker l(state->lock);
         if (key.first == "mds" || key.first == "mgr") {
           daemon_meta.erase("name");
         } else if (key.first == "osd") {
           daemon_meta.erase("id");
         }
         daemon_meta.erase("hostname");
-        state->metadata.clear();
 	map<string,string> m;
         for (const auto &i : daemon_meta) {
           m[i.first] = i.second.get_str();
 	}
-	state->set_metadata(m);
+
+	daemon_state.update_metadata(state, m);
       } else {
         state = std::make_shared<DaemonState>(daemon_state.types);
         state->key = key;
@@ -139,7 +138,7 @@ void MetadataUpdate::finish(int r)
 
 void Mgr::background_init(Context *completion)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   ceph_assert(!initializing);
   ceph_assert(!initialized);
   initializing = true;
@@ -214,7 +213,7 @@ std::map<std::string, std::string> Mgr::load_store()
 
 void Mgr::init()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   ceph_assert(initializing);
   ceph_assert(!initialized);
 
@@ -255,7 +254,8 @@ void Mgr::init()
   lock.Lock();
 
   // Populate PGs in ClusterState
-  objecter->with_osdmap([this](const OSDMap &osd_map) {
+  cluster_state.with_osdmap_and_pgmap([this](const OSDMap &osd_map,
+					     const PGMap& pg_map) {
     cluster_state.notify_osdmap(osd_map);
   });
 
@@ -391,7 +391,7 @@ void Mgr::shutdown()
 {
   finisher.queue(new FunctionContext([&](int) {
     {
-      Mutex::Locker l(lock);
+      std::lock_guard l(lock);
       monc->sub_unwant("log-info");
       monc->sub_unwant("mgrdigest");
       monc->sub_unwant("fsmap");
@@ -420,7 +420,8 @@ void Mgr::handle_osd_map()
    * see if they have changed (service restart), and if so
    * reload the metadata.
    */
-  objecter->with_osdmap([this, &names_exist](const OSDMap &osd_map) {
+  cluster_state.with_osdmap_and_pgmap([this, &names_exist](const OSDMap &osd_map,
+							   const PGMap &pg_map) {
     for (int osd_id = 0; osd_id < osd_map.get_max_osd(); ++osd_id) {
       if (!osd_map.exists(osd_id)) {
         continue;
@@ -438,7 +439,7 @@ void Mgr::handle_osd_map()
 
       if (daemon_state.exists(k)) {
         auto metadata = daemon_state.get(k);
-	Mutex::Locker l(metadata->lock);
+	std::lock_guard l(metadata->lock);
         auto addr_iter = metadata->metadata.find("front_addr");
         if (addr_iter != metadata->metadata.end()) {
           const std::string &metadata_addr = addr_iter->second;
@@ -498,7 +499,7 @@ void Mgr::handle_service_map(MServiceMap *m)
 bool Mgr::ms_dispatch(Message *m)
 {
   dout(4) << *m << dendl;
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   switch (m->get_type()) {
     case MSG_MGR_DIGEST:
@@ -575,7 +576,7 @@ void Mgr::handle_fs_map(MFSMap* m)
     bool update = false;
     if (daemon_state.exists(k)) {
       auto metadata = daemon_state.get(k);
-      Mutex::Locker l(metadata->lock);
+      std::lock_guard l(metadata->lock);
       if (metadata->metadata.empty() ||
 	  metadata->metadata.count("addr") == 0) {
         update = true;
@@ -612,7 +613,7 @@ void Mgr::handle_fs_map(MFSMap* m)
 
 bool Mgr::got_mgr_map(const MgrMap& m)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   dout(10) << m << dendl;
 
   set<string> old_modules;
@@ -654,7 +655,7 @@ void Mgr::handle_mgr_digest(MMgrDigest* m)
 
 std::map<std::string, std::string> Mgr::get_services() const
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   return py_module_registry->get_services();
 }

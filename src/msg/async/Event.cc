@@ -455,12 +455,16 @@ int EventCenter::process_events(unsigned timeout_microseconds,  ceph::timespan *
 
 void EventCenter::dispatch_event_external(EventCallbackRef e)
 {
-  external_lock.lock();
-  external_events.push_back(e);
-  bool wake = !external_num_events.load();
-  uint64_t num = ++external_num_events;
-  external_lock.unlock();
-  if (!in_thread() && wake)
+  uint64_t num = 0;
+  {
+    std::lock_guard lock{external_lock};
+    if (external_num_events > 0 && *external_events.rbegin() == e) {
+      return;
+    }
+    external_events.push_back(e);
+    num = ++external_num_events;
+  }
+  if (num == 1 && !in_thread())
     wakeup();
 
   ldout(cct, 30) << __func__ << " " << e << " pending " << num << dendl;

@@ -36,13 +36,14 @@ class Module(MgrModule):
         },
     ]
 
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {
             'name': 'address',
             'default': 'unixgram:///tmp/telegraf.sock',
         },
         {
             'name': 'interval',
+            'type': 'secs',
             'default': 15
         }
     ]
@@ -51,7 +52,7 @@ class Module(MgrModule):
 
     @property
     def config_keys(self):
-        return dict((o['name'], o.get('default', None)) for o in self.OPTIONS)
+        return dict((o['name'], o.get('default', None)) for o in self.MODULE_OPTIONS)
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
@@ -75,7 +76,7 @@ class Module(MgrModule):
             'dirty',
             'rd',
             'rd_bytes',
-            'raw_bytes_used',
+            'stored_raw',
             'wr',
             'wr_bytes',
             'objects',
@@ -218,9 +219,9 @@ class Module(MgrModule):
 
     def init_module_config(self):
         self.config['address'] = \
-            self.get_config("address", default=self.config_keys['address'])
+            self.get_module_option("address", default=self.config_keys['address'])
         self.config['interval'] = \
-            int(self.get_config("interval",
+            int(self.get_module_option("interval",
                                 default=self.config_keys['interval']))
 
     def now(self):
@@ -267,7 +268,7 @@ class Module(MgrModule):
 
             self.log.debug('Setting configuration option %s to %s', key, value)
             self.set_config_option(key, value)
-            self.set_config(key, value)
+            self.set_module_option(key, value)
             return 0, 'Configuration option {0} updated'.format(key), ''
         elif cmd['prefix'] == 'telegraf send':
             self.send_to_telegraf()

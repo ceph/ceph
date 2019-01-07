@@ -4,10 +4,14 @@ import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Subject, throwError as observableThrowError } from 'rxjs';
 
-import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  i18nProviders,
+  PermissionHelper
+} from '../../../../testing/unit-test-helper';
 import { ApiModule } from '../../../shared/api/api.module';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
@@ -52,8 +56,8 @@ describe('RbdSnapshotListComponent', () => {
     ],
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
-      SummaryService,
-      TaskListService
+      TaskListService,
+      i18nProviders
     ]
   });
 

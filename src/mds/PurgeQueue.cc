@@ -307,12 +307,12 @@ uint32_t PurgeQueue::_calculate_ops(const PurgeItem &item) const
   uint32_t ops_required = 0;
   if (item.action == PurgeItem::PURGE_DIR) {
     // Directory, count dirfrags to be deleted
-    std::list<frag_t> ls;
+    frag_vec_t leaves;
     if (!item.fragtree.is_leaf(frag_t())) {
-      item.fragtree.get_leaves(ls);
+      item.fragtree.get_leaves(leaves);
     }
     // One for the root, plus any leaves
-    ops_required = 1 + ls.size();
+    ops_required = 1 + leaves.size();
   } else {
     // File, work out concurrent Filer::purge deletes
     const uint64_t num = (item.size > 0) ?
@@ -433,7 +433,8 @@ void PurgeQueue::_execute_item(
 
   in_flight[expire_to] = item;
   logger->set(l_pq_executing, in_flight.size());
-  ops_in_flight += _calculate_ops(item);
+  auto ops = _calculate_ops(item);
+  ops_in_flight += ops;
   logger->set(l_pq_executing_ops, ops_in_flight);
 
   SnapContext nullsnapc;
@@ -471,12 +472,12 @@ void PurgeQueue::_execute_item(
     }
   } else if (item.action == PurgeItem::PURGE_DIR) {
     object_locator_t oloc(metadata_pool);
-    std::list<frag_t> frags;
+    frag_vec_t leaves;
     if (!item.fragtree.is_leaf(frag_t()))
-      item.fragtree.get_leaves(frags);
-    frags.push_back(frag_t());
-    for (const auto &frag : frags) {
-      object_t oid = CInode::get_object_name(item.ino, frag, "");
+      item.fragtree.get_leaves(leaves);
+    leaves.push_back(frag_t());
+    for (const auto &leaf : leaves) {
+      object_t oid = CInode::get_object_name(item.ino, leaf, "");
       dout(10) << " remove dirfrag " << oid << dendl;
       objecter->remove(oid, oloc, nullsnapc,
                        ceph::real_clock::now(),
@@ -500,6 +501,8 @@ void PurgeQueue::_execute_item(
   } else {
     derr << "Invalid item (action=" << item.action << ") in purge queue, "
             "dropping it" << dendl;
+    ops_in_flight -= ops;
+    logger->set(l_pq_executing_ops, ops_in_flight);
     in_flight.erase(expire_to);
     logger->set(l_pq_executing, in_flight.size());
     return;
@@ -519,9 +522,7 @@ void PurgeQueue::_execute_item(
     // expire_pos doesn't fall too far behind our progress when consuming
     // a very long queue.
     if (in_flight.empty() || journaler.write_head_needed()) {
-      journaler.write_head(new FunctionContext([this](int r){
-            journaler.trim();
-            }));
+      journaler.write_head(nullptr);
     }
   }), &finisher));
 

@@ -446,6 +446,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
       return entry.prio >= level;
     };
 
+    // Decrement operation that sets to container end when hitting rbegin
     ostringstream ss;
     if (channel == "*") {
       list<LogEntry> full_tail;
@@ -460,7 +461,21 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
       if (rp == full_tail.rend()) {
 	--rp;
       }
-      for (; rp != full_tail.rbegin(); --rp) {
+
+      // Decrement a reverse iterator such that going past rbegin()
+      // sets it to rend().  This is for writing a for() loop that
+      // goes up to (and including) rbegin()
+      auto dec = [&rp, &full_tail] () {
+        if (rp == full_tail.rbegin()) {
+          rp = full_tail.rend();
+        } else {
+          --rp;
+        }
+      };
+
+      // Move forward to the end of the container (decrement the reverse
+      // iterator).
+      for (; rp != full_tail.rend(); dec()) {
 	if (!match(*rp)) {
 	  continue;
 	}
@@ -471,7 +486,6 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
 	}
       }
     } else {
-      derr << "bar" << dendl;
       auto p = summary.tail_by_channel.find(channel);
       if (p != summary.tail_by_channel.end()) {
 	auto rp = p->second.rbegin();
@@ -483,7 +497,21 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
 	if (rp == p->second.rend()) {
 	  --rp;
 	}
-	for (; rp != p->second.rbegin(); --rp) {
+
+        // Decrement a reverse iterator such that going past rbegin()
+        // sets it to rend().  This is for writing a for() loop that
+        // goes up to (and including) rbegin()
+        auto dec = [&rp, &p] () {
+          if (rp == p->second.rbegin()) {
+            rp = p->second.rend();
+          } else {
+            --rp;
+          }
+        };
+
+        // Move forward to the end of the container (decrement the reverse
+        // iterator).
+	for (; rp != p->second.rend(); dec()) {
 	  if (!match(rp->second)) {
 	    continue;
 	  }

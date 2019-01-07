@@ -180,14 +180,17 @@ void Client::_reset_faked_inos()
   free_faked_inos.clear();
   free_faked_inos.insert(start, (uint32_t)-1 - start + 1);
   last_used_faked_ino = 0;
+  last_used_faked_root = 0;
   _use_faked_inos = sizeof(ino_t) < 8 || cct->_conf->client_use_faked_inos;
 }
 
 void Client::_assign_faked_ino(Inode *in)
 {
+  if (0 == last_used_faked_ino)
+    last_used_faked_ino = last_used_faked_ino + 2048; // start(1024)~2048 reserved for _assign_faked_root
   interval_set<ino_t>::const_iterator it = free_faked_inos.lower_bound(last_used_faked_ino + 1);
   if (it == free_faked_inos.end() && last_used_faked_ino > 0) {
-    last_used_faked_ino = 0;
+    last_used_faked_ino = 2048;
     it = free_faked_inos.lower_bound(last_used_faked_ino + 1);
   }
   ceph_assert(it != free_faked_inos.end());
@@ -199,6 +202,32 @@ void Client::_assign_faked_ino(Inode *in)
     ceph_assert(it.get_start() + it.get_len() > last_used_faked_ino);
   }
   in->faked_ino = last_used_faked_ino;
+  free_faked_inos.erase(in->faked_ino);
+  faked_ino_map[in->faked_ino] = in->vino();
+}
+
+/*
+ * In the faked mode, if you export multiple subdirectories,
+ * you will see that the inode numbers of the exported subdirectories
+ * are the same. so we distinguish the mount point by reserving 
+ * the "fake ids" between "1024~2048" and combining the last 
+ * 10bits(0x3ff) of the "root inodes".
+*/
+void Client::_assign_faked_root(Inode *in)
+{
+  interval_set<ino_t>::const_iterator it = free_faked_inos.lower_bound(last_used_faked_root + 1);
+  if (it == free_faked_inos.end() && last_used_faked_root > 0) {
+    last_used_faked_root = 0;
+    it = free_faked_inos.lower_bound(last_used_faked_root + 1);
+  }
+  assert(it != free_faked_inos.end());
+  vinodeno_t inode_info = in->vino();
+  uint64_t inode_num = (uint64_t)inode_info.ino;
+  ldout(cct, 10) << "inode_num " << inode_num << "inode_num & 0x3ff=" << (inode_num & 0x3ff)<< dendl;
+  last_used_faked_root = it.get_start()  + (inode_num & 0x3ff); // 0x3ff mask and get_start will not exceed 2048
+  assert(it.get_start() + it.get_len() > last_used_faked_root);
+
+  in->faked_ino = last_used_faked_root;
   free_faked_inos.erase(in->faked_ino);
   faked_ino_map[in->faked_ino] = in->vino();
 }
@@ -243,7 +272,8 @@ Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
     interrupt_finisher(m->cct),
     remount_finisher(m->cct),
     objecter_finisher(m->cct),
-    m_command_hook(this)
+    m_command_hook(this),
+    fscid(0)
 {
   _reset_faked_inos();
 
@@ -435,8 +465,9 @@ void Client::dump_status(Formatter *f)
     f->dump_int("id", get_nodeid().v);
     entity_inst_t inst(messenger->get_myname(), messenger->get_myaddr());
     f->dump_object("inst", inst);
-    f->dump_stream("inst_str") << inst;
-    f->dump_stream("addr_str") << inst.addr;
+    f->dump_object("addr", inst.addr);
+    f->dump_stream("inst_str") << inst.name << " " << inst.addr.get_legacy_str();
+    f->dump_string("addr_str", inst.addr.get_legacy_str());
     f->dump_int("inode_count", inode_map.size());
     f->dump_int("mds_epoch", mdsmap->get_epoch());
     f->dump_int("osd_epoch", osd_epoch);
@@ -468,6 +499,8 @@ void Client::_finish_init()
   plb.add_time_avg(l_c_reply, "reply", "Latency of receiving a reply on metadata request");
   plb.add_time_avg(l_c_lat, "lat", "Latency of processing a metadata request");
   plb.add_time_avg(l_c_wrlat, "wrlat", "Latency of a file data write operation");
+  plb.add_time_avg(l_c_read, "rdlat", "Latency of a file data read operation");
+  plb.add_time_avg(l_c_fsync, "fsync", "Latency of a file sync operation");
   logger.reset(plb.create_perf_counters());
   cct->get_perfcounters_collection()->add(logger.get());
 
@@ -790,6 +823,8 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
 
     if (!root) {
       root = in;
+      if (use_faked_inos())
+        _assign_faked_root(root);
       root_ancestor = in;
       cwd = root;
     } else if (!mounted) {
@@ -855,6 +890,7 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       ldout(cct, 20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << dendl;
       in->rstat = st->rstat;
       in->quota = st->quota;
+      in->dir_pin = st->dir_pin;
     }
     // move me if/when version reflects fragtree changes.
     if (in->dirfragtree != st->dirfragtree) {
@@ -2453,11 +2489,25 @@ void Client::handle_osd_map(MOSDMap *m)
 
   const auto myaddrs = messenger->get_myaddrs();
   bool new_blacklist = false;
+  bool prenautilus = objecter->with_osdmap(
+    [&](const OSDMap& o) {
+      return o.require_osd_release < CEPH_RELEASE_NAUTILUS;
+    });
   if (!blacklisted) {
-    for (auto& a : myaddrs.v) {
+    for (auto a : myaddrs.v) {
+      // blacklist entries are always TYPE_ANY for nautilus+
+      a.set_type(entity_addr_t::TYPE_ANY);
       if (new_blacklists.count(a)) {
 	new_blacklist = true;
 	break;
+      }
+      if (prenautilus) {
+	// ...except pre-nautilus, they were TYPE_LEGACY
+	a.set_type(entity_addr_t::TYPE_LEGACY);
+	if (new_blacklists.count(a)) {
+	  new_blacklist = true;
+	  break;
+	}
       }
     }
   }
@@ -2479,6 +2529,12 @@ void Client::handle_osd_map(MOSDMap *m)
     // Handle case where we were blacklisted but no longer are
     blacklisted = objecter->with_osdmap([myaddrs](const OSDMap &o){
         return o.is_blacklisted(myaddrs);});
+  }
+
+  // Always subscribe to next osdmap for blacklisted client
+  // until this client is not blacklisted.
+  if (blacklisted) {
+    objecter->maybe_request_map();
   }
 
   if (objecter->osdmap_full_flag()) {
@@ -4860,7 +4916,6 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
 	    tcap.cap_id = m->peer.cap_id;
 	    tcap.seq = m->peer.seq - 1;
 	    tcap.issue_seq = tcap.seq;
-	    tcap.mseq = m->peer.mseq;
 	    tcap.issued |= cap.issued;
 	    tcap.implemented |= cap.issued;
 	    if (&cap == in->auth_cap)
@@ -5741,13 +5796,13 @@ int Client::subscribe_mdsmap(const std::string &fs_name)
     r = fetch_fsmap(true);
     if (r < 0)
       return r;
-    fs_cluster_id_t cid = fsmap_user->get_fs_cid(resolved_fs_name);
-    if (cid == FS_CLUSTER_ID_NONE) {
+    fscid = fsmap_user->get_fs_cid(resolved_fs_name);
+    if (fscid == FS_CLUSTER_ID_NONE) {
       return -ENOENT;
     }
 
     std::ostringstream oss;
-    oss << want << "." << cid;
+    oss << want << "." << fscid;
     want = oss.str();
   }
   ldout(cct, 10) << "Subscribing to map '" << want << "'" << dendl;
@@ -8975,6 +9030,8 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   int64_t r = 0;
   const auto& conf = cct->_conf;
   Inode *in = f->inode.get();
+  utime_t lat;
+  utime_t start = ceph_clock_now(); 
 
   if ((f->mode & CEPH_FILE_MODE_RD) == 0)
     return -EBADF;
@@ -9076,10 +9133,14 @@ success:
     // adjust fd pos
     f->pos = start_pos + r;
   }
+  
+  lat = ceph_clock_now();
+  lat -= start;
+  logger->tinc(l_c_read, lat);
 
 done:
   // done!
-
+  
   if (onuninline) {
     client_lock.Unlock();
     int ret = onuninline->wait();
@@ -9217,9 +9278,9 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 	int64_t some = in->size - pos;
 	if (some > left)
 	  some = left;
-	bufferptr z(some);
-	z.zero();
-	bl->push_back(z);
+	auto z = buffer::ptr_node::create(some);
+	z->zero();
+	bl->push_back(std::move(z));
 	read += some;
 	pos += some;
 	left -= some;
@@ -9354,6 +9415,8 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
 int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 	                const struct iovec *iov, int iovcnt)
 {
+  uint64_t fpos = 0;
+
   if ((uint64_t)(offset+size) > mdsmap->get_max_filesize()) //too large!
     return -EFBIG;
 
@@ -9370,13 +9433,6 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   if ((f->mode & CEPH_FILE_MODE_WR) == 0)
     return -EBADF;
 
-  // check quota
-  uint64_t endoff = offset + size;
-  if (endoff > in->size && is_quota_bytes_exceeded(in, endoff - in->size,
-						   f->actor_perms)) {
-    return -EDQUOT;
-  }
-
   // use/adjust fd pos?
   if (offset < 0) {
     lock_fh_pos(f);
@@ -9392,8 +9448,15 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
       }
     }
     offset = f->pos;
-    f->pos = offset+size;
+    fpos = offset+size;
     unlock_fh_pos(f);
+  }
+
+  // check quota
+  uint64_t endoff = offset + size;
+  if (endoff > in->size && is_quota_bytes_exceeded(in, endoff - in->size,
+						   f->actor_perms)) {
+    return -EDQUOT;
   }
 
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
@@ -9531,6 +9594,11 @@ success:
   lat -= start;
   logger->tinc(l_c_wrlat, lat);
 
+  if (fpos) {
+    lock_fh_pos(f);
+    f->pos = fpos;
+    unlock_fh_pos(f);
+  }
   totalwritten = size;
   r = (int64_t)totalwritten;
 
@@ -9660,6 +9728,8 @@ int Client::_fsync(Inode *in, bool syncdataonly)
   std::unique_ptr<C_SaferCond> object_cacher_completion = nullptr;
   ceph_tid_t flush_tid = 0;
   InodeRef tmp_ref;
+  utime_t lat;
+  utime_t start = ceph_clock_now(); 
 
   ldout(cct, 8) << "_fsync on " << *in << " " << (syncdataonly ? "(dataonly)":"(data+metadata)") << dendl;
   
@@ -9711,6 +9781,10 @@ int Client::_fsync(Inode *in, bool syncdataonly)
     ldout(cct, 8) << "ino " << in->ino << " failed to commit to disk! "
 		  << cpp_strerror(-r) << dendl;
   }
+   
+  lat = ceph_clock_now();
+  lat -= start;
+  logger->tinc(l_c_fsync, lat);
 
   return r;
 }
@@ -10296,19 +10370,12 @@ int Client::test_dentry_handling(bool can_invalidate)
     ceph_assert(dentry_invalidate_cb);
     ldout(cct, 1) << "using dentry_invalidate_cb" << dendl;
     r = 0;
-  } else if (remount_cb) {
+  } else {
+    ceph_assert(remount_cb);
     ldout(cct, 1) << "using remount_cb" << dendl;
     r = _do_remount(false);
   }
-  if (r) {
-    bool should_abort = cct->_conf.get_val<bool>("client_die_on_failed_dentry_invalidate");
-    if (should_abort) {
-      lderr(cct) << "no method to invalidate kernel dentry cache; quitting!" << dendl;
-      ceph_abort();
-    } else {
-      lderr(cct) << "no method to invalidate kernel dentry cache; expect issues!" << dendl;
-    }
-  }
+
   return r;
 }
 
@@ -11704,6 +11771,14 @@ size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
   return snprintf(val, size, "%ld.09%ld", (long)in->rstat.rctime.sec(),
       (long)in->rstat.rctime.nsec());
 }
+bool Client::_vxattrcb_dir_pin_exists(Inode *in)
+{
+  return in->dir_pin != -ENODATA;
+}
+size_t Client::_vxattrcb_dir_pin(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%ld", (long)in->dir_pin);
+}
 
 #define CEPH_XATTR_NAME(_type, _name) "ceph." #_type "." #_name
 #define CEPH_XATTR_NAME2(_type, _name, _name2) "ceph." #_type "." #_name "." #_name2
@@ -11777,6 +11852,14 @@ const Client::VXattr Client::_dir_vxattrs[] = {
   },
   XATTR_QUOTA_FIELD(quota, max_bytes),
   XATTR_QUOTA_FIELD(quota, max_files),
+  {
+    name: "ceph.dir.pin",
+    getxattr_cb: &Client::_vxattrcb_dir_pin,
+    readonly: false,
+    hidden: true,
+    exists_cb: &Client::_vxattrcb_dir_pin_exists,
+    flags: 0,
+  },
   { name: "" }     /* Required table terminator */
 };
 
@@ -13143,10 +13226,10 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
   }
   object_t oid = file_object_t(vino.ino, blockid);
   SnapContext fakesnap;
-  bufferptr bp;
-  if (length > 0) bp = buffer::copy(buf, length);
-  bufferlist bl;
-  bl.push_back(bp);
+  ceph::bufferlist bl;
+  if (length > 0) {
+    bl.push_back(buffer::copy(buf, length));
+  }
 
   ldout(cct, 1) << "ll_block_write for " << vino.ino << "." << blockid
 		<< dendl;

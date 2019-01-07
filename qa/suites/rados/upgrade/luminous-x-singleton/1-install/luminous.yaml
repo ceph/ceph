@@ -8,6 +8,8 @@ meta:
 tasks:
 - install:
     branch: luminous
+    exclude_packages: ['librados3']
+    extra_packages: ['librados2']
 - print: "**** done install luminous"
 - ceph:
 - print: "**** done ceph"

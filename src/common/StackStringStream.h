@@ -39,7 +39,6 @@ public:
 
   void push(std::string_view sv)
   {
-    vec.reserve(vec.size() + sv.size());
     vec.insert(vec.end(), sv.begin(), sv.end());
   }
 
@@ -129,11 +128,17 @@ public:
     }
   }
 
-  sss& get_stream() {
+  sss& operator*() {
     return *osp;
   }
-  const sss& get_stream() const {
+  sss const& operator*() const {
     return *osp;
+  }
+  sss* operator->() {
+    return osp.get();
+  }
+  sss const* operator->() const {
+    return osp.get();
   }
 
 private:

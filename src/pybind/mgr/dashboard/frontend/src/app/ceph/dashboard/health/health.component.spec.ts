@@ -1,21 +1,24 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
+import { By } from '@angular/platform-browser';
 
 import * as _ from 'lodash';
 import { PopoverModule } from 'ngx-bootstrap/popover';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { DashboardService } from '../../../shared/api/dashboard.service';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { HealthService } from '../../../shared/api/health.service';
+import { Permissions } from '../../../shared/models/permissions';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SharedModule } from '../../../shared/shared.module';
-import { LogColorPipe } from '../log-color.pipe';
+import { PgCategoryService } from '../../shared/pg-category.service';
+import { HealthPieColor } from '../health-pie/health-pie-color.enum';
+import { HealthPieComponent } from '../health-pie/health-pie.component';
 import { MdsSummaryPipe } from '../mds-summary.pipe';
 import { MgrSummaryPipe } from '../mgr-summary.pipe';
 import { MonSummaryPipe } from '../mon-summary.pipe';
 import { OsdSummaryPipe } from '../osd-summary.pipe';
-import { PgStatusStylePipe } from '../pg-status-style.pipe';
-import { PgStatusPipe } from '../pg-status.pipe';
 import { HealthComponent } from './health.component';
 
 describe('HealthComponent', () => {
@@ -37,27 +40,35 @@ describe('HealthComponent', () => {
     df: { stats: { total_objects: 0 } },
     pg_info: {}
   };
+  const fakeAuthStorageService = {
+    getPermissions: () => {
+      return new Permissions({ log: ['read'] });
+    }
+  };
 
   configureTestBed({
-    providers: [DashboardService],
     imports: [SharedModule, HttpClientTestingModule, PopoverModule.forRoot()],
     declarations: [
       HealthComponent,
+      HealthPieComponent,
       MonSummaryPipe,
       OsdSummaryPipe,
       MdsSummaryPipe,
-      MgrSummaryPipe,
-      PgStatusStylePipe,
-      LogColorPipe,
-      PgStatusPipe
+      MgrSummaryPipe
     ],
-    schemas: [NO_ERRORS_SCHEMA]
+    schemas: [NO_ERRORS_SCHEMA],
+    providers: [
+      i18nProviders,
+      { provide: AuthStorageService, useValue: fakeAuthStorageService },
+      PgCategoryService
+    ]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(HealthComponent);
     component = fixture.componentInstance;
-    getHealthSpy = spyOn(TestBed.get(DashboardService), 'getHealth');
+    getHealthSpy = spyOn(TestBed.get(HealthService), 'getMinimalHealth');
+    getHealthSpy.and.returnValue(of(healthPayload));
   });
 
   it('should create', () => {
@@ -65,7 +76,6 @@ describe('HealthComponent', () => {
   });
 
   it('should render all info groups and all info cards', () => {
-    getHealthSpy.and.returnValue(of(healthPayload));
     fixture.detectChanges();
 
     const infoGroups = fixture.debugElement.nativeElement.querySelectorAll('cd-info-group');
@@ -141,20 +151,129 @@ describe('HealthComponent', () => {
     });
   });
 
-  // @TODO: remove this test when logs are no longer in landing page
-  // See https://tracker.ceph.com/issues/24571 & https://github.com/ceph/ceph/pull/23834
-  it('should render Logs group & cards in addition to the other ones', () => {
+  it('should render "Cluster Status" card text that is not clickable', () => {
+    fixture.detectChanges();
+
+    const clusterStatusCard = fixture.debugElement.query(
+      By.css('cd-info-card[cardTitle="Cluster Status"]')
+    );
+    const clickableContent = clusterStatusCard.query(By.css('.info-card-content-clickable'));
+    expect(clickableContent).toBeNull();
+    expect(clusterStatusCard.nativeElement.textContent).toEqual(` ${healthPayload.health.status} `);
+  });
+
+  it('should render "Cluster Status" card text that is clickable (popover)', () => {
     const payload = _.cloneDeep(healthPayload);
-    payload['clog'] = [];
-    payload['audit_log'] = [];
+    payload.health['status'] = 'HEALTH_WARN';
+    payload.health['checks'] = [
+      { severity: 'HEALTH_WARN', type: 'WRN', summary: { message: 'fake warning' } }
+    ];
 
     getHealthSpy.and.returnValue(of(payload));
     fixture.detectChanges();
 
-    const infoGroups = fixture.debugElement.nativeElement.querySelectorAll('cd-info-group');
-    expect(infoGroups.length).toBe(4);
+    expect(component.permissions.log.read).toBeTruthy();
 
-    const infoCards = fixture.debugElement.nativeElement.querySelectorAll('cd-info-card');
-    expect(infoCards.length).toBe(20);
+    const clusterStatusCard = fixture.debugElement.query(
+      By.css('cd-info-card[cardTitle="Cluster Status"]')
+    );
+    const clickableContent = clusterStatusCard.query(By.css('.info-card-content-clickable'));
+    expect(clickableContent.nativeElement.textContent).toEqual(` ${payload.health.status} `);
+  });
+
+  it('event binding "prepareReadWriteRatio" is called', () => {
+    const prepareReadWriteRatio = spyOn(component, 'prepareReadWriteRatio');
+
+    const payload = _.cloneDeep(healthPayload);
+    payload.client_perf['read_op_per_sec'] = 1;
+    payload.client_perf['write_op_per_sec'] = 1;
+    getHealthSpy.and.returnValue(of(payload));
+    fixture.detectChanges();
+
+    expect(prepareReadWriteRatio).toHaveBeenCalled();
+  });
+
+  it('event binding "prepareRawUsage" is called', () => {
+    const prepareRawUsage = spyOn(component, 'prepareRawUsage');
+
+    fixture.detectChanges();
+
+    expect(prepareRawUsage).toHaveBeenCalled();
+  });
+
+  it('event binding "preparePgStatus" is called', () => {
+    const preparePgStatus = spyOn(component, 'preparePgStatus');
+
+    fixture.detectChanges();
+
+    expect(preparePgStatus).toHaveBeenCalled();
+  });
+
+  describe('preparePgStatus', () => {
+    const expectedChart = (data: number[]) => ({
+      colors: [
+        {
+          backgroundColor: [
+            HealthPieColor.SHADE_GREEN_CYAN,
+            HealthPieColor.MEDIUM_DARK_SHADE_CYAN_BLUE,
+            HealthPieColor.LIGHT_SHADE_BROWN,
+            HealthPieColor.MEDIUM_LIGHT_SHADE_PINK_RED
+          ]
+        }
+      ],
+      labels: ['Clean', 'Working', 'Warning', 'Unknown'],
+      dataset: [{ data: data }]
+    });
+
+    it('gets no data', () => {
+      const chart = { dataset: [{}] };
+      component.preparePgStatus(chart, { pg_info: {} });
+      expect(chart).toEqual(expectedChart([undefined, undefined, undefined, undefined]));
+    });
+
+    it('gets data from all categories', () => {
+      const chart = { dataset: [{}] };
+      component.preparePgStatus(chart, {
+        pg_info: {
+          statuses: {
+            'clean+active+scrubbing+nonMappedState': 4,
+            'clean+active+scrubbing': 2,
+            'clean+active': 1,
+            'clean+active+scrubbing+down': 3
+          }
+        }
+      });
+      expect(chart).toEqual(expectedChart([1, 2, 3, 4]));
+    });
+  });
+
+  describe('isClientReadWriteChartShowable', () => {
+    beforeEach(() => {
+      component.healthData = healthPayload;
+    });
+
+    it('returns false', () => {
+      component.healthData['client_perf'] = {};
+
+      expect(component.isClientReadWriteChartShowable()).toBeFalsy();
+    });
+
+    it('returns false', () => {
+      component.healthData['client_perf'] = { read_op_per_sec: undefined, write_op_per_sec: 0 };
+
+      expect(component.isClientReadWriteChartShowable()).toBeFalsy();
+    });
+
+    it('returns true', () => {
+      component.healthData['client_perf'] = { read_op_per_sec: 1, write_op_per_sec: undefined };
+
+      expect(component.isClientReadWriteChartShowable()).toBeTruthy();
+    });
+
+    it('returns true', () => {
+      component.healthData['client_perf'] = { read_op_per_sec: 2, write_op_per_sec: 3 };
+
+      expect(component.isClientReadWriteChartShowable()).toBeTruthy();
+    });
   });
 });

@@ -139,14 +139,11 @@ class Batch(object):
         self.argv = argv
 
     def get_devices(self):
-        all_devices = disk.get_devices()
         # remove devices with partitions
-        # XXX Should be optional when getting device info
-        for device, detail in all_devices.items():
-            if detail.get('partitions') != {}:
-                del all_devices[device]
-        devices = sorted(all_devices.items(), key=lambda x: (x[0], x[1]['size']))
-        return device_formatter(devices)
+        devices = [(device, details) for device, details in
+                       disk.get_devices().items() if details.get('partitions') == {}]
+        size_sort = lambda x: (x[0], x[1]['size'])
+        return device_formatter(sorted(devices, key=size_sort))
 
     def print_help(self):
         return self._help.format(
@@ -262,6 +259,11 @@ class Batch(object):
             '--journal-size',
             type=int,
             help='Override the "osd_journal_size" value, in megabytes'
+        )
+        parser.add_argument(
+            '--prepare',
+            action='store_true',
+            help='Only prepare all OSDs, do not activate',
         )
         args = parser.parse_args(self.argv)
 

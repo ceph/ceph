@@ -25,12 +25,12 @@
 
 #include "common/perf_histogram.h"
 #include "include/utime.h"
-#include "common/Mutex.h"
-#include "common/ceph_context.h"
+#include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
 
 class CephContext;
 class PerfCountersBuilder;
+class PerfCounters;
 
 enum perfcounter_type_d : uint8_t
 {
@@ -204,9 +204,9 @@ public:
     pair<uint64_t,uint64_t> read_avg() const {
       uint64_t sum, count;
       do {
-	count = avgcount;
+	count = avgcount2;
 	sum = u64;
-      } while (avgcount2 != count);
+      } while (avgcount != count);
       return make_pair(sum, count);
     }
   };
@@ -282,17 +282,19 @@ private:
   int m_lower_bound;
   int m_upper_bound;
   std::string m_name;
-  const std::string m_lock_name;
 
   int prio_adjust = 0;
 
+#ifndef WITH_SEASTAR
+  const std::string m_lock_name;
   /** Protects m_data */
-  mutable Mutex m_lock;
+  ceph::mutex m_lock;
+#endif
 
   perf_counter_data_vec_t m_data;
 
   friend class PerfCountersBuilder;
-  friend class PerfCountersCollection;
+  friend class PerfCountersCollectionImpl;
 };
 
 class SortPerfCountersByName {
@@ -305,15 +307,15 @@ public:
 typedef std::set <PerfCounters*, SortPerfCountersByName> perf_counters_set_t;
 
 /*
- * PerfCountersCollection manages PerfCounters objects for a Ceph process.
+ * PerfCountersCollectionImp manages PerfCounters objects for a Ceph process.
  */
-class PerfCountersCollection
+class PerfCountersCollectionImpl
 {
 public:
-  PerfCountersCollection(CephContext *cct);
-  ~PerfCountersCollection();
-  void add(class PerfCounters *l);
-  void remove(class PerfCounters *l);
+  PerfCountersCollectionImpl();
+  ~PerfCountersCollectionImpl();
+  void add(PerfCounters *l);
+  void remove(PerfCounters *l);
   void clear();
   bool reset(const std::string &name);
 
@@ -348,16 +350,9 @@ private:
                               const std::string &logger = "",
                               const std::string &counter = "");
 
-  CephContext *m_cct;
-
-  /** Protects m_loggers */
-  mutable Mutex m_lock;
-
   perf_counters_set_t m_loggers;
 
   CounterMap by_path; 
-
-  friend class PerfCountersCollectionTest;
 };
 
 
@@ -379,20 +374,5 @@ public:
   }
 };
 
-
-class PerfCountersDeleter {
-  CephContext* cct;
-
-public:
-  PerfCountersDeleter() noexcept : cct(nullptr) {}
-  PerfCountersDeleter(CephContext* cct) noexcept : cct(cct) {}
-  void operator()(PerfCounters* p) noexcept {
-    if (cct)
-      cct->get_perfcounters_collection()->remove(p);
-    delete p;
-  }
-};
-
-using PerfCountersRef = std::unique_ptr<PerfCounters, PerfCountersDeleter>;
 
 #endif

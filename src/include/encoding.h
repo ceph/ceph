@@ -21,6 +21,7 @@
 #include <string>
 #include <string_view>
 #include <tuple>
+#include <boost/container/small_vector.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/tuple/tuple.hpp>
 
@@ -425,6 +426,23 @@ inline void encode(const std::vector<std::shared_ptr<T>,Alloc>& v,
 template<class T, class Alloc>
 inline void decode(std::vector<std::shared_ptr<T>,Alloc>& v,
 		   bufferlist::const_iterator& p);
+// small_vector
+template<class T, std::size_t N, class Alloc, typename traits=denc_traits<T>>
+inline std::enable_if_t<!traits::supported>
+encode(const boost::container::small_vector<T,N,Alloc>& v, bufferlist& bl, uint64_t features);
+template<class T, std::size_t N, class Alloc, typename traits=denc_traits<T>>
+inline std::enable_if_t<!traits::supported>
+encode(const boost::container::small_vector<T,N,Alloc>& v, bufferlist& bl);
+template<class T, std::size_t N, class Alloc, typename traits=denc_traits<T>>
+inline std::enable_if_t<!traits::supported>
+decode(boost::container::small_vector<T,N,Alloc>& v, bufferlist::const_iterator& p);
+template<class T, std::size_t N, class Alloc, typename traits=denc_traits<T>>
+inline std::enable_if_t<!traits::supported>
+encode_nohead(const boost::container::small_vector<T,N,Alloc>& v, bufferlist& bl);
+template<class T, std::size_t N, class Alloc, typename traits=denc_traits<T>>
+inline std::enable_if_t<!traits::supported>
+decode_nohead(int len, boost::container::small_vector<T,N,Alloc>& v, bufferlist::const_iterator& p);
+// std::map
 template<class T, class U, class Comp, class Alloc,
 	 typename t_traits=denc_traits<T>, typename u_traits=denc_traits<U>>
 inline std::enable_if_t<!t_traits::supported ||
@@ -844,6 +862,53 @@ inline std::enable_if_t<!traits::supported>
     decode(v[i], p);
 }
 
+// small vector
+template<class T, std::size_t N, class Alloc, typename traits>
+inline std::enable_if_t<!traits::supported>
+  encode(const boost::container::small_vector<T,N,Alloc>& v, bufferlist& bl, uint64_t features)
+{
+  __u32 n = (__u32)(v.size());
+  encode(n, bl);
+  for (const auto& i : v)
+    encode(i, bl, features);
+}
+template<class T, std::size_t N, class Alloc, typename traits>
+inline std::enable_if_t<!traits::supported>
+  encode(const boost::container::small_vector<T,N,Alloc>& v, bufferlist& bl)
+{
+  __u32 n = (__u32)(v.size());
+  encode(n, bl);
+  for (const auto& i : v)
+    encode(i, bl);
+}
+template<class T, std::size_t N, class Alloc, typename traits>
+inline std::enable_if_t<!traits::supported>
+  decode(boost::container::small_vector<T,N,Alloc>& v, bufferlist::const_iterator& p)
+{
+  __u32 n;
+  decode(n, p);
+  v.resize(n);
+  for (auto& i : v)
+    decode(i, p);
+}
+
+template<class T, std::size_t N, class Alloc, typename traits>
+inline std::enable_if_t<!traits::supported>
+  encode_nohead(const boost::container::small_vector<T,N,Alloc>& v, bufferlist& bl)
+{
+  for (const auto& i : v)
+    encode(i, bl);
+}
+template<class T, std::size_t N, class Alloc, typename traits>
+inline std::enable_if_t<!traits::supported>
+  decode_nohead(int len, boost::container::small_vector<T,N,Alloc>& v, bufferlist::const_iterator& p)
+{
+  v.resize(len);
+  for (auto& i : v)
+    decode(i, p);
+}
+
+
 // vector (shared_ptr)
 template<class T,class Alloc>
 inline void encode(const std::vector<std::shared_ptr<T>,Alloc>& v,
@@ -1203,19 +1268,16 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
  * @param v current (code) version of the encoding
  * @param compat oldest code version that can decode it
  * @param bl bufferlist to encode to
+ *
  */
 #define ENCODE_START(v, compat, bl)			     \
-  using ::ceph::encode;					     \
-  __u8 struct_v = v, struct_compat = compat;		     \
-  encode(struct_v, (bl));				     \
-  encode(struct_compat, (bl));			     \
-  ::ceph::buffer::list::iterator struct_compat_it = (bl).end();	\
-  struct_compat_it.advance(-1);				     \
+  __u8 struct_v = v;                                         \
+  __u8 struct_compat = compat;		                     \
   ceph_le32 struct_len;				             \
-  struct_len = 0;                                            \
-  encode(struct_len, (bl));				     \
-  ::ceph::buffer::list::iterator struct_len_it = (bl).end(); \
-  struct_len_it.advance(-4);				     \
+  auto filler = (bl).append_hole(sizeof(struct_v) + 	     \
+    sizeof(struct_compat) + sizeof(struct_len));	     \
+  const auto starting_bl_len = (bl).length();		     \
+  using ::ceph::encode;					     \
   do {
 
 /**
@@ -1224,14 +1286,16 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
  * @param bl bufferlist we were encoding to
  * @param new_struct_compat struct-compat value to use
  */
-#define ENCODE_FINISH_NEW_COMPAT(bl, new_struct_compat)			\
-  } while (false);							\
-  struct_len = (bl).length() - struct_len_it.get_off() - sizeof(struct_len); \
-  struct_len_it.copy_in(4, (char *)&struct_len);			\
-  if (new_struct_compat) {						\
-    struct_compat = new_struct_compat;					\
-    struct_compat_it.copy_in(1, (char *)&struct_compat);		\
-  }
+#define ENCODE_FINISH_NEW_COMPAT(bl, new_struct_compat)      \
+  } while (false);                                           \
+  if (new_struct_compat) {                                   \
+    struct_compat = new_struct_compat;                       \
+  }                                                          \
+  struct_len = (bl).length() - starting_bl_len;              \
+  filler.copy_in(sizeof(struct_v), (char *)&struct_v);       \
+  filler.copy_in(sizeof(struct_compat),			     \
+    (char *)&struct_compat);				     \
+  filler.copy_in(sizeof(struct_len), (char *)&struct_len);
 
 #define ENCODE_FINISH(bl) ENCODE_FINISH_NEW_COMPAT(bl, 0)
 
@@ -1272,6 +1336,8 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
   unsigned struct_end = bl.get_off() + struct_len;			\
   do {
 
+/* BEWARE: any change to this macro MUST be also reflected in the duplicative
+ * DECODE_START_LEGACY_COMPAT_LEN! */
 #define __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, skip_v, bl)	\
   using ::ceph::decode;							\
   __u8 struct_v;							\
@@ -1282,7 +1348,7 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
     if (v < struct_compat)						\
       throw buffer::malformed_input(DECODE_ERR_OLDVERSION(__PRETTY_FUNCTION__, v, struct_compat)); \
   } else if (skip_v) {							\
-    if ((int)bl.get_remaining() < skip_v)				\
+    if (bl.get_remaining() < skip_v)					\
       throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
     bl.advance(skip_v);							\
   }									\
@@ -1310,8 +1376,30 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
  * @param lenv oldest version that includes a __u32 length wrapper
  * @param bl bufferlist::iterator containing the encoded data
  */
+
+/* BEWARE: this is duplication of __DECODE_START_LEGACY_COMPAT_LEN which
+ * MUST be changed altogether. For the rationale behind code duplication,
+ * please `git blame` and refer to the commit message. */
 #define DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, bl)		\
-  __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 0, bl)
+  using ::ceph::decode;							\
+  __u8 struct_v;							\
+  decode(struct_v, bl);							\
+  if (struct_v >= compatv) {						\
+    __u8 struct_compat;							\
+    decode(struct_compat, bl);						\
+    if (v < struct_compat)						\
+      throw buffer::malformed_input(DECODE_ERR_OLDVERSION(		\
+	__PRETTY_FUNCTION__, v, struct_compat));			\
+  }									\
+  unsigned struct_end = 0;						\
+  if (struct_v >= lenv) {						\
+    __u32 struct_len;							\
+    decode(struct_len, bl);						\
+    if (struct_len > bl.get_remaining())				\
+      throw buffer::malformed_input(DECODE_ERR_PAST(__PRETTY_FUNCTION__)); \
+    struct_end = bl.get_off() + struct_len;				\
+  }									\
+  do {
 
 /**
  * start a decoding block with legacy support for older encoding schemes
@@ -1331,10 +1419,10 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
  * @param bl bufferlist::iterator containing the encoded data
  */
 #define DECODE_START_LEGACY_COMPAT_LEN_32(v, compatv, lenv, bl)		\
-  __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 3, bl)
+  __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 3u, bl)
 
 #define DECODE_START_LEGACY_COMPAT_LEN_16(v, compatv, lenv, bl)		\
-  __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 1, bl)
+  __DECODE_START_LEGACY_COMPAT_LEN(v, compatv, lenv, 1u, bl)
 
 /**
  * finish decode block

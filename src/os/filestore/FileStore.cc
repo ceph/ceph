@@ -684,7 +684,6 @@ void FileStore::collect_metadata(map<string,string> *pm)
 {
   char partition_path[PATH_MAX];
   char dev_node[PATH_MAX];
-  int rc = 0;
 
   (*pm)["filestore_backend"] = backend->get_name();
   ostringstream ss;
@@ -692,43 +691,39 @@ void FileStore::collect_metadata(map<string,string> *pm)
   (*pm)["filestore_f_type"] = ss.str();
 
   if (cct->_conf->filestore_collect_device_partition_information) {
-    rc = get_device_by_fd(fsid_fd, partition_path, dev_node, PATH_MAX);
-  } else {
-    rc = -EINVAL;
-  }
-
-  switch (rc) {
-    case -EOPNOTSUPP:
-    case -EINVAL:
+    int rc = 0;
+    BlkDev blkdev(fsid_fd);
+    if (rc = blkdev.partition(partition_path, PATH_MAX); rc) {
       (*pm)["backend_filestore_partition_path"] = "unknown";
-      (*pm)["backend_filestore_dev_node"] = "unknown";
-      break;
-    case -ENODEV:
+    } else {
       (*pm)["backend_filestore_partition_path"] = string(partition_path);
+    }
+    if (rc = blkdev.wholedisk(dev_node, PATH_MAX); rc) {
       (*pm)["backend_filestore_dev_node"] = "unknown";
-      break;
-    default:
-      (*pm)["backend_filestore_partition_path"] = string(partition_path);
+    } else {
       (*pm)["backend_filestore_dev_node"] = string(dev_node);
-      if (vdo_fd >= 0) {
-	(*pm)["vdo"] = "true";
-	(*pm)["vdo_physical_size"] =
-	  stringify(4096 * get_vdo_stat(vdo_fd, "physical_blocks"));
-      }
+    }
+    if (rc == 0 && vdo_fd >= 0) {
+      (*pm)["vdo"] = "true";
+      (*pm)["vdo_physical_size"] =
+	stringify(4096 * get_vdo_stat(vdo_fd, "physical_blocks"));
+    }
+    if (journal) {
+      journal->collect_metadata(pm);
+    }
   }
 }
 
 int FileStore::get_devices(set<string> *ls)
 {
-  char partition_path[PATH_MAX];
-  char dev_node[PATH_MAX];
-  int rc = 0;
-  rc = get_device_by_fd(fsid_fd, partition_path, dev_node, PATH_MAX);
-  if (rc == 0) {
-    ls->insert(dev_node);
-    if (strncmp(dev_node, "dm-", 3) == 0) {
-      get_dm_parents(dev_node, ls);
-    }
+  string dev_node;
+  BlkDev blkdev(fsid_fd);
+  if (int rc = blkdev.wholedisk(&dev_node); rc) {
+    return rc;
+  }
+  get_raw_devices(dev_node, ls);
+  if (journal) {
+    journal->get_devices(ls);
   }
   return 0;
 }
@@ -771,6 +766,7 @@ int FileStore::statfs(struct store_statfs_t *buf0)
   // Adjust for writes pending in the journal
   if (journal) {
     uint64_t estimate = journal->get_journal_size_estimate();
+    buf0->internally_reserved = estimate;
     if (buf0->available > estimate)
       buf0->available -= estimate;
     else
@@ -780,6 +776,10 @@ int FileStore::statfs(struct store_statfs_t *buf0)
   return 0;
 }
 
+int FileStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
+{
+  return -ENOTSUP;
+}
 
 void FileStore::new_journal()
 {
@@ -1257,10 +1257,8 @@ int FileStore::_detect_fs()
 
   // vdo
   {
-    char partition_path[PATH_MAX];
     char dev_node[PATH_MAX];
-    int rc = get_device_by_fd(fsid_fd, partition_path, dev_node, PATH_MAX);
-    if (rc == 0) {
+    if (int rc = BlkDev{fsid_fd}.wholedisk(dev_node, PATH_MAX); rc == 0) {
       vdo_fd = get_vdo_stats_handle(dev_node, &vdo_name);
       if (vdo_fd >= 0) {
 	dout(0) << __func__ << " VDO volume " << vdo_name << " for " << dev_node
@@ -5800,19 +5798,20 @@ int FileStore::_merge_collection(const coll_t& cid,
   bool is_pg = dest.is_pg(&pgid);
   ceph_assert(is_pg);
 
+  int dstcmp = _check_replay_guard(dest, spos);
+  if (dstcmp < 0)
+    return 0;
+
+  int srccmp = _check_replay_guard(cid, spos);
+  if (srccmp < 0)
+    return 0;
+
+  _set_global_replay_guard(cid, spos);
+  _set_replay_guard(cid, spos, true);
+  _set_replay_guard(dest, spos, true);
+
+  // main collection
   {
-    int dstcmp = _check_replay_guard(dest, spos);
-    if (dstcmp < 0)
-      return 0;
-
-    int srccmp = _check_replay_guard(cid, spos);
-    if (srccmp < 0)
-      return 0;
-
-    _set_global_replay_guard(cid, spos);
-    _set_replay_guard(cid, spos, true);
-    _set_replay_guard(dest, spos, true);
-
     Index from;
     r = get_index(cid, &from);
 
@@ -5829,25 +5828,10 @@ int FileStore::_merge_collection(const coll_t& cid,
 
       r = from->merge(bits, to.index);
     }
-
-    _close_replay_guard(cid, spos);
-    _close_replay_guard(dest, spos);
   }
 
   // temp too
   {
-    int dstcmp = _check_replay_guard(dest.get_temp(), spos);
-    if (dstcmp < 0)
-      return 0;
-
-    int srccmp = _check_replay_guard(cid.get_temp(), spos);
-    if (srccmp < 0)
-      return 0;
-
-    _set_global_replay_guard(cid.get_temp(), spos);
-    _set_replay_guard(cid.get_temp(), spos, true);
-    _set_replay_guard(dest.get_temp(), spos, true);
-
     Index from;
     r = get_index(cid.get_temp(), &from);
 
@@ -5864,15 +5848,14 @@ int FileStore::_merge_collection(const coll_t& cid,
 
       r = from->merge(bits, to.index);
     }
-
-    _close_replay_guard(cid.get_temp(), spos);
-    _close_replay_guard(dest.get_temp(), spos);
-
   }
 
   // remove source
-  if (_check_replay_guard(cid, spos) > 0)
-    r = _destroy_collection(cid);
+  _destroy_collection(cid);
+
+  _close_replay_guard(dest, spos);
+  _close_replay_guard(dest.get_temp(), spos);
+  // no need to close guards on cid... it's removed.
 
   if (!r && cct->_conf->filestore_debug_verify_split) {
     vector<ghobject_t> objects;
@@ -6214,6 +6197,11 @@ void FileStore::dump_transactions(vector<ObjectStore::Transaction>& ls, uint64_t
   m_filestore_dump_fmt.close_section();
   m_filestore_dump_fmt.flush(m_filestore_dump);
   m_filestore_dump.flush();
+}
+
+void FileStore::get_db_statistics(Formatter* f)
+{
+  object_map->db->get_statistics(f);
 }
 
 void FileStore::set_xattr_limits_via_conf()

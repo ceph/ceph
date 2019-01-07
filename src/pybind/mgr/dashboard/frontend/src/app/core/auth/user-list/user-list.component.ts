@@ -1,9 +1,10 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { I18n } from '@ngx-translate/i18n-polyfill';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { UserService } from '../../../shared/api/user.service';
-import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
+import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { EmptyPipe } from '../../../shared/empty.pipe';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
@@ -35,27 +36,28 @@ export class UserListComponent implements OnInit {
     private emptyPipe: EmptyPipe,
     private modalService: BsModalService,
     private notificationService: NotificationService,
-    private authStorageService: AuthStorageService
+    private authStorageService: AuthStorageService,
+    private i18n: I18n
   ) {
     this.permission = this.authStorageService.getPermissions().user;
     const addAction: CdTableAction = {
       permission: 'create',
       icon: 'fa-plus',
       routerLink: () => '/user-management/users/add',
-      name: 'Add'
+      name: this.i18n('Add')
     };
     const editAction: CdTableAction = {
       permission: 'update',
       icon: 'fa-pencil',
       routerLink: () =>
         this.selection.first() && `/user-management/users/edit/${this.selection.first().username}`,
-      name: 'Edit'
+      name: this.i18n('Edit')
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
       icon: 'fa-times',
       click: () => this.deleteUserModal(),
-      name: 'Delete'
+      name: this.i18n('Delete')
     };
     this.tableActions = [addAction, editAction, deleteAction];
   }
@@ -63,24 +65,24 @@ export class UserListComponent implements OnInit {
   ngOnInit() {
     this.columns = [
       {
-        name: 'Username',
+        name: this.i18n('Username'),
         prop: 'username',
         flexGrow: 1
       },
       {
-        name: 'Name',
+        name: this.i18n('Name'),
         prop: 'name',
         flexGrow: 1,
         pipe: this.emptyPipe
       },
       {
-        name: 'Email',
+        name: this.i18n('Email'),
         prop: 'email',
         flexGrow: 1,
         pipe: this.emptyPipe
       },
       {
-        name: 'Roles',
+        name: this.i18n('Roles'),
         prop: 'roles',
         flexGrow: 1,
         cellTemplate: this.userRolesTpl
@@ -103,7 +105,10 @@ export class UserListComponent implements OnInit {
       () => {
         this.getUsers();
         this.modalRef.hide();
-        this.notificationService.show(NotificationType.success, `Deleted user "${username}"`);
+        this.notificationService.show(
+          NotificationType.success,
+          this.i18n('Deleted user "{{username}}"', { username: username })
+        );
       },
       () => {
         this.modalRef.content.stopLoadingSpinner();
@@ -117,12 +122,12 @@ export class UserListComponent implements OnInit {
     if (sessionUsername === username) {
       this.notificationService.show(
         NotificationType.error,
-        `Failed to delete user "${username}"`,
-        `You are currently logged in as "${username}".`
+        this.i18n('Failed to delete user "{{username}}"', { username: username }),
+        this.i18n('You are currently logged in as "{{username}}".', { username: username })
       );
       return;
     }
-    this.modalRef = this.modalService.show(DeletionModalComponent, {
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
       initialState: {
         itemDescription: 'User',
         submitAction: () => this.deleteUser(username)

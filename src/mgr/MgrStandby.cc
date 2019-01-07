@@ -105,7 +105,7 @@ int MgrStandby::init()
   init_async_signal_handler();
   register_async_signal_handler(SIGHUP, sighup_handler);
 
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   // Initialize Messenger
   client_messenger->add_dispatcher_tail(this);
@@ -137,6 +137,9 @@ int MgrStandby::init()
 	return true;
       }
       return false;
+    });
+  monc.register_config_notify_callback([this]() {
+      py_module_registry.handle_config_notify();
     });
   dout(4) << "Registered monc callback" << dendl;
 
@@ -192,6 +195,7 @@ void MgrStandby::send_beacon()
     info.name = module->get_name();
     info.error_string = module->get_error_string();
     info.can_run = module->get_can_run();
+    info.module_options = module->get_options();
     module_info.push_back(std::move(info));
   }
 
@@ -248,7 +252,7 @@ void MgrStandby::tick()
 
 void MgrStandby::handle_signal(int signum)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
   shutdown();
@@ -372,7 +376,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
             [this](int r){
               // Advertise our active-ness ASAP instead of waiting for
               // next tick.
-              Mutex::Locker l(lock);
+              std::lock_guard l(lock);
               send_beacon();
             }));
       dout(1) << "I am now activating" << dendl;
@@ -404,7 +408,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
 
 bool MgrStandby::ms_dispatch(Message *m)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   dout(4) << state_str() << " " << *m << dendl;
 
   if (m->get_type() == MSG_MGR_MAP) {

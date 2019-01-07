@@ -146,7 +146,8 @@ int FileJournal::_open(bool forwrite, bool create)
 int FileJournal::_open_block_device()
 {
   int64_t bdev_sz = 0;
-  int ret = get_block_device_size(fd, &bdev_sz);
+  BlkDev blkdev(fd);
+  int ret = blkdev.get_size(&bdev_sz);
   if (ret) {
     dout(0) << __func__ << ": failed to read block device size." << dendl;
     return -EIO;
@@ -167,7 +168,7 @@ int FileJournal::_open_block_device()
   block_size = cct->_conf->journal_block_size;
 
   if (cct->_conf->journal_discard) {
-    discard = block_device_support_discard(fn.c_str());
+    discard = blkdev.support_discard();
     dout(10) << fn << " support discard: " << (int)discard << dendl;
   }
 
@@ -1371,11 +1372,9 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
     iovec *iov = new iovec[max];
     int n = 0;
     unsigned len = 0;
-    for (std::list<buffer::ptr>::const_iterator p = bl.buffers().begin();
-	 n < max;
-	 ++p, ++n) {
-      ceph_assert(p != bl.buffers().end());
-      iov[n].iov_base = (void *)p->c_str();
+    for (auto p = std::cbegin(bl.buffers()); n < max; ++p, ++n) {
+      ceph_assert(p != std::cend(bl.buffers()));
+      iov[n].iov_base = const_cast<void*>(static_cast<const void*>(p->c_str()));
       iov[n].iov_len = p->length();
       len += p->length();
     }
@@ -1735,9 +1734,12 @@ void FileJournal::do_discard(int64_t offset, int64_t end)
     return;
   end = round_up_to(end - block_size, block_size);
   ceph_assert(end >= offset);
-  if (offset < end)
-    if (block_device_discard(fd, offset, end - offset) < 0)
-	dout(1) << __func__ << " ioctl(BLKDISCARD) error:" << cpp_strerror(errno) << dendl;
+  if (offset < end) {
+    BlkDev blkdev(fd);
+    if (blkdev.discard(offset, end - offset) < 0) {
+	dout(1) << __func__ << "ioctl(BLKDISCARD) error:" << cpp_strerror(errno) << dendl;
+    }
+  }
 }
 
 void FileJournal::committed_thru(uint64_t seq)
@@ -2180,4 +2182,31 @@ off64_t FileJournal::get_journal_size_estimate()
   }
   dout(20) << __func__ << " journal size=" << size << dendl;
   return size;
+}
+
+void FileJournal::get_devices(set<string> *ls)
+{
+  string dev_node;
+  BlkDev blkdev(fd);
+  if (int rc = blkdev.wholedisk(&dev_node); rc) {
+    return;
+  }
+  get_raw_devices(dev_node, ls);
+}
+
+void FileJournal::collect_metadata(map<string,string> *pm)
+{
+  BlkDev blkdev(fd);
+  char partition_path[PATH_MAX];
+  char dev_node[PATH_MAX];
+  if (blkdev.partition(partition_path, PATH_MAX)) {
+    (*pm)["backend_filestore_journal_partition_path"] = "unknown";
+  } else {
+    (*pm)["backend_filestore_journal_partition_path"] = string(partition_path);
+  }
+  if (blkdev.wholedisk(dev_node, PATH_MAX)) {
+    (*pm)["backend_filestore_journal_dev_node"] = "unknown";
+  } else {
+    (*pm)["backend_filestore_journal_dev_node"] = string(dev_node);
+  }
 }

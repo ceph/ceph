@@ -24,7 +24,9 @@ from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  RBD_LOCK_MODE_EXCLUSIVE, RBD_OPERATION_FEATURE_GROUP,
                  RBD_SNAP_NAMESPACE_TYPE_TRASH,
                  RBD_IMAGE_MIGRATION_STATE_PREPARED, RBD_CONFIG_SOURCE_CONFIG,
-                 RBD_CONFIG_SOURCE_POOL, RBD_CONFIG_SOURCE_IMAGE)
+                 RBD_CONFIG_SOURCE_POOL, RBD_CONFIG_SOURCE_IMAGE,
+                 RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST,
+                 RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY)
 
 rados = None
 ioctx = None
@@ -51,7 +53,7 @@ def setup_module():
     rados.create_pool(pool_name)
     global ioctx
     ioctx = rados.open_ioctx(pool_name)
-    ioctx.application_enable('rbd')
+    RBD().pool_init(ioctx, True)
     global features
     features = os.getenv("RBD_FEATURES")
     features = int(features) if features is not None else 61
@@ -92,6 +94,7 @@ def create_image():
                      features=int(features))
     else:
         RBD().create(ioctx, image_name, IMG_SIZE, IMG_ORDER, old_format=True)
+    return image_name
 
 def remove_image():
     if image_name is not None:
@@ -317,6 +320,10 @@ def test_list_empty():
 def test_list():
     eq([image_name], RBD().list(ioctx))
 
+    with Image(ioctx, image_name) as image:
+        image_id = image.id()
+    eq([{'id': image_id, 'name': image_name}], list(RBD().list2(ioctx)))
+
 @with_setup(create_image, remove_image)
 def test_rename():
     rbd = RBD()
@@ -349,11 +356,11 @@ def test_pool_metadata():
     eq(len(metadata), 0)
 
     N = 65
-    for i in xrange(N):
+    for i in range(N):
         rbd.pool_metadata_set(ioctx, "key" + str(i), "X" * 1025)
     metadata = list(rbd.pool_metadata_list(ioctx))
     eq(len(metadata), N)
-    for i in xrange(N):
+    for i in range(N):
         rbd.pool_metadata_remove(ioctx, "key" + str(i))
         metadata = list(rbd.pool_metadata_list(ioctx))
         eq(len(metadata), N - i - 1)
@@ -376,6 +383,51 @@ def test_config_list():
 
     for option in rbd.config_list(ioctx):
         eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
+
+def test_namespaces():
+    rbd = RBD()
+
+    eq(False, rbd.namespace_exists(ioctx, 'ns1'))
+    eq([], rbd.namespace_list(ioctx))
+    assert_raises(ImageNotFound, rbd.namespace_remove, ioctx, 'ns1')
+
+    rbd.namespace_create(ioctx, 'ns1')
+    eq(True, rbd.namespace_exists(ioctx, 'ns1'))
+
+    assert_raises(ImageExists, rbd.namespace_create, ioctx, 'ns1')
+    eq(['ns1'], rbd.namespace_list(ioctx))
+    rbd.namespace_remove(ioctx, 'ns1')
+    eq([], rbd.namespace_list(ioctx))
+
+@require_new_format()
+def test_pool_stats():
+    rbd = RBD()
+
+    try:
+        image1 = create_image()
+        image2 = create_image()
+        image3 = create_image()
+        image4 = create_image()
+        with Image(ioctx, image4) as image:
+            image.create_snap('snap')
+            image.resize(0)
+
+        stats = rbd.pool_stats_get(ioctx)
+        eq(stats['image_count'], 4)
+        eq(stats['image_provisioned_bytes'], 3 * IMG_SIZE)
+        eq(stats['image_max_provisioned_bytes'], 4 * IMG_SIZE)
+        eq(stats['image_snap_count'], 1)
+        eq(stats['trash_count'], 0)
+        eq(stats['trash_provisioned_bytes'], 0)
+        eq(stats['trash_max_provisioned_bytes'], 0)
+        eq(stats['trash_snap_count'], 0)
+    finally:
+        rbd.remove(ioctx, image1)
+        rbd.remove(ioctx, image2)
+        rbd.remove(ioctx, image3)
+        with Image(ioctx, image4) as image:
+            image.remove_snap('snap')
+        rbd.remove(ioctx, image4)
 
 def rand_data(size):
     return os.urandom(size)
@@ -1032,11 +1084,11 @@ class TestImage(object):
         eq(len(metadata), 0)
 
         N = 65
-        for i in xrange(N):
+        for i in range(N):
             self.image.metadata_set("key" + str(i), "X" * 1025)
         metadata = list(self.image.metadata_list())
         eq(len(metadata), N)
-        for i in xrange(N):
+        for i in range(N):
             self.image.metadata_remove("key" + str(i))
             metadata = list(self.image.metadata_list())
             eq(len(metadata), N - i - 1)
@@ -1301,7 +1353,8 @@ class TestClone(object):
         self.image.set_snap('snap1')
         self.check_children([(pool_name, self.clone_name)])
         self.check_children2(
-            [{'pool': pool_name, 'image': self.clone_name, 'trash': False,
+            [{'pool': pool_name, 'pool_namespace': '',
+              'image': self.clone_name, 'trash': False,
               'id': self.get_image_id(ioctx, self.clone_name)}])
         self.clone.close()
         self.rbd.remove(ioctx, self.clone_name)
@@ -1316,7 +1369,8 @@ class TestClone(object):
                            clone_name + str(i), features)
             expected_children.append((pool_name, clone_name + str(i)))
             expected_children2.append(
-                {'pool': pool_name, 'image': clone_name + str(i), 'trash': False,
+                {'pool': pool_name, 'pool_namespace': '',
+                 'image': clone_name + str(i), 'trash': False,
                  'id': self.get_image_id(ioctx, clone_name + str(i))})
             self.check_children(expected_children)
             self.check_children2(expected_children2)
@@ -1353,7 +1407,8 @@ class TestClone(object):
                        features)
         self.check_children([(pool_name, self.clone_name)])
         self.check_children2(
-            [{'pool': pool_name, 'image': self.clone_name, 'trash': False,
+            [{'pool': pool_name, 'pool_namespace': '',
+              'image': self.clone_name, 'trash': False,
               'id': self.get_image_id(ioctx, self.clone_name)}])
         self.clone = Image(ioctx, self.clone_name)
 
@@ -1686,6 +1741,14 @@ class TestMirroring(object):
             'client_name' : client_name,
             }
         eq([peer], list(self.rbd.mirror_peer_list(ioctx)))
+
+        attribs = {
+            RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST: 'host1',
+            RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY: 'abc'
+            }
+        self.rbd.mirror_peer_set_attributes(ioctx, uuid, attribs)
+        eq(attribs, self.rbd.mirror_peer_get_attributes(ioctx, uuid))
+
         self.rbd.mirror_peer_remove(ioctx, uuid)
         eq([], list(self.rbd.mirror_peer_list(ioctx)))
 
@@ -1762,6 +1825,10 @@ class TestMirroring(object):
         states = self.rbd.mirror_image_status_summary(ioctx)
         eq([(MIRROR_IMAGE_STATUS_STATE_UNKNOWN, 1)], states)
 
+        assert_raises(ImageNotFound, self.image.mirror_image_get_instance_id)
+        instance_ids = list(self.rbd.mirror_image_instance_id_list(ioctx))
+        eq(0, len(instance_ids))
+
         N = 65
         for i in range(N):
             self.rbd.create(ioctx, image_name + str(i), IMG_SIZE, IMG_ORDER,
@@ -1802,6 +1869,7 @@ class TestTrash(object):
 
         RBD().trash_move(ioctx, image_name, 1000)
         assert_raises(PermissionError, RBD().trash_remove, ioctx, image_id)
+        RBD().trash_remove(ioctx, image_id, True)
 
     def test_remove(self):
         create_image()

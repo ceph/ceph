@@ -36,15 +36,19 @@ class SocketMessenger final : public Messenger {
   std::set<SocketConnectionRef> accepting_conns;
   using Throttle = ceph::thread::Throttle;
   ceph::net::PolicySet<Throttle> policy_set;
-  seastar::gate pending_dispatch;
-
-  seastar::future<> dispatch(SocketConnectionRef conn);
+  // Distinguish messengers with meaningful names for debugging
+  const std::string logic_name;
+  const uint32_t nonce;
 
   seastar::future<> accept(seastar::connected_socket socket,
                            seastar::socket_address paddr);
 
  public:
-  SocketMessenger(const entity_name_t& myname);
+  SocketMessenger(const entity_name_t& myname,
+                  const std::string& logic_name,
+                  uint32_t nonce);
+
+  void set_myaddr(const entity_addr_t& addr) override;
 
   void bind(const entity_addr_t& addr) override;
 
@@ -55,16 +59,14 @@ class SocketMessenger final : public Messenger {
 
   seastar::future<> shutdown() override;
 
-  seastar::future<msgr_tag_t, bufferlist>
-  verify_authorizer(peer_type_t peer_type,
-		    auth_proto_t protocol,
-		    bufferlist& auth) override;
-
-  seastar::future<std::unique_ptr<AuthAuthorizer>>
-  get_authorizer(peer_type_t peer_type,
-		 bool force_new) override;
+  void print(ostream& out) const override {
+    out << get_myname()
+        << "(" << logic_name
+        << ") " << get_myaddr();
+  }
 
  public:
+  void learned_addr(const entity_addr_t &peer_addr_for_me);
   void set_default_policy(const SocketPolicy& p);
   void set_policy(entity_type_t peer_type, const SocketPolicy& p);
   void set_policy_throttler(entity_type_t peer_type, Throttle* throttle);

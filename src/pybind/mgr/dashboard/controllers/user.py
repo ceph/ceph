@@ -8,7 +8,7 @@ from ..exceptions import DashboardException, UserAlreadyExists, \
     UserDoesNotExist
 from ..security import Scope
 from ..services.access_control import ACCESS_CTRL_DB, SYSTEM_ROLES
-from ..tools import Session
+from ..services.auth import JwtManager
 
 
 @ApiController('/user', Scope.USER)
@@ -62,7 +62,7 @@ class User(RESTController):
         return User._user_to_dict(user)
 
     def delete(self, username):
-        session_username = cherrypy.session.get(Session.USERNAME)
+        session_username = JwtManager.get_username()
         if session_username == username:
             raise DashboardException(msg='Cannot delete current user',
                                      code='cannot_delete_current_user',

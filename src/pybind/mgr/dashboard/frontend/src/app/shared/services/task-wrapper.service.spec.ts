@@ -3,9 +3,9 @@ import { inject, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import { Observable } from 'rxjs/Observable';
+import { Observable } from 'rxjs';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { FinishedTask } from '../models/finished-task';
 import { SharedModule } from '../shared.module';
 import { NotificationService } from './notification.service';
@@ -18,7 +18,7 @@ describe('TaskWrapperService', () => {
 
   configureTestBed({
     imports: [HttpClientTestingModule, ToastModule.forRoot(), SharedModule, RouterTestingModule],
-    providers: [TaskWrapperService]
+    providers: [TaskWrapperService, i18nProviders]
   });
 
   beforeEach(inject([TaskWrapperService], (wrapper: TaskWrapperService) => {

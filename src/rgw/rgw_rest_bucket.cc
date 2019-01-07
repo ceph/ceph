@@ -7,6 +7,8 @@
 
 #include "include/str_list.h"
 
+#include "services/svc_sys_obj.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 class RGWOp_Bucket_Info : public RGWRESTOp {
@@ -262,7 +264,7 @@ void RGWOp_Set_Bucket_Quota::execute()
   if (use_http_params) {
     RGWBucketInfo bucket_info;
     map<string, bufferlist> attrs;
-    RGWObjectCtx obj_ctx(store);
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
     http_ret = store->get_bucket_info(obj_ctx, uid.tenant, bucket, bucket_info, NULL, &attrs);
     if (http_ret < 0) {
       return;

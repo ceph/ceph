@@ -13,13 +13,15 @@
 <ng-template #protectTpl
              let-value="value">
   <span *ngIf="value"
-        class="label label-success">PROTECTED</span>
+        class="label label-success"
+        i18n>PROTECTED</span>
   <span *ngIf="!value"
-        class="label label-info">UNPROTECTED</span>
+        class="label label-info"
+        i18n>UNPROTECTED</span>
 </ng-template>
 
 <ng-template #rollbackTpl
              let-value>
-  You are about to rollback
+  <ng-container i18n>You are about to rollback</ng-container>
   <strong>{{ value.snapName }}</strong>.
 </ng-template>

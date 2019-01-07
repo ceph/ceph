@@ -108,7 +108,6 @@ private:
   version_t last_seq = 0; // last seq sent to monitor
   std::map<version_t,time>  seq_stamp;    // seq # -> time sent
   time last_acked_stamp = clock::zero();  // last time we sent a beacon that got acked
-  time last_mon_reconnect = clock::zero();
   bool laggy = false;
   time last_laggy = clock::zero();
 

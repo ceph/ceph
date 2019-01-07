@@ -126,6 +126,8 @@ enum {
   l_bluestore_last
 };
 
+#define META_POOL_ID ((uint64_t)-1ull)
+
 class BlueStore : public ObjectStore,
 		  public md_config_obs_t {
   // -----------------------------------------------------
@@ -461,15 +463,19 @@ public:
       sb->coll = coll;
     }
 
-    void remove(SharedBlob *sb) {
+    bool remove(SharedBlob *sb, bool verify_nref_is_zero=false) {
       std::lock_guard l(lock);
       ceph_assert(sb->get_parent() == this);
+      if (verify_nref_is_zero && sb->nref != 0) {
+	return false;
+      }
       // only remove if it still points to us
       auto p = sb_map.find(sb->get_sbid());
       if (p != sb_map.end() &&
 	  p->second == sb) {
 	sb_map.erase(p);
       }
+      return true;
     }
 
     bool empty() {
@@ -1430,7 +1436,7 @@ public:
     int upper_bound(const string &after) override;
     int lower_bound(const string &to) override;
     bool valid() override;
-    int next(bool validate=true) override;
+    int next() override;
     string key() override;
     bufferlist value() override;
     int status() override {
@@ -1454,6 +1460,14 @@ public:
     void reset() {
       *this = volatile_statfs();
     }
+    void publish(store_statfs_t* buf) const {
+      buf->allocated = allocated();
+      buf->data_stored = stored();
+      buf->data_compressed = compressed();
+      buf->data_compressed_original = compressed_original();
+      buf->data_compressed_allocated = compressed_allocated();
+    }
+
     volatile_statfs& operator+=(const volatile_statfs& other) {
       for (size_t i = 0; i < STATFS_LAST; ++i) {
 	values[i] += other.values[i];
@@ -1473,6 +1487,21 @@ public:
       return values[STATFS_COMPRESSED];
     }
     int64_t& compressed_allocated() {
+      return values[STATFS_COMPRESSED_ALLOCATED];
+    }
+    int64_t allocated() const {
+      return values[STATFS_ALLOCATED];
+    }
+    int64_t stored() const {
+      return values[STATFS_STORED];
+    }
+    int64_t compressed_original() const {
+      return values[STATFS_COMPRESSED_ORIGINAL];
+    }
+    int64_t compressed() const {
+      return values[STATFS_COMPRESSED];
+    }
+    int64_t compressed_allocated() const {
       return values[STATFS_COMPRESSED_ALLOCATED];
     }
     volatile_statfs& operator=(const store_statfs_t& st) {
@@ -1591,8 +1620,9 @@ public:
     bluestore_deferred_transaction_t *deferred_txn = nullptr; ///< if any
 
     interval_set<uint64_t> allocated, released;
-    volatile_statfs statfs_delta;
-
+    volatile_statfs statfs_delta;	   ///< overall store statistics delta
+    uint64_t osd_pool_id = META_POOL_ID;    ///< osd pool id we're operating on
+    
     IOContext ioc;
     bool had_ios = false;  ///< true if we submitted IOs before our kv txn
 
@@ -1967,8 +1997,14 @@ private:
   double osd_memory_expected_fragmentation = 0; ///< expected memory fragmentation
   uint64_t osd_memory_cache_min = 0; ///< Min memory to assign when autotuning cache
   double osd_memory_cache_resize_interval = 0; ///< Time to wait between cache resizing 
+
+  typedef map<uint64_t, volatile_statfs> osd_pools_map;
+
   ceph::mutex vstatfs_lock = ceph::make_mutex("BlueStore::vstatfs_lock");
   volatile_statfs vstatfs;
+  osd_pools_map osd_pools; // protected by vstatfs_lock as well
+
+  bool per_pool_stat_collection = true;
 
   struct MempoolThread : public Thread {
   public:
@@ -2128,6 +2164,15 @@ private:
   // its initialization (and outside of _open_bdev)
   void _validate_bdev();
   void _close_bdev();
+
+  int _open_bluefs(bool create);
+  void _close_bluefs();
+
+  // Limited (u)mount intended for BlueFS operations only
+  int _mount_for_bluefs();
+  void _umount_for_bluefs();
+
+
   /*
    * @warning to_repair_db means that we open this db to repair it, will not
    * hold the rocksdb's file lock.
@@ -2156,6 +2201,7 @@ private:
   int _open_super_meta();
 
   void _open_statfs();
+  void _get_statfs_overall(struct store_statfs_t *buf);
 
   void _dump_alloc_on_rebalance_failure();
   int _reconcile_bluefs_freespace();
@@ -2229,6 +2275,14 @@ private:
     uint64_t granularity,
     BlueStoreRepairer* repairer,
     store_statfs_t& expected_statfs);
+
+  using  per_pool_statfs =
+    mempool::bluestore_fsck::map<uint64_t, store_statfs_t>;
+  void _fsck_check_pool_statfs(
+    per_pool_statfs& expected_pool_statfs,
+    bool need_per_pool_stats,
+    int& errors,
+    BlueStoreRepairer* repairer);
 
   void _buffer_cache_write(
     TransContext *txc,
@@ -2379,8 +2433,18 @@ public:
     f->close_section();
   }
 
+  int add_new_bluefs_device(int id, const string& path);
+  int migrate_to_existing_bluefs_device(const set<int>& devs_source,
+    int id);
+  int migrate_to_new_bluefs_device(const set<int>& devs_source,
+    int id,
+    const string& path);
+  int expand_devices(ostream& out);
+  string get_device_path(unsigned id);
+
 public:
   int statfs(struct store_statfs_t *buf) override;
+  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
 
   void collect_metadata(map<string,string> *pm) override;
 
@@ -2539,7 +2603,7 @@ public:
 			 const bufferlist& bl);
   void inject_leaked(uint64_t len);
   void inject_false_free(coll_t cid, ghobject_t oid);
-  void inject_statfs(const store_statfs_t& new_statfs);
+  void inject_statfs(const string& key, const store_statfs_t& new_statfs);
   void inject_misreference(coll_t cid1, ghobject_t oid1,
 			   coll_t cid2, ghobject_t oid2,
 			   uint64_t offset);
@@ -2551,6 +2615,8 @@ public:
   bool has_builtin_csum() const override {
     return true;
   }
+
+  int allocate_bluefs_freespace(uint64_t size);
 
 private:
   bool _debug_data_eio(const ghobject_t& o) {
@@ -2838,6 +2904,20 @@ private:
 			unsigned bits);
 };
 
+inline ostream& operator<<(ostream& out, const BlueStore::volatile_statfs& s) {
+  return out 
+    << " allocated:"
+      << s.values[BlueStore::volatile_statfs::STATFS_ALLOCATED]
+    << " stored:"
+      << s.values[BlueStore::volatile_statfs::STATFS_STORED]
+    << " compressed:"
+      << s.values[BlueStore::volatile_statfs::STATFS_COMPRESSED]
+    << " compressed_orig:"
+      << s.values[BlueStore::volatile_statfs::STATFS_COMPRESSED_ORIGINAL]
+    << " compressed_alloc:"
+      << s.values[BlueStore::volatile_statfs::STATFS_COMPRESSED_ALLOCATED];
+}
+
 static inline void intrusive_ptr_add_ref(BlueStore::Onode *o) {
   o->get();
 }
@@ -2986,7 +3066,8 @@ public:
   bool fix_shared_blob(KeyValueDB *db,
 		         uint64_t sbid,
 		       const bufferlist* bl);
-  bool fix_statfs(KeyValueDB *db, const store_statfs_t& new_statfs);
+  bool fix_statfs(KeyValueDB *db, const string& key,
+    const store_statfs_t& new_statfs);
 
   bool fix_leaked(KeyValueDB *db,
 		  FreelistManager* fm,

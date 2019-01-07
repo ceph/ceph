@@ -4,18 +4,19 @@ import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import {
-  AlertModule,
-  BsDropdownModule,
-  ModalModule,
-  TabsModule,
-  TooltipModule
-} from 'ngx-bootstrap';
+import { AlertModule } from 'ngx-bootstrap/alert';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
+import { ModalModule } from 'ngx-bootstrap/modal';
+import { TabsModule } from 'ngx-bootstrap/tabs';
+import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { BehaviorSubject, of } from 'rxjs';
 
-import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  i18nProviders,
+  PermissionHelper
+} from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
-import { ComponentsModule } from '../../../shared/components/components.module';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { ExecutingTask } from '../../../shared/models/executing-task';
@@ -46,12 +47,11 @@ describe('RbdListComponent', () => {
       TooltipModule.forRoot(),
       ToastModule.forRoot(),
       AlertModule.forRoot(),
-      ComponentsModule,
       RouterTestingModule,
       HttpClientTestingModule
     ],
     declarations: [RbdListComponent, RbdDetailsComponent, RbdSnapshotListComponent],
-    providers: [SummaryService, TaskListService, RbdService]
+    providers: [TaskListService, i18nProviders]
   });
 
   beforeEach(() => {
@@ -107,14 +107,26 @@ describe('RbdListComponent', () => {
     const addTask = (name: string, image_name: string) => {
       const task = new ExecutingTask();
       task.name = name;
-      task.metadata = {
-        pool_name: 'rbd',
-        image_name: image_name,
-        child_pool_name: 'rbd',
-        child_image_name: 'd',
-        dest_pool_name: 'rbd',
-        dest_image_name: 'd'
-      };
+      switch (task.name) {
+        case 'rbd/copy':
+          task.metadata = {
+            dest_pool_name: 'rbd',
+            dest_image_name: 'd'
+          };
+          break;
+        case 'rbd/clone':
+          task.metadata = {
+            child_pool_name: 'rbd',
+            child_image_name: 'd'
+          };
+          break;
+        default:
+          task.metadata = {
+            pool_name: 'rbd',
+            image_name: image_name
+          };
+          break;
+      }
       summaryService.addRunningTask(task);
     };
 

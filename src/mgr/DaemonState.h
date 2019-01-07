@@ -168,6 +168,7 @@ class DaemonState
   }
 
   void set_metadata(const std::map<std::string,std::string>& m) {
+    devices.clear();
     metadata = m;
     auto p = m.find("device_ids");
     if (p != m.end()) {
@@ -181,7 +182,7 @@ class DaemonState
     }
   }
 
-  const std::map<std::string,std::string>& get_config_defaults() {
+  const std::map<std::string,std::string>& _get_config_defaults() {
     if (config_defaults.empty() &&
 	config_defaults_bl.length()) {
       auto p = config_defaults_bl.cbegin();
@@ -209,7 +210,9 @@ struct DeviceState : public RefCountedObject
   pair<utime_t,utime_t> life_expectancy;  ///< when device failure is expected
   utime_t life_expectancy_stamp;          ///< when life expectency was recorded
 
-  DeviceState(const std::string& n) : devid(n) {}
+  DeviceState(const std::string& n)
+    : RefCountedObject(nullptr, 0),
+      devid(n) {}
 
   void set_metadata(map<string,string>&& m);
 
@@ -267,9 +270,11 @@ public:
   PerfCounterTypes types;
 
   void insert(DaemonStatePtr dm);
+  void _insert(DaemonStatePtr dm);
   bool exists(const DaemonKey &key) const;
   DaemonStatePtr get(const DaemonKey &key);
   void rm(const DaemonKey &key);
+  void _rm(const DaemonKey &key);
 
   // Note that these return by value rather than reference to avoid
   // callers needing to stay in lock while using result.  Callers must
@@ -333,7 +338,7 @@ public:
 			     std::set<std::string> *ls) {
     auto m = get_by_server(server);
     for (auto& i : m) {
-      Mutex::Locker l(i.second->lock);
+      std::lock_guard l(i.second->lock);
       for (auto& j : i.second->devices) {
 	ls->insert(j.first);
       }
@@ -351,6 +356,18 @@ public:
   bool is_updating(const DaemonKey &k) {
     RWLock::RLocker l(lock);
     return updating.count(k) > 0;
+  }
+
+  void update_metadata(DaemonStatePtr state,
+		       const map<string,string>& meta) {
+    // remove and re-insert in case the device metadata changed
+    RWLock::WLocker l(lock);
+    _rm(state->key);
+    {
+      Mutex::Locker l2(state->lock);
+      state->set_metadata(meta);
+    }
+    _insert(state);
   }
 
   /**

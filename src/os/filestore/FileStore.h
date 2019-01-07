@@ -518,6 +518,7 @@ public:
   int get_devices(set<string> *ls) override;
 
   int statfs(struct store_statfs_t *buf) override;
+  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
 
   int _do_transactions(
     vector<Transaction> &tls, uint64_t op_seq,
@@ -770,6 +771,8 @@ public:
   void dump_transactions(vector<Transaction>& ls, uint64_t seq, OpSequencer *osr);
 
   virtual int apply_layout_settings(const coll_t &cid, int target_level);
+
+  void get_db_statistics(Formatter* f) override;
 
 private:
   void _inject_failure();

@@ -42,4 +42,6 @@ sensible.
     Crash plugin <crash>
     Orchestrator CLI plugin <orchestrator_cli>
     Rook plugin <rook>
+    DeepSea plugin <deepsea>
     Insights plugin <insights>
+    Ansible plugin <ansible>

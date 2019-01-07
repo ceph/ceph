@@ -13,6 +13,14 @@ set(auth_srcs
   none/AuthNoneAuthorizeHandler.cc
   unknown/AuthUnknownAuthorizeHandler.cc)
 
+if(HAVE_GSSAPI)
+  list(APPEND auth_srcs
+    krb/KrbAuthorizeHandler.cpp
+    krb/KrbClientHandler.cpp
+    krb/KrbProtocol.cpp
+    krb/KrbSessionHandler.hpp)
+endif()
+
 add_library(common-auth-objs OBJECT ${auth_srcs})
 if(WITH_SEASTAR)
   add_library(crimson-auth OBJECT ${auth_srcs})

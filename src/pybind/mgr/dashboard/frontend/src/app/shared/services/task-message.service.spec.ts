@@ -1,5 +1,8 @@
+import { TestBed } from '@angular/core/testing';
+
 import * as _ from 'lodash';
 
+import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { FinishedTask } from '../models/finished-task';
 import { TaskException } from '../models/task-exception';
 import { TaskMessageOperation, TaskMessageService } from './task-message.service';
@@ -8,8 +11,12 @@ describe('TaskManagerMessageService', () => {
   let service: TaskMessageService;
   let finishedTask: FinishedTask;
 
+  configureTestBed({
+    providers: [TaskMessageService, i18nProviders]
+  });
+
   beforeEach(() => {
-    service = new TaskMessageService();
+    service = TestBed.get(TaskMessageService);
     finishedTask = new FinishedTask();
   });
 
@@ -90,20 +97,44 @@ describe('TaskManagerMessageService', () => {
       });
     });
 
+    describe('erasure code profile tasks', () => {
+      beforeEach(() => {
+        const metadata = {
+          name: 'someEcpName'
+        };
+        defaultMsg = `erasure code profile '${metadata.name}'`;
+        finishedTask.metadata = metadata;
+      });
+
+      it('tests ecp/create messages', () => {
+        finishedTask.name = 'ecp/create';
+        testCreate(defaultMsg);
+        testErrorCode(17, `Name is already used by ${defaultMsg}.`);
+      });
+
+      it('tests ecp/delete messages', () => {
+        finishedTask.name = 'ecp/delete';
+        testDelete(defaultMsg);
+      });
+    });
+
     describe('rbd tasks', () => {
+      let metadata;
       let childMsg: string;
       let destinationMsg: string;
       let snapMsg: string;
 
       beforeEach(() => {
-        const metadata = {
+        metadata = {
           pool_name: 'somePool',
           image_name: 'someImage',
           snapshot_name: 'someSnapShot',
           dest_pool_name: 'someDestinationPool',
           dest_image_name: 'someDestinationImage',
           child_pool_name: 'someChildPool',
-          child_image_name: 'someChildImage'
+          child_image_name: 'someChildImage',
+          new_image_name: 'newImage',
+          image_id: '12345'
         };
         defaultMsg = `RBD '${metadata.pool_name}/${metadata.image_name}'`;
         childMsg = `RBD '${metadata.child_pool_name}/${metadata.child_image_name}'`;
@@ -171,6 +202,72 @@ describe('TaskManagerMessageService', () => {
       it('tests rbd/snap/rollback messages', () => {
         finishedTask.name = 'rbd/snap/rollback';
         testMessages(new TaskMessageOperation('Rolling back', 'rollback', 'Rolled back'), snapMsg);
+      });
+
+      it('tests rbd/trash/move messages', () => {
+        finishedTask.name = 'rbd/trash/move';
+        testMessages(
+          new TaskMessageOperation('Moving', 'move', 'Moved'),
+          `image '${metadata.pool_name}/${metadata.image_name}' to trash`
+        );
+        testErrorCode(2, `Could not find image.`);
+      });
+
+      it('tests rbd/trash/restore messages', () => {
+        finishedTask.name = 'rbd/trash/restore';
+        testMessages(
+          new TaskMessageOperation('Restoring', 'restore', 'Restored'),
+          `image '${metadata.pool_name}@${metadata.image_id}' ` +
+            `into '${metadata.pool_name}/${metadata.new_image_name}'`
+        );
+        testErrorCode(
+          17,
+          `Image name '${metadata.pool_name}/${metadata.new_image_name}' is already in use.`
+        );
+      });
+
+      it('tests rbd/trash/remove messages', () => {
+        finishedTask.name = 'rbd/trash/remove';
+        testDelete(`image '${metadata.pool_name}/${metadata.image_name}@${metadata.image_id}'`);
+      });
+
+      it('tests rbd/trash/purge messages', () => {
+        finishedTask.name = 'rbd/trash/purge';
+        testMessages(
+          new TaskMessageOperation('Purging', 'purge', 'Purged'),
+          `images from '${metadata.pool_name}'`
+        );
+      });
+    });
+    describe('rbd tasks', () => {
+      let metadata;
+      let modeMsg: string;
+      let peerMsg: string;
+
+      beforeEach(() => {
+        metadata = {
+          pool_name: 'somePool'
+        };
+        modeMsg = `mirror mode for pool '${metadata.pool_name}'`;
+        peerMsg = `mirror peer for pool '${metadata.pool_name}'`;
+        finishedTask.metadata = metadata;
+      });
+      it('tests rbd/mirroring/pool/edit messages', () => {
+        finishedTask.name = 'rbd/mirroring/pool/edit';
+        testUpdate(modeMsg);
+        testErrorCode(16, 'Cannot disable mirroring because it contains a peer.');
+      });
+      it('tests rbd/mirroring/peer/edit messages', () => {
+        finishedTask.name = 'rbd/mirroring/peer/edit';
+        testUpdate(peerMsg);
+      });
+      it('tests rbd/mirroring/peer/add messages', () => {
+        finishedTask.name = 'rbd/mirroring/peer/add';
+        testCreate(peerMsg);
+      });
+      it('tests rbd/mirroring/peer/delete messages', () => {
+        finishedTask.name = 'rbd/mirroring/peer/delete';
+        testDelete(peerMsg);
       });
     });
   });

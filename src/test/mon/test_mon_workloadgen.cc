@@ -536,9 +536,9 @@ class OSDStub : public TestStub
       return;
     }
 
-    osd_stat.kb = stbuf.f_blocks * stbuf.f_bsize / 1024;
-    osd_stat.kb_used = (stbuf.f_blocks - stbuf.f_bfree) * stbuf.f_bsize / 1024;
-    osd_stat.kb_avail = stbuf.f_bavail * stbuf.f_bsize / 1024;
+    osd_stat.statfs.total = stbuf.f_blocks * stbuf.f_bsize;
+    osd_stat.statfs.available = stbuf.f_bavail * stbuf.f_bsize;
+    osd_stat.statfs.internally_reserved = 0;
   }
 
   void send_pg_stats() {

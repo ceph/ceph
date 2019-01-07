@@ -55,6 +55,7 @@ export class ApiInterceptorService implements HttpInterceptor {
             case 401:
               this.authStorageService.remove();
               this.router.navigate(['/login']);
+              showNotification = false;
               break;
             case 403:
               this.router.navigate(['/403']);

@@ -3,6 +3,7 @@ from __future__ import absolute_import
 
 import sys
 import inspect
+import json
 import functools
 
 import collections
@@ -15,8 +16,15 @@ import socket
 from six.moves import urllib
 import cherrypy
 
-from . import logger
+try:
+    from urlparse import urljoin
+except ImportError:
+    from urllib.parse import urljoin
+
+from . import logger, mgr
 from .exceptions import ViewCacheNoDataException
+from .settings import Settings
+from .services.auth import JwtManager
 
 
 class RequestLoggingTool(cherrypy.Tool):
@@ -31,20 +39,33 @@ class RequestLoggingTool(cherrypy.Tool):
         cherrypy.request.hooks.attach('after_error_response', self.request_error,
                                       priority=5)
 
-    def _get_user(self):
-        if hasattr(cherrypy.serving, 'session'):
-            return cherrypy.session.get(Session.USERNAME)
-        return None
-
     def request_begin(self):
         req = cherrypy.request
-        user = self._get_user()
-        if user:
-            logger.debug("[%s:%s] [%s] [%s] %s", req.remote.ip,
-                         req.remote.port, req.method, user, req.path_info)
-        else:
-            logger.debug("[%s:%s] [%s] %s", req.remote.ip,
-                         req.remote.port, req.method, req.path_info)
+        user = JwtManager.get_username()
+        # Log the request.
+        logger.debug('[%s:%s] [%s] [%s] %s', req.remote.ip, req.remote.port,
+                     req.method, user, req.path_info)
+        # Audit the request.
+        if Settings.AUDIT_API_ENABLED and req.method not in ['GET']:
+            url = build_url(req.remote.ip, scheme=req.scheme,
+                            port=req.remote.port)
+            msg = '[DASHBOARD] from=\'{}\' path=\'{}\' method=\'{}\' ' \
+                'user=\'{}\''.format(url, req.path_info, req.method, user)
+            if Settings.AUDIT_API_LOG_PAYLOAD:
+                params = dict(req.params or {}, **get_request_body_params(req))
+                # Hide sensitive data like passwords, secret keys, ...
+                # Extend the list of patterns to search for if necessary.
+                # Currently parameters like this are processed:
+                # - secret_key
+                # - user_password
+                # - new_passwd_to_login
+                keys = []
+                for key in ['password', 'passwd', 'secret']:
+                    keys.extend([x for x in params.keys() if key in x])
+                for key in keys:
+                    params[key] = '***'
+                msg = '{} params=\'{}\''.format(msg, json.dumps(params))
+            mgr.cluster_log('audit', mgr.CLUSTER_LOG_PRIO_INFO, msg)
 
     def request_error(self):
         self._request_log(logger.error)
@@ -85,7 +106,7 @@ class RequestLoggingTool(cherrypy.Tool):
         req = cherrypy.request
         res = cherrypy.response
         lat = time.time() - res.time
-        user = self._get_user()
+        user = JwtManager.get_username()
         status = res.status[:3] if isinstance(res.status, str) else res.status
         if 'Content-Length' in res.headers:
             length = self._format_bytes(res.headers['Content-Length'])
@@ -160,6 +181,11 @@ class ViewCache(object):
             self.exception = None
             self.lock = threading.Lock()
 
+        def reset(self):
+            with self.lock:
+                self.value_when = None
+                self.value = None
+
         def run(self, fn, args, kwargs):
             """
             If data less than `stale_period` old is available, return it
@@ -216,49 +242,12 @@ class ViewCache(object):
                 rvc = ViewCache.RemoteViewCache(self.timeout)
                 self.cache_by_args[args] = rvc
             return rvc.run(fn, args, kwargs)
+        wrapper.reset = self.reset
         return wrapper
 
-
-class Session(object):
-    """
-    This class contains all relevant settings related to cherrypy.session.
-    """
-    NAME = 'session_id'
-
-    # The keys used to store the information in the cherrypy.session.
-    USERNAME = '_username'
-    TS = '_ts'
-    EXPIRE_AT_BROWSER_CLOSE = '_expire_at_browser_close'
-
-    # The default values.
-    DEFAULT_EXPIRE = 1200.0
-
-
-class SessionExpireAtBrowserCloseTool(cherrypy.Tool):
-    """
-    A CherryPi Tool which takes care that the cookie does not expire
-    at browser close if the 'Keep me logged in' checkbox was selected
-    on the login page.
-    """
-    def __init__(self):
-        cherrypy.Tool.__init__(self, 'before_finalize', self._callback)
-
-    def _callback(self):
-        # Shall the cookie expire at browser close?
-        expire_at_browser_close = cherrypy.session.get(
-            Session.EXPIRE_AT_BROWSER_CLOSE, True)
-        logger.debug("expire at browser close: %s", expire_at_browser_close)
-        if expire_at_browser_close:
-            # Get the cookie and its name.
-            cookie = cherrypy.response.cookie
-            name = cherrypy.request.config.get(
-                'tools.sessions.name', Session.NAME)
-            # Make the cookie a session cookie by purging the
-            # fields 'expires' and 'max-age'.
-            logger.debug("expire at browser close: removing 'expires' and 'max-age'")
-            if name in cookie:
-                del cookie[name]['expires']
-                del cookie[name]['max-age']
+    def reset(self):
+        for _, rvc in self.cache_by_args.items():
+            rvc.reset()
 
 
 class NotificationQueue(threading.Thread):
@@ -700,6 +689,14 @@ def build_url(host, scheme=None, port=None):
     return pr.geturl()
 
 
+def prepare_url_prefix(url_prefix):
+    """
+    return '' if no prefix, or '/prefix' without slash in the end.
+    """
+    url_prefix = urljoin('/', url_prefix)
+    return url_prefix.rstrip('/')
+
+
 def dict_contains_path(dct, keys):
     """
     Tests whether the keys exist recursively in `dictionary`.
@@ -764,3 +761,24 @@ def str_to_bool(val):
     if isinstance(val, bool):
         return val
     return bool(strtobool(val))
+
+
+def get_request_body_params(request):
+    """
+    Helper function to get parameters from the request body.
+    :param request The CherryPy request object.
+    :type request: cherrypy.Request
+    :return: A dictionary containing the parameters.
+    :rtype: dict
+    """
+    params = {}
+    if request.method not in request.methods_with_bodies:
+        return params
+
+    content_type = request.headers.get('Content-Type', '')
+    if content_type in ['application/json', 'text/javascript']:
+        if not hasattr(request, 'json'):
+            raise cherrypy.HTTPError(400, 'Expected JSON body')
+        params.update(request.json.items())
+
+    return params

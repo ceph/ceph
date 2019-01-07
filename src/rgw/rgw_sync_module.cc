@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "rgw_common.h"
 #include "rgw_coroutine.h"
 #include "rgw_cr_rados.h"
@@ -7,6 +10,7 @@
 #include "rgw_sync_module_log.h"
 #include "rgw_sync_module_es.h"
 #include "rgw_sync_module_aws.h"
+#include "rgw_sync_module_pubsub.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -36,8 +40,8 @@ int RGWCallStatRemoteObjCR::operate() {
       return set_cr_error(retcode);
     }
     ldout(sync_env->cct, 20) << "stat of remote obj: z=" << sync_env->source_zone
-      << " b=" << bucket_info.bucket << " k=" << key << " size=" << size << " mtime=" << mtime
-      << " attrs=" << attrs << " headers=" << headers << dendl;
+                             << " b=" << bucket_info.bucket << " k=" << key
+                             << " size=" << size << " mtime=" << mtime << dendl;
     yield {
       RGWStatRemoteObjCBCR *cb = allocate_callback();
       if (cb) {
@@ -67,4 +71,7 @@ void rgw_register_sync_modules(RGWSyncModulesManager *modules_manager)
 
   RGWSyncModuleRef aws_module(std::make_shared<RGWAWSSyncModule>());
   modules_manager->register_module("cloud", aws_module);
+
+  RGWSyncModuleRef pubsub_module(std::make_shared<RGWPSSyncModule>());
+  modules_manager->register_module("pubsub", pubsub_module);
 }

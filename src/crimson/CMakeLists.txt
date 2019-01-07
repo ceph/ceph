@@ -5,6 +5,7 @@ set_target_properties(crimson::cflags PROPERTIES
 
 set(crimson_common_srcs
   common/config_proxy.cc
+  common/perf_counters_collection.cc
   common/assert.cc
   common/log.cc)
 
@@ -39,7 +40,6 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/hobject.cc
   ${PROJECT_SOURCE_DIR}/src/common/hostname.cc
   ${PROJECT_SOURCE_DIR}/src/common/ipaddr.cc
-  ${PROJECT_SOURCE_DIR}/src/common/io_priority.cc
   ${PROJECT_SOURCE_DIR}/src/common/lockdep.cc
   ${PROJECT_SOURCE_DIR}/src/common/mutex_debug.cc
   ${PROJECT_SOURCE_DIR}/src/common/mempool.cc

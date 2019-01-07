@@ -1,12 +1,8 @@
 <cd-loading-panel *ngIf="editing && loading && !error"
-                  i18n>
-  Loading user data...
-</cd-loading-panel>
+                  i18n>Loading user data...</cd-loading-panel>
 <cd-error-panel *ngIf="editing && error"
                 (backAction)="goToListView()"
-                i18n>
-  The user data could not be loaded.
-</cd-error-panel>
+                i18n>The user data could not be loaded.</cd-error-panel>
 
 <div class="col-sm-12 col-lg-6"
      *ngIf="!loading && !error">
@@ -16,39 +12,33 @@
         novalidate>
     <div class="panel panel-default">
       <div class="panel-heading">
-        <h3 class="panel-title">
-          {editing, select, 1 {Edit} other {Add}} user
-        </h3>
+        <h3 class="panel-title">{editing, select, 1 {Edit} other {Add}} user</h3>
       </div>
       <div class="panel-body">
 
         <!-- Username -->
         <div class="form-group"
-             [ngClass]="{'has-error': userForm.showError('user_id', frm)}">
+             [ngClass]="{'has-error': userForm.showError('uid', frm)}">
           <label class="control-label col-sm-3"
-                 for="user_id"
-                 i18n>Username
+                 for="uid">
+            <ng-container i18n>Username</ng-container>
             <span class="required"
                   *ngIf="!editing">
             </span>
           </label>
           <div class="col-sm-9">
-            <input id="user_id"
+            <input id="uid"
                    class="form-control"
                    type="text"
-                   formControlName="user_id"
+                   formControlName="uid"
                    [readonly]="editing"
                    autofocus>
             <span class="help-block"
-                  *ngIf="userForm.showError('user_id', frm, 'required')"
-                  i18n>
-              This field is required.
-            </span>
+                  *ngIf="userForm.showError('uid', frm, 'required')"
+                  i18n>This field is required.</span>
             <span class="help-block"
-                  *ngIf="userForm.showError('user_id', frm, 'notUnique')"
-                  i18n>
-              The chosen user ID is already in use.
-            </span>
+                  *ngIf="userForm.showError('uid', frm, 'notUnique')"
+                  i18n>The chosen user ID is already in use.</span>
           </div>
         </div>
 
@@ -56,8 +46,8 @@
         <div class="form-group"
              [ngClass]="{'has-error': userForm.showError('display_name', frm)}">
           <label class="control-label col-sm-3"
-                 for="display_name"
-                 i18n>Full name
+                 for="display_name">
+            <ng-container i18n>Full name</ng-container>
             <span class="required"
                   *ngIf="!editing">
             </span>
@@ -69,9 +59,7 @@
                    formControlName="display_name">
             <span class="help-block"
                   *ngIf="userForm.showError('display_name', frm, 'required')"
-                  i18n>
-              This field is required.
-            </span>
+                  i18n>This field is required.</span>
           </div>
         </div>
 
@@ -80,8 +68,7 @@
              [ngClass]="{'has-error': userForm.showError('email', frm)}">
           <label class="control-label col-sm-3"
                  for="email"
-                 i18n>Email address
-          </label>
+                 i18n>Email address</label>
           <div class="col-sm-9">
             <input id="email"
                    class="form-control"
@@ -89,9 +76,10 @@
                    formControlName="email">
             <span class="help-block"
                   *ngIf="userForm.showError('email', frm, 'email')"
-                  i18n>
-              This is not a valid email address.
-            </span>
+                  i18n>This is not a valid email address.</span>
+            <span class="help-block"
+                  *ngIf="userForm.showError('email', frm, 'notUnique')"
+                  i18n>The chosen email address is already in use.</span>
           </div>
         </div>
 
@@ -99,8 +87,8 @@
         <div class="form-group"
              [ngClass]="{'has-error': userForm.showError('max_buckets', frm)}">
           <label class="control-label col-sm-3"
-                 for="max_buckets"
-                 i18n>Max. buckets
+                 for="max_buckets">
+            <ng-container i18n>Max. buckets</ng-container>
             <span class="required"></span>
           </label>
           <div class="col-sm-9">
@@ -110,14 +98,10 @@
                    formControlName="max_buckets">
             <span class="help-block"
                   *ngIf="userForm.showError('max_buckets', frm, 'required')"
-                  i18n>
-              This field is required.
-            </span>
+                  i18n>This field is required.</span>
             <span class="help-block"
                   *ngIf="userForm.showError('max_buckets', frm, 'min')"
-                  i18n>
-              The entered value must be >= 0.
-            </span>
+                  i18n>The entered value must be >= 0.</span>
           </div>
         </div>
 
@@ -129,8 +113,7 @@
                      type="checkbox"
                      formControlName="suspended">
               <label for="suspended"
-                     i18n>Suspended
-              </label>
+                     i18n>Suspended</label>
             </div>
           </div>
         </div>
@@ -147,8 +130,7 @@
                        type="checkbox"
                        formControlName="generate_key">
                 <label for="generate_key"
-                       i18n>Auto-generate key
-                </label>
+                       i18n>Auto-generate key</label>
               </div>
             </div>
           </div>
@@ -158,8 +140,8 @@
                [ngClass]="{'has-error': userForm.showError('access_key', frm)}"
                *ngIf="!editing && !userForm.getValue('generate_key')">
             <label class="control-label col-sm-3"
-                   for="access_key"
-                   i18n>Access key
+                   for="access_key">
+              <ng-container i18n>Access key</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -181,9 +163,7 @@
               </div>
               <span class="help-block"
                     *ngIf="userForm.showError('access_key', frm, 'required')"
-                    i18n>
-                This field is required.
-              </span>
+                    i18n>This field is required.</span>
             </div>
           </div>
 
@@ -192,8 +172,8 @@
                [ngClass]="{'has-error': userForm.showError('secret_key', frm)}"
                *ngIf="!editing && !userForm.getValue('generate_key')">
             <label class="control-label col-sm-3"
-                   for="secret_key"
-                   i18n>Secret key
+                   for="secret_key">
+              <ng-container i18n>Secret key</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -215,9 +195,7 @@
               </div>
               <span class="help-block"
                     *ngIf="userForm.showError('secret_key', frm, 'required')"
-                    i18n>
-                This field is required.
-              </span>
+                    i18n>This field is required.</span>
             </div>
           </div>
         </fieldset>
@@ -230,9 +208,7 @@
             <span *ngIf="subusers.length === 0"
                   class="form-control no-border">
               <span class="text-muted"
-                    i18n>
-                There are no subusers.
-              </span>
+                    i18n>There are no subusers.</span>
             </span>
 
             <span *ngFor="let subuser of subusers; let i=index;">
@@ -289,15 +265,12 @@
 
           <!-- S3 keys -->
           <label class="col-sm-3 control-label"
-                 i18n>S3
-          </label>
+                 i18n>S3</label>
           <div class="col-sm-9">
             <span *ngIf="s3Keys.length === 0"
                   class="form-control no-border">
               <span class="text-muted"
-                    i18n>
-                There are no keys.
-              </span>
+                    i18n>There are no keys.</span>
             </span>
 
             <span *ngFor="let key of s3Keys; let i=index;">
@@ -342,15 +315,12 @@
 
           <!-- Swift keys -->
           <label class="col-sm-3 control-label"
-                 i18n>Swift
-          </label>
+                 i18n>Swift</label>
           <div class="col-sm-9">
             <span *ngIf="swiftKeys.length === 0"
                   class="form-control no-border">
               <span class="text-muted"
-                    i18n>
-                There are no keys.
-              </span>
+                    i18n>There are no keys.</span>
             </span>
 
             <span *ngFor="let key of swiftKeys; let i=index;">
@@ -385,9 +355,7 @@
             <span *ngIf="capabilities.length === 0"
                   class="form-control no-border">
               <span class="text-muted"
-                    i18n>
-                There are no capabilities.
-              </span>
+                    i18n>There are no capabilities.</span>
             </span>
 
             <span *ngFor="let cap of capabilities; let i=index;">
@@ -442,8 +410,7 @@
                        type="checkbox"
                        formControlName="user_quota_enabled">
                 <label for="user_quota_enabled"
-                       i18n>Enabled
-                </label>
+                       i18n>Enabled</label>
               </div>
             </div>
           </div>
@@ -457,8 +424,7 @@
                        type="checkbox"
                        formControlName="user_quota_max_size_unlimited">
                 <label for="user_quota_max_size_unlimited"
-                       i18n>Unlimited size
-                </label>
+                       i18n>Unlimited size</label>
               </div>
             </div>
           </div>
@@ -468,8 +434,8 @@
                [ngClass]="{'has-error': userForm.showError('user_quota_max_size', frm)}"
                *ngIf="!userForm.getValue('user_quota_max_size_unlimited')">
             <label class="control-label col-sm-3"
-                   for="user_quota_max_size"
-                   i18n>Max. size
+                   for="user_quota_max_size">
+              <ng-container i18n>Max. size</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -480,14 +446,10 @@
                      cdDimlessBinary>
               <span class="help-block"
                     *ngIf="userForm.showError('user_quota_max_size', frm, 'required')"
-                    i18n>
-                This field is required.
-              </span>
+                    i18n>This field is required.</span>
               <span class="help-block"
                     *ngIf="userForm.showError('user_quota_max_size', frm, 'quotaMaxSize')"
-                    i18n>
-                The value is not valid.
-              </span>
+                    i18n>The value is not valid.</span>
             </div>
           </div>
 
@@ -500,8 +462,7 @@
                        type="checkbox"
                        formControlName="user_quota_max_objects_unlimited">
                 <label for="user_quota_max_objects_unlimited"
-                       i18n>Unlimited objects
-                </label>
+                       i18n>Unlimited objects</label>
               </div>
             </div>
           </div>
@@ -511,8 +472,8 @@
                [ngClass]="{'has-error': userForm.showError('user_quota_max_objects', frm)}"
                *ngIf="!userForm.getValue('user_quota_max_objects_unlimited')">
             <label class="control-label col-sm-3"
-                   for="user_quota_max_objects"
-                   i18n>Max. objects
+                   for="user_quota_max_objects">
+              <ng-container i18n>Max. objects</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -522,14 +483,10 @@
                      formControlName="user_quota_max_objects">
               <span class="help-block"
                     *ngIf="userForm.showError('user_quota_max_objects', frm, 'required')"
-                    i18n>
-                This field is required.
-              </span>
+                    i18n>This field is required.</span>
               <span class="help-block"
                     *ngIf="userForm.showError('user_quota_max_objects', frm, 'min')"
-                    i18n>
-              The entered value must be >= 0.
-            </span>
+                    i18n>The entered value must be >= 0.</span>
             </div>
           </div>
         </fieldset>
@@ -546,8 +503,7 @@
                        type="checkbox"
                        formControlName="bucket_quota_enabled">
                 <label for="bucket_quota_enabled"
-                       i18n>Enabled
-                </label>
+                       i18n>Enabled</label>
               </div>
             </div>
           </div>
@@ -561,8 +517,7 @@
                        type="checkbox"
                        formControlName="bucket_quota_max_size_unlimited">
                 <label for="bucket_quota_max_size_unlimited"
-                       i18n>Unlimited size
-                </label>
+                       i18n>Unlimited size</label>
               </div>
             </div>
           </div>
@@ -572,8 +527,8 @@
                [ngClass]="{'has-error': userForm.showError('bucket_quota_max_size', frm)}"
                *ngIf="!userForm.getValue('bucket_quota_max_size_unlimited')">
             <label class="control-label col-sm-3"
-                   for="bucket_quota_max_size"
-                   i18n>Max. size
+                   for="bucket_quota_max_size">
+              <ng-container i18n>Max. size</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -584,14 +539,10 @@
                      cdDimlessBinary>
               <span class="help-block"
                     *ngIf="userForm.showError('bucket_quota_max_size', frm, 'required')"
-                    i18n>
-                This field is required.
-              </span>
+                    i18n>This field is required.</span>
               <span class="help-block"
                     *ngIf="userForm.showError('bucket_quota_max_size', frm, 'quotaMaxSize')"
-                    i18n>
-                The value is not valid.
-              </span>
+                    i18n>The value is not valid.</span>
             </div>
           </div>
 
@@ -604,8 +555,7 @@
                        type="checkbox"
                        formControlName="bucket_quota_max_objects_unlimited">
                 <label for="bucket_quota_max_objects_unlimited"
-                       i18n>Unlimited objects
-                </label>
+                       i18n>Unlimited objects</label>
               </div>
             </div>
           </div>
@@ -615,8 +565,8 @@
                [ngClass]="{'has-error': userForm.showError('bucket_quota_max_objects', frm)}"
                *ngIf="!userForm.getValue('bucket_quota_max_objects_unlimited')">
             <label class="control-label col-sm-3"
-                   for="bucket_quota_max_objects"
-                   i18n>Max. objects
+                   for="bucket_quota_max_objects">
+              <ng-container i18n>Max. objects</ng-container>
               <span class="required"></span>
             </label>
             <div class="col-sm-9">
@@ -626,14 +576,10 @@
                      formControlName="bucket_quota_max_objects">
               <span class="help-block"
                     *ngIf="userForm.showError('bucket_quota_max_objects', frm, 'required')"
-                    i18n>
-                This field is required.
-              </span>
+                    i18n>This field is required.</span>
               <span class="help-block"
                     *ngIf="userForm.showError('bucket_quota_max_objects', frm, 'min')"
-                    i18n>
-              The entered value must be >= 0.
-            </span>
+                    i18n>The entered value must be >= 0.</span>
             </div>
           </div>
         </fieldset>
@@ -643,16 +589,13 @@
         <div class="button-group text-right">
           <cd-submit-button type="button"
                             (submitAction)="onSubmit()"
-                            [form]="userForm"
-                            i18n>
-            {editing, select, 1 {Update} other {Add}}
+                            [form]="userForm">
+            <ng-container i18n>{editing, select, 1 {Update} other {Add}}</ng-container>
           </cd-submit-button>
           <button class="btn btn-sm btn-default"
                   type="button"
                   routerLink="/rgw/user"
-                  i18n>
-            Back
-          </button>
+                  i18n>Back</button>
         </div>
       </div>
     </div>

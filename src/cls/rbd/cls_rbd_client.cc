@@ -2170,6 +2170,84 @@ void mirror_image_status_remove_down(librados::ObjectWriteOperation *op) {
   op->exec("rbd", "mirror_image_status_remove_down", bl);
 }
 
+int mirror_image_instance_get(librados::IoCtx *ioctx,
+                              const std::string &global_image_id,
+                              entity_inst_t *instance) {
+  librados::ObjectReadOperation op;
+  mirror_image_instance_get_start(&op, global_image_id);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto iter = out_bl.cbegin();
+  r = mirror_image_instance_get_finish(&iter, instance);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void mirror_image_instance_get_start(librados::ObjectReadOperation *op,
+                                     const std::string &global_image_id) {
+  bufferlist bl;
+  encode(global_image_id, bl);
+  op->exec("rbd", "mirror_image_instance_get", bl);
+}
+
+int mirror_image_instance_get_finish(bufferlist::const_iterator *iter,
+                                     entity_inst_t *instance) {
+  try {
+    decode(*instance, *iter);
+  } catch (const buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
+int mirror_image_instance_list(
+    librados::IoCtx *ioctx, const std::string &start, uint64_t max_return,
+    std::map<std::string, entity_inst_t> *instances) {
+  librados::ObjectReadOperation op;
+  mirror_image_instance_list_start(&op, start, max_return);
+
+  bufferlist out_bl;
+  int r = ioctx->operate(RBD_MIRRORING, &op, &out_bl);
+  if (r < 0) {
+    return r;
+  }
+
+  auto iter = out_bl.cbegin();
+  r = mirror_image_instance_list_finish(&iter, instances);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+void mirror_image_instance_list_start(librados::ObjectReadOperation *op,
+                                      const std::string &start,
+                                      uint64_t max_return) {
+  bufferlist bl;
+  encode(start, bl);
+  encode(max_return, bl);
+  op->exec("rbd", "mirror_image_instance_list", bl);
+}
+
+int mirror_image_instance_list_finish(
+    bufferlist::const_iterator *iter,
+    std::map<std::string, entity_inst_t> *instances) {
+  instances->clear();
+  try {
+    decode(*instances, *iter);
+  } catch (const buffer::error &err) {
+    return -EBADMSG;
+  }
+  return 0;
+}
+
 void mirror_instances_list_start(librados::ObjectReadOperation *op) {
   bufferlist bl;
   op->exec("rbd", "mirror_instances_list", bl);

@@ -193,9 +193,30 @@ ccache can also be used for speeding up all builds in the system. for more
 details refer to the `run modes`_ of the ccache manual. The default settings of
 ``ccache`` can be displayed with ``ccache -s``.
 
-.. note: It is recommended to override the ``max_size``, which is the size of
+.. note:: It is recommended to override the ``max_size``, which is the size of
    cache, defaulting to 10G, to a larger size like 25G or so. Refer to the
    `configuration`_ section of ccache manual.
+
+To further increase the cache hit rate and reduce compile times in a development
+environment, it is possible to set version information and build timestamps to
+fixed values, which avoids frequent rebuilds of binaries that contain this
+information.
+
+This can be achieved by adding the following settings to the ``ccache``
+configuration file ``ccache.conf``::
+
+  sloppiness = time_macros
+  run_second_cpp = true
+
+Now, set the environment variable ``SOURCE_DATE_EPOCH`` to a fixed value (a UNIX
+timestamp) and set ``ENABLE_GIT_VERSION`` to ``OFF`` when running ``cmake``::
+
+  $ export SOURCE_DATE_EPOCH=946684800
+  $ cmake -DWITH_CCACHE=ON -DENABLE_GIT_VERSION=OFF ..
+
+.. note:: Binaries produced with these build options are not suitable for
+  production or debugging purposes, as they do not contain the correct build
+  time and git version information.
 
 .. _`ccache`: https://ccache.samba.org/
 .. _`run modes`: https://ccache.samba.org/manual.html#_run_modes
@@ -1098,7 +1119,7 @@ An individual test from the `ceph-deploy suite`_ can be run by adding the
       --suite ceph-deploy/basic \
       --filter 'ceph-deploy/basic/{distros/ubuntu_16.04.yaml tasks/ceph-deploy.yaml}'
 
-.. note: To run a standalone test like the one in `Reading a standalone
+.. note:: To run a standalone test like the one in `Reading a standalone
    test`_, ``--suite`` alone is sufficient. If you want to run a single
    test from a suite that is defined as a directory tree, ``--suite`` must
    be combined with ``--filter``. This is because the ``--suite`` option

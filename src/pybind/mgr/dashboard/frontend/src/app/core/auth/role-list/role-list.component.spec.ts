@@ -4,9 +4,13 @@ import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import { TabsModule } from 'ngx-bootstrap';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { configureTestBed, PermissionHelper } from '../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  i18nProviders,
+  PermissionHelper
+} from '../../../../testing/unit-test-helper';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '../../../shared/shared.module';
 import { RoleDetailsComponent } from '../role-details/role-details.component';
@@ -25,7 +29,8 @@ describe('RoleListComponent', () => {
       TabsModule.forRoot(),
       RouterTestingModule,
       HttpClientTestingModule
-    ]
+    ],
+    providers: i18nProviders
   });
 
   beforeEach(() => {

@@ -234,14 +234,6 @@ bool KeyServer::get_caps(const EntityName& name, const string& type,
 }
 
 bool KeyServer::get_service_secret(uint32_t service_id,
-	      ExpiringCryptoKey& secret, uint64_t& secret_id) const
-{
-  std::scoped_lock l{lock};
-
-  return data.get_service_secret(cct, service_id, secret, secret_id);
-}
-
-bool KeyServer::get_service_secret(uint32_t service_id,
 		CryptoKey& secret, uint64_t& secret_id) const
 {
   std::scoped_lock l{lock};

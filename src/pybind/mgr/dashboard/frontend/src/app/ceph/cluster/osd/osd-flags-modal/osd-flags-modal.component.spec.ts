@@ -4,9 +4,9 @@ import { ReactiveFormsModule } from '@angular/forms';
 
 import * as _ from 'lodash';
 import { ToastModule } from 'ng2-toastr';
-import { BsModalRef, ModalModule } from 'ngx-bootstrap';
+import { BsModalRef, ModalModule } from 'ngx-bootstrap/modal';
 
-import { configureTestBed } from '../../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { NotificationService } from '../../../../shared/services/notification.service';
 import { SharedModule } from '../../../../shared/shared.module';
@@ -33,7 +33,7 @@ describe('OsdFlagsModalComponent', () => {
       ToastModule.forRoot()
     ],
     declarations: [OsdFlagsModalComponent],
-    providers: [BsModalRef]
+    providers: [BsModalRef, i18nProviders]
   });
 
   beforeEach(() => {

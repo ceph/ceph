@@ -64,69 +64,64 @@ describe('BreadcrumbsComponent', () => {
     expect(component.subscription).toBeDefined();
   });
 
-  it(
-    'should run postProcess and split the breadcrumbs when navigating to hosts',
-    fakeAsync(() => {
+  it('should run postProcess and split the breadcrumbs when navigating to hosts', fakeAsync(() => {
+    fixture.ngZone.run(() => {
       router.navigateByUrl('/hosts');
-      tick();
-      expect(component.crumbs).toEqual([
-        { path: null, text: 'Cluster' },
-        { path: '/hosts', text: 'Hosts' }
-      ]);
-    })
-  );
+    });
+    tick();
+    expect(component.crumbs).toEqual([
+      { path: null, text: 'Cluster' },
+      { path: '/hosts', text: 'Hosts' }
+    ]);
+  }));
 
-  it(
-    'should display empty breadcrumb when navigating to perf_counters from unknown path',
-    fakeAsync(() => {
+  it('should display empty breadcrumb when navigating to perf_counters from unknown path', fakeAsync(() => {
+    fixture.ngZone.run(() => {
       router.navigateByUrl('/perf_counters');
-      tick();
-      expect(component.crumbs).toEqual([
-        { path: null, text: 'Cluster' },
-        { path: null, text: '' },
-        { path: '', text: 'Performance Counters' }
-      ]);
-    })
-  );
+    });
+    tick();
+    expect(component.crumbs).toEqual([
+      { path: null, text: 'Cluster' },
+      { path: null, text: '' },
+      { path: '', text: 'Performance Counters' }
+    ]);
+  }));
 
-  it(
-    'should display Monitor breadcrumb when navigating to perf_counters from Monitors',
-    fakeAsync(() => {
+  it('should display Monitor breadcrumb when navigating to perf_counters from Monitors', fakeAsync(() => {
+    fixture.ngZone.run(() => {
       router.navigate(['/perf_counters'], { queryParams: { fromLink: '/monitor' } });
-      tick();
-      expect(component.crumbs).toEqual([
-        { path: null, text: 'Cluster' },
-        { path: '/monitor', text: 'Monitors' },
-        { path: '', text: 'Performance Counters' }
-      ]);
-    })
-  );
+    });
+    tick();
+    expect(component.crumbs).toEqual([
+      { path: null, text: 'Cluster' },
+      { path: '/monitor', text: 'Monitors' },
+      { path: '', text: 'Performance Counters' }
+    ]);
+  }));
 
-  it(
-    'should display Hosts breadcrumb when navigating to perf_counters from Hosts',
-    fakeAsync(() => {
+  it('should display Hosts breadcrumb when navigating to perf_counters from Hosts', fakeAsync(() => {
+    fixture.ngZone.run(() => {
       router.navigate(['/perf_counters'], { queryParams: { fromLink: '/hosts' } });
-      tick();
-      expect(component.crumbs).toEqual([
-        { path: null, text: 'Cluster' },
-        { path: '/hosts', text: 'Hosts' },
-        { path: '', text: 'Performance Counters' }
-      ]);
-    })
-  );
+    });
+    tick();
+    expect(component.crumbs).toEqual([
+      { path: null, text: 'Cluster' },
+      { path: '/hosts', text: 'Hosts' },
+      { path: '', text: 'Performance Counters' }
+    ]);
+  }));
 
-  it(
-    'should show all 3 breadcrumbs when navigating to RBD Add',
-    fakeAsync(() => {
+  it('should show all 3 breadcrumbs when navigating to RBD Add', fakeAsync(() => {
+    fixture.ngZone.run(() => {
       router.navigateByUrl('/block/rbd/add');
-      tick();
-      expect(component.crumbs).toEqual([
-        { path: null, text: 'Block' },
-        { path: '/block/rbd', text: 'Images' },
-        { path: '/block/rbd/add', text: 'Add' }
-      ]);
-    })
-  );
+    });
+    tick();
+    expect(component.crumbs).toEqual([
+      { path: null, text: 'Block' },
+      { path: '/block/rbd', text: 'Images' },
+      { path: '/block/rbd/add', text: 'Add' }
+    ]);
+  }));
 
   it('should unsubscribe on ngOnDestroy', () => {
     expect(component.subscription.closed).toBeFalsy();

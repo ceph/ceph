@@ -38,7 +38,7 @@ void PyFormatter::open_object_section(const char *name)
 
 void PyFormatter::dump_unsigned(const char *name, uint64_t u)
 {
-  PyObject *p = PyLong_FromLongLong(u);
+  PyObject *p = PyLong_FromUnsignedLong(u);
   ceph_assert(p);
   dump_pyobject(name, p);
 }

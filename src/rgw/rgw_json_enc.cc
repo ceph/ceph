@@ -3,6 +3,7 @@
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_log.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
@@ -381,7 +382,7 @@ static struct rgw_flags_desc op_type_flags[] = {
  { 0, NULL }
 };
 
-static void op_type_to_str(uint32_t mask, char *buf, int len)
+extern void op_type_to_str(uint32_t mask, char *buf, int len)
 {
   return mask_to_str(op_type_flags, mask, buf, len);
 }
@@ -477,7 +478,7 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json("temp_url_keys", temp_url_keys, f);
 
   string user_source_type;
-  switch ((RGWUserSourceType)type) {
+  switch ((RGWIdentityType)type) {
   case TYPE_RGW:
     user_source_type = "rgw";
     break;

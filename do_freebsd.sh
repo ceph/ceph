@@ -14,6 +14,14 @@ fi
 #   To test with a new release Clang, use with cmake:
 #	-D CMAKE_CXX_COMPILER="/usr/local/bin/clang++-devel" \
 #	-D CMAKE_C_COMPILER="/usr/local/bin/clang-devel" \
+COMPILE_FLAGS="-O0 -g"
+if [ `sysctl -n kern.osreldate` -le 1102000 ]; then
+    # We need to use the llvm linker for linking ceph-dencoder
+    COMPILE_FLAGS="$COMPILE_FLAGS -fuse-ld=/usr/bin/ld.lld"
+fi
+CMAKE_CXX_FLAGS_DEBUG="$CXX_FLAGS_DEBUG $COMPILE_FLAGS"
+CMAKE_C_FLAGS_DEBUG="$C_FLAGS_DEBUG $COMPILE_FLAGS"
+
 #
 #   On FreeBSD we need to preinstall all the tools that are required for building
 #   dashboard, because versions fetched are not working on FreeBSD.
@@ -27,8 +35,8 @@ fi
 ./do_cmake.sh "$*" \
 	-D WITH_CCACHE=ON \
 	-D CMAKE_BUILD_TYPE=Debug \
-	-D CMAKE_CXX_FLAGS_DEBUG="$CXX_FLAGS_DEBUG -O0 -g" \
-	-D CMAKE_C_FLAGS_DEBUG="$C_FLAGS_DEBUG -O0 -g" \
+	-D CMAKE_CXX_FLAGS_DEBUG="$CXX_FLAGS_DEBUG" \
+	-D CMAKE_C_FLAGS_DEBUG="$C_FLAGS_DEBUG" \
 	-D ENABLE_GIT_VERSION=OFF \
 	-D WITH_SYSTEM_BOOST=ON \
 	-D WITH_SYSTEM_NPM=ON \
@@ -36,11 +44,10 @@ fi
 	-D WITH_BABELTRACE=OFF \
 	-D WITH_SEASTAR=OFF \
 	-D WITH_BLKID=OFF \
-	-D WITH_BLUESTORE=OFF \
 	-D WITH_FUSE=ON \
 	-D WITH_KRBD=OFF \
 	-D WITH_XFS=OFF \
-	-D WITH_KVS=OFF \
+	-D WITH_KVS=ON \
 	-D CEPH_MAN_DIR=man \
 	-D WITH_LIBCEPHFS=OFF \
 	-D WITH_CEPHFS=OFF \

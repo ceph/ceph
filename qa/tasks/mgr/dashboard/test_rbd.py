@@ -677,6 +677,8 @@ class RbdTest(DashboardTestCase):
         self.remove_trash('rbd', id, 'test_rbd', False)
         self.assertStatus(400)
 
+        time.sleep(1)
+
         image = self.get_trash('rbd', id)
         self.assertIsNotNone(image)
 

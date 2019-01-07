@@ -44,6 +44,10 @@ export class RgwUserService {
     return this.http.get(this.url);
   }
 
+  enumerateEmail() {
+    return this.http.get(`${this.url}/get_emails`);
+  }
+
   get(uid: string) {
     return this.http.get(`${this.url}/${uid}`);
   }
@@ -131,6 +135,20 @@ export class RgwUserService {
     return this.enumerate().pipe(
       mergeMap((resp: string[]) => {
         const index = _.indexOf(resp, uid);
+        return observableOf(-1 !== index);
+      })
+    );
+  }
+
+  // Using @cdEncodeNot would be the preferred way here, but this
+  // causes an error: https://tracker.ceph.com/issues/37505
+  // Use decodeURIComponent as workaround.
+  // emailExists(@cdEncodeNot email: string): Observable<boolean> {
+  emailExists(email: string): Observable<boolean> {
+    email = decodeURIComponent(email);
+    return this.enumerateEmail().pipe(
+      mergeMap((resp: any[]) => {
+        const index = _.indexOf(resp, email);
         return observableOf(-1 !== index);
       })
     );

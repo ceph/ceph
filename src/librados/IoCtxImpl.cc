@@ -327,7 +327,7 @@ void librados::IoCtxImpl::flush_aio_writes_async(AioCompletionImpl *c)
 {
   ldout(client->cct, 20) << "flush_aio_writes_async " << this
 			 << " completion " << c << dendl;
-  Mutex::Locker l(aio_write_list_lock);
+  std::lock_guard l(aio_write_list_lock);
   ceph_tid_t seq = aio_write_seq;
   if (aio_write_list.empty()) {
     ldout(client->cct, 20) << "flush_aio_writes_async no writes. (tid "
@@ -1283,7 +1283,7 @@ int librados::IoCtxImpl::get_inconsistent_objects(const pg_t& pg,
   c->io = this;
 
   ::ObjectOperation op;
-  op.scrub_ls(start_after, max_to_get, objects, interval, nullptr);
+  op.scrub_ls(start_after, max_to_get, objects, interval, &c->rval);
   object_locator_t oloc{poolid, pg.ps()};
   Objecter::Op *o = objecter->prepare_pg_read_op(
     oloc.hash, oloc, op, nullptr, CEPH_OSD_FLAG_PGOP, oncomplete,
@@ -1304,7 +1304,7 @@ int librados::IoCtxImpl::get_inconsistent_snapsets(const pg_t& pg,
   c->io = this;
 
   ::ObjectOperation op;
-  op.scrub_ls(start_after, max_to_get, snapsets, interval, nullptr);
+  op.scrub_ls(start_after, max_to_get, snapsets, interval, &c->rval);
   object_locator_t oloc{poolid, pg.ps()};
   Objecter::Op *o = objecter->prepare_pg_read_op(
     oloc.hash, oloc, op, nullptr, CEPH_OSD_FLAG_PGOP, oncomplete,
@@ -1318,30 +1318,6 @@ int librados::IoCtxImpl::tmap_update(const object_t& oid, bufferlist& cmdbl)
   ::ObjectOperation wr;
   prepare_assert_ops(&wr);
   wr.tmap_update(cmdbl);
-  return operate(oid, &wr, NULL);
-}
-
-int librados::IoCtxImpl::tmap_put(const object_t& oid, bufferlist& bl)
-{
-  ::ObjectOperation wr;
-  prepare_assert_ops(&wr);
-  wr.tmap_put(bl);
-  return operate(oid, &wr, NULL);
-}
-
-int librados::IoCtxImpl::tmap_get(const object_t& oid, bufferlist& bl)
-{
-  ::ObjectOperation rd;
-  prepare_assert_ops(&rd);
-  rd.tmap_get(&bl, NULL);
-  return operate_read(oid, &rd, NULL);
-}
-
-int librados::IoCtxImpl::tmap_to_omap(const object_t& oid, bool nullok)
-{
-  ::ObjectOperation wr;
-  prepare_assert_ops(&wr);
-  wr.tmap_to_omap(nullok);
   return operate(oid, &wr, NULL);
 }
 
@@ -1986,7 +1962,9 @@ librados::IoCtxImpl::C_aio_Complete::C_aio_Complete(AioCompletionImpl *_c)
 void librados::IoCtxImpl::C_aio_Complete::finish(int r)
 {
   c->lock.Lock();
-  c->rval = r;
+  // Leave an existing rval unless r != 0
+  if (r)
+    c->rval = r; // This clears the error set in C_ObjectOperation_scrub_ls::finish()
   c->complete = true;
   c->cond.Signal();
 
@@ -1994,6 +1972,9 @@ void librados::IoCtxImpl::C_aio_Complete::finish(int r)
     if (c->out_buf && !c->blp->is_contiguous()) {
       c->rval = -ERANGE;
     } else {
+      if (c->out_buf && !c->blp->is_provided_buffer(c->out_buf))
+        c->blp->copy(0, c->blp->length(), c->out_buf);
+
       c->rval = c->blp->length();
     }
   }
@@ -2089,7 +2070,7 @@ void librados::IoCtxImpl::application_enable_async(const std::string& app_name,
       << "\"pool\": \"" << get_cached_pool_name() << "\","
       << "\"app\": \"" << app_name << "\"";
   if (force) {
-    cmd << ",\"force\":\"--yes-i-really-mean-it\"";
+    cmd << ",\"yes_i_really_mean_it\": true";
   }
   cmd << "}";
 

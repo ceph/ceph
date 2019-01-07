@@ -61,6 +61,7 @@ private:
 
 public:
   void handle_config(const std::string &k, const std::string &v);
+  void handle_config_notify();
 
   /**
    * Get references to all modules (whether they have loaded and/or
@@ -68,7 +69,7 @@ public:
    */
   std::list<PyModuleRef> get_modules() const
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     std::list<PyModuleRef> modules_out;
     for (const auto &i : modules) {
       modules_out.push_back(i.second);
@@ -117,7 +118,7 @@ public:
    */
   PyModuleRef get_module(const std::string &module_name)
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     return modules.at(module_name);
   }
 

@@ -35,7 +35,7 @@
 #include "MDSMap.h"
 #include "MDSRank.h"
 
-#define CEPH_MDS_PROTOCOL    33 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    34 /* cluster internal */
 
 class AuthAuthorizeHandlerRegistry;
 class Messenger;
@@ -51,7 +51,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   bool         stopping;
 
   SafeTimer    timer;
-
+  std::string gss_ktfile_client{};
 
   mono_time get_starttime() const {
     return starttime;
@@ -166,8 +166,19 @@ protected:
   void _handle_mds_map(const MDSMap &oldmap);
 
 private:
-    mono_time starttime = mono_clock::zero();
-};
+  struct MDSCommand {
+    MDSCommand(std::string_view signature, std::string_view help)
+        : cmdstring(signature), helpstring(help)
+    {}
 
+    std::string cmdstring;
+    std::string helpstring;
+    std::string module = "mds";
+  };
+
+  static const std::vector<MDSCommand>& get_commands();
+
+  mono_time starttime = mono_clock::zero();
+};
 
 #endif

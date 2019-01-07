@@ -35,6 +35,7 @@
 #include "osd/PGLog.h"
 #include "osd/OSD.h"
 #include "osd/PG.h"
+#include "osd/ECUtil.h"
 
 #include "json_spirit/json_spirit_value.h"
 #include "json_spirit/json_spirit_reader.h"
@@ -534,7 +535,7 @@ int do_trim_pg_log(ObjectStore *store, const coll_t &coll,
     ObjectMap::ObjectMapIterator p = store->get_omap_iterator(ch, oid);
     if (!p)
       break;
-    for (p->seek_to_first(); p->valid(); p->next(false)) {
+    for (p->seek_to_first(); p->valid(); p->next()) {
       if (p->key()[0] == '_')
 	continue;
       if (p->key() == "can_rollback_to")
@@ -1892,25 +1893,36 @@ int do_meta(ObjectStore *store, string object, Formatter *formatter, bool debug,
   return 0;
 }
 
+enum rmtype {
+  BOTH,
+  SNAPMAP,
+  NOSNAPMAP
+};
+
 int remove_object(coll_t coll, ghobject_t &ghobj,
   SnapMapper &mapper,
   MapCacher::Transaction<std::string, bufferlist> *_t,
-  ObjectStore::Transaction *t)
+  ObjectStore::Transaction *t,
+  enum rmtype type)
 {
-  int r = mapper.remove_oid(ghobj.hobj, _t);
-  if (r < 0 && r != -ENOENT) {
-    cerr << "remove_oid returned " << cpp_strerror(r) << std::endl;
-    return r;
+  if (type == BOTH || type == SNAPMAP) {
+    int r = mapper.remove_oid(ghobj.hobj, _t);
+    if (r < 0 && r != -ENOENT) {
+      cerr << "remove_oid returned " << cpp_strerror(r) << std::endl;
+      return r;
+    }
   }
 
-  t->remove(coll, ghobj);
+  if (type == BOTH || type == NOSNAPMAP) {
+    t->remove(coll, ghobj);
+  }
   return 0;
 }
 
 int get_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj, SnapSet &ss, bool silent);
 
 int do_remove_object(ObjectStore *store, coll_t coll,
-		     ghobject_t &ghobj, bool all, bool force)
+		     ghobject_t &ghobj, bool all, bool force, enum rmtype type)
 {
   auto ch = store->open_collection(coll);
   spg_t pg;
@@ -1951,24 +1963,24 @@ int do_remove_object(ObjectStore *store, coll_t coll,
   ObjectStore::Transaction t;
   OSDriver::OSTransaction _t(driver.get_transaction(&t));
 
-  cout << "remove " << ghobj << std::endl;
-
-  if (!dry_run) {
-    r = remove_object(coll, ghobj, mapper, &_t, &t);
-    if (r < 0)
-      return r;
-  }
-
   ghobject_t snapobj = ghobj;
   for (vector<snapid_t>::iterator i = ss.snaps.begin() ;
        i != ss.snaps.end() ; ++i) {
     snapobj.hobj.snap = *i;
     cout << "remove " << snapobj << std::endl;
     if (!dry_run) {
-      r = remove_object(coll, snapobj, mapper, &_t, &t);
+      r = remove_object(coll, snapobj, mapper, &_t, &t, type);
       if (r < 0)
         return r;
     }
+  }
+
+  cout << "remove " << ghobj << std::endl;
+
+  if (!dry_run) {
+    r = remove_object(coll, ghobj, mapper, &_t, &t, type);
+    if (r < 0)
+      return r;
   }
 
   if (!dry_run) {
@@ -2404,6 +2416,22 @@ int print_obj_info(ObjectStore *store, coll_t coll, ghobject_t &ghobj, Formatter
       formatter->open_object_section("SnapSet");
       ss.dump(formatter);
       formatter->close_section();
+    }
+  }
+  bufferlist hattr;
+  gr = store->getattr(ch, ghobj, ECUtil::get_hinfo_key(), hattr);
+  if (gr == 0) {
+    ECUtil::HashInfo hinfo;
+    auto hp = hattr.cbegin();
+    try {
+      decode(hinfo, hp);
+      formatter->open_object_section("hinfo");
+      hinfo.dump(formatter);
+      formatter->close_section();
+    } catch (...) {
+      r = -EINVAL;
+      cerr << "Error decoding hinfo on : " << make_pair(coll, ghobj) << ", "
+           << cpp_strerror(r) << std::endl;
     }
   }
   formatter->close_section();
@@ -2983,7 +3011,7 @@ int main(int argc, char **argv)
 {
   string dpath, jpath, pgidstr, op, file, mountpoint, mon_store_path, object;
   string target_data_path, fsid;
-  string objcmd, arg1, arg2, type, format, argnspace, pool;
+  string objcmd, arg1, arg2, type, format, argnspace, pool, rmtypestr;
   boost::optional<std::string> nspace;
   spg_t pgid;
   unsigned epoch = 0;
@@ -3007,7 +3035,7 @@ int main(int argc, char **argv)
      "Pool name, mandatory for apply-layout-settings if --pgid is not specified")
     ("op", po::value<string>(&op),
      "Arg is one of [info, log, remove, mkfs, fsck, repair, fuse, dup, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
-     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, apply-layout-settings, update-mon-db, dump-import, trim-pg-log]")
+     "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, apply-layout-settings, update-mon-db, dump-import, trim-pg-log]")
     ("epoch", po::value<unsigned>(&epoch),
      "epoch# for get-osdmap and get-inc-osdmap, the current epoch in use if not specified")
     ("file", po::value<string>(&file),
@@ -3029,6 +3057,7 @@ int main(int argc, char **argv)
     ("head", "Find head/snapdir when searching for objects by name")
     ("dry-run", "Don't modify the objectstore")
     ("namespace", po::value<string>(&argnspace), "Specify namespace when searching for objects")
+    ("rmtype", po::value<string>(&rmtypestr), "Specify corrupting object removal 'snapmap' or 'nosnapmap' - TESTING USE ONLY")
     ;
 
   po::options_description positional("Positional options");
@@ -3543,6 +3572,7 @@ int main(int argc, char **argv)
   // mentioned in the usage for --pgid.
   if ((op == "info" || op == "log" || op == "remove" || op == "export"
       || op == "export-remove" || op == "mark-complete"
+      || op == "reset-last-complete"
       || op == "trim-pg-log") &&
       pgidstr.length() == 0) {
     cerr << "Must provide pgid" << std::endl;
@@ -3745,7 +3775,7 @@ int main(int argc, char **argv)
   // before complaining about a bad pgid
   if (!vm.count("objcmd") && op != "export" && op != "export-remove" && op != "info" && op != "log" && op != "mark-complete" && op != "trim-pg-log") {
     cerr << "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, "
-      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, dump-import, trim-pg-log)"
+      "get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-import, trim-pg-log)"
 	 << std::endl;
     usage(desc);
     ret = 1;
@@ -3761,7 +3791,12 @@ int main(int argc, char **argv)
       ret = 0;
       if (objcmd == "remove" || objcmd == "removeall") {
         bool all = (objcmd == "removeall");
-        ret = do_remove_object(fs, coll, ghobj, all, force);
+        enum rmtype type = BOTH;
+        if (rmtypestr == "nosnapmap")
+          type = NOSNAPMAP;
+        else if (rmtypestr == "snapmap")
+          type = SNAPMAP;
+        ret = do_remove_object(fs, coll, ghobj, all, force, type);
         goto out;
       } else if (objcmd == "list-attrs") {
         ret = do_list_attrs(fs, coll, ghobj);
@@ -4088,6 +4123,38 @@ int main(int argc, char **argv)
       }
       cout << "Finished trimming pg log" << std::endl;
       goto out;
+    } else if (op == "reset-last-complete") {
+      if (!force) {
+        std::cerr << "WARNING: reset-last-complete is extremely dangerous and almost "
+                  << "certain to lead to permanent data loss unless you know exactly "
+                  << "what you are doing. Pass --force to proceed anyway."
+                  << std::endl;
+        ret = -EINVAL;
+        goto out;
+      }
+      ObjectStore::Transaction tran;
+      ObjectStore::Transaction *t = &tran;
+
+      if (struct_ver < PG::get_compat_struct_v()) {
+        cerr << "Can't reset-last-complete, version mismatch " << (int)struct_ver
+	     << " (pg)  < compat " << (int)PG::get_compat_struct_v() << " (tool)"
+	     << std::endl;
+	ret = 1;
+	goto out;
+      }
+
+      cout << "Reseting last_complete " << std::endl;
+
+      info.last_complete = info.last_update;
+
+      if (!dry_run) {
+	ret = write_info(*t, map_epoch, info, past_intervals);
+	if (ret != 0)
+	  goto out;
+	fs->queue_transaction(ch, std::move(*t));
+      }
+      cout << "Reseting last_complete succeeded" << std::endl;
+   
     } else {
       ceph_assert(!"Should have already checked for valid --op");
     }

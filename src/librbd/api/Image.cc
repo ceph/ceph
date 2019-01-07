@@ -5,6 +5,7 @@
 #include "include/rados/librados.hpp"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/Cond.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/DeepCopyRequest.h"
 #include "librbd/ExclusiveLock.h"
@@ -25,6 +26,39 @@
 namespace librbd {
 namespace api {
 
+namespace {
+
+bool compare_by_pool(const librbd::linked_image_spec_t& lhs,
+                     const librbd::linked_image_spec_t& rhs)
+{
+  if (lhs.pool_id != rhs.pool_id) {
+    return lhs.pool_id < rhs.pool_id;
+  } else if (lhs.pool_namespace != rhs.pool_namespace) {
+    return lhs.pool_namespace < rhs.pool_namespace;
+  }
+  return false;
+}
+
+bool compare(const librbd::linked_image_spec_t& lhs,
+             const librbd::linked_image_spec_t& rhs)
+{
+  if (lhs.pool_name != rhs.pool_name) {
+    return lhs.pool_name < rhs.pool_name;
+  } else if (lhs.pool_id != rhs.pool_id) {
+    return lhs.pool_id < rhs.pool_id;
+  } else if (lhs.pool_namespace != rhs.pool_namespace) {
+    return lhs.pool_namespace < rhs.pool_namespace;
+  } else if (lhs.image_name != rhs.image_name) {
+    return lhs.image_name < rhs.image_name;
+  } else if (lhs.image_id != rhs.image_id) {
+    return lhs.image_id < rhs.image_id;
+  }
+  return false;
+}
+
+
+} // anonymous namespace
+
 template <typename I>
 int Image<I>::get_op_features(I *ictx, uint64_t *op_features) {
   CephContext *cct = ictx->cct;
@@ -41,7 +75,54 @@ int Image<I>::get_op_features(I *ictx, uint64_t *op_features) {
 }
 
 template <typename I>
-int Image<I>::list_images(librados::IoCtx& io_ctx, ImageNameToIds *images) {
+int Image<I>::list_images(librados::IoCtx& io_ctx,
+                          std::vector<image_spec_t> *images) {
+  CephContext *cct = (CephContext *)io_ctx.cct();
+  ldout(cct, 20) << "list " << &io_ctx << dendl;
+
+  int r;
+  images->clear();
+
+  if (io_ctx.get_namespace().empty()) {
+    bufferlist bl;
+    r = io_ctx.read(RBD_DIRECTORY, bl, 0, 0);
+    if (r == -ENOENT) {
+      return 0;
+    } else if (r < 0) {
+      lderr(cct) << "error listing v1 images: " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    // old format images are in a tmap
+    if (bl.length()) {
+      auto p = bl.cbegin();
+      bufferlist header;
+      std::map<std::string, bufferlist> m;
+      decode(header, p);
+      decode(m, p);
+      for (auto& it : m) {
+        images->push_back({.id ="", .name = it.first});
+      }
+    }
+  }
+
+  std::map<std::string, std::string> image_names_to_ids;
+  r = list_images_v2(io_ctx, &image_names_to_ids);
+  if (r < 0) {
+    lderr(cct) << "error listing v2 images: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  for (const auto& img_pair : image_names_to_ids) {
+    images->push_back({.id = img_pair.second,
+                       .name = img_pair.first});
+  }
+
+  return 0;
+}
+
+template <typename I>
+int Image<I>::list_images_v2(librados::IoCtx& io_ctx, ImageNameToIds *images) {
   CephContext *cct = (CephContext *)io_ctx.cct();
   ldout(cct, 20) << "io_ctx=" << &io_ctx << dendl;
 
@@ -51,8 +132,8 @@ int Image<I>::list_images(librados::IoCtx& io_ctx, ImageNameToIds *images) {
   string last_read = "";
   do {
     map<string, string> images_page;
-    r = cls_client::dir_list(&io_ctx, RBD_DIRECTORY,
-      		   last_read, max_read, &images_page);
+    r = cls_client::dir_list(&io_ctx, RBD_DIRECTORY, last_read, max_read,
+                             &images_page);
     if (r < 0 && r != -ENOENT) {
       lderr(cct) << "error listing image in directory: "
                  << cpp_strerror(r) << dendl;
@@ -74,22 +155,102 @@ int Image<I>::list_images(librados::IoCtx& io_ctx, ImageNameToIds *images) {
 }
 
 template <typename I>
+int Image<I>::get_parent(I *ictx,
+                         librbd::linked_image_spec_t *parent_image,
+                         librbd::snap_spec_t *parent_snap) {
+  auto cct = ictx->cct;
+  ldout(cct, 20) << "image_ctx=" << ictx << dendl;
+
+  int r = ictx->state->refresh_if_required();
+  if (r < 0) {
+    return r;
+  }
+
+  RWLock::RLocker snap_locker(ictx->snap_lock);
+  RWLock::RLocker parent_locker(ictx->parent_lock);
+  if (ictx->parent == nullptr) {
+    return -ENOENT;
+  }
+
+  cls::rbd::ParentImageSpec parent_spec;
+  if (ictx->snap_id == CEPH_NOSNAP) {
+    parent_spec = ictx->parent_md.spec;
+  } else {
+    r = ictx->get_parent_spec(ictx->snap_id, &parent_spec);
+    if (r < 0) {
+      lderr(cct) << "error looking up snapshot id " << ictx->snap_id << dendl;
+      return r;
+    }
+    if (parent_spec.pool_id == -1) {
+      return -ENOENT;
+    }
+  }
+
+  parent_image->pool_id = parent_spec.pool_id;
+  parent_image->pool_name = ictx->parent->md_ctx.get_pool_name();
+  parent_image->pool_namespace = ictx->parent->md_ctx.get_namespace();
+
+  RWLock::RLocker parent_snap_locker(ictx->parent->snap_lock);
+  parent_snap->id = parent_spec.snap_id;
+  parent_snap->namespace_type = RBD_SNAP_NAMESPACE_TYPE_USER;
+  if (parent_spec.snap_id != CEPH_NOSNAP) {
+    auto snap_info = ictx->parent->get_snap_info(parent_spec.snap_id);
+    if (snap_info == nullptr) {
+      lderr(cct) << "error finding parent snap name: " << cpp_strerror(r)
+                 << dendl;
+      return -ENOENT;
+    }
+
+    parent_snap->namespace_type = static_cast<snap_namespace_type_t>(
+      cls::rbd::get_snap_namespace_type(snap_info->snap_namespace));
+    parent_snap->name = snap_info->name;
+  }
+
+  parent_image->image_id = ictx->parent->id;
+  parent_image->image_name = ictx->parent->name;
+  parent_image->trash = true;
+
+  librbd::trash_image_info_t trash_info;
+  r = Trash<I>::get(ictx->parent->md_ctx, ictx->parent->id,
+                    &trash_info);
+  if (r == -ENOENT || r == -EOPNOTSUPP) {
+    parent_image->trash = false;
+  } else if (r < 0) {
+    lderr(cct) << "error looking up trash status: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
+int Image<I>::list_children(I *ictx,
+                            std::vector<librbd::linked_image_spec_t> *images) {
+  RWLock::RLocker l(ictx->snap_lock);
+  cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
+                                        ictx->md_ctx.get_namespace(),
+                                        ictx->id, ictx->snap_id};
+  return list_children(ictx, parent_spec, images);
+}
+
+template <typename I>
 int Image<I>::list_children(I *ictx,
                             const cls::rbd::ParentImageSpec &parent_spec,
-                            PoolImageIds *pool_image_ids)
-{
+                            std::vector<librbd::linked_image_spec_t> *images) {
   CephContext *cct = ictx->cct;
+  ldout(cct, 20) << "ictx=" << ictx << dendl;
 
   // no children for non-layered or old format image
   if (!ictx->test_features(RBD_FEATURE_LAYERING, ictx->snap_lock)) {
     return 0;
   }
 
-  pool_image_ids->clear();
+  images->clear();
 
   librados::Rados rados(ictx->md_ctx);
 
-  // search all pools for clone v1 children depending on this snapshot
+  // search all pools for clone v1 children dependent on this snapshot
   std::list<std::pair<int64_t, std::string> > pools;
   int r = rados.pool_list2(pools);
   if (r < 0) {
@@ -97,40 +258,43 @@ int Image<I>::list_children(I *ictx,
     return r;
   }
 
-  for (auto it = pools.begin(); it != pools.end(); ++it) {
+  for (auto& it : pools) {
     int64_t base_tier;
-    r = rados.pool_get_base_tier(it->first, &base_tier);
+    r = rados.pool_get_base_tier(it.first, &base_tier);
     if (r == -ENOENT) {
-      ldout(cct, 1) << "pool " << it->second << " no longer exists" << dendl;
+      ldout(cct, 1) << "pool " << it.second << " no longer exists" << dendl;
       continue;
     } else if (r < 0) {
-      lderr(cct) << "error retrieving base tier for pool " << it->second
+      lderr(cct) << "error retrieving base tier for pool " << it.second
                  << dendl;
       return r;
     }
-    if (it->first != base_tier) {
+    if (it.first != base_tier) {
       // pool is a cache; skip it
       continue;
     }
 
     IoCtx ioctx;
-    r = util::create_ioctx(ictx->md_ctx, "child image", it->first, {}, &ioctx);
+    r = util::create_ioctx(ictx->md_ctx, "child image", it.first, {}, &ioctx);
     if (r == -ENOENT) {
       continue;
     } else if (r < 0) {
       return r;
     }
 
-    set<string> image_ids;
+    std::set<std::string> image_ids;
     r = cls_client::get_children(&ioctx, RBD_CHILDREN, parent_spec,
                                  image_ids);
     if (r < 0 && r != -ENOENT) {
-      lderr(cct) << "error reading list of children from pool " << it->second
+      lderr(cct) << "error reading list of children from pool " << it.second
                  << dendl;
       return r;
     }
-    pool_image_ids->insert({
-      {it->first, it->second, ictx->md_ctx.get_namespace()}, image_ids});
+
+    for (auto& image_id : image_ids) {
+      images->push_back({
+        it.first, "", ictx->md_ctx.get_namespace(), image_id, "", false});
+    }
   }
 
   // retrieve clone v2 children attached to this snapshot
@@ -151,18 +315,70 @@ int Image<I>::list_children(I *ictx,
   }
 
   for (auto& child_image : child_images) {
-    IoCtx io_ctx;
-    r = util::create_ioctx(ictx->md_ctx, "child image", child_image.pool_id,
-                           child_image.pool_namespace, &io_ctx);
-    if (r == -ENOENT) {
-      continue;
-    }
-
-    PoolSpec pool_spec = {child_image.pool_id, io_ctx.get_pool_name(),
-                          child_image.pool_namespace};
-    (*pool_image_ids)[pool_spec].insert(child_image.image_id);
+    images->push_back({
+      child_image.pool_id, "", child_image.pool_namespace,
+      child_image.image_id, "", false});
   }
 
+  // batch lookups by pool + namespace
+  std::sort(images->begin(), images->end(), compare_by_pool);
+
+  int64_t child_pool_id = -1;
+  librados::IoCtx child_io_ctx;
+  std::map<std::string, std::pair<std::string, bool>> child_image_id_to_info;
+  for (auto& image : *images) {
+    if (child_pool_id == -1 || child_pool_id != image.pool_id ||
+        child_io_ctx.get_namespace() != image.pool_namespace) {
+      r = util::create_ioctx(ictx->md_ctx, "child image", image.pool_id,
+                             image.pool_namespace, &child_io_ctx);
+      if (r < 0) {
+        return r;
+      }
+      child_pool_id = image.pool_id;
+
+      child_image_id_to_info.clear();
+
+      std::map<std::string, std::string> image_names_to_ids;
+      r = list_images_v2(child_io_ctx, &image_names_to_ids);
+      if (r < 0) {
+        lderr(cct) << "error listing v2 images: " << cpp_strerror(r) << dendl;
+        return r;
+      }
+
+      for (auto& [name, id] : image_names_to_ids) {
+        child_image_id_to_info.insert({id, {name, false}});
+      }
+
+      std::vector<librbd::trash_image_info_t> trash_images;
+      r = Trash<I>::list(child_io_ctx, trash_images);
+      if (r < 0 && r != -EOPNOTSUPP) {
+        lderr(cct) << "error listing trash images: " << cpp_strerror(r)
+                   << dendl;
+        return r;
+      }
+
+      for (auto& it : trash_images) {
+        child_image_id_to_info[it.id] = {it.name, true};
+      }
+    }
+
+    auto it = child_image_id_to_info.find(image.image_id);
+    if (it == child_image_id_to_info.end()) {
+          lderr(cct) << "error looking up name for image id "
+                     << image.image_id << " in pool "
+                     << child_io_ctx.get_pool_name()
+                     << (image.pool_namespace.empty() ?
+                          "" : "/" + image.pool_namespace) << dendl;
+      return -ENOENT;
+    }
+
+    image.pool_name = child_io_ctx.get_pool_name();
+    image.image_name = it->second.first;
+    image.trash = it->second.second;
+  }
+
+  // final sort by pool + image names
+  std::sort(images->begin(), images->end(), compare);
   return 0;
 }
 

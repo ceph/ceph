@@ -28,11 +28,10 @@
 
 #include "DaemonState.h"
 #include "ClusterState.h"
-#include "OSDPerfMetricQuery.h"
+#include "OSDPerfMetricTypes.h"
 
 class health_check_map_t;
 class DaemonServer;
-struct OSDPerfMetricQuery;
 
 class ActivePyModules
 {
@@ -93,8 +92,11 @@ public:
       const std::string &svc_id,
       const std::string &path) const;
 
-  OSDPerfMetricQueryID add_osd_perf_query(const OSDPerfMetricQuery &query);
+  OSDPerfMetricQueryID add_osd_perf_query(
+      const OSDPerfMetricQuery &query,
+      const std::optional<OSDPerfMetricLimit> &limit);
   void remove_osd_perf_query(OSDPerfMetricQueryID query_id);
+  PyObject *get_osd_perf_counters(OSDPerfMetricQueryID query_id);
 
   bool get_store(const std::string &module_name,
       const std::string &key, std::string *val) const;
@@ -111,6 +113,8 @@ public:
   void set_health_checks(const std::string& module_name,
 			 health_check_map_t&& checks);
   void get_health_checks(health_check_map_t *checks);
+
+  void config_notify();
 
   void set_uri(const std::string& module_name, const std::string &uri);
 

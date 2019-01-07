@@ -79,6 +79,8 @@ enum {
   l_c_reply,
   l_c_lat,
   l_c_wrlat,
+  l_c_read,
+  l_c_fsync,
   l_c_last,
 };
 
@@ -302,6 +304,10 @@ public:
   int start_reclaim(const std::string& uuid, unsigned flags,
 		    const std::string& fs_name);
   void finish_reclaim();
+
+  fs_cluster_id_t get_fs_cid() {
+    return fscid;
+  }
 
   int mds_command(
     const std::string &mds_spec,
@@ -822,6 +828,7 @@ protected:
 
   // fake inode number for 32-bits ino_t
   void _assign_faked_ino(Inode *in);
+  void _assign_faked_root(Inode *in);
   void _release_faked_ino(Inode *in);
   void _reset_faked_inos();
   vinodeno_t _map_faked_ino(ino_t ino);
@@ -1162,6 +1169,10 @@ private:
   size_t _vxattrcb_dir_rsubdirs(Inode *in, char *val, size_t size);
   size_t _vxattrcb_dir_rbytes(Inode *in, char *val, size_t size);
   size_t _vxattrcb_dir_rctime(Inode *in, char *val, size_t size);
+
+  bool _vxattrcb_dir_pin_exists(Inode *in);
+  size_t _vxattrcb_dir_pin(Inode *in, char *val, size_t size);
+
   size_t _vxattrs_calcu_name_size(const VXattr *vxattrs);
 
   static const VXattr *_get_vxattrs(Inode *in);
@@ -1238,6 +1249,9 @@ private:
 
   bool _use_faked_inos;
 
+  // Cluster fsid
+  fs_cluster_id_t fscid;
+
   // file handles, etc.
   interval_set<int> free_fd_set;  // unused fds
   ceph::unordered_map<int, Fh*> fd_map;
@@ -1253,6 +1267,7 @@ private:
   ceph::unordered_map<ino_t, vinodeno_t> faked_ino_map;
   interval_set<ino_t> free_faked_inos;
   ino_t last_used_faked_ino;
+  ino_t last_used_faked_root;
 
   // When an MDS has sent us a REJECT, remember that and don't
   // contact it again.  Remember which inst rejected us, so that

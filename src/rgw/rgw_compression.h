@@ -7,6 +7,7 @@
 #include <vector>
 
 #include "compressor/Compressor.h"
+#include "rgw_putobj.h"
 #include "rgw_op.h"
 
 class RGWGetObj_Decompress : public RGWGetObj_Filter
@@ -31,7 +32,7 @@ public:
 
 };
 
-class RGWPutObj_Compress : public RGWPutObj_Filter
+class RGWPutObj_Compress : public rgw::putobj::Pipe
 {
   CephContext* cct;
   bool compressed{false};
@@ -39,10 +40,10 @@ class RGWPutObj_Compress : public RGWPutObj_Filter
   std::vector<compression_block> blocks;
 public:
   RGWPutObj_Compress(CephContext* cct_, CompressorRef compressor,
-                     RGWPutObjDataProcessor* next)
-    : RGWPutObj_Filter(next), cct(cct_), compressor(compressor) {}
-  ~RGWPutObj_Compress() override{}
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override;
+                     rgw::putobj::DataProcessor *next)
+    : Pipe(next), cct(cct_), compressor(compressor) {}
+
+  int process(bufferlist&& data, uint64_t logical_offset) override;
 
   bool is_compressed() { return compressed; }
   vector<compression_block>& get_compression_blocks() { return blocks; }

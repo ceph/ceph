@@ -48,8 +48,8 @@ class FlagSetHandler : public FileSystemCommandHandler
     string flag_val;
     cmd_getval(g_ceph_context, cmdmap, "val", flag_val);
 
-    string confirm;
-    cmd_getval(g_ceph_context, cmdmap, "confirm", confirm);
+    bool sure = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", sure);
 
     if (flag_name == "enable_multiple") {
       bool flag_bool = false;
@@ -64,7 +64,7 @@ class FlagSetHandler : public FileSystemCommandHandler
         ss << "Multiple-filesystems are forbidden until all mons are updated";
         return -EINVAL;
       }
-      if (confirm != "--yes-i-really-mean-it") {
+      if (!sure) {
 	ss << EXPERIMENTAL_WARNING;
       }
       fsmap.set_enable_multiple(flag_bool);
@@ -139,9 +139,9 @@ class FsNewHandler : public FileSystemCommandHandler
       }
     }
 
-    string force_str;
-    cmd_getval(g_ceph_context,cmdmap, "force", force_str);
-    bool force = (force_str == "--force");
+    bool force = false;
+    cmd_getval(g_ceph_context,cmdmap, "force", force);
+
     const pool_stat_t *stat = mon->mgrstatmon()->get_pool_stat(metadata);
     if (stat) {
       int64_t metadata_num_objects = stat->stats.sum.num_objects;
@@ -162,11 +162,14 @@ class FsNewHandler : public FileSystemCommandHandler
 
     for (auto fs : fsmap.get_filesystems()) {
       const std::vector<int64_t> &data_pools = fs->mds_map.get_data_pools();
-      string sure;
+
+      bool sure = false;
+      cmd_getval(g_ceph_context, cmdmap,
+                 "allow_dangerous_metadata_overlay", sure);
+
       if ((std::find(data_pools.begin(), data_pools.end(), data) != data_pools.end()
 	   || fs->mds_map.get_metadata_pool() == metadata)
-	  && ((!cmd_getval(g_ceph_context, cmdmap, "sure", sure)
-	       || sure != "--allow-dangerous-metadata-overlay"))) {
+	  && !sure) {
 	ss << "Filesystem '" << fs_name
 	   << "' is already using one of the specified RADOS pools. This should ONLY be done in emergencies and after careful reading of the documentation. Pass --allow-dangerous-metadata-overlay to permit this.";
 	return -EEXIST;
@@ -303,9 +306,9 @@ public:
       }
 
       if (enable_inline) {
-	string confirm;
-	if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
-	    confirm != "--yes-i-really-mean-it") {
+        bool confirm = false;
+        cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", confirm);
+	if (!confirm) {
 	  ss << EXPERIMENTAL_WARNING;
 	  return -EPERM;
 	}
@@ -693,9 +696,9 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
     }
 
     // Check for confirmation flag
-    string sure;
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
-    if (sure != "--yes-i-really-mean-it") {
+    bool sure = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
       ss << "this is a DESTRUCTIVE operation and will make data in your filesystem permanently" \
             " inaccessible.  Add --yes-i-really-mean-it if you are sure you wish to continue.";
       return -EPERM;
@@ -755,9 +758,9 @@ class ResetFilesystemHandler : public FileSystemCommandHandler
     }
 
     // Check for confirmation flag
-    string sure;
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
-    if (sure != "--yes-i-really-mean-it") {
+    bool sure = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
       ss << "this is a potentially destructive operation, only for use by experts in disaster recovery.  "
         "Add --yes-i-really-mean-it if you are sure you wish to continue.";
       return -EPERM;

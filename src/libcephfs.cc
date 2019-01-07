@@ -538,6 +538,13 @@ extern "C" struct UserPerm *ceph_mount_perms(struct ceph_mount_info *cmount)
   return &cmount->default_perms;
 }
 
+extern "C" int64_t ceph_get_fs_cid(struct ceph_mount_info *cmount)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->get_fs_cid();
+}
+
 extern "C" int ceph_mount_perms_set(struct ceph_mount_info *cmount,
 				    struct UserPerm *perms)
 {

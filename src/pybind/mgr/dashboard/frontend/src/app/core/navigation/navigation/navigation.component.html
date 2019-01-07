@@ -12,8 +12,7 @@
             class="navbar-toggle collapsed"
             (click)="isCollapsed = !isCollapsed">
       <span i18n
-            class="sr-only">Toggle navigation
-      </span>
+            class="sr-only">Toggle navigation</span>
       <span class="icon-bar"></span>
       <span class="icon-bar"></span>
       <span class="icon-bar"></span>
@@ -29,11 +28,10 @@
       <!-- Dashboard -->
       <li routerLinkActive="active"
           class="tc_menuitem tc_menuitem_dashboard">
-        <a i18n
-           routerLink="/dashboard">
+        <a routerLink="/dashboard">
           <i class="fa fa-heartbeat fa-fw"
              [ngStyle]="summaryData?.health_status | healthColor"></i>
-          <span>Dashboard</span>
+          <span i18n>Dashboard</span>
         </a>
       </li>
 
@@ -55,32 +53,42 @@
               *ngIf="permissions.hosts.read">
             <a i18n
                class="dropdown-item"
-               routerLink="/hosts">Hosts
-            </a>
+               routerLink="/hosts">Hosts</a>
           </li>
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_cluster_monitor"
               *ngIf="permissions.monitor.read">
             <a i18n
                class="dropdown-item"
-               routerLink="/monitor/"> Monitors
-            </a>
+               routerLink="/monitor/">Monitors</a>
           </li>
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_hosts"
               *ngIf="permissions.osd.read">
             <a i18n
                class="dropdown-item"
-               routerLink="/osd">OSDs
-            </a>
+               routerLink="/osd">OSDs</a>
           </li>
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_configuration"
               *ngIf="permissions.configOpt.read">
             <a i18n
                class="dropdown-item"
-               routerLink="/configuration">Configuration
-            </a>
+               routerLink="/configuration">Configuration</a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_crush"
+              *ngIf="permissions.hosts.read && permissions.osd.read">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/crush-map">CRUSH map</a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_log"
+              *ngIf="permissions.log.read">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/logs">Logs</a>
           </li>
         </ul>
       </li>
@@ -90,8 +98,7 @@
           class="tc_menuitem tc_menuitem_pool"
           *ngIf="permissions.pool.read">
         <a i18n
-           routerLink="/pool">Pools
-        </a>
+           routerLink="/pool">Pools</a>
       </li>
 
       <!-- Block -->
@@ -118,9 +125,9 @@
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_block_mirroring"
               *ngIf="permissions.rbdMirroring.read">
-            <a i18n
-               class="dropdown-item"
-               routerLink="/block/mirroring"> Mirroring
+            <a class="dropdown-item"
+               routerLink="/block/mirroring">
+              <ng-container i18n>Mirroring</ng-container>
               <small *ngIf="summaryData?.rbd_mirroring?.warnings !== 0"
                      class="label label-warning">{{ summaryData?.rbd_mirroring?.warnings }}</small>
               <small *ngIf="summaryData?.rbd_mirroring?.errors !== 0"
@@ -143,8 +150,7 @@
           class="tc_menuitem tc_menuitem_cephs"
           *ngIf="permissions.cephfs.read">
         <a i18n
-           routerLink="/cephfs">Filesystems
-        </a>
+           routerLink="/cephfs">Filesystems</a>
       </li>
 
       <!-- Object Gateway -->
@@ -164,22 +170,19 @@
               class="tc_submenuitem tc_submenuitem_rgw_daemons">
             <a i18n
                class="dropdown-item"
-               routerLink="/rgw/daemon">Daemons
-            </a>
+               routerLink="/rgw/daemon">Daemons</a>
           </li>
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_rgw_users">
             <a i18n
                class="dropdown-item"
-               routerLink="/rgw/user">Users
-            </a>
+               routerLink="/rgw/user">Users</a>
           </li>
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_rgw_buckets">
             <a i18n
                class="dropdown-item"
-               routerLink="/rgw/bucket">Buckets
-            </a>
+               routerLink="/rgw/bucket">Buckets</a>
           </li>
         </ul>
       </li>
@@ -187,6 +190,9 @@
     <!-- /.navbar-primary -->
 
     <ul class="nav navbar-nav navbar-utility">
+      <li>
+        <cd-language-selector class="oa-navbar"></cd-language-selector>
+      </li>
       <li>
         <cd-task-manager class="oa-navbar"></cd-task-manager>
       </li>

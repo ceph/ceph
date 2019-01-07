@@ -66,7 +66,6 @@ set(common_srcs
   histogram.cc
   hobject.cc
   hostname.cc
-  io_priority.cc
   ipaddr.cc
   iso_8601.cc
   linux_version.c
@@ -77,6 +76,7 @@ set(common_srcs
   options.cc
   page.cc
   perf_counters.cc
+  perf_counters_collection.cc
   perf_histogram.cc
   pick_address.cc
   reverse.c

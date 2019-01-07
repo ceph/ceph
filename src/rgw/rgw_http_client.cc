@@ -52,6 +52,9 @@ struct rgw_http_req_data : public RefCountedObject {
 
   int wait() {
     Mutex::Locker l(lock);
+    if (done) {
+      return ret;
+    }
     cond.Wait(lock);
     return ret;
   }
@@ -527,11 +530,7 @@ bool RGWHTTPClient::is_done()
  */
 int RGWHTTPClient::wait()
 {
-  if (!req_data->is_done()) {
-    return req_data->wait();
-  }
-
-  return req_data->ret;
+  return req_data->wait();
 }
 
 void RGWHTTPClient::cancel()
@@ -1155,6 +1154,7 @@ void *RGWHTTPManager::reqs_thread_entry()
               << cct->_conf->rgw_curl_low_speed_limit << " Bytes per second during " << cct->_conf->rgw_curl_low_speed_time << " seconds." << dendl;
           default:
             dout(20) << "ERROR: msg->data.result=" << result << " req_data->id=" << id << " http_status=" << http_status << dendl;
+            dout(20) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << dendl;
 	    break;
         }
       }

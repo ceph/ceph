@@ -1,12 +1,16 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import { TabsModule } from 'ngx-bootstrap';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { PermissionHelper } from '../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  i18nProviders,
+  PermissionHelper
+} from '../../../../testing/unit-test-helper';
 import { TableActionsComponent } from '../../../shared/datatable/table-actions/table-actions.component';
 import { SharedModule } from '../../../shared/shared.module';
 import { UserTabsComponent } from '../user-tabs/user-tabs.component';
@@ -16,18 +20,17 @@ describe('UserListComponent', () => {
   let component: UserListComponent;
   let fixture: ComponentFixture<UserListComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        ToastModule.forRoot(),
-        TabsModule.forRoot(),
-        RouterTestingModule,
-        HttpClientTestingModule
-      ],
-      declarations: [UserListComponent, UserTabsComponent]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    imports: [
+      SharedModule,
+      ToastModule.forRoot(),
+      TabsModule.forRoot(),
+      RouterTestingModule,
+      HttpClientTestingModule
+    ],
+    declarations: [UserListComponent, UserTabsComponent],
+    providers: i18nProviders
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(UserListComponent);

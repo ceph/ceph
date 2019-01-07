@@ -112,8 +112,8 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
 
   ssize_t send(bufferlist &bl, bool more) override {
     size_t sent_bytes = 0;
-    std::list<bufferptr>::const_iterator pb = bl.buffers().begin();
-    uint64_t left_pbrs = bl.buffers().size();
+    auto pb = std::cbegin(bl.buffers());
+    uint64_t left_pbrs = std::size(bl.buffers());
     while (left_pbrs) {
       struct msghdr msg;
       struct iovec msgvec[IOV_MAX];
@@ -170,8 +170,9 @@ class PosixServerSocketImpl : public ServerSocketImpl {
   int _fd;
 
  public:
-  explicit PosixServerSocketImpl(NetHandler &h, int f, int type)
-    : ServerSocketImpl(type),
+  explicit PosixServerSocketImpl(NetHandler &h, int f,
+				 const entity_addr_t& listen_addr, unsigned slot)
+    : ServerSocketImpl(listen_addr.get_type(), slot),
       handler(h), _fd(f) {}
   int accept(ConnectedSocket *sock, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
   void abort_accept() override {
@@ -218,7 +219,9 @@ void PosixWorker::initialize()
 {
 }
 
-int PosixWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
+int PosixWorker::listen(entity_addr_t &sa,
+			unsigned addr_slot,
+			const SocketOptions &opt,
                         ServerSocket *sock)
 {
   int listen_sd = net.create_socket(sa.get_family(), true);
@@ -257,7 +260,7 @@ int PosixWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
 
   *sock = ServerSocket(
           std::unique_ptr<PosixServerSocketImpl>(
-	    new PosixServerSocketImpl(net, listen_sd, sa.get_type())));
+	    new PosixServerSocketImpl(net, listen_sd, sa, addr_slot)));
   return 0;
 }
 

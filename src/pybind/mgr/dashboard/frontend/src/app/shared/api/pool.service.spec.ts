@@ -29,7 +29,7 @@ describe('PoolService', () => {
 
   it('should call getList', () => {
     service.getList().subscribe();
-    const req = httpTesting.expectOne(apiPath);
+    const req = httpTesting.expectOne(`${apiPath}?stats=true`);
     expect(req.request.method).toBe('GET');
   });
 
@@ -60,29 +60,23 @@ describe('PoolService', () => {
     expect(req.request.method).toBe('DELETE');
   });
 
-  it(
-    'should call list without parameter',
-    fakeAsync(() => {
-      let result;
-      service.list().then((resp) => (result = resp));
-      const req = httpTesting.expectOne(`${apiPath}?attrs=`);
-      expect(req.request.method).toBe('GET');
-      req.flush(['foo', 'bar']);
-      tick();
-      expect(result).toEqual(['foo', 'bar']);
-    })
-  );
+  it('should call list without parameter', fakeAsync(() => {
+    let result;
+    service.list().then((resp) => (result = resp));
+    const req = httpTesting.expectOne(`${apiPath}?attrs=`);
+    expect(req.request.method).toBe('GET');
+    req.flush(['foo', 'bar']);
+    tick();
+    expect(result).toEqual(['foo', 'bar']);
+  }));
 
-  it(
-    'should call list with a list',
-    fakeAsync(() => {
-      let result;
-      service.list(['foo']).then((resp) => (result = resp));
-      const req = httpTesting.expectOne(`${apiPath}?attrs=foo`);
-      expect(req.request.method).toBe('GET');
-      req.flush(['foo', 'bar']);
-      tick();
-      expect(result).toEqual(['foo', 'bar']);
-    })
-  );
+  it('should call list with a list', fakeAsync(() => {
+    let result;
+    service.list(['foo']).then((resp) => (result = resp));
+    const req = httpTesting.expectOne(`${apiPath}?attrs=foo`);
+    expect(req.request.method).toBe('GET');
+    req.flush(['foo', 'bar']);
+    tick();
+    expect(result).toEqual(['foo', 'bar']);
+  }));
 });

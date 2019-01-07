@@ -3,7 +3,7 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { TestBed } from '@angular/core/testing';
 import { Router } from '@angular/router';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { AppModule } from '../../app.module';
 import { ApiInterceptorService } from './api-interceptor.service';
 import { NotificationService } from './notification.service';
@@ -45,7 +45,7 @@ describe('ApiInterceptorService', () => {
 
   configureTestBed({
     imports: [AppModule, HttpClientTestingModule],
-    providers: [NotificationService]
+    providers: [NotificationService, i18nProviders]
   });
 
   beforeEach(() => {

@@ -6,7 +6,7 @@ import { ToastModule } from 'ng2-toastr';
 import { of } from 'rxjs';
 
 import { By } from '@angular/platform-browser';
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { ExecutingTask } from '../../../shared/models/executing-task';
@@ -24,7 +24,7 @@ describe('RbdTrashListComponent', () => {
   configureTestBed({
     declarations: [RbdTrashListComponent],
     imports: [SharedModule, HttpClientTestingModule, RouterTestingModule, ToastModule.forRoot()],
-    providers: [TaskListService, RbdService]
+    providers: [TaskListService, i18nProviders]
   });
 
   beforeEach(() => {

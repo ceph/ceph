@@ -106,7 +106,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
 
   /* Need to get user info of bucket owner. */
   RGWBucketInfo bucket_info;
-  int ret = store->get_bucket_info(*static_cast<RGWObjectCtx *>(s->obj_ctx),
+  int ret = store->get_bucket_info(*s->sysobj_ctx,
                                    bucket_tenant, bucket_name,
                                    bucket_info, nullptr);
   if (ret < 0) {
@@ -118,6 +118,19 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
 
   if (rgw_get_user_info_by_uid(store, bucket_info.owner, owner_info) < 0) {
     throw -EPERM;
+  }
+}
+
+std::string TempURLEngine::convert_from_iso8601(std::string expires) const
+{
+  /* Swift's TempURL allows clients to send the expiration as ISO8601-
+   * compatible strings. Though, only plain UNIX timestamp are taken
+   * for the HMAC calculations. We need to make the conversion. */
+  struct tm date_t;
+  if (!parse_iso8601(expires.c_str(), &date_t, nullptr, true)) {
+    return std::move(expires);
+  } else {
+    return std::to_string(internal_timegm(&date_t));
   }
 }
 
@@ -254,7 +267,8 @@ TempURLEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* cons
    * never returns nullptr. If the requested parameter is absent, we will
    * get the empty string. */
   const std::string& temp_url_sig = s->info.args.get("temp_url_sig");
-  const std::string& temp_url_expires = s->info.args.get("temp_url_expires");
+  const std::string& temp_url_expires = \
+    convert_from_iso8601(s->info.args.get("temp_url_expires"));
 
   if (temp_url_sig.empty() || temp_url_expires.empty()) {
     return result_t::deny();
@@ -420,7 +434,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   auto apl = apl_factory->create_apl_local(cct, s, tmp_uinfo,
                                            extract_swift_subuser(swift_user),
-                                           boost::none, boost::none);
+                                           boost::none);
   return result_t::grant(std::move(apl));
 }
 
@@ -571,7 +585,7 @@ SignedTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   auto apl = apl_factory->create_apl_local(cct, s, user_info,
                                            extract_swift_subuser(swift_user),
-                                           boost::none, boost::none);
+                                           boost::none);
   return result_t::grant(std::move(apl));
 }
 

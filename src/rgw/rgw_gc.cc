@@ -128,6 +128,7 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
 }
 
 class RGWGCIOManager {
+  const DoutPrefixProvider* dpp;
   CephContext *cct;
   RGWGC *gc;
 
@@ -150,7 +151,8 @@ class RGWGCIOManager {
   size_t max_aio{MAX_AIO_DEFAULT};
 
 public:
-  RGWGCIOManager(CephContext *_cct, RGWGC *_gc) : cct(_cct),
+  RGWGCIOManager(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWGC *_gc) : dpp(_dpp),
+                                                  cct(_cct),
                                                   gc(_gc),
                                                   remove_tags(cct->_conf->rgw_gc_max_objs) {
     max_aio = cct->_conf->rgw_gc_max_concurrent_io;
@@ -194,13 +196,13 @@ public:
 
     if (io.type == IO::IndexIO) {
       if (ret < 0) {
-        ldout(cct, 0) << "WARNING: gc cleanup of tags on gc shard index=" << io.index << " returned error, ret=" << ret << dendl;
+        ldpp_dout(dpp, 0) << "WARNING: gc cleanup of tags on gc shard index=" << io.index << " returned error, ret=" << ret << dendl;
       }
       goto done;
     }
 
     if (ret < 0) {
-      ldout(cct, 0) << "WARNING: could not remove oid=" << io.oid << ", ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "WARNING: could not remove oid=" << io.oid << ", ret=" << ret << dendl;
       goto done;
     }
 
@@ -239,7 +241,7 @@ done:
       /* we already cleared list of tags, this prevents us from ballooning in case of
        * a persistent problem
        */
-      ldout(cct, 0) << "WARNING: failed to remove tags on gc shard index=" << index << " ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "WARNING: failed to remove tags on gc shard index=" << index << " ret=" << ret << dendl;
       return;
     }
     ios.push_back(index_io);
@@ -273,7 +275,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
 
   int ret = l.lock_exclusive(&store->gc_pool_ctx, obj_names[index]);
   if (ret == -EBUSY) { /* already locked by another gc processor */
-    dout(10) << "RGWGC::process() failed to acquire lock on " << obj_names[index] << dendl;
+    ldpp_dout(this, 10) << "RGWGC::process() failed to acquire lock on " << obj_names[index] << dendl;
     return 0;
   }
   if (ret < 0)
@@ -313,7 +315,8 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
           ctx = new IoCtx;
 	  ret = rgw_init_ioctx(store->get_rados_handle(), obj.pool, *ctx);
 	  if (ret < 0) {
-	    dout(0) << "ERROR: failed to create ioctx pool=" << obj.pool << dendl;
+	    last_pool = "";
+	    ldpp_dout(this, 0) << "ERROR: failed to create ioctx pool=" << obj.pool << dendl;
 	    continue;
 	  }
           last_pool = obj.pool;
@@ -323,13 +326,13 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
 
         const string& oid = obj.key.name; /* just stored raw oid there */
 
-	dout(5) << "gc::process: removing " << obj.pool << ":" << obj.key.name << dendl;
+	ldpp_dout(this, 5) << "gc::process: removing " << obj.pool << ":" << obj.key.name << dendl;
 	ObjectWriteOperation op;
 	cls_refcount_put(op, info.tag, true);
 
         ret = io_manager.schedule_io(ctx, oid, &op, index, info.tag);
         if (ret < 0) {
-          ldout(store->ctx(), 0) << "WARNING: failed to schedule deletion for oid=" << oid << dendl;
+          ldpp_dout(this, 0) << "WARNING: failed to schedule deletion for oid=" << oid << dendl;
         }
 
         if (going_down()) // leave early, even if tag isn't removed, it's ok
@@ -353,7 +356,7 @@ int RGWGC::process(bool expired_only)
 
   const int start = ceph::util::generate_random_number(0, max_objs - 1);
 
-  RGWGCIOManager io_manager(store->ctx(), this);
+  RGWGCIOManager io_manager(this, store->ctx(), this);
 
   for (int i = 0; i < max_objs; i++) {
     int index = (i + start) % max_objs;
@@ -375,7 +378,7 @@ bool RGWGC::going_down()
 
 void RGWGC::start_processor()
 {
-  worker = new GCWorker(cct, this);
+  worker = new GCWorker(this, cct, this);
   worker->create("rgw_gc");
 }
 
@@ -390,15 +393,25 @@ void RGWGC::stop_processor()
   worker = NULL;
 }
 
+unsigned RGWGC::get_subsys() const
+{
+  return dout_subsys;
+}
+
+std::ostream& RGWGC::gen_prefix(std::ostream& out) const
+{
+  return out << "garbage collection: ";
+}
+
 void *RGWGC::GCWorker::entry() {
   do {
     utime_t start = ceph_clock_now();
-    dout(2) << "garbage collection: start" << dendl;
+    ldpp_dout(dpp, 2) << "garbage collection: start" << dendl;
     int r = gc->process(true);
     if (r < 0) {
-      dout(0) << "ERROR: garbage collection process() returned error r=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: garbage collection process() returned error r=" << r << dendl;
     }
-    dout(2) << "garbage collection: stop" << dendl;
+    ldpp_dout(dpp, 2) << "garbage collection: stop" << dendl;
 
     if (gc->going_down())
       break;

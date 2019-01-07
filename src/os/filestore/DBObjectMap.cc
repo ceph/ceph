@@ -402,7 +402,7 @@ bool DBObjectMap::DBObjectMapIteratorImpl::valid_parent()
   return false;
 }
 
-int DBObjectMap::DBObjectMapIteratorImpl::next(bool validate)
+int DBObjectMap::DBObjectMapIteratorImpl::next()
 {
   ceph_assert(cur_iter->valid());
   ceph_assert(valid());

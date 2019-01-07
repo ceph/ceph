@@ -23,6 +23,9 @@ set(librbd_test
 add_library(rbd_test STATIC ${librbd_test})
 target_link_libraries(rbd_test PRIVATE
   rbd_test_support
+  radostest
+  radostest-cxx
+  librados
   Boost::thread
   GMock::GMock
   GTest::GTest)
@@ -120,8 +123,7 @@ target_link_libraries(unittest_librbd
   osdc
   ceph-common
   global
-  ${UNITTEST_LIBS}
-  radostest)
+  ${UNITTEST_LIBS})
 
 add_executable(ceph_test_librbd
   test_main.cc
@@ -135,6 +137,7 @@ target_link_libraries(ceph_test_librbd
   cls_journal_client
   cls_rbd_client
   librados
+  librados-cxx
   ${UNITTEST_LIBS}
   radostest)
 target_compile_definitions(ceph_test_librbd PRIVATE "TEST_LIBRBD_INTERNALS")
@@ -143,12 +146,14 @@ add_executable(ceph_test_librbd_api
   test_support.cc
   test_librbd.cc
   test_main.cc
-  $<TARGET_OBJECTS:libradostest_obj>
   $<TARGET_OBJECTS:common_texttable_obj>)
 target_link_libraries(ceph_test_librbd_api
   ceph-common
+  radostest
+  radostest-cxx
   librbd
   librados
+  librados-cxx
   ${UNITTEST_LIBS})
 
 add_executable(ceph_test_librbd_fsx
@@ -158,6 +163,7 @@ add_executable(ceph_test_librbd_fsx
 target_link_libraries(ceph_test_librbd_fsx
   librbd
   librados
+  librados-cxx
   journal
   global
   m

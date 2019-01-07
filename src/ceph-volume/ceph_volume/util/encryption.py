@@ -3,6 +3,7 @@ import os
 import logging
 from ceph_volume import process, conf
 from ceph_volume.util import constants, system
+from ceph_volume.util.device import Device
 from .prepare import write_keyring
 from .disk import lsblk, device_family, get_part_entry_type
 
@@ -59,6 +60,7 @@ def plain_open(key, device, mapping):
         'cryptsetup',
         '--key-file',
         '-',
+        '--allow-discards',  # allow discards (aka TRIM) requests for device
         'open',
         device,
         mapping,
@@ -83,6 +85,7 @@ def luks_open(key, device, mapping):
         'cryptsetup',
         '--key-file',
         '-',
+        '--allow-discards',  # allow discards (aka TRIM) requests for device
         'luksOpen',
         device,
         mapping,
@@ -251,9 +254,9 @@ def legacy_encrypted(device):
         return metadata
     parent_device = disk_meta['PKNAME']
     # With the parent device set, we can now look for the lockbox listing associated devices
-    devices = device_family(parent_device)
-    for i in devices:
-        if 'lockbox' in i.get('PARTLABEL', ''):
-            metadata['lockbox'] = i['NAME']
+    devices = [Device(i['NAME']) for i in device_family(parent_device)]
+    for d in devices:
+        if d.ceph_disk.type == 'lockbox':
+            metadata['lockbox'] = d.abspath
             break
     return metadata

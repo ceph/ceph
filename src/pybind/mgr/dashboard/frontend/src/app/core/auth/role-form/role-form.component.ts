@@ -2,8 +2,9 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap';
+import { BsModalRef } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin } from 'rxjs';
 
 import { RoleService } from '../../../shared/api/role.service';
@@ -46,7 +47,8 @@ export class RoleFormComponent implements OnInit {
     private router: Router,
     private roleService: RoleService,
     private scopeService: ScopeService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private i18n: I18n
   ) {
     this.createForm();
     this.listenToChanges();
@@ -67,14 +69,14 @@ export class RoleFormComponent implements OnInit {
     this.columns = [
       {
         prop: 'scope',
-        name: 'All',
+        name: this.i18n('All'),
         flexGrow: 2,
         cellTemplate: this.cellScopeCheckboxTpl,
         headerTemplate: this.headerPermissionCheckboxTpl
       },
       {
         prop: 'read',
-        name: 'Read',
+        name: this.i18n('Read'),
         flexGrow: 1,
         cellClass: 'text-center',
         cellTemplate: this.cellPermissionCheckboxTpl,
@@ -82,7 +84,7 @@ export class RoleFormComponent implements OnInit {
       },
       {
         prop: 'create',
-        name: 'Create',
+        name: this.i18n('Create'),
         flexGrow: 1,
         cellClass: 'text-center',
         cellTemplate: this.cellPermissionCheckboxTpl,
@@ -90,7 +92,7 @@ export class RoleFormComponent implements OnInit {
       },
       {
         prop: 'update',
-        name: 'Update',
+        name: this.i18n('Update'),
         flexGrow: 1,
         cellClass: 'text-center',
         cellTemplate: this.cellPermissionCheckboxTpl,
@@ -98,7 +100,7 @@ export class RoleFormComponent implements OnInit {
       },
       {
         prop: 'delete',
-        name: 'Delete',
+        name: this.i18n('Delete'),
         flexGrow: 1,
         cellClass: 'text-center',
         cellTemplate: this.cellPermissionCheckboxTpl,
@@ -267,7 +269,7 @@ export class RoleFormComponent implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          `Created role '${roleFormModel.name}'`
+          this.i18n(`Created role '{{role_name}}'`, { role_name: roleFormModel.name })
         );
         this.router.navigate(['/user-management/roles']);
       },
@@ -283,7 +285,7 @@ export class RoleFormComponent implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          `Updated role '${roleFormModel.name}'`
+          this.i18n(`Updated role '{{role_name}}'`, { role_name: roleFormModel.name })
         );
         this.router.navigate(['/user-management/roles']);
       },

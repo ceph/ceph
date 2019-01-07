@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "rgw_common.h"
 #include "rgw_coroutine.h"
 #include "rgw_sync_module.h"
@@ -8,6 +11,9 @@
 #include "rgw_cr_rest.h"
 #include "rgw_op.h"
 #include "rgw_es_query.h"
+#include "rgw_zone.h"
+
+#include "services/svc_zone.h"
 
 #include "include/str_list.h"
 
@@ -131,7 +137,7 @@ struct ElasticConfig {
     num_replicas = config["num_replicas"](ES_NUM_REPLICAS_DEFAULT);
   }
 
-  void init_instance(RGWRealm& realm, uint64_t instance_id) {
+  void init_instance(const RGWRealm& realm, uint64_t instance_id) {
     sync_instance = instance_id;
 
     if (!override_index_path.empty()) {
@@ -244,6 +250,20 @@ struct es_index_config {
   }
 };
 
+static bool is_sys_attr(const std::string& attr_name){
+  static constexpr std::initializer_list<const char*> rgw_sys_attrs =
+                                                         {RGW_ATTR_PG_VER,
+                                                          RGW_ATTR_SOURCE_ZONE,
+                                                          RGW_ATTR_ID_TAG,
+                                                          RGW_ATTR_TEMPURL_KEY1,
+                                                          RGW_ATTR_TEMPURL_KEY2,
+                                                          RGW_ATTR_UNIX1,
+                                                          RGW_ATTR_UNIX_KEY1
+  };
+
+  return std::find(rgw_sys_attrs.begin(), rgw_sys_attrs.end(), attr_name) != rgw_sys_attrs.end();
+}
+
 struct es_obj_metadata {
   CephContext *cct;
   ElasticConfigRef es_conf;
@@ -268,27 +288,34 @@ struct es_obj_metadata {
 
     for (auto i : attrs) {
       const string& attr_name = i.first;
-      string name;
       bufferlist& val = i.second;
 
-      if (attr_name.compare(0, sizeof(RGW_ATTR_PREFIX) - 1, RGW_ATTR_PREFIX) != 0) {
+      if (!boost::algorithm::starts_with(attr_name, RGW_ATTR_PREFIX)) {
         continue;
       }
 
-      if (attr_name.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1, RGW_ATTR_META_PREFIX) == 0) {
-        name = attr_name.substr(sizeof(RGW_ATTR_META_PREFIX) - 1);
-        custom_meta[name] = string(val.c_str(), (val.length() > 0 ? val.length() - 1 : 0));
+      if (boost::algorithm::starts_with(attr_name, RGW_ATTR_META_PREFIX)) {
+        custom_meta.emplace(attr_name.substr(sizeof(RGW_ATTR_META_PREFIX) - 1),
+                            string(val.c_str(), (val.length() > 0 ? val.length() - 1 : 0)));
         continue;
       }
 
-      name = attr_name.substr(sizeof(RGW_ATTR_PREFIX) - 1);
+      if (boost::algorithm::starts_with(attr_name, RGW_ATTR_CRYPT_PREFIX)) {
+        continue;
+      }
 
-      if (name == "acl") {
+      if (boost::algorithm::starts_with(attr_name, RGW_ATTR_OLH_PREFIX)) {
+        // skip versioned object olh info
+        continue;
+      }
+
+      if (attr_name == RGW_ATTR_ACL) {
         try {
           auto i = val.cbegin();
           decode(policy, i);
         } catch (buffer::error& err) {
           ldout(cct, 0) << "ERROR: failed to decode acl for " << bucket_info.bucket << "/" << key << dendl;
+          continue;
         }
 
         const RGWAccessControlList& acl = policy.get_acl();
@@ -304,25 +331,39 @@ struct es_obj_metadata {
             }
           }
         }
-      } else if (name == "x-amz-tagging") {
-        auto tags_bl = val.cbegin();
-        decode(obj_tags, tags_bl);
-      } else if (name == "compression") {
+      } else if (attr_name == RGW_ATTR_TAGS) {
+        try {
+          auto tags_bl = val.cbegin();
+          decode(obj_tags, tags_bl);
+        } catch (buffer::error& err) {
+          ldout(cct,0) << "ERROR: failed to decode obj tags for "
+                       << bucket_info.bucket << "/" << key << dendl;
+          continue;
+        }
+      } else if (attr_name == RGW_ATTR_COMPRESSION) {
         RGWCompressionInfo cs_info;
-        auto vals_bl = val.cbegin();
-        decode(cs_info, vals_bl);
-        out_attrs[name] = cs_info.compression_type;
+        try {
+          auto vals_bl = val.cbegin();
+          decode(cs_info, vals_bl);
+        } catch (buffer::error& err) {
+          ldout(cct,0) << "ERROR: failed to decode compression attr for "
+                       << bucket_info.bucket << "/" << key << dendl;
+          continue;
+        }
+        out_attrs.emplace("compression",std::move(cs_info.compression_type));
       } else {
-        if (name != "pg_ver" &&
-            name != "source_zone" &&
-            name != "idtag") {
-          out_attrs[name] = string(val.c_str(), (val.length() > 0 ? val.length() - 1 : 0));
+        if (!is_sys_attr(attr_name)) {
+          out_attrs.emplace(attr_name.substr(sizeof(RGW_ATTR_PREFIX) - 1),
+                            std::string(val.c_str(), (val.length() > 0 ? val.length() - 1 : 0)));
         }
       }
     }
     ::encode_json("bucket", bucket_info.bucket.name, f);
     ::encode_json("name", key.name, f);
-    ::encode_json("instance", key.instance, f);
+    string instance = key.instance;
+    if (instance.empty())
+      instance = "null";
+    ::encode_json("instance", instance, f);
     ::encode_json("versioned_epoch", versioned_epoch, f);
     ::encode_json("owner", policy.get_owner(), f);
     ::encode_json("permissions", permissions, f);
@@ -466,8 +507,9 @@ public:
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 10) << ": stat of remote obj: z=" << sync_env->source_zone
-                               << " b=" << bucket_info.bucket << " k=" << key << " size=" << size << " mtime=" << mtime
-                               << " attrs=" << attrs << dendl;
+                               << " b=" << bucket_info.bucket << " k=" << key
+                               << " size=" << size << " mtime=" << mtime << dendl;
+
       yield {
         string path = conf->get_obj_path(bucket_info, key);
         es_obj_metadata doc(sync_env->cct, conf, bucket_info, key, mtime, size, attrs, versioned_epoch);
@@ -546,7 +588,7 @@ public:
   ~RGWElasticDataSyncModule() override {}
 
   void init(RGWDataSyncEnv *sync_env, uint64_t instance_id) override {
-    conf->init_instance(sync_env->store->get_realm(), instance_id);
+    conf->init_instance(sync_env->store->svc.zone->get_realm(), instance_id);
   }
 
   RGWCoroutine *init_sync(RGWDataSyncEnv *sync_env) override {

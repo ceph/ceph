@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/format.hpp>
 #include <boost/optional.hpp>
@@ -160,11 +163,13 @@ void RGWSTSAssumeRole::execute()
   if (op_ret == 0) {
     s->formatter->open_object_section("AssumeRoleResponse");
     s->formatter->open_object_section("AssumeRoleResult");
-    s->formatter->open_object_section("AssumeRole");
-    assumedRoleUser.dump(s->formatter);
+    s->formatter->open_object_section("Credentials");
     creds.dump(s->formatter);
-    encode_json("PackedPolicySize", packedPolicySize , s->formatter);
     s->formatter->close_section();
+    s->formatter->open_object_section("AssumedRoleUser");
+    assumedRoleUser.dump(s->formatter);
+    s->formatter->close_section();
+    encode_json("PackedPolicySize", packedPolicySize , s->formatter);
     s->formatter->close_section();
     s->formatter->close_section();
   }
@@ -172,23 +177,31 @@ void RGWSTSAssumeRole::execute()
 
 RGWOp *RGWHandler_REST_STS::op_post()
 {
-  char buf[256];
-  recv_body(s, buf, s->content_length);
-  ldout(s->cct, 0) << "Content of POST: " << buf << dendl;
-  string post_body = buf;
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
 
-  if (post_body.find("Action") != string::npos) {
-    boost::char_separator<char> sep("&");
-    boost::tokenizer<boost::char_separator<char>> tokens(post_body, sep);
-    for (const auto& t : tokens) {
-      auto pos = t.find("=");
-      if (pos != string::npos) {
-         std::string key = t.substr(0, pos);
-         std::string value = t.substr(pos + 1, t.size() - 1);
-         ldout(s->cct, 0) << "Key: " << key << "Value: " << value << dendl;
-         s->info.args.append(key, value);
+  int ret = 0;
+  bufferlist data;
+  std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  if (data.length() > 0) {
+    string post_body = data.to_str();
+    ldout(s->cct, 10) << "Content of POST: " << post_body << dendl;
+
+    if (post_body.find("Action") != string::npos) {
+      boost::char_separator<char> sep("&");
+      boost::tokenizer<boost::char_separator<char>> tokens(post_body, sep);
+      for (const auto& t : tokens) {
+        auto pos = t.find("=");
+        if (pos != string::npos) {
+           std::string key = t.substr(0, pos);
+           std::string value = t.substr(pos + 1, t.size() - 1);
+           if (key == "RoleArn") {
+            value = url_decode(value);
+           }
+           ldout(s->cct, 10) << "Key: " << key << "Value: " << value << dendl;
+           s->info.args.append(key, value);
+         }
        }
-     }
+    }
   }
 
   if (s->info.args.exists("Action"))    {

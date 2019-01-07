@@ -12,8 +12,10 @@
   </tab>
 
   <tab i18n-heading
+       *ngIf="grafanaPermission.read"
        heading="Overall Performance">
-    <cd-grafana [grafanaPath]="'WAkugZpiz/rgw-overview?'"
+    <cd-grafana [grafanaPath]="'rgw-overview?'"
+                uid="WAkugZpiz"
                 grafanaStyle="two">
     </cd-grafana>
   </tab>

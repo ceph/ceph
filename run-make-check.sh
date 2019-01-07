@@ -111,9 +111,6 @@ function run() {
     test "$BUILD_MAKEOPTS" && echo "make will run with option(s) $BUILD_MAKEOPTS"
     CHECK_MAKEOPTS=${CHECK_MAKEOPTS:-$DEFAULT_MAKEOPTS}
     CMAKE_BUILD_OPTS="-DWITH_GTEST_PARALLEL=ON -DWITH_FIO=ON -DWITH_SEASTAR=ON"
-    if ! type python2 > /dev/null 2>&1 ; then
-        CMAKE_BUILD_OPTS+=" -DWITH_PYTHON2=OFF -DWITH_PYTHON3=ON -DMGR_PYTHON_VERSION=3"
-    fi
     CMAKE_BUILD_OPTS+=$(detect_ceph_dev_pkgs)
     cat <<EOM
 Note that the binaries produced by this script do not contain correct time

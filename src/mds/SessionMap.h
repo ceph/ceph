@@ -250,6 +250,7 @@ public:
   xlist<Capability*> caps;     // inodes with caps; front=most recently used
   xlist<ClientLease*> leases;  // metadata leases to clients
   time last_cap_renew = clock::zero();
+  time last_seen = clock::zero();
 
 public:
   version_t inc_push_seq() { return ++cap_push_seq; }
@@ -563,7 +564,7 @@ public:
   // sessions
   void decode_legacy(bufferlist::const_iterator& blp) override;
   bool empty() const { return session_map.empty(); }
-  const ceph::unordered_map<entity_name_t, Session*> &get_sessions() const
+  const ceph::unordered_map<entity_name_t, Session*>& get_sessions() const
   {
     return session_map;
   }

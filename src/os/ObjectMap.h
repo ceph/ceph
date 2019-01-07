@@ -31,6 +31,7 @@ class SequencerPosition;
 class ObjectMap {
 public:
   CephContext* cct;
+  boost::scoped_ptr<KeyValueDB> db;
   /// Set keys and values from specified map
   virtual int set_keys(
     const ghobject_t &oid,              ///< [in] object containing map
@@ -164,7 +165,7 @@ public:
 
   virtual KeyValueDB *get_db() { return nullptr; }
 
-  ObjectMap(CephContext* cct) : cct(cct) {}
+  ObjectMap(CephContext* cct, KeyValueDB *db) : cct(cct), db(db) {}
   virtual ~ObjectMap() {}
 };
 

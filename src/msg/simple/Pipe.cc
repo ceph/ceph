@@ -2187,7 +2187,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       if (got < 0)
 	goto out_dethrottle;
       if (got > 0) {
-	blp.advance(got);
+	blp.advance(static_cast<size_t>(got));
 	data.append(bp, 0, got);
 	offset += got;
 	left -= got;
@@ -2408,7 +2408,7 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
   msg.msg_iovlen++;
 
   // payload (front+data)
-  list<bufferptr>::const_iterator pb = blist.buffers().begin();
+  auto pb = std::cbegin(blist.buffers());
   unsigned b_off = 0;  // carry-over buffer offset, if any
   unsigned bl_pos = 0; // blist pos
   unsigned left = blist.length();

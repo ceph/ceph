@@ -5,13 +5,11 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import * as moment from 'moment';
 import { ToastModule } from 'ng2-toastr';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { ApiModule } from '../../../shared/api/api.module';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { NotificationService } from '../../../shared/services/notification.service';
-import { ServicesModule } from '../../../shared/services/services.module';
 import { SharedModule } from '../../../shared/shared.module';
 import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal.component';
 
@@ -26,13 +24,11 @@ describe('RbdTrashMoveModalComponent', () => {
       HttpClientTestingModule,
       RouterTestingModule,
       SharedModule,
-      ServicesModule,
-      ApiModule,
       ToastModule.forRoot(),
       BsDatepickerModule.forRoot()
     ],
     declarations: [RbdTrashMoveModalComponent],
-    providers: [BsModalRef, BsModalService]
+    providers: [BsModalRef, BsModalService, i18nProviders]
   });
 
   beforeEach(() => {

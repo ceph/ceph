@@ -74,17 +74,10 @@ GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
     if (fd < 0) {
       return;
     }
-    char partition[PATH_MAX], devname[PATH_MAX];
-    int r = get_device_by_fd(fd, partition, devname, sizeof(devname));
-    if (r < 0) {
-      dout(1) << "unable to get device name for " << get_basedir_path() << ": "
-	      << cpp_strerror(r) << dendl;
-      m_rotational = true;
-    } else {
-      m_rotational = block_device_is_rotational(devname);
-      dout(20) << __func__ << " devname " << devname
-	       << " rotational " << (int)m_rotational << dendl;
-    }
+    BlkDev blkdev(fd);
+    m_rotational = blkdev.is_rotational();
+    dout(20) << __func__ << " basedir " << fn
+	     << " rotational " << (int)m_rotational << dendl;
     ::close(fd);
   }
   // journal rotational?
@@ -95,17 +88,10 @@ GenericFileStoreBackend::GenericFileStoreBackend(FileStore *fs):
     if (fd < 0) {
       return;
     }
-    char partition[PATH_MAX], devname[PATH_MAX];
-    int r = get_device_by_fd(fd, partition, devname, sizeof(devname));
-    if (r < 0) {
-      dout(1) << "unable to get journal device name for "
-              << get_journal_path() << ": " << cpp_strerror(r) << dendl;
-      m_journal_rotational = true;
-    } else {
-      m_journal_rotational = block_device_is_rotational(devname);
-      dout(20) << __func__ << " journal devname " << devname
-               << " journal rotational " << (int)m_journal_rotational << dendl;
-    }
+    BlkDev blkdev(fd);
+    m_journal_rotational = blkdev.is_rotational();
+    dout(20) << __func__ << " journal filename " << fn.c_str()
+	     << " journal rotational " << (int)m_journal_rotational << dendl;
     ::close(fd);
   }
 }

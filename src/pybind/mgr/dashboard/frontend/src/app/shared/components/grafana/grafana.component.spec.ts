@@ -1,13 +1,12 @@
-import { HttpClientModule } from '@angular/common/http';
-
+import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { AlertModule } from 'ngx-bootstrap';
+import { AlertModule } from 'ngx-bootstrap/alert';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { SettingsService } from '../../../shared/api/settings.service';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SummaryService } from '../../../shared/services/summary.service';
+import { SettingsService } from '../../api/settings.service';
 import { CephReleaseNamePipe } from '../../pipes/ceph-release-name.pipe';
 import { InfoPanelComponent } from '../info-panel/info-panel.component';
 import { LoadingPanelComponent } from '../loading-panel/loading-panel.component';
@@ -19,17 +18,50 @@ describe('GrafanaComponent', () => {
 
   configureTestBed({
     declarations: [GrafanaComponent, InfoPanelComponent, LoadingPanelComponent],
-    imports: [AlertModule.forRoot(), HttpClientModule, RouterTestingModule],
-    providers: [CephReleaseNamePipe, SettingsService, SummaryService]
+    imports: [AlertModule.forRoot(), HttpClientTestingModule, RouterTestingModule],
+    providers: [CephReleaseNamePipe, SettingsService, SummaryService, i18nProviders]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(GrafanaComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
+    component.grafanaPath = 'somePath';
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('should have found out that grafana does not exist', () => {
+    fixture.detectChanges();
+    expect(component.grafanaExist).toBe(false);
+    expect(component.baseUrl).toBe(undefined);
+    expect(component.loading).toBe(true);
+    expect(component.url).toBe(undefined);
+    expect(component.grafanaSrc).toEqual(undefined);
+  });
+
+  describe('with grafana initialized', () => {
+    beforeEach(() => {
+      TestBed.get(SettingsService).settings = { 'api/grafana/url': 'http:localhost:3000' };
+      fixture.detectChanges();
+    });
+
+    it('should have found out that grafana exists', () => {
+      expect(component.grafanaExist).toBe(true);
+      expect(component.baseUrl).toBe('http:localhost:3000/d/');
+      expect(component.loading).toBe(false);
+      component.uid = 'uid';
+      component.getFrame();
+      expect(component.url).toBe('http:localhost:3000/d/uid/somePath&refresh=2s&kiosk');
+      expect(component.grafanaSrc).toEqual({
+        changingThisBreaksApplicationSecurity: 'http:localhost:3000/d/uid/somePath&refresh=2s&kiosk'
+      });
+    });
+
+    it('should have Dashboard', () => {
+      TestBed.get(SettingsService).validateGrafanaDashboardUrl = { uid: 200 };
+      expect(component.dashboardExist).toBe(true);
+    });
   });
 });

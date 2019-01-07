@@ -6,18 +6,17 @@
         novalidate>
     <div class="panel panel-default">
       <div class="panel-heading">
-        <h3 class="panel-title">
-          <span i18n>{mode, select, editing {Edit} other {Add}}</span> User
-        </h3>
+        <h3 class="panel-title"
+            i18n>{mode, select, editing {Edit} other {Add}} User</h3>
       </div>
       <div class="panel-body">
 
         <!-- Username -->
         <div class="form-group"
              [ngClass]="{'has-error': userForm.showError('username', formDir)}">
-          <label i18n
-                 class="control-label col-sm-3"
-                 for="name">Username
+          <label class="control-label col-sm-3"
+                 for="name">
+            <ng-container i18n>Username</ng-container>
             <span class="required"
                   *ngIf="mode !== userFormMode.editing"></span>
           </label>
@@ -29,11 +28,9 @@
                    name="username"
                    formControlName="username"
                    autofocus>
-            <span i18n
-                  class="help-block"
-                  *ngIf="userForm.showError('username', formDir, 'required')">
-              This field is required.
-            </span>
+            <span class="help-block"
+                  *ngIf="userForm.showError('username', formDir, 'required')"
+                  i18n>This field is required.</span>
           </div>
         </div>
 
@@ -42,8 +39,7 @@
              [ngClass]="{'has-error': userForm.showError('password', formDir)}">
           <label i18n
                  class="control-label col-sm-3"
-                 for="name">Password
-          </label>
+                 for="name">Password</label>
           <div class="col-sm-9">
             <div class="input-group">
               <input class="form-control"
@@ -59,11 +55,9 @@
                 </button>
               </span>
             </div>
-            <span i18n
-                  class="help-block"
-                  *ngIf="userForm.showError('password', formDir, 'required')">
-              This field is required.
-            </span>
+            <span class="help-block"
+                  *ngIf="userForm.showError('password', formDir, 'required')"
+                  i18n>This field is required.</span>
           </div>
         </div>
 
@@ -72,8 +66,7 @@
              [ngClass]="{'has-error': userForm.showError('confirmpassword', formDir)}">
           <label i18n
                  class="control-label col-sm-3"
-                 for="name">Confirm password
-          </label>
+                 for="name">Confirm password</label>
           <div class="col-sm-9">
             <div class="input-group">
               <input class="form-control"
@@ -89,16 +82,12 @@
                 </button>
               </span>
             </div>
-            <span i18n
-                  class="help-block"
-                  *ngIf="userForm.showError('confirmpassword', formDir, 'required')">
-              This field is required.
-            </span>
-            <span i18n
-                  class="help-block"
-                  *ngIf="userForm.showError('confirmpassword', formDir, 'match')">
-              Password confirmation doesn't match the password.
-            </span>
+            <span class="help-block"
+                  *ngIf="userForm.showError('confirmpassword', formDir, 'required')"
+                  i18n>This field is required.</span>
+            <span class="help-block"
+                  *ngIf="userForm.showError('confirmpassword', formDir, 'match')"
+                  i18n>Password confirmation doesn't match the password.</span>
           </div>
         </div>
 
@@ -106,8 +95,7 @@
         <div class="form-group">
           <label i18n
                  class="control-label col-sm-3"
-                 for="name">Full name
-          </label>
+                 for="name">Full name</label>
           <div class="col-sm-9">
             <input class="form-control"
                    type="text"
@@ -123,8 +111,7 @@
              [ngClass]="{'has-error': userForm.showError('email', formDir)}">
           <label i18n
                  class="control-label col-sm-3"
-                 for="email">Email
-          </label>
+                 for="email">Email</label>
           <div class="col-sm-9">
             <input class="form-control"
                    type="email"
@@ -133,18 +120,15 @@
                    name="email"
                    formControlName="email">
 
-            <span i18n
-                  class="help-block"
-                  *ngIf="userForm.showError('email', formDir, 'email')">
-              Invalid email.
-            </span>
+            <span class="help-block"
+                  *ngIf="userForm.showError('email', formDir, 'email')"
+                  i18n>Invalid email.</span>
           </div>
         </div>
 
         <!-- Roles -->
         <label class="col-sm-3 control-label"
-               i18n>Roles
-        </label>
+               i18n>Roles</label>
         <div class="col-sm-9">
           <span class="form-control no-border full-height"
                 *ngIf="allRoles">
@@ -159,15 +143,12 @@
         <div class="button-group text-right">
           <cd-submit-button [form]="formDir"
                             type="button"
-                            (submitAction)="submit()">
-            <span i18n>{mode, select, editing {Update} other {Create}}</span> User
-          </cd-submit-button>
+                            (submitAction)="submit()"
+                            i18n>{mode, select, editing {Update} other {Create}} User</cd-submit-button>
           <button i18n
                   type="button"
                   class="btn btn-sm btn-default"
-                  routerLink="/user-management/users">
-            Back
-          </button>
+                  routerLink="/user-management/users">Back</button>
         </div>
       </div>
     </div>
@@ -175,9 +156,9 @@
 </div>
 
 <ng-template #removeSelfUserReadUpdatePermissionTpl>
-  <p><strong>You are about to remove "user read / update" permissions from your own user.</strong></p>
+  <p><strong i18n>You are about to remove "user read / update" permissions from your own user.</strong></p>
   <br>
-  <p>If you continue, you will no longer be able to add or remove roles from any user.</p>
+  <p i18n>If you continue, you will no longer be able to add or remove roles from any user.</p>
 
-  Are you sure you want to continue?
+  <ng-container i18n>Are you sure you want to continue?</ng-container>
 </ng-template>

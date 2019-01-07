@@ -42,6 +42,7 @@
 static void global_init_set_globals(CephContext *cct)
 {
   g_ceph_context = cct;
+  get_process_name(g_process_name, sizeof(g_process_name));
 }
 
 static void output_ceph_version()

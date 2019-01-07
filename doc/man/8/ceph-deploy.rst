@@ -186,7 +186,7 @@ Subcommand ``add`` is used to add a monitor to an existing cluster. It first
 detects platform and distro for desired host and checks if hostname is compatible
 for deployment. It then uses the monitor keyring, ensures configuration for new
 monitor host and adds the monitor to the cluster. If the section for the monitor
-exists and defines a mon addr that will be used, otherwise it will fallback by
+exists and defines a monitor address that will be used, otherwise it will fallback by
 resolving the hostname to an IP. If :option:`--address` is used it will override
 all other options. After adding the monitor to the cluster, it gives it some time
 to start. It then looks for any monitor errors and checks monitor status. Monitor
@@ -330,7 +330,7 @@ uninstall
 
 Remove Ceph packages from remote hosts. It detects the platform and distro of
 selected host and uninstalls Ceph packages from it. However, some dependencies
-like ``librbd1`` and ``librados2`` will not be removed because they can cause
+like ``librbd1`` and ``librados3`` will not be removed because they can cause
 issues with ``qemu-kvm``.
 
 Usage::
@@ -345,7 +345,7 @@ purge
 
 Remove Ceph packages from remote hosts and purge all data. It detects the
 platform and distro of selected host, uninstalls Ceph packages and purges all
-data. However, some dependencies like ``librbd1`` and ``librados2`` will not be
+data. However, some dependencies like ``librbd1`` and ``librados3`` will not be
 removed because they can cause issues with ``qemu-kvm``.
 
 Usage::

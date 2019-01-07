@@ -85,9 +85,46 @@ describe('TableKeyValueComponent', () => {
     component.data = [['someKey', 0, 3]];
     expect(() => component.ngOnInit()).toThrowError('Wrong array format: [string, any][]');
     component.data = [{ somekey: 939, somethingElse: 'test' }];
-    expect(() => component.ngOnInit()).toThrowError(
-      'Wrong object array format: {key: string, value: any}[]'
-    );
+  });
+
+  describe('Class objects equal plain objects', () => {
+    class Example {
+      sth = 'something';
+      deep?: Example;
+      constructor(deep: boolean) {
+        if (deep) {
+          this.deep = new Example(false);
+        }
+      }
+    }
+
+    const classExample = new Example(true);
+    const objectExample = {
+      sth: 'something',
+      deep: {
+        sth: 'something'
+      }
+    };
+
+    const getTableData = (data) => {
+      component.data = data;
+      expect(() => component.ngOnInit()).not.toThrow();
+      return component.tableData;
+    };
+
+    const doesClassEqualsObject = (classData, objectData, dataLength) => {
+      const classTableData = getTableData(classData);
+      expect(classTableData).toEqual(getTableData(objectData));
+      expect(classTableData.length).toBe(dataLength);
+    };
+
+    it('should convert class objects the same way as plain objects', () => {
+      doesClassEqualsObject(classExample, objectExample, 1);
+      doesClassEqualsObject([classExample], [objectExample], 1);
+      component.renderObjects = true;
+      doesClassEqualsObject(classExample, objectExample, 2);
+      doesClassEqualsObject([classExample], [objectExample], 2);
+    });
   });
 
   it('tests _makePairs', () => {

@@ -1,7 +1,17 @@
+import { TestBed } from '@angular/core/testing';
+import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { OsdSummaryPipe } from './osd-summary.pipe';
 
 describe('OsdSummaryPipe', () => {
-  const pipe = new OsdSummaryPipe();
+  let pipe: OsdSummaryPipe;
+
+  configureTestBed({
+    providers: [OsdSummaryPipe, i18nProviders]
+  });
+
+  beforeEach(() => {
+    pipe = TestBed.get(OsdSummaryPipe);
+  });
 
   it('create an instance', () => {
     expect(pipe).toBeTruthy();

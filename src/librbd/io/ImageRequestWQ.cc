@@ -4,6 +4,7 @@
 #include "librbd/io/ImageRequestWQ.h"
 #include "common/errno.h"
 #include "common/zipkin_trace.h"
+#include "common/Cond.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -78,13 +79,13 @@ struct ImageRequestWQ<I>::C_RefreshFinish : public Context {
   }
 };
 
-static std::list<uint64_t> throttle_flags = {
-  RBD_QOS_IOPS_THROTTLE,
-  RBD_QOS_BPS_THROTTLE,
-  RBD_QOS_READ_IOPS_THROTTLE,
-  RBD_QOS_WRITE_IOPS_THROTTLE,
-  RBD_QOS_READ_BPS_THROTTLE,
-  RBD_QOS_WRITE_BPS_THROTTLE
+static std::map<uint64_t, std::string> throttle_flags = {
+  { RBD_QOS_IOPS_THROTTLE,       "rbd_qos_iops_throttle"       },
+  { RBD_QOS_BPS_THROTTLE,        "rbd_qos_bps_throttle"        },
+  { RBD_QOS_READ_IOPS_THROTTLE,  "rbd_qos_read_iops_throttle"  },
+  { RBD_QOS_WRITE_IOPS_THROTTLE, "rbd_qos_write_iops_throttle" },
+  { RBD_QOS_READ_BPS_THROTTLE,   "rbd_qos_read_bps_throttle"   },
+  { RBD_QOS_WRITE_BPS_THROTTLE,  "rbd_qos_write_bps_throttle"  }
 };
 
 template <typename I>
@@ -102,7 +103,8 @@ ImageRequestWQ<I>::ImageRequestWQ(I *image_ctx, const string &name,
 
   for (auto flag : throttle_flags) {
     m_throttles.push_back(make_pair(
-	  flag, new TokenBucketThrottle(cct, 0, 0, timer, timer_lock)));
+      flag.first,
+      new TokenBucketThrottle(cct, flag.second, 0, 0, timer, timer_lock)));
   }
 
   this->register_work_queue();
@@ -615,7 +617,17 @@ void ImageRequestWQ<I>::set_require_lock(Direction direction, bool enabled) {
 }
 
 template <typename I>
-void ImageRequestWQ<I>::apply_qos_limit(uint64_t limit, const uint64_t flag) {
+void ImageRequestWQ<I>::apply_qos_schedule_tick_min(uint64_t tick){
+  for (auto pair : m_throttles) {
+    pair.second->set_schedule_tick_min(tick);
+  }
+}
+
+template <typename I>
+void ImageRequestWQ<I>::apply_qos_limit(const uint64_t flag,
+                                        uint64_t limit,
+                                        uint64_t burst) {
+  CephContext *cct = m_image_ctx.cct;
   TokenBucketThrottle *throttle = nullptr;
   for (auto pair : m_throttles) {
     if (flag == pair.first) {
@@ -624,8 +636,16 @@ void ImageRequestWQ<I>::apply_qos_limit(uint64_t limit, const uint64_t flag) {
     }
   }
   ceph_assert(throttle != nullptr);
-  throttle->set_max(limit);
-  throttle->set_average(limit);
+
+  int r = throttle->set_limit(limit, burst);
+  if (r < 0) {
+    lderr(cct) << throttle->get_name() << ": invalid qos parameter: "
+               << "burst(" << burst << ") is less than "
+               << "limit(" << limit << ")" << dendl;
+    // if apply failed, we should at least make sure the limit works.
+    throttle->set_limit(limit, 0);
+  }
+
   if (limit)
     m_qos_enabled_flag |= flag;
   else
@@ -720,7 +740,7 @@ void *ImageRequestWQ<I>::_void_dequeue() {
   ceph_assert(peek_item == item);
 
   if (lock_required) {
-    this->get_pool_lock().Unlock();
+    this->get_pool_lock().unlock();
     m_image_ctx.owner_lock.get_read();
     if (m_image_ctx.exclusive_lock != nullptr) {
       ldout(cct, 5) << "exclusive lock required: delaying IO " << item << dendl;
@@ -741,7 +761,7 @@ void *ImageRequestWQ<I>::_void_dequeue() {
       lock_required = false;
     }
     m_image_ctx.owner_lock.put_read();
-    this->get_pool_lock().Lock();
+    this->get_pool_lock().lock();
 
     if (lock_required) {
       return nullptr;
@@ -754,9 +774,9 @@ void *ImageRequestWQ<I>::_void_dequeue() {
     // stall IO until the refresh completes
     ++m_io_blockers;
 
-    this->get_pool_lock().Unlock();
+    this->get_pool_lock().unlock();
     m_image_ctx.state->refresh(new C_RefreshFinish(this, item));
-    this->get_pool_lock().Lock();
+    this->get_pool_lock().lock();
     return nullptr;
   }
 

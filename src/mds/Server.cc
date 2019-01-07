@@ -431,7 +431,6 @@ void Server::handle_client_reclaim(const MClientReclaim::const_ref &m)
   m->put();
 }
 
-/* This function DOES put the passed message before returning*/
 void Server::handle_client_session(const MClientSession::const_ref &m)
 {
   version_t pv;
@@ -923,7 +922,16 @@ void Server::find_idle_sessions()
       if (last_cap_renew_span < cutoff) {
 	dout(20) << "laggiest active session is " << session->info.inst
 		 << " and renewed caps recently (" << last_cap_renew_span << "s ago)" << dendl;
-	continue;
+	break;
+      }
+
+      if (session->last_seen > session->last_cap_renew) {
+	last_cap_renew_span = std::chrono::duration<double>(now - session->last_seen).count();
+	if (last_cap_renew_span < cutoff) {
+	  dout(20) << "laggiest active session is " << session->info.inst
+		   << " and renewed caps recently (" << last_cap_renew_span << "s ago)" << dendl;
+	  continue;
+	}
       }
 
       auto it = session->info.client_metadata.find("timeout");
@@ -1077,8 +1085,8 @@ void Server::kill_session(Session *session, Context *on_safe)
 size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
 {
   std::list<Session*> victims;
-  const auto sessions = mds->sessionmap.get_sessions();
-  for (const auto p : sessions)  {
+  const auto& sessions = mds->sessionmap.get_sessions();
+  for (const auto& p : sessions)  {
     if (!p.first.is_client()) {
       // Do not apply OSDMap blacklist to MDS daemons, we find out
       // about their death via MDSMap.
@@ -1156,7 +1164,7 @@ void Server::reconnect_clients(MDSInternalContext *reconnect_done_)
 
   // clients will get the mdsmap and discover we're reconnecting via the monitor.
   
-  reconnect_start = ceph_clock_now();
+  reconnect_start = now;
   dout(1) << "reconnect_clients -- " << client_reconnect_gather.size() << " sessions" << dendl;
   mds->sessionmap.dump();
 }
@@ -1174,8 +1182,7 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
     return;
   }
 
-  utime_t delay = ceph_clock_now();
-  delay -= reconnect_start;
+  auto delay = std::chrono::duration<double>(clock::now() - reconnect_start).count();
   dout(10) << " reconnect_start " << reconnect_start << " delay " << delay << dendl;
 
   bool deny = false;
@@ -1219,13 +1226,6 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
     mds->send_message_client(m, session);
     if (session->is_open())
       kill_session(session, nullptr);
-    return;
-  }
-
-  // opening snaprealm past parents needs to use snaptable
-  if (!mds->snapclient->is_synced()) {
-    dout(10) << " snaptable isn't synced, waiting" << dendl;
-    mds->snapclient->wait_for_sync(new C_MDS_RetryMessage(mds, m));
     return;
   }
 
@@ -1290,6 +1290,8 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
     }
   }
   mdcache->rejoin_recovered_client(session->get_client(), session->info.inst);
+
+  reconnect_last_seen = clock::now();
 
   // remove from gather set
   client_reconnect_gather.erase(from);
@@ -1387,63 +1389,81 @@ void Server::reconnect_gather_finish()
 void Server::reconnect_tick()
 {
   if (reconnect_evicting) {
-    dout(4) << "reconnect_tick: waiting for evictions" << dendl;
+    dout(7) << "reconnect_tick: waiting for evictions" << dendl;
     return;
   }
 
-  utime_t reconnect_end = reconnect_start;
-  reconnect_end += g_conf()->mds_reconnect_timeout;
-  if (ceph_clock_now() >= reconnect_end &&
-      !client_reconnect_gather.empty()) {
-    dout(10) << "reconnect timed out" << dendl;
+  if (client_reconnect_gather.empty())
+    return;
 
-    // If we're doing blacklist evictions, use this to wait for them before
-    // proceeding to reconnect_gather_finish
-    MDSGatherBuilder gather(g_ceph_context);
+  auto now = clock::now();
+  auto elapse1 = std::chrono::duration<double>(now - reconnect_start).count();
+  if (elapse1 < g_conf()->mds_reconnect_timeout)
+    return;
 
-    for (set<client_t>::iterator p = client_reconnect_gather.begin();
-	 p != client_reconnect_gather.end();
-	 ++p) {
-      Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
-      ceph_assert(session);
+  vector<Session*> remaining_sessions;
+  remaining_sessions.reserve(client_reconnect_gather.size());
+  for (auto c : client_reconnect_gather) {
+    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(c.v));
+    ceph_assert(session);
+    remaining_sessions.push_back(session);
+    // client re-sends cap flush messages before the reconnect message
+    if (session->last_seen > reconnect_last_seen)
+      reconnect_last_seen = session->last_seen;
+  }
 
-      // Keep sessions that have specified timeout. These sessions will prevent
-      // mds from going to active. MDS goes to active after they all have been
-      // killed or reclaimed.
-      if (session->info.client_metadata.find("timeout") !=
-	  session->info.client_metadata.end()) {
-	dout(1) << "reconnect keeps " << session->info.inst << ", need to be reclaimed" << dendl;
-	client_reclaim_gather.insert(session->get_client());
-	continue;
-      }
+  auto elapse2 = std::chrono::duration<double>(now - reconnect_last_seen).count();
+  if (elapse2 < g_conf()->mds_reconnect_timeout / 2) {
+    dout(7) << "reconnect_tick: last seen " << elapse2
+            << " seconds ago, extending reconnect interval" << dendl;
+    return;
+  }
 
-      dout(1) << "reconnect gives up on " << session->info.inst << dendl;
+  dout(7) << "reconnect timed out, " << remaining_sessions.size()
+	  << " clients have not reconnected in time" << dendl;
 
-      mds->clog->warn() << "evicting unresponsive client " << *session
-                        << ", after waiting " << g_conf()->mds_reconnect_timeout
-                        << " seconds during MDS startup";
+  // If we're doing blacklist evictions, use this to wait for them before
+  // proceeding to reconnect_gather_finish
+  MDSGatherBuilder gather(g_ceph_context);
 
-      if (g_conf()->mds_session_blacklist_on_timeout) {
-        std::stringstream ss;
-        mds->evict_client(session->get_client().v, false, true, ss,
-                          gather.new_sub());
-      } else {
-        kill_session(session, NULL);
-      }
-
-      failed_reconnects++;
+  for (auto session : remaining_sessions) {
+    // Keep sessions that have specified timeout. These sessions will prevent
+    // mds from going to active. MDS goes to active after they all have been
+    // killed or reclaimed.
+    if (session->info.client_metadata.find("timeout") !=
+	session->info.client_metadata.end()) {
+      dout(1) << "reconnect keeps " << session->info.inst
+	      << ", need to be reclaimed" << dendl;
+      client_reclaim_gather.insert(session->get_client());
+      continue;
     }
-    client_reconnect_gather.clear();
 
-    if (gather.has_subs()) {
-      dout(1) << "reconnect will complete once clients are evicted" << dendl;
-      gather.set_finisher(new MDSInternalContextWrapper(mds, new FunctionContext(
-            [this](int r){reconnect_gather_finish();})));
-      gather.activate();
-      reconnect_evicting = true;
+    dout(1) << "reconnect gives up on " << session->info.inst << dendl;
+
+    mds->clog->warn() << "evicting unresponsive client " << *session
+		      << ", after waiting " << elapse1
+		      << " seconds during MDS startup";
+
+    if (g_conf()->mds_session_blacklist_on_timeout) {
+      std::stringstream ss;
+      mds->evict_client(session->get_client().v, false, true, ss,
+			gather.new_sub());
     } else {
-      reconnect_gather_finish();
+      kill_session(session, NULL);
     }
+
+    failed_reconnects++;
+  }
+  client_reconnect_gather.clear();
+
+  if (gather.has_subs()) {
+    dout(1) << "reconnect will complete once clients are evicted" << dendl;
+    gather.set_finisher(new MDSInternalContextWrapper(mds, new FunctionContext(
+	    [this](int r){reconnect_gather_finish();})));
+    gather.activate();
+    reconnect_evicting = true;
+  } else {
+    reconnect_gather_finish();
   }
 }
 
@@ -2467,7 +2487,6 @@ void Server::handle_slave_request_reply(const MMDSSlaveRequest::const_ref &m)
   }
 }
 
-/* This function DOES put the mdr->slave_request before returning*/
 void Server::dispatch_slave_request(MDRequestRef& mdr)
 {
   dout(7) << "dispatch_slave_request " << *mdr << " " << *mdr->slave_request << dendl;
@@ -2595,7 +2614,6 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
   }
 }
 
-/* This function DOES put the mdr->slave_request before returning*/
 void Server::handle_slave_auth_pin(MDRequestRef& mdr)
 {
   dout(10) << "handle_slave_auth_pin " << *mdr << dendl;
@@ -3464,7 +3482,6 @@ struct C_MDS_LookupIno2 : public ServerContext {
   }
 };
 
-/* This function DOES clean up the mdr before returning*/
 /*
  * filepath:  ino
  */
@@ -6093,7 +6110,6 @@ public:
   }
 };
 
-/* This function DOES put the mdr->slave_request before returning*/
 void Server::handle_slave_link_prep(MDRequestRef& mdr)
 {
   dout(10) << "handle_slave_link_prep " << *mdr 
@@ -6699,8 +6715,6 @@ void Server::_unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn)
   if (in->is_dir()) {
     ceph_assert(straydn);
     mdcache->project_subtree_rename(in, dn->get_dir(), straydn->get_dir());
-
-    in->maybe_export_pin(true);
   }
 
   journal_and_reply(mdr, 0, dn, le, new C_MDS_unlink_local_finish(this, mdr, dn, straydn));
@@ -7501,15 +7515,13 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     dout(10) << "srci is remote dir, setting stickydirs and opening all frags" << dendl;
     mdr->set_stickydirs(srci);
 
-    list<frag_t> frags;
-    srci->dirfragtree.get_leaves(frags);
-    for (list<frag_t>::iterator p = frags.begin();
-	 p != frags.end();
-	 ++p) {
-      CDir *dir = srci->get_dirfrag(*p);
+    frag_vec_t leaves;
+    srci->dirfragtree.get_leaves(leaves);
+    for (const auto& leaf : leaves) {
+      CDir *dir = srci->get_dirfrag(leaf);
       if (!dir) {
-	dout(10) << " opening " << *p << " under " << *srci << dendl;
-	mdcache->open_remote_dirfrag(srci, *p, new C_MDS_RetryRequest(mdcache, mdr));
+	dout(10) << " opening " << leaf << " under " << *srci << dendl;
+	mdcache->open_remote_dirfrag(srci, leaf, new C_MDS_RetryRequest(mdcache, mdr));
 	return;
       }
     }
@@ -7767,37 +7779,36 @@ version_t Server::_rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, buff
 
 bool Server::_need_force_journal(CInode *diri, bool empty)
 {
-  list<CDir*> ls;
-  diri->get_dirfrags(ls);
+  std::vector<CDir*> dirs;
+  diri->get_dirfrags(dirs);
 
   bool force_journal = false;
   if (empty) {
-    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-      if ((*p)->is_subtree_root() && (*p)->get_dir_auth().first == mds->get_nodeid()) {
-	dout(10) << " frag " << (*p)->get_frag() << " is auth subtree dirfrag, will force journal" << dendl;
+    for (const auto& dir : dirs) {
+      if (dir->is_subtree_root() && dir->get_dir_auth().first == mds->get_nodeid()) {
+	dout(10) << " frag " << dir->get_frag() << " is auth subtree dirfrag, will force journal" << dendl;
 	force_journal = true;
 	break;
       } else
-	dout(20) << " frag " << (*p)->get_frag() << " is not auth subtree dirfrag" << dendl;
+	dout(20) << " frag " << dir->get_frag() << " is not auth subtree dirfrag" << dendl;
     }
   } else {
     // see if any children of our frags are auth subtrees.
-    list<CDir*> subtrees;
-    mdcache->list_subtrees(subtrees);
-    dout(10) << " subtrees " << subtrees << " frags " << ls << dendl;
-    for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
-      CDir *dir = *p;
-      for (list<CDir*>::iterator q = subtrees.begin(); q != subtrees.end(); ++q) {
-	if (dir->contains(*q)) {
-	  if ((*q)->get_dir_auth().first == mds->get_nodeid()) {
-	    dout(10) << " frag " << (*p)->get_frag() << " contains (maybe) auth subtree, will force journal "
-		     << **q << dendl;
+    std::vector<CDir*> subtrees;
+    mdcache->get_subtrees(subtrees);
+    dout(10) << " subtrees " << subtrees << " frags " << dirs << dendl;
+    for (const auto& dir : dirs) {
+      for (const auto& subtree : subtrees) {
+	if (dir->contains(subtree)) {
+	  if (subtree->get_dir_auth().first == mds->get_nodeid()) {
+	    dout(10) << " frag " << dir->get_frag() << " contains (maybe) auth subtree, will force journal "
+		     << *subtree << dendl;
 	    force_journal = true;
 	    break;
 	  } else
-	    dout(20) << " frag " << (*p)->get_frag() << " contains but isn't auth for " << **q << dendl;
+	    dout(20) << " frag " << dir->get_frag() << " contains but isn't auth for " << *subtree << dendl;
 	} else
-	  dout(20) << " frag " << (*p)->get_frag() << " does not contain " << **q << dendl;
+	  dout(20) << " frag " << dir->get_frag() << " does not contain " << *subtree << dendl;
       }
       if (force_journal)
 	break;
@@ -8321,12 +8332,8 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
   mdr->apply();
 
   // update subtree map?
-  if (destdnl->is_primary() && in->is_dir()) {
+  if (destdnl->is_primary() && in->is_dir())
     mdcache->adjust_subtree_after_rename(in, srcdn->get_dir(), true);
-
-    if (destdn->is_auth())
-      mdcache->migrator->adjust_export_after_rename(in, srcdn->get_dir());
-  }
 
   if (straydn && oldin->is_dir())
     mdcache->adjust_subtree_after_rename(oldin, destdn->get_dir(), true);
@@ -8377,7 +8384,6 @@ public:
   }
 };
 
-/* This function DOES put the mdr->slave_request before returning*/
 void Server::handle_slave_rename_prep(MDRequestRef& mdr)
 {
   dout(10) << "handle_slave_rename_prep " << *mdr 

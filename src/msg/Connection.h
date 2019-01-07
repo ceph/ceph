@@ -24,6 +24,7 @@
 #include "common/RefCountedObj.h"
 #include "common/config.h"
 #include "common/debug.h"
+#include "common/Mutex.h"
 #include "include/ceph_assert.h" // Because intusive_ptr clobbers our assert...
 #include "include/buffer.h"
 #include "include/types.h"
@@ -152,6 +153,7 @@ public:
    */
   virtual void mark_disposable() = 0;
 
+  // WARNING / FIXME: this is not populated for loopback connections
   AuthCapsInfo& get_peer_caps_info() {
     return peer_caps_info;
   }

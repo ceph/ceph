@@ -15,30 +15,110 @@
 #define MGR_MAP_H_
 
 #include <sstream>
+#include <set>
 
 #include "msg/msg_types.h"
 #include "common/Formatter.h"
 #include "include/encoding.h"
+#include "include/utime.h"
 #include "common/version.h"
+#include "common/options.h"
+#include "common/Clock.h"
 
 
 class MgrMap
 {
 public:
+  struct ModuleOption {
+    std::string name;
+    uint8_t type = Option::TYPE_STR;         // Option::type_t TYPE_*
+    uint8_t level = Option::LEVEL_ADVANCED;  // Option::level_t LEVEL_*
+    uint32_t flags = 0; // Option::flag_t FLAG_*
+    std::string default_value;
+    std::string min, max;
+    std::set<std::string> enum_allowed;
+    std::string desc, long_desc;
+    std::set<std::string> tags;
+    std::set<std::string> see_also;
+
+    void encode(bufferlist& bl) const {
+      ENCODE_START(1, 1, bl);
+      encode(name, bl);
+      encode(type, bl);
+      encode(level, bl);
+      encode(flags, bl);
+      encode(default_value, bl);
+      encode(min, bl);
+      encode(max, bl);
+      encode(enum_allowed, bl);
+      encode(desc, bl);
+      encode(long_desc, bl);
+      encode(tags, bl);
+      encode(see_also, bl);
+      ENCODE_FINISH(bl);
+    }
+    void decode(bufferlist::const_iterator& p) {
+      DECODE_START(1, p);
+      decode(name, p);
+      decode(type, p);
+      decode(level, p);
+      decode(flags, p);
+      decode(default_value, p);
+      decode(min, p);
+      decode(max, p);
+      decode(enum_allowed, p);
+      decode(desc, p);
+      decode(long_desc, p);
+      decode(tags, p);
+      decode(see_also, p);
+      DECODE_FINISH(p);
+    }
+    void dump(Formatter *f) const {
+      f->dump_string("name", name);
+      f->dump_string("type", Option::type_to_str(
+		       static_cast<Option::type_t>(type)));
+      f->dump_string("level", Option::level_to_str(
+		       static_cast<Option::level_t>(level)));
+      f->dump_unsigned("flags", flags);
+      f->dump_string("default_value", default_value);
+      f->dump_string("min", min);
+      f->dump_string("max", max);
+      f->open_array_section("enum_allowed");
+      for (auto& i : enum_allowed) {
+	f->dump_string("value", i);
+      }
+      f->close_section();
+      f->dump_string("desc", desc);
+      f->dump_string("long_desc", long_desc);
+      f->open_array_section("tags");
+      for (auto& i : tags) {
+	f->dump_string("tag", i);
+      }
+      f->close_section();
+      f->open_array_section("see_also");
+      for (auto& i : see_also) {
+	f->dump_string("option", i);
+      }
+      f->close_section();
+    }
+  };
+
   class ModuleInfo
   {
     public:
     std::string name;
     bool can_run = true;
     std::string error_string;
+    std::map<std::string,ModuleOption> module_options;
 
     // We do not include the module's `failed` field in the beacon,
     // because it is exposed via health checks.
     void encode(bufferlist &bl) const {
-      ENCODE_START(1, 1, bl);
+      ENCODE_START(2, 1, bl);
       encode(name, bl);
       encode(can_run, bl);
       encode(error_string, bl);
+      encode(module_options, bl);
       ENCODE_FINISH(bl);
     }
 
@@ -47,6 +127,9 @@ public:
       decode(name, bl);
       decode(can_run, bl);
       decode(error_string, bl);
+      if (struct_v >= 2) {
+	decode(module_options, bl);
+      }
       DECODE_FINISH(bl);
     }
 
@@ -60,6 +143,11 @@ public:
       f->dump_string("name", name);
       f->dump_bool("can_run", can_run);
       f->dump_string("error_string", error_string);
+      f->open_object_section("module_options");
+      for (auto& i : module_options) {
+	f->dump_object(i.first.c_str(), i.second);
+      }
+      f->close_section();
       f->close_section();
     }
   };
@@ -186,6 +274,15 @@ public:
     }
 
     return false;
+  }
+
+  const ModuleInfo *get_module_info(const std::string &module_name) const {
+    for (const auto &i : available_modules) {
+      if (i.name == module_name) {
+        return &i;
+      }
+    }
+    return nullptr;
   }
 
   bool can_run_module(const std::string &module_name, std::string *error) const
@@ -339,6 +436,7 @@ public:
     f->dump_int("active_gid", get_active_gid());
     f->dump_string("active_name", get_active_name());
     f->dump_object("active_addrs", active_addrs);
+    f->dump_stream("active_addr") << active_addrs.get_legacy_str();
     f->dump_stream("active_change") << active_change;
     f->dump_bool("available", available);
     f->open_array_section("standbys");
@@ -443,6 +541,7 @@ public:
 WRITE_CLASS_ENCODER_FEATURES(MgrMap)
 WRITE_CLASS_ENCODER(MgrMap::StandbyInfo)
 WRITE_CLASS_ENCODER(MgrMap::ModuleInfo);
+WRITE_CLASS_ENCODER(MgrMap::ModuleOption);
 
 #endif
 

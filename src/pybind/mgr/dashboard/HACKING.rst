@@ -79,6 +79,34 @@ We added 2 npm scripts to help run these tools:
 - ``npm run lint``, will check frontend files against all linters
 - ``npm run fix``, will try to fix all the detected linting errors
 
+Writing Unit Tests
+~~~~~~~~~~~~~~~~~~
+
+To write unit tests most efficient we have a small collection of tools,
+we use within test suites.
+
+Those tools can be found under
+``src/pybind/mgr/dashboard/frontend/src/testing/``, especially take
+a look at ``unit-test-helper.ts``.
+
+There you will be able to find:
+
+``configureTestBed`` that replaces the initial ``TestBed``
+methods. It takes the same arguments as ``TestBed.configureTestingModule``.
+Using it will run your tests a lot faster in development, as it doesn't
+recreate everything from scratch on every test. To use the default behaviour
+pass ``true`` as the second argument.
+
+``PermissionHelper`` to help determine if
+the correct actions are shown based on the current permissions and selection
+in a list.
+
+``FormHelper`` which makes testing a form a lot easier
+with a few simple methods. It allows you to set a control or multiple
+controls, expect if a control is valid or has an error or just do both with
+one method. Additional you can expect a template element or multiple elements
+to be visible in the rendered template.
+
 Running Unit Tests
 ~~~~~~~~~~~~~~~~~~
 
@@ -124,6 +152,16 @@ Remote:
 Note:
   When using docker, as your device, you might need to run the script with sudo
   permissions.
+
+Writing End-to-End Tests
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+When writing e2e tests you don't want to recompile every time from scratch to
+try out if your test has succeeded. As usual you have your development server
+open (``npm start``) which already has compiled all files. To attach
+`Protractor <http://www.protractortest.org/>`__ to this process, instead of
+spinning up it's own server, you can use ``npm run e2e -- --dev-server-target``
+or just ``npm run e2e:dev`` which is equivalent.
 
 Further Help
 ~~~~~~~~~~~~
@@ -190,6 +228,132 @@ Example:
       Some <strong>helper</strong> html text
     </cd-helper>
 
+I18N
+----
+
+How to extract messages from source code?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To extract the I18N messages from the templates and the TypeScript files just
+run the following command in ``src/pybind/mgr/dashboard/frontend``::
+
+  $ npm run i18n
+
+This will extract all marked messages from the HTML templates first and then
+add all marked strings from the TypeScript files to the translation template.
+Since the extraction from TypeScript files is still not supported by Angular
+itself, we are using the
+`ngx-translator <https://github.com/ngx-translate/i18n-polyfill>`_ extractor to
+parse the TypeScript files.
+
+When the command ran successfully, it should have created or updated the file
+``src/locale/messages.xlf``.
+
+To make sure this file is always up to date in master branch, we added a
+validation in ``run-frontend-unittests.sh`` that will fail if it finds
+uncommitted translations.
+
+Supported languages
+~~~~~~~~~~~~~~~~~~~
+
+All our supported languages should be registeredd in
+``supported-languages.enum.ts``, this will then provide that list to both the
+language selectors in the frontend.
+
+Translating process
+~~~~~~~~~~~~~~~~~~~
+
+To facilitate the translation process of the dashboard we are using a web tool
+called `transifex <https://www.transifex.com/>`_.
+
+If you wish to help translating to any language just go to our `transifex
+project page <https://www.transifex.com/ceph/ceph-dashboard/>`_, join the
+project and you can start translating immediately.
+
+All translations will then be reviewed and later pushed upstream.
+
+Updating translated messages
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Any time there are new messages translated and reviewed in a specific language
+we should update the translation file upstream.
+
+To do that, we need to download the language xlf file from transifex and replace
+the current one in the repository. Since Angular doesn't support missing
+translations, we need to do an extra step and fill all the untranslated strings
+with the source string.
+
+Each language file should be placed in ``src/locale/messages.<locale-id>.xlf``.
+For example, the path for german would be ``src/locale/messages.de-DE.xlf``.
+``<locale-id>`` should match the id previouisly inserted in
+``supported-languages.enum.ts``.
+
+Suggestions
+~~~~~~~~~~~
+
+Strings need to start and end in the same line as the element:
+
+.. code-block:: xml
+
+  <!-- avoid -->
+  <span i18n>
+    Foo
+  </span>
+
+  <!-- recommended -->
+  <span i18n>Foo</span>
+
+
+  <!-- avoid -->
+  <span i18n>
+    Foo bar baz.
+    Foo bar baz.
+  </span>
+
+  <!-- recommended -->
+  <span i18n>Foo bar baz.
+    Foo bar baz.</span>
+
+Isolated interpolations should not be translated:
+
+.. code-block:: xml
+
+  <!-- avoid -->
+  <span i18n>{{ foo }}</span>
+
+  <!-- recommended -->
+  <span>{{ foo }}</span>
+
+Interpolations used in a sentence should be kept in the translation:
+
+.. code-block:: xml
+
+  <!-- recommended -->
+  <span i18n>There are {{ x }} OSDs.</span>
+
+Remove elements that are outside the context of the translation:
+
+.. code-block:: xml
+
+  <!-- avoid -->
+  <label i18n>
+    Profile
+    <span class="required"></span>
+  </label>
+
+  <!-- recommended -->
+  <label>
+    <ng-container i18n>Profile<ng-container>
+    <span class="required"></span>
+  </label>
+
+Keep elements that affect the sentence:
+
+.. code-block:: xml
+
+  <!-- recommended -->
+  <span i18n>Profile <b>foo</b> will be removed.</span>
+
 Backend Development
 -------------------
 
@@ -227,8 +391,8 @@ Alternatively, you can use Python's native package installation method::
   $ pip install tox
   $ pip install coverage
 
-To run the tests, run ``tox`` in the dashboard directory (where ``tox.ini``
-is located).
+To run the tests, run ``run-tox.sh`` in the dashboard directory (where
+``tox.ini`` is located).
 
 We also collect coverage information from the backend code. You can check the
 coverage information provided by the tox output, or by running the following
@@ -247,28 +411,63 @@ instance if you only want to run the linting tools, do::
 API tests based on Teuthology
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To run our API tests against a real Ceph cluster, we leverage the Teuthology framework. This
-has the advantage of catching bugs originated from changes in the internal Ceph
-code.
+How to run existing API tests:
+  To run the API tests against a real Ceph cluster, we leverage the Teuthology
+  framework. This has the advantage of catching bugs originated from changes in
+  the internal Ceph code.
 
+  Our ``run-backend-api-tests.sh`` script will start a ``vstart`` Ceph cluster
+  before running the Teuthology tests, and then it stops the cluster after the
+  tests are run. Of course this implies that you have built/compiled Ceph
+  previously.
 
-Our ``run-backend-api-tests.sh`` script will start a ``vstart`` Ceph cluster before running the
-Teuthology tests, and then it stops the cluster after the tests are run. Of
-course this implies that you have built/compiled Ceph previously.
+  Start all dashboard tests by running::
 
-Start all dashboard tests by running::
+    $ ./run-backend-api-tests.sh
 
-  $ ./run-backend-api-tests.sh
+  Or, start one or multiple specific tests by specifying the test name::
 
-Or, start one or multiple specific tests by specifying the test name::
+    $ ./run-backend-api-tests.sh tasks.mgr.dashboard.test_pool.PoolTest
 
-  $ ./run-backend-api-tests.sh tasks.mgr.dashboard.test_pool.PoolTest
+  Or, ``source`` the script and run the tests manually::
 
-Or, ``source`` the script and run the tests manually::
+    $ source run-backend-api-tests.sh
+    $ run_teuthology_tests [tests]...
+    $ cleanup_teuthology
 
-  $ source run-backend-api-tests.sh
-  $ run_teuthology_tests [tests]...
-  $ cleanup_teuthology
+How to write your own tests:
+  There are two possible ways to write your own API tests:
+
+  The first is by extending one of the existing test classes in the
+  ``qa/tasks/mgr/dashboard`` directory.
+
+  The second way is by adding your own API test module if you're creating a new
+  controller for example. To do so you'll just need to add the file containing
+  your new test class to the ``qa/tasks/mgr/dashboard`` directory and implement
+  all your tests here.
+
+  .. note:: Don't forget to add the path of the newly created module to
+    ``modules`` section in ``qa/suites/rados/mgr/tasks/dashboard.yaml``.
+
+  Short example: Let's assume you created a new controller called
+  ``my_new_controller.py`` and the related test module
+  ``test_my_new_controller.py``. You'll need to add
+  ``tasks.mgr.dashboard.test_my_new_controller`` to the ``modules`` section in
+  the ``dashboard.yaml`` file.
+
+  Also, if you're removing test modules please keep in mind to remove the
+  related section. Otherwise the Teuthology test run will fail.
+
+  Please run your API tests on your dev environment (as explained above)
+  before submitting a pull request. Also make sure that a full QA run in
+  Teuthology/sepia lab (based on your changes) has completed successfully
+  before it gets merged. You don't need to schedule the QA run yourself, just
+  add the 'needs-qa' label to your pull request as soon as you think it's ready
+  for merging (e.g. make check was successful, the pull request is approved and
+  all comments have been addressed). One of the developers who has access to
+  Teuthology/the sepia lab will take care of it and report the result back to
+  you.
+
 
 How to add a new controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -526,6 +725,44 @@ same applies to other request types:
 | DELETE       | Yes        | delete         | 204         |
 +--------------+------------+----------------+-------------+
 
+How to use a custom API endpoint in a RESTController?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you don't have any access restriction you can use ``@Endpoint``. If you
+have set a permission scope to restrict access to your endpoints,
+``@Endpoint`` will fail, as it doesn't know which permission property should be
+used. To use a custom endpoint inside a restricted ``RESTController`` use
+``@RESTController.Collection`` instead. You can also choose
+``@RESTController.Resource`` if you have set a ``RESOURCE_ID`` in your
+``RESTController`` class.
+
+.. code-block:: python
+
+  import cherrypy
+  from ..tools import ApiController, RESTController
+
+  @ApiController('ping', Scope.Ping)
+  class Ping(RESTController):
+    RESOURCE_ID = 'ping'
+
+    @RESTController.Resource('GET')
+    def some_get_endpoint(self):
+      return {"msg": "Hello"}
+
+    @RESTController.Collection('POST')
+    def some_post_endpoint(self, **data):
+      return {"msg": data}
+
+Both decorators also support four parameters to customize the
+endpoint:
+
+* ``method="GET"``: the HTTP method allowed to access this endpoint.
+* ``path="/<method_name>"``: the URL path of the endpoint, excluding the
+  controller URL path prefix.
+* ``status=200``: set the HTTP status response code
+* ``query_params=[]``: list of method parameter names that correspond to URL
+  query parameters.
+
 How to restrict access to a controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -587,7 +824,7 @@ If we want to write a unit test for the above ``Ping`` controller, create a
   class PingTest(ControllerTestCase):
       @classmethod
       def setup_test(cls):
-          Ping._cp_config['tools.authentication.on'] = False
+          Ping._cp_config['tools.authenticate.on'] = False
           cls.setup_controllers([Ping])
 
       def test_ping(self):

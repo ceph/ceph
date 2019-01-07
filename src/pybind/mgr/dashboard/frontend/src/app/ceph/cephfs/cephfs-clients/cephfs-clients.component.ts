@@ -1,5 +1,7 @@
 import { Component, Input, OnInit } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
+
 import { CephfsService } from '../../../shared/api/cephfs.service';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 
@@ -15,17 +17,17 @@ export class CephfsClientsComponent implements OnInit {
   clients: any;
   viewCacheStatus: ViewCacheStatus;
 
-  constructor(private cephfsService: CephfsService) {}
+  constructor(private cephfsService: CephfsService, private i18n: I18n) {}
 
   ngOnInit() {
     this.clients = {
       columns: [
-        { prop: 'id' },
-        { prop: 'type' },
-        { prop: 'state' },
-        { prop: 'version' },
-        { prop: 'hostname', name: 'Host' },
-        { prop: 'root' }
+        { prop: 'id', name: this.i18n('id') },
+        { prop: 'type', name: this.i18n('type') },
+        { prop: 'state', name: this.i18n('state') },
+        { prop: 'version', name: this.i18n('version') },
+        { prop: 'hostname', name: this.i18n('Host') },
+        { prop: 'root', name: this.i18n('root') }
       ],
       data: []
     };

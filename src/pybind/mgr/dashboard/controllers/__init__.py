@@ -21,12 +21,9 @@ import cherrypy
 
 from .. import logger
 from ..security import Scope, Permission
-from ..settings import Settings
-from ..tools import Session, wraps, getargspec, TaskManager
-from ..exceptions import ViewCacheNoDataException, DashboardException, \
-                         ScopeNotValid, PermissionNotValid
-from ..services.exception import serialize_dashboard_exception
-from ..services.auth import AuthManager
+from ..tools import wraps, getargspec, TaskManager, get_request_body_params
+from ..exceptions import ScopeNotValid, PermissionNotValid
+from ..services.auth import AuthManager, JwtManager
 
 
 class Controller(object):
@@ -57,9 +54,6 @@ class Controller(object):
         cls._security_scope = self.security_scope
 
         config = {
-            'tools.sessions.on': True,
-            'tools.sessions.name': Session.NAME,
-            'tools.session_expire_at_browser_close.on': True,
             'tools.dashboard_exception_handler.on': True,
             'tools.authenticate.on': self.secure,
         }
@@ -89,7 +83,7 @@ class UiApiController(Controller):
 
 
 def Endpoint(method=None, path=None, path_params=None, query_params=None,
-             json_response=True, proxy=False):
+             json_response=True, proxy=False, xml=False):
 
     if method is None:
         method = 'GET'
@@ -139,7 +133,8 @@ def Endpoint(method=None, path=None, path_params=None, query_params=None,
             'path_params': path_params,
             'query_params': query_params,
             'json_response': json_response,
-            'proxy': proxy
+            'proxy': proxy,
+            'xml': xml
         }
         return func
     return _wrapper
@@ -380,7 +375,8 @@ class BaseController(object):
         @property
         def function(self):
             return self.ctrl._request_wrapper(self.func, self.method,
-                                              self.config['json_response'])
+                                              self.config['json_response'],
+                                              self.config['xml'])
 
         @property
         def method(self):
@@ -482,7 +478,7 @@ class BaseController(object):
         if scope is None:
             raise Exception("Cannot verify permissions without scope security"
                             " defined")
-        username = cherrypy.session.get(Session.USERNAME)
+        username = JwtManager.LOCAL_USER.username
         return AuthManager.authorize(username, scope, permissions)
 
     @classmethod
@@ -523,7 +519,7 @@ class BaseController(object):
         return result
 
     @staticmethod
-    def _request_wrapper(func, method, json_response):
+    def _request_wrapper(func, method, json_response, xml):  # pylint: disable=unused-argument
         @wraps(func)
         def inner(*args, **kwargs):
             for key, value in kwargs.items():
@@ -532,34 +528,50 @@ class BaseController(object):
                         or isinstance(value, str):
                     kwargs[key] = unquote(value)
 
-            if method in ['GET', 'DELETE']:
-                ret = func(*args, **kwargs)
+            # Process method arguments.
+            params = get_request_body_params(cherrypy.request)
+            kwargs.update(params)
 
-            elif cherrypy.request.headers.get('Content-Type', '') == \
-                    'application/x-www-form-urlencoded':
-                ret = func(*args, **kwargs)
-
-            else:
-                content_length = int(cherrypy.request.headers['Content-Length'])
-                body = cherrypy.request.body.read(content_length)
-                if not body:
-                    ret = func(*args, **kwargs)
-                else:
-                    try:
-                        data = json.loads(body.decode('utf-8'))
-                    except Exception as e:
-                        raise cherrypy.HTTPError(400, 'Failed to decode JSON: {}'
-                                                 .format(str(e)))
-                    kwargs.update(data.items())
-                    ret = func(*args, **kwargs)
-
+            ret = func(*args, **kwargs)
             if isinstance(ret, bytes):
                 ret = ret.decode('utf-8')
+            if xml:
+                cherrypy.response.headers['Content-Type'] = 'application/xml'
+                return ret.encode('utf8')
             if json_response:
                 cherrypy.response.headers['Content-Type'] = 'application/json'
                 ret = json.dumps(ret).encode('utf8')
             return ret
         return inner
+
+    @property
+    def _request(self):
+        return self.Request(cherrypy.request)
+
+    class Request(object):
+        def __init__(self, cherrypy_req):
+            self._creq = cherrypy_req
+
+        @property
+        def scheme(self):
+            return self._creq.scheme
+
+        @property
+        def host(self):
+            base = self._creq.base
+            base = base[len(self.scheme)+3:]
+            return base[:base.find(":")] if ":" in base else base
+
+        @property
+        def port(self):
+            base = self._creq.base
+            base = base[len(self.scheme)+3:]
+            default_port = 443 if self.scheme == 'https' else 80
+            return int(base[base.find(":")+1:]) if ":" in base else default_port
+
+        @property
+        def path_info(self):
+            return self._creq.path_info
 
 
 class RESTController(BaseController):
@@ -590,7 +602,7 @@ class RESTController(BaseController):
     # should be overridden by subclasses.
     # to specify a composite id (two parameters) use '/'. e.g., "param1/param2".
     # If subclasses don't override this property we try to infer the structure
-    # of the resourse ID.
+    # of the resource ID.
     RESOURCE_ID = None
 
     _permission_map = {

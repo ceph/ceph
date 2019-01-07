@@ -6,7 +6,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
 
-import { configureTestBed } from '../../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../../shared/shared.module';
 import { ConfigurationFormComponent } from './configuration-form.component';
 import { ConfigFormModel } from './configuration-form.model';
@@ -14,7 +14,6 @@ import { ConfigFormModel } from './configuration-form.model';
 describe('ConfigurationFormComponent', () => {
   let component: ConfigurationFormComponent;
   let fixture: ComponentFixture<ConfigurationFormComponent>;
-  let activatedRoute: ActivatedRoute;
 
   configureTestBed({
     imports: [
@@ -28,14 +27,14 @@ describe('ConfigurationFormComponent', () => {
     providers: [
       {
         provide: ActivatedRoute
-      }
+      },
+      i18nProviders
     ]
   });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(ConfigurationFormComponent);
     component = fixture.componentInstance;
-    activatedRoute = TestBed.get(ActivatedRoute);
   });
 
   it('should create', () => {

@@ -322,3 +322,23 @@ void ObjectCache::chain_cache(RGWChainedCache *cache) {
   chained_cache.push_back(cache);
 }
 
+void ObjectCache::unchain_cache(RGWChainedCache *cache) {
+  RWLock::WLocker l(lock);
+
+  auto iter = chained_cache.begin();
+  for (; iter != chained_cache.end(); ++iter) {
+    if (cache == *iter) {
+      chained_cache.erase(iter);
+      cache->unregistered();
+      return;
+    }
+  }
+}
+
+ObjectCache::~ObjectCache()
+{
+  for (auto cache : chained_cache) {
+    cache->unregistered();
+  }
+}
+

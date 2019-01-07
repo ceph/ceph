@@ -145,7 +145,7 @@ void PyModuleConfig::set_config(
   const std::string global_key = PyModule::config_prefix
                                    + module_name + "/" + key;
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
 
     if (val) {
       config[global_key] = *val;
@@ -372,9 +372,9 @@ int PyModule::load(PyThreadState *pMainThreadState)
 
     r = load_options();
     if (r != 0) {
-      derr << "Missing or invalid OPTIONS attribute in module '"
+      derr << "Missing or invalid MODULE_OPTIONS attribute in module '"
           << module_name << "'" << dendl;
-      error_string = "Missing or invalid OPTIONS attribute";
+      error_string = "Missing or invalid MODULE_OPTIONS attribute";
       return r;
     }
 
@@ -514,16 +514,87 @@ int PyModule::load_commands()
 
 int PyModule::load_options()
 {
-  int r = walk_dict_list("OPTIONS", [this](PyObject *pOption) -> int {
-    PyObject *pName = PyDict_GetItemString(pOption, "name");
-    ceph_assert(pName != nullptr);
-
-    ModuleOption option;
-    option.name = PyString_AsString(pName);
-    dout(20) << "loaded option " << option.name << dendl;
-
+  int r = walk_dict_list("MODULE_OPTIONS", [this](PyObject *pOption) -> int {
+    MgrMap::ModuleOption option;
+    PyObject *p;
+    p = PyDict_GetItemString(pOption, "name");
+    ceph_assert(p != nullptr);
+    option.name = PyString_AsString(p);
+    option.type = Option::TYPE_STR;
+    p = PyDict_GetItemString(pOption, "type");
+    if (p && PyObject_TypeCheck(p, &PyString_Type)) {
+      std::string s = PyString_AsString(p);
+      int t = Option::str_to_type(s);
+      if (t >= 0) {
+	option.type = t;
+      }
+    }
+    p = PyDict_GetItemString(pOption, "desc");
+    if (p && PyObject_TypeCheck(p, &PyString_Type)) {
+      option.desc = PyString_AsString(p);
+    }
+    p = PyDict_GetItemString(pOption, "long_desc");
+    if (p && PyObject_TypeCheck(p, &PyString_Type)) {
+      option.long_desc = PyString_AsString(p);
+    }
+    p = PyDict_GetItemString(pOption, "default");
+    if (p) {
+      auto q = PyObject_Str(p);
+      option.default_value = PyString_AsString(q);
+      Py_DECREF(q);
+    }
+    p = PyDict_GetItemString(pOption, "min");
+    if (p) {
+      auto q = PyObject_Str(p);
+      option.min = PyString_AsString(q);
+      Py_DECREF(q);
+    }
+    p = PyDict_GetItemString(pOption, "max");
+    if (p) {
+      auto q = PyObject_Str(p);
+      option.max = PyString_AsString(q);
+      Py_DECREF(q);
+    }
+    p = PyDict_GetItemString(pOption, "enum_allowed");
+    if (p && PyObject_TypeCheck(p, &PyList_Type)) {
+      for (unsigned i = 0; i < PyList_Size(p); ++i) {
+	auto q = PyList_GetItem(p, i);
+	if (q) {
+	  auto r = PyObject_Str(q);
+	  option.enum_allowed.insert(PyString_AsString(r));
+	  Py_DECREF(r);
+	}
+      }
+    }
+    p = PyDict_GetItemString(pOption, "see_also");
+    if (p && PyObject_TypeCheck(p, &PyList_Type)) {
+      for (unsigned i = 0; i < PyList_Size(p); ++i) {
+	auto q = PyList_GetItem(p, i);
+	if (q && PyObject_TypeCheck(q, &PyString_Type)) {
+	  option.see_also.insert(PyString_AsString(q));
+	}
+      }
+    }
+    p = PyDict_GetItemString(pOption, "tags");
+    if (p && PyObject_TypeCheck(p, &PyList_Type)) {
+      for (unsigned i = 0; i < PyList_Size(p); ++i) {
+	auto q = PyList_GetItem(p, i);
+	if (q && PyObject_TypeCheck(q, &PyString_Type)) {
+	  option.tags.insert(PyString_AsString(q));
+	}
+      }
+    }
+    p = PyDict_GetItemString(pOption, "runtime");
+    if (p && PyObject_TypeCheck(p, &PyBool_Type)) {
+      if (p == Py_True) {
+	option.flags |= Option::FLAG_RUNTIME;
+      }
+      if (p == Py_False) {
+	option.flags &= ~Option::FLAG_RUNTIME;
+      }
+    }
+    dout(20) << "loaded module option " << option.name << dendl;
     options[option.name] = std::move(option);
-
     return 0;
   });
 
@@ -534,8 +605,40 @@ int PyModule::load_options()
 
 bool PyModule::is_option(const std::string &option_name)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   return options.count(option_name) > 0;
+}
+
+PyObject *PyModule::get_typed_option_value(const std::string& name,
+					   const std::string& value)
+{
+  auto p = options.find(name);
+  if (p != options.end()) {
+    switch (p->second.type) {
+    case Option::TYPE_INT:
+    case Option::TYPE_UINT:
+    case Option::TYPE_SIZE:
+      return PyInt_FromString((char *)value.c_str(), nullptr, 0);
+    case Option::TYPE_SECS:
+    case Option::TYPE_FLOAT:
+      {
+	PyObject *s = PyString_FromString(value.c_str());
+	PyObject *f = PyFloat_FromString(s, nullptr);
+	Py_DECREF(s);
+	return f;
+      }
+    case Option::TYPE_BOOL:
+      if (value == "1" || value == "true" || value == "True" ||
+	  value == "on" || value == "yes") {
+	Py_INCREF(Py_True);
+	return Py_True;
+      } else {
+	Py_INCREF(Py_False);
+	return Py_False;
+      }
+    }
+  }
+  return PyString_FromString(value.c_str());
 }
 
 int PyModule::load_subclass_of(const char* base_class, PyObject** py_class)

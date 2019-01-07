@@ -163,7 +163,7 @@ seastar::future<bool> Connection::do_auth()
     return reply.get_future();
   }).then([this] (Ref<MAuthReply> m) {
     logger().info("mon {} => {} returns {}: {}",
-                   conn->get_my_addr(),
+                   conn->get_messenger()->get_myaddr(),
                    conn->get_peer_addr(), *m, m->result);
     reply = decltype(reply){};
     auto p = m->result_bl.cbegin();
@@ -360,7 +360,7 @@ seastar::future<> Client::handle_auth_reply(ceph::net::ConnectionRef conn,
                                                Ref<MAuthReply> m)
 {
   logger().info("mon {} => {} returns {}: {}",
-                conn->get_my_addr(),
+                conn->get_messenger()->get_myaddr(),
                 conn->get_peer_addr(), *m, m->result);
   auto found = std::find_if(pending_conns.begin(), pending_conns.end(),
                             [peer_addr = conn->get_peer_addr()](auto& mc) {
@@ -463,7 +463,7 @@ std::vector<unsigned> Client::get_random_mons(unsigned n) const
 
 seastar::future<> Client::build_initial_map()
 {
-  return monmap.build_initial(ceph::common::local_conf());
+  return monmap.build_initial(ceph::common::local_conf(), false);
 }
 
 seastar::future<> Client::authenticate()
@@ -496,7 +496,8 @@ seastar::future<> Client::reopen_session(int rank)
   }
   pending_conns.reserve(mons.size());
   return seastar::parallel_for_each(mons, [this](auto rank) {
-    auto peer = monmap.get_addr(rank);
+#warning fixme
+    auto peer = monmap.get_addrs(rank).legacy_addr();
     logger().info("connecting to mon.{}", rank);
     auto conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MON);
     auto& mc = pending_conns.emplace_back(conn, &keyring);

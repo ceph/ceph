@@ -239,27 +239,31 @@ int ObjBencher::aio_bench(
   uint64_t op_size, uint64_t object_size,
   unsigned max_objects,
   bool cleanup, bool hints,
-  const std::string& run_name, bool no_verify) {
+  const std::string& run_name, bool reuse_bench, bool no_verify) {
 
   if (concurrentios <= 0)
     return -EINVAL;
 
   int num_objects = 0;
   int r = 0;
-  int prevPid = 0;
+  int prev_pid = 0;
   std::chrono::duration<double> timePassed;
 
   // default metadata object is used if user does not specify one
   const std::string run_name_meta = (run_name.empty() ? BENCH_LASTRUN_METADATA : run_name);
 
   //get data from previous write run, if available
-  if (operation != OP_WRITE) {
+  if (operation != OP_WRITE || reuse_bench) {
     uint64_t prev_op_size, prev_object_size;
     r = fetch_bench_metadata(run_name_meta, &prev_op_size, &prev_object_size,
-			     &num_objects, &prevPid);
+			     &num_objects, &prev_pid);
     if (r < 0) {
-      if (r == -ENOENT)
-        cerr << "Must write data before running a read benchmark!" << std::endl;
+      if (r == -ENOENT) {
+        if (reuse_bench)
+          cerr << "Must write data before using reuse_bench for a write benchmark!" << std::endl;
+        else
+          cerr << "Must write data before running a read benchmark!" << std::endl;
+      }
       return r;
     }
     object_size = prev_object_size;   
@@ -289,21 +293,21 @@ int ObjBencher::aio_bench(
     formatter->open_object_section("bench");
 
   if (OP_WRITE == operation) {
-    r = write_bench(secondsToRun, concurrentios, run_name_meta, max_objects);
+    r = write_bench(secondsToRun, concurrentios, run_name_meta, max_objects, prev_pid);
     if (r != 0) goto out;
   }
   else if (OP_SEQ_READ == operation) {
-    r = seq_read_bench(secondsToRun, num_objects, concurrentios, prevPid, no_verify);
+    r = seq_read_bench(secondsToRun, num_objects, concurrentios, prev_pid, no_verify);
     if (r != 0) goto out;
   }
   else if (OP_RAND_READ == operation) {
-    r = rand_read_bench(secondsToRun, num_objects, concurrentios, prevPid, no_verify);
+    r = rand_read_bench(secondsToRun, num_objects, concurrentios, prev_pid, no_verify);
     if (r != 0) goto out;
   }
 
   if (OP_WRITE == operation && cleanup) {
     r = fetch_bench_metadata(run_name_meta, &op_size, &object_size,
-			     &num_objects, &prevPid);
+                            &num_objects, &prev_pid);
     if (r < 0) {
       if (r == -ENOENT)
         cerr << "Should never happen: bench metadata missing for current run!" << std::endl;
@@ -313,7 +317,7 @@ int ObjBencher::aio_bench(
     data.start_time = mono_clock::now();
     out(cout) << "Cleaning up (deleting benchmark objects)" << std::endl;
 
-    r = clean_up(num_objects, prevPid, concurrentios);
+    r = clean_up(num_objects, prev_pid, concurrentios);
     if (r != 0) goto out;
 
     timePassed = mono_clock::now() - data.start_time;
@@ -377,7 +381,7 @@ int ObjBencher::fetch_bench_metadata(const std::string& metadata_file,
 
 int ObjBencher::write_bench(int secondsToRun,
 			    int concurrentios, const string& run_name_meta,
-			    unsigned max_objects) {
+			    unsigned max_objects, int prev_pid) {
   if (concurrentios <= 0) 
     return -EINVAL;
   
@@ -397,7 +401,7 @@ int ObjBencher::write_bench(int secondsToRun,
   }
   bufferlist* newContents = 0;
 
-  std::string prefix = generate_object_prefix();
+  std::string prefix = prev_pid ? generate_object_prefix(prev_pid) : generate_object_prefix();
   if (!formatter)
     out(cout) << "Object prefix: " << prefix << std::endl;
   else
@@ -405,7 +409,7 @@ int ObjBencher::write_bench(int secondsToRun,
 
   std::vector<string> name(concurrentios);
   std::string newName;
-  bufferlist* contents[concurrentios];
+  unique_ptr<bufferlist> contents[concurrentios];
   int r = 0;
   bufferlist b_write;
   lock_cond lc(&lock);
@@ -423,7 +427,7 @@ int ObjBencher::write_bench(int secondsToRun,
   //set up writes so I can start them together
   for (int i = 0; i<concurrentios; ++i) {
     name[i] = generate_object_name_fast(i / writes_per_object);
-    contents[i] = new bufferlist();
+    contents[i] = std::make_unique<bufferlist>();
     snprintf(data.object_contents, data.op_size, "I'm the %16dth op!", i);
     contents[i]->append(data.object_contents, data.op_size);
   }
@@ -443,7 +447,7 @@ int ObjBencher::write_bench(int secondsToRun,
       goto ERR;
     r = aio_write(name[i], i, *contents[i], data.op_size,
 		  data.op_size * (i % writes_per_object));
-    if (r < 0) { //naughty, doesn't clean up heap
+    if (r < 0) {
       goto ERR;
     }
     lock.lock();
@@ -482,7 +486,7 @@ int ObjBencher::write_bench(int secondsToRun,
     lock.unlock();
     //create new contents and name on the heap, and fill them
     newName = generate_object_name_fast(data.started / writes_per_object);
-    newContents = contents[slot];
+    newContents = contents[slot].get();
     snprintf(newContents->c_str(), data.op_size, "I'm the %16dth op!", data.started);
     // we wrote to buffer, going around internal crc cache, so invalidate it now.
     newContents->invalidate_crc();
@@ -515,7 +519,7 @@ int ObjBencher::write_bench(int secondsToRun,
       goto ERR;
     r = aio_write(newName, slot, *newContents, data.op_size,
 		  data.op_size * (data.started % writes_per_object));
-    if (r < 0) {//naughty; doesn't clean up heap space.
+    if (r < 0) {
       goto ERR;
     }
     name[slot] = newName;
@@ -553,8 +557,6 @@ int ObjBencher::write_bench(int secondsToRun,
     --data.in_flight;
     lock.unlock();
     release_completion(slot);
-    delete contents[slot];
-    contents[slot] = 0;
   }
 
   timePassed = mono_clock::now() - data.start_time;
@@ -627,16 +629,13 @@ int ObjBencher::write_bench(int secondsToRun,
   encode(data.object_size, b_write);
   num_objects = (data.finished + writes_per_object - 1) / writes_per_object;
   encode(num_objects, b_write);
-  encode(getpid(), b_write);
+  encode(prev_pid ? prev_pid : getpid(),  b_write);
   encode(data.op_size, b_write);
 
   // persist meta-data for further cleanup or read
   sync_write(run_name_meta, b_write, sizeof(int)*3);
 
   completions_done();
-  for (int i = 0; i < concurrentios; i++)
-      if (contents[i])
-          delete contents[i];
 
   return 0;
 
@@ -645,9 +644,6 @@ int ObjBencher::write_bench(int secondsToRun,
   data.done = 1;
   lock.unlock();
   pthread_join(print_thread, NULL);
-  for (int i = 0; i < concurrentios; i++)
-      if (contents[i])
-          delete contents[i];
   return r;
 }
 
@@ -659,7 +655,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
   std::vector<string> name(concurrentios);
   std::string newName;
-  bufferlist* contents[concurrentios];
+  unique_ptr<bufferlist> contents[concurrentios];
   int index[concurrentios];
   int errors = 0;
   double total_latency = 0;
@@ -670,9 +666,9 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
   sanitize_object_contents(&data, data.op_size); //clean it up once; subsequent
   //changes will be safe because string length should remain the same
 
-  unsigned writes_per_object = 1;
+  unsigned reads_per_object = 1;
   if (data.op_size)
-    writes_per_object = data.object_size / data.op_size;
+    reads_per_object = data.object_size / data.op_size;
 
   r = completions_init(concurrentios);
   if (r < 0)
@@ -680,8 +676,8 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
 
   //set up initial reads
   for (int i = 0; i < concurrentios; ++i) {
-    name[i] = generate_object_name_fast(i / writes_per_object, pid);
-    contents[i] = new bufferlist();
+    name[i] = generate_object_name_fast(i / reads_per_object, pid);
+    contents[i] = std::make_unique<bufferlist>();
   }
 
   lock.lock();
@@ -699,9 +695,9 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     index[i] = i;
     start_times[i] = mono_clock::now();
     create_completion(i, _aio_cb, (void *)&lc);
-    r = aio_read(name[i], i, contents[i], data.op_size,
-		 data.op_size * (i % writes_per_object));
-    if (r < 0) { //naughty, doesn't clean up heap -- oh, or handle the print thread!
+    r = aio_read(name[i], i, contents[i].get(), data.op_size,
+		 data.op_size * (i % reads_per_object));
+    if (r < 0) {
       cerr << "r = " << r << std::endl;
       goto ERR;
     }
@@ -741,7 +737,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     // calculate latency here, so memcmp doesn't inflate it
     data.cur_latency = mono_clock::now() - start_times[slot];
 
-    cur_contents = contents[slot];
+    cur_contents = contents[slot].get();
     int current_index = index[slot];
     
     // invalidate internal crc cache
@@ -756,7 +752,7 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
       }
     }
 
-    newName = generate_object_name_fast(data.started / writes_per_object, pid);
+    newName = generate_object_name_fast(data.started / reads_per_object, pid);
     index[slot] = data.started;
     lock.unlock();
     completion_wait(slot);
@@ -781,8 +777,8 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     //start new read and check data if requested
     start_times[slot] = mono_clock::now();
     create_completion(slot, _aio_cb, (void *)&lc);
-    r = aio_read(newName, slot, contents[slot], data.op_size,
-		 data.op_size * (data.started % writes_per_object));
+    r = aio_read(newName, slot, contents[slot].get(), data.op_size,
+		 data.op_size * (data.started % reads_per_object));
     if (r < 0) {
       goto ERR;
     }
@@ -825,7 +821,6 @@ int ObjBencher::seq_read_bench(int seconds_to_run, int num_objects, int concurre
     } else {
         lock.unlock();
     }
-    delete contents[slot];
   }
 
   timePassed = mono_clock::now() - data.start_time;
@@ -895,7 +890,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
 
   std::vector<string> name(concurrentios);
   std::string newName;
-  bufferlist* contents[concurrentios];
+  unique_ptr<bufferlist> contents[concurrentios];
   int index[concurrentios];
   int errors = 0;
   int r = 0;
@@ -906,9 +901,9 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
   sanitize_object_contents(&data, data.op_size); //clean it up once; subsequent
   //changes will be safe because string length should remain the same
 
-  unsigned writes_per_object = 1;
+  unsigned reads_per_object = 1;
   if (data.op_size)
-    writes_per_object = data.object_size / data.op_size;
+    reads_per_object = data.object_size / data.op_size;
 
   srand (time(NULL));
 
@@ -918,8 +913,8 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
 
   //set up initial reads
   for (int i = 0; i < concurrentios; ++i) {
-    name[i] = generate_object_name_fast(i / writes_per_object, pid);
-    contents[i] = new bufferlist();
+    name[i] = generate_object_name_fast(i / reads_per_object, pid);
+    contents[i] = std::make_unique<bufferlist>();
   }
 
   lock.lock();
@@ -937,9 +932,9 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     index[i] = i;
     start_times[i] = mono_clock::now();
     create_completion(i, _aio_cb, (void *)&lc);
-    r = aio_read(name[i], i, contents[i], data.op_size,
-		 data.op_size * (i % writes_per_object));
-    if (r < 0) { //naughty, doesn't clean up heap -- oh, or handle the print thread!
+    r = aio_read(name[i], i, contents[i].get(), data.op_size,
+		 data.op_size * (i % reads_per_object));
+    if (r < 0) {
       cerr << "r = " << r << std::endl;
       goto ERR;
     }
@@ -982,7 +977,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     lock.unlock();
 
     int current_index = index[slot];
-    cur_contents = contents[slot];
+    cur_contents = contents[slot].get();
     completion_wait(slot);
     lock.lock();
     r = completion_ret(slot);
@@ -1012,7 +1007,7 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     } 
 
     rand_id = rand() % num_objects;
-    newName = generate_object_name_fast(rand_id / writes_per_object, pid);
+    newName = generate_object_name_fast(rand_id / reads_per_object, pid);
     index[slot] = rand_id;
     release_completion(slot);
 
@@ -1022,8 +1017,8 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     //start new read and check data if requested
     start_times[slot] = mono_clock::now();
     create_completion(slot, _aio_cb, (void *)&lc);
-    r = aio_read(newName, slot, contents[slot], data.op_size,
-		 data.op_size * (rand_id % writes_per_object));
+    r = aio_read(newName, slot, contents[slot].get(), data.op_size,
+		 data.op_size * (rand_id % reads_per_object));
     if (r < 0) {
       goto ERR;
     }
@@ -1067,7 +1062,6 @@ int ObjBencher::rand_read_bench(int seconds_to_run, int num_objects, int concurr
     } else {
         lock.unlock();
     }
-    delete contents[slot];
   }
 
   timePassed = mono_clock::now() - data.start_time;

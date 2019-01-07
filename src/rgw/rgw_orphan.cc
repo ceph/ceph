@@ -10,6 +10,10 @@
 
 #include "rgw_rados.h"
 #include "rgw_orphan.h"
+#include "rgw_zone.h"
+
+#include "services/svc_zone.h"
+#include "services/svc_sys_obj.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -141,7 +145,7 @@ int RGWOrphanStore::list_jobs(map <string,RGWOrphanSearchState>& job_list)
 
 int RGWOrphanStore::init()
 {
-  rgw_pool& log_pool = store->get_zone_params().log_pool;
+  const rgw_pool& log_pool = store->svc.zone->get_zone_params().log_pool;
   int r = rgw_init_ioctx(store->get_rados_handle(), log_pool, ioctx);
   if (r < 0) {
     cerr << "ERROR: failed to open log pool (" << log_pool << " ret=" << r << std::endl;
@@ -471,7 +475,8 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
   ldout(store->ctx(), 10) << "building linked oids for bucket instance: " << bucket_instance_id << dendl;
   RGWBucketInfo bucket_info;
   RGWObjectCtx obj_ctx(store);
-  int ret = store->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, NULL, NULL);
+  auto sysobj_ctx = store->svc.sysobj->init_obj_ctx();
+  int ret = store->get_bucket_instance_info(sysobj_ctx, bucket_instance_id, bucket_info, NULL, NULL);
   if (ret < 0) {
     if (ret == -ENOENT) {
       /* probably raced with bucket removal */

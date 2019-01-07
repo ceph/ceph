@@ -62,9 +62,9 @@ class StoreTool
   StoreTool(string type, const string &path, bool need_open_db=true) : store_path(path) {
     if (type == "bluestore-kv") {
 #ifdef WITH_BLUESTORE
-      auto bluestore = new BlueStore(g_ceph_context, path, need_open_db);
+      auto bluestore = new BlueStore(g_ceph_context, path);
       KeyValueDB *db_ptr;
-      int r = bluestore->start_kv_only(&db_ptr);
+      int r = bluestore->start_kv_only(&db_ptr, need_open_db);
       if (r < 0) {
 	exit(1);
       }
@@ -89,6 +89,7 @@ class StoreTool
 
   uint32_t traverse(const string &prefix,
                     const bool do_crc,
+                    const bool do_value_dump,
                     ostream *out) {
     KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
 
@@ -119,14 +120,22 @@ class StoreTool
       }
       if (out)
         *out << std::endl;
+      if (out && do_value_dump) {
+	bufferptr bp = iter->value_as_ptr();
+	bufferlist value;
+	value.append(bp);
+	ostringstream os;
+	value.hexdump(os);
+	std::cout << os.str() << std::endl;
+      }
       iter->next();
     }
 
     return crc;
   }
 
-  void list(const string &prefix, const bool do_crc) {
-    traverse(prefix, do_crc, &std::cout);
+  void list(const string &prefix, const bool do_crc, const bool do_value_dump) {
+    traverse(prefix, do_crc, do_value_dump, &std::cout);
   }
 
   bool exists(const string &prefix) {
@@ -297,6 +306,7 @@ void usage(const char *pname)
     << "Commands:\n"
     << "  list [prefix]\n"
     << "  list-crc [prefix]\n"
+    << "  dump [prefix]\n"
     << "  exists <prefix> [key]\n"
     << "  get <prefix> <key> [out <file>]\n"
     << "  crc <prefix> <key>\n"
@@ -336,6 +346,10 @@ int main(int argc, const char *argv[])
     CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
+  ceph_assert((int)args.size() < argc);
+  for(size_t i=0; i<args.size(); i++)
+    argv[i+1] = args[i];
+  argc = args.size() + 1;
 
   if (args.size() < 3) {
     usage(argv[0]);
@@ -374,8 +388,13 @@ int main(int argc, const char *argv[])
       prefix = url_unescape(argv[4]);
 
     bool do_crc = (cmd == "list-crc");
+    st.list(prefix, do_crc, false);
 
-    st.list(prefix, do_crc);
+  } else if (cmd == "dump") {
+    string prefix;
+    if (argc > 4)
+      prefix = url_unescape(argv[4]);
+    st.list(prefix, false, true);
 
   } else if (cmd == "exists") {
     string key;
@@ -576,7 +595,7 @@ int main(int argc, const char *argv[])
       return 1;
     }
     std::ofstream fs(argv[4]);
-    uint32_t crc = st.traverse(string(), true, &fs);
+    uint32_t crc = st.traverse(string(), true, false, &fs);
     std::cout << "store at '" << argv[4] << "' crc " << crc << std::endl;
 
   } else if (cmd == "compact") {

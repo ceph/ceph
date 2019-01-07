@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 
 #include <semaphore.h>
 #include <errno.h>

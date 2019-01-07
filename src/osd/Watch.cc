@@ -147,14 +147,14 @@ void Notify::unregister_cb()
 
 void Notify::start_watcher(WatchRef watch)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   dout(10) << "start_watcher" << dendl;
   watchers.insert(watch);
 }
 
 void Notify::complete_watcher(WatchRef watch, bufferlist& reply_bl)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   dout(10) << "complete_watcher" << dendl;
   if (is_discarded())
     return;
@@ -168,7 +168,7 @@ void Notify::complete_watcher(WatchRef watch, bufferlist& reply_bl)
 
 void Notify::complete_watcher_remove(WatchRef watch)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   dout(10) << __func__ << dendl;
   if (is_discarded())
     return;
@@ -209,7 +209,7 @@ void Notify::maybe_complete_notify()
 
 void Notify::discard()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   discarded = true;
   unregister_cb();
   watchers.clear();
@@ -217,7 +217,7 @@ void Notify::discard()
 
 void Notify::init()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   register_cb();
   maybe_complete_notify();
 }
@@ -322,7 +322,7 @@ Context *Watch::get_delayed_cb()
 
 void Watch::register_cb()
 {
-  Mutex::Locker l(osd->watch_lock);
+  std::lock_guard l(osd->watch_lock);
   if (cb) {
     dout(15) << "re-registering callback, timeout: " << timeout << dendl;
     cb->cancel();
@@ -344,7 +344,7 @@ void Watch::unregister_cb()
   dout(15) << "actually registered, cancelling" << dendl;
   cb->cancel();
   {
-    Mutex::Locker l(osd->watch_lock);
+    std::lock_guard l(osd->watch_lock);
     osd->watch_timer.cancel_event(cb); // harmless if not registered with timer
   }
   cb = nullptr;
@@ -504,13 +504,13 @@ WatchRef Watch::makeWatchRef(
 
 void WatchConState::addWatch(WatchRef watch)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   watches.insert(watch);
 }
 
 void WatchConState::removeWatch(WatchRef watch)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   watches.erase(watch);
 }
 
@@ -518,7 +518,7 @@ void WatchConState::reset(Connection *con)
 {
   set<WatchRef> _watches;
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     _watches.swap(watches);
   }
   for (set<WatchRef>::iterator i = _watches.begin();

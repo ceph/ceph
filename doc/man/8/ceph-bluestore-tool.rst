@@ -19,6 +19,9 @@ Synopsis
 | **ceph-bluestore-tool** show-label --dev *device* ...
 | **ceph-bluestore-tool** prime-osd-dir --dev *device* --path *osd path*
 | **ceph-bluestore-tool** bluefs-export --path *osd path* --out-dir *dir*
+| **ceph-bluestore-tool** bluefs-bdev-new-wal --path *osd path* --dev-target *new-device*
+| **ceph-bluestore-tool** bluefs-bdev-new-db --path *osd path* --dev-target *new-device*
+| **ceph-bluestore-tool** bluefs-bdev-migrate --path *osd path* --dev-target *new-device* --devs-source *device1* [--devs-source *device2*]
 
 
 Description
@@ -54,6 +57,26 @@ Commands
 
    Instruct BlueFS to check the size of its block devices and, if they have expanded, make use of the additional space.
 
+:command:`bluefs-bdev-new-wal` --path *osd path* --dev-target *new-device*
+
+   Adds WAL device to BlueFS, fails if WAL device already exists.
+
+:command:`bluefs-bdev-new-db` --path *osd path* --dev-target *new-device*
+
+   Adds DB device to BlueFS, fails if DB device already exists.
+   
+:command:`bluefs-bdev-migrate` --dev-target *new-device* --devs-source *device1* [--devs-source *device2*]
+
+   Moves BlueFS data from source device(s) to the target one, source devices
+   (except the main one) are removed on success. Target device can be both
+   already attached or new device. In the latter case it's added to OSD
+   replacing one of the source devices. Following replacement rules apply
+   (in the order of precedence, stop on the first match):
+
+      - if source list has DB volume - target device replaces it.
+      - if source list has WAL volume - target device replace it.
+      - if source list has slow volume only - operation isn't permitted, requires explicit allocation via new-db/new-wal command.
+
 :command:`show-label` --dev *device* [...]
 
    Show device label(s).	   
@@ -64,6 +87,14 @@ Options
 .. option:: --dev *device*
 
    Add *device* to the list of devices to consider
+
+.. option:: --devs-source *device*
+
+   Add *device* to the list of devices to consider as sources for migrate operation
+
+.. option:: --dev-target *device*
+
+   Specify target *device* migrate operation or device to add for adding new DB/WAL.
 
 .. option:: --path *osd path*
 

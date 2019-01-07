@@ -1,51 +1,24 @@
-from unittest import TestCase
-
-import cherrypy
-import six
-from .. import mgr
-from ..controllers import BaseController, Controller, Proxy
-from ..controllers.grafana import GrafanaProxy, GrafanaRestClient
-
 from .helper import ControllerTestCase
+from ..controllers.grafana import Grafana
+from .. import mgr
 
 
-class Grafana(TestCase):
-    def test_missing_credentials(self):
-        with six.assertRaisesRegex(self, LookupError, r'^No credentials.*'):
-            GrafanaRestClient(
-                url='http://localhost:3000', username='', password='admin')
-        with six.assertRaisesRegex(self, LookupError, r'^No URL.*'):
-            GrafanaRestClient(
-                url='//localhost:3000', username='admin', password='admin')
-
-
-@Controller('grafana/mocked', secure=False)
-class GrafanaMockInstance(BaseController):
-    @Proxy()
-    def __call__(self, path, **params):
-        cherrypy.response.headers['foo'] = 'bar'
-        return 'Static Content at path {}'.format(path)
-
-
-class GrafanaControllerTestCase(ControllerTestCase):
+class GrafanaTest(ControllerTestCase):
     @classmethod
     def setup_server(cls):
         settings = {
-            'GRAFANA_API_URL': 'http://localhost:{}/grafana/mocked/'.format(54583),
-            'GRAFANA_API_USERNAME': 'admin',
-            'GRAFANA_API_PASSWORD': 'admin'
+            'GRAFANA_API_URL': 'http://localhost:3000'
         }
-        mgr.get_config.side_effect = settings.get
-        GrafanaProxy._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
+        mgr.get_module_option.side_effect = settings.get
+        # pylint: disable=protected-access
+        Grafana._cp_config['tools.authenticate.on'] = False
+        cls.setup_controllers([Grafana])
 
-        cls.setup_controllers([GrafanaProxy, GrafanaMockInstance])
-
-    def test_grafana_proxy(self):
-        self._get('/grafana/mocked/foo')
+    def test_url(self):
+        self._get('/api/grafana/url')
         self.assertStatus(200)
-        self.assertBody('Static Content at path foo')
+        self.assertJsonBody({'instance': 'http://localhost:3000'})
 
-        # Test the proxy
-        self._get('/api/grafana/proxy/bar')
-        self.assertStatus(200)
-        self.assertBody('Static Content at path bar')
+    def test_validation(self):
+        self._get('/api/grafana/validation/foo')
+        self.assertStatus(500)

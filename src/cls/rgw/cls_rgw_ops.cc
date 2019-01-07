@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include "cls/rgw/cls_rgw_ops.h"
 
@@ -352,7 +354,7 @@ void rgw_cls_bucket_update_stats_op::generate_test_instances(list<rgw_cls_bucket
 {
   rgw_cls_bucket_update_stats_op *r = new rgw_cls_bucket_update_stats_op;
   r->absolute = true;
-  rgw_bucket_category_stats& s = r->stats[0];
+  rgw_bucket_category_stats& s = r->stats[RGWObjCategory::None];
   s.total_size = 1;
   s.total_size_rounded = 4096;
   s.num_entries = 1;

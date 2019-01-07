@@ -13,6 +13,7 @@
  */
 
 
+#include <iterator>
 #include <sstream>
 #include <tuple>
 #include <stdlib.h>
@@ -28,6 +29,7 @@
 #include "Monitor.h"
 #include "common/version.h"
 #include "common/blkdev.h"
+#include "common/cmdparse.h"
 
 #include "osd/OSDMap.h"
 
@@ -107,10 +109,10 @@ const string Monitor::MONITOR_STORE_PREFIX = "monitor_store";
 #undef COMMAND
 #undef COMMAND_WITH_FLAG
 #define FLAG(f) (MonCommand::FLAG_##f)
-#define COMMAND(parsesig, helptext, modulename, req_perms, avail)	\
-  {parsesig, helptext, modulename, req_perms, avail, FLAG(NONE)},
-#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, avail, flags) \
-  {parsesig, helptext, modulename, req_perms, avail, flags},
+#define COMMAND(parsesig, helptext, modulename, req_perms)	\
+  {parsesig, helptext, modulename, req_perms, FLAG(NONE)},
+#define COMMAND_WITH_FLAG(parsesig, helptext, modulename, req_perms, flags) \
+  {parsesig, helptext, modulename, req_perms, flags},
 MonCommand mon_commands[] = {
 #include <mon/MonCommands.h>
 };
@@ -145,9 +147,10 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 			cct->_conf->auth_cluster_required : cct->_conf->auth_supported),
   auth_service_required(cct,
 			cct->_conf->auth_supported.empty() ?
-			cct->_conf->auth_service_required : cct->_conf->auth_supported ),
+			cct->_conf->auth_service_required : cct->_conf->auth_supported),
   mgr_messenger(mgr_m),
   mgr_client(cct_, mgr_m),
+  gss_ktfile_client(cct->_conf.get_val<std::string>("gss_ktab_client_file")),
   store(s),
   
   state(STATE_PROBING),
@@ -184,6 +187,22 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 
   update_log_clients();
 
+  if (!gss_ktfile_client.empty()) {
+    // Assert we can export environment variable 
+    /* 
+        The default client keytab is used, if it is present and readable,
+        to automatically obtain initial credentials for GSSAPI client
+        applications. The principal name of the first entry in the client
+        keytab is used by default when obtaining initial credentials.
+        1. The KRB5_CLIENT_KTNAME environment variable.
+        2. The default_client_keytab_name profile variable in [libdefaults].
+        3. The hardcoded default, DEFCKTNAME.
+    */
+    const int32_t set_result(setenv("KRB5_CLIENT_KTNAME", 
+                                    gss_ktfile_client.c_str(), 1));
+    ceph_assert(set_result == 0);
+  }
+
   op_tracker.set_complaint_and_threshold(
       g_conf().get_val<std::chrono::seconds>("mon_op_complaint_time").count(),
       g_conf().get_val<int64_t>("mon_op_log_threshold"));
@@ -214,11 +233,21 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   exited_quorum = ceph_clock_now();
 
   // prepare local commands
-  local_mon_commands.resize(ARRAY_SIZE(mon_commands));
-  for (unsigned i = 0; i < ARRAY_SIZE(mon_commands); ++i) {
+  local_mon_commands.resize(std::size(mon_commands));
+  for (unsigned i = 0; i < std::size(mon_commands); ++i) {
     local_mon_commands[i] = mon_commands[i];
   }
   MonCommand::encode_vector(local_mon_commands, local_mon_commands_bl);
+
+  prenautilus_local_mon_commands = local_mon_commands;
+  for (auto& i : prenautilus_local_mon_commands) {
+    std::string n = cmddesc_get_prenautilus_compat(i.cmdstring);
+    if (n != i.cmdstring) {
+      dout(20) << " pre-nautilus cmd " << i.cmdstring << " -> " << n << dendl;
+      i.cmdstring = n;
+    }
+  }
+  MonCommand::encode_vector(prenautilus_local_mon_commands, prenautilus_local_mon_commands_bl);
 
   // assume our commands until we have an election.  this only means
   // we won't reply with EINVAL before the election; any command that
@@ -254,7 +283,7 @@ public:
 void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
 			       std::string_view format, std::ostream& ss)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
@@ -672,8 +701,9 @@ int Monitor::preinit()
     if (!initial_members.empty()) {
       dout(1) << " initial_members " << initial_members << ", filtering seed monmap" << dendl;
 
-      monmap->set_initial_members(g_ceph_context, initial_members, name, messenger->get_myaddr(),
-				  &extra_probe_peers);
+      monmap->set_initial_members(
+	g_ceph_context, initial_members, name, messenger->get_myaddrs(),
+	&extra_probe_peers);
 
       dout(10) << " monmap is " << *monmap << dendl;
       dout(10) << " extra probe peers " << extra_probe_peers << dendl;
@@ -822,7 +852,7 @@ int Monitor::preinit()
 int Monitor::init()
 {
   dout(2) << "init" << dendl;
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   finisher.start();
 
@@ -923,7 +953,9 @@ void Monitor::shutdown()
 
   state = STATE_SHUTDOWN;
 
+  lock.Unlock();
   g_conf().remove_observer(this);
+  lock.Lock();
 
   if (admin_hook) {
     cct->get_admin_socket()->unregister_commands(admin_hook);
@@ -955,6 +987,16 @@ void Monitor::shutdown()
 
   remove_all_sessions();
 
+  log_client.shutdown();
+
+  // unlock before msgr shutdown...
+  lock.Unlock();
+
+  // shutdown messenger before removing logger from perfcounter collection, 
+  // otherwise _ms_dispatch() will try to update deleted logger
+  messenger->shutdown();
+  mgr_messenger->shutdown();
+
   if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
     delete logger;
@@ -966,14 +1008,6 @@ void Monitor::shutdown()
     delete cluster_logger;
     cluster_logger = NULL;
   }
-
-  log_client.shutdown();
-
-  // unlock before msgr shutdown...
-  lock.Unlock();
-
-  messenger->shutdown();  // last thing!  ceph_mon.cc will delete mon.
-  mgr_messenger->shutdown();
 }
 
 void Monitor::wait_for_paxos_write()
@@ -1786,9 +1820,10 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
   // new initial peer?
   if (monmap->get_epoch() == 0 &&
       monmap->contains(m->name) &&
-      monmap->get_addr(m->name).is_blank_ip()) {
-    dout(1) << " learned initial mon " << m->name << " addr " << m->get_source_addr() << dendl;
-    monmap->set_addr(m->name, m->get_source_addr());
+      monmap->get_addrs(m->name).front().is_blank_ip()) {
+    dout(1) << " learned initial mon " << m->name
+	    << " addrs " << m->get_source_addrs() << dendl;
+    monmap->set_addrvec(m->name, m->get_source_addrs());
 
     bootstrap();
     return;
@@ -1863,13 +1898,13 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
              << dendl;
 
     if (monmap->contains(name) &&
-        !monmap->get_addr(name).is_blank_ip()) {
+        !monmap->get_addrs(name).front().is_blank_ip()) {
       // i'm part of the cluster; just initiate a new election
       start_election();
     } else {
       dout(10) << " ready to join, but i'm not in the monmap or my addr is blank, trying to join" << dendl;
       send_mon_message(
-	new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
+	new MMonJoin(monmap->fsid, name, messenger->get_myaddrs()),
 	*m->quorum.begin());
     }
   } else {
@@ -2101,15 +2136,24 @@ void Monitor::collect_metadata(Metadata *m)
 
   // infer storage device
   string devname = store->get_devname();
-  if (devname.size()) {
-    (*m)["devices"] = devname;
-    string id = get_device_id(devname);
+  set<string> devnames;
+  derr << " devname " << devname << dendl;
+  get_raw_devices(devname, &devnames);
+  (*m)["devices"] = stringify(devnames);
+  string devids;
+  for (auto& devname : devnames) {
+    string err;
+    string id = get_device_id(devname, &err);
     if (id.size()) {
-      (*m)["device_ids"] = string(devname) + "=" + id;
+      if (!devids.empty()) {
+	devids += ",";
+      }
+      devids += devname + "=" + id;
     } else {
-      derr << "failed to get devid for " << devname << dendl;
+      derr << "failed to get devid for " << devname << ": " << err << dendl;
     }
   }
+  (*m)["device_ids"] = devids;
 }
 
 void Monitor::finish_election()
@@ -2129,7 +2173,7 @@ void Monitor::finish_election()
   if (cur_name != name) {
     dout(10) << " renaming myself from " << cur_name << " -> " << name << dendl;
     send_mon_message(
-      new MMonJoin(monmap->fsid, name, messenger->get_myaddr()),
+      new MMonJoin(monmap->fsid, name, messenger->get_myaddrs()),
       *quorum.begin());
   }
 }
@@ -2313,7 +2357,10 @@ void Monitor::_quorum_status(Formatter *f, ostream& ss)
   f->dump_string("quorum_leader_name", quorum.empty() ? string() : monmap->get_name(*quorum.begin()));
 
   if (!quorum.empty()) {
-    f->dump_stream("quorum_age") << (mono_clock::now() - quorum_since);
+    f->dump_int(
+      "quorum_age",
+      std::chrono::duration_cast<std::chrono::seconds>(
+	mono_clock::now() - quorum_since).count());
   }
 
   f->open_object_section("monmap");
@@ -2349,7 +2396,10 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
   f->close_section(); // quorum
 
   if (!quorum.empty()) {
-    f->dump_stream("quorum_age") << (mono_clock::now() - quorum_since);
+    f->dump_int(
+      "quorum_age",
+      std::chrono::duration_cast<std::chrono::seconds>(
+	mono_clock::now() - quorum_since).count());
   }
 
   f->open_object_section("features");
@@ -2737,7 +2787,10 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
       for (set<int>::iterator p = quorum.begin(); p != quorum.end(); ++p)
 	f->dump_string("id", monmap->get_name(*p));
       f->close_section();
-      f->dump_stream("quorum_age") << (now - quorum_since);
+      f->dump_int(
+	"quorum_age",
+	std::chrono::duration_cast<std::chrono::seconds>(
+	  mono_clock::now() - quorum_since).count());
     }
     f->open_object_section("monmap");
     monmap->dump(f);
@@ -2868,6 +2921,7 @@ bool Monitor::_allowed_command(MonSession *s, const string &module,
 
 void Monitor::format_command_descriptions(const std::vector<MonCommand> &commands,
 					  Formatter *f,
+					  uint64_t features,
 					  bufferlist *rdata)
 {
   int cmdnum = 0;
@@ -2876,9 +2930,9 @@ void Monitor::format_command_descriptions(const std::vector<MonCommand> &command
     unsigned flags = cmd.flags;
     ostringstream secname;
     secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-    dump_cmddesc_to_json(f, secname.str(),
+    dump_cmddesc_to_json(f, features, secname.str(),
 			 cmd.cmdstring, cmd.helpstring, cmd.module,
-			 cmd.req_perms, cmd.availability, flags);
+			 cmd.req_perms, flags);
     cmdnum++;
   }
   f->close_section();	// command_descriptions
@@ -2888,13 +2942,10 @@ void Monitor::format_command_descriptions(const std::vector<MonCommand> &command
 
 bool Monitor::is_keyring_required()
 {
-  string auth_cluster_required = g_conf()->auth_supported.empty() ?
-    g_conf()->auth_cluster_required : g_conf()->auth_supported;
-  string auth_service_required = g_conf()->auth_supported.empty() ?
-    g_conf()->auth_service_required : g_conf()->auth_supported;
-
-  return auth_service_required == "cephx" ||
-    auth_cluster_required == "cephx";
+  return auth_cluster_required.is_supported_auth(CEPH_AUTH_CEPHX) || 
+         auth_service_required.is_supported_auth(CEPH_AUTH_CEPHX) || 
+         auth_cluster_required.is_supported_auth(CEPH_AUTH_GSS)   || 
+         auth_service_required.is_supported_auth(CEPH_AUTH_GSS);
 }
 
 struct C_MgrProxyCommand : public Context {
@@ -2906,7 +2957,7 @@ struct C_MgrProxyCommand : public Context {
   C_MgrProxyCommand(Monitor *mon, MonOpRequestRef op, uint64_t s)
     : mon(mon), op(op), size(s) { }
   void finish(int r) {
-    Mutex::Locker l(mon->lock);
+    std::lock_guard l(mon->lock);
     mon->mgr_proxy_bytes -= size;
     mon->reply_command(op, r, outs, outbl, 0);
   }
@@ -2978,7 +3029,8 @@ void Monitor::handle_command(MonOpRequestRef op)
       }
     }
 
-    format_command_descriptions(commands, f, &rdata);
+    auto features = m->get_connection()->get_features();
+    format_command_descriptions(commands, f, features, &rdata);
     delete f;
     reply_command(op, 0, "", rdata, 0);
     return;
@@ -3297,9 +3349,10 @@ void Monitor::handle_command(MonOpRequestRef op)
       if (f)
         f->open_object_section("stats");
 
-      mgrstatmon()->dump_fs_stats(&ds, f.get(), verbose);
-      if (!f)
-        ds << '\n';
+      mgrstatmon()->dump_cluster_stats(&ds, f.get(), verbose);
+      if (!f) {
+	ds << "\n \n";
+      }
       mgrstatmon()->dump_pool_stats(osdmon()->osdmap, &ds, f.get(), verbose);
 
       if (f) {
@@ -3487,11 +3540,12 @@ void Monitor::handle_command(MonOpRequestRef op)
     r = 0;
   } else if (prefix == "sync force" ||
              prefix == "mon sync force") {
-    string validate1, validate2;
-    cmd_getval(g_ceph_context, cmdmap, "validate1", validate1);
-    cmd_getval(g_ceph_context, cmdmap, "validate2", validate2);
-    if (validate1 != "--yes-i-really-mean-it" ||
-	validate2 != "--i-know-what-i-am-doing") {
+    bool validate1 = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", validate1);
+    bool validate2 = false;
+    cmd_getval(g_ceph_context, cmdmap, "i_know_what_i_am_doing", validate2);
+
+    if (!validate1 || !validate2) {
       r = -EINVAL;
       rs = "are you SURE? this will mean the monitor store will be "
 	   "erased.  pass '--yes-i-really-mean-it "
@@ -3607,35 +3661,33 @@ void Monitor::handle_command(MonOpRequestRef op)
     string want_devid;
     cmd_getval(cct, cmdmap, "devid", want_devid);
 
-    string dev = store->get_devname();
-    string devid = get_device_id(dev);
-    if (want_devid.size() && want_devid != devid) {
-      r = -ENOENT;
-    } else {
-      uint64_t smart_timeout = cct->_conf.get_val<uint64_t>(
-	"mon_smart_report_timeout");
-      json_spirit::mObject json_map;
+    string devname = store->get_devname();
+    set<string> devnames;
+    get_raw_devices(devname, &devnames);
+    json_spirit::mObject json_map;
+    uint64_t smart_timeout = cct->_conf.get_val<uint64_t>(
+      "mon_smart_report_timeout");
+    for (auto& devname : devnames) {
+      string err;
+      string devid = get_device_id(devname, &err);
+      if (want_devid.size() && want_devid != devid) {
+	derr << "get_device_id failed on " << devname << ": " << err << dendl;
+	continue;
+      }
       json_spirit::mValue smart_json;
-      std::string result;
-      if (block_device_run_smartctl(("/dev/" + dev).c_str(), smart_timeout,
-				    &result)) {
-	dout(10) << "probe_smart_device failed for /dev/" << dev << dendl;
-	result = "{\"error\": \"smartctl failed\", \"dev\": \"" + dev +
-	  "\", \"smartctl_error\": \"" + result + "\"}";
+      if (block_device_get_metrics(devname, smart_timeout,
+				   &smart_json)) {
+	dout(10) << "block_device_get_metrics failed for /dev/" << devname
+		 << dendl;
+	continue;
       }
-
-      if (!json_spirit::read(result, smart_json)) {
-	derr << "smartctl JSON output of /dev/" + dev + " is invalid"
-	     << dendl;
-      } else {
-	json_map[devid] = smart_json;
-      }
-      ostringstream ss;
-      json_spirit::write(json_map, ss, json_spirit::pretty_print);
-      rdata.append(ss.str());
-      r = 0;
-      rs = "";
+      json_map[devid] = smart_json;
     }
+    ostringstream ss;
+    json_spirit::write(json_map, ss, json_spirit::pretty_print);
+    rdata.append(ss.str());
+    r = 0;
+    rs = "";
   }
 
  out:
@@ -3969,7 +4021,7 @@ void Monitor::remove_session(MonSession *s)
 
 void Monitor::remove_all_sessions()
 {
-  Mutex::Locker l(session_map_lock);
+  std::lock_guard l(session_map_lock);
   while (!session_map.sessions.empty()) {
     MonSession *s = session_map.sessions.front();
     remove_session(s);
@@ -4015,7 +4067,7 @@ void Monitor::waitlist_or_zap_client(MonOpRequestRef op)
     // proxied sessions aren't registered and don't have a con; don't remove
     // those.
     if (!s->proxy_con) {
-      Mutex::Locker l(session_map_lock);
+      std::lock_guard l(session_map_lock);
       remove_session(s);
     }
     op->mark_zap();
@@ -4076,7 +4128,7 @@ void Monitor::_ms_dispatch(Message *m)
 
     ConnectionRef con = m->get_connection();
     {
-      Mutex::Locker l(session_map_lock);
+      std::lock_guard l(session_map_lock);
       s = session_map.new_session(m->get_source(),
 				  m->get_source_addrs(),
 				  con.get());
@@ -4846,7 +4898,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
       for (map<string, Subscription*>::iterator it = s->sub_map.begin();
 	   it != s->sub_map.end(); ) {
 	if (it->first != p->first && logmon()->sub_name_to_id(it->first) >= 0) {
-	  Mutex::Locker l(session_map_lock);
+	  std::lock_guard l(session_map_lock);
 	  session_map.remove_sub((it++)->second);
 	} else {
 	  ++it;
@@ -4855,7 +4907,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
     }
 
     {
-      Mutex::Locker l(session_map_lock);
+      std::lock_guard l(session_map_lock);
       session_map.add_update_sub(s, p->first, p->second.start,
 				 p->second.flags & CEPH_SUBSCRIBE_ONETIME,
 				 m->get_connection()->has_feature(CEPH_FEATURE_INCSUBOSDMAP));
@@ -4968,11 +5020,11 @@ bool Monitor::ms_handle_reset(Connection *con)
   if (is_shutdown())
     return false;
 
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   dout(10) << "reset/close on session " << s->name << " " << s->addrs << dendl;
   if (!s->closed) {
-    Mutex::Locker l(session_map_lock);
+    std::lock_guard l(session_map_lock);
     remove_session(s);
   }
   return true;
@@ -5444,7 +5496,7 @@ void Monitor::tick()
   
   // trim sessions
   {
-    Mutex::Locker l(session_map_lock);
+    std::lock_guard l(session_map_lock);
     auto p = session_map.sessions.begin();
 
     bool out_for_too_long = (!exited_quorum.is_zero() &&

@@ -105,10 +105,10 @@ function(build_dpdk dpdk_dir)
       bus_pci
       eal
       ethdev
+      kvargs
       mbuf
       mempool
       mempool_ring
-      mempool_stack
       pci
       ring)
     add_library(dpdk::${c} STATIC IMPORTED)

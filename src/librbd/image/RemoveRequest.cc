@@ -95,7 +95,7 @@ void RemoveRequest<I>::open_image() {
   Context *ctx = create_context_callback<klass, &klass::handle_open_image>(
     this);
 
-  m_image_ctx->state->open(true, ctx);
+  m_image_ctx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT, ctx);
 }
 
 template<typename I>

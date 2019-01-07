@@ -231,6 +231,11 @@ int MemStore::statfs(struct store_statfs_t *st)
   return 0;
 }
 
+int MemStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
+{
+  return -ENOTSUP;
+}
+
 objectstore_perf_stat_t MemStore::get_cur_stats()
 {
   // fixme
@@ -583,7 +588,7 @@ public:
     std::lock_guard<std::mutex> lock(o->omap_mutex);
     return it != o->omap.end();
   }
-  int next(bool validate=true) override {
+  int next() override {
     std::lock_guard<std::mutex> lock(o->omap_mutex);
     ++it;
     return 0;
@@ -950,6 +955,12 @@ void MemStore::_do_transaction(Transaction& t)
       break;
 
     case Transaction::OP_SETALLOCHINT:
+      {
+        r = 0;
+      }
+      break;
+
+    case Transaction::OP_COLL_SET_BITS:
       {
         r = 0;
       }

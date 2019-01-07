@@ -17,6 +17,7 @@
 #include "include/compat.h"
 #include "pthread.h"
 
+#include "common/ceph_mutex.h"
 #include "common/BackTrace.h"
 #include "common/debug.h"
 #include "common/safe_io.h"
@@ -195,6 +196,7 @@ static void handle_fatal_signal(int signum)
 	jf.open_object_section("crash");
 	jf.dump_string("crash_id", id);
 	now.gmtime(jf.dump_stream("timestamp"));
+	jf.dump_string("process_name", g_process_name);
 	jf.dump_string("entity_name", g_ceph_context->_conf->name.to_str());
 	jf.dump_string("ceph_version", ceph_version_to_str());
 
@@ -248,6 +250,9 @@ static void handle_fatal_signal(int signum)
 	}
 	if (g_assert_thread_name[0]) {
 	  jf.dump_string("assert_thread_name", g_assert_thread_name);
+	}
+	if (g_assert_msg[0]) {
+	  jf.dump_string("assert_msg", g_assert_msg);
 	}
 
 	// backtrace
@@ -380,7 +385,7 @@ struct SignalHandler : public Thread {
   int pipefd[2];  // write to [1], read from [0]
 
   /// to signal shutdown
-  bool stop;
+  bool stop = false;
 
   /// for an individual signal
   struct safe_handler {
@@ -400,11 +405,9 @@ struct SignalHandler : public Thread {
   safe_handler *handlers[32] = {nullptr};
 
   /// to protect the handlers array
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("SignalHandler::lock");
 
-  SignalHandler()
-    : stop(false), lock("SignalHandler::lock")
-  {
+  SignalHandler() {
     // create signal pipe
     int r = pipe_cloexec(pipefd);
     ceph_assert(r == 0);
@@ -436,7 +439,7 @@ struct SignalHandler : public Thread {
       // build fd list
       struct pollfd fds[33];
 
-      lock.Lock();
+      lock.lock();
       int num_fds = 0;
       fds[num_fds].fd = pipefd[0];
       fds[num_fds].events = POLLIN | POLLERR;
@@ -450,7 +453,7 @@ struct SignalHandler : public Thread {
 	  ++num_fds;
 	}
       }
-      lock.Unlock();
+      lock.unlock();
 
       // wait for data on any of those pipes
       int r = poll(fds, num_fds, -1);
@@ -462,7 +465,7 @@ struct SignalHandler : public Thread {
 	// consume byte from signal socket, if any.
 	TEMP_FAILURE_RETRY(read(pipefd[0], &v, 1));
 
-	lock.Lock();
+	lock.lock();
 	for (unsigned signum=0; signum<32; signum++) {
 	  if (handlers[signum]) {
 	    r = read(handlers[signum]->pipefd[0], &v, 1);
@@ -498,7 +501,7 @@ struct SignalHandler : public Thread {
 	    }
 	  }
 	}
-	lock.Unlock();
+	lock.unlock();
       } 
     }
     return NULL;
@@ -549,9 +552,9 @@ void SignalHandler::register_handler(int signum, signal_handler_t handler, bool 
   ceph_assert(r == 0);
 
   h->handler = handler;
-  lock.Lock();
+  lock.lock();
   handlers[signum] = h;
-  lock.Unlock();
+  lock.unlock();
 
   // signal thread so that it sees our new handler
   signal_thread();
@@ -579,9 +582,9 @@ void SignalHandler::unregister_handler(int signum, signal_handler_t handler)
   signal(signum, SIG_DFL);
 
   // _then_ remove our handlers entry
-  lock.Lock();
+  lock.lock();
   handlers[signum] = NULL;
-  lock.Unlock();
+  lock.unlock();
 
   // this will wake up select() so that worker thread sees our handler is gone
   close(h->pipefd[0]);

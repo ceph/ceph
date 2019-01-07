@@ -51,6 +51,7 @@ def _blkid_parser(output):
         'TYPE': 'TYPE',
         'PART_ENTRY_NAME': 'PARTLABEL',
         'PART_ENTRY_UUID': 'PARTUUID',
+        'PTTYPE': 'PTTYPE',
     }
 
     for pair in pairs:
@@ -126,6 +127,23 @@ def get_device_from_partuuid(partuuid):
     return ' '.join(out).strip()
 
 
+def remove_partition(device):
+    """
+    Removes a partition using parted
+
+    :param device: A ``Device()`` object
+    """
+    parent_device = '/dev/%s' % device.disk_api['PKNAME']
+    udev_info = udevadm_property(device.abspath)
+    partition_number = udev_info.get('ID_PART_ENTRY_NUMBER')
+    if not partition_number:
+        raise RuntimeError('Unable to detect the partition number for device: %s' % device.abspath)
+
+    process.run(
+        ['parted', parent_device, '--script', '--', 'rm', partition_number]
+    )
+
+
 def _stat_is_device(stat_obj):
     """
     Helper function that will interpret ``os.stat`` output directly, so that other
@@ -167,6 +185,47 @@ def device_family(device):
         devices.append(_lsblk_parser(line))
 
     return devices
+
+
+def udevadm_property(device, properties=[]):
+    """
+    Query udevadm for information about device properties.
+    Optionally pass a list of properties to return. A requested property might
+    not be returned if not present.
+
+    Expected output format::
+        # udevadm info --query=property --name=/dev/sda                                  :(
+        DEVNAME=/dev/sda
+        DEVTYPE=disk
+        ID_ATA=1
+        ID_BUS=ata
+        ID_MODEL=SK_hynix_SC311_SATA_512GB
+        ID_PART_TABLE_TYPE=gpt
+        ID_PART_TABLE_UUID=c8f91d57-b26c-4de1-8884-0c9541da288c
+        ID_PATH=pci-0000:00:17.0-ata-3
+        ID_PATH_TAG=pci-0000_00_17_0-ata-3
+        ID_REVISION=70000P10
+        ID_SERIAL=SK_hynix_SC311_SATA_512GB_MS83N71801150416A
+        TAGS=:systemd:
+        USEC_INITIALIZED=16117769
+        ...
+    """
+    out = _udevadm_info(device)
+    ret = {}
+    for line in out:
+        p, v = line.split('=', 1)
+        if not properties or p in properties:
+            ret[p] = v
+    return ret
+
+
+def _udevadm_info(device):
+    """
+    Call udevadm and return the output
+    """
+    cmd = ['udevadm', 'info', '--query=property', device]
+    out, _err, _rc = process.call(cmd)
+    return out
 
 
 def lsblk(device, columns=None, abspath=False):
@@ -630,7 +689,7 @@ def get_partitions_facts(sys_block_path):
         folder_path = os.path.join(sys_block_path, folder)
         if os.path.exists(os.path.join(folder_path, 'partition')):
             contents = get_file_contents(os.path.join(folder_path, 'partition'))
-            if '1' in contents:
+            if contents:
                 part = {}
                 partname = folder
                 part_sys_block_path = os.path.join(sys_block_path, partname)
@@ -644,6 +703,9 @@ def get_partitions_facts(sys_block_path):
                     part['sectorsize'] = get_file_contents(
                         part_sys_block_path + "/queue/hw_sector_size", 512)
                 part['size'] = human_readable_size(float(part['sectors']) * 512)
+                part['holders'] = []
+                for holder in os.listdir(part_sys_block_path + '/holders'):
+                    part['holders'].append(holder)
 
                 partition_metadata[partname] = part
     return partition_metadata
@@ -651,6 +713,28 @@ def get_partitions_facts(sys_block_path):
 
 def is_mapper_device(device_name):
     return device_name.startswith(('/dev/mapper', '/dev/dm-'))
+
+
+def is_locked_raw_device(disk_path):
+    """
+    A device can be locked by a third party software like a database.
+    To detect that case, the device is opened in Read/Write and exclusive mode
+    """
+    open_flags = (os.O_RDWR | os.O_EXCL)
+    open_mode = 0
+    fd = None
+
+    try:
+        fd = os.open(disk_path, open_flags, open_mode)
+    except OSError:
+        return 1
+
+    try:
+        os.close(fd)
+    except OSError:
+        return 1
+
+    return 0
 
 
 def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/dev/mapper'):
@@ -694,12 +778,12 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
             if lvm.is_lv(diskname):
                 continue
 
-        # If the device reports itself as 'removable', get it excluded
         metadata['removable'] = get_file_contents(os.path.join(sysdir, 'removable'))
-        if metadata['removable'] == '1':
-            continue
+        # Is the device read-only ?
+        metadata['ro'] = get_file_contents(os.path.join(sysdir, 'ro'))
 
-        for key in ['vendor', 'model', 'sas_address', 'sas_device_handle']:
+
+        for key in ['vendor', 'model', 'rev', 'sas_address', 'sas_device_handle']:
             metadata[key] = get_file_contents(sysdir + "/device/" + key)
 
         for key in ['sectors', 'size']:
@@ -710,7 +794,9 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
 
         metadata['partitions'] = get_partitions_facts(sysdir)
 
-        metadata['rotational'] = get_file_contents(sysdir + "/queue/rotational")
+        for key in ['rotational', 'nr_requests']:
+            metadata[key] = get_file_contents(sysdir + "/queue/" + key)
+
         metadata['scheduler_mode'] = ""
         scheduler = get_file_contents(sysdir + "/queue/scheduler")
         if scheduler is not None:
@@ -727,6 +813,7 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
         metadata['human_readable_size'] = human_readable_size(float(size) * 512)
         metadata['size'] = float(size) * 512
         metadata['path'] = diskname
+        metadata['locked'] = is_locked_raw_device(metadata['path'])
 
         device_facts[diskname] = metadata
     return device_facts

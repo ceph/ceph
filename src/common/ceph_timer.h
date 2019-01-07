@@ -207,7 +207,7 @@ namespace ceph {
       template<typename Callable, typename... Args>
       uint64_t add_event(typename TC::time_point when,
 			 Callable&& f, Args&&... args) {
-	std::lock_guard<std::mutex> l(lock);
+	std::lock_guard l(lock);
 	event& e = *(new event(
 		       when, ++next_id,
 		       std::forward<std::function<void()> >(
@@ -237,7 +237,7 @@ namespace ceph {
 
       // Adjust the timeout of a currently-scheduled event (absolute)
       bool adjust_event(uint64_t id, typename TC::time_point when) {
-	std::lock_guard<std::mutex> l(lock);
+	std::lock_guard l(lock);
 
 	event key(id);
 	typename event_set_type::iterator it = events.find(key);
@@ -258,7 +258,7 @@ namespace ceph {
       // never submitted it) you will receive false. Otherwise you will
       // receive true and it is guaranteed the event will not execute.
       bool cancel_event(const uint64_t id) {
-	std::lock_guard<std::mutex> l(lock);
+	std::lock_guard l(lock);
 	event dummy(id);
 	auto p = events.find(dummy);
 	if (p == events.end()) {
@@ -298,7 +298,7 @@ namespace ceph {
       uint64_t reschedule_me(typename TC::time_point when) {
 	if (std::this_thread::get_id() != thread.get_id())
 	  throw std::make_error_condition(std::errc::operation_not_permitted);
-	std::lock_guard<std::mutex> l(lock);
+	std::lock_guard l(lock);
 	running->t = when;
 	uint64_t id = ++next_id;
 	running->id = id;
@@ -314,7 +314,7 @@ namespace ceph {
 
       // Remove all events from the queue.
       void cancel_all_events() {
-	std::lock_guard<std::mutex> l(lock);
+	std::lock_guard l(lock);
 	while (!events.empty()) {
 	  auto p = events.begin();
 	  event& e = *p;

@@ -1,6 +1,7 @@
 include(AddCephTest)
 
-set(UNITTEST_LIBS GMock::Main GMock::GMock GTest::GTest ${CMAKE_THREAD_LIBS_INIT} ${CMAKE_DL_LIBS})
+set(UNITTEST_LIBS GMock::Main GMock::GMock GTest::GTest ${CMAKE_THREAD_LIBS_INIT} 
+    ${GSSAPI_LIBRARIES} ${OPENLDAP_LIBRARIES} ${CMAKE_DL_LIBS})
 
 add_library(unit-main OBJECT unit.cc)
 target_include_directories(unit-main PRIVATE
@@ -38,7 +39,9 @@ if(WITH_RBD)
   add_subdirectory(librbd)
 endif(WITH_RBD)
 add_subdirectory(messenger)
-add_subdirectory(mds)
+if (WITH_CEPHFS)
+  add_subdirectory(mds)
+endif()
 add_subdirectory(mon)
 add_subdirectory(mgr)
 add_subdirectory(msgr)
@@ -130,7 +133,7 @@ target_link_libraries(ceph_bench_log global pthread rt ${BLKID_LIBRARIES} ${CMAK
 add_executable(ceph_test_mutate
   test_mutate.cc
   )
-target_link_libraries(ceph_test_mutate global librados ${BLKID_LIBRARIES}
+target_link_libraries(ceph_test_mutate global librados-cxx ${BLKID_LIBRARIES} 
   ${CMAKE_DL_LIBS})
 
 # test_trans
@@ -150,7 +153,7 @@ add_executable(ceph_omapbench
   ${omapbench_srcs}
   )
 target_link_libraries(ceph_omapbench
-  librados
+  librados-cxx
   Boost::program_options
   global
   ${BLKID_LIBRARIES}
@@ -164,7 +167,7 @@ if(WITH_KVS)
     ${CMAKE_SOURCE_DIR}/src/key_value_store/kv_flat_btree_async.cc
     )
   add_executable(ceph_kvstorebench ${kvstorebench_srcs})
-  target_link_libraries(ceph_kvstorebench librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+  target_link_libraries(ceph_kvstorebench librados-cxx global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
   install(TARGETS ceph_kvstorebench DESTINATION bin)
 endif(WITH_KVS)
 
@@ -356,7 +359,7 @@ endif(${WITH_RADOSGW})
 add_executable(ceph_multi_stress_watch
   multi_stress_watch.cc
   )
-target_link_libraries(ceph_multi_stress_watch librados global radostest
+target_link_libraries(ceph_multi_stress_watch librados-cxx global radostest-cxx
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 
 #ceph_perf_local
@@ -418,9 +421,9 @@ add_executable(ceph_test_stress_watch
   test_stress_watch.cc
   )
 target_link_libraries(ceph_test_stress_watch
-  librados
+  librados-cxx
   ${UNITTEST_LIBS}
-  radostest
+  radostest-cxx
   ${EXTRALIBS}
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}
@@ -447,18 +450,18 @@ if(${WITH_CEPHFS})
     cephfs)
 endif(${WITH_CEPHFS})
 
-if(HAVE_BLKID)
-  add_executable(ceph_test_get_blkdev_size
-    test_get_blkdev_size.cc
+if(HAVE_BLKID OR FREEBSD)
+  add_executable(ceph_test_get_blkdev_props
+    test_get_blkdev_props.cc
     )
-  target_link_libraries(ceph_test_get_blkdev_size
+  target_link_libraries(ceph_test_get_blkdev_props
     ceph-common
     pthread
     ${EXTRALIBS}
     ${BLKID_LIBRARIES}
     ${CMAKE_DL_LIBS}
     )
-endif(HAVE_BLKID)
+endif(HAVE_BLKID OR FREEBSD)
 
 # ceph_test_admin_socket_output
 
@@ -485,7 +488,6 @@ add_dependencies(tests
   crushtool
   ceph-conf
   rados
-  ceph-mds
   monmaptool
   ceph-osd
   ceph-dencoder
@@ -500,6 +502,9 @@ add_dependencies(tests
   ceph_erasure_code_non_regression
   ceph_erasure_code
   cython${PY_BINDING_INFIX}_modules)
+if (WITH_CEPHFS)
+  add_dependencies(tests ceph-mds)
+endif()
 if(WITH_MGR)
   add_dependencies(tests ceph-mgr)
 endif()
@@ -530,7 +535,6 @@ add_ceph_test(test_objectstore_memstore.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_obje
 #add_ceph_test(test_pidfile.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_pidfile.sh)
 
 add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
-add_ceph_test(unittest_bufferlist.sh ${CMAKE_SOURCE_DIR}/src/unittest_bufferlist.sh)
 
 # XXX are these safe to remove? they used to be around for ceph-disk tox testing
 set(env_vars_for_tox_tests
@@ -555,6 +559,11 @@ if(WITH_MGR)
   list(APPEND tox_tests run-tox-mgr-insights)
   set(MGR_INSIGHTS_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-insights-virtualenv)
   list(APPEND env_vars_for_tox_tests MGR_INSIGHTS_VIRTUALENV=${MGR_INSIGHTS_VIRTUALENV})
+
+  add_test(NAME run-tox-mgr-ansible COMMAND bash ${CMAKE_SOURCE_DIR}/src/pybind/mgr/ansible/run-tox.sh)
+  list(APPEND tox_tests run-tox-mgr-ansible)
+  set(MGR_ANSIBLE_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-ansible-virtualenv)
+  list(APPEND env_vars_for_tox_tests MGR_ANSIBLE_VIRTUALENV=${MGR_ANSIBLE_VIRTUALENV})
 endif()
 
 set_property(

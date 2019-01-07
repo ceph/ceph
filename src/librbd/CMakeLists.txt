@@ -31,6 +31,7 @@ set(librbd_internal_srcs
   api/Migration.cc
   api/Mirror.cc
   api/Namespace.cc
+  api/Pool.cc
   api/PoolMetadata.cc
   api/Snapshot.cc
   api/Trash.cc
@@ -138,6 +139,9 @@ add_library(rbd_internal STATIC
   ${librbd_internal_srcs}
   $<TARGET_OBJECTS:rados_snap_set_diff_obj>)
 if(WITH_LTTNG)
+  # librbd.cc includes tracing/librbd.h
+  add_dependencies(rbd_api librbd-tp)
+  # io/AioCompletion.cc includes tracing/librbd.h
   add_dependencies(rbd_internal librbd-tp)
 endif()
 if(WITH_LTTNG AND WITH_EVENTTRACE)
@@ -148,19 +152,22 @@ target_link_libraries(rbd_internal PRIVATE
 
 add_library(librbd ${CEPH_SHARED}
   librbd.cc)
+if(WITH_LTTNG)
+  add_dependencies(librbd librbd-tp)
+endif()
 
 target_link_libraries(librbd PRIVATE
   rbd_internal
   rbd_types
   journal
-  librados 
+  librados-cxx
   cls_rbd_client 
   cls_lock_client 
   cls_journal_client 
   ceph-common
   pthread
   ${CMAKE_DL_LIBS}
-  ${EXTRALIBS})
+  ${EXTRALIBS} ${GSSAPI_LIBRARIES})
 if(HAVE_UDEV)
   target_link_libraries(librbd PRIVATE
     udev)

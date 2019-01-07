@@ -87,6 +87,7 @@ static void usage()
        << "  --convert-filestore\n"
        << "                    run any pending upgrade operations\n"
        << "  --flush-journal   flush all data out of journal\n"
+       << "  --dump-journal    dump all data of journal\n"
        << "  --mkjournal       initialize a new journal\n"
        << "  --check-wants-journal\n"
        << "                    check whether a journal is desired\n"
@@ -195,6 +196,7 @@ int main(int argc, const char **argv)
       return r;
     }
     if (forker.is_parent()) {
+      g_ceph_context->_log->start();
       if (forker.parent_wait(err) != 0) {
         return -ENXIO;
       }
@@ -331,8 +333,7 @@ int main(int argc, const char **argv)
       forker.exit(-EINVAL);
     }
 
-    int err = OSD::mkfs(g_ceph_context, store, data_path,
-			g_conf().get_val<uuid_d>("fsid"),
+    int err = OSD::mkfs(g_ceph_context, store, g_conf().get_val<uuid_d>("fsid"),
                         whoami);
     if (err < 0) {
       derr << TEXT_RED << " ** ERROR: error creating empty object store in "

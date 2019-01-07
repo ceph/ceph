@@ -1,8 +1,8 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { TabsModule } from 'ngx-bootstrap';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { configureTestBed } from '../../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { DataTableModule } from '../../../../shared/datatable/datatable.module';
 import { ConfigurationDetailsComponent } from './configuration-details.component';
 
@@ -12,7 +12,8 @@ describe('ConfigurationDetailsComponent', () => {
 
   configureTestBed({
     declarations: [ConfigurationDetailsComponent],
-    imports: [DataTableModule, TabsModule.forRoot()]
+    imports: [DataTableModule, TabsModule.forRoot()],
+    providers: [i18nProviders]
   });
 
   beforeEach(() => {

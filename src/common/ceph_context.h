@@ -31,9 +31,11 @@
 #include "common/code_environment.h"
 #ifdef WITH_SEASTAR
 #include "crimson/common/config_proxy.h"
+#include "crimson/common/perf_counters_collection.h"
 #else
 #include "common/config_proxy.h"
 #include "include/spinlock.h"
+#include "common/perf_counters_collection.h"
 #endif
 
 
@@ -41,8 +43,6 @@
 
 class AdminSocket;
 class CephContextServiceThread;
-class PerfCountersCollection;
-class PerfCounters;
 class CephContextHook;
 class CephContextObs;
 class CryptoHandler;
@@ -68,9 +68,9 @@ public:
   ~CephContext();
 
   CryptoRandom* random() const;
-  PerfCountersCollection* get_perfcounters_collection();
+  PerfCountersCollectionImpl* get_perfcounters_collection();
   ceph::common::ConfigProxy& _conf;
-
+  ceph::common::PerfCountersCollection& _perf_counters_collection;
   CephContext* get();
   void put();
 private:
@@ -136,22 +136,6 @@ public:
   ceph::HeartbeatMap *get_heartbeat_map() {
     return _heartbeat_map;
   }
-
-  /**
-   * Enable the performance counter, currently we only have counter for the
-   * number of total/unhealthy workers.
-   */
-  void enable_perf_counter();
-
-  /**
-   * Disable the performance counter.
-   */
-  void disable_perf_counter();
-
-  /**
-   * Refresh perf counter values.
-   */
-  void refresh_perf_values();
 
   /**
    * Get the admin socket associated with this CephContext.
@@ -241,7 +225,7 @@ public:
   };
 
   void register_fork_watcher(ForkWatcher *w) {
-    std::lock_guard<ceph::spinlock> lg(_fork_watchers_lock);
+    std::lock_guard lg(_fork_watchers_lock);
     _fork_watchers.push_back(w);
   }
 
@@ -333,8 +317,30 @@ private:
     l_cct_unhealthy_workers,
     l_cct_last
   };
-  PerfCounters *_cct_perf;
-  ceph::spinlock _cct_perf_lock;
+  enum {
+    l_mempool_first = 873222,
+    l_mempool_bytes,
+    l_mempool_items,
+    l_mempool_last
+  };
+  PerfCounters *_cct_perf = nullptr;
+  PerfCounters* _mempool_perf = nullptr;
+  std::vector<std::string> _mempool_perf_names, _mempool_perf_descriptions;
+
+  /**
+   * Enable the performance counters.
+   */
+  void _enable_perf_counter();
+
+  /**
+   * Disable the performance counter.
+   */
+  void _disable_perf_counter();
+
+  /**
+   * Refresh perf counter values.
+   */
+  void _refresh_perf_values();
 
   friend class CephContextObs;
 };

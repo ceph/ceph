@@ -4,7 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { ExecutingTask } from '../models/executing-task';
 import { SummaryService } from './summary.service';
 import { TaskListService } from './task-list.service';
@@ -15,7 +15,6 @@ describe('TaskListService', () => {
   let summaryService: SummaryService;
   let taskMessageService: TaskMessageService;
 
-  let reset: boolean;
   let list: any[];
   let apiResp: any;
   let tasks: any[];
@@ -25,7 +24,7 @@ describe('TaskListService', () => {
   };
 
   configureTestBed({
-    providers: [TaskListService, TaskMessageService, SummaryService],
+    providers: [TaskListService, TaskMessageService, SummaryService, i18nProviders],
     imports: [HttpClientTestingModule, RouterTestingModule]
   });
 
@@ -39,7 +38,6 @@ describe('TaskListService', () => {
     taskMessageService.messages['test/edit'] = taskMessageService.messages['rbd/edit'];
     taskMessageService.messages['test/delete'] = taskMessageService.messages['rbd/delete'];
 
-    reset = false;
     tasks = [];
     apiResp = [];
     list = [];
@@ -51,7 +49,7 @@ describe('TaskListService', () => {
       () => of(apiResp),
       undefined,
       (updatedList) => (list = updatedList),
-      () => (reset = true),
+      () => true,
       (task) => task.name.startsWith('test'),
       (item, task) => item.name === task.metadata['name'],
       {

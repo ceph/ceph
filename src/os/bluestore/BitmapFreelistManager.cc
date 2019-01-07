@@ -106,6 +106,52 @@ int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
   return 0;
 }
 
+int BitmapFreelistManager::expand(uint64_t new_size, KeyValueDB::Transaction txn)
+{
+  assert(new_size > size);
+  ceph_assert(isp2(bytes_per_block));
+
+  uint64_t blocks0 = size / bytes_per_block;
+  if (blocks0 / blocks_per_key * blocks_per_key != blocks0) {
+    blocks0 = (blocks / blocks_per_key + 1) * blocks_per_key;
+    dout(10) << __func__ << " rounding blocks up from 0x" << std::hex << size
+	     << " to 0x" << (blocks0 * bytes_per_block)
+	     << " (0x" << blocks0 << " blocks)" << std::dec << dendl;
+    // reset past-eof blocks to unallocated
+    _xor(size, blocks0 * bytes_per_block - size, txn);
+  }
+
+  size = p2align(new_size, bytes_per_block);
+  blocks = size / bytes_per_block;
+
+  if (blocks / blocks_per_key * blocks_per_key != blocks) {
+    blocks = (blocks / blocks_per_key + 1) * blocks_per_key;
+    dout(10) << __func__ << " rounding blocks up from 0x" << std::hex << size
+	     << " to 0x" << (blocks * bytes_per_block)
+	     << " (0x" << blocks << " blocks)" << std::dec << dendl;
+    // set past-eof blocks as allocated
+    _xor(size, blocks * bytes_per_block - size, txn);
+  }
+
+  dout(10) << __func__
+	   << " size 0x" << std::hex << size
+	   << " bytes_per_block 0x" << bytes_per_block
+	   << " blocks 0x" << blocks
+	   << " blocks_per_key 0x" << blocks_per_key
+	   << std::dec << dendl;
+  {
+    bufferlist bl;
+    encode(blocks, bl);
+    txn->set(meta_prefix, "blocks", bl);
+  }
+  {
+    bufferlist bl;
+    encode(size, bl);
+    txn->set(meta_prefix, "size", bl);
+  }
+  return 0;
+}
+
 int BitmapFreelistManager::init()
 {
   dout(1) << __func__ << dendl;

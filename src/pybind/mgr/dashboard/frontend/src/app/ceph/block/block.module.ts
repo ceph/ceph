@@ -3,14 +3,16 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
-import { BsDropdownModule, ModalModule, TabsModule, TooltipModule } from 'ngx-bootstrap';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
+import { ModalModule } from 'ngx-bootstrap/modal';
 import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
+import { TabsModule } from 'ngx-bootstrap/tabs';
+import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { SharedModule } from '../../shared/shared.module';
 import { IscsiComponent } from './iscsi/iscsi.component';
-import { MirrorHealthColorPipe } from './mirror-health-color.pipe';
-import { MirroringComponent } from './mirroring/mirroring.component';
+import { MirroringModule } from './mirroring/mirroring.module';
 import { RbdDetailsComponent } from './rbd-details/rbd-details.component';
 import { RbdFormComponent } from './rbd-form/rbd-form.component';
 import { RbdImagesComponent } from './rbd-images/rbd-images.component';
@@ -32,6 +34,7 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
   ],
   imports: [
     CommonModule,
+    MirroringModule,
     FormsModule,
     ReactiveFormsModule,
     TabsModule.forRoot(),
@@ -46,8 +49,6 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
   declarations: [
     RbdListComponent,
     IscsiComponent,
-    MirroringComponent,
-    MirrorHealthColorPipe,
     RbdDetailsComponent,
     RbdFormComponent,
     RbdSnapshotListComponent,

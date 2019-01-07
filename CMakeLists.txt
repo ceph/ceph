@@ -215,6 +215,10 @@ if(LINUX)
   set(HAVE_UDEV ${UDEV_FOUND})
   find_package(blkid REQUIRED)
   set(HAVE_BLKID ${BLKID_FOUND})
+elseif(FREEBSD)
+  set(HAVE_UDEV OFF)
+  set(HAVE_LIBAIO OFF)
+  set(HAVE_BLKID OFF)
 else()
   set(HAVE_UDEV OFF)
   message(STATUS "Not using udev")
@@ -226,6 +230,12 @@ option(WITH_OPENLDAP "OPENLDAP is here" ON)
 if(WITH_OPENLDAP)
   find_package(OpenLdap REQUIRED)
   set(HAVE_OPENLDAP ${OPENLDAP_FOUND})
+endif()
+
+option(WITH_GSSAPI "GSSAPI/KRB5 is here" ON)
+if(WITH_GSSAPI)
+  find_package(GSSApi REQUIRED)
+  set(HAVE_GSSAPI ${GSSApi_FOUND})
 endif()
 
 option(WITH_FUSE "Fuse is here" ON)
@@ -248,8 +258,13 @@ endif()
 
 option(WITH_BLUESTORE "Bluestore OSD backend" ON)
 if(WITH_BLUESTORE)
-  find_package(aio)
-  set(HAVE_LIBAIO ${AIO_FOUND})
+  if(LINUX)
+    find_package(aio)
+    set(HAVE_LIBAIO ${AIO_FOUND})
+  elseif(FREEBSD)
+    # POSIX AIO is integrated into FreeBSD kernel, and exposed by libc.
+    set(HAVE_POSIXAIO ON)
+  endif()
 endif()
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64|AMD64|aarch64")
@@ -275,7 +290,7 @@ if(WITH_PMEM)
 endif()
 
 if(WITH_BLUESTORE)
-  if(NOT AIO_FOUND AND NOT WITH_SPDK AND NOT WITH_PMEM)
+  if(NOT AIO_FOUND AND NOT HAVE_POSIXAIO AND NOT WITH_SPDK AND NOT WITH_PMEM)
     message(SEND_ERROR "WITH_BLUESTORE is ON, "
       "but none of the bluestore backends is enabled. "
       "Please install libaio, or enable WITH_SPDK or WITH_PMEM (experimental)")
@@ -556,6 +571,8 @@ option(ENABLE_COVERAGE "Coverage is enabled" OFF)
 option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
 option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
+set(CEPH_TEST_TIMEOUT 3600 CACHE STRING 
+  "Maximum time before a CTest gets killed" )
 
 # fio
 option(WITH_FIO "build with fio plugin enabled" OFF)
@@ -598,6 +615,7 @@ if(sanitizers)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} ${Sanitizers_COMPILE_OPTIONS}")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} ${Sanitizers_COMPILE_OPTIONS}")
   set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} ${Sanitizers_COMPILE_OPTIONS}")
+  set(CMAKE_SHARED_LINKER_FLAGS "${CMAKE_SHARED_LINKER_FLAGS} ${Sanitizers_COMPILE_OPTIONS}")
 endif()
 
 # Rocksdb
@@ -700,6 +718,11 @@ endif()
 
 if(LINUX)
   add_subdirectory(etc/sysctl)
+endif()
+
+option(WITH_GRAFANA "install grafana dashboards" OFF)
+if(WITH_GRAFANA)
+  add_subdirectory(monitoring/grafana/dashboards)
 endif()
 
 include(CTags)

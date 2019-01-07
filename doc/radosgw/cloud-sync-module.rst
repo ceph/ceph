@@ -4,21 +4,17 @@ Cloud Sync Module
 
 .. versionadded:: Mimic
 
-This sync module sync zone data to a remote cloud service. The sync is unidirectional,
-and data is not synced from the remote zone back. The aim of this sync module is to
-provide capability of syncing data to different cloud providers. Currently the supported
-cloud providers are ones that are compatible with AWS (S3).
+This module syncs zone data to a remote cloud service. The sync is unidirectional; data is not synced back from the
+remote zone. The goal of this module is to enable syncing data to multiple cloud providers. The currently supported
+cloud providers are those that are compatible with AWS (S3).
 
-A user for the remote cloud object store service needs to be configured. Sync operations will
-be done under that specified user. Since different cloud services impose limits on the number
-of buckets that each user can create, the source objects and buckets will be mapped into a
-different (configurable) buckets and objects. It is possible to configure different targets
-to different buckets and bucket prefixes. In addition to that, source ACLs will not be preserved.
-It is possible to map permission to specific source users to a specific destination users.
+User credentials for the remote cloud object store service need to be configured. Since many cloud services impose limits
+on the number of buckets that each user can create, the mapping of source objects and buckets is configurable.
+It is possible to configure different targets to different buckets and bucket prefixes. Note that source ACLs will not
+be preserved. It is possible to map permissions of specific source users to specific destination users.
 
-Due to API limitations, there is no way to preserve original objects modification time, and
-ETag. The cloud sync module stores these in a separate metadata attributes on the destination
-objects.
+Due to API limitations there is no way to preserve original object modification time and ETag. The cloud sync module 
+stores these as metadata attributes on the destination objects.
 
 
 

@@ -10,9 +10,11 @@ import {
 } from '@angular/core';
 
 import * as Chart from 'chart.js';
+import * as _ from 'lodash';
 
 import { ChartTooltip } from '../../../shared/models/chart-tooltip';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
+import { HealthPieColor } from './health-pie-color.enum';
 
 @Component({
   selector: 'cd-health-pie',
@@ -38,7 +40,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
   @Output()
   prepareFn = new EventEmitter();
 
-  chart: any = {
+  chartConfig: any = {
     dataset: [
       {
         label: null,
@@ -49,20 +51,19 @@ export class HealthPieComponent implements OnChanges, OnInit {
       legend: {
         display: false,
         position: 'right',
-        labels: { usePointStyle: true }
+        labels: { usePointStyle: true },
+        onClick: (event, legendItem) => {
+          this.onLegendClick(event, legendItem);
+        }
       },
       animation: { duration: 0 },
 
       tooltips: {
         enabled: false
       }
-    },
-    colors: [
-      {
-        borderColor: 'transparent'
-      }
-    ]
+    }
   };
+  private hiddenSlices = [];
 
   constructor(private dimlessBinary: DimlessBinaryPipe) {}
 
@@ -114,29 +115,33 @@ export class HealthPieComponent implements OnChanges, OnInit {
 
     chartTooltip.getBody = getBody;
 
-    this.chart.options.tooltips.custom = (tooltip) => {
+    this.chartConfig.options.tooltips.custom = (tooltip) => {
       chartTooltip.customTooltips(tooltip);
     };
 
     this.setChartType();
 
-    this.chart.options.legend.display = this.displayLegend;
+    this.chartConfig.options.legend.display = this.displayLegend;
 
-    const redColor = '#FF6384';
-    const blueColor = '#36A2EB';
-    const yellowColor = '#FFCD56';
-    const greenColor = '#4BC0C0';
-    this.chart.colors = [
+    this.chartConfig.colors = [
       {
-        backgroundColor: [redColor, blueColor, yellowColor, greenColor]
+        backgroundColor: [
+          HealthPieColor.MEDIUM_LIGHT_SHADE_PINK_RED,
+          HealthPieColor.MEDIUM_DARK_SHADE_CYAN_BLUE,
+          HealthPieColor.LIGHT_SHADE_BROWN,
+          HealthPieColor.SHADE_GREEN_CYAN,
+          HealthPieColor.MEDIUM_DARK_SHADE_BLUE_MAGENTA
+        ]
       }
     ];
 
-    this.prepareFn.emit([this.chart, this.data]);
+    this.prepareFn.emit([this.chartConfig, this.data]);
   }
 
   ngOnChanges() {
-    this.prepareFn.emit([this.chart, this.data]);
+    this.prepareFn.emit([this.chartConfig, this.data]);
+    this.hideSlices();
+    this.setChartSliceBorderWidth();
   }
 
   private getChartTooltipBody(body) {
@@ -154,9 +159,34 @@ export class HealthPieComponent implements OnChanges, OnInit {
     const selectedChartType = chartTypes.find((chartType) => chartType === this.chartType);
 
     if (selectedChartType !== undefined) {
-      this.chart.chartType = selectedChartType;
+      this.chartConfig.chartType = selectedChartType;
     } else {
-      this.chart.chartType = chartTypes[0];
+      this.chartConfig.chartType = chartTypes[0];
     }
+  }
+
+  private setChartSliceBorderWidth() {
+    let nonZeroValueSlices = 0;
+    _.forEach(this.chartConfig.dataset[0].data, function(slice) {
+      if (slice > 0) {
+        nonZeroValueSlices += 1;
+      }
+    });
+
+    this.chartConfig.dataset[0].borderWidth = nonZeroValueSlices > 1 ? 1 : 0;
+  }
+
+  private onLegendClick(event, legendItem) {
+    event.stopPropagation();
+    this.hiddenSlices[legendItem.index] = !legendItem.hidden;
+    this.ngOnChanges();
+  }
+
+  private hideSlices() {
+    _.forEach(this.chartConfig.dataset[0].data, (slice, sliceIndex) => {
+      if (this.hiddenSlices[sliceIndex]) {
+        this.chartConfig.dataset[0].data[sliceIndex] = undefined;
+      }
+    });
   }
 }

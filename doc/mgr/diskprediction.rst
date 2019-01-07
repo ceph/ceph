@@ -4,24 +4,32 @@ DISKPREDICTION PLUGIN
 
 The *diskprediction* plugin supports two modes: cloud mode and local mode. In cloud mode, the disk and Ceph operating status information is collected from Ceph cluster and sent to a cloud-based DiskPrediction server over the Internet. DiskPrediction server analyzes the data and provides the analytics and prediction results of performance and disk health states for Ceph clusters. 
 
-Local mode doesn't require any external server for data analysis and output results. In local mode, the *diskprediction* plugin uses an internal predictor module for disk prediction service, and then returns the disk prediction result to the Ceph system. 
+Local mode doesn't require any external server for data analysis and output results. In local mode, the *diskprediction* plugin uses an internal predictor module for disk prediction service, and then returns the disk prediction result to the Ceph system.
+
+| Local predictor: 70% accuracy
+| Cloud predictor for free: 95% accuracy
 
 Enabling
 ========
 
 Run the following command to enable the *diskprediction* module in the Ceph
-environment:
+environment::
 
-::
+    ceph mgr module enable diskprediction_cloud
+    ceph mgr module enable diskprediction_local
 
-    ceph mgr module enable diskprediction
 
+Select the prediction mode::
 
-Select the prediction mode:
+    ceph config set global device_failure_prediction_mode local
 
-::
+or::
+  
+    ceph config set global device_failure_prediction_mode cloud
 
-    ceph device set-prediction-mode <local/cloud>
+To disable prediction,::
+
+  ceph config set global device_failure_prediction_mode none
 
 
 Connection settings
@@ -236,7 +244,7 @@ Osd:
 +----------------------+-----------------------------------------+
 |rd_bytes              |Number of bytes read in the pool         |
 +----------------------+-----------------------------------------+
-|raw_bytes_used        |Bytes used in pool including copies made |
+|stored_raw            |Bytes used in pool including copies made |
 +----------------------+-----------------------------------------+
 
 - Ceph physical device metadata

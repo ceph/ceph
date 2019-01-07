@@ -182,7 +182,7 @@ public:
       decode(v, bl);
       if (v < 2) {  // normally 0, but conceivably 1
 	// decode old header_t struct (pre v0.40).
-	bl.advance(4); // skip __u32 flags (it was unused by any old code)
+	bl.advance(4u); // skip __u32 flags (it was unused by any old code)
 	flags = 0;
 	uint64_t tfsid;
 	decode(tfsid, bl);
@@ -462,6 +462,9 @@ private:
   int _fdump(Formatter &f, bool simple);
 
   void flush() override;
+
+  void get_devices(set<string> *ls) override;
+  void collect_metadata(map<string,string> *pm) override;
 
   void reserve_throttle_and_backoff(uint64_t count) override;
 

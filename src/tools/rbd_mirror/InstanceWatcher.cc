@@ -10,6 +10,7 @@
 #include "librbd/Utils.h"
 #include "InstanceReplayer.h"
 #include "ImageSyncThrottler.h"
+#include "common/Cond.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -331,6 +332,7 @@ InstanceWatcher<I>::InstanceWatcher(librados::IoCtx &io_ctx,
 
 template <typename I>
 InstanceWatcher<I>::~InstanceWatcher() {
+  ceph_assert(m_requests.empty());
   ceph_assert(m_notify_ops.empty());
   ceph_assert(m_notify_op_tracker.empty());
   ceph_assert(m_suspended_ops.empty());

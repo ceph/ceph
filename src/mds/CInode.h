@@ -343,7 +343,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * been returned from scrub_dirfrag_next but not sent back
    * via scrub_dirfrag_finished.
    */
-  void scrub_dirfrags_scrubbing(list<frag_t> *out_dirfrags);
+  void scrub_dirfrags_scrubbing(frag_vec_t *out_dirfrags);
   /**
    * Report to the CInode that a dirfrag it owns has been scrubbed. Call
    * this for every frag_t returned from scrub_dirfrag_next().
@@ -358,6 +358,9 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
    * be complete()ed.
    */
   void scrub_finished(MDSInternalContextBase **c);
+
+  void scrub_aborted(MDSInternalContextBase **c);
+
   /**
    * Report to the CInode that alldirfrags it owns have been scrubbed.
    */
@@ -758,6 +761,7 @@ public:
   int d_type() const { return IFTODT(inode.mode); }
 
   mempool_inode& get_inode() { return inode; }
+  const mempool_inode& get_inode() const { return inode; }
   CDentry* get_parent_dn() { return parent; }
   const CDentry* get_parent_dn() const { return parent; }
   CDentry* get_projected_parent_dn() { return !projected_parent.empty() ? projected_parent.back() : parent; }
@@ -1060,7 +1064,6 @@ public:
   mds_authority_t authority() const override;
 
   // -- auth pins --
-  void adjust_nested_auth_pins(int a, void *by);
   bool can_auth_pin(int *err_ret=nullptr) const override;
   void auth_pin(void *by) override;
   void auth_unpin(void *by) override;

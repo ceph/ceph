@@ -13,15 +13,17 @@
 using namespace std;
 
 int main(int argc, char **argv) {
+  map<string,string> defaults = {
+    // make sure we have 3 copies, or some tests won't work
+    { "osd_pool_default_size", "3" },
+    // our map is flat, so just try and split across OSDs, not hosts or whatever
+    { "osd_crush_chooseleaf_type", "0" },
+  };
   std::vector<const char*> args(argv, argv+argc);
-  auto cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT,
+  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  // make sure we have 3 copies, or some tests won't work
-  g_ceph_context->_conf.set_val("osd_pool_default_size", "3");
-  // our map is flat, so just try and split across OSDs, not hosts or whatever
-  g_ceph_context->_conf.set_val("osd_crush_chooseleaf_type", "0");
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
@@ -599,6 +601,147 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
     int parent_1 = osdmap.crush->get_parent_of_type(up[1],
       osdmap.crush->get_type_id("host"));
     ASSERT_TRUE(parent_0 != parent_1);
+  }
+
+ {
+    // cancel stale upmaps
+    osdmap.pg_to_raw_up(pgid, &up, &up_primary);
+    int from = -1;
+    for (int i = 0; i < (int)get_num_osds(); i++) {
+      if (std::find(up.begin(), up.end(), i) == up.end()) {
+        from = i;
+        break;
+      }
+    }
+    ASSERT_TRUE(from >= 0);
+    int to = -1;
+    for (int i = 0; i < (int)get_num_osds(); i++) {
+      if (std::find(up.begin(), up.end(), i) == up.end() && i != from) {
+        to = i;
+        break;
+      }
+    }
+    ASSERT_TRUE(to >= 0);
+    vector<pair<int32_t,int32_t>> new_pg_upmap_items;
+    new_pg_upmap_items.push_back(make_pair(from, to));
+    OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+    pending_inc.new_pg_upmap_items[pgid] =
+      mempool::osdmap::vector<pair<int32_t,int32_t>>(
+        new_pg_upmap_items.begin(), new_pg_upmap_items.end());
+    OSDMap nextmap;
+    nextmap.deepish_copy_from(osdmap);
+    nextmap.apply_incremental(pending_inc);
+    ASSERT_TRUE(nextmap.have_pg_upmaps(pgid));
+    OSDMap::Incremental new_pending_inc(nextmap.get_epoch() + 1);
+    nextmap.clean_pg_upmaps(g_ceph_context, &new_pending_inc);
+    nextmap.apply_incremental(new_pending_inc);
+    ASSERT_TRUE(!nextmap.have_pg_upmaps(pgid));
+  }
+
+  {
+    // https://tracker.ceph.com/issues/37493
+    pg_t ec_pg(0, my_ec_pool);
+    pg_t ec_pgid = osdmap.raw_pg_to_pg(ec_pg);
+    OSDMap tmpmap; // use a tmpmap here, so we do not dirty origin map..
+    int from = -1;
+    int to = -1;
+    {
+      // insert a valid pg_upmap_item
+      vector<int> ec_up;
+      int ec_up_primary;
+      osdmap.pg_to_raw_up(ec_pgid, &ec_up, &ec_up_primary);
+      ASSERT_TRUE(!ec_up.empty());
+      from = *(ec_up.begin());
+      ASSERT_TRUE(from >= 0);
+      for (int i = 0; i < (int)get_num_osds(); i++) {
+        if (std::find(ec_up.begin(), ec_up.end(), i) == ec_up.end()) {
+          to = i;
+          break;
+        }
+      }
+      ASSERT_TRUE(to >= 0);
+      ASSERT_TRUE(from != to);
+      vector<pair<int32_t,int32_t>> new_pg_upmap_items;
+      new_pg_upmap_items.push_back(make_pair(from, to));
+      OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+      pending_inc.new_pg_upmap_items[ec_pgid] =
+      mempool::osdmap::vector<pair<int32_t,int32_t>>(
+        new_pg_upmap_items.begin(), new_pg_upmap_items.end());
+      tmpmap.deepish_copy_from(osdmap);
+      tmpmap.apply_incremental(pending_inc);
+      ASSERT_TRUE(tmpmap.have_pg_upmaps(ec_pgid));
+    }
+    {
+      // mark one of the target OSDs of the above pg_upmap_item as down
+      OSDMap::Incremental pending_inc(tmpmap.get_epoch() + 1);
+      pending_inc.new_state[to] = CEPH_OSD_UP;
+      tmpmap.apply_incremental(pending_inc);
+      ASSERT_TRUE(!tmpmap.is_up(to));
+      ASSERT_TRUE(tmpmap.have_pg_upmaps(ec_pgid));
+    }
+    {
+      // confirm *maybe_remove_pg_upmaps* won't do anything bad
+      OSDMap::Incremental pending_inc(tmpmap.get_epoch() + 1);
+      OSDMap nextmap;
+      nextmap.deepish_copy_from(tmpmap);
+      nextmap.maybe_remove_pg_upmaps(g_ceph_context, tmpmap,
+        nextmap, &pending_inc);
+      tmpmap.apply_incremental(pending_inc);
+      ASSERT_TRUE(tmpmap.have_pg_upmaps(ec_pgid));
+    }
+  }
+
+  {
+    // http://tracker.ceph.com/issues/37501
+    pg_t ec_pg(0, my_ec_pool);
+    pg_t ec_pgid = osdmap.raw_pg_to_pg(ec_pg);
+    OSDMap tmpmap; // use a tmpmap here, so we do not dirty origin map..
+    int from = -1;
+    int to = -1;
+    {
+      // insert a valid pg_upmap_item
+      vector<int> ec_up;
+      int ec_up_primary;
+      osdmap.pg_to_raw_up(ec_pgid, &ec_up, &ec_up_primary);
+      ASSERT_TRUE(!ec_up.empty());
+      from = *(ec_up.begin());
+      ASSERT_TRUE(from >= 0);
+      for (int i = 0; i < (int)get_num_osds(); i++) {
+        if (std::find(ec_up.begin(), ec_up.end(), i) == ec_up.end()) {
+          to = i;
+          break;
+        }
+      }
+      ASSERT_TRUE(to >= 0);
+      ASSERT_TRUE(from != to);
+      vector<pair<int32_t,int32_t>> new_pg_upmap_items;
+      new_pg_upmap_items.push_back(make_pair(from, to));
+      OSDMap::Incremental pending_inc(osdmap.get_epoch() + 1);
+      pending_inc.new_pg_upmap_items[ec_pgid] =
+      mempool::osdmap::vector<pair<int32_t,int32_t>>(
+        new_pg_upmap_items.begin(), new_pg_upmap_items.end());
+      tmpmap.deepish_copy_from(osdmap);
+      tmpmap.apply_incremental(pending_inc);
+      ASSERT_TRUE(tmpmap.have_pg_upmaps(ec_pgid));
+    }
+    {
+      // mark one of the target OSDs of the above pg_upmap_item as out
+      OSDMap::Incremental pending_inc(tmpmap.get_epoch() + 1);
+      pending_inc.new_weight[to] = CEPH_OSD_OUT;
+      tmpmap.apply_incremental(pending_inc);
+      ASSERT_TRUE(tmpmap.is_out(to));
+      ASSERT_TRUE(tmpmap.have_pg_upmaps(ec_pgid));
+    }
+    {
+      // *maybe_remove_pg_upmaps* should be able to remove the above *bad* mapping
+      OSDMap::Incremental pending_inc(tmpmap.get_epoch() + 1);
+      OSDMap nextmap;
+      nextmap.deepish_copy_from(tmpmap);
+      nextmap.maybe_remove_pg_upmaps(g_ceph_context, tmpmap,
+        nextmap, &pending_inc);
+      tmpmap.apply_incremental(pending_inc);
+      ASSERT_TRUE(!tmpmap.have_pg_upmaps(ec_pgid));
+    }
   }
 
   {

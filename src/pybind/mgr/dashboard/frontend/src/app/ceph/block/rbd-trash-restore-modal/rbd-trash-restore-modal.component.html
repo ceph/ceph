@@ -29,19 +29,15 @@
                  autofocus>
           <span class="help-block"
                 *ngIf="restoreForm.showError('name', formDir, 'required')"
-                i18n>
-            This field is required.
-          </span>
+                i18n>This field is required.</span>
         </div>
       </div>
 
       <div class="modal-footer">
         <div class="button-group text-right">
-          <cd-submit-button i18n
-                            [form]="restoreForm"
-                            (submitAction)="restore()">
-            Restore Image
-          </cd-submit-button>
+          <cd-submit-button [form]="restoreForm"
+                            (submitAction)="restore()"
+                            i18n>Restore Image</cd-submit-button>
           <button i18n
                   type="button"
                   class="btn btn-sm btn-default"

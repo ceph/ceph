@@ -96,6 +96,7 @@ enum {
 
 struct MigrationInfo {
   int64_t pool_id = -1;
+  std::string pool_namespace;
   std::string image_name;
   std::string image_id;
   deep_copy::SnapMap snap_map;
@@ -104,11 +105,13 @@ struct MigrationInfo {
 
   MigrationInfo() {
   }
-  MigrationInfo(int64_t pool_id, std::string image_name, std::string image_id,
+  MigrationInfo(int64_t pool_id, const std::string& pool_namespace,
+                const std::string& image_name, const std::string& image_id,
                 const deep_copy::SnapMap &snap_map, uint64_t overlap,
                 bool flatten)
-    : pool_id(pool_id), image_name(image_name), image_id(image_id),
-      snap_map(snap_map), overlap(overlap), flatten(flatten) {
+    : pool_id(pool_id), pool_namespace(pool_namespace), image_name(image_name),
+      image_id(image_id), snap_map(snap_map), overlap(overlap),
+      flatten(flatten) {
   }
 
   bool empty() const {

@@ -1,7 +1,8 @@
 import { Component, OnInit } from '@angular/core';
 import { FormGroup } from '@angular/forms';
 
-import { BsModalRef } from 'ngx-bootstrap';
+import { I18n } from '@ngx-translate/i18n-polyfill';
+import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { OsdService } from '../../../../shared/api/osd.service';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
@@ -20,7 +21,8 @@ export class OsdScrubModalComponent implements OnInit {
   constructor(
     public bsModalRef: BsModalRef,
     private osdService: OsdService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private i18n: I18n
   ) {}
 
   ngOnInit() {
@@ -36,7 +38,10 @@ export class OsdScrubModalComponent implements OnInit {
 
         this.notificationService.show(
           NotificationType.success,
-          `${operation} was initialized in the following OSD: ${id}`
+          this.i18n('{{operation}} was initialized in the following OSD: {{id}}', {
+            operation: operation,
+            id: id
+          })
         );
 
         this.bsModalRef.hide();

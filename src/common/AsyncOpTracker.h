@@ -4,7 +4,7 @@
 #ifndef CEPH_ASYNC_OP_TRACKER_H
 #define CEPH_ASYNC_OP_TRACKER_H
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 
 struct Context;
 
@@ -21,7 +21,7 @@ public:
   bool empty();
 
 private:
-  Mutex m_lock;
+  ceph::mutex m_lock = ceph::make_mutex("AsyncOpTracker::m_lock");
   uint32_t m_pending_ops = 0;
   Context *m_on_finish = nullptr;
 

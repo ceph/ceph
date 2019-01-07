@@ -1,5 +1,7 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
+
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -21,7 +23,7 @@ export class ConfigurationComponent implements OnInit {
   selection = new CdTableSelection();
   filters = [
     {
-      label: 'Level',
+      label: this.i18n('Level'),
       prop: 'level',
       value: 'basic',
       options: ['basic', 'advanced', 'dev'],
@@ -38,7 +40,7 @@ export class ConfigurationComponent implements OnInit {
       }
     },
     {
-      label: 'Service',
+      label: this.i18n('Service'),
       prop: 'services',
       value: 'any',
       options: ['any', 'mon', 'mgr', 'osd', 'mds', 'common', 'mds_client', 'rgw'],
@@ -51,7 +53,7 @@ export class ConfigurationComponent implements OnInit {
       }
     },
     {
-      label: 'Source',
+      label: this.i18n('Source'),
       prop: 'source',
       value: 'any',
       options: ['any', 'mon'],
@@ -76,7 +78,8 @@ export class ConfigurationComponent implements OnInit {
 
   constructor(
     private authStorageService: AuthStorageService,
-    private configurationService: ConfigurationService
+    private configurationService: ConfigurationService,
+    private i18n: I18n
   ) {
     this.permission = this.authStorageService.getPermissions().configOpt;
     const getConfigOptUri = () =>
@@ -85,22 +88,22 @@ export class ConfigurationComponent implements OnInit {
       permission: 'update',
       icon: 'fa-pencil',
       routerLink: () => `/configuration/edit/${getConfigOptUri()}`,
-      name: 'Edit'
+      name: this.i18n('Edit')
     };
     this.tableActions = [editAction];
   }
 
   ngOnInit() {
     this.columns = [
-      { canAutoResize: true, prop: 'name' },
-      { prop: 'desc', name: 'Description', cellClass: 'wrap' },
+      { canAutoResize: true, prop: 'name', name: this.i18n('Name') },
+      { prop: 'desc', name: this.i18n('Description'), cellClass: 'wrap' },
       {
         prop: 'value',
-        name: 'Current value',
+        name: this.i18n('Current value'),
         cellClass: 'wrap',
         cellTemplate: this.confValTpl
       },
-      { prop: 'default', cellClass: 'wrap' }
+      { prop: 'default', name: this.i18n('Default'), cellClass: 'wrap' }
     ];
   }
 

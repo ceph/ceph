@@ -1933,10 +1933,10 @@ function test_flush_pg_stats()
     rados -p rbd put obj /etc/group
     flush_pg_stats || return 1
     local jq_filter='.pools | .[] | select(.name == "rbd") | .stats'
-    raw_bytes_used=`ceph df detail --format=json | jq "$jq_filter.raw_bytes_used"`
-    bytes_used=`ceph df detail --format=json | jq "$jq_filter.bytes_used"`
-    test $raw_bytes_used -gt 0 || return 1
-    test $raw_bytes_used == $bytes_used || return 1
+    stored=`ceph df detail --format=json | jq "$jq_filter.stored"`
+    stored_raw=`ceph df detail --format=json | jq "$jq_filter.stored_raw"`
+    test $stored -gt 0 || return 1
+    test $stored == $stored_raw || return 1
     teardown $dir
 }
 

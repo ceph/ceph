@@ -474,6 +474,22 @@ int mirror_image_status_get_summary_finish(bufferlist::const_iterator *iter,
 int mirror_image_status_remove_down(librados::IoCtx *ioctx);
 void mirror_image_status_remove_down(librados::ObjectWriteOperation *op);
 
+int mirror_image_instance_get(librados::IoCtx *ioctx,
+                              const std::string &global_image_id,
+                              entity_inst_t *instance);
+void mirror_image_instance_get_start(librados::ObjectReadOperation *op,
+                                     const std::string &global_image_id);
+int mirror_image_instance_get_finish(bufferlist::const_iterator *iter,
+                                     entity_inst_t *instance);
+int mirror_image_instance_list(librados::IoCtx *ioctx,
+                               const std::string &start, uint64_t max_return,
+                               std::map<std::string, entity_inst_t> *instances);
+void mirror_image_instance_list_start(librados::ObjectReadOperation *op,
+                                      const std::string &start,
+                                      uint64_t max_return);
+int mirror_image_instance_list_finish(bufferlist::const_iterator *iter,
+                                      std::map<std::string, entity_inst_t> *instances);
+
 void mirror_instances_list_start(librados::ObjectReadOperation *op);
 int mirror_instances_list_finish(bufferlist::const_iterator *iter,
                                  std::vector<std::string> *instance_ids);

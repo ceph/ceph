@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <errno.h>
 #include <ctime>
 #include <regex>
@@ -112,7 +115,7 @@ int Credentials::generateCredentials(CephContext* cct,
     token.acct_name = {};
     token.perm_mask = 0;
     token.is_admin = 0;
-    token.acct_type = TYPE_NONE;
+    token.acct_type = TYPE_ROLE;
   }
 
   buffer::list input, enc_output;
@@ -301,7 +304,7 @@ AssumeRoleResponse STSService::assumeRole(AssumeRoleRequest& req)
   //Role and Policy provide the authorization info, user id and applier info are not needed
   if (ret = cred.generateCredentials(cct, req.getDuration(),
                                       req.getPolicy(), roleId,
-                                      boost::none, nullptr); ret < 0) {
+                                      user_id, nullptr); ret < 0) {
     return make_tuple(ret, user, cred, packedPolicySize);
   }
 

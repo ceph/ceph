@@ -33,9 +33,10 @@ Options
 
 :Description: Sets the listening address in the form ``address[:port]``,
               where the address is an IPv4 address string in dotted decimal
-              form, or an IPv6 address in hexadecimal notation. The
-              optional port defaults to 80. Can be specified multiple times
-              as in ``endpoint=::1 endpoint=192.168.0.100:8000``.
+              form, or an IPv6 address in hexadecimal notation surrounded
+              by square brackets. The optional port defaults to 80 for
+              ``endpoint`` and 443 for ``ssl_endpoint``. Can be specified
+              multiple times as in ``endpoint=[::1] endpoint=192.168.0.100:8000``.
 
 :Type: Integer
 :Default: None
@@ -129,10 +130,13 @@ Options
 :Default: ``EMPTY``
 
 
-The following is an example of the ``/etc/ceph/ceph.conf`` file with some of these options set:
+The following is an example of the ``/etc/ceph/ceph.conf`` file with some of these options set: ::
  
  [client.rgw.gateway-node1]
- rgw frontends = civetweb request_timeout_ms=30000 error_log_file=/var/log/radosgw/civetweb.error.log access_log_file=/var/log/radosgw/civetweb.access.log
+ rgw_frontends = civetweb 
+ request_timeout_ms = 30000 
+ error_log_file = /var/log/radosgw/civetweb.error.log 
+ access_log_file = /var/log/radosgw/civetweb.access.log
 
 A complete list of supported options can be found in the `Civetweb User Manual`_.
 

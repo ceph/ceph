@@ -56,7 +56,6 @@
  */
 class DBObjectMap : public ObjectMap {
 public:
-  boost::scoped_ptr<KeyValueDB> db;
 
   KeyValueDB *get_db() override { return db.get(); }
 
@@ -117,7 +116,7 @@ public:
   };
 
   DBObjectMap(CephContext* cct, KeyValueDB *db)
-    : ObjectMap(cct), db(db), header_lock("DBOBjectMap"),
+    : ObjectMap(cct, db), header_lock("DBOBjectMap"),
       cache_lock("DBObjectMap::CacheLock"),
       caches(cct->_conf->filestore_omap_header_cache_size)
     {}
@@ -388,7 +387,7 @@ private:
     int upper_bound(const string &after) override { return 0; }
     int lower_bound(const string &to) override { return 0; }
     bool valid() override { return false; }
-    int next(bool validate=true) override { ceph_abort(); return 0; }
+    int next() override { ceph_abort(); return 0; }
     string key() override { ceph_abort(); return ""; }
     bufferlist value() override { ceph_abort(); return bufferlist(); }
     int status() override { return 0; }
@@ -426,7 +425,7 @@ private:
     int upper_bound(const string &after) override;
     int lower_bound(const string &to) override;
     bool valid() override;
-    int next(bool validate=true) override;
+    int next() override;
     string key() override;
     bufferlist value() override;
     int status() override;

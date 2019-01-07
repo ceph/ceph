@@ -680,7 +680,9 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
         });
     }
 
-    if (info.state == MDSMap::STATE_STOPPING && state != MDSMap::STATE_STOPPED ) {
+    if (info.state == MDSMap::STATE_STOPPING &&
+        state != MDSMap::STATE_STOPPING &&
+        state != MDSMap::STATE_STOPPED) {
       // we can't transition to any other states from STOPPING
       dout(0) << "got beacon for MDS in STATE_STOPPING, ignoring requested state change"
 	       << dendl;
@@ -1344,7 +1346,7 @@ int MDSMonitor::filesystem_command(
       return -EINVAL;
     }
     if (!fsmap.gid_exists(gid)) {
-      ss << "mds gid " << gid << " dne";
+      ss << "mds gid " << gid << " does not exist";
       r = 0;
     } else {
       const auto &info = fsmap.get_info_gid(gid);
@@ -1360,9 +1362,9 @@ int MDSMonitor::filesystem_command(
       }
     }
   } else if (prefix == "mds rmfailed") {
-    string confirm;
-    if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
-       confirm != "--yes-i-really-mean-it") {
+    bool confirm = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", confirm);
+    if (!confirm) {
          ss << "WARNING: this can make your filesystem inaccessible! "
                "Add --yes-i-really-mean-it if you are sure you wish to continue.";
          return -EPERM;

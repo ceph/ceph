@@ -1,6 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 
-import { BsModalRef } from 'ngx-bootstrap';
+import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
@@ -44,7 +44,6 @@ export class RbdTrashRestoreModalComponent implements OnInit {
         task: new FinishedTask('rbd/trash/restore', {
           pool_name: this.poolName,
           image_id: this.imageId,
-          image_name: this.imageName,
           new_image_name: name
         }),
         call: this.rbdService.restoreTrash(this.poolName, this.imageId, name)

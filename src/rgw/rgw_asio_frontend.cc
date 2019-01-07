@@ -6,6 +6,7 @@
 #include <vector>
 
 #include <boost/asio.hpp>
+#define BOOST_COROUTINES_NO_DEPRECATION_WARNING
 #include <boost/asio/spawn.hpp>
 #include <boost/intrusive/list.hpp>
 
@@ -31,22 +32,23 @@ namespace ssl = boost::asio::ssl;
 
 template <typename Stream>
 class StreamIO : public rgw::asio::ClientIO {
+  CephContext* const cct;
   Stream& stream;
   beast::flat_buffer& buffer;
  public:
-  StreamIO(Stream& stream, rgw::asio::parser_type& parser,
+  StreamIO(CephContext *cct, Stream& stream, rgw::asio::parser_type& parser,
            beast::flat_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
            const tcp::endpoint& remote_endpoint)
       : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint),
-        stream(stream), buffer(buffer)
+        cct(cct), stream(stream), buffer(buffer)
   {}
 
   size_t write_data(const char* buf, size_t len) override {
     boost::system::error_code ec;
     auto bytes = boost::asio::write(stream, boost::asio::buffer(buf, len), ec);
     if (ec) {
-      derr << "write_data failed: " << ec.message() << dendl;
+      ldout(cct, 4) << "write_data failed: " << ec.message() << dendl;
       throw rgw::io::Exception(ec.value(), std::system_category());
     }
     return bytes;
@@ -66,7 +68,7 @@ class StreamIO : public rgw::asio::ClientIO {
         break;
       }
       if (ec) {
-        derr << "failed to read body: " << ec.message() << dendl;
+        ldout(cct, 4) << "failed to read body: " << ec.message() << dendl;
         throw rgw::io::Exception(ec.value(), std::system_category());
       }
     }
@@ -137,7 +139,7 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
       RGWRequest req{env.store->get_new_req_id()};
 
       auto& socket = stream.lowest_layer();
-      StreamIO real_client{stream, parser, buffer, is_ssl,
+      StreamIO real_client{cct, stream, parser, buffer, is_ssl,
                            socket.local_endpoint(),
                            socket.remote_endpoint()};
 
@@ -276,20 +278,46 @@ unsigned short parse_port(const char *input, boost::system::error_code& ec)
 }
 
 tcp::endpoint parse_endpoint(boost::asio::string_view input,
+                             unsigned short default_port,
                              boost::system::error_code& ec)
 {
   tcp::endpoint endpoint;
 
-  auto colon = input.find(':');
-  if (colon != input.npos) {
-    auto port_str = input.substr(colon + 1);
-    endpoint.port(parse_port(port_str.data(), ec));
-  } else {
-    endpoint.port(80);
+  if (input.empty()) {
+    ec = boost::asio::error::invalid_argument;
+    return endpoint;
   }
-  if (!ec) {
+
+  if (input[0] == '[') { // ipv6
+    const size_t addr_begin = 1;
+    const size_t addr_end = input.find(']');
+    if (addr_end == input.npos) { // no matching ]
+      ec = boost::asio::error::invalid_argument;
+      return endpoint;
+    }
+    if (addr_end + 1 < input.size()) {
+      // :port must must follow [ipv6]
+      if (input[addr_end + 1] != ':') {
+        ec = boost::asio::error::invalid_argument;
+        return endpoint;
+      } else {
+        auto port_str = input.substr(addr_end + 2);
+        endpoint.port(parse_port(port_str.data(), ec));
+      }
+    }
+    auto addr = input.substr(addr_begin, addr_end - addr_begin);
+    endpoint.address(boost::asio::ip::make_address_v6(addr, ec));
+  } else { // ipv4
+    auto colon = input.find(':');
+    if (colon != input.npos) {
+      auto port_str = input.substr(colon + 1);
+      endpoint.port(parse_port(port_str.data(), ec));
+      if (ec) {
+        return endpoint;
+      }
+    }
     auto addr = input.substr(0, colon);
-    endpoint.address(boost::asio::ip::make_address(addr, ec));
+    endpoint.address(boost::asio::ip::make_address_v4(addr, ec));
   }
   return endpoint;
 }
@@ -343,7 +371,7 @@ int AsioFrontend::init()
 
   auto endpoints = config.equal_range("endpoint");
   for (auto i = endpoints.first; i != endpoints.second; ++i) {
-    auto endpoint = parse_endpoint(i->second, ec);
+    auto endpoint = parse_endpoint(i->second, 80, ec);
     if (ec) {
       lderr(ctx()) << "failed to parse endpoint=" << i->second << dendl;
       return -ec.value();
@@ -446,7 +474,7 @@ int AsioFrontend::init_ssl()
       lderr(ctx()) << "no ssl_certificate configured for ssl_endpoint" << dendl;
       return -EINVAL;
     }
-    auto endpoint = parse_endpoint(i->second, ec);
+    auto endpoint = parse_endpoint(i->second, 443, ec);
     if (ec) {
       lderr(ctx()) << "failed to parse ssl_endpoint=" << i->second << dendl;
       return -ec.value();
@@ -530,6 +558,8 @@ int AsioFrontend::run()
 
   for (int i = 0; i < thread_count; i++) {
     threads.emplace_back([=] {
+      // request warnings on synchronous librados calls in this thread
+      is_asio_thread = true;
       boost::system::error_code ec;
       context.run(ec);
     });

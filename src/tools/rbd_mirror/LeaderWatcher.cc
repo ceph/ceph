@@ -483,7 +483,7 @@ void LeaderWatcher<I>::handle_break_leader_lock(int r) {
   }
 
   if (r < 0 && r != -ENOENT) {
-    derr << "error beaking leader lock: " << cpp_strerror(r)  << dendl;
+    derr << "error breaking leader lock: " << cpp_strerror(r)  << dendl;
     schedule_acquire_leader_lock(1);
     m_timer_op_tracker.finish_op();
     return;
@@ -982,7 +982,7 @@ void LeaderWatcher<I>::handle_notify_heartbeat(int r) {
   }
 
   if (r < 0 && r != -ETIMEDOUT) {
-    derr << "error notifying hearbeat: " << cpp_strerror(r)
+    derr << "error notifying heartbeat: " << cpp_strerror(r)
          <<  ", releasing leader" << dendl;
     release_leader_lock();
     return;

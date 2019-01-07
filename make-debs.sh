@@ -19,7 +19,7 @@ set -xe
 base=${1:-/tmp/release}
 codename=$(lsb_release -sc)
 releasedir=$base/$(lsb_release -si)/WORKDIR
-rm -fr $releasedir
+rm -fr $(dirname $releasedir)
 mkdir -p $releasedir
 #
 # remove all files not under git so they are not

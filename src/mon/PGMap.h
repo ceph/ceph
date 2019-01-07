@@ -48,6 +48,7 @@ public:
   mempool::pgmap::map<int64_t,int64_t> num_pg_by_pool;
   pool_stat_t pg_sum;
   osd_stat_t osd_sum;
+  mempool::pgmap::map<string,osd_stat_t> osd_sum_by_class;
   mempool::pgmap::unordered_map<uint64_t,int32_t> num_pg_by_state;
   struct pg_count {
     int32_t acting = 0;
@@ -75,23 +76,28 @@ public:
    * keep track of last deltas for each pool, calculated using
    * @p pg_pool_sum as baseline.
    */
-  mempool::pgmap::unordered_map<uint64_t, mempool::pgmap::list< pair<pool_stat_t, utime_t> > > per_pool_sum_deltas;
+  mempool::pgmap::unordered_map<int64_t, mempool::pgmap::list< pair<pool_stat_t, utime_t> > > per_pool_sum_deltas;
   /**
    * keep track of per-pool timestamp deltas, according to last update on
    * each pool.
    */
-  mempool::pgmap::unordered_map<uint64_t, utime_t> per_pool_sum_deltas_stamps;
+  mempool::pgmap::unordered_map<int64_t, utime_t> per_pool_sum_deltas_stamps;
   /**
    * keep track of sum deltas, per-pool, taking into account any previous
    * deltas existing in @p per_pool_sum_deltas.  The utime_t as second member
    * of the pair is the timestamp referring to the last update (i.e., the first
    * member of the pair) for a given pool.
    */
-  mempool::pgmap::unordered_map<uint64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;
+  mempool::pgmap::unordered_map<int64_t, pair<pool_stat_t,utime_t> > per_pool_sum_delta;
 
   pool_stat_t pg_sum_delta;
   utime_t stamp_delta;
 
+  void get_recovery_stats(
+    double *misplaced_ratio,
+    double *degraded_ratio,
+    double *inactive_ratio,
+    double *unknown_pgs_ratio) const;
 
   void print_summary(Formatter *f, ostream *out) const;
   void print_oneline_summary(Formatter *f, ostream *out) const;
@@ -158,9 +164,9 @@ public:
    */
   virtual void dump_pool_stats_full(const OSDMap &osd_map, stringstream *ss,
 				    Formatter *f, bool verbose) const;
-  void dump_fs_stats(stringstream *ss, Formatter *f, bool verbose) const;
+  void dump_cluster_stats(stringstream *ss, Formatter *f, bool verbose) const;
   static void dump_object_stat_sum(TextTable &tbl, Formatter *f,
-			    const object_stat_sum_t &sum,
+			    const pool_stat_t &pool_stat,
 			    uint64_t avail,
 			    float raw_used_rate,
 			    bool verbose, const pg_pool_t *pool);
@@ -225,6 +231,13 @@ public:
   mempool::pgmap::unordered_map<int32_t,osd_stat_t> osd_stat;
   mempool::pgmap::unordered_map<pg_t,pg_stat_t> pg_stat;
 
+  typedef mempool::pgmap::map<
+    std::pair<int64_t, int>,  // <pool, osd>
+    store_statfs_t>
+      per_osd_pool_statfs_t;
+
+  per_osd_pool_statfs_t pool_statfs;
+
   class Incremental {
   public:
     MEMPOOL_CLASS_HELPERS();
@@ -234,6 +247,7 @@ public:
     epoch_t pg_scan;  // osdmap epoch
     mempool::pgmap::set<pg_t> pg_remove;
     utime_t stamp;
+    per_osd_pool_statfs_t pool_statfs_updates;
 
   private:
     mempool::pgmap::map<int32_t,osd_stat_t> osd_stat_updates;
@@ -288,11 +302,20 @@ public:
   void update_pool_deltas(
     CephContext *cct,
     const utime_t ts,
-    const mempool::pgmap::unordered_map<uint64_t, pool_stat_t>& pg_pool_sum_old);
+    const mempool::pgmap::unordered_map<int32_t, pool_stat_t>& pg_pool_sum_old);
   void clear_delta();
 
   void deleted_pool(int64_t pool) {
+    for (auto i = pool_statfs.begin();  i != pool_statfs.end();) {
+      if (i->first.first == pool) {
+	i = pool_statfs.erase(i);
+      } else {
+        ++i;
+      }
+    }
+
     pg_pool_sum.erase(pool);
+    num_pg_by_pool_state.erase(pool);
     num_pg_by_pool.erase(pool);
     per_pool_sum_deltas.erase(pool);
     per_pool_sum_deltas_stamps.erase(pool);
@@ -312,7 +335,7 @@ public:
 
   void update_one_pool_delta(CephContext *cct,
                              const utime_t ts,
-                             const uint64_t pool,
+                             const int64_t pool,
                              const pool_stat_t& old_pool_sum);
 
  public:
@@ -381,9 +404,10 @@ public:
   void calc_stats();
   void stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
-  void stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
+  bool stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
   void calc_purged_snaps();
+  void calc_osd_sum_by_class(const OSDMap& osdmap);
   void stat_osd_add(int osd, const osd_stat_t &s);
   void stat_osd_sub(int osd, const osd_stat_t &s);
   

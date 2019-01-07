@@ -1,10 +1,11 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import { TabsModule } from 'ngx-bootstrap';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
 import { RoleDetailsComponent } from './role-details.component';
@@ -13,18 +14,17 @@ describe('RoleDetailsComponent', () => {
   let component: RoleDetailsComponent;
   let fixture: ComponentFixture<RoleDetailsComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        ToastModule.forRoot(),
-        TabsModule.forRoot(),
-        RouterTestingModule,
-        HttpClientTestingModule
-      ],
-      declarations: [RoleDetailsComponent]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    imports: [
+      SharedModule,
+      ToastModule.forRoot(),
+      TabsModule.forRoot(),
+      RouterTestingModule,
+      HttpClientTestingModule
+    ],
+    declarations: [RoleDetailsComponent],
+    providers: i18nProviders
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(RoleDetailsComponent);

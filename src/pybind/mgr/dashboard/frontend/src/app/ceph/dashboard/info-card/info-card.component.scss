@@ -43,6 +43,7 @@ $logs-text-font-size: $card-font-min-size;
 }
 
 .content-chart {
+  margin-top: -0.7vw;
   position: unset;
   top: unset;
   left: unset;
@@ -56,12 +57,12 @@ $logs-text-font-size: $card-font-min-size;
   transform: unset;
 }
 
-.content-row-size-1-5 {
+.text-area-size-2 {
   margin-right: -50%;
   transform: translate(-50%, -20%);
 }
 
-.content-row-size-2 {
+.text-area-size-3 {
   margin-right: -50%;
   transform: translate(-50%, -40%);
 }
@@ -99,11 +100,19 @@ $logs-text-font-size: $card-font-min-size;
   .card-medium {
     min-height: $card-medium-height * 1.5;
   }
+
+  .content-chart {
+    margin-top: -0.6vw;
+  }
 }
 
 @media (max-width: 991px) {
   .card {
     min-height: $card-height * 2;
+  }
+
+  .content-chart {
+    margin-top: -0.3vw;
   }
 }
 

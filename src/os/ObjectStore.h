@@ -446,8 +446,6 @@ public:
     bufferlist data_bl;
     bufferlist op_bl;
 
-    bufferptr op_ptr;
-
     list<Context *> on_applied;
     list<Context *> on_commit;
     list<Context *> on_applied_sync;
@@ -472,7 +470,6 @@ public:
       object_id(other.object_id),
       data_bl(std::move(other.data_bl)),
       op_bl(std::move(other.op_bl)),
-      op_ptr(std::move(other.op_ptr)),
       on_applied(std::move(other.on_applied)),
       on_commit(std::move(other.on_commit)),
       on_applied_sync(std::move(other.on_applied_sync)) {
@@ -488,7 +485,6 @@ public:
       object_id = other.object_id;
       data_bl = std::move(other.data_bl);
       op_bl = std::move(other.op_bl);
-      op_ptr = std::move(other.op_ptr);
       on_applied = std::move(other.on_applied);
       on_commit = std::move(other.on_commit);
       on_applied_sync = std::move(other.on_applied_sync);
@@ -699,15 +695,11 @@ public:
       bufferlist& bl,
       vector<__le32> &cm,
       vector<__le32> &om) {
+      for (auto& bp : bl.buffers()) {
+        ceph_assert(bp.length() % sizeof(Op) == 0);
 
-      list<bufferptr> list = bl.buffers();
-      std::list<bufferptr>::iterator p;
-
-      for(p = list.begin(); p != list.end(); ++p) {
-        ceph_assert(p->length() % sizeof(Op) == 0);
-
-        char* raw_p = p->c_str();
-        char* raw_end = raw_p + p->length();
+        char* raw_p = const_cast<char*>(bp.c_str());
+        char* raw_end = raw_p + bp.length();
         while (raw_p < raw_end) {
           _update_op(reinterpret_cast<Op*>(raw_p), cm, om);
           raw_p += sizeof(Op);
@@ -747,10 +739,12 @@ public:
 
       //the other.op_bl SHOULD NOT be changes during append operation,
       //we use additional bufferlist to avoid this problem
-      bufferptr other_op_bl_ptr(other.op_bl.length());
-      other.op_bl.copy(0, other.op_bl.length(), other_op_bl_ptr.c_str());
       bufferlist other_op_bl;
-      other_op_bl.append(other_op_bl_ptr);
+      {
+        bufferptr other_op_bl_ptr(other.op_bl.length());
+        other.op_bl.copy(0, other.op_bl.length(), other_op_bl_ptr.c_str());
+        other_op_bl.append(std::move(other_op_bl_ptr));
+      }
 
       //update other_op_bl with cm & om
       //When the other is appended to current transaction, all coll_index and
@@ -963,15 +957,12 @@ private:
      * form of seat belts for the decoder.
      */
     Op* _get_next_op() {
-      if (op_ptr.length() == 0 || op_ptr.offset() >= op_ptr.length()) {
-        op_ptr = bufferptr(sizeof(Op) * OPS_PER_PTR);
+      if (op_bl.get_append_buffer_unused_tail_length() < sizeof(Op)) {
+        op_bl.reserve(sizeof(Op) * OPS_PER_PTR);
       }
-      bufferptr ptr(op_ptr, 0, sizeof(Op));
-      op_bl.append(ptr);
-
-      op_ptr.set_offset(op_ptr.offset() + sizeof(Op));
-
-      char* p = ptr.c_str();
+      // append_hole ensures bptr merging. Even huge number of ops
+      // shouldn't result in overpopulating bl::_buffers.
+      char* const p = op_bl.append_hole(sizeof(Op)).c_str();
       memset(p, 0, sizeof(Op));
       return reinterpret_cast<Op*>(p);
     }
@@ -1560,6 +1551,7 @@ public:
   }
 
   virtual int statfs(struct store_statfs_t *buf) = 0;
+  virtual int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) = 0;
 
   virtual void collect_metadata(map<string,string> *pm) { }
 

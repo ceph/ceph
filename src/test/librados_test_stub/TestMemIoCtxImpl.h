@@ -21,7 +21,7 @@ public:
 
   TestIoCtxImpl *clone() override;
 
-  int aio_remove(const std::string& oid, AioCompletionImpl *c) override;
+  int aio_remove(const std::string& oid, AioCompletionImpl *c, int flags = 0) override;
 
   int append(const std::string& oid, const bufferlist &bl,
              const SnapContext &snapc) override;

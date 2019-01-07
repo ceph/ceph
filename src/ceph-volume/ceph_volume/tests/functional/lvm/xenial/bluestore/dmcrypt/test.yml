@@ -33,6 +33,17 @@
       environment:
         CEPH_VOLUME_DEBUG: 1
 
+    # partitions have been completely removed, so re-create them again
+    - name: re-create partition /dev/sdd for lvm data usage
+      parted:
+        device: /dev/sdd
+        number: 1
+        part_start: 0%
+        part_end: 50%
+        unit: '%'
+        label: gpt
+        state: present
+
     - name: redeploy osd.2 using /dev/sdd1
       command: "ceph-volume --cluster {{ cluster }} lvm create --bluestore --data /dev/sdd1 --osd-id 2"
       environment:
@@ -79,6 +90,11 @@
 
     - name: activate all to start the previously prepared osd.0
       command: "ceph-volume lvm activate --all"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: node inventory
+      command: "ceph-volume inventory"
       environment:
         CEPH_VOLUME_DEBUG: 1
 

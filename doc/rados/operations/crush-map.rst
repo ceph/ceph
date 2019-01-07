@@ -249,6 +249,11 @@ with::
 
   ceph osd crush tree --show-shadow
 
+For older clusters created before Luminous that relied on manually
+crafted CRUSH maps to maintain per-device-type hierarchies, there is a
+*reclassify* tool available to help transition to device classes
+without triggering data movement (see :ref:`crush-reclassify`).
+
 
 Weights sets
 ------------

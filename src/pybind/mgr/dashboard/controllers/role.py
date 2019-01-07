@@ -83,6 +83,7 @@ class Role(RESTController):
         Role._validate_permissions(scopes_permissions)
         Role._set_permissions(role, scopes_permissions)
         role.description = description
+        ACCESS_CTRL_DB.update_users_with_roles(role)
         ACCESS_CTRL_DB.save()
         return Role._role_to_dict(role)
 

@@ -2,11 +2,14 @@ import { Component, OnInit } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { forkJoin } from 'rxjs';
+import { BsModalService } from 'ngx-bootstrap/modal';
+import { forkJoin, Subscription } from 'rxjs';
 
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
+import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { CrushRule } from '../../../shared/models/crush-rule';
@@ -14,13 +17,23 @@ import { CrushStep } from '../../../shared/models/crush-step';
 import { ErasureCodeProfile } from '../../../shared/models/erasure-code-profile';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permission } from '../../../shared/models/permissions';
+import { PoolFormInfo } from '../../../shared/models/pool-form-info';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { FormatterService } from '../../../shared/services/formatter.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+import { ErasureCodeProfileFormComponent } from '../erasure-code-profile-form/erasure-code-profile-form.component';
 import { Pool } from '../pool';
 import { PoolFormData } from './pool-form-data';
-import { PoolFormInfo } from './pool-form-info';
+
+interface FormFieldDescription {
+  externalFieldName: string;
+  formControlName: string;
+  attr?: string;
+  replaceFn?: Function;
+  editable?: boolean;
+  resetValue?: any;
+}
 
 @Component({
   selector: 'cd-pool-form',
@@ -30,13 +43,13 @@ import { PoolFormInfo } from './pool-form-info';
 export class PoolFormComponent implements OnInit {
   permission: Permission;
   form: CdFormGroup;
-  compressionForm: CdFormGroup;
   ecProfiles: ErasureCodeProfile[];
   info: PoolFormInfo;
   routeParamsSubscribe: any;
   editing = false;
-  data = new PoolFormData();
+  data = new PoolFormData(this.i18n);
   externalPgChange = false;
+  private modalSubscription: Subscription;
   current = {
     rules: []
   };
@@ -45,15 +58,18 @@ export class PoolFormComponent implements OnInit {
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private route: ActivatedRoute,
     private router: Router,
+    private modalService: BsModalService,
     private poolService: PoolService,
     private authStorageService: AuthStorageService,
     private formatter: FormatterService,
+    private bsModalService: BsModalService,
     private taskWrapper: TaskWrapperService,
-    private ecpService: ErasureCodeProfileService
+    private ecpService: ErasureCodeProfileService,
+    private i18n: I18n
   ) {
     this.editing = this.router.url.startsWith('/pool/edit');
     this.authenticate();
-    this.createForms();
+    this.createForm();
   }
 
   authenticate() {
@@ -66,8 +82,8 @@ export class PoolFormComponent implements OnInit {
     }
   }
 
-  private createForms() {
-    this.compressionForm = new CdFormGroup({
+  private createForm() {
+    const compressionForm = new CdFormGroup({
       mode: new FormControl('none'),
       algorithm: new FormControl(''),
       minBlobSize: new FormControl('', {
@@ -80,17 +96,11 @@ export class PoolFormComponent implements OnInit {
         updateOn: 'blur'
       })
     });
+
     this.form = new CdFormGroup(
       {
         name: new FormControl('', {
-          validators: [
-            Validators.pattern('[A-Za-z0-9_-]+'),
-            Validators.required,
-            CdValidators.custom(
-              'uniqueName',
-              (value) => this.info && this.info.pool_names.indexOf(value) !== -1
-            )
-          ]
+          validators: [Validators.pattern('[\\.A-Za-z0-9_-]+'), Validators.required]
         }),
         poolType: new FormControl('', {
           validators: [Validators.required]
@@ -111,7 +121,7 @@ export class PoolFormComponent implements OnInit {
           validators: [Validators.required, Validators.min(1)]
         }),
         ecOverwrites: new FormControl(false),
-        compression: this.compressionForm
+        compression: compressionForm
       },
       CdValidators.custom('form', () => null)
     );
@@ -138,10 +148,14 @@ export class PoolFormComponent implements OnInit {
   }
 
   private initEcp(ecProfiles: ErasureCodeProfile[]) {
-    if (ecProfiles.length === 1) {
-      const control = this.form.get('erasureProfile');
-      control.setValue(ecProfiles[0]);
+    const control = this.form.get('erasureProfile');
+    if (ecProfiles.length <= 1) {
       control.disable();
+    }
+    if (ecProfiles.length === 1) {
+      control.setValue(ecProfiles[0]);
+    } else if (ecProfiles.length > 1 && control.disabled) {
+      control.enable();
     }
     this.ecProfiles = ecProfiles;
   }
@@ -157,34 +171,33 @@ export class PoolFormComponent implements OnInit {
   }
 
   private disableForEdit() {
-    ['name', 'poolType', 'crushRule', 'size', 'erasureProfile', 'ecOverwrites'].forEach(
-      (controlName) => this.form.get(controlName).disable()
+    ['poolType', 'crushRule', 'size', 'erasureProfile', 'ecOverwrites'].forEach((controlName) =>
+      this.form.get(controlName).disable()
     );
   }
 
   private initEditFormData(pool: Pool) {
-    const transform = {
-      name: 'pool_name',
-      poolType: 'type',
-      crushRule: (p) =>
-        this.info['crush_rules_' + p.type].find(
-          (rule: CrushRule) => rule.rule_name === p.crush_rule
-        ),
-      size: 'size',
-      erasureProfile: (p) => this.ecProfiles.find((ecp) => ecp.name === p.erasure_code_profile),
-      pgNum: 'pg_num',
-      ecOverwrites: (p) => p.flags_names.includes('ec_overwrites'),
-      mode: 'options.compression_mode',
-      algorithm: 'options.compression_algorithm',
-      minBlobSize: (p) => this.dimlessBinaryPipe.transform(p.options.compression_min_blob_size),
-      maxBlobSize: (p) => this.dimlessBinaryPipe.transform(p.options.compression_max_blob_size),
-      ratio: 'options.compression_required_ratio'
+    const dataMap = {
+      name: pool.pool_name,
+      poolType: pool.type,
+      crushRule: this.info['crush_rules_' + pool.type].find(
+        (rule: CrushRule) => rule.rule_name === pool.crush_rule
+      ),
+      size: pool.size,
+      erasureProfile: this.ecProfiles.find((ecp) => ecp.name === pool.erasure_code_profile),
+      pgNum: pool.pg_num,
+      ecOverwrites: pool.flags_names.includes('ec_overwrites'),
+      mode: pool.options.compression_mode,
+      algorithm: pool.options.compression_algorithm,
+      minBlobSize: this.dimlessBinaryPipe.transform(pool.options.compression_min_blob_size),
+      maxBlobSize: this.dimlessBinaryPipe.transform(pool.options.compression_max_blob_size),
+      ratio: pool.options.compression_required_ratio
     };
-    Object.keys(transform).forEach((key) => {
-      const attrib = transform[key];
-      const value = _.isFunction(attrib) ? attrib(pool) : _.get(pool, attrib);
+
+    Object.keys(dataMap).forEach((controlName: string) => {
+      const value = dataMap[controlName];
       if (!_.isUndefined(value) && value !== '') {
-        this.form.silentSet(key, value);
+        this.form.silentSet(controlName, value);
       }
     });
     this.data.applications.selected = pool.application_metadata;
@@ -360,6 +373,20 @@ export class PoolFormComponent implements OnInit {
         .setValidators(
           CdValidators.custom('noDecrease', (pgs) => this.data.pool && pgs < this.data.pool.pg_num)
         );
+      this.form
+        .get('name')
+        .setValidators([
+          this.form.get('name').validator,
+          CdValidators.custom(
+            'uniqueName',
+            (name) =>
+              this.data.pool &&
+              this.info &&
+              this.info.pool_names.indexOf(name) !== -1 &&
+              this.info.pool_names.indexOf(name) !==
+                this.info.pool_names.indexOf(this.data.pool.pool_name)
+          )
+        ]);
     } else {
       CdValidators.validateIf(
         this.form.get('size'),
@@ -375,24 +402,33 @@ export class PoolFormComponent implements OnInit {
           )
         ]
       );
+      this.form
+        .get('name')
+        .setValidators([
+          this.form.get('name').validator,
+          CdValidators.custom(
+            'uniqueName',
+            (name) => this.info && this.info.pool_names.indexOf(name) !== -1
+          )
+        ]);
     }
     this.setCompressionValidators();
   }
 
   private setCompressionValidators() {
-    CdValidators.validateIf(this.form.get('minBlobSize'), () => this.activatedCompression(), [
+    CdValidators.validateIf(this.form.get('minBlobSize'), () => this.hasCompressionEnabled(), [
       Validators.min(0),
       CdValidators.custom('maximum', (size) =>
         this.oddBlobSize(size, this.form.getValue('maxBlobSize'))
       )
     ]);
-    CdValidators.validateIf(this.form.get('maxBlobSize'), () => this.activatedCompression(), [
+    CdValidators.validateIf(this.form.get('maxBlobSize'), () => this.hasCompressionEnabled(), [
       Validators.min(0),
       CdValidators.custom('minimum', (size) =>
         this.oddBlobSize(this.form.getValue('minBlobSize'), size)
       )
     ]);
-    CdValidators.validateIf(this.form.get('ratio'), () => this.activatedCompression(), [
+    CdValidators.validateIf(this.form.get('ratio'), () => this.hasCompressionEnabled(), [
       Validators.min(0),
       Validators.max(1)
     ]);
@@ -404,7 +440,7 @@ export class PoolFormComponent implements OnInit {
     return Boolean(minimum && maximum && minimum >= maximum);
   }
 
-  activatedCompression() {
+  hasCompressionEnabled() {
     return this.form.getValue('mode') && this.form.get('mode').value.toLowerCase() !== 'none';
   }
 
@@ -425,58 +461,110 @@ export class PoolFormComponent implements OnInit {
     ].join(' ');
   }
 
+  addErasureCodeProfile() {
+    this.modalSubscription = this.modalService.onHide.subscribe(() => this.reloadECPs());
+    this.bsModalService.show(ErasureCodeProfileFormComponent);
+  }
+
+  private reloadECPs() {
+    this.ecpService.list().subscribe((profiles: ErasureCodeProfile[]) => this.initEcp(profiles));
+    this.modalSubscription.unsubscribe();
+  }
+
+  deleteErasureCodeProfile() {
+    const ecp = this.form.getValue('erasureProfile');
+    if (!ecp) {
+      return;
+    }
+    const name = ecp.name;
+    this.modalSubscription = this.modalService.onHide.subscribe(() => this.reloadECPs());
+    this.modalService.show(CriticalConfirmationModalComponent, {
+      initialState: {
+        itemDescription: this.i18n('erasure code profile'),
+        submitActionObservable: () =>
+          this.taskWrapper.wrapTaskAroundCall({
+            task: new FinishedTask('ecp/delete', { name: name }),
+            call: this.ecpService.delete(name)
+          })
+      }
+    });
+  }
+
   submit() {
     if (this.form.invalid) {
       this.form.setErrors({ cdSubmitButton: true });
       return;
     }
+
     const pool = { pool: this.form.getValue('name') };
-    this.extendByItemsForSubmit(pool, [
-      { api: 'pool_type', name: 'poolType' },
-      { api: 'pg_num', name: 'pgNum', edit: true },
+
+    this.assignFormFields(pool, [
+      { externalFieldName: 'pool_type', formControlName: 'poolType' },
+      { externalFieldName: 'pg_num', formControlName: 'pgNum', editable: true },
       this.form.getValue('poolType') === 'replicated'
-        ? { api: 'size', name: 'size' }
-        : { api: 'erasure_code_profile', name: 'erasureProfile', attr: 'name' },
-      { api: 'rule_name', name: 'crushRule', attr: 'rule_name' }
+        ? { externalFieldName: 'size', formControlName: 'size' }
+        : {
+            externalFieldName: 'erasure_code_profile',
+            formControlName: 'erasureProfile',
+            attr: 'name'
+          },
+      { externalFieldName: 'rule_name', formControlName: 'crushRule', attr: 'rule_name' }
     ]);
+
     if (this.info.is_all_bluestore) {
-      this.extendByItemForSubmit(pool, {
-        api: 'flags',
-        name: 'ecOverwrites',
-        fn: () => ['ec_overwrites']
+      this.assignFormField(pool, {
+        externalFieldName: 'flags',
+        formControlName: 'ecOverwrites',
+        replaceFn: () => ['ec_overwrites']
       });
+
       if (this.form.getValue('mode') !== 'none') {
-        this.extendByItemsForSubmit(pool, [
+        this.assignFormFields(pool, [
           {
-            api: 'compression_mode',
-            name: 'mode',
-            edit: true,
-            fn: (value) => this.activatedCompression() && value
+            externalFieldName: 'compression_mode',
+            formControlName: 'mode',
+            editable: true,
+            replaceFn: (value) => this.hasCompressionEnabled() && value
           },
-          { api: 'compression_algorithm', name: 'algorithm', edit: true },
           {
-            api: 'compression_min_blob_size',
-            name: 'minBlobSize',
-            fn: this.formatter.toBytes,
-            edit: true,
+            externalFieldName: 'compression_algorithm',
+            formControlName: 'algorithm',
+            editable: true
+          },
+          {
+            externalFieldName: 'compression_min_blob_size',
+            formControlName: 'minBlobSize',
+            replaceFn: this.formatter.toBytes,
+            editable: true,
             resetValue: 0
           },
           {
-            api: 'compression_max_blob_size',
-            name: 'maxBlobSize',
-            fn: this.formatter.toBytes,
-            edit: true,
+            externalFieldName: 'compression_max_blob_size',
+            formControlName: 'maxBlobSize',
+            replaceFn: this.formatter.toBytes,
+            editable: true,
             resetValue: 0
           },
-          { api: 'compression_required_ratio', name: 'ratio', edit: true, resetValue: 0 }
+          {
+            externalFieldName: 'compression_required_ratio',
+            formControlName: 'ratio',
+            editable: true,
+            resetValue: 0
+          }
         ]);
       } else if (this.editing) {
-        this.extendByItemsForSubmit(pool, [
+        this.assignFormFields(pool, [
           {
-            api: 'compression_mode',
-            name: 'mode',
-            edit: true,
-            fn: () => 'unset'
+            externalFieldName: 'compression_mode',
+            formControlName: 'mode',
+            editable: true,
+            replaceFn: () => 'unset'
+          },
+          {
+            externalFieldName: 'srcpool',
+            formControlName: 'name',
+            editable: true,
+            replaceFn: () => this.data.pool.pool_name
           }
         ]);
       }
@@ -488,48 +576,51 @@ export class PoolFormComponent implements OnInit {
     this.triggerApiTask(pool);
   }
 
-  private extendByItemsForSubmit(pool, items: any[]) {
-    items.forEach((item) => this.extendByItemForSubmit(pool, item));
+  /**
+   * Retrieves the values for the given form field descriptions and assigns the values to the given
+   * object. This method differentiates between `add` and `edit` mode and acts differently on one or
+   * the other.
+   */
+  private assignFormFields(pool: object, formFieldDescription: FormFieldDescription[]): void {
+    formFieldDescription.forEach((item) => this.assignFormField(pool, item));
   }
 
-  private extendByItemForSubmit(
-    pool,
+  /**
+   * Retrieves the value for the given form field description and assigns the values to the given
+   * object. This method differentiates between `add` and `edit` mode and acts differently on one or
+   * the other.
+   */
+  private assignFormField(
+    pool: object,
     {
-      api,
-      name,
+      externalFieldName,
+      formControlName,
       attr,
-      fn,
-      edit,
+      replaceFn,
+      editable,
       resetValue
-    }: {
-      api: string;
-      name: string;
-      attr?: string;
-      fn?: Function;
-      edit?: boolean;
-      resetValue?: any;
-    }
-  ) {
-    if (this.editing && (!edit || this.form.get(name).pristine)) {
+    }: FormFieldDescription
+  ): void {
+    if (this.editing && (!editable || this.form.get(formControlName).pristine)) {
       return;
     }
-    const value = this.form.getValue(name);
-    let apiValue = fn ? fn(value) : attr ? _.get(value, attr) : value;
+    const value = this.form.getValue(formControlName);
+    let apiValue = replaceFn ? replaceFn(value) : attr ? _.get(value, attr) : value;
     if (!value || !apiValue) {
-      if (edit && !_.isUndefined(resetValue)) {
+      if (editable && !_.isUndefined(resetValue)) {
         apiValue = resetValue;
       } else {
         return;
       }
     }
-    pool[api] = apiValue;
+    pool[externalFieldName] = apiValue;
   }
 
   private triggerApiTask(pool) {
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('pool/' + (this.editing ? 'edit' : 'create'), {
-          pool_name: pool.pool
+          pool_name: pool.hasOwnProperty('srcpool') ? pool.srcpool : pool.pool
         }),
         call: this.poolService[this.editing ? 'update' : 'create'](pool)
       })

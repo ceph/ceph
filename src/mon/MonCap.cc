@@ -205,6 +205,7 @@ void MonCapGrant::expand_profile_mon(const EntityName& name) const
     profile_grants.push_back(MonCapGrant("log", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("mon", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("mds", MON_CAP_R | MON_CAP_W));
+    profile_grants.push_back(MonCapGrant("fs", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("osd", MON_CAP_R | MON_CAP_W));
     profile_grants.push_back(MonCapGrant("auth", MON_CAP_R | MON_CAP_X));
     profile_grants.push_back(MonCapGrant("config-key", MON_CAP_R | MON_CAP_W));
@@ -367,6 +368,12 @@ mon_rwxa_t MonCapGrant::get_allowed(CephContext *cct,
       }
     }
     return MON_CAP_ALL;
+  }
+  // we don't allow config-key service to be accessed with blanket caps other
+  // than '*' (i.e., 'any'), and that should have been checked by the caller
+  // via 'is_allow_all()'.
+  if (s == "config-key") {
+    return 0;
   }
   return allow;
 }
@@ -600,14 +607,11 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
 
 bool MonCap::parse(const string& str, ostream *err)
 {
-  string s = str;
-  string::iterator iter = s.begin();
-  string::iterator end = s.end();
+  auto iter = str.begin();
+  auto end = str.end();
 
-  MonCapParser<string::iterator> g;
-  bool r = qi::parse(iter, end, g, *this);
-  //MonCapGrant foo;
-  //bool r = qi::phrase_parse(iter, end, g, ascii::space, foo);
+  MonCapParser<string::const_iterator> exp;
+  bool r = qi::parse(iter, end, exp, *this);
   if (r && iter == end) {
     text = str;
     for (auto& g : grants) {

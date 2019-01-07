@@ -111,8 +111,8 @@ For example, a key pair can be generated with a command similar to::
 The ``dashboard.crt`` file should then be signed by a CA. Once that is done, you
 can enable it for all Ceph manager instances by running the following commands::
 
-  $ ceph config-key set mgr mgr/dashboard/crt -i dashboard.crt
-  $ ceph config-key set mgr mgr/dashboard/key -i dashboard.key
+  $ ceph config-key set mgr/dashboard/crt -i dashboard.crt
+  $ ceph config-key set mgr/dashboard/key -i dashboard.key
 
 If different certificates are desired for each manager instance for some reason,
 the name of the instance can be included as follows (where ``$name`` is the name
@@ -319,6 +319,53 @@ You need to tell the dashboard on which url Grafana instance is running/deployed
 The format of url is : `<protocol>:<IP-address>:<port>`
 You can directly access Grafana Instance as well to monitor your cluster.
 
+Enabling Single Sign-On (SSO)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The Ceph Manager Dashboard supports external authentication of users via the
+`SAML 2.0 <https://en.wikipedia.org/wiki/SAML_2.0>`_ protocol. You need to create
+the user accounts and associate them with the desired roles first, as authorization
+is still performed by the Dashboard. However, the authentication process can be
+performed by an existing Identity Provider (IdP).
+
+.. note::
+  Ceph Dashboard SSO support relies on onelogin's
+  `python-saml <https://pypi.org/project/python-saml/>`_ library.
+  Please ensure that this library is installed on your system, either by using
+  your distribution's package management or via Python's `pip` installer.
+
+To configure SSO on Ceph Dashboard, you should use the following command::
+
+  $ ceph dashboard sso setup saml2 <ceph_dashboard_base_url> <idp_metadata> {<idp_username_attribute>} {<idp_entity_id>} {<sp_x_509_cert>} {<sp_private_key>}
+
+Parameters:
+
+- **<ceph_dashboard_base_url>**: Base URL where Ceph Dashboard is accessible (e.g., `https://cephdashboard.local`)
+- **<idp_metadata>**: URL, file path or content of the IdP metadata XML (e.g., `https://myidp/metadata`)
+- **<idp_username_attribute>** *(optional)*: Attribute that should be used to get the username from the authentication response. Defaults to `uid`.
+- **<idp_entity_id>** *(optional)*: Use this when more than one entity id exists on the IdP metadata.
+- **<sp_x_509_cert> / <sp_private_key>** *(optional)*: File path or content of the certificate that should be used by Ceph Dashboard (Service Provider) for signing and encryption.
+
+
+To display the current SAML 2.0 configuration, use the following command::
+
+  $ ceph dashboard sso show saml2
+
+.. note::
+  For more information about `onelogin_settings`, please check the `onelogin documentation <https://github.com/onelogin/python-saml>`_.
+
+To disable SSO::
+
+  $ ceph dashboard sso disable
+
+To check if SSO is enabled::
+
+  $ ceph dashboard sso status
+
+To enable SSO::
+
+  $ ceph dashboard sso enable saml2
+
 Accessing the dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -514,3 +561,29 @@ to use hyperlinks that include your prefix, you can set the
   ceph config set mgr mgr/dashboard/url_prefix $PREFIX
 
 so you can access the dashboard at ``http://$IP:$PORT/$PREFIX/``.
+
+
+Auditing
+--------
+
+The REST API is capable of logging PUT, POST and DELETE requests to the Ceph
+audit log. This feature is disabled by default, but can be enabled with the
+following command::
+
+  $ ceph dashboard set-audit-api-enabled <true|false>
+
+If enabled, the following parameters are logged per each request:
+
+* from - The origin of the request, e.g. https://[::1]:44410
+* path - The REST API path, e.g. /api/auth
+* method - e.g. PUT, POST or DELETE
+* user - The name of the user, otherwise 'None'
+
+The logging of the request payload (the arguments and their values) is enabled
+by default. Execute the following command to disable this behaviour::
+
+  $ ceph dashboard set-audit-api-log-payload <true|false>
+
+A log entry may look like this::
+
+  2018-10-22 15:27:01.302514 mgr.x [INF] [DASHBOARD] from='https://[::ffff:127.0.0.1]:37022' path='/api/rgw/user/klaus' method='PUT' user='admin' params='{"max_buckets": "1000", "display_name": "Klaus Mustermann", "uid": "klaus", "suspended": "0", "email": "klaus.mustermann@ceph.com"}'

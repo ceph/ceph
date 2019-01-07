@@ -462,6 +462,8 @@ status()
     do
 	echo "${cluster} status"
 	ceph --cluster ${cluster} -s
+	ceph --cluster ${cluster} service dump
+	ceph --cluster ${cluster} service status
 	echo
 
 	for image_pool in ${POOL} ${PARENT_POOL}
@@ -673,14 +675,25 @@ test_status_in_pool_dir()
     local cluster=$1
     local pool=$2
     local image=$3
-    local state_pattern=$4
-    local description_pattern=$5
+    local state_pattern="$4"
+    local description_pattern="$5"
+    local service_pattern="$6"
 
     local status_log=${TEMPDIR}/${cluster}-${image}.mirror_status
     rbd --cluster ${cluster} -p ${pool} mirror image status ${image} |
 	tee ${status_log} >&2
     grep "state: .*${state_pattern}" ${status_log} || return 1
     grep "description: .*${description_pattern}" ${status_log} || return 1
+
+    if [ -n "${service_pattern}" ]; then
+        grep "service: *${service_pattern}" ${status_log} || return 1
+    elif echo ${state_pattern} | grep '^up+'; then
+        grep "service: *${MIRROR_USER_ID_PREFIX}.* on " ${status_log} || return 1
+    else
+        grep "service: " ${status_log} && return 1
+    fi
+
+    return 0
 }
 
 wait_for_status_in_pool_dir()
@@ -688,12 +701,15 @@ wait_for_status_in_pool_dir()
     local cluster=$1
     local pool=$2
     local image=$3
-    local state_pattern=$4
-    local description_pattern=$5
+    local state_pattern="$4"
+    local description_pattern="$5"
+    local service_pattern="$6"
 
     for s in 1 2 4 8 8 8 8 8 8 8 8 16 16; do
 	sleep ${s}
-	test_status_in_pool_dir ${cluster} ${pool} ${image} ${state_pattern} ${description_pattern} && return 0
+	test_status_in_pool_dir ${cluster} ${pool} ${image} "${state_pattern}" \
+                                "${description_pattern}" "${service_pattern}" &&
+            return 0
     done
     return 1
 }
@@ -767,6 +783,22 @@ remove_image_retry()
         remove_image ${cluster} ${pool} ${image} && return 0
     done
     return 1
+}
+
+trash_move() {
+    local cluster=$1
+    local pool=$2
+    local image=$3
+
+    rbd --cluster=${cluster} -p ${pool} trash move ${image}
+}
+
+trash_restore() {
+    local cluster=$1
+    local pool=$2
+    local image_id=$3
+
+    rbd --cluster=${cluster} -p ${pool} trash restore ${image_id}
 }
 
 clone_image()

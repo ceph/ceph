@@ -2,15 +2,21 @@ policy_module(ceph, 1.1.1)
 
 require {
 	type sysfs_t;
+	type configfs_t;
+	type commplex_main_port_t;
+	type rpm_exec_t;
+	type rpm_var_lib_t;
+	type kernel_t;
 	type var_run_t;
 	type random_device_t;
 	type urandom_device_t;
 	type setfiles_t;
 	type nvme_device_t;
 	class sock_file unlink;
-	class lnk_file read;
-	class dir read;
-	class file { getattr read open };
+	class tcp_socket name_connect_t;
+	class lnk_file { create getattr read unlink };
+	class dir { add_name create getattr open read remove_name rmdir search write };
+	class file { create getattr open read rename unlink write };
 	class blk_file { getattr ioctl open read write };
 	class capability2 block_suspend;
 }
@@ -63,6 +69,7 @@ manage_lnk_files_pattern(ceph_t, ceph_var_run_t, ceph_var_run_t)
 
 kernel_read_system_state(ceph_t)
 kernel_read_network_state(ceph_t)
+allow ceph_t kernel_t:system module_request;
 
 corenet_all_recvfrom_unlabeled(ceph_t)
 corenet_all_recvfrom_netlabel(ceph_t)
@@ -75,8 +82,14 @@ corenet_sendrecv_cyphesis_server_packets(ceph_t)
 corenet_tcp_bind_cyphesis_port(ceph_t)
 corenet_tcp_sendrecv_cyphesis_port(ceph_t)
 
+allow ceph_t commplex_main_port_t:tcp_socket name_connect;
+
 corecmd_exec_bin(ceph_t)
 corecmd_exec_shell(ceph_t)
+
+allow ceph_t rpm_exec_t:file getattr;
+allow ceph_t rpm_var_lib_t:dir { add_name write };
+allow ceph_t rpm_var_lib_t:file { create open };
 
 dev_read_urand(ceph_t)
 
@@ -110,6 +123,11 @@ libs_exec_ldconfig(ceph_t)
 allow ceph_t sysfs_t:dir read;
 allow ceph_t sysfs_t:file { read getattr open };
 allow ceph_t sysfs_t:lnk_file { read getattr };
+
+allow ceph_t configfs_t:dir { add_name create getattr open read remove_name rmdir search write };
+allow ceph_t configfs_t:file { getattr open read write };
+allow ceph_t configfs_t:lnk_file { create getattr read unlink };
+
 
 allow ceph_t random_device_t:chr_file getattr;
 allow ceph_t urandom_device_t:chr_file getattr;

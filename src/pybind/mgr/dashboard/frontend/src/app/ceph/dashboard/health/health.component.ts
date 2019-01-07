@@ -1,9 +1,13 @@
-import { ViewportScroller } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
-import { DashboardService } from '../../../shared/api/dashboard.service';
+import { HealthService } from '../../../shared/api/health.service';
+import { Permissions } from '../../../shared/models/permissions';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { PgCategoryService } from '../../shared/pg-category.service';
+import { HealthPieColor } from '../health-pie/health-pie-color.enum';
 
 @Component({
   selector: 'cd-health',
@@ -11,18 +15,23 @@ import { DashboardService } from '../../../shared/api/dashboard.service';
   styleUrls: ['./health.component.scss']
 })
 export class HealthComponent implements OnInit, OnDestroy {
-  contentData: any;
+  healthData: any;
   interval: number;
+  permissions: Permissions;
 
   constructor(
-    private dashboardService: DashboardService,
-    public viewportScroller: ViewportScroller
-  ) {}
+    private healthService: HealthService,
+    private i18n: I18n,
+    private authStorageService: AuthStorageService,
+    private pgCategoryService: PgCategoryService
+  ) {
+    this.permissions = this.authStorageService.getPermissions();
+  }
 
   ngOnInit() {
-    this.getInfo();
+    this.getHealth();
     this.interval = window.setInterval(() => {
-      this.getInfo();
+      this.getHealth();
     }, 5000);
   }
 
@@ -30,9 +39,9 @@ export class HealthComponent implements OnInit, OnDestroy {
     clearInterval(this.interval);
   }
 
-  getInfo() {
-    this.dashboardService.getHealth().subscribe((data: any) => {
-      this.contentData = data;
+  getHealth() {
+    this.healthService.getMinimalHealth().subscribe((data: any) => {
+      this.healthData = data;
     });
   }
 
@@ -40,10 +49,10 @@ export class HealthComponent implements OnInit, OnDestroy {
     const ratioLabels = [];
     const ratioData = [];
 
-    ratioLabels.push('Writes');
-    ratioData.push(this.contentData.client_perf.write_op_per_sec);
-    ratioLabels.push('Reads');
-    ratioData.push(this.contentData.client_perf.read_op_per_sec);
+    ratioLabels.push(this.i18n('Writes'));
+    ratioData.push(this.healthData.client_perf.write_op_per_sec);
+    ratioLabels.push(this.i18n('Reads'));
+    ratioData.push(this.healthData.client_perf.read_op_per_sec);
 
     chart.dataset[0].data = ratioData;
     chart.labels = ratioLabels;
@@ -52,80 +61,61 @@ export class HealthComponent implements OnInit, OnDestroy {
   prepareRawUsage(chart, data) {
     const percentAvailable = Math.round(
       100 *
-        ((data.df.stats.total_bytes - data.df.stats.total_used_bytes) / data.df.stats.total_bytes)
+        ((data.df.stats.total_bytes - data.df.stats.total_used_raw_bytes) /
+          data.df.stats.total_bytes)
     );
 
     const percentUsed = Math.round(
-      100 * (data.df.stats.total_used_bytes / data.df.stats.total_bytes)
+      100 * (data.df.stats.total_used_raw_bytes / data.df.stats.total_bytes)
     );
 
-    chart.dataset[0].data = [data.df.stats.total_used_bytes, data.df.stats.total_avail_bytes];
+    chart.dataset[0].data = [data.df.stats.total_used_raw_bytes, data.df.stats.total_avail_bytes];
     if (chart === 'doughnut') {
       chart.options.cutoutPercentage = 65;
     }
-    chart.labels = [`Used (${percentUsed}%)`, `Avail. (${percentAvailable}%)`];
+    chart.labels = [
+      `${this.i18n('Used')} (${percentUsed}%)`,
+      `${this.i18n('Avail.')} (${percentAvailable}%)`
+    ];
   }
 
   preparePgStatus(chart, data) {
-    const pgCategoryClean = 'Clean';
-    const pgCategoryCleanStates = ['active', 'clean'];
-    const pgCategoryWarning = 'Warning';
-    const pgCategoryWarningStates = [
-      'backfill_toofull',
-      'backfill_unfound',
-      'down',
-      'incomplete',
-      'inconsistent',
-      'recovery_toofull',
-      'recovery_unfound',
-      'remapped',
-      'snaptrim_error',
-      'stale',
-      'undersized'
+    const categoryPgAmount = {};
+    chart.labels = [
+      this.i18n('Clean'),
+      this.i18n('Working'),
+      this.i18n('Warning'),
+      this.i18n('Unknown')
     ];
-    const pgCategoryUnknown = 'Unknown';
-    const pgCategoryWorking = 'Working';
-    const pgCategoryWorkingStates = [
-      'activating',
-      'backfill_wait',
-      'backfilling',
-      'creating',
-      'deep',
-      'degraded',
-      'forced_backfill',
-      'forced_recovery',
-      'peering',
-      'peered',
-      'recovering',
-      'recovery_wait',
-      'repair',
-      'scrubbing',
-      'snaptrim',
-      'snaptrim_wait'
+    chart.colors = [
+      {
+        backgroundColor: [
+          HealthPieColor.SHADE_GREEN_CYAN,
+          HealthPieColor.MEDIUM_DARK_SHADE_CYAN_BLUE,
+          HealthPieColor.LIGHT_SHADE_BROWN,
+          HealthPieColor.MEDIUM_LIGHT_SHADE_PINK_RED
+        ]
+      }
     ];
-    let totalPgClean = 0;
-    let totalPgWarning = 0;
-    let totalPgUnknown = 0;
-    let totalPgWorking = 0;
 
     _.forEach(data.pg_info.statuses, (pgAmount, pgStatesText) => {
-      const pgStates = pgStatesText.split('+');
-      const isWarning = _.intersection(pgCategoryWarningStates, pgStates).length > 0;
-      const pgWorkingStates = _.intersection(pgCategoryWorkingStates, pgStates);
-      const pgCleanStates = _.intersection(pgCategoryCleanStates, pgStates);
+      const categoryType = this.pgCategoryService.getTypeByStates(pgStatesText);
 
-      if (isWarning) {
-        totalPgWarning += pgAmount;
-      } else if (pgStates.length > pgCleanStates.length + pgWorkingStates.length) {
-        totalPgUnknown += pgAmount;
-      } else if (pgWorkingStates.length > 0) {
-        totalPgWorking = pgAmount;
-      } else {
-        totalPgClean += pgAmount;
+      if (_.isUndefined(categoryPgAmount[categoryType])) {
+        categoryPgAmount[categoryType] = 0;
       }
+      categoryPgAmount[categoryType] += pgAmount;
     });
 
-    chart.labels = [pgCategoryWarning, pgCategoryClean, pgCategoryUnknown, pgCategoryWorking];
-    chart.dataset[0].data = [totalPgWarning, totalPgClean, totalPgUnknown, totalPgWorking];
+    chart.dataset[0].data = this.pgCategoryService
+      .getAllTypes()
+      .map((categoryType) => categoryPgAmount[categoryType]);
+  }
+
+  isClientReadWriteChartShowable() {
+    const readOps = this.healthData.client_perf.read_op_per_sec || 0;
+    const writeOps = this.healthData.client_perf.write_op_per_sec || 0;
+
+    return readOps + writeOps > 0;
   }
 }

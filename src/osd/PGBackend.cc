@@ -64,7 +64,7 @@ void PGBackend::send_recovery_deletes(int prio,
     const auto& objects = p.second;
     ConnectionRef con = get_parent()->get_con_osd_cluster(
       shard.osd,
-      get_osdmap()->get_epoch());
+      get_osdmap_epoch());
     if (!con)
       continue;
     auto it = objects.begin();
@@ -75,7 +75,7 @@ void PGBackend::send_recovery_deletes(int prio,
       MOSDPGRecoveryDelete *msg =
 	new MOSDPGRecoveryDelete(get_parent()->whoami_shard(),
 				 target_pg,
-				 get_osdmap()->get_epoch(),
+				 get_osdmap_epoch(),
 				 min_epoch);
       msg->set_priority(prio);
 

@@ -443,6 +443,7 @@ private:
 				 ostream *ss);
   int prepare_pool_size(const unsigned pool_type,
 			const string &erasure_code_profile,
+                        uint8_t repl_size,
 			unsigned *size, unsigned *min_size,
 			ostream *ss);
   int prepare_pool_stripe_width(const unsigned pool_type,
@@ -454,6 +455,10 @@ private:
 		       int crush_rule,
 		       const string &crush_rule_name,
                        unsigned pg_num, unsigned pgp_num,
+		       unsigned pg_num_min,
+                       uint64_t repl_size,
+		       const uint64_t target_size_bytes,
+		       const float target_size_ratio,
 		       const string &erasure_code_profile,
                        const unsigned pool_type,
                        const uint64_t expected_num_objects,
@@ -632,9 +637,19 @@ public:
 
   int prepare_command_pool_set(const cmdmap_t& cmdmap,
                                stringstream& ss);
+
   int prepare_command_pool_application(const string &prefix,
                                        const cmdmap_t& cmdmap,
                                        stringstream& ss);
+  int preprocess_command_pool_application(const string &prefix,
+                                          const cmdmap_t& cmdmap,
+                                          stringstream& ss,
+                                          bool *modified);
+  int _command_pool_application(const string &prefix,
+                                       const cmdmap_t& cmdmap,
+                                       stringstream& ss,
+                                       bool *modified,
+                                       bool preparing);
 
   bool handle_osd_timeouts(const utime_t &now,
 			   std::map<int,utime_t> &last_osd_report);
@@ -658,7 +673,7 @@ public:
   int get_full_from_pinned_map(version_t ver, bufferlist& bl);
 
   epoch_t blacklist(const entity_addrvec_t& av, utime_t until);
-  epoch_t blacklist(const entity_addr_t& a, utime_t until);
+  epoch_t blacklist(entity_addr_t a, utime_t until);
 
   void dump_info(Formatter *f);
   int dump_osd_metadata(int osd, Formatter *f, ostream *err);

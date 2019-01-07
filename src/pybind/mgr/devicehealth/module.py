@@ -24,38 +24,62 @@ HEALTH_MESSAGES = {
 
 
 class Module(MgrModule):
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {
             'name': 'enable_monitoring',
-            'default': str(False),
+            'default': False,
+            'type': 'bool',
+            'desc': 'monitor device health metrics',
+            'runtime': True,
         },
         {
             'name': 'scrape_frequency',
-            'default': str(86400),
+            'default': 86400,
+            'type': 'secs',
+            'desc': 'how frequently to scrape device health metrics',
+            'runtime': True,
         },
         {
             'name': 'pool_name',
             'default': 'device_health_metrics',
+            'type': 'str',
+            'desc': 'name of pool in which to store device health metrics',
+            'runtime': True,
         },
         {
             'name': 'retention_period',
-            'default': str(86400 * 14),
+            'default': (86400 * 180),
+            'type': 'secs',
+            'desc': 'how long to retain device health metrics',
+            'runtime': True,
         },
         {
             'name': 'mark_out_threshold',
-            'default': str(86400 * 14 * 2),
+            'default': (86400 * 14 * 2),
+            'type': 'secs',
+            'desc': 'automatically mark OSD if it may fail before this long',
+            'runtime': True,
         },
         {
             'name': 'warn_threshold',
-            'default': str(86400 * 14 * 6),
+            'default': (86400 * 14 * 6),
+            'type': 'secs',
+            'desc': 'raise health warning if OSD may fail before this long',
+            'runtime': True,
         },
         {
             'name': 'self_heal',
-            'default': str(True),
+            'default': True,
+            'type': 'bool',
+            'desc': 'preemptively heal cluster around devices that may fail',
+            'runtime': True,
         },
         {
             'name': 'sleep_interval',
-            'default': str(600),
+            'default': 600,
+            'type': 'secs',
+            'desc': 'how frequently to wake up and check device health',
+            'runtime': True,
         },
     ]
 
@@ -101,13 +125,19 @@ class Module(MgrModule):
             "desc": "Disable device health monitoring",
             "perm": "rw",
         },
+        {
+            'cmd': 'device predict-life-expectancy '
+                   'name=devid,type=CephString,req=true',
+            'desc': 'Predict life expectancy with local predictor',
+            'perm': 'r'
+        },
     ]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
 
-        # options
-        for opt in self.OPTIONS:
+        # populate options (just until serve() runs)
+        for opt in self.MODULE_OPTIONS:
             setattr(self, opt['name'], opt['default'])
 
         # other
@@ -115,7 +145,7 @@ class Module(MgrModule):
         self.event = Event()
 
     def is_valid_daemon_name(self, who):
-        l = cmd.get('who', '').split('.')
+        l = who.split('.')
         if len(l) != 2:
             return False
         if l[0] not in ('osd', 'mon'):
@@ -152,20 +182,22 @@ class Module(MgrModule):
         elif cmd['prefix'] == 'device check-health':
             return self.check_health()
         elif cmd['prefix'] == 'device monitoring on':
-            self.set_config('enable_monitoring', 'true')
+            self.set_module_option('enable_monitoring', True)
             self.event.set()
             return 0, '', ''
         elif cmd['prefix'] == 'device monitoring off':
-            self.set_config('enable_monitoring', 'false')
+            self.set_module_option('enable_monitoring', False)
             self.set_health_checks({})  # avoid stuck health alerts
             return 0, '', ''
+        elif cmd['prefix'] == 'device predict-life-expectancy':
+            return self.predict_lift_expectancy(cmd['devid'])
         else:
             # mgr should respect our self.COMMANDS and not call us for
             # any prefix we don't advertise
             raise NotImplementedError(cmd['prefix'])
 
     def self_test(self):
-        self.refresh_config()
+        self.config_notify()
         osdmap = self.get('osd_map')
         osd_id = osdmap['osds'][0]['osd']
         osdmeta = self.get('osd_metadata')
@@ -180,15 +212,16 @@ class Module(MgrModule):
             assert r == 0
             assert before != after
 
-    def refresh_config(self):
-        for opt in self.OPTIONS:
+    def config_notify(self):
+        for opt in self.MODULE_OPTIONS:
             setattr(self,
                     opt['name'],
-                    self.get_config(opt['name']) or opt['default'])
+                    self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
     def serve(self):
         self.log.info("Starting")
+        self.config_notify()
 
         last_scrape = None
         ls = self.get_store('last_scrape')
@@ -200,9 +233,7 @@ class Module(MgrModule):
         self.log.debug('Last scrape %s', last_scrape)
 
         while self.run:
-            self.refresh_config()
-
-            if self.enable_monitoring == 'true' or self.enable_monitoring == 'True':
+            if self.enable_monitoring:
                 self.log.debug('Running')
                 self.check_health()
 
@@ -225,6 +256,7 @@ class Module(MgrModule):
                                    next_scrape.strftime(TIME_FORMAT))
                 if now >= next_scrape:
                     self.scrape_all()
+                    self.predict_all_devices()
                     last_scrape = now
                     self.set_store('last_scrape', last_scrape.strftime(TIME_FORMAT))
 
@@ -257,6 +289,7 @@ class Module(MgrModule):
                 'format': 'json',
                 'pool': self.pool_name,
                 'pg_num': 1,
+                'pg_num_min': 1,
             }), '')
             r, outb, outs = result.wait()
             assert r == 0
@@ -391,7 +424,9 @@ class Module(MgrModule):
         # fetch metrics
         res = {}
         ioctx = self.open_connection(create_if_missing=False)
-        if ioctx:
+        if not ioctx:
+            return 0, json.dumps(res, indent=4), ''
+        with ioctx:
             with rados.ReadOpCtx() as op:
                 omap_iter, ret = ioctx.get_omap_vals(op, "", sample or '', 500)  # fixme
                 assert ret == 0
@@ -479,7 +514,7 @@ class Module(MgrModule):
 
         # OSD might be marked 'out' (which means it has no
         # data), however PGs are still attached to it.
-        for _id in osds_out.iterkeys():
+        for _id in osds_out:
             num_pgs = self.get_osd_num_pgs(_id)
             if num_pgs > 0:
                 health_warnings[DEVICE_HEALTH_IN_USE].append(
@@ -564,3 +599,35 @@ class Module(MgrModule):
         # FIXME: extract and normalize raw smartctl --json output and
         # generate a dict of the fields we care about.
         return raw
+
+    def predict_lift_expectancy(self, devid):
+        plugin_name = ''
+        model = self.get_ceph_option('device_failure_prediction_mode')
+        if model and model.lower() == 'cloud':
+            plugin_name = 'diskprediction_cloud'
+        elif model and model.lower() == 'local':
+            plugin_name = 'diskprediction_local'
+        else:
+            return -1, '', 'unable to enable any disk prediction model[local/cloud]'
+        try:
+            can_run, _ = self.remote(plugin_name, 'can_run')
+            if can_run:
+                return self.remote(plugin_name, 'predict_life_expectancy', devid=devid)
+        except:
+            return -1, '', 'unable to invoke diskprediction local or remote plugin'
+
+    def predict_all_devices(self):
+        plugin_name = ''
+        model = self.get_ceph_option('device_failure_prediction_mode')
+        if model and model.lower() == 'cloud':
+            plugin_name = 'diskprediction_cloud'
+        elif model and model.lower() == 'local':
+            plugin_name = 'diskprediction_local'
+        else:
+            return -1, '', 'unable to enable any disk prediction model[local/cloud]'
+        try:
+            can_run, _ = self.remote(plugin_name, 'can_run')
+            if can_run:
+                return self.remote(plugin_name, 'predict_all_devices')
+        except:
+            return -1, '', 'unable to invoke diskprediction local or remote plugin'

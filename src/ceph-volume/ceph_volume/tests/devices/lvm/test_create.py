@@ -17,14 +17,16 @@ class TestCreate(object):
         assert 'Use the bluestore objectstore' in stdout
         assert 'A physical device or logical' in stdout
 
-    def test_excludes_filestore_bluestore_flags(self, capsys):
+    def test_excludes_filestore_bluestore_flags(self, capsys, device_info):
+        device_info()
         with pytest.raises(SystemExit):
             lvm.create.Create(argv=['--data', '/dev/sdfoo', '--filestore', '--bluestore']).main()
         stdout, sterr = capsys.readouterr()
         expected = 'Cannot use --filestore (filestore) with --bluestore (bluestore)'
         assert expected in stdout
 
-    def test_excludes_other_filestore_bluestore_flags(self, capsys):
+    def test_excludes_other_filestore_bluestore_flags(self, capsys, device_info):
+        device_info()
         with pytest.raises(SystemExit):
             lvm.create.Create(argv=[
                 '--bluestore', '--data', '/dev/sdfoo',
@@ -34,7 +36,8 @@ class TestCreate(object):
         expected = 'Cannot use --bluestore (bluestore) with --journal (filestore)'
         assert expected in stdout
 
-    def test_excludes_block_and_journal_flags(self, capsys):
+    def test_excludes_block_and_journal_flags(self, capsys, device_info):
+        device_info()
         with pytest.raises(SystemExit):
             lvm.create.Create(argv=[
                 '--bluestore', '--data', '/dev/sdfoo', '--block.db', 'vg/ceph1',

@@ -61,10 +61,10 @@ ceph_get_mgr_id(BaseMgrStandbyModule *self, PyObject *args)
 }
 
 static PyObject*
-ceph_config_get(BaseMgrStandbyModule *self, PyObject *args)
+ceph_get_module_option(BaseMgrStandbyModule *self, PyObject *args)
 {
   char *what = nullptr;
-  if (!PyArg_ParseTuple(args, "s:ceph_config_get", &what)) {
+  if (!PyArg_ParseTuple(args, "s:ceph_get_module_option", &what)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
@@ -72,10 +72,30 @@ ceph_config_get(BaseMgrStandbyModule *self, PyObject *args)
   std::string value;
   bool found = self->this_module->get_config(what, &value);
   if (found) {
-    dout(10) << "ceph_config_get " << what << " found: " << value.c_str() << dendl;
+    dout(10) << __func__ << " " << what << " found: " << value.c_str() << dendl;
+    return self->this_module->py_module->get_typed_option_value(what, value);
+  } else {
+    dout(4) << __func__ << " " << what << " not found " << dendl;
+    Py_RETURN_NONE;
+  }
+}
+
+static PyObject*
+ceph_option_get(BaseMgrStandbyModule *self, PyObject *args)
+{
+  char *what = nullptr;
+  if (!PyArg_ParseTuple(args, "s:ceph_option_get", &what)) {
+    derr << "Invalid args!" << dendl;
+    return nullptr;
+  }
+
+  std::string value;
+  int r = g_conf().get_val(string(what), &value);
+  if (r >= 0) {
+    dout(10) << "ceph_option_get " << what << " found: " << value << dendl;
     return PyString_FromString(value.c_str());
   } else {
-    dout(4) << "ceph_config_get " << what << " not found " << dendl;
+    dout(4) << "ceph_option_get " << what << " not found " << dendl;
     Py_RETURN_NONE;
   }
 }
@@ -133,8 +153,11 @@ PyMethodDef BaseMgrStandbyModule_methods[] = {
   {"_ceph_get_mgr_id", (PyCFunction)ceph_get_mgr_id, METH_NOARGS,
    "Get the name of the Mgr daemon where we are running"},
 
-  {"_ceph_get_config", (PyCFunction)ceph_config_get, METH_VARARGS,
-   "Get a configuration value"},
+  {"_ceph_get_module_option", (PyCFunction)ceph_get_module_option, METH_VARARGS,
+   "Get a module configuration option value"},
+
+  {"_ceph_get_option", (PyCFunction)ceph_option_get, METH_VARARGS,
+   "Get a native configuration option value"},
 
   {"_ceph_get_store", (PyCFunction)ceph_store_get, METH_VARARGS,
    "Get a KV store value"},

@@ -17,7 +17,7 @@
 #include "librbd/Types.h"
 
 #include "gtest/gtest.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 
 #include <errno.h>
 #include <string>
@@ -1638,7 +1638,7 @@ TEST_F(TestClsRbd, mirror_image_status) {
 
     explicit WatchCtx(librados::IoCtx *ioctx) : m_ioctx(ioctx) {}
     void handle_notify(uint64_t notify_id, uint64_t cookie,
-			     uint64_t notifier_id, bufferlist& bl_) override {
+                       uint64_t notifier_id, bufferlist& bl_) override {
       bufferlist bl;
       m_ioctx->notify_ack(RBD_MIRRORING, notify_id, cookie, bl);
     }
@@ -1648,12 +1648,16 @@ TEST_F(TestClsRbd, mirror_image_status) {
   map<std::string, cls::rbd::MirrorImage> images;
   map<std::string, cls::rbd::MirrorImageStatus> statuses;
   std::map<cls::rbd::MirrorImageStatusState, int> states;
+  std::map<std::string, entity_inst_t> instances;
   cls::rbd::MirrorImageStatus read_status;
+  entity_inst_t read_instance;
   uint64_t watch_handle;
   librados::IoCtx ioctx;
 
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
   ioctx.remove(RBD_MIRRORING);
+
+  int64_t instance_id = librados::Rados(ioctx).get_instance_id();
 
   // Test list fails on nonexistent RBD_MIRRORING object
 
@@ -1694,10 +1698,18 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(1U, states.size());
   ASSERT_EQ(3, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN]);
 
+  // Test get instance return -ESTALE due to down.
+
+  ASSERT_EQ(-ESTALE, mirror_image_instance_get(&ioctx, "uuid1", &read_instance));
+  instances.clear();
+  ASSERT_EQ(0, mirror_image_instance_list(&ioctx, "", 1024, &instances));
+  ASSERT_TRUE(instances.empty());
+
   // Test remove_down removes stale statuses
 
   ASSERT_EQ(0, mirror_image_status_remove_down(&ioctx));
   ASSERT_EQ(-ENOENT, mirror_image_status_get(&ioctx, "uuid1", &read_status));
+  ASSERT_EQ(-ENOENT, mirror_image_instance_get(&ioctx, "uuid1", &read_instance));
   ASSERT_EQ(0, mirror_image_status_list(&ioctx, "", 1024, &images, &statuses));
   ASSERT_EQ(3U, images.size());
   ASSERT_TRUE(statuses.empty());
@@ -1733,6 +1745,16 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(statuses["image_id1"], status1);
   ASSERT_EQ(statuses["image_id2"], status2);
   ASSERT_EQ(statuses["image_id3"], status3);
+
+  read_instance = {};
+  ASSERT_EQ(0, mirror_image_instance_get(&ioctx, "uuid1", &read_instance));
+  ASSERT_EQ(read_instance.name.num(), instance_id);
+  instances.clear();
+  ASSERT_EQ(0, mirror_image_instance_list(&ioctx, "", 1024, &instances));
+  ASSERT_EQ(3U, instances.size());
+  ASSERT_EQ(instances["image_id1"].name.num(), instance_id);
+  ASSERT_EQ(instances["image_id2"].name.num(), instance_id);
+  ASSERT_EQ(instances["image_id3"].name.num(), instance_id);
 
   ASSERT_EQ(0, mirror_image_status_remove_down(&ioctx));
   ASSERT_EQ(0, mirror_image_status_get(&ioctx, "uuid1", &read_status));
@@ -1818,6 +1840,11 @@ TEST_F(TestClsRbd, mirror_image_status) {
   ASSERT_EQ(0, mirror_image_status_get_summary(&ioctx, &states));
   ASSERT_EQ(1U, states.size());
   ASSERT_EQ(3, states[cls::rbd::MIRROR_IMAGE_STATUS_STATE_UNKNOWN]);
+
+  ASSERT_EQ(-ESTALE, mirror_image_instance_get(&ioctx, "uuid1", &read_instance));
+  instances.clear();
+  ASSERT_EQ(0, mirror_image_instance_list(&ioctx, "", 1024, &instances));
+  ASSERT_TRUE(instances.empty());
 
   ASSERT_EQ(0, mirror_image_status_remove_down(&ioctx));
   ASSERT_EQ(-ENOENT, mirror_image_status_get(&ioctx, "uuid1", &read_status));
@@ -2810,7 +2837,8 @@ TEST_F(TestClsRbd, migration)
   ASSERT_EQ(0, create_image(&ioctx, oid, 0, 22, 0, oid, -1));
 
   cls::rbd::MigrationSpec migration_spec(cls::rbd::MIGRATION_HEADER_TYPE_DST, 1,
-                                         "name", "id", {}, 0, false, false,
+                                         "name", "ns", "id", {}, 0, false,
+                                         false,
                                          cls::rbd::MIGRATION_STATE_PREPARING,
                                          "123");
   cls::rbd::MigrationSpec read_migration_spec;
@@ -2879,7 +2907,8 @@ TEST_F(TestClsRbd, migration_v1)
   ASSERT_EQ(0, ioctx.write(oid, header, header.length(), 0));
 
   cls::rbd::MigrationSpec migration_spec(cls::rbd::MIGRATION_HEADER_TYPE_DST, 1,
-                                         "name", "id", {}, 0, false, false,
+                                         "name", "ns", "id", {}, 0, false,
+                                         false,
                                          cls::rbd::MIGRATION_STATE_PREPARING,
                                          "123");
   cls::rbd::MigrationSpec read_migration_spec;

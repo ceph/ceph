@@ -19,6 +19,7 @@
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "common/Timer.h"
+#include "common/ceph_time.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "mon/MonClient.h"
@@ -171,6 +172,8 @@ public:
     std::map<std::string,std::string>&& status);
 
   mon_feature_t get_required_monitor_features() const;
+
+  int get_inconsistent_pgs(int64_t pool_id, std::vector<std::string>* pgs);
 };
 
 #endif

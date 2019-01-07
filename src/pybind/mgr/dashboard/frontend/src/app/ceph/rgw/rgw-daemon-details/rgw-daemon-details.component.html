@@ -12,8 +12,10 @@
     </cd-table-performance-counter>
   </tab>
   <tab i18n-heading
+       *ngIf="grafanaPermission.read"
        heading="Performance Details">
-    <cd-grafana [grafanaPath]="'x5ARzZtmk/rgw-instance-detail?var-rgw_servers=rgw.' + this.selection.first().id"
+    <cd-grafana [grafanaPath]="'rgw-instance-detail?var-rgw_servers=rgw.' + this.selection.first().id"
+                uid="x5ARzZtmk"
                 grafanaStyle="one">
     </cd-grafana>
   </tab>

@@ -127,8 +127,8 @@ ostream& operator<<(ostream& out, const CInode& in)
   if (in.get_projected_version() > in.get_version())
     out << " pv" << in.get_projected_version();
 
-  if (in.is_auth_pinned()) {
-    out << " ap=" << in.get_num_auth_pins() << "+" << in.get_num_nested_auth_pins();
+  if (in.get_num_auth_pins()) {
+    out << " ap=" << in.get_num_auth_pins();
 #ifdef MDS_AUTHPIN_SET
     in.print_authpin_set(out);
 #endif
@@ -417,7 +417,10 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   int64_t old_pool = inode.layout.pool_id;
 
   mark_dirty(front.inode.version, ls);
+  bool new_export_pin = inode.export_pin != front.inode.export_pin;
   inode = front.inode;
+  if (new_export_pin)
+    maybe_export_pin(true);
 
   if (inode.is_backtrace_updated())
     mark_dirty_parent(ls, old_pool != inode.layout.pool_id);
@@ -633,13 +636,17 @@ frag_t InodeStoreBase::pick_dirfrag(std::string_view dn)
 bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
 {
   bool all = true;
-  std::list<frag_t> fglist;
-  dirfragtree.get_leaves_under(fg, fglist);
-  for (list<frag_t>::iterator p = fglist.begin(); p != fglist.end(); ++p)
-    if (dirfrags.count(*p))
-      ls.push_back(dirfrags[*p]);
-    else 
-      all = false;
+  {
+    frag_vec_t leaves;
+    dirfragtree.get_leaves_under(fg, leaves);
+    for (const auto &leaf : leaves) {
+      if (auto it = dirfrags.find(leaf); it != dirfrags.end()) {
+        ls.push_back(it->second);
+      } else {
+        all = false;
+      }
+    }
+  }
 
   if (all)
     return all;
@@ -653,11 +660,14 @@ bool CInode::get_dirfrags_under(frag_t fg, list<CDir*>& ls)
   }
 
   all = true;
-  tmpdft.get_leaves_under(fg, fglist);
-  for (const auto &p : fglist) {
-    if (!dirfrags.count(p)) {
-      all = false;
-      break;
+  {
+    frag_vec_t leaves;
+    tmpdft.get_leaves_under(fg, leaves);
+    for (const auto& leaf : leaves) {
+      if (!dirfrags.count(leaf)) {
+        all = false;
+        break;
+      }
     }
   }
 
@@ -689,10 +699,11 @@ void CInode::force_dirfrags()
   }
 
   if (bad) {
-    list<frag_t> leaves;
+    frag_vec_t leaves;
     dirfragtree.get_leaves(leaves);
-    for (list<frag_t>::iterator p = leaves.begin(); p != leaves.end(); ++p)
-      mdcache->get_force_dirfrag(dirfrag_t(ino(),*p), true);
+    for (const auto& leaf : leaves) {
+      mdcache->get_force_dirfrag(dirfrag_t(ino(), leaf), true);
+    }
   }
 
   verify_dirfrags();
@@ -2201,13 +2212,14 @@ void CInode::finish_scatter_gather_update(int type)
       dout(20) << " final dirstat " << pi->dirstat << dendl;
 
       if (dirstat_valid && !dirstat.same_sums(pi->dirstat)) {
-	list<frag_t> ls;
-	tmpdft.get_leaves_under(frag_t(), ls);
-	for (list<frag_t>::iterator p = ls.begin(); p != ls.end(); ++p)
-	  if (!dirfrags.count(*p)) {
+        frag_vec_t leaves;
+        tmpdft.get_leaves_under(frag_t(), leaves);
+	for (const auto& leaf : leaves) {
+	  if (!dirfrags.count(leaf)) {
 	    dirstat_valid = false;
 	    break;
 	  }
+        }
 	if (dirstat_valid) {
 	  if (state_test(CInode::STATE_REPAIRSTATS)) {
 	    dout(20) << " dirstat mismatch, fixing" << dendl;
@@ -2311,13 +2323,14 @@ void CInode::finish_scatter_gather_update(int type)
       dout(20) << " final rstat " << pi->rstat << dendl;
 
       if (rstat_valid && !rstat.same_sums(pi->rstat)) {
-	list<frag_t> ls;
-	tmpdft.get_leaves_under(frag_t(), ls);
-	for (list<frag_t>::iterator p = ls.begin(); p != ls.end(); ++p)
-	  if (!dirfrags.count(*p)) {
+        frag_vec_t leaves;
+        tmpdft.get_leaves_under(frag_t(), leaves);
+        for (const auto& leaf : leaves) {
+          if (!dirfrags.count(leaf)) {
 	    rstat_valid = false;
 	    break;
 	  }
+        }
 	if (rstat_valid) {
 	  if (state_test(CInode::STATE_REPAIRSTATS)) {
 	    dout(20) << " rstat mismatch, fixing" << dendl;
@@ -2559,12 +2572,10 @@ void CInode::auth_pin(void *by)
   auth_pin_set.insert(by);
 #endif
 
-  dout(10) << "auth_pin by " << by << " on " << *this
-	   << " now " << auth_pins << "+" << nested_auth_pins
-	   << dendl;
+  dout(10) << "auth_pin by " << by << " on " << *this << " now " << auth_pins << dendl;
   
   if (parent)
-    parent->adjust_nested_auth_pins(1, 1, this);
+    parent->adjust_nested_auth_pins(1, this);
 }
 
 void CInode::auth_unpin(void *by) 
@@ -2582,14 +2593,12 @@ void CInode::auth_unpin(void *by)
   if (auth_pins == 0)
     put(PIN_AUTHPIN);
   
-  dout(10) << "auth_unpin by " << by << " on " << *this
-	   << " now " << auth_pins << "+" << nested_auth_pins
-	   << dendl;
+  dout(10) << "auth_unpin by " << by << " on " << *this << " now " << auth_pins << dendl;
   
   ceph_assert(auth_pins >= 0);
 
   if (parent)
-    parent->adjust_nested_auth_pins(-1, -1, by);
+    parent->adjust_nested_auth_pins(-1, by);
 
   if (is_freezing_inode() &&
       auth_pins == auth_pin_freeze_allowance) {
@@ -2601,31 +2610,6 @@ void CInode::auth_unpin(void *by)
     finish_waiting(WAIT_FROZEN);
   }  
 }
-
-void CInode::adjust_nested_auth_pins(int a, void *by)
-{
-  ceph_assert(a);
-  nested_auth_pins += a;
-  dout(35) << __func__ << " by " << by
-	   << " change " << a << " yields "
-	   << auth_pins << "+" << nested_auth_pins << dendl;
-  ceph_assert(nested_auth_pins >= 0);
-
-  if (g_conf()->mds_debug_auth_pins) {
-    // audit
-    int s = 0;
-    for (const auto &p : dirfrags) {
-      CDir *dir = p.second;
-      if (!dir->is_subtree_root() && dir->get_cum_auth_pins())
-	s++;
-    } 
-    ceph_assert(s == nested_auth_pins);
-  } 
-
-  if (parent)
-    parent->adjust_nested_auth_pins(a, 0, by);
-}
-
 
 // authority
 
@@ -3588,18 +3572,14 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     using ceph::encode;
     if (xattr_version) {
       ceph_le32 xbl_len;
-      xbl_len = sizeof(__u32);
-      encode(xbl_len, bl);
-
-      auto xbl_len_it = bl.end();
-      xbl_len_it.advance(-4);
+      auto filler = bl.append_hole(sizeof(xbl_len));
+      const auto starting_bl_len = bl.length();
       if (pxattrs)
 	encode(*pxattrs, bl);
       else
 	encode((__u32)0, bl);
-      xbl_len = bl.length() - xbl_len_it.get_off() - sizeof(xbl_len);
-      if (xbl_len != sizeof(__u32))
-	xbl_len_it.copy_in(sizeof(xbl_len), (char *)&xbl_len);
+      xbl_len = bl.length() - starting_bl_len;
+      filler.copy_in(sizeof(xbl_len), (char *)&xbl_len);
     } else {
       encode((__u32)0, bl);
     }
@@ -3609,7 +3589,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
    * note: encoding matches MClientReply::InodeStat
    */
   if (session->info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(oi->ino, bl);
     encode(snapid, bl);
     encode(oi->rdev, bl);
@@ -3650,6 +3630,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(layout.pool_ns, bl);
     encode(any_i->btime, bl);
     encode(any_i->change_attr, bl);
+    encode(file_i->export_pin, bl);
     ENCODE_FINISH(bl);
   }
   else {
@@ -4129,7 +4110,8 @@ void CInode::validate_disk_state(CInode::validated_data *results,
     /**
      * Fetch backtrace and set tag if tag is non-empty
      */
-    void fetch_backtrace_and_tag(CInode *in, std::string_view tag,
+    void fetch_backtrace_and_tag(CInode *in,
+                                 std::string_view tag, bool is_internal,
                                  Context *fin, int *bt_r, bufferlist *bt)
     {
       const int64_t pool = in->get_backtrace_pool();
@@ -4140,8 +4122,8 @@ void CInode::validate_disk_state(CInode::validated_data *results,
       in->mdcache->mds->objecter->read(oid, object_locator_t(pool), fetch, CEPH_NOSNAP,
 				       NULL, 0, fin);
       using ceph::encode;
-      if (!tag.empty()) {
-	ObjectOperation scrub_tag;
+      if (!is_internal) {
+        ObjectOperation scrub_tag;
         bufferlist tag_bl;
         encode(tag, tag_bl);
         scrub_tag.setxattr("scrub_tag", tag_bl);
@@ -4172,10 +4154,11 @@ void CInode::validate_disk_state(CInode::validated_data *results,
 					    in->mdcache->mds->finisher);
 
       std::string_view tag = in->scrub_infop->header->get_tag();
+      bool is_internal = in->scrub_infop->header->is_internal_tag();
       // Rather than using the usual CInode::fetch_backtrace,
       // use a special variant that optionally writes a tag in the same
       // operation.
-      fetch_backtrace_and_tag(in, tag, conf, &results->backtrace.ondisk_read_retval, &bl);
+      fetch_backtrace_and_tag(in, tag, is_internal, conf, &results->backtrace.ondisk_read_retval, &bl);
       return false;
     }
 
@@ -4324,12 +4307,10 @@ next:
 
     bool check_dirfrag_rstats() {
       MDSGatherBuilder gather(g_ceph_context);
-      std::list<frag_t> frags;
-      in->dirfragtree.get_leaves(frags);
-      for (list<frag_t>::iterator p = frags.begin();
-          p != frags.end();
-          ++p) {
-        CDir *dir = in->get_or_open_dirfrag(in->mdcache, *p);
+      frag_vec_t leaves;
+      in->dirfragtree.get_leaves(leaves);
+      for (const auto& leaf : leaves) {
+        CDir *dir = in->get_or_open_dirfrag(in->mdcache, leaf);
 	dir->scrub_info();
 	if (!dir->scrub_infop->header)
 	  dir->scrub_infop->header = in->scrub_infop->header;
@@ -4704,15 +4685,13 @@ void CInode::scrub_initialize(CDentry *scrub_parent,
 
   if (get_projected_inode()->is_dir()) {
     // fill in dirfrag_stamps with initial state
-    std::list<frag_t> frags;
-    dirfragtree.get_leaves(frags);
-    for (std::list<frag_t>::iterator i = frags.begin();
-        i != frags.end();
-        ++i) {
+    frag_vec_t leaves;
+    dirfragtree.get_leaves(leaves);
+    for (const auto& leaf : leaves) {
       if (header->get_force())
-	scrub_infop->dirfrag_stamps[*i].reset();
+	scrub_infop->dirfrag_stamps[leaf].reset();
       else
-	scrub_infop->dirfrag_stamps[*i];
+	scrub_infop->dirfrag_stamps[leaf];
     }
   }
 
@@ -4756,7 +4735,7 @@ int CInode::scrub_dirfrag_next(frag_t* out_dirfrag)
   return ENOENT;
 }
 
-void CInode::scrub_dirfrags_scrubbing(list<frag_t>* out_dirfrags)
+void CInode::scrub_dirfrags_scrubbing(frag_vec_t* out_dirfrags)
 {
   ceph_assert(out_dirfrags != NULL);
   ceph_assert(scrub_infop != NULL);
@@ -4791,6 +4770,24 @@ void CInode::scrub_dirfrag_finished(frag_t dirfrag)
   si.last_scrub_version = si.scrub_start_version;
 }
 
+void CInode::scrub_aborted(MDSInternalContextBase **c) {
+  dout(20) << __func__ << dendl;
+  ceph_assert(scrub_is_in_progress());
+
+  *c = nullptr;
+  std::swap(*c, scrub_infop->on_finish);
+
+  if (scrub_infop->scrub_parent) {
+    CDentry *dn = scrub_infop->scrub_parent;
+    scrub_infop->scrub_parent = NULL;
+    dn->dir->scrub_dentry_finished(dn);
+    dn->put(CDentry::PIN_SCRUBPARENT);
+  }
+
+  delete scrub_infop;
+  scrub_infop = nullptr;
+}
+
 void CInode::scrub_finished(MDSInternalContextBase **c) {
   dout(20) << __func__ << dendl;
   ceph_assert(scrub_is_in_progress());
@@ -4823,12 +4820,8 @@ void CInode::scrub_finished(MDSInternalContextBase **c) {
   if (scrub_infop->header->get_origin() == this) {
     // We are at the point that a tagging scrub was initiated
     LogChannelRef clog = mdcache->mds->clog;
-    if (scrub_infop->header->get_tag().empty()) {
-      clog->info() << "scrub complete";
-    } else {
-      clog->info() << "scrub complete with tag '"
-                   << scrub_infop->header->get_tag() << "'";
-    }
+    clog->info() << "scrub complete with tag '"
+                 << scrub_infop->header->get_tag() << "'";
   }
 }
 
@@ -4890,7 +4883,6 @@ void CInode::set_export_pin(mds_rank_t rank)
   ceph_assert(is_dir());
   ceph_assert(is_projected());
   get_projected_inode()->export_pin = rank;
-  maybe_export_pin(true);
 }
 
 mds_rank_t CInode::get_export_pin(bool inherit) const
@@ -4904,15 +4896,14 @@ mds_rank_t CInode::get_export_pin(bool inherit) const
   while (true) {
     if (in->is_system())
       break;
-    const CDentry *pdn = in->get_projected_parent_dn();
+    const CDentry *pdn = in->get_parent_dn();
     if (!pdn)
       break;
-    const mempool_inode *pi = in->get_projected_inode();
     // ignore export pin for unlinked directory
-    if (pi->nlink == 0)
+    if (in->get_inode().nlink == 0)
       break;
-    if (pi->export_pin >= 0)
-      return pi->export_pin;
+    if (in->get_inode().export_pin >= 0)
+      return in->get_inode().export_pin;
 
     if (!inherit)
       break;

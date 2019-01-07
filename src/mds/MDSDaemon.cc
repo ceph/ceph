@@ -66,6 +66,7 @@ MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   mds_lock("MDSDaemon::mds_lock"),
   stopping(false),
   timer(m->cct, mds_lock),
+  gss_ktfile_client(m->cct->_conf.get_val<std::string>("gss_ktab_client_file")),
   beacon(m->cct, mc, n),
   authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(m->cct,
 								      m->cct->_conf->auth_supported.empty() ?
@@ -88,6 +89,21 @@ MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   orig_argv = NULL;
 
   clog = log_client.create_channel();
+  if (!gss_ktfile_client.empty()) {
+    // Assert we can export environment variable 
+    /* 
+        The default client keytab is used, if it is present and readable,
+        to automatically obtain initial credentials for GSSAPI client
+        applications. The principal name of the first entry in the client
+        keytab is used by default when obtaining initial credentials.
+        1. The KRB5_CLIENT_KTNAME environment variable.
+        2. The default_client_keytab_name profile variable in [libdefaults].
+        3. The hardcoded default, DEFCKTNAME.
+    */
+    const int32_t set_result(setenv("KRB5_CLIENT_KTNAME", 
+                                    gss_ktfile_client.c_str(), 1));
+    ceph_assert(set_result == 0);
+  }
 
   monc->set_messenger(messenger);
 
@@ -245,7 +261,7 @@ void MDSDaemon::set_up_admin_socket()
                                      "show cache status");
   ceph_assert(r == 0);
   r = admin_socket->register_command("cache drop",
-                                     "cache drop name=timeout,type=CephInt,range=1",
+                                     "cache drop name=timeout,type=CephInt,range=0,req=false",
                                      asok_hook,
                                      "drop cache");
   ceph_assert(r == 0);
@@ -358,6 +374,8 @@ const char** MDSDaemon::get_tracked_conf_keys() const
     "mds_cache_reservation",
     "mds_health_cache_threshold",
     "mds_cache_mid",
+    "mds_dump_cache_threshold_formatter",
+    "mds_dump_cache_threshold_file",
     // MDBalancer
     "mds_bal_fragment_dirs",
     "mds_bal_fragment_interval",
@@ -643,69 +661,36 @@ void MDSDaemon::handle_command(const MCommand::const_ref &m)
   }
 }
 
-
-struct MDSCommand {
-  string cmdstring;
-  string helpstring;
-  string module;
-  string perm;
-  string availability;
-} mds_commands[] = {
-
-#define COMMAND(parsesig, helptext, module, perm, availability) \
-  {parsesig, helptext, module, perm, availability},
-
-COMMAND("injectargs " \
-	"name=injected_args,type=CephString,n=N",
-	"inject configuration arguments into running MDS",
-	"mds", "*", "cli,rest")
-COMMAND("config set " \
-	"name=key,type=CephString name=value,type=CephString",
-	"Set a configuration option at runtime (not persistent)",
-	"mds", "*", "cli,rest")
-COMMAND("config unset " \
-	"name=key,type=CephString",
-	"Unset a configuration option at runtime (not persistent)",
-	"mds", "*", "cli,rest")
-COMMAND("exit",
-	"Terminate this MDS",
-	"mds", "*", "cli,rest")
-COMMAND("respawn",
-	"Restart this MDS",
-	"mds", "*", "cli,rest")
-COMMAND("session kill " \
-        "name=session_id,type=CephInt",
-	"End a client session",
-	"mds", "*", "cli,rest")
-COMMAND("cpu_profiler " \
-	"name=arg,type=CephChoices,strings=status|flush",
-	"run cpu profiling on daemon", "mds", "rw", "cli,rest")
-COMMAND("session ls " \
-	"name=filters,type=CephString,n=N,req=false",
-	"List client sessions", "mds", "r", "cli,rest")
-COMMAND("client ls " \
-	"name=filters,type=CephString,n=N,req=false",
-	"List client sessions", "mds", "r", "cli,rest")
-COMMAND("session evict " \
-	"name=filters,type=CephString,n=N,req=false",
-	"Evict client session(s)", "mds", "rw", "cli,rest")
-COMMAND("client evict " \
-	"name=filters,type=CephString,n=N,req=false",
-	"Evict client session(s)", "mds", "rw", "cli,rest")
-COMMAND("damage ls",
-	"List detected metadata damage", "mds", "r", "cli,rest")
-COMMAND("damage rm name=damage_id,type=CephInt",
-	"Remove a damage table entry", "mds", "rw", "cli,rest")
-COMMAND("version", "report version of MDS", "mds", "r", "cli,rest")
-COMMAND("heap " \
-	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
-	"show heap usage info (available only if compiled with tcmalloc)", \
-	"mds", "*", "cli,rest")
-COMMAND("cache drop name=timeout,type=CephInt,range=1", "trim cache and optionally "
-	"request client to release all caps and flush the journal", "mds",
-	"r", "cli,rest")
+const std::vector<MDSDaemon::MDSCommand>& MDSDaemon::get_commands()
+{
+  static const std::vector<MDSCommand> commands = {
+    MDSCommand("injectargs name=injected_args,type=CephString,n=N", "inject configuration arguments into running MDS"),
+    MDSCommand("config set name=key,type=CephString name=value,type=CephString", "Set a configuration option at runtime (not persistent)"),
+    MDSCommand("config unset name=key,type=CephString", "Unset a configuration option at runtime (not persistent)"),
+    MDSCommand("exit", "Terminate this MDS"),
+    MDSCommand("respawn", "Restart this MDS"),
+    MDSCommand("session kill name=session_id,type=CephInt", "End a client session"),
+    MDSCommand("cpu_profiler name=arg,type=CephChoices,strings=status|flush", "run cpu profiling on daemon"),
+    MDSCommand("session ls name=filters,type=CephString,n=N,req=false", "List client sessions"),
+    MDSCommand("client ls name=filters,type=CephString,n=N,req=false", "List client sessions"),
+    MDSCommand("session evict name=filters,type=CephString,n=N,req=false", "Evict client session(s)"),
+    MDSCommand("client evict name=filters,type=CephString,n=N,req=false", "Evict client session(s)"),
+    MDSCommand("damage ls", "List detected metadata damage"),
+    MDSCommand("damage rm name=damage_id,type=CephInt", "Remove a damage table entry"),
+    MDSCommand("version", "report version of MDS"),
+    MDSCommand("heap "
+        "name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats",
+        "show heap usage info (available only if compiled with tcmalloc)"),
+    MDSCommand("cache drop name=timeout,type=CephInt,range=0,req=false", "trim cache and optionally request client to release all caps and flush the journal"),
+    MDSCommand("scrub start name=path,type=CephString name=scrubops,type=CephChoices,strings=force|recursive|repair,n=N,req=false name=tag,type=CephString,req=false",
+               "scrub an inode and output results"),
+    MDSCommand("scrub abort", "Abort in progress scrub operation(s)"),
+    MDSCommand("scrub pause", "Pause in progress scrub operation(s)"),
+    MDSCommand("scrub resume", "Resume paused scrub operation(s)"),
+    MDSCommand("scrub status", "Status of scrub operation"),
+  };
+  return commands;
 };
-
 
 int MDSDaemon::_handle_command(
     const cmdmap_t &cmdmap,
@@ -763,13 +748,12 @@ int MDSDaemon::_handle_command(
     int cmdnum = 0;
     std::unique_ptr<JSONFormatter> f(std::make_unique<JSONFormatter>());
     f->open_object_section("command_descriptions");
-    for (MDSCommand *cp = mds_commands;
-	 cp < &mds_commands[ARRAY_SIZE(mds_commands)]; cp++) {
-
+    for (auto& c : get_commands()) {
       ostringstream secname;
       secname << "cmd" << setfill('0') << std::setw(3) << cmdnum;
-      dump_cmddesc_to_json(f.get(), secname.str(), cp->cmdstring, cp->helpstring,
-			   cp->module, cp->perm, cp->availability, 0);
+      dump_cmddesc_to_json(f.get(), m->get_connection()->get_features(),
+                           secname.str(), c.cmdstring, c.helpstring,
+			   c.module, "*", 0);
       cmdnum++;
     }
     f->close_section();	// command_descriptions
@@ -948,10 +932,12 @@ void MDSDaemon::handle_mds_map(const MMDSMap::const_ref &m)
   }
 
   // see who i am
-  addrs = messenger->get_myaddrs();
-  dout(10) << "map says I am " << addrs
-	   << " mds." << whoami << "." << incarnation
+  dout(10) << "my gid is " << monc->get_global_id() << dendl;
+  dout(10) << "map says I am mds." << whoami << "." << incarnation
 	   << " state " << ceph_mds_state_name(new_state) << dendl;
+
+  addrs = messenger->get_myaddrs();
+  dout(10) << "msgr says i am " << addrs << dendl;
 
   if (whoami == MDS_RANK_NONE) {
     if (mds_rank != NULL) {
@@ -1070,8 +1056,11 @@ void MDSDaemon::suicide()
 
   //because add_observer is called after set_up_admin_socket
   //so we can use asok_hook to avoid assert in the remove_observer
-  if (asok_hook != NULL)
+  if (asok_hook != NULL) {
+    mds_lock.Unlock();
     g_conf().remove_observer(this);
+    mds_lock.Lock();
+  }
 
   clean_up_admin_socket();
 
@@ -1304,6 +1293,7 @@ KeyStore *MDSDaemon::ms_get_auth1_authorizer_keystore()
 
 int MDSDaemon::ms_handle_authentication(Connection *con)
 {
+  std::lock_guard l(mds_lock);
   int ret = 0;
   entity_name_t n(con->get_peer_type(), con->get_peer_global_id());
 

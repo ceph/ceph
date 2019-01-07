@@ -216,17 +216,14 @@ protected:
 #endif
   }
 
-  protected:
+protected:
   int auth_pins = 0;
-  int nested_auth_pins = 0;
 #ifdef MDS_AUTHPIN_SET
   mempool::mds_co::multiset<void*> auth_pin_set;
 #endif
 
-  public:
-  bool is_auth_pinned() const { return auth_pins || nested_auth_pins; }
+public:
   int get_num_auth_pins() const { return auth_pins; }
-  int get_num_nested_auth_pins() const { return nested_auth_pins; }
 #ifdef MDS_AUTHPIN_SET
   void print_authpin_set(std::ostream& out) const {
     out << " (" << auth_pin_set << ")";

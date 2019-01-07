@@ -13,7 +13,6 @@
  */
 
 #include "common/Mutex.h"
-#include "common/perf_counters.h"
 #include "common/config.h"
 #include "common/Clock.h"
 #include "common/valgrind.h"

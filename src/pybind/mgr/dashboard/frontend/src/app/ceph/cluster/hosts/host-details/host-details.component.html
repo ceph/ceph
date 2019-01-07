@@ -1,7 +1,8 @@
-<tabset *ngIf="selection.hasSingleSelection">
+<tabset *ngIf="selection.hasSingleSelection && grafanaPermission.read">
   <tab i18n-heading
        heading="Performance Details">
-    <cd-grafana [grafanaPath]="'7IGu2Ttmz/host-details?'"
+    <cd-grafana [grafanaPath]="'host-details?'"
+                uid="7IGu2Ttmz"
                 grafanaStyle="three">
     </cd-grafana>
   </tab>
