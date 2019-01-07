@@ -37,7 +37,7 @@ Cephx Notes
 
 When `cephx`_ is enabled (it is by default), you must specify a user name or ID
 and a path to the keyring containing the corresponding key for the user. See
-`User Management`_ for details. You may also add the ``CEPH_ARGS`` environment
+:ref:`User Management <user-management>` for details. You may also add the ``CEPH_ARGS`` environment
 variable to avoid re-entry of the following parameters. ::
 
 	rbd --id {user-ID} --keyring=/path/to/secret [commands]
@@ -302,7 +302,6 @@ For example::
 
 
 .. _cephx: ../../rados/configuration/auth-config-ref/
-.. _User Management: ../../operations/user-management
 .. _QEMU: ../qemu-rbd/
 .. _OpenStack: ../rbd-openstack/
 .. _CloudStack: ../rbd-cloudstack/
