@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, Input, OnInit } from '@angular/core';
 
 import { Router } from '@angular/router';
 
@@ -10,6 +10,12 @@ import { Router } from '@angular/router';
 export class UserTabsComponent implements OnInit {
   url: string;
 
+  /**
+   * Change initial active state of a tabset component without tigger event emitted.
+   */
+  @Input()
+  changeInitialActive: Boolean;
+
   constructor(private router: Router) {}
 
   ngOnInit() {
@@ -17,6 +23,10 @@ export class UserTabsComponent implements OnInit {
   }
 
   navigateTo(url) {
+    if (this.changeInitialActive) {
+      this.changeInitialActive = false;
+      return;
+    }
     this.router.navigate([url]);
   }
 }

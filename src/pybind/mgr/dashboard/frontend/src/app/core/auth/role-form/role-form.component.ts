@@ -1,3 +1,4 @@
+import { Location } from '@angular/common';
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
@@ -48,7 +49,8 @@ export class RoleFormComponent implements OnInit {
     private roleService: RoleService,
     private scopeService: ScopeService,
     private notificationService: NotificationService,
-    private i18n: I18n
+    private i18n: I18n,
+    private location: Location
   ) {
     this.createForm();
     this.listenToChanges();

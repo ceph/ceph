@@ -7,6 +7,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
 import { BsModalService } from 'ngx-bootstrap/modal';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 import { of } from 'rxjs';
 
 import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -17,6 +18,7 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { UserTabsComponent } from '../user-tabs/user-tabs.component';
 import { UserFormComponent } from './user-form.component';
 import { UserFormModel } from './user-form.model';
 
@@ -48,9 +50,10 @@ describe('UserFormComponent', () => {
         ReactiveFormsModule,
         ComponentsModule,
         ToastModule.forRoot(),
+        TabsModule.forRoot(),
         SharedModule
       ],
-      declarations: [UserFormComponent, FakeComponent],
+      declarations: [UserFormComponent, FakeComponent, UserTabsComponent],
       providers: i18nProviders
     },
     true

@@ -6,6 +6,7 @@ import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 import { of } from 'rxjs';
 
 import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -14,6 +15,7 @@ import { ScopeService } from '../../../shared/api/scope.service';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { UserTabsComponent } from '../user-tabs/user-tabs.component';
 import { RoleFormComponent } from './role-form.component';
 import { RoleFormModel } from './role-form.model';
 
@@ -38,9 +40,10 @@ describe('RoleFormComponent', () => {
         HttpClientTestingModule,
         ReactiveFormsModule,
         ToastModule.forRoot(),
+        TabsModule.forRoot(),
         SharedModule
       ],
-      declarations: [RoleFormComponent, FakeComponent],
+      declarations: [RoleFormComponent, FakeComponent, UserTabsComponent],
       providers: i18nProviders
     },
     true

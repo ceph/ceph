@@ -1,3 +1,5 @@
+<cd-user-tabs [changeInitialActive]="true"></cd-user-tabs>
+
 <div class="col-sm-12 col-lg-6">
   <form name="roleForm"
         class="form-horizontal"
@@ -82,7 +84,7 @@
           <button i18n
                   type="button"
                   class="btn btn-sm btn-default"
-                  routerLink="/user-management/roles">Back</button>
+                  (click)="this.location.back()">Back</button>
         </div>
       </div>
     </div>

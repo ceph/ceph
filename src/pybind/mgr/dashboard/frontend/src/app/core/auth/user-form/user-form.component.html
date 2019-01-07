@@ -1,3 +1,5 @@
+<cd-user-tabs></cd-user-tabs>
+
 <div class="col-sm-12 col-lg-6">
   <form name="userForm"
         class="form-horizontal"
@@ -136,6 +138,10 @@
                               [options]="allRoles"
                               [messages]="messages"></cd-select-badges>
           </span>
+          <button i18n
+                  type="button"
+                  class="btn btn-sm btn-primary"
+                  routerLink="/user-management/roles/add">Add role</button>
         </div>
 
       </div>
