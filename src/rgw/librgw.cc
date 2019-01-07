@@ -121,6 +121,7 @@ namespace rgw {
 	RGWLibFS* fs = iter->first->ref();
 	uniq.unlock();
 	fs->gc();
+	fs->update_user();
 	fs->rele();
 	uniq.lock();
 	if (cur_gen != gen)
