@@ -631,7 +631,7 @@ void MDSDaemon::handle_command(const MCommand::const_ref &m)
   if (!session->auth_caps.allow_all()) {
     dout(1) << __func__
       << ": received command from client without `tell` capability: "
-      << m->get_connection()->peer_addrs << dendl;
+      << *m->get_connection()->peer_addrs << dendl;
 
     ss << "permission denied";
     r = -EPERM;
