@@ -10,6 +10,15 @@ class NoOrchestrator(Exception):
     pass
 
 
+class ExternalOrchestratorException(Exception):
+    def __init__(self, sub_errors):
+        super(ExternalOrchestratorException, self).__init__(sub_errors)
+        self.sub_errors = sub_errors
+
+    def __str__(self):
+        return "\n".join(getattr(e, 'stderr', None) or str(e) for e in self.sub_errors) or "Exception in external orchestrator"
+
+
 class OrchestratorCli(MgrModule):
     MODULE_OPTIONS = [
         {'name': 'orchestrator'}
@@ -97,7 +106,7 @@ class OrchestratorCli(MgrModule):
                 break
 
         if all(hasattr(c, 'error') and getattr(c, 'error')for c in completions):
-            raise Exception([getattr(c, 'error') for c in completions])
+            raise ExternalOrchestratorException([getattr(c, 'error') for c in completions])
 
     def _list_devices(self, cmd):
         """
@@ -316,6 +325,9 @@ class OrchestratorCli(MgrModule):
             return HandleCommandResult(-errno.ENOENT, stderr=str(e))
         except NotImplementedError:
             return HandleCommandResult(-errno.EINVAL, stderr="Command not found")
+        except ExternalOrchestratorException as e:
+            return HandleCommandResult(-errno.EINVAL, stderr=str(e))
+
 
     def _handle_command(self, _, cmd):
         if cmd['prefix'] == "orchestrator device ls":
