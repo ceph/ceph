@@ -139,6 +139,9 @@ public:
 
   void dump(Formatter *f) const;
   static void generate_test_instances(list<SnapServer*>& ls);
+
+  bool force_update(snapid_t last, snapid_t v2_since,
+		    map<snapid_t, SnapInfo>& _snaps);
 };
 WRITE_CLASS_ENCODER(SnapServer)
 
