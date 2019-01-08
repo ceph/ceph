@@ -227,7 +227,8 @@ bool DaemonServer::ms_get_authorizer(int dest_type,
   }
 
   if (force_new) {
-    if (monc->wait_auth_rotating(10) < 0)
+    auto timeout = g_conf().get_val<int64_t>("rotating_keys_renewal_timeout");
+    if (monc->wait_auth_rotating(timeout) < 0)
       return false;
   }
 
