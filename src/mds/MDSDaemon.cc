@@ -507,7 +507,9 @@ int MDSDaemon::init()
   }
 
   int rotating_auth_attempts = 0;
-  while (monc->wait_auth_rotating(30.0) < 0) {
+  auto rotating_auth_timeout =
+    g_conf().get_val<int64_t>("rotating_keys_bootstrap_timeout");
+  while (monc->wait_auth_rotating(rotating_auth_timeout) < 0) {
     if (++rotating_auth_attempts <= g_conf()->max_rotating_auth_attempts) {
       derr << "unable to obtain rotating service keys; retrying" << dendl;
       continue;
@@ -1177,7 +1179,8 @@ bool MDSDaemon::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bo
     return true;
 
   if (force_new) {
-    if (monc->wait_auth_rotating(10) < 0)
+    auto timeout = g_conf().get_val<int64_t>("rotating_keys_renewal_timeout");
+    if (monc->wait_auth_rotating(timeout) < 0)
       return false;
   }
 
