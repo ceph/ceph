@@ -125,6 +125,9 @@ public:
 class Monitor : public Dispatcher,
                 public md_config_obs_t {
 public:
+  int orig_argc = 0;
+  const char **orig_argv = nullptr;
+
   // me
   string name;
   int rank;
@@ -593,6 +596,7 @@ private:
   void _reset();   ///< called from bootstrap, start_, or join_election
   void wait_for_paxos_write();
   void _finish_svc_election(); ///< called by {win,lose}_election
+  void respawn();
 public:
   void bootstrap();
   void join_election();
