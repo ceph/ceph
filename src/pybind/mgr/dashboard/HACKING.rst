@@ -1,6 +1,8 @@
 Dashboard Developer Documentation
 ====================================
 
+.. contents:: Table of Contents
+
 Frontend Development
 --------------------
 
