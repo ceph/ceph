@@ -207,7 +207,7 @@ int CephxSessionHandler::sign_bufferlist(bufferlist &in, bufferlist &out)
 int CephxSessionHandler::encrypt_bufferlist(bufferlist &in, bufferlist &out) {
   std::string error;
   try {
-    key.encrypt(cct, in, out, &error);
+    connection_secret.encrypt(cct, in, out, &error);
   } catch (std::exception &e) {
     lderr(cct) << __func__ << " failed to encrypt buffer: " << error << dendl;
     return -1;
@@ -218,7 +218,7 @@ int CephxSessionHandler::encrypt_bufferlist(bufferlist &in, bufferlist &out) {
 int CephxSessionHandler::decrypt_bufferlist(bufferlist &in, bufferlist &out) {
   std::string error;
   try {
-    key.decrypt(cct, in, out, &error);
+    connection_secret.decrypt(cct, in, out, &error);
   } catch (std::exception &e) {
     lderr(cct) << __func__ << " failed to decrypt buffer: " << error << dendl;
     return -1;
