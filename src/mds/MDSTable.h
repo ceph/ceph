@@ -31,7 +31,6 @@ protected:
   bool per_mds;
   mds_rank_t rank;
 
-  object_t get_object_name() const;
   
   static const int STATE_UNDEF   = 0;
   static const int STATE_OPENING = 1;
@@ -80,6 +79,7 @@ public:
     if (is_active()) save(0);
   }
 
+  object_t get_object_name() const;
   void load(MDSInternalContextBase *onfinish);
   void load_2(int, bufferlist&, Context *onfinish);
 

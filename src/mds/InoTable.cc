@@ -223,3 +223,18 @@ bool InoTable::repair(inodeno_t id)
   dout(10) << "repair: after status. ino = " << id << " pver =" << projected_version << " ver= " << version << dendl;
   return true;
 }
+
+bool InoTable::force_consume_to(inodeno_t ino)
+{
+  auto it = free.begin();
+  if (it != free.end() && it.get_start() <= ino) {
+    inodeno_t min = it.get_start();
+    derr << "erasing " << min << " to " << ino << dendl;
+    free.erase(min, ino - min + 1);
+    projected_free = free;
+    projected_version = ++version;
+    return true;
+  } else {
+    return false;
+  }
+}
