@@ -24,6 +24,7 @@ struct AuthUnknownAuthorizeHandler : public AuthAuthorizeHandler {
 			 bufferlist& authorizer_data, bufferlist& authorizer_reply,
                          EntityName& entity_name, uint64_t& global_id,
 			 AuthCapsInfo& caps_info, CryptoKey& session_key,
+			 CryptoKey *connection_secret,
 			 std::unique_ptr<AuthAuthorizerChallenge> *challenge) override;
   int authorizer_session_crypto() override;
 };

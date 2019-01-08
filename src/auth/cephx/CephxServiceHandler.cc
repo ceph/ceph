@@ -151,8 +151,11 @@ int CephxServiceHandler::handle_request(bufferlist::const_iterator& indata, buff
       bufferlist tmp_bl;
       CephXServiceTicketInfo auth_ticket_info;
       // note: no challenge here.
-      if (!cephx_verify_authorizer(cct, key_server, indata, auth_ticket_info, nullptr,
-				   tmp_bl)) {
+      if (!cephx_verify_authorizer(
+	    cct, key_server, indata, auth_ticket_info, nullptr,
+#warning FIXME mon connection needs connection_secret too
+	    nullptr,
+	    tmp_bl)) {
         ret = -EPERM;
 	break;
       }

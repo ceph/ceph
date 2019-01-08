@@ -268,17 +268,28 @@ WRITE_CLASS_ENCODER(CephXServiceTicketRequest)
 
 struct CephXAuthorizeReply {
   uint64_t nonce_plus_one;
+  CryptoKey connection_secret;
   void encode(bufferlist& bl) const {
     using ceph::encode;
     __u8 struct_v = 1;
+    if (connection_secret.get_type()) {
+      struct_v = 2;
+    }
     encode(struct_v, bl);
     encode(nonce_plus_one, bl);
+    if (struct_v >= 2) {
+      struct_v = 2;
+      encode(connection_secret, bl);
+    }
   }
   void decode(bufferlist::const_iterator& bl) {
     using ceph::decode;
     __u8 struct_v;
     decode(struct_v, bl);
     decode(nonce_plus_one, bl);
+    if (struct_v >= 2) {
+      decode(connection_secret, bl);
+    }
   }
 };
 WRITE_CLASS_ENCODER(CephXAuthorizeReply)
@@ -295,7 +306,8 @@ public:
     : AuthAuthorizer(CEPH_AUTH_CEPHX), cct(cct_), nonce(0) {}
 
   bool build_authorizer();
-  bool verify_reply(bufferlist::const_iterator& reply) override;
+  bool verify_reply(bufferlist::const_iterator& reply,
+		    CryptoKey *connection_secret) override;
   bool add_challenge(CephContext *cct, bufferlist& challenge) override;
 };
 
@@ -463,6 +475,7 @@ extern bool cephx_verify_authorizer(
   bufferlist::const_iterator& indata,
   CephXServiceTicketInfo& ticket_info,
   std::unique_ptr<AuthAuthorizerChallenge> *challenge,
+  CryptoKey *connection_secret,
   bufferlist& reply_bl);
 
 
