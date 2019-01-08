@@ -594,7 +594,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(
   conn->connect(addrs, type, target);
   ceph_assert(!conns.count(addrs));
   ldout(cct, 10) << __func__ << " " << conn << " " << addrs << " "
-		 << conn->peer_addrs << dendl;
+		 << *conn->peer_addrs << dendl;
   conns[addrs] = conn;
   w->get_perf_counter()->inc(l_msgr_active_connections);
 
@@ -816,7 +816,7 @@ int AsyncMessenger::get_proto_version(int peer_type, bool connect) const
 int AsyncMessenger::accept_conn(AsyncConnectionRef conn)
 {
   Mutex::Locker l(lock);
-  auto it = conns.find(conn->peer_addrs);
+  auto it = conns.find(*conn->peer_addrs);
   if (it != conns.end()) {
     AsyncConnectionRef existing = it->second;
 
@@ -830,8 +830,8 @@ int AsyncMessenger::accept_conn(AsyncConnectionRef conn)
       return -1;
     }
   }
-  ldout(cct, 10) << __func__ << " " << conn << " " << conn->peer_addrs << dendl;
-  conns[conn->peer_addrs] = conn;
+  ldout(cct, 10) << __func__ << " " << conn << " " << *conn->peer_addrs << dendl;
+  conns[*conn->peer_addrs] = conn;
   conn->get_perf_counter()->inc(l_msgr_active_connections);
   accepting_conns.erase(conn);
   return 0;
@@ -891,7 +891,7 @@ int AsyncMessenger::reap_dead()
     auto it = deleted_conns.begin();
     AsyncConnectionRef p = *it;
     ldout(cct, 5) << __func__ << " delete " << p << dendl;
-    auto conns_it = conns.find(p->peer_addrs);
+    auto conns_it = conns.find(*p->peer_addrs);
     if (conns_it != conns.end() && conns_it->second == p)
       conns.erase(conns_it);
     accepting_conns.erase(p);
