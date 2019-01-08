@@ -616,6 +616,16 @@ public:
     }
   }
 
+  /**
+   * Get MDS rank incarnation if the rank is up, else -1
+   */
+  mds_gid_t get_incarnation(mds_rank_t m) const {
+    std::map<mds_rank_t, mds_gid_t>::const_iterator u = up.find(m);
+    if (u == up.end())
+      return MDS_GID_NONE;
+    return (mds_gid_t)get_inc_gid(u->second);
+  }
+
   int get_inc_gid(mds_gid_t gid) const {
     auto mds_info_entry = mds_info.find(gid);
     if (mds_info_entry != mds_info.end())
