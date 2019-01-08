@@ -82,9 +82,13 @@ the form::
 
   frame_len (le32)
   tag (TAG_* le32)
+  frame_header_checksum (le32)
   payload
   [payload padding -- only present after stream auth phase]
   [signature -- only present after stream auth phase]
+
+
+* The frame_header_checksum is over just the frame_len and tag values (8 bytes).
 
 * frame_len includes everything after the frame_len le32 up to the end of the
   frame (all payloads, signatures, and padding).
