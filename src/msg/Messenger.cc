@@ -157,6 +157,7 @@ bool Messenger::ms_deliver_verify_authorizer(
   bufferlist& authorizer_reply,
   bool& isvalid,
   CryptoKey& session_key,
+  CryptoKey *connection_secret,
   std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
   if (authorizer.length() == 0) {
@@ -203,6 +204,7 @@ bool Messenger::ms_deliver_verify_authorizer(
 	con->peer_global_id,
 	con->peer_caps_info,
 	session_key,
+	connection_secret,
 	challenge);
       if (isvalid) {
 	dis->ms_handle_authentication(con);

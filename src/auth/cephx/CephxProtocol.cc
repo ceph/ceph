@@ -394,6 +394,7 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
 			     bufferlist::const_iterator& indata,
 			     CephXServiceTicketInfo& ticket_info,
 			     std::unique_ptr<AuthAuthorizerChallenge> *challenge,
+			     CryptoKey *connection_secret,
 			     bufferlist& reply_bl)
 {
   __u8 authorizer_v;
@@ -402,7 +403,6 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
   CryptoKey service_secret;
   // ticket blob
   CephXTicketBlob ticket;
-
 
   try {
     decode(authorizer_v, indata);
@@ -492,6 +492,16 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
   CephXAuthorizeReply reply;
   // reply.trans_id = auth_msg.trans_id;
   reply.nonce_plus_one = auth_msg.nonce + 1;
+  if (connection_secret) {
+    // generate a connection secret
+    bufferptr bp;
+    CryptoHandler *crypto = cct->get_crypto_handler(CEPH_CRYPTO_AES);
+    assert(crypto);
+    int r = crypto->create(cct->random(), bp);
+    assert(r >= 0);
+    connection_secret->set_secret(CEPH_CRYPTO_AES, bp, ceph_clock_now());
+    reply.connection_secret = *connection_secret;
+  }
   if (encode_encrypt(cct, reply, ticket_info.session_key, reply_bl, error)) {
     ldout(cct, 10) << "verify_authorizer: encode_encrypt error: " << error << dendl;
     return false;
@@ -502,7 +512,8 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
   return true;
 }
 
-bool CephXAuthorizer::verify_reply(bufferlist::const_iterator& indata)
+bool CephXAuthorizer::verify_reply(bufferlist::const_iterator& indata,
+				   CryptoKey *connection_secret)
 {
   CephXAuthorizeReply reply;
 
@@ -517,6 +528,11 @@ bool CephXAuthorizer::verify_reply(bufferlist::const_iterator& indata)
     ldout(cct, 0) << "verify_authorizer_reply bad nonce got " << reply.nonce_plus_one << " expected " << expect
 	    << " sent " << nonce << dendl;
     return false;
+  }
+
+  if (connection_secret &&
+      reply.connection_secret.get_type()) {
+    *connection_secret = reply.connection_secret;
   }
   return true;
 }

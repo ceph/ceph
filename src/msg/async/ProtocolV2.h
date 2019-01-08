@@ -78,6 +78,7 @@ private:
   bool got_bad_auth;
   uint32_t got_bad_method;
   CryptoKey session_key;
+  CryptoKey connection_secret;
   std::shared_ptr<AuthSessionHandler> session_security;
   std::unique_ptr<AuthAuthorizerChallenge> authorizer_challenge;
   uint64_t auth_flags;
