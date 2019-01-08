@@ -351,6 +351,7 @@ public:
   void set_addrvec(const string& n, const entity_addrvec_t& a) {
     ceph_assert(mon_info.count(n));
     mon_info[n].public_addrs = a;
+    calc_addr_mons();
   }
 
   void encode(bufferlist& blist, uint64_t con_features) const;
