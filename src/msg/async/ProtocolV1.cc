@@ -1933,6 +1933,13 @@ CtPtr ProtocolV1::handle_connect_message_2() {
           need_challenge ? &authorizer_challenge : nullptr) ||
       !authorizer_valid) {
     connection->lock.lock();
+    if (state != ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
+      ldout(cct, 1) << __func__
+		    << " state changed while accept, it must be mark_down"
+		    << dendl;
+      ceph_assert(state == CLOSED);
+      return _fault();
+    }
 
     if (need_challenge && !had_challenge && authorizer_challenge) {
       ldout(cct, 10) << __func__ << ": challenging authorizer" << dendl;
