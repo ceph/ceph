@@ -145,8 +145,10 @@ std::string to_string(amqp_status_enum s) {
       return "AMQP_STATUS_SOCKET_INUSE";
     case AMQP_STATUS_BROKER_UNSUPPORTED_SASL_METHOD:
       return "AMQP_STATUS_BROKER_UNSUPPORTED_SASL_METHOD";
+#if AMQP_VERSION >= AMQP_VERSION_CODE(0, 8, 0, 0)
     case AMQP_STATUS_UNSUPPORTED:
       return "AMQP_STATUS_UNSUPPORTED";
+#endif
     case _AMQP_STATUS_NEXT_VALUE:
       return "AMQP_STATUS_INTERNAL"; 
     case AMQP_STATUS_TCP_ERROR:
