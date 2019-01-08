@@ -701,9 +701,7 @@ int RGWAsyncRemoveObj::_send_request()
   if (del_if_older) {
     del_op.params.unmod_since = timestamp;
   }
-  if (versioned) {
-    del_op.params.versioning_status = BUCKET_VERSIONED;
-  }
+  del_op.params.versioning_status = bucket_info.versioning_status();
   del_op.params.olh_epoch = versioned_epoch;
   del_op.params.marker_version_id = marker_version_id;
   del_op.params.obj_owner.set_id(owner);
