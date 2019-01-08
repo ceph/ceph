@@ -15,12 +15,6 @@ std::string cpu_set_to_str_list(size_t cpu_set_size,
 std::set<int> cpu_set_to_set(size_t cpu_set_size,
 			     const cpu_set_t *cpu_set);
 
-int parse_cpu_set_mask(const char *s,
-		       size_t *cpu_set_size,
-		       cpu_set_t *cpu_set);
-std::string cpu_set_to_str_mask(size_t cpu_set_size,
-				const cpu_set_t *cpu_set);
-
 int get_numa_node_cpu_set(int node,
 			  size_t *cpu_set_size,
 			  cpu_set_t *cpu_set);
