@@ -775,6 +775,9 @@ int main(int argc, const char **argv)
   mon = new Monitor(g_ceph_context, g_conf()->name.get_id(), store,
 		    msgr, mgr_msgr, &monmap);
 
+  mon->orig_argc = argc;
+  mon->orig_argv = argv;
+
   if (force_sync) {
     derr << "flagging a forced sync ..." << dendl;
     ostringstream oss;
