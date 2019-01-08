@@ -451,6 +451,9 @@ COMMAND("mon set-rank " \
 	"name=rank,type=CephInt",
 	"set the rank for the specified mon",
 	"mon", "rw")
+COMMAND("mon enable-msgr2",
+	"enable the msgr2 protocol on port 3300",
+	"mon", "rw")
 
 /*
  * OSD commands
