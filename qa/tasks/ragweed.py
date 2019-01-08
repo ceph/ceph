@@ -32,30 +32,46 @@ def download(ctx, config):
     assert isinstance(config, dict)
     log.info('Downloading ragweed...')
     testdir = teuthology.get_testdir(ctx)
-    s3_branches = [ 'giant', 'firefly', 'firefly-original', 'hammer' ]
+    s3_branches = [ 'master', 'nautilus', 'mimic', 'luminous', 'kraken', 'jewel' ]
     for (client, cconf) in config.items():
+        default_branch = ''
         branch = cconf.get('force-branch', None)
         if not branch:
+            default_branch = cconf.get('default-branch', None)
             ceph_branch = ctx.config.get('branch')
             suite_branch = ctx.config.get('suite_branch', ceph_branch)
+            ragweed_repo = ctx.config.get('ragweed_repo', teuth_config.ceph_git_base_url + 'ragweed.git')
             if suite_branch in s3_branches:
-                branch = cconf.get('branch', suite_branch)
-	    else:
                 branch = cconf.get('branch', 'ceph-' + suite_branch)
+	    else:
+                branch = cconf.get('branch', suite_branch)
         if not branch:
             raise ValueError(
                 "Could not determine what branch to use for ragweed!")
         else:
             log.info("Using branch '%s' for ragweed", branch)
         sha1 = cconf.get('sha1')
-        ctx.cluster.only(client).run(
-            args=[
-                'git', 'clone',
-                '-b', branch,
-                teuth_config.ceph_git_base_url + 'ragweed.git',
-                '{tdir}/ragweed'.format(tdir=testdir),
-                ],
-            )
+        try:
+            ctx.cluster.only(client).run(
+                args=[
+                    'git', 'clone',
+                    '-b', branch,
+                    ragweed_repo,
+                    '{tdir}/ragweed'.format(tdir=testdir),
+                    ],
+                )
+        except Exception as e:
+            if not default_branch:
+                raise e
+            ctx.cluster.only(client).run(
+                args=[
+                    'git', 'clone',
+                    '-b', default_branch,
+                    ragweed_repo,
+                    '{tdir}/ragweed'.format(tdir=testdir),
+                    ],
+                )
+
         if sha1 is not None:
             ctx.cluster.only(client).run(
                 args=[

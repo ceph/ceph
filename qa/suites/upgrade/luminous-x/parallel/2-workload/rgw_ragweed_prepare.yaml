@@ -8,7 +8,7 @@ workload:
       - client.1
     - ragweed:
         client.1:
-          force-branch: ceph-master
+          default-branch: ceph-master
           rgw_server: client.1
           stages: prepare
     - print: "**** done rgw ragweed prepare 2-workload"
