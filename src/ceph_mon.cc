@@ -398,19 +398,29 @@ int main(int argc, const char **argv)
 	// is a local address listed without a name?  if so, name myself.
 	list<entity_addr_t> ls;
 	monmap.list_addrs(ls);
-	entity_addr_t local;
+	dout(0) << " monmap addrs are " << ls << ", checking if any are local"
+		<< dendl;
 
+	entity_addr_t local;
 	if (have_local_addr(g_ceph_context, ls, &local)) {
 	  string name;
-	  monmap.get_addr_name(local, name);
-
+	  local.set_type(entity_addr_t::TYPE_MSGR2);
+	  if (!monmap.get_addr_name(local, name)) {
+	    local.set_type(entity_addr_t::TYPE_LEGACY);
+	    if (!monmap.get_addr_name(local, name)) {
+	      dout(0) << "no local addresses appear in bootstrap monmap"
+		      << dendl;
+	    }
+	  }
 	  if (name.compare(0, 7, "noname-") == 0) {
 	    dout(0) << argv[0] << ": mon." << name << " " << local
-		    << " is local, renaming to mon." << g_conf()->name.get_id() << dendl;
+		    << " is local, renaming to mon." << g_conf()->name.get_id()
+		    << dendl;
 	    monmap.rename(name, g_conf()->name.get_id());
-	  } else {
+	  } else if (name.size()) {
 	    dout(0) << argv[0] << ": mon." << name << " " << local
-		 << " is local, but not 'noname-' + something; not assuming it's me" << dendl;
+		    << " is local, but not 'noname-' + something; "
+		    << "not assuming it's me" << dendl;
 	  }
 	}
       }
