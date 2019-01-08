@@ -65,7 +65,6 @@ export class GrafanaComponent implements OnInit, OnChanges {
         subs.unsubscribe();
       }, 0);
     });
-
     this.settingsService.ifSettingConfigured('api/grafana/url', (url) => {
       this.grafanaExist = true;
       this.loading = false;
@@ -92,17 +91,23 @@ export class GrafanaComponent implements OnInit, OnChanges {
     } else {
       this.modeText = 'Return to default';
     }
-    this.getFrame();
+    if (this.grafanaExist) {
+      this.getFrame();
+    }
     this.modeFlag = false;
   }
 
   reset() {
     this.mode = '&kiosk';
     this.modeText = 'Change time selection';
-    this.getFrame();
+    if (this.grafanaExist) {
+      this.getFrame();
+    }
   }
 
   ngOnChanges(changes) {
-    this.getFrame();
+    if (this.grafanaExist) {
+      this.getFrame();
+    }
   }
 }
