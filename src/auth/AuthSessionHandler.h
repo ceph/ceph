@@ -30,13 +30,19 @@ struct AuthSessionHandler {
 protected:
   CephContext *cct;
   int protocol;
-  CryptoKey key;
+  CryptoKey key;                // per mon authentication
+  CryptoKey connection_secret;  // per connection
 
 public:
   explicit AuthSessionHandler(CephContext *cct_) : cct(cct_), protocol(CEPH_AUTH_UNKNOWN) {}
 
-  AuthSessionHandler(CephContext *cct_, int protocol_, CryptoKey key_) : cct(cct_),
-    protocol(protocol_), key(key_) {}
+  AuthSessionHandler(CephContext *cct_, int protocol_,
+		     const CryptoKey& key_,
+		     const CryptoKey& cs_)
+    : cct(cct_),
+      protocol(protocol_),
+      key(key_),
+      connection_secret(cs_) {}
   virtual ~AuthSessionHandler() { }
 
   virtual bool no_security() = 0;
@@ -60,7 +66,10 @@ public:
 
 };
 
-extern AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, CryptoKey key,
-						    uint64_t features);
+extern AuthSessionHandler *get_auth_session_handler(
+  CephContext *cct, int protocol,
+  const CryptoKey& key,
+  const CryptoKey& connection_secret,
+  uint64_t features);
 
 #endif

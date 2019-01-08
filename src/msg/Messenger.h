@@ -784,6 +784,7 @@ public:
     Connection *con, int peer_type,
     int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
     bool& isvalid, CryptoKey& session_key,
+    CryptoKey *connection_secret,
     std::unique_ptr<AuthAuthorizerChallenge> *challenge);
 
   /**

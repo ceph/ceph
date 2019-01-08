@@ -2128,10 +2128,10 @@ CtPtr ProtocolV2::handle_auth_done(char *payload, uint32_t length) {
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
 
   AuthDoneFrame auth_done(payload, length);
-
+  CryptoKey connection_secret;
   if (authorizer) {
     auto iter = auth_done.auth_payload().cbegin();
-    if (!authorizer->verify_reply(iter)) {
+    if (!authorizer->verify_reply(iter, &connection_secret)) {
       ldout(cct, 0) << __func__ << " failed verifying authorize reply" << dendl;
       return _fault();
     }
@@ -2146,6 +2146,7 @@ CtPtr ProtocolV2::handle_auth_done(char *payload, uint32_t length) {
                    << authorizer << dendl;
     session_security.reset(get_auth_session_handler(
         cct, authorizer->protocol, authorizer->session_key,
+	connection_secret,
         CEPH_FEATURE_MSG_AUTH | CEPH_FEATURE_CEPHX_V2));
     auth_flags = auth_done.flags();
   } else {
@@ -2365,9 +2366,10 @@ CtPtr ProtocolV2::handle_cephx_auth(bufferlist &auth_payload) {
 
   connection->lock.unlock();
   if (!messenger->ms_deliver_verify_authorizer(
-          connection, connection->peer_type, auth_method, auth_payload,
-          authorizer_reply, authorizer_valid, session_key,
-          &authorizer_challenge) ||
+	connection, connection->peer_type, auth_method, auth_payload,
+	authorizer_reply, authorizer_valid, session_key,
+	&connection_secret,
+	&authorizer_challenge) ||
       !authorizer_valid) {
     connection->lock.lock();
 
@@ -2389,6 +2391,7 @@ CtPtr ProtocolV2::handle_cephx_auth(bufferlist &auth_payload) {
 
   session_security.reset(
       get_auth_session_handler(cct, auth_method, session_key,
+			       connection_secret,
                                CEPH_FEATURE_MSG_AUTH | CEPH_FEATURE_CEPHX_V2));
 
   if (cct->_conf.get_val<bool>("ms_msgr2_sign_messages")) {
@@ -2446,7 +2449,9 @@ CtPtr ProtocolV2::handle_auth_request(char *payload, uint32_t length) {
     messenger->ms_deliver_verify_authorizer(
         connection, connection->peer_type, auth_method,
         auth_request.auth_payload(), authorizer_reply, authorizer_valid,
-        session_key, nullptr);
+        session_key,
+	nullptr /* connection_secret */,
+	nullptr);
     connection->lock.lock();
 
     if (!authorizer_valid) {

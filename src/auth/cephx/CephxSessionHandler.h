@@ -23,8 +23,11 @@ class CephxSessionHandler  : public AuthSessionHandler {
   uint64_t features;
 
 public:
-  CephxSessionHandler(CephContext *cct_, CryptoKey session_key, uint64_t features)
-    : AuthSessionHandler(cct_, CEPH_AUTH_CEPHX, session_key),
+  CephxSessionHandler(CephContext *cct_,
+		      const CryptoKey& session_key,
+		      const CryptoKey& connection_secret,
+		      uint64_t features)
+    : AuthSessionHandler(cct_, CEPH_AUTH_CEPHX, session_key, connection_secret),
       features(features) {}
   ~CephxSessionHandler() override {}
 
