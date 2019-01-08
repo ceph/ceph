@@ -74,7 +74,6 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
       once_ready(false),
       state(NONE),
       global_seq(0),
-      got_bad_auth(false),
       authorizer(nullptr),
       wait_for_seq(false) {
   temp_buffer = new char[4096];
@@ -95,7 +94,6 @@ void ProtocolV2::connect() {
   this->state = START_CONNECT;
 
   // reset connect state variables
-  got_bad_auth = false;
   if (authorizer) {
     delete authorizer;
     authorizer = nullptr;
@@ -1235,7 +1233,6 @@ void ProtocolV2::reset_recv_state() {
       delete authorizer;
     }
     authorizer = nullptr;
-    got_bad_auth = false;
   }
 
   // clean read and write callbacks
@@ -1595,14 +1592,7 @@ CtPtr ProtocolV2::handle_connect_reply_2() {
 
   if (connect_reply.tag == CEPH_MSGR_TAG_BADAUTHORIZER) {
     ldout(cct, 0) << __func__ << " connect got BADAUTHORIZER" << dendl;
-    if (got_bad_auth) {
-      return _fault();
-    }
-    got_bad_auth = true;
-    delete authorizer;
-    authorizer = messenger->ms_deliver_get_authorizer(connection->peer_type,
-                                                      true);  // try harder
-    return CONTINUE(send_connect_message);
+    return _fault();
   }
 
   if (connect_reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
