@@ -247,7 +247,7 @@ class RgwClient(RestClient):
         Consider the service as online if the response contains the
         specified keys. Nothing more is checked here.
         """
-        request({'format': 'json'})
+        _ = request({'format': 'json'})
         return True
 
     @RestClient.api_get('/{admin_path}/metadata/user?myself',
