@@ -7089,6 +7089,15 @@ static std::vector<Option> get_rbd_mirror_options() {
     Option("rbd_mirror_image_policy_rebalance_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("number of seconds policy should be idle before trigerring reshuffle (rebalance) of images"),
+
+    Option("rbd_mirror_perf_stats_prio", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default((int64_t)PerfCountersBuilder::PRIO_USEFUL)
+    .set_description("Priority level for mirror daemon replication perf counters")
+    .set_long_description("The daemon will send perf counter data to the "
+                          "manager daemon if the priority is not lower than "
+                          "mgr_stats_threshold.")
+    .set_min_max((int64_t)PerfCountersBuilder::PRIO_DEBUGONLY,
+                 (int64_t)PerfCountersBuilder::PRIO_CRITICAL + 1),
   });
 }
 
