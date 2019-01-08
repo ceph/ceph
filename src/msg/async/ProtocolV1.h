@@ -226,7 +226,6 @@ public:
   // Client Protocol
 private:
   int global_seq;
-  bool got_bad_auth;
   AuthAuthorizer *authorizer;
 
   CONTINUATION_DECL(ProtocolV1, send_client_banner);
