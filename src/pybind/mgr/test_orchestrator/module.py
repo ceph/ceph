@@ -193,7 +193,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         There is no guarantee which devices are returned by get_inventory.
         """
         try:
-            c_v_out = check_output(['ceph_volume', 'inventory', '--format', 'json'])
+            c_v_out = check_output(['ceph-volume', 'inventory', '--format', 'json'])
         except OSError:
             cmd = """
             . /tmp/ceph-volume-virtualenv/bin/activate
