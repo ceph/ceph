@@ -1,5 +1,5 @@
 <cd-navigation *ngIf="!isLoginActive()"></cd-navigation>
-<div class="container-fluid"
+<div class="container-fluid view-background-color"
      [ngClass]="{'full-height':isLoginActive(), 'dashboard':isDashboardPage()} ">
   <cd-breadcrumbs></cd-breadcrumbs>
   <router-outlet></router-outlet>

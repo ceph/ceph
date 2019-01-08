@@ -287,6 +287,17 @@ uib-accordion .panel-title,
   padding-left: 4px;
   vertical-align: text-top;
 }
+
+/*Overwriting form panel's background color */
+.form-horizontal > .panel.panel-default {
+  & > .panel-heading {
+    background-color: $color-form-panel-header;
+  }
+  & > .panel-footer {
+    background-color: $color-form-panel-footer;
+  }
+}
+
 /* Panel */
 .panel-footer button.btn:not(:first-child) {
   margin-left: 5px;
@@ -300,4 +311,17 @@ uib-accordion .panel-title,
 }
 .nav-tabs {
   margin-bottom: 15px;
+}
+
+/* Background color */
+.view-background-color {
+  background-color: $color-whitesmoke-gray;
+  height: 100%;
+}
+
+/* Overwriting active tab background color */
+.nav-tabs > li.active > a,
+.nav-tabs > li.active > a:hover,
+.nav-tabs > li.active > a:focus {
+  background-color: $color-whitesmoke-gray;
 }

@@ -183,6 +183,9 @@
         border-left: none;
       }
     }
+    .datatable-header-inner {
+      background-color: $color-table-header-bg;
+    }
   }
   .datatable-body {
     .empty-row {

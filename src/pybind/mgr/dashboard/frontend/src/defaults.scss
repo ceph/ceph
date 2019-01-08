@@ -36,6 +36,7 @@ $color-whitesmoke-gray: #f5f5f5;
 $color-solid-white: #ffffff;
 $color-transparent: rgba(0, 0, 0, 0.09);
 $color-brand-gray: #374249;
+$color-light-white: #fcfcfc;
 
 $color-app-bg: $color-solid-white;
 $color-bg-darken: $color-dark-gray;
@@ -103,7 +104,7 @@ $color-helper-bg: $color-blue;
 $color-table-seperator-border: $color-transparent;
 $color-table-input-border: $color-transparent;
 $color-table-dropdown-bg: $color-whitesmoke-gray;
-$color-table-header-bg: $color-whitesmoke-gray;
+$color-table-header-bg: $color-light-white;
 $color-table-header-border: $color-light-gray;
 $color-table-active-row: $color-sky-blue;
 $color-table-active-row-hover: $color-light-blue;
@@ -115,7 +116,7 @@ $color-table-sort: $color-blue;
 $color-table-empty-row: $color-light-yellow;
 $color-table-hover-row: $color-white-gray;
 $color-table-even-row-bg: $color-solid-white;
-$color-table-odd-row-bg: $color-whitesmoke-gray;
+$color-table-odd-row-bg: $color-light-white;
 $color-table-datatable-header: $color-whitesmoke-gray;
 
 /*Chart tooltip*/
@@ -129,6 +130,10 @@ $color-popover-seperator-bg: $color-white-gray;
 $color-popover-message-text: $color-dark-gray;
 $color-popover-table-text: $color-dark-gray;
 $color-popover-date: $color-solid-gray;
+
+/*Horizontal Form*/
+$color-form-panel-header: $color-light-white;
+$color-form-panel-footer: $color-light-white;
 
 /*RGW user form*/
 $color-rgw-icon: $color-blue-gray;
