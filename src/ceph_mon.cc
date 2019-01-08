@@ -384,14 +384,11 @@ int main(int argc, const char **argv)
 	// hmm, make sure the ip listed exists on the current host?
 	// maybe later.
       } else if (!g_conf()->public_addr.is_blank_ip()) {
-	entity_addr_t a = g_conf()->public_addr;
-	if (a.get_port() == 0)
-	  a.set_port(CEPH_MON_PORT_LEGACY);
-	if (monmap.contains(a)) {
-	  string name;
-	  monmap.get_addr_name(a, name);
+	entity_addrvec_t av = make_mon_addrs(g_conf()->public_addr);
+	string name;
+	if (monmap.contains(av, &name)) {
 	  monmap.rename(name, g_conf()->name.get_id());
-	  dout(0) << argv[0] << ": renaming mon." << name << " " << a
+	  dout(0) << argv[0] << ": renaming mon." << name << " " << av
 		  << " to mon." << g_conf()->name.get_id() << dendl;
 	}
       } else {
