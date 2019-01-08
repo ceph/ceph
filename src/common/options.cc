@@ -2057,7 +2057,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_client_hunt_parallel", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(2)
+    .set_default(3)
     .set_description(""),
 
     Option("mon_client_hunt_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -2073,7 +2073,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_client_hunt_interval_backoff", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(2.0)
+    .set_default(1.5)
     .set_description(""),
 
     Option("mon_client_hunt_interval_min_multiple", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
