@@ -324,7 +324,8 @@ void Monitor::do_admin_command(std::string_view command, const cmdmap_t& cmdmap,
       goto abort;
     }
     sync_force(f.get(), ss);
-  } else if (command.compare(0, 23, "add_bootstrap_peer_hint") == 0) {
+  } else if (command.compare(0, 23, "add_bootstrap_peer_hint") == 0 ||
+	     command.compare(0, 24, "add_bootstrap_peer_hintv") == 0) {
     if (!_add_bootstrap_peer_hint(command, cmdmap, ss))
       goto abort;
   } else if (command == "quorum enter") {
@@ -809,6 +810,13 @@ int Monitor::preinit()
 				     "add peer address as potential bootstrap"
 				     " peer for cluster bringup");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("add_bootstrap_peer_hintv",
+				     "add_bootstrap_peer_hintv name=addrv,"
+				     "type=CephString",
+				     admin_hook,
+				     "add peer address vector as potential bootstrap"
+				     " peer for cluster bringup");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("quorum enter", "quorum enter",
                                      admin_hook,
                                      "force monitor back into quorum");
@@ -1086,16 +1094,11 @@ void Monitor::bootstrap()
 	new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined),
 	i);
   }
-  for (set<entity_addr_t>::iterator p = extra_probe_peers.begin();
-       p != extra_probe_peers.end();
-       ++p) {
-    if (*p != messenger->get_myaddr()) {
-      entity_inst_t i;
-      i.name = entity_name_t::MON(-1);
-      i.addr = *p;
-      messenger->send_message(
+  for (auto& av : extra_probe_peers) {
+    if (av != messenger->get_myaddrs()) {
+      messenger->send_to_mon(
 	new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined),
-	i);
+	av);
     }
   }
 }
@@ -1104,32 +1107,55 @@ bool Monitor::_add_bootstrap_peer_hint(std::string_view cmd,
 				       const cmdmap_t& cmdmap,
 				       ostream& ss)
 {
-  string addrstr;
-  if (!cmd_getval(g_ceph_context, cmdmap, "addr", addrstr)) {
-    ss << "unable to parse address string value '"
-       << cmd_vartype_stringify(cmdmap.at("addr")) << "'";
-    return false;
-  }
-  dout(10) << "_add_bootstrap_peer_hint '" << cmd << "' '"
-           << addrstr << "'" << dendl;
-
-  entity_addr_t addr;
-  const char *end = 0;
-  if (!addr.parse(addrstr.c_str(), &end)) {
-    ss << "failed to parse addr '" << addrstr << "'; syntax is 'add_bootstrap_peer_hint ip[:port]'";
-    return false;
-  }
-
   if (is_leader() || is_peon()) {
     ss << "mon already active; ignoring bootstrap hint";
     return true;
   }
 
-  if (addr.get_port() == 0)
-    addr.set_port(CEPH_MON_PORT_LEGACY);
+  entity_addrvec_t addrs;
+  string addrstr;
+  if (cmd_getval(g_ceph_context, cmdmap, "addr", addrstr)) {
+    dout(10) << "_add_bootstrap_peer_hint '" << cmd << "' addr '"
+	     << addrstr << "'" << dendl;
 
-  extra_probe_peers.insert(addr);
-  ss << "adding peer " << addr << " to list: " << extra_probe_peers;
+    entity_addr_t addr;
+    const char *end = 0;
+    if (!addr.parse(addrstr.c_str(), &end, entity_addr_t::TYPE_ANY)) {
+      ss << "failed to parse addrs '" << addrstr
+	 << "'; syntax is 'add_bootstrap_peer_hint ip[:port]'";
+      return false;
+    }
+
+    addrs.v.push_back(addr);
+    if (addr.get_port() == 0) {
+      addrs.v[0].set_type(entity_addr_t::TYPE_MSGR2);
+      addrs.v[0].set_port(CEPH_MON_PORT_IANA);
+      addrs.v.push_back(addr);
+      addrs.v[1].set_type(entity_addr_t::TYPE_LEGACY);
+      addrs.v[1].set_port(CEPH_MON_PORT_LEGACY);
+    } else if (addr.get_type() == entity_addr_t::TYPE_ANY) {
+      if (addr.get_port() == CEPH_MON_PORT_LEGACY) {
+	addrs.v[0].set_type(entity_addr_t::TYPE_LEGACY);
+      } else {
+	addrs.v[0].set_type(entity_addr_t::TYPE_MSGR2);
+      }
+    }
+  } else if (cmd_getval(g_ceph_context, cmdmap, "addrv", addrstr)) {
+    dout(10) << "_add_bootstrap_peer_hintv '" << cmd << "' addrv '"
+	     << addrstr << "'" << dendl;
+    const char *end = 0;
+    if (!addrs.parse(addrstr.c_str(), &end)) {
+      ss << "failed to parse addrs '" << addrstr
+	 << "'; syntax is 'add_bootstrap_peer_hintv v2:ip:port[,v1:ip:port]'";
+      return false;
+    }
+  } else {
+    ss << "no addr or addrv provided";
+    return false;
+  }
+
+  extra_probe_peers.insert(addrs);
+  ss << "adding peer " << addrs << " to list: " << extra_probe_peers;
   return true;
 }
 
@@ -1245,7 +1271,7 @@ void Monitor::sync_reset_requester()
     sync_timeout_event = NULL;
   }
 
-  sync_provider = entity_inst_t();
+  sync_provider = entity_addrvec_t();
   sync_cookie = 0;
   sync_full = false;
   sync_start_version = 0;
@@ -1257,9 +1283,9 @@ void Monitor::sync_reset_provider()
   sync_providers.clear();
 }
 
-void Monitor::sync_start(entity_inst_t &other, bool full)
+void Monitor::sync_start(entity_addrvec_t &addrs, bool full)
 {
-  dout(10) << __func__ << " " << other << (full ? " full" : " recent") << dendl;
+  dout(10) << __func__ << " " << addrs << (full ? " full" : " recent") << dendl;
 
   ceph_assert(state == STATE_PROBING ||
 	 state == STATE_SYNCHRONIZING);
@@ -1300,14 +1326,14 @@ void Monitor::sync_start(entity_inst_t &other, bool full)
 
   // assume 'other' as the leader. We will update the leader once we receive
   // a reply to the sync start.
-  sync_provider = other;
+  sync_provider = addrs;
 
   sync_reset_timeout();
 
   MMonSync *m = new MMonSync(sync_full ? MMonSync::OP_GET_COOKIE_FULL : MMonSync::OP_GET_COOKIE_RECENT);
   if (!sync_full)
     m->last_committed = paxos->get_version();
-  messenger->send_message(m, sync_provider);
+  messenger->send_to_mon(m, sync_provider);
 }
 
 void Monitor::sync_stash_critical_state(MonitorDBStore::TransactionRef t)
@@ -1446,7 +1472,7 @@ void Monitor::handle_sync_get_cookie(MonOpRequestRef op)
 
   SyncProvider& sp = sync_providers[cookie];
   sp.cookie = cookie;
-  sp.entity = m->get_source_inst();
+  sp.addrs = m->get_source_addrs();
   sp.reset_timeout(g_ceph_context, g_conf()->mon_sync_timeout * 2);
 
   set<string> sync_targets;
@@ -1547,7 +1573,7 @@ void Monitor::handle_sync_cookie(MonOpRequestRef op)
     dout(10) << __func__ << " already have a cookie, ignoring" << dendl;
     return;
   }
-  if (m->get_source_inst() != sync_provider) {
+  if (m->get_source_addrs() != sync_provider) {
     dout(10) << __func__ << " source does not match, discarding" << dendl;
     return;
   }
@@ -1568,7 +1594,7 @@ void Monitor::sync_get_next_chunk()
     usleep((long long)(g_conf()->mon_inject_sync_get_chunk_delay * 1000000.0));
   }
   MMonSync *r = new MMonSync(MMonSync::OP_GET_CHUNK, sync_cookie);
-  messenger->send_message(r, sync_provider);
+  messenger->send_to_mon(r, sync_provider);
 
   ceph_assert(g_conf()->mon_sync_requester_kill_at != 4);
 }
@@ -1582,7 +1608,7 @@ void Monitor::handle_sync_chunk(MonOpRequestRef op)
     dout(10) << __func__ << " cookie does not match, discarding" << dendl;
     return;
   }
-  if (m->get_source_inst() != sync_provider) {
+  if (m->get_source_addrs() != sync_provider) {
     dout(10) << __func__ << " source does not match, discarding" << dendl;
     return;
   }
@@ -1642,7 +1668,8 @@ void Monitor::sync_trim_providers()
   map<uint64_t,SyncProvider>::iterator p = sync_providers.begin();
   while (p != sync_providers.end()) {
     if (now > p->second.timeout) {
-      dout(10) << __func__ << " expiring cookie " << p->second.cookie << " for " << p->second.entity << dendl;
+      dout(10) << __func__ << " expiring cookie " << p->second.cookie
+	       << " for " << p->second.addrs << dendl;
       sync_providers.erase(p++);
     } else {
       ++p;
@@ -1760,9 +1787,9 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
 
   // did we discover a peer here?
   if (!monmap->contains(m->get_source_addr())) {
-    dout(1) << " adding peer " << m->get_source_addr()
+    dout(1) << " adding peer " << m->get_source_addrs()
 	    << " to list of hints" << dendl;
-    extra_probe_peers.insert(m->get_source_addr());
+    extra_probe_peers.insert(m->get_source_addrs());
   }
 
  out:
@@ -1841,7 +1868,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
     return;
   }
 
-  entity_inst_t other = m->get_source_inst();
+  entity_addrvec_t other = m->get_source_addrs();
 
   if (m->paxos_last_version < sync_last_committed_floor) {
     dout(10) << " peer paxos versions [" << m->paxos_first_version
@@ -2416,10 +2443,11 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
   f->close_section(); // outside_quorum
 
   f->open_array_section("extra_probe_peers");
-  for (set<entity_addr_t>::iterator p = extra_probe_peers.begin();
+  for (set<entity_addrvec_t>::iterator p = extra_probe_peers.begin();
        p != extra_probe_peers.end();
-       ++p)
-    f->dump_stream("peer") << *p;
+       ++p) {
+    f->dump_object("peer", *p);
+  }
   f->close_section(); // extra_probe_peers
 
   f->open_array_section("sync_provider");
@@ -2427,7 +2455,7 @@ void Monitor::get_mon_status(Formatter *f, ostream& ss)
        p != sync_providers.end();
        ++p) {
     f->dump_unsigned("cookie", p->second.cookie);
-    f->dump_stream("entity") << p->second.entity;
+    f->dump_object("addrs", p->second.addrs);
     f->dump_stream("timeout") << p->second.timeout;
     f->dump_unsigned("last_committed", p->second.last_committed);
     f->dump_stream("last_key") << p->second.last_key;

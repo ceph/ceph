@@ -403,7 +403,7 @@ public:
 			   list<std::string>& initial_members,
 			   string my_name,
 			   const entity_addrvec_t& my_addrs,
-			   set<entity_addr_t> *removed);
+			   set<entity_addrvec_t> *removed);
 
   void print(ostream& out) const;
   void print_summary(ostream& out) const;
