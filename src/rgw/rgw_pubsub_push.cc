@@ -14,6 +14,8 @@
 #include <boost/asio/yield.hpp>
 #include <functional>
 
+using namespace rgw;
+
 std::string json_format_pubsub_event(const rgw_pubsub_event& event) {
   std::stringstream ss;
   JSONFormatter f(false);

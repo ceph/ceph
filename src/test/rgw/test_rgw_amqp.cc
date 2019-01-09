@@ -5,6 +5,7 @@
 #include "amqp_mock.h"
 #include <gtest/gtest.h>
 
+using namespace rgw;
 
 TEST(AMQP_Connection, ConnectionOK)
 {

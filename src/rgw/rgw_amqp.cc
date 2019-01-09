@@ -13,7 +13,7 @@
 #include <vector>
 #include <thread>
 
-namespace amqp {
+namespace rgw::amqp {
 
 // key class for the connection list
 class ConnectionID {
