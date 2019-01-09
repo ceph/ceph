@@ -347,6 +347,9 @@ int main(int argc, const char **argv)
     // resolve public_network -> public_addr
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
+    dout(10) << "public_network " << g_conf()->public_network << dendl;
+    dout(10) << "public_addr " << g_conf()->public_network << dendl;
+
     common_init_finish(g_ceph_context);
 
     bufferlist monmapbl, osdmapbl;
@@ -369,7 +372,12 @@ int main(int argc, const char **argv)
       } catch (const buffer::error& e) {
 	derr << argv[0] << ": error decoding monmap " << monmap_fn << ": " << e.what() << dendl;
 	exit(1);
-      }      
+      }
+
+      dout(1) << "imported monmap:\n";
+      monmap.print(*_dout);
+      *_dout << dendl;
+      
     } else {
       ostringstream oss;
       int err = monmap.build_initial(g_ceph_context, true, oss);
@@ -378,6 +386,10 @@ int main(int argc, const char **argv)
       if (err < 0) {
 	derr << argv[0] << ": warning: no initial monitors; must use admin socket to feed hints" << dendl;
       }
+
+      dout(1) << "initial generated monmap:\n";
+      monmap.print(*_dout);
+      *_dout << dendl;
 
       // am i part of the initial quorum?
       if (monmap.contains(g_conf()->name.get_id())) {
@@ -633,6 +645,13 @@ int main(int argc, const char **argv)
     } else {
       derr << "unable to obtain a monmap: " << cpp_strerror(err) << dendl;
     }
+
+    dout(10) << __func__ << " monmap:\n";
+    JSONFormatter jf(true);
+    jf.dump_object("monmap", monmap);
+    jf.flush(*_dout);
+    *_dout << dendl;
+
     if (!extract_monmap.empty()) {
       int r = mapbl.write_file(extract_monmap.c_str());
       if (r < 0) {
