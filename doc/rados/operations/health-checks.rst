@@ -52,6 +52,26 @@ If it is impractical to keep the clocks closely synchronized, the
 value must stay significantly below the ``mon_lease`` interval in
 order for monitor cluster to function properly.
 
+MON_MSGR2_NOT_ENABLED
+_____________________
+
+The ``ms_bind_msgr2`` option is enabled but one or more monitors is
+not configured to bind to a v2 port in the cluster's monmap.  This
+means that features specific to the msgr2 protocol (e.g., encryption)
+are not available on some or all connections.
+
+In most cases this can be corrected by issuing the command::
+
+  ceph mon enable-msgr2
+
+That command will change any monitor configured for the old default
+port 6789 to continue to listen for v1 connections on 6789 and also
+listen for v2 connections on the new default 3300 port.
+
+If a monitor is configured to listen for v1 connections on a non-standard port (not 6789), then the monmap will need to be modified manually.
+
+
+
 Manager
 -------
 

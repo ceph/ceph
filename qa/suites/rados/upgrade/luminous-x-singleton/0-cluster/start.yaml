@@ -7,6 +7,8 @@ overrides:
   ceph:
     mon_bind_addrvec: false
     mon_bind_msgr2: false
+    log-whitelist:
+      - \(MON_MSGR2_NOT_ENABLED\)
     fs: xfs
     conf:
       global:
