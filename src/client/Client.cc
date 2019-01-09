@@ -4817,8 +4817,6 @@ void Client::handle_caps(MClientCaps *m)
 
   got_mds_push(session);
 
-  m->clear_payload();  // for if/when we send back to MDS
-
   Inode *in = 0;
   vinodeno_t vino(m->get_ino(), CEPH_NOSNAP);
   if (inode_map.count(vino))
