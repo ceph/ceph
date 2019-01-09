@@ -1,4 +1,4 @@
-import { Component, OnInit, ViewChild } from '@angular/core';
+import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
@@ -15,6 +15,7 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permissions } from '../../../shared/models/permissions';
+import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
@@ -30,6 +31,8 @@ import { Pool } from '../pool';
 export class PoolListComponent implements OnInit {
   @ViewChild(TableComponent)
   table: TableComponent;
+  @ViewChild('poolUsageTpl')
+  poolUsageTpl: TemplateRef<any>;
 
   pools: Pool[] = [];
   columns: CdTableColumn[];
@@ -47,7 +50,8 @@ export class PoolListComponent implements OnInit {
     private taskListService: TaskListService,
     private modalService: BsModalService,
     private i18n: I18n,
-    private pgCategoryService: PgCategoryService
+    private pgCategoryService: PgCategoryService,
+    private dimlessPipe: DimlessPipe
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
@@ -70,11 +74,14 @@ export class PoolListComponent implements OnInit {
         name: this.i18n('Delete')
       }
     ];
+  }
+
+  ngOnInit() {
     this.columns = [
       {
         prop: 'pool_name',
         name: this.i18n('Name'),
-        flexGrow: 3,
+        flexGrow: 4,
         cellTransformation: CellTemplate.executing
       },
       {
@@ -85,12 +92,12 @@ export class PoolListComponent implements OnInit {
       {
         prop: 'application_metadata',
         name: this.i18n('Applications'),
-        flexGrow: 3
+        flexGrow: 2
       },
       {
         prop: 'pg_status',
         name: this.i18n('PG Status'),
-        flexGrow: 1,
+        flexGrow: 3,
         cellClass: ({ row, column, value }): any => {
           return this.getPgStatusCellClass({ row, column, value });
         }
@@ -115,12 +122,37 @@ export class PoolListComponent implements OnInit {
       {
         prop: 'crush_rule',
         name: this.i18n('Crush Ruleset'),
-        flexGrow: 2
+        flexGrow: 3
+      },
+      { name: this.i18n('Usage'), cellTemplate: this.poolUsageTpl, flexGrow: 3 },
+      {
+        prop: 'stats.rd_bytes.series',
+        name: this.i18n('Read bytes'),
+        cellTransformation: CellTemplate.sparkline,
+        flexGrow: 3
+      },
+      {
+        prop: 'stats.wr_bytes.series',
+        name: this.i18n('Write bytes'),
+        cellTransformation: CellTemplate.sparkline,
+        flexGrow: 3
+      },
+      {
+        prop: 'stats.rd.rate',
+        name: this.i18n('Read ops'),
+        flexGrow: 1,
+        pipe: this.dimlessPipe,
+        cellTransformation: CellTemplate.perSecond
+      },
+      {
+        prop: 'stats.wr.rate',
+        name: this.i18n('Write ops'),
+        flexGrow: 1,
+        pipe: this.dimlessPipe,
+        cellTransformation: CellTemplate.perSecond
       }
     ];
-  }
 
-  ngOnInit() {
     this.taskListService.init(
       () => this.poolService.getList(),
       undefined,
@@ -161,9 +193,21 @@ export class PoolListComponent implements OnInit {
   }
 
   transformPoolsData(pools: any) {
-    _.map(pools, (pool: object) => {
-      delete pool['stats'];
+    const requiredStats = ['bytes_used', 'max_avail', 'rd_bytes', 'wr_bytes', 'rd', 'wr'];
+    const emptyStat = { latest: 0, rate: 0, series: [] };
+
+    _.forEach(pools, (pool: Pool) => {
       pool['pg_status'] = this.transformPgStatus(pool['pg_status']);
+      const stats = {};
+      _.forEach(requiredStats, (stat) => {
+        stats[stat] = pool.stats && pool.stats[stat] ? pool.stats[stat] : emptyStat;
+      });
+      pool['stats'] = stats;
+
+      ['rd_bytes', 'wr_bytes'].forEach((stat) => {
+        pool.stats[stat].series = pool.stats[stat].series.map((point) => point[1]);
+      });
+      pool.cdIsBinary = true;
     });
 
     return pools;
@@ -176,5 +220,9 @@ export class PoolListComponent implements OnInit {
     });
 
     return strings.join(', ');
+  }
+
+  getPoolDetails(pool: object) {
+    return _.omit(pool, ['cdExecuting', 'cdIsBinary']);
   }
 }
