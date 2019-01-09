@@ -133,7 +133,8 @@ class MonMap {
 
   void _add_ambiguous_addr(const string& name,
 			   entity_addr_t addr,
-			   int priority);
+			   int priority,
+			   bool for_mkfs=false);
 
 public:
   void calc_legacy_ranks();
