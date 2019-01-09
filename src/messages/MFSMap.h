@@ -28,7 +28,7 @@ public:
   bufferlist encoded;
 
   version_t get_epoch() const { return epoch; }
-  const FSMap & get_fsmap() {return fsmap;}
+  const FSMap& get_fsmap() const {return fsmap;}
 
   MFSMap() : 
     MessageInstance(CEPH_MSG_FS_MAP), epoch(0) {}

@@ -169,10 +169,10 @@ void MgrClient::reconnect()
 
   // resend any pending commands
   for (const auto &p : command_table.get_commands()) {
-    MCommand *m = p.second.get_message({});
+    auto m = p.second.get_message({});
     ceph_assert(session);
     ceph_assert(session->con);
-    session->con->send_message(m);
+    session->con->send_message2(std::move(m));
   }
 }
 
@@ -433,8 +433,8 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
 
   if (session && session->con) {
     // Leaving fsid argument null because it isn't used.
-    MCommand *m = op.get_message({});
-    session->con->send_message(m);
+    auto m = op.get_message({});
+    session->con->send_message2(std::move(m));
   } else {
     ldout(cct, 0) << "no mgr session (no running mgr daemon?), waiting" << dendl;
   }

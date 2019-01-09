@@ -29,9 +29,9 @@ class CommandOp
   bufferlist   *outbl;
   std::string  *outs;
 
-  MCommand *get_message(const uuid_d &fsid) const
+  MCommand::ref get_message(const uuid_d &fsid) const
   {
-    MCommand *m = new MCommand(fsid);
+    auto m = MCommand::create(fsid);
     m->cmd = cmd;
     m->set_data(inbl);
     m->set_tid(tid);
