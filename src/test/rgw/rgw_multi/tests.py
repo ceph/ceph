@@ -741,6 +741,9 @@ def test_version_suspended_incremental_sync():
     log.debug('created null version id=%s', key3.version_id)
     zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
 
+    key3.delete()
+    zonegroup_bucket_checkpoint(zonegroup_conns, bucket.name)
+
 
 def test_bucket_versioning():
     buckets, zone_bucket = create_bucket_per_zone_in_realm()
