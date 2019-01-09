@@ -615,12 +615,16 @@ class Module(MgrModule):
         }
         self.log.debug('score_by_root %s' % pe.score_by_root)
 
+        # get the list of score metrics, comma separated
+        metrics = self.get_config('crush_compat_metrics', 'pgs,objects,bytes').split(',')
+
         # total score is just average of normalized stddevs
         pe.score = 0.0
         for r, vs in six.iteritems(pe.score_by_root):
             for k, v in six.iteritems(vs):
-                pe.score += v
-        pe.score /= 3 * len(roots)
+                if k in metrics:
+                    pe.score += v
+        pe.score /= len(metrics) * len(roots)
         return pe
 
     def evaluate(self, ms, pools, verbose=False):
@@ -763,7 +767,12 @@ class Module(MgrModule):
             self.log.error(detail)
             return -errno.EOPNOTSUPP, detail
 
-        key = 'pgs'  # pgs objects or bytes
+        # rebalance by pgs, objects, or bytes
+        metrics = self.get_config('crush_compat_metrics', 'pgs,objects,bytes').split(',')
+        key = metrics[0] # balancing using the first score metric
+        if key not in ['pgs', 'bytes', 'objects']:
+            self.log.warn("Invalid crush_compat balancing key %s. Using 'pgs'." % key)
+            key = 'pgs'
 
         # go
         best_ws = copy.deepcopy(orig_ws)
