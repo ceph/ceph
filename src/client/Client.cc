@@ -4817,11 +4817,11 @@ void Client::handle_caps(MClientCaps *m)
 
   got_mds_push(session);
 
-  Inode *in = 0;
+  Inode *in;
   vinodeno_t vino(m->get_ino(), CEPH_NOSNAP);
-  if (inode_map.count(vino))
-    in = inode_map[vino];
-  if (!in) {
+  if (auto it = inode_map.find(vino); it != inode_map.end()) {
+    in = it->second;
+  } else {
     if (m->get_op() == CEPH_CAP_OP_IMPORT) {
       ldout(cct, 5) << __func__ << " don't have vino " << vino << " on IMPORT, immediately releasing" << dendl;
       session->enqueue_cap_release(
@@ -4841,30 +4841,27 @@ void Client::handle_caps(MClientCaps *m)
   }
 
   switch (m->get_op()) {
-  case CEPH_CAP_OP_EXPORT:
-    return handle_cap_export(session, in, m);
-  case CEPH_CAP_OP_FLUSHSNAP_ACK:
-    return handle_cap_flushsnap_ack(session, in, m);
-  case CEPH_CAP_OP_IMPORT:
-    handle_cap_import(session, in, m);
+    case CEPH_CAP_OP_EXPORT: return handle_cap_export(session, in, m);
+    case CEPH_CAP_OP_FLUSHSNAP_ACK: return handle_cap_flushsnap_ack(session, in, m);
+    case CEPH_CAP_OP_IMPORT: /* no return */ handle_cap_import(session, in, m);
   }
 
-  if (in->caps.count(mds) == 0) {
+  if (auto it = in->caps.find(mds); it != in->caps.end()) {
+    Cap &cap = in->caps.at(mds);
+
+    switch (m->get_op()) {
+      case CEPH_CAP_OP_TRUNC: return handle_cap_trunc(session, in, m);
+      case CEPH_CAP_OP_IMPORT:
+      case CEPH_CAP_OP_REVOKE:
+      case CEPH_CAP_OP_GRANT: return handle_cap_grant(session, in, &cap, m);
+      case CEPH_CAP_OP_FLUSH_ACK: return handle_cap_flush_ack(session, in, &cap, m);
+      default:
+        m->put();
+    }
+  } else {
     ldout(cct, 5) << __func__ << " don't have " << *in << " cap on mds." << mds << dendl;
     m->put();
     return;
-  }
-
-  Cap &cap = in->caps.at(mds);
-
-  switch (m->get_op()) {
-  case CEPH_CAP_OP_TRUNC: return handle_cap_trunc(session, in, m);
-  case CEPH_CAP_OP_IMPORT:
-  case CEPH_CAP_OP_REVOKE:
-  case CEPH_CAP_OP_GRANT: return handle_cap_grant(session, in, &cap, m);
-  case CEPH_CAP_OP_FLUSH_ACK: return handle_cap_flush_ack(session, in, &cap, m);
-  default:
-    m->put();
   }
 }
 
@@ -4878,8 +4875,7 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
   const mds_rank_t peer_mds = mds_rank_t(m->peer.mds);
   Cap *cap = NULL;
   UserPerm cap_perms;
-  auto it = in->caps.find(peer_mds);
-  if (m->peer.cap_id && it != in->caps.end()) {
+  if (auto it = in->caps.find(peer_mds); m->peer.cap_id && it != in->caps.end()) {
     cap = &it->second;
     cap_perms = cap->latest_perms;
   }
@@ -5045,8 +5041,8 @@ void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, MClientCa
   ceph_assert(in->caps.count(mds));
   snapid_t follows = m->get_snap_follows();
 
-  if (in->cap_snaps.count(follows)) {
-    CapSnap &capsnap = in->cap_snaps.at(follows);
+  if (auto it = in->cap_snaps.find(follows); it != in->cap_snaps.end()) {
+    auto& capsnap = it->second;
     if (m->get_client_tid() != capsnap.flush_tid) {
       ldout(cct, 10) << " tid " << m->get_client_tid() << " != " << capsnap.flush_tid << dendl;
     } else {
@@ -5058,7 +5054,7 @@ void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, MClientCa
       if (in->flushing_caps == 0 && in->cap_snaps.empty())
 	in->flushing_cap_item.remove_myself();
       session->flushing_caps_tids.erase(capsnap.flush_tid);
-      in->cap_snaps.erase(follows);
+      in->cap_snaps.erase(it);
     }
   } else {
     ldout(cct, 5) << __func__ << " DUP(?) mds." << mds << " flushed snap follows " << follows
