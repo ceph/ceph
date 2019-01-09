@@ -1,0 +1,8 @@
+#!/bin/sh
+# vim: set noet ts=8:
+
+set -e
+
+#DEBHELPER#
+
+exit 0

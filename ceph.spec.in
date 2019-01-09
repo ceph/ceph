@@ -451,12 +451,50 @@ Requires:       python%{_python_buildid}-Werkzeug
 Requires:       python%{_python_buildid}-pyOpenSSL
 Requires:       python%{_python_buildid}-bcrypt
 Recommends:     python%{_python_buildid}-influxdb
+Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
+Recommends:	ceph-mgr-diskprediction-cloud = %{_epoch_prefix}%{version}-%{release}
+Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
 %endif
 %description mgr
 ceph-mgr enables python modules that provide services (such as the REST
 module derived from Calamari) and expose CLI hooks.  ceph-mgr gathers
 the cluster maps, the daemon metadata, and performance counters, and
 exposes all these to the python modules.
+
+%package mgr-diskprediction-local
+Summary:        ceph-mgr diskprediction_local plugin
+BuildArch:	noarch
+%if 0%{?suse_version}
+Group:          System/Filesystems
+%endif
+Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
+Requires:       numpy
+Requires:       scipy
+%description mgr-diskprediction-local
+ceph-mgr-diskprediction-local is a ceph-mgr plugin that tries to predict
+disk failures using local algorithms and machine-learning databases.
+
+%package mgr-diskprediction-cloud
+Summary:        ceph-mgr diskprediction_cloud plugin
+BuildArch:	noarch
+%if 0%{?suse_version}
+Group:          System/Filesystems
+%endif
+Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
+%description mgr-diskprediction-cloud
+ceph-mgr-diskprediction-cloud is a ceph-mgr plugin that tries to predict
+disk failures using services in the Google cloud.
+
+%package mgr-rook
+Summary:        ceph-mgr rook plugin
+BuildArch:	noarch
+%if 0%{?suse_version}
+Group:          System/Filesystems
+%endif
+Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
+%description mgr-rook
+ceph-mgr-rook is a ceph-mgr plugin for orchestration functions using
+a Rook backend.
 
 %package fuse
 Summary:	Ceph fuse-based client
@@ -1413,7 +1451,33 @@ fi
 
 %files mgr
 %{_bindir}/ceph-mgr
-%{_libdir}/ceph/mgr
+%{_libdir}/ceph/mgr/ansible
+%{_libdir}/ceph/mgr/balancer
+%{_libdir}/ceph/mgr/crash
+%{_libdir}/ceph/mgr/dashboard
+%{_libdir}/ceph/mgr/deepsea
+%{_libdir}/ceph/mgr/devicehealth
+%{_libdir}/ceph/mgr/influx
+%{_libdir}/ceph/mgr/insights
+%{_libdir}/ceph/mgr/iostat
+%{_libdir}/ceph/mgr/localpool
+%{_libdir}/ceph/mgr/mgr_module.*
+%{_libdir}/ceph/mgr/mgr_util.*
+%{_libdir}/ceph/mgr/orchestrator_cli
+%{_libdir}/ceph/mgr/orchestrator.*
+%{_libdir}/ceph/mgr/osd_perf_query
+%{_libdir}/ceph/mgr/pg_autoscaler
+%{_libdir}/ceph/mgr/progress
+%{_libdir}/ceph/mgr/prometheus
+%{_libdir}/ceph/mgr/restful
+%{_libdir}/ceph/mgr/selftest
+%{_libdir}/ceph/mgr/smart
+%{_libdir}/ceph/mgr/status
+%{_libdir}/ceph/mgr/telegraf
+%{_libdir}/ceph/mgr/telemetry
+%{_libdir}/ceph/mgr/test_orchestrator
+%{_libdir}/ceph/mgr/volumes
+%{_libdir}/ceph/mgr/zabbix
 %{_unitdir}/ceph-mgr@.service
 %{_unitdir}/ceph-mgr.target
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mgr
@@ -1458,6 +1522,45 @@ if [ $FIRST_ARG -ge 1 ] ; then
   if [ "X$CEPH_AUTO_RESTART_ON_UPGRADE" = "Xyes" ] ; then
     /usr/bin/systemctl try-restart ceph-mgr@\*.service > /dev/null 2>&1 || :
   fi
+fi
+
+%files mgr-diskprediction-local
+%{_libdir}/ceph/mgr/diskprediction_local
+
+%post mgr-diskprediction-local
+if [ $1 -eq 1 ] ; then
+    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
+fi
+
+%postun mgr-diskprediction-local
+if [ $1 -eq 1 ] ; then
+    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
+fi
+
+%files mgr-diskprediction-cloud
+%{_libdir}/ceph/mgr/diskprediction_cloud
+
+%post mgr-diskprediction-cloud
+if [ $1 -eq 1 ] ; then
+    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
+fi
+
+%postun mgr-diskprediction-cloud
+if [ $1 -eq 1 ] ; then
+    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
+fi
+
+%files mgr-rook
+%{_libdir}/ceph/mgr/rook
+
+%post mgr-rook
+if [ $1 -eq 1 ] ; then
+    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
+fi
+
+%postun mgr-rook
+if [ $1 -eq 1 ] ; then
+    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
 fi
 
 %files mon
