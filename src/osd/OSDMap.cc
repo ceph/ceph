@@ -2118,6 +2118,12 @@ int OSDMap::apply_incremental(const Incremental &inc)
     }
   }
 
+  if (inc.new_require_osd_release >= 0) {
+    require_osd_release = inc.new_require_osd_release;
+    if (require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+      flags |= CEPH_OSDMAP_PGLOG_HARDLIMIT;
+    }
+  }
   // do new crush map last (after up/down stuff)
   if (inc.crush.length()) {
     bufferlist bl(inc.crush);
@@ -3092,6 +3098,9 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
     if (struct_v >= 5) {
       decode(require_min_compat_client, bl);
       decode(require_osd_release, bl);
+      if (require_osd_release >= CEPH_RELEASE_NAUTILUS) {
+	flags |= CEPH_OSDMAP_PGLOG_HARDLIMIT;
+      }
       if (require_osd_release >= CEPH_RELEASE_LUMINOUS) {
 	flags &= ~(CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS);
 	flags |= CEPH_OSDMAP_RECOVERY_DELETES;
@@ -3419,6 +3428,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",recovery_deletes";
   if (f & CEPH_OSDMAP_PURGED_SNAPDIRS)
     s += ",purged_snapdirs";
+  if (f & CEPH_OSDMAP_PGLOG_HARDLIMIT)
+    s += ",pglog_hardlimit";
   if (s.length())
     s.erase(0, 1);
   return s;

@@ -3886,6 +3886,20 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="1bb4a1f9127cefe624c173557a716d0ebb6d647c" datatype="html">
+        <source>PG Log Hard Limit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-flags-modal/osd-flags-modal.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="e03c0321397fdf7a9c22e8d6b5015424943c0a57" datatype="html">
+        <source>Puts a hard limit on pg log length</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-flags-modal/osd-flags-modal.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="0182a66735272f5c540a0c65ff3f5a7913ac1b74" datatype="html">
         <source>OSD Flags were updated successfully.</source>
         <context-group purpose="location">
