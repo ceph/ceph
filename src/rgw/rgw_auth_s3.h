@@ -256,8 +256,7 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
                         public rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>,
                         public std::enable_shared_from_this<AWSv4ComplMulti> {
   using io_base_t = rgw::io::DecoratedRestfulClient<rgw::io::RestfulClient*>;
-  using signing_key_t = std::array<unsigned char,
-                                   CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>;
+  using signing_key_t = sha256_digest_t;
 
   CephContext* const cct;
 

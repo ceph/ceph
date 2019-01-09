@@ -2537,13 +2537,11 @@ extern std::string url_encode(const std::string& src, bool encode_slash = true);
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);
 
-using sha1_digest_array_t = \
-  std::array<char, CEPH_CRYPTO_HMACSHA1_DIGESTSIZE>;
-
-static inline sha1_digest_array_t
+static inline sha1_digest_t
 calc_hmac_sha1(const boost::string_view& key, const boost::string_view& msg) {
-  sha1_digest_array_t dest;
-  calc_hmac_sha1(key.data(), key.size(), msg.data(), msg.size(), dest.data());
+  sha1_digest_t dest;
+  calc_hmac_sha1(key.data(), key.size(), msg.data(), msg.size(),
+                 reinterpret_cast<char*>(dest.v));
   return dest;
 }
 
@@ -2552,34 +2550,41 @@ extern void calc_hmac_sha256(const char *key, int key_len,
                              const char *msg, int msg_len,
                              char *dest);
 
-using sha256_digest_t = \
-  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE>;
-
 static inline sha256_digest_t
 calc_hmac_sha256(const char *key, const int key_len,
                  const char *msg, const int msg_len) {
-  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
+  sha256_digest_t dest;
   calc_hmac_sha256(key, key_len, msg, msg_len,
-                   reinterpret_cast<char*>(dest.data()));
+                   reinterpret_cast<char*>(dest.v));
   return dest;
 }
 
 static inline sha256_digest_t
 calc_hmac_sha256(const boost::string_view& key, const boost::string_view& msg) {
-  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
+  sha256_digest_t dest;
   calc_hmac_sha256(key.data(), key.size(),
                    msg.data(), msg.size(),
-                   reinterpret_cast<char*>(dest.data()));
+                   reinterpret_cast<char*>(dest.v));
+  return dest;
+}
+
+static inline sha256_digest_t
+calc_hmac_sha256(const sha256_digest_t &key,
+                 const boost::string_view& msg) {
+  sha256_digest_t dest;
+  calc_hmac_sha256(reinterpret_cast<const char*>(key.v), sha256_digest_t::SIZE,
+                   msg.data(), msg.size(),
+                   reinterpret_cast<char*>(dest.v));
   return dest;
 }
 
 static inline sha256_digest_t
 calc_hmac_sha256(const std::vector<unsigned char>& key,
                  const boost::string_view& msg) {
-  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
+  sha256_digest_t dest;
   calc_hmac_sha256(reinterpret_cast<const char*>(key.data()), key.size(),
                    msg.data(), msg.size(),
-                   reinterpret_cast<char*>(dest.data()));
+                   reinterpret_cast<char*>(dest.v));
   return dest;
 }
 
@@ -2587,10 +2592,10 @@ template<size_t KeyLenN>
 static inline sha256_digest_t
 calc_hmac_sha256(const std::array<unsigned char, KeyLenN>& key,
                  const boost::string_view& msg) {
-  std::array<unsigned char, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE> dest;
+  sha256_digest_t dest;
   calc_hmac_sha256(reinterpret_cast<const char*>(key.data()), key.size(),
                    msg.data(), msg.size(),
-                   reinterpret_cast<char*>(dest.data()));
+                   reinterpret_cast<char*>(dest.v));
   return dest;
 }
 
