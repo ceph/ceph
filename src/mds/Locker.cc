@@ -195,14 +195,21 @@ void Locker::include_snap_rdlocks_wlayout(set<SimpleLock*>& rdlocks, CInode *in,
 struct MarkEventOnDestruct {
   MDRequestRef& mdr;
   const char* message;
+  string message2;
   bool mark_event;
+  bool use_msg2;
   MarkEventOnDestruct(MDRequestRef& _mdr,
                       const char *_message) : mdr(_mdr),
                           message(_message),
-                          mark_event(true) {}
+                          mark_event(true),
+                          use_msg2(false) {}
   ~MarkEventOnDestruct() {
-    if (mark_event)
-      mdr->mark_event(message);
+    if (mark_event) {
+      if (!use_msg2)
+	mdr->mark_event(message);
+      else
+	mdr->mark_event(message2.c_str());
+    }
   }
 };
 
@@ -570,20 +577,30 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       cancel_locking(mdr.get(), &issue_set);
     }
     if (xlocks.count(*p)) {
-      marker.message = "failed to xlock, waiting";
-      if (!xlock_start(*p, mdr)) 
+      if (!xlock_start(*p, mdr)) {
+	stringstream ss;
+	ss << "failed to xlock, waiting on " << **p << " " << *(*p)->get_parent();
+	marker.use_msg2 = true;
+	marker.message2 = ss.str();
 	goto out;
+      }
       dout(10) << " got xlock on " << **p << " " << *(*p)->get_parent() << dendl;
     } else if (need_wrlock || need_remote_wrlock) {
       if (need_remote_wrlock && !mdr->remote_wrlocks.count(*p)) {
-        marker.message = "waiting for remote wrlocks";
+	stringstream ss;
+	ss << "waiting for remote wrlocks on " << **p << " " << *(*p)->get_parent();
+	marker.use_msg2 = true;
+	marker.message2 = ss.str();
 	remote_wrlock_start(*p, (*remote_wrlocks)[*p], mdr);
 	goto out;
       }
       if (need_wrlock && !mdr->wrlocks.count(*p)) {
-        marker.message = "failed to wrlock, waiting";
 	if (need_remote_wrlock && !(*p)->can_wrlock(mdr->get_client())) {
-	  marker.message = "failed to wrlock, dropping remote wrlock and waiting";
+	  stringstream ss2;
+	  ss2 << "failed to wrlock, dropping remote wrlock and waiting on " << **p
+		<< " " << *(*p)->get_parent();
+	  marker.use_msg2 = true;
+	  marker.message2 = ss2.str();
 	  // can't take the wrlock because the scatter lock is gathering. need to
 	  // release the remote wrlock, so that the gathering process can finish.
 	  remote_wrlock_finish(*p, mdr->remote_wrlocks[*p], mdr.get());
@@ -591,8 +608,13 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	  goto out;
 	}
 	// nowait if we have already gotten remote wrlock
-	if (!wrlock_start(*p, mdr, need_remote_wrlock))
+	if (!wrlock_start(*p, mdr, need_remote_wrlock)) {
+	  stringstream ss;
+	  ss << "failed to wrlock, waiting on " << **p << " " << *(*p)->get_parent();
+	  marker.use_msg2 = true;
+	  marker.message2 = ss.str();
 	  goto out;
+	}
 	dout(10) << " got wrlock on " << **p << " " << *(*p)->get_parent() << dendl;
       }
     } else {
@@ -606,6 +628,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	    mds->wait_for_cluster_recovered(new C_MDS_RetryRequest(mdcache, mdr));
 	    dout(10) << " rejoin recovering " << **p << " " << *(*p)->get_parent()
 		     << ", waiting for cluster recovered" << dendl;
+	    marker.use_msg2 = false;
 	    marker.message = "rejoin recovering lock, waiting for cluster recovered";
 	    return false;
 	  }
@@ -614,9 +637,13 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	}
       }
 
-      marker.message = "failed to rdlock, waiting";
-      if (!rdlock_start(*p, mdr)) 
+      if (!rdlock_start(*p, mdr)) {
+	stringstream ss;
+	ss << "failed to rdlock, waiting on " << **p << " " << *(*p)->get_parent();
+	marker.use_msg2 = true;
+	marker.message2 = ss.str();
 	goto out;
+      }
       dout(10) << " got rdlock on " << **p << " " << *(*p)->get_parent() << dendl;
     }
   }
@@ -645,6 +672,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
   mdr->done_locking = true;
   mdr->set_mds_stamp(ceph_clock_now());
   result = true;
+  marker.use_msg2 = false;
   marker.message = "acquired locks";
 
  out:
