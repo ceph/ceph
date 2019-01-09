@@ -21,6 +21,37 @@ that are defined by ceph-mgr python modules.
 Definitions
 ===========
 
+Monitor
+-------
+
+MON_DOWN
+________
+
+One or more monitor daemons is currently down.  The cluster requires a
+majority (more than 1/2) of the monitors in order to function.  When
+one or more monitors are down, clients may have a harder time forming
+their initial connection to the cluster as they may need to try more
+addresses before they reach an operating monitor.
+
+The down monitor daemon should generally be restarted as soon as
+possible to reduce the risk of a subsequen monitor failure leading to
+a service outage.
+
+MON_CLOCK_SKEW
+______________
+
+The clocks on the hosts running the ceph-mon monitor daemons are not
+sufficiently well synchronized.  This health alert is raised if the
+cluster detects a clock skew greater than ``mon_clock_drift_allowed``.
+
+This is best resolved by synchronizing the clocks using a tool like
+``ntpd`` or ``chrony``.
+
+If it is impractical to keep the clocks closely synchronized, the
+``mon_clock_drift_allowed`` threshold can also be increased, but this
+value must stay significantly below the ``mon_lease`` interval in
+order for monitor cluster to function properly.
+
 Manager
 -------
 
