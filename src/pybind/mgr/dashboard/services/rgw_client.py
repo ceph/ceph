@@ -6,7 +6,7 @@ from distutils.util import strtobool
 from ..awsauth import S3Auth
 from ..settings import Settings, Options
 from ..rest_client import RestClient, RequestException
-from ..tools import build_url, dict_contains_path
+from ..tools import build_url, dict_contains_path, is_valid_ip_address
 from .. import mgr, logger
 
 
@@ -31,6 +31,7 @@ def _determine_rgw_addr():
                     'summary': '',
                     '0': {
                         ...
+                        'addr': '[2001:db8:85a3::8a2e:370:7334]:49774/1534999298',
                         'metadata': {
                             'frontend_config#0': 'civetweb port=7280',
                         }
@@ -49,6 +50,7 @@ def _determine_rgw_addr():
                     'summary': '',
                     'rgw': {
                         ...
+                        'addr': '192.168.178.3:49774/1534999298',
                         'metadata': {
                             'frontend_config#0': 'civetweb port=8000',
                         }
@@ -61,7 +63,7 @@ def _determine_rgw_addr():
     """
     service_map = mgr.get('service_map')
     if not dict_contains_path(service_map, ['services', 'rgw', 'daemons']):
-        raise LookupError('No RGW found.')
+        raise LookupError('No RGW found')
     daemon = None
     daemons = service_map['services']['rgw']['daemons']
     for key in daemons.keys():
@@ -69,12 +71,64 @@ def _determine_rgw_addr():
             daemon = daemons[key]
             break
     if daemon is None:
-        raise LookupError('No RGW daemon found.')
+        raise LookupError('No RGW daemon found')
 
-    addr = daemon['addr'].split(':')[0]
+    addr = _parse_addr(daemon['addr'])
     port, ssl = _parse_frontend_config(daemon['metadata']['frontend_config#0'])
 
     return addr, port, ssl
+
+
+def _parse_addr(value):
+    """
+    Get the IP address the RGW is running on.
+
+    >>> _parse_addr('192.168.178.3:49774/1534999298')
+    '192.168.178.3'
+
+    >>> _parse_addr('[2001:db8:85a3::8a2e:370:7334]:49774/1534999298')
+    '2001:db8:85a3::8a2e:370:7334'
+
+    >>> _parse_addr('xyz')
+    Traceback (most recent call last):
+    ...
+    LookupError: Failed to determine RGW address
+
+    >>> _parse_addr('192.168.178.a:8080/123456789')
+    Traceback (most recent call last):
+    ...
+    LookupError: Invalid RGW address '192.168.178.a' found
+
+    >>> _parse_addr('[2001:0db8:1234]:443/123456789')
+    Traceback (most recent call last):
+    ...
+    LookupError: Invalid RGW address '2001:0db8:1234' found
+
+    >>> _parse_addr('2001:0db8::1234:49774/1534999298')
+    Traceback (most recent call last):
+    ...
+    LookupError: Failed to determine RGW address
+
+    :param value: The string to process. The syntax is '<HOST>:<PORT>/<NONCE>'.
+    :type: str
+    :raises LookupError if parsing fails to determine the IP address.
+    :return: The IP address.
+    :rtype: str
+    """
+    match = re.search(r'^(\[)?(?(1)([^\]]+)\]|([^:]+)):\d+/\d+?', value)
+    if match:
+        # IPv4:
+        #   Group 0: 192.168.178.3:49774/1534999298
+        #   Group 3: 192.168.178.3
+        # IPv6:
+        #   Group 0: [2001:db8:85a3::8a2e:370:7334]:49774/1534999298
+        #   Group 1: [
+        #   Group 2: 2001:db8:85a3::8a2e:370:7334
+        addr = match.group(3) if match.group(3) else match.group(2)
+        if not is_valid_ip_address(addr):
+            raise LookupError('Invalid RGW address \'{}\' found'.format(addr))
+        return addr
+    raise LookupError('Failed to determine RGW address')
 
 
 def _parse_frontend_config(config):
