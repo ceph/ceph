@@ -290,7 +290,18 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       if (aiter != rgw_to_http_attrs.end()) {
         if (response_attrs.count(aiter->second) == 0) {
           /* Was not already overridden by a response param. */
-          response_attrs[aiter->second] = iter->second.to_str();
+
+          /* clean up attribute, we have cases where we kept extra null character
+           * at the end of the buffer, so bufferlist.to_str() won't work because
+           * it'll generate a string with that extra character
+           */
+          auto& buf = iter->second;
+          const char *val = buf.c_str();
+          size_t len = buf.length();
+          while (len > 0 && !val[len - 1]) {
+            --len;
+          }
+          response_attrs[aiter->second] = string(val, len);
         }
       } else if (iter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
         /* Special handling for content_type. */
