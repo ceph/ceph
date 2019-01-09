@@ -761,7 +761,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-list/pool-list.component.html</context>
-          <context context-type="linenumber">40</context>
+          <context context-type="linenumber">48</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-daemon-list/rgw-daemon-list.component.html</context>
@@ -3520,6 +3520,10 @@
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-list/osd-list.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/pool/pool-list/pool-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="7db875ff4cc626d394f37fba95c075b2e4bfeb00" datatype="html">
         <source>Standby daemons</source>
@@ -4052,6 +4056,10 @@
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-list/osd-list.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/pool/pool-list/pool-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="ecbe2fdca919499125bc42c2c67cedae8563db1c" datatype="html">
         <source>Writes bytes</source>
@@ -4066,11 +4074,19 @@
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-list/osd-list.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/pool/pool-list/pool-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="7e0b24a17546cbfab48b03dc874461d1ca68bc9a" datatype="html">
         <source>Write ops</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-list/osd-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/pool/pool-list/pool-list.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
@@ -4341,6 +4357,13 @@
       </trans-unit>
       <trans-unit id="0ad7f0662956cff61ac1208f92b1a0305b1b2e58" datatype="html">
         <source>Crush Ruleset</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/pool/pool-list/pool-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="f15bf7f588f09ca79795b17bc244e8d336f28171" datatype="html">
+        <source>Write bytes</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/pool/pool-list/pool-list.component.ts</context>
           <context context-type="linenumber">1</context>

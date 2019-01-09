@@ -199,9 +199,9 @@ describe('TableKeyValueComponent', () => {
     ];
     expect(component._insertFlattenObjects(v)).toEqual([
       { key: 'no', value: 'change' },
+      { key: 'first layer', value: 'something' },
       { key: 'first second l3_1', value: 33 },
-      { key: 'first second l3_2', value: 44 },
-      { key: 'first layer', value: 'something' }
+      { key: 'first second l3_2', value: 44 }
     ]);
   });
 
@@ -217,7 +217,9 @@ describe('TableKeyValueComponent', () => {
             sub3: 56
           }
         },
-        someKey: 0
+        someKey: 0,
+        additionalKeyContainingObject: { type: 'none' },
+        keyWithEmptyObject: {}
       };
       component.renderObjects = true;
     });
@@ -225,12 +227,14 @@ describe('TableKeyValueComponent', () => {
     it('with parent key', () => {
       component.ngOnInit();
       expect(component.tableData).toEqual([
+        { key: 'someKey', value: 0 },
+        { key: 'keyWithEmptyObject', value: '' },
         { key: 'options someSetting1', value: 38 },
         { key: 'options anotherSetting2', value: 'somethingElse' },
         { key: 'options suboptions sub1', value: 12 },
         { key: 'options suboptions sub2', value: 34 },
         { key: 'options suboptions sub3', value: 56 },
-        { key: 'someKey', value: 0 }
+        { key: 'additionalKeyContainingObject type', value: 'none' }
       ]);
     });
 
@@ -238,12 +242,14 @@ describe('TableKeyValueComponent', () => {
       component.appendParentKey = false;
       component.ngOnInit();
       expect(component.tableData).toEqual([
+        { key: 'someKey', value: 0 },
+        { key: 'keyWithEmptyObject', value: '' },
         { key: 'someSetting1', value: 38 },
         { key: 'anotherSetting2', value: 'somethingElse' },
         { key: 'sub1', value: 12 },
         { key: 'sub2', value: 34 },
         { key: 'sub3', value: 56 },
-        { key: 'someKey', value: 0 }
+        { key: 'type', value: 'none' }
       ]);
     });
   });
