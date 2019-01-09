@@ -193,7 +193,7 @@ class TestDamage(CephFSTestCase):
                     o,
                     "Truncate {0}".format(o),
                     lambda o=o: self.fs.rados(["truncate", o, "0"]),
-                    DAMAGED_ON_START
+                    expectation
             ))
 
         # OMAP value corruptions
