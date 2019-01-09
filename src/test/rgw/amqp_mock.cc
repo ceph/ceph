@@ -6,6 +6,7 @@
 #include <amqp_tcp_socket.h>
 #include <string>
 #include <stdarg.h>
+#include <iostream>
 
 namespace amqp_mock {
 int VALID_PORT(5672);
@@ -19,7 +20,8 @@ using namespace amqp_mock;
 
 struct amqp_connection_state_t_ {
   amqp_socket_t* socket;
-  amqp_channel_open_ok_t* channel;
+  amqp_channel_open_ok_t* channel1;
+  amqp_channel_open_ok_t* channel2;
   amqp_exchange_declare_ok_t* exchange;
   amqp_queue_declare_ok_t* queue;
   amqp_confirm_select_ok_t* confirm;
@@ -28,7 +30,8 @@ struct amqp_connection_state_t_ {
   // ctor
   amqp_connection_state_t_() : 
     socket(nullptr), 
-    channel(nullptr),
+    channel1(nullptr),
+    channel2(nullptr),
     exchange(nullptr),
     queue(nullptr),
     confirm(nullptr),
@@ -51,7 +54,8 @@ amqp_connection_state_t AMQP_CALL amqp_new_connection(void) {
 
 int amqp_destroy_connection(amqp_connection_state_t state) {
   delete state->socket;
-  delete state->channel;
+  delete state->channel1;
+  delete state->channel2;
   delete state->exchange;
   delete state->queue;
   delete state->confirm;
@@ -114,8 +118,13 @@ amqp_rpc_reply_t amqp_login(
 }
 
 amqp_channel_open_ok_t* amqp_channel_open(amqp_connection_state_t state, amqp_channel_t channel) {
-  state->channel = new amqp_channel_open_ok_t;
-  return state->channel;
+  if (state->channel1 == nullptr) {
+    state->channel1 = new amqp_channel_open_ok_t;
+    return state->channel1;
+  }
+
+  state->channel2 = new amqp_channel_open_ok_t;
+  return state->channel2;
 }
 
 amqp_exchange_declare_ok_t* amqp_exchange_declare(
@@ -149,7 +158,7 @@ int amqp_basic_publish(
     amqp_bytes_t body) {
   // make sure that all calls happened before publish
   if (state->socket && state->socket->open_called &&
-      state->login_called && state->channel && state->exchange) {
+      state->login_called && state->channel1 && state->channel2 && state->exchange) {
     return 0;
   }
   return -1;
@@ -173,6 +182,8 @@ amqp_queue_declare_ok_t* amqp_queue_declare(
     amqp_boolean_t passive, amqp_boolean_t durable, amqp_boolean_t exclusive,
     amqp_boolean_t auto_delete, amqp_table_t arguments) {
   state->queue = new amqp_queue_declare_ok_t;
+  static const char* str = "tmp-queue";
+  state->queue->queue = amqp_cstring_bytes(str);
   return state->queue;
 }
 
@@ -183,7 +194,7 @@ amqp_confirm_select_ok_t* amqp_confirm_select(amqp_connection_state_t state, amq
 
 int amqp_simple_wait_frame(amqp_connection_state_t state, amqp_frame_t *decoded_frame) {
   if (state->socket && state->socket->open_called &&
-      state->login_called && state->channel && state->exchange &&
+      state->login_called && state->channel1 && state->channel2 && state->exchange &&
       state->queue && state->consume && state->confirm) {
     return 0;
   }

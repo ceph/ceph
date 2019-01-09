@@ -4,11 +4,10 @@
 #pragma once
 
 #include <string>
-//#include <memory>
 #include <functional>
 #include <stdexcept>
 
-namespace amqp {
+namespace rgw::amqp {
 // farward declaration of coonection object
 struct connection_t;
 
