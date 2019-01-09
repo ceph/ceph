@@ -447,9 +447,7 @@ int MonMap::init_with_ips(const std::string& ips,
     n[0] = 'a' + i;
     n[1] = 0;
     string name;
-    if (!for_mkfs) {
-      name = prefix;
-    }
+    name = prefix;
     name += n;
     _add_ambiguous_addr(name, addrs[i], 0, for_mkfs);
   }
@@ -780,8 +778,6 @@ int MonMap::build_initial(CephContext *cct, bool for_mkfs, ostream& errout)
   // -m foo?
   if (const auto mon_host = conf.get_val<std::string>("mon_host");
       !mon_host.empty()) {
-    // NOTE: the for_mkfs path here is dodgey.. it assumes the mons will be
-    // named 'a', 'b', 'c'.
     auto ret = init_with_ips(mon_host, for_mkfs, "noname-");
     if (ret == -EINVAL) {
       ret = init_with_hosts(mon_host, for_mkfs, "noname-");
