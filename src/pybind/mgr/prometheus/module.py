@@ -555,7 +555,7 @@ class Module(MgrModule):
         # stats are collected for every namespace in the pool.
         pools_string = self.get_localized_module_option('rbd_stats_pools', '')
         pools = {}
-        for p in re.split('[\s,]+', pools_string):
+        for p in [x for x in re.split('[\s,]+', pools_string) if x]:
             s = p.split('/', 2)
             pool_name = s[0]
             if len(s) == 1:
