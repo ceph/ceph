@@ -42,21 +42,24 @@ SimplePolicy::~SimplePolicy() {
 cache_status_t SimplePolicy::alloc_entry(std::string file_name) {
   ldout(cct, 20) << "alloc entry for: " << file_name << dendl;
 
+  RWLock::WLocker wlocker(m_cache_map_lock);
+
+  // cache hit when promoting
+  if (m_cache_map.find(file_name) != m_cache_map.end()) {
+    ldout(cct, 20) << "object is under promoting: " << file_name << dendl;
+    return OBJ_CACHE_SKIP;
+  }
   m_free_list_lock.lock();
 
-  //TODO(): make the max inflight ops configurable
-  if (m_free_list.size() && (inflight_ops < 128)) {
+  if (m_free_list.size() && (inflight_ops < m_max_inflight_ops)) {
     Entry* entry = m_free_list.front();
     ceph_assert(entry != nullptr);
     m_free_list.pop_front();
     m_free_list_lock.unlock();
-
-    {
-      RWLock::WLocker wlocker(m_cache_map_lock);
-      m_cache_map[file_name] = entry;
-    }
+    m_cache_map[file_name] = entry;
+    wlocker.unlock();
     update_status(file_name, OBJ_CACHE_SKIP);
-    return OBJ_CACHE_NONE;
+    return OBJ_CACHE_NONE; // start promotion request
   }
 
   m_free_list_lock.unlock();
@@ -70,7 +73,7 @@ cache_status_t SimplePolicy::lookup_object(std::string file_name) {
   RWLock::RLocker rlocker(m_cache_map_lock);
 
   auto entry_it = m_cache_map.find(file_name);
-  // simplely promote on first lookup
+  // simply promote on first lookup
   if (entry_it == m_cache_map.end()) {
       rlocker.unlock();
       return alloc_entry(file_name);
