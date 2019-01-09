@@ -155,9 +155,10 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
   assert(OBJ_CACHE_PROMOTED == m_policy->get_status(cache_file_name));
 
   delete read_buf;
-  return ret;
 
   evict_objects();
+
+  return ret;
 }
 
 int ObjectCacheStore::lookup_object(std::string pool_name,
@@ -192,11 +193,7 @@ int ObjectCacheStore::promote_object(librados::IoCtx* ioctx,
                                      Context* on_finish) {
   ldout(m_cct, 20) << "object name = " << object_name << dendl;
 
-  auto ctx = new FunctionContext([on_finish](int ret) {
-    on_finish->complete(ret);
-  });
-
-  librados::AioCompletion* read_completion = create_rados_callback(ctx);
+  librados::AioCompletion* read_completion = create_rados_callback(on_finish);
   // issue a zero-sized read req to get full obj
   int ret = ioctx->aio_read(object_name, read_completion, read_buf, 0, 0);
   if(ret < 0) {
@@ -222,6 +219,10 @@ int ObjectCacheStore::do_evict(std::string cache_file) {
 
   //TODO(): need a better way to get file path
 
+  if (cache_file == "") {
+    return 0;
+  }
+
   std::string cache_dir = m_cache_root_dir;
 
    if (m_dir_num > 0) {
@@ -234,6 +235,7 @@ int ObjectCacheStore::do_evict(std::string cache_file) {
   int ret = std::remove(cache_file_path.c_str());
    // evict entry in policy
   if (ret == 0) {
+    m_policy->update_status(cache_file, OBJ_CACHE_SKIP);
     m_policy->evict_entry(cache_file);
   }
 
