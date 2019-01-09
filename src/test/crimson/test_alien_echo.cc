@@ -280,7 +280,7 @@ seastar_echo(SeastarContext& sc,
         // bind the server
         server.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
                                          &server.byte_throttler);
-        server.msgr.bind(addr);
+        server.msgr.bind(entity_addrvec_t{addr});
         return server.msgr.start(&server.dispatcher)
           .then([&dispatcher=server.dispatcher, count] {
             return dispatcher.on_reply.wait([&dispatcher, count] {

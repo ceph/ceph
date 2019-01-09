@@ -48,9 +48,9 @@ class SocketMessenger final : public Messenger {
                   const std::string& logic_name,
                   uint32_t nonce);
 
-  void set_myaddr(const entity_addr_t& addr) override;
+  void set_myaddrs(const entity_addrvec_t& addr) override;
 
-  void bind(const entity_addr_t& addr) override;
+  void bind(const entity_addrvec_t& addr) override;
 
   seastar::future<> start(Dispatcher *dispatcher) override;
 

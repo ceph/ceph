@@ -85,7 +85,7 @@ static seastar::future<> test_echo(unsigned rounds,
       t.addr.set_family(AF_INET);
       t.addr.set_port(9010);
       t.addr.set_nonce(1);
-      t.server.messenger.bind(t.addr);
+      t.server.messenger.bind(entity_addrvec_t{t.addr});
 
       t.client.rounds = rounds;
       t.client.keepalive_dist = std::bernoulli_distribution{keepalive_ratio};
@@ -164,7 +164,7 @@ static seastar::future<> test_concurrent_dispatch()
       t.addr.set_family(AF_INET);
       t.addr.set_port(9010);
       t.addr.set_nonce(3);
-      t.server.messenger.bind(t.addr);
+      t.server.messenger.bind(entity_addrvec_t{t.addr});
 
       return t.server.messenger.start(&t.server.dispatcher)
         .then([&] {
