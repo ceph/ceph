@@ -26,7 +26,7 @@ public:
   epoch_t epoch;
 
   version_t get_epoch() const { return epoch; }
-  const FSMapUser & get_fsmap() { return fsmap; }
+  const FSMapUser& get_fsmap() const { return fsmap; }
 
   MFSMapUser() :
     MessageInstance(CEPH_MSG_FS_MAP_USER), epoch(0) {}

@@ -56,8 +56,6 @@ MetaRequest::~MetaRequest()
     _dentry->put();
   if (_old_dentry)
     _old_dentry->put();
-  if (reply)
-    reply->put();
 }
 
 void MetaRequest::set_dentry(Dentry *d) {
