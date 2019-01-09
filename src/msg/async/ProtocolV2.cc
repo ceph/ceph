@@ -2070,9 +2070,8 @@ CtPtr ProtocolV2::send_auth_request(std::vector<uint32_t> &allowed_methods) {
     return nullptr;
   }
 
-  ldout(cct, 10) << __func__
-                 << " sending auth request len=" << authorizer->bl.length()
-                 << dendl;
+  ldout(cct, 10) << __func__ << " sending auth request method=" << auth_method
+                 << " len=" << authorizer->bl.length() << dendl;
 
   AuthRequestFrame authFrame(auth_method, authorizer->bl.length(),
                              authorizer->bl);
@@ -2116,9 +2115,16 @@ CtPtr ProtocolV2::handle_auth_bad_auth(char *payload, uint32_t length) {
   delete authorizer;
   authorizer = messenger->ms_deliver_get_authorizer(connection->peer_type,
                                                     true);  // try harder
-  ldout(cct, 10) << __func__
-                 << " sending auth request len=" << authorizer->bl.length()
-                 << dendl;
+
+  if (!authorizer) {
+    ldout(cct, 1) << __func__
+                  << " could not get an authorizer, closing connection"
+                  << dendl;
+    return _fault();
+  }
+
+  ldout(cct, 10) << __func__ << " sending auth request method=" << auth_method
+                 << " len=" << authorizer->bl.length() << dendl;
 
   AuthRequestFrame authFrame(auth_method, authorizer->bl.length(),
                              authorizer->bl);
