@@ -683,35 +683,6 @@ class PSSubscription {
     PSSubConfigRef& sub_conf;
     int i;
 
-    bool split_endpoint(const string& push_endpoint, string *addr, string *path) {
-      if (push_endpoint.size() < 9) { /* http://x/ */
-        return false;
-      }
-      size_t pos = push_endpoint.find(':');
-      if (pos == string::npos || pos >= push_endpoint.size() - 1) {
-        return false;
-      }
-
-      string protocol = push_endpoint.substr(0, pos);
-      string s = push_endpoint.substr(pos + 1);
-
-      if (s.size() < 4) { /* //x/ */
-        return false;
-      }
-
-      size_t slash_pos = s.find('/', 2);
-      if (slash_pos == string::npos) {
-        return false;
-      }
-
-      pos += slash_pos;
-
-      *addr = push_endpoint.substr(0, pos + 1);
-      *path = push_endpoint.substr(pos + 1);
-
-      return true;
-    }
-
   public:
     InitCR(RGWDataSyncEnv *_sync_env,
            PSSubscriptionRef& _sub) : RGWSingletonCR<bool>(_sync_env->cct),
@@ -753,17 +724,6 @@ class PSSubscription {
             if (retcode < 0) {
               ldout(sync_env->cct, 0) << "ERROR: failed to init lifecycle on bucket (bucket=" << sub_conf->data_bucket_name << ") ret=" << retcode << dendl;
               return set_cr_error(retcode);
-            }
-
-            if (!sub_conf->push_endpoint.empty()) {
-              string remote_id = string("pubsub:sub:") + sub->get_bucket_info_result->bucket_info.owner.to_str() + ":" + sub_conf->name;
-              string addr;
-              if (split_endpoint(sub_conf->push_endpoint, &addr, &sub->push.path)) {
-                list<string> endpoints{addr};
-                sub->push.conn = std::make_shared<RGWRESTConn>(sync_env->cct, sync_env->store->svc.zone, remote_id, endpoints);
-              } else {
-                ldout(sync_env->cct, 20) << "failed to split push endpoint: " << sub_conf->push_endpoint << dendl;
-              }
             }
 
             return set_cr_done();
