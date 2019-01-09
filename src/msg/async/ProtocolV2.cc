@@ -24,23 +24,15 @@ ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
 using CtPtr = Ct<ProtocolV2> *;
 
 struct SHA256SignatureError : public std::exception {
+  sha256_digest_t sig1;
+  sha256_digest_t sig2;
   std::string reason;
 
-  SHA256SignatureError(const char *sig1, const char *sig2) {
+  SHA256SignatureError(const char *sig1, const char *sig2)
+      : sig1((const unsigned char *)sig1), sig2((const unsigned char *)sig2) {
     std::stringstream ss;
-
-    uint64_t s1 = *(uint64_t *)sig1;
-    uint64_t s2 = *(uint64_t *)(sig1 + 8);
-    uint64_t s3 = *(uint64_t *)(sig1 + 16);
-    uint64_t s4 = *(uint64_t *)(sig1 + 24);
-
-    uint64_t m1 = *(uint64_t *)sig2;
-    uint64_t m2 = *(uint64_t *)(sig2 + 8);
-    uint64_t m3 = *(uint64_t *)(sig2 + 16);
-    uint64_t m4 = *(uint64_t *)(sig2 + 24);
-    ss << " signature mismatch: calc signature=" << std::hex << s4 << s3 << s2
-       << s1 << std::dec << " msg signature=" << std::hex << m4 << m3 << m2
-       << m1 << std::dec;
+    ss << " signature mismatch: calc signature=" << this->sig1
+       << " msg signature=" << this->sig2;
     reason = ss.str();
   }
 
