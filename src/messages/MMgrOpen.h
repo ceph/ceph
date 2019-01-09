@@ -71,7 +71,7 @@ public:
     encode(config_defaults_bl, payload);
   }
 
-  const char *get_type_name() const override { return "mgropen"; }
+  std::string_view get_type_name() const override { return "mgropen"; }
   void print(ostream& out) const override {
     out << get_type_name() << "(";
     if (service_name.length()) {

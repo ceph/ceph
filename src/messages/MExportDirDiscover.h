@@ -46,7 +46,7 @@ protected:
   ~MExportDirDiscover() override {}
 
 public:
-  const char *get_type_name() const override { return "ExDis"; }
+  std::string_view get_type_name() const override { return "ExDis"; }
   void print(ostream& o) const override {
     o << "export_discover(" << dirfrag << " " << path << ")";
   }

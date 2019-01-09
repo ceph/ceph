@@ -49,7 +49,7 @@ protected:
   ~MDentryLink() override {}
 
 public:
-  const char *get_type_name() const override { return "dentry_link";}
+  std::string_view get_type_name() const override { return "dentry_link";}
   void print(ostream& o) const override {
     o << "dentry_link(" << dirfrag << " " << dn << ")";
   }

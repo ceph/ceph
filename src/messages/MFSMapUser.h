@@ -41,7 +41,7 @@ private:
   ~MFSMapUser() override {}
 
 public:
-  const char *get_type_name() const override { return "fsmap.user"; }
+  std::string_view get_type_name() const override { return "fsmap.user"; }
   void print(ostream& out) const override {
     out << "fsmap.user(e " << epoch << ")";
   }

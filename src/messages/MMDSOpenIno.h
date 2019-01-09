@@ -35,7 +35,7 @@ protected:
   ~MMDSOpenIno() override {}
 
 public:
-  const char *get_type_name() const override { return "openino"; }
+  std::string_view get_type_name() const override { return "openino"; }
   void print(ostream &out) const override {
     out << "openino(" << header.tid << " " << ino << " " << ancestors << ")";
   }

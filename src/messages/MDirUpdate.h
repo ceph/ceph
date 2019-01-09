@@ -32,7 +32,7 @@ public:
   bool has_tried_discover() const { return tried_discover > 0; }
   void inc_tried_discover() const { ++tried_discover; }
 
-  const char *get_type_name() const override { return "dir_update"; }
+  std::string_view get_type_name() const override { return "dir_update"; }
   void print(ostream& out) const override {
     out << "dir_update(" << get_dirfrag() << ")";
   }

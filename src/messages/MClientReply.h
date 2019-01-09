@@ -298,7 +298,7 @@ protected:
   ~MClientReply() override {}
 
 public:
-  const char *get_type_name() const override { return "creply"; }
+  std::string_view get_type_name() const override { return "creply"; }
   void print(ostream& o) const override {
     o << "client_reply(???:" << get_tid();
     o << " = " << get_result();

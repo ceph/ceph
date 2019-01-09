@@ -35,7 +35,7 @@ protected:
 
 
 public:
-  const char *get_type_name() const override { return "openinoreply"; }
+  std::string_view get_type_name() const override { return "openinoreply"; }
   void print(ostream &out) const override {
     out << "openinoreply(" << header.tid << " "
 	<< ino << " " << hint << " " << ancestors << ")";

@@ -159,7 +159,7 @@ public:
     }
   }
 
-  const char *get_type_name() const override { return "osdmap"; }
+  std::string_view get_type_name() const override { return "osdmap"; }
   void print(ostream& out) const override {
     out << "osd_map(" << get_first() << ".." << get_last();
     if (oldest_map || newest_map)

@@ -33,7 +33,7 @@ protected:
   ~MRemoveSnaps() override {}
 
 public:
-  const char *get_type_name() const override { return "remove_snaps"; }
+  std::string_view get_type_name() const override { return "remove_snaps"; }
   void print(ostream& out) const override {
     out << "remove_snaps(" << snaps << " v" << version << ")";
   }

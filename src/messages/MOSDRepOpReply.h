@@ -138,7 +138,7 @@ private:
   ~MOSDRepOpReply() override {}
 
 public:
-  const char *get_type_name() const override { return "osd_repop_reply"; }
+  std::string_view get_type_name() const override { return "osd_repop_reply"; }
 
   void print(ostream& out) const override {
     out << "osd_repop_reply(" << reqid

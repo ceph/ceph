@@ -40,7 +40,7 @@ private:
   ~MCommandReply() override {}
 
 public:
-  const char *get_type_name() const override { return "command_reply"; }
+  std::string_view get_type_name() const override { return "command_reply"; }
   void print(ostream& o) const override {
     o << "command_reply(tid " << get_tid() << ": " << r << " " << rs << ")";
   }

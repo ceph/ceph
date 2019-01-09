@@ -27,7 +27,7 @@ public:
   uint32_t get_flags() const { return flags; }
   std::string_view get_uuid() const { return uuid; }
 
-  const char *get_type_name() const override { return "client_reclaim"; }
+  std::string_view get_type_name() const override { return "client_reclaim"; }
   void print(ostream& o) const override {
     std::ios_base::fmtflags f(o.flags());
     o << "client_reclaim(" << get_uuid() << " flags 0x" << std::hex << get_flags() << ")";

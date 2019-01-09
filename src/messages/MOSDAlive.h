@@ -42,7 +42,7 @@ public:
     decode(want, p);
   }
 
-  const char *get_type_name() const override { return "osd_alive"; }
+  std::string_view get_type_name() const override { return "osd_alive"; }
   void print(ostream &out) const override {
     out << "osd_alive(want up_thru " << want << " have " << version << ")";
   }

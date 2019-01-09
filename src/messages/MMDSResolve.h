@@ -72,7 +72,7 @@ protected:
   ~MMDSResolve() override {}
 
 public:
-  const char *get_type_name() const override { return "mds_resolve"; }
+  std::string_view get_type_name() const override { return "mds_resolve"; }
 
   void print(ostream& out) const override {
     out << "mds_resolve(" << subtrees.size()

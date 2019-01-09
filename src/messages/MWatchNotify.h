@@ -82,7 +82,7 @@ public:
     encode(notifier_gid, payload);
   }
 
-  const char *get_type_name() const override { return "watch-notify"; }
+  std::string_view get_type_name() const override { return "watch-notify"; }
   void print(ostream& out) const override {
     out << "watch-notify("
 	<< ceph_watch_event_name(opcode) << " (" << (int)opcode << ")"

@@ -73,7 +73,7 @@ public:
       last_committed(0)
   { }
 
-  const char *get_type_name() const override { return "mon_sync"; }
+  std::string_view get_type_name() const override { return "mon_sync"; }
 
   void print(ostream& out) const override {
     out << "mon_sync(" << get_opname(op);

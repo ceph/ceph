@@ -21,6 +21,7 @@
 #include <sstream>
 #include <stdio.h>
 #include <memory>
+#include <string_view>
 #include <boost/scoped_ptr.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/variant.hpp>
@@ -1085,7 +1086,7 @@ struct pg_pool_t {
     //TYPE_RAID4 = 2,   // raid4 (never implemented)
     TYPE_ERASURE = 3,      // erasure-coded
   };
-  static const char *get_type_name(int t) {
+  static std::string_view get_type_name(int t) {
     switch (t) {
     case TYPE_REPLICATED: return "replicated";
       //case TYPE_RAID4: return "raid4";
@@ -1093,7 +1094,7 @@ struct pg_pool_t {
     default: return "???";
     }
   }
-  const char *get_type_name() const {
+  std::string_view get_type_name() const {
     return get_type_name(type);
   }
 
@@ -3381,7 +3382,7 @@ struct pg_query_t {
     MISSING = 4,
     FULLLOG = 5,
   };
-  const char *get_type_name() const {
+  std::string_view get_type_name() const {
     switch (type) {
     case INFO: return "info";
     case LOG: return "log";
@@ -4984,7 +4985,7 @@ struct object_manifest_t {
   bool is_chunked() const {
     return type == TYPE_CHUNKED;
   }
-  static const char *get_type_name(uint8_t m) {
+  static std::string_view get_type_name(uint8_t m) {
     switch (m) {
     case TYPE_NONE: return "none";
     case TYPE_REDIRECT: return "redirect";
@@ -4992,7 +4993,7 @@ struct object_manifest_t {
     default: return "unknown";
     }
   }
-  const char *get_type_name() const {
+  std::string_view get_type_name() const {
     return get_type_name(type);
   }
   void clear() {

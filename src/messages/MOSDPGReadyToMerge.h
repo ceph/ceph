@@ -37,7 +37,7 @@ public:
     decode(last_epoch_clean, p);
     decode(ready, p);
   }
-  const char *get_type_name() const override { return "osd_pg_ready_to_merge"; }
+  std::string_view get_type_name() const override { return "osd_pg_ready_to_merge"; }
   void print(ostream &out) const {
     out << get_type_name()
         << "(" << pgid

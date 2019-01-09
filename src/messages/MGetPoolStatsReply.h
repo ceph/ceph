@@ -34,7 +34,7 @@ private:
   ~MGetPoolStatsReply() override {}
 
 public:
-  const char *get_type_name() const override { return "getpoolstats"; }
+  std::string_view get_type_name() const override { return "getpoolstats"; }
   void print(ostream& out) const override {
     out << "getpoolstatsreply(" << get_tid() << " v" << version <<  ")";
   }

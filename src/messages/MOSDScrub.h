@@ -45,7 +45,7 @@ private:
   ~MOSDScrub() override {}
 
 public:
-  const char *get_type_name() const override { return "scrub"; }
+  std::string_view get_type_name() const override { return "scrub"; }
   void print(ostream& out) const override {
     out << "scrub(";
     if (scrub_pgs.empty())

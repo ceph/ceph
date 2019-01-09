@@ -37,7 +37,7 @@ protected:
   ~MClientSnap() override {}
 
 public:  
-  const char *get_type_name() const override { return "client_snap"; }
+  std::string_view get_type_name() const override { return "client_snap"; }
   void print(ostream& out) const override {
     out << "client_snap(" << ceph_snap_op_name(head.op);
     if (head.split)

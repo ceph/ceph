@@ -30,7 +30,7 @@ public:
     encode(service_name, payload);
   }
 
-  const char *get_type_name() const override { return "mgrclose"; }
+  std::string_view get_type_name() const override { return "mgrclose"; }
   void print(ostream& out) const override {
     out << get_type_name() << "(";
     if (service_name.length()) {

@@ -15,6 +15,8 @@
 #ifndef CEPH_OSD_HITSET_H
 #define CEPH_OSD_HITSET_H
 
+#include <string_view>
+
 #include <boost/scoped_ptr.hpp>
 
 #include "include/encoding.h"
@@ -39,7 +41,7 @@ public:
     TYPE_BLOOM = 3
   } impl_type_t;
 
-  static const char *get_type_name(impl_type_t t) {
+  static std::string_view get_type_name(impl_type_t t) {
     switch (t) {
     case TYPE_NONE: return "none";
     case TYPE_EXPLICIT_HASH: return "explicit_hash";
@@ -48,7 +50,7 @@ public:
     default: return "???";
     }
   }
-  const char *get_type_name() const {
+  std::string_view get_type_name() const {
     if (impl)
       return get_type_name(impl->get_type());
     return get_type_name(TYPE_NONE);

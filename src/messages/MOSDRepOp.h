@@ -163,7 +163,7 @@ private:
   ~MOSDRepOp() override {}
 
 public:
-  const char *get_type_name() const override { return "osd_repop"; }
+  std::string_view get_type_name() const override { return "osd_repop"; }
   void print(ostream& out) const override {
     out << "osd_repop(" << reqid
 	<< " " << pgid << " e" << map_epoch << "/" << min_epoch;

@@ -53,7 +53,7 @@ private:
   ~MOSDForceRecovery() {}
 
 public:
-  const char *get_type_name() const { return "force_recovery"; }
+  std::string_view get_type_name() const { return "force_recovery"; }
   void print(ostream& out) const {
     out << "force_recovery(";
     if (forced_pgs.empty())

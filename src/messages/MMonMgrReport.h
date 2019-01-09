@@ -39,7 +39,7 @@ private:
   ~MMonMgrReport() override {}
 
 public:
-  const char *get_type_name() const override { return "monmgrreport"; }
+  std::string_view get_type_name() const override { return "monmgrreport"; }
 
   void print(ostream& out) const override {
     out << get_type_name() << "(" << health_checks.checks.size() << " checks)";

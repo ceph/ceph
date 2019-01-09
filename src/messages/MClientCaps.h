@@ -174,7 +174,7 @@ private:
   file_layout_t layout;
 
 public:
-  const char *get_type_name() const override { return "Cfcap";}
+  std::string_view get_type_name() const override { return "Cfcap";}
   void print(ostream& out) const override {
     out << "client_caps(" << ceph_cap_op_name(head.op)
 	<< " ino " << inodeno_t(head.ino)

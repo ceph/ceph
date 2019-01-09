@@ -69,7 +69,7 @@ public:
     encode_trace(payload, features);
   }
 
-  const char *get_type_name() const override { return "MOSDECSubOpReadReply"; }
+  std::string_view get_type_name() const override { return "MOSDECSubOpReadReply"; }
 
   void print(ostream& out) const override {
     out << "MOSDECSubOpReadReply(" << pgid

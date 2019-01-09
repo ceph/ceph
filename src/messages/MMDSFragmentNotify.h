@@ -49,7 +49,7 @@ protected:
   ~MMDSFragmentNotify() override {}
 
 public:  
-  const char *get_type_name() const override { return "fragment_notify"; }
+  std::string_view get_type_name() const override { return "fragment_notify"; }
   void print(ostream& o) const override {
     o << "fragment_notify(" << base_dirfrag << " " << (int)bits << ")";
   }

@@ -35,7 +35,7 @@ private:
   ~MClientReconnect() override {}
 
 public:
-  const char *get_type_name() const override { return "client_reconnect"; }
+  std::string_view get_type_name() const override { return "client_reconnect"; }
   void print(ostream& out) const override {
     out << "client_reconnect("
 	<< caps.size() << " caps)";

@@ -53,7 +53,7 @@ public:
       pgid(pgid), map_epoch(map_epoch),
       type(type), from(from) {}
 
-  const char *get_type_name() const {
+  std::string_view get_type_name() const {
     return "MOSDScrubReserve";
   }
 

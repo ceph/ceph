@@ -89,7 +89,7 @@ public:
     encode(request_ack, payload);
   }
 
-  const char *get_type_name() const override { return "MOSDMarkMeDown"; }
+  std::string_view get_type_name() const override { return "MOSDMarkMeDown"; }
   void print(ostream& out) const override {
     out << "MOSDMarkMeDown("
 	<< "request_ack=" << request_ack

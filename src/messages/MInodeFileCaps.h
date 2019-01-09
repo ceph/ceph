@@ -40,7 +40,7 @@ protected:
   ~MInodeFileCaps() override {}
 
 public:
-  const char *get_type_name() const override { return "inode_file_caps";}
+  std::string_view get_type_name() const override { return "inode_file_caps";}
   void print(ostream& out) const override {
     out << "inode_file_caps(" << ino << " " << ccap_string(caps) << ")";
   }

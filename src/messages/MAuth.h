@@ -32,7 +32,7 @@ private:
   ~MAuth() override {}
 
 public:
-  const char *get_type_name() const override { return "auth"; }
+  std::string_view get_type_name() const override { return "auth"; }
   void print(ostream& out) const override {
     out << "auth(proto " << protocol << " " << auth_payload.length() << " bytes"
 	<< " epoch " << monmap_epoch << ")";

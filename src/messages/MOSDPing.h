@@ -118,7 +118,7 @@ public:
     }
   }
 
-  const char *get_type_name() const override { return "osd_ping"; }
+  std::string_view get_type_name() const override { return "osd_ping"; }
   void print(ostream& out) const override {
     out << "osd_ping(" << get_op_name(op)
 	<< " e" << map_epoch

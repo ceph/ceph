@@ -82,7 +82,7 @@ public:
     encode(counter, payload);
   }
 
-  const char *get_type_name() const override { return "data_ping"; }
+  std::string_view get_type_name() const override { return "data_ping"; }
 
   void print(ostream& out) const override {
     out << get_type_name() << " " << tag << " " << counter;

@@ -31,7 +31,7 @@ public:
 
   MMonGetVersion() : MessageInstance(CEPH_MSG_MON_GET_VERSION) {}
 
-  const char *get_type_name() const override {
+  std::string_view get_type_name() const override {
     return "mon_get_version";
   }
 
