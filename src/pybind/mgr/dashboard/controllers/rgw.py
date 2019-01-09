@@ -168,7 +168,22 @@ class RgwUser(RgwRESTController):
         return user
 
     def list(self):
-        return self.proxy('GET', 'metadata/user')
+        users = []
+        marker = None
+        while True:
+            params = {}
+            if marker:
+                params['marker'] = marker
+            result = self.proxy('GET', 'user?list', params)
+            users.extend(result['keys'])
+            if not result['truncated']:
+                break
+            # Make sure there is a marker.
+            assert result['marker']
+            # Make sure the marker has changed.
+            assert marker != result['marker']
+            marker = result['marker']
+        return users
 
     def get(self, uid):
         result = self.proxy('GET', 'user', {'uid': uid})
