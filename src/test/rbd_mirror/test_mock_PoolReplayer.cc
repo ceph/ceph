@@ -347,6 +347,13 @@ public:
     EXPECT_CALL(mock_instance_replayer, add_peer(uuid, _));
   }
 
+  void expect_instance_watcher_get_instance_id(
+      MockInstanceWatcher& mock_instance_watcher,
+      const std::string &instance_id) {
+    EXPECT_CALL(mock_instance_watcher, get_instance_id())
+      .WillOnce(Return(instance_id));
+  }
+
   void expect_instance_watcher_init(MockInstanceWatcher& mock_instance_watcher,
                                     int r) {
     EXPECT_CALL(mock_instance_watcher, init())
@@ -367,6 +374,19 @@ public:
     EXPECT_CALL(mock_leader_watcher, shut_down());
   }
 
+  void expect_service_daemon_add_or_update_attribute(
+      MockServiceDaemon &mock_service_daemon, const std::string& key,
+      const service_daemon::AttributeValue& value) {
+    EXPECT_CALL(mock_service_daemon, add_or_update_attribute(_, _, _));
+  }
+
+  void expect_service_daemon_add_or_update_instance_id_attribute(
+      MockInstanceWatcher& mock_instance_watcher,
+      MockServiceDaemon &mock_service_daemon) {
+    expect_instance_watcher_get_instance_id(mock_instance_watcher, "1234");
+    expect_service_daemon_add_or_update_attribute(mock_service_daemon,
+                                                  "instance_id", "1234");
+  }
 };
 
 TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
@@ -400,11 +420,14 @@ TEST_F(TestMockPoolReplayer, ConfigKeyOverride) {
   auto mock_instance_watcher = new MockInstanceWatcher();
   expect_instance_watcher_init(*mock_instance_watcher, 0);
 
+  MockServiceDaemon mock_service_daemon;
+  expect_service_daemon_add_or_update_instance_id_attribute(
+      *mock_instance_watcher, mock_service_daemon);
+
   auto mock_leader_watcher = new MockLeaderWatcher();
   expect_leader_watcher_init(*mock_leader_watcher, 0);
 
   MockThreads mock_threads(m_threads);
-  MockServiceDaemon mock_service_daemon;
   MockPoolReplayer pool_replayer(&mock_threads, &mock_service_daemon,
                                  m_local_io_ctx.get_id(), peer_spec, {});
   pool_replayer.init();
