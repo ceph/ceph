@@ -326,7 +326,8 @@ void OSDMonitor::create_initial()
 
   newmap.flags |=
     CEPH_OSDMAP_RECOVERY_DELETES |
-    CEPH_OSDMAP_PURGED_SNAPDIRS;
+    CEPH_OSDMAP_PURGED_SNAPDIRS |
+    CEPH_OSDMAP_PGLOG_HARDLIMIT;
   newmap.full_ratio = g_conf()->mon_osd_full_ratio;
   if (newmap.full_ratio > 1.0) newmap.full_ratio /= 100;
   newmap.backfillfull_ratio = g_conf()->mon_osd_backfillfull_ratio;
@@ -2829,6 +2830,17 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
     mon->clog->info() << "disallowing boot of post-nautilus OSD "
 		      << m->get_orig_source_inst()
 		      << " because require_osd_release < nautilus";
+    goto ignore;
+  }
+
+  // The release check here is required because for OSD_PGLOG_HARDLIMIT,
+  // we are reusing a jewel feature bit that was retired in luminous.
+  if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
+      osdmap.test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT) &&
+      !(m->osd_features & CEPH_FEATURE_OSD_PGLOG_HARDLIMIT)) {
+    mon->clog->info() << "disallowing boot of OSD "
+		      << m->get_orig_source_inst()
+		      << " because 'pglog_hardlimit' osdmap flag is set and OSD lacks the OSD_PGLOG_HARDLIMIT feature";
     goto ignore;
   }
 
@@ -10075,6 +10087,24 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	return prepare_set_flag(op, CEPH_OSDMAP_RECOVERY_DELETES);
       } else {
 	ss << "not all up OSDs have OSD_RECOVERY_DELETES feature";
+	err = -EPERM;
+	goto reply;
+      }
+    } else if (key == "pglog_hardlimit") {
+      if (!osdmap.get_num_up_osds() && !sure) {
+        ss << "Not advisable to continue since no OSDs are up. Pass "
+           << "--yes-i-really-mean-it if you really wish to continue.";
+        err = -EPERM;
+        goto reply;
+      }
+      // The release check here is required because for OSD_PGLOG_HARDLIMIT,
+      // we are reusing a jewel feature bit that was retired in luminous.
+      if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
+         (HAVE_FEATURE(osdmap.get_up_osd_features(), OSD_PGLOG_HARDLIMIT)
+          || sure)) {
+	return prepare_set_flag(op, CEPH_OSDMAP_PGLOG_HARDLIMIT);
+      } else {
+	ss << "not all up OSDs have OSD_PGLOG_HARDLIMIT feature";
 	err = -EPERM;
 	goto reply;
       }

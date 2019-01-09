@@ -755,7 +755,7 @@ COMMAND("osd erasure-code-profile ls", \
 	"list all erasure code profiles", \
 	"osd", "r")
 COMMAND("osd set " \
-	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim|sortbitwise|recovery_deletes|require_jewel_osds|require_kraken_osds " \
+	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim|sortbitwise|recovery_deletes|require_jewel_osds|require_kraken_osds|pglog_hardlimit " \
         "name=yes_i_really_mean_it,type=CephBool,req=false", \
 	"set <key>", "osd", "rw")
 COMMAND("osd unset " \

@@ -98,6 +98,13 @@ export class OsdFlagsModalComponent implements OnInit {
       value: false,
       description: this.i18n('Deletes performed during recovery instead of peering'),
       disabled: true
+    },
+    pglog_hardlimit: {
+      code: 'pglog_hardlimit',
+      name: this.i18n('PG Log Hard Limit'),
+      value: false,
+      description: this.i18n('Puts a hard limit on pg log length'),
+      disabled: true
     }
   };
   flags: any[];
