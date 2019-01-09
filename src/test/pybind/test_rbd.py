@@ -1196,7 +1196,8 @@ class TestClone(object):
         eq(deduped, set(expected))
 
     def check_children2(self, expected):
-        actual = list(self.image.list_children2())
+        actual = [{k:v for k,v in x.items() if k in expected[0]} \
+                  for x in self.image.list_children2()]
         eq(actual, expected)
 
     def get_image_id(self, ioctx, name):
