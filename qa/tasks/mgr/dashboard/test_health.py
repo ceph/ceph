@@ -176,6 +176,7 @@ class HealthTest(DashboardTestCase):
             'hosts': int,
             'iscsi_daemons': int,
             'mgr_map': JObj({
+                'active_addr': str,
                 'active_addrs': JObj({
                     'addrvec': JList(JObj({
                         'addr': str,
@@ -227,7 +228,7 @@ class HealthTest(DashboardTestCase):
                 'name': str,
                 'outside_quorum': JList(int),
                 'quorum': JList(int),
-                'quorum_age': str,
+                'quorum_age': int,
                 'rank': int,
                 'state': str,
                 # TODO: What type should be expected here?
