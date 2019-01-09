@@ -58,7 +58,7 @@ private:
   ~MOSDBoot() override { }
 
 public:
-  const char *get_type_name() const override { return "osd_boot"; }
+  std::string_view get_type_name() const override { return "osd_boot"; }
   void print(ostream& out) const override {
     out << "osd_boot(osd." << sb.whoami << " booted " << boot_epoch
 	<< " features " << osd_features

@@ -54,7 +54,7 @@ private:
   ~MOSDRepScrubMap() {}
 
 public:
-  const char *get_type_name() const override { return "rep_scrubmap"; }
+  std::string_view get_type_name() const override { return "rep_scrubmap"; }
   void print(ostream& out) const override {
     out << "rep_scrubmap(" << pgid << " e" << map_epoch
 	<< " from shard " << from

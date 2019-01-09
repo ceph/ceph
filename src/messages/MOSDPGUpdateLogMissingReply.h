@@ -80,7 +80,7 @@ private:
   ~MOSDPGUpdateLogMissingReply() override {}
 
 public:
-  const char *get_type_name() const override { return "PGUpdateLogMissingReply"; }
+  std::string_view get_type_name() const override { return "PGUpdateLogMissingReply"; }
   void print(ostream& out) const override {
     out << "pg_update_log_missing_reply(" << pgid << " epoch " << map_epoch
 	<< "/" << min_epoch

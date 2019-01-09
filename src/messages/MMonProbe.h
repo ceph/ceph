@@ -73,7 +73,7 @@ private:
   ~MMonProbe() override {}
 
 public:  
-  const char *get_type_name() const override { return "mon_probe"; }
+  std::string_view get_type_name() const override { return "mon_probe"; }
   void print(ostream& out) const override {
     out << "mon_probe(" << get_opname(op) << " " << fsid << " name " << name;
     if (quorum.size())

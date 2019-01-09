@@ -139,7 +139,7 @@ public:
     return m;
   }
 
-  const char *get_type_name() const override { return "forward"; }
+  std::string_view get_type_name() const override { return "forward"; }
   void print(ostream& o) const override {
     o << "forward(";
     if (msg) {

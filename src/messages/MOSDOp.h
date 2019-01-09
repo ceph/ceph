@@ -571,7 +571,7 @@ struct ceph_osd_request_head {
     bdata_encode = false;
   }
 
-  const char *get_type_name() const override { return "osd_op"; }
+  std::string_view get_type_name() const override { return "osd_op"; }
   void print(ostream& out) const override {
     out << "osd_op(";
     if (!partial_decode_needed) {

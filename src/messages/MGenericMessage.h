@@ -33,7 +33,7 @@ private:
   //void set_pcid(long pcid) { this->pcid = pcid; }
   //long get_pcid() { return pcid; }
 
-  const char *get_type_name() const override { return tname; }
+  std::string_view get_type_name() const override { return tname; }
 
   void decode_payload() override { }
   void encode_payload(uint64_t features) override { }

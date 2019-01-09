@@ -43,7 +43,7 @@ private:
   ~MPGStats() override {}
 
 public:
-  const char *get_type_name() const override { return "pg_stats"; }
+  std::string_view get_type_name() const override { return "pg_stats"; }
   void print(ostream& out) const override {
     out << "pg_stats(" << pg_stat.size() << " pgs tid " << get_tid() << " v " << version << ")";
   }

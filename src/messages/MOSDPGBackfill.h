@@ -101,7 +101,7 @@ private:
   ~MOSDPGBackfill() override {}
 
 public:
-  const char *get_type_name() const override { return "pg_backfill"; }
+  std::string_view get_type_name() const override { return "pg_backfill"; }
   void print(ostream& out) const override {
     out << "pg_backfill(" << get_op_name(op)
 	<< " " << pgid

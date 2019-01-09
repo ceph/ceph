@@ -36,7 +36,7 @@ protected:
   ~MExportDir() override {}
 
 public:
-  const char *get_type_name() const override { return "Ex"; }
+  std::string_view get_type_name() const override { return "Ex"; }
   void print(ostream& o) const override {
     o << "export(" << dirfrag << ")";
   }

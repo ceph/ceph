@@ -46,7 +46,7 @@ public:
       response_data.claim(*blp);
   }
 
-  const char *get_type_name() const override { return "poolopreply"; }
+  std::string_view get_type_name() const override { return "poolopreply"; }
 
   void print(ostream& out) const override {
     out << "pool_op_reply(tid " << get_tid()

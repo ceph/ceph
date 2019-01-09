@@ -40,7 +40,7 @@ private:
   ~MAuthReply() override {}
 
 public:
-  const char *get_type_name() const override { return "auth_reply"; }
+  std::string_view get_type_name() const override { return "auth_reply"; }
   void print(ostream& o) const override {
     o << "auth_reply(proto " << protocol << " " << result << " " << cpp_strerror(result);
     if (result_msg.length())

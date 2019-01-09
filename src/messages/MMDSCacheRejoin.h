@@ -224,7 +224,7 @@ protected:
   ~MMDSCacheRejoin() override {}
 
 public:
-  const char *get_type_name() const override { return "cache_rejoin"; }
+  std::string_view get_type_name() const override { return "cache_rejoin"; }
   void print(ostream& out) const override {
     out << "cache_rejoin " << get_opname(op);
   }

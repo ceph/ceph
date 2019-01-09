@@ -19,7 +19,7 @@ public:
     : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
       config(c) {}
 
-  const char *get_type_name() const override {
+  std::string_view get_type_name() const override {
     return "config";
   }
   void print(ostream& o) const override {

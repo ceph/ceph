@@ -33,7 +33,7 @@ private:
   ~MMonMap() override {}
 
 public:
-  const char *get_type_name() const override { return "mon_map"; }
+  std::string_view get_type_name() const override { return "mon_map"; }
 
   void encode_payload(uint64_t features) override { 
     if (monmapbl.length() &&

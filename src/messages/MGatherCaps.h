@@ -17,7 +17,7 @@ protected:
   ~MGatherCaps() override {}
 
 public:
-  const char *get_type_name() const override { return "gather_caps"; }
+  std::string_view get_type_name() const override { return "gather_caps"; }
   void print(ostream& o) const override {
     o << "gather_caps(" << ino << ")";
   }

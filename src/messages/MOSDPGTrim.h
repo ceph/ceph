@@ -55,7 +55,7 @@ private:
   ~MOSDPGTrim() override {}
 
 public:
-  const char *get_type_name() const override { return "pg_trim"; }
+  std::string_view get_type_name() const override { return "pg_trim"; }
   void inner_print(ostream& out) const override {
     out << trim_to;
   }

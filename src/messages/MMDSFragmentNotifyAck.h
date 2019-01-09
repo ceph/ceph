@@ -40,7 +40,7 @@ protected:
   ~MMDSFragmentNotifyAck() override {}
 
 public:
-  const char *get_type_name() const override { return "fragment_notify_ack"; }
+  std::string_view get_type_name() const override { return "fragment_notify_ack"; }
   void print(ostream& o) const override {
     o << "fragment_notify_ack(" << base_dirfrag << " " << (int)bits << ")";
   }

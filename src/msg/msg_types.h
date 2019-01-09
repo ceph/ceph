@@ -237,7 +237,7 @@ struct entity_addr_t {
     TYPE_ANY = 3,  ///< ambiguous
   } type_t;
   static const type_t TYPE_DEFAULT = TYPE_MSGR2;
-  static const char *get_type_name(int t) {
+  static std::string_view get_type_name(int t) {
     switch (t) {
     case TYPE_NONE: return "none";
     case TYPE_LEGACY: return "v1";

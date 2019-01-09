@@ -43,7 +43,7 @@ private:
   ~MOSDPGCreate() override {}
 
 public:  
-  const char *get_type_name() const override { return "pg_create"; }
+  std::string_view get_type_name() const override { return "pg_create"; }
 
   void encode_payload(uint64_t features) override {
     using ceph::encode;

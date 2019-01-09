@@ -75,7 +75,7 @@ protected:
   ~MCacheExpire() override {}
 
 public:
-  const char *get_type_name() const override { return "cache_expire";}
+  std::string_view get_type_name() const override { return "cache_expire";}
   
   void add_inode(dirfrag_t r, vinodeno_t vino, unsigned nonce) {
     realms[r].inodes[vino] = nonce;

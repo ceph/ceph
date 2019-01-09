@@ -65,7 +65,7 @@ protected:
   ~MLock() override {}
   
 public:
-  const char *get_type_name() const override { return "ILock"; }
+  std::string_view get_type_name() const override { return "ILock"; }
   void print(ostream& out) const override {
     out << "lock(a=" << get_lock_action_name(action)
 	<< " " << get_lock_type_name(lock_type)

@@ -73,7 +73,7 @@ private:
   ~MMonElection() override {}
 
 public:  
-  const char *get_type_name() const override { return "election"; }
+  std::string_view get_type_name() const override { return "election"; }
   void print(ostream& out) const override {
     out << "election(" << fsid << " " << get_opname(op) << " " << epoch << ")";
   }

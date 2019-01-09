@@ -28,7 +28,7 @@ private:
   ~MMonHealthChecks() override { }
 
 public:
-  const char *get_type_name() const override { return "mon_health_checks"; }
+  std::string_view get_type_name() const override { return "mon_health_checks"; }
   void print(ostream &o) const override {
     o << "mon_health_checks(" << health_checks.checks.size() << " checks)";
   }
