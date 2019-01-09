@@ -15,8 +15,9 @@
 #define dout_prefix _conn_prefix(_dout)
 ostream &ProtocolV1::_conn_prefix(std::ostream *_dout) {
   return *_dout << "--1- " << messenger->get_myaddrs().legacy_addr() << " >> "
-                << connection->peer_addrs->legacy_addr() << " conn("
-                << connection << (connection->msgr2 ? " msgr2" : " legacy")
+                << connection->peer_addrs->legacy_addr()
+		<< " conn("
+                << connection << " " << this
                 << " :" << connection->port << " s=" << get_state_name(state)
                 << " pgs=" << peer_global_seq << " cs=" << connect_seq
                 << " l=" << connection->policy.lossy << ").";
@@ -1984,6 +1985,8 @@ CtPtr ProtocolV1::handle_connect_message_2() {
                             // AsyncConnection here)
 
     ProtocolV1 *exproto = dynamic_cast<ProtocolV1 *>(existing->protocol.get());
+    ldout(cct,10) << __func__ << " existing=" << existing << " exproto="
+		  << exproto << dendl;
     assert(exproto->proto_type == 1);
 
     if (!exproto) {
