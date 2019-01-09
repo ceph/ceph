@@ -2180,8 +2180,8 @@ bool Client::_any_stale_sessions() const
 {
   ceph_assert(client_lock.is_locked_by_me());
 
-  for (const auto &it : mds_sessions) {
-    if (it.second.state == MetaSession::STATE_STALE) {
+  for (const auto &p : mds_sessions) {
+    if (p.second.state == MetaSession::STATE_STALE) {
       return true;
     }
   }
@@ -3534,9 +3534,9 @@ void Client::check_caps(Inode *in, unsigned flags)
   if (!in->cap_snaps.empty())
     flush_snaps(in);
 
-  for (auto &it : in->caps) {
-    mds_rank_t mds = it.first;
-    Cap &cap = it.second;
+  for (auto &p : in->caps) {
+    mds_rank_t mds = p.first;
+    Cap &cap = p.second;
 
     MetaSession *session = &mds_sessions.at(mds);
 
@@ -4041,10 +4041,10 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
 
   if ((issued & ~old_caps) && in->auth_cap == &cap) {
     // non-auth MDS is revoking the newly grant caps ?
-    for (auto &it : in->caps) {
-      if (&it.second == &cap)
+    for (auto &p : in->caps) {
+      if (&p.second == &cap)
 	continue;
-      if (it.second.implemented & ~it.second.issued & issued) {
+      if (p.second.implemented & ~p.second.issued & issued) {
 	check_caps(in, CHECK_CAPS_NODELAY);
 	break;
       }
@@ -5277,10 +5277,10 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
 
     if (cap == in->auth_cap) {
       // non-auth MDS is revoking the newly grant caps ?
-      for (const auto &it : in->caps) {
-	if (&it.second == cap)
+      for (const auto &p : in->caps) {
+	if (&p.second == cap)
 	  continue;
-	if (it.second.implemented & ~it.second.issued & new_caps) {
+	if (p.second.implemented & ~p.second.issued & new_caps) {
 	  check = true;
 	  break;
 	}
@@ -5946,8 +5946,8 @@ void Client::flush_mdlog_sync()
 {
   if (mds_requests.empty()) 
     return;
-  for (auto &it : mds_sessions) {
-    flush_mdlog(&it.second);
+  for (auto &p : mds_sessions) {
+    flush_mdlog(&p.second);
   }
 }
 
@@ -14420,15 +14420,15 @@ void Client::finish_reclaim()
 {
   auto it = metadata.find("reclaiming_uuid");
   if (it == metadata.end()) {
-    for (auto &it : mds_sessions)
-      it.second.reclaim_state = MetaSession::RECLAIM_NULL;
+    for (auto &p : mds_sessions)
+      p.second.reclaim_state = MetaSession::RECLAIM_NULL;
     return;
   }
 
-  for (auto &it : mds_sessions) {
-    it.second.reclaim_state = MetaSession::RECLAIM_NULL;
+  for (auto &p : mds_sessions) {
+    p.second.reclaim_state = MetaSession::RECLAIM_NULL;
     auto m = MClientReclaim::create("", MClientReclaim::FLAG_FINISH);
-    it.second.con->send_message2(m);
+    p.second.con->send_message2(m);
   }
 
   metadata["uuid"] = it->second;
