@@ -73,6 +73,9 @@ POOL_METADATA = ('pool_id', 'name')
 
 RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
 
+RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
+                       'ceph_version')
+
 DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device', 'wal_device', 'instance')
 
 NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
@@ -251,6 +254,13 @@ class Module(MgrModule):
             'rgw_metadata',
             'RGW Metadata',
             RGW_METADATA
+        )
+
+        metrics['rbd_mirror_metadata'] = Metric(
+            'untyped',
+            'rbd_mirror_metadata',
+            'RBD Mirror Metadata',
+            RBD_MIRROR_METADATA
         )
 
         metrics['pg_total'] = Metric(
@@ -519,16 +529,24 @@ class Module(MgrModule):
         for pool in osd_map['pools']:
             self.metrics['pool_metadata'].set(1, (pool['pool'], pool['pool_name']))
 
-        # Populate rgw_metadata
+        # Populate other servers metadata
         for key, value in servers.items():
             service_id, service_type = key
-            if service_type != 'rgw':
-                continue
-            hostname, version = value
-            self.metrics['rgw_metadata'].set(
-                1,
-                ('{}.{}'.format(service_type, service_id), hostname, version)
-            )
+            if service_type == 'rgw':
+                hostname, version = value
+                self.metrics['rgw_metadata'].set(
+                    1,
+                    ('{}.{}'.format(service_type, service_id), hostname, version)
+                )
+            elif service_type == 'rbd-mirror':
+                mirror_metadata = self.get_metadata('rbd-mirror', service_id)
+                if mirror_metadata is None:
+                    continue
+                mirror_metadata['ceph_daemon'] = '{}.{}'.format(service_type,
+                                                                service_id)
+                self.metrics['rbd_mirror_metadata'].set(
+                    1, (mirror_metadata.get(k, '') for k in RBD_MIRROR_METADATA)
+                )
 
     def get_num_objects(self):
         pg_sum = self.get('pg_summary')['pg_stats_sum']['stat_sum']
