@@ -643,7 +643,7 @@ get_v4_canon_req_hash(CephContext* cct,
   using sanitize = rgw::crypt_sanitize::log_content;
   ldout(cct, 10) << "canonical request = " << sanitize{canonical_req} << dendl;
   ldout(cct, 10) << "canonical request hash = "
-                 << buf_to_hex(canonical_req_hash).data() << dendl;
+                 << canonical_req_hash << dendl;
 
   return canonical_req_hash;
 }
@@ -660,9 +660,8 @@ get_v4_string_to_sign(CephContext* const cct,
                       const boost::string_view& credential_scope,
                       const sha256_digest_t& canonreq_hash)
 {
-  const auto hexed_cr_hash = buf_to_hex(canonreq_hash);
-  const boost::string_view hexed_cr_hash_str(hexed_cr_hash.data(),
-                                             hexed_cr_hash.size() - 1);
+  const auto hexed_cr_hash = canonreq_hash.to_str();
+  const boost::string_view hexed_cr_hash_str(hexed_cr_hash);
 
   const auto string_to_sign = string_join_reserve("\n",
     algorithm,
@@ -742,10 +741,10 @@ get_v4_signing_key(CephContext* const cct,
   const auto signing_key = calc_hmac_sha256(service_k,
                                             boost::string_view("aws4_request"));
 
-  ldout(cct, 10) << "date_k    = " << buf_to_hex(date_k).data() << dendl;
-  ldout(cct, 10) << "region_k  = " << buf_to_hex(region_k).data() << dendl;
-  ldout(cct, 10) << "service_k = " << buf_to_hex(service_k).data() << dendl;
-  ldout(cct, 10) << "signing_k = " << buf_to_hex(signing_key).data() << dendl;
+  ldout(cct, 10) << "date_k    = " << date_k << dendl;
+  ldout(cct, 10) << "region_k  = " << region_k << dendl;
+  ldout(cct, 10) << "service_k = " << service_k << dendl;
+  ldout(cct, 10) << "signing_k = " << signing_key << dendl;
 
   return signing_key;
 }
@@ -774,8 +773,8 @@ get_v4_signature(const boost::string_view& credential_scope,
    * the non-const data() variant like C++17's std::string. */
   using srv_signature_t = AWSEngine::VersionAbstractor::server_signature_t;
   srv_signature_t signature(srv_signature_t::initialized_later(),
-                            digest.size() * 2);
-  buf_to_hex(digest.data(), digest.size(), signature.begin());
+                            digest.SIZE * 2);
+  buf_to_hex(digest.v, digest.SIZE, signature.begin());
 
   ldout(cct, 10) << "generated signature = " << signature << dendl;
 
@@ -797,8 +796,8 @@ get_v2_signature(CephContext* const cct,
   char buf[64];
   const int ret = ceph_armor(std::begin(buf),
                              std::begin(buf) + 64,
-                             std::begin(digest),
-                             std::begin(digest) + digest.size());
+                             reinterpret_cast<const char *>(digest.v),
+                             reinterpret_cast<const char *>(digest.v + digest.SIZE));
   if (ret < 0) {
     ldout(cct, 10) << "ceph_armor failed" << dendl;
     throw ret;
@@ -905,10 +904,9 @@ AWSv4ComplMulti::calc_chunk_signature(const std::string& payload_hash) const
                  << dendl;
 
   /* new chunk signature */
-  const auto sighex = buf_to_hex(calc_hmac_sha256(signing_key,
-                                                  string_to_sign));
+  const auto sig = calc_hmac_sha256(signing_key, string_to_sign);
   /* FIXME(rzarzynski): std::string here is really unnecessary. */
-  return std::string(sighex.data(), sighex.size() - 1);
+  return sig.to_str();
 }
 
 
