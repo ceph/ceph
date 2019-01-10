@@ -244,11 +244,10 @@ bool entity_addrvec_t::parse(const char *s, const char **end)
     }
     v.push_back(a);
     s = *end;
-    while (*s == ',' ||
-	   *s == ' ' ||
-	   *s == ';') {
-      ++s;
+    if (*s != ',') {
+      break;
     }
+    ++s;
   }
   return !v.empty();
 }
