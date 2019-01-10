@@ -1312,12 +1312,12 @@ static void get_contype_from_attrs(map<string, bufferlist>& attrs,
 {
   map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_CONTENT_TYPE);
   if (iter != attrs.end()) {
-    content_type = iter->second.c_str();
+    content_type = rgw_bl_str(iter->second);
   }
 }
 
 static void dump_object_metadata(struct req_state * const s,
-				 map<string, bufferlist> attrs)
+				 const map<string, bufferlist>& attrs)
 {
   map<string, string> response_attrs;
 
@@ -1326,7 +1326,7 @@ static void dump_object_metadata(struct req_state * const s,
     const auto aiter = rgw_to_http_attrs.find(name);
 
     if (aiter != std::end(rgw_to_http_attrs)) {
-      response_attrs[aiter->second] = kv.second.c_str();
+      response_attrs[aiter->second] = rgw_bl_str(kv.second);
     } else if (strcmp(name, RGW_ATTR_SLO_UINDICATOR) == 0) {
       // this attr has an extra length prefix from encode() in prior versions
       dump_header(s, "X-Object-Meta-Static-Large-Object", "True");

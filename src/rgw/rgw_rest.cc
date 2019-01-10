@@ -335,31 +335,11 @@ void dump_header(struct req_state* const s,
   }
 }
 
-static inline boost::string_ref get_sanitized_hdrval(ceph::buffer::list& raw)
-{
-  /* std::string and thus boost::string_ref ARE OBLIGED to carry multiple
-   * 0x00 and count them to the length of a string. We need to take that
-   * into consideration and sanitize the size of a ceph::buffer::list used
-   * to store metadata values (x-amz-meta-*, X-Container-Meta-*, etags).
-   * Otherwise we might send 0x00 to clients. */
-  const char* const data = raw.c_str();
-  size_t len = raw.length();
-
-  if (len && data[len - 1] == '\0') {
-    /* That's the case - the null byte has been included at the last position
-     * of the bufferlist. We need to restore the proper string length we'll
-     * pass to string_ref. */
-    len--;
-  }
-
-  return boost::string_ref(data, len);
-}
-
 void dump_header(struct req_state* const s,
                  const boost::string_ref& name,
                  ceph::buffer::list& bl)
 {
-  return dump_header(s, name, get_sanitized_hdrval(bl));
+  return dump_header(s, name, rgw_sanitized_hdrval(bl));
 }
 
 void dump_header(struct req_state* const s,
