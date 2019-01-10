@@ -2667,4 +2667,15 @@ static inline ssize_t rgw_unescape_str(const string& s, ssize_t ofs,
   return string::npos;
 }
 
+static inline string rgw_bl_str(ceph::buffer::list& raw)
+{
+  size_t len = raw.length();
+  string s(raw.c_str(), len);
+  while (len && !s[len - 1]) {
+    --len;
+    s.resize(len);
+  }
+  return s;
+}
+
 #endif

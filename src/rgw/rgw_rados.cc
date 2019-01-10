@@ -3622,9 +3622,9 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     op.setxattr(name.c_str(), bl);
 
     if (name.compare(RGW_ATTR_ETAG) == 0) {
-      etag = bl.to_str();
+      etag = rgw_bl_str(bl);
     } else if (name.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
-      content_type = bl.to_str();
+      content_type = rgw_bl_str(bl);
     } else if (name.compare(RGW_ATTR_ACL) == 0) {
       acl_bl = bl;
     }
@@ -6206,12 +6206,12 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& ob
       bufferlist acl_bl = attrs[RGW_ATTR_ACL];
       bufferlist etag_bl = attrs[RGW_ATTR_ETAG];
       bufferlist content_type_bl = attrs[RGW_ATTR_CONTENT_TYPE];
-      string etag(etag_bl.c_str(), etag_bl.length());
-      string content_type(content_type_bl.c_str(), content_type_bl.length());
+      string etag = rgw_bl_str(etag_bl);
+      string content_type = rgw_bl_str(content_type_bl);
       string storage_class;
       auto iter = attrs.find(RGW_ATTR_STORAGE_CLASS);
       if (iter != attrs.end()) {
-        storage_class = iter->second.to_str();
+        storage_class = rgw_bl_str(iter->second);
       }
       uint64_t epoch = ref.ioctx.get_last_version();
       int64_t poolid = ref.ioctx.get_id();
@@ -9303,11 +9303,11 @@ int RGWRados::check_disk_state(librados::IoCtx io_ctx,
 
   map<string, bufferlist>::iterator iter = astate->attrset.find(RGW_ATTR_ETAG);
   if (iter != astate->attrset.end()) {
-    etag = iter->second.to_str();
+    etag = rgw_bl_str(iter->second);
   }
   iter = astate->attrset.find(RGW_ATTR_CONTENT_TYPE);
   if (iter != astate->attrset.end()) {
-    content_type = iter->second.to_str();
+    content_type = rgw_bl_str(iter->second);
   }
   iter = astate->attrset.find(RGW_ATTR_ACL);
   if (iter != astate->attrset.end()) {
