@@ -4,6 +4,9 @@
 #include "rgw/rgw_amqp.h"
 #include "amqp_mock.h"
 #include <gtest/gtest.h>
+#include <chrono>
+#include <thread>
+#include <atomic>
 
 using namespace rgw;
 
@@ -135,8 +138,11 @@ TEST(AMQP_Connection, ExchangeMismatch)
   }
 }
 
+std::atomic<bool> callback_invoked = false;
+
 void my_callback_expect_ack(int rc) {
   EXPECT_EQ(0, rc);
+  callback_invoked = true;
 }
 
 TEST(AMQP_PublishAndWait, ReceiveAck)
@@ -146,9 +152,12 @@ TEST(AMQP_PublishAndWait, ReceiveAck)
     const amqp::connection_t& conn = amqp::connect("amqp://localhost", "ex1");
     auto rc = publish_with_confirm(conn, "topic", "message", my_callback_expect_ack);
     EXPECT_EQ(rc, 0);
+    std::this_thread::sleep_for(std::chrono::seconds(1));
+    EXPECT_TRUE(callback_invoked);
   } catch (const amqp::connection_error& e) {
     // make sure exception dont happen
     EXPECT_TRUE(false);
   }
 }
+
 

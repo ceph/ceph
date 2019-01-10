@@ -6,7 +6,8 @@
 #include <amqp_tcp_socket.h>
 #include <string>
 #include <stdarg.h>
-#include <iostream>
+#include <unistd.h>
+#include <boost/lockfree/queue.hpp>
 
 namespace amqp_mock {
 int VALID_PORT(5672);
@@ -27,6 +28,10 @@ struct amqp_connection_state_t_ {
   amqp_confirm_select_ok_t* confirm;
   amqp_basic_consume_ok_t* consume;
   bool login_called;
+  boost::lockfree::queue<amqp_basic_ack_t> ack_list;
+  std::atomic<uint64_t> delivery_tag;
+  amqp_rpc_reply_t reply;
+  amqp_basic_ack_t ack;
   // ctor
   amqp_connection_state_t_() : 
     socket(nullptr), 
@@ -36,7 +41,10 @@ struct amqp_connection_state_t_ {
     queue(nullptr),
     confirm(nullptr),
     consume(nullptr),
-    login_called(false) {
+    login_called(false),
+    ack_list(1024),
+    delivery_tag(0) {
+      reply.reply_type = AMQP_RESPONSE_NONE;
     }
 };
 
@@ -90,16 +98,15 @@ amqp_rpc_reply_t amqp_login(
     int frame_max, 
     int heartbeat, 
     amqp_sasl_method_enum sasl_method, ...) {
-  amqp_rpc_reply_t reply;
-  reply.reply_type = AMQP_RESPONSE_SERVER_EXCEPTION;
-  reply.library_error = 0;
-  reply.reply_type = AMQP_RESPONSE_NONE;
-  reply.reply.decoded = nullptr;
+  state->reply.reply_type = AMQP_RESPONSE_SERVER_EXCEPTION;
+  state->reply.library_error = 0;
+  state->reply.reply.decoded = nullptr;
+  state->reply.reply.id = 0;
   if (std::string(vhost) != VALID_VHOST) {
-    return reply;
+    return state->reply;
   }
   if (sasl_method != AMQP_SASL_METHOD_PLAIN) {
-      return reply;
+      return state->reply;
   }
   va_list args;
   va_start(args, sasl_method);
@@ -107,17 +114,18 @@ amqp_rpc_reply_t amqp_login(
   char* password = va_arg(args, char*);
   va_end(args);
   if (std::string(user) != VALID_USER) {
-    return reply;
+    return state->reply;
   }
   if (std::string(password) != VALID_PASSWORD) {
-    return reply;
+    return state->reply;
   }
-  reply.reply_type = AMQP_RESPONSE_NORMAL;
+  state->reply.reply_type = AMQP_RESPONSE_NORMAL;
   state->login_called = true;
-  return reply;
+  return state->reply;
 }
 
 amqp_channel_open_ok_t* amqp_channel_open(amqp_connection_state_t state, amqp_channel_t channel) {
+  state->reply.reply_type = AMQP_RESPONSE_NORMAL;
   if (state->channel1 == nullptr) {
     state->channel1 = new amqp_channel_open_ok_t;
     return state->channel1;
@@ -138,13 +146,12 @@ amqp_exchange_declare_ok_t* amqp_exchange_declare(
     amqp_boolean_t internal,
     amqp_table_t arguments) {
   state->exchange = new amqp_exchange_declare_ok_t;
+  state->reply.reply_type = AMQP_RESPONSE_NORMAL;
   return state->exchange;
 }
 
 amqp_rpc_reply_t amqp_get_rpc_reply(amqp_connection_state_t state) {
-  amqp_rpc_reply_t reply;
-  reply.reply_type = AMQP_RESPONSE_NORMAL;
-  return reply;
+  return state->reply;
 }
 
 int amqp_basic_publish(
@@ -159,7 +166,11 @@ int amqp_basic_publish(
   // make sure that all calls happened before publish
   if (state->socket && state->socket->open_called &&
       state->login_called && state->channel1 && state->channel2 && state->exchange) {
-    return 0;
+    state->reply.reply_type = AMQP_RESPONSE_NORMAL;
+    if (properties) {
+      state->ack_list.push(amqp_basic_ack_t{state->delivery_tag++, 0});
+    }
+    return AMQP_STATUS_OK;
   }
   return -1;
 }
@@ -184,19 +195,34 @@ amqp_queue_declare_ok_t* amqp_queue_declare(
   state->queue = new amqp_queue_declare_ok_t;
   static const char* str = "tmp-queue";
   state->queue->queue = amqp_cstring_bytes(str);
+  state->reply.reply_type = AMQP_RESPONSE_NORMAL;
   return state->queue;
 }
 
 amqp_confirm_select_ok_t* amqp_confirm_select(amqp_connection_state_t state, amqp_channel_t channel) {
   state->confirm = new amqp_confirm_select_ok_t;
+  state->reply.reply_type = AMQP_RESPONSE_NORMAL;
   return state->confirm;
 }
 
-int amqp_simple_wait_frame(amqp_connection_state_t state, amqp_frame_t *decoded_frame) {
+int amqp_simple_wait_frame_noblock(amqp_connection_state_t state, amqp_frame_t *decoded_frame, struct timeval* tv) {
   if (state->socket && state->socket->open_called &&
       state->login_called && state->channel1 && state->channel2 && state->exchange &&
       state->queue && state->consume && state->confirm) {
-    return 0;
+    // "wait" for queue
+    usleep(tv->tv_sec*1000000+tv->tv_usec);
+    // read from queue
+    if (state->ack_list.pop(state->ack)) {
+      decoded_frame->frame_type = AMQP_FRAME_METHOD;
+      decoded_frame->payload.method.id = AMQP_BASIC_ACK_METHOD;
+      decoded_frame->payload.method.decoded = &state->ack;
+      state->reply.reply_type = AMQP_RESPONSE_NORMAL;
+      return AMQP_STATUS_OK;
+    } else {
+      // queue is empty
+      return AMQP_STATUS_TIMEOUT;
+    }
+    
   }
   return -1;
 }
@@ -206,6 +232,7 @@ amqp_basic_consume_ok_t* amqp_basic_consume(
     amqp_bytes_t consumer_tag, amqp_boolean_t no_local, amqp_boolean_t no_ack,
     amqp_boolean_t exclusive, amqp_table_t arguments) {
   state->consume = new amqp_basic_consume_ok_t;
+  state->reply.reply_type = AMQP_RESPONSE_NORMAL;
   return state->consume;
 }
 
