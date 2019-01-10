@@ -107,7 +107,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
       throw new Error('Wrong data format');
     }
     temp = temp.map((v) => this._convertValue(v)).filter((o) => o); // Filters out undefined
-    return this.renderObjects ? this._insertFlattenObjects(temp) : temp;
+    return _.sortBy(this.renderObjects ? this.insertFlattenObjects(temp) : temp, 'key');
   }
 
   _makePairsFromArray(data: any[]): Item[] {
@@ -142,34 +142,33 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
     }));
   }
 
-  _insertFlattenObjects(temp: any[]) {
-    const itemsToRemoveIndexes = [];
-    const itemsToAdd = [];
-    temp.forEach((v, i) => {
-      if (_.isObject(v.value)) {
-        if (_.isEmpty(v.value)) {
-          temp[i]['value'] = '';
-        } else {
-          itemsToRemoveIndexes.push(i);
-          this._makePairs(v.value).forEach((item) => {
-            if (this.appendParentKey) {
-              item.key = v.key + ' ' + item.key;
-            }
-            itemsToAdd.push(item);
-            i++;
-          });
+  private insertFlattenObjects(temp: Item[]): any[] {
+    return _.flattenDeep(
+      temp.map((item) => {
+        const value = item.value;
+        const isObject = _.isObject(value);
+        if (!isObject || _.isEmpty(value)) {
+          if (isObject) {
+            item.value = '';
+          }
+          return item;
         }
+        return this.splitItemIntoItems(item);
+      })
+    );
+  }
+
+  /**
+   * Split item into items will call _makePairs inside _makePairs (recursion), in oder to split
+   * the object item up into items as planned.
+   */
+  private splitItemIntoItems(v: { key: string; value: object }): Item[] {
+    return this._makePairs(v.value).map((item) => {
+      if (this.appendParentKey) {
+        item.key = v.key + ' ' + item.key;
       }
+      return item;
     });
-
-    _.remove(temp, (item, itemIndex) => {
-      return _.includes(itemsToRemoveIndexes, itemIndex);
-    });
-    itemsToAdd.forEach((item) => {
-      temp.push(item);
-    });
-
-    return temp;
   }
 
   _convertValue(v: Item): Item {
