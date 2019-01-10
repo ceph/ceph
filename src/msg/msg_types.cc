@@ -67,6 +67,9 @@ bool entity_addr_t::parse(const char *s, const char **end, int default_type)
   *this = entity_addr_t();
 
   const char *start = s;
+  if (end) {
+    *end = s;
+  }
 
   int newtype;
   if (strncmp("v1:", s, 3) == 0) {
@@ -229,6 +232,8 @@ bool entity_addrvec_t::parse(const char *s, const char **end)
   const char *static_end;
   if (!end) {
     end = &static_end;
+  } else {
+    *end = s;
   }
   v.clear();
   while (*s) {
