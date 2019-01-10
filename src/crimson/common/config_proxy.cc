@@ -15,6 +15,13 @@ ConfigProxy::ConfigProxy(const EntityName& name, std::string_view cluster)
   values.get()->cluster = cluster;
   // and the only copy of md_config_impl<> is allocated on CPU#0
   local_config.reset(new md_config_t{*values, obs_mgr, true});
+  if (name.is_mds()) {
+    local_config->set_val_default(*values, obs_mgr,
+				  "keyring", "$mds_data/keyring");
+  } else if (name.is_osd()) {
+    local_config->set_val_default(*values, obs_mgr,
+				  "keyring", "$osd_data/keyring");
+  }
 }
 
 seastar::future<> ConfigProxy::start()
