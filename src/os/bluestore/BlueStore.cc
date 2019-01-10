@@ -3538,9 +3538,9 @@ void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
   if (store->cache_autotune) {
     cache_size = autotune_cache_size;
 
-    kv_alloc = store->db->get_cache_bytes();
-    meta_alloc = meta_cache.get_cache_bytes();
-    data_alloc = data_cache.get_cache_bytes();
+    kv_alloc = store->db->get_committed_size();
+    meta_alloc = meta_cache.get_committed_size();
+    data_alloc = data_cache.get_committed_size();
   }
   
   if (interval_stats) {
@@ -3632,6 +3632,14 @@ void BlueStore::MempoolThread::_balance_cache(
     const std::list<PriorityCache::PriCache *>& caches)
 {
   int64_t mem_avail = autotune_cache_size;
+  /* Each cache is going to get at least 1 chunk's worth of memory from get_chunk
+   * so shrink the available memory here to compensate.  Don't shrink the amount of
+   * memory below 0 however.
+   */
+  mem_avail -= PriorityCache::get_chunk(1, autotune_cache_size) * caches.size();
+  if (mem_avail < 0) {
+    mem_avail = 0;
+  }
 
   // Assign memory for each priority level
   for (int i = 0; i < PriorityCache::Priority::LAST + 1; i++) {
@@ -3654,7 +3662,7 @@ void BlueStore::MempoolThread::_balance_cache(
 
   // Finally commit the new cache sizes
   for (auto it = caches.begin(); it != caches.end(); it++) {
-    (*it)->commit_cache_size();
+    (*it)->commit_cache_size(autotune_cache_size);
   }
 }
 
@@ -3678,7 +3686,7 @@ void BlueStore::MempoolThread::_balance_cache_pri(int64_t *mem_avail,
     uint64_t total_assigned = 0;
 
     for (auto it = tmp_caches.begin(); it != tmp_caches.end(); ) {
-      int64_t cache_wants = (*it)->request_cache_bytes(pri, store->cache_autotune_chunk_size);
+      int64_t cache_wants = (*it)->request_cache_bytes(pri, autotune_cache_size);
 
       // Usually the ratio should be set to the fraction of the current caches'
       // assigned ratio compared to the total ratio of all caches that still
@@ -4103,8 +4111,6 @@ int BlueStore::_set_cache_sizes()
 {
   ceph_assert(bdev);
   cache_autotune = cct->_conf.get_val<bool>("bluestore_cache_autotune");
-  cache_autotune_chunk_size = 
-      cct->_conf.get_val<Option::size_t>("bluestore_cache_autotune_chunk_size");
   cache_autotune_interval =
       cct->_conf.get_val<double>("bluestore_cache_autotune_interval");
   osd_memory_target = cct->_conf.get_val<uint64_t>("osd_memory_target");
