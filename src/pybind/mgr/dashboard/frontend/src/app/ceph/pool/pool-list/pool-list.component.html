@@ -18,7 +18,7 @@
         <tab i18n-heading
              heading="Details">
           <cd-table-key-value [renderObjects]="true"
-                              [data]="selection.first()"
+                              [data]="getPoolDetails(selection.first())"
                               [autoReload]="false">
           </cd-table-key-value>
         </tab>
@@ -33,6 +33,14 @@
         </tab>
       </tabset>
     </cd-table>
+
+    <ng-template #poolUsageTpl
+                 let-row="row">
+      <cd-usage-bar *ngIf="row.stats?.max_avail?.latest"
+                    [totalBytes]="row.stats.bytes_used.latest + row.stats.max_avail.latest"
+                    [usedBytes]="row.stats.bytes_used.latest">
+      </cd-usage-bar>
+    </ng-template>
   </tab>
 
   <tab i18n-heading

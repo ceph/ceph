@@ -139,18 +139,32 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
   }
 
   _insertFlattenObjects(temp: any[]) {
+    const itemsToRemoveIndexes = [];
+    const itemsToAdd = [];
     temp.forEach((v, i) => {
       if (_.isObject(v.value)) {
-        temp.splice(i, 1);
-        this._makePairs(v.value).forEach((item) => {
-          if (this.appendParentKey) {
-            item.key = v.key + ' ' + item.key;
-          }
-          temp.splice(i, 0, item);
-          i++;
-        });
+        if (_.isEmpty(v.value)) {
+          temp[i]['value'] = '';
+        } else {
+          itemsToRemoveIndexes.push(i);
+          this._makePairs(v.value).forEach((item) => {
+            if (this.appendParentKey) {
+              item.key = v.key + ' ' + item.key;
+            }
+            itemsToAdd.push(item);
+            i++;
+          });
+        }
       }
     });
+
+    _.remove(temp, (item, itemIndex) => {
+      return _.includes(itemsToRemoveIndexes, itemIndex);
+    });
+    itemsToAdd.forEach((item) => {
+      temp.push(item);
+    });
+
     return temp;
   }
 
