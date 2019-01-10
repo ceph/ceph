@@ -197,8 +197,26 @@ describe('PoolListComponent', () => {
 
   describe('transformPoolsData', () => {
     it('transforms pools data correctly', () => {
-      const pools = [{ stats: { rate: 0 }, pg_status: { 'active+clean': 8, down: 2 } }];
-      const expected = [{ pg_status: '8 active+clean, 2 down' }];
+      const pools = [
+        {
+          stats: { rd_bytes: { latest: 6, rate: 4, series: [[0, 2], [1, 6]] } },
+          pg_status: { 'active+clean': 8, down: 2 }
+        }
+      ];
+      const expected = [
+        {
+          cdIsBinary: true,
+          pg_status: '8 active+clean, 2 down',
+          stats: {
+            bytes_used: { latest: 0, rate: 0, series: [] },
+            max_avail: { latest: 0, rate: 0, series: [] },
+            rd: { latest: 0, rate: 0, series: [] },
+            rd_bytes: { latest: 6, rate: 4, series: [2, 6] },
+            wr: { latest: 0, rate: 0, series: [] },
+            wr_bytes: { latest: 0, rate: 0, series: [] }
+          }
+        }
+      ];
 
       expect(component.transformPoolsData(pools)).toEqual(expected);
     });
@@ -212,7 +230,7 @@ describe('PoolListComponent', () => {
   });
 
   describe('transformPgStatus', () => {
-    it('returns ststus groups correctly', () => {
+    it('returns status groups correctly', () => {
       const pgStatus = { 'active+clean': 8 };
       const expected = '8 active+clean';
 
@@ -238,6 +256,15 @@ describe('PoolListComponent', () => {
       const expected = '';
 
       expect(component.transformPgStatus(pgStatus)).toEqual(expected);
+    });
+  });
+
+  describe('getPoolDetails', () => {
+    it('returns pool details corretly', () => {
+      const pool = { prop1: 1, cdIsBinary: true, prop2: 2, cdExecuting: true, prop3: 3 };
+      const expected = { prop1: 1, prop2: 2, prop3: 3 };
+
+      expect(component.getPoolDetails(pool)).toEqual(expected);
     });
   });
 });
