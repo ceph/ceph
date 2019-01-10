@@ -868,7 +868,7 @@ TEST(cls_rgw, usage_basic)
   ret = cls_rgw_usage_log_read(ioctx, oid, "", bucket1, start_epoch, end_epoch,
                               max_entries, read_iter, usage2, &truncated);
   ASSERT_EQ(0, ret);
-  ASSERT_EQ(100, usage2.size());
+  ASSERT_EQ(100u, usage2.size());
 
   // delete and read to assert that bucket option is valid for usage trim
   ASSERT_EQ(0, cls_rgw_usage_log_trim(ioctx, oid, "", bucket1, start_epoch, end_epoch));
@@ -876,7 +876,7 @@ TEST(cls_rgw, usage_basic)
   ret = cls_rgw_usage_log_read(ioctx, oid, "", bucket1, start_epoch, end_epoch,
                                max_entries, read_iter, usage2, &truncated);
   ASSERT_EQ(0, ret);
-  ASSERT_EQ(0, usage2.size());
+  ASSERT_EQ(0u, usage2.size());
   ASSERT_EQ(0, cls_rgw_usage_log_trim(ioctx, oid, "", bucket2, start_epoch, end_epoch));
 }
 

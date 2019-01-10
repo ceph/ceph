@@ -15,7 +15,7 @@
 #define dout_prefix _conn_prefix(_dout)
 ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
   return *_dout << "--2- " << messenger->get_myaddrs() << " >> "
-                << connection->peer_addrs << " conn("
+                << *connection->peer_addrs << " conn("
                 << connection << (connection->msgr2 ? " msgr2" : " legacy")
                 << " :" << connection->port << " s=" << get_state_name(state)
                 << " pgs=" << peer_global_seq << " cs=" << connect_seq
@@ -1376,10 +1376,10 @@ CtPtr ProtocolV2::handle_server_addrvec_and_identify(char *buffer, int r) {
   // may be trying to connect to a v2 addr, and the remote may
   // identify themselves by several other addrs as well.  This happens
   // with mon discovery.
-  if (!connection->peer_addrs.contains(peer_addr)) {
+  if (!connection->peer_addrs->contains(peer_addr)) {
     ldout(cct, 10) << __func__ << " server claims to be " << peer_addr
 		   << " (of " << paddrs << "), but we are trying to reach "
-                   << connection->peer_addrs << dendl;
+                   << *connection->peer_addrs << dendl;
     return _fault();
   }
 
@@ -2007,9 +2007,9 @@ CtPtr ProtocolV2::handle_connect_message_2() {
   ldout(cct, 10) << __func__ << " accept setting up session_security." << dendl;
 
   // existing?
-  AsyncConnectionRef existing = messenger->lookup_conn(connection->peer_addrs);
+  AsyncConnectionRef existing = messenger->lookup_conn(*connection->peer_addrs);
   ldout(cct, 10) << __func__ << " existing " << existing
-		 << " on " << connection->peer_addrs << dendl;
+		 << " on " << *connection->peer_addrs << dendl;
   connection->inject_delay();
 
   connection->lock.lock();
@@ -2137,7 +2137,7 @@ CtPtr ProtocolV2::handle_connect_message_2() {
       }
 
       // connection race?
-      if (connection->peer_addrs.legacy_addr() < messenger->get_myaddr() ||
+      if (connection->peer_addrs->legacy_addr() < messenger->get_myaddr() ||
           existing->policy.server) {
         // incoming wins
         ldout(cct, 10) << __func__ << " accept connection race, existing "
@@ -2151,7 +2151,7 @@ CtPtr ProtocolV2::handle_connect_message_2() {
             << __func__ << " accept connection race, existing " << existing
             << ".cseq " << exproto->connect_seq
             << " == " << connect_msg.connect_seq << ", sending WAIT" << dendl;
-        ceph_assert(connection->peer_addrs.legacy_addr() >
+        ceph_assert(connection->peer_addrs->legacy_addr() >
                     messenger->get_myaddr());
         existing->lock.unlock();
         return send_connect_message_reply(CEPH_MSGR_TAG_WAIT, reply,
@@ -2421,7 +2421,7 @@ CtPtr ProtocolV2::open(ceph_msg_connect_reply &reply,
   replacing = false;
   if (r < 0) {
     ldout(cct, 1) << __func__ << " existing race replacing process for addr = "
-                  << connection->peer_addrs.legacy_addr()
+                  << connection->peer_addrs->legacy_addr()
                   << " just fail later one(this)" << dendl;
     ldout(cct, 10) << "accept fault after register" << dendl;
     connection->inject_delay();

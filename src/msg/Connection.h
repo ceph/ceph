@@ -28,6 +28,7 @@
 #include "include/ceph_assert.h" // Because intusive_ptr clobbers our assert...
 #include "include/buffer.h"
 #include "include/types.h"
+#include "common/item_history.h"
 #include "msg/MessageRef.h"
 
 
@@ -42,7 +43,7 @@ struct Connection : public RefCountedObject {
   Messenger *msgr;
   RefCountedPtr priv;
   int peer_type;
-  entity_addrvec_t peer_addrs;
+  safe_item_history<entity_addrvec_t> peer_addrs;
   utime_t last_keepalive, last_keepalive_ack;
 private:
   uint64_t features;
@@ -177,10 +178,10 @@ public:
   virtual entity_addr_t get_peer_socket_addr() const = 0;
 
   entity_addr_t get_peer_addr() const {
-    return peer_addrs.front();
+    return peer_addrs->front();
   }
   const entity_addrvec_t& get_peer_addrs() const {
-    return peer_addrs;
+    return *peer_addrs;
   }
   void set_peer_addr(const entity_addr_t& a) {
     peer_addrs = entity_addrvec_t(a);
