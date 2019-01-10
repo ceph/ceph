@@ -271,4 +271,59 @@ describe('TableKeyValueComponent', () => {
       expect(called).toBeTruthy();
     });
   });
+
+  describe('hide empty items', () => {
+    beforeEach(() => {
+      component.data = {
+        string: '',
+        array: [],
+        object: {},
+        emptyObject: {
+          string: '',
+          array: [],
+          object: {}
+        },
+        someNumber: 0,
+        someDifferentNumber: 1,
+        someArray: [0, 1],
+        someString: '0',
+        someObject: {
+          empty: {},
+          something: 0.1
+        }
+      };
+      component.renderObjects = true;
+    });
+
+    it('should show all items as default', () => {
+      expect(component.hideEmpty).toBe(false);
+      component.ngOnInit();
+      expect(component.tableData).toEqual([
+        { key: 'array', value: '' },
+        { key: 'emptyObject array', value: '' },
+        { key: 'emptyObject object', value: '' },
+        { key: 'emptyObject string', value: '' },
+        { key: 'object', value: '' },
+        { key: 'someArray', value: '0, 1' },
+        { key: 'someDifferentNumber', value: 1 },
+        { key: 'someNumber', value: 0 },
+        { key: 'someObject empty', value: '' },
+        { key: 'someObject something', value: 0.1 },
+        { key: 'someString', value: '0' },
+        { key: 'string', value: '' }
+      ]);
+    });
+
+    it('should hide all empty items', () => {
+      component.hideEmpty = true;
+      component.ngOnInit();
+      expect(component.tableData).toEqual([
+        { key: 'someArray', value: '0, 1' },
+        { key: 'someDifferentNumber', value: 1 },
+        { key: 'someNumber', value: 0 },
+        { key: 'someObject something', value: 0.1 },
+        { key: 'someString', value: '0' }
+      ]);
+    });
+  });
 });
