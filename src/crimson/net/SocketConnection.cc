@@ -230,10 +230,11 @@ bool SocketConnection::update_rx_seq(seq_num_t seq)
 seastar::future<> SocketConnection::write_message(MessageRef msg)
 {
   msg->set_seq(++out_seq);
+  auto& header = msg->get_header();
+  header.src = messenger.get_myname();
   msg->encode(features, messenger.get_crc_flags());
   bufferlist bl;
   bl.append(CEPH_MSGR_TAG_MSG);
-  auto& header = msg->get_header();
   bl.append((const char*)&header, sizeof(header));
   bl.append(msg->get_payload());
   bl.append(msg->get_middle());
