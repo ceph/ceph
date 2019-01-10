@@ -12,6 +12,10 @@
 #include <string>
 #include <vector>
 #include <thread>
+#include <atomic>
+#include <mutex>
+// TODO in case of single threaded writer contex use spsc_queue
+#include <boost/lockfree/queue.hpp>
 
 namespace rgw::amqp {
 
@@ -288,7 +292,7 @@ connection_t create_connection(const amqp_connection_info& info, const std::stri
   }
   {
     // create queue for confirmations
-    const auto ok  = amqp_queue_declare(conn, 
+    const auto queue_ok  = amqp_queue_declare(conn, 
         CHANNEL_ID,         // use the regular channel for this call
         amqp_empty_bytes,   // let broker allocate queue name
         0,                  // not passive - create the queue 
@@ -297,54 +301,163 @@ connection_t create_connection(const amqp_connection_info& info, const std::stri
         1,                  // auto-delete
         amqp_empty_table    // not args TODO add args from conf: TTL, max length etc.
         );
-    if (!ok) {
+    if (!queue_ok) {
       throw(connection_error("failed to create queue for incomming confimations (client)"));
     }
-    const auto reply = amqp_get_rpc_reply(conn);
+    auto reply = amqp_get_rpc_reply(conn);
     if (reply.reply_type != AMQP_RESPONSE_NORMAL) {
       throw(connection_error("failed to create queue for incomming confimations (broker):" + to_string(reply)));
     }
 
+    // define consumption for connection
+    const auto consume_ok = amqp_basic_consume(conn, 
+        CONFIRMING_CHANNEL_ID, 
+        queue_ok->queue,
+        amqp_empty_bytes, // broker will generate consumer tag
+        1,                // messages sent from client are never routed back
+        1,                // client does not ack thr acks
+        1,                // exclusive access to queue
+        amqp_empty_table  // no parameters
+        );
+
+    if (!consume_ok) {
+      throw(connection_error("failed to define message consumption (client)"));
+    }
+    reply = amqp_get_rpc_reply(conn);
+    if (reply.reply_type != AMQP_RESPONSE_NORMAL) {
+      throw(connection_error("failed to define message consumption (broker):" + to_string(reply)));
+    }
+    //TODO broker generated consumer_tag could be used to cancel sending of n/acks from broker - probably not needed
+
     guard.reset();
-    return connection_t(conn, exchange, ok->queue);
+    return connection_t(conn, exchange, queue_ok->queue);
   }
 }
 
+/// struct used for holding mesages in the message queue
+struct message_wrapper_t {
+  message_wrapper_t(const connection_t& _conn,
+      const std::string& _topic,
+      const std::string& _message,
+      reply_callback_t _cb) : conn(_conn), topic(_topic), message(_message), cb(_cb)
+  {}
+  const connection_t& conn; 
+  std::string topic;
+  std::string message;
+  reply_callback_t cb;
+};
+
 typedef std::unordered_map<ConnectionID, connection_t, ConnectionID::hasher> ConnectionList;
 typedef std::unordered_map<uint64_t, reply_callback_t> CallbackList;
+typedef boost::lockfree::queue<message_wrapper_t*> MessageQueue;
 
 // Thread Safety: libamqp is not thread-safe within the connection object
 // so, this should not be a separate thread, has to run in the same thread
 // of the callers of connect() and publish(). This would require:
-// (1) non-blocking wait with timeout
 // (2) exponential backoff - skipping idle connections
-class Manager : public std::thread {
+class Manager {
 private:
+  const size_t max_connections;
+  size_t connection_number;
+  std::atomic<bool> stopped;
+  std::atomic<uint64_t> delivery_tag;
+  struct timeval read_timeout;
   ConnectionList connections;
   CallbackList callbacks;
-  bool stopped;
-  const unsigned max_connections;
-  unsigned connection_number;
-  uint64_t delivery_tag;
+  MessageQueue messages;
+  std::mutex connections_lock;
+  std::thread runner;
 
-  void run() {
-    // define consumption for all connection
-    for (const auto& conn : connections) {
-      amqp_basic_consume(conn.second.state, 
-          CONFIRMING_CHANNEL_ID, 
-          conn.second.reply_to_queue, 
-          amqp_empty_bytes, 
-          0,
-          1,
-          0,
-          amqp_empty_table);
-      // TODO: error handling here should involve retries
+  int publish_internal(const message_wrapper_t& message) {
+    ceph_assert(message.conn.state);
+
+    if (message.cb == nullptr) {
+      return amqp_basic_publish(message.conn.state,
+        CHANNEL_ID,
+        amqp_cstring_bytes(message.conn.exchange.c_str()),
+        amqp_cstring_bytes(message.topic.c_str()),
+        1, // mandatory, TODO: take from conf
+        0, // not immediate
+        nullptr,
+        amqp_cstring_bytes(message.message.c_str()));
     }
+
+    amqp_basic_properties_t props;
+    props._flags = 
+      AMQP_BASIC_DELIVERY_MODE_FLAG | 
+      AMQP_BASIC_REPLY_TO_FLAG;
+    props.delivery_mode = 2; // persistent delivery TODO take from conf
+    props.reply_to = message.conn.reply_to_queue;
+
+    const auto rc = amqp_basic_publish(message.conn.state,
+      CONFIRMING_CHANNEL_ID,
+      amqp_cstring_bytes(message.conn.exchange.c_str()),
+      amqp_cstring_bytes(message.topic.c_str()),
+      1, // mandatory, TODO: take from conf
+      0, // not immediate
+      &props,
+      amqp_cstring_bytes(message.message.c_str()));
+
+    if (rc == AMQP_STATUS_OK) {
+      if (callbacks.insert(std::make_pair(delivery_tag++, message.cb)).second == false) {
+        // callback with that message id is already pending confirmation
+        return INTERNAL_AMQP_STATUS_PENDING_CONFIRMATION;
+      }
+    }
+    return rc;
+  }
+
+  // publish_internal functor
+  class PublishInternal {
+  public:
+    Manager* const manager;
+    PublishInternal(Manager* _manager) : manager(_manager) {}
+    void operator()(const message_wrapper_t* message) {
+      auto rc = manager->publish_internal(*message);
+      // TODO handle rc
+      delete message;
+    }
+  };
+
+  // the managers thread:
+  // (1) empty the queue of messages to be published
+  // (2) loop over all connections and read acks
+  // (3) TODO manages deleted connections
+  // (4) TODO reconnect on conection errors
+  void run() {
     amqp_frame_t frame;
+    PublishInternal publish_internal_func(this);
     while (!stopped) {
-      // loop over all connections
-      for (const auto& conn : connections) {
-        amqp_simple_wait_frame(conn.second.state, &frame);
+
+      // publish all messages in the queue
+      // TODO empty to local list, and go over the list?
+      const auto count = messages.consume_all(publish_internal_func);
+
+      ConnectionList::const_iterator conn_it;
+      ConnectionList::const_iterator end_it;
+      {
+        // thread safe access to the connection list
+        std::lock_guard<std::mutex> lock (connections_lock);
+        conn_it = connections.begin();
+        end_it = connections.end();
+      }
+      auto incoming_message = false;
+      // loop over all connections to read acks
+      for (; conn_it != end_it; ++conn_it) {
+        //amqp_simple_wait_frame(conn_it->second.state, &frame);
+        const auto rc = amqp_simple_wait_frame_noblock(conn_it->second.state, &frame, &read_timeout);
+        if (rc == AMQP_STATUS_TIMEOUT) {
+          // TODO mark connection as idle
+          continue;
+        }
+       
+        // this is just to prevent spinning idle, does not indicate that a message
+        // was sucessfully processd or not
+        incoming_message = true;
+        if (rc != AMQP_STATUS_OK) {
+          // TODO error handling, add a counter
+          continue;
+        }
 
         if (frame.frame_type != AMQP_FRAME_METHOD) {
           // handler is for publish confirmation only - ignore all other messages
@@ -373,7 +486,7 @@ private:
           // TODO: add a counter
           continue;
         }
-      
+
         // TODO: handle "multiple"
         ceph_assert(!multiple); // multiple n/acks in one reply not supported. going to cause a leak if received
         const auto it = callbacks.find(tag);
@@ -384,15 +497,29 @@ private:
           // TODO add counter for acks with no callback
         }
       }
-      // if no message was received, sleep for 10ms
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
+      // if no messages were received or published, sleep for 100ms
+      if (count == 0 && !incoming_message) {
+        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+      }
     }
   }
 
+  // used in the dtor for message cleanup
+  static void delete_message(const message_wrapper_t* message) {
+    delete message;
+  }
+
 public:
-  Manager(unsigned _max_connections) : 
-    std::thread(&Manager::run, this),
-    max_connections(_max_connections), delivery_tag(0) {}
+  Manager(size_t _max_connections, size_t max_queue, long _usec_timeout) : 
+    max_connections(_max_connections),
+    connection_number(0),
+    stopped(false),
+    delivery_tag(0),
+    read_timeout{0, _usec_timeout},
+    messages(max_queue),
+    runner(&Manager::run, this)
+    //TODO make sure connection list iterators are not rehashed
+  {}
 
   // non copyable
   Manager(const Manager&) = delete;
@@ -405,7 +532,7 @@ public:
 
   // disconnect from a broker
   bool disconnect(const std::string& url) {
-    // TODO
+    // TODO mark connection for deletion
     return true;
   }
 
@@ -441,48 +568,47 @@ public:
     const auto conn = create_connection(info, exchange);
     // if creation fails, create_connection() must throw an exception
     ceph_assert(conn.state != nullptr);
+    // locking the connection list only when inserting a new one
+    std::lock_guard<std::mutex> lock (connections_lock);
     ++connection_number;
     return connections.emplace(id, conn).first->second;
   }
 
+  int publish(const connection_t& conn, 
+    const std::string& topic,
+    const std::string& message) {
+    if (!conn.state) {
+      // TODO add error for deleted connection
+      return -1;
+    }
+    if (messages.push(new message_wrapper_t(conn, topic, message, nullptr))) {
+      return AMQP_STATUS_OK;
+    }
+    // TODO add error for queue full
+    return -2;
+  }
+  
   int publish_with_confirm(const connection_t& conn, 
     const std::string& topic,
     const std::string& message,
     reply_callback_t cb) {
-    ceph_assert(conn.state);
-
-
-    amqp_basic_properties_t props;
-    props._flags = 
-      AMQP_BASIC_DELIVERY_MODE_FLAG | 
-      AMQP_BASIC_REPLY_TO_FLAG;
-    props.delivery_mode = 2; // persistent delivery TODO take from conf
-    props.reply_to = conn.reply_to_queue;
-
-    const auto rc = amqp_basic_publish(conn.state,
-      CONFIRMING_CHANNEL_ID,
-      amqp_cstring_bytes(conn.exchange.c_str()),
-      amqp_cstring_bytes(topic.c_str()),
-      1, // mandatory, TODO: take from conf
-      0, // not immediate
-      &props,
-      amqp_cstring_bytes(message.c_str()));
-
-    if (rc == AMQP_STATUS_OK) {
-      ++delivery_tag;
-      if (callbacks.insert(std::make_pair(delivery_tag, cb)).second == false) {
-        // callback with that message id is already pending confirmation
-        return INTERNAL_AMQP_STATUS_PENDING_CONFIRMATION;
-      }
+    if (!conn.state) {
+      // TODO add error for deleted connection
+      return -1;
     }
-    return rc;
+    if (messages.push(new message_wrapper_t(conn, topic, message, cb))) {
+      return AMQP_STATUS_OK;
+    }
+    // TODO add error for queue full
+    return -2;
   }
 
   // dtor wait for thread to stop
   // then connection are cleaned-up
   ~Manager() {
     stopped = true;
-    join();
+    runner.join();
+    messages.consume_all(delete_message);
     for (const auto& conn : connections) {
         amqp_destroy_connection(conn.second.state);
         amqp_bytes_free(conn.second.reply_to_queue);
@@ -490,14 +616,14 @@ public:
   }
 
   // get the number of connections
-  unsigned get_connection_number() const {
+  size_t get_connection_number() const {
     return connection_number;
   }
 };
 
 // singleton manager
 // note that the manager itself is not a singleton, and multiple instances may co-exist
-Manager s_manager(256);
+Manager s_manager(256, 8192, 10000);
 
 const connection_t& connect(const std::string& url, const std::string& exchange) {
   return s_manager.connect(url, exchange);
@@ -506,15 +632,7 @@ const connection_t& connect(const std::string& url, const std::string& exchange)
 int publish(const connection_t& conn, 
     const std::string& topic,
     const std::string& message) {
-  ceph_assert(conn.state);
-  return amqp_basic_publish(conn.state,
-      CHANNEL_ID,
-      amqp_cstring_bytes(conn.exchange.c_str()),
-      amqp_cstring_bytes(topic.c_str()),
-      1, // mandatory, TODO: take from conf
-      0, // not immediate
-      nullptr,
-      amqp_cstring_bytes(message.c_str()));
+  return s_manager.publish(conn, topic, message);
 }
 
 int publish_with_confirm(const connection_t& conn, 
