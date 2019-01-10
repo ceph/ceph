@@ -1874,24 +1874,13 @@ class TestTrash(object):
             image_name2 = image_name
             image_id2 = image.id()
 
-        create_image()
-        with Image(ioctx, image_name) as image:
-            image_name3 = image_name
-            image_id3 = image.id()
-
         RBD().trash_move(ioctx, image_name1, 0)
         RBD().trash_move(ioctx, image_name2, 1000)
-        RBD().trash_move(ioctx, image_name3, 1000)
-
         RBD().trash_purge(ioctx, datetime.now())
-        entries = list(RBD().trash_list(ioctx))
-        for e in entries:
-            assert(e['id'] != image_id1)
 
-        RBD.trash_purge(ioctx, datetime.now() + timedelta(seconds=5000), 0)
         entries = list(RBD().trash_list(ioctx))
-        for e in entries:
-            assert(e['id'] not in [image_id2, image_id3])
+        eq([image_id2], [x['id'] for x in entries])
+        RBD().trash_remove(ioctx, image_id2, True)
 
     def test_remove_denied(self):
         create_image()

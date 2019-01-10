@@ -14,6 +14,7 @@
 #include "librbd/Operations.h"
 #include "librbd/TrashWatcher.h"
 #include "librbd/Utils.h"
+#include "librbd/api/DiffIterate.h"
 #include "librbd/api/Image.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
@@ -275,8 +276,7 @@ template <typename I>
 int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
                     float threshold, ProgressContext& pctx) {
   auto *cct((CephContext *) io_ctx.cct());
-
-  librbd::RBD rbd;
+  ldout(cct, 20) << &io_ctx << dendl;
 
   std::vector<librbd::trash_image_info_t> trash_entries;
   int r = librbd::api::Trash<>::list(io_ctx, trash_entries);
@@ -290,7 +290,7 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
       }
   );
 
-  std::vector<const char *> to_be_removed;
+  std::set<std::string> to_be_removed;
   if (threshold != -1) {
     if (threshold < 0 || threshold > 1) {
       lderr(cct) << "argument 'threshold' is out of valid range"
@@ -318,7 +318,7 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
     double pool_percent_used = 0;
     uint64_t pool_total_bytes = 0;
 
-    std::map<std::string, std::vector<const char *>> datapools;
+    std::map<std::string, std::vector<std::string>> datapools;
 
     std::sort(trash_entries.begin(), trash_entries.end(),
         [](librbd::trash_image_info_t a, librbd::trash_image_info_t b) {
@@ -327,12 +327,16 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
     );
 
     for (const auto &entry : trash_entries) {
-      librbd::Image image;
-      std::string data_pool;
-      r = rbd.open_by_id_read_only(io_ctx, image, entry.id.c_str(), NULL);
-      if (r < 0) continue;
+      int64_t data_pool_id = -1;
+      r = cls_client::get_data_pool(&io_ctx, util::header_name(entry.id),
+                                    &data_pool_id);
+      if (r < 0 && r != -ENOENT && r != -EOPNOTSUPP) {
+        lderr(cct) << "failed to query data pool: " << cpp_strerror(r) << dendl;
+        return r;
+      } else if (data_pool_id == -1) {
+        data_pool_id = io_ctx.get_id();
+      }
 
-      int64_t data_pool_id = image.get_data_pool_id();
       if (data_pool_id != io_ctx.get_id()) {
         librados::IoCtx data_io_ctx;
         r = util::create_ioctx(io_ctx, "image", data_pool_id,
@@ -341,10 +345,10 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
           lderr(cct) << "error accessing data pool" << dendl;
           continue;
         }
-        data_pool = data_io_ctx.get_pool_name();
-        datapools[data_pool].push_back(entry.id.c_str());
+        auto data_pool = data_io_ctx.get_pool_name();
+        datapools[data_pool].push_back(entry.id);
       } else {
-        datapools[pool_name].push_back(entry.id.c_str());
+        datapools[pool_name].push_back(entry.id);
       }
     }
 
@@ -367,27 +371,41 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
         auto bytes_threshold = (uint64_t) (pool_total_bytes *
                                           (pool_percent_used - threshold));
 
-        librbd::Image curr_img;
         for (const auto &it : img->second) {
-          r = rbd.open_by_id_read_only(io_ctx, curr_img, it, NULL);
-          if (r < 0) continue;
+          auto ictx = new ImageCtx("", it, nullptr, io_ctx, false);
+          r = ictx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT);
+          if (r == -ENOENT) {
+            continue;
+          } else if (r < 0) {
+            lderr(cct) << "failed to open image " << it << ": "
+                       << cpp_strerror(r) << dendl;
+          }
 
-          uint64_t img_size;
-          curr_img.size(&img_size);
-          r = curr_img.diff_iterate2(nullptr, 0, img_size, false, true,
-              [](uint64_t offset, size_t len, int exists, void *arg) {
+          r = librbd::api::DiffIterate<I>::diff_iterate(
+            ictx, cls::rbd::UserSnapshotNamespace(), nullptr, 0, ictx->size,
+            false, true,
+            [](uint64_t offset, size_t len, int exists, void *arg) {
                 auto *to_free = reinterpret_cast<uint64_t *>(arg);
                 if (exists)
                   (*to_free) += len;
                 return 0;
-              }, &bytes_to_free
-          );
-          if (r < 0) continue;
-          to_be_removed.push_back(it);
-          if (bytes_to_free >= bytes_threshold) break;
+            }, &bytes_to_free);
+
+          ictx->state->close();
+          if (r < 0) {
+            lderr(cct) << "failed to calculate disk usage for image " << it
+                       << ": " << cpp_strerror(r) << dendl;
+            continue;
+          }
+
+          to_be_removed.insert(it);
+          if (bytes_to_free >= bytes_threshold) {
+            break;
+          }
         }
       }
     }
+
     if (bytes_to_free == 0) {
       ldout(cct, 10) << "pool usage is lower than or equal to "
                      << (threshold * 100)
@@ -404,7 +422,7 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
 
   for (const auto &entry : trash_entries) {
     if (expire_ts >= entry.deferment_end_time) {
-      to_be_removed.push_back(entry.id.c_str());
+      to_be_removed.insert(entry.id);
     }
   }
 
@@ -415,14 +433,13 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
     if (r < 0) {
       if (r == -ENOTEMPTY) {
         ldout(cct, 5) << "image has snapshots - these must be deleted "
-                      << "with 'rbd snap purge' before the image can be removed."
-                      << dendl;
+                      << "with 'rbd snap purge' before the image can be "
+                      << "removed." << dendl;
       } else if (r == -EBUSY) {
-        ldout(cct, 5) << "error: image still has watchers"
-                      << std::endl
-                      << "This means the image is still open or the client using "
-                      << "it crashed. Try again after closing/unmapping it or "
-                      << "waiting 30s for the crashed client to timeout."
+        ldout(cct, 5) << "error: image still has watchers" << std::endl
+                      << "This means the image is still open or the client "
+                      << "using it crashed. Try again after closing/unmapping "
+                      << "it or waiting 30s for the crashed client to timeout."
                       << dendl;
       } else if (r == -EMLINK) {
         ldout(cct, 5) << "Remove the image from the group and try again."
