@@ -554,7 +554,7 @@ RADOS Gateway
 :Description: Enable logging of RGW's bandwidth usage.
 :Type: Boolean
 :Required: No
-:Default: ``true``
+:Default: ``false``
 
 
 ``rgw usage log flush threshold``
