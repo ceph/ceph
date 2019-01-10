@@ -66,6 +66,28 @@ void validate_path(CephContext *cct, const string& path, bool bluefs)
   }
 }
 
+const char* find_device_path(
+  int id,
+  CephContext *cct,
+  const vector<string>& devs)
+{
+  for (auto& i : devs) {
+    bluestore_bdev_label_t label;
+    int r = BlueStore::_read_bdev_label(cct, i, &label);
+    if (r < 0) {
+      cerr << "unable to read label for " << i << ": "
+	   << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    if ((id == BlueFS::BDEV_SLOW && label.description == "main") ||
+        (id == BlueFS::BDEV_DB && label.description == "bluefs db") ||
+        (id == BlueFS::BDEV_WAL && label.description == "bluefs wal")) {
+      return i.c_str();
+    }
+  }
+  return nullptr;
+}
+
 BlueFS *open_bluefs(
   CephContext *cct,
   const string& path,
@@ -277,7 +299,9 @@ int main(int argc, char **argv)
   env_to_vec(args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+
   common_init_finish(cct.get());
 
   if (action == "fsck" ||
@@ -403,7 +427,22 @@ int main(int argc, char **argv)
 	   << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
-    label.meta[key] = value;
+    if (key == "size") {
+      label.size = strtoull(value.c_str(), nullptr, 10);
+    } else if (key =="osd_uuid") {
+      label.osd_uuid.parse(value.c_str());
+    } else if (key =="btime") {
+      uint64_t epoch;
+      uint64_t nsec;
+      int r = utime_t::parse_date(value.c_str(), &epoch, &nsec);
+      if (r == 0) {
+	label.btime = utime_t(epoch, nsec);
+      }
+    } else if (key =="description") {
+      label.description = value;
+    } else {
+      label.meta[key] = value;
+    }
     r = BlueStore::_write_bdev_label(cct.get(), devs.front(), label);
     if (r < 0) {
       cerr << "unable to write label for " << devs.front() << ": "
@@ -449,6 +488,27 @@ int main(int argc, char **argv)
 	cout << "expanding dev " << devid << " from 0x" << std::hex
 	     << end << " to 0x" << size << std::dec << std::endl;
 	fs->add_block_extent(devid, end, size-end);
+	const char* path = find_device_path(devid, cct.get(), devs);
+	if (path == nullptr) {
+	  cerr << "Can't find device path for dev " << devid << std::endl;
+	  continue;
+	}
+	bluestore_bdev_label_t label;
+	int r = BlueStore::_read_bdev_label(cct.get(), path, &label);
+	if (r < 0) {
+	  cerr << "unable to read label for " << path << ": "
+		<< cpp_strerror(r) << std::endl;
+	  continue;
+	}
+        label.size = size;
+	r = BlueStore::_write_bdev_label(cct.get(), path, label);
+	if (r < 0) {
+	  cerr << "unable to write label for " << path << ": "
+		<< cpp_strerror(r) << std::endl;
+	  continue;
+	}
+	cout << "dev " << devid << " size label updated to "
+	      << size << std::endl;
       }
     }
     delete fs;
