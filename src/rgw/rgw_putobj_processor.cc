@@ -27,7 +27,7 @@ int HeadObjectProcessor::process(bufferlist&& data, uint64_t logical_offset)
   const bool flush = (data.length() == 0);
 
   // capture the first chunk for special handling
-  if (data_offset < head_chunk_size) {
+  if (data_offset < head_chunk_size || data_offset == 0) {
     if (flush) {
       // flush partial chunk
       return process_first_chunk(std::move(head_data), &processor);
@@ -207,7 +207,8 @@ int AtomicObjectProcessor::prepare()
     return r;
   }
   const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
-  manifest.set_trivial_rule(max_chunk_size, default_stripe_size);
+  uint64_t head_max_size = max_chunk_size;
+  manifest.set_trivial_rule(head_max_size, default_stripe_size);
 
   r = manifest_gen.create_begin(store->ctx(), &manifest,
                                 bucket_info.placement_rule,
@@ -228,13 +229,11 @@ int AtomicObjectProcessor::prepare()
   if (r < 0) {
     return r;
   }
-  // only the first chunk goes to the head object
-  uint64_t stripe_size = chunk_size;
 
-  set_head_chunk_size(chunk_size);
+  set_head_chunk_size(head_max_size);
   // initialize the processors
   chunk = ChunkProcessor(&writer, chunk_size);
-  stripe = StripeProcessor(&chunk, this, stripe_size);
+  stripe = StripeProcessor(&chunk, this, head_max_size);
   return 0;
 }
 
@@ -356,7 +355,7 @@ int MultipartObjectProcessor::prepare_head()
   set_head_chunk_size(max_head_size);
 
   chunk = ChunkProcessor(&writer, chunk_size);
-  stripe = StripeProcessor(&chunk, this, stripe_size);
+  stripe = StripeProcessor(&chunk, this, max_head_size);
   return 0;
 }
 

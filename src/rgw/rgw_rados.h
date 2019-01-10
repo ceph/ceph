@@ -667,10 +667,6 @@ public:
     return head_size;
   }
 
-  void set_max_head_size(uint64_t s) {
-    max_head_size = s;
-  }
-
   uint64_t get_max_head_size() {
     return max_head_size;
   }
