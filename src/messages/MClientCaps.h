@@ -16,6 +16,7 @@
 #define CEPH_MCLIENTCAPS_H
 
 #include "msg/Message.h"
+#include "mds/mdstypes.h"
 #include "include/ceph_features.h"
 
 class MClientCaps : public MessageInstance<MClientCaps> {

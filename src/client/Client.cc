@@ -47,8 +47,22 @@
 
 #include "mon/MonClient.h"
 
+#include "messages/MClientCaps.h"
+#include "messages/MClientLease.h"
+#include "messages/MClientQuota.h"
 #include "messages/MClientReclaim.h"
+#include "messages/MClientReclaimReply.h"
 #include "messages/MClientReconnect.h"
+#include "messages/MClientReply.h"
+#include "messages/MClientRequest.h"
+#include "messages/MClientRequestForward.h"
+#include "messages/MClientSession.h"
+#include "messages/MClientSnap.h"
+#include "messages/MCommandReply.h"
+#include "messages/MFSMap.h"
+#include "messages/MFSMapUser.h"
+#include "messages/MMDSMap.h"
+#include "messages/MOSDMap.h"
 
 #include "mds/flock.h"
 #include "mds/cephfs_features.h"
@@ -1557,7 +1571,7 @@ void Client::dump_mds_requests(Formatter *f)
 }
 
 int Client::verify_reply_trace(int r,
-			       MetaRequest *request, const MClientReply::const_ref& reply,
+			       MetaRequest *request, const MConstRef<MClientReply>& reply,
 			       InodeRef *ptarget, bool *pcreated,
 			       const UserPerm& perms)
 {
@@ -2067,7 +2081,7 @@ void Client::_closed_mds_session(MetaSession *s)
   mds_sessions.erase(s->mds_num);
 }
 
-void Client::handle_client_session(const MClientSession::const_ref& m)
+void Client::handle_client_session(const MConstRef<MClientSession>& m)
 {
   mds_rank_t from = mds_rank_t(m->get_source().num());
   ldout(cct, 10) << __func__ << " " << *m << " from mds." << from << dendl;
@@ -2269,7 +2283,7 @@ MClientRequest::ref Client::build_client_request(MetaRequest *request)
 
 
 
-void Client::handle_client_request_forward(const MClientRequestForward::const_ref& fwd)
+void Client::handle_client_request_forward(const MConstRef<MClientRequestForward>& fwd)
 {
   mds_rank_t mds = mds_rank_t(fwd->get_source().num());
   MetaSession *session = _get_mds_session(mds, fwd->get_connection().get());
@@ -2315,7 +2329,7 @@ bool Client::is_dir_operation(MetaRequest *req)
   return false;
 }
 
-void Client::handle_client_reply(const MClientReply::const_ref& reply)
+void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
 {
   mds_rank_t mds_num = mds_rank_t(reply->get_source().num());
   MetaSession *session = _get_mds_session(mds_num, reply->get_connection().get());
@@ -2453,7 +2467,7 @@ void Client::_handle_full_flag(int64_t pool)
   }
 }
 
-void Client::handle_osd_map(const MOSDMap::const_ref& m)
+void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
 {
   std::set<entity_addr_t> new_blacklists;
   objecter->consume_blacklist_events(&new_blacklists);
@@ -2542,7 +2556,7 @@ void Client::handle_osd_map(const MOSDMap::const_ref& m)
 // incoming messages
 
 
-bool Client::ms_dispatch2(const Message::ref &m)
+bool Client::ms_dispatch2(const MessageRef &m)
 {
   std::lock_guard l(client_lock);
   if (!initialized) {
@@ -2624,7 +2638,7 @@ bool Client::ms_dispatch2(const Message::ref &m)
   return true;
 }
 
-void Client::handle_fs_map(const MFSMap::const_ref& m)
+void Client::handle_fs_map(const MConstRef<MFSMap>& m)
 {
   fsmap.reset(new FSMap(m->get_fsmap()));
 
@@ -2633,7 +2647,7 @@ void Client::handle_fs_map(const MFSMap::const_ref& m)
   monclient->sub_got("fsmap", fsmap->get_epoch());
 }
 
-void Client::handle_fs_map_user(const MFSMapUser::const_ref& m)
+void Client::handle_fs_map_user(const MConstRef<MFSMapUser>& m)
 {
   fsmap_user.reset(new FSMapUser);
   *fsmap_user = m->get_fsmap();
@@ -2642,7 +2656,7 @@ void Client::handle_fs_map_user(const MFSMapUser::const_ref& m)
   signal_cond_list(waiting_for_fsmap);
 }
 
-void Client::handle_mds_map(const MMDSMap::const_ref& m)
+void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
 {
   mds_gid_t old_inc, new_inc;
   if (m->get_epoch() <= mdsmap->get_epoch()) {
@@ -2939,7 +2953,7 @@ void Client::got_mds_push(MetaSession *s)
   }
 }
 
-void Client::handle_lease(const MClientLease::const_ref& m)
+void Client::handle_lease(const MConstRef<MClientLease>& m)
 {
   ldout(cct, 10) << __func__ << " " << *m << dendl;
 
@@ -4652,7 +4666,7 @@ void Client::update_snap_trace(const bufferlist& bl, SnapRealm **realm_ret, bool
     put_snap_realm(first_realm);
 }
 
-void Client::handle_snap(const MClientSnap::const_ref& m)
+void Client::handle_snap(const MConstRef<MClientSnap>& m)
 {
   ldout(cct, 10) << __func__ << " " << *m << dendl;
   mds_rank_t mds = mds_rank_t(m->get_source().num());
@@ -4723,7 +4737,7 @@ void Client::handle_snap(const MClientSnap::const_ref& m)
   }
 }
 
-void Client::handle_quota(const MClientQuota::const_ref& m)
+void Client::handle_quota(const MConstRef<MClientQuota>& m)
 {
   mds_rank_t mds = mds_rank_t(m->get_source().num());
   MetaSession *session = _get_mds_session(mds, m->get_connection().get());
@@ -4747,7 +4761,7 @@ void Client::handle_quota(const MClientQuota::const_ref& m)
   }
 }
 
-void Client::handle_caps(const MClientCaps::const_ref& m)
+void Client::handle_caps(const MConstRef<MClientCaps>& m)
 {
   mds_rank_t mds = mds_rank_t(m->get_source().num());
   MetaSession *session = _get_mds_session(mds, m->get_connection().get());
@@ -4811,7 +4825,7 @@ void Client::handle_caps(const MClientCaps::const_ref& m)
   }
 }
 
-void Client::handle_cap_import(MetaSession *session, Inode *in, const MClientCaps::const_ref& m)
+void Client::handle_cap_import(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m)
 {
   mds_rank_t mds = session->mds_num;
 
@@ -4850,7 +4864,7 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, const MClientCap
   }
 }
 
-void Client::handle_cap_export(MetaSession *session, Inode *in, const MClientCaps::const_ref& m)
+void Client::handle_cap_export(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m)
 {
   mds_rank_t mds = session->mds_num;
 
@@ -4896,7 +4910,7 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, const MClientCap
   }
 }
 
-void Client::handle_cap_trunc(MetaSession *session, Inode *in, const MClientCaps::const_ref& m)
+void Client::handle_cap_trunc(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m)
 {
   mds_rank_t mds = session->mds_num;
   ceph_assert(in->caps.count(mds));
@@ -4912,7 +4926,7 @@ void Client::handle_cap_trunc(MetaSession *session, Inode *in, const MClientCaps
 			 m->get_truncate_seq(), m->get_truncate_size());
 }
 
-void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, const MClientCaps::const_ref& m)
+void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, const MConstRef<MClientCaps>& m)
 {
   ceph_tid_t flush_ack_tid = m->get_client_tid();
   int dirty = m->get_dirty();
@@ -4976,7 +4990,7 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, con
 }
 
 
-void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, const MClientCaps::const_ref& m)
+void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m)
 {
   mds_rank_t mds = session->mds_num;
   ceph_assert(in->caps.count(mds));
@@ -5091,7 +5105,7 @@ void Client::_try_to_trim_inode(Inode *in, bool sched_inval)
   }
 }
 
-void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const MClientCaps::const_ref& m)
+void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const MConstRef<MClientCaps>& m)
 {
   mds_rank_t mds = session->mds_num;
   int used = get_caps_used(in);
@@ -5692,7 +5706,7 @@ int Client::mds_command(
   return 0;
 }
 
-void Client::handle_command_reply(const MCommandReply::const_ref& m)
+void Client::handle_command_reply(const MConstRef<MCommandReply>& m)
 {
   ceph_tid_t const tid = m->get_tid();
 
@@ -14363,7 +14377,7 @@ void Client::finish_reclaim()
   metadata.erase(it);
 }
 
-void Client::handle_client_reclaim_reply(const MClientReclaimReply::const_ref& reply)
+void Client::handle_client_reclaim_reply(const MConstRef<MClientReclaimReply>& reply)
 {
   mds_rank_t from = mds_rank_t(reply->get_source().num());
   ldout(cct, 10) << __func__ << " " << *reply << " from mds." << from << dendl;
