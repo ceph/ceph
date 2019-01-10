@@ -48,24 +48,34 @@ const char *addr_checks[][3] = {
   { NULL, NULL, NULL },
 };
 
+const char *addr_only_checks[][3] = {
+  // we shouldn't parse an addrvec...
+  { "[v2:1.2.3.4:111/0,v1:5.6.7.8:222/0]", "", "[v2:1.2.3.4:111/0,v1:5.6.7.8:222/0]" },
+  { NULL, NULL, NULL },
+};
+
+
+
 TEST(Msgr, TestAddrParsing)
 {
-  for (unsigned i = 0; addr_checks[i][0]; ++i) {
-    entity_addr_t a;
-    const char *end = "";
-    bool ok = a.parse(addr_checks[i][0], &end);
-    string out;
-    if (ok) {
-      stringstream ss;
-      ss << a;
-      getline(ss, out);
-    }
-    string left = end;
+  for (auto& addr_checks : { addr_checks, addr_only_checks }) {
+    for (unsigned i = 0; addr_checks[i][0]; ++i) {
+      entity_addr_t a;
+      const char *end = "";
+      bool ok = a.parse(addr_checks[i][0], &end);
+      string out;
+      if (ok) {
+	stringstream ss;
+	ss << a;
+	getline(ss, out);
+      }
+      string left = end;
       
-    cout << "'" << addr_checks[i][0] << "' -> '" << out << "' + '" << left << "'" << std::endl;
+      cout << "'" << addr_checks[i][0] << "' -> '" << out << "' + '" << left << "'" << std::endl;
 
-    ASSERT_EQ(out, addr_checks[i][1]);
-    ASSERT_EQ(left, addr_checks[i][2]);
+      ASSERT_EQ(out, addr_checks[i][1]);
+      ASSERT_EQ(left, addr_checks[i][2]);
+    }
   }
 }
 
