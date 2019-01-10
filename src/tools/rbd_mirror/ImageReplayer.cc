@@ -43,6 +43,8 @@ using std::unique_ptr;
 using std::shared_ptr;
 using std::vector;
 
+extern PerfCounters *g_perf_counters;
+
 namespace rbd {
 namespace mirror {
 
@@ -1257,6 +1259,14 @@ void ImageReplayer<I>::handle_process_entry_safe(const ReplayEntry &replay_entry
                        replay_entry.get_data().length());
   m_perf_counters->tinc(l_rbd_mirror_replay_latency,
                         ceph_clock_now() - replay_start_time);
+
+  if (g_perf_counters) {
+    g_perf_counters->inc(l_rbd_mirror_replay);
+    g_perf_counters->inc(l_rbd_mirror_replay_bytes,
+                         replay_entry.get_data().length());
+    g_perf_counters->tinc(l_rbd_mirror_replay_latency,
+                          ceph_clock_now() - replay_start_time);
+  }
 
   m_event_replay_tracker.finish_op();
 }
