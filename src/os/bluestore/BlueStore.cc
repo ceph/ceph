@@ -36,6 +36,8 @@
 #include "auth/Crypto.h"
 #include "common/EventTrace.h"
 #include "perfglue/heap_profiler.h"
+#include "common/blkdev.h"
+#include "common/numa.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
@@ -4913,7 +4915,7 @@ bool BlueStore::test_mount_in_use()
   return ret;
 }
 
-int BlueStore::_open_bluefs(bool create)
+int BlueStore::_minimal_open_bluefs(bool create)
 {
   int r;
   bluefs = new BlueFS(cct);
@@ -5036,17 +5038,8 @@ int BlueStore::_open_bluefs(bool create)
       goto free_bluefs;
     }
   }
-
-  if (create) {
-    bluefs->mkfs(fsid);
-  }
-  r = bluefs->mount();
-  if (r < 0) {
-    derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
-    goto free_bluefs;
-  }
-  
   return 0;
+
 free_bluefs:
   ceph_assert(bluefs);
   delete bluefs;
@@ -5054,12 +5047,34 @@ free_bluefs:
   return r;
 }
 
+int BlueStore::_open_bluefs(bool create)
+{
+  int r = _minimal_open_bluefs(create);
+  if (r < 0) {
+    return r;
+  }
+  if (create) {
+    bluefs->mkfs(fsid);
+  }
+  r = bluefs->mount();
+  if (r < 0) {
+    derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
+  }
+  return r;
+}
+
 void BlueStore::_close_bluefs()
 {
   bluefs->umount();
+  _minimal_close_bluefs();
+}
+
+void BlueStore::_minimal_close_bluefs()
+{
   delete bluefs;
   bluefs = NULL;
 }
+
 int BlueStore::_open_db(bool create, bool to_repair_db)
 {
   int r;
@@ -7765,15 +7780,108 @@ void BlueStore::collect_metadata(map<string,string> *pm)
   } else {
     (*pm)["bluefs"] = "0";
   }
+
+  // report numa mapping for underlying devices
+  int node = -1;
+  set<int> nodes;
+  set<string> failed;
+  int r = get_numa_node(&node, &nodes, &failed);
+  if (r >= 0) {
+    if (!failed.empty()) {
+      (*pm)["objectstore_numa_unknown_devices"] = stringify(failed);
+    }
+    if (!nodes.empty()) {
+      dout(1) << __func__ << " devices span numa nodes " << nodes << dendl;
+      (*pm)["objectstore_numa_nodes"] = stringify(nodes);
+    }
+    if (node >= 0) {
+      (*pm)["objectstore_numa_node"] = stringify(node);
+    }
+  }
+}
+
+int BlueStore::get_numa_node(
+  int *final_node,
+  set<int> *out_nodes,
+  set<string> *out_failed)
+{
+  int node = -1;
+  set<string> devices;
+  get_devices(&devices);
+  set<int> nodes;
+  set<string> failed;
+  for (auto& devname : devices) {
+    int n;
+    BlkDev bdev(devname);
+    int r = bdev.get_numa_node(&n);
+    if (r < 0) {
+      dout(10) << __func__ << " bdev " << devname << " can't detect numa_node"
+	       << dendl;
+      failed.insert(devname);
+      continue;
+    }
+    dout(10) << __func__ << " bdev " << devname << " on numa_node " << n
+	     << dendl;
+    nodes.insert(n);
+    if (node < 0) {
+      node = n;
+    }
+  }
+  if (node >= 0 && nodes.size() == 1 && failed.empty()) {
+    *final_node = node;
+  }
+  if (out_nodes) {
+    *out_nodes = nodes;
+  }
+  if (out_failed) {
+    *out_failed = failed;
+  }
+  return 0;
 }
 
 int BlueStore::get_devices(set<string> *ls)
 {
+  if (bdev) {
+    bdev->get_devices(ls);
+    if (bluefs) {
+      bluefs->get_devices(ls);
+    }
+    return 0;
+  }
+  
+  // grumble, we haven't started up yet.
+  int r = _open_path();
+  if (r < 0)
+    goto out;
+  r = _open_fsid(false);
+  if (r < 0)
+    goto out_path;
+  r = _read_fsid(&fsid);
+  if (r < 0)
+    goto out_fsid;
+  r = _lock_fsid();
+  if (r < 0)
+    goto out_fsid;
+  r = _open_bdev(false);
+  if (r < 0)
+    goto out_fsid;
+  r = _minimal_open_bluefs(false);
+  if (r < 0)
+    goto out_bdev;
   bdev->get_devices(ls);
   if (bluefs) {
     bluefs->get_devices(ls);
   }
-  return 0;
+  r = 0;
+  _minimal_close_bluefs();
+ out_bdev:
+  _close_bdev();
+ out_fsid:
+  _close_fsid();
+ out_path:
+  _close_path();
+ out:
+  return r;
 }
 
 void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)

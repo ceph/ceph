@@ -1293,6 +1293,10 @@ protected:
   int whoami;
   std::string dev_path, journal_path;
 
+  int numa_node = -1;
+  size_t numa_cpu_set_size = 0;
+  cpu_set_t numa_cpu_set;
+
   bool store_is_rotational = true;
   bool journal_is_rotational = true;
 
@@ -2300,6 +2304,7 @@ public:
   void final_init();
 
   int enable_disable_fuse(bool stop);
+  int set_numa_affinity();
 
   void suicide(int exitcode);
   int shutdown();

@@ -31,6 +31,7 @@
 #include "include/uuid.h"
 #include "include/stringify.h"
 #include "blkdev.h"
+#include "numa.h"
 
 #include "json_spirit/json_spirit_reader.h"
 
@@ -108,6 +109,8 @@ static const char *blkdev_props2strings[] = {
   [BLKDEV_PROP_ROTATIONAL]          = "queue/rotational",
   [BLKDEV_PROP_SERIAL]              = "device/serial",
   [BLKDEV_PROP_VENDOR]              = "device/device/vendor",
+  [BLKDEV_PROP_NUMA_NODE]           = "device/device/numa_node",
+  [BLKDEV_PROP_NUMA_CPUS]           = "device/device/local_cpulist",
 };
 
 const char *BlkDev::sysfsdir() const {
@@ -228,6 +231,15 @@ bool BlkDev::is_rotational() const
   return get_int_property(BLKDEV_PROP_ROTATIONAL) > 0;
 }
 
+int BlkDev::get_numa_node(int *node) const
+{
+  int numa = get_int_property(BLKDEV_PROP_NUMA_NODE);
+  if (numa < 0)
+    return -1;
+  *node = numa;
+  return 0;
+}
+
 int BlkDev::dev(char *dev, size_t max) const
 {
   return get_string_property(BLKDEV_PROP_DEV, dev, max);
@@ -323,10 +335,8 @@ void get_raw_devices(const std::string& in,
     BlkDev d(in);
     std::string wholedisk;
     if (d.wholedisk(&wholedisk) == 0) {
-      std::cout << " wholedisk of " << in << " is " << wholedisk << std::endl;
       ls->insert(wholedisk);
     } else {
-      std::cout << " wholedisk of " << in << " failed" << std::endl;
       ls->insert(in);
     }
   }

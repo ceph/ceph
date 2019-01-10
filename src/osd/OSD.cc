@@ -50,6 +50,7 @@
 #include "common/version.h"
 #include "common/pick_address.h"
 #include "common/blkdev.h"
+#include "common/numa.h"
 
 #include "os/ObjectStore.h"
 #ifdef HAVE_LIBFUSE
@@ -2233,6 +2234,75 @@ int OSD::pre_init()
   }
 
   cct->_conf.add_observer(this);
+  return 0;
+}
+
+int OSD::set_numa_affinity()
+{
+  // storage numa node
+  int store_node = -1;
+  store->get_numa_node(&store_node, nullptr, nullptr);
+  if (store_node >= 0) {
+    dout(1) << __func__ << " storage numa node " << store_node << dendl;
+  }
+
+  // check network numa node(s)
+  int front_node = -1, back_node = -1;
+  string front_iface = pick_iface(
+    cct,
+    client_messenger->get_myaddrs().front().get_sockaddr_storage());
+  string back_iface = pick_iface(
+    cct,
+    cluster_messenger->get_myaddrs().front().get_sockaddr_storage());
+  int r = get_iface_numa_node(front_iface, &front_node);
+  if (r >= 0) {
+    dout(1) << __func__ << " public network " << front_iface << " numa node "
+	      << front_node << dendl;
+    r = get_iface_numa_node(back_iface, &back_node);
+    if (r >= 0) {
+      dout(1) << __func__ << " cluster network " << back_iface << " numa node "
+	      << back_node << dendl;
+      if (front_node == back_node &&
+	  front_node == store_node) {
+	dout(1) << " objectstore and network numa nodes all match" << dendl;
+	if (g_conf().get_val<bool>("osd_numa_auto_affinity")) {
+	  numa_node = front_node;
+	}
+      } else {
+	derr << __func__ << " objectstore and network numa nodes to not match"
+	     << dendl;
+      }
+    }
+  } else {
+    derr << __func__ << " unable to identify public interface '" << front_iface
+	 << "' numa node: " << cpp_strerror(r) << dendl;
+  }
+  if (int node = g_conf().get_val<int64_t>("osd_numa_node"); node >= 0) {
+    // this takes precedence over the automagic logic above
+    numa_node = node;
+  }
+  if (numa_node >= 0) {
+    int r = get_numa_node_cpu_set(numa_node, &numa_cpu_set_size, &numa_cpu_set);
+    if (r < 0) {
+      dout(1) << __func__ << " unable to determine numa node " << numa_node
+	      << " CPUs" << dendl;
+      numa_node = -1;
+    } else {
+      dout(1) << __func__ << " setting numa affinity to node " << numa_node
+	      << " cpus "
+	      << cpu_set_to_str_list(numa_cpu_set_size, &numa_cpu_set)
+	      << dendl;
+      r = sched_setaffinity(getpid(), numa_cpu_set_size, &numa_cpu_set);
+      if (r < 0) {
+	r = -errno;
+	derr << __func__ << " failed to set numa affinity: " << cpp_strerror(r)
+	     << dendl;
+	numa_node = -1;
+      }
+    }
+  } else {
+    dout(1) << __func__ << " not setting numa affinity" << dendl;
+  }
   return 0;
 }
 
@@ -5742,6 +5812,11 @@ void OSD::_send_boot()
     hb_front_server_messenger->ms_deliver_handle_fast_connect(local_connection);
   }
 
+  // we now know what our front and back addrs will be, and we are
+  // about to tell the mon what our metadata (including numa bindings)
+  // are, so now is a good time!
+  set_numa_affinity();
+
   MOSDBoot *mboot = new MOSDBoot(
     superblock, get_osdmap_epoch(), service.get_boot_epoch(),
     hb_back_addrs, hb_front_addrs, cluster_addrs,
@@ -5784,6 +5859,44 @@ void OSD::_collect_metadata(map<string,string> *pm)
   (*pm)["back_iface"] = pick_iface(
     cct,
     cluster_messenger->get_myaddrs().front().get_sockaddr_storage());
+
+  // network numa
+  {
+    int node = -1;
+    set<int> nodes;
+    set<string> unknown;
+    for (auto nm : { "front_iface", "back_iface" }) {
+      if (!(*pm)[nm].size()) {
+	unknown.insert(nm);
+	continue;
+      }
+      int n = -1;
+      int r = get_iface_numa_node((*pm)[nm], &n);
+      if (r < 0) {
+	unknown.insert((*pm)[nm]);
+	continue;
+      }
+      nodes.insert(n);
+      if (node < 0) {
+	node = n;
+      }
+    }
+    if (unknown.size()) {
+      (*pm)["network_numa_unknown_ifaces"] = stringify(unknown);
+    }
+    if (!nodes.empty()) {
+      (*pm)["network_numa_nodes"] = stringify(nodes);
+    }
+    if (node >= 0 && nodes.size() == 1 && unknown.empty()) {
+      (*pm)["network_numa_node"] = stringify(node);
+    }
+  }
+
+  if (numa_node >= 0) {
+    (*pm)["numa_node"] = stringify(numa_node);
+    (*pm)["numa_node_cpus"] = cpu_set_to_str_list(numa_cpu_set_size,
+						  &numa_cpu_set);
+  }
 
   set<string> devnames;
   store->get_devices(&devnames);
