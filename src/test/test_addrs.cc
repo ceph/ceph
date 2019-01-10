@@ -75,6 +75,11 @@ TEST(Msgr, TestAddrParsing)
 
       ASSERT_EQ(out, addr_checks[i][1]);
       ASSERT_EQ(left, addr_checks[i][2]);
+      if (addr_checks[i][0] == end) {
+	ASSERT_FALSE(ok);
+      } else {
+	ASSERT_TRUE(ok);
+      }
     }
   }
 }
@@ -112,6 +117,11 @@ TEST(Msgr, TestAddrEncodeAddrvecDecode)
     addrvec.decode(bli);
     cout << addr_checks2[i][0] << " " << addr << " " << addrvec << std::endl;
     ASSERT_EQ(addr, addrvec.v[0]);
+    if (addr_checks2[i][0] == end) {
+      ASSERT_FALSE(ok);
+    } else {
+      ASSERT_TRUE(ok);
+    }
   }
 }
 
