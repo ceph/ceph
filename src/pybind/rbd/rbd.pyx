@@ -29,6 +29,7 @@ except ImportError:
     from collections import Iterable
 from datetime import datetime
 from itertools import chain
+import time
 
 cimport rados
 
@@ -1247,7 +1248,7 @@ class RBD(object):
         if ret != 0:
             raise make_ex(ret, 'error moving image to trash')
 
-    def trash_purge(self, ioctx, expire_ts=datetime.now(), threshold=-1):
+    def trash_purge(self, ioctx, expire_ts=None, threshold=-1):
         """
         Delete RBD images from trash in bulk.
 
@@ -1265,11 +1266,15 @@ class RBD(object):
         :param threshold: percentage of pool usage to be met (0 to 1)
         :type threshold: float
         """
-        as_time_t = int((expire_ts - datetime.utcfromtimestamp(0)).total_seconds())
+        if expire_ts:
+            expire_epoch_ts = time.mktime(expire_ts.timetuple())
+        else:
+            expire_epoch_ts = 0
+
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            time_t _expire_ts = expire_epoch_ts
             float _threshold = threshold
-            time_t _expire_ts = as_time_t
         with nogil:
             ret = rbd_trash_purge(_ioctx, _expire_ts, _threshold)
         if ret != 0:
