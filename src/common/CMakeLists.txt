@@ -73,6 +73,7 @@ set(common_srcs
   mempool.cc
   mime.c
   mutex_debug.cc
+  numa.cc
   options.cc
   page.cc
   perf_counters.cc

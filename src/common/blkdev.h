@@ -15,7 +15,9 @@ enum blkdev_prop_t {
   BLKDEV_PROP_ROTATIONAL,
   BLKDEV_PROP_SERIAL,
   BLKDEV_PROP_VENDOR,
-  BLKDEV_PROP_NUMPROPS
+  BLKDEV_PROP_NUMA_NODE,
+  BLKDEV_PROP_NUMA_CPUS,
+  BLKDEV_PROP_NUMPROPS,
 };
 
 extern int get_device_by_path(const char *path, char* partition, char* device, size_t max);
@@ -54,6 +56,7 @@ public:
   bool support_discard() const;
   bool is_nvme() const;
   bool is_rotational() const;
+  int get_numa_node(int *node) const;
   int dev(char *dev, size_t max) const;
   int vendor(char *vendor, size_t max) const;
   int model(char *model, size_t max) const;

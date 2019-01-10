@@ -35,6 +35,7 @@
 #include "common/Timer.h"
 #include "common/TracepointProvider.h"
 #include "common/ceph_argparse.h"
+#include "common/numa.h"
 
 #include "global/global_init.h"
 #include "global/signal_handler.h"
@@ -471,6 +472,18 @@ flushjournal_out:
     forker.exit(0);
   }
 
+  // consider objectstore numa node
+  int os_numa_node = -1;
+  r = store->get_numa_node(&os_numa_node, nullptr, nullptr);
+  if (r >= 0 && os_numa_node >= 0) {
+    dout(1) << " objectstore numa_node " << os_numa_node << dendl;
+  }
+  int iface_preferred_numa_node = -1;
+  if (g_conf().get_val<bool>("osd_numa_prefer_iface")) {
+    iface_preferred_numa_node = os_numa_node;
+  }
+
+  // messengers
   std::string msg_type = g_conf().get_val<std::string>("ms_type");
   std::string public_msg_type =
     g_conf().get_val<std::string>("ms_public_type");
@@ -561,12 +574,14 @@ flushjournal_out:
   ms_objecter->set_default_policy(Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
 
   entity_addrvec_t public_addrs, cluster_addrs;
-  r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC, &public_addrs);
+  r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC, &public_addrs,
+		     iface_preferred_numa_node);
   if (r < 0) {
     derr << "Failed to pick public address." << dendl;
     forker.exit(1);
   }
-  r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_CLUSTER, &cluster_addrs);
+  r = pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_CLUSTER, &cluster_addrs,
+		     iface_preferred_numa_node);
   if (r < 0) {
     derr << "Failed to pick cluster address." << dendl;
     forker.exit(1);
