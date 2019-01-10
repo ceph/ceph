@@ -376,15 +376,17 @@ void MonClient::handle_monmap(MMonMap *m)
     ldout(cct,10) << " can't identify which mon we were connected to" << dendl;
     _reopen_session();
   } else {
-    if (monmap.get_rank(old_name) < 0) {
-      ldout(cct, 10) << "mon." << old_name << " went away" << dendl;
+    int new_rank = monmap.get_rank(m->get_source_addr());
+    if (new_rank < 0) {
+      ldout(cct, 10) << "mon." << new_rank << " at " << m->get_source_addrs()
+		     << " went away" << dendl;
       // can't find the mon we were talking to (above)
       _reopen_session();
-    } else if (monmap.get_addrs(old_name) != con_addrs) {
+    } else if (monmap.get_addrs(new_rank) != con_addrs) {
       // FIXME: we might make this a more sophisticated check later if we do
       // multiprotocol IPV4/IPV6 and have a strict preference
-      ldout(cct,10) << " mon." << old_name << " has addrs "
-		    << monmap.get_addrs(old_name) << " but i'm connected to "
+      ldout(cct,10) << " mon." << new_rank << " has addrs "
+		    << monmap.get_addrs(new_rank) << " but i'm connected to "
 		    << con_addrs << dendl;
       _reopen_session();
     }
