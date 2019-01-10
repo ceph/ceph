@@ -201,7 +201,8 @@ void ceph_arg_value_type(const char * nextargstr, bool *bool_option, bool *bool_
   return;
 }
 
-bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec, int type)
+
+bool parse_ip_port_vec(const char *s, vector<entity_addrvec_t>& vec, int type)
 {
   const char *p = s;
   const char *end = p + strlen(p);
@@ -213,7 +214,7 @@ bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec, int type)
       return false;
     }
     //cout << " got " << a << ", rest is '" << p << "'" << std::endl;
-    vec.push_back(a);
+    vec.push_back(entity_addrvec_t(a));
     while (*p == ',' || *p == ' ' || *p == ';')
       p++;
   }
