@@ -261,6 +261,9 @@ bool entity_addrvec_t::parse(const char *s, const char **end)
     }
     v.push_back(a);
     s = *end;
+    if (!brackets) {
+      break;
+    }
     if (*s != ',') {
       break;
     }
