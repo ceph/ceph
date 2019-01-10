@@ -229,6 +229,34 @@ def configure_compression(ctx, clients, compression):
     yield
 
 @contextlib.contextmanager
+def configure_storage_classes(ctx, clients, storage_classes):
+    """ set a compression type in the default zone placement """
+
+    sc = [s.strip() for s in storage_classes.split(',')]
+
+    for client in clients:
+        # XXX: the 'default' zone and zonegroup aren't created until we run RGWRados::init_complete().
+        # issue a 'radosgw-admin user list' command to trigger this
+        rgwadmin(ctx, client, cmd=['user', 'list'], check_status=True)
+
+        for storage_class in sc:
+            log.info('Configuring storage class type = %s', storage_class)
+            rgwadmin(ctx, client,
+                    cmd=['zonegroup', 'placement', 'add',
+                        '--rgw-zone', 'default',
+                        '--placement-id', 'default-placement',
+                        '--storage-class', storage_class],
+                    check_status=True)
+            rgwadmin(ctx, client,
+                    cmd=['zone', 'placement', 'add',
+                        '--rgw-zone', 'default',
+                        '--placement-id', 'default-placement',
+                        '--storage-class', storage_class,
+                        '--data-pool', 'default.rgw.buckets.data.' + storage_class.lower()],
+                    check_status=True)
+    yield
+
+@contextlib.contextmanager
 def task(ctx, config):
     """
     For example, to run rgw on all clients::
@@ -287,6 +315,7 @@ def task(ctx, config):
     ctx.rgw.cache_pools = bool(config.pop('cache-pools', False))
     ctx.rgw.frontend = config.pop('frontend', 'civetweb')
     ctx.rgw.compression_type = config.pop('compression type', None)
+    ctx.rgw.storage_classes = config.pop('storage classes', None)
     default_cert = config.pop('ssl certificate', None)
     ctx.rgw.data_pool_pg_size = config.pop('data_pool_pg_size', 64)
     ctx.rgw.index_pool_pg_size = config.pop('index_pool_pg_size', 64)
@@ -304,6 +333,11 @@ def task(ctx, config):
         subtasks.extend([
             lambda: configure_compression(ctx=ctx, clients=clients,
                                           compression=ctx.rgw.compression_type),
+        ])
+    if ctx.rgw.storage_classes:
+        subtasks.extend([
+            lambda: configure_storage_classes(ctx=ctx, clients=clients,
+                                              storage_classes=ctx.rgw.storage_classes),
         ])
     subtasks.extend([
         lambda: start_rgw(ctx=ctx, config=config, clients=clients),
