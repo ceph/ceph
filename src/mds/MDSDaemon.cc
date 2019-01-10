@@ -372,6 +372,8 @@ const char** MDSDaemon::get_tracked_conf_keys() const
     "mds_cache_reservation",
     "mds_health_cache_threshold",
     "mds_cache_mid",
+    "mds_dump_cache_threshold_formatter",
+    "mds_dump_cache_threshold_file",
     // MDBalancer
     "mds_bal_fragment_interval",
     // PurgeQueue

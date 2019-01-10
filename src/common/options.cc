@@ -6539,6 +6539,16 @@ std::vector<Option> get_mds_options() {
     Option("mds_cap_revoke_eviction_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
      .set_default(0)
      .set_description("number of seconds after which clients which have not responded to cap revoke messages by the MDS are evicted."),
+
+    Option("mds_dump_cache_threshold_formatter", Option::TYPE_UINT, Option::LEVEL_DEV)
+     .set_default(1_G)
+     .set_description("threshold for cache usage to disallow \"dump cache\" operation to formatter")
+     .set_long_description("Disallow MDS from dumping caches to formatter via \"dump cache\" command if cache usage exceeds this threshold."),
+
+    Option("mds_dump_cache_threshold_file", Option::TYPE_UINT, Option::LEVEL_DEV)
+     .set_default(0)
+     .set_description("threshold for cache usage to disallow \"dump cache\" operation to file")
+     .set_long_description("Disallow MDS from dumping caches to file via \"dump cache\" command if cache usage exceeds this threshold."),
   });
 }
 
