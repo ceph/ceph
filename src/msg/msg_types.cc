@@ -229,6 +229,7 @@ ostream& operator<<(ostream& out, const sockaddr *sa)
 
 bool entity_addrvec_t::parse(const char *s, const char **end)
 {
+  const char *orig_s = s;
   const char *static_end;
   if (!end) {
     end = &static_end;
@@ -236,10 +237,26 @@ bool entity_addrvec_t::parse(const char *s, const char **end)
     *end = s;
   }
   v.clear();
+  bool brackets = false;
+  if (*s == '[') {
+    // weirdness: make sure this isn't an IPV6 addr!
+    entity_addr_t a;
+    const char *p;
+    if (!a.parse(s, &p) || !a.is_ipv6()) {
+      // it's not
+      brackets = true;
+      ++s;
+    }
+  }
   while (*s) {
     entity_addr_t a;
     bool r = a.parse(s, end);
     if (!r) {
+      if (brackets) {
+	v.clear();
+	*end = orig_s;
+	return false;
+      }
       break;
     }
     v.push_back(a);
@@ -248,6 +265,16 @@ bool entity_addrvec_t::parse(const char *s, const char **end)
       break;
     }
     ++s;
+  }
+  if (brackets) {
+    if (*s == ']') {
+      ++s;
+      *end = s;
+    } else {
+      *end = orig_s;
+      v.clear();
+      return false;
+    }
   }
   return !v.empty();
 }
