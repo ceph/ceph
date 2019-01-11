@@ -24,25 +24,6 @@
 // -- lock types --
 // see CEPH_LOCK_*
 
-inline const char *get_lock_type_name(int t) {
-  switch (t) {
-  case CEPH_LOCK_DN: return "dn";
-  case CEPH_LOCK_DVERSION: return "dversion";
-  case CEPH_LOCK_IVERSION: return "iversion";
-  case CEPH_LOCK_IFILE: return "ifile";
-  case CEPH_LOCK_IAUTH: return "iauth";
-  case CEPH_LOCK_ILINK: return "ilink";
-  case CEPH_LOCK_IDFT: return "idft";
-  case CEPH_LOCK_INEST: return "inest";
-  case CEPH_LOCK_IXATTR: return "ixattr";
-  case CEPH_LOCK_ISNAP: return "isnap";
-  case CEPH_LOCK_INO: return "ino";
-  case CEPH_LOCK_IFLOCK: return "iflock";
-  case CEPH_LOCK_IPOLICY: return "ipolicy";
-  default: ceph_abort(); return 0;
-  }
-}
-
 
 struct MutationImpl;
 typedef boost::intrusive_ptr<MutationImpl> MutationRef;
@@ -94,7 +75,7 @@ class SimpleLock {
 public:
   LockType *type;
   
-  const char *get_state_name(int n) const {
+  static std::string_view get_state_name(int n) {
     switch (n) {
     case LOCK_UNDEF: return "UNDEF";
     case LOCK_SYNC: return "sync";
@@ -145,10 +126,47 @@ public:
 
     case LOCK_SNAP_SYNC: return "snap->sync";
 
-    default: ceph_abort(); return 0;
+    default: ceph_abort(); return std::string_view();
     }
   }
 
+  static std::string_view get_lock_type_name(int t) {
+    switch (t) {
+      case CEPH_LOCK_DN: return "dn";
+      case CEPH_LOCK_DVERSION: return "dversion";
+      case CEPH_LOCK_IVERSION: return "iversion";
+      case CEPH_LOCK_IFILE: return "ifile";
+      case CEPH_LOCK_IAUTH: return "iauth";
+      case CEPH_LOCK_ILINK: return "ilink";
+      case CEPH_LOCK_IDFT: return "idft";
+      case CEPH_LOCK_INEST: return "inest";
+      case CEPH_LOCK_IXATTR: return "ixattr";
+      case CEPH_LOCK_ISNAP: return "isnap";
+      case CEPH_LOCK_INO: return "ino";
+      case CEPH_LOCK_IFLOCK: return "iflock";
+      case CEPH_LOCK_IPOLICY: return "ipolicy";
+      default: ceph_abort(); return std::string_view();
+    }
+  }
+
+  static std::string_view get_lock_action_name(int a) {
+    switch (a) {
+      case LOCK_AC_SYNC: return "sync";
+      case LOCK_AC_MIX: return "mix";
+      case LOCK_AC_LOCK: return "lock";
+      case LOCK_AC_LOCKFLUSHED: return "lockflushed";
+
+      case LOCK_AC_SYNCACK: return "syncack";
+      case LOCK_AC_MIXACK: return "mixack";
+      case LOCK_AC_LOCKACK: return "lockack";
+
+      case LOCK_AC_REQSCATTER: return "reqscatter";
+      case LOCK_AC_REQUNSCATTER: return "requnscatter";
+      case LOCK_AC_NUDGE: return "nudge";
+      case LOCK_AC_REQRDLOCK: return "reqrdlock";
+      default: return "???";
+    }
+  }
 
   // waiting
   static const uint64_t WAIT_RD          = (1<<0);  // to read

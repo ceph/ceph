@@ -62,7 +62,7 @@ public:
   static const int PIN_EXPORTBOUND = 10;
   static const int PIN_STICKY =      11;
   static const int PIN_SUBTREETEMP = 12;  // used by MDCache::trim_non_auth()
-  const char *pin_name(int p) const override {
+  std::string_view pin_name(int p) const override {
     switch (p) {
     case PIN_DNWAITER: return "dnwaiter";
     case PIN_INOWAITER: return "inowaiter";
@@ -469,9 +469,6 @@ protected:
  public:
   CDentry* lookup_exact_snap(std::string_view dname, snapid_t last);
   CDentry* lookup(std::string_view n, snapid_t snap=CEPH_NOSNAP);
-  CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP) {
-    return lookup(std::string_view(n), snap);
-  }
 
   CDentry* add_null_dentry(std::string_view dname,
 			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
