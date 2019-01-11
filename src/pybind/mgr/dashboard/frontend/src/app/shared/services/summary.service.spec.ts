@@ -47,6 +47,7 @@ describe('SummaryService', () => {
   });
 
   it('should call refresh', fakeAsync(() => {
+    summaryService.enablePolling();
     authStorageService.set('foobar', undefined, undefined);
     const calledWith = [];
     summaryService.subscribe((data) => {
@@ -57,10 +58,9 @@ describe('SummaryService', () => {
     expect(calledWith).toEqual([summary, summary]);
     tick(10000);
     expect(calledWith.length).toEqual(4);
-    // In order to not trigger setTimeout again,
+    // In order to not trigger setInterval again,
     // which would raise 'Error: 1 timer(s) still in the queue.'
-    spyOn(summaryService, 'refresh').and.callFake(() => true);
-    tick(5000);
+    window.clearInterval(summaryService.polling);
   }));
 
   describe('Should test methods after first refresh', () => {
