@@ -337,7 +337,8 @@ int Trash<I>::remove(IoCtx &io_ctx, const std::string &image_id, bool force,
 }
 
 template <typename I>
-int Trash<I>::restore(librados::IoCtx &io_ctx, const std::string &image_id,
+int Trash<I>::restore(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
+                      const std::string &image_id,
                       const std::string &image_new_name) {
   CephContext *cct((CephContext *)io_ctx.cct());
   ldout(cct, 20) << "trash_restore " << &io_ctx << " " << image_id << " "
@@ -349,6 +350,13 @@ int Trash<I>::restore(librados::IoCtx &io_ctx, const std::string &image_id,
     lderr(cct) << "error getting image id " << image_id
                << " info from trash: " << cpp_strerror(r) << dendl;
     return r;
+  }
+
+  if (trash_spec.source !=  static_cast<cls::rbd::TrashImageSource>(source)) {
+    lderr(cct) << "Current trash source: " << trash_spec.source
+               << " does not match expected: "
+               << static_cast<cls::rbd::TrashImageSource>(source) << dendl;
+    return -EINVAL;
   }
 
   std::string image_name = image_new_name;

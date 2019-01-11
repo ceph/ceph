@@ -743,6 +743,14 @@ test_migration() {
     rbd migration execute test1
     rbd migration commit test1
 
+    # testing trash
+    rbd migration prepare test1
+    expect_fail rbd trash mv test1
+    ID=`rbd trash ls -a | cut -d ' ' -f 1`
+    expect_fail rbd trash rm $ID
+    expect_fail rbd trash restore $ID
+    rbd migration abort test1
+
     for format in 1 2; do
         # Abort migration after successful prepare
         rbd create -s 128M --image-format ${format} test2
