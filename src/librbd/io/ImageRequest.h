@@ -84,6 +84,7 @@ protected:
 
 
   virtual int clip_request();
+  virtual void update_timestamp();
   virtual void send_request() = 0;
   virtual void send_image_cache_request() = 0;
 
@@ -247,6 +248,8 @@ protected:
 
   int clip_request() override {
     return 0;
+  }
+  void update_timestamp() override {
   }
   void send_request() override;
   void send_image_cache_request() override;

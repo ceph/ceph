@@ -82,8 +82,9 @@ struct TestMockIoImageRequest : public TestMockFixture {
       EXPECT_CALL(mock_image_ctx, get_modify_timestamp())
         .WillOnce(Return(ceph_clock_now() - utime_t(10,0)));
     } else {
-      mock_image_ctx.mtime_update_interval = 0;
-      EXPECT_CALL(mock_image_ctx, get_modify_timestamp());
+      mock_image_ctx.mtime_update_interval = 600;
+      EXPECT_CALL(mock_image_ctx, get_modify_timestamp())
+        .WillOnce(Return(ceph_clock_now()));
     }
   }
 
@@ -226,8 +227,8 @@ TEST_F(TestMockIoImageRequest, AioWriteJournalAppendDisabled) {
   mock_image_ctx.journal = &mock_journal;
 
   InSequence seq;
-  expect_is_journal_appending(mock_journal, false);
   expect_get_modify_timestamp(mock_image_ctx, false);
+  expect_is_journal_appending(mock_journal, false);
   expect_object_request_send(mock_image_ctx, 0);
 
   C_SaferCond aio_comp_ctx;
@@ -256,8 +257,8 @@ TEST_F(TestMockIoImageRequest, AioDiscardJournalAppendDisabled) {
   mock_image_ctx.journal = &mock_journal;
 
   InSequence seq;
-  expect_is_journal_appending(mock_journal, false);
   expect_get_modify_timestamp(mock_image_ctx, false);
+  expect_is_journal_appending(mock_journal, false);
   expect_object_request_send(mock_image_ctx, 0);
 
   C_SaferCond aio_comp_ctx;
@@ -314,8 +315,8 @@ TEST_F(TestMockIoImageRequest, AioWriteSameJournalAppendDisabled) {
   mock_image_ctx.journal = &mock_journal;
 
   InSequence seq;
-  expect_is_journal_appending(mock_journal, false);
   expect_get_modify_timestamp(mock_image_ctx, false);
+  expect_is_journal_appending(mock_journal, false);
   expect_object_request_send(mock_image_ctx, 0);
 
   C_SaferCond aio_comp_ctx;
@@ -345,8 +346,8 @@ TEST_F(TestMockIoImageRequest, AioCompareAndWriteJournalAppendDisabled) {
   mock_image_ctx.journal = &mock_journal;
 
   InSequence seq;
-  expect_is_journal_appending(mock_journal, false);
   expect_get_modify_timestamp(mock_image_ctx, false);
+  expect_is_journal_appending(mock_journal, false);
   expect_object_request_send(mock_image_ctx, 0);
 
   C_SaferCond aio_comp_ctx;
