@@ -2075,6 +2075,12 @@ private:
 
   bool per_pool_stat_collection = true;
 
+  friend class HashSharded_TransactionImpl;
+  KeyValueDB::Transaction get_transaction();
+  KeyValueDB::ColumnFamilyHandle get_db_shard(const std::string &prefix, const char *k, size_t keylen);
+  std::vector<KeyValueDB::ColumnFamilyHandle>& get_shards(const std::string &prefix);
+
+
   struct MempoolThread : public Thread {
   public:
     BlueStore *store;

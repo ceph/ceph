@@ -55,6 +55,8 @@
 #define tracepoint(...)
 #endif
 
+KeyValueDB* make_BlueStore_DB_Hash(KeyValueDB*, const std::map<std::string, size_t>& = {});
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
 
@@ -5743,6 +5745,8 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
     env = NULL;
     return -EIO;
   }
+  //wrap DB with sharded features
+  db = make_BlueStore_DB_Hash(db);
 
   FreelistManager::setup_merge_operators(db);
   db->set_merge_operator(PREFIX_STAT, merge_op);

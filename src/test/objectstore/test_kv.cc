@@ -72,6 +72,55 @@ public:
   }
 };
 
+class KVSharded : public ::testing::Test {
+public:
+  KeyValueDB* db;
+//  KeyValueDB* sharded_db;
+  KVSharded()
+  : db(nullptr)/*, sharded_db(nullptr)*/ {}
+
+  string _bl_to_str(bufferlist val) {
+    string str(val.c_str(), val.length());
+    return str;
+  }
+
+  void rm_r(string path) {
+    string cmd = string("rm -r ") + path;
+    cout << "==> " << cmd << std::endl;
+    int r = ::system(cmd.c_str());
+    if (r) {
+      cerr << "failed with exit code " << r
+           << ", continuing anyway" << std::endl;
+    }
+  }
+
+  void init() {
+    cout << "Creating rocksdb\n";
+    db = KeyValueDB::create(g_ceph_context,
+                            "rocksdb",
+                            "kv_test_temp_dir");
+  }
+  void fini() {
+    delete(db);
+  }
+
+  void SetUp() override {
+    int r = ::mkdir("kv_test_temp_dir", 0777);
+    if (r < 0 && errno != EEXIST) {
+      r = -errno;
+      cerr << __func__ << ": unable to create kv_test_temp_dir: "
+           << cpp_strerror(r) << std::endl;
+      return;
+    }
+    init();
+  }
+  void TearDown() override {
+    fini();
+    rm_r("kv_test_temp_dir");
+  }
+};
+
+
 TEST_P(KVTest, OpenClose) {
   ASSERT_EQ(0, db->create_and_open(cout));
   fini();
@@ -677,6 +726,155 @@ INSTANTIATE_TEST_SUITE_P(
   KeyValueDB,
   KVTest,
   ::testing::Values("leveldb", "rocksdb", "memdb"));
+
+KeyValueDB* make_BlueStore_DB_Hash(KeyValueDB*, const std::map<std::string, size_t>& = {});
+
+TEST_F(KVSharded, basic_creation) {
+  std::vector<KeyValueDB::ColumnFamily> cfs;
+  std::map<std::string, size_t> shards{{"A", 1}, {"C", 4}};
+  db = make_BlueStore_DB_Hash(db, shards);
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->create_and_open(cout, cfs));
+
+  KeyValueDB::Transaction t = db->get_transaction();
+  bufferlist value;
+  value.append("value");
+  t->set("A", "key", value);
+  t->set("C", "key", value);
+  t->set("C", "key2", value);
+  ASSERT_EQ(0, db->submit_transaction_sync(t));
+  bufferlist b1, b2, b3;
+  ASSERT_EQ(0, db->get("A", "key", &b1));
+  ASSERT_EQ(tostr(b1), "value");
+  ASSERT_EQ(0, db->get("C", "key", &b2));
+  ASSERT_EQ(tostr(b2), "value");
+  ASSERT_EQ(0, db->get("C", "key", &b3));
+  ASSERT_EQ(tostr(b3), "value");
+}
+
+TEST_F(KVSharded, massive_creation) {
+  std::vector<KeyValueDB::ColumnFamily> cfs;
+  std::map<std::string, size_t> shards{{"A", 1}, {"B", 2}, {"C", 3}, {"D", 4}};
+  db = make_BlueStore_DB_Hash(db, shards);
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->create_and_open(cout, cfs));
+
+  const std::string prefixes[]={"A", "B", "C", "D"};
+  for (int i = 0; i < 50; i++) {
+    KeyValueDB::Transaction t = db->get_transaction();
+    for (int j = 0; j < 10; j++) {
+      int v = i * 10 + j;
+      bufferlist value;
+      value.append(to_string(v));
+      t->set(prefixes[v % 4], to_string(v), value);
+    }
+    ASSERT_EQ(0, db->submit_transaction_sync(t));
+  }
+
+  for (int i = 0; i < 50; i++) {
+    for (int j = 0; j < 10; j++) {
+      int v = i * 10 + j;
+      bufferlist value;
+      ASSERT_EQ(0, db->get(prefixes[v % 4], to_string(v), &value));
+      ASSERT_EQ(tostr(value), to_string(v));
+    }
+  }
+}
+
+TEST_F(KVSharded, iterator_basic) {
+  std::map<std::string, std::string> k_v;
+  while (k_v.size() < 1000) {
+    std::string k, v;
+    do {
+      k.append(1, '0' + (rand() % ('z' - '0' + 1) ));
+    } while (rand() % 9);
+    do {
+      v.append(1, '0' + (rand() % ('z' - '0' + 1) ));
+    } while (rand() % 15);
+    k_v.emplace(k,v);
+  }
+
+  //std::vector<KeyValueDB::ColumnFamily> cfs;
+  std::map<std::string, size_t> shards{{"A", 7}};
+  db = make_BlueStore_DB_Hash(db, shards);
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->create_and_open(cout/*, cfs*/));
+
+  KeyValueDB::Transaction t = db->get_transaction();
+  for (auto& it: k_v) {
+    bufferlist value;
+    value.append(it.second);
+    t->set("A", it.first, value);
+  }
+
+  ASSERT_EQ(0, db->submit_transaction_sync(t));
+
+  KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
+  iter->seek_to_first();
+
+  ASSERT_EQ(1, iter->valid());
+  while (iter->valid()) {
+    std::pair<std::string, std::string> k = iter->raw_key();
+    std::string v = _bl_to_str(iter->value());
+    ASSERT_EQ(k_v[k.second], v);
+    k_v.erase(k.second);
+    iter->next();
+  }
+  ASSERT_EQ(k_v.size(), 0);
+}
+
+TEST_F(KVSharded, iterator_multitable) {
+  std::map<char, std::map<std::string, std::string>> prefix_k_v;
+  char prefix;
+  do {
+    std::string k, v;
+    prefix = "AIOPBb"[rand() % 6];
+    do {
+      k.append(1, '0' + (rand() % ('z' - '0' + 1) ));
+    } while (rand() % 9);
+    do {
+      v.append(1, '0' + (rand() % ('z' - '0' + 1) ));
+    } while (rand() % 15);
+    prefix_k_v[prefix].emplace(k,v);
+    //std::cout << ":" << std::string(1,prefix) << " " << k << " " << v << std::endl;
+  } while (prefix_k_v[prefix].size() < 1000);
+
+  //std::vector<KeyValueDB::ColumnFamily> cfs;
+  std::map<std::string, size_t> shards{
+    {"A", 7}, {"I", 5}, {"O", 2}, {"P", 1}, {"B", 3}, {"b", 1} };
+  db = make_BlueStore_DB_Hash(db, shards);
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->create_and_open(cout/*, cfs*/));
+
+  KeyValueDB::Transaction t = db->get_transaction();
+  for (auto& pit: prefix_k_v) {
+    for (auto& it: pit.second) {
+      bufferlist value;
+      value.append(it.second);
+      t->set(std::string(1,pit.first), it.first, value);
+    }
+  }
+
+  ASSERT_EQ(0, db->submit_transaction_sync(t));
+
+  KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
+  iter->seek_to_first();
+
+  ASSERT_EQ(1, iter->valid());
+  while (iter->valid()) {
+    std::pair<std::string, std::string> k = iter->raw_key();
+    std::string v = _bl_to_str(iter->value());
+    //std::cout << k.first << " " << k.second << " " << v << std::endl;
+    ASSERT_EQ(prefix_k_v[k.first[0]][k.second], v);
+    prefix_k_v[k.first[0]].erase(k.second);
+    iter->next();
+  }
+  for (auto& it: prefix_k_v) {
+    ASSERT_EQ(it.second.size(), 0);
+  }
+}
+
+
 
 int main(int argc, char **argv) {
   vector<const char*> args;
