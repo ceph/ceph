@@ -9,6 +9,7 @@
 #include "librbd/Utils.h"
 #include "librbd/cache/ImageCache.h"
 #include "librbd/io/AioCompletion.h"
+#include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ObjectDispatchInterface.h"
 #include "librbd/io/ObjectDispatchSpec.h"
 #include "librbd/io/ObjectDispatcher.h"
@@ -18,6 +19,7 @@
 #include "common/perf_counters.h"
 #include "common/WorkQueue.h"
 #include "osdc/Striper.h"
+#include <functional>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -34,37 +36,41 @@ namespace {
 template <typename I>
 struct C_UpdateTimestamp : public Context {
 public:
-  I* m_image_ctx;
-  AioCompletion* m_aio_comp;
-  bool modify; //if modify set to 'true', modify timestamp is updated, access timestamp otherwise
+  I& m_image_ctx;
+  bool m_modify; // if modify set to 'true', modify timestamp is updated,
+                 // access timestamp otherwise
+  AsyncOperation m_async_op;
 
-  C_UpdateTimestamp(I* ictx, AioCompletion *c, bool m)  
-    : m_image_ctx(ictx), m_aio_comp(c), modify(m) {
-    m_aio_comp->add_request();
+  C_UpdateTimestamp(I& ictx, bool m) : m_image_ctx(ictx), m_modify(m) {
+    m_async_op.start_op(*get_image_ctx(&m_image_ctx));
+  }
+  ~C_UpdateTimestamp() override {
+    m_async_op.finish_op();
   }
 
   void send() {
     librados::ObjectWriteOperation op;
-    if(modify)
+    if (m_modify) {
       cls_client::set_modify_timestamp(&op);
-    else
+    } else {
       cls_client::set_access_timestamp(&op);
+    }
 
-    librados::AioCompletion *comp = librbd::util::create_rados_callback(this);
-    int r = m_image_ctx->md_ctx.aio_operate(m_image_ctx->header_oid, comp, &op);
+    auto comp = librbd::util::create_rados_callback(this);
+    int r = m_image_ctx.md_ctx.aio_operate(m_image_ctx.header_oid, comp, &op);
     ceph_assert(r == 0);
     comp->release();
   }
 
   void finish(int r) override {
     // ignore errors updating timestamp
-    m_aio_comp->complete_request(0);
   }
 };
 
 bool should_update_timestamp(const utime_t& now, const utime_t& timestamp,
                              uint64_t interval) {
-    return (interval && (static_cast<uint64_t>(now.sec()) >= interval + timestamp));
+    return (interval &&
+            (static_cast<uint64_t>(now.sec()) >= interval + timestamp));
 }
 
 } // anonymous namespace
@@ -151,6 +157,7 @@ void ImageRequest<I>::send() {
   }
 
   if (m_bypass_image_cache || m_image_ctx.image_cache == nullptr) {
+    update_timestamp();
     send_request();
   } else {
     send_image_cache_request();
@@ -170,6 +177,58 @@ int ImageRequest<I>::clip_request() {
     image_extent.second = clip_len;
   }
   return 0;
+}
+
+template <typename I>
+void ImageRequest<I>::update_timestamp() {
+  bool modify = (get_aio_type() != AIO_TYPE_READ);
+  uint64_t update_interval;
+  if (modify) {
+    update_interval = m_image_ctx.mtime_update_interval;
+  } else {
+    update_interval = m_image_ctx.atime_update_interval;
+  }
+
+  if (update_interval == 0) {
+    return;
+  }
+
+  utime_t (I::*get_timestamp_fn)() const;
+  void (I::*set_timestamp_fn)(utime_t);
+  if (modify) {
+    get_timestamp_fn = &I::get_modify_timestamp;
+    set_timestamp_fn = &I::set_modify_timestamp;
+  } else {
+    get_timestamp_fn = &I::get_access_timestamp;
+    set_timestamp_fn = &I::set_access_timestamp;
+  }
+
+  utime_t ts = ceph_clock_now();
+  {
+    RWLock::RLocker timestamp_locker(m_image_ctx.timestamp_lock);
+    if(!should_update_timestamp(ts, std::invoke(get_timestamp_fn, m_image_ctx),
+                                update_interval)) {
+      return;
+    }
+  }
+
+  {
+    RWLock::WLocker timestamp_locker(m_image_ctx.timestamp_lock);
+    bool update = should_update_timestamp(
+      ts, std::invoke(get_timestamp_fn, m_image_ctx), update_interval);
+    if (!update) {
+      return;
+    }
+
+    std::invoke(set_timestamp_fn, m_image_ctx, ts);
+  }
+
+  // TODO we fire and forget this outside the IO path to prevent
+  // potential race conditions with librbd client IO callbacks
+  // between different threads (e.g. librados and object cacher)
+  ldout(m_image_ctx.cct, 10) << get_request_type() << dendl;
+  auto req = new C_UpdateTimestamp<I>(m_image_ctx, modify);
+  req->send();
 }
 
 template <typename I>
@@ -238,28 +297,7 @@ void ImageReadRequest<I>::send_request() {
   for (auto &object_extent : object_extents) {
     request_count += object_extent.second.size();
   }
-  
-  utime_t ts = ceph_clock_now();
-
-  image_ctx.timestamp_lock.get_read();
-  if(should_update_timestamp(ts,image_ctx.get_access_timestamp(),
-                             image_ctx.atime_update_interval)) {
-    image_ctx.timestamp_lock.put_read();
-    image_ctx.timestamp_lock.get_write();
-    if(should_update_timestamp(ts,image_ctx.get_access_timestamp(),
-                               image_ctx.atime_update_interval)) {
-      aio_comp->set_request_count(request_count + 1);
-      auto update_ctx = new C_UpdateTimestamp<I>(&image_ctx, aio_comp, false);
-      update_ctx->send();
-      image_ctx.set_access_timestamp(ts);
-    } else {
-      aio_comp->set_request_count(request_count);
-    }
-    image_ctx.timestamp_lock.put_write();
-  } else {
-    image_ctx.timestamp_lock.put_read();
-    aio_comp->set_request_count(request_count);
-  }
+  aio_comp->set_request_count(request_count);
 
   // issue the requests
   for (auto &object_extent : object_extents) {
@@ -346,34 +384,13 @@ void AbstractImageWriteRequest<I>::send_request() {
 
   if (!object_extents.empty()) {
     uint64_t journal_tid = 0;
-
-    utime_t ts = ceph_clock_now();
-    image_ctx.timestamp_lock.get_read();
-    if(should_update_timestamp(ts,image_ctx.get_modify_timestamp(),
-                               image_ctx.mtime_update_interval)) {
-      image_ctx.timestamp_lock.put_read();
-      image_ctx.timestamp_lock.get_write();
-      if(should_update_timestamp(ts,image_ctx.get_modify_timestamp(),
-                                 image_ctx.mtime_update_interval)) {
-        aio_comp->set_request_count(object_extents.size() + 1);
-        auto update_ctx = new C_UpdateTimestamp<I>(&image_ctx, aio_comp, true);
-        update_ctx->send();
-        image_ctx.set_modify_timestamp(ts);
-      } else {
-        aio_comp->set_request_count(object_extents.size());
-      }
-      image_ctx.timestamp_lock.put_write();
-    } else {
-      image_ctx.timestamp_lock.put_read();
-      aio_comp->set_request_count(object_extents.size());
-    }
-    
     if (journaling) {
       // in-flight ops are flushed prior to closing the journal
       ceph_assert(image_ctx.journal != NULL);
       journal_tid = append_journal_event(m_synchronous);
     }
 
+    aio_comp->set_request_count(object_extents.size());
     send_object_requests(object_extents, snapc, journal_tid);
   } else {
     // no IO to perform -- fire completion
