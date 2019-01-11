@@ -1599,12 +1599,12 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
 }
 
 void Server::submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin, MDRequestRef& mdr,
-                                const char *event)
+                                std::string_view event)
 {
   if (mdr) {
     string event_str("submit entry: ");
     event_str += event;
-    mdr->mark_event_string(event_str);
+    mdr->mark_event(event_str);
   } 
   mdlog->submit_entry(le, fin);
 }
