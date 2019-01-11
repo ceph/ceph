@@ -18,8 +18,22 @@ export class SummaryService {
   // Observable streams
   summaryData$ = this.summaryDataSource.asObservable();
 
+  polling: number;
+
   constructor(private http: HttpClient, private router: Router, private ngZone: NgZone) {
+    this.enablePolling();
+  }
+
+  enablePolling() {
     this.refresh();
+
+    this.ngZone.runOutsideAngular(() => {
+      this.polling = window.setInterval(() => {
+        this.ngZone.run(() => {
+          this.refresh();
+        });
+      }, 5000);
+    });
   }
 
   refresh() {
@@ -28,14 +42,6 @@ export class SummaryService {
         this.summaryDataSource.next(data);
       });
     }
-
-    this.ngZone.runOutsideAngular(() => {
-      setTimeout(() => {
-        this.ngZone.run(() => {
-          this.refresh();
-        });
-      }, 5000);
-    });
   }
 
   /**
