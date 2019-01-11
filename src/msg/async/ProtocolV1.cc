@@ -199,6 +199,7 @@ void ProtocolV1::fault() {
         backoff.set_from_double(cct->_conf->ms_max_backoff);
     }
 
+    global_seq = messenger->get_global_seq();
     state = START_CONNECT;
     connection->state = AsyncConnection::STATE_CONNECTING;
     ldout(cct, 10) << __func__ << " waiting " << backoff << dendl;
@@ -214,6 +215,7 @@ void ProtocolV1::fault() {
     } else {
       ldout(cct, 0) << __func__ << " initiating reconnect" << dendl;
       connect_seq++;
+      global_seq = messenger->get_global_seq();
       state = START_CONNECT;
       connection->state = AsyncConnection::STATE_CONNECTING;
     }
@@ -2394,6 +2396,7 @@ CtPtr ProtocolV1::open(ceph_msg_connect_reply &reply,
                   << dendl;
     ceph_assert(state == CLOSED || state == NONE);
     ldout(cct, 10) << "accept fault after register" << dendl;
+    messenger->unregister_conn(connection);
     connection->inject_delay();
     return _fault();
   }
