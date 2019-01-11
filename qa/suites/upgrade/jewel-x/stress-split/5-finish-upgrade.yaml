@@ -7,7 +7,12 @@ tasks:
     wait-for-healthy: false
     wait-for-osds-up: true
 - exec:
+     osd.0:
+      - ceph osd require-osd-release luminous
+- print: "**** done `ceph osd require-osd-release luminous`"
+- exec:
     osd.0:
+      - ceph osd dump --format=json-pretty | grep "flags"
       - ceph osd set pglog_hardlimit
       - ceph osd dump --format=json-pretty | grep "flags"
 - print: "**** try to set pglog_hardlimit again, should succeed"
