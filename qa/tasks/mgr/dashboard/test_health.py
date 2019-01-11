@@ -66,7 +66,7 @@ class HealthTest(DashboardTestCase):
                     })),
             }),
             'pg_info': JObj({
-                'pgs_per_osd': int,
+                'pgs_per_osd': float,
                 'statuses': JObj({}, allow_unknown=True, unknown_schema=int)
             }),
             'pools': JList(JLeaf(dict)),
@@ -244,7 +244,7 @@ class HealthTest(DashboardTestCase):
                     }, allow_unknown=True)),
             }, allow_unknown=True),
             'pg_info': JObj({
-                'pgs_per_osd': int,
+                'pgs_per_osd': float,
                 'statuses': JObj({}, allow_unknown=True, unknown_schema=int)
             }),
             'pools': JList(JLeaf(dict)),
