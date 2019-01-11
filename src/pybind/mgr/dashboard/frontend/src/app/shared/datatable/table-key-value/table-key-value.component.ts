@@ -48,6 +48,10 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
   @Input()
   hideEmpty = false;
 
+  // If set, the classAddingTpl is used to enable different css for different values
+  @Input()
+  customCss?: { [css: string]: number | string | ((any) => boolean) };
+
   columns: Array<CdTableColumn> = [];
   tableData: Item[];
 
@@ -71,6 +75,9 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
         flexGrow: 3
       }
     ];
+    if (this.customCss) {
+      this.columns[1].cellTransformation = CellTemplate.classAdding;
+    }
     // We need to subscribe the 'fetchData' event here and not in the
     // HTML template, otherwise the data table will display the loading
     // indicator infinitely if data is only bound via '[data]="xyz"'.

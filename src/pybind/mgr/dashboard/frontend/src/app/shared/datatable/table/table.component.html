@@ -162,7 +162,6 @@
      [hidden]="!value"></i>
 </ng-template>
 
-
 <ng-template #perSecondTpl
              let-row="row"
              let-value="value">
@@ -177,4 +176,9 @@
   {{ value }}
   <span *ngIf="row.cdExecuting"
         class="text-muted italic">({{ row.cdExecuting }}... )</span>
+</ng-template>
+
+<ng-template #classAddingTpl
+             let-value="value">
+  <span class="{{useCustomClass(value)}}">{{ value }}</span>
 </ng-template>
