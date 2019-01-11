@@ -219,12 +219,15 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             return HandleCommandResult(-errno.EINVAL,
                                        stderr="Invalid device spec, should be <node>:<device>")
 
-        spec = orchestrator.OsdCreationSpec()
-        spec.node = node_name
-        spec.format = "bluestore"
-        spec.drive_group = orchestrator.DriveGroupSpec([block_device])
+        devs = orchestrator.DeviceSelection(paths=block_device)
+        spec = orchestrator.DriveGroupSpec(node_name, data_devices=devs)
 
-        completion = self.create_osds(spec)
+        # TODO: Remove this and make the orchestrator composable
+        host_completion = self.get_hosts()
+        self.wait([host_completion])
+        all_hosts = [h.name for h in host_completion.result]
+
+        completion = self.create_osds(spec, all_hosts)
         self._orchestrator_wait([completion])
 
         return HandleCommandResult()

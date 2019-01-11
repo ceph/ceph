@@ -278,7 +278,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return ansible_operation
 
-    def create_osds(self, osd_spec):
+    def create_osds(self, drive_group, all_hosts):
         """
         Create one or more OSDs within a single Drive Group.
 
@@ -287,7 +287,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         finer-grained OSD feature enablement (choice of backing store,
         compression/encryption, etc).
 
-        :param osd_spec: OsdCreationSpec
+        :param osd_spec: DriveGroupSpec
         """
 
     def verify_config(self):
