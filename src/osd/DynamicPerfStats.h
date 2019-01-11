@@ -78,18 +78,15 @@ public:
             return;
           case PerformanceCounterType::BYTES:
             c->first += inb + outb;
-            c->second++;
             return;
           case PerformanceCounterType::WRITE_BYTES:
             if (op.may_write() || op.may_cache()) {
               c->first += inb;
-              c->second++;
             }
             return;
           case PerformanceCounterType::READ_BYTES:
             if (op.may_read()) {
               c->first += outb;
-              c->second++;
             }
             return;
           case PerformanceCounterType::LATENCY:
