@@ -130,9 +130,10 @@ describe('TableKeyValueComponent', () => {
   it('tests _makePairs', () => {
     expect(component._makePairs([['dash', 'board']])).toEqual([{ key: 'dash', value: 'board' }]);
     const pair = [{ key: 'dash', value: 'board' }, { key: 'ceph', value: 'mimic' }];
-    expect(component._makePairs(pair)).toEqual(pair);
+    const pairInverse = [{ key: 'ceph', value: 'mimic' }, { key: 'dash', value: 'board' }];
+    expect(component._makePairs(pair)).toEqual(pairInverse);
     expect(component._makePairs({ dash: 'board' })).toEqual([{ key: 'dash', value: 'board' }]);
-    expect(component._makePairs({ dash: 'board', ceph: 'mimic' })).toEqual(pair);
+    expect(component._makePairs({ dash: 'board', ceph: 'mimic' })).toEqual(pairInverse);
   });
 
   it('tests _makePairsFromArray', () => {
@@ -179,32 +180,6 @@ describe('TableKeyValueComponent', () => {
     });
   });
 
-  it('tests _insertFlattenObjects', () => {
-    component.renderObjects = true;
-    const v = [
-      {
-        key: 'no',
-        value: 'change'
-      },
-      {
-        key: 'first',
-        value: {
-          second: {
-            l3_1: 33,
-            l3_2: 44
-          },
-          layer: 'something'
-        }
-      }
-    ];
-    expect(component._insertFlattenObjects(v)).toEqual([
-      { key: 'no', value: 'change' },
-      { key: 'first layer', value: 'something' },
-      { key: 'first second l3_1', value: 33 },
-      { key: 'first second l3_2', value: 44 }
-    ]);
-  });
-
   describe('render objects', () => {
     beforeEach(() => {
       component.data = {
@@ -218,6 +193,14 @@ describe('TableKeyValueComponent', () => {
           }
         },
         someKey: 0,
+        o2: {
+          sub1: {
+            x: 42
+          },
+          sub2: {
+            y: 555
+          }
+        },
         additionalKeyContainingObject: { type: 'none' },
         keyWithEmptyObject: {}
       };
@@ -227,14 +210,16 @@ describe('TableKeyValueComponent', () => {
     it('with parent key', () => {
       component.ngOnInit();
       expect(component.tableData).toEqual([
-        { key: 'someKey', value: 0 },
+        { key: 'additionalKeyContainingObject type', value: 'none' },
         { key: 'keyWithEmptyObject', value: '' },
-        { key: 'options someSetting1', value: 38 },
+        { key: 'o2 sub1 x', value: 42 },
+        { key: 'o2 sub2 y', value: 555 },
         { key: 'options anotherSetting2', value: 'somethingElse' },
+        { key: 'options someSetting1', value: 38 },
         { key: 'options suboptions sub1', value: 12 },
         { key: 'options suboptions sub2', value: 34 },
         { key: 'options suboptions sub3', value: 56 },
-        { key: 'additionalKeyContainingObject type', value: 'none' }
+        { key: 'someKey', value: 0 }
       ]);
     });
 
@@ -242,14 +227,16 @@ describe('TableKeyValueComponent', () => {
       component.appendParentKey = false;
       component.ngOnInit();
       expect(component.tableData).toEqual([
-        { key: 'someKey', value: 0 },
-        { key: 'keyWithEmptyObject', value: '' },
-        { key: 'someSetting1', value: 38 },
         { key: 'anotherSetting2', value: 'somethingElse' },
+        { key: 'keyWithEmptyObject', value: '' },
+        { key: 'someKey', value: 0 },
+        { key: 'someSetting1', value: 38 },
         { key: 'sub1', value: 12 },
         { key: 'sub2', value: 34 },
         { key: 'sub3', value: 56 },
-        { key: 'type', value: 'none' }
+        { key: 'type', value: 'none' },
+        { key: 'x', value: 42 },
+        { key: 'y', value: 555 }
       ]);
     });
   });
@@ -269,6 +256,61 @@ describe('TableKeyValueComponent', () => {
       expect(component.table.fetchData.observers.length).toBe(1);
       component.table.fetchData.emit();
       expect(called).toBeTruthy();
+    });
+  });
+
+  describe('hide empty items', () => {
+    beforeEach(() => {
+      component.data = {
+        string: '',
+        array: [],
+        object: {},
+        emptyObject: {
+          string: '',
+          array: [],
+          object: {}
+        },
+        someNumber: 0,
+        someDifferentNumber: 1,
+        someArray: [0, 1],
+        someString: '0',
+        someObject: {
+          empty: {},
+          something: 0.1
+        }
+      };
+      component.renderObjects = true;
+    });
+
+    it('should show all items as default', () => {
+      expect(component.hideEmpty).toBe(false);
+      component.ngOnInit();
+      expect(component.tableData).toEqual([
+        { key: 'array', value: '' },
+        { key: 'emptyObject array', value: '' },
+        { key: 'emptyObject object', value: '' },
+        { key: 'emptyObject string', value: '' },
+        { key: 'object', value: '' },
+        { key: 'someArray', value: '0, 1' },
+        { key: 'someDifferentNumber', value: 1 },
+        { key: 'someNumber', value: 0 },
+        { key: 'someObject empty', value: '' },
+        { key: 'someObject something', value: 0.1 },
+        { key: 'someString', value: '0' },
+        { key: 'string', value: '' }
+      ]);
+    });
+
+    it('should hide all empty items', () => {
+      component.hideEmpty = true;
+      component.ngOnInit();
+      expect(component.tableData).toEqual([
+        { key: 'someArray', value: '0, 1' },
+        { key: 'someDifferentNumber', value: 1 },
+        { key: 'someNumber', value: 0 },
+        { key: 'someObject something', value: 0.1 },
+        { key: 'someString', value: '0' }
+      ]);
     });
   });
 });
