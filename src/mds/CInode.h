@@ -95,7 +95,7 @@ public:
   bool is_file() const    { return inode.is_file(); }
   bool is_symlink() const { return inode.is_symlink(); }
   bool is_dir() const     { return inode.is_dir(); }
-  static object_t get_object_name(inodeno_t ino, frag_t fg, const char *suffix);
+  static object_t get_object_name(inodeno_t ino, frag_t fg, std::string_view suffix);
 
   /* Full serialization for use in ".inode" root inode objects */
   void encode(bufferlist &bl, uint64_t features, const bufferlist *snap_blob=NULL) const;
@@ -176,7 +176,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int PIN_DIRWAITER =        24;
   static const int PIN_SCRUBQUEUE =       25;
 
-  const char *pin_name(int p) const override {
+  std::string_view pin_name(int p) const override {
     switch (p) {
     case PIN_DIRFRAG: return "dirfrag";
     case PIN_CAPS: return "caps";

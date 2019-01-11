@@ -17,16 +17,18 @@
 
 // MDS TABLES
 
+#include <string_view>
+
 enum {
   TABLE_ANCHOR,
   TABLE_SNAP,
 };
 
-inline const char *get_mdstable_name(int t) {
+inline std::string_view get_mdstable_name(int t) {
   switch (t) {
   case TABLE_ANCHOR: return "anchortable";
   case TABLE_SNAP: return "snaptable";
-  default: ceph_abort();
+  default: ceph_abort(); return std::string_view();
   }
 }
 
@@ -44,7 +46,7 @@ enum {
   TABLESERVER_OP_NOTIFY_PREP  = -11,
 };
 
-inline const char *get_mdstableserver_opname(int op) {
+inline std::string_view get_mdstableserver_opname(int op) {
   switch (op) {
   case TABLESERVER_OP_QUERY: return "query";
   case TABLESERVER_OP_QUERY_REPLY: return "query_reply";
@@ -57,7 +59,7 @@ inline const char *get_mdstableserver_opname(int op) {
   case TABLESERVER_OP_SERVER_READY: return "server_ready";
   case TABLESERVER_OP_NOTIFY_ACK: return "notify_ack";
   case TABLESERVER_OP_NOTIFY_PREP: return "notify_prep";
-  default: ceph_abort(); return 0;
+  default: ceph_abort(); return std::string_view();
   }
 }
 
@@ -67,12 +69,12 @@ enum {
   TABLE_OP_DESTROY,
 };
 
-inline const char *get_mdstable_opname(int op) {
+inline std::string_view get_mdstable_opname(int op) {
   switch (op) {
   case TABLE_OP_CREATE: return "create";
   case TABLE_OP_UPDATE: return "update";
   case TABLE_OP_DESTROY: return "destroy";
-  default: ceph_abort(); return 0;
+  default: ceph_abort(); return std::string_view();
   }
 }
 

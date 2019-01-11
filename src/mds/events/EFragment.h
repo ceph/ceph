@@ -51,7 +51,7 @@ public:
     OP_ROLLBACK = 3,
     OP_FINISH = 4 // finish deleting orphan dirfrags
   };
-  static const char *op_name(int o) {
+  static std::string_view op_name(int o) {
     switch (o) {
     case OP_PREPARE: return "prepare";
     case OP_COMMIT: return "commit";

@@ -67,8 +67,8 @@ protected:
 public:
   const char *get_type_name() const override { return "ILock"; }
   void print(ostream& out) const override {
-    out << "lock(a=" << get_lock_action_name(action)
-	<< " " << get_lock_type_name(lock_type)
+    out << "lock(a=" << SimpleLock::get_lock_action_name(action)
+	<< " " << SimpleLock::get_lock_type_name(lock_type)
 	<< " " << object_info
 	<< ")";
   }
