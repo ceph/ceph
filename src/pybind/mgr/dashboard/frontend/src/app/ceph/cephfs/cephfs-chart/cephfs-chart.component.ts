@@ -85,6 +85,9 @@ export class CephfsChartComponent implements OnChanges, OnInit {
                 displayFormats: {
                   quarter: 'MMM YYYY'
                 }
+              },
+              ticks: {
+                maxRotation: 0
               }
             }
           ],
