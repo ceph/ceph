@@ -321,7 +321,13 @@ class Task(object):
                         pos = int(param)
                         md[k] = arg_map[pos]
                     except ValueError:
-                        md[k] = arg_map[v[1:-1]]
+                        if param.find('.') == -1:
+                            md[k] = arg_map[param]
+                        else:
+                            path = param.split('.')
+                            md[k] = arg_map[path[0]]
+                            for i in range(1, len(path)):
+                                md[k] = md[k][path[i]]
                 else:
                     md[k] = v
             task = TaskManager.run(self.name, md, func, args, kwargs,
