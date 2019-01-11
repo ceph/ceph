@@ -751,12 +751,6 @@ public:
   }
 
   /**
-   * Get allowed authentication methods for a specific peer type
-   **/
-  void ms_deliver_get_auth_allowed_methods(
-      int peer_type, std::vector<uint32_t> &allowed_methods);
-
-  /**
    * Get the AuthAuthorizer for a new outgoing Connection.
    *
    * @param peer_type The peer type for the new Connection

@@ -112,6 +112,9 @@ private:
 
   bool keepalive;
 
+  void get_auth_allowed_methods(
+    int peer_type, std::vector<uint32_t> &allowed_methods);
+
   ostream &_conn_prefix(std::ostream *_dout);
   void run_continuation(Ct<ProtocolV2> *continuation);
   void calc_signature(const char *in, uint32_t length, char *out);
