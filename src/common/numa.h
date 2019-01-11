@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <include/compat.h>
 #include <sched.h>
 #include <ostream>
 #include <set>

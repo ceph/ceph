@@ -36,6 +36,12 @@
 /* And include the extra required include file */
 #include <pthread_np.h>
 
+#include <sys/param.h>
+#include <sys/cpuset.h>
+#define cpu_set_t cpuset_t
+int sched_setaffinity(pid_t pid, size_t cpusetsize,
+                      cpu_set_t *mask);
+
 #endif /* __FreeBSD__ */
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
