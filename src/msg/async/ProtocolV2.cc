@@ -1509,7 +1509,7 @@ CtPtr ProtocolV2::handle_auth_more(char *payload, uint32_t length) {
     }
   } else if (state == ACCEPTING) {
     if (auth_method == CEPH_AUTH_CEPHX) {
-      return handle_cephx_auth(auth_more.auth_payload());
+      return _handle_authorizer(auth_more.auth_payload());
     } else {
       ceph_abort("Auth method %d not implemented", auth_method);
     }
@@ -2441,72 +2441,6 @@ CtPtr ProtocolV2::post_server_banner_exchange() {
   return CONTINUE(read_frame);
 }
 
-CtPtr ProtocolV2::handle_cephx_auth(bufferlist &auth_payload) {
-  ldout(cct, 20) << __func__ << dendl;
-
-  ceph_assert(auth_method == CEPH_AUTH_CEPHX);
-
-  ldout(cct, 15) << __func__
-                 << " authorizer payload len=" << auth_payload.length()
-                 << dendl;
-
-  bool authorizer_valid;
-  bufferlist authorizer_reply;
-  bool had_challenge = (bool)authorizer_challenge;
-
-  connection->lock.unlock();
-  if (!messenger->ms_deliver_verify_authorizer(
-	connection, connection->peer_type, auth_method, auth_payload,
-	authorizer_reply, authorizer_valid, session_key,
-	&connection_secret,
-	&authorizer_challenge) ||
-      !authorizer_valid) {
-    connection->lock.lock();
-
-    if (!had_challenge && authorizer_challenge) {
-      ldout(cct, 10) << __func__ << " challenging authorizer" << dendl;
-      ceph_assert(authorizer_reply.length());
-      AuthMoreFrame more(authorizer_reply.length(), authorizer_reply);
-      return WRITE(more.get_buffer(), "auth more", read_frame);
-    } else {
-      ldout(cct, 0) << __func__ << " got bad authorizer, auth_reply_len="
-                    << authorizer_reply.length() << dendl;
-      session_security.reset();
-      AuthBadAuthFrame bad_auth(EPERM, "Bad Authorizer");
-      return WRITE(bad_auth.get_buffer(), "bad auth", read_frame);
-    }
-  }
-
-  connection->lock.lock();
-
-  if (state != ACCEPTING) {
-    ldout(cct, 1) << __func__
-                  << " state changed while accept, it must be mark_down"
-                  << dendl;
-    ceph_assert(state == CLOSED);
-    return _fault();
-  }
-
-  session_security.reset(
-      get_auth_session_handler(cct, auth_method, session_key,
-			       connection_secret,
-                               CEPH_FEATURE_MSG_AUTH | CEPH_FEATURE_CEPHX_V2));
-
-  if (cct->_conf.get_val<bool>("ms_msgr2_sign_messages")) {
-    auth_flags |= static_cast<uint64_t>(AuthFlag::SIGNED);
-  }
-  if (cct->_conf.get_val<bool>("ms_msgr2_encrypt_messages")) {
-    auth_flags |= static_cast<uint64_t>(AuthFlag::ENCRYPTED);
-  }
-
-  ldout(cct, 1) << __func__ << " authentication done,"
-                << " flags=" << std::hex << auth_flags << std::dec << dendl;
-
-  AuthDoneFrame auth_done(auth_flags, authorizer_reply.length(),
-                          authorizer_reply);
-  return WRITE(auth_done.get_buffer(), "auth done", read_frame);
-}
-
 CtPtr ProtocolV2::handle_auth_request(char *payload, uint32_t length) {
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
 
@@ -2531,27 +2465,29 @@ CtPtr ProtocolV2::handle_auth_request(char *payload, uint32_t length) {
   }
 
   ldout(cct, 10) << __func__ << " auth method=" << auth_request.method()
-                 << " accepted" << dendl;
+                 << " accepted, authorizer payload len="
+		 << auth_request.auth_payload().length() << dendl;
 
   auth_method = auth_request.method();
 
-  if (auth_method == CEPH_AUTH_NONE) {
-    ldout(cct, 1) << __func__ << " proceeding without authentication" << dendl;
+  return _handle_authorizer(auth_request.auth_payload());
+}
 
-    // even with CEPH_AUTH_NONE we still need to call verify_authorizer to
-    // make sure that peer caps are set correctly, and code up in the stack
-    // runs ms_handle_authentication.
-    connection->lock.unlock();
-    bufferlist authorizer_reply;
-    bool authorizer_valid;
-    messenger->ms_deliver_verify_authorizer(
-        connection, connection->peer_type, auth_method,
-        auth_request.auth_payload(), authorizer_reply, authorizer_valid,
-        session_key,
-	nullptr /* connection_secret */,
-	nullptr);
+CtPtr ProtocolV2::_handle_authorizer(bufferlist& auth_payload)
+{
+  bool authorizer_valid;
+  bufferlist authorizer_reply;
+  bool had_challenge = (bool)authorizer_challenge;
+
+  connection->lock.unlock();
+  if (!messenger->ms_deliver_verify_authorizer(
+	connection, connection->peer_type, auth_method,
+	auth_payload,
+	authorizer_reply, authorizer_valid, session_key,
+	&connection_secret,
+	&authorizer_challenge) ||
+      !authorizer_valid) {
     connection->lock.lock();
-
     if (state != ACCEPTING) {
       ldout(cct, 1) << __func__
                     << " state changed while accept, it must be mark_down"
@@ -2560,28 +2496,46 @@ CtPtr ProtocolV2::handle_auth_request(char *payload, uint32_t length) {
       return _fault();
     }
 
-    if (!authorizer_valid) {
+    if (!had_challenge && authorizer_challenge) {
+      ldout(cct, 10) << __func__ << " challenging authorizer" << dendl;
+      ceph_assert(authorizer_reply.length());
+      AuthMoreFrame more(authorizer_reply.length(), authorizer_reply);
+      return WRITE(more.get_buffer(), "auth more", read_frame);
+    } else {
       ldout(cct, 0) << __func__ << " got bad authorizer, auth_reply_len="
                     << authorizer_reply.length() << dendl;
       session_security.reset();
       AuthBadAuthFrame bad_auth(EPERM, "Bad Authorizer");
       return WRITE(bad_auth.get_buffer(), "bad auth", read_frame);
     }
-
-    session_security.reset();
-    bufferlist empty_bl;
-    AuthDoneFrame auth_done(0, 0, empty_bl);
-    return WRITE(auth_done.get_buffer(), "auth done", read_frame);
   }
+
+  connection->lock.lock();
+  if (state != ACCEPTING) {
+    ldout(cct, 1) << __func__
+		  << " state changed while accept, it must be mark_down"
+		  << dendl;
+    ceph_assert(state == CLOSED);
+    return _fault();
+  }
+
+  session_security.reset(
+    get_auth_session_handler(cct, auth_method, session_key,
+			     connection_secret,
+			     CEPH_FEATURE_MSG_AUTH | CEPH_FEATURE_CEPHX_V2));
 
   if (auth_method == CEPH_AUTH_CEPHX) {
-    return handle_cephx_auth(auth_request.auth_payload());
+#warning fix msgr2 sign/encrypt options
+    if (cct->_conf.get_val<bool>("ms_msgr2_sign_messages")) {
+      auth_flags |= static_cast<uint64_t>(AuthFlag::SIGNED);
+    }
+    if (cct->_conf.get_val<bool>("ms_msgr2_encrypt_messages")) {
+      auth_flags |= static_cast<uint64_t>(AuthFlag::ENCRYPTED);
+    }
   }
-
-  lderr(cct) << __func__ << " auth method " << auth_method << " not implemented"
-             << dendl;
-  ceph_abort();
-  return nullptr;
+  AuthDoneFrame auth_done(auth_flags, authorizer_reply.length(),
+                          authorizer_reply);
+  return WRITE(auth_done.get_buffer(), "auth done", read_frame);
 }
 
 CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {

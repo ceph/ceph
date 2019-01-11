@@ -249,8 +249,8 @@ private:
 
   Ct<ProtocolV2> *start_server_banner_exchange();
   Ct<ProtocolV2> *post_server_banner_exchange();
-  Ct<ProtocolV2> *handle_cephx_auth(bufferlist &auth_payload);
   Ct<ProtocolV2> *handle_auth_request(char *payload, uint32_t length);
+  Ct<ProtocolV2> *_handle_authorizer(bufferlist& auth_payload);
   Ct<ProtocolV2> *handle_client_ident(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_ident_missing_features_write(int r);
   Ct<ProtocolV2> *handle_reconnect(char *payload, uint32_t length);
