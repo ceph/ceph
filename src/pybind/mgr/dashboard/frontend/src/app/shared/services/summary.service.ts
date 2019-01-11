@@ -20,6 +20,14 @@ export class SummaryService {
 
   constructor(private http: HttpClient, private router: Router, private ngZone: NgZone) {
     this.refresh();
+
+    this.ngZone.runOutsideAngular(() => {
+      setInterval(() => {
+        this.ngZone.run(() => {
+          this.refresh();
+        });
+      }, 5000);
+    });
   }
 
   refresh() {
@@ -28,14 +36,6 @@ export class SummaryService {
         this.summaryDataSource.next(data);
       });
     }
-
-    this.ngZone.runOutsideAngular(() => {
-      setTimeout(() => {
-        this.ngZone.run(() => {
-          this.refresh();
-        });
-      }, 5000);
-    });
   }
 
   /**
