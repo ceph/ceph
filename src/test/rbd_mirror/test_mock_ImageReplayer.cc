@@ -533,7 +533,9 @@ public:
       .WillRepeatedly(Return(0));
   }
 
-  void expect_committed(::journal::MockJournaler &mock_journaler, int times) {
+  void expect_committed(::journal::MockReplayEntry &mock_replay_entry,
+                        ::journal::MockJournaler &mock_journaler, int times) {
+    EXPECT_CALL(mock_replay_entry, get_data()).Times(times);
     EXPECT_CALL(mock_journaler, committed(
                   MatcherCast<const ::journal::MockReplayEntryProxy&>(_)))
       .Times(times);
@@ -1033,7 +1035,7 @@ TEST_F(TestMockImageReplayer, Replay) {
   expect_get_or_send_update(mock_replay_status_formatter);
   expect_get_commit_tid_in_debug(mock_replay_entry);
   expect_get_tag_tid_in_debug(mock_local_journal);
-  expect_committed(mock_remote_journaler, 2);
+  expect_committed(mock_replay_entry, mock_remote_journaler, 2);
 
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
@@ -1243,7 +1245,7 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
   expect_get_or_send_update(mock_replay_status_formatter);
   expect_get_commit_tid_in_debug(mock_replay_entry);
   expect_get_tag_tid_in_debug(mock_local_journal);
-  expect_committed(mock_remote_journaler, 1);
+  expect_committed(mock_replay_entry, mock_remote_journaler, 1);
 
   InSequence seq;
   expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,

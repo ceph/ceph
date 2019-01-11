@@ -210,7 +210,7 @@ class CephMonOsdAgent(MetricsAgent):
     def _collect_data(self):
         # process data and save to 'self.data'
         obj_api = ClusterAPI(self._module_inst)
-        perf_data = obj_api.module.get_all_perf_counters()
+        perf_data = obj_api.module.get_all_perf_counters(services=('mon', 'osd'))
         if not perf_data and not isinstance(perf_data, dict):
             self._logger.error('unable to get all perf counters')
             return

@@ -62,7 +62,7 @@ struct MockReplayEntry {
   }
 
   MOCK_CONST_METHOD0(get_commit_tid, uint64_t());
-  MOCK_METHOD0(get_data, bufferlist());
+  MOCK_CONST_METHOD0(get_data, bufferlist());
 };
 
 struct MockReplayEntryProxy {
@@ -70,7 +70,7 @@ struct MockReplayEntryProxy {
     return MockReplayEntry::get_instance().get_commit_tid();
   }
 
-  bufferlist get_data() {
+  bufferlist get_data() const {
     return MockReplayEntry::get_instance().get_data();
   }
 };
