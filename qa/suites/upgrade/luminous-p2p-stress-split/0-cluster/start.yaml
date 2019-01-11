@@ -1,0 +1,20 @@
+meta:
+- desc: |
+   Run ceph on two nodes,
+   with a separate client-only node.
+   Use xfs beneath the osds.
+overrides:
+  ceph:
+    fs: xfs
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+- - osd.3
+  - osd.4
+  - osd.5
+- - client.0
