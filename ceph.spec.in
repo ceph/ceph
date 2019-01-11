@@ -432,6 +432,7 @@ Group:          System/Filesystems
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{_python_buildid}-pecan
 Requires:       python%{_python_buildid}-six
+Requires:       python%{_python_buildid}-psutil
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python%{_python_buildid}-cherrypy
 Requires:       python%{_python_buildid}-jwt

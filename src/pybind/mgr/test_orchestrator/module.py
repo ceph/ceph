@@ -3,6 +3,7 @@ import re
 import threading
 import functools
 import uuid
+import psutil
 from subprocess import check_output
 
 from mgr_module import MgrModule
@@ -227,21 +228,26 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         There is no guarantee which daemons are returned by describe_service, except that
         it returns the mgr we're running in.
         """
+        allowed_types = [ "mds", "osd", "mon", "rgw", "mgr" ]
         if service_type:
-            assert service_type in ("mds", "osd", "mon", "rgw", "mgr"), service_type + " unsupported"
-
-        out = map(str, check_output(['ps', 'aux']).splitlines())
-        types = [service_type] if service_type else ("mds", "osd", "mon", "rgw", "mgr")
-        processes = [p for p in out if any([('ceph-' + t in p) for t in types])]
+            assert service_type in allowed_types, service_type + " unsupported"
 
         result = []
-        for p in processes:
-            sd = orchestrator.ServiceDescription()
-            sd.nodename = 'localhost'
-            sd.service_type = re.search('ceph-([^ ]+)', p).group(1)
-            sd.daemon_name = re.search(' -i ([^ ]+)', p).group(1)
-            sd.container_id = p.split()[1]
-            result.append(sd)
+        for p in psutil.process_iter(attrs=['name']):
+            if 'ceph-' in p.info['name']:
+                svc_type = re.search('ceph-([^ ]+)', p.info['name']).group(1)
+                if svc_type not in allowed_types:
+                    continue
+                sd = orchestrator.ServiceDescription()
+                sd.nodename = 'localhost'
+                pd = p.as_dict(attrs=['pid','cmdline'])
+                sd.container_id = pd['pid']
+                sd.service_type = svc_type
+                for i in range(len(pd['cmdline'])):
+                    if pd['cmdline'][i] == '-i':
+                        sd.daemon_name = pd['cmdline'][i + 1]
+                        break
+                result.append(sd)
 
         return result
 
