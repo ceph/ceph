@@ -30,10 +30,9 @@ class TestClientNetworkRecovery(CephFSTestCase):
     REQUIRE_ONE_CLIENT_REMOTE = True
     CLIENTS_REQUIRED = 2
 
-    LOAD_SETTINGS = ["mds_session_timeout", "mds_reconnect_timeout", "ms_max_backoff"]
+    LOAD_SETTINGS = ["mds_reconnect_timeout", "ms_max_backoff"]
 
     # Environment references
-    mds_session_timeout = None
     mds_reconnect_timeout = None
     ms_max_backoff = None
 
@@ -44,6 +43,8 @@ class TestClientNetworkRecovery(CephFSTestCase):
         Check that the client blocks I/O during failure, and completes
         I/O after failure.
         """
+
+        session_timeout = self.fs.get_var("session_timeout")
 
         # We only need one client
         self.mount_b.umount_wait()
@@ -67,7 +68,7 @@ class TestClientNetworkRecovery(CephFSTestCase):
         # ...then it should block
         self.assertFalse(write_blocked.finished)
         self.assert_session_state(client_id, "open")
-        time.sleep(self.mds_session_timeout * 1.5)  # Long enough for MDS to consider session stale
+        time.sleep(session_timeout * 1.5)  # Long enough for MDS to consider session stale
         self.assertFalse(write_blocked.finished)
         self.assert_session_state(client_id, "stale")
 
@@ -87,10 +88,9 @@ class TestClientRecovery(CephFSTestCase):
     REQUIRE_KCLIENT_REMOTE = True
     CLIENTS_REQUIRED = 2
 
-    LOAD_SETTINGS = ["mds_session_timeout", "mds_reconnect_timeout", "ms_max_backoff"]
+    LOAD_SETTINGS = ["mds_reconnect_timeout", "ms_max_backoff"]
 
     # Environment references
-    mds_session_timeout = None
     mds_reconnect_timeout = None
     ms_max_backoff = None
 
@@ -214,6 +214,8 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.create_destroy()
 
     def test_stale_caps(self):
+        session_timeout = self.fs.get_var("session_timeout")
+
         # Capability release from stale session
         # =====================================
         cap_holder = self.mount_a.open_background()
@@ -226,7 +228,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.kill()
 
         try:
-            # Now, after mds_session_timeout seconds, the waiter should
+            # Now, after session_timeout seconds, the waiter should
             # complete their operation when the MDS marks the holder's
             # session stale.
             cap_waiter = self.mount_b.write_background()
@@ -239,9 +241,9 @@ class TestClientRecovery(CephFSTestCase):
 
             cap_waited = b - a
             log.info("cap_waiter waited {0}s".format(cap_waited))
-            self.assertTrue(self.mds_session_timeout / 2.0 <= cap_waited <= self.mds_session_timeout * 2.0,
+            self.assertTrue(session_timeout / 2.0 <= cap_waited <= session_timeout * 2.0,
                             "Capability handover took {0}, expected approx {1}".format(
-                                cap_waited, self.mds_session_timeout
+                                cap_waited, session_timeout
                             ))
 
             cap_holder.stdin.close()
@@ -260,6 +262,8 @@ class TestClientRecovery(CephFSTestCase):
     def test_evicted_caps(self):
         # Eviction while holding a capability
         # ===================================
+
+        session_timeout = self.fs.get_var("session_timeout")
 
         # Take out a write capability on a file on client A,
         # and then immediately kill it.
@@ -290,9 +294,9 @@ class TestClientRecovery(CephFSTestCase):
             log.info("cap_waiter waited {0}s".format(cap_waited))
             # This is the check that it happened 'now' rather than waiting
             # for the session timeout
-            self.assertLess(cap_waited, self.mds_session_timeout / 2.0,
+            self.assertLess(cap_waited, session_timeout / 2.0,
                             "Capability handover took {0}, expected less than {1}".format(
-                                cap_waited, self.mds_session_timeout / 2.0
+                                cap_waited, session_timeout / 2.0
                             ))
 
             cap_holder.stdin.close()
@@ -479,6 +483,8 @@ class TestClientRecovery(CephFSTestCase):
         if not isinstance(self.mount_a, FuseMount):
             raise SkipTest("Require FUSE client to handle signal STOP/CONT")
 
+        session_timeout = self.fs.get_var("session_timeout")
+
         self.mount_a.run_shell(["mkdir", "testdir"])
         self.mount_a.run_shell(["touch", "testdir/file1"])
         # populate readdir cache
@@ -497,7 +503,7 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_b.client_remote.run(args=["sudo", "kill", "-STOP", mount_b_pid])
 
         self.assert_session_state(mount_b_gid, "open")
-        time.sleep(self.mds_session_timeout * 1.5)  # Long enough for MDS to consider session stale
+        time.sleep(session_timeout * 1.5)  # Long enough for MDS to consider session stale
         self.assert_session_state(mount_b_gid, "stale")
 
         self.mount_a.run_shell(["touch", "testdir/file2"])
