@@ -73,6 +73,57 @@ public:
   }
 };
 
+class KVSharded : public ::testing::Test {
+public:
+  KeyValueDB* db;
+//  KeyValueDB* sharded_db;
+  KVSharded()
+  : db(nullptr)/*, sharded_db(nullptr)*/ {}
+
+  string _bl_to_str(bufferlist val) {
+    string str(val.c_str(), val.length());
+    return str;
+  }
+
+  void rm_r(string path) {
+    string cmd = string("rm -r ") + path;
+    cout << "==> " << cmd << std::endl;
+    int r = ::system(cmd.c_str());
+    if (r) {
+      cerr << "failed with exit code " << r
+           << ", continuing anyway" << std::endl;
+    }
+  }
+
+  void init() {
+    cout << "Creating rocksdb\n";
+    db = KeyValueDB::create(g_ceph_context,
+                            "rocksdb",
+                            "kv_test_temp_dir");
+  }
+  void fini() {
+    delete(db);
+  }
+
+  void SetUp() override {
+    cout << "SETUP" << std::endl;
+    int r = ::mkdir("kv_test_temp_dir", 0777);
+    if (r < 0 && errno != EEXIST) {
+      r = -errno;
+      cerr << __func__ << ": unable to create kv_test_temp_dir: "
+           << cpp_strerror(r) << std::endl;
+      return;
+    }
+    init();
+  }
+  void TearDown() override {
+    cout << "TEARDOWN" << std::endl;
+    fini();
+    rm_r("kv_test_temp_dir");
+  }
+};
+
+
 TEST_P(KVTest, OpenClose) {
   ASSERT_EQ(0, db->create_and_open(cout));
   fini();
@@ -608,6 +659,101 @@ INSTANTIATE_TEST_SUITE_P(
   KeyValueDB,
   KVTest,
   ::testing::Values("leveldb", "rocksdb", "memdb"));
+
+#else
+
+// Google Test may not support value-parameterized tests with some
+// compilers. If we use conditional compilation to compile out all
+// code referring to the gtest_main library, MSVC linker will not link
+// that library at all and consequently complain about missing entry
+// point defined in that library (fatal error LNK1561: entry point
+// must be defined). This dummy test keeps gtest_main linked in.
+TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
+
+#endif
+
+KeyValueDB* make_BlueStore_DB_Hash(KeyValueDB*, const std::map<std::string, size_t>& = {});
+
+TEST_F(KVSharded, basic_creation) {
+  std::vector<KeyValueDB::ColumnFamily> cfs;
+  std::map<std::string, size_t> shards{{"A", 1}, {"C", 4}};
+  db = make_BlueStore_DB_Hash(db, shards);
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->create_and_open(cout, cfs));
+
+  KeyValueDB::Transaction t = db->get_transaction();
+  bufferlist value;
+  value.append("value");
+  t->set("A", "key", value);
+  t->set("C", "key", value);
+  t->set("C", "key2", value);
+  ASSERT_EQ(0, db->submit_transaction_sync(t));
+  bufferlist b1, b2, b3;
+  ASSERT_EQ(0, db->get("A", "key", &b1));
+  ASSERT_EQ(tostr(b1), "value");
+  ASSERT_EQ(0, db->get("C", "key", &b2));
+  ASSERT_EQ(tostr(b2), "value");
+  ASSERT_EQ(0, db->get("C", "key", &b3));
+  ASSERT_EQ(tostr(b3), "value");
+}
+
+TEST_F(KVSharded, massive_creation) {
+  std::vector<KeyValueDB::ColumnFamily> cfs;
+  std::map<std::string, size_t> shards{{"A", 1}, {"B", 2}, {"C", 3}, {"D", 4}};
+  db = make_BlueStore_DB_Hash(db, shards);
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->create_and_open(cout, cfs));
+
+  const std::string prefixes[]={"A", "B", "C", "D"};
+  for (int i = 0; i < 50; i++) {
+    KeyValueDB::Transaction t = db->get_transaction();
+    for (int j = 0; j < 10; j++) {
+      int v = i * 10 + j;
+      bufferlist value;
+      value.append(to_string(v));
+      t->set(prefixes[v % 4], to_string(v), value);
+    }
+    ASSERT_EQ(0, db->submit_transaction_sync(t));
+  }
+
+  for (int i = 0; i < 50; i++) {
+    for (int j = 0; j < 10; j++) {
+      int v = i * 10 + j;
+      bufferlist value;
+      ASSERT_EQ(0, db->get(prefixes[v % 4], to_string(v), &value));
+      ASSERT_EQ(tostr(value), to_string(v));
+    }
+  }
+}
+
+TEST_F(KVSharded, iterator) {
+  //std::vector<KeyValueDB::ColumnFamily> cfs;
+  std::map<std::string, size_t> shards{{"A", 6}};
+  db = make_BlueStore_DB_Hash(db, shards);
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  ASSERT_EQ(0, db->create_and_open(cout/*, cfs*/));
+
+  for (int i = 0; i < 1000; i++) {
+    KeyValueDB::Transaction t = db->get_transaction();
+    bufferlist value;
+    value.append(to_string(1000 - i));
+    t->set("A", to_string(i), value);
+    ASSERT_EQ(0, db->submit_transaction_sync(t));
+  }
+
+  KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
+  iter->seek_to_first();
+  for (int i = 0; i < 1000; i++) {
+    ASSERT_EQ(1, iter->valid());
+    std::pair<std::string, std::string> x = iter->raw_key();
+    ASSERT_EQ("A", x.first);
+    ASSERT_EQ(to_string(i), x.second);
+    ASSERT_EQ(to_string(i), iter->key());
+    ASSERT_EQ(to_string(1000 - i), _bl_to_str(iter->value()));
+  }
+}
+
+
 
 int main(int argc, char **argv) {
   vector<const char*> args;
