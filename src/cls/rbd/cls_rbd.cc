@@ -2987,7 +2987,10 @@ int dir_get_name(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   string name;
   int r = read_key(hctx, dir_key_for_id(id), &name);
   if (r < 0) {
-    CLS_ERR("error reading name for id '%s': %s", id.c_str(), cpp_strerror(r).c_str());
+    if (r != -ENOENT) {
+      CLS_ERR("error reading name for id '%s': %s", id.c_str(),
+              cpp_strerror(r).c_str());
+    }
     return r;
   }
   encode(name, *out);
@@ -3031,7 +3034,9 @@ int dir_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     int r = cls_cxx_map_get_vals(hctx, last_read, RBD_DIR_NAME_KEY_PREFIX,
                                  max_read, &vals, &more);
     if (r < 0) {
-      CLS_ERR("error reading directory by name: %s", cpp_strerror(r).c_str());
+      if (r != -ENOENT) {
+        CLS_ERR("error reading directory by name: %s", cpp_strerror(r).c_str());
+      }
       return r;
     }
 
@@ -3622,7 +3627,10 @@ int metadata_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     int r = cls_cxx_map_get_vals(hctx, last_read, RBD_METADATA_KEY_PREFIX,
                                  max_read, &raw_data, &more);
     if (r < 0) {
-      CLS_ERR("failed to read the vals off of disk: %s", cpp_strerror(r).c_str());
+      if (r != -ENOENT) {
+        CLS_ERR("failed to read the vals off of disk: %s",
+                cpp_strerror(r).c_str());
+      }
       return r;
     }
 
@@ -4554,7 +4562,9 @@ int read_peers(cls_method_context_t hctx,
     int r = cls_cxx_map_get_vals(hctx, last_read, PEER_KEY_PREFIX.c_str(),
                                  max_read, &vals, &more);
     if (r < 0) {
-      CLS_ERR("error reading peers: %s", cpp_strerror(r).c_str());
+      if (r != -ENOENT) {
+        CLS_ERR("error reading peers: %s", cpp_strerror(r).c_str());
+      }
       return r;
     }
 
@@ -4845,8 +4855,10 @@ int image_status_list(cls_method_context_t hctx,
     r = cls_cxx_map_get_vals(hctx, last_read, IMAGE_KEY_PREFIX, max_read, &vals,
                              &more);
     if (r < 0) {
-      CLS_ERR("error reading mirror image directory by name: %s",
-              cpp_strerror(r).c_str());
+      if (r != -ENOENT) {
+        CLS_ERR("error reading mirror image directory by name: %s",
+                cpp_strerror(r).c_str());
+      }
       return r;
     }
 
@@ -4882,8 +4894,9 @@ int image_status_list(cls_method_context_t hctx,
   return 0;
 }
 
-int image_status_get_summary(cls_method_context_t hctx,
-	std::map<cls::rbd::MirrorImageStatusState, int> *states) {
+int image_status_get_summary(
+    cls_method_context_t hctx,
+    std::map<cls::rbd::MirrorImageStatusState, int> *states) {
   std::set<entity_inst_t> watchers;
   int r = list_watchers(hctx, &watchers);
   if (r < 0) {
@@ -4900,7 +4913,9 @@ int image_status_get_summary(cls_method_context_t hctx,
     r = cls_cxx_map_get_vals(hctx, last_read, IMAGE_KEY_PREFIX,
 			     max_read, &vals, &more);
     if (r < 0) {
-      CLS_ERR("error reading mirrored images: %s", cpp_strerror(r).c_str());
+      if (r != -ENOENT) {
+        CLS_ERR("error reading mirrored images: %s", cpp_strerror(r).c_str());
+      }
       return r;
     }
 
@@ -4952,7 +4967,9 @@ int image_status_remove_down(cls_method_context_t hctx) {
     r = cls_cxx_map_get_vals(hctx, last_read, STATUS_GLOBAL_KEY_PREFIX,
 			     max_read, &vals, &more);
     if (r < 0) {
-      CLS_ERR("error reading mirrored images: %s", cpp_strerror(r).c_str());
+      if (r != -ENOENT) {
+        CLS_ERR("error reading mirrored images: %s", cpp_strerror(r).c_str());
+      }
       return r;
     }
 
@@ -5046,8 +5063,10 @@ int image_instance_list(cls_method_context_t hctx,
     r = cls_cxx_map_get_vals(hctx, last_read, IMAGE_KEY_PREFIX, max_read, &vals,
                              &more);
     if (r < 0) {
-      CLS_ERR("error reading mirror image directory by name: %s",
-              cpp_strerror(r).c_str());
+      if (r != -ENOENT) {
+        CLS_ERR("error reading mirror image directory by name: %s",
+                cpp_strerror(r).c_str());
+      }
       return r;
     }
 
@@ -5554,8 +5573,10 @@ int mirror_image_list(cls_method_context_t hctx, bufferlist *in,
     int r = cls_cxx_map_get_vals(hctx, last_read, mirror::IMAGE_KEY_PREFIX,
                                  max_read, &vals, &more);
     if (r < 0) {
-      CLS_ERR("error reading mirror image directory by name: %s",
-              cpp_strerror(r).c_str());
+      if (r != -ENOENT) {
+        CLS_ERR("error reading mirror image directory by name: %s",
+                cpp_strerror(r).c_str());
+      }
       return r;
     }
 
@@ -6281,7 +6302,9 @@ int group_dir_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     int r = cls_cxx_map_get_vals(hctx, last_read, RBD_DIR_NAME_KEY_PREFIX,
                                  max_read, &vals, &more);
     if (r < 0) {
-      CLS_ERR("error reading directory by name: %s", cpp_strerror(r).c_str());
+      if (r != -ENOENT) {
+        CLS_ERR("error reading directory by name: %s", cpp_strerror(r).c_str());
+      }
       return r;
     }
 
@@ -6989,8 +7012,10 @@ int trash_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     int r = cls_cxx_map_get_vals(hctx, last_read, trash::IMAGE_KEY_PREFIX,
                                  max_read, &raw_data, &more);
     if (r < 0) {
-      CLS_ERR("failed to read the vals off of disk: %s",
-              cpp_strerror(r).c_str());
+      if (r != -ENOENT) {
+        CLS_ERR("failed to read the vals off of disk: %s",
+                cpp_strerror(r).c_str());
+      }
       return r;
     }
     if (raw_data.empty()) {
@@ -7226,8 +7251,10 @@ int namespace_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     int r = cls_cxx_map_get_vals(hctx, last_read, nspace::NAME_KEY_PREFIX,
                                  max_read, &raw_data, &more);
     if (r < 0) {
-      CLS_ERR("failed to read the vals off of disk: %s",
-              cpp_strerror(r).c_str());
+      if (r != -ENOENT) {
+        CLS_ERR("failed to read the vals off of disk: %s",
+                cpp_strerror(r).c_str());
+      }
       return r;
     }
 

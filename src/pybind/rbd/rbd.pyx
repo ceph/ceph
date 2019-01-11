@@ -29,6 +29,7 @@ except ImportError:
     from collections import Iterable
 from datetime import datetime
 from itertools import chain
+import time
 
 cimport rados
 
@@ -304,6 +305,7 @@ cdef extern from "rbd/librbd.h" nogil:
                        size_t *num_entries)
     void rbd_trash_list_cleanup(rbd_trash_image_info_t *trash_entries,
                                 size_t num_entries)
+    int rbd_trash_purge(rados_ioctx_t io, time_t expire_ts, float threshold)
     int rbd_trash_remove(rados_ioctx_t io, const char *id, int force)
     int rbd_trash_restore(rados_ioctx_t io, const char *id, const char *name)
 
@@ -1246,10 +1248,43 @@ class RBD(object):
         if ret != 0:
             raise make_ex(ret, 'error moving image to trash')
 
+    def trash_purge(self, ioctx, expire_ts=None, threshold=-1):
+        """
+        Delete RBD images from trash in bulk.
+
+        By default it removes images with deferment end time less than now.
+
+        The timestamp is configurable, e.g. delete images that have expired a
+        week ago.
+
+        If the threshold is used it deletes images until X% pool usage is met.
+
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param expire_ts: timestamp for images to be considered as expired (UTC)
+        :type expire_ts: datetime
+        :param threshold: percentage of pool usage to be met (0 to 1)
+        :type threshold: float
+        """
+        if expire_ts:
+            expire_epoch_ts = time.mktime(expire_ts.timetuple())
+        else:
+            expire_epoch_ts = 0
+
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            time_t _expire_ts = expire_epoch_ts
+            float _threshold = threshold
+        with nogil:
+            ret = rbd_trash_purge(_ioctx, _expire_ts, _threshold)
+        if ret != 0:
+            raise make_ex(ret, 'error purging images from trash')
+
     def trash_remove(self, ioctx, image_id, force=False):
         """
         Delete an RBD image from trash. If image deferment time has not
         expired :class:`PermissionError` is raised.
+
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
         :param image_id: the id of the image to remove
@@ -1270,7 +1305,8 @@ class RBD(object):
 
     def trash_get(self, ioctx, image_id):
         """
-        Retrieve RBD image info from trash
+        Retrieve RBD image info from trash.
+
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
         :param image_id: the id of the image to restore
@@ -1314,6 +1350,7 @@ class RBD(object):
     def trash_list(self, ioctx):
         """
         List all entries from trash.
+
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
         :returns: :class:`TrashIterator`
@@ -1323,6 +1360,7 @@ class RBD(object):
     def trash_restore(self, ioctx, image_id, name):
         """
         Restore an RBD image from trash.
+
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
         :param image_id: the id of the image to restore

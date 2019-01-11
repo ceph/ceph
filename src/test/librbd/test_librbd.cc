@@ -6594,6 +6594,8 @@ TEST_F(TestLibRBD, DefaultFeatures) {
 }
 
 TEST_F(TestLibRBD, TestTrashMoveAndPurge) {
+  REQUIRE_FORMAT_V2();
+
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
 
@@ -6606,14 +6608,7 @@ TEST_F(TestLibRBD, TestTrashMoveAndPurge) {
 
   librbd::Image image;
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
-  uint8_t old_format;
-  ASSERT_EQ(0, image.old_format(&old_format));
 
-  if (old_format) {
-    ASSERT_EQ(-EOPNOTSUPP, rbd.trash_move(ioctx, name.c_str(), 0));
-    image.close();
-    return;
-  }
   std::string image_id;
   ASSERT_EQ(0, image.get_id(&image_id));
   image.close();
@@ -6645,6 +6640,8 @@ TEST_F(TestLibRBD, TestTrashMoveAndPurge) {
 }
 
 TEST_F(TestLibRBD, TestTrashMoveAndPurgeNonExpiredDelay) {
+  REQUIRE_FORMAT_V2();
+
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
 
@@ -6657,14 +6654,7 @@ TEST_F(TestLibRBD, TestTrashMoveAndPurgeNonExpiredDelay) {
 
   librbd::Image image;
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
-  uint8_t old_format;
-  ASSERT_EQ(0, image.old_format(&old_format));
 
-  if (old_format) {
-    ASSERT_EQ(-EOPNOTSUPP, rbd.trash_move(ioctx, name.c_str(), 0));
-    image.close();
-    return;
-  }
   std::string image_id;
   ASSERT_EQ(0, image.get_id(&image_id));
   image.close();
@@ -6680,7 +6670,66 @@ TEST_F(TestLibRBD, TestTrashMoveAndPurgeNonExpiredDelay) {
                                               true, pp2));
 }
 
+TEST_F(TestLibRBD, TestTrashPurge) {
+  REQUIRE_FORMAT_V2();
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name1 = get_temp_image_name();
+  std::string name2 = get_temp_image_name();
+
+  uint64_t size = 1 << 18;
+  int order = 12;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name1.c_str(), size, &order));
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name2.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name1.c_str(), nullptr));
+
+  std::string image_id1;
+  ASSERT_EQ(0, image1.get_id(&image_id1));
+  image1.close();
+
+  ASSERT_EQ(0, rbd.trash_move(ioctx, name1.c_str(), 0));
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name2.c_str(), nullptr));
+  ceph::bufferlist bl;
+  bl.append(std::string(1024, '0'));
+  ASSERT_EQ(1024, image2.write(0, 1024, bl));
+
+  std::string image_id2;
+  ASSERT_EQ(0, image2.get_id(&image_id2));
+  image2.close();
+
+  ASSERT_EQ(0, rbd.trash_move(ioctx, name2.c_str(), 100));
+  ASSERT_EQ(0, rbd.trash_purge(ioctx, 0, -1));
+
+  std::vector<librbd::trash_image_info_t> entries;
+  ASSERT_EQ(0, rbd.trash_list(ioctx, entries));
+  ASSERT_EQ(1U, entries.size());
+  ASSERT_EQ(image_id2, entries[0].id);
+  ASSERT_EQ(name2, entries[0].name);
+  entries.clear();
+
+  struct timespec now;
+  clock_gettime(CLOCK_REALTIME, &now);
+  float threshold = 0.0;
+  if (!is_librados_test_stub(_rados)) {
+    // real cluster usage reports have a long latency to update
+    threshold = -1.0;
+  }
+
+  ASSERT_EQ(0, rbd.trash_purge(ioctx, now.tv_sec+1000, threshold));
+  ASSERT_EQ(0, rbd.trash_list(ioctx, entries));
+  ASSERT_EQ(0U, entries.size());
+}
+
 TEST_F(TestLibRBD, TestTrashMoveAndRestore) {
+  REQUIRE_FORMAT_V2();
+
   librados::IoCtx ioctx;
   ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
 
@@ -6693,14 +6742,7 @@ TEST_F(TestLibRBD, TestTrashMoveAndRestore) {
 
   librbd::Image image;
   ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
-  uint8_t old_format;
-  ASSERT_EQ(0, image.old_format(&old_format));
 
-  if (old_format) {
-    ASSERT_EQ(-EOPNOTSUPP, rbd.trash_move(ioctx, name.c_str(), 0));
-    image.close();
-    return;
-  }
   std::string image_id;
   ASSERT_EQ(0, image.get_id(&image_id));
   image.close();
