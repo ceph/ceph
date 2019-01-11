@@ -14,6 +14,8 @@
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
 #include "librbd/api/Group.h"
+#include "librbd/api/Image.h"
+#include "librbd/api/Snapshot.h"
 #include "librbd/api/Trash.h"
 #include "librbd/deep_copy/MetadataCopyRequest.h"
 #include "librbd/deep_copy/SnapshotCopyRequest.h"
@@ -967,17 +969,51 @@ int Migration<I>::list_snaps(std::vector<librbd::snap_info_t> *snapsptr) {
   }
 
   for (auto &snap : snaps) {
-    bool is_protected;
-    r = snap_is_protected(m_src_image_ctx, snap.name.c_str(), &is_protected);
+    librbd::snap_namespace_type_t namespace_type;
+    r = Snapshot<I>::get_namespace_type(m_src_image_ctx, snap.id, &namespace_type);
     if (r < 0) {
-      lderr(m_cct) << "failed retrieving snapshot status: " << cpp_strerror(r)
+      lderr(m_cct) << "error getting snap namespace type: " << cpp_strerror(r)
                    << dendl;
       return r;
     }
-    if (is_protected) {
-      lderr(m_cct) << "image has protected snapshot '" << snap.name << "'"
+
+    if (namespace_type == RBD_SNAP_NAMESPACE_TYPE_GROUP ||
+        namespace_type == RBD_SNAP_NAMESPACE_TYPE_TRASH) {
+      lderr(m_cct) << "image has group or trash snapshot '" << snap.name << "'"
                    << dendl;
       return -EBUSY;
+    } else {
+      bool is_protected;
+      r = snap_is_protected(m_src_image_ctx, snap.name.c_str(), &is_protected);
+      if (r < 0) {
+        lderr(m_cct) << "failed retrieving snapshot status: " << cpp_strerror(r)
+                     << dendl;
+        return r;
+      }
+      if (is_protected) {
+        lderr(m_cct) << "image has protected snapshot '" << snap.name << "'"
+                     << dendl;
+        return -EBUSY;
+      }
+
+      RWLock::RLocker l(m_src_image_ctx->snap_lock);
+      cls::rbd::ParentImageSpec parent_spec{m_src_image_ctx->md_ctx.get_id(),
+                                            m_src_image_ctx->md_ctx.get_namespace(),
+                                            m_src_image_ctx->id, snap.id};
+      std::vector<librbd::linked_image_spec_t> child_images;
+      r = api::Image<I>::list_children(m_src_image_ctx, parent_spec, &child_images);
+      if (r < 0) {
+        lderr(m_cct) << "failed listing children: " << cpp_strerror(r)
+                     << dendl;
+        return r;
+      }
+
+      size_t size = child_images.size();
+      if (size > 0) {
+        lderr(m_cct) << "image has snapshot '" << snap.name << "' with linked clones"
+                     << dendl;
+        return -EBUSY;
+      }
     }
   }
 
