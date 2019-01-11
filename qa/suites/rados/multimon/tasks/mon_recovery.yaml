@@ -4,4 +4,5 @@ tasks:
     log-whitelist:
       - overall HEALTH_
       - \(MON_DOWN\)
+      - \(PG_AVAILABILITY\)
 - mon_recovery:
