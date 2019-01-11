@@ -46,10 +46,10 @@ void PerformanceCounterDescriptor::pack_counter(const PerformanceCounter &c,
   case PerformanceCounterType::OPS:
   case PerformanceCounterType::WRITE_OPS:
   case PerformanceCounterType::READ_OPS:
-    break;
   case PerformanceCounterType::BYTES:
   case PerformanceCounterType::WRITE_BYTES:
   case PerformanceCounterType::READ_BYTES:
+    break;
   case PerformanceCounterType::LATENCY:
   case PerformanceCounterType::WRITE_LATENCY:
   case PerformanceCounterType::READ_LATENCY:
@@ -68,10 +68,10 @@ void PerformanceCounterDescriptor::unpack_counter(
   case PerformanceCounterType::OPS:
   case PerformanceCounterType::WRITE_OPS:
   case PerformanceCounterType::READ_OPS:
-    break;
   case PerformanceCounterType::BYTES:
   case PerformanceCounterType::WRITE_BYTES:
   case PerformanceCounterType::READ_BYTES:
+    break;
   case PerformanceCounterType::LATENCY:
   case PerformanceCounterType::WRITE_LATENCY:
   case PerformanceCounterType::READ_LATENCY:
