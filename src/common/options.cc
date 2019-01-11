@@ -1998,19 +1998,20 @@ std::vector<Option> get_global_options() {
 
     Option("auth_cluster_required", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("cephx")
-    .set_description(""),
+    .set_description("authentication methods required by the cluster"),
 
     Option("auth_service_required", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("cephx")
-    .set_description(""),
+    .set_description("authentication methods required by service daemons"),
 
     Option("auth_client_required", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("cephx, none")
-    .set_description(""),
+    .set_flag(Option::FLAG_MINIMAL_CONF)
+    .set_description("authentication methods allowed by clients"),
 
     Option("auth_supported", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
-    .set_description(""),
+    .set_description("authentication methods required (deprecated)"),
 
     Option("max_rotating_auth_attempts", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10)

@@ -117,6 +117,7 @@ struct Option {
     FLAG_CLUSTER_CREATE = 0x8,  ///< option only has effect at cluster creation
     FLAG_CREATE = 0x10,         ///< option only has effect at daemon creation
     FLAG_MGR = 0x20,            ///< option is a mgr module option
+    FLAG_MINIMAL_CONF = 0x40,   ///< option should go in a minimal ceph.conf
   };
 
   struct size_t {
