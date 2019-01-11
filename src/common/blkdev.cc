@@ -765,6 +765,11 @@ int BlkDev::get_size(int64_t *psize) const
   return ret;
 }
 
+int64_t BlkDev::get_int_property(blkdev_prop_t prop) const
+{
+  return 0;
+}
+
 bool BlkDev::support_discard() const
 {
   return false;
@@ -783,6 +788,11 @@ bool BlkDev::is_nvme() const
 bool BlkDev::is_rotational() const
 {
   return false;
+}
+
+int BlkDev::get_numa_node(int *node) const
+{
+  return -1;
 }
 
 int BlkDev::model(char *model, size_t max) const
@@ -866,6 +876,11 @@ int BlkDev::get_size(int64_t *psize) const
   return ret;
 }
 
+int64_t BlkDev::get_int_property(blkdev_prop_t prop) const
+{
+  return 0;
+}
+
 bool BlkDev::support_discard() const
 {
 #ifdef FREEBSD_WITH_TRIM
@@ -932,6 +947,15 @@ bool BlkDev::is_rotational() const
 #else
   return true;      // When in doubt, it's probably spinny
 #endif
+}
+
+int BlkDev::get_numa_node(int *node) const
+{
+  int numa = get_int_property(BLKDEV_PROP_NUMA_NODE);
+  if (numa < 0)
+    return -1;
+  *node = numa;
+  return 0;
 }
 
 int BlkDev::model(char *model, size_t max) const

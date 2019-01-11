@@ -12,7 +12,7 @@
 
 
 // list
-
+#if defined(__linux__)
 int parse_cpu_set_list(const char *s,
 		       size_t *cpu_set_size,
 		       cpu_set_t *cpu_set)
@@ -133,3 +133,33 @@ int get_numa_node_cpu_set(
   ::close(fd);
   return r;
 }
+
+#elif defined(__FreeBSD__)
+
+int parse_cpu_set_list(const char *s,
+		       size_t *cpu_set_size,
+		       cpu_set_t *cpu_set)
+{
+  return -ENOTSUP;
+}
+
+std::string cpu_set_to_str_list(size_t cpu_set_size,
+				const cpu_set_t *cpu_set)
+{
+  return {};
+}
+
+std::set<int> cpu_set_to_set(size_t cpu_set_size,
+			     const cpu_set_t *cpu_set)
+{
+  return {};
+}
+
+int get_numa_node_cpu_set(int node,
+                          size_t *cpu_set_size,
+                          cpu_set_t *cpu_set)
+{
+  return -ENOTSUP;
+}
+
+#endif
