@@ -554,6 +554,8 @@ public:
   void count_metadata(const string& field, map<string,int> *out);
 protected:
   int get_osd_objectstore_type(int osd, std::string *type);
+  int get_osd_hostname(int osd, string* hostname);
+  int update_osd_hostname(int osd, const string& hostname);
   bool is_pool_currently_all_bluestore(int64_t pool_id, const pg_pool_t &pool,
 				       ostream *err);
 

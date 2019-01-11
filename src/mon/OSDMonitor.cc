@@ -1575,6 +1575,37 @@ int OSDMonitor::get_osd_objectstore_type(int osd, string *type)
   return 0;
 }
 
+int OSDMonitor::get_osd_hostname(int osd, string* hostname)
+{
+  map<string, string> metadata;
+  int r = load_metadata(osd, metadata, nullptr);
+  if (r < 0)
+    return r;
+
+  auto it = metadata.find("hostname");
+  if (it == metadata.end())
+    return -ENOENT;
+  *hostname = it->second;
+  return 0;
+}
+
+int OSDMonitor::update_osd_hostname(int osd, const string& hostname)
+{
+  map<string, string> metadata;
+  int r = load_metadata(osd, metadata, nullptr);
+  if (r < 0)
+    return r;
+
+  auto it = metadata.find("hostname");
+  if (it == metadata.end())
+    return -ENOENT;
+  it->second = hostname;
+  bufferlist bl;
+  encode(metadata, bl);
+  pending_metadata[osd] = bl;
+  return 0;
+}
+
 bool OSDMonitor::is_pool_currently_all_bluestore(int64_t pool_id,
 						 const pg_pool_t &pool,
 						 ostream *err)
@@ -9193,6 +9224,44 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       dout(0) << "create-or-move crush item name '" << osd_name
 	      << "' initial_weight " << weight << " at location " << loc
 	      << dendl;
+
+      // trying to catch hostname change first, and if it doesn't work,
+      // we fall back to the old way.
+      string old_hostname, new_hostname;
+      if (const auto src = m->get_orig_source();
+          src.is_osd() && src.num() == osdid) {
+        // osd boot
+        auto osd = src.num();
+        get_osd_hostname(osd, &old_hostname);
+        if (auto it = loc.find("host"); it != loc.end()) {
+          new_hostname = it->second;
+        }
+      }
+      if (!old_hostname.empty() && !new_hostname.empty() &&
+          osdmap.crush->name_exists(old_hostname) &&
+          old_hostname != new_hostname) {
+        // get all osds belonging to the same host
+        set<int> osds;
+        osdmap.crush->get_leaves(old_hostname, &osds);
+        // rename bucket
+        stringstream ts;
+        err = crush_rename_bucket(old_hostname, new_hostname, &ts);
+        if (err == 0) {
+          // good, update osds' metadata too
+          for (auto& osd : osds) {
+            update_osd_hostname(osd, new_hostname);
+          }
+          dout(0) << "create-or-move cursh item, renaming hostname '"
+                  << old_hostname << "' -> '" << new_hostname << "', waiting"
+                  << dendl;
+          goto wait;
+        }
+        derr << "create-or-move cursh item, hostname changed '"
+             << old_hostname << "' -> '" << new_hostname << "', "
+             << "but try rename bucket failed, r = " << err
+             << ", detail: " << ss.str()
+             << dendl;
+      }
 
       CrushWrapper newcrush;
       _get_pending_crush(newcrush);
