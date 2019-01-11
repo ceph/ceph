@@ -384,6 +384,10 @@ CEPH_RBD_API int rbd_trash_list(rados_ioctx_t io,
                                 size_t *num_entries);
 CEPH_RBD_API void rbd_trash_list_cleanup(rbd_trash_image_info_t *trash_entries,
                                          size_t num_entries);
+CEPH_RBD_API int rbd_trash_purge(rados_ioctx_t io, time_t expire_ts, float threshold);
+CEPH_RBD_API int rbd_trash_purge_with_progress(rados_ioctx_t io, time_t expire_ts,
+                                               float threshold, librbd_progress_fn_t cb,
+                                               void* cbdata);
 CEPH_RBD_API int rbd_trash_remove(rados_ioctx_t io, const char *id, bool force);
 CEPH_RBD_API int rbd_trash_remove_with_progress(rados_ioctx_t io,
                                                 const char *id,
