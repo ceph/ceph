@@ -238,7 +238,9 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         for p in processes:
             sd = orchestrator.ServiceDescription()
             sd.nodename = 'localhost'
-            sd.daemon_name = re.search('ceph-[^ ]+', p).group()
+            sd.service_type = re.search('ceph-([^ ]+)', p).group(1)
+            sd.daemon_name = re.search(' -i ([^ ]+)', p).group(1)
+            sd.container_id = p.split()[1]
             result.append(sd)
 
         return result
