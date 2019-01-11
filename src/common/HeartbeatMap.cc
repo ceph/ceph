@@ -167,17 +167,15 @@ int HeartbeatMap::get_total_workers() const
 
 void HeartbeatMap::check_touch_file()
 {
-  if (is_healthy()) {
-    string path = m_cct->_conf->heartbeat_file;
-    if (path.length()) {
-      int fd = ::open(path.c_str(), O_WRONLY|O_CREAT|O_CLOEXEC, 0644);
-      if (fd >= 0) {
-	::utimes(path.c_str(), NULL);
-	::close(fd);
-      } else {
-	ldout(m_cct, 0) << "unable to touch " << path << ": "
-			<< cpp_strerror(errno) << dendl;
-      }
+  string path = m_cct->_conf->heartbeat_file;
+  if (path.length() && is_healthy()) {
+    int fd = ::open(path.c_str(), O_WRONLY|O_CREAT|O_CLOEXEC, 0644);
+    if (fd >= 0) {
+      ::utimes(path.c_str(), NULL);
+      ::close(fd);
+    } else {
+      ldout(m_cct, 0) << "unable to touch " << path << ": "
+                     << cpp_strerror(errno) << dendl;
     }
   }
 }
