@@ -2013,10 +2013,11 @@ private:
     ceph::mutex lock = ceph::make_mutex("BlueStore::MempoolThread::lock");
     bool stop = false;
     uint64_t autotune_cache_size = 0;
+    std::shared_ptr<PriorityCache::PriCache> binned_kv_cache = nullptr;
 
     struct MempoolCache : public PriorityCache::PriCache {
       BlueStore *store;
-      int64_t cache_bytes[PriorityCache::Priority::LAST+1];
+      int64_t cache_bytes[PriorityCache::Priority::LAST+1] = {0};
       int64_t committed_bytes = 0;
       double cache_ratio = 0;
 
@@ -2097,7 +2098,8 @@ private:
       double get_bytes_per_onode() const {
         return (double)_get_used_bytes() / (double)_get_num_onodes();
       }
-    } meta_cache;
+    };
+    std::shared_ptr<MetaCache> meta_cache;
 
     struct DataCache : public MempoolCache {
       DataCache(BlueStore *s) : MempoolCache(s) {};
@@ -2112,13 +2114,14 @@ private:
       virtual string get_cache_name() const {
         return "BlueStore Data Cache";
       }
-    } data_cache;
+    };
+    std::shared_ptr<DataCache> data_cache;
 
   public:
     explicit MempoolThread(BlueStore *s)
       : store(s),
-        meta_cache(MetaCache(s)),
-        data_cache(DataCache(s)) {}
+        meta_cache(new MetaCache(s)),
+        data_cache(new DataCache(s)) {}
 
     void *entry() override;
     void init() {
@@ -2137,10 +2140,12 @@ private:
     void _adjust_cache_settings();
     void _trim_shards(bool interval_stats);
     void _tune_cache_size(bool interval_stats);
-    void _balance_cache(const std::list<PriorityCache::PriCache *>& caches);
-    void _balance_cache_pri(int64_t *mem_avail, 
-                            const std::list<PriorityCache::PriCache *>& caches, 
-                            PriorityCache::Priority pri);
+    void _balance_cache(
+        const std::list<std::shared_ptr<PriorityCache::PriCache>>& caches);
+    void _balance_cache_pri(
+        int64_t *mem_avail, 
+        const std::list<std::shared_ptr<PriorityCache::PriCache>>& caches, 
+        PriorityCache::Priority pri);
   } mempool_thread;
 
   // --------------------------------------------------------

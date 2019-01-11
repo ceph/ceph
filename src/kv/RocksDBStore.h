@@ -16,6 +16,7 @@
 #include "rocksdb/iostats_context.h"
 #include "rocksdb/statistics.h"
 #include "rocksdb/table.h"
+#include "kv/rocksdb_cache/BinnedLRUCache.h"
 #include <errno.h>
 #include "common/errno.h"
 #include "common/dout.h"
@@ -120,7 +121,6 @@ public:
   bool disableWAL;
   bool enable_rmrange;
   void compact() override;
-  int64_t high_pri_watermark;
 
   void compact_async() override {
     compact_range_async(string(), string());
@@ -159,8 +159,7 @@ public:
     compact_thread(this),
     compact_on_mount(false),
     disableWAL(false),
-    enable_rmrange(cct->_conf->rocksdb_enable_rmrange),
-    high_pri_watermark(0)
+    enable_rmrange(cct->_conf->rocksdb_enable_rmrange)
   {}
 
   ~RocksDBStore() override;
@@ -478,17 +477,9 @@ err:
     return total_size;
   }
 
-  virtual int64_t request_cache_bytes(
-      PriorityCache::Priority pri, uint64_t cache_bytes) const override;
-  virtual int64_t commit_cache_size(uint64_t total_cache) override;
-  virtual int64_t get_committed_size() const override {
-    return bbt_opts.block_cache->GetCapacity();
+  virtual int64_t get_cache_usage() const override {
+    return static_cast<int64_t>(bbt_opts.block_cache->GetUsage());
   }
-  virtual std::string get_cache_name() const override {
-    return "RocksDB Block Cache";
-  }
-  virtual int64_t get_cache_usage() const override;
-
 
   int set_cache_size(uint64_t s) override {
     cache_size = s;
@@ -498,6 +489,12 @@ err:
 
   int set_cache_capacity(int64_t capacity);
   int64_t get_cache_capacity();
+
+  virtual std::shared_ptr<PriorityCache::PriCache> get_priority_cache() 
+      const override {
+    return dynamic_pointer_cast<PriorityCache::PriCache>(
+        bbt_opts.block_cache);
+  }
 
   WholeSpaceIterator get_wholespace_iterator() override;
 };
