@@ -5,13 +5,16 @@
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/errno.h"
+#include "common/perf_counters.h"
 #include "global/global_init.h"
 #include "global/signal_handler.h"
 #include "Mirror.h"
+#include "Types.h"
 
 #include <vector>
 
 rbd::mirror::Mirror *mirror = nullptr;
+PerfCounters *g_perf_counters = nullptr;
 
 void usage() {
   std::cout << "usage: rbd-mirror [options...]" << std::endl;
@@ -63,6 +66,20 @@ int main(int argc, const char **argv)
   // disable unnecessary librbd cache
   g_ceph_context->_conf.set_val_or_die("rbd_cache", "false");
 
+  auto prio =
+      g_ceph_context->_conf.get_val<int64_t>("rbd_mirror_perf_stats_prio");
+  PerfCountersBuilder plb(g_ceph_context, "rbd_mirror",
+                          rbd::mirror::l_rbd_mirror_first,
+                          rbd::mirror::l_rbd_mirror_last);
+  plb.add_u64_counter(rbd::mirror::l_rbd_mirror_replay, "replay", "Replays",
+                      "r", prio);
+  plb.add_u64_counter(rbd::mirror::l_rbd_mirror_replay_bytes, "replay_bytes",
+                      "Replayed data", "rb", prio, unit_t(UNIT_BYTES));
+  plb.add_time_avg(rbd::mirror::l_rbd_mirror_replay_latency, "replay_latency",
+                   "Replay latency", "rl", prio);
+  g_perf_counters = plb.create_perf_counters();
+  g_ceph_context->get_perfcounters_collection()->add(g_perf_counters);
+
   mirror = new rbd::mirror::Mirror(g_ceph_context, cmd_args);
   int r = mirror->init();
   if (r < 0) {
@@ -77,6 +94,9 @@ int main(int argc, const char **argv)
   unregister_async_signal_handler(SIGINT, handle_signal);
   unregister_async_signal_handler(SIGTERM, handle_signal);
   shutdown_async_signal_handler();
+
+  g_ceph_context->get_perfcounters_collection()->remove(g_perf_counters);
+  delete g_perf_counters;
 
   delete mirror;
 

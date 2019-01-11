@@ -939,7 +939,9 @@ class MgrModule(ceph_module.BaseMgrModule):
         else:
             return (0, 0)
 
-    def get_all_perf_counters(self, prio_limit=PRIO_USEFUL):
+    def get_all_perf_counters(self, prio_limit=PRIO_USEFUL,
+                              services=("mds", "mon", "osd",
+                                        "rbd-mirror", "rgw")):
         """
         Return the perf counters currently known to this ceph-mgr
         instance, filtered by priority equal to or greater than `prio_limit`.
@@ -957,7 +959,7 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         for server in self.list_servers():
             for service in server['services']:
-                if service['type'] not in ("rgw", "mds", "osd", "mon"):
+                if service['type'] not in services:
                     continue
 
                 schema = self.get_perf_schema(service['type'], service['id'])

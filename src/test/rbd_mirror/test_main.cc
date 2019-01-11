@@ -1,12 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "common/perf_counters.h"
 #include "include/rados/librados.hpp"
 #include "global/global_context.h"
 #include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 #include <iostream>
 #include <string>
+
+PerfCounters *g_perf_counters = nullptr;
 
 extern void register_test_cluster_watcher();
 extern void register_test_image_policy();

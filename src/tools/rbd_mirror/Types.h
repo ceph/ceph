@@ -16,6 +16,15 @@
 namespace rbd {
 namespace mirror {
 
+// Performance counters
+enum {
+  l_rbd_mirror_first = 27000,
+  l_rbd_mirror_replay,
+  l_rbd_mirror_replay_bytes,
+  l_rbd_mirror_replay_latency,
+  l_rbd_mirror_last,
+};
+
 typedef std::shared_ptr<librados::Rados> RadosRef;
 typedef std::shared_ptr<librados::IoCtx> IoCtxRef;
 typedef std::shared_ptr<librbd::Image> ImageRef;
