@@ -41,7 +41,7 @@ struct MonOpRequest : public TrackedOp {
   void mark_svc_event(const string &service, const string &event) {
     string s = service;
     s.append(":").append(event);
-    mark_event_string(s);
+    mark_event(s);
   }
 
   void mark_logmon_event(const string &event) {
@@ -217,7 +217,7 @@ struct C_MonOp : public Context
 
   void mark_op_event(const string &event) {
     if (op)
-      op->mark_event_string(event);
+      op->mark_event(event);
   }
 
   virtual void _finish(int r) = 0;

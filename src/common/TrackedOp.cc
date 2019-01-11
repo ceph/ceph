@@ -390,7 +390,7 @@ bool OpTracker::check_ops_in_flight(std::string* summary,
     ss << "slow request " << age << " seconds old, received at "
        << op.get_initiated() << ": " << op.get_desc()
        << " currently "
-        << (op.current ? op.current : op.state_string());
+       << op.state_string();
     warnings.push_back(ss.str());
     // only those that have been shown will backoff
     op.warn_interval_multiplier *= 2;
@@ -434,7 +434,7 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
 #undef dout_context
 #define dout_context tracker->cct
 
-void TrackedOp::mark_event_string(const string &event, utime_t stamp)
+void TrackedOp::mark_event(std::string_view event, utime_t stamp)
 {
   if (!state)
     return;
@@ -442,25 +442,6 @@ void TrackedOp::mark_event_string(const string &event, utime_t stamp)
   {
     std::lock_guard l(lock);
     events.emplace_back(stamp, event);
-    current = events.back().c_str();
-  }
-  dout(6) << " seq: " << seq
-	  << ", time: " << stamp
-	  << ", event: " << event
-	  << ", op: " << get_desc()
-	  << dendl;
-  _event_marked();
-}
-
-void TrackedOp::mark_event(const char *event, utime_t stamp)
-{
-  if (!state)
-    return;
-
-  {
-    std::lock_guard l(lock);
-    events.emplace_back(stamp, event);
-    current = event;
   }
   dout(6) << " seq: " << seq
 	  << ", time: " << stamp

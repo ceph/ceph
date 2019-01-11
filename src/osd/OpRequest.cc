@@ -151,7 +151,7 @@ void OpRequest::mark_flag_point_string(uint8_t flag, const string& s) {
 #ifdef WITH_LTTNG
   uint8_t old_flags = hit_flag_points;
 #endif
-  mark_event_string(s);
+  mark_event(s);
   hit_flag_points |= flag;
   latest_flag_point = flag;
   tracepoint(oprequest, mark_flag_point, reqid.name._type,
