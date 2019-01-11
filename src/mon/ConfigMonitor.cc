@@ -349,6 +349,34 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     } else {
       odata.append(ds.str());
     }
+  } else if (prefix == "config generate-minimal-conf") {
+    ostringstream conf;
+    conf << "# minimal ceph.conf for " << mon->monmap->get_fsid() << "\n";
+
+    // the basics
+    conf << "[global]\n";
+    conf << "\tfsid = " << mon->monmap->get_fsid() << "\n";
+    conf << "\tmon_host = ";
+    for (auto i = mon->monmap->mon_info.begin();
+	 i != mon->monmap->mon_info.end();
+	 ++i) {
+      if (i != mon->monmap->mon_info.begin()) {
+	conf << " ";
+      }
+      conf << i->second.public_addrs;
+    }
+    conf << "\n";
+    conf << config_map.global.get_minimal_conf();
+    for (auto m : { &config_map.by_type, &config_map.by_id }) {
+      for (auto& i : *m) {
+	auto s = i.second.get_minimal_conf();
+	if (s.size()) {
+	  conf << "\n[" << i.first << "]\n" << s;
+	}
+      }
+    }
+    odata.append(conf.str());
+    err = 0;
   } else {
     return false;
   }
