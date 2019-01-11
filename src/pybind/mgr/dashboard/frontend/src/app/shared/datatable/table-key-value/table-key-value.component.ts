@@ -14,6 +14,11 @@ import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';
 import { TableComponent } from '../table/table.component';
 
+class Item {
+  key: string;
+  value: any;
+}
+
 /**
  * Display the given data in a 2 column data table. The left column
  * shows the 'key' attribute, the right column the 'value' attribute.
@@ -40,12 +45,11 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
   // Only used if objects are rendered
   @Input()
   appendParentKey = true;
+  @Input()
+  hideEmpty = false;
 
   columns: Array<CdTableColumn> = [];
-  tableData: {
-    key: string;
-    value: any;
-  }[];
+  tableData: Item[];
 
   /**
    * The function that will be called to update the input data.
@@ -91,7 +95,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
     this.tableData = this._makePairs(this.data);
   }
 
-  _makePairs(data: any) {
+  _makePairs(data: any): Item[] {
     let temp = [];
     if (!data) {
       return; // Wait for data
@@ -103,10 +107,10 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
       throw new Error('Wrong data format');
     }
     temp = temp.map((v) => this._convertValue(v)).filter((o) => o); // Filters out undefined
-    return this.renderObjects ? this._insertFlattenObjects(temp) : temp;
+    return _.sortBy(this.renderObjects ? this.insertFlattenObjects(temp) : temp, 'key');
   }
 
-  _makePairsFromArray(data: any[]) {
+  _makePairsFromArray(data: any[]): Item[] {
     let temp = [];
     const first = data[0];
     if (_.isArray(first)) {
@@ -131,48 +135,51 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
     return temp;
   }
 
-  _makePairsFromObject(data: object) {
+  _makePairsFromObject(data: object): Item[] {
     return Object.keys(data).map((k) => ({
       key: k,
       value: data[k]
     }));
   }
 
-  _insertFlattenObjects(temp: any[]) {
-    const itemsToRemoveIndexes = [];
-    const itemsToAdd = [];
-    temp.forEach((v, i) => {
-      if (_.isObject(v.value)) {
-        if (_.isEmpty(v.value)) {
-          temp[i]['value'] = '';
-        } else {
-          itemsToRemoveIndexes.push(i);
-          this._makePairs(v.value).forEach((item) => {
-            if (this.appendParentKey) {
-              item.key = v.key + ' ' + item.key;
-            }
-            itemsToAdd.push(item);
-            i++;
-          });
+  private insertFlattenObjects(temp: Item[]): any[] {
+    return _.flattenDeep(
+      temp.map((item) => {
+        const value = item.value;
+        const isObject = _.isObject(value);
+        if (!isObject || _.isEmpty(value)) {
+          if (isObject) {
+            item.value = '';
+          }
+          return item;
         }
-      }
-    });
-
-    _.remove(temp, (item, itemIndex) => {
-      return _.includes(itemsToRemoveIndexes, itemIndex);
-    });
-    itemsToAdd.forEach((item) => {
-      temp.push(item);
-    });
-
-    return temp;
+        return this.splitItemIntoItems(item);
+      })
+    );
   }
 
-  _convertValue(v: any) {
+  /**
+   * Split item into items will call _makePairs inside _makePairs (recursion), in oder to split
+   * the object item up into items as planned.
+   */
+  private splitItemIntoItems(v: { key: string; value: object }): Item[] {
+    return this._makePairs(v.value).map((item) => {
+      if (this.appendParentKey) {
+        item.key = v.key + ' ' + item.key;
+      }
+      return item;
+    });
+  }
+
+  _convertValue(v: Item): Item {
     if (_.isArray(v.value)) {
       v.value = v.value.map((item) => (_.isObject(item) ? JSON.stringify(item) : item)).join(', ');
-    } else if (_.isObject(v.value) && !this.renderObjects) {
+    }
+    const isEmpty = _.isEmpty(v.value) && !_.isNumber(v.value);
+    if ((this.hideEmpty && isEmpty) || (_.isObject(v.value) && !this.renderObjects)) {
       return;
+    } else if (isEmpty && !this.hideEmpty && v.value !== '') {
+      v.value = '';
     }
     return v;
   }
