@@ -6919,6 +6919,8 @@ TEST_F(TestLibRBD, Migration) {
     ASSERT_EQ(status.source_image_id, string());
   } else {
     ASSERT_NE(status.source_image_id, string());
+    ASSERT_EQ(-EROFS, rbd_trash_remove(ioctx, status.source_image_id, false));
+    ASSERT_EQ(-EINVAL, rbd_trash_restore(ioctx, status.source_image_id, name.c_str()));
   }
   ASSERT_EQ(status.dest_pool_id, rados_ioctx_get_id(ioctx));
   ASSERT_EQ(status.dest_image_name, name);
@@ -6927,6 +6929,7 @@ TEST_F(TestLibRBD, Migration) {
   rbd_migration_status_cleanup(&status);
 
   ASSERT_EQ(-EBUSY, rbd_remove(ioctx, name.c_str()));
+  ASSERT_EQ(-EINVAL, rbd_trash_move(ioctx, name.c_str(), 0));
 
   ASSERT_EQ(0, rbd_migration_execute(ioctx, name.c_str()));
 
@@ -6943,6 +6946,7 @@ TEST_F(TestLibRBD, Migration) {
                                      new_name.c_str(), image_options));
 
   ASSERT_EQ(-EBUSY, rbd_remove(ioctx, new_name.c_str()));
+  ASSERT_EQ(-EINVAL, rbd_trash_move(ioctx, new_name.c_str(), 0));
 
   ASSERT_EQ(0, rbd_migration_abort(ioctx, name.c_str()));
 
@@ -6979,6 +6983,8 @@ TEST_F(TestLibRBD, MigrationPP) {
     ASSERT_EQ(status.source_image_id, "");
   } else {
     ASSERT_NE(status.source_image_id, "");
+    ASSERT_EQ(-EROFS, rbd.trash_remove(ioctx, status.source_image_id.c_str(), false));
+    ASSERT_EQ(-EINVAL, rbd.trash_restore(ioctx, status.source_image_id.c_str(), name.c_str()));
   }
   ASSERT_EQ(status.dest_pool_id, ioctx.get_id());
   ASSERT_EQ(status.dest_image_name, name);
@@ -6986,6 +6992,7 @@ TEST_F(TestLibRBD, MigrationPP) {
   ASSERT_EQ(status.state, RBD_IMAGE_MIGRATION_STATE_PREPARED);
 
   ASSERT_EQ(-EBUSY, rbd.remove(ioctx, name.c_str()));
+  ASSERT_EQ(-EINVAL, rbd.trash_move(ioctx, name.c_str(), 0));
 
   ASSERT_EQ(0, rbd.migration_execute(ioctx, name.c_str()));
 
@@ -7001,6 +7008,7 @@ TEST_F(TestLibRBD, MigrationPP) {
                                      new_name.c_str(), image_options));
 
   ASSERT_EQ(-EBUSY, rbd.remove(ioctx, new_name.c_str()));
+  ASSERT_EQ(-EINVAL, rbd.trash_move(ioctx, new_name.c_str(), 0));
 
   ASSERT_EQ(0, rbd.migration_abort(ioctx, name.c_str()));
 
