@@ -328,4 +328,44 @@ describe('TableComponent', () => {
       clearLocalStorage();
     });
   });
+
+  describe('useCustomClass', () => {
+    beforeEach(() => {
+      component.customCss = {
+        'label label-danger': 'active',
+        'secret secret-number': 123.456,
+        'btn btn-sm': (v) => _.isString(v) && v.startsWith('http'),
+        secure: (v) => _.isString(v) && v.startsWith('https')
+      };
+    });
+
+    const expectUseCustomClass = (values: any[], expectation: string) => {
+      values.forEach((value) => expect(component.useCustomClass(value)).toBe(expectation));
+    };
+
+    it('should throw an error if custom classes are not set', () => {
+      component.customCss = undefined;
+      expect(() => component.useCustomClass('active')).toThrowError('Custom classes are not set!');
+    });
+
+    it('should not return any class', () => {
+      expectUseCustomClass(['', 'something', 123, { complex: 1 }, [1, 2, 3]], undefined);
+    });
+
+    it('should match a string and return the corresponding class', () => {
+      expect(component.useCustomClass('active')).toBe('label label-danger');
+    });
+
+    it('should match a number and return the corresponding class', () => {
+      expect(component.useCustomClass(123.456)).toBe('secret secret-number');
+    });
+
+    it('should match against a function and return the corresponding class', () => {
+      expect(component.useCustomClass('http://no.ssl')).toBe('btn btn-sm');
+    });
+
+    it('should match against multiple functions and return the corresponding classes', () => {
+      expect(component.useCustomClass('https://secure.it')).toBe('btn btn-sm secure');
+    });
+  });
 });
