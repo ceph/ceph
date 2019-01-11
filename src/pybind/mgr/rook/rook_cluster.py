@@ -19,6 +19,12 @@ try:
 except ImportError:
     ApiException = None
 
+try:
+    import orchestrator
+except ImportError:
+    pass  # just used for type checking.
+
+
 ROOK_SYSTEM_NS = "rook-ceph-system"
 ROOK_API_VERSION = "v1"
 ROOK_API_NAME = "ceph.rook.io/%s" % ROOK_API_VERSION
@@ -335,16 +341,15 @@ class RookCluster(object):
         else:
             return True
 
-    def add_osds(self, spec):
+    def add_osds(self, drive_group, all_hosts):
+        # type: (orchestrator.DriveGroupSpec, List[str]) -> None
         """
         Rook currently (0.8) can only do single-drive OSDs, so we
         treat all drive groups as just a list of individual OSDs.
         """
-        # assert isinstance(spec, orchestrator.OsdSpec)
+        block_devices = drive_group.data_devices
 
-        block_devices = spec.drive_group.devices
-
-        assert spec.format in ("bluestore", "filestore")
+        assert drive_group.objectstore in ("bluestore", "filestore")
 
         # The CRD looks something like this:
         #     nodes:
@@ -370,13 +375,13 @@ class RookCluster(object):
 
         current_nodes = current_cluster['spec']['storage'].get('nodes', [])
 
-        if spec.node not in [n['name'] for n in current_nodes]:
+        if drive_group.hosts(all_hosts)[0] not in [n['name'] for n in current_nodes]:
             patch.append({
                 "op": "add", "path": "/spec/storage/nodes/-", "value": {
-                    "name": spec.node,
+                    "name": drive_group.hosts(all_hosts)[0],
                     "devices": [{'name': d} for d in block_devices],
                     "storeConfig": {
-                        "storeType": spec.format
+                        "storeType": drive_group.objectstore
                     }
                 }
             })
@@ -385,7 +390,7 @@ class RookCluster(object):
             node_idx = None
             current_node = None
             for i, c in enumerate(current_nodes):
-                if c['name'] == spec.node:
+                if c['name'] == drive_group.hosts(all_hosts)[0]:
                     current_node = c
                     node_idx = i
                     break

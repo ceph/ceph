@@ -2,10 +2,10 @@ import threading
 import functools
 import os
 import uuid
-
-from mgr_module import MgrModule
-
-import orchestrator
+try:
+    from typing import List
+except ImportError:
+    pass  # just for type checking
 
 try:
     from kubernetes import client, config
@@ -16,6 +16,9 @@ except ImportError:
     kubernetes_imported = False
     client = None
     config = None
+
+from mgr_module import MgrModule
+import orchestrator
 
 from .rook_cluster import RookCluster
 
@@ -386,11 +389,13 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             lambda: self.rook_cluster.rm_service(service_type, service_id), None,
             "Removing {0} services for {1}".format(service_type, service_id))
 
-    def create_osds(self, spec):
-        # Validate spec.node
-        if not self.rook_cluster.node_exists(spec.node):
+    def create_osds(self, drive_group, all_hosts):
+        # type: (orchestrator.DriveGroupSpec, List[str]) -> RookWriteCompletion
+
+        assert len(drive_group.hosts(all_hosts)) == 1
+        if not self.rook_cluster.node_exists(drive_group.hosts(all_hosts)[0]):
             raise RuntimeError("Node '{0}' is not in the Kubernetes "
-                               "cluster".format(spec.node))
+                               "cluster".format(drive_group.hosts(all_hosts)))
 
         # Validate whether cluster CRD can accept individual OSD
         # creations (i.e. not useAllDevices)
@@ -399,7 +404,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                                "support OSD creation.")
 
         def execute():
-            self.rook_cluster.add_osds(spec)
+            self.rook_cluster.add_osds(drive_group, all_hosts)
 
         def is_complete():
             # Find OSD pods on this host
@@ -407,7 +412,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             pods = self._k8s.list_namespaced_pod("rook-ceph",
                                                  label_selector="rook_cluster=rook-ceph,app=rook-ceph-osd",
                                                  field_selector="spec.nodeName={0}".format(
-                                                     spec.node
+                                                     drive_group.hosts(all_hosts)[0]
                                                  )).items
             for p in pods:
                 pod_osd_ids.add(int(p.metadata.labels['ceph-osd-id']))
@@ -422,7 +427,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     continue
 
                 metadata = self.get_metadata('osd', "%s" % osd_id)
-                if metadata and metadata['devices'] in spec.drive_group.devices:
+                if metadata and metadata['devices'] in drive_group.data_devices.paths:
                     found.append(osd_id)
                 else:
                     self.log.info("ignoring osd {0} {1}".format(
@@ -433,6 +438,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return RookWriteCompletion(execute, is_complete,
                                    "Creating OSD on {0}:{1}".format(
-                                       spec.node,
-                                       spec.drive_group.devices
+                                       drive_group.hosts(all_hosts)[0],
+                                       drive_group.data_devices.paths
                                    ))

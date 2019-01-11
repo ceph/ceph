@@ -246,8 +246,8 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def add_stateless_service(self, service_type, spec):
         raise NotImplementedError(service_type)
 
-    def create_osds(self, spec):
-        raise NotImplementedError(str(spec))
+    def create_osds(self, drive_group, all_hosts):
+        raise NotImplementedError(str(drive_group))
 
     def service_action(self, action, service_type, service_name=None, service_id=None):
         return TestWriteCompletion(
