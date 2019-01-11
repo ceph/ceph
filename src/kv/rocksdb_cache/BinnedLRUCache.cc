@@ -13,10 +13,14 @@
 
 #include "BinnedLRUCache.h"
 
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string>
+
+#define dout_context cct
+#define dout_subsys ceph_subsys_rocksdb
+#undef dout_prefix
+#define dout_prefix *_dout << "rocksdb: "
 
 namespace rocksdb_cache {
 
@@ -459,9 +463,12 @@ std::string BinnedLRUCacheShard::GetPrintableOptions() const {
   return std::string(buffer);
 }
 
-BinnedLRUCache::BinnedLRUCache(size_t capacity, int num_shard_bits,
-                   bool strict_capacity_limit, double high_pri_pool_ratio)
-    : ShardedCache(capacity, num_shard_bits, strict_capacity_limit) {
+BinnedLRUCache::BinnedLRUCache(CephContext *c, 
+                               size_t capacity, 
+                               int num_shard_bits,
+                               bool strict_capacity_limit, 
+                               double high_pri_pool_ratio)
+    : ShardedCache(capacity, num_shard_bits, strict_capacity_limit), cct(c) {
   num_shards_ = 1 << num_shard_bits;
   // TODO: Switch over to use mempool
   int rc = posix_memalign((void**) &shards_, 
@@ -542,9 +549,57 @@ size_t BinnedLRUCache::GetHighPriPoolUsage() const {
   return usage;
 }
 
-std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(size_t capacity, int num_shard_bits,
-                                   bool strict_capacity_limit,
-                                   double high_pri_pool_ratio) {
+// PriCache
+
+int64_t BinnedLRUCache::request_cache_bytes(PriorityCache::Priority pri, uint64_t total_cache) const
+{
+  int64_t assigned = get_cache_bytes(pri);
+  int64_t request = 0;
+
+  switch (pri) {
+  // PRI0 is for rocksdb's high priority items (indexes/filters)
+  case PriorityCache::Priority::PRI0:
+    {
+      request = GetHighPriPoolUsage();
+      break;
+    }
+  // All other cache items are currently shoved into the LAST priority. 
+  case PriorityCache::Priority::LAST:
+    {
+      request = GetUsage();
+      request -= GetHighPriPoolUsage();
+      break;
+    }
+  default:
+    break;
+  }
+  request = (request > assigned) ? request - assigned : 0;
+  ldout(cct, 10) << __func__ << " Priority: " << static_cast<uint32_t>(pri)
+                 << " Request: " << request << dendl;
+  return request;
+}
+
+int64_t BinnedLRUCache::commit_cache_size(uint64_t total_bytes)
+{
+  size_t old_bytes = GetCapacity();
+  int64_t new_bytes = PriorityCache::get_chunk(
+      get_cache_bytes(), total_bytes);
+  ldout(cct, 10) << __func__ << " old: " << old_bytes
+                 << " new: " << new_bytes << dendl;
+  SetCapacity((size_t) new_bytes);
+  double ratio =
+      (double) get_cache_bytes(PriorityCache::Priority::PRI0) / new_bytes;
+  ldout(cct, 10) << __func__ << " High Pri Pool Ratio set to " << ratio << dendl;
+  SetHighPriPoolRatio(ratio);
+  return new_bytes;
+}
+
+std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(
+    CephContext *c, 
+    size_t capacity,
+    int num_shard_bits,
+    bool strict_capacity_limit,
+    double high_pri_pool_ratio) {
   if (num_shard_bits >= 20) {
     return nullptr;  // the cache cannot be sharded into too many fine pieces
   }
@@ -555,8 +610,8 @@ std::shared_ptr<rocksdb::Cache> NewBinnedLRUCache(size_t capacity, int num_shard
   if (num_shard_bits < 0) {
     num_shard_bits = GetDefaultCacheShardBits(capacity);
   }
-  return std::make_shared<BinnedLRUCache>(capacity, num_shard_bits,
-                                    strict_capacity_limit, high_pri_pool_ratio);
+  return std::make_shared<BinnedLRUCache>(
+      c, capacity, num_shard_bits, strict_capacity_limit, high_pri_pool_ratio);
 }
 
 }  // namespace rocksdb_cache
