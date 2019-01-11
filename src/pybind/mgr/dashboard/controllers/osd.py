@@ -201,7 +201,7 @@ class OsdFlagsController(RESTController):
         """
         The `recovery_deletes`, `sortbitwise` and `pglog_hardlimit` flags cannot be unset.
         `purged_snapshots` cannot even be set. It is therefore required to at
-        least include those three flags for a successful operation.
+        least include those four flags for a successful operation.
         """
         assert isinstance(flags, list)
 

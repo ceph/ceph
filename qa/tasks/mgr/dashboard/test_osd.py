@@ -123,7 +123,8 @@ class OsdFlagsTest(DashboardTestCase):
     def __init__(self, *args, **kwargs):
         super(OsdFlagsTest, self).__init__(*args, **kwargs)
         self._initial_flags = sorted(  # These flags cannot be unset
-            ['sortbitwise', 'recovery_deletes', 'purged_snapdirs'])
+            ['sortbitwise', 'recovery_deletes', 'purged_snapdirs',
+             'pglog_hardlimit'])
 
     @classmethod
     def _get_cluster_osd_flags(cls):
@@ -139,17 +140,17 @@ class OsdFlagsTest(DashboardTestCase):
     def test_list_osd_flags(self):
         flags = self._get('/api/osd/flags')
         self.assertStatus(200)
-        self.assertEqual(len(flags), 3)
+        self.assertEqual(len(flags), 4)
         self.assertEqual(sorted(flags), self._initial_flags)
 
     def test_add_osd_flag(self):
         flags = self._put_flags([
             'sortbitwise', 'recovery_deletes', 'purged_snapdirs', 'noout',
-            'pause'
+            'pause', 'pglog_hardlimit'
         ])
         self.assertEqual(flags, sorted([
             'sortbitwise', 'recovery_deletes', 'purged_snapdirs', 'noout',
-            'pause'
+            'pause', 'pglog_hardlimit'
         ]))
 
         # Restore flags
