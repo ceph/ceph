@@ -391,6 +391,12 @@ class DashboardTestCase(MgrTestCase):
         cls.mgr_cluster.admin_remote.run(args=args)
 
     @classmethod
+    def _rados_cmd(cls, cmd):
+        args = ['rados']
+        args.extend(cmd)
+        cls.mgr_cluster.admin_remote.run(args=args)
+
+    @classmethod
     def mons(cls):
         out = cls.ceph_cluster.mon_manager.raw_cluster_cmd('mon_status')
         j = json.loads(out)
