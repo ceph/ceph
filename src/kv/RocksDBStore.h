@@ -191,6 +191,7 @@ private:
   void perf_counters_register();
 
   friend class RocksWBHandler;
+  friend class BlueStore_DB_Hash;
 public:
 
   int repair(std::ostream &out) override;
