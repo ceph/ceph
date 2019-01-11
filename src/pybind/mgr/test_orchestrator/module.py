@@ -4,6 +4,7 @@ import threading
 import functools
 import uuid
 import psutil
+import socket
 from subprocess import check_output
 
 from mgr_module import MgrModule
@@ -232,6 +233,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         if service_type:
             assert service_type in allowed_types, service_type + " unsupported"
 
+        hostname = socket.gethostname()
         result = []
         for p in psutil.process_iter(attrs=['name']):
             if 'ceph-' in p.info['name']:
@@ -239,7 +241,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
                 if svc_type not in allowed_types:
                     continue
                 sd = orchestrator.ServiceDescription()
-                sd.nodename = 'localhost'
+                sd.nodename = hostname
                 pd = p.as_dict(attrs=['pid','cmdline'])
                 sd.container_id = pd['pid']
                 sd.service_type = svc_type
