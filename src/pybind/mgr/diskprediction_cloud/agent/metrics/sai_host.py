@@ -48,8 +48,7 @@ class SAIHostAgent(MetricsAgent):
                 if osd_host not in hosts:
                     data = SAIHostFields()
                     data.fields['agenthost'] = str(socket.gethostname())
-                    data.tags['agenthost_domain_id'] = \
-                        str('%s_%s' % (cluster_id, data.fields['agenthost']))
+                    data.tags['agenthost_domain_id'] = cluster_id
                     data.tags['domain_id'] = \
                         str('%s_%s' % (cluster_id, osd_host))
                     data.fields['cluster_domain_id'] = str(cluster_id)
@@ -72,8 +71,7 @@ class SAIHostAgent(MetricsAgent):
             if mon_host not in hosts:
                 data = SAIHostFields()
                 data.fields['agenthost'] = str(socket.gethostname())
-                data.tags['agenthost_domain_id'] = \
-                    str('%s_%s' % (cluster_id, data.fields['agenthost']))
+                data.tags['agenthost_domain_id'] = cluster_id
                 data.tags['domain_id'] = \
                     str('%s_%s' % (cluster_id, mon_host))
                 data.fields['cluster_domain_id'] = str(cluster_id)
@@ -95,8 +93,7 @@ class SAIHostAgent(MetricsAgent):
                 if mds_host not in hosts:
                     data = SAIHostFields()
                     data.fields['agenthost'] = str(socket.gethostname())
-                    data.tags['agenthost_domain_id'] = \
-                        str('%s_%s' % (cluster_id, data.fields['agenthost']))
+                    data.tags['agenthost_domain_id'] = cluster_id
                     data.tags['domain_id'] = \
                         str('%s_%s' % (cluster_id, mds_host))
                     data.fields['cluster_domain_id'] = str(cluster_id)
