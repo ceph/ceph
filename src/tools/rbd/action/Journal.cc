@@ -1214,7 +1214,7 @@ int execute_import(const po::variables_map &vm,
   r = do_import_journal(io_ctx, journal_name, path, vm[at::NO_ERROR].as<bool>(),
 			vm[at::VERBOSE].as<bool>());
   if (r < 0) {
-    std::cerr << "rbd: journal export: " << cpp_strerror(r) << std::endl;
+    std::cerr << "rbd: journal import: " << cpp_strerror(r) << std::endl;
     return r;
   }
   return 0;
