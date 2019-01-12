@@ -163,7 +163,9 @@ bool MDSUtility::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
     return true;
 
   if (force_new) {
-    if (monc->wait_auth_rotating(10) < 0)
+    auto timeout =
+      g_ceph_context->_conf.get_val<int64_t>("rotating_keys_renewal_timeout");
+    if (monc->wait_auth_rotating(timeout) < 0)
       return false;
   }
 

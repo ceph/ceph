@@ -2014,7 +2014,15 @@ std::vector<Option> get_global_options() {
 
     Option("max_rotating_auth_attempts", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10)
-    .set_description(""),
+    .set_description("number of attempts to initialize rotating keys before giving up"),
+
+    Option("rotating_keys_bootstrap_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(30)
+    .set_description("timeout for obtaining rotating keys during bootstrap phase (seconds)"),
+
+    Option("rotating_keys_renewal_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_description("timeout for updating rotating keys (seconds)"),
 
     Option("cephx_require_signatures", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
