@@ -349,7 +349,7 @@ Request Parameters
 :Required: Yes
 
 A tenant name may also specified as a part of ``uid``, by following the syntax
-``tenant$user``, refer to `Multitenancy`_ for more details.
+``tenant$user``, refer to :ref:`Multitenancy <rgw-multitenancy>` for more details.
 
 ``display-name``
 
@@ -1978,7 +1978,6 @@ Binding libraries
 
 .. _Admin Guide: ../admin
 .. _Quota Management: ../admin#quota-management
-.. _Multitenancy: ./multitenancy
 .. _QuentinPerez/go-radosgw: https://github.com/QuentinPerez/go-radosgw
 .. _twonote/radosgw-admin4j: https://github.com/twonote/radosgw-admin4j
 .. _UMIACS/rgwadmin: https://github.com/UMIACS/rgwadmin
