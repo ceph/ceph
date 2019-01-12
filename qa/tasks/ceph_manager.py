@@ -1796,6 +1796,21 @@ class CephManager:
             self.pools[pool_name] = new_pg_num
             return True
 
+    def stop_pg_num_changes(self):
+        """
+        Reset all pg_num_targets back to pg_num, canceling splits and merges
+        """
+        self.log('Canceling any pending splits or merges...')
+        osd_dump = self.get_osd_dump_json()
+        for pool in osd_dump['pools']:
+            if pool['pg_num'] != pool['pg_num_target']:
+                self.log('Setting pool %s (%d) pg_num %d -> %d' %
+                         (pool['pool_name'], pool['pool'],
+                          pool['pg_num_target'],
+                          pool['pg_num']))
+                self.raw_cluster_cmd('osd', 'pool', 'set', pool['pool_name'],
+                                     'pg_num', str(pool['pg_num']))
+
     def set_pool_pgpnum(self, pool_name, force):
         """
         Set pgpnum property of pool_name pool.
