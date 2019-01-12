@@ -747,6 +747,10 @@ Per mapping (block device) `rbd device map` options:
   requests will fail with -EOPNOTSUPP, write zeroes requests will fall back to
   manually zeroing.
 
+* abort_on_full - Fail write requests with -ENOSPC when the cluster is full or
+  the data pool reaches its quota (since 5.0).  The default behaviour is to
+  block until the full condition is cleared.
+
 `rbd device unmap` options:
 
 * force - Force the unmapping of a block device that is open (since 4.9).  The
