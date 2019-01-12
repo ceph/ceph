@@ -133,7 +133,8 @@ class MonMap {
 
   void _add_ambiguous_addr(const string& name,
 			   entity_addr_t addr,
-			   int priority);
+			   int priority,
+			   bool for_mkfs=false);
 
 public:
   void calc_legacy_ranks();
@@ -274,21 +275,27 @@ public:
    * @returns true if monmap contains a monitor with address @p;
    *          false otherwise.
    */
-  bool contains(const entity_addr_t &a) const {
+  bool contains(const entity_addr_t &a, string *name=nullptr) const {
     for (auto& i : mon_info) {
       for (auto& j : i.second.public_addrs.v) {
 	if (j == a) {
+	  if (name) {
+	    *name = i.first;
+	  }
 	  return true;
 	}
       }
     }
     return false;
   }
-  bool contains(const entity_addrvec_t &av) const {
+  bool contains(const entity_addrvec_t &av, string *name=nullptr) const {
     for (auto& i : mon_info) {
       for (auto& j : i.second.public_addrs.v) {
 	for (auto& k : av.v) {
 	  if (j == k) {
+	    if (name) {
+	      *name = i.first;
+	    }
 	    return true;
 	  }
 	}
