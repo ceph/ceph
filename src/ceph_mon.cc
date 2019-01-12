@@ -347,6 +347,9 @@ int main(int argc, const char **argv)
     // resolve public_network -> public_addr
     pick_addresses(g_ceph_context, CEPH_PICK_ADDRESS_PUBLIC);
 
+    dout(10) << "public_network " << g_conf()->public_network << dendl;
+    dout(10) << "public_addr " << g_conf()->public_network << dendl;
+
     common_init_finish(g_ceph_context);
 
     bufferlist monmapbl, osdmapbl;
@@ -369,7 +372,12 @@ int main(int argc, const char **argv)
       } catch (const buffer::error& e) {
 	derr << argv[0] << ": error decoding monmap " << monmap_fn << ": " << e.what() << dendl;
 	exit(1);
-      }      
+      }
+
+      dout(1) << "imported monmap:\n";
+      monmap.print(*_dout);
+      *_dout << dendl;
+      
     } else {
       ostringstream oss;
       int err = monmap.build_initial(g_ceph_context, true, oss);
@@ -379,38 +387,49 @@ int main(int argc, const char **argv)
 	derr << argv[0] << ": warning: no initial monitors; must use admin socket to feed hints" << dendl;
       }
 
+      dout(1) << "initial generated monmap:\n";
+      monmap.print(*_dout);
+      *_dout << dendl;
+
       // am i part of the initial quorum?
       if (monmap.contains(g_conf()->name.get_id())) {
 	// hmm, make sure the ip listed exists on the current host?
 	// maybe later.
       } else if (!g_conf()->public_addr.is_blank_ip()) {
-	entity_addr_t a = g_conf()->public_addr;
-	if (a.get_port() == 0)
-	  a.set_port(CEPH_MON_PORT_LEGACY);
-	if (monmap.contains(a)) {
-	  string name;
-	  monmap.get_addr_name(a, name);
+	entity_addrvec_t av = make_mon_addrs(g_conf()->public_addr);
+	string name;
+	if (monmap.contains(av, &name)) {
 	  monmap.rename(name, g_conf()->name.get_id());
-	  dout(0) << argv[0] << ": renaming mon." << name << " " << a
+	  dout(0) << argv[0] << ": renaming mon." << name << " " << av
 		  << " to mon." << g_conf()->name.get_id() << dendl;
 	}
       } else {
 	// is a local address listed without a name?  if so, name myself.
 	list<entity_addr_t> ls;
 	monmap.list_addrs(ls);
-	entity_addr_t local;
+	dout(0) << " monmap addrs are " << ls << ", checking if any are local"
+		<< dendl;
 
+	entity_addr_t local;
 	if (have_local_addr(g_ceph_context, ls, &local)) {
 	  string name;
-	  monmap.get_addr_name(local, name);
-
+	  local.set_type(entity_addr_t::TYPE_MSGR2);
+	  if (!monmap.get_addr_name(local, name)) {
+	    local.set_type(entity_addr_t::TYPE_LEGACY);
+	    if (!monmap.get_addr_name(local, name)) {
+	      dout(0) << "no local addresses appear in bootstrap monmap"
+		      << dendl;
+	    }
+	  }
 	  if (name.compare(0, 7, "noname-") == 0) {
 	    dout(0) << argv[0] << ": mon." << name << " " << local
-		    << " is local, renaming to mon." << g_conf()->name.get_id() << dendl;
+		    << " is local, renaming to mon." << g_conf()->name.get_id()
+		    << dendl;
 	    monmap.rename(name, g_conf()->name.get_id());
-	  } else {
+	  } else if (name.size()) {
 	    dout(0) << argv[0] << ": mon." << name << " " << local
-		 << " is local, but not 'noname-' + something; not assuming it's me" << dendl;
+		    << " is local, but not 'noname-' + something; "
+		    << "not assuming it's me" << dendl;
 	  }
 	}
       }
@@ -626,6 +645,13 @@ int main(int argc, const char **argv)
     } else {
       derr << "unable to obtain a monmap: " << cpp_strerror(err) << dendl;
     }
+
+    dout(10) << __func__ << " monmap:\n";
+    JSONFormatter jf(true);
+    jf.dump_object("monmap", monmap);
+    jf.flush(*_dout);
+    *_dout << dendl;
+
     if (!extract_monmap.empty()) {
       int r = mapbl.write_file(extract_monmap.c_str());
       if (r < 0) {
