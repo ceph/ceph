@@ -2747,6 +2747,8 @@ int OSD::init()
   }
 
   int rotating_auth_attempts = 0;
+  auto rotating_auth_timeout =
+    g_conf().get_val<int64_t>("rotating_keys_bootstrap_timeout");
 
   // sanity check long object name handling
   {
@@ -2993,7 +2995,7 @@ int OSD::init()
     exit(1);
   }
 
-  while (monc->wait_auth_rotating(30.0) < 0) {
+  while (monc->wait_auth_rotating(rotating_auth_timeout) < 0) {
     derr << "unable to obtain rotating service keys; retrying" << dendl;
     ++rotating_auth_attempts;
     if (rotating_auth_attempts > g_conf()->max_rotating_auth_attempts) {
@@ -7048,7 +7050,8 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
   if (force_new) {
     /* the MonClient checks keys every tick(), so we should just wait for that cycle
        to get through */
-    if (monc->wait_auth_rotating(10) < 0) {
+    auto timeout = g_conf().get_val<int64_t>("rotating_keys_renewal_timeout");
+    if (monc->wait_auth_rotating(timeout) < 0) {
       derr << "OSD::ms_get_authorizer wait_auth_rotating failed" << dendl;
       return false;
     }
