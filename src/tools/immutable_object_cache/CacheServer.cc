@@ -47,18 +47,6 @@ int CacheServer::stop() {
   return 0;
 }
 
-void CacheServer::send(uint64_t session_id, std::string msg) {
-  ldout(cct, 20) << dendl;
-
-  auto it = m_session_map.find(session_id);
-  if (it != m_session_map.end()) {
-    it->second->send(msg);
-  } else {
-    ldout(cct, 20) << "missing reply session id" << dendl;
-    assert(0);
-  }
-}
-
 int CacheServer::start_accept() {
   ldout(cct, 20) << dendl;
 
@@ -86,9 +74,10 @@ int CacheServer::start_accept() {
 }
 
 void CacheServer::accept() {
+  CacheSessionPtr new_session = nullptr;
 
-  CacheSessionPtr new_session(new CacheSession(m_session_id, m_io_service,
-                                               m_server_process_msg, cct));
+  new_session.reset(new CacheSession(m_session_id, m_io_service, m_server_process_msg, cct));
+
   m_acceptor.async_accept(new_session->socket(),
       boost::bind(&CacheServer::handle_accept, this, new_session,
         boost::asio::placeholders::error));
@@ -97,6 +86,7 @@ void CacheServer::accept() {
 void CacheServer::handle_accept(CacheSessionPtr new_session,
                                 const boost::system::error_code& error) {
   ldout(cct, 20) << dendl;
+  std::cout << "new session arrived....." << std::endl;
   if (error) {
     // operation_absort
     lderr(cct) << "async accept fails : " << error.message() << dendl;
@@ -110,6 +100,18 @@ void CacheServer::handle_accept(CacheSessionPtr new_session,
 
   // lanuch next accept
   accept();
+}
+
+void CacheServer::send(uint64_t session_id, ObjectCacheRequest* msg) {
+  ldout(cct, 20) << dendl;
+
+  auto it = m_session_map.find(session_id);
+  if (it != m_session_map.end()) {
+    it->second->send(msg);
+  } else {
+    ldout(cct, 20) << "missing reply session id" << dendl;
+    ceph_assert(0);
+  }
 }
 
 } // namespace immutable_obj_cache

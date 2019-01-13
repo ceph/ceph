@@ -11,6 +11,8 @@
 #include <boost/algorithm/string.hpp>
 #include "include/ceph_assert.h"
 #include "include/Context.h"
+#include "common/Mutex.h"
+#include "Types.h"
 #include "SocketCommon.h"
 
 
@@ -30,9 +32,13 @@ public:
   int stop();
   int connect();
 
+  void lookup_object(ObjectCacheRequest* req);
+  void send_message();
+  void try_send();
+  void fault(const int err_type, const boost::system::error_code& err);
+  void try_receive();
+  void receive_message();
   int register_client(Context* on_finish);
-  int lookup_object(std::string pool_name, std::string object_id, Context* on_finish);
-  void get_result(Context* on_finish);
 
 private:
   boost::asio::io_service m_io_service;
@@ -40,14 +46,24 @@ private:
   stream_protocol::socket m_dm_socket;
   ClientProcessMsg m_client_process_msg;
   stream_protocol::endpoint m_ep;
-  char m_recv_buffer[1024];
   std::shared_ptr<std::thread> m_io_thread;
-
-  // atomic modfiy for this variable.
-  // thread 1 : asio callback thread modify it.
-  // thread 2 : librbd read it.
   std::atomic<bool> m_session_work;
   CephContext* cct;
+
+  bool m_use_dedicated_worker;
+  int m_worker_thread_num;
+  boost::asio::io_service* m_worker;
+  std::vector<std::thread*> m_worker_threads;
+  boost::asio::io_service::work* m_worker_io_service_work;
+
+  char* m_header_buffer;
+  std::atomic<bool> m_writing;
+  std::atomic<bool> m_reading;
+  std::atomic<uint64_t> m_sequence_id;
+  Mutex m_lock;
+  bufferlist m_outcoming_bl;
+  Mutex m_map_lock;
+  std::map<uint64_t, ObjectCacheRequest*> m_seq_to_req;
 };
 
 } // namespace immutable_obj_cache

@@ -8,6 +8,7 @@
 #include <boost/asio.hpp>
 #include <boost/asio/error.hpp>
 
+#include "Types.h"
 #include "SocketCommon.h"
 
 using boost::asio::local::stream_protocol;
@@ -18,35 +19,26 @@ namespace immutable_obj_cache {
 
 class CacheSession : public std::enable_shared_from_this<CacheSession> {
 public:
-  CacheSession(uint64_t session_id, io_service& io_service,
-               ProcessMsg processmsg, CephContext* cct);
+  CacheSession(uint64_t session_id, io_service& io_service, ProcessMsg process_msg, CephContext* ctx);
   ~CacheSession();
-
   stream_protocol::socket& socket();
-  void start();
   void close();
-  void handing_request();
-
-private:
-
-  void handle_read(const boost::system::error_code& error,
-                   size_t bytes_transferred);
-
-  void handle_write(const boost::system::error_code& error,
-                    size_t bytes_transferred);
-
-public:
-  void send(std::string msg);
+  void start();
+  void read_request_header();
+  void handle_request_header(const boost::system::error_code& err, size_t bytes_transferred);
+  void read_request_data(uint64_t data_len);
+  void handle_request_data(bufferptr bp, uint64_t data_len,
+                          const boost::system::error_code& err, size_t bytes_transferred);
+  void process(ObjectCacheRequest* req);
+  void fault();
+  void send(ObjectCacheRequest* msg);
 
 private:
   uint64_t m_session_id;
   stream_protocol::socket m_dm_socket;
-  ProcessMsg process_msg;
+  char* m_head_buffer;
+  ProcessMsg m_server_process_msg;
   CephContext* cct;
-
-  // Buffer used to store data received from the client.
-  //std::array<char, 1024> data_;
-  char m_buffer[1024];
 };
 
 typedef std::shared_ptr<CacheSession> CacheSessionPtr;
