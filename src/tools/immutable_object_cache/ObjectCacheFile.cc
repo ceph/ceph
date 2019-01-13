@@ -58,7 +58,8 @@ int ObjectCacheFile::read_object_from_file(ceph::bufferlist* read_buf, uint64_t 
 
   bufferlist temp_bl;
   std::string error_str;
-  // TODO : optimization
+
+  // TODO : current implements will drop sharely performance.
   int ret = temp_bl.read_file(m_name.c_str(), &error_str);
   if (ret < 0) {
     lderr(cct)<<"read file fail:" << error_str << dendl;

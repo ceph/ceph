@@ -7,6 +7,7 @@
 #include <boost/asio.hpp>
 #include <boost/asio/error.hpp>
 
+#include "Types.h"
 #include "SocketCommon.h"
 #include "CacheSession.h"
 
@@ -17,15 +18,14 @@ namespace ceph {
 namespace immutable_obj_cache {
 
 class CacheServer {
-
  public:
   CacheServer(CephContext* cct, const std::string& file, ProcessMsg processmsg);
   ~CacheServer();
 
   int run();
-  void send(uint64_t session_id, std::string msg);
   int start_accept();
   int stop();
+  void send(uint64_t session_id, ObjectCacheRequest* msg);
 
  private:
   void accept();
@@ -33,11 +33,12 @@ class CacheServer {
 
  private:
   CephContext* cct;
-  boost::asio::io_service m_io_service; // TODO wrapper it.
+  boost::asio::io_service m_io_service;
   ProcessMsg m_server_process_msg;
   stream_protocol::endpoint m_local_path;
   stream_protocol::acceptor m_acceptor;
   uint64_t m_session_id = 1;
+  // TODO : need to lock it.
   std::map<uint64_t, CacheSessionPtr> m_session_map;
 };
 

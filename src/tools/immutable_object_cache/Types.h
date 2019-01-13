@@ -5,6 +5,7 @@
 #define CEPH_CACHE_TYPES_H
 
 #include "include/encoding.h"
+#include "include/Context.h"
 
 namespace ceph {
 namespace immutable_obj_cache {
@@ -14,15 +15,29 @@ struct ObjectCacheMsgHeader {
     uint16_t type;                        /* msg type */
     uint16_t version;                     /* object cache version */
     uint32_t padding;
-    uint64_t mid_len;
     uint32_t data_len;
     uint32_t reserved;
 
-    void encode(bufferlist& bl) const;
-    void decode(bufferlist::const_iterator& it);
+    void encode(bufferlist& bl) const {
+      ceph::encode(seq, bl);
+      ceph::encode(type, bl);
+      ceph::encode(version, bl);
+      ceph::encode(padding, bl);
+      ceph::encode(data_len, bl);
+      ceph::encode(reserved, bl);
+    }
+
+    void decode(bufferlist::const_iterator& it) {
+      ceph::decode(seq, it);
+      ceph::decode(type, it);
+      ceph::decode(version, it);
+      ceph::decode(padding, it);
+      ceph::decode(data_len, it);
+      ceph::decode(reserved, it);
+    }
 };
 
-class ObjectCacheMsgMiddle {
+class ObjectCacheMsgData {
 public:
   uint64_t m_image_size;
   uint64_t m_read_offset;
@@ -31,8 +46,8 @@ public:
   std::string m_image_name;
   std::string m_oid;
 
-   ObjectCacheMsgMiddle(){}
-   ~ObjectCacheMsgMiddle(){}
+   ObjectCacheMsgData(){}
+   ~ObjectCacheMsgData(){}
 
    void encode(bufferlist& bl) {
      ceph::encode(m_image_size, bl);
@@ -57,76 +72,43 @@ public:
 class ObjectCacheRequest {
 public:
     ObjectCacheMsgHeader m_head;
-    ObjectCacheMsgMiddle m_mid;
-
+    ObjectCacheMsgData m_data;
     bufferlist m_head_buffer;
-    bufferlist m_mid_buffer;
     bufferlist m_data_buffer;
+    Context* m_on_finish;
+    GenContext<ObjectCacheRequest*>* m_process_msg;
 
     ObjectCacheRequest() {}
     ~ObjectCacheRequest() {}
-
     void encode() {
-      m_mid.encode(m_mid_buffer);
-
-      m_head.mid_len = m_mid_buffer.length();
+      m_data.encode(m_data_buffer);
       m_head.data_len = m_data_buffer.length();
-
+      m_head.data_len = m_data_buffer.length();
       assert(m_head_buffer.length() == 0);
       m_head.encode(m_head_buffer);
       assert(sizeof(ObjectCacheMsgHeader) == m_head_buffer.length());
     }
-
     bufferlist get_head_buffer() {
       return m_head_buffer;
     }
-
-    bufferlist get_mid_buffer() {
-      return m_mid_buffer;
-    }
-
     bufferlist get_data_buffer() {
       return m_data_buffer;
     }
 };
 
-// currently, just use this interface.
 inline ObjectCacheRequest* decode_object_cache_request(
-            ObjectCacheMsgHeader* head, bufferlist mid_buffer)
-{
+            ObjectCacheMsgHeader* head, bufferlist data_buffer) {
   ObjectCacheRequest* req = new ObjectCacheRequest();
-
-  // head
   req->m_head = *head;
-  assert(req->m_head.mid_len == mid_buffer.length());
-
-  // mid
-  req->m_mid.decode(mid_buffer);
-
+  assert(req->m_head.data_len == data_buffer.length());
+  req->m_data.decode(data_buffer);
   return req;
 }
 
 inline ObjectCacheRequest* decode_object_cache_request(
-             ObjectCacheMsgHeader* head, bufferlist& mid_buffer,
-             bufferlist& data_buffer)
-{
-  ObjectCacheRequest* req = decode_object_cache_request(head, mid_buffer);
-
-  // data
-  if(data_buffer.length() != 0) {
-    req->m_data_buffer = data_buffer;
-  }
-
-  return req;
+             bufferlist head_buffer, bufferlist data_buffer) {
+  return decode_object_cache_request((ObjectCacheMsgHeader*)(head_buffer.c_str()), data_buffer);
 }
-
-inline ObjectCacheRequest* decode_object_cache_request(bufferlist& head,
-                bufferlist& mid_buffer, bufferlist& data_buffer)
-{
-  assert(sizeof(ObjectCacheMsgHeader) == head.length());
-  return decode_object_cache_request((ObjectCacheMsgHeader*)(head.c_str()), mid_buffer, data_buffer);
-}
-
 
 } // namespace immutable_obj_cache
 } // namespace ceph

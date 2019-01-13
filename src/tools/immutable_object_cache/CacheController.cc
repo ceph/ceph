@@ -49,7 +49,7 @@ void CacheController::run() {
     std::remove(controller_path.c_str());
 
     m_cache_server = new CacheServer(m_cct, controller_path,
-      ([&](uint64_t p, std::string s){handle_request(p, s);}));
+      ([&](uint64_t p, ObjectCacheRequest* s){handle_request(p, s);}));
 
     int ret = m_cache_server->run();
     if (ret != 0) {
@@ -60,34 +60,32 @@ void CacheController::run() {
   }
 }
 
-void CacheController::handle_request(uint64_t session_id, std::string msg){
+void CacheController::handle_request(uint64_t session_id, ObjectCacheRequest* req){
   ldout(m_cct, 20) << dendl;
 
-  rbdsc_req_type_t *io_ctx = (rbdsc_req_type_t*)(msg.c_str());
-
-  switch (io_ctx->type) {
+  switch (req->m_head.type) {
     case RBDSC_REGISTER: {
       // init cache layout for volume
       m_object_cache_store->init_cache();
-      io_ctx->type = RBDSC_REGISTER_REPLY;
-      m_cache_server->send(session_id, std::string((char*)io_ctx, msg.size()));
+      req->m_head.type = RBDSC_REGISTER_REPLY;
+      m_cache_server->send(session_id, req);
 
       break;
     }
     case RBDSC_READ: {
       // lookup object in local cache store
-      int ret = m_object_cache_store->lookup_object(io_ctx->pool_name, io_ctx->oid);
+      int ret = m_object_cache_store->lookup_object(req->m_data.m_pool_name, req->m_data.m_oid);
       if (ret < 0) {
-        io_ctx->type = RBDSC_READ_RADOS;
+        req->m_head.type = RBDSC_READ_RADOS;
       } else {
-        io_ctx->type = RBDSC_READ_REPLY;
+        req->m_head.type = RBDSC_READ_REPLY;
       }
-      m_cache_server->send(session_id, std::string((char*)io_ctx, msg.size()));
+      m_cache_server->send(session_id, req);
 
       break;
     }
     ldout(m_cct, 5) << "can't recongize request" << dendl;
-    assert(0); // TODO replace it.
+    ceph_assert(0); // TODO replace it.
   }
 }
 
