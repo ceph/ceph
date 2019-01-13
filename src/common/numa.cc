@@ -111,16 +111,13 @@ int get_numa_node_cpu_set(
   std::string fn = "/sys/devices/system/node/node";
   fn += stringify(node);
   fn += "/cpulist";
-  std::cout << __func__ << " fn " << fn << std::endl;
   int fd = ::open(fn.c_str(), O_RDONLY);
   if (fd < 0) {
-    std::cout << __func__ << " fail to open " << errno << std::endl;
     return -errno;
   }
   char buf[1024];
   int r = safe_read(fd, &buf, sizeof(buf));
   if (r < 0) {
-    std::cout << __func__ << " fail to read " << errno << std::endl;
     goto out;
   }
   buf[r] = 0;
@@ -129,7 +126,6 @@ int get_numa_node_cpu_set(
   }
   r = parse_cpu_set_list(buf, cpu_set_size, cpu_set);
   if (r < 0) {
-    std::cout << __func__ << " fail to parse " << r << std::endl;
     goto out;
   }
   r = 0;
