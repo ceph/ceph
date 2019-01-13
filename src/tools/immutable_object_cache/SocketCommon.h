@@ -4,6 +4,9 @@
 #ifndef CEPH_CACHE_SOCKET_COMMON_H
 #define CEPH_CACHE_SOCKET_COMMON_H
 
+#include "include/types.h"
+#include "include/int_types.h"
+
 namespace ceph {
 namespace immutable_obj_cache {
 
