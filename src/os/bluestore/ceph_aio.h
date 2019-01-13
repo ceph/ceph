@@ -22,13 +22,13 @@ struct aio_t {
 #if defined(HAVE_LIBAIO)
   struct iocb iocb{};  // must be first element; see shenanigans in aio_queue_t
 #elif defined(HAVE_POSIXAIO)
-  //  static long aio_listio_max = -1;
   union {
     struct aiocb aiocb;
     struct aiocb *aiocbp;
   } aio;
   int n_aiocb;
 #endif
+  CephContext *cct;
   void *priv;
   int fd;
   boost::container::small_vector<iovec,4> iov;
@@ -38,7 +38,7 @@ struct aio_t {
 
   boost::intrusive::list_member_hook<> queue_item;
 
-  aio_t(void *p, int f) : priv(p), fd(f), offset(0), length(0), rval(-1000) {
+  aio_t(CephContext *c, void *p, int f) : cct(c), priv(p), fd(f), offset(0), length(0), rval(-1000) {
   }
 
   void pwritev(uint64_t _offset, uint64_t len) {
@@ -85,6 +85,9 @@ struct aio_t {
 };
 
 std::ostream& operator<<(std::ostream& os, const aio_t& aio);
+#if defined(__FreeBSD__)
+std::ostream& operator<<(std::ostream& os, const struct aiocb *cb);
+#endif
 
 typedef boost::intrusive::list<
   aio_t,
@@ -111,7 +114,10 @@ struct aio_queue_t final : public io_queue_t {
   io_context_t ctx;
 #elif defined(HAVE_POSIXAIO)
   int ctx;
+  int timeouts;
+  int fd;
 #endif
+  CephContext *cct;
 
   explicit aio_queue_t(unsigned max_iodepth)
     : max_iodepth(max_iodepth),
@@ -128,8 +134,8 @@ struct aio_queue_t final : public io_queue_t {
     int r = io_setup(max_iodepth, &ctx);
     if (r < 0) {
       if (ctx) {
-	io_destroy(ctx);
-	ctx = 0;
+        io_destroy(ctx);
+      ctx = 0;
       }
     }
     return r;

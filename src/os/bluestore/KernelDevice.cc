@@ -227,7 +227,7 @@ int KernelDevice::open(const string& p)
 	  << " block_size " << block_size
 	  << " (" << byte_u_t(block_size) << ")"
 	  << " " << (rotational ? "rotational" : "non-rotational")
-      << " discard " << (support_discard ? "supported" : "not supported")
+       << " discard " << (support_discard ? "supported" : "not supported")
 	  << dendl;
   return 0;
 
@@ -387,9 +387,15 @@ bool KernelDevice::get_thin_utilization(uint64_t *total, uint64_t *avail) const
 
 int KernelDevice::choose_fd(bool buffered, int write_hint) const
 {
+#if defined(F_SET_FILE_RW_HINT)
   assert(write_hint >= WRITE_LIFE_NOT_SET && write_hint < WRITE_LIFE_MAX);
   if (!enable_wrt)
     write_hint = WRITE_LIFE_NOT_SET;
+#else
+  // Without WRITE_LIFE capabilities, only one file is used.
+  // And rocksdb sets this value also to > 0.
+  write_hint = WRITE_LIFE_NOT_SET;
+#endif
   return buffered ? fd_buffereds[write_hint] : fd_directs[write_hint];
 }
 
@@ -526,11 +532,21 @@ void KernelDevice::_aio_thread()
 					 aio, max);
     if (r < 0) {
       derr << __func__ << " got " << cpp_strerror(r) << dendl;
+#if defined(__linux__)
       ceph_abort_msg("got unexpected error from io_getevents");
+#elif defined(__FreeBSD__)
+      ceph_abort_msg("got unexpected error from kevent");
+#endif
     }
     if (r > 0) {
       dout(30) << __func__ << " got " << r << " completed aios" << dendl;
       for (int i = 0; i < r; ++i) {
+        dout(35) << __func__
+                 << " aio[i] = "  << aio[i]
+                 << "( fd = "     << aio[i]->fd
+                 << ", offset = " << aio[i]->offset
+                 << ", offset = " << aio[i]->length
+                 << ")" << dendl;
 	IOContext *ioc = static_cast<IOContext*>(aio[i]->priv);
 	_aio_log_finish(ioc, aio[i]->offset, aio[i]->length);
 	if (aio[i]->queue_item.is_linked()) {
@@ -893,7 +909,7 @@ int KernelDevice::aio_write(
 
   _aio_log_start(ioc, off, len);
 
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (aio && dio && !buffered) {
     if (cct->_conf->bdev_inject_crash &&
 	rand() % cct->_conf->bdev_inject_crash == 0) {
@@ -902,7 +918,7 @@ int KernelDevice::aio_write(
 	   << dendl;
       // generate a real io so that aio_wait behaves properly, but make it
       // a read instead of write, and toss the result.
-      ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+      ioc->pending_aios.push_back(aio_t(cct, ioc, choose_fd(false, write_hint)));
       ++ioc->num_pending;
       auto& aio = ioc->pending_aios.back();
       bufferptr p = ceph::buffer::create_small_page_aligned(len);
@@ -913,7 +929,7 @@ int KernelDevice::aio_write(
     } else {
       if (bl.length() <= RW_IO_MAX) {
 	// fast path (non-huge write)
-	ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+	ioc->pending_aios.push_back(aio_t(cct, ioc, choose_fd(false, write_hint)));
 	++ioc->num_pending;
 	auto& aio = ioc->pending_aios.back();
 	bl.prepare_iov(&aio.iov);
@@ -933,7 +949,7 @@ int KernelDevice::aio_write(
 	    tmp.substr_of(bl, prev_len, bl.length() - prev_len);
 	  }
 	  auto len = tmp.length();
-	  ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+	  ioc->pending_aios.push_back(aio_t(cct, ioc, choose_fd(false, write_hint)));
 	  ++ioc->num_pending;
 	  auto& aio = ioc->pending_aios.back();
 	  tmp.prepare_iov(&aio.iov);
@@ -1032,11 +1048,11 @@ int KernelDevice::aio_read(
 	  << dendl;
 
   int r = 0;
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (aio && dio) {
     ceph_assert(is_valid_io(off, len));
     _aio_log_start(ioc, off, len);
-    ioc->pending_aios.push_back(aio_t(ioc, fd_directs[WRITE_LIFE_NOT_SET]));
+    ioc->pending_aios.push_back(aio_t(cct, ioc, fd_directs[WRITE_LIFE_NOT_SET]));
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
     bufferptr p = ceph::buffer::create_small_page_aligned(len);
