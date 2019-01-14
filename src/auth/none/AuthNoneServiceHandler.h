@@ -26,10 +26,12 @@ public:
     : AuthServiceHandler(cct_) {}
   ~AuthNoneServiceHandler() override {}
   
-  int start_session(EntityName& name, bufferlist::const_iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps) override {
+  int start_session(const EntityName& name,
+		    bufferlist *result_bl,
+		    AuthCapsInfo *caps) override {
     entity_name = name;
-    caps.allow_all = true;
-    return CEPH_AUTH_NONE;
+    caps->allow_all = true;
+    return 0;
   }
   int handle_request(bufferlist::const_iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps) override {
     return 0;
