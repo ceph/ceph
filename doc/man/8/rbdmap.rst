@@ -46,6 +46,8 @@ This will cause the script to issue an ``rbd map`` command like the following::
     rbd map POOLNAME/IMAGENAME --PARAM1 VAL1 --PARAM2 VAL2 
 
 (See the ``rbd`` manpage for a full list of possible options.)
+For parameters and values which contain commas or equality signs, a simple
+apostrophe can be used to prevent replacing them.
 
 When run as ``rbdmap map``, the script parses the configuration file, and for
 each RBD image specified attempts to first map the image (using the ``rbd map``
@@ -77,11 +79,12 @@ sequence.)
 Examples
 ========
 
-Example ``/etc/ceph/rbdmap`` for two RBD images called "bar1" and "bar2", both
-in pool "foopool"::
+Example ``/etc/ceph/rbdmap`` for three RBD images called "bar1", "bar2" and "bar3", 
+which are in pool "foopool"::
 
     foopool/bar1    id=admin,keyring=/etc/ceph/ceph.client.admin.keyring
     foopool/bar2    id=admin,keyring=/etc/ceph/ceph.client.admin.keyring
+    foopool/bar3    id=admin,keyring=/etc/ceph/ceph.client.admin.keyring,options='lock_on_read,queue_depth=1024'
 
 Each line in the file contains two strings: the image spec and the options to
 be passed to ``rbd map``. These two lines get transformed into the following
@@ -89,12 +92,14 @@ commands::
 
     rbd map foopool/bar1 --id admin --keyring /etc/ceph/ceph.client.admin.keyring
     rbd map foopool/bar2 --id admin --keyring /etc/ceph/ceph.client.admin.keyring
+    rbd map foopool/bar2 --id admin --keyring /etc/ceph/ceph.client.admin.keyring --options lock_on_read,queue_depth=1024
 
 If the images had XFS filesystems on them, the corresponding ``/etc/fstab``
 entries might look like this::
 
     /dev/rbd/foopool/bar1 /mnt/bar1 xfs noauto 0 0
     /dev/rbd/foopool/bar2 /mnt/bar2 xfs noauto 0 0
+    /dev/rbd/foopool/bar3 /mnt/bar3 xfs noauto 0 0
 
 After creating the images and populating the ``/etc/ceph/rbdmap`` file, making
 the images get automatically mapped and mounted at boot is just a matter of
