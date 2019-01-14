@@ -765,30 +765,6 @@ std::string calc_hash_sha256_restart_stream(SHA256 **phash)
   return hash;
 }
 
-int gen_rand_base64(CephContext *cct, char *dest, int size) /* size should be the required string size + 1 */
-{
-  using buffer_t = boost::container::small_vector<char, 64>;
-
-  buffer_t buf(size);
-  buffer_t tmp_dest(4 + size);    // space for extra '=' chars, and some 
-
-  cct->random()->get_bytes(buf.data(), sizeof(buf));
-
-  int ret = ceph_armor(tmp_dest.data(), &tmp_dest[sizeof(tmp_dest)],
-		              (const char *)buf.data(), 
-                      ((const char *)buf.data()) + ((size - 1) * 3 + 4 - 1) / 4);
-  if (ret < 0) {
-    lderr(cct) << "ceph_armor failed" << dendl;
-    return ret;
-  }
-  tmp_dest[ret] = '\0';
-  memcpy(dest, tmp_dest.data(), size);
-  dest[size-1] = '\0';
-
-  return 0;
-}
-
-
 int NameVal::parse()
 {
   auto delim_pos = str.find('=');
