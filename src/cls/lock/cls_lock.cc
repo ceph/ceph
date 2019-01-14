@@ -216,6 +216,13 @@ static int lock_obj(cls_method_context_t hctx,
     expiration += duration;
 
   }
+  // make all addrs of type legacy, because v2 clients speak v2 or v1,
+  // even depending on which OSD they are talking to, and the type
+  // isn't what uniquely identifies them.  also, storing a v1 addr
+  // here means that old clients who get this locker_info won't see an
+  // old "msgr2:" prefix.
+  inst.addr.set_type(entity_addr_t::TYPE_LEGACY);
+
   struct locker_info_t info(expiration, inst.addr, description);
 
   linfo.lockers[id] = info;
