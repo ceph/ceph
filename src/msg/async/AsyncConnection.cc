@@ -283,7 +283,6 @@ ssize_t AsyncConnection::read_bulk(char *buf, unsigned len)
 ssize_t AsyncConnection::write(bufferlist &bl,
                                std::function<void(ssize_t)> callback,
                                bool more) {
-
     std::unique_lock<std::mutex> l(write_lock);
     outcoming_bl.claim_append(bl);
     ssize_t r = _try_send(more);
@@ -538,7 +537,10 @@ void AsyncConnection::fault()
 
   recv_start = recv_end = 0;
   state_offset = 0;
+  send_lock.lock();
+  protocol->add_sent(outcoming_bl.length());
   outcoming_bl.clear();
+  send_lock.unlock();
 }
 
 void AsyncConnection::_stop() {
@@ -647,7 +649,6 @@ void AsyncConnection::mark_down()
 }
 
 void AsyncConnection::cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops) {
-  std::lock_guard<std::mutex> l(send_lock);
   protocol->cancel_ops(ops);
 }
 

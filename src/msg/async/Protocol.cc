@@ -337,6 +337,7 @@ void ProtocolV1::write_event() {
         m->get();
       }
       more = !out_q.empty();
+      connection->send_lock.lock();
       connection->write_lock.unlock();
 
       // send_message or requeue messages may not encode message
@@ -414,6 +415,7 @@ bool ProtocolV1::is_queued() {
 void ProtocolV1::cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops)
 {
   connection->write_lock.lock();
+  connection->send_lock.lock();
   auto it = out_q.begin();
   while (it != out_q.end()) {
     auto lit = it->second.begin();
@@ -462,6 +464,7 @@ void ProtocolV1::cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops)
       }
     }
   }
+  connection->send_lock.unlock();
 }
 
 void ProtocolV1::add_sent(uint64_t sent) {
@@ -1192,7 +1195,6 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
     connection->outcoming_bl.claim_append(bl);
   }
   ssize_t body_end = connection->outcoming_bl.length();
-  connection->send_lock.lock();
   messages_writing.push_back(new writing_item(m->get_tid(), sent_pos + body_start, body_end - body_start));
   connection->send_lock.unlock();
 
@@ -1646,7 +1648,10 @@ CtPtr ProtocolV1::handle_connect_reply_2() {
     connect_seq = 0;
 
     // see session_reset
+    connection->send_lock.lock();
+    add_sent(connection->outcoming_bl.length());
     connection->outcoming_bl.clear();
+    connection->send_lock.unlock();
 
     return CONTINUE(send_connect_message);
   }
@@ -2294,7 +2299,10 @@ CtPtr ProtocolV1::replace(AsyncConnectionRef existing,
             std::lock_guard<std::mutex> l(existing->lock);
             existing->write_lock.lock();
             exproto->requeue_sent();
+            existing->send_lock.lock();
+            exproto->add_sent(existing->outcoming_bl.length());
             existing->outcoming_bl.clear();
+            existing->send_lock.unlock();
             existing->open_write = false;
             existing->write_lock.unlock();
             if (exproto->state == NONE) {
