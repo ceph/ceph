@@ -22,6 +22,12 @@
 
 using namespace ceph::net;
 
+namespace {
+  seastar::logger& logger() {
+    return ceph::get_logger(ceph_subsys_ms);
+  }
+}
+
 SocketMessenger::SocketMessenger(const entity_name_t& myname,
                                  const std::string& logic_name,
                                  uint32_t nonce)
@@ -70,7 +76,7 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
       }).handle_exception_type([this] (const std::system_error& e) {
         // stop gracefully on connection_aborted
         if (e.code() != error::connection_aborted) {
-          throw e;
+          logger().error("{} unexpected error during accept: {}", *this, e);
         }
       });
   }
