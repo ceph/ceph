@@ -43,7 +43,7 @@ struct amqp_connection_state_t_ {
     consume(nullptr),
     login_called(false),
     ack_list(1024),
-    delivery_tag(0) {
+    delivery_tag(1) {
       reply.reply_type = AMQP_RESPONSE_NONE;
     }
 };

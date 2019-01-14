@@ -336,31 +336,39 @@ connection_t create_connection(const amqp_connection_info& info, const std::stri
 
 /// struct used for holding mesages in the message queue
 struct message_wrapper_t {
-  message_wrapper_t(const connection_t& _conn,
-      const std::string& _topic,
-      const std::string& _message,
-      reply_callback_t _cb) : conn(_conn), topic(_topic), message(_message), cb(_cb)
-  {}
   const connection_t& conn; 
   std::string topic;
   std::string message;
   reply_callback_t cb;
+  
+  message_wrapper_t(const connection_t& _conn,
+      const std::string& _topic,
+      const std::string& _message,
+      reply_callback_t _cb) : conn(_conn), topic(_topic), message(_message), cb(_cb) {}
+};
+
+// struct for holding the callback and its tag in the callback list
+struct reply_callback_with_tag_t {
+  uint64_t tag;
+  reply_callback_t cb;
+  
+  reply_callback_with_tag_t(uint64_t _tag, reply_callback_t _cb) : tag(_tag), cb(_cb) {}
+  
+  bool operator==(uint64_t rhs) {
+    return tag == rhs;
+  }
 };
 
 typedef std::unordered_map<ConnectionID, connection_t, ConnectionID::hasher> ConnectionList;
-typedef std::unordered_map<uint64_t, reply_callback_t> CallbackList;
+typedef std::vector<reply_callback_with_tag_t> CallbackList;
 typedef boost::lockfree::queue<message_wrapper_t*> MessageQueue;
 
-// Thread Safety: libamqp is not thread-safe within the connection object
-// so, this should not be a separate thread, has to run in the same thread
-// of the callers of connect() and publish(). This would require:
-// (2) exponential backoff - skipping idle connections
 class Manager {
 private:
   const size_t max_connections;
   size_t connection_number;
   std::atomic<bool> stopped;
-  std::atomic<uint64_t> delivery_tag;
+  uint64_t delivery_tag;
   struct timeval read_timeout;
   ConnectionList connections;
   CallbackList callbacks;
@@ -399,10 +407,7 @@ private:
       amqp_cstring_bytes(message.message.c_str()));
 
     if (rc == AMQP_STATUS_OK) {
-      if (callbacks.insert(std::make_pair(delivery_tag++, message.cb)).second == false) {
-        // callback with that message id is already pending confirmation
-        return INTERNAL_AMQP_STATUS_PENDING_CONFIRMATION;
-      }
+      callbacks.emplace_back(delivery_tag++, message.cb);
     }
     return rc;
   }
@@ -444,7 +449,6 @@ private:
       auto incoming_message = false;
       // loop over all connections to read acks
       for (; conn_it != end_it; ++conn_it) {
-        //amqp_simple_wait_frame(conn_it->second.state, &frame);
         const auto rc = amqp_simple_wait_frame_noblock(conn_it->second.state, &frame, &read_timeout);
         if (rc == AMQP_STATUS_TIMEOUT) {
           // TODO mark connection as idle
@@ -487,12 +491,19 @@ private:
           continue;
         }
 
-        // TODO: handle "multiple"
-        ceph_assert(!multiple); // multiple n/acks in one reply not supported. going to cause a leak if received
-        const auto it = callbacks.find(tag);
+        const auto it = std::find(callbacks.begin(), callbacks.end(), tag);
         if (it != callbacks.end()) {
-          it->second(result);
-          callbacks.erase(it);
+          if (multiple) {
+            // n/ack all
+            for (auto rit = it; rit >= callbacks.begin(); --rit) {
+              rit->cb(result);
+              callbacks.erase(rit);
+            }
+          } else {
+            // n/ack a specific tag
+            it->cb(result);
+            callbacks.erase(it);
+          }
         } else {
           // TODO add counter for acks with no callback
         }
@@ -514,7 +525,7 @@ public:
     max_connections(_max_connections),
     connection_number(0),
     stopped(false),
-    delivery_tag(0),
+    delivery_tag(1),
     read_timeout{0, _usec_timeout},
     messages(max_queue),
     runner(&Manager::run, this)
