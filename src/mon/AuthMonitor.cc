@@ -654,9 +654,12 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       wait_for_active(op, new C_RetryMessage(this,op));
       goto done;
     }
-    if (!s->authenticated &&
-	mon->ms_handle_authentication(s->con.get()) > 0) {
-      finished = true;
+    if (ret > 0) {
+      if (!s->authenticated &&
+	  mon->ms_handle_authentication(s->con.get()) > 0) {
+	finished = true;
+      }
+      ret = 0;
     }
   } catch (const buffer::error &err) {
     ret = -EINVAL;

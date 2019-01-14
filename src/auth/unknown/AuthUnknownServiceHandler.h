@@ -29,7 +29,7 @@ public:
   int start_session(const EntityName& name,
 		    bufferlist *result_bl,
 		    AuthCapsInfo *caps) {
-    return 0;
+    return 1;
   }
   int handle_request(bufferlist::iterator& indata,
 		     bufferlist *result_bl,
