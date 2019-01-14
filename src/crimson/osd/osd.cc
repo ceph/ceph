@@ -1,5 +1,6 @@
 #include "osd.h"
 
+#include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDMap.h"
 #include "crimson/net/Connection.h"
@@ -38,6 +39,9 @@ OSD::OSD(int id, uint32_t nonce)
   dispatchers.push_front(this);
   dispatchers.push_front(&monc);
   osdmaps[0] = seastar::make_lw_shared<OSDMap>();
+  beacon_timer.set_callback([this] {
+    send_beacon();
+  });
 }
 
 OSD::~OSD() = default;
@@ -300,6 +304,8 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
     if (state.is_booting()) {
       logger().info("osd.{}: activating...", whoami);
       state.set_active();
+      beacon_timer.arm_periodic(
+         std::chrono::seconds(local_conf()->osd_beacon_report_interval));
     }
   }
 
@@ -368,4 +374,14 @@ seastar::future<> OSD::shutdown()
   superblock.mounted = boot_epoch;
   superblock.clean_thru = osdmap->get_epoch();
   return seastar::now();
+}
+
+seastar::future<> OSD::send_beacon()
+{
+  // FIXME: min lec should be calculated from pg_stat
+  //        and should set m->pgs
+  epoch_t min_last_epoch_clean = osdmap->get_epoch();
+  auto m = make_message<MOSDBeacon>(osdmap->get_epoch(),
+                                    min_last_epoch_clean);
+  return monc.send_message(m);
 }
