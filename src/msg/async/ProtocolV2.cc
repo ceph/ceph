@@ -650,6 +650,7 @@ CtPtr ProtocolV2::_fault() {
     } else {
       ldout(cct, 0) << __func__ << " initiating reconnect" << dendl;
       connect_seq++;
+      global_seq = messenger->get_global_seq();
       state = START_CONNECT;
       connection->state = AsyncConnection::STATE_CONNECTING;
     }
@@ -666,6 +667,7 @@ CtPtr ProtocolV2::_fault() {
         backoff.set_from_double(cct->_conf->ms_max_backoff);
     }
 
+    global_seq = messenger->get_global_seq();
     state = START_CONNECT;
     connection->state = AsyncConnection::STATE_CONNECTING;
     ldout(cct, 10) << __func__ << " waiting " << backoff << dendl;
@@ -2893,6 +2895,7 @@ CtPtr ProtocolV2::send_server_ident() {
                   << " state changed while accept_conn, it must be mark_down"
                   << dendl;
     ceph_assert(state == CLOSED || state == NONE);
+    messenger->unregister_conn(connection);
     connection->inject_delay();
     return _fault();
   }
@@ -2949,6 +2952,7 @@ CtPtr ProtocolV2::send_reconnect_ok() {
                   << " state changed while accept_conn, it must be mark_down"
                   << dendl;
     ceph_assert(state == CLOSED || state == NONE);
+    messenger->unregister_conn(connection);
     connection->inject_delay();
     return _fault();
   }
