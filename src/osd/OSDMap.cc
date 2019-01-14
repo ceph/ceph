@@ -4350,17 +4350,17 @@ int OSDMap::calc_pg_upmaps(
 
     map<int,float> pmap;
     int ruleno = tmp.crush->find_rule(i.second.get_crush_rule(),
-					i.second.get_type(),
-					i.second.get_size());
+				      i.second.get_type(),
+				      i.second.get_size());
     tmp.crush->get_rule_weight_osd_map(ruleno, &pmap);
     ldout(cct,30) << __func__ << " pool " << i.first << " ruleno " << ruleno << dendl;
     for (auto p : pmap) {
-	auto adjusted_weight = tmp.get_weightf(p.first) * p.second;
+      auto adjusted_weight = tmp.get_weightf(p.first) * p.second;
       if (adjusted_weight == 0) {
         continue;
       }
-	osd_weight[p.first] += adjusted_weight;
-	osd_weight_total += adjusted_weight;
+      osd_weight[p.first] += adjusted_weight;
+      osd_weight_total += adjusted_weight;
     }
   }
   for (auto& i : osd_weight) {
@@ -4461,6 +4461,7 @@ int OSDMap::calc_pg_upmaps(
 	      pending_inc->old_pg_upmap_items.insert(pg);
 	      ++num_changed;
 	      restart = true;
+              break;
 	    }
 	  }
 	}
