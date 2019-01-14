@@ -16,6 +16,7 @@
 #define RGW_DMCLOCK_SYNC_SCHEDULER_H
 
 #include "rgw_dmclock_scheduler.h"
+#include "rgw_dmclock_scheduler_ctx.h"
 
 namespace rgw::dmclock {
 // For a blocking SyncRequest we hold a reference to a cv and the caller must

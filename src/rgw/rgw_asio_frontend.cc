@@ -221,6 +221,7 @@ class ConnectionList {
   }
 };
 
+namespace dmc = rgw::dmclock;
 class AsioFrontend {
   RGWProcessEnv env;
   RGWFrontendConfig* conf;
@@ -258,17 +259,24 @@ class AsioFrontend {
 
  public:
   AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf,
-	       rgw::dmclock::optional_scheduler_ctx& sched_ctx)
+               dmc::optional_scheduler_ctx& sched_ctx)
     : env(env), conf(conf), pause_mutex(context.get_executor())
   {
-    if (sched_ctx){
-      scheduler.reset(new rgw::dmclock::AsyncScheduler(ctx(), context,
-						       std::ref(sched_ctx.get_counters()),
-						       &(sched_ctx.get_clients()),
-						       sched_ctx.get_clients(),
-						       rgw::dmclock::AtLimit::Reject));
-    } else {
-      scheduler.reset(new rgw::dmclock::SimpleThrottler(ctx()));
+    auto sched_t = dmc::get_scheduler_t(ctx());
+    switch(sched_t){
+    case dmc::scheduler_t::none:
+      break;
+    case dmc::scheduler_t::throttler:
+      scheduler.reset(new dmc::SimpleThrottler(ctx()));
+      break;
+    case dmc::scheduler_t::dmclock:
+      ceph_assert(sched_ctx);
+      scheduler.reset(new dmc::AsyncScheduler(ctx(),
+                                              context,
+                                              std::ref(sched_ctx.get_counters()),
+                                              &(sched_ctx.get_clients()),
+                                              sched_ctx.get_clients(),
+                                              dmc::AtLimit::Reject));
     }
   }
 
