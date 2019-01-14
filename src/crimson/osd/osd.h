@@ -4,6 +4,7 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/shared_ptr.hh>
+#include <seastar/core/timer.hh>
 
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Dispatcher.h"
@@ -22,6 +23,7 @@ namespace ceph::net {
 
 class OSD : public ceph::net::Dispatcher {
   seastar::gate gate;
+  seastar::timer<seastar::lowres_clock> beacon_timer;
   const int whoami;
   // talk with osd
   std::unique_ptr<ceph::net::Messenger> cluster_msgr;
@@ -82,4 +84,6 @@ private:
   bool should_restart() const;
   seastar::future<> restart();
   seastar::future<> shutdown();
+
+  seastar::future<> send_beacon();
 };
