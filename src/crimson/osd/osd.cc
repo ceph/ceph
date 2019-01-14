@@ -12,6 +12,7 @@
 #include "crimson/os/cyan_object.h"
 #include "crimson/os/cyan_store.h"
 #include "crimson/os/Transaction.h"
+#include "crimson/osd/heartbeat.h"
 #include "crimson/osd/osd_meta.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_meta.h"
@@ -26,6 +27,7 @@ namespace {
   {
     return {new Message{std::forward<Args>(args)...}, false};
   }
+  static constexpr int TICK_INTERVAL = 1;
 }
 
 using ceph::common::local_conf;
@@ -38,6 +40,8 @@ OSD::OSD(int id, uint32_t nonce)
     public_msgr{new ceph::net::SocketMessenger{entity_name_t::OSD(whoami),
                                                "client", nonce}},
     monc{*public_msgr},
+    heartbeat{new Heartbeat{whoami, nonce, *this, monc}},
+    heartbeat_timer{[this] { update_heartbeat_peers(); }}
 {
   for (auto msgr : {cluster_msgr.get(), public_msgr.get()}) {
     if (local_conf()->ms_crc_data) {
@@ -156,6 +160,9 @@ seastar::future<> OSD::start()
     monc.sub_want("osdmap", 0, 0);
     return monc.renew_subs();
   }).then([this] {
+    return heartbeat->start(public_msgr->get_myaddrs(),
+                            cluster_msgr->get_myaddrs());
+  }).then([this] {
     return start_boot();
   });
 }
@@ -205,15 +212,14 @@ seastar::future<> OSD::_send_boot()
 {
   state.set_booting();
 
-  entity_addrvec_t hb_back_addrs;
-  entity_addrvec_t hb_front_addrs;
-
+  logger().info("hb_back_msgr: {}", heartbeat->get_back_addrs());
+  logger().info("hb_front_msgr: {}", heartbeat->get_front_addrs());
   logger().info("cluster_msgr: {}", cluster_msgr->get_myaddr());
   auto m = make_message<MOSDBoot>(superblock,
                                   osdmap->get_epoch(),
                                   osdmap->get_epoch(),
-                                  hb_back_addrs,
-                                  hb_front_addrs,
+                                  heartbeat->get_back_addrs(),
+                                  heartbeat->get_front_addrs(),
                                   cluster_msgr->get_myaddrs(),
                                   CEPH_FEATURES_ALL);
   return monc.send_message(m);
@@ -224,6 +230,8 @@ seastar::future<> OSD::stop()
   // see also OSD::shutdown()
   state.set_stopping();
   return gate.close().then([this] {
+    return heartbeat->stop();
+  }).then([this] {
     return monc.stop();
   }).then([this] {
     return public_msgr->shutdown();
@@ -496,6 +504,8 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
         state.set_active();
         beacon_timer.arm_periodic(
           std::chrono::seconds(local_conf()->osd_beacon_report_interval));
+        heartbeat_timer.arm_periodic(
+          std::chrono::seconds(TICK_INTERVAL));
       }
     }
 
@@ -574,4 +584,23 @@ seastar::future<> OSD::send_beacon()
   auto m = make_message<MOSDBeacon>(osdmap->get_epoch(),
                                     min_last_epoch_clean);
   return monc.send_message(m);
+}
+
+void OSD::update_heartbeat_peers()
+{
+  if (!state.is_active()) {
+    return;
+  }
+  for (auto& pg : pgs) {
+    vector<int> up, acting;
+    osdmap->pg_to_up_acting_osds(pg.first.pgid,
+                                 &up, nullptr,
+                                 &acting, nullptr);
+    for (auto osd : boost::join(up, acting)) {
+      if (osd != CRUSH_ITEM_NONE) {
+        heartbeat->add_peer(osd);
+      }
+    }
+  }
+  // TODO: remove down OSD
 }

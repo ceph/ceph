@@ -21,6 +21,7 @@ class MOSDMap;
 class OSDMap;
 class OSDMeta;
 class PG;
+class Heartbeat;
 
 namespace ceph::net {
   class Messenger;
@@ -45,6 +46,9 @@ class OSD : public ceph::net::Dispatcher,
   std::unique_ptr<ceph::net::Messenger> public_msgr;
   ChainedDispatchers dispatchers;
   ceph::mon::Client monc;
+
+  std::unique_ptr<Heartbeat> heartbeat;
+  seastar::timer<seastar::lowres_clock> heartbeat_timer;
 
   // TODO: use LRU cache
   std::map<epoch_t, seastar::lw_shared_ptr<OSDMap>> osdmaps;
@@ -115,4 +119,5 @@ private:
   seastar::future<> shutdown();
 
   seastar::future<> send_beacon();
+  void update_heartbeat_peers();
 };
