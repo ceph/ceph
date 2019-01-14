@@ -200,14 +200,46 @@ int AtomicObjectProcessor::process_first_chunk(bufferlist&& data,
 
 int AtomicObjectProcessor::prepare()
 {
-  uint64_t max_chunk_size = 0;
-  int r = store->get_max_chunk_size(bucket_info.placement_rule, head_obj,
-                                    &max_chunk_size);
+  uint64_t max_head_chunk_size = 0;
+  uint64_t head_max_size;
+  uint64_t chunk_size = 0;
+  rgw_pool head_pool;
+
+  if (!store->get_obj_data_pool(bucket_info.placement_rule, head_obj, &head_pool)) {
+    return -EIO;
+  }
+
+  int r = store->get_max_chunk_size(head_pool, &max_head_chunk_size);
   if (r < 0) {
     return r;
   }
+
+  bool same_pool = true;
+
+  if (bucket_info.placement_rule != tail_placement_rule) {
+    rgw_pool tail_pool;
+    if (!store->get_obj_data_pool(tail_placement_rule, head_obj, &tail_pool)) {
+      return -EIO;
+    }
+
+    if (tail_pool != head_pool) {
+      same_pool = false;
+
+      r = store->get_max_chunk_size(tail_pool, &chunk_size);
+      if (r < 0) {
+        return r;
+      }
+
+      head_max_size = 0;
+    }
+  }
+
+  if (same_pool) {
+    head_max_size = max_head_chunk_size;
+    chunk_size = max_head_chunk_size;
+  }
+
   const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
-  uint64_t head_max_size = max_chunk_size;
   manifest.set_trivial_rule(head_max_size, default_stripe_size);
 
   r = manifest_gen.create_begin(store->ctx(), &manifest,
@@ -220,11 +252,6 @@ int AtomicObjectProcessor::prepare()
 
   rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
 
-  uint64_t chunk_size = 0;
-  r = store->get_max_chunk_size(stripe_obj.pool, &chunk_size);
-  if (r < 0) {
-    return r;
-  }
   r = writer.set_stripe_obj(stripe_obj);
   if (r < 0) {
     return r;
