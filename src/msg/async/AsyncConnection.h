@@ -170,7 +170,7 @@ class AsyncConnection : public Connection {
   // lockfree, only used in own thread
   bufferlist outcoming_bl;
   bool open_write = false;
-  // lock order: write_lock -> send_lock
+  // lock order: lock -> write_lock -> send_lock
   std::mutex write_lock;
   std::mutex send_lock;
 

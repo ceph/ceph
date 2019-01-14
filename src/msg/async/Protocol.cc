@@ -364,8 +364,10 @@ void ProtocolV1::write_event() {
       if (left) {
         ceph_le64 s;
         s = in_seq;
+        connection->send_lock.lock();
         connection->outcoming_bl.append(CEPH_MSGR_TAG_ACK);
         connection->outcoming_bl.append((char *)&s, sizeof(s));
+        connection->send_lock.unlock();
         ldout(cct, 10) << __func__ << " try send msg ack, acked " << left
                        << " messages" << dendl;
         ack_left -= left;
@@ -612,6 +614,7 @@ CtPtr ProtocolV1::handle_keepalive2(char *buffer, int r) {
 
 void ProtocolV1::append_keepalive_or_ack(bool ack, utime_t *tp) {
   ldout(cct, 10) << __func__ << dendl;
+  std::lock_guard<std::mutex> l(connection->send_lock);
   if (ack) {
     ceph_assert(tp);
     struct ceph_timespec ts;
@@ -1196,7 +1199,6 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
   }
   ssize_t body_end = connection->outcoming_bl.length();
   messages_writing.push_back(new writing_item(m->get_tid(), sent_pos + body_start, body_end - body_start));
-  connection->send_lock.unlock();
 
   // send footer; if receiver doesn't support signatures, use the old footer
   // format
@@ -1221,13 +1223,13 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
   ldout(cct, 20) << __func__ << " sending " << m->get_seq() << " " << m
                  << dendl;
   ssize_t total_send_size = connection->outcoming_bl.length();
+  connection->send_lock.unlock();
   ssize_t rc = connection->_try_send(more);
   if (rc < 0) {
     ldout(cct, 1) << __func__ << " error sending " << m << ", "
                   << cpp_strerror(rc) << dendl;
   } else {
-    connection->logger->inc(
-        l_msgr_send_bytes, total_send_size - connection->outcoming_bl.length());
+    connection->logger->inc(l_msgr_send_bytes, total_send_size - rc);
     ldout(cct, 10) << __func__ << " sending " << m
                    << (rc ? " continuely." : " done.") << dendl;
   }
