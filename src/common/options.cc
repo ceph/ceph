@@ -3949,7 +3949,7 @@ std::vector<Option> get_global_options() {
     .set_description("When tcmalloc and cache autotuning is enabled, set the minimum amount of memory used for caches."),
 
     Option("osd_memory_cache_resize_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
-    .set_default(1)
+    .set_default(5)
     .add_see_also("bluestore_cache_autotune")
     .set_description("When tcmalloc and cache autotuning is enabled, wait this many seconds between resizing caches."),
 
