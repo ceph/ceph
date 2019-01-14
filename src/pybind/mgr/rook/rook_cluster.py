@@ -10,6 +10,7 @@ This module is runnable outside of ceph-mgr, useful for testing.
 from six.moves.urllib.parse import urljoin  # pylint: disable=import-error
 import logging
 import json
+from contextlib import contextmanager
 
 # Optional kubernetes imports to enable MgrModule.can_run
 # to behave cleanly.
@@ -160,6 +161,8 @@ class RookCluster(object):
                     label_filter += ",mon={0}".format(service_id)
                 elif service_type == "mgr":
                     label_filter += ",mgr={0}".format(service_id)
+                elif service_type == "nfs":
+                    label_filter += ",ceph_nfs={0}".format(service_id)
                 elif service_type == "rgw":
                     # TODO: rgw
                     pass
@@ -191,6 +194,17 @@ class RookCluster(object):
 
         return pods_summary
 
+    @contextmanager
+    def ignore_409(self, what):
+        try:
+            yield
+        except ApiException as e:
+            if e.status == 409:
+                # Idempotent, succeed.
+                log.info("{} already exists".format(what))
+            else:
+                raise
+
     def add_filesystem(self, spec):
         # TODO use spec.placement
         # TODO use spec.min_size (and use max_size meaningfully)
@@ -214,17 +228,37 @@ class RookCluster(object):
             }
         }
 
-        try:
-            self.rook_api_post(
-                "cephfilesystems/",
-                body=rook_fs
-            )
-        except ApiException as e:
-            if e.status == 409:
-                log.info("CephFilesystem '{0}' already exists".format(spec.name))
-                # Idempotent, succeed.
-            else:
-                raise
+        with self.ignore_409("CephFilesystem '{0}' already exists".format(spec.name)):
+            self.rook_api_post("cephfilesystems/", body=rook_fs)
+
+    def add_nfsgw(self, spec):
+        # TODO use spec.placement
+        # TODO use spec.min_size (and use max_size meaningfully)
+        # TODO warn if spec.extended has entries we don't kow how
+        #      to action.
+
+        rook_nfsgw = {
+            "apiVersion": ROOK_API_NAME,
+            "kind": "CephNFS",
+            "metadata": {
+                "name": spec.name,
+                "namespace": self.rook_namespace
+            },
+            "spec": {
+                "RADOS": {
+                    "pool": spec.extended["pool"]
+                },
+                "server": {
+                    "active": spec.max_size,
+                }
+            }
+        }
+
+        if "namespace" in spec.extended:
+            rook_nfsgw["spec"]["RADOS"]["namespace"] = spec.extended["namespace"]
+
+        with self.ignore_409("NFS cluster '{0}' already exists".format(spec.name)):
+            self.rook_api_post("cephnfses/", body=rook_nfsgw)
 
     def add_objectstore(self, spec):
   
@@ -257,25 +291,18 @@ class RookCluster(object):
             }
         }
         
-        try:
-            self.rook_api_post(
-                "cephobjectstores/",
-                body=rook_os
-            )
-        except ApiException as e:
-            if e.status == 409:
-                log.info("CephObjectStore '{0}' already exists".format(spec.name))
-                # Idempotent, succeed.                                                                                                                                                                     
-            else:
-                raise
+        with self.ignore_409("CephObjectStore '{0}' already exists".format(spec.name)):
+            self.rook_api_post("cephobjectstores/", body=rook_os)
 
     def rm_service(self, service_type, service_id):
-        assert service_type in ("mds", "rgw")
+        assert service_type in ("mds", "rgw", "nfs")
 
         if service_type == "mds":
             rooktype = "cephfilesystems"
         elif service_type == "rgw":
             rooktype = "cephobjectstores"
+        elif service_type == "nfs":
+            rooktype = "cephnfses"
 
         objpath = "{0}/{1}".format(rooktype, service_id)
 

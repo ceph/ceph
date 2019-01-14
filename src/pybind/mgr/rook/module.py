@@ -334,7 +334,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     @deferred_read
     def describe_service(self, service_type, service_id, nodename):
 
-        assert service_type in ("mds", "osd", "mgr", "mon", None), service_type + " unsupported"
+        assert service_type in ("mds", "osd", "mgr", "mon", "nfs", None), service_type + " unsupported"
 
         pods = self.rook_cluster.describe_pods(service_type, service_id, nodename)
 
@@ -353,6 +353,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 sd.daemon_name = p['labels']["mon"]
             elif sd.service_type == "mgr":
                 sd.daemon_name = p['labels']["mgr"]
+            elif sd.service_type == "nfs":
+                sd.daemon_name = p['labels']["ceph_nfs"]
             else:
                 # Unknown type -- skip it
                 continue
@@ -361,19 +363,22 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return result
 
+    def _service_add_decorate(self, typename, spec, func):
+        return RookWriteCompletion(lambda: func(spec), None,
+                    "Creating {0} services for {1}".format(typename, spec.name))
+
     def add_stateless_service(self, service_type, spec):
         # assert isinstance(spec, orchestrator.StatelessServiceSpec)
-
         if service_type == "mds":
-            return RookWriteCompletion(
-                lambda: self.rook_cluster.add_filesystem(spec), None,
-                "Creating Filesystem services for {0}".format(spec.name))
+            return self._service_add_decorate("Filesystem", spec,
+                                         self.rook_cluster.add_filesystem)
         elif service_type == "rgw" :
-            return RookWriteCompletion(
-                lambda: self.rook_cluster.add_objectstore(spec), None,
-                "Creating RGW services for {0}".format(spec.name))
+            return self._service_add_decorate("RGW", spec,
+                                         self.rook_cluster.add_objectstore)
+        elif service_type == "nfs" :
+            return self._service_add_decorate("NFS", spec,
+                                         self.rook_cluster.add_nfsgw)
         else:
-            # TODO: RGW, NFS
             raise NotImplementedError(service_type)
 
     def remove_stateless_service(self, service_type, service_id):
