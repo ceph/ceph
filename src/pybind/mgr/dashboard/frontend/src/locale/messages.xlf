@@ -645,6 +645,28 @@
           <context context-type="sourcefile">app/ceph/block/rbd-images/rbd-images.component.html</context>
           <context context-type="linenumber">8</context>
         </context-group>
+      </trans-unit><trans-unit id="5e7f4b1ca49e8d217bd0e12c6f7d6b6a2ade2c18" datatype="html">
+        <source>Overall Performance</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-images/rbd-images.component.html</context>
+          <context context-type="linenumber">12</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/hosts/hosts.component.html</context>
+          <context context-type="linenumber">29</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/osd/osd-list/osd-list.component.html</context>
+          <context context-type="linenumber">59</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/pool/pool-list/pool-list.component.html</context>
+          <context context-type="linenumber">48</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/rgw/rgw-daemon-list/rgw-daemon-list.component.html</context>
+          <context context-type="linenumber">16</context>
+        </context-group>
       </trans-unit><trans-unit id="28f86ffd419b869711aa13f5e5ff54be6d70731c" datatype="html">
         <source>Edit</source>
         <context-group purpose="location">
@@ -748,24 +770,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/hosts/hosts.component.html</context>
           <context context-type="linenumber">3</context>
-        </context-group>
-      </trans-unit><trans-unit id="5e7f4b1ca49e8d217bd0e12c6f7d6b6a2ade2c18" datatype="html">
-        <source>Overall Performance</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/cluster/hosts/hosts.component.html</context>
-          <context context-type="linenumber">29</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/cluster/osd/osd-list/osd-list.component.html</context>
-          <context context-type="linenumber">59</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/pool/pool-list/pool-list.component.html</context>
-          <context context-type="linenumber">48</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/rgw/rgw-daemon-list/rgw-daemon-list.component.html</context>
-          <context context-type="linenumber">16</context>
         </context-group>
       </trans-unit><trans-unit id="d556ab48a65722b400e497f61737f553ee0f89e2" datatype="html">
         <source>Cluster Logs</source>

@@ -9,5 +9,13 @@
          i18n-heading>
       <cd-rbd-trash-list></cd-rbd-trash-list>
     </tab>
+    <tab heading="Overall Performance"
+         *ngIf="grafanaPermission.read"
+         i18n-heading>
+      <cd-grafana [grafanaPath]="'rbd-overview?'"
+                  uid="41FrpeUiz"
+                  grafanaStyle="two">
+      </cd-grafana>
+    </tab>
   </tabset>
 </div>
