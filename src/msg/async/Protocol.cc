@@ -454,7 +454,7 @@ void ProtocolV1::cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops)
       unsigned o, len;
       if ((*it)->start < sent_pos) {
         o = 0;
-        len -= ((*it)->start - sent_pos);
+        len -= (sent_pos - (*it)->start);
       } else {
         o = (*it)->start - sent_pos;
         len = (*it)->len;
