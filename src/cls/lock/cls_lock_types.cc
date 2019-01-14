@@ -41,7 +41,7 @@ void locker_id_t::generate_test_instances(list<locker_id_t*>& o)
 void locker_info_t::dump(Formatter *f) const
 {
   f->dump_stream("expiration") << expiration;
-  f->dump_stream("addr") << addr;
+  f->dump_string("addr", addr.get_legacy_str());
   f->dump_string("description", description);
 }
 

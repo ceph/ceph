@@ -121,7 +121,7 @@ void cls_lock_get_info_reply::dump(Formatter *f) const
     f->dump_string("description", info.description);
     f->dump_string("cookie", id.cookie);
     f->dump_stream("expiration") << info.expiration;
-    f->dump_stream("addr") << info.addr;
+    f->dump_string("addr", info.addr.get_legacy_str());
     f->close_section();
   }
   f->close_section();
