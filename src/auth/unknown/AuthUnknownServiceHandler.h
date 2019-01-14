@@ -31,7 +31,10 @@ public:
 		    AuthCapsInfo *caps) {
     return 0;
   }
-  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps) {
+  int handle_request(bufferlist::iterator& indata,
+		     bufferlist *result_bl,
+		     uint64_t *global_id,
+		     AuthCapsInfo *caps) {
     ceph_abort();  // shouldn't get called
     return 0;
   }

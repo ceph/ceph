@@ -45,18 +45,22 @@ int CephxServiceHandler::start_session(const EntityName& name,
   return 0;
 }
 
-int CephxServiceHandler::handle_request(bufferlist::const_iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps)
+int CephxServiceHandler::handle_request(
+  bufferlist::const_iterator& indata,
+  bufferlist *result_bl,
+  uint64_t *global_id,
+  AuthCapsInfo *caps)
 {
   int ret = 0;
 
   struct CephXRequestHeader cephx_header;
   decode(cephx_header, indata);
 
-
   switch (cephx_header.request_type) {
   case CEPHX_GET_AUTH_SESSION_KEY:
     {
-      ldout(cct, 10) << "handle_request get_auth_session_key for " << entity_name << dendl;
+      ldout(cct, 10) << "handle_request get_auth_session_key for "
+		     << entity_name << dendl;
 
       CephXAuthenticate req;
       decode(req, indata);
@@ -105,14 +109,16 @@ int CephxServiceHandler::handle_request(bufferlist::const_iterator& indata, buff
 
       if (cephx_decode_ticket(cct, key_server, CEPH_ENTITY_TYPE_AUTH,
 			      req.old_ticket, old_ticket_info)) {
-        global_id = old_ticket_info.ticket.global_id;
-        ldout(cct, 10) << "decoded old_ticket with global_id=" << global_id << dendl;
+        *global_id = old_ticket_info.ticket.global_id;
+        ldout(cct, 10) << "decoded old_ticket with global_id=" << *global_id
+		       << dendl;
         should_enc_ticket = true;
       }
 
-      info.ticket.init_timestamps(ceph_clock_now(), cct->_conf->auth_mon_ticket_ttl);
+      info.ticket.init_timestamps(ceph_clock_now(),
+				  cct->_conf->auth_mon_ticket_ttl);
       info.ticket.name = entity_name;
-      info.ticket.global_id = global_id;
+      info.ticket.global_id = *global_id;
       info.validity += cct->_conf->auth_mon_ticket_ttl;
 
       key_server->generate_secret(session_key);
@@ -128,17 +134,19 @@ int CephxServiceHandler::handle_request(bufferlist::const_iterator& indata, buff
       vector<CephXSessionAuthInfo> info_vec;
       info_vec.push_back(info);
 
-      build_cephx_response_header(cephx_header.request_type, 0, result_bl);
-      if (!cephx_build_service_ticket_reply(cct, eauth.key, info_vec, should_enc_ticket,
-					    old_ticket_info.session_key, result_bl)) {
+      build_cephx_response_header(cephx_header.request_type, 0, *result_bl);
+      if (!cephx_build_service_ticket_reply(
+	    cct, eauth.key, info_vec, should_enc_ticket,
+	    old_ticket_info.session_key, *result_bl)) {
 	ret = -EIO;
       }
 
-      if (!key_server->get_service_caps(entity_name, CEPH_ENTITY_TYPE_MON, caps)) {
+      if (!key_server->get_service_caps(entity_name, CEPH_ENTITY_TYPE_MON,
+					*caps)) {
         ldout(cct, 0) << " could not get mon caps for " << entity_name << dendl;
         ret = -EACCES;
       } else {
-        char *caps_str = caps.caps.c_str();
+        char *caps_str = caps->caps.c_str();
         if (!caps_str || !caps_str[0]) {
           ldout(cct,0) << "mon caps null for " << entity_name << dendl;
           ret = -EACCES;
@@ -196,16 +204,18 @@ int CephxServiceHandler::handle_request(bufferlist::const_iterator& indata, buff
 	ret = service_err;
       }
       CryptoKey no_key;
-      build_cephx_response_header(cephx_header.request_type, ret, result_bl);
-      cephx_build_service_ticket_reply(cct, auth_ticket_info.session_key, info_vec, false, no_key, result_bl);
+      build_cephx_response_header(cephx_header.request_type, ret, *result_bl);
+      cephx_build_service_ticket_reply(cct, auth_ticket_info.session_key,
+				       info_vec, false, no_key, *result_bl);
     }
     break;
 
   case CEPHX_GET_ROTATING_KEY:
     {
-      ldout(cct, 10) << "handle_request getting rotating secret for " << entity_name << dendl;
-      build_cephx_response_header(cephx_header.request_type, 0, result_bl);
-      if (!key_server->get_rotating_encrypted(entity_name, result_bl)) {
+      ldout(cct, 10) << "handle_request getting rotating secret for "
+		     << entity_name << dendl;
+      build_cephx_response_header(cephx_header.request_type, 0, *result_bl);
+      if (!key_server->get_rotating_encrypted(entity_name, *result_bl)) {
         ret = -EPERM;
         break;
       }
