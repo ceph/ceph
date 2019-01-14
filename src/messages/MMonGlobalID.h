@@ -27,7 +27,7 @@ private:
   ~MMonGlobalID() override {}
 
 public:
-  const char *get_type_name() const override { return "global_id"; }
+  std::string_view get_type_name() const override { return "global_id"; }
   void print(ostream& out) const override {
     out << "global_id  (" << old_max_id << ")";
   }

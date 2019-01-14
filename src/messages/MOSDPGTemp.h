@@ -55,7 +55,7 @@ public:
     }
   }
 
-  const char *get_type_name() const override { return "osd_pgtemp"; }
+  std::string_view get_type_name() const override { return "osd_pgtemp"; }
   void print(ostream &out) const override {
     out << "osd_pgtemp(e" << map_epoch << " " << pg_temp << " v" << version << ")";
   }

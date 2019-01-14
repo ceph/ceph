@@ -31,6 +31,7 @@
 #include "include/unordered_set.h"
 #include "mds/mdstypes.h"
 #include "msg/Dispatcher.h"
+#include "msg/MessageRef.h"
 #include "msg/Messenger.h"
 #include "osdc/ObjectCacher.h"
 
@@ -53,14 +54,6 @@ class FSMapUser;
 class MonClient;
 
 class CephContext;
-class MClientReply;
-class MClientRequest;
-class MClientSession;
-class MClientRequest;
-class MClientRequestForward;
-class MClientLease;
-class MClientCaps;
-class MClientReclaimReply;
 
 struct DirStat;
 struct LeaseStat;
@@ -638,12 +631,12 @@ public:
   virtual void shutdown();
 
   // messaging
-  void handle_mds_map(class MMDSMap *m);
-  void handle_fs_map(class MFSMap *m);
-  void handle_fs_map_user(class MFSMapUser *m);
-  void handle_osd_map(class MOSDMap *m);
+  void handle_mds_map(const MConstRef<MMDSMap>& m);
+  void handle_fs_map(const MConstRef<MFSMap>& m);
+  void handle_fs_map_user(const MConstRef<MFSMapUser>& m);
+  void handle_osd_map(const MConstRef<MOSDMap>& m);
 
-  void handle_lease(MClientLease *m);
+  void handle_lease(const MConstRef<MClientLease>& m);
 
   // inline data
   int uninline_data(Inode *in, Context *onfinish);
@@ -669,15 +662,15 @@ public:
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater,
 			      vector<snapid_t>& snaps);
 
-  void handle_quota(struct MClientQuota *m);
-  void handle_snap(struct MClientSnap *m);
-  void handle_caps(class MClientCaps *m);
-  void handle_cap_import(MetaSession *session, Inode *in, class MClientCaps *m);
-  void handle_cap_export(MetaSession *session, Inode *in, class MClientCaps *m);
-  void handle_cap_trunc(MetaSession *session, Inode *in, class MClientCaps *m);
-  void handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
-  void handle_cap_flushsnap_ack(MetaSession *session, Inode *in, class MClientCaps *m);
-  void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, class MClientCaps *m);
+  void handle_quota(const MConstRef<MClientQuota>& m);
+  void handle_snap(const MConstRef<MClientSnap>& m);
+  void handle_caps(const MConstRef<MClientCaps>& m);
+  void handle_cap_import(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
+  void handle_cap_export(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
+  void handle_cap_trunc(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
+  void handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, const MConstRef<MClientCaps>& m);
+  void handle_cap_flushsnap_ack(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
+  void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const MConstRef<MClientCaps>& m);
   void cap_delay_requeue(Inode *in);
   void send_cap(Inode *in, MetaSession *session, Cap *cap, bool sync,
 		int used, int want, int retain, int flush,
@@ -774,7 +767,7 @@ protected:
 
   void set_cap_epoch_barrier(epoch_t e);
 
-  void handle_command_reply(MCommandReply *m);
+  void handle_command_reply(const MConstRef<MCommandReply>& m);
   int fetch_fsmap(bool user);
   int resolve_mds(
       const std::string &mds_spec,
@@ -790,7 +783,7 @@ protected:
   void _closed_mds_session(MetaSession *s);
   bool _any_stale_sessions() const;
   void _kick_stale_sessions();
-  void handle_client_session(MClientSession *m);
+  void handle_client_session(const MConstRef<MClientSession>& m);
   void send_reconnect(MetaSession *s);
   void resend_unsafe_requests(MetaSession *s);
   void wait_unsafe_requests();
@@ -806,7 +799,7 @@ protected:
   void put_request(MetaRequest *request);
   void unregister_request(MetaRequest *request);
 
-  int verify_reply_trace(int r, MetaRequest *request, MClientReply *reply,
+  int verify_reply_trace(int r, MetaRequest *request, const MConstRef<MClientReply>& reply,
 			 InodeRef *ptarget, bool *pcreated,
 			 const UserPerm& perms);
   void encode_cap_releases(MetaRequest *request, mds_rank_t mds);
@@ -819,11 +812,11 @@ protected:
   void connect_mds_targets(mds_rank_t mds);
   void send_request(MetaRequest *request, MetaSession *session,
 		    bool drop_cap_releases=false);
-  MClientRequest *build_client_request(MetaRequest *request);
+  MRef<MClientRequest> build_client_request(MetaRequest *request);
   void kick_requests(MetaSession *session);
   void kick_requests_closed(MetaSession *session);
-  void handle_client_request_forward(MClientRequestForward *reply);
-  void handle_client_reply(MClientReply *reply);
+  void handle_client_request_forward(const MConstRef<MClientRequestForward>& reply);
+  void handle_client_reply(const MConstRef<MClientReply>& reply);
   bool is_dir_operation(MetaRequest *request);
 
   // fake inode number for 32-bits ino_t
@@ -840,7 +833,7 @@ protected:
   SnapRealm *get_snap_realm_maybe(inodeno_t r);
   void put_snap_realm(SnapRealm *realm);
   bool adjust_realm_parent(SnapRealm *realm, inodeno_t parent);
-  void update_snap_trace(bufferlist& bl, SnapRealm **realm_ret, bool must_flush=true);
+  void update_snap_trace(const bufferlist& bl, SnapRealm **realm_ret, bool must_flush=true);
   void invalidate_snaprealm_and_children(SnapRealm *realm);
 
   Inode *open_snapdir(Inode *diri);
@@ -925,7 +918,7 @@ protected:
 
   void dump_status(Formatter *f);  // debug
 
-  bool ms_dispatch(Message *m) override;
+  bool ms_dispatch2(const MessageRef& m) override;
 
   void ms_handle_connect(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;
@@ -945,7 +938,7 @@ protected:
 
   int check_pool_perm(Inode *in, int need);
 
-  void handle_client_reclaim_reply(MClientReclaimReply *reply);
+  void handle_client_reclaim_reply(const MConstRef<MClientReclaimReply>& reply);
 
   /**
    * Call this when an OSDMap is seen with a full flag (global or per pool)

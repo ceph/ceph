@@ -92,7 +92,7 @@ public:
     out << ")";
   }
 
-  const char *get_type_name() const override { return "MOSDPGPushReply"; }
+  std::string_view get_type_name() const override { return "MOSDPGPushReply"; }
 };
 
 #endif

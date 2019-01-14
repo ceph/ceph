@@ -49,7 +49,7 @@ public:
     what[w].flags = flags;
   }
 
-  const char *get_type_name() const override { return "mon_subscribe"; }
+  std::string_view get_type_name() const override { return "mon_subscribe"; }
   void print(ostream& o) const override {
     o << "mon_subscribe(" << what << ")";
   }

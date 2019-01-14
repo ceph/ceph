@@ -29,7 +29,7 @@ public:
     h.version = epoch;
   }
 
-  const char *get_type_name() const override { return "statfs_reply"; }
+  std::string_view get_type_name() const override { return "statfs_reply"; }
   void print(ostream& out) const override {
     out << "statfs_reply(" << header.tid << ")";
   }

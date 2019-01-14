@@ -52,7 +52,7 @@ protected:
   ~MExportDirPrep() override {}
 
 public:
-  const char *get_type_name() const override { return "ExP"; }
+  std::string_view get_type_name() const override { return "ExP"; }
   void print(ostream& o) const override {
     o << "export_prep(" << dirfrag << ")";
   }

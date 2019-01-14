@@ -57,7 +57,7 @@ public:
     encode(osd_perf_metric_queries, payload);
   }
 
-  const char *get_type_name() const override { return "mgrconfigure"; }
+  std::string_view get_type_name() const override { return "mgrconfigure"; }
   void print(ostream& out) const override {
     out << get_type_name() << "(period=" << stats_period
                            << ", threshold=" << stats_threshold << ")";

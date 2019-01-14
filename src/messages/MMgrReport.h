@@ -145,7 +145,7 @@ public:
     encode(osd_perf_metric_reports, payload);
   }
 
-  const char *get_type_name() const override { return "mgrreport"; }
+  std::string_view get_type_name() const override { return "mgrreport"; }
   void print(ostream& out) const override {
     out << get_type_name() << "(";
     if (service_name.length()) {

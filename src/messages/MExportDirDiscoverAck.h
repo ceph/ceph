@@ -40,7 +40,7 @@ protected:
   ~MExportDirDiscoverAck() override {}
 
 public:
-  const char *get_type_name() const override { return "ExDisA"; }
+  std::string_view get_type_name() const override { return "ExDisA"; }
   void print(ostream& o) const override {
     o << "export_discover_ack(" << dirfrag;
     if (success) 

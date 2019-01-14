@@ -37,7 +37,7 @@ public:
     data(metadata)
   {}
 
-  const char *get_type_name() const override {
+  std::string_view get_type_name() const override {
     return "mon_metadata";
   }
 

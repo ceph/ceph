@@ -46,7 +46,7 @@ protected:
   ~MMDSMap() override {}
 
 public:
-  const char *get_type_name() const override { return "mdsmap"; }
+  std::string_view get_type_name() const override { return "mdsmap"; }
   void print(ostream& out) const override {
     out << "mdsmap(e " << epoch << ")";
   }

@@ -53,7 +53,7 @@ public:
       op(op), version(v), num_keys(num_keys)
   { }
 
-  const char *get_type_name() const override { return "mon_scrub"; }
+  std::string_view get_type_name() const override { return "mon_scrub"; }
 
   void print(ostream& out) const override {
     out << "mon_scrub(" << get_opname((op_type_t)op);

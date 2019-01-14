@@ -46,7 +46,7 @@ private:
   ~MPoolOp() override {}
 
 public:
-  const char *get_type_name() const override { return "poolop"; }
+  std::string_view get_type_name() const override { return "poolop"; }
   void print(ostream& out) const override {
     out << "pool_op(" << ceph_pool_op_name(op) << " pool " << pool
 	<< " tid " << get_tid()

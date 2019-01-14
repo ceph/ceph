@@ -35,7 +35,7 @@ private:
   ~MLog() override {}
 
 public:
-  const char *get_type_name() const override { return "log"; }
+  std::string_view get_type_name() const override { return "log"; }
   void print(ostream& out) const override {
     out << "log(";
     if (entries.size())

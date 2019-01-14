@@ -45,25 +45,24 @@
 #include "common/config.h"
 #include "common/version.h"
 
-// ceph stuff
-#include "messages/MClientSession.h"
-#include "messages/MClientReconnect.h"
-#include "messages/MClientRequest.h"
-#include "messages/MClientRequestForward.h"
-#include "messages/MClientReply.h"
+#include "mon/MonClient.h"
+
 #include "messages/MClientCaps.h"
 #include "messages/MClientLease.h"
-#include "messages/MClientSnap.h"
+#include "messages/MClientQuota.h"
 #include "messages/MClientReclaim.h"
 #include "messages/MClientReclaimReply.h"
+#include "messages/MClientReconnect.h"
+#include "messages/MClientReply.h"
+#include "messages/MClientRequest.h"
+#include "messages/MClientRequestForward.h"
+#include "messages/MClientSession.h"
+#include "messages/MClientSnap.h"
 #include "messages/MCommandReply.h"
-#include "messages/MOSDMap.h"
-#include "messages/MClientQuota.h"
-#include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
 #include "messages/MFSMapUser.h"
-
-#include "mon/MonClient.h"
+#include "messages/MMDSMap.h"
+#include "messages/MOSDMap.h"
 
 #include "mds/flock.h"
 #include "mds/cephfs_features.h"
@@ -1088,7 +1087,7 @@ void Client::clear_dir_complete_and_ordered(Inode *diri, bool complete)
  */
 void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, Inode *diri) {
 
-  MClientReply *reply = request->reply;
+  auto& reply = request->reply;
   ConnectionRef con = request->reply->get_connection();
   uint64_t features;
   if(session->mds_features.test(CEPHFS_FEATURE_REPLY_ENCODING)) {
@@ -1251,7 +1250,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session, 
  */
 Inode* Client::insert_trace(MetaRequest *request, MetaSession *session)
 {
-  MClientReply *reply = request->reply;
+  auto& reply = request->reply;
   int op = request->get_op();
 
   ldout(cct, 10) << "insert_trace from " << request->sent_stamp << " mds." << session->mds_num
@@ -1572,7 +1571,7 @@ void Client::dump_mds_requests(Formatter *f)
 }
 
 int Client::verify_reply_trace(int r,
-			       MetaRequest *request, MClientReply *reply,
+			       MetaRequest *request, const MConstRef<MClientReply>& reply,
 			       InodeRef *ptarget, bool *pcreated,
 			       const UserPerm& perms)
 {
@@ -1582,7 +1581,7 @@ int Client::verify_reply_trace(int r,
   bool got_created_ino = false;
   ceph::unordered_map<vinodeno_t, Inode*>::iterator p;
 
-  extra_bl.claim(reply->get_extra_bl());
+  extra_bl = reply->get_extra_bl();
   if (extra_bl.length() >= 8) {
     // if the extra bufferlist has a buffer, we assume its the created inode
     // and that this request to create succeeded in actually creating
@@ -1781,8 +1780,7 @@ int Client::make_request(MetaRequest *request,
   }
 
   // got it!
-  MClientReply *reply = request->reply;
-  request->reply = NULL;
+  auto reply = std::move(request->reply);
   r = reply->get_result();
   if (r >= 0)
     request->success = true;
@@ -1797,7 +1795,7 @@ int Client::make_request(MetaRequest *request,
     r = verify_reply_trace(r, request, reply, ptarget, pcreated, perms);
 
   if (pdirbl)
-    pdirbl->claim(reply->get_extra_bl());
+    *pdirbl = reply->get_extra_bl();
 
   // -- log times --
   utime_t lat = ceph_clock_now();
@@ -1807,8 +1805,6 @@ int Client::make_request(MetaRequest *request,
   logger->tinc(l_c_reply, lat);
 
   put_request(request);
-
-  reply->put();
   return r;
 }
 
@@ -1903,7 +1899,7 @@ void Client::encode_dentry_release(Dentry *dn, MetaRequest *req,
 				    mds, drop, unless, 1);
   if (released && dn->lease_mds == mds) {
     ldout(cct, 25) << "preemptively releasing dn to mds" << dendl;
-    MClientRequest::Release& rel = req->cap_releases.back();
+    auto& rel = req->cap_releases.back();
     rel.item.dname_len = dn->name.length();
     rel.item.dname_seq = dn->lease_seq;
     rel.dname = dn->name;
@@ -2062,7 +2058,7 @@ MetaSession *Client::_open_mds_session(mds_rank_t mds)
   auto m = MClientSession::create(CEPH_SESSION_REQUEST_OPEN);
   m->metadata = metadata;
   m->supported_features = feature_bitset_t(CEPHFS_FEATURES_CLIENT_SUPPORTED);
-  session->con->send_message2(m);
+  session->con->send_message2(std::move(m));
   return session;
 }
 
@@ -2085,7 +2081,7 @@ void Client::_closed_mds_session(MetaSession *s)
   mds_sessions.erase(s->mds_num);
 }
 
-void Client::handle_client_session(MClientSession *m) 
+void Client::handle_client_session(const MConstRef<MClientSession>& m)
 {
   mds_rank_t from = mds_rank_t(m->get_source().num());
   ldout(cct, 10) << __func__ << " " << *m << " from mds." << from << dendl;
@@ -2093,7 +2089,6 @@ void Client::handle_client_session(MClientSession *m)
   MetaSession *session = _get_mds_session(from, m->get_connection().get());
   if (!session) {
     ldout(cct, 10) << " discarding session message from sessionless mds " << m->get_source_inst() << dendl;
-    m->put();
     return;
   }
 
@@ -2172,16 +2167,14 @@ void Client::handle_client_session(MClientSession *m)
   default:
     ceph_abort();
   }
-
-  m->put();
 }
 
 bool Client::_any_stale_sessions() const
 {
   ceph_assert(client_lock.is_locked_by_me());
 
-  for (const auto &it : mds_sessions) {
-    if (it.second.state == MetaSession::STATE_STALE) {
+  for (const auto &p : mds_sessions) {
+    if (p.second.state == MetaSession::STATE_STALE) {
       return true;
     }
   }
@@ -2208,7 +2201,7 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
   mds_rank_t mds = session->mds_num;
   ldout(cct, 10) << __func__ << " rebuilding request " << request->get_tid()
 		 << " for mds." << mds << dendl;
-  MClientRequest *r = build_client_request(request);
+  auto r = build_client_request(request);
   if (request->dentry()) {
     r->set_dentry_wanted();
   }
@@ -2247,10 +2240,10 @@ void Client::send_request(MetaRequest *request, MetaSession *session,
   session->requests.push_back(&request->item);
 
   ldout(cct, 10) << __func__ << " " << *r << " to mds." << mds << dendl;
-  session->con->send_message(r);
+  session->con->send_message2(std::move(r));
 }
 
-MClientRequest* Client::build_client_request(MetaRequest *request)
+MClientRequest::ref Client::build_client_request(MetaRequest *request)
 {
   auto req = MClientRequest::create(request->get_op());
   req->set_tid(request->tid);
@@ -2285,24 +2278,22 @@ MClientRequest* Client::build_client_request(MetaRequest *request)
   const gid_t *_gids;
   int gid_count = request->perms.get_gids(&_gids);
   req->set_gid_list(gid_count, _gids);
-  return req.detach();
+  return req;
 }
 
 
 
-void Client::handle_client_request_forward(MClientRequestForward *fwd)
+void Client::handle_client_request_forward(const MConstRef<MClientRequestForward>& fwd)
 {
   mds_rank_t mds = mds_rank_t(fwd->get_source().num());
   MetaSession *session = _get_mds_session(mds, fwd->get_connection().get());
   if (!session) {
-    fwd->put();
     return;
   }
   ceph_tid_t tid = fwd->get_tid();
 
   if (mds_requests.count(tid) == 0) {
     ldout(cct, 10) << __func__ << " no pending request on tid " << tid << dendl;
-    fwd->put();
     return;
   }
 
@@ -2325,8 +2316,6 @@ void Client::handle_client_request_forward(MClientRequestForward *fwd)
   request->num_fwd = fwd->get_num_fwd();
   request->resend_mds = fwd->get_dest_mds();
   request->caller_cond->Signal();
-
-  fwd->put();
 }
 
 bool Client::is_dir_operation(MetaRequest *req)
@@ -2340,12 +2329,11 @@ bool Client::is_dir_operation(MetaRequest *req)
   return false;
 }
 
-void Client::handle_client_reply(MClientReply *reply)
+void Client::handle_client_reply(const MConstRef<MClientReply>& reply)
 {
   mds_rank_t mds_num = mds_rank_t(reply->get_source().num());
   MetaSession *session = _get_mds_session(mds_num, reply->get_connection().get());
   if (!session) {
-    reply->put();
     return;
   }
 
@@ -2355,7 +2343,6 @@ void Client::handle_client_reply(MClientReply *reply)
   if (mds_requests.count(tid) == 0) {
     lderr(cct) << __func__ << " no pending request on tid " << tid
 	       << " safe is:" << is_safe << dendl;
-    reply->put();
     return;
   }
   MetaRequest *request = mds_requests.at(tid);
@@ -2367,7 +2354,6 @@ void Client::handle_client_reply(MClientReply *reply)
     //duplicate response
     ldout(cct, 0) << "got a duplicate reply on tid " << tid << " from mds "
 	    << mds_num << " safe:" << is_safe << dendl;
-    reply->put();
     return;
   }
 
@@ -2386,12 +2372,11 @@ void Client::handle_client_reply(MClientReply *reply)
       ldout(cct, 20) << "have to return ESTALE" << dendl;
     } else {
       request->caller_cond->Signal();
-      reply->put();
       return;
     }
   }
   
-  ceph_assert(request->reply == NULL);
+  ceph_assert(!request->reply);
   request->reply = reply;
   insert_trace(request, session);
 
@@ -2482,7 +2467,7 @@ void Client::_handle_full_flag(int64_t pool)
   }
 }
 
-void Client::handle_osd_map(MOSDMap *m)
+void Client::handle_osd_map(const MConstRef<MOSDMap>& m)
 {
   std::set<entity_addr_t> new_blacklists;
   objecter->consume_blacklist_events(&new_blacklists);
@@ -2564,8 +2549,6 @@ void Client::handle_osd_map(MOSDMap *m)
       objecter->maybe_request_map();
     }
   }
-
-  m->put();
 }
 
 
@@ -2573,65 +2556,64 @@ void Client::handle_osd_map(MOSDMap *m)
 // incoming messages
 
 
-bool Client::ms_dispatch(Message *m)
+bool Client::ms_dispatch2(const MessageRef &m)
 {
   std::lock_guard l(client_lock);
   if (!initialized) {
     ldout(cct, 10) << "inactive, discarding " << *m << dendl;
-    m->put();
     return true;
   }
 
   switch (m->get_type()) {
     // mounting and mds sessions
   case CEPH_MSG_MDS_MAP:
-    handle_mds_map(static_cast<MMDSMap*>(m));
+    handle_mds_map(MMDSMap::msgref_cast(m));
     break;
   case CEPH_MSG_FS_MAP:
-    handle_fs_map(static_cast<MFSMap*>(m));
+    handle_fs_map(MFSMap::msgref_cast(m));
     break;
   case CEPH_MSG_FS_MAP_USER:
-    handle_fs_map_user(static_cast<MFSMapUser*>(m));
+    handle_fs_map_user(MFSMapUser::msgref_cast(m));
     break;
   case CEPH_MSG_CLIENT_SESSION:
-    handle_client_session(static_cast<MClientSession*>(m));
+    handle_client_session(MClientSession::msgref_cast(m));
     break;
 
   case CEPH_MSG_OSD_MAP:
-    handle_osd_map(static_cast<MOSDMap*>(m));
+    handle_osd_map(MOSDMap::msgref_cast(m));
     break;
 
     // requests
   case CEPH_MSG_CLIENT_REQUEST_FORWARD:
-    handle_client_request_forward(static_cast<MClientRequestForward*>(m));
+    handle_client_request_forward(MClientRequestForward::msgref_cast(m));
     break;
   case CEPH_MSG_CLIENT_REPLY:
-    handle_client_reply(static_cast<MClientReply*>(m));
+    handle_client_reply(MClientReply::msgref_cast(m));
     break;
 
   // reclaim reply
   case CEPH_MSG_CLIENT_RECLAIM_REPLY:
-    handle_client_reclaim_reply(static_cast<MClientReclaimReply*>(m));
+    handle_client_reclaim_reply(MClientReclaimReply::msgref_cast(m));
     break;
 
   case CEPH_MSG_CLIENT_SNAP:
-    handle_snap(static_cast<MClientSnap*>(m));
+    handle_snap(MClientSnap::msgref_cast(m));
     break;
   case CEPH_MSG_CLIENT_CAPS:
-    handle_caps(static_cast<MClientCaps*>(m));
+    handle_caps(MClientCaps::msgref_cast(m));
     break;
   case CEPH_MSG_CLIENT_LEASE:
-    handle_lease(static_cast<MClientLease*>(m));
+    handle_lease(MClientLease::msgref_cast(m));
     break;
   case MSG_COMMAND_REPLY:
     if (m->get_source().type() == CEPH_ENTITY_TYPE_MDS) {
-      handle_command_reply(static_cast<MCommandReply*>(m));
+      handle_command_reply(MCommandReply::msgref_cast(m));
     } else {
       return false;
     }
     break;
   case CEPH_MSG_CLIENT_QUOTA:
-    handle_quota(static_cast<MClientQuota*>(m));
+    handle_quota(MClientQuota::msgref_cast(m));
     break;
 
   default:
@@ -2656,34 +2638,31 @@ bool Client::ms_dispatch(Message *m)
   return true;
 }
 
-void Client::handle_fs_map(MFSMap *m)
+void Client::handle_fs_map(const MConstRef<MFSMap>& m)
 {
   fsmap.reset(new FSMap(m->get_fsmap()));
-  m->put();
 
   signal_cond_list(waiting_for_fsmap);
 
   monclient->sub_got("fsmap", fsmap->get_epoch());
 }
 
-void Client::handle_fs_map_user(MFSMapUser *m)
+void Client::handle_fs_map_user(const MConstRef<MFSMapUser>& m)
 {
   fsmap_user.reset(new FSMapUser);
   *fsmap_user = m->get_fsmap();
-  m->put();
 
   monclient->sub_got("fsmap.user", fsmap_user->get_epoch());
   signal_cond_list(waiting_for_fsmap);
 }
 
-void Client::handle_mds_map(MMDSMap* m)
+void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
 {
   mds_gid_t old_inc, new_inc;
   if (m->get_epoch() <= mdsmap->get_epoch()) {
     ldout(cct, 1) << __func__ << " epoch " << m->get_epoch()
                   << " is identical to or older than our "
                   << mdsmap->get_epoch() << dendl;
-    m->put();
     return;
   }
 
@@ -2775,8 +2754,6 @@ void Client::handle_mds_map(MMDSMap* m)
   // kick any waiting threads
   signal_cond_list(waiting_for_mdsmap);
 
-  m->put();
-
   monclient->sub_got("mdsmap", mdsmap->get_epoch());
 }
 
@@ -2799,7 +2776,7 @@ void Client::send_reconnect(MetaSession *session)
   //make sure unsafe requests get saved
   resend_unsafe_requests(session);
 
-  MClientReconnect *m = new MClientReconnect;
+  auto m = MClientReconnect::create();
 
   // i have an open session.
   ceph::unordered_set<inodeno_t> did_snaprealm;
@@ -2854,7 +2831,7 @@ void Client::send_reconnect(MetaSession *session)
 
   early_kick_flushing_caps(session);
 
-  session->con->send_message(m);
+  session->con->send_message2(std::move(m));
 
   mount_cond.Signal();
 
@@ -2976,7 +2953,7 @@ void Client::got_mds_push(MetaSession *s)
   }
 }
 
-void Client::handle_lease(MClientLease *m)
+void Client::handle_lease(const MConstRef<MClientLease>& m)
 {
   ldout(cct, 10) << __func__ << " " << *m << dendl;
 
@@ -2985,7 +2962,6 @@ void Client::handle_lease(MClientLease *m)
   mds_rank_t mds = mds_rank_t(m->get_source().num());
   MetaSession *session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
-    m->put();
     return;
   }
 
@@ -3014,9 +2990,8 @@ void Client::handle_lease(MClientLease *m)
  revoke:
   {
     auto reply = MClientLease::create(CEPH_MDS_LEASE_RELEASE, seq, m->get_mask(), m->get_ino(), m->get_first(), m->get_last(), m->dname);
-    m->get_connection()->send_message2(reply);
+    m->get_connection()->send_message2(std::move(reply));
   }
-  m->put();
 }
 
 void Client::put_inode(Inode *in, int n)
@@ -3428,7 +3403,7 @@ void Client::send_cap(Inode *in, MetaSession *session, Cap *cap,
   if (!session->flushing_caps_tids.empty())
     m->set_oldest_flush_tid(*session->flushing_caps_tids.begin());
 
-  session->con->send_message2(m);
+  session->con->send_message2(std::move(m));
 }
 
 static bool is_max_size_approaching(Inode *in)
@@ -3534,9 +3509,9 @@ void Client::check_caps(Inode *in, unsigned flags)
   if (!in->cap_snaps.empty())
     flush_snaps(in);
 
-  for (auto &it : in->caps) {
-    mds_rank_t mds = it.first;
-    Cap &cap = it.second;
+  for (auto &p : in->caps) {
+    mds_rank_t mds = p.first;
+    Cap &cap = p.second;
 
     MetaSession *session = &mds_sessions.at(mds);
 
@@ -3769,7 +3744,7 @@ void Client::flush_snaps(Inode *in, bool all_again)
     ceph_assert(!session->flushing_caps_tids.empty());
     m->set_oldest_flush_tid(*session->flushing_caps_tids.begin());
 
-    session->con->send_message2(m);
+    session->con->send_message2(std::move(m));
   }
 }
 
@@ -4041,10 +4016,10 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
 
   if ((issued & ~old_caps) && in->auth_cap == &cap) {
     // non-auth MDS is revoking the newly grant caps ?
-    for (auto &it : in->caps) {
-      if (&it.second == &cap)
+    for (auto &p : in->caps) {
+      if (&p.second == &cap)
 	continue;
-      if (it.second.implemented & ~it.second.issued & issued) {
+      if (p.second.implemented & ~p.second.issued & issued) {
 	check_caps(in, CHECK_CAPS_NODELAY);
 	break;
       }
@@ -4598,7 +4573,7 @@ static bool has_new_snaps(const SnapContext& old_snapc,
 }
 
 
-void Client::update_snap_trace(bufferlist& bl, SnapRealm **realm_ret, bool flush)
+void Client::update_snap_trace(const bufferlist& bl, SnapRealm **realm_ret, bool flush)
 {
   SnapRealm *first_realm = NULL;
   ldout(cct, 10) << __func__ << " len " << bl.length() << dendl;
@@ -4691,13 +4666,12 @@ void Client::update_snap_trace(bufferlist& bl, SnapRealm **realm_ret, bool flush
     put_snap_realm(first_realm);
 }
 
-void Client::handle_snap(MClientSnap *m)
+void Client::handle_snap(const MConstRef<MClientSnap>& m)
 {
   ldout(cct, 10) << __func__ << " " << *m << dendl;
   mds_rank_t mds = mds_rank_t(m->get_source().num());
   MetaSession *session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
-    m->put();
     return;
   }
 
@@ -4716,10 +4690,8 @@ void Client::handle_snap(MClientSnap *m)
     // flush, then move, ino's.
     realm = get_snap_realm(info.ino());
     ldout(cct, 10) << " splitting off " << *realm << dendl;
-    for (vector<inodeno_t>::iterator p = m->split_inos.begin();
-	 p != m->split_inos.end();
-	 ++p) {
-      vinodeno_t vino(*p, CEPH_NOSNAP);
+    for (auto& ino : m->split_inos) {
+      vinodeno_t vino(ino, CEPH_NOSNAP);
       if (inode_map.count(vino)) {
 	Inode *in = inode_map[vino];
 	if (!in->snaprealm || in->snaprealm == realm)
@@ -4739,11 +4711,9 @@ void Client::handle_snap(MClientSnap *m)
     }
 
     // move child snaprealms, too
-    for (vector<inodeno_t>::iterator p = m->split_realms.begin();
-	 p != m->split_realms.end();
-	 ++p) {
-      ldout(cct, 10) << "adjusting snaprealm " << *p << " parent" << dendl;
-      SnapRealm *child = get_snap_realm_maybe(*p);
+    for (auto& child_realm : m->split_realms) {
+      ldout(cct, 10) << "adjusting snaprealm " << child_realm << " parent" << dendl;
+      SnapRealm *child = get_snap_realm_maybe(child_realm);
       if (!child)
 	continue;
       adjust_realm_parent(child, realm->ino);
@@ -4765,16 +4735,13 @@ void Client::handle_snap(MClientSnap *m)
     }
     put_snap_realm(realm);
   }
-
-  m->put();
 }
 
-void Client::handle_quota(MClientQuota *m)
+void Client::handle_quota(const MConstRef<MClientQuota>& m)
 {
   mds_rank_t mds = mds_rank_t(m->get_source().num());
   MetaSession *session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
-    m->put();
     return;
   }
 
@@ -4792,16 +4759,13 @@ void Client::handle_quota(MClientQuota *m)
       in->rstat = m->rstat;
     }
   }
-
-  m->put();
 }
 
-void Client::handle_caps(MClientCaps *m)
+void Client::handle_caps(const MConstRef<MClientCaps>& m)
 {
   mds_rank_t mds = mds_rank_t(m->get_source().num());
   MetaSession *session = _get_mds_session(mds, m->get_connection().get());
   if (!session) {
-    m->put();
     return;
   }
 
@@ -4817,13 +4781,11 @@ void Client::handle_caps(MClientCaps *m)
 
   got_mds_push(session);
 
-  m->clear_payload();  // for if/when we send back to MDS
-
-  Inode *in = 0;
+  Inode *in;
   vinodeno_t vino(m->get_ino(), CEPH_NOSNAP);
-  if (inode_map.count(vino))
-    in = inode_map[vino];
-  if (!in) {
+  if (auto it = inode_map.find(vino); it != inode_map.end()) {
+    in = it->second;
+  } else {
     if (m->get_op() == CEPH_CAP_OP_IMPORT) {
       ldout(cct, 5) << __func__ << " don't have vino " << vino << " on IMPORT, immediately releasing" << dendl;
       session->enqueue_cap_release(
@@ -4835,7 +4797,6 @@ void Client::handle_caps(MClientCaps *m)
     } else {
       ldout(cct, 5) << __func__ << " don't have vino " << vino << ", dropping" << dendl;
     }
-    m->put();
 
     // in case the mds is waiting on e.g. a revocation
     flush_cap_releases();
@@ -4843,34 +4804,28 @@ void Client::handle_caps(MClientCaps *m)
   }
 
   switch (m->get_op()) {
-  case CEPH_CAP_OP_EXPORT:
-    return handle_cap_export(session, in, m);
-  case CEPH_CAP_OP_FLUSHSNAP_ACK:
-    return handle_cap_flushsnap_ack(session, in, m);
-  case CEPH_CAP_OP_IMPORT:
-    handle_cap_import(session, in, m);
+    case CEPH_CAP_OP_EXPORT: return handle_cap_export(session, in, m);
+    case CEPH_CAP_OP_FLUSHSNAP_ACK: return handle_cap_flushsnap_ack(session, in, m);
+    case CEPH_CAP_OP_IMPORT: /* no return */ handle_cap_import(session, in, m);
   }
 
-  if (in->caps.count(mds) == 0) {
+  if (auto it = in->caps.find(mds); it != in->caps.end()) {
+    Cap &cap = in->caps.at(mds);
+
+    switch (m->get_op()) {
+      case CEPH_CAP_OP_TRUNC: return handle_cap_trunc(session, in, m);
+      case CEPH_CAP_OP_IMPORT:
+      case CEPH_CAP_OP_REVOKE:
+      case CEPH_CAP_OP_GRANT: return handle_cap_grant(session, in, &cap, m);
+      case CEPH_CAP_OP_FLUSH_ACK: return handle_cap_flush_ack(session, in, &cap, m);
+    }
+  } else {
     ldout(cct, 5) << __func__ << " don't have " << *in << " cap on mds." << mds << dendl;
-    m->put();
     return;
-  }
-
-  Cap &cap = in->caps.at(mds);
-
-  switch (m->get_op()) {
-  case CEPH_CAP_OP_TRUNC: return handle_cap_trunc(session, in, m);
-  case CEPH_CAP_OP_IMPORT:
-  case CEPH_CAP_OP_REVOKE:
-  case CEPH_CAP_OP_GRANT: return handle_cap_grant(session, in, &cap, m);
-  case CEPH_CAP_OP_FLUSH_ACK: return handle_cap_flush_ack(session, in, &cap, m);
-  default:
-    m->put();
   }
 }
 
-void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
+void Client::handle_cap_import(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m)
 {
   mds_rank_t mds = session->mds_num;
 
@@ -4880,8 +4835,7 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
   const mds_rank_t peer_mds = mds_rank_t(m->peer.mds);
   Cap *cap = NULL;
   UserPerm cap_perms;
-  auto it = in->caps.find(peer_mds);
-  if (m->peer.cap_id && it != in->caps.end()) {
+  if (auto it = in->caps.find(peer_mds); m->peer.cap_id && it != in->caps.end()) {
     cap = &it->second;
     cap_perms = cap->latest_perms;
   }
@@ -4910,7 +4864,7 @@ void Client::handle_cap_import(MetaSession *session, Inode *in, MClientCaps *m)
   }
 }
 
-void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
+void Client::handle_cap_export(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m)
 {
   mds_rank_t mds = session->mds_num;
 
@@ -4954,11 +4908,9 @@ void Client::handle_cap_export(MetaSession *session, Inode *in, MClientCaps *m)
       remove_cap(&cap, false);
     }
   }
-
-  m->put();
 }
 
-void Client::handle_cap_trunc(MetaSession *session, Inode *in, MClientCaps *m)
+void Client::handle_cap_trunc(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m)
 {
   mds_rank_t mds = session->mds_num;
   ceph_assert(in->caps.count(mds));
@@ -4972,10 +4924,9 @@ void Client::handle_cap_trunc(MetaSession *session, Inode *in, MClientCaps *m)
   issued |= in->caps_dirty();
   update_inode_file_size(in, issued, m->get_size(),
 			 m->get_truncate_seq(), m->get_truncate_size());
-  m->put();
 }
 
-void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MClientCaps *m)
+void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, const MConstRef<MClientCaps>& m)
 {
   ceph_tid_t flush_ack_tid = m->get_client_tid();
   int dirty = m->get_dirty();
@@ -5036,19 +4987,17 @@ void Client::handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, MCl
 	put_inode(in);
     }
   }
-  
-  m->put();
 }
 
 
-void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, MClientCaps *m)
+void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m)
 {
   mds_rank_t mds = session->mds_num;
   ceph_assert(in->caps.count(mds));
   snapid_t follows = m->get_snap_follows();
 
-  if (in->cap_snaps.count(follows)) {
-    CapSnap &capsnap = in->cap_snaps.at(follows);
+  if (auto it = in->cap_snaps.find(follows); it != in->cap_snaps.end()) {
+    auto& capsnap = it->second;
     if (m->get_client_tid() != capsnap.flush_tid) {
       ldout(cct, 10) << " tid " << m->get_client_tid() << " != " << capsnap.flush_tid << dendl;
     } else {
@@ -5060,15 +5009,13 @@ void Client::handle_cap_flushsnap_ack(MetaSession *session, Inode *in, MClientCa
       if (in->flushing_caps == 0 && in->cap_snaps.empty())
 	in->flushing_cap_item.remove_myself();
       session->flushing_caps_tids.erase(capsnap.flush_tid);
-      in->cap_snaps.erase(follows);
+      in->cap_snaps.erase(it);
     }
   } else {
     ldout(cct, 5) << __func__ << " DUP(?) mds." << mds << " flushed snap follows " << follows
 	    << " on " << *in << dendl;
     // we may not have it if we send multiple FLUSHSNAP requests and (got multiple FLUSHEDSNAPs back)
   }
-
-  m->put();
 }
 
 class C_Client_DentryInvalidate : public Context  {
@@ -5158,7 +5105,7 @@ void Client::_try_to_trim_inode(Inode *in, bool sched_inval)
   }
 }
 
-void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClientCaps *m)
+void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const MConstRef<MClientCaps>& m)
 {
   mds_rank_t mds = session->mds_num;
   int used = get_caps_used(in);
@@ -5277,10 +5224,10 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
 
     if (cap == in->auth_cap) {
       // non-auth MDS is revoking the newly grant caps ?
-      for (const auto &it : in->caps) {
-	if (&it.second == cap)
+      for (const auto &p : in->caps) {
+	if (&p.second == cap)
 	  continue;
-	if (it.second.implemented & ~it.second.issued & new_caps) {
+	if (p.second.implemented & ~p.second.issued & new_caps) {
 	  check = true;
 	  break;
 	}
@@ -5298,8 +5245,6 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, MClient
   // may drop inode's last ref
   if (deleted_inode)
     _try_to_trim_inode(in, true);
-
-  m->put();
 }
 
 int Client::inode_permission(Inode *in, const UserPerm& perms, unsigned want)
@@ -5753,15 +5698,15 @@ int Client::mds_command(
       << " tid=" << op.tid << cmd << dendl;
 
     // Construct and send MCommand
-    MCommand *m = op.get_message(monclient->get_fsid());
-    conn->send_message(m);
+    auto m = op.get_message(monclient->get_fsid());
+    conn->send_message2(std::move(m));
   }
   gather.activate();
 
   return 0;
 }
 
-void Client::handle_command_reply(MCommandReply *m)
+void Client::handle_command_reply(const MConstRef<MCommandReply>& m)
 {
   ceph_tid_t const tid = m->get_tid();
 
@@ -5769,13 +5714,12 @@ void Client::handle_command_reply(MCommandReply *m)
 
   if (!command_table.exists(tid)) {
     ldout(cct, 1) << __func__ << ": unknown tid " << tid << ", dropping" << dendl;
-    m->put();
     return;
   }
 
   auto &op = command_table.get_command(tid);
   if (op.outbl) {
-    op.outbl->claim(m->get_data());
+    *op.outbl = m->get_data();
   }
   if (op.outs) {
     *op.outs = m->rs;
@@ -5786,8 +5730,6 @@ void Client::handle_command_reply(MCommandReply *m)
   }
 
   command_table.erase(tid);
-
-  m->put();
 }
 
 // -------------------
@@ -5946,8 +5888,8 @@ void Client::flush_mdlog_sync()
 {
   if (mds_requests.empty()) 
     return;
-  for (auto &it : mds_sessions) {
-    flush_mdlog(&it.second);
+  for (auto &p : mds_sessions) {
+    flush_mdlog(&p.second);
   }
 }
 
@@ -5958,7 +5900,7 @@ void Client::flush_mdlog(MetaSession *session)
   const uint64_t features = session->con->get_features();
   if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
     auto m = MClientSession::create(CEPH_SESSION_REQUEST_FLUSH_MDLOG);
-    session->con->send_message2(m);
+    session->con->send_message2(std::move(m));
   }
 }
 
@@ -6145,7 +6087,7 @@ void Client::flush_cap_releases()
       if (cct->_conf->client_inject_release_failure) {
         ldout(cct, 20) << __func__ << " injecting failure to send cap release message" << dendl;
       } else {
-        session.con->send_message2(session.release);
+        session.con->send_message2(std::move(session.release));
       }
       session.release.reset();
     }
@@ -14376,7 +14318,7 @@ int Client::start_reclaim(const std::string& uuid, unsigned flags,
 	session->reclaim_state == MetaSession::RECLAIMING) {
       session->reclaim_state = MetaSession::RECLAIMING;
       auto m = MClientReclaim::create(uuid, flags);
-      session->con->send_message2(m);
+      session->con->send_message2(std::move(m));
       wait_on_list(waiting_for_reclaim);
     } else if (session->reclaim_state == MetaSession::RECLAIM_FAIL) {
       return reclaim_errno ? : -ENOTRECOVERABLE;
@@ -14420,22 +14362,22 @@ void Client::finish_reclaim()
 {
   auto it = metadata.find("reclaiming_uuid");
   if (it == metadata.end()) {
-    for (auto &it : mds_sessions)
-      it.second.reclaim_state = MetaSession::RECLAIM_NULL;
+    for (auto &p : mds_sessions)
+      p.second.reclaim_state = MetaSession::RECLAIM_NULL;
     return;
   }
 
-  for (auto &it : mds_sessions) {
-    it.second.reclaim_state = MetaSession::RECLAIM_NULL;
+  for (auto &p : mds_sessions) {
+    p.second.reclaim_state = MetaSession::RECLAIM_NULL;
     auto m = MClientReclaim::create("", MClientReclaim::FLAG_FINISH);
-    it.second.con->send_message2(m);
+    p.second.con->send_message2(std::move(m));
   }
 
   metadata["uuid"] = it->second;
   metadata.erase(it);
 }
 
-void Client::handle_client_reclaim_reply(MClientReclaimReply *reply)
+void Client::handle_client_reclaim_reply(const MConstRef<MClientReclaimReply>& reply)
 {
   mds_rank_t from = mds_rank_t(reply->get_source().num());
   ldout(cct, 10) << __func__ << " " << *reply << " from mds." << from << dendl;
@@ -14443,7 +14385,6 @@ void Client::handle_client_reclaim_reply(MClientReclaimReply *reply)
   MetaSession *session = _get_mds_session(from, reply->get_connection().get());
   if (!session) {
     ldout(cct, 10) << " discarding reclaim reply from sessionless mds." <<  from << dendl;
-    reply->put();
     return;
   }
 
@@ -14459,7 +14400,6 @@ void Client::handle_client_reclaim_reply(MClientReclaimReply *reply)
   }
 
   signal_cond_list(waiting_for_reclaim);
-  reply->put();
 }
 
 /**

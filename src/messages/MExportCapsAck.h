@@ -34,7 +34,7 @@ protected:
   ~MExportCapsAck() override {}
 
 public:
-  const char *get_type_name() const override { return "export_caps_ack"; }
+  std::string_view get_type_name() const override { return "export_caps_ack"; }
   void print(ostream& o) const override {
     o << "export_caps_ack(" << ino << ")";
   }

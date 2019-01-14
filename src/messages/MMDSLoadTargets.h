@@ -38,7 +38,7 @@ protected:
   ~MMDSLoadTargets() override {}
 
 public:
-  const char* get_type_name() const override { return "mds_load_targets"; }
+  std::string_view get_type_name() const override { return "mds_load_targets"; }
   void print(ostream& o) const override {
     o << "mds_load_targets(" << global_id << " " << targets << ")";
   }

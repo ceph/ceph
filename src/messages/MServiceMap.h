@@ -21,7 +21,7 @@ private:
   ~MServiceMap() override {}
 
 public:
-  const char *get_type_name() const override { return "service_map"; }
+  std::string_view get_type_name() const override { return "service_map"; }
   void print(ostream& out) const override {
     out << "service_map(e" << service_map.epoch << " "
 	<< service_map.services.size() << " svc)";

@@ -29,7 +29,7 @@ private:
   ~MPGStatsAck() override {}
 
 public:
-  const char *get_type_name() const override { return "pg_stats_ack"; }
+  std::string_view get_type_name() const override { return "pg_stats_ack"; }
   void print(ostream& out) const override {
     out << "pg_stats_ack(" << pg_stat.size() << " pgs tid " << get_tid() << ")";
   }

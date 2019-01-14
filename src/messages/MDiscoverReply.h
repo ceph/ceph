@@ -145,7 +145,7 @@ protected:
   ~MDiscoverReply() override {}
 
 public:
-  const char *get_type_name() const override { return "discover_reply"; }
+  std::string_view get_type_name() const override { return "discover_reply"; }
   void print(ostream& out) const override {
     out << "discover_reply(" << header.tid << " " << base_ino << ")";
   }

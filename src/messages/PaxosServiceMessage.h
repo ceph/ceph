@@ -50,7 +50,7 @@ public:
     paxos_decode(p);
   }
 
-  const char *get_type_name() const override { return "PaxosServiceMessage"; }
+  std::string_view get_type_name() const override { return "PaxosServiceMessage"; }
 };
 
 #endif

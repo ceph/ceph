@@ -84,7 +84,7 @@ private:
   ~MOSDPGLog() override {}
 
 public:
-  const char *get_type_name() const override { return "PGlog"; }
+  std::string_view get_type_name() const override { return "PGlog"; }
   void inner_print(ostream& out) const override {
     // NOTE: log is not const, but operator<< doesn't touch fields
     // swapped out by OSD code.

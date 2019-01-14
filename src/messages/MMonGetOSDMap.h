@@ -61,7 +61,7 @@ public:
     return inc_last;
   }
 
-  const char *get_type_name() const override { return "mon_get_osdmap"; }
+  std::string_view get_type_name() const override { return "mon_get_osdmap"; }
   void print(ostream& out) const override {
     out << "mon_get_osdmap(";
     if (full_first && full_last)

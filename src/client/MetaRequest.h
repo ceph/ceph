@@ -13,8 +13,8 @@
 #include "UserPerm.h"
 
 #include "messages/MClientRequest.h"
+#include "messages/MClientReply.h"
 
-class MClientReply;
 class Dentry;
 class dir_result_t;
 
@@ -49,7 +49,7 @@ public:
   int      retry_attempt;
   std::atomic<uint64_t> ref = { 1 };
   
-  MClientReply *reply;         // the reply
+  MClientReply::const_ref reply;         // the reply
   bool kick;
   bool success;
   

@@ -45,7 +45,7 @@ protected:
   ~MDentryUnlink() override {}
 
 public:
-  const char *get_type_name() const override { return "dentry_unlink";}
+  std::string_view get_type_name() const override { return "dentry_unlink";}
   void print(ostream& o) const override {
     o << "dentry_unlink(" << dirfrag << " " << dn << ")";
   }

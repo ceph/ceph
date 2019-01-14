@@ -53,7 +53,7 @@ private:
   ~MOSDPGQuery() override {}
 
 public:  
-  const char *get_type_name() const override { return "pg_query"; }
+  std::string_view get_type_name() const override { return "pg_query"; }
   void print(ostream& out) const override {
     out << "pg_query(";
     for (map<spg_t,pg_query_t>::const_iterator p = pg_list.begin();

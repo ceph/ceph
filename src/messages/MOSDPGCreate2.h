@@ -29,7 +29,7 @@ private:
   ~MOSDPGCreate2() override {}
 
 public:
-  const char *get_type_name() const override {
+  std::string_view get_type_name() const override {
     return "pg_create2";
   }
   void print(ostream& out) const override {

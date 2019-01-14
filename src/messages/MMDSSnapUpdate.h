@@ -40,7 +40,7 @@ protected:
   ~MMDSSnapUpdate() override {}
 
 public:
-  const char *get_type_name() const override { return "snap_update"; }
+  std::string_view get_type_name() const override { return "snap_update"; }
   void print(ostream& o) const override {
     o << "snap_update(" << ino << " table_tid " << get_tid() << ")";
   }

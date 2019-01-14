@@ -84,7 +84,7 @@ public:
       pgid(pgid), query_epoch(query_epoch),
       type(type), priority(prio) {}
 
-  const char *get_type_name() const override {
+  std::string_view get_type_name() const override {
     return "MRecoveryReserve";
   }
 

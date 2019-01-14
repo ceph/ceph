@@ -41,7 +41,7 @@ private:
   ~MMonJoin() override {}
 
 public:  
-  const char *get_type_name() const override { return "mon_join"; }
+  std::string_view get_type_name() const override { return "mon_join"; }
   void print(ostream& o) const override {
     o << "mon_join(" << name << " " << addrs << ")";
   }

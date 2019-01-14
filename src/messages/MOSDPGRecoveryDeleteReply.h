@@ -58,7 +58,7 @@ public:
         << " e" << map_epoch << "," << min_epoch << " " << objects << ")";
   }
 
-  const char *get_type_name() const override { return "recovery_delete_reply"; }
+  std::string_view get_type_name() const override { return "recovery_delete_reply"; }
 };
 
 #endif

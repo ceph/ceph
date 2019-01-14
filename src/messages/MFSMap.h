@@ -28,7 +28,7 @@ public:
   bufferlist encoded;
 
   version_t get_epoch() const { return epoch; }
-  const FSMap & get_fsmap() {return fsmap;}
+  const FSMap& get_fsmap() const {return fsmap;}
 
   MFSMap() : 
     MessageInstance(CEPH_MSG_FS_MAP), epoch(0) {}
@@ -43,7 +43,7 @@ private:
   ~MFSMap() override {}
 
 public:
-  const char *get_type_name() const override { return "fsmap"; }
+  std::string_view get_type_name() const override { return "fsmap"; }
   void print(ostream& out) const override {
     out << "fsmap(e " << epoch << ")";
   }

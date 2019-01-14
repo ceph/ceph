@@ -298,7 +298,7 @@ protected:
   ~MClientReply() override {}
 
 public:
-  const char *get_type_name() const override { return "creply"; }
+  std::string_view get_type_name() const override { return "creply"; }
   void print(ostream& o) const override {
     o << "client_reply(???:" << get_tid();
     o << " = " << get_result();
@@ -336,7 +336,10 @@ public:
   void set_extra_bl(bufferlist& bl) {
     extra_bl.claim(bl);
   }
-  bufferlist &get_extra_bl() {
+  bufferlist& get_extra_bl() {
+    return extra_bl;
+  }
+  const bufferlist& get_extra_bl() const {
     return extra_bl;
   }
 
@@ -345,6 +348,9 @@ public:
     trace_bl.claim(bl);
   }
   bufferlist& get_trace_bl() {
+    return trace_bl;
+  }
+  const bufferlist& get_trace_bl() const {
     return trace_bl;
   }
 };

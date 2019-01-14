@@ -92,7 +92,7 @@ public:
     encode(min_epoch, payload);
   }
 
-  const char *get_type_name() const override { return "MOSDPGPush"; }
+  std::string_view get_type_name() const override { return "MOSDPGPush"; }
 
   void print(ostream& out) const override {
     out << "MOSDPGPush(" << pgid

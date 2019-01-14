@@ -64,7 +64,7 @@ protected:
   ~MClientLease() override {}
 
 public:
-  const char *get_type_name() const override { return "client_lease"; }
+  std::string_view get_type_name() const override { return "client_lease"; }
   void print(ostream& out) const override {
     out << "client_lease(a=" << ceph_lease_op_name(get_action())
 	<< " seq " << get_seq()
