@@ -551,8 +551,12 @@ SocketConnection::handle_keepalive2()
   return socket->read_exactly(sizeof(ceph_timespec))
     .then([this] (auto buf) {
       k.ack.stamp = *reinterpret_cast<const ceph_timespec*>(buf.get());
-      logger().info("{} keepalive2 {}", *this, k.ack.stamp.tv_sec);
-      return socket->write_flush(make_static_packet(k.ack));
+      seastar::shared_future<> f = send_ready.then([this] {
+          logger().info("{} keepalive2 {}", *this, k.ack.stamp.tv_sec);
+          return socket->write_flush(make_static_packet(k.ack));
+        });
+      send_ready = f.get_future();
+      return f.get_future();
     });
 }
 
