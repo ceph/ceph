@@ -143,7 +143,7 @@ private:
   void create_pending() override;  // prepare a new pending
   bool prepare_global_id(MonOpRequestRef op);
   void increase_max_global_id();
-  uint64_t assign_global_id(MonOpRequestRef op, bool should_increase_max);
+  uint64_t assign_global_id(bool should_increase_max);
   // propose pending update to peers
   void encode_pending(MonitorDBStore::TransactionRef t) override;
   void encode_full(MonitorDBStore::TransactionRef t) override;

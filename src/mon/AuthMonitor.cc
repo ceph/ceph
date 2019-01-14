@@ -457,12 +457,13 @@ bool AuthMonitor::prepare_update(MonOpRequestRef op)
   }
 }
 
-uint64_t AuthMonitor::assign_global_id(MonOpRequestRef op, bool should_increase_max)
+uint64_t AuthMonitor::assign_global_id(bool should_increase_max)
 {
-  MAuth *m = static_cast<MAuth*>(op->get_req());
   int total_mon = mon->monmap->size();
-  dout(10) << "AuthMonitor::assign_global_id m=" << *m << " mon=" << mon->rank << "/" << total_mon
-	   << " last_allocated=" << last_allocated_id << " max_global_id=" <<  max_global_id << dendl;
+  dout(10) << "AuthMonitor::assign_global_id mon=" << mon->rank
+	   << "/" << total_mon
+	   << " last_allocated=" << last_allocated_id
+	   << " max_global_id=" <<  max_global_id << dendl;
 
   uint64_t next_global_id = last_allocated_id + 1;
   int remainder = next_global_id % total_mon;
@@ -608,7 +609,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
      request. If a client tries to send it later, it'll screw up its auth
      session */
   if (!s->con->peer_global_id) {
-    s->con->peer_global_id = assign_global_id(op, paxos_writable);
+    s->con->peer_global_id = assign_global_id(paxos_writable);
     if (!s->con->peer_global_id) {
 
       delete s->auth_handler;
