@@ -151,6 +151,8 @@ int CephxServiceHandler::handle_request(
           ldout(cct,0) << "mon caps null for " << entity_name << dendl;
           ret = -EACCES;
         }
+	// caller should try to finish authentication
+	ret = 1;
       }
     }
     break;

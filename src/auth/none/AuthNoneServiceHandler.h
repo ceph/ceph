@@ -31,7 +31,7 @@ public:
 		    AuthCapsInfo *caps) override {
     entity_name = name;
     caps->allow_all = true;
-    return 0;
+    return 1;
   }
   int handle_request(bufferlist::const_iterator& indata,
 		     bufferlist *result_bl,
