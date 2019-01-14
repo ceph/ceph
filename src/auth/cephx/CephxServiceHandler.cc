@@ -139,18 +139,23 @@ int CephxServiceHandler::handle_request(
 	    cct, eauth.key, info_vec, should_enc_ticket,
 	    old_ticket_info.session_key, *result_bl)) {
 	ret = -EIO;
+	break;
       }
 
       if (!key_server->get_service_caps(entity_name, CEPH_ENTITY_TYPE_MON,
 					*caps)) {
         ldout(cct, 0) << " could not get mon caps for " << entity_name << dendl;
         ret = -EACCES;
+	break;
       } else {
         char *caps_str = caps->caps.c_str();
         if (!caps_str || !caps_str[0]) {
           ldout(cct,0) << "mon caps null for " << entity_name << dendl;
           ret = -EACCES;
+	  break;
         }
+	// caller should try to finish authentication
+	ret = 1;
       }
     }
     break;
