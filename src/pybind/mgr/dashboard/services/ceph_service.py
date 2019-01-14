@@ -235,10 +235,10 @@ class CephService(object):
     def get_pg_info(cls):
         pg_summary = mgr.get('pg_summary')
 
-        pgs_per_osd = 0
+        pgs_per_osd = 0.0
         total_osds = len(pg_summary['by_osd'])
         if total_osds > 0:
-            total_pgs = 0
+            total_pgs = 0.0
             for _, osd_pg_statuses in pg_summary['by_osd'].items():
                 for _, pg_amount in osd_pg_statuses.items():
                     total_pgs += pg_amount
