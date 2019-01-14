@@ -5977,11 +5977,12 @@ int Monitor::ms_handle_authentication(Connection *con)
 	   << " " << *s << dendl;
 
   AuthCapsInfo &caps_info = con->get_peer_caps_info();
+  int ret = 0;
   if (caps_info.allow_all) {
     s->caps.set_allow_all();
     s->authenticated = true;
+    ret = 1;
   }
-  int ret = 1;
   if (caps_info.caps.length()) {
     bufferlist::const_iterator p = caps_info.caps.cbegin();
     string str;
@@ -5996,6 +5997,7 @@ int Monitor::ms_handle_authentication(Connection *con)
     if (ret >= 0) {
       if (s->caps.parse(str, NULL)) {
 	s->authenticated = true;
+	ret = 1;
       } else {
 	derr << __func__ << " unparseable caps '" << str << "' for "
 	     << con->get_peer_entity_name() << dendl;

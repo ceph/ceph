@@ -640,9 +640,8 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   try {
     if (start) {
       // new session
-      s->auth_handler->start_session(entity_name, &response_bl,
-				     &s->con->peer_caps_info);
-      ret = 0;
+      ret = s->auth_handler->start_session(entity_name, &response_bl,
+					   &s->con->peer_caps_info);
     } else {
       // request
       ret = s->auth_handler->handle_request(
@@ -655,7 +654,8 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       wait_for_active(op, new C_RetryMessage(this,op));
       goto done;
     }
-    if (mon->ms_handle_authentication(s->con.get()) > 0) {
+    if (!s->authenticated &&
+	mon->ms_handle_authentication(s->con.get()) > 0) {
       finished = true;
     }
   } catch (const buffer::error &err) {
