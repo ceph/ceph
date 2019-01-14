@@ -75,7 +75,6 @@ private:
   uint64_t peer_required_features;
   AuthAuthorizer *authorizer;
   uint32_t auth_method;
-  bool got_bad_auth;
   uint32_t got_bad_method;
   CryptoKey session_key;
   CryptoKey connection_secret;

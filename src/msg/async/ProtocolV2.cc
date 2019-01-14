@@ -407,7 +407,6 @@ ProtocolV2::ProtocolV2(AsyncConnection *connection)
       state(NONE),
       peer_required_features(0),
       authorizer(nullptr),
-      got_bad_auth(false),
       got_bad_method(0),
       auth_flags(0),
       cookie(0),
@@ -433,7 +432,6 @@ ProtocolV2::~ProtocolV2() {
 void ProtocolV2::connect() {
   state = START_CONNECT;
 
-  got_bad_auth = false;
   got_bad_method = 0;
   if (authorizer) {
     delete authorizer;
@@ -557,7 +555,6 @@ void ProtocolV2::reset_recv_state() {
       delete authorizer;
     }
     authorizer = nullptr;
-    got_bad_auth = false;
     got_bad_method = 0;
   }
 
@@ -2099,31 +2096,7 @@ CtPtr ProtocolV2::handle_auth_bad_auth(char *payload, uint32_t length) {
                 << " error code=" << bad_auth.error_code()
                 << " error message=" << bad_auth.error_msg() << dendl;
 
-  if (got_bad_auth) {
-    ldout(cct, 1) << __func__ << " too many attempts, closing connection"
-                  << dendl;
-    return _fault();
-  }
-
-  got_bad_auth = true;
-  delete authorizer;
-  authorizer = messenger->ms_deliver_get_authorizer(connection->peer_type,
-                                                    true);  // try harder
-
-  if (!authorizer) {
-    ldout(cct, 1) << __func__
-                  << " could not get an authorizer, closing connection"
-                  << dendl;
-    return _fault();
-  }
-
-  ldout(cct, 10) << __func__ << " sending auth request method=" << auth_method
-                 << " len=" << authorizer->bl.length() << dendl;
-
-  AuthRequestFrame authFrame(auth_method, authorizer->bl.length(),
-                             authorizer->bl);
-  bufferlist &bl = authFrame.get_buffer();
-  return WRITE(bl, "auth request", read_frame);
+  return _fault();
 }
 
 CtPtr ProtocolV2::handle_auth_done(char *payload, uint32_t length) {
