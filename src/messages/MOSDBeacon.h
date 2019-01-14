@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "PaxosServiceMessage.h"
+
 class MOSDBeacon : public MessageInstance<MOSDBeacon, PaxosServiceMessage> {
 public:
   friend factory;
