@@ -75,10 +75,10 @@
   become: True
   any_errors_fatal: true
   roles:
-    - role: ceph-defaults
-      tags: ['ceph_update_config']
-    - role: ceph-handler
-    - role: ceph-common
+    - ceph-defaults
+    - ceph-facts
+    - ceph-handler
+    - ceph-common
   tasks:
     - name: rsync ceph-volume to test nodes on centos
       synchronize:

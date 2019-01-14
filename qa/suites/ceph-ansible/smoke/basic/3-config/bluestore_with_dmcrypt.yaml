@@ -3,6 +3,7 @@ meta:
 
 overrides:
    ceph_ansible:
+     branch: stable-3.2
      vars:
         osd_objectstore: bluestore
         dmcrypt: True

@@ -773,11 +773,7 @@ bool DaemonServer::handle_command(MCommand *m)
       f.reset(Formatter::create("json-pretty"));
     // only include state from services that are in the persisted service map
     f->open_object_section("service_status");
-    ServiceMap s;
-    cluster_state.with_servicemap([&](const ServiceMap& service_map) {
-	s = service_map;
-      });
-    for (auto& p : s.services) {
+    for (auto& p : pending_service_map.services) {
       f->open_object_section(p.first.c_str());
       for (auto& q : p.second.daemons) {
 	f->open_object_section(q.first.c_str());
@@ -853,6 +849,7 @@ bool DaemonServer::handle_command(MCommand *m)
       ss << "pg " << pgid << " primary osd." << acting_primary
 	 << " is not currently connected";
       cmdctx->reply(-EAGAIN, ss);
+      return true;
     }
     vector<pg_t> pgs = { pgid };
     for (auto& con : p->second) {

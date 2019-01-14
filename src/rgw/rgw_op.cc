@@ -608,9 +608,7 @@ rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
     e.emplace("aws:Referer", i->second);
   }
 
-  // These seem to be the semantics, judging from rest_rgw_s3.cc
-  i = m.find("SERVER_PORT_SECURE");
-  if (i != m.end()) {
+  if (rgw_transport_is_secure(s->cct, *s->info.env)) {
     e.emplace("aws:SecureTransport", "true");
   }
 
@@ -2281,22 +2279,13 @@ int RGWListBucket::verify_permission()
 
 int RGWListBucket::parse_max_keys()
 {
-  if (!max_keys.empty()) {
-    char *endptr;
-    max = strtol(max_keys.c_str(), &endptr, 10);
-    if (endptr) {
-      if (endptr == max_keys.c_str()) return -EINVAL;
-      while (*endptr && isspace(*endptr)) // ignore white space
-        endptr++;
-      if (*endptr) {
-        return -EINVAL;
-      }
-    }
-  } else {
-    max = default_max;
-  }
-
-  return 0;
+  // Bound max value of max-keys to configured value for security
+  // Bound min value of max-keys to '0'
+  // Some S3 clients explicitly send max-keys=0 to detect if the bucket is
+  // empty without listing any items.
+  return parse_value_and_bound(max_keys, max, 0,
+			s->cct->_conf->get_val<uint64_t>("rgw_max_listing_results"),
+			default_max);
 }
 
 void RGWListBucket::pre_exec()

@@ -1437,13 +1437,15 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       if (ret < 0) {
         return ret;
       }
+    }
+
+    removing = existed && op.delete_marker;
+    if (!removing) {
       ret = other_obj.unlink();
       if (ret < 0) {
         return ret;
       }
     }
-
-    removing = existed && op.delete_marker;
   } else {
     removing = (existed && !obj.is_delete_marker() && op.delete_marker);
   }
@@ -3758,7 +3760,7 @@ static int rgw_set_bucket_resharding(cls_method_context_t hctx, bufferlist *in, 
 
 static int rgw_clear_bucket_resharding(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
-  cls_rgw_set_bucket_resharding_op op;
+  cls_rgw_clear_bucket_resharding_op op;
 
   bufferlist::iterator in_iter = in->begin();
   try {

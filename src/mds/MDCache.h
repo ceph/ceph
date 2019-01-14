@@ -759,13 +759,18 @@ public:
 
   // shutdown
 private:
-  set<inodeno_t> shutdown_exported_strays;
+  set<inodeno_t> shutdown_exporting_strays;
+  pair<dirfrag_t, string> shutdown_export_next;
 public:
   void shutdown_start();
   void shutdown_check();
   bool shutdown_pass();
-  bool shutdown_export_strays();
   bool shutdown();                    // clear cache (ie at shutodwn)
+  bool shutdown_export_strays();
+  void shutdown_export_stray_finish(inodeno_t ino) {
+    if (shutdown_exporting_strays.erase(ino))
+      shutdown_export_strays();
+  }
 
   bool did_shutdown_log_cap;
 
@@ -1176,7 +1181,7 @@ public:
   int dump_cache(Formatter *f);
   int dump_cache(boost::string_view dump_root, int depth, Formatter *f);
 
-  int cache_status(Formatter *f);
+  void cache_status(Formatter *f);
 
   void dump_resolve_status(Formatter *f) const;
   void dump_rejoin_status(Formatter *f) const;

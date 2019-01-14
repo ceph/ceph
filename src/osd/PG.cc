@@ -3920,9 +3920,14 @@ void PG::reg_next_scrub()
     return;
 
   utime_t reg_stamp;
-  if (scrubber.must_scrub ||
-      (info.stats.stats_invalid && cct->_conf->osd_scrub_invalid_stats)) {
+  bool must = false;
+  if (scrubber.must_scrub) {
+    // Set the smallest time that isn't utime_t()
+    reg_stamp = utime_t(0,1);
+    must = true;
+  } else if (info.stats.stats_invalid && cct->_conf->osd_scrub_invalid_stats) {
     reg_stamp = ceph_clock_now();
+    must = true;
   } else {
     reg_stamp = info.history.last_scrub_stamp;
   }
@@ -3936,7 +3941,7 @@ void PG::reg_next_scrub()
 					       reg_stamp,
 					       scrub_min_interval,
 					       scrub_max_interval,
-					       scrubber.must_scrub);
+					       must);
 }
 
 void PG::unreg_next_scrub()
@@ -4367,7 +4372,7 @@ void PG::_scan_snaps(ScrubMap &smap)
 	  bool done;
 	  t.register_on_applied_sync(
 	    new C_SafeCond(&my_lock, &my_cond, &done, &r));
-	  r = osd->store->apply_transaction(osr.get(), std::move(t));
+	  r = osd->store->queue_transaction(osr.get(), std::move(t), nullptr);
 	  if (r != 0) {
 	    derr << __func__ << ": apply_transaction got " << cpp_strerror(r)
 		 << dendl;

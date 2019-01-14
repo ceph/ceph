@@ -232,9 +232,15 @@ public:
   utime_t get_session_timeout() const {
     return utime_t(session_timeout,0);
   }
+  void set_session_timeout(uint32_t t) {
+    session_timeout = t;
+  }
 
   utime_t get_session_autoclose() const {
     return utime_t(session_autoclose, 0);
+  }
+  void set_session_autoclose(uint32_t t) {
+    session_autoclose = t;
   }
 
   uint64_t get_max_filesize() const { return max_file_size; }

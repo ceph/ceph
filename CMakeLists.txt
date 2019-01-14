@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 2.8.11)
 
 project(ceph)
-set(VERSION 12.2.9)
+set(VERSION 12.2.10)
 
 if(POLICY CMP0046)
   # Tweak policies (this one disables "missing" dependency warning)
@@ -367,6 +367,8 @@ endif()
 option(WITH_RADOSGW "Rados Gateway is enabled" ON)
 option(WITH_RADOSGW_FCGI_FRONTEND "Rados Gateway's FCGI frontend is enabled" OFF)
 option(WITH_RADOSGW_BEAST_FRONTEND "Rados Gateway's Beast frontend is enabled" ON)
+option(WITH_RADOSGW_BEAST_OPENSSL "Rados Gateway's Beast frontend uses OpenSSL" ON)
+
 if(WITH_RADOSGW)
   find_package(EXPAT REQUIRED)
   if(WITH_RADOSGW_FCGI_FRONTEND)
@@ -376,14 +378,7 @@ if(WITH_RADOSGW)
     message(WARNING "disabling WITH_RADOSGW_BEAST_FRONTEND, which depends on WITH_BOOST_CONTEXT")
     set(WITH_RADOSGW_BEAST_FRONTEND OFF)
   endif()
-endif(WITH_RADOSGW)
 
-
-if (WITH_RADOSGW)
-  if (NOT DEFINED OPENSSL_FOUND)
-    message(STATUS "Looking for openssl anyways, because radosgw selected")
-    find_package(OpenSSL)
-  endif()
 # https://curl.haxx.se/docs/install.html mentions the
 # configure flags for various ssl backends
   execute_process(
@@ -396,7 +391,13 @@ if (WITH_RADOSGW)
   if (CURL_CONFIG_ERRORS)
     message(WARNING "unable to run curl-config; rgw cannot make ssl requests to external systems reliably")
   endif()
-  find_package(OpenSSL)
+
+  if (WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL)
+    find_package(OpenSSL REQUIRED)
+  else()
+    find_package(OpenSSL)
+  endif()
+
   if (OPENSSL_FOUND)
     if (NOT NO_CURL_SSL_LINK)
       message(STATUS "libcurl is linked with openssl: explicitly setting locks")

@@ -898,7 +898,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_osd_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(10)
+    .set_default(500)
     .set_description(""),
 
     Option("mon_cpu_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -1950,7 +1950,11 @@ std::vector<Option> get_global_options() {
     .set_default(65536)
     .set_description(""),
 
-    Option("osd_disk_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    Option("osd_remove_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description(""),
+
+    Option("osd_recovery_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1)
     .set_description(""),
 
@@ -2842,6 +2846,10 @@ std::vector<Option> get_global_options() {
     .set_default(30)
     .set_description(""),
 
+    Option("osd_delete_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Time in seconds to sleep before next removal transaction"),
+
     Option("osd_failsafe_full_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.97)
     .set_description(""),
@@ -2956,7 +2964,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("rocksdb_cache_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(128_M)
+    .set_default(512_M)
     .set_description(""),
 
     Option("rocksdb_cache_row_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -3164,6 +3172,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_memory_expected_fragmentation", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0.15)
+    .set_min_max(0.0, 1.0)
     .add_see_also("bluestore_cache_autotune")
     .set_description("When tcmalloc and cache autotuning is enabled, estimate the percent of memory fragmentation."),
 
@@ -3335,6 +3344,11 @@ std::vector<Option> get_global_options() {
     .set_default(1)
     .set_description("How frequently (in seconds) to balance free space between BlueFS and BlueStore"),
 
+    Option("bluestore_bluefs_balance_failure_dump_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("How frequently (in seconds) to dump information on "
+      "allocation failure occurred during BlueFS space rebalance"),
+
     Option("bluestore_spdk_mem", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(512)
     .set_description(""),
@@ -3421,6 +3435,12 @@ std::vector<Option> get_global_options() {
     .set_safe()
     .set_description("Maximum block size to checksum")
     .add_see_also("bluestore_csum_min_block"),
+
+    Option("bluestore_retry_disk_reads", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(3)
+    .set_min_max(0, 255)
+    .set_description("Number of read retries on checksum validation error")
+    .set_long_description("Retries to read data from the disk this many times when checksum validation fails to handle spurious read errors gracefully."),
 
     Option("bluestore_min_alloc_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
@@ -3790,6 +3810,10 @@ std::vector<Option> get_global_options() {
     Option("bluestore_debug_random_read_err", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
+
+    Option("bluestore_debug_inject_csum_err_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(0.0)
+    .set_description("inject crc verification errors into bluestore device reads"),
 
     // -----------------------------------------
     // kstore
@@ -5572,6 +5596,17 @@ std::vector<Option> get_rgw_options() {
     .set_default(120)
     .set_description(""),
 
+    Option("rgw_trust_forwarded_https", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Trust Forwarded and X-Forwarded-Proto headers")
+    .set_long_description(
+        "When a proxy in front of radosgw is used for ssl termination, radosgw "
+        "does not know whether incoming http connections are secure. Enable "
+        "this option to trust the Forwarded and X-Forwarded-Proto headers sent "
+        "by the proxy when determining whether the connection is secure. This "
+        "is required for some features, such as server side encryption.")
+    .add_see_also("rgw_crypt_require_ssl"),
+
     Option("rgw_crypt_require_ssl", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("Requests including encryption key headers must be sent over ssl"),
@@ -5670,6 +5705,17 @@ std::vector<Option> get_rgw_options() {
 			  "of RGW instances under heavy use. If you would like "
 			  "to turn off cache expiry, set this value to zero."),
 
+    Option("rgw_max_listing_results", Option::TYPE_UINT,
+	   Option::LEVEL_ADVANCED)
+    .set_default(1000)
+    .set_min_max(1, 100000)
+    .add_service("rgw")
+    .set_description("Upper bound on results in listing operations, ListBucket max-keys")
+    .set_long_description("This caps the maximum permitted value for listing-like operations in RGW S3. "
+			  "Affects ListBucket(max-keys), "
+			  "ListBucketVersions(max-keys), "
+			  "ListBucketMultiPartUploads(max-uploads), "
+			  "ListMultipartUploadParts(max-parts)"),
   });
 }
 
@@ -6026,10 +6072,6 @@ std::vector<Option> get_mds_options() {
     .set_default("/var/lib/ceph/mds/$cluster-$id")
     .set_description(""),
 
-    Option("mds_max_file_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(1ULL << 40)
-    .set_description(""),
-
     Option("mds_max_xattr_pairs_size", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(64 << 10)
     .set_description(""),
@@ -6080,12 +6122,12 @@ std::vector<Option> get_mds_options() {
     .set_default(15)
     .set_description(""),
 
+    Option("mds_heartbeat_grace", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(15)
+    .set_description("tolerance in seconds for MDS internal heartbeat"),
+
     Option("mds_enforce_unique_name", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
-    .set_description(""),
-
-    Option("mds_session_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(60)
     .set_description(""),
 
     Option("mds_session_blacklist_on_timeout", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -6106,10 +6148,6 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_freeze_tree_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(30)
-    .set_description(""),
-
-    Option("mds_session_autoclose", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(300)
     .set_description(""),
 
     Option("mds_health_summarize_threshold", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -6182,10 +6220,6 @@ std::vector<Option> get_mds_options() {
 
     Option("mds_bal_unreplicate_threshold", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
-
-    Option("mds_bal_frag", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
     .set_description(""),
 
     Option("mds_bal_split_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
@@ -6509,6 +6543,16 @@ std::vector<Option> get_mds_options() {
     Option("mds_cap_revoke_eviction_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
      .set_default(0)
      .set_description("number of seconds after which clients which have not responded to cap revoke messages by the MDS are evicted."),
+
+    Option("mds_dump_cache_threshold_formatter", Option::TYPE_UINT, Option::LEVEL_DEV)
+     .set_default(1_G)
+     .set_description("threshold for cache usage to disallow \"dump cache\" operation to formatter")
+     .set_long_description("Disallow MDS from dumping caches to formatter via \"dump cache\" command if cache usage exceeds this threshold."),
+
+    Option("mds_dump_cache_threshold_file", Option::TYPE_UINT, Option::LEVEL_DEV)
+     .set_default(0)
+     .set_description("threshold for cache usage to disallow \"dump cache\" operation to file")
+     .set_long_description("Disallow MDS from dumping caches to file via \"dump cache\" command if cache usage exceeds this threshold."),
   });
 }
 

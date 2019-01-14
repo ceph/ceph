@@ -1140,6 +1140,12 @@ int cls_cxx_create(cls_method_context_t hctx, bool exclusive) {
   return ctx->io_ctx_impl->create(ctx->oid, exclusive);
 }
 
+int cls_cxx_remove(cls_method_context_t hctx) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  return ctx->io_ctx_impl->remove(ctx->oid, ctx->io_ctx_impl->get_snap_context());
+}
+
 int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t *origin) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);

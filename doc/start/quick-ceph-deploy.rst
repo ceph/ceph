@@ -124,7 +124,7 @@ configuration details, perform the following steps using ``ceph-deploy``.
      ceph-deploy mgr create node1  *Required only for luminous+ builds, i.e >= 12.x builds*
 
 #. Add three OSDs. For the purposes of these instructions, we assume you have an
-   unused disk in each node called ``/dev/vdb``.  *Be sure that the device is not currently in use and does not contain any important data.*
+   unused disk in each node called ``/dev/vdb``.  *Be sure that the device is not currently in use and does not contain any important data.* ::
 
      ceph-deploy osd create {ceph-node}:{device}
 

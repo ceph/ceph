@@ -18,7 +18,7 @@ and the Boost.Asio library for asynchronous network i/o.
 Options
 -------
 
-``port``
+``port`` and ``ssl_port``
 
 :Description: Sets the listening port number. Can be specified multiple
               times as in ``port=80 port=8000``.
@@ -27,15 +27,34 @@ Options
 :Default: ``80``
 
 
-``endpoint``
+``endpoint`` and ``ssl_endpoint``
 
 :Description: Sets the listening address in the form ``address[:port]``,
               where the address is an IPv4 address string in dotted decimal
-              form, or an IPv6 address in hexadecimal notation. The
-              optional port defaults to 80. Can be specified multiple times
-              as in ``endpoint=::1 endpoint=192.168.0.100:8000``.
+              form, or an IPv6 address in hexadecimal notation surrounded
+              by square brackets. The optional port defaults to 80 for
+              ``endpoint`` and 443 for ``ssl_endpoint``. Can be specified
+              multiple times as in ``endpoint=[::1] endpoint=192.168.0.100:8000``.
 
 :Type: Integer
+:Default: None
+
+
+``ssl_certificate``
+
+:Description: Path to the SSL certificate file used for SSL-enabled endpoints.
+
+:Type: String
+:Default: None
+
+
+``ssl_private_key``
+
+:Description: Optional path to the private key file used for SSL-enabled
+              endpoints. If one is not given, the ``ssl_certificate`` file
+              is used as the private key.
+
+:Type: String
 :Default: None
 
 

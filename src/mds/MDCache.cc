@@ -399,7 +399,8 @@ void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir()) {
     in->inode.dir_layout.dl_dir_hash = g_conf->mds_default_dir_hash;
-    ++in->inode.rstat.rsubdirs;
+    in->inode.rstat.rsubdirs = 1; /* itself */
+    in->inode.rstat.rctime = in->inode.ctime;
   } else {
     in->inode.layout = default_file_layout;
     ++in->inode.rstat.rfiles;
@@ -446,13 +447,12 @@ void MDCache::create_empty_hierarchy(MDSGather *gather)
   adjust_subtree_auth(rootdir, mds->get_nodeid());   
   rootdir->dir_rep = CDir::REP_ALL;   //NONE;
 
-  rootdir->fnode.accounted_fragstat = rootdir->fnode.fragstat;
-  rootdir->fnode.accounted_rstat = rootdir->fnode.rstat;
-
-  root->inode.dirstat = rootdir->fnode.fragstat;
-  root->inode.rstat = rootdir->fnode.rstat;
-  ++root->inode.rstat.rsubdirs;
-  root->inode.accounted_rstat = root->inode.rstat;
+  assert(rootdir->fnode.accounted_fragstat == rootdir->fnode.fragstat);
+  assert(rootdir->fnode.fragstat == root->inode.dirstat);
+  assert(rootdir->fnode.accounted_rstat == rootdir->fnode.rstat);
+  /* Do no update rootdir rstat information of the fragment, rstat upkeep magic
+   * assume version 0 is stale/invalid.
+   */
 
   rootdir->mark_complete();
   rootdir->mark_dirty(rootdir->pre_dirty(), mds->mdlog->get_current_segment());
@@ -3068,7 +3068,7 @@ void MDCache::handle_mds_failure(mds_rank_t who)
 
   // MDCache::shutdown_export_strays() always exports strays to mds.0
   if (who == mds_rank_t(0))
-    shutdown_exported_strays.clear();
+    shutdown_exporting_strays.clear();
 
   show_subtrees();  
 }
@@ -7498,7 +7498,7 @@ void MDCache::check_memory_usage()
 
   if (cache_toofull()) {
     last_recall_state = clock::now();
-    mds->server->recall_client_state();
+    mds->server->recall_client_state(-1.0, false, nullptr);
   }
 
   // If the cache size had exceeded its limit, but we're back in bounds
@@ -7744,60 +7744,119 @@ bool MDCache::shutdown_pass()
 
 bool MDCache::shutdown_export_strays()
 {
+  static const unsigned MAX_EXPORTING = 100;
+
   if (mds->get_nodeid() == 0)
     return true;
-  
-  dout(10) << "shutdown_export_strays" << dendl;
+
+  if (shutdown_exporting_strays.size() * 3 >= MAX_EXPORTING * 2)
+    return false;
+
+  dout(10) << "shutdown_export_strays " << shutdown_export_next.first
+	   << " '" << shutdown_export_next.second << "'" << dendl;
 
   bool mds0_active = mds->mdsmap->is_active(mds_rank_t(0));
+  bool all_exported = false;
 
-  bool done = true;
+again:
+  auto next = shutdown_export_next;
 
-  list<CDir*> dfs;
   for (int i = 0; i < NUM_STRAY; ++i) {
-    if (!strays[i] ||
-	!strays[i]->state_test(CInode::STATE_STRAYPINNED))
+    CInode *strayi = strays[i];
+    if (!strayi ||
+	!strayi->state_test(CInode::STATE_STRAYPINNED))
       continue;
-    strays[i]->get_dirfrags(dfs);
-  }
+    if (strayi->ino() < next.first.ino)
+      continue;
 
-  for (std::list<CDir*>::iterator dfs_i = dfs.begin();
-       dfs_i != dfs.end(); ++dfs_i)
-  {
-    CDir *dir = *dfs_i;
+    deque<CDir*> dfls;
+    strayi->get_dirfrags(dfls);
 
-    if (!dir->is_complete()) {
-      dir->fetch(0);
-      done = false;
-      if (!mds0_active)
-	break;
-    }
-    
-    for (auto &p : dir->items) {
-      CDentry *dn = p.second;
-      CDentry::linkage_t *dnl = dn->get_projected_linkage();
-      if (dnl->is_null())
+    while (!dfls.empty()) {
+      CDir *dir = dfls.front();
+      dfls.pop_front();
+
+      if (dir->dirfrag() < next.first)
 	continue;
-      done = false;
-      if (!mds0_active)
-	break;
-      
-      if (dn->state_test(CDentry::STATE_PURGING)) {
-        // Don't try to migrate anything that is actually
-        // being purged right now
-        continue;
+      if (next.first < dir->dirfrag()) {
+	next.first = dir->dirfrag();
+	next.second.clear();
       }
 
-      if (shutdown_exported_strays.count(dnl->get_inode()->ino()) == 0) {
-	shutdown_exported_strays.insert(dnl->get_inode()->ino());
-	stray_manager.migrate_stray(dn, mds_rank_t(0));  // send to root!
+      if (!dir->is_complete()) {
+	MDSInternalContextBase *fin = nullptr;
+	if (shutdown_exporting_strays.empty()) {
+	  fin = new MDSInternalContextWrapper(mds,
+		  new FunctionContext([this](int r) {
+		    shutdown_export_strays();
+		  })
+		);
+	}
+	dir->fetch(fin);
+	goto done;
+      }
+
+      CDir::dentry_key_map::iterator it;
+      if (next.second.empty()) {
+	it = dir->begin();
       } else {
-	dout(10) << "already exporting " << *dn << dendl;
+	auto hash = ceph_frag_value(strayi->hash_dentry_name(next.second));
+	it = dir->lower_bound(dentry_key_t(0, next.second, hash));
+      }
+
+      for (; it != dir->end(); ++it) {
+	CDentry *dn = it->second;
+	CDentry::linkage_t *dnl = dn->get_projected_linkage();
+	if (dnl->is_null())
+	  continue;
+
+	if (!mds0_active && !dn->state_test(CDentry::STATE_PURGING)) {
+	  next.second = string(it->first.name);
+	  goto done;
+	}
+
+	auto ret = shutdown_exporting_strays.insert(dnl->get_inode()->ino());
+	if (!ret.second) {
+	  dout(10) << "already exporting/purging " << *dn << dendl;
+	  continue;
+	}
+
+	// Don't try to migrate anything that is actually
+	// being purged right now
+	if (!dn->state_test(CDentry::STATE_PURGING))
+	  stray_manager.migrate_stray(dn, mds_rank_t(0));  // send to root!
+
+	if (shutdown_exporting_strays.size() >= MAX_EXPORTING) {
+	  ++it;
+	  if (it != dir->end()) {
+	    next.second = string(it->first.name);
+	  } else {
+	    if (dfls.empty())
+	      next.first.ino.val++;
+	    else
+	      next.first = dfls.front()->dirfrag();
+	    next.second.clear();
+	  }
+	  goto done;
+	}
       }
     }
   }
 
-  return done;
+  if (shutdown_exporting_strays.empty()) {
+    dirfrag_t first_df(MDS_INO_STRAY(mds->get_nodeid(), 0), 0);
+    if (first_df < shutdown_export_next.first ||
+	!shutdown_export_next.second.empty()) {
+      shutdown_export_next.first = first_df;
+      shutdown_export_next.second.clear();
+      goto again;
+    }
+    all_exported = true;
+  }
+
+done:
+  shutdown_export_next = next;
+  return all_exported;
 }
 
 // ========= messaging ==============
@@ -11940,7 +11999,7 @@ void MDCache::show_cache()
     show_func(p.second);
 }
 
-int MDCache::cache_status(Formatter *f)
+void MDCache::cache_status(Formatter *f)
 {
   f->open_object_section("cache");
 
@@ -11949,7 +12008,6 @@ int MDCache::cache_status(Formatter *f)
   f->close_section();
 
   f->close_section();
-  return 0;
 }
 
 int MDCache::dump_cache(boost::string_view file_name)
@@ -11975,6 +12033,32 @@ int MDCache::dump_cache(boost::string_view fn, Formatter *f,
 			 boost::string_view dump_root, int depth)
 {
   int r = 0;
+
+  // dumping large caches may cause mds to hang or worse get killed.
+  // so, disallow the dump if the cache size exceeds the configured
+  // threshold, which is 1G for formatter and unlimited for file (note
+  // that this can be jacked up by the admin... and is nothing but foot
+  // shooting, but the option itself is for devs and hence dangerous to
+  // tune). TODO: remove this when fixed.
+  uint64_t threshold = f ?
+    g_conf->get_val<uint64_t>("mds_dump_cache_threshold_formatter") :
+    g_conf->get_val<uint64_t>("mds_dump_cache_threshold_file");
+
+  if (threshold && cache_size() > threshold) {
+    if (f) {
+      std::stringstream ss;
+      ss << "cache usage exceeds dump threshold";
+      f->open_object_section("result");
+      f->dump_string("error", ss.str());
+      f->close_section();
+    } else {
+      derr << "cache usage exceeds dump threshold" << dendl;
+      r = -EINVAL;
+    }
+    return r;
+  }
+
+  r = 0;
   int fd = -1;
 
   if (f) {

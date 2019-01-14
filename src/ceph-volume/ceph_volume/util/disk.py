@@ -127,6 +127,23 @@ def get_device_from_partuuid(partuuid):
     return ' '.join(out).strip()
 
 
+def remove_partition(device):
+    """
+    Removes a partition using parted
+
+    :param device: A ``Device()`` object
+    """
+    parent_device = '/dev/%s' % device.disk_api['PKNAME']
+    udev_info = udevadm_property(device.abspath)
+    partition_number = udev_info.get('ID_PART_ENTRY_NUMBER')
+    if not partition_number:
+        raise RuntimeError('Unable to detect the partition number for device: %s' % device.abspath)
+
+    process.run(
+        ['parted', parent_device, '--script', '--', 'rm', partition_number]
+    )
+
+
 def _stat_is_device(stat_obj):
     """
     Helper function that will interpret ``os.stat`` output directly, so that other
@@ -168,6 +185,47 @@ def device_family(device):
         devices.append(_lsblk_parser(line))
 
     return devices
+
+
+def udevadm_property(device, properties=[]):
+    """
+    Query udevadm for information about device properties.
+    Optionally pass a list of properties to return. A requested property might
+    not be returned if not present.
+
+    Expected output format::
+        # udevadm info --query=property --name=/dev/sda                                  :(
+        DEVNAME=/dev/sda
+        DEVTYPE=disk
+        ID_ATA=1
+        ID_BUS=ata
+        ID_MODEL=SK_hynix_SC311_SATA_512GB
+        ID_PART_TABLE_TYPE=gpt
+        ID_PART_TABLE_UUID=c8f91d57-b26c-4de1-8884-0c9541da288c
+        ID_PATH=pci-0000:00:17.0-ata-3
+        ID_PATH_TAG=pci-0000_00_17_0-ata-3
+        ID_REVISION=70000P10
+        ID_SERIAL=SK_hynix_SC311_SATA_512GB_MS83N71801150416A
+        TAGS=:systemd:
+        USEC_INITIALIZED=16117769
+        ...
+    """
+    out = _udevadm_info(device)
+    ret = {}
+    for line in out:
+        p, v = line.split('=', 1)
+        if not properties or p in properties:
+            ret[p] = v
+    return ret
+
+
+def _udevadm_info(device):
+    """
+    Call udevadm and return the output
+    """
+    cmd = ['udevadm', 'info', '--query=property', device]
+    out, _err, _rc = process.call(cmd)
+    return out
 
 
 def lsblk(device, columns=None, abspath=False):
@@ -631,7 +689,7 @@ def get_partitions_facts(sys_block_path):
         folder_path = os.path.join(sys_block_path, folder)
         if os.path.exists(os.path.join(folder_path, 'partition')):
             contents = get_file_contents(os.path.join(folder_path, 'partition'))
-            if '1' in contents:
+            if contents:
                 part = {}
                 partname = folder
                 part_sys_block_path = os.path.join(sys_block_path, partname)
@@ -645,6 +703,9 @@ def get_partitions_facts(sys_block_path):
                     part['sectorsize'] = get_file_contents(
                         part_sys_block_path + "/queue/hw_sector_size", 512)
                 part['size'] = human_readable_size(float(part['sectors']) * 512)
+                part['holders'] = []
+                for holder in os.listdir(part_sys_block_path + '/holders'):
+                    part['holders'].append(holder)
 
                 partition_metadata[partname] = part
     return partition_metadata
@@ -753,6 +814,10 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
         metadata['size'] = float(size) * 512
         metadata['path'] = diskname
         metadata['locked'] = is_locked_raw_device(metadata['path'])
+
+        for part_name, part_metadata in metadata['partitions'].items():
+            part_abspath = '/dev/%s' % part_name
+            device_facts[part_abspath] = part_metadata
 
         device_facts[diskname] = metadata
     return device_facts

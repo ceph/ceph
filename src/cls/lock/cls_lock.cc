@@ -34,7 +34,18 @@ CLS_NAME(lock)
 
 #define LOCK_PREFIX    "lock."
 
-static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t *lock)
+static int clean_lock(cls_method_context_t hctx)
+{
+  int r = cls_cxx_remove(hctx);
+  if (r < 0)
+    return r;
+
+  return 0;
+}
+
+static int read_lock(cls_method_context_t hctx,
+		     const string& name,
+		     lock_info_t *lock)
 {
   bufferlist bl;
   string key = LOCK_PREFIX;
@@ -67,16 +78,20 @@ static int read_lock(cls_method_context_t hctx, const string& name, lock_info_t 
   map<locker_id_t, locker_info_t>::iterator iter = lock->lockers.begin();
 
   while (iter != lock->lockers.end()) {
-    map<locker_id_t, locker_info_t>::iterator next = iter;
-    ++next;
-
     struct locker_info_t& info = iter->second;
     if (!info.expiration.is_zero() && info.expiration < now) {
       CLS_LOG(20, "expiring locker");
-      lock->lockers.erase(iter);
+      iter = lock->lockers.erase(iter);
+    } else {
+      ++iter;
     }
+  }
 
-    iter = next;
+  if (lock->lockers.empty() && cls_lock_is_ephemeral(lock->lock_type)) {
+    r = clean_lock(hctx);
+    if (r < 0) {
+      CLS_ERR("error, on read, cleaning lock object %s", cpp_strerror(r).c_str());
+    }
   }
 
   return 0;
@@ -121,17 +136,27 @@ static int lock_obj(cls_method_context_t hctx,
                     const string& cookie,
                     const string& tag)
 {
-  bool exclusive = lock_type == LOCK_EXCLUSIVE;
+  bool exclusive = cls_lock_is_exclusive(lock_type);
   lock_info_t linfo;
-  bool fail_if_exists = (flags & LOCK_FLAG_RENEW) == 0;
+  bool fail_if_exists = (flags & LOCK_FLAG_MAY_RENEW) == 0;
+  bool fail_if_does_not_exist = flags & LOCK_FLAG_MUST_RENEW;
 
-  CLS_LOG(20, "requested lock_type=%s fail_if_exists=%d", cls_lock_type_str(lock_type), fail_if_exists);
-  if (lock_type != LOCK_EXCLUSIVE &&
-      lock_type != LOCK_SHARED)
+  CLS_LOG(20,
+	  "requested lock_type=%s fail_if_exists=%d fail_if_does_not_exist=%d",
+	  cls_lock_type_str(lock_type), fail_if_exists, fail_if_does_not_exist);
+  if (!cls_lock_is_valid(lock_type)) {
     return -EINVAL;
+  }
 
   if (name.empty())
     return -EINVAL;
+
+  if (!fail_if_exists && fail_if_does_not_exist) {
+    // at most one of LOCK_FLAG_MAY_RENEW and LOCK_FLAG_MUST_RENEW may
+    // be set since they have different implications if the lock does
+    // not already exist
+    return -EINVAL;
+  }
 
   // see if there's already a locker
   int r = read_lock(hctx, name, &linfo);
@@ -139,6 +164,7 @@ static int lock_obj(cls_method_context_t hctx,
     CLS_ERR("Could not read lock info: %s", cpp_strerror(r).c_str());
     return r;
   }
+
   map<locker_id_t, locker_info_t>& lockers = linfo.lockers;
   map<locker_id_t, locker_info_t>::iterator iter;
 
@@ -160,11 +186,13 @@ static int lock_obj(cls_method_context_t hctx,
   CLS_LOG(20, "existing_lock_type=%s", cls_lock_type_str(existing_lock_type));
   iter = lockers.find(id);
   if (iter != lockers.end()) {
-    if (fail_if_exists) {
+    if (fail_if_exists && !fail_if_does_not_exist) {
       return -EEXIST;
     } else {
       lockers.erase(iter); // remove old entry
     }
+  } else if (fail_if_does_not_exist) {
+    return -ENOENT;
   }
 
   if (!lockers.empty()) {
@@ -235,9 +263,9 @@ static int lock_op(cls_method_context_t hctx,
  *  entity or cookie is wrong), or -errno on other error.
  */
 static int remove_lock(cls_method_context_t hctx,
-                const string& name,
-                entity_name_t& locker,
-                const string& cookie)
+		       const string& name,
+		       entity_name_t& locker,
+		       const string& cookie)
 {
   // get current lockers
   lock_info_t linfo;
@@ -257,7 +285,12 @@ static int remove_lock(cls_method_context_t hctx,
   }
   lockers.erase(iter);
 
-  r = write_lock(hctx, name, linfo);
+  if (cls_lock_is_ephemeral(linfo.lock_type)) {
+    ceph_assert(lockers.empty());
+    r = clean_lock(hctx);
+  } else {
+    r = write_lock(hctx, name, linfo);
+  }
 
   return r;
 }
@@ -301,7 +334,7 @@ static int unlock_op(cls_method_context_t hctx,
  * is wrong), or -errno on other (unexpected) error.
  */
 static int break_lock(cls_method_context_t hctx,
-               bufferlist *in, bufferlist *out)
+		      bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "break_lock");
   cls_lock_break_op op;
@@ -421,7 +454,7 @@ int assert_locked(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  if (op.type != LOCK_EXCLUSIVE && op.type != LOCK_SHARED) {
+  if (!cls_lock_is_valid(op.type)) {
     return -EINVAL;
   }
 
@@ -493,7 +526,7 @@ int set_cookie(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  if (op.type != LOCK_EXCLUSIVE && op.type != LOCK_SHARED) {
+  if (!cls_lock_is_valid(op.type)) {
     return -EINVAL;
   }
 

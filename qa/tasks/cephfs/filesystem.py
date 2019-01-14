@@ -171,8 +171,10 @@ class CephCluster(object):
         del self._ctx.ceph['ceph'].conf[subsys][key]
         write_conf(self._ctx)
 
-    def json_asok(self, command, service_type, service_id):
-        proc = self.mon_manager.admin_socket(service_type, service_id, command)
+    def json_asok(self, command, service_type, service_id, timeout=None):
+        if timeout is None:
+            timeout = 15*60
+        proc = self.mon_manager.admin_socket(service_type, service_id, command, timeout=timeout)
         response_data = proc.stdout.getvalue()
         log.info("_json_asok output: {0}".format(response_data))
         if response_data.strip():
@@ -444,10 +446,10 @@ class Filesystem(MDSCluster):
         self.mon_manager.raw_cluster_cmd("fs", "set", self.name, var, *a)
 
     def set_max_mds(self, max_mds):
-        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "max_mds", "%d" % max_mds)
+        self.set_var("max_mds", "%d" % max_mds)
 
     def set_allow_dirfrags(self, yes):
-        self.mon_manager.raw_cluster_cmd("fs", "set", self.name, "allow_dirfrags", str(yes).lower(), '--yes-i-really-mean-it')
+        self.set_var("allow_dirfrags", str(yes).lower(), '--yes-i-really-mean-it')
 
     def get_pgs_per_fs_pool(self):
         """
@@ -559,8 +561,10 @@ class Filesystem(MDSCluster):
     def _df(self):
         return json.loads(self.mon_manager.raw_cluster_cmd("df", "--format=json-pretty"))
 
-    def get_mds_map(self):
-        return self.status().get_fsmap(self.id)['mdsmap']
+    def get_mds_map(self, status=None):
+        if status is None:
+            status = self.status()
+        return status.get_fsmap(self.id)['mdsmap']
 
     def get_var(self, var):
         return self.status().get_fsmap(self.id)['mdsmap'][var]
@@ -855,15 +859,15 @@ class Filesystem(MDSCluster):
 
         return version
 
-    def mds_asok(self, command, mds_id=None):
+    def mds_asok(self, command, mds_id=None, timeout=None):
         if mds_id is None:
             mds_id = self.get_lone_mds_id()
 
-        return self.json_asok(command, 'mds', mds_id)
+        return self.json_asok(command, 'mds', mds_id, timeout=timeout)
 
-    def rank_asok(self, command, rank=0):
-        info = self.get_rank(rank=rank)
-        return self.json_asok(command, 'mds', info['name'])
+    def rank_asok(self, command, rank=0, status=None, timeout=None):
+        info = self.get_rank(rank=rank, status=status)
+        return self.json_asok(command, 'mds', info['name'], timeout=timeout)
 
     def read_cache(self, path, depth=None):
         cmd = ["dump", "tree", path]
@@ -893,9 +897,17 @@ class Filesystem(MDSCluster):
         while True:
             status = self.status()
             if rank is not None:
-                mds_info = status.get_rank(self.id, rank)
-                current_state = mds_info['state'] if mds_info else None
-                log.info("Looked up MDS state for mds.{0}: {1}".format(rank, current_state))
+                try:
+                    mds_info = status.get_rank(self.id, rank)
+                    current_state = mds_info['state'] if mds_info else None
+                    log.info("Looked up MDS state for mds.{0}: {1}".format(rank, current_state))
+                except:
+                    mdsmap = self.get_mds_map(status=status)
+                    if rank in mdsmap['failed']:
+                        log.info("Waiting for rank {0} to come back.".format(rank))
+                        current_state = None
+                    else:
+                        raise
             elif mds_id is not None:
                 # mds_info is None if no daemon with this ID exists in the map
                 mds_info = status.get_mds(mds_id)
@@ -1166,6 +1178,9 @@ class Filesystem(MDSCluster):
         """
         return ""
 
+    def _make_rank(self, rank):
+        return "{}:{}".format(self.name, rank)
+
     def _run_tool(self, tool, args, rank=None, quiet=False):
         # Tests frequently have [client] configuration that jacks up
         # the objecter log level (unlikely to be interesting here)
@@ -1176,7 +1191,7 @@ class Filesystem(MDSCluster):
             base_args = [os.path.join(self._prefix, tool), '--debug-mds=4', '--debug-objecter=1']
 
         if rank is not None:
-            base_args.extend(["--rank", "%d" % rank])
+            base_args.extend(["--rank", "%s" % str(rank)])
 
         t1 = datetime.datetime.now()
         r = self.tool_remote.run(
@@ -1198,11 +1213,12 @@ class Filesystem(MDSCluster):
         mds_id = self.mds_ids[0]
         return self.mds_daemons[mds_id].remote
 
-    def journal_tool(self, args, rank=None, quiet=False):
+    def journal_tool(self, args, rank, quiet=False):
         """
-        Invoke cephfs-journal-tool with the passed arguments, and return its stdout
+        Invoke cephfs-journal-tool with the passed arguments for a rank, and return its stdout
         """
-        return self._run_tool("cephfs-journal-tool", args, rank, quiet)
+        fs_rank = self._make_rank(rank)
+        return self._run_tool("cephfs-journal-tool", args, fs_rank, quiet)
 
     def table_tool(self, args, quiet=False):
         """

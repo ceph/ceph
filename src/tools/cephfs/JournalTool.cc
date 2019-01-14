@@ -62,9 +62,7 @@ void JournalTool::usage()
     << "    <output>: [summary|list|binary|json] [--path <path>]\n"
     << "\n"
     << "General options:\n"
-    << "  --rank=filesystem:mds-rank  Journal rank (required if multiple\n"
-    << "                              file systems, default is rank 0 on\n"
-    << "                              the only filesystem otherwise.\n"
+    << "  --rank=filesystem:mds-rank|all Journal rank (mandatory)\n"
     << "\n"
     << "Special options\n"
     << "  --alternate-pool <name>     Alternative metadata pool to target\n"
@@ -92,13 +90,12 @@ int JournalTool::main(std::vector<const char*> &argv)
   std::vector<const char*>::iterator arg = argv.begin();
 
   std::string rank_str;
-  if(!ceph_argparse_witharg(argv, arg, &rank_str, "--rank", (char*)NULL)) {
-    // Default: act on rank 0.  Will give the user an error if they
-    // try invoking this way when they have more than one filesystem.
-    rank_str = "0";
+  if (!ceph_argparse_witharg(argv, arg, &rank_str, "--rank", (char*)NULL)) {
+    derr << "missing mandatory \"--rank\" argument" << dendl;
+    return -EINVAL;
   }
 
-  r = role_selector.parse(*fsmap, rank_str);
+  r = role_selector.parse(*fsmap, rank_str, false);
   if (r != 0) {
     derr << "Couldn't determine MDS rank." << dendl;
     return r;
@@ -145,15 +142,27 @@ int JournalTool::main(std::vector<const char*> &argv)
 
   // Execution
   // =========
-  for (auto role : role_selector.get_roles()) {
+  auto roles = role_selector.get_roles();
+  if (roles.size() > 1) {
+    const std::string &command = argv[0];
+    bool allowed = can_execute_for_all_ranks(mode, command);
+    if (!allowed) {
+      derr << "operation not allowed for all ranks" << dendl;
+      return -EINVAL;
+    }
+
+    all_ranks = true;
+  }
+  for (auto role : roles) {
     rank = role.rank;
+    std::vector<const char *> rank_argv(argv);
     dout(4) << "Executing for rank " << rank << dendl;
     if (mode == std::string("journal")) {
-      r = main_journal(argv);
+      r = main_journal(rank_argv);
     } else if (mode == std::string("header")) {
-      r = main_header(argv);
+      r = main_header(rank_argv);
     } else if (mode == std::string("event")) {
-      r = main_event(argv);
+      r = main_event(rank_argv);
     } else {
       derr << "Bad command '" << mode << "'" << dendl;
       usage();
@@ -168,6 +177,23 @@ int JournalTool::main(std::vector<const char*> &argv)
   return r;
 }
 
+
+std::string JournalTool::gen_dump_file_path(const std::string &prefix) {
+  if (!all_ranks) {
+    return prefix;
+  }
+
+  return prefix + "." + std::to_string(rank);
+}
+
+bool JournalTool::can_execute_for_all_ranks(const std::string &mode,
+                                            const std::string &command) {
+  if (mode == "journal" && command == "import") {
+    return false;
+  }
+
+  return true;
+}
 
 /**
  * Handle arguments for 'journal' mode
@@ -376,6 +402,8 @@ int JournalTool::main_event(std::vector<const char*> &argv)
     }
   }
 
+  const std::string dump_path = gen_dump_file_path(output_path);
+
   // Execute command
   // ===============
   JournalScanner js(input, rank, filter);
@@ -493,7 +521,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
 
   // Generate output
   // ===============
-  EventOutput output(js, output_path);
+  EventOutput output(js, dump_path);
   int output_result = 0;
   if (output_style == "binary") {
       output_result = output.binary();
@@ -580,7 +608,8 @@ int JournalTool::journal_export(std::string const &path, bool import, bool force
     if (import) {
       r = dumper.undump(path.c_str(), force);
     } else {
-      r = dumper.dump(path.c_str());
+      const std::string ex_path = gen_dump_file_path(path);
+      r = dumper.dump(ex_path.c_str());
     }
   }
 

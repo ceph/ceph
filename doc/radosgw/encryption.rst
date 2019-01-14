@@ -9,6 +9,11 @@ with 3 options for the management of encryption keys. Server-side encryption
 means that the data is sent over HTTP in its unencrypted form, and the Ceph
 Object Gateway stores that data in the Ceph Storage Cluster in encrypted form.
 
+.. note:: Requests for server-side encryption must be sent over a secure HTTPS
+          connection to avoid sending secrets in plaintext. If a proxy is used
+          for SSL termination, ``rgw trust forwarded https`` must be enabled
+          before forwarded requests will be trusted as secure.
+
 Customer-Provided Keys
 ======================
 

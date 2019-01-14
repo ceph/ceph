@@ -45,6 +45,34 @@ class TestBlkid(object):
         assert result['UUID'] == '62416664-cbaf-40bd-9689-10bd337379c3'
         assert result['TYPE'] == 'xfs'
 
+class TestUdevadmProperty(object):
+
+    def test_good_output(self, stub_call):
+        output = """ID_MODEL=SK_hynix_SC311_SATA_512GB
+ID_PART_TABLE_TYPE=gpt
+ID_SERIAL_SHORT=MS83N71801150416A""".split()
+        stub_call((output, [], 0))
+        result = disk.udevadm_property('dev/sda')
+        assert result['ID_MODEL'] == 'SK_hynix_SC311_SATA_512GB'
+        assert result['ID_PART_TABLE_TYPE'] == 'gpt'
+        assert result['ID_SERIAL_SHORT'] == 'MS83N71801150416A'
+
+    def test_property_filter(self, stub_call):
+        output = """ID_MODEL=SK_hynix_SC311_SATA_512GB
+ID_PART_TABLE_TYPE=gpt
+ID_SERIAL_SHORT=MS83N71801150416A""".split()
+        stub_call((output, [], 0))
+        result = disk.udevadm_property('dev/sda', ['ID_MODEL',
+                                                   'ID_SERIAL_SHORT'])
+        assert result['ID_MODEL'] == 'SK_hynix_SC311_SATA_512GB'
+        assert 'ID_PART_TABLE_TYPE' not in result
+
+    def test_fail_on_broken_output(self, stub_call):
+        output = ["ID_MODEL:SK_hynix_SC311_SATA_512GB"]
+        stub_call((output, [], 0))
+        with pytest.raises(ValueError):
+            disk.udevadm_property('dev/sda')
+
 
 class TestDeviceFamily(object):
 
@@ -238,6 +266,28 @@ class TestGetDevices(object):
         result = list(result.keys())
         assert len(result) == 1
         assert result == [ceph_data_path]
+
+    def test_sda1_partition(self, tmpfile, tmpdir):
+        block_path, dev_path, mapper_path = self.setup_paths(tmpdir)
+        block_sda_path = os.path.join(block_path, 'sda')
+        block_sda1_path = os.path.join(block_sda_path, 'sda1')
+        block_sda1_holders = os.path.join(block_sda1_path, 'holders')
+        dev_sda_path = os.path.join(dev_path, 'sda')
+        dev_sda1_path = os.path.join(dev_path, 'sda1')
+        os.makedirs(block_sda_path)
+        os.makedirs(block_sda1_path)
+        os.makedirs(dev_sda1_path)
+        os.makedirs(block_sda1_holders)
+        os.makedirs(dev_sda_path)
+        tmpfile('size', '1024', directory=block_sda_path)
+        tmpfile('partition', '1', directory=block_sda1_path)
+        result = disk.get_devices(
+            _sys_block_path=block_path,
+            _dev_path=dev_path,
+            _mapper_path=mapper_path)
+        assert dev_sda_path in list(result.keys())
+        assert '/dev/sda1' in list(result.keys())
+        assert result['/dev/sda1']['holders'] == []
 
     def test_sda_size(self, tmpfile, tmpdir):
         block_path, dev_path, mapper_path = self.setup_paths(tmpdir)

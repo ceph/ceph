@@ -6855,6 +6855,73 @@ TEST_P(StoreTestSpecificAUSize, fsckOnUnalignedDevice2) {
   g_conf->apply_changes(NULL);
 }
 
+TEST_P(StoreTest, SpuriousReadErrorTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  ObjectStore::Sequencer osr("test");
+  int r;
+  auto logger = store->get_perf_counters();
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("foo", CEPH_NOSNAP)));
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = store->queue_transaction(&osr, std::move(t), nullptr);
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist test_data;
+  bufferptr ap(0x2000);
+  memset(ap.c_str(), 'a', 0x2000);
+  test_data.append(ap);
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, 0x2000, test_data);
+    r = store->queue_transaction(&osr, std::move(t), nullptr);
+    ASSERT_EQ(r, 0);
+    // force cache clear
+    EXPECT_EQ(store->umount(), 0);
+    EXPECT_EQ(store->mount(), 0);
+  }
+
+  cerr << "Injecting CRC error with no retry, expecting EIO" << std::endl;
+  g_conf->set_val("bluestore_retry_disk_reads", "0");
+  g_conf->set_val("bluestore_debug_inject_csum_err_probability", "1");
+  g_ceph_context->_conf->apply_changes(nullptr);
+  {
+    bufferlist in;
+    r = store->read(cid, hoid, 0, 0x2000, in, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+    ASSERT_EQ(-EIO, r);
+    ASSERT_EQ(logger->get(l_bluestore_read_eio), 1u);
+    ASSERT_EQ(logger->get(l_bluestore_reads_with_retries), 0u);
+  }
+
+  cerr << "Injecting CRC error with retries, expecting success after several retries" << std::endl;
+  g_conf->set_val("bluestore_retry_disk_reads", "255");
+  g_conf->set_val("bluestore_debug_inject_csum_err_probability", "0.8");
+  /**
+   * Probabilistic test: 25 reads, each has a 80% chance of failing with 255 retries
+   * Probability of at least one retried read: 1 - (0.2 ** 25) = 100% - 3e-18
+   * Probability of a random test failure: 1 - ((1 - (0.8 ** 255)) ** 25) ~= 5e-24
+   */
+  g_ceph_context->_conf->apply_changes(nullptr);
+  {
+    for (int i = 0; i < 25; ++i) {
+      bufferlist in;
+      r = store->read(cid, hoid, 0, 0x2000, in, CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+      ASSERT_EQ(0x2000, r);
+      ASSERT_TRUE(bl_eq(test_data, in));
+    }
+    ASSERT_GE(logger->get(l_bluestore_reads_with_retries), 1u);
+  }
+
+  // revert
+  g_conf->set_val("bluestore_retry_disk_reads", "3");
+  g_conf->set_val("bluestore_debug_inject_csum_err_probability", "0");
+  g_ceph_context->_conf->apply_changes(nullptr);
+}
+
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);

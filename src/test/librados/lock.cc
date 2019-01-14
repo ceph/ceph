@@ -72,16 +72,16 @@ TEST_F(LibRadosLockPP, LockSharedDurPP) {
   ASSERT_EQ(0, ioctx.lock_shared("foo", "TestLock", "Cookie", "Tag", "", NULL, 0));
 }
 
-TEST_F(LibRadosLock, LockRenew) {
+TEST_F(LibRadosLock, LockMayRenew) {
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLock", "Cookie", "", NULL, 0));
   ASSERT_EQ(-EEXIST, rados_lock_exclusive(ioctx, "foo", "TestLock", "Cookie", "", NULL, 0));
-  ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLock", "Cookie", "", NULL, LOCK_FLAG_RENEW));
+  ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLock", "Cookie", "", NULL, LOCK_FLAG_MAY_RENEW));
 }
 
-TEST_F(LibRadosLockPP, LockRenewPP) {
+TEST_F(LibRadosLockPP, LockMayRenewPP) {
   ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLock", "Cookie", "", NULL, 0));
   ASSERT_EQ(-EEXIST, ioctx.lock_exclusive("foo", "TestLock", "Cookie", "", NULL, 0));
-  ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLock", "Cookie", "", NULL, LOCK_FLAG_RENEW));
+  ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLock", "Cookie", "", NULL, LOCK_FLAG_MAY_RENEW));
 }
 
 TEST_F(LibRadosLock, Unlock) {
@@ -251,16 +251,16 @@ TEST_F(LibRadosLockECPP, LockSharedDurPP) {
   ASSERT_EQ(0, ioctx.lock_shared("foo", "TestLock", "Cookie", "Tag", "", NULL, 0));
 }
 
-TEST_F(LibRadosLockEC, LockRenew) {
+TEST_F(LibRadosLockEC, LockMayRenew) {
   ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLock", "Cookie", "", NULL, 0));
   ASSERT_EQ(-EEXIST, rados_lock_exclusive(ioctx, "foo", "TestLock", "Cookie", "", NULL, 0));
-  ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLock", "Cookie", "", NULL, LOCK_FLAG_RENEW));
+  ASSERT_EQ(0, rados_lock_exclusive(ioctx, "foo", "TestLock", "Cookie", "", NULL, LOCK_FLAG_MAY_RENEW));
 }
 
-TEST_F(LibRadosLockECPP, LockRenewPP) {
+TEST_F(LibRadosLockECPP, LockMayRenewPP) {
   ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLock", "Cookie", "", NULL, 0));
   ASSERT_EQ(-EEXIST, ioctx.lock_exclusive("foo", "TestLock", "Cookie", "", NULL, 0));
-  ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLock", "Cookie", "", NULL, LOCK_FLAG_RENEW));
+  ASSERT_EQ(0, ioctx.lock_exclusive("foo", "TestLock", "Cookie", "", NULL, LOCK_FLAG_MAY_RENEW));
 }
 
 TEST_F(LibRadosLockEC, Unlock) {

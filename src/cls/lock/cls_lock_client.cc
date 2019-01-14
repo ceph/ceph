@@ -208,14 +208,19 @@ namespace rados {
         rados_op->exec("lock", "set_cookie", in);
       }
 
+      void Lock::assert_locked_shared(ObjectOperation *op)
+      {
+        assert_locked(op, name, LOCK_SHARED, cookie, tag);
+      }
+
       void Lock::assert_locked_exclusive(ObjectOperation *op)
       {
         assert_locked(op, name, LOCK_EXCLUSIVE, cookie, tag);
       }
 
-      void Lock::assert_locked_shared(ObjectOperation *op)
+      void Lock::assert_locked_exclusive_ephemeral(ObjectOperation *op)
       {
-        assert_locked(op, name, LOCK_SHARED, cookie, tag);
+        assert_locked(op, name, LOCK_EXCLUSIVE_EPHEMERAL, cookie, tag);
       }
 
       void Lock::lock_shared(ObjectWriteOperation *op)
@@ -239,6 +244,18 @@ namespace rados {
       int Lock::lock_exclusive(IoCtx *ioctx, const string& oid)
       {
         return lock(ioctx, oid, name, LOCK_EXCLUSIVE,
+                    cookie, tag, description, duration, flags);
+      }
+
+      void Lock::lock_exclusive_ephemeral(ObjectWriteOperation *op)
+      {
+        lock(op, name, LOCK_EXCLUSIVE_EPHEMERAL,
+             cookie, tag, description, duration, flags);
+      }
+
+      int Lock::lock_exclusive_ephemeral(IoCtx *ioctx, const string& oid)
+      {
+        return lock(ioctx, oid, name, LOCK_EXCLUSIVE_EPHEMERAL,
                     cookie, tag, description, duration, flags);
       }
 

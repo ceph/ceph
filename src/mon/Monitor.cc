@@ -929,6 +929,16 @@ void Monitor::shutdown()
 
   remove_all_sessions();
 
+  log_client.shutdown();
+
+  // unlock before msgr shutdown...
+  lock.Unlock();
+
+  // shutdown messenger before removing logger from perfcounter collection, 
+  // otherwise _ms_dispatch() will try to update deleted logger
+  messenger->shutdown();
+  mgr_messenger->shutdown();
+
   if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
     delete logger;
@@ -940,14 +950,6 @@ void Monitor::shutdown()
     delete cluster_logger;
     cluster_logger = NULL;
   }
-
-  log_client.shutdown();
-
-  // unlock before msgr shutdown...
-  lock.Unlock();
-
-  messenger->shutdown();  // last thing!  ceph_mon.cc will delete mon.
-  mgr_messenger->shutdown();
 }
 
 void Monitor::wait_for_paxos_write()

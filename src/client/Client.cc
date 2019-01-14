@@ -456,6 +456,7 @@ void Client::dump_status(Formatter *f)
     f->dump_int("mds_epoch", mdsmap->get_epoch());
     f->dump_int("osd_epoch", osd_epoch);
     f->dump_int("osd_epoch_barrier", cap_epoch_barrier);
+    f->dump_bool("blacklisted", blacklisted);
   }
 }
 
@@ -2473,6 +2474,12 @@ void Client::handle_osd_map(MOSDMap *m)
     // Handle case where we were blacklisted but no longer are
     blacklisted = objecter->with_osdmap([myaddr](const OSDMap &o){
         return o.is_blacklisted(myaddr);});
+  }
+
+  // Always subscribe to next osdmap for blacklisted client
+  // until this client is not blacklisted.
+  if (blacklisted) {
+    objecter->maybe_request_map();
   }
 
   if (objecter->osdmap_full_flag()) {
@@ -9196,6 +9203,8 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
 int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
                   const struct iovec *iov, int iovcnt)
 {
+  uint64_t fpos = 0;
+
   if ((uint64_t)(offset+size) > mdsmap->get_max_filesize()) //too large!
     return -EFBIG;
 
@@ -9235,7 +9244,7 @@ int Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
       }
     }
     offset = f->pos;
-    f->pos = offset+size;
+    fpos = offset+size;
     unlock_fh_pos(f);
   }
 
@@ -9385,6 +9394,11 @@ success:
   lat -= start;
   logger->tinc(l_c_wrlat, lat);
 
+  if (fpos) {
+    lock_fh_pos(f);
+    f->pos = fpos;
+    unlock_fh_pos(f);
+  }
   totalwritten = size;
   r = (int)totalwritten;
 

@@ -23,6 +23,7 @@
 #include "rgw_common.h"
 
 #include "rgw_bucket.h"
+#include "rgw_quota.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -1992,14 +1993,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.has_bucket_quota()) {
     user_info.bucket_quota = op_state.get_bucket_quota();
   } else {
-    if (cct->_conf->rgw_bucket_default_quota_max_objects >= 0) {
-      user_info.bucket_quota.max_objects = cct->_conf->rgw_bucket_default_quota_max_objects;
-      user_info.bucket_quota.enabled = true;
-    }
-    if (cct->_conf->rgw_bucket_default_quota_max_size >= 0) {
-      user_info.bucket_quota.max_size = cct->_conf->rgw_bucket_default_quota_max_size;
-      user_info.bucket_quota.enabled = true;
-    }
+    rgw_apply_default_bucket_quota(user_info.bucket_quota, cct);
   }
 
   if (op_state.temp_url_key_specified) {
@@ -2013,14 +2007,7 @@ int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
   if (op_state.has_user_quota()) {
     user_info.user_quota = op_state.get_user_quota();
   } else {
-    if (cct->_conf->rgw_user_default_quota_max_objects >= 0) {
-      user_info.user_quota.max_objects = cct->_conf->rgw_user_default_quota_max_objects;
-      user_info.user_quota.enabled = true;
-    }
-    if (cct->_conf->rgw_user_default_quota_max_size >= 0) {
-      user_info.user_quota.max_size = cct->_conf->rgw_user_default_quota_max_size;
-      user_info.user_quota.enabled = true;
-    }
+    rgw_apply_default_user_quota(user_info.user_quota, cct);
   }
 
   // update the request

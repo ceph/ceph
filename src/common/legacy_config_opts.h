@@ -429,7 +429,6 @@ OPTION(journaler_write_head_interval, OPT_INT)
 OPTION(journaler_prefetch_periods, OPT_INT)   // * journal object size
 OPTION(journaler_prezero_periods, OPT_INT)     // * journal object size
 OPTION(mds_data, OPT_STR)
-OPTION(mds_max_file_size, OPT_U64) // Used when creating new CephFS. Change with 'ceph mds set max_file_size <size>' afterwards
 // max xattr kv pairs size for each dir/file
 OPTION(mds_max_xattr_pairs_size, OPT_U32)
 OPTION(mds_max_file_recover, OPT_U32)
@@ -440,17 +439,15 @@ OPTION(mds_beacon_interval, OPT_FLOAT)
 OPTION(mds_beacon_grace, OPT_FLOAT)
 OPTION(mds_enforce_unique_name, OPT_BOOL)
 
-OPTION(mds_session_timeout, OPT_FLOAT)    // cap bits and leases time out if client unresponsive or not returning its caps
 OPTION(mds_session_blacklist_on_timeout, OPT_BOOL)    // whether to blacklist clients whose sessions are dropped due to timeout
 OPTION(mds_session_blacklist_on_evict, OPT_BOOL)  // whether to blacklist clients whose sessions are dropped via admin commands
 
 OPTION(mds_sessionmap_keys_per_op, OPT_U32)    // how many sessions should I try to load/store in a single OMAP operation?
 OPTION(mds_recall_state_timeout, OPT_FLOAT)    // detect clients which aren't trimming caps
 OPTION(mds_freeze_tree_timeout, OPT_FLOAT)    // detecting freeze tree deadlock
-OPTION(mds_session_autoclose, OPT_FLOAT) // autoclose idle session
 OPTION(mds_health_summarize_threshold, OPT_INT) // collapse N-client health metrics to a single 'many'
 OPTION(mds_reconnect_timeout, OPT_FLOAT)  // seconds to wait for clients during mds restart
-	      //  make it (mds_session_timeout - mds_beacon_grace)
+	      //  make it (mdsmap.session_timeout - mds_beacon_grace)
 OPTION(mds_tick_interval, OPT_FLOAT)
 OPTION(mds_dirstat_min_interval, OPT_FLOAT)    // try to avoid propagating more often than this
 OPTION(mds_scatter_nudge_interval, OPT_FLOAT)  // how quickly dirstat changes propagate up the hierarchy
@@ -467,7 +464,6 @@ OPTION(mds_bal_export_pin, OPT_BOOL)  // allow clients to pin directory trees to
 OPTION(mds_bal_sample_interval, OPT_DOUBLE)  // every 3 seconds
 OPTION(mds_bal_replicate_threshold, OPT_FLOAT)
 OPTION(mds_bal_unreplicate_threshold, OPT_FLOAT)
-OPTION(mds_bal_frag, OPT_BOOL)
 OPTION(mds_bal_split_size, OPT_INT)
 OPTION(mds_bal_split_rd, OPT_FLOAT)
 OPTION(mds_bal_split_wr, OPT_FLOAT)
@@ -665,7 +661,8 @@ OPTION(osd_peering_wq_threads, OPT_INT)
 OPTION(osd_peering_wq_batch_size, OPT_U64)
 OPTION(osd_op_pq_max_tokens_per_priority, OPT_U64)
 OPTION(osd_op_pq_min_cost, OPT_U64)
-OPTION(osd_disk_threads, OPT_INT)
+OPTION(osd_remove_threads, OPT_INT)
+OPTION(osd_recovery_threads, OPT_INT)
 OPTION(osd_disk_thread_ioprio_class, OPT_STR) // rt realtime be best effort idle
 OPTION(osd_disk_thread_ioprio_priority, OPT_INT) // 0-7
 OPTION(osd_recover_clone_overlap, OPT_BOOL)   // preserve clone_overlap during recovery/migration
@@ -847,6 +844,7 @@ OPTION(osd_op_history_duration, OPT_U32) // Oldest completed op to track
 OPTION(osd_op_history_slow_op_size, OPT_U32)           // Max number of slow ops to track
 OPTION(osd_op_history_slow_op_threshold, OPT_DOUBLE) // track the op if over this threshold
 OPTION(osd_target_transaction_size, OPT_INT)     // to adjust various transactions that batch smaller items
+OPTION(osd_delete_sleep, OPT_FLOAT)         // seconds to sleep between removal transactions
 OPTION(osd_failsafe_full_ratio, OPT_FLOAT) // what % full makes an OSD "full" (failsafe)
 OPTION(osd_fast_fail_on_connection_refused, OPT_BOOL) // immediately mark OSDs as down once they refuse to accept connections
 
@@ -1003,6 +1001,9 @@ OPTION(bluestore_bluefs_max_ratio, OPT_FLOAT)  // max fs free / total free
 OPTION(bluestore_bluefs_gift_ratio, OPT_FLOAT) // how much to add at a time
 OPTION(bluestore_bluefs_reclaim_ratio, OPT_FLOAT) // how much to reclaim at a time
 OPTION(bluestore_bluefs_balance_interval, OPT_FLOAT) // how often (sec) to balance free space between bluefs and bluestore
+// how often (sec) to dump allocation failure happened during bluefs rebalance
+OPTION(bluestore_bluefs_balance_failure_dump_interval, OPT_FLOAT)
+
 // If you want to use spdk driver, you need to specify NVMe serial number here
 // with "spdk:" prefix.
 // Users can use 'lspci -vvv -d 8086:0953 | grep "Device Serial Number"' to
@@ -1031,6 +1032,7 @@ OPTION(bluestore_block_preallocate_file, OPT_BOOL) //whether preallocate space i
 OPTION(bluestore_csum_type, OPT_STR) // none|xxhash32|xxhash64|crc32c|crc32c_16|crc32c_8
 OPTION(bluestore_csum_min_block, OPT_U32)
 OPTION(bluestore_csum_max_block, OPT_U32)
+OPTION(bluestore_retry_disk_reads, OPT_U64)
 OPTION(bluestore_min_alloc_size, OPT_U32)
 OPTION(bluestore_min_alloc_size_hdd, OPT_U32)
 OPTION(bluestore_min_alloc_size_ssd, OPT_U32)
@@ -1124,6 +1126,7 @@ OPTION(bluestore_debug_omit_kv_commit, OPT_BOOL)
 OPTION(bluestore_debug_permit_any_bdev_label, OPT_BOOL)
 OPTION(bluestore_shard_finishers, OPT_BOOL)
 OPTION(bluestore_debug_random_read_err, OPT_DOUBLE)
+OPTION(bluestore_debug_inject_csum_err_probability, OPT_FLOAT)
 
 OPTION(kstore_max_ops, OPT_U64)
 OPTION(kstore_max_bytes, OPT_U64)
@@ -1540,6 +1543,7 @@ OPTION(rgw_shard_warning_threshold, OPT_DOUBLE) // pct of safe max
 
 OPTION(rgw_swift_versioning_enabled, OPT_BOOL) // whether swift object versioning feature is enabled
 
+OPTION(rgw_trust_forwarded_https, OPT_BOOL) // trust Forwarded and X-Forwarded-Proto headers for ssl termination
 OPTION(rgw_crypt_require_ssl, OPT_BOOL) // requests including encryption key headers must be sent over ssl
 OPTION(rgw_crypt_default_encryption_key, OPT_STR) // base64 encoded key for encryption of rgw objects
 OPTION(rgw_crypt_s3_kms_encryption_keys, OPT_STR) // extra keys that may be used for aws:kms

@@ -402,11 +402,13 @@ Replaces: ceph (<< 10),
           ceph-test (<< 9.0.3-1646),
           librbd1 (<< 0.92-1238),
           python-ceph (<< 0.92-1223),
+	  radosgw (<< 12.0.3)
 Breaks: ceph (<< 10),
         ceph-fs-common (<< 11.0),
         ceph-test (<< 9.0.3-1646),
         librbd1 (<< 0.92-1238),
         python-ceph (<< 0.92-1223),
+	radosgw (<< 12.0.3)
 Suggests: ceph-base (= ${binary:Version}),
           ceph-mds (= ${binary:Version}),
 Description: common utilities to mount and interact with a ceph storage cluster

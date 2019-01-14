@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_CLS_RGW_TYPES_H
 #define CEPH_CLS_RGW_TYPES_H
 
@@ -608,6 +611,24 @@ enum cls_rgw_reshard_status {
   CLS_RGW_RESHARD_IN_PROGRESS = 1,
   CLS_RGW_RESHARD_DONE        = 2,
 };
+
+static inline std::string to_string(const enum cls_rgw_reshard_status status)
+{
+  switch (status) {
+  case CLS_RGW_RESHARD_NONE:
+    return "CLS_RGW_RESHARD_NONE";
+    break;
+  case CLS_RGW_RESHARD_IN_PROGRESS:
+    return "CLS_RGW_RESHARD_IN_PROGRESS";
+    break;
+  case CLS_RGW_RESHARD_DONE:
+    return "CLS_RGW_RESHARD_DONE";
+    break;
+  default:
+    break;
+  };
+  return "Unknown reshard status";
+}
 
 struct cls_rgw_bucket_instance_entry {
   cls_rgw_reshard_status reshard_status{CLS_RGW_RESHARD_NONE};

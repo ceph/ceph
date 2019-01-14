@@ -353,6 +353,12 @@ mon_rwxa_t MonCapGrant::get_allowed(CephContext *cct,
     }
     return MON_CAP_ALL;
   }
+  // we don't allow config-key service to be accessed with blanket caps other
+  // than '*' (i.e., 'any'), and that should have been checked by the caller
+  // via 'is_allow_all()'.
+  if (s == "config-key") {
+    return 0;
+  }
   return allow;
 }
 
@@ -487,7 +493,7 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
     quoted_string %=
       lexeme['"' >> +(char_ - '"') >> '"'] | 
       lexeme['\'' >> +(char_ - '\'') >> '\''];
-    unquoted_word %= +char_("a-zA-Z0-9_.-");
+    unquoted_word %= +char_("a-zA-Z0-9_./-");
     str %= quoted_string | unquoted_word;
 
     spaces = +(lit(' ') | lit('\n') | lit('\t'));

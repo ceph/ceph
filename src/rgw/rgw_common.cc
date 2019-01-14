@@ -1080,6 +1080,31 @@ string RGWHTTPArgs::sys_get(const string& name, bool * const exists) const
   return e ? iter->second : string();
 }
 
+bool rgw_transport_is_secure(CephContext *cct, const RGWEnv& env)
+{
+  const auto& m = env.get_map();
+  // frontend connected with ssl
+  if (m.count("SERVER_PORT_SECURE")) {
+    return true;
+  }
+  // ignore proxy headers unless explicitly enabled
+  if (!cct->_conf->rgw_trust_forwarded_https) {
+    return false;
+  }
+  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Forwarded
+  // Forwarded: by=<identifier>; for=<identifier>; host=<host>; proto=<http|https>
+  auto i = m.find("HTTP_FORWARDED");
+  if (i != m.end() && i->second.find("proto=https") != std::string::npos) {
+    return true;
+  }
+  // https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Proto
+  i = m.find("HTTP_X_FORWARDED_PROTO");
+  if (i != m.end() && i->second == "https") {
+    return true;
+  }
+  return false;
+}
+
 bool verify_user_permission(struct req_state * const s,
                             RGWAccessControlPolicy * const user_acl,
                             const int perm)
@@ -1870,12 +1895,15 @@ bool match_policy(boost::string_view pattern, boost::string_view input,
 {
   const uint32_t flag2 = flag & (MATCH_POLICY_ACTION|MATCH_POLICY_ARN) ?
       MATCH_CASE_INSENSITIVE : 0;
+  const bool colonblocks = !(flag & (MATCH_POLICY_RESOURCE |
+				     MATCH_POLICY_STRING));
 
   const auto npos = boost::string_view::npos;
   boost::string_view::size_type last_pos_input = 0, last_pos_pattern = 0;
   while (true) {
-    auto cur_pos_input = input.find(":", last_pos_input);
-    auto cur_pos_pattern = pattern.find(":", last_pos_pattern);
+    auto cur_pos_input = colonblocks ? input.find(":", last_pos_input) : npos;
+    auto cur_pos_pattern =
+      colonblocks ? pattern.find(":", last_pos_pattern) : npos;
 
     auto substr_input = input.substr(last_pos_input, cur_pos_input);
     auto substr_pattern = pattern.substr(last_pos_pattern, cur_pos_pattern);

@@ -1283,7 +1283,7 @@ static int do_cache_flush_evict_all(IoCtx& io_ctx, bool blocking)
       }
     }
   }
-  catch (const std::runtime_error& e) {
+  catch (const std::exception& e) {
     cerr << e.what() << std::endl;
     return -1;
   }
@@ -2252,7 +2252,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	  }
 	}
       }
-      catch (const std::runtime_error& e) {
+      catch (const std::exception& e) {
 	cerr << e.what() << std::endl;
 	ret = -1;
 	goto out;
@@ -2704,13 +2704,13 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       const string & oid = *iter;
       if (use_striper) {
 	if (forcefull) {
-	  ret = striper.remove(oid, CEPH_OSD_FLAG_FULL_FORCE);
+	  ret = striper.remove(oid, (CEPH_OSD_FLAG_FULL_FORCE | CEPH_OSD_FLAG_FULL_TRY));
 	} else {
 	  ret = striper.remove(oid);
 	}
       } else {
 	if (forcefull) {
-	  ret = io_ctx.remove(oid, CEPH_OSD_FLAG_FULL_FORCE);
+	  ret = io_ctx.remove(oid, (CEPH_OSD_FLAG_FULL_FORCE | CEPH_OSD_FLAG_FULL_TRY));
 	} else {
 	  ret = io_ctx.remove(oid);
 	}

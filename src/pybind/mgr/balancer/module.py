@@ -259,6 +259,11 @@ class Module(MgrModule):
             "perm": "r",
         },
         {
+            "cmd": "balancer ls",
+            "desc": "List all plans",
+            "perm": "r",
+        },
+        {
             "cmd": "balancer execute name=plan,type=CephString",
             "desc": "Execute an optimization plan",
             "perm": "r",
@@ -277,7 +282,7 @@ class Module(MgrModule):
         self.log.warn("Handling command: '%s'" % str(command))
         if command['prefix'] == 'balancer status':
             s = {
-                'plans': self.plans.keys(),
+                'plans': list(self.plans.keys()),
                 'active': self.active,
                 'mode': self.get_config('mode', default_mode),
             }
@@ -344,6 +349,8 @@ class Module(MgrModule):
         elif command['prefix'] == 'balancer reset':
             self.plans = {}
             return (0, '', '')
+        elif command['prefix'] == 'balancer ls':
+            return (0, json.dumps([p for p in self.plans], indent=4), '')
         elif command['prefix'] == 'balancer dump':
             plan = self.plans.get(command['plan'])
             if not plan:
@@ -608,12 +615,16 @@ class Module(MgrModule):
         }
         self.log.debug('score_by_root %s' % pe.score_by_root)
 
+        # get the list of score metrics, comma separated
+        metrics = self.get_config('crush_compat_metrics', 'pgs,objects,bytes').split(',')
+
         # total score is just average of normalized stddevs
         pe.score = 0.0
         for r, vs in six.iteritems(pe.score_by_root):
             for k, v in six.iteritems(vs):
-                pe.score += v
-        pe.score /= 3 * len(roots)
+                if k in metrics:
+                    pe.score += v
+        pe.score /= len(metrics) * len(roots)
         return pe
 
     def evaluate(self, ms, pools, verbose=False):
@@ -756,7 +767,12 @@ class Module(MgrModule):
             self.log.error(detail)
             return -errno.EOPNOTSUPP, detail
 
-        key = 'pgs'  # pgs objects or bytes
+        # rebalance by pgs, objects, or bytes
+        metrics = self.get_config('crush_compat_metrics', 'pgs,objects,bytes').split(',')
+        key = metrics[0] # balancing using the first score metric
+        if key not in ['pgs', 'bytes', 'objects']:
+            self.log.warn("Invalid crush_compat balancing key %s. Using 'pgs'." % key)
+            key = 'pgs'
 
         # go
         best_ws = copy.deepcopy(orig_ws)

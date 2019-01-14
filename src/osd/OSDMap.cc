@@ -1637,12 +1637,12 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     to_check.insert(p.first);
   }
   for (auto& pg : to_check) {
-    auto crush_rule = tmpmap.get_pg_pool_crush_rule(pg);
-    if (crush_rule < 0) {
-      lderr(cct) << __func__ << " unable to load crush-rule of pg "
-                 << pg << dendl;
+    if (!tmpmap.pg_exists(pg)) {
+      ldout(cct, 0) << __func__ << " pg " << pg << " is gone" << dendl;
+      to_cancel.insert(pg);
       continue;
     }
+    auto crush_rule = tmpmap.get_pg_pool_crush_rule(pg);
     map<int, float> weight_map;
     auto it = rule_weight_map.find(crush_rule);
     if (it == rule_weight_map.end()) {
@@ -1672,19 +1672,23 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
     tmpmap.pg_to_raw_up(pg, &raw, &primary);
     set<int> parents;
     for (auto osd : raw) {
+      // skip non-existent/down osd for erasure-coded PGs
+      if (osd == CRUSH_ITEM_NONE)
+        continue;
       if (type > 0) {
         auto parent = tmpmap.crush->get_parent_of_type(osd, type, crush_rule);
-        if (parent >= 0) {
+        if (parent < 0) {
+          auto r = parents.insert(parent);
+          if (!r.second) {
+            // two up-set osds come from same parent
+            to_cancel.insert(pg);
+            break;
+          }
+        } else {
           lderr(cct) << __func__ << " unable to get parent of raw osd."
                      << osd << " of pg " << pg
                      << dendl;
-          break;
-        }
-        auto r = parents.insert(parent);
-        if (!r.second) {
-          // two up-set osds come from same parent
-          to_cancel.insert(pg);
-          break;
+          // continue to do checks below
         }
       }
       // the above check validates collision only
@@ -1740,6 +1744,7 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
       }
     }
   }
+  tmpmap.clean_pg_upmaps(cct, pending_inc);
 }
 
 int OSDMap::apply_incremental(const Incremental &inc)
@@ -3905,7 +3910,7 @@ int OSDMap::summarize_mapping_stats(
 
 int OSDMap::clean_pg_upmaps(
   CephContext *cct,
-  Incremental *pending_inc)
+  Incremental *pending_inc) const
 {
   ldout(cct, 10) << __func__ << dendl;
   int changed = 0;
@@ -3926,9 +3931,16 @@ int OSDMap::clean_pg_upmaps(
     pg_to_raw_osds(p.first, &raw, &primary);
     mempool::osdmap::vector<pair<int,int>> newmap;
     for (auto& q : p.second) {
-      if (std::find(raw.begin(), raw.end(), q.first) != raw.end()) {
-	newmap.push_back(q);
+      if (std::find(raw.begin(), raw.end(), q.first) == raw.end()) {
+        // cancel mapping if source osd does not exist anymore
+        continue;
       }
+      if (q.second != CRUSH_ITEM_NONE && q.second < max_osd &&
+          q.second >= 0 && osd_weight[q.second] == 0) {
+        // cancel mapping if target osd is out
+        continue;
+      }
+      newmap.push_back(q);
     }
     if (newmap.empty()) {
       ldout(cct, 10) << " removing no-op pg_upmap_items " << p.first << " "
@@ -4069,6 +4081,8 @@ int OSDMap::calc_pg_upmaps(
     multimap<float,int> deviation_osd;  // deviation(pgs), osd
     set<int> overfull;
     for (auto& i : pgs_by_osd) {
+      // make sure osd is still there (belongs to this crush-tree)
+      assert(osd_weight.count(i.first));
       float target = osd_weight[i.first] * pgs_per_weight;
       float deviation = (float)i.second.size() - target;
       ldout(cct, 20) << " osd." << i.first
@@ -4107,8 +4121,6 @@ int OSDMap::calc_pg_upmaps(
     for (auto p = deviation_osd.rbegin(); p != deviation_osd.rend(); ++p) {
       int osd = p->second;
       float deviation = p->first;
-      // make sure osd is still there (belongs to this crush-tree)
-      assert(osd_weight.count(osd));
       float target = osd_weight[osd] * pgs_per_weight;
       assert(target > 0);
       if (deviation/target < max_deviation_ratio) {

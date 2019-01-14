@@ -142,11 +142,7 @@ add_library(rgw_a STATIC ${rgw_a_srcs})
 
 add_dependencies(rgw_a civetweb_h)
 
-target_include_directories(rgw_a PUBLIC
-  ${FCGI_INCLUDE_DIR}
-  "../rapidjson/include"
-  )
-target_compile_definitions(rgw_a PUBLIC BOOST_COROUTINES_NO_DEPRECATION_WARNING)
+target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
 
 target_link_libraries(rgw_a librados cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
@@ -155,9 +151,13 @@ target_link_libraries(rgw_a librados cls_lock_client cls_rgw_client cls_refcount
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS})
 
-if (WITH_CURL_OPENSSL)
+if (WITH_CURL_OPENSSL OR (WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL))
   target_link_libraries(rgw_a ${OPENSSL_LIBRARIES})
-endif (WITH_CURL_OPENSSL)
+endif()
+if (WITH_RADOSGW_BEAST_FRONTEND)
+  target_compile_definitions(rgw_a PUBLIC BOOST_COROUTINES_NO_DEPRECATION_WARNING)
+  target_link_libraries(rgw_a Boost::coroutine Boost::context)
+endif()
 
 set(radosgw_srcs
   rgw_loadgen_process.cc
@@ -177,7 +177,9 @@ endif (WITH_RADOSGW_BEAST_FRONTEND)
 
 add_library(radosgw_a STATIC ${radosgw_srcs}
   $<TARGET_OBJECTS:civetweb_common_objs>)
-target_link_libraries(radosgw_a rgw_a ${SSL_LIBRARIES})
+if (WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL)
+  target_link_libraries(radosgw_a rgw_a ${SSL_LIBRARIES})
+endif()
 
 add_executable(radosgw rgw_main.cc)
 target_link_libraries(radosgw radosgw_a librados
@@ -192,6 +194,10 @@ add_dependencies(radosgw cls_rgw cls_lock cls_refcount
   cls_log cls_statelog cls_timeindex
   cls_version cls_replica_log cls_user)
 install(TARGETS radosgw DESTINATION bin)
+
+if (WITH_RADOSGW_BEAST_FRONTEND)
+  target_link_libraries(radosgw_a ${OPENSSL_LIBRARIES})
+endif()
 
 set(radosgw_admin_srcs
   rgw_admin.cc

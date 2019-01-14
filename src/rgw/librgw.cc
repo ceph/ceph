@@ -49,6 +49,8 @@
 #include "rgw_auth_s3.h"
 #include "rgw_lib.h"
 #include "rgw_lib_frontend.h"
+#include "rgw_http_client.h"
+#include "rgw_http_client_curl.h"
 
 #include <errno.h>
 #include <chrono>
@@ -119,6 +121,7 @@ namespace rgw {
 	RGWLibFS* fs = iter->first->ref();
 	uniq.unlock();
 	fs->gc();
+	fs->update_user();
 	fs->rele();
 	uniq.lock();
 	if (cur_gen != gen)
@@ -489,6 +492,7 @@ namespace rgw {
     rgw_tools_init(g_ceph_context);
 
     rgw_init_resolver();
+    rgw::curl::setup_curl(boost::none);
 
     store = RGWStoreManager::get_storage(g_ceph_context,
 					 g_conf->rgw_enable_gc_threads,
@@ -598,6 +602,7 @@ namespace rgw {
 
     rgw_tools_cleanup();
     rgw_shutdown_resolver();
+    rgw::curl::cleanup_curl();
 
     rgw_perf_stop(g_ceph_context);
 

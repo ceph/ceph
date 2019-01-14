@@ -215,7 +215,7 @@ OSDService::OSDService(OSD *osd) :
   monc(osd->monc),
   peering_wq(osd->peering_wq),
   recovery_gen_wq("recovery_gen_wq", cct->_conf->osd_recovery_thread_timeout,
-		  &osd->disk_tp),
+		  &osd->recovery_tp),
   class_handler(osd->class_handler),
   pg_epoch_lock("OSDService::pg_epoch_lock"),
   publish_lock("OSDService::publish_lock"),
@@ -1971,7 +1971,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
 	     "osd_peering_tp_threads"),
   osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
 	    get_num_op_threads()),
-  disk_tp(cct, "OSD::disk_tp", "tp_osd_disk", cct->_conf->osd_disk_threads, "osd_disk_threads"),
+  remove_tp(cct, "OSD::remove_tp", "tp_osd_remove", cct->_conf->osd_remove_threads, "osd_remove_threads"),
+  recovery_tp(cct, "OSD::recovery_tp", "tp_osd_recovery", cct->_conf->osd_recovery_threads, "osd_recovery_threads"),
   command_tp(cct, "OSD::command_tp", "tp_osd_cmd",  1),
   session_waiting_lock("OSD::session_waiting_lock"),
   osdmap_subscribe_lock("OSD::osdmap_subscribe_lock"),
@@ -2022,7 +2023,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     store,
     cct->_conf->osd_remove_thread_timeout,
     cct->_conf->osd_remove_thread_suicide_timeout,
-    &disk_tp),
+    &remove_tp),
   service(this)
 {
   monc->set_messenger(client_messenger);
@@ -2679,7 +2680,8 @@ int OSD::init()
   service.max_oldest_map = superblock.oldest_map;
 
   osd_op_tp.start();
-  disk_tp.start();
+  remove_tp.start();
+  recovery_tp.start();
   command_tp.start();
 
   set_disk_tp_priority();
@@ -3434,9 +3436,13 @@ int OSD::shutdown()
   command_tp.stop();
   dout(10) << "command tp stopped" << dendl;
 
-  disk_tp.drain();
-  disk_tp.stop();
-  dout(10) << "disk tp paused (new)" << dendl;
+  remove_tp.drain();
+  remove_tp.stop();
+  dout(10) << "remove tp paused (new)" << dendl;
+
+  recovery_tp.drain();
+  recovery_tp.stop();
+  dout(10) << "recovery tp paused (new)" << dendl;
 
   dout(10) << "stopping agent" << dendl;
   service.agent_stop();
@@ -5255,11 +5261,10 @@ void OSD::heartbeat()
 
 bool OSD::heartbeat_reset(Connection *con)
 {
+  Mutex::Locker l(heartbeat_lock);
   HeartbeatSession *s = static_cast<HeartbeatSession*>(con->get_priv());
   if (s) {
-    heartbeat_lock.Lock();
     if (is_stopping()) {
-      heartbeat_lock.Unlock();
       s->put();
       return true;
     }
@@ -5293,7 +5298,6 @@ bool OSD::heartbeat_reset(Connection *con)
     } else {
       dout(10) << "heartbeat_reset closing (old) failed hb con " << con << dendl;
     }
-    heartbeat_lock.Unlock();
     s->put();
   }
   return true;
@@ -5431,6 +5435,7 @@ void OSD::tick_without_osd_lock()
     }
   }
 
+  check_ops_in_flight();
   mgrc.update_osd_health(get_health_metrics());
   service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(get_tick_interval(),
@@ -5707,6 +5712,12 @@ bool remove_dir(
       cont = dstate->pause_clearing();
       handle.suspend_tp_timeout();
       waiter.wait();
+      if (cct->_conf->osd_delete_sleep) {
+        utime_t t;
+        t.set_from_double(cct->_conf->osd_delete_sleep);
+        lgeneric_subdout(cct, osd, 10) << __func__ << " inject delay of " << t << dendl;
+        t.sleep();
+      }
       handle.reset_tp_timeout();
       if (cont)
         cont = dstate->resume_clearing();
@@ -10099,12 +10110,14 @@ void OSD::set_disk_tp_priority()
     return;
   int cls =
     ceph_ioprio_string_to_class(cct->_conf->osd_disk_thread_ioprio_class);
-  if (cls < 0)
+  if (cls < 0) {
     derr << __func__ << cpp_strerror(cls) << ": "
 	 << "osd_disk_thread_ioprio_class is " << cct->_conf->osd_disk_thread_ioprio_class
 	 << " but only the following values are allowed: idle, be or rt" << dendl;
-  else
-    disk_tp.set_ioprio(cls, cct->_conf->osd_disk_thread_ioprio_priority);
+  } else {
+    remove_tp.set_ioprio(cls, cct->_conf->osd_disk_thread_ioprio_priority);
+    recovery_tp.set_ioprio(cls, cct->_conf->osd_disk_thread_ioprio_priority);
+  }
 }
 
 // --------------------------------

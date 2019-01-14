@@ -532,11 +532,12 @@ void Journaler::_finish_flush(int r, uint64_t start, ceph::real_time stamp)
   // adjust safe_pos
   auto it = pending_safe.find(start);
   assert(it != pending_safe.end());
+  uint64_t min_next_safe_pos = pending_safe.begin()->second;
   pending_safe.erase(it);
   if (pending_safe.empty())
     safe_pos = next_safe_pos;
   else
-    safe_pos = pending_safe.begin()->second;
+    safe_pos = min_next_safe_pos;
 
   ldout(cct, 10) << "_finish_flush safe from " << start
 		 << ", pending_safe " << pending_safe
@@ -1267,6 +1268,13 @@ bool Journaler::try_read_entry(bufferlist& bl)
 
   // prefetch?
   _prefetch();
+
+  // If bufferlist consists of discontiguous memory, decoding types whose
+  // denc_traits needs contiguous memory is inefficient. The bufferlist may
+  // get copied to temporary memory multiple times (copy_shallow() in
+  // src/include/denc.h actually does deep copy)
+  if (bl.get_num_buffers() > 1)
+    bl.rebuild();
   return true;
 }
 

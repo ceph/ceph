@@ -1370,10 +1370,8 @@ void BlueStore::BufferSpace::read(
   cache->logger->inc(l_bluestore_buffer_miss_bytes, miss_bytes);
 }
 
-void BlueStore::BufferSpace::finish_write(Cache* cache, uint64_t seq)
+void BlueStore::BufferSpace::_finish_write(Cache* cache, uint64_t seq)
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
-
   auto i = writing.begin();
   while (i != writing.end()) {
     if (i->seq > seq) {
@@ -1645,6 +1643,23 @@ void BlueStore::SharedBlob::put_ref(uint64_t offset, uint32_t length,
   persistent->ref_map.put(offset, length, r, maybe_unshared ? &maybe : nullptr);
   if (maybe_unshared && maybe) {
     maybe_unshared->insert(this);
+  }
+}
+
+void BlueStore::SharedBlob::finish_write(uint64_t seq)
+{
+  while (true) {
+    Cache *cache = coll->cache;
+    std::lock_guard<std::recursive_mutex> l(cache->lock);
+    if (coll->cache != cache) {
+      ldout(coll->store->cct, 20) << __func__
+				  << " raced with sb cache update, was " << cache
+				  << ", now " << coll->cache << ", retrying"
+				  << dendl;
+      continue;
+    }
+    bc._finish_write(cache, seq);
+    break;
   }
 }
 
@@ -3418,8 +3433,12 @@ void BlueStore::MempoolThread::_tune_cache_size(bool interval_stats)
   uint64_t target = store->osd_memory_target;
   uint64_t base = store->osd_memory_base;
   double fragmentation = store->osd_memory_expected_fragmentation;
-  uint64_t cache_max = ((1.0 - fragmentation) * target) - base;
   uint64_t cache_min = store->osd_memory_cache_min;
+  uint64_t cache_max = cache_min;
+  uint64_t limited_target = (1.0 - fragmentation) * target;
+  if (limited_target > base + cache_min) {
+    cache_max = limited_target - base;
+  }
 
   size_t heap_size = 0;
   size_t unmapped = 0;
@@ -4171,6 +4190,8 @@ void BlueStore::_init_logger()
 		    "collection");
   b.add_u64_counter(l_bluestore_read_eio, "bluestore_read_eio",
                     "Read EIO errors propagated to high level callers");
+  b.add_u64_counter(l_bluestore_reads_with_retries, "bluestore_reads_with_retries",
+                    "Read operations that required at least one retry due to failed checksum validation");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -5059,6 +5080,18 @@ int BlueStore::_reconcile_bluefs_freespace()
   return 0;
 }
 
+void BlueStore::_dump_alloc_on_rebalance_failure()
+{
+  auto dump_interval =
+    cct->_conf->bluestore_bluefs_balance_failure_dump_interval;
+  if (dump_interval > 0 &&
+    next_dump_on_bluefs_balance_failure <= ceph_clock_now()) {
+    alloc->dump();
+    next_dump_on_bluefs_balance_failure = ceph_clock_now();
+    next_dump_on_bluefs_balance_failure += dump_interval;
+  }
+}
+
 int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 {
   int ret = 0;
@@ -5147,18 +5180,18 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 					0, 0, &exts);
 
     if (alloc_len <= 0) {
-      dout(1) << __func__ << " no allocate on 0x" << std::hex << gift
+      dout(0) << __func__ << " no allocate on 0x" << std::hex << gift
               << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
       alloc->unreserve(gift);
-      alloc->dump();
+      _dump_alloc_on_rebalance_failure();
       return 0;
     } else if (alloc_len < (int64_t)gift) {
-      dout(1) << __func__ << " insufficient allocate on 0x" << std::hex << gift
+      dout(0) << __func__ << " insufficient allocate on 0x" << std::hex << gift
               << " min_alloc_size 0x" << min_alloc_size 
 	      << " allocated 0x" << alloc_len
 	      << std::dec << dendl;
       alloc->unreserve(gift - alloc_len);
-      alloc->dump();
+      _dump_alloc_on_rebalance_failure();
     }
     for (auto& p : exts) {
       bluestore_pextent_t e = bluestore_pextent_t(p);
@@ -6698,7 +6731,8 @@ int BlueStore::_do_read(
   uint64_t offset,
   size_t length,
   bufferlist& bl,
-  uint32_t op_flags)
+  uint32_t op_flags,
+  uint64_t retry_count)
 {
   FUNCTRACE();
   int r = 0;
@@ -6919,7 +6953,14 @@ int BlueStore::_do_read(
       bufferlist& compressed_bl = *p++;
       if (_verify_csum(o, &bptr->get_blob(), 0, compressed_bl,
 		       b2r_it->second.front().logical_offset) < 0) {
-	return -EIO;
+        // Handles spurious read errors caused by a kernel bug.
+        // We sometimes get all-zero pages as a result of the read under
+        // high memory pressure. Retrying the failing read succeeds in most cases.
+        // See also: http://tracker.ceph.com/issues/22464
+        if (retry_count >= cct->_conf->bluestore_retry_disk_reads) {
+          return -EIO;
+        }
+        return _do_read(c, o, offset, length, bl, op_flags, retry_count + 1);
       }
       bufferlist raw_bl;
       r = _decompress(compressed_bl, &raw_bl);
@@ -6937,7 +6978,14 @@ int BlueStore::_do_read(
       for (auto& reg : b2r_it->second) {
 	if (_verify_csum(o, &bptr->get_blob(), reg.r_off, reg.bl,
 			 reg.logical_offset) < 0) {
-	  return -EIO;
+          // Handles spurious read errors caused by a kernel bug.
+          // We sometimes get all-zero pages as a result of the read under
+          // high memory pressure. Retrying the failing read succeeds in most cases.
+          // See also: http://tracker.ceph.com/issues/22464
+          if (retry_count >= cct->_conf->bluestore_retry_disk_reads) {
+            return -EIO;
+          }
+          return _do_read(c, o, offset, length, bl, op_flags, retry_count + 1);
 	}
 	if (buffered) {
 	  bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(),
@@ -6981,6 +7029,11 @@ int BlueStore::_do_read(
   assert(pos == length);
   assert(pr == pr_end);
   r = bl.length();
+  if (retry_count) {
+    logger->inc(l_bluestore_reads_with_retries);
+    dout(5) << __func__ << " read at 0x" << std::hex << offset << "~" << length
+            << " failed " << std::dec << retry_count << " times before succeeding" << dendl;
+  }
   return r;
 }
 
@@ -6993,6 +7046,13 @@ int BlueStore::_verify_csum(OnodeRef& o,
   uint64_t bad_csum;
   utime_t start = ceph_clock_now();
   int r = blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum);
+  if (cct->_conf->bluestore_debug_inject_csum_err_probability > 0 &&
+      (rand() % 10000) < cct->_conf->bluestore_debug_inject_csum_err_probability * 10000.0) {
+    derr << __func__ << " injecting bluestore checksum verifcation error" << dendl;
+    bad = blob_xoffset;
+    r = -1;
+    bad_csum = 0xDEADBEEF;
+  }
   if (r < 0) {
     if (r == -1) {
       PExtentVector pex;
@@ -8398,7 +8458,7 @@ void BlueStore::_txc_finish(TransContext *txc)
   assert(txc->state == TransContext::STATE_FINISHING);
 
   for (auto& sb : txc->shared_blobs_written) {
-    sb->bc.finish_write(sb->get_cache(), txc->seq);
+    sb->finish_write(txc->seq);
   }
   txc->shared_blobs_written.clear();
 
@@ -10608,6 +10668,8 @@ void BlueStore::_choose_write_options(
 
   dout(20) << __func__ << " prefer csum_order " << wctx->csum_order
            << " target_blob_size 0x" << std::hex << wctx->target_blob_size
+	   << " compress=" << (int)wctx->compress
+	   << " buffered=" << (int)wctx->buffered
            << std::dec << dendl;
 }
 
@@ -11550,6 +11612,11 @@ int BlueStore::_rename(TransContext *txc,
   // Onode in the old slot
   c->onode_map.rename(oldo, old_oid, new_oid, new_okey);
   r = 0;
+
+  // hold a ref to new Onode in old name position, to ensure we don't drop
+  // it from the cache before this txc commits (or else someone may come along
+  // and read newo's metadata via the old name).
+  txc->note_modified_object(oldo);
 
  out:
   dout(10) << __func__ << " " << c->cid << " " << old_oid << " -> "

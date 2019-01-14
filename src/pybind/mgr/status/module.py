@@ -196,7 +196,7 @@ class Module(MgrModule):
                 dns = self.get_latest("mds", daemon_info['name'], "mds_mem.dn")
 
                 activity = "Evts: " + self.format_dimless(
-                    self.get_rate("mds", daemon_info['name'], "mds_log.replay"),
+                    self.get_rate("mds", daemon_info['name'], "mds_log.replayed"),
                     5
                 ) + "/s"
 
@@ -240,7 +240,7 @@ class Module(MgrModule):
         output += "\n" + standby_table.get_string() + "\n"
 
         if len(mds_versions) == 1:
-            output += "MDS version: {0}".format(mds_versions.keys()[0])
+            output += "MDS version: {0}".format(list(mds_versions)[0])
         else:
             version_table = PrettyTable(["version", "daemons"])
             for version, daemons in six.iteritems(mds_versions):

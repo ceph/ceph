@@ -419,7 +419,8 @@ void PurgeQueue::_execute_item(
 
   in_flight[expire_to] = item;
   logger->set(l_pq_executing, in_flight.size());
-  ops_in_flight += _calculate_ops(item);
+  auto ops = _calculate_ops(item);
+  ops_in_flight += ops;
   logger->set(l_pq_executing_ops, ops_in_flight);
 
   SnapContext nullsnapc;
@@ -486,6 +487,8 @@ void PurgeQueue::_execute_item(
   } else {
     derr << "Invalid item (action=" << item.action << ") in purge queue, "
             "dropping it" << dendl;
+    ops_in_flight -= ops;
+    logger->set(l_pq_executing_ops, ops_in_flight);
     in_flight.erase(expire_to);
     logger->set(l_pq_executing, in_flight.size());
     return;
@@ -505,9 +508,7 @@ void PurgeQueue::_execute_item(
     // expire_pos doesn't fall too far behind our progress when consuming
     // a very long queue.
     if (in_flight.empty() || journaler.write_head_needed()) {
-      journaler.write_head(new FunctionContext([this](int r){
-            journaler.trim();
-            }));
+      journaler.write_head(nullptr);
     }
   }), &finisher));
 
