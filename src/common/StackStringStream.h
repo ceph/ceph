@@ -18,7 +18,6 @@
 #include <boost/container/small_vector.hpp>
 
 #include <algorithm>
-#include <cstring>
 #include <iostream>
 #include <memory>
 #include <ostream>
@@ -26,36 +25,50 @@
 #include <string_view>
 #include <vector>
 
+#include "include/inline_memory.h"
+
 template<std::size_t SIZE>
 class StackStringBuf : public std::basic_streambuf<char>
 {
 public:
-  StackStringBuf() = default;
+  StackStringBuf()
+    : vec{SIZE, boost::container::default_init_t{}}
+  {
+    setp(vec.data(), vec.data() + vec.size());
+  }
   StackStringBuf(const StackStringBuf&) = delete;
   StackStringBuf& operator=(const StackStringBuf&) = delete;
   StackStringBuf(StackStringBuf&& o) = delete;
   StackStringBuf& operator=(StackStringBuf&& o) = delete;
   ~StackStringBuf() override = default;
 
-  void push(std::string_view sv)
-  {
-    vec.insert(vec.end(), sv.begin(), sv.end());
-  }
-
   void clear()
   {
-    vec.clear();
+    vec.resize(SIZE);
+    setp(vec.data(), vec.data() + SIZE);
   }
 
   std::string_view strv() const
   {
-    return std::string_view(vec.data(), vec.size());
+    return std::string_view(pbase(), pptr() - pbase());
   }
 
 protected:
   std::streamsize xsputn(const char *s, std::streamsize n)
   {
-    push(std::string_view(s, n));
+    std::streamsize capacity = epptr() - pptr();
+    std::streamsize left = n;
+    if (capacity >= left) {
+      maybe_inline_memcpy(pptr(), s, left, 32);
+      pbump(left);
+    } else {
+      maybe_inline_memcpy(pptr(), s, capacity, 64);
+      s += capacity;
+      left -= capacity;
+      vec.insert(vec.end(), s, s + left);
+      setp(vec.data(), vec.data() + vec.size());
+      pbump(vec.size());
+    }
     return n;
   }
 
@@ -63,10 +76,11 @@ protected:
   {
     if (traits_type::not_eof(c)) {
       char str = traits_type::to_char_type(c);
-      push(std::string_view(&str, 1));
+      vec.push_back(str);
       return c;
+    } else {
+      return traits_type::eof();
     }
-    return EOF;
   }
 
 private:
