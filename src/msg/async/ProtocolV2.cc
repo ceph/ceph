@@ -2391,6 +2391,14 @@ CtPtr ProtocolV2::handle_cephx_auth(bufferlist &auth_payload) {
 
   connection->lock.lock();
 
+  if (state != ACCEPTING) {
+    ldout(cct, 1) << __func__
+                  << " state changed while accept, it must be mark_down"
+                  << dendl;
+    ceph_assert(state == CLOSED);
+    return _fault();
+  }
+
   session_security.reset(
       get_auth_session_handler(cct, auth_method, session_key,
 			       connection_secret,
@@ -2455,6 +2463,14 @@ CtPtr ProtocolV2::handle_auth_request(char *payload, uint32_t length) {
 	nullptr /* connection_secret */,
 	nullptr);
     connection->lock.lock();
+
+    if (state != ACCEPTING) {
+      ldout(cct, 1) << __func__
+                    << " state changed while accept, it must be mark_down"
+                    << dendl;
+      ceph_assert(state == CLOSED);
+      return _fault();
+    }
 
     if (!authorizer_valid) {
       ldout(cct, 0) << __func__ << " got bad authorizer, auth_reply_len="
