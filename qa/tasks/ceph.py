@@ -1932,6 +1932,10 @@ def task(ctx, config):
 
             yield
         finally:
+            # set pg_num_targets back to actual pg_num, so we don't have to
+            # wait for pending merges (which can take a while!)
+            ctx.managers[config['cluster']].stop_pg_num_changes()
+
             if config.get('wait-for-scrub', True):
                 osd_scrub_pgs(ctx, config)
 
