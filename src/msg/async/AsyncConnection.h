@@ -172,7 +172,7 @@ class AsyncConnection : public Connection {
   bool open_write = false;
   // lock order: lock -> write_lock -> send_lock
   std::mutex write_lock;
-  std::mutex send_lock;
+  mutable std::mutex send_lock;
 
   std::mutex lock;
   EventCallbackRef read_handler;
