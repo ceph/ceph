@@ -288,6 +288,14 @@ class Module(MgrModule):
             }
             return (0, json.dumps(s, indent=4), '')
         elif command['prefix'] == 'balancer mode':
+            if command['mode'] == 'upmap':
+                min_compat_client = self.get_osdmap().dump().get('require_min_compat_client', '')
+                if min_compat_client < 'luminous': # works well because version is alphabetized..
+                    warn = 'min_compat_client "%s" ' \
+                           '< "luminous", which is required for pg-upmap. ' \
+                           'Try "ceph osd set-require-min-compat-client luminous" ' \
+                           'before enabling this mode' % min_compat_client
+                    return (-errno.EPERM, '', warn)
             self.set_config('mode', command['mode'])
             return (0, '', '')
         elif command['prefix'] == 'balancer on':
