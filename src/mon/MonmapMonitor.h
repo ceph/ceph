@@ -39,25 +39,6 @@ class MMonJoin;
 
 namespace ceph::mon_cmds {
 
-class failure final 
-{
-    const int error_code_;
-    char what_[128] = {};
-
-    public:
-    failure(const int error_code, const std::string msg)
-     : error_code_(error_code)
-    {
-        std::snprintf(what_, sizeof(what_), "error %d: %s", error_code, msg.c_str());
-    };
-
-    virtual ~failure() {}
-
-    public:
-    const int error_code() const noexcept   { return error_code_; }
-    const char *what() const noexcept       { return what_; }
-};
-
 struct mon_cmd_ctx
 {
  MonOpRequestRef                op;

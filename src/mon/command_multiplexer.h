@@ -23,8 +23,11 @@
 #include <algorithm>
 #include <exception>
 #include <string_view>
+#include <system_error>
 
 #include <experimental/iterator>
+
+#include "error_code.h"
 
 namespace ceph {
 

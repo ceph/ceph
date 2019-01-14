@@ -51,7 +51,7 @@ mon_cmd_ctx::mon_cmd_ctx(MonOpRequestRef op,
   auto& m = mmon_command;
 
   if (!cmdmap_from_json(m.cmd, &cmdmap, ss))
-   throw ceph::mon_cmds::failure(-EINVAL, ss.str());
+   throw ceph::command_failure(ceph::command_error::option_invalid, ss.str());
 
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
@@ -312,9 +312,9 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
             
       return true;
   }
-  catch(mon_cmds::failure& e)
+  catch(ceph::command_failure& e)
   { 
-    mon->reply_command(op, e.error_code(), e.what(), get_last_committed());
+    mon->reply_command(op, ceph::to_ceph_error_code(e.command_error()), e.what(), get_last_committed());
     return false;
   }
 }
