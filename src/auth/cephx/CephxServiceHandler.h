@@ -32,7 +32,11 @@ public:
   int start_session(const EntityName& name,
 		    bufferlist *result_bl,
 		    AuthCapsInfo *caps) override;
-  int handle_request(bufferlist::const_iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps) override;
+  int handle_request(
+    bufferlist::const_iterator& indata,
+    bufferlist *result_bl,
+    uint64_t *global_id,
+    AuthCapsInfo *caps) override;
   void build_cephx_response_header(int request_type, int status, bufferlist& bl);
 };
 
