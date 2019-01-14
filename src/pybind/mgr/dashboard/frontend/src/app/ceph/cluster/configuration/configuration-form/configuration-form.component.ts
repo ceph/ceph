@@ -69,7 +69,7 @@ export class ConfigurationFormComponent implements OnInit {
   getType(type: string): any {
     const knownTypes = [
       {
-        name: 'uint64_t',
+        name: 'uint',
         inputType: 'number',
         humanReadable: this.i18n('Positive integer value'),
         defaultMin: 0,
@@ -78,7 +78,7 @@ export class ConfigurationFormComponent implements OnInit {
         allowsNegative: false
       },
       {
-        name: 'int64_t',
+        name: 'int',
         inputType: 'number',
         humanReadable: this.i18n('Integer value'),
         patternHelpText: this.i18n('The entered value needs to be a number.'),
@@ -86,7 +86,7 @@ export class ConfigurationFormComponent implements OnInit {
         allowsNegative: true
       },
       {
-        name: 'size_t',
+        name: 'size',
         inputType: 'number',
         humanReadable: this.i18n('Positive integer value (size)'),
         defaultMin: 0,
@@ -104,7 +104,7 @@ export class ConfigurationFormComponent implements OnInit {
         allowsNegative: false
       },
       {
-        name: 'double',
+        name: 'float',
         inputType: 'number',
         humanReadable: this.i18n('Decimal value'),
         patternHelpText: this.i18n('The entered value needs to be a number or decimal.'),
@@ -112,20 +112,20 @@ export class ConfigurationFormComponent implements OnInit {
         allowsNegative: true
       },
       {
-        name: 'std::string',
+        name: 'str',
         inputType: 'text',
         humanReadable: this.i18n('Text'),
         isNumberType: false
       },
       {
-        name: 'entity_addr_t',
+        name: 'addr',
         inputType: 'text',
         humanReadable: this.i18n('IPv4 or IPv6 address'),
         patternHelpText: this.i18n('The entered value needs to be a valid IP address.'),
         isNumberType: false
       },
       {
-        name: 'uuid_d',
+        name: 'uuid',
         inputType: 'text',
         humanReadable: this.i18n('UUID'),
         patternHelpText: this.i18n(
@@ -176,32 +176,32 @@ export class ConfigurationFormComponent implements OnInit {
         validators.push(Validators.min(typeParams.defaultMin));
       }
 
-      if (configOption.type === 'double') {
+      if (configOption.type === 'float') {
         validators.push(CdValidators.decimalNumber());
       } else {
         validators.push(CdValidators.number(typeParams.allowsNegative));
       }
 
       return validators;
-    } else if (configOption.type === 'entity_addr_t') {
+    } else if (configOption.type === 'addr') {
       return [CdValidators.ip()];
-    } else if (configOption.type === 'uuid_d') {
+    } else if (configOption.type === 'uuid') {
       return [CdValidators.uuid()];
     }
   }
 
   getStep(type: string, value: number): number | undefined {
-    const numberTypes = ['uint64_t', 'int64_t', 'size_t', 'secs'];
+    const numberTypes = ['uint', 'int', 'size', 'secs'];
 
     if (numberTypes.includes(type)) {
       return 1;
     }
 
-    if (type === 'double') {
+    if (type === 'float') {
       if (value !== null) {
         const stringVal = value.toString();
         if (stringVal.indexOf('.') !== -1) {
-          // Value type double and contains decimal characters
+          // Value type float and contains decimal characters
           const decimal = value.toString().split('.');
           return Math.pow(10, -decimal[1].length);
         }
