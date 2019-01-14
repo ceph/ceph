@@ -295,6 +295,7 @@ if(WITH_SEASTAR)
   endmacro ()
   set(Seastar_HWLOC OFF CACHE BOOL "" FORCE)
   set(Seastar_STD_OPTIONAL_VARIANT_STRINGVIEW ON CACHE BOOL "" FORCE)
+  set(Seastar_CXX_FLAGS "-Wno-sign-compare;-Wno-attributes" CACHE STRING "" FORCE)
   add_subdirectory(seastar)
   # create the directory so cmake won't complain when looking at the imported
   # target: Seastar exports this directory created at build-time
