@@ -16,6 +16,7 @@
 
 #include "rocksdb/cache.h"
 #include "include/ceph_hash.h"
+#include "common/PriorityCache.h"
 //#include "hash.h"
 
 #ifndef CACHE_LINE_SIZE
@@ -52,7 +53,7 @@ class CacheShard {
 // Generic cache interface which shards cache by hash of keys. 2^num_shard_bits
 // shards will be created, with capacity split evenly to each of the shards.
 // Keys are sharded by the highest num_shard_bits bits of hash value.
-class ShardedCache : public rocksdb::Cache {
+class ShardedCache : public rocksdb::Cache, public PriorityCache::PriCache {
  public:
   ShardedCache(size_t capacity, int num_shard_bits, bool strict_capacity_limit);
   virtual ~ShardedCache() = default;
@@ -87,6 +88,32 @@ class ShardedCache : public rocksdb::Cache {
 
   int GetNumShardBits() const { return num_shard_bits_; }
 
+  // PriCache
+  virtual int64_t get_cache_bytes(PriorityCache::Priority pri) const {
+    return cache_bytes[pri];
+  }
+  virtual int64_t get_cache_bytes() const {
+    int64_t total = 0;
+    for (int i = 0; i < PriorityCache::Priority::LAST + 1; i++) {
+      PriorityCache::Priority pri = static_cast<PriorityCache::Priority>(i);
+      total += get_cache_bytes(pri);
+    }
+    return total;
+  }
+  virtual void set_cache_bytes(PriorityCache::Priority pri, int64_t bytes) {
+    cache_bytes[pri] = bytes;
+  }
+  virtual void add_cache_bytes(PriorityCache::Priority pri, int64_t bytes) {
+    cache_bytes[pri] += bytes;
+  }
+  virtual double get_cache_ratio() const {
+    return cache_ratio;
+  }
+  virtual void set_cache_ratio(double ratio) {
+    cache_ratio = ratio;
+  }
+  virtual std::string get_cache_name() const = 0;
+
  private:
   static inline uint32_t HashSlice(const rocksdb::Slice& s) {
      return ceph_str_hash(CEPH_STR_HASH_RJENKINS, s.data(), s.size());
@@ -97,6 +124,9 @@ class ShardedCache : public rocksdb::Cache {
     // Note, hash >> 32 yields hash in gcc, not the zero we expect!
     return (num_shard_bits_ > 0) ? (hash >> (32 - num_shard_bits_)) : 0;
   }
+
+  int64_t cache_bytes[PriorityCache::Priority::LAST+1] = {0};
+  double cache_ratio = 0;
 
   int num_shard_bits_;
   mutable std::mutex capacity_mutex_;
