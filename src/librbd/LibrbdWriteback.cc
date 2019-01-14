@@ -31,26 +31,6 @@
 #define dout_prefix *_dout << "librbdwriteback: "
 
 namespace librbd {
-namespace {
-class ThreadPoolSingleton : public ThreadPool {
-public:
-  LibrbdWriteback::WritebackQueue *writeback_queue;
-
-  explicit ThreadPoolSingleton(CephContext *cct)
-    : ThreadPool(cct, "librbd::writeback_thread_pool", "tp_writeback",
-                 g_conf().get_val<uint64_t>("rbd_cache_writeback_threads"),
-                 "rbd_cache_writeback_threads") {
-    start();
-  }
-  ~ThreadPoolSingleton() override {
-    writeback_queue->drain();
-    delete writeback_queue;
-
-    stop();
-  }
-};
-}
-
   /**
    * context to wrap another context in a Mutex
    *
@@ -125,13 +105,12 @@ public:
 
   LibrbdWriteback::LibrbdWriteback(ImageCtx *ictx, Mutex& lock)
     : m_tid(0), m_lock(lock), m_ictx(ictx) {
-    ThreadPoolSingleton *thread_pool_singleton;
-    ictx->cct->lookup_or_create_singleton_object<ThreadPoolSingleton>(
-      thread_pool_singleton, "librbd::writeback_thread_pool");
+    ThreadPool *thread_pool;
+    ContextWQ *op_work_queue;
+    ImageCtx::get_thread_pool_instance(m_image_ctx->cct, &thread_pool, &op_work_queue)
     writeback_queue = new WritebackQueue(this, ictx, "librbd::writeback_work_queue",
                                   g_conf().get_val<int64_t>("rbd_op_thread_timeout"),
-                                  thread_pool_singleton);
-    thread_pool_singleton->writeback_queue = writeback_queue;
+                                  thread_pool);
   }
 
   void LibrbdWriteback::read(const object_t& oid, uint64_t object_no,
@@ -198,7 +177,7 @@ public:
 				    const bufferlist &bl,
 				    ceph::real_time mtime, uint64_t trunc_size,
 				    __u32 trunc_seq, ceph_tid_t journal_tid,
-            const ZTracer::Trace &parent_trace,
+                                    const ZTracer::Trace &parent_trace,
 				    Context *oncommit)
   {
     write_result_d *result = new write_result_d(oid.name, oncommit);
