@@ -340,12 +340,14 @@ To configure SSO on Ceph Dashboard, you should use the following command::
 
 Parameters:
 
-- **<ceph_dashboard_base_url>**: Base URL where Ceph Dashboard is accessible (e.g., `https://cephdashboard.local`)
-- **<idp_metadata>**: URL, file path or content of the IdP metadata XML (e.g., `https://myidp/metadata`)
-- **<idp_username_attribute>** *(optional)*: Attribute that should be used to get the username from the authentication response. Defaults to `uid`.
-- **<idp_entity_id>** *(optional)*: Use this when more than one entity id exists on the IdP metadata.
-- **<sp_x_509_cert> / <sp_private_key>** *(optional)*: File path or content of the certificate that should be used by Ceph Dashboard (Service Provider) for signing and encryption.
+* **<ceph_dashboard_base_url>**: Base URL where Ceph Dashboard is accessible (e.g., `https://cephdashboard.local`)
+* **<idp_metadata>**: URL, file path or content of the IdP metadata XML (e.g., `https://myidp/metadata`)
+* **<idp_username_attribute>** *(optional)*: Attribute that should be used to get the username from the authentication response. Defaults to `uid`.
+* **<idp_entity_id>** *(optional)*: Use this when more than one entity id exists on the IdP metadata.
+* **<sp_x_509_cert> / <sp_private_key>** *(optional)*: File path or content of the certificate that should be used by Ceph Dashboard (Service Provider) for signing and encryption.
 
+.. note::
+  The issuer value of SAML requests will follow this pattern:  **<ceph_dashboard_base_url>**/auth/saml2/metadata
 
 To display the current SAML 2.0 configuration, use the following command::
 
