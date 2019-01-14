@@ -1,5 +1,52 @@
 #!/usr/bin/env bash
 
+create_cmd_params() {
+	local PARAMS="$1"
+	local CMDPARAMS=""
+	local STATE="START"
+	for (( i=0; i<${#PARAMS}; i++ )); do
+		CHAR="${PARAMS:$i:1}"
+		case $CHAR in
+			"#")
+				break
+				;;
+			"'")
+				if [ "$STATE" == "INQUOTE" ];then
+					STATE="NORMAL"
+				else
+					STATE="INQUOTE"
+				fi
+				;;
+			"=")
+				if [ "$STATE" == "INQUOTE" ]; then
+					CMDPARAMS="${CMDPARAMS}${CHAR}"
+				else
+					CMDPARAMS="${CMDPARAMS} "
+				fi
+				;;
+			",")
+				if [ "$STATE" == "INQUOTE" ]; then
+					CMDPARAMS="${CMDPARAMS}${CHAR}"
+				elif [ "$STATE" == "START" ]; then
+					STATE="NORMAL"
+					CMDPARAMS="${CMDPARAMS} --"
+				else
+					CMDPARAMS="${CMDPARAMS} --"
+				fi
+				;;
+			*)
+				if [ "$STATE" == "START" ];then
+					STATE="NORMAL"
+					CMDPARAMS="${CMDPARAMS}--${CHAR}"
+				else
+					CMDPARAMS="${CMDPARAMS}${CHAR}"
+				fi
+				;;
+		esac
+	done
+	echo -n "$CMDPARAMS"
+}
+
 do_map() {
 	# Read /etc/rbdtab to create non-existant mapping
 	RET=0
@@ -14,16 +61,12 @@ do_map() {
 			DEV=rbd/$DEV
 			;;
 		esac
+
+		CMDPARAMS="$(create_cmd_params "${PARAMS}")"
 		logger -p "daemon.debug" -t rbdmap "Mapping '${DEV}'"
 		newrbd=""
 		MAP_RV=""
-		OIFS=$IFS
-		IFS=','
-		CMDPARAMS=""
-		for PARAM in ${PARAMS[@]}; do
-			CMDPARAMS="$CMDPARAMS --$(echo $PARAM | tr '=' ' ')"
-		done
-		IFS=$OIFS
+
 		if [ -b /dev/rbd/$DEV ]; then
 			MAP_RV="$(readlink -f /dev/rbd/$DEV)"
 		else
