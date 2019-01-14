@@ -30,7 +30,7 @@ public:
   const entity_addrvec_t& get_addrs() const { return addrs; }
   void set_addrs(const entity_addrvec_t& _addrs)  { addrs = _addrs; }
 
-  const char *get_type_name() const override { return "client_reclaim_reply"; }
+  std::string_view get_type_name() const override { return "client_reclaim_reply"; }
   void print(ostream& o) const override {
     o << "client_reclaim_reply(" << result << " e " << epoch << ")";
   }

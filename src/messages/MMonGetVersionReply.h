@@ -33,7 +33,7 @@ private:
 public:
   MMonGetVersionReply() : MessageInstance(CEPH_MSG_MON_GET_VERSION_REPLY, HEAD_VERSION) { }
 
-  const char *get_type_name() const override {
+  std::string_view get_type_name() const override {
     return "mon_get_version_reply";
   }
 

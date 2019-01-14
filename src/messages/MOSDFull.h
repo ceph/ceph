@@ -41,7 +41,7 @@ public:
     decode(state, p);
   }
 
-  const char *get_type_name() const { return "osd_full"; }
+  std::string_view get_type_name() const { return "osd_full"; }
   void print(ostream &out) const {
     set<string> states;
     OSDMap::calc_state_set(state, states);

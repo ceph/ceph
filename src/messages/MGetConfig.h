@@ -22,7 +22,7 @@ public:
       name(n),
       host(h) {}
 
-  const char *get_type_name() const override {
+  std::string_view get_type_name() const override {
     return "get_config";
   }
   void print(ostream& o) const override {

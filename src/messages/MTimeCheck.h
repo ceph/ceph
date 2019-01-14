@@ -45,7 +45,7 @@ private:
   ~MTimeCheck() override { }
 
 public:
-  const char *get_type_name() const override { return "time_check"; }
+  std::string_view get_type_name() const override { return "time_check"; }
   const char *get_op_name() const {
     switch (op) {
     case OP_PING: return "ping";

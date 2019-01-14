@@ -29,7 +29,7 @@ private:
   ~MLogAck() override {}
 
 public:
-  const char *get_type_name() const override { return "log_ack"; }
+  std::string_view get_type_name() const override { return "log_ack"; }
   void print(ostream& out) const override {
     out << "log(last " << last << ")";
   }

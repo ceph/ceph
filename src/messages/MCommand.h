@@ -36,7 +36,7 @@ private:
   ~MCommand() override {}
 
 public:  
-  const char *get_type_name() const override { return "command"; }
+  std::string_view get_type_name() const override { return "command"; }
   void print(ostream& o) const override {
     o << "command(tid " << get_tid() << ": ";
     for (unsigned i=0; i<cmd.size(); i++) {

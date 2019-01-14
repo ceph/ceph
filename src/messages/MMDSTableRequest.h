@@ -38,7 +38,7 @@ protected:
   ~MMDSTableRequest() override {}
 
 public:  
-  const char *get_type_name() const override { return "mds_table_request"; }
+  std::string_view get_type_name() const override { return "mds_table_request"; }
   void print(ostream& o) const override {
     o << "mds_table_request(" << get_mdstable_name(table)
       << " " << get_mdstableserver_opname(op);

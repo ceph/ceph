@@ -30,7 +30,7 @@ private:
   ~MOSDScrub2() override {}
 
 public:
-  const char *get_type_name() const override { return "scrub2"; }
+  std::string_view get_type_name() const override { return "scrub2"; }
   void print(ostream& out) const override {
     out << "scrub2(" << scrub_pgs;
     if (repair)

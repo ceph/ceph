@@ -33,7 +33,7 @@ private:
   ~MMonSubscribeAck() override {}
 
 public:
-  const char *get_type_name() const override { return "mon_subscribe_ack"; }
+  std::string_view get_type_name() const override { return "mon_subscribe_ack"; }
   void print(ostream& o) const override {
     o << "mon_subscribe_ack(" << interval << "s)";
   }

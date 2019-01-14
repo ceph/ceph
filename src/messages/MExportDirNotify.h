@@ -44,7 +44,7 @@ protected:
   ~MExportDirNotify() override {}
 
 public:
-  const char *get_type_name() const override { return "ExNot"; }
+  std::string_view get_type_name() const override { return "ExNot"; }
   void print(ostream& o) const override {
     o << "export_notify(" << base;
     o << " " << old_auth << " -> " << new_auth;

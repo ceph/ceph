@@ -67,7 +67,7 @@ protected:
   ~MDiscover() override {}
 
 public:
-  const char *get_type_name() const override { return "Dis"; }
+  std::string_view get_type_name() const override { return "Dis"; }
   void print(ostream &out) const override {
     out << "discover(" << header.tid << " " << base_ino << "." << base_dir_frag
 	<< " " << want << ")";

@@ -37,7 +37,7 @@ protected:
   ~MExportDirNotifyAck() override {}
 
 public:
-  const char *get_type_name() const override { return "ExNotA"; }
+  std::string_view get_type_name() const override { return "ExNotA"; }
   void print(ostream& o) const override {
     o << "export_notify_ack(" << dirfrag << ")";
   }

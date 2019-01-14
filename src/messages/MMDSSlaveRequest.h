@@ -207,7 +207,7 @@ public:
     decode(desti_snapbl, p);
   }
 
-  const char *get_type_name() const override { return "slave_request"; }
+  std::string_view get_type_name() const override { return "slave_request"; }
   void print(ostream& out) const override {
     out << "slave_request(" << reqid
 	<< "." << attempt

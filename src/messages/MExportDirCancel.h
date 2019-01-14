@@ -36,7 +36,7 @@ protected:
   ~MExportDirCancel() override {}
 
 public:
-  const char *get_type_name() const override { return "ExCancel"; }
+  std::string_view get_type_name() const override { return "ExCancel"; }
   void print(ostream& o) const override {
     o << "export_cancel(" << dirfrag << ")";
   }

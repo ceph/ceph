@@ -39,11 +39,11 @@ protected:
   ~MClientRequestForward() override {}
 
 public:
-  int get_dest_mds() { return dest_mds; }
-  int get_num_fwd() { return num_fwd; }
-  bool must_resend() { return client_must_resend; }
+  int get_dest_mds() const { return dest_mds; }
+  int get_num_fwd() const { return num_fwd; }
+  bool must_resend() const { return client_must_resend; }
 
-  const char *get_type_name() const override { return "client_request_forward"; }
+  std::string_view get_type_name() const override { return "client_request_forward"; }
   void print(ostream& o) const override {
     o << "client_request_forward(" << get_tid()
       << " to mds." << dest_mds

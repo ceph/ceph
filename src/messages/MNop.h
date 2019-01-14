@@ -47,7 +47,7 @@ public:
     decode(tag, p);
   }
 
-  const char *get_type_name() const { return "MNop"; }
+  std::string_view get_type_name() const { return "MNop"; }
 
   void print(ostream& out) const {
     out << get_type_name() << " ";

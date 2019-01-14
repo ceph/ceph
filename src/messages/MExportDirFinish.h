@@ -37,7 +37,7 @@ protected:
   ~MExportDirFinish() override {}
 
 public:
-  const char *get_type_name() const override { return "ExFin"; }
+  std::string_view get_type_name() const override { return "ExFin"; }
   void print(ostream& o) const override {
     o << "export_finish(" << dirfrag << (last ? " last" : "") << ")";
   }

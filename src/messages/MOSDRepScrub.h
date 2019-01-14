@@ -77,7 +77,7 @@ private:
   ~MOSDRepScrub() override {}
 
 public:
-  const char *get_type_name() const override { return "replica scrub"; }
+  std::string_view get_type_name() const override { return "replica scrub"; }
   void print(ostream& out) const override {
     out << "replica_scrub(pg: "	<< pgid
 	<< ",from:" << scrub_from

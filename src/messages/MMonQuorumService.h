@@ -64,7 +64,7 @@ public:
     ceph_abort_msg("MMonQuorumService message must always be a base class");
   }
 
-  const char *get_type_name() const override { return "quorum_service"; }
+  std::string_view get_type_name() const override { return "quorum_service"; }
 };
 
 #endif /* CEPH_MMON_QUORUM_SERVICE_H */

@@ -32,7 +32,7 @@ public:
   MMgrDigest() : 
     MessageInstance(MSG_MGR_DIGEST) {}
 
-  const char *get_type_name() const override { return "mgrdigest"; }
+  std::string_view get_type_name() const override { return "mgrdigest"; }
   void print(ostream& out) const override {
     out << get_type_name();
   }

@@ -46,7 +46,7 @@ private:
   ~MOSDPGInfo() override {}
 
 public:
-  const char *get_type_name() const override { return "pg_info"; }
+  std::string_view get_type_name() const override { return "pg_info"; }
   void print(ostream& out) const override {
     out << "pg_info(";
     for (auto i = pg_list.begin();

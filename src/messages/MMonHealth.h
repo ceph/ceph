@@ -36,7 +36,7 @@ private:
   ~MMonHealth() override { }
 
 public:
-  const char *get_type_name() const override { return "mon_health"; }
+  std::string_view get_type_name() const override { return "mon_health"; }
   void print(ostream &o) const override {
     o << "mon_health("
       << " e " << get_epoch()
