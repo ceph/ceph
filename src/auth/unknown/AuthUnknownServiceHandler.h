@@ -26,8 +26,10 @@ public:
     : AuthServiceHandler(cct_) {}
   ~AuthUnknownServiceHandler() {}
   
-  int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps) {
-    return CEPH_AUTH_UNKNOWN;
+  int start_session(const EntityName& name,
+		    bufferlist *result_bl,
+		    AuthCapsInfo *caps) {
+    return 0;
   }
   int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps) {
     ceph_abort();  // shouldn't get called

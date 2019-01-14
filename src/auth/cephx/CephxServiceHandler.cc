@@ -27,19 +27,22 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx server " << entity_name << ": "
 
-int CephxServiceHandler::start_session(EntityName& name, bufferlist::const_iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps)
+int CephxServiceHandler::start_session(const EntityName& name,
+				       bufferlist *result_bl,
+				       AuthCapsInfo *caps)
 {
   entity_name = name;
 
   uint64_t min = 1; // always non-zero
   uint64_t max = std::numeric_limits<uint64_t>::max();
   server_challenge = ceph::util::generate_random_number<uint64_t>(min, max);
-  ldout(cct, 10) << "start_session server_challenge " << hex << server_challenge << dec << dendl;
+  ldout(cct, 10) << "start_session server_challenge "
+		 << hex << server_challenge << dec << dendl;
 
   CephXServerChallenge ch;
   ch.server_challenge = server_challenge;
-  encode(ch, result_bl);
-  return CEPH_AUTH_CEPHX;
+  encode(ch, *result_bl);
+  return 0;
 }
 
 int CephxServiceHandler::handle_request(bufferlist::const_iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps)
