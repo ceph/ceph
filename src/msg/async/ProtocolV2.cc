@@ -276,9 +276,17 @@ struct AuthBadAuthFrame
   inline std::string &error_msg() { return get_val<1>(); }
 };
 
-struct AuthMoreFrame
-    : public PayloadFrame<AuthMoreFrame, uint32_t, bufferlist> {
-  const ProtocolV2::Tag tag = ProtocolV2::Tag::AUTH_MORE;
+struct AuthReplyMoreFrame
+    : public PayloadFrame<AuthReplyMoreFrame, uint32_t, bufferlist> {
+  const ProtocolV2::Tag tag = ProtocolV2::Tag::AUTH_REPLY_MORE;
+  using PayloadFrame::PayloadFrame;
+
+  inline bufferlist &auth_payload() { return get_val<1>(); }
+};
+
+struct AuthRequestMoreFrame
+    : public PayloadFrame<AuthRequestMoreFrame, uint32_t, bufferlist> {
+  const ProtocolV2::Tag tag = ProtocolV2::Tag::AUTH_REQUEST_MORE;
   using PayloadFrame::PayloadFrame;
 
   inline bufferlist &auth_payload() { return get_val<1>(); }
@@ -1416,7 +1424,8 @@ CtPtr ProtocolV2::handle_read_frame_length_and_tag(char *buffer, int r) {
     case Tag::AUTH_REQUEST:
     case Tag::AUTH_BAD_METHOD:
     case Tag::AUTH_BAD_AUTH:
-    case Tag::AUTH_MORE:
+    case Tag::AUTH_REPLY_MORE:
+    case Tag::AUTH_REQUEST_MORE:
     case Tag::AUTH_DONE:
     case Tag::IDENT:
     case Tag::IDENT_MISSING_FEATURES:
@@ -1461,8 +1470,10 @@ CtPtr ProtocolV2::handle_frame_payload(char *buffer, int r) {
       return handle_auth_bad_method(buffer, next_payload_len);
     case Tag::AUTH_BAD_AUTH:
       return handle_auth_bad_auth(buffer, next_payload_len);
-    case Tag::AUTH_MORE:
-      return handle_auth_more(buffer, next_payload_len);
+    case Tag::AUTH_REPLY_MORE:
+      return handle_auth_reply_more(buffer, next_payload_len);
+    case Tag::AUTH_REQUEST_MORE:
+      return handle_auth_request_more(buffer, next_payload_len);
     case Tag::AUTH_DONE:
       return handle_auth_done(buffer, next_payload_len);
     case Tag::IDENT:
@@ -1486,37 +1497,6 @@ CtPtr ProtocolV2::handle_frame_payload(char *buffer, int r) {
     default:
       ceph_abort();
   }
-  return nullptr;
-}
-
-CtPtr ProtocolV2::handle_auth_more(char *payload, uint32_t length) {
-  ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
-
-  AuthMoreFrame auth_more(payload, length);
-  ldout(cct, 5) << __func__
-                << " auth more len=" << auth_more.auth_payload().length()
-                << dendl;
-
-  if (state == CONNECTING) {
-    ldout(cct, 10) << __func__ << " connect got auth challenge" << dendl;
-    if (auth_method == CEPH_AUTH_CEPHX) {
-      ceph_assert(authorizer);
-      authorizer->add_challenge(cct, auth_more.auth_payload());
-      AuthMoreFrame more_reply(authorizer->bl.length(), authorizer->bl);
-      return WRITE(more_reply.get_buffer(), "auth more", read_frame);
-    } else {
-      ceph_abort("Auth method %d not implemented", auth_method);
-    }
-  } else if (state == ACCEPTING) {
-    if (auth_method == CEPH_AUTH_CEPHX) {
-      return _handle_authorizer(auth_more.auth_payload());
-    } else {
-      ceph_abort("Auth method %d not implemented", auth_method);
-    }
-  } else {
-    ceph_abort();
-  }
-
   return nullptr;
 }
 
@@ -2181,6 +2161,26 @@ CtPtr ProtocolV2::handle_auth_bad_auth(char *payload, uint32_t length) {
   return _fault();
 }
 
+CtPtr ProtocolV2::handle_auth_reply_more(char *payload, uint32_t length)
+{
+  ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
+
+  AuthReplyMoreFrame auth_more(payload, length);
+  ldout(cct, 5) << __func__
+                << " auth reply more len=" << auth_more.auth_payload().length()
+                << dendl;
+  ldout(cct, 10) << __func__ << " connect got auth challenge" << dendl;
+  if (auth_method == CEPH_AUTH_CEPHX) {
+    ceph_assert(authorizer);
+    authorizer->add_challenge(cct, auth_more.auth_payload());
+    AuthRequestMoreFrame more_reply(authorizer->bl.length(), authorizer->bl);
+    return WRITE(more_reply.get_buffer(), "auth request more", read_frame);
+  } else {
+    ceph_abort("Auth method %d not implemented", auth_method);
+  }
+  return nullptr;
+}
+
 CtPtr ProtocolV2::handle_auth_done(char *payload, uint32_t length) {
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
 
@@ -2470,10 +2470,10 @@ CtPtr ProtocolV2::handle_auth_request(char *payload, uint32_t length) {
 
   auth_method = auth_request.method();
 
-  return _handle_authorizer(auth_request.auth_payload());
+  return _handle_authorizer(auth_request.auth_payload(), false);
 }
 
-CtPtr ProtocolV2::_handle_authorizer(bufferlist& auth_payload)
+CtPtr ProtocolV2::_handle_authorizer(bufferlist& auth_payload, bool more)
 {
   bool authorizer_valid;
   bufferlist authorizer_reply;
@@ -2499,8 +2499,8 @@ CtPtr ProtocolV2::_handle_authorizer(bufferlist& auth_payload)
     if (!had_challenge && authorizer_challenge) {
       ldout(cct, 10) << __func__ << " challenging authorizer" << dendl;
       ceph_assert(authorizer_reply.length());
-      AuthMoreFrame more(authorizer_reply.length(), authorizer_reply);
-      return WRITE(more.get_buffer(), "auth more", read_frame);
+      AuthReplyMoreFrame more(authorizer_reply.length(), authorizer_reply);
+      return WRITE(more.get_buffer(), "auth reply more", read_frame);
     } else {
       ldout(cct, 0) << __func__ << " got bad authorizer, auth_reply_len="
                     << authorizer_reply.length() << dendl;
@@ -2536,6 +2536,17 @@ CtPtr ProtocolV2::_handle_authorizer(bufferlist& auth_payload)
   AuthDoneFrame auth_done(auth_flags, authorizer_reply.length(),
                           authorizer_reply);
   return WRITE(auth_done.get_buffer(), "auth done", read_frame);
+}
+
+CtPtr ProtocolV2::handle_auth_request_more(char *payload, uint32_t length)
+{
+  ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
+
+  AuthRequestMoreFrame auth_more(payload, length);
+  ldout(cct, 5) << __func__
+                << " auth request more len=" << auth_more.auth_payload().length()
+                << dendl;
+  return _handle_authorizer(auth_more.auth_payload(), true);
 }
 
 CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {

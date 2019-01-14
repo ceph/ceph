@@ -50,7 +50,8 @@ public:
     AUTH_REQUEST = 1,
     AUTH_BAD_METHOD,
     AUTH_BAD_AUTH,
-    AUTH_MORE,
+    AUTH_REPLY_MORE,
+    AUTH_REQUEST_MORE,
     AUTH_DONE,
     IDENT,
     IDENT_MISSING_FEATURES,
@@ -168,7 +169,6 @@ private:
   Ct<ProtocolV2> *read_frame();
   Ct<ProtocolV2> *handle_read_frame_length_and_tag(char *buffer, int r);
   Ct<ProtocolV2> *handle_frame_payload(char *buffer, int r);
-  Ct<ProtocolV2> *handle_auth_more(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_ident(char *payload, uint32_t length);
 
   Ct<ProtocolV2> *ready();
@@ -231,6 +231,7 @@ private:
   Ct<ProtocolV2> *send_auth_request(std::vector<uint32_t> &allowed_methods);
   Ct<ProtocolV2> *handle_auth_bad_method(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_auth_bad_auth(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_auth_reply_more(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_auth_done(char *payload, uint32_t length);
   Ct<ProtocolV2> *send_client_ident();
   Ct<ProtocolV2> *send_reconnect();
@@ -250,7 +251,8 @@ private:
   Ct<ProtocolV2> *start_server_banner_exchange();
   Ct<ProtocolV2> *post_server_banner_exchange();
   Ct<ProtocolV2> *handle_auth_request(char *payload, uint32_t length);
-  Ct<ProtocolV2> *_handle_authorizer(bufferlist& auth_payload);
+  Ct<ProtocolV2> *handle_auth_request_more(char *payload, uint32_t length);
+  Ct<ProtocolV2> *_handle_authorizer(bufferlist& auth_payload, bool more);
   Ct<ProtocolV2> *handle_client_ident(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_ident_missing_features_write(int r);
   Ct<ProtocolV2> *handle_reconnect(char *payload, uint32_t length);

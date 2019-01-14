@@ -126,7 +126,12 @@ Authentication
 
   - Sent when the authentication fails
 
-* TAG_AUTH_MORE: server->client or client->server::
+* TAG_AUTH_REPLY_MORE: server->client::
+
+    __le32 len;
+    method specific payload
+
+* TAG_AUTH_REQUEST_MORE: client->server::
 
     __le32 len;
     method specific payload
