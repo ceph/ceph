@@ -1268,7 +1268,6 @@ struct string_snap_t {
   snapid_t snapid;
   string_snap_t() {}
   string_snap_t(std::string_view n, snapid_t s) : name(n), snapid(s) {}
-  string_snap_t(const char *n, snapid_t s) : name(n), snapid(s) {}
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& p);

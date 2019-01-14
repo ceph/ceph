@@ -84,7 +84,7 @@ public:
     STATE_KILLING = 5
   };
 
-  const char *get_state_name(int s) const {
+  static std::string_view get_state_name(int s) {
     switch (s) {
     case STATE_CLOSED: return "closed";
     case STATE_OPENING: return "opening";
@@ -203,7 +203,7 @@ public:
     return info.get_client();
   }
 
-  const char *get_state_name() const { return get_state_name(state); }
+  std::string_view get_state_name() const { return get_state_name(state); }
   uint64_t get_state_seq() const { return state_seq; }
   bool is_closed() const { return state == STATE_CLOSED; }
   bool is_opening() const { return state == STATE_OPENING; }

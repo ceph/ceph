@@ -935,7 +935,7 @@ public:
   void open_mydir_frag(MDSInternalContextBase *c);
   void populate_mydir();
 
-  void _create_system_file(CDir *dir, const char *name, CInode *in, MDSInternalContextBase *fin);
+  void _create_system_file(CDir *dir, std::string_view name, CInode *in, MDSInternalContextBase *fin);
   void _create_system_file_finish(MutationRef& mut, CDentry *dn,
                                   version_t dpv, MDSInternalContextBase *fin);
 

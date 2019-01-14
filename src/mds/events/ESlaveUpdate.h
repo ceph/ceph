@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_ESLAVEUPDATE_H
 #define CEPH_MDS_ESLAVEUPDATE_H
 
+#include <string_view>
+
 #include "../LogEvent.h"
 #include "EMetaBlob.h"
 
@@ -123,7 +125,7 @@ public:
   __u8 origop; // link | rename
 
   ESlaveUpdate() : LogEvent(EVENT_SLAVEUPDATE), master(0), op(0), origop(0) { }
-  ESlaveUpdate(MDLog *mdlog, const char *s, metareqid_t ri, int mastermds, int o, int oo) : 
+  ESlaveUpdate(MDLog *mdlog, std::string_view s, metareqid_t ri, int mastermds, int o, int oo) :
     LogEvent(EVENT_SLAVEUPDATE),
     type(s),
     reqid(ri),
