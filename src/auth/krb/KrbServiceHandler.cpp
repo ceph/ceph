@@ -148,10 +148,9 @@ int KrbServiceHandler::handle_request(bufferlist::const_iterator& indata,
   return result;
 }
 
-int KrbServiceHandler::start_session(EntityName& name, 
-                                     bufferlist::const_iterator& indata, 
-                                     bufferlist& buff_list,
-                                     AuthCapsInfo& caps)
+int KrbServiceHandler::start_session(const EntityName& name,
+                                     bufferlist *buff_list,
+                                     AuthCapsInfo *caps)
 {
   gss_buffer_desc gss_buffer_in = {0, nullptr};
   gss_OID gss_object_id = GSS_C_NT_HOSTBASED_SERVICE;
@@ -206,7 +205,7 @@ int KrbServiceHandler::start_session(EntityName& name,
         static_cast<int>(GSSAuthenticationRequest::GSS_MUTUAL);
 
     using ceph::encode;
-    encode(krb_response, buff_list);
+    encode(krb_response, *buff_list);
     return (CEPH_AUTH_GSS);
   }
 }

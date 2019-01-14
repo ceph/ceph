@@ -599,6 +599,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       goto reply;
     }
     start = true;
+    proto = type;
   } else if (!s->auth_handler) {
       dout(10) << "protocol specified but no s->auth_handler" << dendl;
       ret = -EINVAL;
@@ -639,8 +640,8 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   try {
     if (start) {
       // new session
-      proto = s->auth_handler->start_session(entity_name, indata, response_bl,
-					     s->con->peer_caps_info);
+      s->auth_handler->start_session(entity_name, &response_bl,
+				     &s->con->peer_caps_info);
       ret = 0;
     } else {
       // request
