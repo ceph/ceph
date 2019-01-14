@@ -19,7 +19,7 @@
 
 #include <boost/asio.hpp>
 #include "rgw_dmclock_scheduler.h"
-
+#include "rgw_dmclock_scheduler_ctx.h"
 
 namespace rgw::dmclock {
   namespace async = ceph::async;
@@ -103,8 +103,8 @@ class AsyncScheduler : public md_config_obs_t, public Scheduler {
 
 template <typename ...Args>
 AsyncScheduler::AsyncScheduler(CephContext *cct, boost::asio::io_context& context,
-                     GetClientCounters&& counters,
-                     md_config_obs_t *observer, Args&& ...args)
+                               GetClientCounters&& counters,
+                               md_config_obs_t *observer, Args&& ...args)
   : queue(std::forward<Args>(args)...),
     timer(context), cct(cct), observer(observer),
     counters(std::move(counters)),

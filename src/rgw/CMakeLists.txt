@@ -64,8 +64,7 @@ set(librgw_common_srcs
   rgw_cors.cc
   rgw_cors_s3.cc
   rgw_dencoder.cc
-  rgw_dmclock.cc
-  rgw_dmclock_scheduler.cc
+  rgw_dmclock_scheduler_ctx.cc
   rgw_dmclock_sync_scheduler.cc
   rgw_dmclock_async_scheduler.cc
   rgw_env.cc

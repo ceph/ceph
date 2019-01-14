@@ -38,7 +38,7 @@
 #include "rgw_frontend.h"
 #include "rgw_http_client_curl.h"
 #if defined(WITH_RADOSGW_BEAST_FRONTEND)
-#include "rgw_dmclock_scheduler.h"
+#include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_asio_frontend.h"
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
 

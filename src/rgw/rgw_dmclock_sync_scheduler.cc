@@ -1,5 +1,6 @@
 #include "rgw_dmclock_scheduler.h"
 #include "rgw_dmclock_sync_scheduler.h"
+#include "rgw_dmclock_scheduler_ctx.h"
 
 namespace rgw::dmclock {
 
