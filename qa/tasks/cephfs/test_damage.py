@@ -135,8 +135,8 @@ class TestDamage(CephFSTestCase):
         mutations = []
 
         # Removals
-        for obj_id in objects:
-            if obj_id in [
+        for o in objects:
+            if o in [
                 # JournalPointers are auto-replaced if missing (same path as upgrade)
                 "400.00000000",
                 # Missing dirfrags for non-system dirs result in empty directory
@@ -151,13 +151,13 @@ class TestDamage(CephFSTestCase):
                 expectation = DAMAGED_ON_START
 
             log.info("Expectation on rm '{0}' will be '{1}'".format(
-                obj_id, expectation
+                o, expectation
             ))
 
             mutations.append(MetadataMutation(
-                obj_id,
-                "Delete {0}".format(obj_id),
-                lambda o=obj_id: self.fs.rados(["rm", o]),
+                o,
+                "Delete {0}".format(o),
+                lambda o=o: self.fs.rados(["rm", o]),
                 expectation
             ))
 
@@ -180,8 +180,8 @@ class TestDamage(CephFSTestCase):
                 ))
 
         # Truncations
-        for obj_id in data_objects:
-            if obj_id == "500.00000000":
+        for o in data_objects:
+            if o == "500.00000000":
                 # The PurgeQueue is allowed to be empty: Journaler interprets
                 # an empty header object as an empty journal.
                 expectation = NO_DAMAGE
@@ -193,7 +193,7 @@ class TestDamage(CephFSTestCase):
                     o,
                     "Truncate {0}".format(o),
                     lambda o=o: self.fs.rados(["truncate", o, "0"]),
-                    DAMAGED_ON_START
+                    expectation
             ))
 
         # OMAP value corruptions
@@ -215,22 +215,22 @@ class TestDamage(CephFSTestCase):
             )
 
         # OMAP header corruptions
-        for obj_id in omap_header_objs:
-            if re.match("60.\.00000000", obj_id) \
-                    or obj_id in ["1.00000000", "100.00000000", "mds0_sessionmap"]:
+        for o in omap_header_objs:
+            if re.match("60.\.00000000", o) \
+                    or o in ["1.00000000", "100.00000000", "mds0_sessionmap"]:
                 expectation = DAMAGED_ON_START
             else:
                 expectation = NO_DAMAGE
 
             log.info("Expectation on corrupt header '{0}' will be '{1}'".format(
-                obj_id, expectation
+                o, expectation
             ))
 
             mutations.append(
                 MetadataMutation(
-                    obj_id,
-                    "Corrupt omap header on {0}".format(obj_id),
-                    lambda o=obj_id: self.fs.rados(["setomapheader", o, junk]),
+                    o,
+                    "Corrupt omap header on {0}".format(o),
+                    lambda o=o: self.fs.rados(["setomapheader", o, junk]),
                     expectation
                 )
             )
