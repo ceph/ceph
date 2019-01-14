@@ -3472,7 +3472,7 @@ void *BlueStore::MempoolThread::entry()
   utime_t next_resize = ceph_clock_now();
 
   bool interval_stats_trim = false;
-  bool interval_stats_resize = false; 
+  bool interval_stats_resize = true;  // be more verbose on start
   while (!stop) {
     _adjust_cache_settings();
 
@@ -3480,7 +3480,15 @@ void *BlueStore::MempoolThread::entry()
     double autotune_interval = store->cache_autotune_interval;
     double resize_interval = store->osd_memory_cache_resize_interval;
 
-    if (autotune_interval > 0 && next_balance < ceph_clock_now()) {
+    if (resize_interval > 0 && next_resize <= ceph_clock_now()) {
+      if (ceph_using_tcmalloc() && store->cache_autotune) {
+        _tune_cache_size(interval_stats_resize);
+        interval_stats_resize = false;
+      }
+      next_resize = ceph_clock_now();
+      next_resize += resize_interval;
+    }
+    if (autotune_interval > 0 && next_balance <= ceph_clock_now()) {
       // Log events at 5 instead of 20 when balance happens.
       interval_stats_resize = true; 
       interval_stats_trim = true;
@@ -3490,14 +3498,6 @@ void *BlueStore::MempoolThread::entry()
 
       next_balance = ceph_clock_now();
       next_balance += autotune_interval;
-    }
-    if (resize_interval > 0 && next_resize < ceph_clock_now()) {
-      if (ceph_using_tcmalloc() && store->cache_autotune) {
-        _tune_cache_size(interval_stats_resize);
-        interval_stats_resize = false;
-      }
-      next_resize = ceph_clock_now();
-      next_resize += resize_interval;
     }
 
     // Now Trim
@@ -3567,7 +3567,7 @@ void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
       (meta_alloc / (double) num_shards) / meta_cache.get_bytes_per_onode());
   uint64_t max_shard_buffer = static_cast<uint64_t>(data_alloc / num_shards);
 
-  ldout(cct, 30) << __func__ << " max_shard_onodes: " << max_shard_onodes
+  ldout(cct, 20) << __func__ << " max_shard_onodes: " << max_shard_onodes
                  << " max_shard_buffer: " << max_shard_buffer << dendl;
 
   for (auto i : store->cache_shards) {
