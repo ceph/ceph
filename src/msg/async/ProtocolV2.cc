@@ -172,7 +172,8 @@ void ProtocolV2::fault() {
 
   reset_recv_state();
 
-  if (connection->policy.standby && out_q.empty() && state != WAIT) {
+  if (connection->policy.standby && out_q.empty() && !keepalive &&
+      state != WAIT) {
     ldout(cct, 10) << __func__ << " with nothing to send, going to standby"
                    << dendl;
     state = STANDBY;
@@ -2149,7 +2150,11 @@ CtPtr ProtocolV2::handle_connect_message_2() {
         ceph_assert(connection->peer_addrs->legacy_addr() >
                     messenger->get_myaddr());
         existing->lock.unlock();
-        return send_connect_message_reply(CEPH_MSGR_TAG_WAIT, reply,
+	// make sure we follow through with opening the existing
+	// connection (if it isn't yet open) since we know the peer
+	// has something to send to us.
+	existing->send_keepalive();
+	return send_connect_message_reply(CEPH_MSGR_TAG_WAIT, reply,
                                           authorizer_reply);
       }
     }
