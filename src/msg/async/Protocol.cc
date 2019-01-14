@@ -460,8 +460,6 @@ void ProtocolV1::cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops)
         len = (*it)->len;
       }
       if (len > 0) {
-        // this will modify the inner buffer of outcoming_bl, and only _try_send will touch inner buffer of outcoming_bl,
-        // other places just append to outcoming_bl, and both _try_send and this are made exclusive by send_lock, so it is safe.
         connection->outcoming_bl.clone_replace(o, len);
       }
     }
