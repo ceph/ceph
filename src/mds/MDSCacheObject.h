@@ -2,6 +2,7 @@
 #define CEPH_MDSCACHEOBJECT_H
 
 #include <ostream>
+#include <string_view>
 
 #include "common/config.h"
 
@@ -69,7 +70,7 @@ class MDSCacheObject {
   static const int PIN_CLIENTLEASE = 1009;
   static const int PIN_DISCOVERBASE = 1010;
 
-  const char *generic_pin_name(int p) const {
+  std::string_view generic_pin_name(int p) const {
     switch (p) {
     case PIN_REPLICATED: return "replicated";
     case PIN_DIRTY: return "dirty";
@@ -82,7 +83,7 @@ class MDSCacheObject {
     case PIN_TEMPEXPORTING: return "tempexporting";
     case PIN_CLIENTLEASE: return "clientlease";
     case PIN_DISCOVERBASE: return "discoverbase";
-    default: ceph_abort(); return 0;
+    default: ceph_abort(); return std::string_view();
     }
   }
 
@@ -157,7 +158,7 @@ protected:
 #endif
     return ref;
   }
-  virtual const char *pin_name(int by) const = 0;
+  virtual std::string_view pin_name(int by) const = 0;
   //bool is_pinned_by(int by) { return ref_set.count(by); }
   //multiset<int>& get_ref_set() { return ref_set; }
 

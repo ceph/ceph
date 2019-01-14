@@ -123,25 +123,4 @@ enum {
 #define LOCK_AC_FOR_AUTH(a)     ((a) > 0)
 
 
-static inline const char *get_lock_action_name(int a) {
-  switch (a) {
-  case LOCK_AC_SYNC: return "sync";
-  case LOCK_AC_MIX: return "mix";
-  case LOCK_AC_LOCK: return "lock";
-  case LOCK_AC_LOCKFLUSHED: return "lockflushed";
-
-  case LOCK_AC_SYNCACK: return "syncack";
-  case LOCK_AC_MIXACK: return "mixack";
-  case LOCK_AC_LOCKACK: return "lockack";
-
-  case LOCK_AC_REQSCATTER: return "reqscatter";
-  case LOCK_AC_REQUNSCATTER: return "requnscatter";
-  case LOCK_AC_NUDGE: return "nudge";
-  case LOCK_AC_REQRDLOCK: return "reqrdlock";
-  default: return "???";
-  }
-}
-
-
-
 #endif

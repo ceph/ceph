@@ -1070,10 +1070,12 @@ struct C_IO_Inode_Stored : public CInodeIOContext {
   }
 };
 
-object_t InodeStoreBase::get_object_name(inodeno_t ino, frag_t fg, const char *suffix)
+object_t InodeStoreBase::get_object_name(inodeno_t ino, frag_t fg, std::string_view suffix)
 {
   char n[60];
-  snprintf(n, sizeof(n), "%llx.%08llx%s", (long long unsigned)ino, (long long unsigned)fg, suffix ? suffix : "");
+  snprintf(n, sizeof(n), "%llx.%08llx", (long long unsigned)ino, (long long unsigned)fg);
+  ceph_assert(strlen(n) + suffix.size() < sizeof n);
+  strncat(n, suffix.data(), suffix.size());
   return object_t(n);
 }
 
@@ -2053,7 +2055,7 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
       mempool_inode *pi = get_projected_inode();
       fnode_t *pf = dir->project_fnode();
 
-      const char *ename = 0;
+      std::string_view ename = 0;
       switch (lock->get_type()) {
       case CEPH_LOCK_IFILE:
 	pf->fragstat.version = pi->dirstat.version;
