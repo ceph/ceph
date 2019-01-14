@@ -135,16 +135,13 @@ public:
    * @defgroup Messaging
    * @{
    */
-  int send_message(Message *m, const entity_inst_t& dest) override {
-    return _send_message(m, dest);
-  }
   int send_to(
     Message *m,
     int type,
     const entity_addrvec_t& addr) override {
     // temporary
-    return send_message(m, entity_inst_t(entity_name_t(type, -1),
-					 addr.legacy_addr()));
+    return _send_message(m, entity_inst_t(entity_name_t(type, -1),
+					  addr.legacy_addr()));
   }
 
   int send_message(Message *m, Connection *con) {
