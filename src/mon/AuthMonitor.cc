@@ -647,9 +647,9 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       // request
       ret = s->auth_handler->handle_request(
 	indata,
-	response_bl,
-	s->con->peer_global_id,
-	s->con->peer_caps_info);
+	&response_bl,
+	&s->con->peer_global_id,
+	&s->con->peer_caps_info);
     }
     if (ret == -EIO) {
       wait_for_active(op, new C_RetryMessage(this,op));

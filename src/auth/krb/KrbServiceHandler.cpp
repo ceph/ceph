@@ -27,9 +27,9 @@
 
 
 int KrbServiceHandler::handle_request(bufferlist::const_iterator& indata, 
-                                      bufferlist& buff_list, 
-                                      uint64_t& global_id, 
-                                      AuthCapsInfo& caps) 
+                                      bufferlist *buff_list,
+                                      uint64_t *global_id,
+                                      AuthCapsInfo *caps)
 {
   auto result(0);
   gss_buffer_desc gss_buffer_in = {0, nullptr};
@@ -93,13 +93,13 @@ int KrbServiceHandler::handle_request(bufferlist::const_iterator& indata,
                "[KrbServiceHandler(GSS_S_COMPLETE)] " << dendl; 
         if (!m_key_server->get_service_caps(entity_name, 
                                             CEPH_ENTITY_TYPE_MON, 
-                                            caps)) {
+                                            *caps)) {
           result = (-EACCES);
           ldout(cct, 0)
               << "KrbServiceHandler::handle_response() : "
                  "ERROR: Could not get MONITOR CAPS : " << entity_name << dendl;
         } else {
-          if (!caps.caps.c_str()) {
+          if (!caps->caps.c_str()) {
             result = (-EACCES);
             ldout(cct, 0)
                 << "KrbServiceHandler::handle_response() : "
@@ -132,13 +132,13 @@ int KrbServiceHandler::handle_request(bufferlist::const_iterator& indata,
         static_cast<int>(GSSAuthenticationRequest::GSS_TOKEN);
 
     using ceph::encode;
-    encode(krb_response, buff_list);
+    encode(krb_response, *buff_list);
 
     krb_token.m_token_blob.append(buffer::create_static(
                                     m_gss_buffer_out.length, 
                                     reinterpret_cast<char*>
                                       (m_gss_buffer_out.value)));
-    encode(krb_token, buff_list);
+    encode(krb_token, *buff_list);
     ldout(cct, 20) 
         << "KrbServiceHandler::handle_request() : Token Blob: " << "\n"; 
     krb_token.m_token_blob.hexdump(*_dout);

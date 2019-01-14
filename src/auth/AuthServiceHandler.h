@@ -38,7 +38,10 @@ public:
   virtual int start_session(const EntityName& name,
 			    bufferlist *result,
 			    AuthCapsInfo *caps) = 0;
-  virtual int handle_request(bufferlist::const_iterator& indata, bufferlist& result, uint64_t& global_id, AuthCapsInfo& caps) = 0;
+  virtual int handle_request(bufferlist::const_iterator& indata,
+			     bufferlist *result,
+			     uint64_t *global_id,
+			     AuthCapsInfo *caps) = 0;
 
   EntityName& get_entity_name() { return entity_name; }
 };
