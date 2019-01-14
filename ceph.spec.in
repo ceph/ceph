@@ -463,6 +463,7 @@ Summary:	Ceph fuse-based client
 Group:		System/Filesystems
 %endif
 Requires:       fuse
+Requires:	python%{python3_pkgversion}
 %description fuse
 FUSE based client for Ceph distributed network file system
 
