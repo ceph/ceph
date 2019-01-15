@@ -327,10 +327,17 @@ public:
   }
   int get_rank(const entity_addr_t& a) const {
     string n = get_name(a);
-    if (n.empty())
-      return -1;
-
-    return get_rank(n);
+    if (!n.empty()) {
+      return get_rank(n);
+    }
+    return -1;
+  }
+  int get_rank(const entity_addrvec_t& av) const {
+    string n = get_name(av);
+    if (!n.empty()) {
+      return get_rank(n);
+    }
+    return -1;
   }
   bool get_addr_name(const entity_addr_t& a, string& name) {
     if (addr_mons.count(a) == 0)
