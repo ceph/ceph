@@ -128,7 +128,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
     recv_start(0), recv_end(0),
     last_active(ceph::coarse_mono_clock::now()),
     inactive_timeout_us(cct->_conf->ms_tcp_read_timeout*1000*1000),
-    msg_left(0), cur_msg_size(0), got_bad_auth(false),
+    msg_left(0), cur_msg_size(0),
     authorizer(NULL), replacing(false),
     is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0),
     worker(w), center(&w->center)
@@ -864,7 +864,6 @@ ssize_t AsyncConnection::_process_connection()
         assert(!policy.server);
 
         // reset connect state variables
-        got_bad_auth = false;
         delete authorizer;
         authorizer = NULL;
         authorizer_buf.clear();
@@ -1411,12 +1410,7 @@ int AsyncConnection::handle_connect_reply(ceph_msg_connect &connect, ceph_msg_co
 
   if (reply.tag == CEPH_MSGR_TAG_BADAUTHORIZER) {
     ldout(async_msgr->cct,0) << __func__ << " connect got BADAUTHORIZER" << dendl;
-    if (got_bad_auth)
-      goto fail;
-    got_bad_auth = true;
-    delete authorizer;
-    authorizer = async_msgr->get_authorizer(peer_type, true);  // try harder
-    state = STATE_CONNECTING_SEND_CONNECT_MSG;
+    goto fail;
   }
   if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
     ldout(async_msgr->cct, 0) << __func__ << " connect got RESETSESSION" << dendl;
@@ -2319,7 +2313,6 @@ void AsyncConnection::reset_recv_state()
       state <= STATE_CONNECTING_READY) {
     delete authorizer;
     authorizer = NULL;
-    got_bad_auth = false;
   }
 
   if (state > STATE_OPEN_MESSAGE_THROTTLE_MESSAGE &&
