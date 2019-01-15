@@ -348,6 +348,7 @@ public:
 			     flags);
       b->cache_private = _discard(cache, offset, bl.length());
       _add_buffer(cache, b, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
+      cache->_trim_buffers();
     }
     void _finish_write(Cache* cache, uint64_t seq);
     void did_read(Cache* cache, uint32_t offset, bufferlist& bl) {
@@ -355,6 +356,7 @@ public:
       Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
       b->cache_private = _discard(cache, offset, bl.length());
       _add_buffer(cache, b, 1, nullptr);
+      cache->_trim_buffers();
     }
 
     void read(Cache* cache, uint32_t offset, uint32_t length,
@@ -1089,6 +1091,8 @@ public:
 
     std::atomic<uint64_t> num_extents = {0};
     std::atomic<uint64_t> num_blobs = {0};
+    std::atomic<uint64_t> onode_max = {0};
+    std::atomic<uint64_t> buffer_max = {0};
 
     static Cache *create(CephContext* cct, string type, PerfCounters *logger);
 
@@ -1122,11 +1126,28 @@ public:
       --num_blobs;
     }
 
-    void trim(uint64_t onode_max, uint64_t buffer_max);
+    void set_onode_max(uint64_t max) {
+      onode_max = max;
+    }
 
-    void trim_all();
+    void set_buffer_max(uint64_t max) {
+      buffer_max = max;
+    }
 
-    virtual void _trim(uint64_t onode_max, uint64_t buffer_max) = 0;
+    void flush();
+    void trim_onodes();
+    void trim_buffers();
+
+    virtual void _trim_onodes_to(uint64_t max) = 0;
+    virtual void _trim_buffers_to(uint64_t max) = 0;
+
+    void _trim_onodes() {
+      _trim_onodes_to(onode_max);
+    }
+
+    void _trim_buffers() {
+      _trim_buffers_to(buffer_max);
+    }
 
     virtual void add_stats(uint64_t *onodes, uint64_t *extents,
 			   uint64_t *blobs,
@@ -1218,7 +1239,8 @@ public:
       _audit("_touch_buffer end");
     }
 
-    void _trim(uint64_t onode_max, uint64_t buffer_max) override;
+    void _trim_onodes_to(uint64_t max) override;
+    void _trim_buffers_to(uint64_t max) override;
 
     void add_stats(uint64_t *onodes, uint64_t *extents,
 		   uint64_t *blobs,
@@ -1313,7 +1335,8 @@ public:
       _audit("_touch_buffer end");
     }
 
-    void _trim(uint64_t onode_max, uint64_t buffer_max) override;
+    void _trim_onodes_to(uint64_t max) override;
+    void _trim_buffers_to(uint64_t max) override;
 
     void add_stats(uint64_t *onodes, uint64_t *extents,
 		   uint64_t *blobs,
@@ -2148,7 +2171,7 @@ private:
 
   private:
     void _adjust_cache_settings();
-    void _trim_shards(bool interval_stats);
+    void _resize_shards(bool interval_stats);
     void _tune_cache_size(bool interval_stats);
     void _balance_cache(
         const std::list<std::shared_ptr<PriorityCache::PriCache>>& caches);

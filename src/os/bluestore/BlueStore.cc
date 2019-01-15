@@ -870,16 +870,23 @@ BlueStore::Cache *BlueStore::Cache::create(CephContext* cct, string type,
   return c;
 }
 
-void BlueStore::Cache::trim(uint64_t onode_max, uint64_t buffer_max)
+void BlueStore::Cache::trim_onodes()
 {
   std::lock_guard l(lock);
-  _trim(onode_max, buffer_max);
+  _trim_onodes();
 }
 
-void BlueStore::Cache::trim_all()
+void BlueStore::Cache::trim_buffers()
 {
   std::lock_guard l(lock);
-  _trim(0, 0);
+  _trim_buffers();
+}
+
+void BlueStore::Cache::flush()
+{
+  std::lock_guard l(lock);
+  _trim_buffers_to(0);
+  _trim_onodes_to(0);
 }
 
 // LRUCache
@@ -893,33 +900,11 @@ void BlueStore::LRUCache::_touch_onode(OnodeRef& o)
   onode_lru.push_front(*o);
 }
 
-void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
-{
-  dout(20) << __func__ << " onodes " << onode_lru.size() << " / " << onode_max
-	   << " buffers " << buffer_size << " / " << buffer_max
-	   << dendl;
-
-  _audit("trim start");
-
-  // buffers
-  while (buffer_size > buffer_max) {
-    auto i = buffer_lru.rbegin();
-    if (i == buffer_lru.rend()) {
-      // stop if buffer_lru is now empty
-      break;
-    }
-
-    Buffer *b = &*i;
-    ceph_assert(b->is_clean());
-    dout(20) << __func__ << " rm " << *b << dendl;
-    b->space->_rm_buffer(this, b);
-  }
-
-  // onodes
-  if (onode_max >= onode_lru.size()) {
+void BlueStore::LRUCache::_trim_onodes_to(uint64_t max) {
+  if (max >= onode_lru.size()) {
     return; // don't even try
   }
-  uint64_t num = onode_lru.size() - onode_max;
+  uint64_t num = onode_lru.size() - max;
 
   auto p = onode_lru.end();
   ceph_assert(p != onode_lru.begin());
@@ -931,7 +916,7 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     int refs = o->nref.load();
     if (refs > 1) {
       dout(20) << __func__ << "  " << o->oid << " has " << refs
-	       << " refs, skipping" << dendl;
+               << " refs, skipping" << dendl;
       if (++skipped >= max_skipped) {
         dout(20) << __func__ << " maximum skip pinned reached; stopping with "
                  << num << " left to trim" << dendl;
@@ -957,6 +942,21 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     o->c->onode_map.remove(o->oid);
     o->put();
     --num;
+  }
+}
+
+void BlueStore::LRUCache::_trim_buffers_to(uint64_t max) {
+  while (buffer_size > max) {
+    auto i = buffer_lru.rbegin();
+    if (i == buffer_lru.rend()) {
+      // stop if buffer_lru is now empty
+      break;
+    }
+
+    Buffer *b = &*i;
+    ceph_assert(b->is_clean());
+    dout(20) << __func__ << " rm " << *b << dendl;
+    b->space->_rm_buffer(this, b);
   }
 }
 
@@ -1111,18 +1111,56 @@ void BlueStore::TwoQCache::_adjust_buffer_size(Buffer *b, int64_t delta)
   }
 }
 
-void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
-{
-  dout(20) << __func__ << " onodes " << onode_lru.size() << " / " << onode_max
-	   << " buffers " << buffer_bytes << " / " << buffer_max
-	   << dendl;
+void BlueStore::TwoQCache::_trim_onodes_to(uint64_t max) {
+  if (max >= onode_lru.size()) {
+    return; // don't even try
+  }
+  uint64_t num = onode_lru.size() - max;
 
-  _audit("trim start");
+  auto p = onode_lru.end();
+  ceph_assert(p != onode_lru.begin());
+  --p;
+  int skipped = 0;
+  int max_skipped = g_conf()->bluestore_cache_trim_max_skip_pinned;
+  while (num > 0) {
+    Onode *o = &*p;
+    dout(20) << __func__ << " considering " << o << dendl;
+    int refs = o->nref.load();
+    if (refs > 1) {
+      dout(20) << __func__ << "  " << o->oid << " has " << refs
+               << " refs; skipping" << dendl;
+      if (++skipped >= max_skipped) {
+        dout(20) << __func__ << " maximum skip pinned reached; stopping with "
+                 << num << " left to trim" << dendl;
+        break;
+      }
 
-  // buffers
-  if (buffer_bytes > buffer_max) {
-    uint64_t kin = buffer_max * cct->_conf->bluestore_2q_cache_kin_ratio;
-    uint64_t khot = buffer_max - kin;
+      if (p == onode_lru.begin()) {
+        break;
+      } else {
+        p--;
+        num--;
+        continue;
+      }
+    }
+    dout(30) << __func__ << " " << o->oid << " num=" << num <<" lru size="<<onode_lru.size()<< dendl;
+    if (p != onode_lru.begin()) {
+      onode_lru.erase(p--);
+    } else {
+      onode_lru.erase(p);
+      ceph_assert(num == 1);
+    }
+    o->get();  // paranoia
+    o->c->onode_map.remove(o->oid);
+    o->put();
+    --num;
+  }
+}
+
+void BlueStore::TwoQCache::_trim_buffers_to(uint64_t max) {
+  if (buffer_bytes > max) {
+    uint64_t kin = max * cct->_conf->bluestore_2q_cache_kin_ratio;
+    uint64_t khot = max - kin;
 
     // pre-calculate kout based on average buffer size too,
     // which is typical(the warm_in and hot lists may change later)
@@ -1131,7 +1169,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     if (buffer_num) {
       uint64_t buffer_avg_size = buffer_bytes / buffer_num;
       ceph_assert(buffer_avg_size);
-      uint64_t calculated_buffer_num = buffer_max / buffer_avg_size;
+      uint64_t calculated_buffer_num = max / buffer_avg_size;
       kout = calculated_buffer_num * cct->_conf->bluestore_2q_cache_kout_ratio;
     }
 
@@ -1210,51 +1248,6 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       dout(20) << __func__ << " buffer_warm_out rm " << *b << dendl;
       b->space->_rm_buffer(this, b);
     }
-  }
-
-  // onodes
-  if (onode_max >= onode_lru.size()) {
-    return; // don't even try
-  }
-  uint64_t num = onode_lru.size() - onode_max;
-
-  auto p = onode_lru.end();
-  ceph_assert(p != onode_lru.begin());
-  --p;
-  int skipped = 0;
-  int max_skipped = g_conf()->bluestore_cache_trim_max_skip_pinned;
-  while (num > 0) {
-    Onode *o = &*p;
-    dout(20) << __func__ << " considering " << o << dendl;
-    int refs = o->nref.load();
-    if (refs > 1) {
-      dout(20) << __func__ << "  " << o->oid << " has " << refs
-	       << " refs; skipping" << dendl;
-      if (++skipped >= max_skipped) {
-        dout(20) << __func__ << " maximum skip pinned reached; stopping with "
-                 << num << " left to trim" << dendl;
-        break;
-      }
-
-      if (p == onode_lru.begin()) {
-        break;
-      } else {
-        p--;
-        num--;
-        continue;
-      }
-    }
-    dout(30) << __func__ << " " << o->oid << " num=" << num <<" lru size="<<onode_lru.size()<< dendl;
-    if (p != onode_lru.begin()) {
-      onode_lru.erase(p--);
-    } else {
-      onode_lru.erase(p);
-      ceph_assert(num == 1);
-    }
-    o->get();  // paranoia
-    o->c->onode_map.remove(o->oid);
-    o->put();
-    --num;
   }
 }
 
@@ -1385,6 +1378,7 @@ int BlueStore::BufferSpace::_discard(Cache* cache, uint32_t offset, uint32_t len
     cache->_audit("discard end 2");
     break;
   }
+  cache->_trim_buffers();
   return cache_private;
 }
 
@@ -1489,7 +1483,7 @@ void BlueStore::BufferSpace::_finish_write(Cache* cache, uint64_t seq)
       ldout(cache->cct, 20) << __func__ << " added " << *b << dendl;
     }
   }
-
+  cache->_trim_buffers();
   cache->_audit("finish_write end");
 }
 
@@ -1541,6 +1535,7 @@ void BlueStore::BufferSpace::split(Cache* cache, size_t pos, BlueStore::BufferSp
     }
   }
   ceph_assert(writing.empty());
+  cache->_trim_buffers();
 }
 
 // OnodeSpace
@@ -1561,6 +1556,7 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o
   ldout(cache->cct, 30) << __func__ << " " << oid << " " << o << dendl;
   onode_map[oid] = o;
   cache->_add_onode(o, 1);
+  cache->_trim_onodes();
   return o;
 }
 
@@ -1635,7 +1631,7 @@ void BlueStore::OnodeSpace::rename(
   oldo.reset(new Onode(o->c, old_oid, o->key));
   po->second = oldo;
   cache->_add_onode(po->second, 1);
-
+  cache->_trim_onodes();
   // add at new position and fix oid, key
   onode_map.insert(make_pair(new_oid, o));
   cache->_touch_onode(o);
@@ -3521,6 +3517,7 @@ void BlueStore::Collection::split_cache(
       }
     }
   }
+  dest->cache->_trim_onodes();
 }
 
 // =======================================================
@@ -3576,8 +3573,8 @@ void *BlueStore::MempoolThread::entry()
       next_resize += resize_interval;
     }
 
-    // Now Trim
-    _trim_shards(interval_stats_trim);
+    // Now Resize the shards 
+    _resize_shards(interval_stats_trim);
     interval_stats_trim = false;
 
     store->_update_cache_logger();
@@ -3598,7 +3595,7 @@ void BlueStore::MempoolThread::_adjust_cache_settings()
   data_cache->set_cache_ratio(store->cache_data_ratio);
 }
 
-void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
+void BlueStore::MempoolThread::_resize_shards(bool interval_stats)
 {
   auto cct = store->cct;
   size_t num_shards = store->cache_shards.size();
@@ -3649,7 +3646,8 @@ void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
                  << " max_shard_buffer: " << max_shard_buffer << dendl;
 
   for (auto i : store->cache_shards) {
-    i->trim(max_shard_onodes, max_shard_buffer);
+    i->set_onode_max(max_shard_onodes);
+    i->set_buffer_max(max_shard_buffer);
   }
 }
 
@@ -13780,7 +13778,7 @@ void BlueStore::_flush_cache()
 {
   dout(10) << __func__ << dendl;
   for (auto i : cache_shards) {
-    i->trim_all();
+    i->flush();
     ceph_assert(i->empty());
   }
   for (auto& p : coll_map) {
@@ -13806,7 +13804,7 @@ int BlueStore::flush_cache(ostream *os)
 {
   dout(10) << __func__ << dendl;
   for (auto i : cache_shards) {
-    i->trim_all();
+    i->flush();
   }
 
   return 0;
