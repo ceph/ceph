@@ -122,7 +122,9 @@ class FailHandler : public FileSystemCommandHandler
     for (const auto& gid : to_fail) {
       mon->mdsmon()->fail_mds_gid(fsmap, gid);
     }
-    mon->osdmon()->propose_pending();
+    if (!to_fail.empty()) {
+      mon->osdmon()->propose_pending();
+    }
 
     ss << fs_name;
     ss << " marked not joinable; MDS cannot join the cluster. All MDS ranks marked failed.";
