@@ -40,6 +40,19 @@ class PGMap;
 class MonSession;
 class MOSDMap;
 
+namespace ceph::handle_flags {
+
+int set(vector<string> flags, const bool sure,
+        OSDMonitor& osdmon, MonOpRequestRef op, std::ostream& os);
+
+int unset(vector<string> flags, 
+          OSDMonitor& osdmon, MonOpRequestRef op, std::ostream& os);
+
+int set_special(ostream& os, const std::string& flag_name,
+                OSDMonitor& osdmon, OSDMap& osdmap, MonOpRequestRef op, const bool sure);
+
+} // namespace ceph::handle_flags
+
 #include "erasure-code/ErasureCodeInterface.h"
 #include "mon/MonOpRequest.h"
 #include <boost/functional/hash.hpp>
@@ -481,6 +494,10 @@ private:
   int lookup_pruned_snap(int64_t pool, snapid_t snap,
 			 snapid_t *begin, snapid_t *end);
 
+
+  void set_pending_flags(MonOpRequestRef op, const int flag);
+  void unset_pending_flags(MonOpRequestRef op, const int flag);
+  void wait_for_finished_command_proposal(MonOpRequestRef op, const std::string&& msg);
   bool prepare_set_flag(MonOpRequestRef op, int flag);
   bool prepare_unset_flag(MonOpRequestRef op, int flag);
 
@@ -701,6 +718,16 @@ public:
       pending_inc.new_flags &= ~flag;
     }
   }
+
+ private:
+ friend int ceph::handle_flags::set(vector<string> flags, const bool sure,
+                                    OSDMonitor& osdmon, MonOpRequestRef op, std::ostream& os);
+
+ friend int ceph::handle_flags::unset(vector<string> flags, 
+                                      OSDMonitor& osdmon, MonOpRequestRef op, std::ostream& os);
+
+ friend int ceph::handle_flags::set_special(ostream& os, const std::string& flag_name,
+                                OSDMonitor& osdmon, OSDMap& osdmap, MonOpRequestRef op, const bool sure);
 };
 
 #endif
