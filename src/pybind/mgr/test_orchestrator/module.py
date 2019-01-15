@@ -249,3 +249,9 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def create_osds(self, spec):
         raise NotImplementedError(str(spec))
 
+    def service_action(self, action, service_type, service_name=None, service_id=None):
+        return TestWriteCompletion(
+            lambda: True, None,
+            "Pretending to {} service {} (name={}, id={})".format(
+                action, service_type, service_name, service_id))
+
