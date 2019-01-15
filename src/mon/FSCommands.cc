@@ -677,6 +677,13 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
       const cmdmap_t& cmdmap,
       std::stringstream &ss) override
   {
+    /* We may need to blacklist ranks. */
+    if (!mon->osdmon()->is_writeable()) {
+      // not allowed to write yet, so retry when we can
+      mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
+      return -EAGAIN;
+    }
+
     // Check caller has correctly named the FS to delete
     // (redundant while there is only one FS, but command
     //  syntax should apply to multi-FS future)
@@ -719,6 +726,9 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
       // Standby replays don't write, so it isn't important to
       // wait for an osdmap propose here: ignore return value.
       mon->mdsmon()->fail_mds_gid(fsmap, gid);
+    }
+    if (!to_fail.empty()) {
+      mon->osdmon()->propose_pending(); /* maybe new blacklists */
     }
 
     fsmap.erase_filesystem(fs->fscid);
