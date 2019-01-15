@@ -13,6 +13,8 @@ Timeline
 .. ceph_timeline:: releases.yml development mimic luminous kraken jewel infernalis hammer giant firefly emperor dumpling
 
 .. _Mimic: ../mimic
+.. _13.2.4: ../mimic#v13-2-4-mimic
+.. _13.2.3: ../mimic#v13-2-3-mimic
 .. _13.2.2: ../mimic#v13-2-2-mimic
 .. _13.2.1: ../mimic#v13-2-1-mimic
 .. _13.2.0: ../mimic#v13-2-0-mimic
