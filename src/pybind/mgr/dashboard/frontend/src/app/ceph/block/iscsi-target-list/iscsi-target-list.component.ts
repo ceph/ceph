@@ -1,18 +1,23 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Subscription } from 'rxjs';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
+import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
+import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
+import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permissions } from '../../../shared/models/permissions';
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
+import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 
 @Component({
   selector: 'cd-iscsi-target-list',
@@ -36,15 +41,40 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
   tableActions: CdTableAction[];
   targets = [];
 
+  builders = {
+    'iscsi/target/create': (metadata) => {
+      return {
+        target_iqn: metadata['target_iqn']
+      };
+    }
+  };
+
   constructor(
     private authStorageService: AuthStorageService,
     private i18n: I18n,
     private iscsiService: IscsiService,
     private taskListService: TaskListService,
     private cephReleaseNamePipe: CephReleaseNamePipe,
-    private summaryservice: SummaryService
+    private summaryservice: SummaryService,
+    private modalService: BsModalService,
+    private taskWrapper: TaskWrapperService
   ) {
     this.permissions = this.authStorageService.getPermissions();
+
+    this.tableActions = [
+      {
+        permission: 'create',
+        icon: 'fa-plus',
+        routerLink: () => '/block/iscsi/targets/add',
+        name: this.i18n('Add')
+      },
+      {
+        permission: 'delete',
+        icon: 'fa-times',
+        click: () => this.deleteIscsiTargetModal(),
+        name: this.i18n('Delete')
+      }
+    ];
   }
 
   ngOnInit() {
@@ -76,9 +106,9 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
           (resp) => this.prepareResponse(resp),
           (targets) => (this.targets = targets),
           () => this.onFetchError(),
-          () => false,
-          () => false,
-          undefined
+          this.taskFilter,
+          this.itemFilter,
+          this.builders
         );
 
         this.iscsiService.settings().subscribe((settings: any) => {
@@ -112,7 +142,32 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
     this.table.reset(); // Disable loading indicator.
   }
 
+  itemFilter(entry, task) {
+    return entry.target_iqn === task.metadata['target_iqn'];
+  }
+
+  taskFilter(task) {
+    return ['iscsi/target/create', 'iscsi/target/delete'].includes(task.name);
+  }
+
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  deleteIscsiTargetModal() {
+    const target_iqn = this.selection.first().target_iqn;
+
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      initialState: {
+        itemDescription: this.i18n('iSCSI'),
+        submitActionObservable: () =>
+          this.taskWrapper.wrapTaskAroundCall({
+            task: new FinishedTask('iscsi/target/delete', {
+              target_iqn: target_iqn
+            }),
+            call: this.iscsiService.deleteTarget(target_iqn)
+          })
+      }
+    });
   }
 }
