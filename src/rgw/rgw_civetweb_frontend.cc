@@ -17,21 +17,20 @@
 namespace dmc = rgw::dmclock;
 
 RGWCivetWebFrontend::RGWCivetWebFrontend(RGWProcessEnv& env,
-					 RGWFrontendConfig *conf,
-					 CephContext *cct)
+					 RGWFrontendConfig *conf)
   : conf(conf),
     ctx(nullptr),
     env(env)
 {
 
-  auto sched_t = dmc::get_scheduler_t(cct);
+  auto sched_t = dmc::get_scheduler_t(cct());
   switch(sched_t){
   case dmc::scheduler_t::none: [[fallthrough]];
   case dmc::scheduler_t::throttler:
     break;
   case dmc::scheduler_t::dmclock:
-    client_config = std::make_unique<dmc::ClientConfig>(cct);
-    client_counters.emplace(cct);
+    client_config = std::make_unique<dmc::ClientConfig>(cct());
+
     // TODO: keep track of server ready state and use that here civetweb
     // internally tracks in the ctx the threads used and free, while it is
     // expected with the current implementation that the threads waiting on the
@@ -40,8 +39,8 @@ RGWCivetWebFrontend::RGWCivetWebFrontend(RGWProcessEnv& env,
     // probably set this to false
     auto server_ready_f = []() -> bool { return true; };
 
-    scheduler.reset(new dmc::SyncScheduler(cct,
-					   std::ref(client_counters.value()),
+    scheduler.reset(new dmc::SyncScheduler(cct(),
+					   dmc::ClientCounters(cct()),
 					   *client_config.get(),
 					   server_ready_f,
 					   std::ref(dmc::SyncScheduler::handle_request_cb),

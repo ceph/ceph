@@ -14,7 +14,6 @@
 #include "rgw_civetweb.h"
 #include "rgw_civetweb_log.h"
 #include "civetweb/civetweb.h"
-#include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_auth_registry.h"
 
 #define dout_context g_ceph_context
@@ -113,10 +112,10 @@ class RGWCivetWebFrontend : public RGWFrontend {
     }
   }
 
+  CephContext* cct() const { return env.store->ctx(); }
 public:
   RGWCivetWebFrontend(RGWProcessEnv& env,
-                      RGWFrontendConfig *conf,
-                      CephContext *cct);
+                      RGWFrontendConfig *conf);
 
   int init() override {
     return 0;
