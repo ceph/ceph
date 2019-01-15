@@ -138,9 +138,21 @@ export class CdValidators {
    *
    * @param {AbstractControl} formControl
    * @param {Function} condition
-   * @param {ValidatorFn[]} validators
+   * @param {ValidatorFn[]} conditionalValidators List of validators that should only be tested
+   * when the condition is met
+   * @param {ValidatorFn[]} permanentValidators List of validators that should always be tested
+   * @param {AbstractControl[]} watchControls List of controls that the condition depend on.
+   * Every time one of this controls value is updated, the validation will be triggered
    */
-  static validateIf(formControl: AbstractControl, condition: Function, validators: ValidatorFn[]) {
+  static validateIf(
+    formControl: AbstractControl,
+    condition: Function,
+    conditionalValidators: ValidatorFn[],
+    permanentValidators: ValidatorFn[] = [],
+    watchControls: AbstractControl[] = []
+  ) {
+    conditionalValidators = conditionalValidators.concat(permanentValidators);
+
     formControl.setValidators(
       (
         control: AbstractControl
@@ -149,11 +161,20 @@ export class CdValidators {
       } => {
         const value = condition.call(this);
         if (value) {
-          return Validators.compose(validators)(control);
+          return Validators.compose(conditionalValidators)(control);
+        }
+        if (permanentValidators.length > 0) {
+          return Validators.compose(permanentValidators)(control);
         }
         return null;
       }
     );
+
+    watchControls.forEach((control: AbstractControl) => {
+      control.valueChanges.subscribe(() => {
+        formControl.updateValueAndValidity({ emitEvent: false });
+      });
+    });
   }
 
   /**
