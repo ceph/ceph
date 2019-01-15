@@ -322,6 +322,9 @@ struct entity_addr_t {
       memset(&u, 0, sizeof(u));
       memcpy(&u.sin6, sa, sizeof(u.sin6));
       break;
+    case AF_UNSPEC:
+      memset(&u, 0, sizeof(u));
+      break;
     default:
       return false;
     }
