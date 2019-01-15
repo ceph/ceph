@@ -159,7 +159,7 @@ class CephInt(CephArgtype):
 
     def valid(self, s, partial=False):
         try:
-            val = int(s)
+            val = int(s, 0)
         except ValueError:
             raise ArgumentValid("{0} doesn't represent an int".format(s))
         if len(self.range) == 2:
