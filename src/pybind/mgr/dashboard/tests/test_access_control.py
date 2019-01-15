@@ -10,8 +10,7 @@ import unittest
 from . import CmdException, exec_dashboard_cmd
 from .. import mgr
 from ..security import Scope, Permission
-from ..services.access_control import handle_access_control_command, \
-                                      load_access_control_db, \
+from ..services.access_control import load_access_control_db, \
                                       password_hash, AccessControlDB, \
                                       SYSTEM_ROLES
 
@@ -41,7 +40,7 @@ class AccessControlTest(unittest.TestCase):
 
     @classmethod
     def exec_cmd(cls, cmd, **kwargs):
-        return exec_dashboard_cmd(handle_access_control_command, cmd, **kwargs)
+        return exec_dashboard_cmd(None, cmd, **kwargs)
 
     def load_persistent_db(self):
         config_key = AccessControlDB.accessdb_config_key()
