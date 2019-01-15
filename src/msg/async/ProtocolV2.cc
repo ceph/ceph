@@ -375,6 +375,14 @@ struct KeepAliveFrame : public SignedEncryptedFrame<KeepAliveFrame, utime_t> {
   inline utime_t &timestamp() { return get_val<0>(); }
 };
 
+struct KeepAliveFrameAck
+    : public SignedEncryptedFrame<KeepAliveFrame, utime_t> {
+  const ProtocolV2::Tag tag = ProtocolV2::Tag::KEEPALIVE2_ACK;
+  using SignedEncryptedFrame::SignedEncryptedFrame;
+
+  inline utime_t &timestamp() { return get_val<0>(); }
+};
+
 struct AckFrame : public SignedEncryptedFrame<AckFrame, uint64_t> {
   const ProtocolV2::Tag tag = ProtocolV2::Tag::ACK;
   using SignedEncryptedFrame::SignedEncryptedFrame;
@@ -735,7 +743,7 @@ void ProtocolV2::send_message(Message *m) {
 void ProtocolV2::send_keepalive() {
   ldout(cct, 10) << __func__ << dendl;
   std::lock_guard<std::mutex> l(connection->write_lock);
-  if (can_write) {
+  if (state != CLOSED) {
     keepalive = true;
     connection->center->dispatch_event_external(connection->write_handler);
   }
@@ -868,7 +876,7 @@ void ProtocolV2::append_keepalive() {
 }
 
 void ProtocolV2::append_keepalive_ack(utime_t &timestamp) {
-  KeepAliveFrame keepalive_ack_frame(this, timestamp);
+  KeepAliveFrameAck keepalive_ack_frame(this, timestamp);
   connection->outcoming_bl.claim_append(keepalive_ack_frame.get_buffer());
 }
 
@@ -1988,7 +1996,7 @@ CtPtr ProtocolV2::handle_keepalive2(char *payload, uint32_t length) {
 CtPtr ProtocolV2::handle_keepalive2_ack(char *payload, uint32_t length) {
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
 
-  KeepAliveFrame keepalive_ack_frame(this, payload, length);
+  KeepAliveFrameAck keepalive_ack_frame(this, payload, length);
   connection->set_last_keepalive_ack(keepalive_ack_frame.timestamp());
   ldout(cct, 20) << __func__ << " got KEEPALIVE_ACK" << dendl;
 
