@@ -1,4 +1,4 @@
-export class SelectBadgesOption {
+export class SelectOption {
   selected: boolean;
   name: string;
   description: string;
