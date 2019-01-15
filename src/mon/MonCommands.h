@@ -371,6 +371,10 @@ COMMAND("fs new " \
 	"name=allow_dangerous_metadata_overlay,type=CephBool,req=false", \
 	"make new filesystem using named pools <metadata> and <data>", \
 	"fs", "rw")
+COMMAND("fs fail " \
+	"name=fs_name,type=CephString ", \
+	"bring the file system down and all of its ranks", \
+	"fs", "rw")
 COMMAND("fs rm " \
 	"name=fs_name,type=CephString " \
 	"name=yes_i_really_mean_it,type=CephBool,req=false", \
