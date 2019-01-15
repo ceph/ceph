@@ -293,11 +293,10 @@ void AuthMonitor::increase_max_global_id()
 {
   ceph_assert(mon->is_leader());
 
-  max_global_id += g_conf()->mon_globalid_prealloc;
   dout(10) << "increasing max_global_id to " << max_global_id << dendl;
   Incremental inc;
   inc.inc_type = GLOBAL_ID;
-  inc.max_global_id = max_global_id;
+  inc.max_global_id = max_global_id + g_conf()->mon_globalid_prealloc;
   pending_auth.push_back(inc);
 }
 
