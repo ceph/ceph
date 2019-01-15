@@ -1565,13 +1565,19 @@ std::vector<Option> get_global_options() {
     .set_default(15_G)
     .set_description(""),
 
-    Option("mon_warn_not_scrubbed", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(0)
-    .set_description(""),
+    Option("mon_warn_pg_not_scrubbed_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.5)
+    .set_min(0)
+    .set_description("Percentage of the scrub max interval past the scrub max interval to warn")
+    .set_long_description("")
+    .add_see_also("osd_scrub_max_interval"),
 
-    Option("mon_warn_not_deep_scrubbed", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(0)
-    .set_description(""),
+    Option("mon_warn_pg_not_deep_scrubbed_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.75)
+    .set_min(0)
+    .set_description("Percentage of the deep scrub interval past the deep scrub interval to warn")
+    .set_long_description("")
+    .add_see_also("osd_deep_scrub_interval"),
 
     Option("mon_scrub_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1_day)

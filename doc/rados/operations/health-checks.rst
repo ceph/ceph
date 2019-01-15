@@ -520,8 +520,8 @@ _______________
 
 One or more PGs has not been scrubbed recently.  PGs are normally
 scrubbed every ``mon_scrub_interval`` seconds, and this warning
-triggers when ``mon_warn_not_scrubbed`` such intervals have elapsed
-without a scrub.
+triggers when ``mon_warn_pg_not_scrubbed_ratio`` percentage of interval has elapsed
+without a scrub since it was due.
 
 PGs will not scrub if they are not flagged as *clean*, which may
 happen if they are misplaced or degraded (see *PG_AVAILABILITY* and
@@ -536,8 +536,8 @@ ____________________
 
 One or more PGs has not been deep scrubbed recently.  PGs are normally
 scrubbed every ``osd_deep_mon_scrub_interval`` seconds, and this warning
-triggers when ``mon_warn_not_deep_scrubbed`` such intervals have elapsed
-without a scrub.
+triggers when ``mon_warn_pg_not_deep_scrubbed_ratio`` percentage of interval has elapsed
+without a scrub since it was due.
 
 PGs will not (deep) scrub if they are not flagged as *clean*, which may
 happen if they are misplaced or degraded (see *PG_AVAILABILITY* and
