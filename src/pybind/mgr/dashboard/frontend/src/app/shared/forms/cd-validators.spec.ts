@@ -1,5 +1,5 @@
 import { fakeAsync, tick } from '@angular/core/testing';
-import { FormControl } from '@angular/forms';
+import { FormControl, Validators } from '@angular/forms';
 
 import { of as observableOf } from 'rxjs';
 
@@ -374,6 +374,34 @@ describe('CdValidators', () => {
       formHelper.setValue('y', 11);
       formHelper.setValue('x', 12);
       formHelper.expectValid('x');
+    });
+
+    it('should validate automatically if dependency controls are defined', () => {
+      CdValidators.validateIf(
+        form.get('x'),
+        () => ((form && form.getValue('y')) || 0) > 10,
+        [Validators.min(7), Validators.max(12)],
+        undefined,
+        [form.get('y')]
+      );
+
+      formHelper.expectValid('x');
+      formHelper.setValue('y', 13);
+      formHelper.expectError('x', 'min');
+    });
+
+    it('should always validate the permanentValidators', () => {
+      CdValidators.validateIf(
+        form.get('x'),
+        () => ((form && form.getValue('y')) || 0) > 10,
+        [Validators.min(7), Validators.max(12)],
+        [Validators.required],
+        [form.get('y')]
+      );
+
+      formHelper.expectValid('x');
+      formHelper.setValue('x', '');
+      formHelper.expectError('x', 'required');
     });
   });
 
