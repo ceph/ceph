@@ -85,6 +85,13 @@ void MetadataUpdate::finish(int r)
 
       json_spirit::mObject daemon_meta = json_result.get_obj();
 
+      // Skip daemon who doesn't have hostname yet
+      if (daemon_meta.count("hostname") == 0) {
+        dout(1) << "Skipping incomplete metadata entry for "
+                << key.first << "." << key.second << dendl;
+        return;
+      }
+
       // Apply any defaults
       for (const auto &i : defaults) {
         if (daemon_meta.find(i.first) == daemon_meta.end()) {
