@@ -35,6 +35,12 @@ struct OptionMask {
   std::string location_type, location_value; ///< matches crush_location
   std::string device_class;                  ///< matches device class
 
+  bool empty() const {
+    return location_type.size() == 0
+      && location_value.size() == 0
+      && device_class.size() == 0;
+  }
+
   std::string to_str() const {
     std::string r;
     if (location_type.size()) {
@@ -86,6 +92,7 @@ struct Section {
     options.clear();
   }
   void dump(Formatter *f) const;
+  std::string get_minimal_conf() const;
 };
 
 struct ConfigMap {
