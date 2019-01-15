@@ -254,12 +254,12 @@ class AsioFrontend {
   std::atomic<bool> going_down{false};
 
   CephContext* ctx() const { return env.store->ctx(); }
-
+  std::optional<dmc::ClientCounters> client_counters;
+  std::unique_ptr<dmc::ClientConfig> client_config;
   void accept(Listener& listener, boost::system::error_code ec);
 
  public:
-  AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf,
-               dmc::optional_scheduler_ctx& sched_ctx)
+  AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf)
     : env(env), conf(conf), pause_mutex(context.get_executor())
   {
     auto sched_t = dmc::get_scheduler_t(ctx());
@@ -270,12 +270,13 @@ class AsioFrontend {
       scheduler.reset(new dmc::SimpleThrottler(ctx()));
       break;
     case dmc::scheduler_t::dmclock:
-      ceph_assert(sched_ctx);
+      client_config = std::make_unique<dmc::ClientConfig>(ctx());
+      client_counters.emplace(ctx());
       scheduler.reset(new dmc::AsyncScheduler(ctx(),
                                               context,
-                                              std::ref(sched_ctx.get_counters()),
-                                              &(sched_ctx.get_clients()),
-                                              sched_ctx.get_clients(),
+                                              std::ref(client_counters.value()),
+                                              client_config.get(),
+                                              *client_config.get(),
                                               dmc::AtLimit::Reject));
     }
   }
@@ -666,15 +667,13 @@ void AsioFrontend::unpause(RGWRados* const store,
 
 class RGWAsioFrontend::Impl : public AsioFrontend {
  public:
-  Impl(const RGWProcessEnv& env, RGWFrontendConfig* conf,
-       rgw::dmclock::optional_scheduler_ctx& sched_ctx)
-    : AsioFrontend(env, conf, sched_ctx) {}
+  Impl(const RGWProcessEnv& env, RGWFrontendConfig* conf)
+    : AsioFrontend(env, conf) {}
 };
 
 RGWAsioFrontend::RGWAsioFrontend(const RGWProcessEnv& env,
-                                 RGWFrontendConfig* conf,
-				 rgw::dmclock::optional_scheduler_ctx& sched_ctx)
-  : impl(new Impl(env, conf, sched_ctx))
+                                 RGWFrontendConfig* conf)
+  : impl(new Impl(env, conf))
 {
 }
 
