@@ -290,6 +290,64 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
         return dict(result)
 
 
+class CLICommand(object):
+    COMMANDS = {}
+
+    def __init__(self, prefix, args="", desc="", perm="rw"):
+        self.prefix = prefix
+        self.args = args
+        self.args_dict = {}
+        self.desc = desc
+        self.perm = perm
+        self.func = None
+        self._parse_args()
+
+    def _parse_args(self):
+        if not self.args:
+            return
+        args = self.args.split(" ")
+        for arg in args:
+            arg_desc = arg.strip().split(",")
+            arg_d = {}
+            for kv in arg_desc:
+                k, v = kv.split("=")
+                if k != "name":
+                    arg_d[k] = v
+                else:
+                    self.args_dict[v] = arg_d
+
+    def __call__(self, func):
+        self.func = func
+        self.COMMANDS[self.prefix] = self
+        return self.func
+
+    def call(self, mgr, cmd_dict, inbuf):
+        kwargs = {}
+        for a, d in self.args_dict.items():
+            if 'req' in d and d['req'] == "false" and a not in cmd_dict:
+                continue
+            kwargs[a.replace("-", "_")] = cmd_dict[a]
+        if inbuf:
+            kwargs['inbuf'] = inbuf
+        return self.func(mgr, **kwargs)
+
+    @classmethod
+    def dump_cmd_list(cls):
+        return [{
+            'cmd': '{} {}'.format(cmd.prefix, cmd.args),
+            'desc': cmd.desc,
+            'perm': cmd.perm
+        } for _, cmd in cls.COMMANDS.items()]
+
+
+def CLIReadCommand(prefix, args="", desc=""):
+    return CLICommand(prefix, args, desc, "r")
+
+
+def CLIWriteCommand(prefix, args="", desc=""):
+    return CLICommand(prefix, args, desc, "w")
+
+
 class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
     """
     Standby modules only implement a serve and shutdown method, they
@@ -436,6 +494,10 @@ class MgrModule(ceph_module.BaseMgrModule):
     def __del__(self):
         unconfigure_logger(self, self.module_name)
 
+    @classmethod
+    def _register_commands(cls):
+        cls.COMMANDS.extend(CLICommand.dump_cmd_list())
+
     @property
     def log(self):
         return self._logger
@@ -512,7 +574,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Called by the plugin to fetch named cluster-wide objects from ceph-mgr.
 
-        :param str data_name: Valid things to fetch are osd_crush_map_text, 
+        :param str data_name: Valid things to fetch are osd_crush_map_text,
                 osd_map, osd_map_tree, osd_map_crush, config, mon_map, fs_map,
                 osd_metadata, pg_summary, io_rate, pg_dump, df, osd_stats,
                 health, mon_status, devices, device <devid>.
@@ -524,7 +586,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         return self._ceph_get(data_name)
 
     def _stattype_to_str(self, stattype):
-        
+
         typeonly = stattype & self.PERFCOUNTER_TYPE_MASK
         if typeonly == 0:
             return 'gauge'
@@ -535,7 +597,7 @@ class MgrModule(ceph_module.BaseMgrModule):
             return 'counter'
         if typeonly == self.PERFCOUNTER_HISTOGRAM:
             return 'histogram'
-        
+
         return ''
 
     def _perfvalue_to_value(self, stattype, value):
@@ -549,7 +611,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         if unit == self.NONE:
             return "/s"
         elif unit == self.BYTES:
-            return "B/s"  
+            return "B/s"
 
     def to_pretty_iec(self, n):
         for bits, suffix in [(60, 'Ei'), (50, 'Pi'), (40, 'Ti'), (30, 'Gi'),
@@ -762,6 +824,11 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         self._ceph_set_health_checks(checks)
 
+    def _handle_command(self, inbuf, cmd):
+        if cmd['prefix'] not in CLICommand.COMMANDS:
+            return self.handle_command(inbuf, cmd)
+        return CLICommand.COMMANDS[cmd['prefix']].call(self, cmd, inbuf)
+
     def handle_command(self, inbuf, cmd):
         """
         Called by ceph-mgr to request the plugin to handle one
@@ -797,7 +864,7 @@ class MgrModule(ceph_module.BaseMgrModule):
 
     def _validate_module_option(self, key):
         """
-        Helper: don't allow get/set config callers to 
+        Helper: don't allow get/set config callers to
         access config options that they didn't declare
         in their schema.
         """
