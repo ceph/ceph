@@ -105,8 +105,20 @@
           <context context-type="linenumber">128</context>
         </context-group>
         <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">120</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">341</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">479</context>
+        </context-group>
+        <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi/iscsi.component.html</context>
-          <context context-type="linenumber">7</context>
+          <context context-type="linenumber">9</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/mirroring/overview/overview.component.html</context>
@@ -148,7 +160,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi/iscsi.component.html</context>
-          <context context-type="linenumber">1</context>
+          <context context-type="linenumber">3</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/mirroring/overview/overview.component.html</context>
@@ -197,6 +209,10 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/shared/components/error-panel/error-panel.component.html</context>
           <context context-type="linenumber">27</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">544</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
@@ -293,62 +309,134 @@
           <context context-type="linenumber">118</context>
         </context-group>
         <note priority="1" from="description">X total</note>
-      </trans-unit><trans-unit id="beb1391a148bd032914f49a2665dcc414a5d56d0" datatype="html">
-        <source>{VAR_SELECT, select, editing {Edit} cloning {Clone} copying {Copy} other {Add} }</source>
+      </trans-unit><trans-unit id="121cc5391cd2a5115bc2b3160379ee5b36cd7716" datatype="html">
+        <source>Settings</source>
         <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">10</context>
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component.html</context>
+          <context context-type="linenumber">3</context>
         </context-group>
-      </trans-unit><trans-unit id="52dd89f49fc440660cbbb3665b88d80f5baa7437" datatype="html">
-        <source>{VAR_SELECT, select, cloning {Clone from} copying {Copy from} other {Parent} }</source>
+      </trans-unit><trans-unit id="9e515f954730279c31d5301f02479666d6264e8b" datatype="html">
+        <source>Changing these parameters from their default values is usually not necessary.</source>
         <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">20</context>
-        </context-group>
-      </trans-unit><trans-unit id="cff1428d10d59d14e45edec3c735a27b5482db59" datatype="html">
-        <source>Name</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
-          <context context-type="linenumber">36</context>
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component.html</context>
+          <context context-type="linenumber">15</context>
         </context-group>
         <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/cluster/configuration/configuration-form/configuration-form.component.html</context>
-          <context context-type="linenumber">18</context>
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-iqn-settings-modal/iscsi-target-iqn-settings-modal.component.html</context>
+          <context context-type="linenumber">13</context>
+        </context-group>
+      </trans-unit><trans-unit id="68e710782ccb5398b3acb8844caf0b199da2c3da" datatype="html">
+        <source>Confirm</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component.html</context>
+          <context context-type="linenumber">35</context>
         </context-group>
         <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-iqn-settings-modal/iscsi-target-iqn-settings-modal.component.html</context>
+          <context context-type="linenumber">53</context>
+        </context-group>
+      </trans-unit><trans-unit id="d7b35c384aecd25a516200d6921836374613dfe7" datatype="html">
+        <source>Cancel</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component.html</context>
+          <context context-type="linenumber">39</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-iqn-settings-modal/iscsi-target-iqn-settings-modal.component.html</context>
+          <context context-type="linenumber">57</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component.html</context>
+          <context context-type="linenumber">38</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/shared/components/confirmation-modal/confirmation-modal.component.html</context>
           <context context-type="linenumber">21</context>
         </context-group>
         <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">26</context>
+          <context context-type="sourcefile">app/ceph/cluster/osd/osd-flags-modal/osd-flags-modal.component.html</context>
+          <context context-type="linenumber">38</context>
         </context-group>
         <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
-          <context context-type="linenumber">42</context>
+          <context context-type="sourcefile">app/ceph/cluster/osd/osd-recv-speed-modal/osd-recv-speed-modal.component.html</context>
+          <context context-type="linenumber">91</context>
         </context-group>
         <context-group purpose="location">
-          <context context-type="sourcefile">app/core/auth/role-form/role-form.component.html</context>
-          <context context-type="linenumber">19</context>
+          <context context-type="sourcefile">app/ceph/cluster/osd/osd-reweight-modal/osd-reweight-modal.component.html</context>
+          <context context-type="linenumber">34</context>
         </context-group>
         <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-details/rgw-bucket-details.component.html</context>
-          <context context-type="linenumber">8</context>
+          <context context-type="sourcefile">app/ceph/cluster/osd/osd-scrub-modal/osd-scrub-modal.component.html</context>
+          <context context-type="linenumber">25</context>
         </context-group>
         <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/cluster/configuration/configuration-details/configuration-details.component.html</context>
-          <context context-type="linenumber">8</context>
+          <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
+          <context context-type="linenumber">44</context>
         </context-group>
         <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
-          <context context-type="linenumber">13</context>
+          <context context-type="sourcefile">app/ceph/block/rbd-trash-purge-modal/rbd-trash-purge-modal.component.html</context>
+          <context context-type="linenumber">45</context>
         </context-group>
         <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-snapshot-form/rbd-snapshot-form.component.html</context>
-          <context context-type="linenumber">23</context>
+          <context context-type="sourcefile">app/ceph/block/rbd-trash-restore-modal/rbd-trash-restore-modal.component.html</context>
+          <context context-type="linenumber">44</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/mirroring/pool-edit-mode-modal/pool-edit-mode-modal.component.html</context>
+          <context context-type="linenumber">45</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/mirroring/pool-edit-peer-modal/pool-edit-peer-modal.component.html</context>
+          <context context-type="linenumber">110</context>
+        </context-group>
+      </trans-unit><trans-unit id="339878da255ab55447c43afef8d9b2f9753bf5f6" datatype="html">
+        <source>Advanced Settings</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-iqn-settings-modal/iscsi-target-iqn-settings-modal.component.html</context>
+          <context context-type="linenumber">3</context>
+        </context-group>
+      </trans-unit><trans-unit id="a01e6937a5d1ee040a02416eed34544c4ea61e38" datatype="html">
+        <source>Create target</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">11</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">539</context>
+        </context-group>
+      </trans-unit><trans-unit id="1406c2fb12a20c1528b19bcc5e24a6a2386167f3" datatype="html">
+        <source>Target IQN</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">20</context>
         </context-group>
       </trans-unit><trans-unit id="7cbdabcece469fab89cfa687ab152bca18b97498" datatype="html">
         <source>This field is required.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">43</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">209</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">231</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">266</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">291</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">326</context>
+        </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">49</context>
@@ -480,6 +568,298 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/mirroring/pool-edit-peer-modal/pool-edit-peer-modal.component.html</context>
           <context context-type="linenumber">58</context>
+        </context-group>
+      </trans-unit><trans-unit id="5fe42339be910372fa689f559155631862d218e8" datatype="html">
+        <source>IQN has wrong pattern.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">47</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">213</context>
+        </context-group>
+      </trans-unit><trans-unit id="47d1bfe4f5b3f292e1202dfe691195b10cb99500" datatype="html">
+        <source>An IQN has the following notation &apos;iqn.$year-$month.$reversedAddress:$definedName&apos;</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">51</context>
+        </context-group>
+      </trans-unit><trans-unit id="c8ada4b53396d8366db00a435acc61d53d857047" datatype="html">
+        <source>For example: iqn.2016-06.org.dashboard:storage:disk.sn-a8675309</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">53</context>
+        </context-group>
+      </trans-unit><trans-unit id="e60c11e1b1dfbbeda577364b8de39ded2d796c5e" datatype="html">
+        <source>More information</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">57</context>
+        </context-group>
+      </trans-unit><trans-unit id="9b1aa85dfc6849196e64060db02c5410de69b7a1" datatype="html">
+        <source>This target has modified advanced settings.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">62</context>
+        </context-group>
+      </trans-unit><trans-unit id="6990ad8d6182662e864495ac31c3758cda1c7a28" datatype="html">
+        <source>Portals</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">72</context>
+        </context-group>
+      </trans-unit><trans-unit id="c3638c01b6c34066438909713ec96087c813fc7e" datatype="html">
+        <source>At least <x id="INTERPOLATION" equiv-text="{{ minimum_gateways }}"/> gateways are required.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">96</context>
+        </context-group>
+      </trans-unit><trans-unit id="6a3ac2b4137d723fd9878cd357c2012ff6c07973" datatype="html">
+        <source>Add portal</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">106</context>
+        </context-group>
+      </trans-unit><trans-unit id="e3484cae8b118c576ca2815bf9c9406c2eb2cae3" datatype="html">
+        <source>This image has modified settings.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">146</context>
+        </context-group>
+      </trans-unit><trans-unit id="107c84e820909b44fe258673938a68ced1bbff72" datatype="html">
+        <source>At least 1 image is required.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">151</context>
+        </context-group>
+      </trans-unit><trans-unit id="808038f912fdc7f0e03f82d4afd3bf9178527fc8" datatype="html">
+        <source>Add image</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">161</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">371</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">506</context>
+        </context-group>
+      </trans-unit><trans-unit id="f494bd31f095f6dcc656ce87ec2dcf07a2e9b30c" datatype="html">
+        <source>Initiators</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">174</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">437</context>
+        </context-group>
+      </trans-unit><trans-unit id="e98239d8a6be1100119ff4b5630c822b82786740" datatype="html">
+        <source>Initiator</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">181</context>
+        </context-group>
+      </trans-unit><trans-unit id="f2c5059d8cda15d8d03e2cce30f2d139623d9a91" datatype="html">
+        <source>Client IQN</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">194</context>
+        </context-group>
+      </trans-unit><trans-unit id="107d5aabce23d900f0a80e6ddc1c10e29aa0bed8" datatype="html">
+        <source>Initiator IQN needs to be unique.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">205</context>
+        </context-group>
+      </trans-unit><trans-unit id="e08a77594f3d89311cdf6da5090044270909c194" datatype="html">
+        <source>User</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">223</context>
+        </context-group>
+      </trans-unit><trans-unit id="bbf0b34a3fcc80800fcb44b9e1e86931a530dfe3" datatype="html">
+        <source>Usernames must have a length of 8 to 64 characters and
+                        can only contain letters, &apos;.&apos;, &apos;@&apos;, &apos;-&apos;, &apos;_&apos; or &apos;:&apos;.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">235</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">295</context>
+        </context-group>
+      </trans-unit><trans-unit id="c32ef07f8803a223a83ed17024b38e8d82292407" datatype="html">
+        <source>Password</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">245</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/core/auth/user-form/user-form.component.html</context>
+          <context context-type="linenumber">42</context>
+        </context-group>
+      </trans-unit><trans-unit id="4b2dd8635fba00476da25977e0884969821e62da" datatype="html">
+        <source>Passwords must have a length of 12 to 16 characters
+                        and can only contain letters, &apos;@&apos;, &apos;-&apos; or &apos;_&apos;.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">270</context>
+        </context-group>
+      </trans-unit><trans-unit id="ff40391de7a1944ea95091e4045cc34c4979b736" datatype="html">
+        <source>Mutual User</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">281</context>
+        </context-group>
+      </trans-unit><trans-unit id="0cf73dbebe99b737c4d288788182fc356e3c93d3" datatype="html">
+        <source>Mutual Password</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">305</context>
+        </context-group>
+      </trans-unit><trans-unit id="c58e136a292acf8ebccfa6d777fdff9f392b6ee2" datatype="html">
+        <source>Passwords must have a length of 12 to 16 characters and
+                        can only contain letters, &apos;@&apos;, &apos;-&apos; or &apos;_&apos;.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">330</context>
+        </context-group>
+      </trans-unit><trans-unit id="5d1878d5fc761cbe9614bfd87047a740c82a6951" datatype="html">
+        <source>Initiator belongs to a group. Images will be configure in the group.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">361</context>
+        </context-group>
+      </trans-unit><trans-unit id="c0de67b9d97fafbf200f9451e8388ee8128a56ac" datatype="html">
+        <source>No items added.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">384</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">521</context>
+        </context-group>
+      </trans-unit><trans-unit id="d565e47726158e428ecdc952fc9233b9b7d7f049" datatype="html">
+        <source>Add initiator</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">389</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">465</context>
+        </context-group>
+      </trans-unit><trans-unit id="c22ba03540aa3217da059f45e7eab138b51a96e2" datatype="html">
+        <source>Groups</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">403</context>
+        </context-group>
+      </trans-unit><trans-unit id="4c90059afafb7e160384d9f512797c95bb95c6dc" datatype="html">
+        <source>Group</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">410</context>
+        </context-group>
+      </trans-unit><trans-unit id="cff1428d10d59d14e45edec3c735a27b5482db59" datatype="html">
+        <source>Name</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">422</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
+          <context context-type="linenumber">36</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/configuration/configuration-form/configuration-form.component.html</context>
+          <context context-type="linenumber">18</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
+          <context context-type="linenumber">21</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
+          <context context-type="linenumber">26</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
+          <context context-type="linenumber">42</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/core/auth/role-form/role-form.component.html</context>
+          <context context-type="linenumber">19</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-details/rgw-bucket-details.component.html</context>
+          <context context-type="linenumber">8</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/configuration/configuration-details/configuration-details.component.html</context>
+          <context context-type="linenumber">8</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
+          <context context-type="linenumber">13</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-snapshot-form/rbd-snapshot-form.component.html</context>
+          <context context-type="linenumber">23</context>
+        </context-group>
+      </trans-unit><trans-unit id="3084948274cff4f56d0f431af47240e9cf02fcc7" datatype="html">
+        <source>Add group</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
+          <context context-type="linenumber">526</context>
+        </context-group>
+      </trans-unit><trans-unit id="54839ebc827b73c9dc4e1df731c6d36a85036af7" datatype="html">
+        <source>Are you sure that you want to <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> the selected <x id="INTERPOLATION_1" equiv-text="{{ itemDescription }}"/>?</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component.html</context>
+          <context context-type="linenumber">15</context>
+        </context-group>
+      </trans-unit><trans-unit id="2be8b7f04f0104d3fad90d079d8202b74f758b9a" datatype="html">
+        <source>Yes, I am sure.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component.html</context>
+          <context context-type="linenumber">25</context>
+        </context-group>
+      </trans-unit><trans-unit id="53a583cd5f15059cc958b7d547f72cc78f68e123" datatype="html">
+        <source>Please consult the <x id="START_LINK" ctype="x-a" equiv-text="&lt;a&gt;"/>documentation<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a&gt;"/>
+    on how to configure and enable the iSCSI Targets management functionality.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-list/iscsi-target-list.component.html</context>
+          <context context-type="linenumber">6</context>
+        </context-group>
+      </trans-unit><trans-unit id="3b301d0044f62c92af0da53d7aaca52a436a547d" datatype="html">
+        <source>Available information:</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-list/iscsi-target-list.component.html</context>
+          <context context-type="linenumber">12</context>
+        </context-group>
+      </trans-unit><trans-unit id="332227f088a4877b3c11f5fb3ae8bc812c470fae" datatype="html">
+        <source>iSCSI Targets not available</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-list/iscsi-target-list.component.html</context>
+          <context context-type="linenumber">4</context>
+        </context-group>
+      </trans-unit><trans-unit id="beb1391a148bd032914f49a2665dcc414a5d56d0" datatype="html">
+        <source>{VAR_SELECT, select, editing {Edit} cloning {Clone} copying {Copy} other {Add} }</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
+          <context context-type="linenumber">10</context>
+        </context-group>
+      </trans-unit><trans-unit id="52dd89f49fc440660cbbb3665b88d80f5baa7437" datatype="html">
+        <source>{VAR_SELECT, select, cloning {Clone from} copying {Copy from} other {Parent} }</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
+          <context context-type="linenumber">20</context>
         </context-group>
       </trans-unit><trans-unit id="94516fa213706c67ce5a5b5765681d7fb032033a" datatype="html">
         <source>Loading...</source>
@@ -874,64 +1254,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/monitor/monitor.component.html</context>
           <context context-type="linenumber">54</context>
-        </context-group>
-      </trans-unit><trans-unit id="d7b35c384aecd25a516200d6921836374613dfe7" datatype="html">
-        <source>Cancel</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/shared/components/confirmation-modal/confirmation-modal.component.html</context>
-          <context context-type="linenumber">21</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component.html</context>
-          <context context-type="linenumber">38</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/cluster/osd/osd-flags-modal/osd-flags-modal.component.html</context>
-          <context context-type="linenumber">38</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/cluster/osd/osd-recv-speed-modal/osd-recv-speed-modal.component.html</context>
-          <context context-type="linenumber">91</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/cluster/osd/osd-reweight-modal/osd-reweight-modal.component.html</context>
-          <context context-type="linenumber">34</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/cluster/osd/osd-scrub-modal/osd-scrub-modal.component.html</context>
-          <context context-type="linenumber">25</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
-          <context context-type="linenumber">44</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-trash-purge-modal/rbd-trash-purge-modal.component.html</context>
-          <context context-type="linenumber">45</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-trash-restore-modal/rbd-trash-restore-modal.component.html</context>
-          <context context-type="linenumber">44</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/mirroring/pool-edit-mode-modal/pool-edit-mode-modal.component.html</context>
-          <context context-type="linenumber">45</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/mirroring/pool-edit-peer-modal/pool-edit-peer-modal.component.html</context>
-          <context context-type="linenumber">110</context>
-        </context-group>
-      </trans-unit><trans-unit id="54839ebc827b73c9dc4e1df731c6d36a85036af7" datatype="html">
-        <source>Are you sure that you want to <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> the selected <x id="INTERPOLATION_1" equiv-text="{{ itemDescription }}"/>?</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component.html</context>
-          <context context-type="linenumber">15</context>
-        </context-group>
-      </trans-unit><trans-unit id="2be8b7f04f0104d3fad90d079d8202b74f758b9a" datatype="html">
-        <source>Yes, I am sure.</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component.html</context>
-          <context context-type="linenumber">25</context>
         </context-group>
       </trans-unit><trans-unit id="5ef50ba2514414f799d4c8fc36067a251904ba81" datatype="html">
         <source>Cluster-wide OSD Flags</source>
@@ -2236,12 +2558,6 @@
           <context context-type="sourcefile">app/core/auth/user-form/user-form.component.html</context>
           <context context-type="linenumber">10</context>
         </context-group>
-      </trans-unit><trans-unit id="c32ef07f8803a223a83ed17024b38e8d82292407" datatype="html">
-        <source>Password</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/auth/user-form/user-form.component.html</context>
-          <context context-type="linenumber">42</context>
-        </context-group>
       </trans-unit><trans-unit id="7f3bdcce4b2e8c37cd7f0f6c92ef8cff34b039b8" datatype="html">
         <source>Confirm password</source>
         <context-group purpose="location">
@@ -2808,6 +3124,18 @@
           <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
           <context context-type="linenumber">40</context>
         </context-group>
+      </trans-unit><trans-unit id="e95ae009d0bdb45fcc656e8b65248cf7396080d5" datatype="html">
+        <source>Overview</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-tabs/iscsi-tabs.component.html</context>
+          <context context-type="linenumber">2</context>
+        </context-group>
+      </trans-unit><trans-unit id="bbd2045d5c37e4bb39a3c0fb62ea1ddf70a12838" datatype="html">
+        <source>Targets</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-tabs/iscsi-tabs.component.html</context>
+          <context context-type="linenumber">7</context>
+        </context-group>
       </trans-unit><trans-unit id="0f6e8f6094b180eaf1f11bc0ffe383f1cdcd059e" datatype="html">
         <source>Only available for RBD images with <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="&lt;strong&gt;"/>fast-diff<x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="&lt;/strong&gt;"/> enabled</source>
         <context-group purpose="location">
@@ -3022,6 +3350,12 @@
           <context context-type="sourcefile">app/ceph/block/rbd-trash-list/rbd-trash-list.component.html</context>
           <context context-type="linenumber">47</context>
         </context-group>
+      </trans-unit><trans-unit id="a674ab267d1934bf395f87ca1503fd474296893f" datatype="html">
+        <source>iSCSI Topology</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-details/iscsi-target-details.component.html</context>
+          <context context-type="linenumber">2</context>
+        </context-group>
       </trans-unit><trans-unit id="66db799d67958d4b0765181d072df62e2d1c16f5" datatype="html">
         <source>Issues</source>
         <context-group purpose="location">
@@ -3178,6 +3512,48 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cephfs/cephfs-detail/cephfs-detail.component.html</context>
           <context context-type="linenumber">36</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="bd5a3b1c5a3c185c7bbb0e09a061d4cdc88ce5ad" datatype="html">
+        <source>Current</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/iscsi-target-details/iscsi-target-details.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="dd4ab758afd5fd5a6c6a25b2b30ff99d0c00e9ad" datatype="html">
+        <source>There are no portals available.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="83021e45778a4a230a14ca0c6d6ccdf05500ad93" datatype="html">
+        <source>There are no images available.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="86684eb21f8a768e1dbc659e3d5da6861db544a0" datatype="html">
+        <source>There are no images available. Please make sure you add an image to the target.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="fffda6e440078f57eba93944ce051c593cc6ed7f" datatype="html">
+        <source>There are no initiators available. Please make sure you add an initiator to the target.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/iscsi-target-form/iscsi-target-form.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="38baeb215c17af9d9e295e371a57f4a48ab4c191" datatype="html">
+        <source>Target</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/iscsi-target-list/iscsi-target-list.component.ts</context>
+          <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
       <trans-unit id="9a541ec1a4319fffc16ad3b3ab2c2b6d251a829d" datatype="html">
@@ -4972,38 +5348,45 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="5c2114c69efd7a972c62db45f99b8b7550a5b673" datatype="html">
-        <source>There are no items.</source>
+      <trans-unit id="37391297bb077a6f84484930261b01a3ce38327b" datatype="html">
+        <source>No items selected.</source>
         <context-group purpose="location">
-          <context context-type="sourcefile">src/app/shared/components/select-badges/select-badges-messages.model.ts</context>
+          <context context-type="sourcefile">src/app/shared/components/select/select-messages.model.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
       <trans-unit id="2c1e52ee832661b4a0f570877d24661736b16af1" datatype="html">
         <source>Deselect item to select again</source>
         <context-group purpose="location">
-          <context context-type="sourcefile">src/app/shared/components/select-badges/select-badges-messages.model.ts</context>
+          <context context-type="sourcefile">src/app/shared/components/select/select-messages.model.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
       <trans-unit id="c8c9c6e5918659336824bbdda3501c66eaa79a4c" datatype="html">
         <source>Selection limit reached</source>
         <context-group purpose="location">
-          <context context-type="sourcefile">src/app/shared/components/select-badges/select-badges-messages.model.ts</context>
+          <context context-type="sourcefile">src/app/shared/components/select/select-messages.model.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
       <trans-unit id="02d184c288f567825a1fcbf83bcd3099a10853d5" datatype="html">
         <source>Filter tags</source>
         <context-group purpose="location">
-          <context context-type="sourcefile">src/app/shared/components/select-badges/select-badges-messages.model.ts</context>
+          <context context-type="sourcefile">src/app/shared/components/select/select-messages.model.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
       <trans-unit id="aa00748e49c269956837d6f3acdd8d218796a8d8" datatype="html">
         <source>Add badge</source>
         <context-group purpose="location">
-          <context context-type="sourcefile">src/app/shared/components/select-badges/select-badges-messages.model.ts</context>
+          <context context-type="sourcefile">src/app/shared/components/select/select-messages.model.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4078a92d8121abdce7d8f346a88914923ec835fc" datatype="html">
+        <source>There are no items available.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/select/select-messages.model.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>

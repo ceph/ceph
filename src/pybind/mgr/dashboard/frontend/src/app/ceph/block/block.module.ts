@@ -13,6 +13,10 @@ import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { SharedModule } from '../../shared/shared.module';
 import { IscsiTabsComponent } from './iscsi-tabs/iscsi-tabs.component';
+import { IscsiTargetDetailsComponent } from './iscsi-target-details/iscsi-target-details.component';
+import { IscsiTargetFormComponent } from './iscsi-target-form/iscsi-target-form.component';
+import { IscsiTargetImageSettingsModalComponent } from './iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component';
+import { IscsiTargetIqnSettingsModalComponent } from './iscsi-target-iqn-settings-modal/iscsi-target-iqn-settings-modal.component';
 import { IscsiTargetListComponent } from './iscsi-target-list/iscsi-target-list.component';
 import { IscsiComponent } from './iscsi/iscsi.component';
 import { MirroringModule } from './mirroring/mirroring.module';
@@ -26,7 +30,6 @@ import { RbdTrashListComponent } from './rbd-trash-list/rbd-trash-list.component
 import { RbdTrashMoveModalComponent } from './rbd-trash-move-modal/rbd-trash-move-modal.component';
 import { RbdTrashPurgeModalComponent } from './rbd-trash-purge-modal/rbd-trash-purge-modal.component';
 import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-trash-restore-modal.component';
-import { IscsiTargetDetailsComponent } from './iscsi-target-details/iscsi-target-details.component';
 
 @NgModule({
   entryComponents: [
@@ -35,7 +38,9 @@ import { IscsiTargetDetailsComponent } from './iscsi-target-details/iscsi-target
     RbdTrashMoveModalComponent,
     RbdTrashRestoreModalComponent,
     RbdTrashPurgeModalComponent,
-    IscsiTargetDetailsComponent
+    IscsiTargetDetailsComponent,
+    IscsiTargetImageSettingsModalComponent,
+    IscsiTargetIqnSettingsModalComponent
   ],
   imports: [
     CommonModule,
@@ -66,7 +71,10 @@ import { IscsiTargetDetailsComponent } from './iscsi-target-details/iscsi-target
     RbdImagesComponent,
     RbdTrashRestoreModalComponent,
     RbdTrashPurgeModalComponent,
-    IscsiTargetDetailsComponent
+    IscsiTargetDetailsComponent,
+    IscsiTargetFormComponent,
+    IscsiTargetImageSettingsModalComponent,
+    IscsiTargetIqnSettingsModalComponent
   ]
 })
 export class BlockModule {}

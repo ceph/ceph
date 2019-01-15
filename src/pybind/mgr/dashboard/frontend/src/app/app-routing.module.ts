@@ -1,6 +1,7 @@
 import { NgModule } from '@angular/core';
 import { ActivatedRouteSnapshot, RouterModule, Routes } from '@angular/router';
 
+import { IscsiTargetFormComponent } from './ceph/block/iscsi-target-form/iscsi-target-form.component';
 import { IscsiTargetListComponent } from './ceph/block/iscsi-target-list/iscsi-target-list.component';
 import { IscsiComponent } from './ceph/block/iscsi/iscsi.component';
 import { OverviewComponent as RbdMirroringComponent } from './ceph/block/mirroring/overview/overview.component';
@@ -193,7 +194,8 @@ const routes: Routes = [
             path: 'targets',
             data: { breadcrumbs: 'Targets' },
             children: [
-              { path: '', component: IscsiTargetListComponent }
+              { path: '', component: IscsiTargetListComponent },
+              { path: 'add', component: IscsiTargetFormComponent, data: { breadcrumbs: 'Add' } }
             ]
           }
         ]
