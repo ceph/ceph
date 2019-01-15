@@ -298,19 +298,20 @@ struct ClientIdentFrame
 };
 
 struct ServerIdentFrame
-    : public SignedEncryptedFrame<ServerIdentFrame, entity_addrvec_t, int64_t,
-                                  uint64_t, uint64_t, uint64_t, uint64_t,
-                                  uint64_t> {
+    : public SignedEncryptedFrame<ServerIdentFrame, entity_addrvec_t,
+                                  entity_addr_t, int64_t, uint64_t, uint64_t,
+                                  uint64_t, uint64_t, uint64_t> {
   const ProtocolV2::Tag tag = ProtocolV2::Tag::IDENT;
   using SignedEncryptedFrame::SignedEncryptedFrame;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
-  inline int64_t &gid() { return get_val<1>(); }
-  inline uint64_t &global_seq() { return get_val<2>(); }
-  inline uint64_t &supported_features() { return get_val<3>(); }
-  inline uint64_t &required_features() { return get_val<4>(); }
-  inline uint64_t &flags() { return get_val<5>(); }
-  inline uint64_t &cookie() { return get_val<6>(); }
+  inline entity_addr_t &peer_addr() { return get_val<1>(); }
+  inline int64_t &gid() { return get_val<2>(); }
+  inline uint64_t &global_seq() { return get_val<3>(); }
+  inline uint64_t &supported_features() { return get_val<4>(); }
+  inline uint64_t &required_features() { return get_val<5>(); }
+  inline uint64_t &flags() { return get_val<6>(); }
+  inline uint64_t &cookie() { return get_val<7>(); }
 };
 
 struct ReconnectFrame
@@ -2158,17 +2159,8 @@ CtPtr ProtocolV2::send_client_ident() {
     flags |= CEPH_MSG_CONNECT_LOSSY;
   }
 
-  entity_addrvec_t maddrs = messenger->get_myaddrs();
-  if (!messenger->get_myaddrs().front().is_msgr2()) {
-    entity_addr_t a = messenger->get_myaddrs().front();
-    a.set_type(entity_addr_t::TYPE_MSGR2);
-    ldout(cct, 20) << "encoding addr " << a << " instead of non-v2 myaddrs "
-                   << messenger->get_myaddrs() << dendl;
-    maddrs.v.push_back(a);
-  }
-
-  ClientIdentFrame client_ident(this, maddrs, messenger->get_myname().num(),
-                                global_seq,
+  ClientIdentFrame client_ident(this, messenger->get_myaddrs(),
+                                messenger->get_myname().num(), global_seq,
                                 connection->policy.features_supported,
                                 connection->policy.features_required, flags);
 
@@ -2281,8 +2273,9 @@ CtPtr ProtocolV2::handle_server_ident(char *payload, uint32_t length) {
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
 
   ServerIdentFrame server_ident(this, payload, length);
-  ldout(cct, 5) << __func__ << " received server identification: "
-                << "addrs=" << server_ident.addrs()
+  ldout(cct, 5) << __func__ << " received server identification:"
+                << " addrs=" << server_ident.addrs()
+                << " my_addr=" << server_ident.peer_addr()
                 << " gid=" << server_ident.gid()
                 << " global_seq=" << server_ident.global_seq()
                 << " features_supported=" << std::hex
@@ -2290,6 +2283,26 @@ CtPtr ProtocolV2::handle_server_ident(char *payload, uint32_t length) {
                 << " features_required=" << server_ident.required_features()
                 << " flags=" << server_ident.flags() << " cookie=" << std::dec
                 << server_ident.cookie() << dendl;
+
+  connection->lock.unlock();
+  messenger->learned_addr(server_ident.peer_addr());
+  if (cct->_conf->ms_inject_internal_delays &&
+      cct->_conf->ms_inject_socket_failures) {
+    if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
+      ldout(cct, 10) << __func__ << " sleep for "
+                     << cct->_conf->ms_inject_internal_delays << dendl;
+      utime_t t;
+      t.set_from_double(cct->_conf->ms_inject_internal_delays);
+      t.sleep();
+    }
+  }
+  connection->lock.lock();
+  if (state != CONNECTING) {
+    ldout(cct, 1) << __func__
+                  << " state changed while learned_addr, mark_down or "
+                  << " replacing must be happened just now" << dendl;
+    return nullptr;
+  }
 
   cookie = server_ident.cookie();
 
@@ -2491,13 +2504,37 @@ CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {
                 << " features_required=" << client_ident.required_features()
                 << " flags=" << client_ident.flags() << std::dec << dendl;
 
+  connection->target_addr.set_type(entity_addr_t::TYPE_MSGR2);
+
   if (client_ident.addrs().empty()) {
     connection->set_peer_addr(connection->target_addr);
   } else {
-    // Should we check if one of the ident.addrs match connection->target_addr
-    // as we do in ProtocolV1?
-    connection->set_peer_addrs(client_ident.addrs());
-    connection->target_addr = client_ident.addrs().msgr2_addr();
+    entity_addr_t peer_addr = client_ident.addrs().msgr2_addr();
+
+    ldout(cct, 10) << __func__ << " peer addr is " << peer_addr << dendl;
+    if (peer_addr.type == entity_addr_t::TYPE_NONE) {
+      // no address is known
+      peer_addr = client_ident.addrs().legacy_addr();
+      peer_addr.set_type(entity_addr_t::TYPE_MSGR2);
+    } else if (peer_addr.is_blank_ip()) {
+      // peer apparently doesn't know what ip they have; figure it out for them.
+      int port = peer_addr.get_port();
+      peer_addr.u = connection->target_addr.u;
+      peer_addr.set_port(port);
+      peer_addr.set_type(entity_addr_t::TYPE_MSGR2);
+    }
+    ldout(cct, 0) << __func__ << " peer addr is really " << peer_addr
+                  << " (socket is " << connection->target_addr << ")"
+                  << dendl;
+    connection->target_addr = peer_addr;
+    entity_addrvec_t addrs;
+    addrs.v.push_back(peer_addr);
+    for (const auto &addr : client_ident.addrs().v) {
+      if (addr.type != entity_addr_t::TYPE_MSGR2) {
+        addrs.v.push_back(addr);
+      }
+    }
+    connection->set_peer_addrs(addrs);
   }
   peer_name = entity_name_t(connection->get_peer_type(), client_ident.gid());
 
@@ -2857,12 +2894,13 @@ CtPtr ProtocolV2::send_server_ident() {
 
   uint64_t gs = messenger->get_global_seq();
   ServerIdentFrame server_ident(
-      this, messenger->get_myaddrs(), messenger->get_myname().num(), gs,
-      connection->policy.features_supported,
+      this, messenger->get_myaddrs(), connection->target_addr,
+      messenger->get_myname().num(), gs, connection->policy.features_supported,
       connection->policy.features_required, flags, cookie);
 
-  ldout(cct, 5) << __func__ << " sending identification: "
-                << "addrs=" << messenger->get_myaddrs()
+  ldout(cct, 5) << __func__ << " sending identification:"
+                << " addrs=" << messenger->get_myaddrs()
+                << " peer_addr=" << connection->target_addr
                 << " gid=" << messenger->get_myname().num()
                 << " global_seq=" << gs << " features_supported=" << std::hex
                 << connection->policy.features_supported
