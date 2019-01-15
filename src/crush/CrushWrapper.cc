@@ -1686,15 +1686,7 @@ int CrushWrapper::set_subtree_class(
     return -ENOENT;
   }
 
-  int new_class_id = -1;
-  if (class_exists(new_class)) {
-    new_class_id = get_class_id(new_class);
-  } else {
-    for (new_class_id = 1; class_name.count(new_class_id); ++new_class_id) ;
-    class_name[new_class_id] = new_class;
-    class_rname[new_class] = new_class_id;
-  }
-
+  int new_class_id = get_or_create_class_id(new_class);
   int id = get_item_id(subtree);
   list<int> q = { id };
   while (!q.empty()) {
@@ -1734,20 +1726,9 @@ int CrushWrapper::reclassify(
     }
     int root_id = get_item_id(root);
     string new_class = i.second;
-    int new_class_id = -1;
+    int new_class_id = get_or_create_class_id(new_class);
     out << "classify_root " << root << " (" << root_id
 	<< ") as " << new_class << std::endl;
-    if (class_exists(new_class)) {
-      new_class_id = get_class_id(new_class);
-      out << "  new class " << new_class << " exists as " << new_class_id
-	  << std::endl;
-    } else {
-      for (new_class_id = 1; class_name.count(new_class_id); ++new_class_id) ;
-      class_name[new_class_id] = new_class;
-      class_rname[new_class] = new_class_id;
-      out << "  created new class " << new_class << " as " << new_class_id
-	  << std::endl;
-    }
 
     // validate rules
     for (unsigned j = 0; j < crush->max_rules; j++) {
@@ -1865,20 +1846,7 @@ int CrushWrapper::reclassify(
 	<< " default bucket " << default_parent
 	<< " (" << default_parent_type_name << ")" << std::endl;
 
-    int new_class_id = -1;
-    if (class_exists(new_class)) {
-      new_class_id = get_class_id(new_class);
-      out << "  new class " << new_class << " exists as " << new_class_id
-	  << std::endl;
-    } else {
-      for (new_class_id = 1; class_name.count(new_class_id); ++new_class_id) {
-      }
-      class_name[new_class_id] = new_class;
-      class_rname[new_class] = new_class_id;
-      out << "  created new class " << new_class << " as " << new_class_id
-	  << std::endl;
-    }
-
+    int new_class_id = get_or_create_class_id(new_class);
     for (int j = 0; j < crush->max_buckets; ++j) {
       crush_bucket *b = crush->buckets[j];
       if (!b || is_shadow_item(b->id)) {

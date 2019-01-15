@@ -1,12 +1,10 @@
   $ crushtool -i $TESTDIR/crush-classes/a --set-subtree-class default hdd --reclassify --reclassify-bucket %-ssd ssd default --reclassify-bucket ssd ssd default --reclassify-root default hdd -o foo
   classify_root default (-1) as hdd
-    new class hdd exists as 1
     renumbering bucket -1 -> -5
     renumbering bucket -4 -> -6
     renumbering bucket -3 -> -7
     renumbering bucket -2 -> -8
   classify_bucket %-ssd as ssd default bucket default (root)
-    created new class ssd as 2
   match %-ssd to ttipod001-cephosd-2-ssd basename ttipod001-cephosd-2
     have base -8
   match %-ssd to ttipod001-cephosd-1-ssd basename ttipod001-cephosd-1
@@ -14,7 +12,6 @@
   match %-ssd to ttipod001-cephosd-3-ssd basename ttipod001-cephosd-3
     have base -6
   classify_bucket ssd as ssd default bucket default (root)
-    new class ssd exists as 2
   match ssd to ssd basename default
     have base -5
   moving items from -24 (ttipod001-cephosd-3-ssd) to -6 (ttipod001-cephosd-3)
@@ -28,7 +25,6 @@
 
   $ crushtool -i $TESTDIR/crush-classes/d --set-subtree-class default hdd --reclassify --reclassify-bucket %-ssd ssd default --reclassify-bucket ssd ssd default --reclassify-root default hdd -o foo
   classify_root default (-1) as hdd
-    new class hdd exists as 1
     renumbering bucket -1 -> -13
     renumbering bucket -6 -> -14
     renumbering bucket -5 -> -15
@@ -36,7 +32,6 @@
     renumbering bucket -3 -> -17
     renumbering bucket -2 -> -18
   classify_bucket %-ssd as ssd default bucket default (root)
-    created new class ssd as 2
   match %-ssd to node-20-ssd basename node-20
     have base -18
   match %-ssd to node-21-ssd basename node-21
@@ -48,7 +43,6 @@
   match %-ssd to node-27-ssd basename node-27
     created base -28
   classify_bucket ssd as ssd default bucket default (root)
-    new class ssd exists as 2
   match ssd to ssd basename default
     have base -13
   moving items from -12 (node-27-ssd) to -28 (node-27)
@@ -64,7 +58,6 @@
 
   $ crushtool -i $TESTDIR/crush-classes/e --reclassify --reclassify-bucket ceph-osd-ssd-% ssd default --reclassify-bucket ssd-root ssd default --reclassify-root default hdd -o foo
   classify_root default (-1) as hdd
-    new class hdd exists as 1
     renumbering bucket -1 -> -55
     renumbering bucket -34 -> -56
     renumbering bucket -20 -> -57
@@ -75,7 +68,6 @@
     renumbering bucket -46 -> -62
     renumbering bucket -40 -> -63
   classify_bucket ceph-osd-ssd-% as ssd default bucket default (root)
-    new class ssd exists as 0
   match ceph-osd-ssd-% to ceph-osd-ssd-node4 basename node4
     have base -57
   match ceph-osd-ssd-% to ceph-osd-ssd-node3 basename node3
@@ -93,7 +85,6 @@
   match ceph-osd-ssd-% to ceph-osd-ssd-node8 basename node8
     have base -61
   classify_bucket ssd-root as ssd default bucket default (root)
-    new class ssd exists as 0
   match ssd-root to ssd-root basename default
     have base -55
   moving items from -49 (ceph-osd-ssd-node8) to -61 (node8)
@@ -116,7 +107,6 @@ this one has weird node weights, so *lots* of mappings change...
 
   $ crushtool -i $TESTDIR/crush-classes/c --reclassify --reclassify-bucket %-SSD ssd default --reclassify-bucket ssd ssd default --reclassify-root default hdd -o foo
   classify_root default (-1) as hdd
-    new class hdd exists as 0
     renumbering bucket -1 -> -55
     renumbering bucket -9 -> -56
     renumbering bucket -8 -> -57
@@ -127,7 +117,6 @@ this one has weird node weights, so *lots* of mappings change...
     renumbering bucket -3 -> -62
     renumbering bucket -2 -> -63
   classify_bucket %-SSD as ssd default bucket default (root)
-    created new class ssd as 2
   match %-SSD to Ceph-Stor1-SSD basename Ceph-Stor1
     have base -63
   match %-SSD to Ceph-Stor2-SSD basename Ceph-Stor2
@@ -145,7 +134,6 @@ this one has weird node weights, so *lots* of mappings change...
   match %-SSD to Ceph-Stor8-SSD basename Ceph-Stor8
     have base -56
   classify_bucket ssd as ssd default bucket default (root)
-    new class ssd exists as 2
   match ssd to ssd basename default
     have base -55
   moving items from -18 (ssd) to -55 (default)
@@ -170,7 +158,6 @@ because the new map has a strictly summing hierarchy.
 
   $ crushtool -i $TESTDIR/crush-classes/beesly --set-subtree-class 0513-R-0060 hdd --set-subtree-class 0513-R-0050 hdd --reclassify --reclassify-root 0513-R-0050 hdd --reclassify-root 0513-R-0060 hdd -o foo
   classify_root 0513-R-0050 (-2) as hdd
-    new class hdd exists as 0
     renumbering bucket -2 -> -131
     renumbering bucket -14 -> -132
     renumbering bucket -34 -> -133
@@ -212,7 +199,6 @@ because the new map has a strictly summing hierarchy.
     renumbering bucket -93 -> -169
     renumbering bucket -68 -> -170
   classify_root 0513-R-0060 (-65) as hdd
-    new class hdd exists as 0
     renumbering bucket -65 -> -35
     renumbering bucket -76 -> -36
     renumbering bucket -78 -> -37
@@ -245,7 +231,6 @@ because the new map has a strictly summing hierarchy.
 
   $ crushtool -i $TESTDIR/crush-classes/flax --reclassify --reclassify-root default hdd -o foo
   classify_root default (-1) as hdd
-    new class hdd exists as 0
     renumbering bucket -1 -> -5
     renumbering bucket -12 -> -7
     renumbering bucket -9 -> -8
@@ -259,7 +244,6 @@ because the new map has a strictly summing hierarchy.
 
   $ crushtool -i $TESTDIR/crush-classes/gabe --reclassify --reclassify-root default hdd -o foo
   classify_root default (-1) as hdd
-    new class hdd exists as 0
     rule 3 includes take on root default class 0
   failed to reclassify map
   [1]
@@ -270,7 +254,6 @@ below is an adjusted version of the same cluster's map
 
   $ crushtool -i $TESTDIR/crush-classes/gabe2 --reclassify --reclassify-root default hdd -o foo
   classify_root default (-1) as hdd
-    new class hdd exists as 0
     renumbering bucket -1 -> -178
     renumbering bucket -4 -> -179
     renumbering bucket -25 -> -180
@@ -306,7 +289,6 @@ below is an adjusted version of the same cluster's map
 
   $ crushtool -i $TESTDIR/crush-classes/b --reclassify --reclassify-bucket %-hdd hdd default --reclassify-bucket %-ssd ssd default --reclassify-bucket ssd ssd default --reclassify-bucket hdd hdd default -o foo
   classify_bucket %-hdd as hdd default bucket default (root)
-    new class hdd exists as 0
   match %-hdd to berta-hdd basename berta
     have base -37
   match %-hdd to oelgard-hdd basename oelgard
@@ -346,7 +328,6 @@ below is an adjusted version of the same cluster's map
   match %-hdd to carl-hdd basename carl
     have base -32
   classify_bucket %-ssd as ssd default bucket default (root)
-    new class ssd exists as 1
   match %-ssd to frauenhaus-ssd basename frauenhaus
     already creating base -145
   match %-ssd to herrenhaus-ssd basename herrenhaus
@@ -378,11 +359,9 @@ below is an adjusted version of the same cluster's map
   match %-ssd to bonobo-ssd basename bonobo
     created base -156
   classify_bucket hdd as hdd default bucket default (root)
-    new class hdd exists as 0
   match hdd to hdd basename default
     have base -1
   classify_bucket ssd as ssd default bucket default (root)
-    new class ssd exists as 1
   match ssd to ssd basename default
     have base -1
   moving items from -124 (bonobo-ssd) to -156 (bonobo)
@@ -432,7 +411,6 @@ below is an adjusted version of the same cluster's map
 
   $ crushtool -i $TESTDIR/crush-classes/f --reclassify --reclassify-root default hdd -o foo
   classify_root default (-1) as hdd
-    new class hdd exists as 0
     renumbering bucket -1 -> -178
     renumbering bucket -4 -> -179
     renumbering bucket -25 -> -180
@@ -470,11 +448,9 @@ default that we aren't changing the class on.
 
   $ crushtool -i $TESTDIR/crush-classes/g --reclassify --reclassify-bucket sata-% hdd-sata default --reclassify-bucket sas-% hdd-sas default --reclassify-bucket sas hdd-sas default --reclassify-bucket sata hdd-sata default -o foo
   classify_bucket sas as hdd-sas default bucket default (root)
-    created new class hdd-sas as 1
   match sas to sas basename default
     have base -1
   classify_bucket sas-% as hdd-sas default bucket default (root)
-    new class hdd-sas exists as 1
   match sas-% to sas-osd01 basename osd01
     created base -73
   match sas-% to sas-osd02 basename osd02
@@ -500,11 +476,9 @@ default that we aren't changing the class on.
   match sas-% to sas-rack3 basename rack3
     created base -84
   classify_bucket sata as hdd-sata default bucket default (root)
-    created new class hdd-sata as 2
   match sata to sata basename default
     have base -1
   classify_bucket sata-% as hdd-sata default bucket default (root)
-    new class hdd-sata exists as 2
   match sata-% to sata-osd11 basename osd11
     created base -85
   match sata-% to sata-osd10 basename osd10
