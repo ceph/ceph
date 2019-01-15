@@ -179,13 +179,11 @@ class Module(MgrModule, orchestrator.Orchestrator):
     """An Orchestrator that an external Ansible runner service to perform
     operations
     """
-
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {'name': 'server_url'},
         {'name': 'username'},
         {'name': 'password'},
         {'name': 'verify_server'} # Check server identity (Boolean/path to CA bundle)
-
     ]
 
     def __init__(self, *args, **kwargs):
@@ -234,10 +232,10 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         # Ansible runner service client
         try:
-            self.ar_client = Client(server_url = self.get_config('server_url', ''),
-                                    user = self.get_config('username', ''),
-                                    password = self.get_config('password', ''),
-                                    verify_server = self.get_config('verify_server', True),
+            self.ar_client = Client(server_url = self.get_module_option('server_url', ''),
+                                    user = self.get_module_option('username', ''),
+                                    password = self.get_module_option('password', ''),
+                                    verify_server = self.get_module_option('verify_server', True),
                                     logger = self.log)
         except Exception:
             self.log.exception("Ansible Runner Service not available. "
@@ -292,25 +290,25 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
     def verify_config(self):
 
-        if not self.get_config('server_url', ''):
+        if not self.get_module_option('server_url', ''):
             self.log.error(
                 "No Ansible Runner Service base URL <server_name>:<port>"
                 "Try 'ceph config set mgr mgr/%s/server_url <server name/ip>:<port>'",
                 self.module_name)
 
-        if not self.get_config('username', ''):
+        if not self.get_module_option('username', ''):
             self.log.error(
                 "No Ansible Runner Service user. "
                 "Try 'ceph config set mgr mgr/%s/username <string value>'",
                 self.module_name)
 
-        if not self.get_config('password', ''):
+        if not self.get_module_option('password', ''):
             self.log.error(
                 "No Ansible Runner Service User password. "
                 "Try 'ceph config set mgr mgr/%s/password <string value>'",
                 self.module_name)
 
-        if not self.get_config('verify_server', ''):
+        if not self.get_module_option('verify_server', ''):
             self.log.error(
                 "TLS server identity verification is enabled by default."
                 "Use 'ceph config set mgr mgr/{0}/verify_server False' to disable it."
