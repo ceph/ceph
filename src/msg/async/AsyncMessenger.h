@@ -215,6 +215,9 @@ private:
   void _finish_bind(const entity_addrvec_t& bind_addrs,
 		    const entity_addrvec_t& listen_addrs);
 
+  entity_addrvec_t _filter_addrs(int type,
+				 const entity_addrvec_t& addrs);
+
  private:
   static const uint64_t ReapDeadConnectionThreshold = 5;
 

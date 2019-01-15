@@ -601,30 +601,36 @@ AsyncConnectionRef AsyncMessenger::create_connect(
   return conn;
 }
 
-ConnectionRef AsyncMessenger::connect_to(int type, const entity_addrvec_t& addrs)
-{
-  Mutex::Locker l(lock);
-  if (*my_addrs == addrs ||
-      (addrs.v.size() == 1 &&
-       my_addrs->contains(addrs.front()))) {
-    // local
-    return local_connection;
-  }
-
-  AsyncConnectionRef conn = _lookup_conn(addrs);
-  if (conn) {
-    ldout(cct, 10) << __func__ << " " << addrs << " existing " << conn << dendl;
-  } else {
-    conn = create_connect(addrs, type);
-    ldout(cct, 10) << __func__ << " " << addrs << " new " << conn << dendl;
-  }
-
-  return conn;
-}
 
 ConnectionRef AsyncMessenger::get_loopback_connection()
 {
   return local_connection;
+}
+
+entity_addrvec_t AsyncMessenger::_filter_addrs(int type,
+					       const entity_addrvec_t& addrs)
+{
+  if (did_bind &&
+      !get_myaddrs().has_msgr2() &&
+      get_mytype() == type) {
+    // if we are bound to v1 only, and we are connecting to a peer, we cannot
+    // use the peer's v2 address (yet). otherwise the connection is assymetrical,
+    // because they would have to use v1 to connect to us, and we would use v2,
+    // and connection race detection etc would totally break down (among other
+    // things).
+    ldout(cct, 10) << __func__ << " " << addrs << " type " << type
+		   << " limiting to v1 ()" << dendl;
+    entity_addrvec_t r;
+    for (auto& i : addrs.v) {
+      if (i.is_msgr2()) {
+	continue;
+      }
+      r.v.push_back(i);
+    }
+    return r;
+  } else {
+    return addrs;
+  }
 }
 
 int AsyncMessenger::send_to(Message *m, int type, const entity_addrvec_t& addrs)
@@ -650,9 +656,33 @@ int AsyncMessenger::send_to(Message *m, int type, const entity_addrvec_t& addrs)
     return -EINVAL;
   }
 
-  AsyncConnectionRef conn = _lookup_conn(addrs);
-  submit_message(m, conn, addrs, type);
+  auto av = _filter_addrs(type, addrs);
+  AsyncConnectionRef conn = _lookup_conn(av);
+  submit_message(m, conn, av, type);
   return 0;
+}
+
+ConnectionRef AsyncMessenger::connect_to(int type, const entity_addrvec_t& addrs)
+{
+  Mutex::Locker l(lock);
+  if (*my_addrs == addrs ||
+      (addrs.v.size() == 1 &&
+       my_addrs->contains(addrs.front()))) {
+    // local
+    return local_connection;
+  }
+
+  auto av = _filter_addrs(type, addrs);
+
+  AsyncConnectionRef conn = _lookup_conn(av);
+  if (conn) {
+    ldout(cct, 10) << __func__ << " " << av << " existing " << conn << dendl;
+  } else {
+    conn = create_connect(av, type);
+    ldout(cct, 10) << __func__ << " " << av << " new " << conn << dendl;
+  }
+
+  return conn;
 }
 
 void AsyncMessenger::submit_message(Message *m, AsyncConnectionRef con,
