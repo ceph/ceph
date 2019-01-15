@@ -204,7 +204,7 @@ BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
 BuildRequires:  cunit-devel
-BuildRequires:	python%{_python_buildid}-base
+BuildRequires:	python%{_python_buildid}-setuptools
 BuildRequires:	python%{_python_buildid}-Cython
 BuildRequires:	python%{_python_buildid}-PrettyTable
 BuildRequires:	python%{_python_buildid}-Sphinx
@@ -225,13 +225,13 @@ BuildRequires:  redhat-lsb-core
 %if 0%{with python2}
 BuildRequires:	python2-Cython
 %endif
+BuildRequires:	python%{python3_pkgversion}-devel
+BuildRequires:	python%{python3_pkgversion}-setuptools
+BuildRequires:	python%{python3_pkgversion}-Cython
 BuildRequires:	python%{_python_buildid}-prettytable
 BuildRequires:	python%{_python_buildid}-sphinx
 BuildRequires:	lz4-devel >= 1.7
 %endif
-BuildRequires:	python%{python3_pkgversion}-devel
-BuildRequires:	python%{python3_pkgversion}-setuptools
-BuildRequires:	python%{python3_pkgversion}-Cython
 # distro-conditional make check dependencies
 %if 0%{with make_check}
 %if 0%{?fedora} || 0%{?rhel}
