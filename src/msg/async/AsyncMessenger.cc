@@ -627,8 +627,10 @@ ConnectionRef AsyncMessenger::get_loopback_connection()
   return local_connection;
 }
 
-int AsyncMessenger::_send_to(Message *m, int type, const entity_addrvec_t& addrs)
+int AsyncMessenger::send_to(Message *m, int type, const entity_addrvec_t& addrs)
 {
+  Mutex::Locker l(lock);
+
   FUNCTRACE(cct);
   ceph_assert(m);
 

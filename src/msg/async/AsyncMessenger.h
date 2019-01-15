@@ -137,11 +137,7 @@ public:
    * @defgroup Messaging
    * @{
    */
-  int send_to(Message *m, int type, const entity_addrvec_t& addrs) override {
-    Mutex::Locker l(lock);
-
-    return _send_to(m, type, addrs);
-  }
+  int send_to(Message *m, int type, const entity_addrvec_t& addrs) override;
 
   /** @} // Messaging */
 
@@ -216,7 +212,6 @@ private:
   void submit_message(Message *m, AsyncConnectionRef con,
                       const entity_addrvec_t& dest_addrs, int dest_type);
 
-  int _send_to(Message *m, int type, const entity_addrvec_t& addrs);
   void _finish_bind(const entity_addrvec_t& bind_addrs,
 		    const entity_addrvec_t& listen_addrs);
 
