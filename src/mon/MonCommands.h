@@ -1165,6 +1165,9 @@ COMMAND("config reset" \
 	" name=num,type=CephInt",
 	"Revert configuration to previous state",
 	"config", "rw")
+COMMAND("config generate-minimal-conf",
+	"Generate a minimal ceph.conf file",
+	"config", "r")
 
 COMMAND_WITH_FLAG("smart name=devid,type=CephString,req=false",
 		  "Query health metrics for underlying device",

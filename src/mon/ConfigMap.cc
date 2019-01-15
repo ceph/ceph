@@ -66,6 +66,24 @@ void Section::dump(Formatter *f) const
   }
 }
 
+std::string Section::get_minimal_conf() const
+{
+  std::string r;
+  for (auto& i : options) {
+    if (i.second.opt->has_flag(Option::FLAG_NO_MON_UPDATE) ||
+	i.second.opt->has_flag(Option::FLAG_MINIMAL_CONF)) {
+      if (i.second.mask.empty()) {
+	r += "\t"s + i.first + " = " + i.second.raw_value + "\n";
+      } else {
+	r += "\t# masked option excluded: " + i.first + " = " +
+	  i.second.raw_value + "\n";
+      }
+    }
+  }
+  return r;
+}
+
+
 // ------------
 
 void ConfigMap::dump(Formatter *f) const
