@@ -1086,7 +1086,7 @@ void Monitor::bootstrap()
   dout(10) << "monmap " << *monmap << dendl;
 
   // note my rank
-  int newrank = monmap->get_rank(messenger->get_myaddr());
+  int newrank = monmap->get_rank(messenger->get_myaddrs());
   if (newrank < 0 && rank >= 0) {
     // was i ever part of the quorum?
     if (has_ever_joined) {
