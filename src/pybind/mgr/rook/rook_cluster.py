@@ -245,7 +245,7 @@ class RookCluster(object):
                 "namespace": self.rook_namespace
             },
             "spec": {
-                "RADOS": {
+                "rados": {
                     "pool": spec.extended["pool"]
                 },
                 "server": {
@@ -255,7 +255,7 @@ class RookCluster(object):
         }
 
         if "namespace" in spec.extended:
-            rook_nfsgw["spec"]["RADOS"]["namespace"] = spec.extended["namespace"]
+            rook_nfsgw["spec"]["rados"]["namespace"] = spec.extended["namespace"]
 
         with self.ignore_409("NFS cluster '{0}' already exists".format(spec.name)):
             self.rook_api_post("cephnfses/", body=rook_nfsgw)
