@@ -462,7 +462,7 @@ int main(int argc, const char **argv)
       RGWProcessEnv env = { store, &rest, olog, 0, uri_prefix, auth_registry };
       //TODO: move all of scheduler initializations to frontends?
 
-      fe = new RGWCivetWebFrontend(env, config, cct.get());
+      fe = new RGWCivetWebFrontend(env, config);
     }
     else if (framework == "loadgen") {
       int port;
