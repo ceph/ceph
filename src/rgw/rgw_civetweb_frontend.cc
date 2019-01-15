@@ -9,8 +9,6 @@
 #include "rgw_frontend.h"
 #include "rgw_client_io_filters.h"
 #include "rgw_dmclock_sync_scheduler.h"
-#include "common/ceph_time.h"
-#include "common/perf_counters.h"
 
 #define dout_subsys ceph_subsys_rgw
 
