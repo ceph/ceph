@@ -129,6 +129,22 @@ class RookCluster(object):
 
         return nodename_to_devices
 
+    def get_nfs_conf_url(self, nfs_cluster, instance):
+        #
+        # Fetch cephnfs object for "nfs_cluster" and then return a rados://
+        # URL for the instance within that cluster.
+        #
+        ceph_nfs = self.rook_api_get("cephnfses/{0}".format(nfs_cluster))
+        pool = ceph_nfs['spec']['rados']['pool']
+        namespace = ceph_nfs['spec']['rados'].get('namespace', None)
+
+        if namespace == None:
+            url = "rados://{0}/conf-{1}.{2}".format(pool, nfs_cluster, instance)
+        else:
+            url = "rados://{0}/{1}/conf-{2}.{3}".format(pool, namespace, nfs_cluster, instance)
+        return url
+
+
     def describe_pods(self, service_type, service_id, nodename):
         # Go query the k8s API about deployment, containers related to this
         # filesystem
