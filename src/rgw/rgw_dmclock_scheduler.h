@@ -23,6 +23,12 @@
 
 namespace rgw::dmclock {
 
+using crimson::dmclock::ReqParams;
+using crimson::dmclock::PhaseType;
+using crimson::dmclock::AtLimit;
+using crimson::dmclock::Time;
+using crimson::dmclock::get_time;
+
 /// function to provide client counters
 using GetClientCounters = std::function<PerfCounters*(client_id)>;
 

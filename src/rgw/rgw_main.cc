@@ -38,7 +38,6 @@
 #include "rgw_frontend.h"
 #include "rgw_http_client_curl.h"
 #if defined(WITH_RADOSGW_BEAST_FRONTEND)
-#include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_asio_frontend.h"
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
 
@@ -437,8 +436,6 @@ int main(int argc, const char **argv)
     exit(1);
   }
 
-  rgw::dmclock::optional_scheduler_ctx sched_ctx(cct.get());
-
   register_async_signal_handler(SIGTERM, handle_sigterm);
   register_async_signal_handler(SIGINT, handle_sigterm);
   register_async_signal_handler(SIGUSR1, handle_sigterm);
@@ -465,7 +462,7 @@ int main(int argc, const char **argv)
       RGWProcessEnv env = { store, &rest, olog, 0, uri_prefix, auth_registry };
       //TODO: move all of scheduler initializations to frontends?
 
-      fe = new RGWCivetWebFrontend(env, config, cct.get(), sched_ctx);
+      fe = new RGWCivetWebFrontend(env, config, cct.get());
     }
     else if (framework == "loadgen") {
       int port;
@@ -484,7 +481,7 @@ int main(int argc, const char **argv)
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
       RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, auth_registry };
-      fe = new RGWAsioFrontend(env, config, sched_ctx);
+      fe = new RGWAsioFrontend(env, config);
     }
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)
