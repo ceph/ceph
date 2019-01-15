@@ -1138,7 +1138,7 @@ def validate_command(sigdict, args, verbose=False):
         if matched < best_match_cnt:
             continue
         if verbose:
-            print("better match: {0} > {1}: {3} ".format(
+            print("better match: {0} > {1}: {2} ".format(
                 matched, best_match_cnt, concise_sig(sig)
             ), file=sys.stderr)
         if matched > best_match_cnt:
