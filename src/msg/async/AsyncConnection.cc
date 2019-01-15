@@ -1542,6 +1542,14 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
 	need_challenge ? &authorizer_challenge : nullptr) ||
       !authorizer_valid) {
     lock.lock();
+    if (state != STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
+      ldout(async_msgr->cct, 1) << __func__
+                                << " state changed while verify_authorizer,"
+                                << " it must be mark_down"
+                                << dendl;
+      ceph_assert(state == STATE_CLOSED);
+      return -1;
+    }
     char tag;
     if (need_challenge && !had_challenge && authorizer_challenge) {
       ldout(async_msgr->cct,10) << __func__ << ": challenging authorizer"
