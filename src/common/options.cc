@@ -6721,9 +6721,10 @@ std::vector<Option> get_rgw_options() {
     .add_tag("performance")
     .add_see_also("rgw_frontends"),
 
-    Option("rgw_dmclock_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
-    .set_description("Enable dmclock scheduler for rgw requests"),
+    Option("rgw_scheduler_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("none")
+    .set_description("Set the type of dmclock scheduler, defaults to none "
+		     "Other valid values are dmclock and throttler (valid only for beast)"),
 
     Option("rgw_dmclock_admin_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(100.0)
