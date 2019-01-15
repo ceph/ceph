@@ -117,11 +117,11 @@ fieldset[disabled] .btn-primary:active,
 .btn-primary.disabled.active,
 .btn-primary[disabled].active,
 fieldset[disabled] .btn-primary.active {
-  background-color: $color-blue;
+  background-color: $color-primary;
   border-color: $color-button-border;
 }
 .btn-primary .badge {
-  color: $color-blue;
+  color: $color-primary;
   background-color: $color-button-badge;
 }
 .btn-primary .caret {
@@ -286,6 +286,15 @@ uib-accordion .panel-title,
   font-size: 6px;
   padding-left: 4px;
   vertical-align: text-top;
+}
+.form-control {
+  display: table-cell;
+
+  &:focus {
+    border-color: rgba($color-primary, 0.8);
+    outline: 0;
+    box-shadow: inset 0 1px 1px rgba(0,0,0,.075), 0 0 8px 2px rgba($color-primary, 0.5);
+  }
 }
 /* Panel */
 .panel-footer button.btn:not(:first-child) {
