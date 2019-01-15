@@ -73,8 +73,20 @@ void AuthMonitor::tick()
 
   if (!mon->is_leader()) return;
 
-  if (check_rotate())
+  // increase global_id?
+  bool propose = false;
+  if (should_increase_max_global_id()) {
+    increase_max_global_id();
+    propose = true;
+  }
+
+  if (check_rotate()) {
+    propose = true;
+  }
+
+  if (propose) {
     propose_pending();
+  }
 }
 
 void AuthMonitor::on_active()
@@ -84,6 +96,11 @@ void AuthMonitor::on_active()
   if (!mon->is_leader())
     return;
   mon->key_server.start_server();
+
+  if (is_writeable() && should_increase_max_global_id()) {
+    increase_max_global_id();
+    propose_pending();
+  }
 }
 
 bufferlist _encode_cap(const string& cap)
@@ -289,6 +306,16 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
 	   << dendl;
 }
 
+bool AuthMonitor::should_increase_max_global_id()
+{
+  auto num_prealloc = g_conf()->mon_globalid_prealloc;
+  if (max_global_id < num_prealloc ||
+      (last_allocated_id + 1) >= max_global_id - num_prealloc / 2) {
+    return true;
+  }
+  return false;
+}
+
 void AuthMonitor::increase_max_global_id()
 {
   ceph_assert(mon->is_leader());
@@ -481,9 +508,8 @@ uint64_t AuthMonitor::assign_global_id(bool should_increase_max)
   bool return_next = (next_global_id <= max_global_id);
 
   // bump the max?
-  while (mon->is_leader() &&
-	 (max_global_id < g_conf()->mon_globalid_prealloc ||
-	  next_global_id >= max_global_id - g_conf()->mon_globalid_prealloc / 2)) {
+  if (mon->is_leader() &&
+      should_increase_max_global_id()) {
     increase_max_global_id();
   }
 
