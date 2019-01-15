@@ -638,7 +638,8 @@ CtPtr ProtocolV2::_fault() {
   connection->fault();
   reset_recv_state();
 
-  if (connection->policy.standby && out_queue.empty() && state != WAIT) {
+  if (connection->policy.standby && out_queue.empty() && !keepalive &&
+      state != WAIT) {
     ldout(cct, 10) << __func__ << " with nothing to send, going to standby"
                    << dendl;
     state = STANDBY;
@@ -2757,6 +2758,13 @@ CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
                    << dendl;
     ceph_assert(connection->peer_addrs->msgr2_addr() >
                 messenger->get_myaddrs().msgr2_addr());
+
+    existing->lock.unlock();
+    // make sure we follow through with opening the existing
+		// connection (if it isn't yet open) since we know the peer
+		// has something to send to us.
+    existing->send_keepalive();
+    existing->lock.lock();
     WaitFrame wait;
     bufferlist &bl = wait.get_buffer();
     return WRITE(bl, "wait", read_frame);
