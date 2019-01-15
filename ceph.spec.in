@@ -198,6 +198,7 @@ BuildRequires:	python%{_python_buildid}-requests
 BuildRequires:	python%{_python_buildid}-six
 BuildRequires:	python%{_python_buildid}-tox
 BuildRequires:	python%{_python_buildid}-virtualenv
+BuildRequires:	python%{_python_buildid}-psutil
 BuildRequires:	socat
 %endif
 %if 0%{with seastar}
