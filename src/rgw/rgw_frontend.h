@@ -22,6 +22,7 @@
 
 namespace rgw::dmclock {
   class SyncScheduler;
+  class ClientConfig;
 }
 
 class RGWFrontendConfig {
@@ -102,7 +103,6 @@ class RGWCivetWebFrontend : public RGWFrontend {
   RGWMongooseEnv env;
 
   std::unique_ptr<rgw::dmclock::SyncScheduler> scheduler;
-  std::optional<rgw::dmclock::ClientCounters> client_counters;
   std::unique_ptr<rgw::dmclock::ClientConfig> client_config;
 
   void set_conf_default(std::multimap<std::string, std::string>& m,
