@@ -1715,16 +1715,18 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("issue MON_DISK_BIG health warning when mon database is above this size"),
 
-    Option("mon_warn_not_scrubbed", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(0)
-    .add_service("mon")
-    .set_description("if non-zero, issue PG_NOT_SCRUBBED when PG(s) have not been scrubbed for more than this long beyond the configured mon_scrub_interval (seconds)")
-    .add_see_also("osd_scrub_min_interval"),
+    Option("mon_warn_pg_not_scrubbed_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.5)
+    .set_min(0)
+    .set_description("Percentage of the scrub max interval past the scrub max interval to warn")
+    .set_long_description("")
+    .add_see_also("osd_scrub_max_interval"),
 
-    Option("mon_warn_not_deep_scrubbed", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(0)
-    .add_service("mon")
-    .set_description("if non-zero, issue PG_NOT_DEEP_SCRUBBED when PG(s) have not been scrubbed for more than this long beyond the configured mon_scrub_interval (seconds)")
+    Option("mon_warn_pg_not_deep_scrubbed_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.75)
+    .set_min(0)
+    .set_description("Percentage of the deep scrub interval past the deep scrub interval to warn")
+    .set_long_description("")
     .add_see_also("osd_deep_scrub_interval"),
 
     Option("mon_scrub_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
