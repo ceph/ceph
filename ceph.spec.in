@@ -1953,8 +1953,12 @@ fi
 /usr/bin/systemctl status ceph.target > /dev/null 2>&1
 STATUS=$?
 
+# Check whether SELinux is in Permissive mode
+/usr/sbin/getenforce|/usr/bin/grep 'Permissive' > /dev/null
+PERMISSIVE=$?
+
 # Stop the daemons if they were running
-if test $STATUS -eq 0; then
+if [ $STATUS -eq 0 ] && [ $PERMISSIVE -ne 0 ]; then
     /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
 fi
 
@@ -1966,7 +1970,7 @@ rm -f ${FILE_CONTEXT}.pre
 /usr/sbin/restorecon -R /var/run/ceph > /dev/null 2>&1
 
 # Start the daemons iff they were running before
-if test $STATUS -eq 0; then
+if [ $STATUS -eq 0 ] && [ $PERMISSIVE -ne 0 ]; then
     /usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
 fi
 exit 0
@@ -1991,8 +1995,12 @@ if [ $1 -eq 0 ]; then
     /usr/bin/systemctl status ceph.target > /dev/null 2>&1
     STATUS=$?
 
+    # Check whether SELinux is in Permissive mode
+    /usr/sbin/getenforce|/usr/bin/grep 'Permissive' > /dev/null
+    PERMISSIVE=$?
+
     # Stop the daemons if they were running
-    if test $STATUS -eq 0; then
+    if [ $STATUS -eq 0 ] && [ $PERMISSIVE -ne 0 ]; then
         /usr/bin/systemctl stop ceph.target > /dev/null 2>&1
     fi
 
@@ -2002,7 +2010,7 @@ if [ $1 -eq 0 ]; then
     /usr/sbin/restorecon -R /var/run/ceph > /dev/null 2>&1
 
     # Start the daemons if they were running before
-    if test $STATUS -eq 0; then
+    if [ $STATUS -eq 0 ] && [ $PERMISSIVE -ne 0 ]; then
 	/usr/bin/systemctl start ceph.target > /dev/null 2>&1 || :
     fi
 fi
