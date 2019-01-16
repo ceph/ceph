@@ -27,6 +27,7 @@
               "node_modules/awesome-bootstrap-checkbox/awesome-bootstrap-checkbox.css",
               "node_modules/ngx-bootstrap/datepicker/bs-datepicker.css",
               "src/styles.scss",
+              "src/vendor.overrides.scss",
               "node_modules/ng2-tree/styles.css"
             ],
             "scripts": [

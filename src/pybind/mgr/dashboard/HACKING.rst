@@ -234,7 +234,7 @@ Frontend branding
 ~~~~~~~~~~~~~~~~~
 
 Every vendor can customize the 'Ceph dashboard' to his needs. No matter if
-Logo, HTML-Template or Typescript, every file inside the frontend folder can be
+logo, HTML-Template or TypeScript, every file inside the frontend folder can be
 replaced.
 
 To replace files, open ``./frontend/angular.json`` and scroll to the section
@@ -260,17 +260,23 @@ or
     $ npm run build -- --prod
 
 Unfortunately it's currently not possible to use multiple configurations when
-serving or building the ui at the same time. That means a configuration just
-for the branding ``fileReplacements`` it not an option, because you want to use
+serving or building the UI at the same time. That means a configuration just
+for the branding ``fileReplacements`` is not an option, because you want to use
 the production configuration anyway
 (https://github.com/angular/angular-cli/issues/10612).
 Furthermore it's also not possible to use glob expressions for
-``fileReplacements``. As long as the feature hasn't been implemented, the
-vendor has to add the file replacements manually to the angular.json
+``fileReplacements``. As long as the feature hasn't been implemented, you have
+to add the file replacements manually to the angular.json file
 (https://github.com/angular/angular-cli/issues/12354).
 
-Nethertheless you should stick to the suggested naming scheme because it makes
+Nevertheless you should stick to the suggested naming scheme because it makes
 it easier for you to use glob expressions once it's supported in the future.
+
+To change the variable defaults you can overwrite them in the file
+``./frontend/src/vendor.variables.scss``. Just reassign the variable you want
+to change, for example ``$color-primary: teal;``
+To overwrite or extend the default CSS, you can add your own styles in
+``./frontend/src/vendor.overrides.scss``.
 
 I18N
 ----
