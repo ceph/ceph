@@ -187,8 +187,10 @@ int CephxServiceHandler::handle_request(
 	  ldout(cct, 10) << " adding key for service "
 			 << ceph_entity_type_name(service_id) << dendl;
           CephXSessionAuthInfo info;
-          int r = key_server->build_session_auth_info(service_id,
-						      auth_ticket_info, info);
+          int r = key_server->build_session_auth_info(
+	    service_id,
+	    auth_ticket_info.ticket,  // parent ticket (client's auth ticket)
+	    info);
 	  // tolerate missing MGR rotating key for the purposes of upgrades.
           if (r < 0) {
 	    ldout(cct, 10) << "   missing key for service "
