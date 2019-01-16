@@ -1504,6 +1504,11 @@ CtPtr ProtocolV2::handle_message() {
 
   ceph_assert(state == READY);
 
+#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
+  ltt_recv_stamp = ceph_clock_now();
+#endif
+  recv_stamp = ceph_clock_now();
+
   uint32_t header_len;
   calculate_payload_size(sizeof(ceph_msg_header2), &header_len);
   return READ(header_len, handle_message_header);
