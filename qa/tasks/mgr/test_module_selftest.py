@@ -1,5 +1,7 @@
 
 import time
+import unittest
+
 import requests
 import errno
 import logging
@@ -50,6 +52,7 @@ class TestModuleSelftest(MgrTestCase):
     def test_diskprediction_local(self):
         self._selftest_plugin("diskprediction_local")
 
+    @unittest.skip("https://tracker.ceph.com/issues/37736")
     def test_diskprediction_cloud(self):
         self._selftest_plugin("diskprediction_cloud")
 
