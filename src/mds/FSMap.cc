@@ -387,11 +387,12 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
     encode(legacy_client_fscid, bl);
     encode(compat, bl);
     encode(enable_multiple, bl);
-    std::vector<Filesystem> fs_list;
-    for (auto i : filesystems) {
-      fs_list.push_back(*(i.second));
+    {
+      std::vector<Filesystem::ref> v;
+      v.reserve(filesystems.size());
+      for (auto& p : filesystems) v.emplace_back(p.second);
+      encode(v, bl, features);
     }
-    encode(fs_list, bl, features);
     encode(mds_roles, bl);
     encode(standby_daemons, bl, features);
     encode(standby_epochs, bl);
@@ -597,13 +598,15 @@ void FSMap::decode(bufferlist::const_iterator& p)
     decode(legacy_client_fscid, p);
     decode(compat, p);
     decode(enable_multiple, p);
-    std::vector<Filesystem> fs_list;
-    decode(fs_list, p);
-    filesystems.clear();
-    for (std::vector<Filesystem>::const_iterator fs = fs_list.begin(); fs != fs_list.end(); ++fs) {
-      filesystems[fs->fscid] = Filesystem::create(*fs);
+    {
+      std::vector<Filesystem::ref> v;
+      decode(v, p);
+      filesystems.clear();
+      for (auto& ref : v) {
+        auto em = filesystems.emplace(std::piecewise_construct, std::forward_as_tuple(ref->fscid), std::forward_as_tuple(std::move(ref)));
+        ceph_assert(em.second);
+      }
     }
-
     decode(mds_roles, p);
     decode(standby_daemons, p);
     decode(standby_epochs, p);
