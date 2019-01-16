@@ -15,7 +15,7 @@ TEST(AMQP_Connection, ConnectionOK)
   try {
     // create connection for the first time
     EXPECT_EQ(amqp::get_connection_number(), 0U);
-    const amqp::connection_t& conn = amqp::connect("amqp://localhost", "ex1");
+    amqp::connection_t& conn = amqp::connect("amqp://localhost", "ex1");
     EXPECT_EQ(amqp::get_connection_number(), 1U);
     auto rc = amqp::publish(conn, "topic", "message");
     EXPECT_EQ(rc, 0);
@@ -30,7 +30,7 @@ TEST(AMQP_Connection, ConnectionReuse)
   try {
     // reuse the connection
     EXPECT_EQ(amqp::get_connection_number(), 1U);
-    const amqp::connection_t& conn = amqp::connect("amqp://localhost", "ex1");
+    amqp::connection_t& conn = amqp::connect("amqp://localhost", "ex1");
     EXPECT_EQ(amqp::get_connection_number(), 1U);
     auto rc = amqp::publish(conn, "topic", "message");
     EXPECT_EQ(rc, 0);
@@ -138,6 +138,34 @@ TEST(AMQP_Connection, ExchangeMismatch)
   }
 }
 
+TEST(AMQP_Connection, MaxConnections)
+{
+  // fill up all connections
+  auto remaining_connections = amqp::get_max_connections() - amqp::get_connection_number();
+  while (remaining_connections > 0) {
+    amqp_mock::VALID_HOST = "127.10.0." + std::to_string(remaining_connections);
+    try {
+      amqp::connect("amqp://" + amqp_mock::VALID_HOST, "ex1");
+    } catch (const amqp::connection_error& e) {
+      // make sure no exception happens
+      EXPECT_TRUE(false);
+    }
+    --remaining_connections;
+  }
+  EXPECT_EQ(amqp::get_connection_number(), amqp::get_max_connections());
+  // try to add another connection
+  amqp_mock::VALID_HOST = "toomany";
+  try {
+    amqp::connect("amqp://" + amqp_mock::VALID_HOST, "ex1");
+    // make sure exception happens
+    EXPECT_TRUE(false);
+  } catch (const amqp::connection_error& e) {
+    EXPECT_STRNE("", e.what());
+  }
+  EXPECT_EQ(amqp::get_connection_number(), amqp::get_max_connections());
+  amqp_mock::VALID_HOST = "localhost";
+}
+
 std::atomic<bool> callback_invoked = false;
 
 void my_callback_expect_ack(int rc) {
@@ -145,19 +173,89 @@ void my_callback_expect_ack(int rc) {
   callback_invoked = true;
 }
 
+void my_callback_expect_nack(int rc) {
+  EXPECT_LT(rc, 0);
+  callback_invoked = true;
+}
+
+std::chrono::milliseconds wait_time(500);
+
 TEST(AMQP_PublishAndWait, ReceiveAck)
 {
+  callback_invoked = false;
   try {
     // create connection for the first time
-    const amqp::connection_t& conn = amqp::connect("amqp://localhost", "ex1");
+    amqp::connection_t& conn = amqp::connect("amqp://localhost", "ex1");
     auto rc = publish_with_confirm(conn, "topic", "message", my_callback_expect_ack);
     EXPECT_EQ(rc, 0);
-    std::this_thread::sleep_for(std::chrono::seconds(1));
+    std::this_thread::sleep_for(wait_time);
     EXPECT_TRUE(callback_invoked);
   } catch (const amqp::connection_error& e) {
     // make sure exception dont happen
     EXPECT_TRUE(false);
   }
+  callback_invoked = false;
 }
 
+TEST(AMQP_PublishAndWait, ReceiveNack)
+{
+  callback_invoked = false;
+  amqp_mock::REPLY_ACK = false;
+  try {
+    // create connection for the first time
+    amqp::connection_t& conn = amqp::connect("amqp://localhost", "ex1");
+    auto rc = publish_with_confirm(conn, "topic", "message", my_callback_expect_nack);
+    EXPECT_EQ(rc, 0);
+    std::this_thread::sleep_for(wait_time);
+    EXPECT_TRUE(callback_invoked);
+  } catch (const amqp::connection_error& e) {
+    // make sure exception dont happen
+    EXPECT_TRUE(false);
+  }
+  amqp_mock::REPLY_ACK = true;
+  callback_invoked = false;
+}
+
+TEST(AMQP_PublishAndWait, FailWrite)
+{
+  callback_invoked = false;
+  amqp_mock::FAIL_NEXT_WRITE = true;
+  try {
+    // create connection for the first time
+    amqp::connection_t& conn = amqp::connect("amqp://localhost", "ex1");
+    auto rc = publish_with_confirm(conn, "topic", "message", my_callback_expect_nack);
+    EXPECT_EQ(rc, 0);
+    std::this_thread::sleep_for(wait_time);
+    EXPECT_TRUE(callback_invoked);
+  } catch (const amqp::connection_error& e) {
+    // make sure exception dont happen
+    EXPECT_TRUE(false);
+  }
+  amqp_mock::FAIL_NEXT_WRITE = false;
+  callback_invoked = false;
+}
+
+TEST(AMQP_PublishAndWait, ClosedConnection)
+{
+  callback_invoked = false;
+  try {
+    const auto current_connections = amqp::get_connection_number();;
+    const std::string url("amqp://localhost");
+    // get one of the existing connections
+    amqp::connection_t& conn = amqp::connect(url, "ex1");
+    EXPECT_EQ(amqp::get_connection_number(), current_connections);
+    amqp::disconnect(conn);
+    std::this_thread::sleep_for(wait_time);
+    // make sure number of connections decreased
+    EXPECT_EQ(amqp::get_connection_number(), current_connections - 1);
+    auto rc = publish_with_confirm(conn, "topic", "message", my_callback_expect_nack);
+    EXPECT_LT(rc, 0);
+    std::this_thread::sleep_for(wait_time);
+    EXPECT_FALSE(callback_invoked);
+  } catch (const amqp::connection_error& e) {
+    // make sure exception dont happen
+    EXPECT_TRUE(false);
+  }
+  callback_invoked = false;
+}
 
