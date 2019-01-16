@@ -28,17 +28,24 @@ public:
   
   int start_session(const EntityName& name,
 		    bufferlist *result_bl,
-		    AuthCapsInfo *caps) {
+		    AuthCapsInfo *caps,
+		    CryptoKey *session_key,
+		    CryptoKey *connection_secret) {
     return 1;
   }
   int handle_request(bufferlist::iterator& indata,
 		     bufferlist *result_bl,
 		     uint64_t *global_id,
-		     AuthCapsInfo *caps) {
+		     AuthCapsInfo *caps,
+		     CryptoKey *session_key,
+		     CryptoKey *connection_secret) {
     ceph_abort();  // shouldn't get called
     return 0;
   }
-  void build_cephx_response_header(int request_type, int status, bufferlist& bl) { }
+
+  void build_cephx_response_header(int request_type, int status,
+				   bufferlist& bl) {
+  }
 };
 
 #endif

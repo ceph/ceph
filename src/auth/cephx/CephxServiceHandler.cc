@@ -29,7 +29,9 @@
 
 int CephxServiceHandler::start_session(const EntityName& name,
 				       bufferlist *result_bl,
-				       AuthCapsInfo *caps)
+				       AuthCapsInfo *caps,
+				       CryptoKey *session_key,
+				       CryptoKey *connection_secret)
 {
   entity_name = name;
 
@@ -49,7 +51,9 @@ int CephxServiceHandler::handle_request(
   bufferlist::const_iterator& indata,
   bufferlist *result_bl,
   uint64_t *global_id,
-  AuthCapsInfo *caps)
+  AuthCapsInfo *caps,
+  CryptoKey *session_key,
+  CryptoKey *connection_secret)
 {
   int ret = 0;
 
