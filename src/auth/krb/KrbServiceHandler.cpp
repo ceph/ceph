@@ -26,10 +26,13 @@
 #define dout_prefix *_dout << "krb5/gssapi service: " << entity_name <<  " : "
 
 
-int KrbServiceHandler::handle_request(bufferlist::const_iterator& indata, 
-                                      bufferlist *buff_list,
-                                      uint64_t *global_id,
-                                      AuthCapsInfo *caps)
+int KrbServiceHandler::handle_request(
+  bufferlist::const_iterator& indata,
+  bufferlist *buff_list,
+  uint64_t *global_id,
+  AuthCapsInfo *caps,
+  CryptoKey *session_key,
+  CryptoKey *connection_secret)
 {
   auto result(0);
   gss_buffer_desc gss_buffer_in = {0, nullptr};
@@ -148,9 +151,12 @@ int KrbServiceHandler::handle_request(bufferlist::const_iterator& indata,
   return result;
 }
 
-int KrbServiceHandler::start_session(const EntityName& name,
-                                     bufferlist *buff_list,
-                                     AuthCapsInfo *caps)
+int KrbServiceHandler::start_session(
+  const EntityName& name,
+  bufferlist *buff_list,
+  AuthCapsInfo *caps,
+  CryptoKey *session_key,
+  CryptoKey *connection_secret)
 {
   gss_buffer_desc gss_buffer_in = {0, nullptr};
   gss_OID gss_object_id = GSS_C_NT_HOSTBASED_SERVICE;
