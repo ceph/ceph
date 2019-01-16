@@ -10,5 +10,8 @@ extern std::string VALID_HOST;      // default "localhost"
 extern std::string VALID_VHOST;     // default "/"
 extern std::string VALID_USER;      // default "guest"
 extern std::string VALID_PASSWORD;  // default "guest"
+extern bool FAIL_NEXT_WRITE;        // default "false"
+extern bool FAIL_NEXT_READ;         // default "false"
+extern bool REPLY_ACK;              // default "true"
 }
 

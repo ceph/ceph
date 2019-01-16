@@ -116,7 +116,7 @@ class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
     };
     const std::string endpoint;
     const std::string topic;
-    const amqp::connection_t& conn;
+    amqp::connection_t& conn;
     ack_level_t ack_level;
     std::string str_ack_level;
 
@@ -135,13 +135,13 @@ class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
   private:
     RGWDataSyncEnv* const sync_env;
     const std::string topic;
-    const amqp::connection_t& conn;
+    amqp::connection_t& conn;
     const std::string message;
 
   public:
     NoAckPublishCR(RGWDataSyncEnv* _sync_env,
               const std::string& _topic,
-              const amqp::connection_t& _conn,
+              amqp::connection_t& _conn,
               const std::string& _message) :
       RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
       topic(_topic), conn(_conn), message(_message) {}
@@ -166,14 +166,14 @@ class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
   private:
     RGWDataSyncEnv* const sync_env;
     const std::string topic;
-    const amqp::connection_t& conn;
+    amqp::connection_t& conn;
     const std::string message;
     const ack_level_t ack_level; // TODO not used for now
 
   public:
     AckPublishCR(RGWDataSyncEnv* _sync_env,
               const std::string& _topic,
-              const amqp::connection_t& _conn,
+              amqp::connection_t& _conn,
               const std::string& _message,
               ack_level_t _ack_level) :
       RGWCoroutine(_sync_env->cct), sync_env(_sync_env),

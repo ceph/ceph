@@ -14,29 +14,33 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
-// TODO in case of single threaded writer contex use spsc_queue
 #include <boost/lockfree/queue.hpp>
+
+// TODO investigation, not necessarily issues:
+// (1) in case of single threaded writer contex use spsc_queue
+// (2) support multiple channels
+// (3) check performance of emptying queue to local list, and go over the list and publish
+// (4) use std::shared_mutex (c++17) or eqivalent for the connections lock
 
 namespace rgw::amqp {
 
 // key class for the connection list
-class ConnectionID {
-private:
+struct connection_id_t {
   std::string host;
   int port;
   std::string vhost;
-public:
   // constructed from amqp_connection_info struct
-  ConnectionID(const amqp_connection_info& info) 
+  connection_id_t(const amqp_connection_info& info) 
     : host(info.host), port(info.port), vhost(info.vhost) {}
 
   // equality operator and hasher functor are needed 
-  // so that ConnectionID could be used as key in unordered_map
-  bool operator==(const ConnectionID& other) const {
+  // so that connection_id_t could be used as key in unordered_map
+  bool operator==(const connection_id_t& other) const {
     return host == other.host && port == other.port && vhost == other.vhost;
   }
+  
   struct hasher {
-    std::size_t operator()(const ConnectionID& k) const {
+    std::size_t operator()(const connection_id_t& k) const {
        return ((std::hash<std::string>()(k.host)
              ^ (std::hash<int>()(k.port) << 1)) >> 1)
              ^ (std::hash<std::string>()(k.vhost) << 1); 
@@ -47,15 +51,28 @@ public:
 // struct for holding the connection state object
 // as well as the exchange
 struct connection_t {
-  amqp_connection_state_t const state;
+  amqp_connection_state_t state;
   const std::string exchange;
   const amqp_bytes_t reply_to_queue;
+  bool mark_for_deletion;
+  uint64_t delivery_tag;
   
   connection_t(amqp_connection_state_t _state, 
       const std::string _exchange,
       const amqp_bytes_t& _reply_to_queue) :
-    state(_state), exchange(_exchange), reply_to_queue(amqp_bytes_malloc_dup(_reply_to_queue))
-  {}
+    state(_state), 
+    exchange(_exchange), 
+    reply_to_queue(amqp_bytes_malloc_dup(_reply_to_queue)),
+    mark_for_deletion(false),
+    delivery_tag(1) {}
+
+    // an explicit destructor, to be used only when
+    // the connection is removed fro mthe list
+    void destroy() {
+      amqp_destroy_connection(state);
+      state = nullptr;
+      amqp_bytes_free(reply_to_queue);
+    }
 };
 
 // convert connection info to string
@@ -175,15 +192,22 @@ std::string to_string(amqp_status_enum s) {
   return "AMQP_STATUS_UNKNOWN";
 }
 
-static const int INTERNAL_AMQP_STATUS_PENDING_CONFIRMATION = -99;
-static const int AMQP_STATUS_BROKER_NACK = -999;
+// RGW AMQP status codes
+static const int RGW_AMQP_STATUS_BROKER_NACK = -1000;
+static const int RGW_AMQP_STATUS_CONNECTION_CLOSED = -1001;
+static const int RGW_AMQP_STATUS_QUEUE_FULL = -1002;
+static const int RGW_AMQP_STATUS_MAX_INFLIGHT = -1003;
 
-// convert int status to string
+// convert int status to string - including RGW specific values
 std::string status_to_string(int s) {
-  if (s == INTERNAL_AMQP_STATUS_PENDING_CONFIRMATION) {
-    return "INTERNAL_AMQP_STATUS_PENDING_CONFIRMATION";
-  } else if (s == AMQP_STATUS_BROKER_NACK) {
-    return "AMQP_STATUS_BROKER_NACK";
+  if (s == RGW_AMQP_STATUS_BROKER_NACK) {
+    return "RGW_AMQP_STATUS_BROKER_NACK";
+  } else if (s == RGW_AMQP_STATUS_CONNECTION_CLOSED) {
+    return "RGW_AMQP_STATUS_CONNECTION_CLOSED";
+  } else if (s == RGW_AMQP_STATUS_QUEUE_FULL) {
+    return "RGW_AMQP_STATUS_QUEUE_FULL";
+  } else if (s == RGW_AMQP_STATUS_MAX_INFLIGHT) {
+    return "RGW_AMQP_STATUS_MAX_INFLIGHT";
   }
   return to_string((amqp_status_enum)s);
 }
@@ -214,13 +238,13 @@ class ConnectionCleaner {
     }
 };
 
-// TODO: support multiple channels
 static const amqp_channel_t CHANNEL_ID = 1;
 static const amqp_channel_t CONFIRMING_CHANNEL_ID = 2;
 
 // utility function to create a connection
 // TODO: retry in case an error is recoverable
-connection_t create_connection(const amqp_connection_info& info, const std::string& exchange) {
+connection_t create_connection(const amqp_connection_info& info, 
+    const std::string& exchange) { 
   // create connection state
   auto conn = amqp_new_connection();
   ConnectionCleaner guard(conn);
@@ -336,12 +360,12 @@ connection_t create_connection(const amqp_connection_info& info, const std::stri
 
 /// struct used for holding mesages in the message queue
 struct message_wrapper_t {
-  const connection_t& conn; 
+  connection_t& conn; 
   std::string topic;
   std::string message;
   reply_callback_t cb;
   
-  message_wrapper_t(const connection_t& _conn,
+  message_wrapper_t(connection_t& _conn,
       const std::string& _topic,
       const std::string& _message,
       reply_callback_t _cb) : conn(_conn), topic(_topic), message(_message), cb(_cb) {}
@@ -359,35 +383,49 @@ struct reply_callback_with_tag_t {
   }
 };
 
-typedef std::unordered_map<ConnectionID, connection_t, ConnectionID::hasher> ConnectionList;
+typedef std::unordered_map<connection_id_t, connection_t, connection_id_t::hasher> ConnectionList;
 typedef std::vector<reply_callback_with_tag_t> CallbackList;
-typedef boost::lockfree::queue<message_wrapper_t*> MessageQueue;
+typedef boost::lockfree::queue<message_wrapper_t*, boost::lockfree::fixed_sized<true>> MessageQueue;
 
 class Manager {
-private:
+public:
   const size_t max_connections;
+  const size_t max_inflight;
+  const size_t max_queue;
+private:
   size_t connection_number;
   std::atomic<bool> stopped;
-  uint64_t delivery_tag;
   struct timeval read_timeout;
   ConnectionList connections;
   CallbackList callbacks;
   MessageQueue messages;
+  size_t queued;
+  size_t dequeued;
   std::mutex connections_lock;
   std::thread runner;
 
-  int publish_internal(const message_wrapper_t& message) {
-    ceph_assert(message.conn.state);
+  void publish_internal(message_wrapper_t* message) {
+    const std::unique_ptr<message_wrapper_t> msg_owner(message);
+    if (!message->conn.state) {
+      // connection was deleted while message was in the queue
+      // TODO add error stats
+      if (message->cb) {
+        message->cb(RGW_AMQP_STATUS_CONNECTION_CLOSED);
+      }
+      return;
+    }
 
-    if (message.cb == nullptr) {
-      return amqp_basic_publish(message.conn.state,
+    if (message->cb == nullptr) {
+      // TODO add error stats
+      amqp_basic_publish(message->conn.state,
         CHANNEL_ID,
-        amqp_cstring_bytes(message.conn.exchange.c_str()),
-        amqp_cstring_bytes(message.topic.c_str()),
+        amqp_cstring_bytes(message->conn.exchange.c_str()),
+        amqp_cstring_bytes(message->topic.c_str()),
         1, // mandatory, TODO: take from conf
         0, // not immediate
         nullptr,
-        amqp_cstring_bytes(message.message.c_str()));
+        amqp_cstring_bytes(message->message.c_str()));
+        return;
     }
 
     amqp_basic_properties_t props;
@@ -395,61 +433,71 @@ private:
       AMQP_BASIC_DELIVERY_MODE_FLAG | 
       AMQP_BASIC_REPLY_TO_FLAG;
     props.delivery_mode = 2; // persistent delivery TODO take from conf
-    props.reply_to = message.conn.reply_to_queue;
+    props.reply_to = message->conn.reply_to_queue;
 
-    const auto rc = amqp_basic_publish(message.conn.state,
+    const auto rc = amqp_basic_publish(message->conn.state,
       CONFIRMING_CHANNEL_ID,
-      amqp_cstring_bytes(message.conn.exchange.c_str()),
-      amqp_cstring_bytes(message.topic.c_str()),
+      amqp_cstring_bytes(message->conn.exchange.c_str()),
+      amqp_cstring_bytes(message->topic.c_str()),
       1, // mandatory, TODO: take from conf
       0, // not immediate
       &props,
-      amqp_cstring_bytes(message.message.c_str()));
+      amqp_cstring_bytes(message->message.c_str()));
 
     if (rc == AMQP_STATUS_OK) {
-      callbacks.emplace_back(delivery_tag++, message.cb);
+      if (callbacks.size() < max_inflight) {
+        callbacks.emplace_back(message->conn.delivery_tag++, message->cb);
+      } else {
+        // immediatly invoke callback with error
+        message->cb(RGW_AMQP_STATUS_MAX_INFLIGHT);
+      }
+    } else {
+      // immediatly invoke callback with error
+      message->cb(rc);
     }
-    return rc;
   }
-
-  // publish_internal functor
-  class PublishInternal {
-  public:
-    Manager* const manager;
-    PublishInternal(Manager* _manager) : manager(_manager) {}
-    void operator()(const message_wrapper_t* message) {
-      auto rc = manager->publish_internal(*message);
-      // TODO handle rc
-      delete message;
-    }
-  };
 
   // the managers thread:
   // (1) empty the queue of messages to be published
   // (2) loop over all connections and read acks
-  // (3) TODO manages deleted connections
+  // (3) manages deleted connections
   // (4) TODO reconnect on conection errors
   void run() {
     amqp_frame_t frame;
-    PublishInternal publish_internal_func(this);
+    //PublishInternal publish_internal_func(this);
     while (!stopped) {
 
       // publish all messages in the queue
-      // TODO empty to local list, and go over the list?
-      const auto count = messages.consume_all(publish_internal_func);
-
-      ConnectionList::const_iterator conn_it;
+      //const auto count = messages.consume_all(publish_internal_func);
+      const auto count = messages.consume_all(std::bind(&Manager::publish_internal, this, std::placeholders::_1));
+      dequeued += count;
+      ConnectionList::iterator conn_it;
       ConnectionList::const_iterator end_it;
       {
         // thread safe access to the connection list
-        std::lock_guard<std::mutex> lock (connections_lock);
+        // once the iterators are fetched they are guaranteed to remain valid
+        std::lock_guard<std::mutex> lock(connections_lock);
         conn_it = connections.begin();
         end_it = connections.end();
       }
       auto incoming_message = false;
       // loop over all connections to read acks
-      for (; conn_it != end_it; ++conn_it) {
+      for (;conn_it != end_it;) {
+        if (conn_it->second.mark_for_deletion) {
+          conn_it->second.destroy();
+          std::lock_guard<std::mutex> lock(connections_lock);
+          // erase is safe - does not invalidate any other iterator
+          // lock so no insertion happens at the same time
+          conn_it = connections.erase(conn_it);
+          --connection_number;
+          continue;
+        }
         const auto rc = amqp_simple_wait_frame_noblock(conn_it->second.state, &frame, &read_timeout);
+
+        // iterator not deleted - increment it
+        // note: the iterator should not be used from now on inside the loop
+        ++conn_it;
+
         if (rc == AMQP_STATUS_TIMEOUT) {
           // TODO mark connection as idle
           continue;
@@ -480,7 +528,7 @@ private:
           tag = ack->delivery_tag;
           multiple = ack->multiple;
         } else if (frame.payload.method.id == AMQP_BASIC_NACK_METHOD) {
-          result = AMQP_STATUS_BROKER_NACK;
+          result = RGW_AMQP_STATUS_BROKER_NACK;
           const auto nack = (amqp_basic_nack_t*)frame.payload.method.decoded;
           ceph_assert(nack);
           tag = nack->delivery_tag;
@@ -494,7 +542,7 @@ private:
         const auto it = std::find(callbacks.begin(), callbacks.end(), tag);
         if (it != callbacks.end()) {
           if (multiple) {
-            // n/ack all
+            // n/ack all up to (and including) the tag
             for (auto rit = it; rit >= callbacks.begin(); --rit) {
               rit->cb(result);
               callbacks.erase(rit);
@@ -521,16 +569,27 @@ private:
   }
 
 public:
-  Manager(size_t _max_connections, size_t max_queue, long _usec_timeout) : 
+  Manager(size_t _max_connections,
+      size_t _max_inflight,
+      size_t _max_queue, 
+      long _usec_timeout) : 
     max_connections(_max_connections),
+    max_inflight(_max_inflight),
+    max_queue(_max_queue),
     connection_number(0),
     stopped(false),
-    delivery_tag(1),
     read_timeout{0, _usec_timeout},
+    connections(_max_connections),
     messages(max_queue),
-    runner(&Manager::run, this)
-    //TODO make sure connection list iterators are not rehashed
-  {}
+    queued(0),
+    dequeued(0),
+    runner(&Manager::run, this) {
+      // The hashmap has "max connections" as the initial number of buckets, 
+      // and allows for 10 collisions per bucket before rehash.
+      // This is to prevent rehashing so that iterators are not invalidated 
+      // when a new connection is added.
+      connections.max_load_factor(10.0);
+  }
 
   // non copyable
   Manager(const Manager&) = delete;
@@ -542,8 +601,11 @@ public:
   }
 
   // disconnect from a broker
-  bool disconnect(const std::string& url) {
-    // TODO mark connection for deletion
+  bool disconnect(connection_t& conn) {
+    if (stopped) {
+      return false;
+    }
+    conn.mark_for_deletion = true;
     return true;
   }
 
@@ -560,14 +622,16 @@ public:
       throw(connection_error("failed to parse URL: " + url));
     }
 
-    ConnectionID id(info);
-    auto it = connections.find(id);
+    const connection_id_t id(info);
+    std::lock_guard<std::mutex> lock(connections_lock);
+    const auto it = connections.find(id);
     if (it != connections.end()) {
-      if (it->second.exchange != exchange) {
+      if (it->second.mark_for_deletion) {
+        throw(connection_error("connection in process of deletion"));
+      } else if (it->second.exchange != exchange) {
         throw(connection_error("exchange mismatch: " + it->second.exchange + " != " + exchange));
       }
       // connection found
-      ceph_assert(it->second.state);
       return it->second;
     }
 
@@ -575,43 +639,38 @@ public:
     if (connection_number >= max_connections) {
       throw(connection_error("max connections reached: " + std::to_string(max_connections)));
     }
-
     const auto conn = create_connection(info, exchange);
-    // if creation fails, create_connection() must throw an exception
-    ceph_assert(conn.state != nullptr);
-    // locking the connection list only when inserting a new one
-    std::lock_guard<std::mutex> lock (connections_lock);
+    // if connection creation fails, it will throw and exception
     ++connection_number;
     return connections.emplace(id, conn).first->second;
   }
 
-  int publish(const connection_t& conn, 
+  // TODO publish with confirm is needed in "none" case as well, cb should be invoked publish is ok (no ack)
+  int publish(connection_t& conn, 
     const std::string& topic,
     const std::string& message) {
-    if (!conn.state) {
-      // TODO add error for deleted connection
-      return -1;
+    if (!conn.state || conn.mark_for_deletion) {
+      return RGW_AMQP_STATUS_CONNECTION_CLOSED;
     }
     if (messages.push(new message_wrapper_t(conn, topic, message, nullptr))) {
+      ++queued;
       return AMQP_STATUS_OK;
     }
-    // TODO add error for queue full
-    return -2;
+    return RGW_AMQP_STATUS_QUEUE_FULL;
   }
   
-  int publish_with_confirm(const connection_t& conn, 
+  int publish_with_confirm(connection_t& conn, 
     const std::string& topic,
     const std::string& message,
     reply_callback_t cb) {
-    if (!conn.state) {
-      // TODO add error for deleted connection
-      return -1;
+    if (!conn.state || conn.mark_for_deletion) {
+      return RGW_AMQP_STATUS_CONNECTION_CLOSED;
     }
     if (messages.push(new message_wrapper_t(conn, topic, message, cb))) {
+      ++queued;
       return AMQP_STATUS_OK;
     }
-    // TODO add error for queue full
-    return -2;
+    return RGW_AMQP_STATUS_QUEUE_FULL;
   }
 
   // dtor wait for thread to stop
@@ -620,9 +679,8 @@ public:
     stopped = true;
     runner.join();
     messages.consume_all(delete_message);
-    for (const auto& conn : connections) {
-        amqp_destroy_connection(conn.second.state);
-        amqp_bytes_free(conn.second.reply_to_queue);
+    for (auto& conn : connections) {
+      conn.second.destroy();
     }
   }
 
@@ -630,31 +688,75 @@ public:
   size_t get_connection_number() const {
     return connection_number;
   }
+  
+  // get the number of in-flight messages
+  size_t get_inflight() const {
+    return callbacks.size();
+  }
+
+  // running counter of the queued messages
+  size_t get_queued() const {
+    return queued;
+  }
+
+  // running counter of the dequeued messages
+  size_t get_dequeued() const {
+    return dequeued;
+  }
 };
 
 // singleton manager
 // note that the manager itself is not a singleton, and multiple instances may co-exist
-Manager s_manager(256, 8192, 10000);
+// TODO get parameters from conf
+Manager s_manager(256, 8192, 8192, 100);
 
-const connection_t& connect(const std::string& url, const std::string& exchange) {
+connection_t& connect(const std::string& url, const std::string& exchange) {
   return s_manager.connect(url, exchange);
 }
 
-int publish(const connection_t& conn, 
+int publish(connection_t& conn, 
     const std::string& topic,
     const std::string& message) {
   return s_manager.publish(conn, topic, message);
 }
 
-int publish_with_confirm(const connection_t& conn, 
+int publish_with_confirm(connection_t& conn, 
     const std::string& topic,
     const std::string& message,
     reply_callback_t cb) {
   return s_manager.publish_with_confirm(conn, topic, message, cb);
 }
 
-unsigned get_connection_number() {
+size_t get_connection_number() {
   return s_manager.get_connection_number();
+}
+  
+size_t get_inflight() {
+  return s_manager.get_inflight();
+}
+
+size_t get_queued() {
+  return s_manager.get_queued();
+}
+
+size_t get_dequeued() {
+  return s_manager.get_dequeued();
+}
+
+size_t get_max_connections() {
+  return s_manager.max_connections;
+}
+
+size_t get_max_inflight() {
+  return s_manager.max_inflight;
+}
+
+size_t get_max_queue() {
+  return s_manager.max_queue;
+}
+
+bool disconnect(connection_t& conn) {
+  return s_manager.disconnect(conn);
 }
 
 } // namespace amqp
