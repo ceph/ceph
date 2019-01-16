@@ -122,23 +122,28 @@ struct CephXAuthenticate {
   uint64_t client_challenge;
   uint64_t key;
   CephXTicketBlob old_ticket;
+  uint32_t other_keys = 0;  // replaces CephXServiceTicketRequest
 
   void encode(bufferlist& bl) const {
-     using ceph::encode;
-     __u8 struct_v = 1;
-     encode(struct_v, bl);
-     encode(client_challenge, bl);
-     encode(key, bl);
-     encode(old_ticket, bl);
+    using ceph::encode;
+    __u8 struct_v = 2;
+    encode(struct_v, bl);
+    encode(client_challenge, bl);
+    encode(key, bl);
+    encode(old_ticket, bl);
+    encode(other_keys, bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-     using ceph::decode;
-     __u8 struct_v;
-     decode(struct_v, bl);
-     decode(client_challenge, bl);
-     decode(key, bl);
-     decode(old_ticket, bl);
- }
+    using ceph::decode;
+    __u8 struct_v;
+    decode(struct_v, bl);
+    decode(client_challenge, bl);
+    decode(key, bl);
+    decode(old_ticket, bl);
+    if (struct_v >= 2) {
+      decode(other_keys, bl);
+    }
+  }
 };
 WRITE_CLASS_ENCODER(CephXAuthenticate)
 

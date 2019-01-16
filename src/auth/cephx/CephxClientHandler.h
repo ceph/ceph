@@ -48,10 +48,7 @@ public:
     reset();
   }
 
-  void reset() override {
-    starting = true;
-    server_challenge = 0;
-  }
+  void reset() override;
   void prepare_build_request() override;
   int build_request(bufferlist& bl) const override;
   int handle_response(int ret, bufferlist::const_iterator& iter,
