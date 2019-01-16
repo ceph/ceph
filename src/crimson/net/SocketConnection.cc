@@ -648,17 +648,8 @@ SocketConnection::handle_connect_reply(msgr_tag_t tag)
     logger().error("{} connect protocol version mispatch", __func__);
     throw std::system_error(make_error_code(error::negotiation_failure));
   case CEPH_MSGR_TAG_BADAUTHORIZER:
-    if (h.got_bad_auth) {
-      logger().error("{} got bad authorizer", __func__);
-      throw std::system_error(make_error_code(error::negotiation_failure));
-    }
-    h.got_bad_auth = true;
-    // try harder
-    return dispatcher.ms_get_authorizer(peer_type, true)
-      .then([this](auto&& auth) {
-        h.authorizer = std::move(auth);
-        return stop_t::no;
-      });
+    logger().error("{} got bad authorizer", __func__);
+    throw std::system_error(make_error_code(error::negotiation_failure));
   case CEPH_MSGR_TAG_RESETSESSION:
     reset_session();
     return seastar::make_ready_future<stop_t>(stop_t::no);
