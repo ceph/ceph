@@ -201,9 +201,14 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         else:
             lines = []
             for s in services:
-                lines.append("{0}.{1} {2} {3} {4} {5}".format(
+                if s.service_cluster_id == None:
+                    daemon_id = s.daemon_name
+                else:
+                    daemon_id = "{0}.{1}".format(s.service_cluster_id, s.daemon_name)
+
+                lines.append("{0} {1} {2} {3} {4} {5}".format(
                     s.service_type,
-                    s.daemon_name,
+                    daemon_id,
                     s.nodename,
                     s.container_id,
                     s.version,
