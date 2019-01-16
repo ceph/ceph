@@ -700,7 +700,8 @@ int MDLog::trim_all()
 
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
   while (p != segments.end() &&
-	 p->first < last_seq && p->second->end <= safe_pos) {
+	 p->first < last_seq &&
+	 p->second->end < safe_pos) { // next segment should have been started
     LogSegment *ls = p->second;
     ++p;
 
