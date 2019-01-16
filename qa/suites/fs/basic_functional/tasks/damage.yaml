@@ -17,6 +17,8 @@ overrides:
       - Corrupt dentry
       - Scrub error on inode
       - Metadata damage detected
+      - MDS_READ_ONLY
+      - force file system read-only
 
 tasks:
   - cephfs_test_runner:
