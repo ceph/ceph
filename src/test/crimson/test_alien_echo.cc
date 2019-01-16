@@ -200,7 +200,8 @@ struct Client {
       return true;
     }
     bool ping(Messenger* msgr, const entity_inst_t& peer) {
-      auto conn = msgr->get_connection(peer);
+      auto conn = msgr->connect_to(peer.name.type(),
+                                   entity_addrvec_t{peer.addr});
       replied = false;
       conn->send_message(new MPing);
       std::unique_lock lock{mutex};
@@ -335,7 +336,8 @@ static void ceph_echo(CephContext* cct,
     native_pingpong::Client client{cct};
     client.msgr->add_dispatcher_head(&client.dispatcher);
     client.msgr->start();
-    auto conn = client.msgr->get_connection(entity);
+    auto conn = client.msgr->connect_to(entity.name.type(),
+                                        entity_addrvec_t{entity.addr});
     for (unsigned i = 0; i < count; i++) {
       std::cout << "seq=" << i << std::endl;
       client.ping(entity);
