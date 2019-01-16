@@ -1419,8 +1419,7 @@ CtPtr ProtocolV1::send_connect_message() {
   ldout(cct, 20) << __func__ << dendl;
 
   if (!authorizer) {
-    authorizer = messenger->ms_deliver_get_authorizer(connection->peer_type,
-						      false);
+    authorizer = messenger->ms_deliver_get_authorizer(connection->peer_type);
   }
 
   ceph_msg_connect connect;

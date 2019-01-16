@@ -4415,8 +4415,7 @@ bool Objecter::ms_handle_refused(Connection *con)
 }
 
 bool Objecter::ms_get_authorizer(int dest_type,
-				 AuthAuthorizer **authorizer,
-				 bool force_new)
+				 AuthAuthorizer **authorizer)
 {
   if (!initialized)
     return false;

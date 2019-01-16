@@ -156,18 +156,10 @@ void MDSUtility::handle_fs_map(MFSMap* m)
 }
 
 
-bool MDSUtility::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
-                         bool force_new)
+bool MDSUtility::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer)
 {
   if (dest_type == CEPH_ENTITY_TYPE_MON)
     return true;
-
-  if (force_new) {
-    auto timeout =
-      g_ceph_context->_conf.get_val<int64_t>("rotating_keys_renewal_timeout");
-    if (monc->wait_auth_rotating(timeout) < 0)
-      return false;
-  }
 
   *authorizer = monc->build_authorizer(dest_type);
   return *authorizer != NULL;
