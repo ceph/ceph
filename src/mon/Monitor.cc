@@ -5906,8 +5906,8 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer)
       return false;
     }
 
-    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info,
-					     secret, (uint64_t)-1);
+    ret = key_server.build_session_auth_info(
+      service_id, auth_ticket_info.ticket, info, secret, (uint64_t)-1);
     if (ret < 0) {
       dout(0) << __func__ << " failed to build mon session_auth_info "
 	      << cpp_strerror(ret) << dendl;
@@ -5915,7 +5915,8 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer)
     }
   } else if (service_id == CEPH_ENTITY_TYPE_MGR) {
     // mgr
-    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info);
+    ret = key_server.build_session_auth_info(
+      service_id, auth_ticket_info.ticket, info);
     if (ret < 0) {
       derr << __func__ << " failed to build mgr service session_auth_info "
 	   << cpp_strerror(ret) << dendl;
