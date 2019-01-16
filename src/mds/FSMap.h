@@ -17,6 +17,7 @@
 #define CEPH_FSMAP_H
 
 #include <map>
+#include <memory>
 #include <set>
 #include <string>
 #include <string_view>
