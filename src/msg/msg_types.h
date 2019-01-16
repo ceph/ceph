@@ -440,11 +440,15 @@ struct entity_addr_t {
     __u16 rest;
     decode(marker, bl);
     decode(rest, bl);
-    type = TYPE_LEGACY;
     decode(nonce, bl);
     sockaddr_storage ss;
     decode(ss, bl);
     set_sockaddr((sockaddr*)&ss);
+    if (get_family() == AF_UNSPEC) {
+      type = TYPE_NONE;
+    } else {
+      type = TYPE_LEGACY;
+    }
   }
 
   // Right now, these only deal with sockaddr_storage that have only family and content.
