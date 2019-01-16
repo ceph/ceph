@@ -1349,7 +1349,7 @@ int MonConnection::authenticate(MAuthReply *m)
     ldout(cct, 10) << "my global_id is " << m->global_id << dendl;
   }
   auto p = m->result_bl.cbegin();
-  int ret = auth->handle_response(m->result, p);
+  int ret = auth->handle_response(m->result, p, nullptr, nullptr);
   if (ret == -EAGAIN) {
     auto ma = new MAuth;
     ma->protocol = auth->get_protocol();
