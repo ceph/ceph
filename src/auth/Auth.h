@@ -148,6 +148,13 @@ struct AuthAuthorizerChallenge {
   virtual ~AuthAuthorizerChallenge() {}
 };
 
+struct AuthConnectionMeta {
+  uint32_t auth_method = CEPH_AUTH_UNKNOWN;
+  CryptoKey session_key;
+  CryptoKey connection_secret;
+  std::unique_ptr<AuthAuthorizer> authorizer;
+  std::unique_ptr<AuthAuthorizerChallenge> authorizer_challenge;
+};
 
 /*
  * Key management
