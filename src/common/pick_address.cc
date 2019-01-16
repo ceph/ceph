@@ -15,6 +15,7 @@
 #include "common/pick_address.h"
 #include "include/ipaddr.h"
 #include "include/str_list.h"
+#include "common/ceph_context.h"
 #include "common/config_obs.h"
 #include "common/debug.h"
 #include "common/errno.h"

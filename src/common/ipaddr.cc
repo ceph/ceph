@@ -31,12 +31,16 @@ void netmask_ipv4(const struct in_addr *addr,
 
 static bool match_numa_node(const string& if_name, int numa_node)
 {
+#ifdef WITH_SEASTAR
+  return true;
+#else
   int if_node = -1;
   int r = get_iface_numa_node(if_name, &if_node);
   if (r < 0) {
     return false;
   }
   return if_node == numa_node;
+#endif
 }
 
 const struct ifaddrs *find_ipv4_in_subnet(const struct ifaddrs *addrs,
