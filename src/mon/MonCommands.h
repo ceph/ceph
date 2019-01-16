@@ -282,7 +282,7 @@ COMMAND("versions",
  * MDS commands (MDSMonitor.cc)
  */
 
-COMMAND("mds stat", "show MDS status", "mds", "r")
+COMMAND_WITH_FLAG("mds stat", "show MDS status", "mds", "r", FLAG(HIDDEN))
 COMMAND_WITH_FLAG("mds dump "
 	"name=epoch,type=CephInt,req=false,range=0", \
 	"dump legacy MDS cluster info, optionally from epoch",
@@ -325,10 +325,10 @@ COMMAND_WITH_FLAG("mds set " \
 // arbitrary limit 0-20 below; worth standing on head to make it
 // relate to actual state definitions?
 // #include "include/ceph_fs.h"
-COMMAND("mds set_state " \
+COMMAND_WITH_FLAG("mds set_state " \
 	"name=gid,type=CephInt,range=0 " \
 	"name=state,type=CephInt,range=0|20", \
-	"set mds state of <gid> to <numeric-state>", "mds", "rw")
+	"set mds state of <gid> to <numeric-state>", "mds", "rw", FLAG(HIDDEN))
 COMMAND("mds fail name=role_or_gid,type=CephString", \
 	"Mark MDS failed: trigger a failover if a standby is available",
         "mds", "rw")
@@ -337,9 +337,9 @@ COMMAND("mds repaired name=role,type=CephString", \
 COMMAND("mds rm " \
 	"name=gid,type=CephInt,range=0", \
 	"remove nonactive mds", "mds", "rw")
-COMMAND("mds rmfailed name=role,type=CephString " \
+COMMAND_WITH_FLAG("mds rmfailed name=role,type=CephString " \
         "name=yes_i_really_mean_it,type=CephBool,req=false", \
-	"remove failed mds", "mds", "rw")
+	"remove failed rank", "mds", "rw", FLAG(HIDDEN))
 COMMAND_WITH_FLAG("mds cluster_down", "take MDS cluster down", "mds", "rw", FLAG(OBSOLETE))
 COMMAND_WITH_FLAG("mds cluster_up", "bring MDS cluster up", "mds", "rw", FLAG(OBSOLETE))
 COMMAND("mds compat rm_compat " \
