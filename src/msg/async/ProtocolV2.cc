@@ -2514,32 +2514,34 @@ CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {
   if (client_ident.addrs().empty()) {
     connection->set_peer_addr(connection->target_addr);
   } else {
-    entity_addr_t peer_addr = client_ident.addrs().msgr2_addr();
-
-    ldout(cct, 10) << __func__ << " peer addr is " << peer_addr << dendl;
-    if (peer_addr.type == entity_addr_t::TYPE_NONE) {
-      // no address is known
-      peer_addr = client_ident.addrs().legacy_addr();
-      peer_addr.set_type(entity_addr_t::TYPE_MSGR2);
-    } else if (peer_addr.is_blank_ip()) {
-      // peer apparently doesn't know what ip they have; figure it out for them.
-      int port = peer_addr.get_port();
-      peer_addr.u = connection->target_addr.u;
-      peer_addr.set_port(port);
-      peer_addr.set_type(entity_addr_t::TYPE_MSGR2);
-    }
-    ldout(cct, 0) << __func__ << " peer addr is really " << peer_addr
-                  << " (socket is " << connection->target_addr << ")"
-                  << dendl;
-    connection->target_addr = peer_addr;
-    entity_addrvec_t addrs;
-    addrs.v.push_back(peer_addr);
-    for (const auto &addr : client_ident.addrs().v) {
-      if (addr.type != entity_addr_t::TYPE_MSGR2) {
-        addrs.v.push_back(addr);
+    for (auto &peer_addr : client_ident.addrs().v) {
+      if (peer_addr.is_blank_ip()) {
+        // peer apparently doesn't know what ip they have; figure it out for
+        // them.
+        int port = peer_addr.get_port();
+        peer_addr.u = connection->target_addr.u;
+        peer_addr.set_port(port);
+        ldout(cct, 0) << __func__ << " peer addr is really " << peer_addr
+                      << " (socket is " << connection->target_addr << ")"
+                      << dendl;
       }
     }
-    connection->set_peer_addrs(addrs);
+
+    entity_addr_t peer_addr = client_ident.addrs().msgr2_addr();
+    if (peer_addr.type == entity_addr_t::TYPE_NONE) {
+      // no v2 address is known
+      peer_addr = client_ident.addrs().legacy_addr();
+      peer_addr.set_type(entity_addr_t::TYPE_MSGR2);
+      entity_addrvec_t addrs;
+      addrs.v.push_back(peer_addr);
+      for (const auto &addr : client_ident.addrs().v) {
+        addrs.v.push_back(addr);
+      }
+      connection->set_peer_addrs(addrs);
+    } else {
+      connection->set_peer_addrs(client_ident.addrs());
+    }
+    connection->target_addr = peer_addr;
   }
   peer_name = entity_name_t(connection->get_peer_type(), client_ident.gid());
 
