@@ -3828,7 +3828,7 @@ class RGWRadosPutObj : public RGWHTTPStreamRWRequest::ReceiveCB
   void *progress_data;
   bufferlist extra_data_bl;
   uint64_t extra_data_left{0};
-  bool need_to_process_attrs{false};
+  bool need_to_process_attrs{true};
   uint64_t data_len{0};
   map<string, bufferlist> src_attrs;
   uint64_t ofs{0};
@@ -3881,6 +3881,8 @@ public:
       filter = &*buffering;
     }
 
+    need_to_process_attrs = false;
+
     return 0;
   }
 
@@ -3907,17 +3909,15 @@ public:
       if (bl.length() == 0) {
         return 0;
       }
-    } else if (need_to_process_attrs) {
+    }
+    if (need_to_process_attrs) {
       /* need to call process_attrs() even if we don't get any attrs,
-       * need it to call attrs_handler(). At the moment this
-       * will never happenas all callers will have extra_data_len > 0, but need
-       * to have it for sake of completeness.
+       * need it to call attrs_handler().
        */
       int res = process_attrs();
       if (res < 0) {
         return res;
       }
-      need_to_process_attrs = false;
     }
 
     ceph_assert(uint64_t(ofs) >= extra_data_len);
@@ -3941,9 +3941,6 @@ public:
 
   void set_extra_data_len(uint64_t len) override {
     extra_data_left = len;
-    if (len == 0) {
-      need_to_process_attrs = true;
-    }
     RGWHTTPStreamRWRequest::ReceiveCB::set_extra_data_len(len);
   }
 
