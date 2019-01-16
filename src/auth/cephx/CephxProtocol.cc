@@ -56,9 +56,12 @@ bool cephx_build_service_ticket_blob(CephContext *cct, CephXSessionAuthInfo& inf
   ticket_info.ticket = info.ticket;
   ticket_info.ticket.caps = info.ticket.caps;
 
-  ldout(cct, 10) << "build_service_ticket service " << ceph_entity_type_name(info.service_id)
-	   << " secret_id " << info.secret_id
-	   << " ticket_info.ticket.name=" << ticket_info.ticket.name.to_str() << dendl;
+  ldout(cct, 10) << "build_service_ticket service "
+		 << ceph_entity_type_name(info.service_id)
+		 << " secret_id " << info.secret_id
+		 << " ticket_info.ticket.name="
+		 << ticket_info.ticket.name.to_str()
+		 << " ticket.global_id " << info.ticket.global_id << dendl;
   blob.secret_id = info.secret_id;
   std::string error;
   if (!info.service_secret.get_secret().length())
@@ -142,8 +145,9 @@ bool cephx_build_service_ticket_reply(CephContext *cct,
  * PRINCIPAL: verify our attempt to authenticate succeeded.  fill out
  * this ServiceTicket with the result.
  */
-bool CephXTicketHandler::verify_service_ticket_reply(CryptoKey& secret,
-						     bufferlist::const_iterator& indata)
+bool CephXTicketHandler::verify_service_ticket_reply(
+  CryptoKey& secret,
+  bufferlist::const_iterator& indata)
 {
   __u8 service_ticket_v;
   decode(service_ticket_v, indata);
@@ -281,9 +285,6 @@ bool CephXTicketManager::verify_service_ticket_reply(CryptoKey& secret,
     }
     handler.service_id = type;
   }
-
-  if (!indata.end())
-    return false;
 
   return true;
 }

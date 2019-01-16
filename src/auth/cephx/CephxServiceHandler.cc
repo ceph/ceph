@@ -52,8 +52,8 @@ int CephxServiceHandler::handle_request(
   bufferlist *result_bl,
   uint64_t *global_id,
   AuthCapsInfo *caps,
-  CryptoKey *session_key,
-  CryptoKey *connection_secret)
+  CryptoKey *psession_key,
+  CryptoKey *pconnection_secret)
 {
   int ret = 0;
 
@@ -119,6 +119,8 @@ int CephxServiceHandler::handle_request(
         should_enc_ticket = true;
       }
 
+      ldout(cct,10) << __func__ << " auth ticket global_id " << *global_id
+		    << dendl;
       info.ticket.init_timestamps(ceph_clock_now(),
 				  cct->_conf->auth_mon_ticket_ttl);
       info.ticket.name = entity_name;
@@ -128,6 +130,9 @@ int CephxServiceHandler::handle_request(
       key_server->generate_secret(session_key);
 
       info.session_key = session_key;
+      if (psession_key) {
+	*psession_key = session_key;
+      }
       info.service_id = CEPH_ENTITY_TYPE_AUTH;
       if (!key_server->get_service_secret(CEPH_ENTITY_TYPE_AUTH, info.service_secret, info.secret_id)) {
         ldout(cct, 0) << " could not get service secret for auth subsystem" << dendl;
@@ -155,6 +160,42 @@ int CephxServiceHandler::handle_request(
           ldout(cct,0) << "mon caps null for " << entity_name << dendl;
           ret = -EACCES;
         }
+
+	if (req.other_keys) {
+	  // nautilus+ client
+	  // generate a connection_secret
+	  bufferlist cbl;
+	  if (pconnection_secret) {
+	    key_server->generate_secret(*pconnection_secret);
+	    string err;
+	    encode_encrypt(cct, *pconnection_secret, session_key, cbl, err);
+	  }
+	  encode(cbl, *result_bl);
+	  // provite all of the other tickets at the same time
+	  vector<CephXSessionAuthInfo> info_vec;
+	  for (uint32_t service_id = 1; service_id <= req.other_keys;
+	       service_id <<= 1) {
+	    if (req.other_keys & service_id) {
+	      ldout(cct, 10) << " adding key for service "
+			     << ceph_entity_type_name(service_id) << dendl;
+	      CephXSessionAuthInfo svc_info;
+	      key_server->build_session_auth_info(
+		service_id,
+		info.ticket,
+		svc_info);
+	      svc_info.validity += cct->_conf->auth_service_ticket_ttl;
+	      info_vec.push_back(svc_info);
+	    }
+	  }
+	  bufferlist extra;
+	  if (!info_vec.empty()) {
+	    CryptoKey no_key;
+	    cephx_build_service_ticket_reply(
+	      cct, session_key, info_vec, false, no_key, extra);
+	  }
+	  encode(extra, *result_bl);
+	}
+
 	// caller should try to finish authentication
 	ret = 1;
       }
@@ -170,7 +211,6 @@ int CephxServiceHandler::handle_request(
       // note: no challenge here.
       if (!cephx_verify_authorizer(
 	    cct, key_server, indata, auth_ticket_info, nullptr,
-#warning FIXME mon connection needs connection_secret too
 	    nullptr,
 	    tmp_bl)) {
         ret = -EPERM;

@@ -28,6 +28,13 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx client: "
 
+void CephxClientHandler::reset()
+{
+  ldout(cct,10) << __func__ << dendl;
+  starting = true;
+  server_challenge = 0;
+}
+
 int CephxClientHandler::build_request(bufferlist& bl) const
 {
   ldout(cct, 10) << "build_request" << dendl;
@@ -62,6 +69,9 @@ int CephxClientHandler::build_request(bufferlist& bl) const
     }
 
     req.old_ticket = ticket_handler->ticket;
+
+    // for nautilus+ servers: request other keys at the same time
+    req.other_keys = need;
 
     if (req.old_ticket.blob.length()) {
       ldout(cct, 20) << "old ticket len=" << req.old_ticket.blob.length() << dendl;
@@ -111,7 +121,7 @@ int CephxClientHandler::handle_response(
   CryptoKey *session_key,
   CryptoKey *connection_secret)
 {
-  ldout(cct, 10) << "handle_response ret = " << ret << dendl;
+  ldout(cct, 10) << this << " handle_response ret = " << ret << dendl;
   
   if (ret < 0)
     return ret; // hrm!
@@ -147,12 +157,47 @@ int CephxClientHandler::handle_response(
 	return -EPERM;
       }
       ldout(cct, 10) << " want=" << want << " need=" << need << " have=" << have << dendl;
+      if (!indata.end()) {
+	bufferlist cbl, extra_tickets;
+	decode(cbl, indata);
+	decode(extra_tickets, indata);
+	ldout(cct, 10) << " got connection bl " << cbl.length()
+		       << " and extra tickets " << extra_tickets.length()
+		       << dendl;
+	if (session_key && connection_secret) {
+	  CephXTicketHandler& ticket_handler =
+	    tickets.get_handler(CEPH_ENTITY_TYPE_AUTH);
+	  if (session_key) {
+	    *session_key = ticket_handler.session_key;
+	  }
+	  if (cbl.length() && connection_secret) {
+	    auto p = cbl.cbegin();
+	    string err;
+	    if (decode_decrypt(cct, *connection_secret, *session_key, p,
+			       err) < 0) {
+	      lderr(cct) << __func__ << " failed to decrypt connection_secret"
+			 << dendl;
+	    } else {
+	      ldout(cct, 10) << " got connection_secret " << dendl;
+	    }
+	  }
+	  if (extra_tickets.length())  {
+	    auto p = extra_tickets.cbegin();
+	    if (!tickets.verify_service_ticket_reply(
+		  *session_key, p)) {
+	      lderr(cct) << "could not verify extra service_tickets" << dendl;
+	    } else {
+	      ldout(cct, 10) << " got extra service_tickets" << dendl;
+	    }
+	  }
+	}
+      }
       validate_tickets();
       if (_need_tickets())
 	ret = -EAGAIN;
       else
 	ret = 0;
-    }
+      }
     break;
 
   case CEPHX_GET_PRINCIPAL_SESSION_KEY:
