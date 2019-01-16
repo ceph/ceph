@@ -232,7 +232,7 @@ endif()
 
 add_library(radosgw_a STATIC ${radosgw_srcs}
   $<TARGET_OBJECTS:civetweb_common_objs>)
-target_link_libraries(radosgw_a PRIVATE rgw_a)
+target_link_libraries(radosgw_a PRIVATE rgw_a rabbitmq)
 if(WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL)
   # used by rgw_asio_frontend.cc
   target_link_libraries(radosgw_a PRIVATE OpenSSL::SSL)
@@ -246,7 +246,7 @@ target_link_libraries(radosgw radosgw_a librados
   global dmclock::dmclock
   ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
-  ${ALLOC_LIBS} rabbitmq)
+  ${ALLOC_LIBS})
 install(TARGETS radosgw DESTINATION bin)
 
 set(radosgw_admin_srcs
