@@ -355,6 +355,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 sd.daemon_name = p['labels']["mgr"]
             elif sd.service_type == "nfs":
                 sd.daemon_name = p['labels']["ceph_nfs"]
+                sd.rados_config_location = self.rook_cluster.get_nfs_conf_url(sd.daemon_name, p['labels']['instance'])
             else:
                 # Unknown type -- skip it
                 continue
