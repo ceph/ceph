@@ -260,7 +260,7 @@ or
     $ npm run build -- --prod
 
 Unfortunately it's currently not possible to use multiple configurations when
-serving or buildung the ui at the same time. That means a configuration just
+serving or building the ui at the same time. That means a configuration just
 for the branding ``fileReplacements`` it not an option, because you want to use
 the production configuration anyway
 (https://github.com/angular/angular-cli/issues/10612).
