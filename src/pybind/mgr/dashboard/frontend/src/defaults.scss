@@ -36,9 +36,9 @@ $color-transparent: rgba(0, 0, 0, 0.09);
 $color-brand-teal: #2b99a8;
 $color-brand-gray: #374249;
 
-$color-primary: #2b99a8; //$color-blue - ceph=$color-brand-teal - suse=#00C081
-$color-secondary: #0d2c40; //$color-dark-gray - ceph=$color-brand-gray - suse=#0D2C40
-$color-accent: #00b2e2; // ceph=#ef5c55 - suse=#00b2e2
+$color-primary: $color-brand-teal;
+$color-secondary: $color-brand-gray;
+$color-accent: #ef5c55;
 
 $color-app-bg: $color-solid-white;
 $color-bg-darken: $color-dark-gray;
@@ -65,9 +65,12 @@ $color-error-btn-border: $color-pink;
 $color-noscript-text: $color-mild-gray;
 $color-required-text: $color-pink;
 
+/*Button*/
+$button-radius: 1.875rem;
+
 /*Login*/
 $color-login-row-text: $color-solid-white;
-$color-login-row-bg: $color-dark-gray;
+$color-login-row-bg: $color-secondary;
 $color-password-toggle-text: $color-solid-white;
 $color-password-toggle-bg: $color-solid-gray;
 $color-password-toggle-focus: $color-primary;
