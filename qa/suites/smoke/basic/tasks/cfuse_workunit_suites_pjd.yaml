@@ -2,6 +2,7 @@ tasks:
 - install:
 - ceph:
     fs: xfs
+    use-ceph-volume: true
     conf:
       mds:
         debug mds: 20

@@ -1,5 +1,6 @@
 overrides:
   ceph:
+    use-ceph-volume: true
     log-whitelist:
       - reached quota
       - mons down

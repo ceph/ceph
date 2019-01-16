@@ -758,6 +758,26 @@ def cluster(ctx, config):
         ],
     )
 
+    if ctx.ceph_volume:
+        log.info("Creating bootstrap-osd keyring")
+        ctx.cluster.only(firstmon).run(\
+            args=[
+                'sudo',
+                'adjust-ulimits',
+                'ceph-authtool',
+                '--create-keyring',
+                '/var/lib/ceph/bootstrap-osd/{cluster}.keyring'.format\
+                (cluster=cluster_name),\
+                '--gen-key',
+                '-n',
+                'client.bootstrap-osd',
+                '--cap',
+                'mon',
+                '\'profile bootstrap-osd\'',
+            ]
+        )
+
+
     log.info('Copying monmap to all nodes...')
     keyring = teuthology.get_file(
         remote=mon0_remote,
@@ -782,6 +802,24 @@ def cluster(ctx, config):
             path=monmap_path,
             data=monmap,
         )
+
+    if ctx.ceph_volume:
+        log.info('Copying bootstrap-osd keys to all osd nodes')
+        keyring = teuthology.get_file(
+            remote=mon0_remote,
+            path='/var/lib/ceph/bootstrap-osd/{cluster}.keyring'.format(
+                cluster=cluster_name),
+            sudo=True,
+        )
+
+        for remote, roles in osds.remotes.iteritems():
+            teuthology.sudo_write_file(
+                remote=remote,
+                path='/var/lib/ceph/bootstrap-osd/{cluster}.keyring'.format(
+                        cluster=cluster_name),
+                data=keyring,
+                perms='0644'
+            )
 
     log.info('Setting up mon nodes...')
     mons = ctx.cluster.only(teuthology.is_type('mon', cluster_name))
@@ -861,154 +899,157 @@ def cluster(ctx, config):
     teuthology.deep_merge(ctx.disk_config.remote_to_roles_to_dev, remote_to_roles_to_devs)
     teuthology.deep_merge(ctx.disk_config.remote_to_roles_to_journals, remote_to_roles_to_journals)
 
-    log.info("ctx.disk_config.remote_to_roles_to_dev: {r}".format(r=str(ctx.disk_config.remote_to_roles_to_dev)))
-    for remote, roles_for_host in osds.remotes.iteritems():
-        roles_to_devs = remote_to_roles_to_devs[remote]
-        roles_to_journals = remote_to_roles_to_journals[remote]
+    if ctx.ceph_volume:
+        pass
+    else:
+        log.info("ctx.disk_config.remote_to_roles_to_dev: {r}".format(r=str(ctx.disk_config.remote_to_roles_to_dev)))
+        for remote, roles_for_host in osds.remotes.iteritems():
+	    roles_to_devs = remote_to_roles_to_devs[remote]
+	    roles_to_journals = remote_to_roles_to_journals[remote]
 
-        for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name):
-            _, _, id_ = teuthology.split_role(role)
-            mnt_point = DATA_PATH.format(
-                type_='osd', cluster=cluster_name, id_=id_)
-            remote.run(
-                args=[
-                    'sudo',
-                    'mkdir',
-                    '-p',
-                    mnt_point,
-                ])
-            log.info(str(roles_to_devs))
-            log.info(str(roles_to_journals))
-            log.info(role)
-            if roles_to_devs.get(role):
-                dev = roles_to_devs[role]
-                fs = config.get('fs')
-                package = None
-                mkfs_options = config.get('mkfs_options')
-                mount_options = config.get('mount_options')
-                if fs == 'btrfs':
-                    # package = 'btrfs-tools'
-                    if mount_options is None:
-                        mount_options = ['noatime', 'user_subvol_rm_allowed']
-                    if mkfs_options is None:
-                        mkfs_options = ['-m', 'single',
-                                        '-l', '32768',
-                                        '-n', '32768']
-                if fs == 'xfs':
-                    # package = 'xfsprogs'
-                    if mount_options is None:
-                        mount_options = ['noatime']
-                    if mkfs_options is None:
-                        mkfs_options = ['-f', '-i', 'size=2048']
-                if fs == 'ext4' or fs == 'ext3':
-                    if mount_options is None:
-                        mount_options = ['noatime', 'user_xattr']
+	    for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name):
+		_, _, id_ = teuthology.split_role(role)
+		mnt_point = DATA_PATH.format(
+			type_='osd', cluster=cluster_name, id_=id_)
+		remote.run(
+		    args=[
+		    'sudo',
+		    'mkdir',
+		    '-p',
+		    mnt_point,
+		    ])
+		log.info(str(roles_to_devs))
+		log.info(str(roles_to_journals))
+		log.info(role)
+		if roles_to_devs.get(role):
+		    dev = roles_to_devs[role]
+		    fs = config.get('fs')
+		    package = None
+		    mkfs_options = config.get('mkfs_options')
+		    mount_options = config.get('mount_options')
+		    if fs == 'btrfs':
+			# package = 'btrfs-tools'
+			if mount_options is None:
+			    mount_options = ['noatime', 'user_subvol_rm_allowed']
+			if mkfs_options is None:
+			    mkfs_options = ['-m', 'single',
+					    '-l', '32768',
+					    '-n', '32768']
+		    if fs == 'xfs':
+			# package = 'xfsprogs'
+			if mount_options is None:
+			    mount_options = ['noatime']
+			if mkfs_options is None:
+			    mkfs_options = ['-f', '-i', 'size=2048']
+		    if fs == 'ext4' or fs == 'ext3':
+			if mount_options is None:
+			    mount_options = ['noatime', 'user_xattr']
 
-                if mount_options is None:
-                    mount_options = []
-                if mkfs_options is None:
-                    mkfs_options = []
-                mkfs = ['mkfs.%s' % fs] + mkfs_options
-                log.info('%s on %s on %s' % (mkfs, dev, remote))
-                if package is not None:
-                    remote.run(
-                        args=[
-                            'sudo',
-                            'apt-get', 'install', '-y', package
-                        ],
-                        stdout=StringIO(),
-                    )
+		    if mount_options is None:
+			mount_options = []
+		    if mkfs_options is None:
+			mkfs_options = []
+		    mkfs = ['mkfs.%s' % fs] + mkfs_options
+		    log.info('%s on %s on %s' % (mkfs, dev, remote))
+		    if package is not None:
+			remote.run(
+			    args=[
+				'sudo',
+				'apt-get', 'install', '-y', package
+			],
+			stdout=StringIO(),
+			)
 
-                try:
-                    remote.run(args=['yes', run.Raw('|')] + ['sudo'] + mkfs + [dev])
-                except run.CommandFailedError:
-                    # Newer btfs-tools doesn't prompt for overwrite, use -f
-                    if '-f' not in mount_options:
-                        mkfs_options.append('-f')
-                        mkfs = ['mkfs.%s' % fs] + mkfs_options
-                        log.info('%s on %s on %s' % (mkfs, dev, remote))
-                    remote.run(args=['yes', run.Raw('|')] + ['sudo'] + mkfs + [dev])
+		    try:
+			remote.run(args=['yes', run.Raw('|')] + ['sudo'] + mkfs + [dev])
+		    except run.CommandFailedError:
+			# Newer btfs-tools doesn't prompt for overwrite, use -f
+			if '-f' not in mount_options:
+			    mkfs_options.append('-f')
+			    mkfs = ['mkfs.%s' % fs] + mkfs_options
+			    log.info('%s on %s on %s' % (mkfs, dev, remote))
+			remote.run(args=['yes', run.Raw('|')] + ['sudo'] + mkfs + [dev])
 
-                log.info('mount %s on %s -o %s' % (dev, remote,
-                                                   ','.join(mount_options)))
-                remote.run(
-                    args=[
-                        'sudo',
-                        'mount',
-                        '-t', fs,
-                        '-o', ','.join(mount_options),
-                        dev,
-                        mnt_point,
-                    ]
-                )
-                remote.run(
-                    args=[
-                        'sudo', '/sbin/restorecon', mnt_point,
-                    ],
-                    check_status=False,
-                )
-                if not remote in ctx.disk_config.remote_to_roles_to_dev_mount_options:
-                    ctx.disk_config.remote_to_roles_to_dev_mount_options[remote] = {}
-                ctx.disk_config.remote_to_roles_to_dev_mount_options[remote][role] = mount_options
-                if not remote in ctx.disk_config.remote_to_roles_to_dev_fstype:
-                    ctx.disk_config.remote_to_roles_to_dev_fstype[remote] = {}
-                ctx.disk_config.remote_to_roles_to_dev_fstype[remote][role] = fs
-                devs_to_clean[remote].append(mnt_point)
+		    log.info('mount %s on %s -o %s' % (dev, remote,
+						      ','.join(mount_options)))
+		    remote.run(
+			args=[
+			    'sudo',
+			    'mount',
+			    '-t', fs,
+			    '-o', ','.join(mount_options),
+			    dev,
+			    mnt_point,
+			]
+		    )
+		    remote.run(
+			args=[
+			    'sudo', '/sbin/restorecon', mnt_point,
+			],
+			check_status=False,
+		    )
+		    if not remote in ctx.disk_config.remote_to_roles_to_dev_mount_options:
+			ctx.disk_config.remote_to_roles_to_dev_mount_options[remote] = {}
+		    ctx.disk_config.remote_to_roles_to_dev_mount_options[remote][role] = mount_options
+		    if not remote in ctx.disk_config.remote_to_roles_to_dev_fstype:
+			ctx.disk_config.remote_to_roles_to_dev_fstype[remote] = {}
+		    ctx.disk_config.remote_to_roles_to_dev_fstype[remote][role] = fs
+		    devs_to_clean[remote].append(mnt_point)
 
-        for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name):
-            _, _, id_ = teuthology.split_role(role)
-            try:
-                remote.run(
-                    args=[
-                        'sudo',
-                        'MALLOC_CHECK_=3',
-                        'adjust-ulimits',
-                        'ceph-coverage',
-                        coverage_dir,
-                        'ceph-osd',
-                        '--no-mon-config',
-                        '--cluster',
-                        cluster_name,
-                        '--mkfs',
-                        '--mkkey',
-                        '-i', id_,
-                    '--monmap', monmap_path,
-                    ],
-                )
-            except run.CommandFailedError:
-                # try without --no-mon-config.. this may be an upgrade test
-                remote.run(
-                    args=[
-                        'sudo',
-                        'MALLOC_CHECK_=3',
-                        'adjust-ulimits',
-                        'ceph-coverage',
-                        coverage_dir,
-                        'ceph-osd',
-                        '--cluster',
-                        cluster_name,
-                        '--mkfs',
-                        '--mkkey',
-                        '-i', id_,
-                    '--monmap', monmap_path,
-                    ],
-                )
-            mnt_point = DATA_PATH.format(
-                type_='osd', cluster=cluster_name, id_=id_)
-            try:
-                remote.run(args=[
-                    'sudo', 'chown', '-R', 'ceph:ceph', mnt_point
-                ])
-            except run.CommandFailedError as e:
-                # hammer does not have ceph user, so ignore this error
-                log.info('ignoring error when chown ceph:ceph,'
-                         'probably installing hammer: %s', e)
+	    for role in teuthology.cluster_roles_of_type(roles_for_host, 'osd', cluster_name):
+		_, _, id_ = teuthology.split_role(role)
+	    try:
+		remote.run(
+		    args=[
+			'sudo',
+			'MALLOC_CHECK_=3',
+			'adjust-ulimits',
+			'ceph-coverage',
+			coverage_dir,
+			'ceph-osd',
+			'--no-mon-config',
+			'--cluster',
+			cluster_name,
+			'--mkfs',
+			'--mkkey',
+			'-i', id_,
+			'--monmap', monmap_path,
+		    ],
+		)
+	    except run.CommandFailedError:
+		# try without --no-mon-config.. this may be an upgrade test
+		remote.run(
+		    args=[
+			'sudo',
+			'MALLOC_CHECK_=3',
+			'adjust-ulimits',
+			'ceph-coverage',
+			coverage_dir,
+			'ceph-osd',
+			'--cluster',
+			cluster_name,
+			'--mkfs',
+			'--mkkey',
+			'-i', id_,
+			'--monmap', monmap_path,
+		    ],
+		)
+	    mnt_point = DATA_PATH.format(
+		type_='osd', cluster=cluster_name, id_=id_)
+	    try:
+		remote.run(args=[
+		    'sudo', 'chown', '-R', 'ceph:ceph', mnt_point
+		])
+	    except run.CommandFailedError as e:
+		# hammer does not have ceph user, so ignore this error
+		log.info('ignoring error when chown ceph:ceph,'
+			 'probably installing hammer: %s', e)
 
     log.info('Reading keys from all nodes...')
     keys_fp = StringIO()
     keys = []
     for remote, roles_for_host in ctx.cluster.remotes.iteritems():
-        for type_ in ['mgr',  'mds', 'osd']:
+	for type_ in [['mgr',  'mds', 'osd'], ['mgr', 'mds']][ctx.ceph_volume]:
             if type_ == 'mgr' and config.get('skip_mgr_daemons', False):
                 continue
             for role in teuthology.cluster_roles_of_type(roles_for_host, type_, cluster_name):
@@ -1033,6 +1074,20 @@ def cluster(ctx, config):
             )
             keys.append(('client', id_, data))
             keys_fp.write(data)
+
+    # add bootstrap-osd keyring as well
+    if ctx.ceph_volume:
+        id_ = 'bootstrap-osd'
+        data = teuthology.get_file(
+            remote=mon0_remote,
+            path='/var/lib/ceph/bootstrap-osd/{cluster}.keyring'.format\
+                (cluster=cluster_name),
+            sudo=True,
+        )
+        keys.append(('client', id_, data))
+        keys_fp.write(data)
+
+
 
     log.info('Adding keys to all mons...')
     writes = mons.run(
@@ -1168,6 +1223,27 @@ def cluster(ctx, config):
                             )
                         break
 
+        if ctx.ceph_volume:
+            osd_path = "/var/lib/ceph/osd/"
+            for remote, roles_to_dev in remote_to_roles_to_devs.iteritems():
+                cmd = 'sudo ls '+osd_path
+                proc =  remote.run(
+                    args=cmd,
+                    stdout=StringIO(),
+                )
+                out = proc.stdout.getvalue()
+                log.info("OSDs on this node are {}".format(out))
+                olist = out.split('\n')
+                for osd in olist:
+                    if osd == '':
+                        continue
+                    cmd = "sudo umount {opath}{osd}".format(opath=osd_path,
+                                                        osd=osd)
+                    remote.run(
+                        args=cmd,
+                    )
+                    time.sleep(5)
+
         for remote, dirs in devs_to_clean.iteritems():
             for dir_ in dirs:
                 log.info('Unmounting %s on %s' % (dir_, remote))
@@ -1243,6 +1319,99 @@ def cluster(ctx, config):
             ),
         )
 
+@contextlib.contextmanager
+def create_osd_with_lvm(ctx, config):
+    '''
+    create osds with ceph-volume lvm
+    as of now doing only bluestore
+    TODO: filestore (because it needs extra journal device)
+    '''
+    remote_to_roles_to_devs = ctx.disk_config.remote_to_roles_to_dev
+    log.info(remote_to_roles_to_devs)
+    log.info('Using ceph-volume lvm for osd creation')
+    objstore = 'bluestore'
+    for section, keys in config['conf'].iteritems():
+        for key, val in keys.iteritems():
+            if key == 'osd objectstore':
+                if val == 'filestore':
+                    objstore = 'filestore'
+                    '''Filestore not implemented as of now'''
+                    log.error("ceph task with ceph-volume lvm not\
+			     implemented for filestore")
+                    return
+
+    log.info("Using objectstore {}".format(objstore))
+    ceph_lvm = "sudo ceph-volume lvm "
+    for remote, roles_to_dev in remote_to_roles_to_devs.iteritems():
+        for osd, dev in roles_to_dev.iteritems():
+            log.info("OSD={}, dev={}".format(osd, dev))
+            cmd = ceph_lvm + "create --" + objstore + \
+                " --data "+ dev
+            log.info("Running cmd={}".format(cmd))
+            remote.run(
+                args=cmd,
+            )
+            time.sleep(10)
+    try:
+        yield
+
+    finally:
+        teuthology.stop_daemons_of_type(ctx, "osd", config['cluster'])
+
+def _fix_roles_map(ctx, config):
+    if not hasattr(ctx, 'managers'):
+        ctx.managers = {}
+    ctx.daemons.use_systemd=True
+    ready_cluster = ctx.cluster
+    cluster_name = config['cluster']
+    if not hasattr(ctx, 'new_remote_role'):
+        new_remote_role = dict()
+        ctx.new_remote_role = new_remote_role
+    else:
+        new_remote_role = ctx.new_remote_role
+    log.info("ROLES BEFORE:")
+    log.info(ctx.cluster.remotes)
+    firstmon = teuthology.get_first_mon(ctx, config, config['cluster'])
+    for remote, roles in ready_cluster.remotes.iteritems():
+        new_remote_role[remote] = []
+        generate_osd_list = True
+        for role in roles:
+            cluster, rol, id = teuthology.split_role(role)
+            if rol.startswith('osd'):
+                if generate_osd_list:
+                    # gather osd ids as seen on host
+                    out = StringIO()
+                    remote.run(args=[
+                                    'ps', '-eaf', run.Raw('|'), 'grep',
+                                    'ceph-osd', run.Raw('|'),
+                                    run.Raw('awk {\'print $13\'}')],
+                                stdout=out)
+                    osd_list_all = out.getvalue().split('\n')
+                    generate_osd_list = False
+                    osd_list = []
+                    for osd_id in osd_list_all:
+                        try:
+                            if type(int(osd_id)) is int:
+                                osd_list.append(osd_id)
+                        except ValueError:
+                            # ignore any empty lines as part of output
+                            pass
+                id = osd_list.pop()
+                log.info("Registering Daemon {rol} {id}".format(rol=rol, id=id))
+                ctx.daemons.add_daemon(remote, rol, id)
+                if len(role.split('.')) == 2:
+                    osd_role = "{rol}.{id}".format(rol=rol, id=id)
+                else:
+                    osd_role = "{c}.{rol}.{id}".format(c=cluster, rol=rol, id=id)
+                new_remote_role[remote].append(osd_role)
+            else:
+                new_remote_role[remote].append(role)
+
+    ctx.daemons.use_systemd=False
+    ctx.cluster.remotes.update(new_remote_role)
+    
+    log.info("ROLES AFTER:")
+    log.info(ctx.cluster.remotes)
 
 def osd_scrub_pgs(ctx, config):
     """
@@ -1848,6 +2017,7 @@ def task(ctx, config):
     :param config: Configuration
 
     """
+    log.info("Inside CEPH task")
     if config is None:
         config = {}
     assert isinstance(config, dict), \
@@ -1878,8 +2048,15 @@ def task(ctx, config):
     if 'cluster' not in config:
         config['cluster'] = 'ceph'
 
-    validate_config(ctx, config)
 
+    validate_config(ctx, config)
+    ctx.ceph_volume = False
+
+    if 'use-ceph-volume' in config:
+	ceph_volume = config.get('use-ceph-volume', {})
+	if ceph_volume:
+	    ctx.ceph_volume = ceph_volume
+ 
     subtasks = []
     if first_ceph_cluster:
         # these tasks handle general log setup and parsing on all hosts,
@@ -1908,7 +2085,8 @@ def task(ctx, config):
         lambda: run_daemon(ctx=ctx, config=config, type_='mon'),
         lambda: run_daemon(ctx=ctx, config=config, type_='mgr'),
         lambda: crush_setup(ctx=ctx, config=config),
-        lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
+        (lambda: run_daemon(ctx=ctx, config=config, type_='osd'),
+        lambda: create_osd_with_lvm(ctx=ctx, config=config))[ctx.ceph_volume],
         lambda: create_rbd_pool(ctx=ctx, config=config),
         lambda: cephfs_setup(ctx=ctx, config=config),
         lambda: run_daemon(ctx=ctx, config=config, type_='mds'),
@@ -1926,6 +2104,33 @@ def task(ctx, config):
             cluster=config['cluster'],
         )
 
+        if ctx.ceph_volume:
+	    mon.run(
+		args=[
+		'sudo',
+		'ceph',
+	        '--cluster', config['cluster'],
+	        'tell',
+	        'mon.*',
+		'injectargs',
+		'--',
+		'--no-mon-health-to-clog',
+		]
+	    )
+            _fix_roles_map(ctx, config)
+	    healthy(ctx=ctx, config=dict(cluster=config['cluster']))
+	    mon.run(
+		args=[
+		'sudo',
+		'ceph',
+	        '--cluster', config['cluster'],
+	        'tell',
+	        'mon.*',
+		'injectargs',
+		'--',
+		'--mon-health-to-clog',
+		]
+	    )
         try:
             if config.get('wait-for-healthy', True):
                 healthy(ctx=ctx, config=dict(cluster=config['cluster']))

@@ -1,6 +1,7 @@
 tasks:
 - install:
 - ceph:
+    use-ceph-volume: true
 - ceph-fuse:
 - workunit:
     clients:
