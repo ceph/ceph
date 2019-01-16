@@ -406,6 +406,17 @@ class ServiceDescription(object):
         # justify having this field here.
         self.container_id = None
 
+        # Some services can be deployed in groups. For example, mds's can
+        # have an active and standby daemons, and nfs-ganesha can run daemons
+        # in parallel. This tag refers to a group of daemons as a whole.
+        #
+        # For instance, a cluster of mds' all service the same fs, and they
+        # will all have the same service_group (which may be the
+        # Filesystem name in the FSMap).
+        #
+        # Single-instance services should leave this set to None
+        self.service = None
+
         # The orchestrator will have picked some names for daemons,
         # typically either based on hostnames or on pod names.
         # This is the <foo> in mds.<foo>, the ID that will appear
@@ -436,6 +447,7 @@ class ServiceDescription(object):
         out = {
             'nodename': self.nodename,
             'container_id': self.container_id,
+            'service': self.service,
             'service_instance': self.service_instance,
             'service_type': self.service_type,
             'version': self.version,
