@@ -29,7 +29,7 @@ from teuthology.task import Task
 log = logging.getLogger(__name__)
 deepsea_ctx = {}
 proposals_dir = "/srv/pillar/ceph/proposals"
-reboot_tries = 15
+reboot_tries = 30
 
 
 def anchored(log_message):
