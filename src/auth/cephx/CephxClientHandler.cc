@@ -105,7 +105,11 @@ bool CephxClientHandler::_need_tickets() const
   return need && need != CEPH_ENTITY_TYPE_MGR;
 }
 
-int CephxClientHandler::handle_response(int ret, bufferlist::const_iterator& indata)
+int CephxClientHandler::handle_response(
+  int ret,
+  bufferlist::const_iterator& indata,
+  CryptoKey *session_key,
+  CryptoKey *connection_secret)
 {
   ldout(cct, 10) << "handle_response ret = " << ret << dendl;
   
