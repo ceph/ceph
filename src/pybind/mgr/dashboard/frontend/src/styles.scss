@@ -83,10 +83,21 @@ option {
 }
 
 /* Buttons */
+.btn {
+  &,
+  &:active,
+  &.active {
+    &:focus,
+    &.focus {
+      outline: 0;
+    }
+  }
+}
 .btn-primary {
   color: $color-button-text;
-  background-color: $color-button;
-  border-color: $color-button-border;
+  background-color: $color-accent;
+  border-color: $color-accent;
+  border-radius: $button-radius;
 }
 .btn-primary:hover,
 .btn-primary:focus,
@@ -94,13 +105,19 @@ option {
 .btn-primary.active,
 .open .dropdown-toggle.btn-primary {
   color: $color-button-text;
-  background-color: $color-button-hover;
-  border-color: $color-button-border;
+  background-color: lighten($color-accent, 10);
+  border-color: lighten($color-accent, 10);
 }
 .btn-primary:active,
 .btn-primary.active,
 .open .dropdown-toggle.btn-primary {
   background-image: none;
+
+  &:hover,
+  &:focus{
+    background-color: lighten($color-accent, 10);
+    border-color: lighten($color-accent, 10);
+  }
 }
 .btn-primary.disabled,
 .btn-primary[disabled],
@@ -117,8 +134,8 @@ fieldset[disabled] .btn-primary:active,
 .btn-primary.disabled.active,
 .btn-primary[disabled].active,
 fieldset[disabled] .btn-primary.active {
-  background-color: $color-primary;
-  border-color: $color-button-border;
+  background-color: $color-accent;
+  border-color: $color-accent;
 }
 .btn-primary .badge {
   color: $color-primary;
@@ -126,6 +143,12 @@ fieldset[disabled] .btn-primary.active {
 }
 .btn-primary .caret {
   color: $color-button-caret;
+}
+.btn-default {
+  border-radius: $button-radius;
+}
+.form-group .btn-default {
+  border-radius: 4px;
 }
 .btn-group > .btn > i.fa,
 button.btn.btn-label > i.fa {
@@ -148,6 +171,12 @@ button.btn.btn-label > i.fa {
 .dropdown-menu > .active > a {
   color: $color-dropdown-active-text;
   background-color: $color-dropdown-active-bg;
+
+  &,
+  &:hover,
+  &:focus {
+    background-color: darken($color-dropdown-active-bg, 10);
+  }
 }
 .dataTables_wrapper .dropdown-menu > li.divider {
   cursor: auto;
