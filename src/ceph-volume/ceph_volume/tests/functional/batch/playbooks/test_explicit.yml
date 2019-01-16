@@ -1,0 +1,63 @@
+
+- hosts: osds
+  become: yes
+  tasks:
+
+    - name: stop ceph-osd daemons
+      service:
+        name: "ceph-osd@{{ item }}"
+        state: stopped
+      with_items: "{{ osd_ids }}"
+
+
+- hosts: mons
+  become: yes
+  tasks:
+
+    - name: purge osds
+      command: "ceph --cluster {{ cluster }} osd purge osd.{{ item }} --yes-i-really-mean-it"
+      with_items: "{{ osd_ids }}"
+
+
+- hosts: osds
+  become: yes
+  tasks:
+
+    - name: zap devices used for OSDs
+      command: "ceph-volume --cluster {{ cluster }} lvm zap {{ item }} --destroy"
+      with_items: "{{ devices }}"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: batch create devices again
+      command: "ceph-volume --cluster {{ cluster }} lvm batch --yes --{{ osd_objectstore|default('bluestore') }} {{ '--dmcrypt' if dmcrypt|default(false) else '' }} {{ devices[:2] | join(' ') }} --db-devices {{ devices[2:] | join(' ') }}"
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: ensure batch create is idempotent
+      command: "ceph-volume --cluster {{ cluster }} lvm batch --yes --{{ osd_objectstore|default('bluestore') }} {{ '--dmcrypt' if dmcrypt|default(false) else '' }} {{ devices[:2] | join(' ') }} --db-devices {{ devices[2:] | join(' ') }}"
+      register: batch_cmd
+      failed_when: false
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: check batch idempotency
+      fail:
+        msg: "lvm batch failed idempotency check"
+      when:
+         - batch_cmd.rc != 0
+         - "'strategy changed' not in batch_cmd.stdout"
+
+    - name: run batch --report to see if devices get filtered
+      command: "ceph-volume --cluster {{ cluster }} lvm batch --report --format=json --{{ osd_objectstore|default('bluestore') }} {{ '--dmcrypt' if dmcrypt|default(false) else '' }} {{ devices[:2] | join(' ') }} --db-devices {{ devices[2:] | join(' ') }}"
+      register: report_cmd
+      failed_when: false
+      environment:
+        CEPH_VOLUME_DEBUG: 1
+
+    - name: check batch --report idempotency
+      fail:
+        msg: "lvm batch --report failed idempotency check"
+      when:
+         - batch_cmd.rc != 0
+         - "'strategy changed' not in batch_cmd.stdout"
