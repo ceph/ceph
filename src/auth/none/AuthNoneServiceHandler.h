@@ -28,7 +28,9 @@ public:
   
   int start_session(const EntityName& name,
 		    bufferlist *result_bl,
-		    AuthCapsInfo *caps) override {
+		    AuthCapsInfo *caps,
+		    CryptoKey *session_key,
+		    CryptoKey *connection_secret) override {
     entity_name = name;
     caps->allow_all = true;
     return 1;
@@ -36,10 +38,14 @@ public:
   int handle_request(bufferlist::const_iterator& indata,
 		     bufferlist *result_bl,
 		     uint64_t *global_id,
-		     AuthCapsInfo *caps) override {
+		     AuthCapsInfo *caps,
+		     CryptoKey *session_key,
+		     CryptoKey *connection_secret) override {
     return 0;
   }
-  void build_cephx_response_header(int request_type, int status, bufferlist& bl) { }
+  void build_cephx_response_header(int request_type, int status,
+				   bufferlist& bl) {
+  }
 };
 
 #endif

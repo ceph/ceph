@@ -666,14 +666,16 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
     if (start) {
       // new session
       ret = s->auth_handler->start_session(entity_name, &response_bl,
-					   &s->con->peer_caps_info);
+					   &s->con->peer_caps_info,
+					   nullptr, nullptr);
     } else {
       // request
       ret = s->auth_handler->handle_request(
 	indata,
 	&response_bl,
 	&s->con->peer_global_id,
-	&s->con->peer_caps_info);
+	&s->con->peer_caps_info,
+	nullptr, nullptr);
     }
     if (ret == -EIO) {
       wait_for_active(op, new C_RetryMessage(this,op));
