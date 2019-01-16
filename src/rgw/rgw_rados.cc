@@ -4302,6 +4302,14 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                           ptail_rule = &dest_bucket_info.placement_rule;
                         }
                       }
+                      const auto& compression_type = svc.zone->get_zone_params().get_compression_type(*ptail_rule);
+                      if (compression_type != "none") {
+                        plugin = Compressor::create(cct, compression_type);
+                        if (!plugin) {
+                          ldout(cct, 1) << "Cannot load plugin for compression type "
+                                        << compression_type << dendl;
+                        }
+                      }
 
                       int ret = processor.prepare();
                       if (ret < 0) {
@@ -4309,16 +4317,6 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                       }
                       return 0;
                     });
-
-  const auto& compression_type = svc.zone->get_zone_params().get_compression_type(
-      *ptail_rule);
-  if (compression_type != "none") {
-    plugin = Compressor::create(cct, compression_type);
-    if (!plugin) {
-      ldout(cct, 1) << "Cannot load plugin for compression type "
-          << compression_type << dendl;
-    }
-  }
 
   string etag;
   real_time set_mtime;
