@@ -1829,10 +1829,10 @@ CtPtr ProtocolV2::handle_client_addrvec(char *buffer, int r) {
     if (peer_addr.is_blank_ip()) {
       // peer apparently doesn't know what ip they have; figure it out for them.
       int port = peer_addr.get_port();
-      peer_addr.u = connection->socket_addr.u;
+      peer_addr.set_sockaddr(connection->target_addr.get_sockaddr());
       peer_addr.set_port(port);
       ldout(cct, 0) << __func__ << " accept peer addr is really " << peer_addr
-                    << " (socket is " << connection->socket_addr << ")"
+                    << " (target is " << connection->target_addr << ")"
                     << dendl;
       peer_addr_p = &peer_addr;
     }

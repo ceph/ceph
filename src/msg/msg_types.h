@@ -313,10 +313,17 @@ struct entity_addr_t {
   {
     switch (sa->sa_family) {
     case AF_INET:
+      // pre-zero, since we're only copying a portion of the source
+      memset(&u, 0, sizeof(u));
       memcpy(&u.sin, sa, sizeof(u.sin));
       break;
     case AF_INET6:
+      // pre-zero, since we're only copying a portion of the source
+      memset(&u, 0, sizeof(u));
       memcpy(&u.sin6, sa, sizeof(u.sin6));
+      break;
+    case AF_UNSPEC:
+      memset(&u, 0, sizeof(u));
       break;
     default:
       return false;
@@ -433,11 +440,15 @@ struct entity_addr_t {
     __u16 rest;
     decode(marker, bl);
     decode(rest, bl);
-    type = TYPE_LEGACY;
     decode(nonce, bl);
     sockaddr_storage ss;
     decode(ss, bl);
     set_sockaddr((sockaddr*)&ss);
+    if (get_family() == AF_UNSPEC) {
+      type = TYPE_NONE;
+    } else {
+      type = TYPE_LEGACY;
+    }
   }
 
   // Right now, these only deal with sockaddr_storage that have only family and content.

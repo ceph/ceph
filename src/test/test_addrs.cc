@@ -131,7 +131,7 @@ TEST(Msgr, TestEmptyAddrvecEncodeAddrDecode)
   addrvec.encode(bl, 0);
   auto bli = bl.cbegin();
   addr.decode(bli);
-  ASSERT_EQ(addr, entity_addr_t(1, 0));
+  ASSERT_EQ(addr, entity_addr_t());
 }
 
 const char *addrvec_checks[][4] = {
@@ -237,9 +237,11 @@ TEST(Msgr, TestAddrvecEncodeAddrDecode3)
   auto bli = bl.cbegin();
 
   addr.decode(bli);
+  //cout << addrvec << " (legacy " << addrvec.legacy_addr()
+  //<< ") -> " << addr << std::endl;
 
   ASSERT_NE(addr, addrvec.v[0]); // it's not the first addr(which is non-legacy)
-  ASSERT_NE(addr, entity_addr_t(1, 0)); // it's not a blank addr either
+  ASSERT_EQ(addr, entity_addr_t()); // it's not a blank addr either
 }
 
 const char *addrvec_parse_checks[][3] = {
