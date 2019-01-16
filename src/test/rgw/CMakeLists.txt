@@ -147,5 +147,5 @@ endif()
 add_executable(unittest_rgw_amqp test_rgw_amqp.cc)
 add_ceph_unittest(unittest_rgw_amqp)
 
-target_link_libraries(unittest_rgw_amqp rgw amqp_mock)
+target_link_libraries(unittest_rgw_amqp rgw_a amqp_mock)
 
