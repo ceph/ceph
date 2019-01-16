@@ -2074,8 +2074,12 @@ CtPtr ProtocolV2::send_auth_request(std::vector<uint32_t> &allowed_methods) {
   ldout(cct, 10) << __func__ << " sending auth request method=" << auth_method
                  << " len=" << authorizer->bl.length() << dendl;
 
+  // we need to copy authorizer->bl because we might need it again in a
+  // reconnect
+  bufferlist auth_blob;
+  auth_blob.append(authorizer->bl);
   AuthRequestFrame authFrame(auth_method, authorizer->bl.length(),
-                             authorizer->bl);
+                             auth_blob);
   bufferlist &bl = authFrame.get_buffer();
   return WRITE(bl, "auth request", read_frame);
 }
