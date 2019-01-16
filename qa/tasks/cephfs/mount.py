@@ -477,6 +477,14 @@ class CephFSMount(object):
         self._kill_background(p)
         self.background_procs.remove(p)
 
+    def send_signal(self, signal):
+        signal = signal.lower()
+        if signal.lower() not in ['sigstop', 'sigcont', 'sigterm', 'sigkill']:
+            raise NotImplementedError
+
+        self.client_remote.run(args=['sudo', 'kill', '-{0}'.format(signal),
+                                self.client_pid], omit_sudo=False)
+
     def get_global_id(self):
         raise NotImplementedError()
 
