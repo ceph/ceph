@@ -569,3 +569,37 @@ class TestClientRecovery(CephFSTestCase):
         self.assert_session_state(gid, "open")
         time.sleep(session_timeout * 1.5)  # Long enough for MDS to consider session stale
         self.assert_session_state(gid, "stale")
+
+    def test_dont_mark_unresponsive_client_stale(self):
+        """
+        Test that an unresponsive client holding caps is not marked stale or
+        evicted unless another clients wants its caps.
+        """
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Require FUSE client to handle signal STOP/CONT")
+
+        # XXX: To conduct this test we need at least two clients since a
+        # single client is never evcited by MDS.
+        SESSION_TIMEOUT = 30
+        SESSION_AUTOCLOSE = 50
+        time_at_beg = time.time()
+        mount_a_gid = self.mount_a.get_global_id()
+        mount_a_pid = self.mount_a.client_pid
+        self.fs.set_var('session_timeout', SESSION_TIMEOUT)
+        self.fs.set_var('session_autoclose', SESSION_AUTOCLOSE)
+        self.assert_session_count(2, self.fs.mds_asok(['session', 'ls']))
+
+        # test that client holding cap not required by any other client is not
+        # marked stale when it becomes unresponsive.
+        self.mount_a.run_shell(['mkdir', 'dir'])
+        self.mount_a.send_signal('sigstop')
+        time.sleep(SESSION_TIMEOUT + 2)
+        self.assert_session_state(mount_a_gid, "open")
+
+        # test that other clients have to wait to get the caps from
+        # unresponsive client until session_autoclose.
+        self.mount_b.run_shell(['stat', 'dir'])
+        self.assert_session_count(1, self.fs.mds_asok(['session', 'ls']))
+        self.assertLess(time.time(), time_at_beg + SESSION_AUTOCLOSE)
+
+        self.mount_a.send_signal('sigcont')
