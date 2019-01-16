@@ -160,7 +160,7 @@ class FsNewHandler : public FileSystemCommandHandler
       return -EINVAL;
     }
 
-    for (auto fs : fsmap.get_filesystems()) {
+    for (auto& fs : fsmap.get_filesystems()) {
       const std::vector<int64_t> &data_pools = fs->mds_map.get_data_pools();
 
       bool sure = false;

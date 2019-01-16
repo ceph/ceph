@@ -76,7 +76,7 @@ void FSMap::generate_test_instances(list<FSMap*>& ls)
 
   int k = 20;
   for (auto i : mds_map_instances) {
-    auto fs = std::make_shared<Filesystem>();
+    auto fs = Filesystem::create();
     fs->fscid = k++;
     fs->mds_map = *i;
     delete i;
@@ -231,10 +231,10 @@ void FSMap::print_summary(Formatter *f, ostream *out) const
 }
 
 
-std::shared_ptr<Filesystem> FSMap::create_filesystem(std::string_view name,
+Filesystem::ref FSMap::create_filesystem(std::string_view name,
     int64_t metadata_pool, int64_t data_pool, uint64_t features)
 {
-  auto fs = std::make_shared<Filesystem>();
+  auto fs = Filesystem::create();
   fs->mds_map.epoch = epoch;
   fs->mds_map.fs_name = name;
   fs->mds_map.data_pools.push_back(data_pool);
@@ -269,7 +269,7 @@ std::shared_ptr<Filesystem> FSMap::create_filesystem(std::string_view name,
 void FSMap::reset_filesystem(fs_cluster_id_t fscid)
 {
   auto fs = get_filesystem(fscid);
-  auto new_fs = std::make_shared<Filesystem>();
+  auto new_fs = Filesystem::create();
 
   // Populate rank 0 as existing (so don't go into CREATING)
   // but failed (so that next available MDS is assigned the rank)
@@ -547,7 +547,7 @@ void FSMap::decode(bufferlist::const_iterator& p)
     // Synthesise a Filesystem from legacy_mds_map, if enabled
     if (legacy_mds_map.enabled) {
       // Construct a Filesystem from the legacy MDSMap
-      auto migrate_fs = std::make_shared<Filesystem>(); 
+      auto migrate_fs = Filesystem::create();
       migrate_fs->fscid = FS_CLUSTER_ID_ANONYMOUS;
       migrate_fs->mds_map = legacy_mds_map;
       migrate_fs->mds_map.epoch = epoch;
@@ -601,7 +601,7 @@ void FSMap::decode(bufferlist::const_iterator& p)
     decode(fs_list, p);
     filesystems.clear();
     for (std::vector<Filesystem>::const_iterator fs = fs_list.begin(); fs != fs_list.end(); ++fs) {
-      filesystems[fs->fscid] = std::make_shared<Filesystem>(*fs);
+      filesystems[fs->fscid] = Filesystem::create(*fs);
     }
 
     decode(mds_roles, p);
@@ -645,7 +645,7 @@ void Filesystem::decode(bufferlist::const_iterator& p)
 
 int FSMap::parse_filesystem(
       std::string_view ns_str,
-      std::shared_ptr<const Filesystem> *result
+      Filesystem::const_ref* result
       ) const
 {
   std::string ns_err;
@@ -812,7 +812,7 @@ void FSMap::sanity() const
 
 void FSMap::promote(
     mds_gid_t standby_gid,
-    const std::shared_ptr<Filesystem> &filesystem,
+    const Filesystem::ref& filesystem,
     mds_rank_t assigned_rank)
 {
   ceph_assert(gid_exists(standby_gid));
@@ -1003,7 +1003,7 @@ int FSMap::parse_role(
 {
   size_t colon_pos = role_str.find(":");
   size_t rank_pos;
-  std::shared_ptr<const Filesystem> fs;
+  Filesystem::const_ref fs;
   if (colon_pos == std::string::npos) {
     if (legacy_client_fscid == FS_CLUSTER_ID_NONE) {
       ss << "No filesystem selected";
