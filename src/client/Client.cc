@@ -98,6 +98,7 @@
 #include "include/stat.h"
 
 #include "include/cephfs/ceph_statx.h"
+#include "perfglue/heap_profiler.h"
 
 #if HAVE_GETGROUPLIST
 #include <grp.h>
@@ -156,7 +157,16 @@ bool Client::CommandHook::call(std::string_view command,
     m_client->_kick_stale_sessions();
   else if (command == "status")
     m_client->dump_status(f.get());
-  else
+  else if (command == "heap dump" || command == "heap start_profiler"
+           || command == "heap stats"|| command == "heap stop_profiler"
+           || command == "heap release") {
+    vector<string> heapcmd_vec;
+    heapcmd_vec.push_back("command.substr(5).str()");
+    std::stringstream ds;
+    std::cout << "command:" << command.substr(5) <<std::endl;
+    ceph_heap_profiler_handle_command(heapcmd_vec, ds);
+    out.append(ds);
+  } else
     ceph_abort_msg("bad command registered");
   m_client->client_lock.Unlock();
   f->close_section();
@@ -547,6 +557,46 @@ void Client::_finish_init()
   if (ret < 0) {
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(-ret) << dendl;
+  }
+  ret = admin_socket->register_command("heap dump",
+                                       "heap dump",
+                                       &m_command_hook,
+                                       "show heap usage info");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+               << cpp_strerror(-ret) << dendl;
+  }
+  ret = admin_socket->register_command("heap start_profiler",
+                                       "heap start_profiler",
+                                       &m_command_hook,
+                                       "start heap profiler");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+               << cpp_strerror(-ret) << dendl;
+  }
+  ret = admin_socket->register_command("heap stats",
+                                       "heap stats",
+                                       &m_command_hook,
+                                       "show the stat of heap profiler");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+               << cpp_strerror(-ret) << dendl;
+  }
+  ret = admin_socket->register_command("heap stop_profiler",
+                                       "heap stop_profiler",
+                                       &m_command_hook,
+                                       "stop heap profiler");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+               << cpp_strerror(-ret) << dendl;
+  }
+  ret = admin_socket->register_command("heap release",
+                                       "heap release",
+                                       &m_command_hook,
+                                       "release heap profiler");
+  if (ret < 0) {
+    lderr(cct) << "error registering admin socket command: "
+               << cpp_strerror(-ret) << dendl;
   }
 
   client_lock.Lock();
