@@ -1042,7 +1042,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry
 
   do {
     int ret = l.lock_exclusive(&store->lc_pool_ctx, obj_names[index]);
-    if (ret == -EBUSY) { /* already locked by another lc processor */
+    if (ret == -EBUSY || ret == -EEXIST) { /* already locked by another lc processor */
       ldpp_dout(this, 0) << "RGWLC::bucket_lc_post() failed to acquire lock on "
           << obj_names[index] << ", sleep 5, try again" << dendl;
       sleep(5);
@@ -1129,7 +1129,7 @@ int RGWLC::process(int index, int max_lock_secs)
     l.set_duration(time);
 
     int ret = l.lock_exclusive(&store->lc_pool_ctx, obj_names[index]);
-    if (ret == -EBUSY) { /* already locked by another lc processor */
+    if (ret == -EBUSY || ret == -EEXIST) { /* already locked by another lc processor */
       ldpp_dout(this, 0) << "RGWLC::process() failed to acquire lock on "
           << obj_names[index] << ", sleep 5, try again" << dendl;
       sleep(5);
@@ -1322,7 +1322,7 @@ static int guard_lc_modify(RGWRados* store, const rgw_bucket& bucket, const stri
 
   do {
     ret = l.lock_exclusive(ctx, oid);
-    if (ret == -EBUSY) {
+    if (ret == -EBUSY || ret == -EEXIST) {
       ldout(cct, 0) << "RGWLC::RGWPutLC() failed to acquire lock on "
           << oid << ", sleep 5, try again" << dendl;
       sleep(5); // XXX: return retryable error
