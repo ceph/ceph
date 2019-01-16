@@ -7,20 +7,54 @@
   </button>
 </div>
 <div class="modal-body">
-  <h1>ceph</h1>
+  <h2>
+    <img src="assets/Ceph_Logo_Stacked_RGB_120411_fa_348x348.png"
+         class="ceph-logo"
+         alt="{{ projectConstants.organization }}">
+    {{ projectConstants.organization }}
+  </h2>
+  <h3>
+    <strong>{{ projectConstants.projectName }}</strong>
+  </h3>
   <div class="product-versions">
-    <strong>Ceph version</strong>
-    {{ versionNumber }}
+    <strong>Version</strong>
     <br>
+    {{ versionNumber }}
     {{ versionHash }}
     <br>
     {{ versionName }}
   </div>
+  <br>
+  <ul class="list-unstyled">
+    <li class="row">
+      <strong class="col-xs-6 col-sm-4">Ceph Manager</strong>
+      <span class="col-xs-4 col-sm-4">{{ hostAddr }}</span>
+    </li>
+    <li class="row">
+      <strong class="col-xs-6 col-sm-4">User</strong>
+      <span class="col-xs-4 col-sm-4">{{ modalVariables.user }}</span>
+    </li>
+    <li class="row">
+      <strong class="col-xs-6 col-sm-4">User Role</strong>
+      <span class="col-xs-4 col-sm-4">{{ modalVariables.role }}</span>
+    </li>
+    <li class="row">
+      <strong class="col-xs-6 col-sm-4">Browser</strong>
+      <span class="col-xs-4 col-sm-4">{{ modalVariables.browserName }}</span>
+    </li>
+    <li class="row">
+      <strong class="col-xs-6 col-sm-4">Browser Version</strong>
+      <span class="col-xs-4 col-sm-4">{{ modalVariables.browserVersion }}</span>
+    </li>
+    <li class="row">
+      <strong class="col-xs-6 col-sm-4">Browser OS</strong>
+      <span class="col-xs-4 col-sm-4">{{ modalVariables.browserOS }}</span>
+    </li>
+  </ul>
 </div>
 <div class="modal-footer">
-  <div class="text-right">
-    <img src="assets/Ceph_Logo_Stacked_RGB_120411_fa_348x348.png"
-         class="ceph-logo"
-         alt="Ceph">
+  <div class="text-left">
+    {{ copyright }}
+    {{ projectConstants.license }}
   </div>
 </div>

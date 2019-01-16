@@ -4,8 +4,9 @@
   "license": "MIT",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve --host 0.0.0.0",
-    "build": "ng build",
+    "start": "npm run env_build && ng serve --host 0.0.0.0",
+    "build": "npm run env_build && ng build",
+    "env_build": "cp src/environments/environment.tpl.ts src/environments/environment.prod.ts && cp src/environments/environment.tpl.ts src/environments/environment.ts  && node ./environment.build.js",
     "i18n": "ng xi18n --i18n-format xlf --i18n-locale en-US --output-path locale --progress=false && ngx-extractor -i 'src/**/*.ts' -f xlf -o src/locale/messages.xlf -l en-US",
     "test": "jest --watch",
     "test:ci": "JEST_SILENT_REPORTER_DOTS=true jest --coverage --reporters jest-silent-reporter",
@@ -59,6 +60,7 @@
     "bootstrap": "3.4.0",
     "chart.js": "2.7.3",
     "core-js": "2.6.1",
+    "detect-browser": "^3.0.1",
     "fork-awesome": "1.1.5",
     "lodash": "4.17.11",
     "moment": "2.23.0",
@@ -92,6 +94,7 @@
     "jest-silent-reporter": "0.1.1",
     "prettier": "1.14.3",
     "protractor": "5.4.2",
+    "replace-in-file": "^3.4.2",
     "ts-node": "7.0.1",
     "tslint": "5.12.0",
     "typescript": "3.2.2"
