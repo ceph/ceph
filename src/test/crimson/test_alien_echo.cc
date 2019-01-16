@@ -60,7 +60,7 @@ struct Server {
           0, bufferlist{});
     }
     seastar::future<std::unique_ptr<AuthAuthorizer>>
-    ms_get_authorizer(peer_type_t, bool) override {
+    ms_get_authorizer(peer_type_t) override {
       return seastar::make_ready_future<std::unique_ptr<AuthAuthorizer>>(
           new DummyAuthAuthorizer{});
     }

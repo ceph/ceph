@@ -13936,7 +13936,7 @@ bool Client::ms_handle_refused(Connection *con)
   return false;
 }
 
-bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
+bool Client::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer)
 {
   if (dest_type == CEPH_ENTITY_TYPE_MON)
     return true;

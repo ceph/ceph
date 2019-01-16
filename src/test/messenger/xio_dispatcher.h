@@ -89,13 +89,12 @@ public:
    * @param a Double pointer to an AuthAuthorizer. The Dispatcher will fill
    * in *a with the correct AuthAuthorizer, if it can. Make sure that you have
    * set *a to NULL before calling in.
-   * @param force_new Force the Dispatcher to wait for a new set of keys before
-   * returning the authorizer.
    *
    * @return True if this function call properly filled in *a, false otherwise.
    */
-  virtual bool ms_get_authorizer(int dest_type, AuthAuthorizer **a,
-				 bool force_new) { return false; };
+  virtual bool ms_get_authorizer(int dest_type, AuthAuthorizer **a) {
+    return false;
+  };
 
 
 };

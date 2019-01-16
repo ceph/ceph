@@ -1146,7 +1146,7 @@ int Pipe::connect()
 
   while (1) {
     if (!authorizer) {
-      authorizer = msgr->ms_deliver_get_authorizer(peer_type, false);
+      authorizer = msgr->ms_deliver_get_authorizer(peer_type);
     }
     bufferlist authorizer_reply;
 

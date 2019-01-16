@@ -737,7 +737,7 @@ SocketConnection::repeat_connect()
   // this is fyi, actually, server decides!
   h.connect.flags = policy.lossy ? CEPH_MSG_CONNECT_LOSSY : 0;
 
-  return dispatcher.ms_get_authorizer(peer_type, false)
+  return dispatcher.ms_get_authorizer(peer_type)
     .then([this](auto&& auth) {
       h.authorizer = std::move(auth);
       bufferlist bl;

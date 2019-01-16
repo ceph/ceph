@@ -57,8 +57,7 @@
 #define dout_prefix *_dout << "librados: "
 
 bool librados::RadosClient::ms_get_authorizer(int dest_type,
-					      AuthAuthorizer **authorizer,
-					      bool force_new) {
+					      AuthAuthorizer **authorizer) {
   //ldout(cct, 0) << "RadosClient::ms_get_authorizer type=" << dest_type << dendl;
   /* monitor authorization is being handled on different layer */
   if (dest_type == CEPH_ENTITY_TYPE_MON)
