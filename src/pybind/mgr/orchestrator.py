@@ -406,6 +406,15 @@ class ServiceDescription(object):
         # justify having this field here.
         self.container_id = None
 
+        # Some services can be deployed in clusters. For example, mds's can
+        # have an active and standby daemons, and nfs-ganesha can run daemons
+        # in parallel. This tag refers to the cluster of daemons as a whole.
+        #
+        # For instance, a cluster of mds' all service the same fs, and they
+        # will all have the same service_cluster_id (which may be the
+        # Filesystem name in the FSMap).
+        self.service_cluster_id = None
+
         # The orchestrator will have picked some names for daemons,
         # typically either based on hostnames or on pod names.
         # This is the <foo> in mds.<foo>, the ID that will appear
