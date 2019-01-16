@@ -690,10 +690,14 @@ SocketConnection::handle_connect_reply(msgr_tag_t tag)
         h.backoff = 0ms;
         set_features(h.reply.features & h.connect.features);
         if (h.authorizer) {
+          CryptoKey connection_secret;  // this is not used here, we just need
+                                        // to make get_auth_session_handler
+                                        // call happy
           session_security.reset(
               get_auth_session_handler(nullptr,
                                        h.authorizer->protocol,
                                        h.authorizer->session_key,
+                                       connection_secret,
                                        features));
         }
         h.authorizer.reset();
@@ -764,7 +768,7 @@ SocketConnection::repeat_connect()
     }).then([this] (bufferlist bl) {
       if (h.authorizer) {
         auto reply = bl.cbegin();
-        if (!h.authorizer->verify_reply(reply)) {
+        if (!h.authorizer->verify_reply(reply, nullptr)) {
           logger().error("{} authorizer failed to verify reply", __func__);
           throw std::system_error(make_error_code(error::negotiation_failure));
         }
