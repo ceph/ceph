@@ -54,7 +54,11 @@ class RbdMirroringSummaryControllerTest(ControllerTestCase):
             'osd_map': mock_osd_map,
             'health': {'json': '{"status": 1}'},
             'fs_map': {'filesystems': []},
-
+            'mgr_map': {
+                'services': {
+                    'dashboard': 'https://ceph.dev:11000/'
+                    },
+            }
         }[key]
         mgr.url_prefix = ''
         mgr.get_mgr_id.return_value = 0
