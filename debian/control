@@ -461,6 +461,21 @@ Description: OCF-compliant resource agents for Ceph
  Ceph with OCF-compliant cluster resource managers,
  such as Pacemaker.
 
+Package: librados2-compat
+Architecture: any
+Depends: librados3 (= ${binary:Version})
+Conflicts: librados2
+Provides: librados2
+Breaks: librados2
+Replaces: librados2
+Description: librados2 compatibility symlinks
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package includes compatibility symlinks to allow some librados2
+ clients to continue working along with librados3.
+
 Package: librados3
 Conflicts: librados
 Replaces: librados
@@ -588,7 +603,8 @@ Description: RADOS striping interface (development files)
 Package: librbd1
 Architecture: linux-any
 Section: libs
-Depends: librados3 (= ${binary:Version}),
+Depends: librados2-compat (= ${binary:Version}),
+         librados3 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
 Description: RADOS block device client library
