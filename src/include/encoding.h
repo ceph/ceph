@@ -681,8 +681,9 @@ inline void encode(const std::list<std::shared_ptr<T>, Alloc>& ls,
 {
   __u32 n = (__u32)(ls.size());  // c++11 std::list::size() is O(1)
   encode(n, bl);
-  for (auto p = ls.begin(); p != ls.end(); ++p)
-    encode(**p, bl);
+  for (const auto& ref : ls) {
+    encode(*ref, bl);
+  }
 }
 template<class T, class Alloc>
 inline void encode(const std::list<std::shared_ptr<T>, Alloc>& ls,
@@ -690,8 +691,9 @@ inline void encode(const std::list<std::shared_ptr<T>, Alloc>& ls,
 {
   __u32 n = (__u32)(ls.size());  // c++11 std::list::size() is O(1)
   encode(n, bl);
-  for (auto p = ls.begin(); p != ls.end(); ++p)
-    encode(**p, bl, features);
+  for (const auto& ref : ls) {
+    encode(*ref, bl, features);
+  }
 }
 template<class T, class Alloc>
 inline void decode(std::list<std::shared_ptr<T>, Alloc>& ls,
@@ -701,9 +703,9 @@ inline void decode(std::list<std::shared_ptr<T>, Alloc>& ls,
   decode(n, p);
   ls.clear();
   while (n--) {
-    std::shared_ptr<T> v(std::make_shared<T>());
-    decode(*v, p);
-    ls.push_back(v);
+    auto ref = std::make_shared<T>();
+    decode(*ref, p);
+    ls.emplace_back(std::move(ref));
   }
 }
 
@@ -917,11 +919,12 @@ inline void encode(const std::vector<std::shared_ptr<T>,Alloc>& v,
 {
   __u32 n = (__u32)(v.size());
   encode(n, bl);
-  for (auto p = v.begin(); p != v.end(); ++p)
-    if (*p)
-      encode(**p, bl, features);
+  for (const auto& ref : v) {
+    if (ref)
+      encode(*ref, bl, features);
     else
       encode(T(), bl, features);
+  }
 }
 template<class T, class Alloc>
 inline void encode(const std::vector<std::shared_ptr<T>,Alloc>& v,
@@ -929,11 +932,12 @@ inline void encode(const std::vector<std::shared_ptr<T>,Alloc>& v,
 {
   __u32 n = (__u32)(v.size());
   encode(n, bl);
-  for (auto p = v.begin(); p != v.end(); ++p)
-    if (*p)
-      encode(**p, bl);
+  for (const auto& ref : v) {
+    if (ref)
+      encode(*ref, bl);
     else
       encode(T(), bl);
+  }
 }
 template<class T, class Alloc>
 inline void decode(std::vector<std::shared_ptr<T>,Alloc>& v,
@@ -941,10 +945,12 @@ inline void decode(std::vector<std::shared_ptr<T>,Alloc>& v,
 {
   __u32 n;
   decode(n, p);
-  v.resize(n);
-  for (__u32 i=0; i<n; i++) {
-    v[i] = std::make_shared<T>();
-    decode(*v[i], p);
+  v.clear();
+  v.reserve(n);
+  while (n--) {
+    auto ref = std::make_shared<T>();
+    decode(*ref, p);
+    v.emplace_back(std::move(ref));
   }
 }
 
