@@ -56,25 +56,13 @@ int ObjectCacheFile::read_object_from_file(ceph::bufferlist* read_buf, uint64_t 
   ldout(cct, 20) << "offset:" << object_off
                  << ", length:" << object_len << dendl;
 
-  bufferlist temp_bl;
   std::string error_str;
 
-  // TODO : current implements will drop sharely performance.
-  int ret = temp_bl.read_file(m_name.c_str(), &error_str);
+  int ret = read_buf->pread_file(m_name.c_str(), object_off, object_len, &error_str);
   if (ret < 0) {
     lderr(cct)<<"read file fail:" << error_str << dendl;
     return -1;
   }
-
-  if(object_off >= temp_bl.length()) {
-    return 0;
-  }
-
-  if((temp_bl.length() - object_off) < object_len) {
-    object_len = temp_bl.length() - object_off;
-  }
-
-  read_buf->substr_of(temp_bl, object_off, object_len);
 
   return read_buf->length();
 }

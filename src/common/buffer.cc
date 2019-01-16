@@ -1781,7 +1781,59 @@ void buffer::list::decode_base64(buffer::list& e)
   push_back(std::move(bp));
 }
 
-  
+int buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std::string *error)
+{
+  int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC));
+  if (fd < 0) {
+    int err = errno;
+    std::ostringstream oss;
+    oss << "can't open " << fn << ": " << cpp_strerror(err);
+    *error = oss.str();
+    return -err;
+  }
+
+  struct stat st;
+  memset(&st, 0, sizeof(st));
+  if (::fstat(fd, &st) < 0) {
+    int err = errno;
+    std::ostringstream oss;
+    oss << "bufferlist::read_file(" << fn << "): stat error: "
+        << cpp_strerror(err);
+    *error = oss.str();
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+    return -err;
+  }
+
+  if (off > st.st_size) {
+    std::ostringstream oss;
+    oss << "bufferlist::read_file(" << fn << "): read error: size < offset";
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+    return -1;
+  }
+
+  if (len > st.st_size - off) {
+    len = st.st_size - off;
+  }
+  lseek(fd, off, SEEK_SET);
+  ssize_t ret = safe_read(fd, (void*)this->c_str(), len);
+  if (ret < 0) {
+    std::ostringstream oss;
+    oss << "bufferlist::read_file(" << fn << "): read error:"
+	<< cpp_strerror(ret);
+    *error = oss.str();
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+    return ret;
+  } else if (ret != len) {
+    // Premature EOF.
+    // Perhaps the file changed between stat() and read()?
+    std::ostringstream oss;
+    oss << "bufferlist::read_file(" << fn << "): warning: got premature EOF.";
+    *error = oss.str();
+    // not actually an error, but weird
+  }
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
+  return 0;
+}
 
 int buffer::list::read_file(const char *fn, std::string *error)
 {
