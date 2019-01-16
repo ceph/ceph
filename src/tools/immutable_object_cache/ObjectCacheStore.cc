@@ -99,7 +99,7 @@ int ObjectCacheStore::do_promote(std::string pool_name, std::string object_name)
     }
   }
 
-  assert(m_ioctxs.find(pool_name) != m_ioctxs.end());
+  ceph_assert(m_ioctxs.find(pool_name) != m_ioctxs.end());
 
   librados::IoCtx* ioctx = m_ioctxs[pool_name];
 
@@ -150,9 +150,9 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
   }
 
   // update metadata
-  assert(OBJ_CACHE_SKIP == m_policy->get_status(cache_file_name));
+  ceph_assert(OBJ_CACHE_SKIP == m_policy->get_status(cache_file_name));
   m_policy->update_status(cache_file_name, OBJ_CACHE_PROMOTED);
-  assert(OBJ_CACHE_PROMOTED == m_policy->get_status(cache_file_name));
+  ceph_assert(OBJ_CACHE_PROMOTED == m_policy->get_status(cache_file_name));
 
   delete read_buf;
 
@@ -183,7 +183,7 @@ int ObjectCacheStore::lookup_object(std::string pool_name,
       return -1;
     default:
       lderr(m_cct) << "unrecognized object cache status." << dendl;
-      assert(0);
+      ceph_assert(0);
   }
 }
 

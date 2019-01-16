@@ -84,8 +84,9 @@ void CacheController::handle_request(uint64_t session_id, ObjectCacheRequest* re
 
       break;
     }
-    ldout(m_cct, 5) << "can't recongize request" << dendl;
-    ceph_assert(0); // TODO replace it.
+    default:
+      ldout(m_cct, 5) << "can't recongize request" << dendl;
+      ceph_assert(0);
   }
 }
 
