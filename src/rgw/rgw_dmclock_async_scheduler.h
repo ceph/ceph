@@ -161,7 +161,9 @@ auto AsyncScheduler::async_request(const client_id& client,
 class SimpleThrottler : public md_config_obs_t, public dmclock::Scheduler {
 public:
   SimpleThrottler(CephContext *cct) :
-    max_requests(cct->_conf.get_val<int64_t>("rgw_max_concurrent_requests")){
+    max_requests(cct->_conf.get_val<int64_t>("rgw_max_concurrent_requests")),
+    counters(cct, "simple-throttler")
+  {
     if (max_requests <= 0) {
       max_requests = std::numeric_limits<int64_t>::max();
     }
@@ -190,11 +192,20 @@ private:
   int schedule_request_impl(const client_id&, const ReqParams&,
                             const Time&, const Cost&,
                             optional_yield) override {
-    return outstanding_requests++ >= max_requests ? -EAGAIN : 0 ;
+    if (outstanding_requests++ >= max_requests) {
+      if (auto c = counters();
+          c != nullptr) {
+        c->inc(throttle_counters::l_throttle);
+      }
+      return -EAGAIN;
+    }
+
+    return 0 ;
   }
 
   std::atomic<int64_t> max_requests;
   std::atomic<int64_t> outstanding_requests = 0;
+  ThrottleCounters counters;
 };
 
 } // namespace rgw::dmclock
