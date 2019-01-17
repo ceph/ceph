@@ -52,7 +52,8 @@ class TestMixedTypeConfiguredSize(object):
     def test_hdd_device_is_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
         # 3GB block.db in ceph.conf
         conf_ceph(get_safe=lambda *a: 3147483640)
-        args = factory(filtered_devices=[], osds_per_device=1, block_db_size=None)
+        args = factory(filtered_devices=[], osds_per_device=1,
+                       block_db_size=None, block_wal_size=None)
         ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
         hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
         devices = [ssd, hdd]
@@ -68,7 +69,8 @@ class TestMixedTypeConfiguredSize(object):
     def test_ssd_device_is_not_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
         # 7GB block.db in ceph.conf
         conf_ceph(get_safe=lambda *a: 7747483640)
-        args = factory(filtered_devices=[], osds_per_device=1, block_db_size=None)
+        args = factory(filtered_devices=[], osds_per_device=1,
+                       block_db_size=None, block_wal_size=None)
         ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
         hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
         devices = [ssd, hdd]
@@ -81,7 +83,8 @@ class TestMixedTypeConfiguredSize(object):
     def test_multi_hdd_device_is_not_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
         # 3GB block.db in ceph.conf
         conf_ceph(get_safe=lambda *a: 3147483640)
-        args = factory(filtered_devices=[], osds_per_device=2, block_db_size=None)
+        args = factory(filtered_devices=[], osds_per_device=2,
+                       block_db_size=None, block_wal_size=None)
         ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=60737400000))
         hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
         devices = [ssd, hdd]
@@ -96,7 +99,8 @@ class TestMixedTypeLargeAsPossible(object):
 
     def test_hdd_device_is_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: None)
-        args = factory(filtered_devices=[], osds_per_device=1, block_db_size=None)
+        args = factory(filtered_devices=[], osds_per_device=1,
+                       block_db_size=None, block_wal_size=None)
         ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
         hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
         devices = [ssd, hdd]
@@ -112,7 +116,8 @@ class TestMixedTypeLargeAsPossible(object):
 
     def test_multi_hdd_device_is_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: None)
-        args = factory(filtered_devices=[], osds_per_device=2, block_db_size=None)
+        args = factory(filtered_devices=[], osds_per_device=2,
+                       block_db_size=None, block_wal_size=None)
         ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=60073740000))
         hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=60073740000))
         devices = [ssd, hdd]
@@ -128,7 +133,8 @@ class TestMixedTypeLargeAsPossible(object):
 
     def test_multi_hdd_device_is_not_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: None)
-        args = factory(filtered_devices=[], osds_per_device=2, block_db_size=None)
+        args = factory(filtered_devices=[], osds_per_device=2,
+                       block_db_size=None, block_wal_size=None)
         ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=60737400000))
         hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
         devices = [ssd, hdd]

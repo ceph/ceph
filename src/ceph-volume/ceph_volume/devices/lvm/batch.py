@@ -231,6 +231,11 @@ class Batch(object):
             help='Set (or override) the "bluestore_block_db_size" value, in bytes'
         )
         parser.add_argument(
+            '--block-wal-size',
+            type=int,
+            help='Set (or override) the "bluestore_block_wal_size" value, in bytes'
+        )
+        parser.add_argument(
             '--journal-size',
             type=int,
             help='Override the "osd_journal_size" value, in megabytes'
@@ -315,11 +320,12 @@ class Batch(object):
         # TODO assert that none of the device lists overlap?
         self._filter_devices()
         if self.args.bluestore:
-            if self.db_usable:
+            if self.db_usable or self.wal_usable:
                 self.strategy = strategies.bluestore.MixedType(
                     self.args,
                     self.usable,
-                    self.db_usable)
+                    self.db_usable,
+                    self.wal_usable)
             else:
                 self.strategy = strategies.bluestore.SingleType(
                     self.args,

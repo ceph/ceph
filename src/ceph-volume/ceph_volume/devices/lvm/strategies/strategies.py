@@ -51,10 +51,10 @@ class Strategy(object):
 
 class MixedStrategy(Strategy):
 
-    def get_common_vg(self):
+    def get_common_vg(self, devs):
         # find all the vgs associated with the current device
-        for ssd in self.db_or_journal_devs:
-            for pv in ssd.pvs_api:
+        for dev in devs:
+            for pv in dev.pvs_api:
                 vg = self.system_vgs.get(vg_name=pv.vg_name)
                 if not vg:
                     continue
