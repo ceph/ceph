@@ -90,7 +90,7 @@ class KrbAuthorizer : public AuthAuthorizer {
       return true; 
     }
     bool add_challenge(CephContext* ceph_ctx, 
-                       bufferlist& buff_list) override { 
+                       const bufferlist& buff_list) override {
       return true; 
     }
 };

@@ -260,7 +260,7 @@ public:
   bool build_authorizer();
   bool verify_reply(bufferlist::const_iterator& reply,
 		    CryptoKey *connection_secret) override;
-  bool add_challenge(CephContext *cct, bufferlist& challenge) override;
+  bool add_challenge(CephContext *cct, const bufferlist& challenge) override;
 };
 
 
@@ -441,7 +441,8 @@ extern bool cephx_verify_authorizer(
 static constexpr uint64_t AUTH_ENC_MAGIC = 0xff009cad8826aa55ull;
 
 template <typename T>
-void decode_decrypt_enc_bl(CephContext *cct, T& t, CryptoKey key, bufferlist& bl_enc, 
+void decode_decrypt_enc_bl(CephContext *cct, T& t, CryptoKey key,
+			   const bufferlist& bl_enc,
 			   std::string &error)
 {
   uint64_t magic;
