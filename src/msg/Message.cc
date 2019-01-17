@@ -128,6 +128,7 @@
 #include "messages/MClientLease.h"
 #include "messages/MClientSnap.h"
 #include "messages/MClientQuota.h"
+#include "messages/MClientMetrics.h"
 
 #include "messages/MMDSSlaveRequest.h"
 
@@ -681,6 +682,9 @@ Message *decode_message(CephContext *cct,
     break;
   case CEPH_MSG_CLIENT_QUOTA:
     m = make_message<MClientQuota>();
+    break;
+  case CEPH_MSG_CLIENT_METRICS:
+    m = make_message<MClientMetrics>();
     break;
 
     // mds
