@@ -13,17 +13,13 @@ namespace ceph {
 namespace immutable_obj_cache {
 
   CacheClient::CacheClient(const std::string& file, CephContext* ceph_ctx)
-    : m_io_service_work(m_io_service),
-      m_dm_socket(m_io_service),
-      m_ep(stream_protocol::endpoint(file)),
-      m_io_thread(nullptr),
-      m_session_work(false),
-      m_writing(false),
+    : cct(ceph_ctx), m_io_service_work(m_io_service),
+      m_dm_socket(m_io_service), m_ep(stream_protocol::endpoint(file)),
+      m_io_thread(nullptr), m_session_work(false), m_writing(false),
+      m_reading(false), m_sequence_id(0),
       m_lock("ceph::cache::cacheclient::m_lock"),
       m_map_lock("ceph::cache::cacheclient::m_map_lock"),
-      m_sequence_id(0),
-      m_header_buffer(new char[sizeof(ObjectCacheMsgHeader)]),
-      cct(ceph_ctx)
+      m_header_buffer(new char[sizeof(ObjectCacheMsgHeader)])
   {
     // TODO : release these resources.
     m_use_dedicated_worker = true;
@@ -32,7 +28,7 @@ namespace immutable_obj_cache {
     if(m_use_dedicated_worker) {
       m_worker = new boost::asio::io_service();
       m_worker_io_service_work = new boost::asio::io_service::work(*m_worker);
-      for(int i = 0; i < m_worker_thread_num; i++) {
+      for(uint64_t i = 0; i < m_worker_thread_num; i++) {
         std::thread* thd = new std::thread([this](){m_worker->run();});
         m_worker_threads.push_back(thd);
       }
@@ -104,7 +100,16 @@ namespace immutable_obj_cache {
     return 0;
   }
 
-  void CacheClient::lookup_object(ObjectCacheRequest* req) {
+  void CacheClient::lookup_object(std::string pool_name, std::string oid,
+                                  GenContext<ObjectCacheRequest*>* on_finish) {
+
+    ObjectCacheRequest* req = new ObjectCacheRequest();
+    req->m_head.version = 0;
+    req->m_head.reserved = 0;
+    req->m_head.type = RBDSC_READ;
+    req->m_data.m_pool_name = pool_name;
+    req->m_data.m_oid = oid;
+    req->m_process_msg = on_finish;
 
     req->m_head.seq = m_sequence_id++;
     req->encode();
@@ -151,7 +156,7 @@ namespace immutable_obj_cache {
         boost::asio::buffer(bl.c_str(), bl.length()),
         boost::asio::transfer_exactly(bl.length()),
         [this, bl](const boost::system::error_code& err, size_t cb) {
-        if(err || cb != bl.length()) {
+        if (err || cb != bl.length()) {
            fault(ASIO_ERROR_WRITE, err);
            return;
         }
@@ -178,6 +183,7 @@ namespace immutable_obj_cache {
     }
   }
 
+  //TODO(): split into smaller functions
   void CacheClient::receive_message() {
     ceph_assert(m_reading.load());
 
@@ -252,6 +258,7 @@ namespace immutable_obj_cache {
             {
               Mutex::Locker locker(m_map_lock);
               ceph_assert(m_seq_to_req.find(seq_id) != m_seq_to_req.end());
+              delete m_seq_to_req[seq_id];
               m_seq_to_req.erase(seq_id);
               if(m_seq_to_req.size() == 0) {
                 m_reading.store(false);

@@ -75,7 +75,6 @@ public:
     ObjectCacheMsgData m_data;
     bufferlist m_head_buffer;
     bufferlist m_data_buffer;
-    Context* m_on_finish;
     GenContext<ObjectCacheRequest*>* m_process_msg;
 
     ObjectCacheRequest() {}
