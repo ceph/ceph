@@ -51,10 +51,18 @@ int ObjectCacheStore::init(bool reset) {
 
   //TODO(): fsck and reuse existing cache objects
   if (reset) {
+    std::error_code ec;
     if (efs::exists(m_cache_root_dir)) {
-      efs::remove_all(m_cache_root_dir);
+      if (!efs::remove_all(m_cache_root_dir, ec)) {
+        lderr(m_cct) << "fail to remove old cache store: " << ec << dendl;
+	return -1;
+      }
     }
-    efs::create_directories(m_cache_root_dir);
+
+    if (!efs::create_directories(m_cache_root_dir, ec)) {
+        lderr(m_cct) << "fail to create cache store dir: " << ec << dendl;
+	return -1;
+    }
   }
 
   return ret;
