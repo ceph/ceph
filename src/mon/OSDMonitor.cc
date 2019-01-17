@@ -4814,6 +4814,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
     f->open_object_section("osd_location");
     f->dump_int("osd", osd);
     f->dump_object("addrs", osdmap.get_addrs(osd));
+    f->dump_stream("osd_fsid") << osdmap.get_uuid(osd);
 
     // try to identify host, pod/container name, etc.
     map<string,string> m;
