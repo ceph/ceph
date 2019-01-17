@@ -84,16 +84,16 @@ def get_daemons_and_pools():  # pylint: disable=R0915
             'health': 'Unknown'
         }
         for _, pool_data in daemon['status'].items():
-            if (health['health'] != 'error' and
-                    [k for k, v in pool_data.get('callouts', {}).items()
-                     if v['level'] == 'error']):
+            if (health['health'] != 'error'
+                    and [k for k, v in pool_data.get('callouts', {}).items()
+                         if v['level'] == 'error']):
                 health = {
                     'health_color': 'error',
                     'health': 'Error'
                 }
-            elif (health['health'] != 'error' and
-                  [k for k, v in pool_data.get('callouts', {}).items()
-                   if v['level'] == 'warning']):
+            elif (health['health'] != 'error'
+                  and [k for k, v in pool_data.get('callouts', {}).items()
+                       if v['level'] == 'warning']):
                 health = {
                     'health_color': 'warning',
                     'health': 'Warning'
@@ -157,12 +157,12 @@ def get_daemons_and_pools():  # pylint: disable=R0915
                     stats['image_local_count'] = pool_data.get('image_local_count', 0)
                     stats['image_remote_count'] = pool_data.get('image_remote_count', 0)
 
-                if (stats.get('health_color', '') != 'error' and
-                        pool_data.get('image_error_count', 0) > 0):
+                if (stats.get('health_color', '') != 'error'
+                        and pool_data.get('image_error_count', 0) > 0):
                     stats['health_color'] = 'error'
                     stats['health'] = 'Error'
-                elif (stats.get('health_color', '') != 'error' and
-                      pool_data.get('image_warning_count', 0) > 0):
+                elif (stats.get('health_color', '') != 'error'
+                      and pool_data.get('image_warning_count', 0) > 0):
                     stats['health_color'] = 'warning'
                     stats['health'] = 'Warning'
                 elif stats.get('health', None) is None:
@@ -362,8 +362,8 @@ class RbdMirroringPoolMode(RESTController):
     def set(self, pool_name, mirror_mode=None):
         def _edit(ioctx, mirror_mode=None):
             if mirror_mode:
-                mode_enum = dict([[x[1], x[0]] for x in
-                                  self.MIRROR_MODES.items()]).get(mirror_mode, None)
+                mode_enum = {x[1]: x[0] for x in
+                             self.MIRROR_MODES.items()}.get(mirror_mode, None)
                 if mode_enum is None:
                     raise rbd.Error('invalid mirror mode "{}"'.format(mirror_mode))
 

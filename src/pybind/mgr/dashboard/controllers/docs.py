@@ -34,15 +34,15 @@ class Docs(BaseController):
         def_value = param['default'] if 'default' in param else None
         if param_name.startswith("is_"):
             return "boolean"
-        elif "size" in param_name:
+        if "size" in param_name:
             return "integer"
-        elif "count" in param_name:
+        if "count" in param_name:
             return "integer"
-        elif "num" in param_name:
+        if "num" in param_name:
             return "integer"
-        elif isinstance(def_value, bool):
+        if isinstance(def_value, bool):
             return "boolean"
-        elif isinstance(def_value, int):
+        if isinstance(def_value, int):
             return "integer"
         return "string"
 

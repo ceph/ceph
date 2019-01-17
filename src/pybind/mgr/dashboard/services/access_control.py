@@ -93,17 +93,17 @@ class Role(object):
 # this roles cannot be deleted nor updated
 
 # admin role provides all permissions for all scopes
-ADMIN_ROLE = Role('administrator', 'Administrator', dict([
-    (scope_name, Permission.all_permissions())
+ADMIN_ROLE = Role('administrator', 'Administrator', {
+    scope_name: Permission.all_permissions()
     for scope_name in Scope.all_scopes()
-]))
+})
 
 
 # read-only role provides read-only permission for all scopes
-READ_ONLY_ROLE = Role('read-only', 'Read-Only', dict([
-    (scope_name, [_P.READ]) for scope_name in Scope.all_scopes()
+READ_ONLY_ROLE = Role('read-only', 'Read-Only', {
+    scope_name: [_P.READ] for scope_name in Scope.all_scopes()
     if scope_name != Scope.DASHBOARD_SETTINGS
-]))
+})
 
 
 # block manager role provides all permission for block related scopes
@@ -227,7 +227,7 @@ class User(object):
     @classmethod
     def from_dict(cls, u_dict, roles):
         return User(u_dict['username'], u_dict['password'], u_dict['name'],
-                    u_dict['email'], set([roles[r] for r in u_dict['roles']]),
+                    u_dict['email'], {roles[r] for r in u_dict['roles']},
                     u_dict['lastUpdate'])
 
 
@@ -300,8 +300,8 @@ class AccessControlDB(object):
     def save(self):
         with self.lock:
             db = {
-                'users': dict([(un, u.to_dict()) for un, u in self.users.items()]),
-                'roles': dict([(rn, r.to_dict()) for rn, r in self.roles.items()]),
+                'users': {un: u.to_dict() for un, u in self.users.items()},
+                'roles': {rn: r.to_dict() for rn, r in self.roles.items()},
                 'version': self.version
             }
             mgr.set_store(self.accessdb_config_key(), json.dumps(db))
@@ -343,10 +343,10 @@ class AccessControlDB(object):
             return db
 
         db = json.loads(json_db)
-        roles = dict([(rn, Role.from_dict(r))
-                      for rn, r in db.get('roles', {}).items()])
-        users = dict([(un, User.from_dict(u, dict(roles, **SYSTEM_ROLES)))
-                      for un, u in db.get('users', {}).items()])
+        roles = {rn: Role.from_dict(r)
+                 for rn, r in db.get('roles', {}).items()}
+        users = {un: User.from_dict(u, dict(roles, **SYSTEM_ROLES))
+                 for un, u in db.get('users', {}).items()}
         return cls(db['version'], users, roles)
 
 

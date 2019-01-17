@@ -402,8 +402,8 @@ class RgwClient(RestClient):
         except RequestException as e:
             if e.status_code == 404:
                 return False
-            else:
-                raise e
+
+            raise e
 
     @RestClient.api_put('/{bucket_name}')
     def create_bucket(self, bucket_name, request=None):

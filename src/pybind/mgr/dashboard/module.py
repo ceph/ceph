@@ -35,7 +35,7 @@ if cherrypy is not None:
     v = StrictVersion(cherrypy.__version__)
     # It was fixed in 3.7.0.  Exact lower bound version is probably earlier,
     # but 3.5.0 is what this monkey patch is tested on.
-    if v >= StrictVersion("3.5.0") and v < StrictVersion("3.7.0"):
+    if StrictVersion("3.5.0") <= v < StrictVersion("3.7.0"):
         from cherrypy.wsgiserver.wsgiserver2 import HTTPConnection,\
                                                     CP_fileobject
 
@@ -337,13 +337,13 @@ class Module(MgrModule, CherryPyConfig):
         res = handle_sso_command(cmd)
         if res[0] != -errno.ENOSYS:
             return res
-        elif cmd['prefix'] == 'dashboard set-jwt-token-ttl':
+        if cmd['prefix'] == 'dashboard set-jwt-token-ttl':
             self.set_module_option('jwt_token_ttl', str(cmd['seconds']))
             return 0, 'JWT token TTL updated', ''
-        elif cmd['prefix'] == 'dashboard get-jwt-token-ttl':
+        if cmd['prefix'] == 'dashboard get-jwt-token-ttl':
             ttl = self.get_module_option('jwt_token_ttl', JwtManager.JWT_TOKEN_TTL)
             return 0, str(ttl), ''
-        elif cmd['prefix'] == 'dashboard create-self-signed-cert':
+        if cmd['prefix'] == 'dashboard create-self-signed-cert':
             self.create_self_signed_cert()
             return 0, 'Self-signed certificate created', ''
 
@@ -377,7 +377,7 @@ class Module(MgrModule, CherryPyConfig):
 
     def get_updated_pool_stats(self):
         df = self.get('df')
-        pool_stats = dict([(p['id'], p['stats']) for p in df['pools']])
+        pool_stats = {p['id']: p['stats'] for p in df['pools']}
         now = time.time()
         for pool_id, stats in pool_stats.items():
             for stat_name, stat_val in stats.items():
