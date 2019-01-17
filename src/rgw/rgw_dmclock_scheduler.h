@@ -66,23 +66,6 @@ private:
 
 using SchedulerCompleter = Completer<std::function<void()>>;
 
-enum class scheduler_t {
-  none,
-  throttler,
-  dmclock
-};
-
-inline scheduler_t get_scheduler_t(CephContext *cct)
-{
-  const auto scheduler_type = cct->_conf.get_val<std::string>("rgw_scheduler_type");
-  if (scheduler_type == "dmclock")
-    return scheduler_t::dmclock;
-  else if (scheduler_type == "throttler")
-    return scheduler_t::throttler;
-  else
-    return scheduler_t::none;
-}
-
 class Scheduler  {
 public:
   auto schedule_request(const client_id& client, const ReqParams& params,

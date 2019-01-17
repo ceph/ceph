@@ -259,7 +259,8 @@ class AsioFrontend {
   void accept(Listener& listener, boost::system::error_code ec);
 
  public:
-  AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf)
+  AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf,
+	       dmc::SchedulerCtx& sched_ctx)
     : env(env), conf(conf), pause_mutex(context.get_executor())
   {
     auto sched_t = dmc::get_scheduler_t(ctx());
@@ -270,13 +271,11 @@ class AsioFrontend {
       scheduler.reset(new dmc::SimpleThrottler(ctx()));
       break;
     case dmc::scheduler_t::dmclock:
-      client_config = std::make_unique<dmc::ClientConfig>(ctx());
-      client_counters.emplace(ctx());
       scheduler.reset(new dmc::AsyncScheduler(ctx(),
                                               context,
-                                              std::ref(client_counters.value()),
-                                              client_config.get(),
-                                              *client_config.get(),
+                                              std::ref(sched_ctx.get_dmc_client_counters()),
+                                              sched_ctx.get_dmc_client_config(),
+                                              *sched_ctx.get_dmc_client_config(),
                                               dmc::AtLimit::Reject));
     }
   }
@@ -667,13 +666,15 @@ void AsioFrontend::unpause(RGWRados* const store,
 
 class RGWAsioFrontend::Impl : public AsioFrontend {
  public:
-  Impl(const RGWProcessEnv& env, RGWFrontendConfig* conf)
-    : AsioFrontend(env, conf) {}
+  Impl(const RGWProcessEnv& env, RGWFrontendConfig* conf,
+       rgw::dmclock::SchedulerCtx& sched_ctx)
+    : AsioFrontend(env, conf, sched_ctx) {}
 };
 
 RGWAsioFrontend::RGWAsioFrontend(const RGWProcessEnv& env,
-                                 RGWFrontendConfig* conf)
-  : impl(new Impl(env, conf))
+                                 RGWFrontendConfig* conf,
+				 rgw::dmclock::SchedulerCtx& sched_ctx)
+  : impl(new Impl(env, conf, sched_ctx))
 {
 }
 

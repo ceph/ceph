@@ -94,6 +94,25 @@ public:
                           const std::set<std::string>& changed) override;
 };
 
+class SchedulerCtx {
+public:
+  SchedulerCtx(CephContext* const cct) : sched_t(get_scheduler_t(cct))
+  {
+    if(sched_t == scheduler_t::dmclock) {
+      dmc_client_config = std::make_shared<ClientConfig>(cct);
+      // we don't have a move only cref std::function yet
+      dmc_client_counters = std::make_optional<ClientCounters>(cct);
+    }
+  }
+  // We need to construct a std::function from a NonCopyable object
+  ClientCounters& get_dmc_client_counters() { return dmc_client_counters.value(); }
+  ClientConfig* const get_dmc_client_config() const { return dmc_client_config.get(); }
+private:
+  scheduler_t sched_t;
+  std::shared_ptr<ClientConfig> dmc_client_config {nullptr};
+  std::optional<ClientCounters> dmc_client_counters  {std::nullopt};
+};
+
 } // namespace rgw::dmclock
 
 #endif /* RGW_DMCLOCK_SCHEDULER_CTX_H */
