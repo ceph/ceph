@@ -22,6 +22,7 @@
 namespace rgw::dmclock {
   class SyncScheduler;
   class ClientConfig;
+  class SchedulerCtx;
 }
 
 class RGWFrontendConfig {
@@ -115,7 +116,8 @@ class RGWCivetWebFrontend : public RGWFrontend {
   CephContext* cct() const { return env.store->ctx(); }
 public:
   RGWCivetWebFrontend(RGWProcessEnv& env,
-                      RGWFrontendConfig *conf);
+                      RGWFrontendConfig *conf,
+		      rgw::dmclock::SchedulerCtx& sched_ctx);
 
   int init() override {
     return 0;

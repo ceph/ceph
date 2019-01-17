@@ -25,17 +25,17 @@ struct SyncRequest : public Request {
   std::mutex& req_mtx;
   std::condition_variable& req_cv;
   ReqState& req_state;
-  ClientCounters& counters;
+  GetClientCounters& counters;
   explicit SyncRequest(client_id _id, Time started, Cost cost,
                        std::mutex& mtx, std::condition_variable& _cv,
-                       ReqState& _state, ClientCounters& counters):
+                       ReqState& _state, GetClientCounters& counters):
     Request{_id, started, cost}, req_mtx(mtx), req_cv(_cv), req_state(_state), counters(counters) {};
 };
 
 class SyncScheduler: public Scheduler {
 public:
   template <typename ...Args>
-  SyncScheduler(CephContext *cct, ClientCounters&& counters,
+  SyncScheduler(CephContext *cct, GetClientCounters&& counters,
 		Args&& ...args);
   ~SyncScheduler();
 
@@ -66,11 +66,11 @@ private:
 
   Queue queue;
   CephContext const *cct;
-  ClientCounters counters; //< provides per-client perf counters
+  GetClientCounters counters; //< provides per-client perf counters
 };
 
 template <typename ...Args>
-SyncScheduler::SyncScheduler(CephContext *cct, ClientCounters&& counters,
+SyncScheduler::SyncScheduler(CephContext *cct, GetClientCounters&& counters,
 			     Args&& ...args):
   queue(std::forward<Args>(args)...), cct(cct), counters(std::move(counters))
 {}
