@@ -41,9 +41,11 @@ namespace throttle_counters {
 
 namespace rgw::dmclock {
 
+// the last client counter would be for global scheduler stats
+static constexpr auto counter_size = static_cast<size_t>(client_id::count) + 1;
 /// array of per-client counters to serve as GetClientCounters
 class ClientCounters {
-  std::array<PerfCountersRef, static_cast<size_t>(client_id::count)> clients;
+  std::array<PerfCountersRef, counter_size> clients;
  public:
   ClientCounters(CephContext *cct);
 

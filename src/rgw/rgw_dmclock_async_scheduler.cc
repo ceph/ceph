@@ -161,8 +161,8 @@ void AsyncScheduler::process(const Time& now)
   }
 
   if (outstanding_requests >= max_requests) {
-    if(perfcounter){
-      perfcounter->inc(l_rgw_throttle);
+    if(auto c = counters(client_id::count)){
+      c->inc(l_rgw_throttle);
     }
   }
 

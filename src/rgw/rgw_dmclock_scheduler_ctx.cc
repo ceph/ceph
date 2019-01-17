@@ -83,6 +83,8 @@ ClientCounters::ClientCounters(CephContext *cct)
       queue_counters::build(cct, "dmclock-data");
   clients[static_cast<size_t>(client_id::metadata)] =
       queue_counters::build(cct, "dmclock-metadata");
+  clients[static_cast<size_t>(client_id::count)] =
+      throttle_counters::build(cct, "dmclock-scheduler");
 }
 
 void inc(ClientSums& sums, client_id client, Cost cost)
