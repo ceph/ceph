@@ -120,31 +120,49 @@ static int write_lock(cls_method_context_t hctx, const string& name, const lock_
  * @param name Lock name
  * @param lock_type Type of lock (exclusive / shared)
  * @param duration Duration of lock (in seconds). Zero means it doesn't expire.
+ *                 Also the duration of bids when a bid is submitted.
  * @param flags lock flags
  * @param cookie The cookie to set in the lock
  * @param tag The tag to match with the lock (can only lock with matching tags)
  * @param lock_description The lock description to set (if not empty)
  * @param locker_description The locker description
+ * @param bidder_id Identifier of the bidder.
+ * @param bid_amount Amount of the bid. -1 indicates no bid.
  *
  * @return 0 on success, or -errno on failure
  */
 static int lock_obj(cls_method_context_t hctx,
                     const string& name,
                     ClsLockType lock_type,
-                    utime_t duration,
+                    const utime_t& duration,
                     const string& description,
                     uint8_t flags,
                     const string& cookie,
-                    const string& tag)
+                    const string& tag,
+		    int32_t bid_amount,
+		    const utime_t& bid_duration)
 {
+  struct BidRecord {
+    int32_t amount;
+    utime_t expiration;
+  };
+  // this data does not have to persist between restarts, but it has
+  // to persist between calls; therefore let's keep it in memory
+  static std::mutex bids_mtx;
+  static std::map<string,std::map<entity_name_t,BidRecord>> bids;
+
   bool exclusive = cls_lock_is_exclusive(lock_type);
   lock_info_t linfo;
   bool fail_if_exists = (flags & LOCK_FLAG_MAY_RENEW) == 0;
   bool fail_if_does_not_exist = flags & LOCK_FLAG_MUST_RENEW;
 
   CLS_LOG(20,
-	  "requested lock_type=%s fail_if_exists=%d fail_if_does_not_exist=%d",
-	  cls_lock_type_str(lock_type), fail_if_exists, fail_if_does_not_exist);
+	  "requested lock_type=%s fail_if_exists=%d "
+	  "fail_if_does_not_exist=%d bid_amount=%d",
+	  cls_lock_type_str(lock_type),
+	  fail_if_exists,
+	  fail_if_does_not_exist,
+	  bid_amount);
   if (!cls_lock_is_valid(lock_type)) {
     return -EINVAL;
   }
@@ -159,8 +177,41 @@ static int lock_obj(cls_method_context_t hctx,
     return -EINVAL;
   }
 
+  utime_t now = ceph_clock_now();
+  entity_inst_t origin;
+  int r = cls_get_request_origin(hctx, &origin);
+  ceph_assert(r == 0);
+
+  // bid related variables that we'll only assign and use if a bid is
+  // present
+  entity_name_t bid_source;
+  std::map<entity_name_t,BidRecord>* obj_bids_ptr = nullptr;
+
+  // if there's a bid, update it in bids
+  if (bid_amount >= 0) {
+    #warning need to add code to clean up bids
+    // bidded locks must not be shared
+    if (!exclusive) {
+      CLS_LOG(20,
+	      "attempted to bid for a lock that was not exclusive "
+	      "or exclusive ephemeral");
+      return -EINVAL;
+    }
+
+    std::unique_lock<std::mutex> guard(bids_mtx);
+    auto p1 =
+      bids.emplace(std::make_pair(name,
+				  std::map<entity_name_t,BidRecord>()));
+    obj_bids_ptr = &(p1.first->second);
+    BidRecord bid_rec{ bid_amount, now + bid_duration };
+    auto p2 = obj_bids_ptr->emplace(std::make_pair(origin.name, bid_rec));
+    if (!p2.second) {
+      p2.first->second = bid_rec;
+    }
+  }
+
   // see if there's already a locker
-  int r = read_lock(hctx, name, &linfo);
+  r = read_lock(hctx, name, &linfo); // this also erases expired locks
   if (r < 0 && r != -ENOENT) {
     CLS_ERR("Could not read lock info: %s", cpp_strerror(r).c_str());
     return r;
@@ -171,10 +222,7 @@ static int lock_obj(cls_method_context_t hctx,
 
   locker_id_t id;
   id.cookie = cookie;
-  entity_inst_t inst;
-  r = cls_get_request_origin(hctx, &inst);
-  id.locker = inst.name;
-  ceph_assert(r == 0);
+  id.locker = origin.name;
 
   /* check this early, before we check fail_if_exists, otherwise we might
    * remove the locker entry and not check it later */
@@ -183,16 +231,21 @@ static int lock_obj(cls_method_context_t hctx,
     return -EBUSY;
   }
 
+  bool is_renewing = false;
   ClsLockType existing_lock_type = linfo.lock_type;
   CLS_LOG(20, "existing_lock_type=%s", cls_lock_type_str(existing_lock_type));
   iter = lockers.find(id);
   if (iter != lockers.end()) {
     if (fail_if_exists && !fail_if_does_not_exist) {
+      // caller does not want to renew, but lock exists; since this is
+      // a common situation no need to log
       return -EEXIST;
     } else {
+      is_renewing = true;
       lockers.erase(iter); // remove old entry
     }
   } else if (fail_if_does_not_exist) {
+      CLS_LOG(20, "there is no existing lock to renew");
     return -ENOENT;
   }
 
@@ -208,22 +261,47 @@ static int lock_obj(cls_method_context_t hctx,
     }
   }
 
+  // If we're renewing bid doesn't matter. But if we're not renewing
+  // then we can only succeed if we have the lowest unexpired bid.
+  if (!is_renewing && bid_amount >= 0) {
+    std::unique_lock<std::mutex> guard(bids_mtx);
+    int32_t best_bid = bid_amount; // start here but see if we can find lower
+    for (auto i = obj_bids_ptr->cbegin();
+	 i != obj_bids_ptr->cend();
+	 /* empty */) {
+      if (i->second.expiration < now) {
+	// "< now" allows a bid with duration of 0 to count;
+	// essentially that's a one-off bid
+	i = obj_bids_ptr->erase(i); // update iterator and go on
+	continue;
+      } else if (i->second.amount < best_bid) {
+	best_bid = i->second.amount;
+      }
+      ++i;
+    }
+
+    if (bid_amount != best_bid) {
+      // lock fails if this bid wasn't among the lowest unexpired bids
+      CLS_LOG(20, "could not lock object due to lower bid");
+      return -EBUSY;
+    }
+  }
+
   linfo.lock_type = lock_type;
   linfo.tag = tag;
   utime_t expiration;
   if (!duration.is_zero()) {
-    expiration = ceph_clock_now();
-    expiration += duration;
-
+    expiration = now + duration;
   }
+
   // make all addrs of type legacy, because v2 clients speak v2 or v1,
   // even depending on which OSD they are talking to, and the type
   // isn't what uniquely identifies them.  also, storing a v1 addr
   // here means that old clients who get this locker_info won't see an
   // old "msgr2:" prefix.
-  inst.addr.set_type(entity_addr_t::TYPE_LEGACY);
+  origin.addr.set_type(entity_addr_t::TYPE_LEGACY);
 
-  struct locker_info_t info(expiration, inst.addr, description);
+  struct locker_info_t info(expiration, origin.addr, description);
 
   linfo.lockers[id] = info;
 
@@ -257,7 +335,8 @@ static int lock_op(cls_method_context_t hctx,
 
   return lock_obj(hctx,
                   op.name, op.type, op.duration, op.description,
-                  op.flags, op.cookie, op.tag);
+                  op.flags, op.cookie, op.tag,
+		  op.bid_amount, op.bid_duration);
 }
 
 /**

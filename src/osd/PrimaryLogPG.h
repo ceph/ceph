@@ -700,7 +700,7 @@ public:
       }
       return -1ull;
     }
-  };
+  }; // struct PrimaryLogPG::OpContext
   using OpContextUPtr = std::unique_ptr<OpContext>;
   friend struct OpContext;
 
