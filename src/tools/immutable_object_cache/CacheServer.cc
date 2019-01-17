@@ -86,7 +86,6 @@ void CacheServer::accept() {
 void CacheServer::handle_accept(CacheSessionPtr new_session,
                                 const boost::system::error_code& error) {
   ldout(cct, 20) << dendl;
-  std::cout << "new session arrived....." << std::endl;
   if (error) {
     // operation_absort
     lderr(cct) << "async accept fails : " << error.message() << dendl;

@@ -38,8 +38,9 @@ public:
 
   void SetUp() override {
     std::remove(m_local_path.c_str());
-    m_cache_server = new CacheServer(g_ceph_context, m_local_path, [this](uint64_t session_id, std::string request ){
-        server_handle_request(session_id, request);
+    m_cache_server = new CacheServer(g_ceph_context, m_local_path,
+      [this](uint64_t session_id, ObjectCacheRequest* req){
+        server_handle_request(session_id, req);
     });
     ASSERT_TRUE(m_cache_server != nullptr);
 
@@ -56,14 +57,14 @@ public:
   }
 
   void TearDown() override {
-    for(uint64_t i = 0; i < m_session_num; i++) {
-      if(m_cache_client_vec[i] != nullptr) {
+    for (uint64_t i = 0; i < m_session_num; i++) {
+      if (m_cache_client_vec[i] != nullptr) {
         m_cache_client_vec[i]->close();
         delete m_cache_client_vec[i];
       }
     }
     m_cache_server->stop();
-    if(m_cache_server_thread->joinable()) {
+    if (m_cache_server_thread->joinable()) {
       m_cache_server_thread->join();
     }
     delete m_cache_server;
@@ -84,19 +85,17 @@ public:
     return cache_client;
   }
 
-  void server_handle_request(uint64_t session_id, std::string request) {
-    rbdsc_req_type_t *io_ctx = (rbdsc_req_type_t*)(request.c_str());
+  void server_handle_request(uint64_t session_id, ObjectCacheRequest* req) {
 
-    switch (io_ctx->type) {
+    switch (req->m_head.type) {
       case RBDSC_REGISTER: {
-
-        io_ctx->type = RBDSC_REGISTER_REPLY;
-        m_cache_server->send(session_id, std::string((char*)io_ctx, request.size()));
+        req->m_head.type = RBDSC_REGISTER_REPLY;
+        m_cache_server->send(session_id, req);
         break;
       }
       case RBDSC_READ: {
-        io_ctx->type = RBDSC_READ_REPLY;
-        m_cache_server->send(session_id, std::string((char*)io_ctx, request.size()));
+        req->m_head.type = RBDSC_READ_REPLY;
+        m_cache_server->send(session_id, req);
         break;
       }
     }
@@ -118,7 +117,8 @@ public:
   void test_lookup_object(std::string pool, uint64_t index, uint64_t request_num, bool is_last) {
 
     for (uint64_t i = 0; i < request_num; i++) {
-      auto ctx = new FunctionContext([this](bool ret) {
+      auto ctx = new LambdaGenContext<std::function<void(ObjectCacheRequest*)>,
+        ObjectCacheRequest*>([this](ObjectCacheRequest* ack) {
         m_recv_ack_index++;
       });
       m_send_request_index++;
@@ -126,7 +126,7 @@ public:
       m_cache_client_vec[index]->lookup_object(pool, "1234", ctx);
     }
 
-    if(is_last) {
+    if (is_last) {
       while(m_send_request_index != m_recv_ack_index) {
         usleep(1);
       }
@@ -141,7 +141,7 @@ TEST_F(TestMultiSession, test_multi_session) {
   uint64_t test_times = 1000;
   uint64_t test_session_num = 100;
 
-  for(uint64_t i = 0; i <= test_times; i++) {
+  for (uint64_t i = 0; i <= test_times; i++) {
     uint64_t random_index = random() % test_session_num;
     if (m_cache_client_vec[random_index] == nullptr) {
       test_register_client(random_index);

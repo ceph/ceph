@@ -24,7 +24,6 @@ static const int ASIO_ERROR_MSG_INCOMPLETE = 0X05;
 class ObjectCacheRequest;
 
 typedef std::function<void(uint64_t, ObjectCacheRequest*)> ProcessMsg;
-typedef std::function<void(std::string)> ClientProcessMsg;
 
 } // namespace immutable_obj_cache
 } // namespace ceph
