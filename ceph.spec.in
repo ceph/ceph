@@ -2186,6 +2186,7 @@ fi
 %dir %{_includedir}/cephfs
 %{_includedir}/cephfs/libcephfs.h
 %{_includedir}/cephfs/ceph_ll_client.h
+%{_includedir}/cephfs/metrics/Types.h
 %{_libdir}/libcephfs.so
 
 %files -n python%{python3_pkgversion}-cephfs
