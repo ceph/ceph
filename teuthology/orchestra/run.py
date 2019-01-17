@@ -260,12 +260,22 @@ def quote(args):
     return ' '.join(_quote(args))
 
 
-def copy_to_log(f, logger, loglevel=logging.INFO):
+def copy_to_log(f, logger, loglevel=logging.INFO, capture=None):
+    """
+    Copy line by line from file in f to the log from logger
+
+    :param f: source stream object
+    :param logger: the destination logger object
+    :param loglevel: the level of logging data
+    :param capture: an optional stream object for data copy
+    """
     # Work-around for http://tracker.ceph.com/issues/8313
     if isinstance(f, ChannelFile):
         f._flags += ChannelFile.FLAG_BINARY
 
     for line in f:
+        if capture:
+            capture.write(line)
         line = line.rstrip()
         # Second part of work-around for http://tracker.ceph.com/issues/8313
         try:
@@ -294,12 +304,7 @@ def copy_file_to(src, logger, stream=None):
     :param stream: an optional file-like object which will receive a copy of
                    src.
     """
-    if stream is not None:
-        shutil.copyfileobj(src, stream)
-        stream.seek(0)
-        src = stream
-    copy_to_log(src, logger)
-
+    copy_to_log(src, logger, capture=stream)
 
 def spawn_asyncresult(fn, *args, **kwargs):
     """
