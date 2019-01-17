@@ -348,14 +348,17 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             if sd.service_type == "osd":
                 sd.service_instance = "%s" % p['labels']["ceph-osd-id"]
             elif sd.service_type == "mds":
-                sd.service_instance = p['labels']["rook_file_system"]
+                sd.service = p['labels']['rook_file_system']
+                pfx = "{0}-".format(sd.service)
+                sd.service_instance = p['labels']['ceph_daemon_id'].replace(pfx, '', 1)
             elif sd.service_type == "mon":
                 sd.service_instance = p['labels']["mon"]
             elif sd.service_type == "mgr":
                 sd.service_instance = p['labels']["mgr"]
             elif sd.service_type == "nfs":
-                sd.service_instance = p['labels']["ceph_nfs"]
-                sd.rados_config_location = self.rook_cluster.get_nfs_conf_url(sd.service_instance, p['labels']['instance'])
+                sd.service = p['labels']['ceph_nfs']
+                sd.service_instance = p['labels']['instance']
+                sd.rados_config_location = self.rook_cluster.get_nfs_conf_url(sd.service, sd.service_instance)
             else:
                 # Unknown type -- skip it
                 continue
