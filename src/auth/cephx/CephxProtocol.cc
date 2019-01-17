@@ -540,7 +540,8 @@ bool CephXAuthorizer::verify_reply(bufferlist::const_iterator& indata,
   return true;
 }
 
-bool CephXAuthorizer::add_challenge(CephContext *cct, bufferlist& challenge)
+bool CephXAuthorizer::add_challenge(CephContext *cct,
+				    const bufferlist& challenge)
 {
   bl = base_bl;
 

@@ -141,7 +141,7 @@ struct AuthAuthorizer {
   virtual ~AuthAuthorizer() {}
   virtual bool verify_reply(bufferlist::const_iterator& reply,
 			    CryptoKey *connection_secret) = 0;
-  virtual bool add_challenge(CephContext *cct, bufferlist& challenge) = 0;
+  virtual bool add_challenge(CephContext *cct, const bufferlist& challenge) = 0;
 };
 
 struct AuthAuthorizerChallenge {
