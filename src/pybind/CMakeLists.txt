@@ -102,6 +102,7 @@ if(WITH_MGR)
   install(DIRECTORY
     ${CMAKE_CURRENT_SOURCE_DIR}/mgr
     DESTINATION ${CMAKE_INSTALL_PKGLIBDIR}
+    REGEX ".*/CMakeLists.txt" EXCLUDE
     REGEX ".*/\\.gitignore" EXCLUDE
     REGEX ".*/hello/.*" EXCLUDE)
   add_subdirectory(mgr)
