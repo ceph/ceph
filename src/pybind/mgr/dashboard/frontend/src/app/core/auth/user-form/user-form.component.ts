@@ -37,7 +37,7 @@ export class UserFormComponent implements OnInit {
   userFormMode = UserFormMode;
   mode: UserFormMode;
   allRoles: Array<UserFormRoleModel>;
-  messages = new SelectBadgesMessages({ empty: 'There are no roles.' });
+  messages: SelectBadgesMessages;
 
   constructor(
     private authService: AuthService,
@@ -51,6 +51,7 @@ export class UserFormComponent implements OnInit {
     private i18n: I18n
   ) {
     this.createForm();
+    this.messages = new SelectBadgesMessages({ empty: 'There are no roles.' }, this.i18n);
   }
 
   createForm() {

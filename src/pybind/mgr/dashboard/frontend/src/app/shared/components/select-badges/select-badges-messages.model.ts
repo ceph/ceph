@@ -1,16 +1,26 @@
+import { I18n } from '@ngx-translate/i18n-polyfill';
+
 import * as _ from 'lodash';
 
 export class SelectBadgesMessages {
-  empty = 'There are no items.';
-  selectionLimit = {
-    tooltip: 'Deselect item to select again',
-    text: 'Selection limit reached'
-  };
+  i18n: I18n;
+  empty: string;
+  selectionLimit: any;
   customValidations = {};
-  filter = 'Filter tags';
-  add = 'Add badge'; // followed by " '{{filter.value}}'"
+  filter: string;
+  add: string;
 
-  constructor(messages: {}) {
+  constructor(messages: {}, i18n: I18n) {
+    this.i18n = i18n;
+
+    this.empty = this.i18n('There are no items.');
+    this.selectionLimit = {
+      tooltip: this.i18n('Deselect item to select again'),
+      text: this.i18n('Selection limit reached')
+    };
+    this.filter = this.i18n('Filter tags');
+    this.add = this.i18n('Add badge'); // followed by " '{{filter.value}}'"
+
     _.merge(this, messages);
   }
 }

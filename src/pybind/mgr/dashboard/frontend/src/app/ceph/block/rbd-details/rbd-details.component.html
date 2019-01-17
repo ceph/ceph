@@ -1,5 +1,5 @@
 <ng-template #usageNotAvailableTooltipTpl>
-  <div [innerHtml]="'Only available for RBD images with <strong>fast-diff</strong> enabled'"></div>
+  <ng-container i18n>Only available for RBD images with <strong>fast-diff</strong> enabled</ng-container>
 </ng-template>
 
 
@@ -8,106 +8,110 @@
        heading="Details">
     <table class="table table-striped table-bordered">
       <tbody>
-      <tr>
-        <td i18n
-            class="bold col-sm-1">Name</td>
-        <td class="col-sm-3">{{ selectedItem.name }}</td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold col-sm-1">Pool</td>
-        <td class="col-sm-3">{{ selectedItem.pool_name }}</td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold col-sm-1">Data Pool</td>
-        <td class="col-sm-3">{{ selectedItem.data_pool | empty }}</td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold col-sm-1">Created</td>
-        <td class="col-sm-3">{{ selectedItem.timestamp | cdDate }}</td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold col-sm-1">Size</td>
-        <td class="col-sm-3">{{ selectedItem.size | dimlessBinary }}</td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold col-sm-1">Objects</td>
-        <td class="col-sm-3">{{ selectedItem.num_objs | dimless }}</td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold col-sm-1">Object size</td>
-        <td class="col-sm-3">{{ selectedItem.obj_size | dimlessBinary }}</td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold col-sm-1">Features</td>
-        <td class="col-sm-3">
-          <span *ngFor="let feature of selectedItem.features_name">
-            <span class="badge badge-pill badge-primary margin-right-sm">{{ feature }}</span>
-          </span>
-        </td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold col-sm-1">Provisioned</td>
-        <td class="col-sm-3">
-          <span *ngIf="selectedItem.features_name?.indexOf('fast-diff') === -1">
-          <span class="text-muted"
-                [tooltip]="usageNotAvailableTooltipTpl"
-                placement="right">N/A</span>
-        </span>
-          <span *ngIf="selectedItem.features_name?.indexOf('fast-diff') !== -1">
-          {{ selectedItem.disk_usage | dimlessBinary }}
-        </span>
-        </td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold col-sm-1">Total provisioned</td>
-        <td class="col-sm-3">
-          <span *ngIf="selectedItem.features_name?.indexOf('fast-diff') === -1">
-          <span class="text-muted"
-                [tooltip]="usageNotAvailableTooltipTpl"
-                placement="right">N/A</span>
-        </span>
-          <span *ngIf="selectedItem.features_name?.indexOf('fast-diff') !== -1">
-          {{ selectedItem.total_disk_usage | dimlessBinary }}
-        </span>
-        </td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold col-sm-1">Striping unit</td>
-        <td class="col-sm-3">{{ selectedItem.stripe_unit | dimlessBinary }}</td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold col-sm-1">Striping count</td>
-        <td class="col-sm-3">{{ selectedItem.stripe_count }}</td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold col-sm-1">Parent</td>
-        <td class="col-sm-3">
-          <span *ngIf="selectedItem.parent">{{ selectedItem.parent.pool_name }}/{{ selectedItem.parent.image_name }}@{{ selectedItem.parent.snap_name }}</span>
-          <span *ngIf="!selectedItem.parent">-</span>
-        </td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold col-sm-1">Block name prefix</td>
-        <td class="col-sm-3">{{ selectedItem.block_name_prefix }}</td>
-      </tr>
-      <tr>
-        <td i18n
-            class="bold col-sm-1">Order</td>
-        <td class="col-sm-3">{{ selectedItem.order }}</td>
-      </tr>
+        <tr>
+          <td i18n
+              class="bold col-sm-1">Name</td>
+          <td class="col-sm-3">{{ selectedItem.name }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold col-sm-1">Pool</td>
+          <td class="col-sm-3">{{ selectedItem.pool_name }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold col-sm-1">Data Pool</td>
+          <td class="col-sm-3">{{ selectedItem.data_pool | empty }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold col-sm-1">Created</td>
+          <td class="col-sm-3">{{ selectedItem.timestamp | cdDate }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold col-sm-1">Size</td>
+          <td class="col-sm-3">{{ selectedItem.size | dimlessBinary }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold col-sm-1">Objects</td>
+          <td class="col-sm-3">{{ selectedItem.num_objs | dimless }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold col-sm-1">Object size</td>
+          <td class="col-sm-3">{{ selectedItem.obj_size | dimlessBinary }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold col-sm-1">Features</td>
+          <td class="col-sm-3">
+            <span *ngFor="let feature of selectedItem.features_name">
+              <span class="badge badge-pill badge-primary margin-right-sm">{{ feature }}</span>
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold col-sm-1">Provisioned</td>
+          <td class="col-sm-3">
+            <span *ngIf="selectedItem.features_name?.indexOf('fast-diff') === -1">
+              <span class="text-muted"
+                    [tooltip]="usageNotAvailableTooltipTpl"
+                    placement="right"
+                    i18n>N/A</span>
+            </span>
+            <span *ngIf="selectedItem.features_name?.indexOf('fast-diff') !== -1">
+              {{ selectedItem.disk_usage | dimlessBinary }}
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold col-sm-1">Total provisioned</td>
+          <td class="col-sm-3">
+            <span *ngIf="selectedItem.features_name?.indexOf('fast-diff') === -1">
+              <span class="text-muted"
+                    [tooltip]="usageNotAvailableTooltipTpl"
+                    placement="right"
+                    i18n>N/A</span>
+            </span>
+            <span *ngIf="selectedItem.features_name?.indexOf('fast-diff') !== -1">
+              {{ selectedItem.total_disk_usage | dimlessBinary }}
+            </span>
+          </td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold col-sm-1">Striping unit</td>
+          <td class="col-sm-3">{{ selectedItem.stripe_unit | dimlessBinary }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold col-sm-1">Striping count</td>
+          <td class="col-sm-3">{{ selectedItem.stripe_count }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold col-sm-1">Parent</td>
+          <td class="col-sm-3">
+            <span *ngIf="selectedItem.parent">{{ selectedItem.parent.pool_name }}
+              /{{ selectedItem.parent.image_name }}
+              @{{ selectedItem.parent.snap_name }}</span>
+            <span *ngIf="!selectedItem.parent">-</span>
+          </td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold col-sm-1">Block name prefix</td>
+          <td class="col-sm-3">{{ selectedItem.block_name_prefix }}</td>
+        </tr>
+        <tr>
+          <td i18n
+              class="bold col-sm-1">Order</td>
+          <td class="col-sm-3">{{ selectedItem.order }}</td>
+        </tr>
       </tbody>
     </table>
   </tab>
