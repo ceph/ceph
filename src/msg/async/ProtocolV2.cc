@@ -2724,6 +2724,15 @@ CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
     return WRITE(bl, "wait", read_frame);
   }
 
+  if (exproto->peer_global_seq > peer_global_seq) {
+    ldout(cct, 1) << __func__ << " this is a stale connection, peer_global_seq="
+                  << peer_global_seq
+                  << " existing->peer_global_seq=" << exproto->peer_global_seq
+                  << ", ask client to retry global" << dendl;
+    RetryGlobalFrame retry(this, exproto->peer_global_seq);
+    return WRITE(retry.get_buffer(), "session retry", read_frame);
+  }
+
   if (existing->policy.lossy) {
     // existing connection can be thrown out in favor of this one
     ldout(cct, 1)
@@ -2735,9 +2744,13 @@ CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
     return send_server_ident();
   }
 
-  if (exproto->cookie) {  // Found previous session
+  if (exproto->cookie) {
+    // Found previous session
     // peer has reseted and we're going to reuse the existing connection
     // by replacing the communication socket
+    ldout(cct, 1) << __func__
+                  << " found previous session, peer must have reseted."
+                  << dendl;
     if (connection->policy.resetcheck) {
       exproto->reset_session();
     }
@@ -2745,9 +2758,9 @@ CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
   }
 
   if (exproto->state == READY || exproto->state == STANDBY) {
-    ldout(cct, 10) << __func__
-                   << " existing connection is READY/STANDBY, lets reuse it"
-                   << dendl;
+    ldout(cct, 1) << __func__
+                  << " existing connection is READY/STANDBY, lets reuse it"
+                  << dendl;
     return reuse_connection(existing, exproto, false);
   }
 
@@ -2757,16 +2770,16 @@ CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
           messenger->get_myaddrs().msgr2_addr() ||
       existing->policy.server) {
     // this connection wins
-    ldout(cct, 10) << __func__
-                   << " connection race detected, replacing existing="
-                   << existing << " socket by this connection's socket"
-                   << dendl;
+    ldout(cct, 1) << __func__
+                  << " connection race detected, replacing existing="
+                  << existing << " socket by this connection's socket"
+                  << dendl;
     return reuse_connection(existing, exproto, false);
   } else {
     // the existing connection wins
-    ldout(cct, 10) << __func__
-                   << " connection race detected, this connection loses"
-                   << dendl;
+    ldout(cct, 1) << __func__
+                  << " connection race detected, this connection loses"
+                  << dendl;
     ceph_assert(connection->peer_addrs->msgr2_addr() >
                 messenger->get_myaddrs().msgr2_addr());
 
