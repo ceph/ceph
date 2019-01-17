@@ -1,5 +1,7 @@
 tasks:
 - ceph:
     mon_bind_addrvec: false
-    log-whitelist:
-      - \(MON_MSGR2_NOT_ENABLED\)
+    mon_bind_msgr2: false
+    conf:
+      global:
+        ms bind msgr2: false
