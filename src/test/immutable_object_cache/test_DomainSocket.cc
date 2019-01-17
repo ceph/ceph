@@ -29,7 +29,8 @@ public:
   unordered_set<std::string> m_hit_entry_set;
 
   TestCommunication()
-    : m_cache_server(nullptr), m_cache_client(nullptr), m_local_path("/tmp/ceph_test_domain_socket"),
+    : m_cache_server(nullptr), m_cache_client(nullptr),
+      m_local_path("/tmp/ceph_test_domain_socket"),
       m_send_request_index(0), m_recv_ack_index(0)
     {}
 
@@ -40,8 +41,9 @@ public:
 
   void SetUp() override {
     std::remove(m_local_path.c_str());
-    m_cache_server = new CacheServer(g_ceph_context, m_local_path, [this](uint64_t xx, std::string yy ){
-        handle_request(xx, yy);
+    m_cache_server = new CacheServer(g_ceph_context, m_local_path,
+      [this](uint64_t sid, ObjectCacheRequest* req){
+        handle_request(sid, req);
     });
     ASSERT_TRUE(m_cache_server != nullptr);
     srv_thd = new std::thread([this]() {m_cache_server->run();});
@@ -50,7 +52,7 @@ public:
     ASSERT_TRUE(m_cache_client != nullptr);
     m_cache_client->run();
 
-    while(true) {
+    while (true) {
       if (0 == m_cache_client->connect()) {
         break;
       }
@@ -75,59 +77,60 @@ public:
     delete srv_thd;
   }
 
-  void handle_request(uint64_t session_id, std::string msg){
-    rbdsc_req_type_t *io_ctx = (rbdsc_req_type_t*)(msg.c_str());
+  void handle_request(uint64_t session_id, ObjectCacheRequest* req) {
 
-    switch (io_ctx->type) {
+    switch (req->m_head.type) {
       case RBDSC_REGISTER: {
-        io_ctx->type = RBDSC_REGISTER_REPLY;
-        m_cache_server->send(session_id, std::string((char*)io_ctx, msg.size()));
+        req->m_head.type = RBDSC_REGISTER_REPLY;
+        m_cache_server->send(session_id, req);
         break;
       }
       case RBDSC_READ: {
-        if (m_hit_entry_set.find(io_ctx->oid) == m_hit_entry_set.end()) {
-          io_ctx->type = RBDSC_READ_RADOS;
+        if (m_hit_entry_set.find(req->m_data.m_oid) == m_hit_entry_set.end()) {
+          req->m_head.type = RBDSC_READ_RADOS;
         } else {
-          io_ctx->type = RBDSC_READ_REPLY;
+          req->m_head.type = RBDSC_READ_REPLY;
         }
-        m_cache_server->send(session_id, std::string((char*)io_ctx, msg.size()));
+        m_cache_server->send(session_id, req);
         break;
       }
     }
   }
 
-   // times: message number
-   // queue_deqth : imitate message queue depth
-   // thinking : imitate handing message time
-   void startup_pingpong_testing(uint64_t times, uint64_t queue_depth, int thinking) {
-     m_send_request_index.store(0);
-     m_recv_ack_index.store(0);
-     for (uint64_t index = 0; index < times; index++) {
-       auto ctx = new FunctionContext([this, thinking, times](bool req){
-          if (thinking != 0) {
-            usleep(thinking); // handling message
-          }
-          m_recv_ack_index++;
-          if (m_recv_ack_index == times) {
-            m_wait_event.signal();
-          }
-       });
+  // times: message number
+  // queue_depth : imitate message queue depth
+  // thinking : imitate handing message time
+  void startup_pingpong_testing(uint64_t times, uint64_t queue_depth, int thinking) {
+    m_send_request_index.store(0);
+    m_recv_ack_index.store(0);
+    for (uint64_t index = 0; index < times; index++) {
+      auto ctx = new LambdaGenContext<std::function<void(ObjectCacheRequest*)>,
+       ObjectCacheRequest*>([this, thinking, times](ObjectCacheRequest* ack){
+         if (thinking != 0) {
+           usleep(thinking); // handling message
+         }
+         m_recv_ack_index++;
+         if (m_recv_ack_index == times) {
+           m_wait_event.signal();
+         }
+      });
 
-       // simple queue depth
-       while (m_send_request_index - m_recv_ack_index > queue_depth) {
-         usleep(1);
-       }
+      // simple queue depth
+      while (m_send_request_index - m_recv_ack_index > queue_depth) {
+        usleep(1);
+      }
 
-       m_cache_client->lookup_object("test_pool", "123456", ctx);
-       m_send_request_index++;
-     }
-     m_wait_event.wait();
-   }
+      m_cache_client->lookup_object("test_pool", "123456", ctx);
+      m_send_request_index++;
+    }
+    m_wait_event.wait();
+  }
 
   bool startup_lookupobject_testing(std::string pool_name, std::string object_id) {
     bool hit;
-    auto ctx = new FunctionContext([this, &hit](bool req){
-       hit = req;
+    auto ctx = new LambdaGenContext<std::function<void(ObjectCacheRequest*)>,
+        ObjectCacheRequest*>([this, &hit](ObjectCacheRequest* ack){
+       hit = ack->m_head.type == RBDSC_READ_REPLY;
        m_wait_event.signal();
     });
     m_cache_client->lookup_object(pool_name, object_id, ctx);
@@ -147,8 +150,6 @@ TEST_F(TestCommunication, test_pingpong) {
   startup_pingpong_testing(10, 16, 0);
   ASSERT_TRUE(m_send_request_index == m_recv_ack_index);
   startup_pingpong_testing(200, 128, 0);
-  ASSERT_TRUE(m_send_request_index == m_recv_ack_index);
-  startup_pingpong_testing(10000, 512, 0);
   ASSERT_TRUE(m_send_request_index == m_recv_ack_index);
 }
 

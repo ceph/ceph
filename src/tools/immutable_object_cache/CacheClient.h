@@ -32,7 +32,7 @@ public:
   int stop();
   int connect();
 
-  void lookup_object(ObjectCacheRequest* req);
+  void lookup_object(std::string pool_name, std::string oid, GenContext<ObjectCacheRequest*>* on_finish);
   void send_message();
   void try_send();
   void fault(const int err_type, const boost::system::error_code& err);
@@ -41,29 +41,28 @@ public:
   int register_client(Context* on_finish);
 
 private:
+  CephContext* cct;
   boost::asio::io_service m_io_service;
   boost::asio::io_service::work m_io_service_work;
   stream_protocol::socket m_dm_socket;
-  ClientProcessMsg m_client_process_msg;
   stream_protocol::endpoint m_ep;
   std::shared_ptr<std::thread> m_io_thread;
   std::atomic<bool> m_session_work;
-  CephContext* cct;
 
   bool m_use_dedicated_worker;
-  int m_worker_thread_num;
+  uint64_t m_worker_thread_num;
   boost::asio::io_service* m_worker;
   std::vector<std::thread*> m_worker_threads;
   boost::asio::io_service::work* m_worker_io_service_work;
 
-  char* m_header_buffer;
   std::atomic<bool> m_writing;
   std::atomic<bool> m_reading;
   std::atomic<uint64_t> m_sequence_id;
   Mutex m_lock;
-  bufferlist m_outcoming_bl;
   Mutex m_map_lock;
   std::map<uint64_t, ObjectCacheRequest*> m_seq_to_req;
+  bufferlist m_outcoming_bl;
+  char* m_header_buffer;
 };
 
 } // namespace immutable_obj_cache
