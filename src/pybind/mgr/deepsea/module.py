@@ -183,10 +183,10 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
             result = []
             if event_data['success']:
                 for node_name, service_info in event_data["return"].items():
-                    for service_type, daemon_name in service_info.items():
+                    for service_type, service_instance in service_info.items():
                         desc = orchestrator.ServiceDescription()
                         desc.nodename = node_name
-                        desc.daemon_name = daemon_name
+                        desc.service_instance = service_instance
                         desc.service_type = service_type
                         result.append(desc)
             return result

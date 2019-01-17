@@ -410,7 +410,7 @@ class ServiceDescription(object):
         # typically either based on hostnames or on pod names.
         # This is the <foo> in mds.<foo>, the ID that will appear
         # in the FSMap/ServiceMap.
-        self.daemon_name = None
+        self.service_instance = None
 
         # The type of service (osd, mon, mgr, etc.)
         self.service_type = None
@@ -436,7 +436,7 @@ class ServiceDescription(object):
         out = {
             'nodename': self.nodename,
             'container_id': self.container_id,
-            'daemon_name': self.daemon_name,
+            'service_instance': self.service_instance,
             'service_type': self.service_type,
             'version': self.version,
             'rados_config_location': self.rados_config_location,
