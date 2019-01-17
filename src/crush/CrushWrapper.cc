@@ -2440,6 +2440,7 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
 	weight_set->weights = (__u32*)realloc(weight_set->weights,
 					      new_size * sizeof(__u32));
       } else {
+        free(weight_set->weights);
 	weight_set->weights = NULL;
       }
       weight_set->size = new_size;
@@ -2451,6 +2452,7 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
       if (new_size) {
 	arg->ids = (__s32 *)realloc(arg->ids, new_size * sizeof(__s32));
       } else {
+        free(arg->ids);
 	arg->ids = NULL;
       }
       arg->ids_size = new_size;
