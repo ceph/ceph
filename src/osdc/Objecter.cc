@@ -2873,10 +2873,11 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   }
 
   bool unpaused = false;
-  if (t->paused && !target_should_be_paused(t)) {
-    t->paused = false;
+  bool should_be_paused = target_should_be_paused(t);
+  if (t->paused && !should_be_paused) {
     unpaused = true;
   }
+  t->paused = should_be_paused;
 
   bool legacy_change =
     t->pgid != pgid ||
