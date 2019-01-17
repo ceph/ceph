@@ -1,4 +1,3 @@
-astroid==1.6.1
 attrs==17.4.0
 backports.functools-lru-cache==1.4
 bcrypt==3.1.4
@@ -17,10 +16,9 @@ pbr==3.1.1
 pluggy==0.6.0
 portend==2.2
 py==1.5.2
-pycodestyle==2.3.1
+pycodestyle==2.4.0
 pycparser==2.18
 PyJWT==1.6.4
-pylint==1.8.2
 pyopenssl==17.5.0
 pytest==3.3.2
 pytest-cov==2.5.1
