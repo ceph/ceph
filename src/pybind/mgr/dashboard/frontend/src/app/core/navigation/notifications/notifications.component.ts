@@ -2,7 +2,6 @@ import { Component, NgZone, OnDestroy, OnInit } from '@angular/core';
 
 import * as _ from 'lodash';
 
-import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdNotification } from '../../../shared/models/cd-notification';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
@@ -19,7 +18,7 @@ export class NotificationsComponent implements OnInit, OnDestroy {
   private interval: number;
 
   constructor(
-    private notificationService: NotificationService,
+    public notificationService: NotificationService,
     private prometheusNotificationService: PrometheusNotificationService,
     private authStorageService: AuthStorageService,
     private prometheusAlertService: PrometheusAlertService,

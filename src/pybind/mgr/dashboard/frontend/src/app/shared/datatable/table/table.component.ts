@@ -199,7 +199,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }
     if (_.isInteger(this.autoReload) && this.autoReload > 0) {
       this.ngZone.runOutsideAngular(() => {
-        this.reloadSubscriber = observableTimer(0, this.autoReload).subscribe((x) => {
+        this.reloadSubscriber = observableTimer(0, this.autoReload).subscribe(() => {
           this.ngZone.run(() => {
             return this.reloadData();
           });
@@ -329,7 +329,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       .map((v, i) => ((_.isFunction(v) && v(value)) || v === value) && classes[i])
       .filter((x) => x)
       .join(' ');
-    return (!_.isEmpty(css) && css) || undefined;
+    return _.isEmpty(css) ? undefined : css;
   }
 
   ngOnChanges(changes) {
