@@ -411,7 +411,7 @@ class ServiceDescription(object):
         # in parallel. This tag refers to a group of daemons as a whole.
         #
         # For instance, a cluster of mds' all service the same fs, and they
-        # will all have the same service_group (which may be the
+        # will all have the same service value (which may be the
         # Filesystem name in the FSMap).
         #
         # Single-instance services should leave this set to None
