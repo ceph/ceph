@@ -4,7 +4,7 @@ import { ReactiveFormsModule, Validators } from '@angular/forms';
 import { PopoverModule } from 'ngx-bootstrap/popover';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SelectBadgesOption } from './select-badges-option.model';
 import { SelectBadgesComponent } from './select-badges.component';
 
@@ -20,7 +20,8 @@ describe('SelectBadgesComponent', () => {
 
   configureTestBed({
     declarations: [SelectBadgesComponent],
-    imports: [PopoverModule.forRoot(), TooltipModule, ReactiveFormsModule]
+    imports: [PopoverModule.forRoot(), TooltipModule, ReactiveFormsModule],
+    providers: i18nProviders
   });
 
   beforeEach(() => {

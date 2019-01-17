@@ -475,15 +475,15 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">60</context>
+          <context context-type="linenumber">59</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">187</context>
+          <context context-type="linenumber">186</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">211</context>
+          <context context-type="linenumber">210</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
@@ -875,7 +875,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
-          <context context-type="linenumber">49</context>
+          <context context-type="linenumber">44</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-trash-purge-modal/rbd-trash-purge-modal.component.html</context>
@@ -959,19 +959,19 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">68</context>
+          <context context-type="linenumber">67</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">92</context>
+          <context context-type="linenumber">91</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">118</context>
+          <context context-type="linenumber">117</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">166</context>
+          <context context-type="linenumber">165</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
@@ -1084,125 +1084,131 @@
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
           <context context-type="linenumber">3</context>
         </context-group>
+      </trans-unit><trans-unit id="490e15ecc922965b6d8194754c87c5583aa071f3" datatype="html">
+        <source>The name can only consist of alphanumeric characters, dashes and underscores.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
+          <context context-type="linenumber">37</context>
+        </context-group>
       </trans-unit><trans-unit id="9edc2b494e660618af3e5225f68d40b7ca67629c" datatype="html">
         <source>The chosen erasure code profile name is already in use.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">41</context>
+          <context context-type="linenumber">40</context>
         </context-group>
       </trans-unit><trans-unit id="ef9ff0e6227947b48dfab4ac39ade04af758913b" datatype="html">
         <source>Plugin</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">48</context>
+          <context context-type="linenumber">47</context>
         </context-group>
       </trans-unit><trans-unit id="dd69b31bce8f630eac1d4762b0bbcf72ce19d193" datatype="html">
         <source>Data chunks (k)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">76</context>
+          <context context-type="linenumber">75</context>
         </context-group>
       </trans-unit><trans-unit id="b0d26a6172d32cb81218fe2103c54a818cbc1189" datatype="html">
         <source>Must be equal to or greater than 2.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">95</context>
+          <context context-type="linenumber">94</context>
         </context-group>
       </trans-unit><trans-unit id="dab3a299ead121169b8e08ed618c3b6a2f66691b" datatype="html">
         <source>Coding chunks (m)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">103</context>
+          <context context-type="linenumber">102</context>
         </context-group>
       </trans-unit><trans-unit id="1e2773e5bd4948193f18f2361d663ecc3988c656" datatype="html">
         <source>Must be equal to or greater than 1.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">121</context>
+          <context context-type="linenumber">120</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">143</context>
+          <context context-type="linenumber">142</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">169</context>
+          <context context-type="linenumber">168</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">262</context>
+          <context context-type="linenumber">261</context>
         </context-group>
       </trans-unit><trans-unit id="6cde4c945a49a260c0a47bcc7cd956846930a5f7" datatype="html">
         <source>Durability estimator (c)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">130</context>
+          <context context-type="linenumber">129</context>
         </context-group>
       </trans-unit><trans-unit id="af668c2a095a979ea2b4e43cd82c2120ab56c21c" datatype="html">
         <source>Locality (l)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">152</context>
+          <context context-type="linenumber">151</context>
         </context-group>
       </trans-unit><trans-unit id="d455a110bf6d2235e314e295ce1dfeee93d3dff2" datatype="html">
         <source>Crush failure domain</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">176</context>
+          <context context-type="linenumber">175</context>
         </context-group>
       </trans-unit><trans-unit id="b74a495f041f7dd102eee5c0bbc9e03083b538ae" datatype="html">
         <source>Crush Locality</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">200</context>
+          <context context-type="linenumber">199</context>
         </context-group>
       </trans-unit><trans-unit id="a2f14a73f7a6e94479f67423cc51102da8d6f524" datatype="html">
         <source>None</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">214</context>
+          <context context-type="linenumber">213</context>
         </context-group>
       </trans-unit><trans-unit id="2981733b912b693a9dd9d915d6d34f4692cc874a" datatype="html">
         <source>Technique</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">227</context>
+          <context context-type="linenumber">226</context>
         </context-group>
       </trans-unit><trans-unit id="e0098b6e47b04ec817361f384ce81d454ba5c0bb" datatype="html">
         <source>Packetsize</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">249</context>
+          <context context-type="linenumber">248</context>
         </context-group>
       </trans-unit><trans-unit id="c0252cd81ca54d0a2f69ec9ccf4248e73df5aa4a" datatype="html">
         <source>Crush root</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">270</context>
+          <context context-type="linenumber">269</context>
         </context-group>
       </trans-unit><trans-unit id="1548d5c76f0406ddd1ba3c557e1e6db22e95b340" datatype="html">
         <source>Crush device class</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">287</context>
+          <context context-type="linenumber">286</context>
         </context-group>
       </trans-unit><trans-unit id="5e85feb6f9f0334366e46ee09ca6b8df52397432" datatype="html">
         <source>any</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">297</context>
+          <context context-type="linenumber">296</context>
         </context-group>
       </trans-unit><trans-unit id="03d84645f6e019c5a43909bbf2ea1696ee88332c" datatype="html">
         <source>Directory</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">309</context>
+          <context context-type="linenumber">308</context>
         </context-group>
       </trans-unit><trans-unit id="f6755cff4957d5c3c89bafce5651f1b6fa2b1fd9" datatype="html">
         <source>Add</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">327</context>
+          <context context-type="linenumber">326</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-s3-key-modal/rgw-user-s3-key-modal.component.html</context>
@@ -1212,7 +1218,7 @@
         <source>Close</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
-          <context context-type="linenumber">331</context>
+          <context context-type="linenumber">330</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-capability-modal/rgw-user-capability-modal.component.html</context>
@@ -1939,7 +1945,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">39</context>
+          <context context-type="linenumber">40</context>
         </context-group>
       </trans-unit><trans-unit id="128d6efb51d9ddc7c0cc695a2deeca5b9523f6e4" datatype="html">
         <source>There are no subusers.</source>
@@ -1975,7 +1981,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">133</context>
+          <context context-type="linenumber">134</context>
         </context-group>
       </trans-unit><trans-unit id="67c746c1ba9dab4351fedc4c7cba4e6d6b0dbc47" datatype="html">
         <source>S3</source>
@@ -2005,7 +2011,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">148</context>
+          <context context-type="linenumber">149</context>
         </context-group>
       </trans-unit><trans-unit id="a5193a8d59cd045c18ef9521f486a091dad1f513" datatype="html">
         <source>Add S3 key</source>
@@ -2027,7 +2033,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">48</context>
+          <context context-type="linenumber">49</context>
         </context-group>
       </trans-unit><trans-unit id="1d01eccdda47fc907c5be35bcb16d2dcd02b0270" datatype="html">
         <source>There are no capabilities.</source>
@@ -2049,7 +2055,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">60</context>
+          <context context-type="linenumber">61</context>
         </context-group>
       </trans-unit><trans-unit id="f50a33d3c339f8f4a465141f8caa5d2d8c005251" datatype="html">
         <source>Enabled</source>
@@ -2067,11 +2073,11 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">65</context>
+          <context context-type="linenumber">66</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">101</context>
+          <context context-type="linenumber">102</context>
         </context-group>
       </trans-unit><trans-unit id="6146e13ceca5fa5cc17b771b282fe5955f3d19fa" datatype="html">
         <source>Unlimited size</source>
@@ -2125,7 +2131,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">96</context>
+          <context context-type="linenumber">97</context>
         </context-group>
       </trans-unit><trans-unit id="449dca3d3a93ead418b0541ea81b0dda7e6483c2" datatype="html">
         <source>Welcome to Ceph!</source>
@@ -2435,11 +2441,11 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">70</context>
+          <context context-type="linenumber">71</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">106</context>
+          <context context-type="linenumber">107</context>
         </context-group>
       </trans-unit><trans-unit id="aa6fb95c355f172bda303de1ce2f38c251a149cf" datatype="html">
         <source>Unlimited</source>
@@ -2453,19 +2459,19 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">73</context>
+          <context context-type="linenumber">74</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">84</context>
+          <context context-type="linenumber">85</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">109</context>
+          <context context-type="linenumber">110</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">120</context>
+          <context context-type="linenumber">121</context>
         </context-group>
       </trans-unit><trans-unit id="ee862a800364b4d11f9b8cb9955a28a60f840a45" datatype="html">
         <source>Maximum objects</source>
@@ -2475,11 +2481,11 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">81</context>
+          <context context-type="linenumber">82</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">117</context>
+          <context context-type="linenumber">118</context>
         </context-group>
       </trans-unit><trans-unit id="8011e20c5bbe51602d459a860fbf29b599b55edd" datatype="html">
         <source>System</source>
@@ -2487,11 +2493,17 @@
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
           <context context-type="linenumber">29</context>
         </context-group>
+      </trans-unit><trans-unit id="f120423a48cf96636bc415daf5ac041ea8c6503e" datatype="html">
+        <source>{VAR_SELECT, select, 0 {No} 1 {Yes} }</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
+          <context context-type="linenumber">31</context>
+        </context-group>
       </trans-unit><trans-unit id="db18a2772988415466a7f75dc42663ce78c9c1d3" datatype="html">
         <source>Maximum buckets</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">34</context>
+          <context context-type="linenumber">35</context>
         </context-group>
       </trans-unit><trans-unit id="ca53d681a9892d6fdbb57ee9676582186515e961" datatype="html">
         <source>Performance counters not available</source>
@@ -2713,57 +2725,48 @@
           <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
           <context context-type="linenumber">3</context>
         </context-group>
-      </trans-unit><trans-unit id="9a7ad2a407f63dbedcc82158886b8475dfd33114" datatype="html">
-        <source>To move</source>
+      </trans-unit><trans-unit id="86301cf2044b1eda218483365f6b9de8dde5040b" datatype="html">
+        <source>To move <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="&lt;kbd&gt;"/><x id="INTERPOLATION" equiv-text="{{ poolName }}"/>/<x id="INTERPOLATION_1" equiv-text="{{ imageName }}"/><x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="&lt;/kbd&gt;"/> to trash,
+          click <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="&lt;kbd&gt;"/>Move Image<x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="&lt;/kbd&gt;"/>. Optionally, you can pick an expiration date.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
-          <context context-type="linenumber">13</context>
-        </context-group>
-      </trans-unit><trans-unit id="be91c2ed9701d56ce78104953e56631139df0e9a" datatype="html">
-        <source>to trash, click</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
-          <context context-type="linenumber">15</context>
-        </context-group>
-      </trans-unit><trans-unit id="536b3205c0c0d4d21685ec06feccfcf2fe14deb1" datatype="html">
-        <source>Move Image</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
-          <context context-type="linenumber">16</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
-          <context context-type="linenumber">45</context>
-        </context-group>
-      </trans-unit><trans-unit id="3f69ac1e65136ebfcc3e5eb31810da33e0489ad6" datatype="html">
-        <source>Optionally, you can pick an expiration date.</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
-          <context context-type="linenumber">17</context>
+          <context context-type="linenumber">12</context>
         </context-group>
       </trans-unit><trans-unit id="88f27d390844aad53b4240360e928156c5f0d326" datatype="html">
         <source>Protection expires at</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
-          <context context-type="linenumber">23</context>
+          <context context-type="linenumber">18</context>
         </context-group>
       </trans-unit><trans-unit id="da166e9a0d27322f6ba8916d71ecc0f9905bb4b1" datatype="html">
         <source>NOT PROTECTED</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
-          <context context-type="linenumber">25</context>
+          <context context-type="linenumber">20</context>
         </context-group>
       </trans-unit><trans-unit id="a1506e5f2ca22cad14502ec7a20fb6113ace145d" datatype="html">
         <source>Wrong date format. Please use &quot;YYYY-MM-DD HH:mm:ss&quot;.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
-          <context context-type="linenumber">34</context>
+          <context context-type="linenumber">29</context>
         </context-group>
       </trans-unit><trans-unit id="aa7ea0bb7495281e0b3258467ac7d90a1e44a1a1" datatype="html">
         <source>Protection has already expired. Please pick a future date or leave it empty.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
-          <context context-type="linenumber">37</context>
+          <context context-type="linenumber">32</context>
+        </context-group>
+      </trans-unit><trans-unit id="536b3205c0c0d4d21685ec06feccfcf2fe14deb1" datatype="html">
+        <source>Move Image</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-trash-move-modal/rbd-trash-move-modal.component.html</context>
+          <context context-type="linenumber">40</context>
+        </context-group>
+      </trans-unit><trans-unit id="0f6e8f6094b180eaf1f11bc0ffe383f1cdcd059e" datatype="html">
+        <source>Only available for RBD images with <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="&lt;strong&gt;"/>fast-diff<x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="&lt;/strong&gt;"/> enabled</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
+          <context context-type="linenumber">2</context>
         </context-group>
       </trans-unit><trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
         <source>Pool</source>
@@ -2789,47 +2792,57 @@
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
           <context context-type="linenumber">57</context>
         </context-group>
+      </trans-unit><trans-unit id="84a36cb75660b736773fe36ffa3d54f0f0fe363e" datatype="html">
+        <source>N/A</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
+          <context context-type="linenumber">63</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
+          <context context-type="linenumber">78</context>
+        </context-group>
       </trans-unit><trans-unit id="e5c009342a4e8381f64341d0bb61c2e4685f5a4b" datatype="html">
         <source>Total provisioned</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
-          <context context-type="linenumber">71</context>
+          <context context-type="linenumber">72</context>
         </context-group>
       </trans-unit><trans-unit id="7f6bf8a43ae415f527ac961ea62471b983aaa97b" datatype="html">
         <source>Striping unit</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
-          <context context-type="linenumber">85</context>
+          <context context-type="linenumber">87</context>
         </context-group>
       </trans-unit><trans-unit id="db710e8a8f011923f2d15d713fbae49c38b02b26" datatype="html">
         <source>Striping count</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
-          <context context-type="linenumber">90</context>
+          <context context-type="linenumber">92</context>
         </context-group>
       </trans-unit><trans-unit id="3a4c2a9e76634ff14a60d52a718296f722d47c67" datatype="html">
         <source>Parent</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
-          <context context-type="linenumber">95</context>
+          <context context-type="linenumber">97</context>
         </context-group>
       </trans-unit><trans-unit id="6a209e68d78ffc2cc9c53d2e76158624efab71ad" datatype="html">
         <source>Block name prefix</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
-          <context context-type="linenumber">103</context>
+          <context context-type="linenumber">107</context>
         </context-group>
       </trans-unit><trans-unit id="5704ec2049d007c5f5fb495a5d8b607e68d58081" datatype="html">
         <source>Order</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
-          <context context-type="linenumber">108</context>
+          <context context-type="linenumber">112</context>
         </context-group>
       </trans-unit><trans-unit id="f21b1d17b6c5042bb5805516eee37fde33739dd8" datatype="html">
         <source>Snapshots</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
-          <context context-type="linenumber">115</context>
+          <context context-type="linenumber">119</context>
         </context-group>
       </trans-unit><trans-unit id="3f67f30568e9ae47507d46e28e1e82a7dca772e2" datatype="html">
         <source><x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> RBD Snapshot</source>
@@ -3375,6 +3388,10 @@
           <context context-type="sourcefile">src/app/ceph/block/rbd-list/rbd-list.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-actions.model.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="3747fff7faf52b436ecff5fb8555091736d92c70" datatype="html">
         <source>Flatten</source>
@@ -3390,15 +3407,62 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="7eb984588f4835f6d0187b33769b4b0f62821640" datatype="html">
-        <source>RBD snapshot rollback</source>
+      <trans-unit id="70a67e04629f6d412db0a12d51820b480788d795" datatype="html">
+        <source>Create</source>
         <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-list.component.ts</context>
+          <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-actions.model.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/auth/role-details/role-details.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/core/auth/role-form/role-form.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="e26f9cf3666aace4e524b1505c9795d76d87738d" datatype="html">
+        <source>Rename</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-actions.model.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="45480c03b0a3a37ff8f6a5600a6a034b40fbaea4" datatype="html">
+        <source>Protect</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-actions.model.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3ea9b96a21a499d296a7f25407da0f3df6c2d5ed" datatype="html">
+        <source>Unprotect</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-actions.model.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="54a4a3132b693575728a45a5f3154ad4c9af404b" datatype="html">
+        <source>Clone</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-actions.model.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
       <trans-unit id="4be22bf20ef82614ed53bcd3b912a85590aa71c9" datatype="html">
         <source>Rollback</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-actions.model.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7eb984588f4835f6d0187b33769b4b0f62821640" datatype="html">
+        <source>RBD snapshot rollback</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/rbd-snapshot-list/rbd-snapshot-list.component.ts</context>
           <context context-type="linenumber">1</context>
@@ -4433,17 +4497,6 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="70a67e04629f6d412db0a12d51820b480788d795" datatype="html">
-        <source>Create</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/core/auth/role-details/role-details.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/core/auth/role-form/role-form.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
       <trans-unit id="fe6ee93173884201ec62d62ba173c3de85ae177e" datatype="html">
         <source>Created role &apos;<x id="INTERPOLATION" equiv-text="{{role_name}}"/>&apos;</source>
         <context-group purpose="location">
@@ -4528,10 +4581,213 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="1d7fbcc3d5efc946ffbcf86fed04c4e20dda20fb" datatype="html">
+        <source>Each object is split in data-chunks parts, each stored on a different OSD.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="b1f8ed4e216585f1f9134740002ef3c8501debd8" datatype="html">
+        <source>Compute coding chunks for each object and store them on different OSDs.
+      The number of coding chunks is also the number of OSDs that can be down without losing data.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="c437ee74a9a8e781e1380153f742a685e3b8cc5e" datatype="html">
+        <source>The jerasure plugin is the most generic and flexible plugin,
+          it is also the default for Ceph erasure coded pools.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8c7e19322851402afa67e41f4f1d4e531caf1bf5" datatype="html">
+        <source>The more flexible technique is reed_sol_van : it is enough to set k
+          and m. The cauchy_good technique can be faster but you need to chose the packetsize
+          carefully. All of reed_sol_r6_op, liberation, blaum_roth, liber8tion are RAID6 equivalents
+          in the sense that they can only be configured with m=2.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="b1b11f49281b4e79219b4eecfbcb033cb15bd880" datatype="html">
+        <source>The encoding will be done on packets of bytes size at a time.
+          Chosing the right packet size is difficult.
+          The jerasure documentation contains extensive information on this topic.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="d9cb3bc07a25b26fbea457e0a7b543340bc13c49" datatype="html">
+        <source>With the jerasure plugin, when an erasure coded object is stored on
+          multiple OSDs, recovering from the loss of one OSD requires reading from all the others.
+          For instance if jerasure is configured with k=8 and m=4, losing one OSD requires reading
+          from the eleven others to repair.
+
+          The lrc erasure code plugin creates local parity chunks to be able to recover using
+          less OSDs. For instance if lrc is configured with k=8, m=4 and l=4, it will create
+          an additional parity chunk for every four OSDs. When a single OSD is lost, it can be
+          recovered with only four OSDs instead of eleven.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="813959d46e63a29bbd266b3af2ff9414c2ef553c" datatype="html">
+        <source>Group the coding and data chunks into sets of size locality. For instance,
+          for k=4 and m=2, when locality=3 two groups of three are created. Each set can
+          be recovered without reading chunks from another set.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="f0ff63d92e0a1b4d4b51e31b9133802d160a5f4c" datatype="html">
+        <source>The type of the crush bucket in which each set of chunks defined
+          by l will be stored. For instance, if it is set to rack, each group of l chunks will be
+          placed in a different rack. It is used to create a CRUSH rule step such as step choose
+          rack. If it is not set, no such grouping is done.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3ece48df9d1e9a98f98bf3c5cc66e8b637020a4d" datatype="html">
+        <source>The isa plugin encapsulates the ISA library. It only runs on Intel processors.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4472c9e31bfc7d96a83dc4afce0a6e885c99e839" datatype="html">
+        <source>The ISA plugin comes in two Reed Solomon forms.
+          If reed_sol_van is set, it is Vandermonde, if cauchy is set, it is Cauchy.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="fa385f5ecf63083ec848dca8dc5e52bdc72ac6f6" datatype="html">
+        <source>The shec plugin encapsulates the multiple SHEC library.
+          It allows ceph to recover data more efficiently than Reed Solomon codes.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="687b3cd94b3475c24ff4481d64d4739f902a377c" datatype="html">
+        <source>The number of parity chunks each of which includes each data chunk in its
+          calculation range. The number is used as a durability estimator. For instance, if c=2,
+          2 OSDs can be down without losing data.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="f3c4af6df91bdaabdb715f8f0b61a24faf73a3bc" datatype="html">
+        <source>The name of the crush bucket used for the first step of the CRUSH rule.
+      For instance step take default.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="e1059955a5ce65cdabf0c0a8207377e1f9bae57e" datatype="html">
+        <source>Ensure that no two chunks are in a bucket with the same failure
+      domain. For instance, if the failure domain is host no two chunks will be stored on the same
+      host. It is used to create a CRUSH rule step such as step chooseleaf host.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="ac392ac9c6da5fde6da80fc57b9c09402fb6e73d" datatype="html">
+        <source>Restrict placement to devices of a specific class
+      (e.g., ssd or hdd), using the crush device class names in the CRUSH map.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="62bcb9ae5583a088649b1adf5787a86ca3334f89" datatype="html">
+        <source>Set the directory name from which the erasure code plugin is loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/erasure-code-profile.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="a436c6a4025a749198e93cac239de8deede72211" datatype="html">
+        <source>-- Select the priority --</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/osd.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="9556266f0a2b1762a44b686f2bb21dbfefb01c12" datatype="html">
+        <source>Low</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/osd.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="72279141a67cc042d9864102b703216cc8a428a3" datatype="html">
+        <source>High</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/api/osd.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="c43dc1967a603fefb886149ac35863a06d5b4ce5" datatype="html">
         <source>Information</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/components/info-panel/info-panel.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5c2114c69efd7a972c62db45f99b8b7550a5b673" datatype="html">
+        <source>There are no items.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/select-badges/select-badges-messages.model.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2c1e52ee832661b4a0f570877d24661736b16af1" datatype="html">
+        <source>Deselect item to select again</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/select-badges/select-badges-messages.model.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="c8c9c6e5918659336824bbdda3501c66eaa79a4c" datatype="html">
+        <source>Selection limit reached</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/select-badges/select-badges-messages.model.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="02d184c288f567825a1fcbf83bcd3099a10853d5" datatype="html">
+        <source>Filter tags</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/select-badges/select-badges-messages.model.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="aa00748e49c269956837d6f3acdd8d218796a8d8" datatype="html">
+        <source>Add badge</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/select-badges/select-badges-messages.model.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="24c4d50fe8567de381a20a1745f1b6d37eacaa90" datatype="html">
+        <source>Failed to <x id="INTERPOLATION" equiv-text="{{failure}}"/> <x id="INTERPOLATION_1" equiv-text="{{metadata}}"/></source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/services/task-message.service.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>

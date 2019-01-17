@@ -9,13 +9,8 @@
           [formGroup]="moveForm"
           novalidate>
       <div class="modal-body">
-        <p>
-          <ng-container i18n>To move</ng-container>&nbsp;
-          <kbd>{{ poolName }}/{{ imageName }}</kbd>&nbsp;
-          <ng-container i18n>to trash, click</ng-container>&nbsp;
-          <kbd i18n>Move Image</kbd>.&nbsp;
-          <ng-container i18n>Optionally, you can pick an expiration date.</ng-container>
-        </p>
+        <p i18n>To move <kbd>{{ poolName }}/{{ imageName }}</kbd> to trash,
+          click <kbd>Move Image</kbd>. Optionally, you can pick an expiration date.</p>
 
         <div class="form-group"
              [ngClass]="{'has-error': moveForm.showError('expiresAt', formDir)}">

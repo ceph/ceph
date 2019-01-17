@@ -33,9 +33,8 @@
               *ngIf="form.showError('name', frm, 'required')"
               i18n>This field is required!</span>
         <span class="help-block"
-              *ngIf="form.showError('name', frm, 'pattern')">
-          The name can only consist of alphanumeric characters, dashes and underscores.
-        </span>
+              *ngIf="form.showError('name', frm, 'pattern')"
+              i18n>The name can only consist of alphanumeric characters, dashes and underscores.</span>
         <span class="help-block"
               *ngIf="form.showError('name', frm, 'uniqueName')"
               i18n>The chosen erasure code profile name is already in use.</span>

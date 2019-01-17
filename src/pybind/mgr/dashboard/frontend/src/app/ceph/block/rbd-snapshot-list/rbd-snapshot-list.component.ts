@@ -77,7 +77,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     private i18n: I18n
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
-    const actions = new RbdSnapshotActionsModel();
+    const actions = new RbdSnapshotActionsModel(this.i18n);
     actions.create.click = () => this.openCreateSnapshotModal();
     actions.rename.click = () => this.openEditSnapshotModal();
     actions.protect.click = () => this.toggleProtection();
