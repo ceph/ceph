@@ -32,6 +32,7 @@ class Grafana(BaseController):
     def validation(self, params):
         grafana = GrafanaRestClient()
         method = 'GET'
-        url = Settings.GRAFANA_API_URL + '/api/dashboards/uid/' + params
+        url = Settings.GRAFANA_API_URL.rstrip('/') + \
+            '/api/dashboards/uid/' + params
         response = grafana.url_validation(method, url)
         return response
