@@ -732,6 +732,32 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     pending_map.set_rank(name, rank);
     pending_map.last_changed = ceph_clock_now();
     propose = true;
+  } else if (prefix == "mon enable-msgr2") {
+    if (!monmap.get_required_features().contains_all(
+	  ceph::features::mon::FEATURE_NAUTILUS)) {
+      err = -EACCES;
+      ss << "all monitors must be running nautilus to enable v2";
+      goto reply;
+    }
+    for (auto& i : pending_map.mon_info) {
+      if (i.second.public_addrs.v.size() == 1 &&
+	  i.second.public_addrs.front().is_legacy() &&
+	  i.second.public_addrs.front().get_port() == CEPH_MON_PORT_LEGACY) {
+	entity_addrvec_t av;
+	entity_addr_t a = i.second.public_addrs.front();
+	a.set_type(entity_addr_t::TYPE_MSGR2);
+	a.set_port(CEPH_MON_PORT_IANA);
+	av.v.push_back(a);
+	av.v.push_back(i.second.public_addrs.front());
+	dout(10) << " setting mon." << i.first
+		 << " addrs " << i.second.public_addrs
+		 << " -> " << av << dendl;
+	pending_map.set_addrvec(i.first, av);
+	propose = true;
+	pending_map.last_changed = ceph_clock_now();
+      }
+    }
+    err = 0;
   } else {
     ss << "unknown command " << prefix;
     err = -EINVAL;

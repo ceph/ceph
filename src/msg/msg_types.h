@@ -609,6 +609,14 @@ struct entity_addrvec_t {
     }
     return entity_addr_t();
   }
+  bool has_msgr2() const {
+    for (auto& a : v) {
+      if (a.is_msgr2()) {
+	return true;
+      }
+    }
+    return false;
+  }
 
   bool parse(const char *s, const char **end = 0);
 
