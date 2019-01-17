@@ -1225,24 +1225,29 @@ namespace crimson {
 	  }
 	}
 
-	Counter erase_num = 0;
+	Counter erased_num = 0;
 	if (erase_point > 0 || idle_point > 0) {
 	  for (auto i = client_map.begin(); i != client_map.end(); /* empty */) {
 	    auto i2 = i++;
-	    if (erase_point && erase_num < erase_max &&
+	    if (erase_point &&
+	        erased_num < erase_max &&
 	        i2->second->last_tick <= erase_point) {
 	      delete_from_heaps(i2->second);
 	      client_map.erase(i2);
-	      erase_num++;
+	      erased_num++;
 	    } else if (idle_point && i2->second->last_tick <= idle_point) {
 	      i2->second->idle = true;
 	    }
 	  } // for
 
-	  if (erase_num < erase_max) {
-	      // clean finished, refresh
-	      last_erase_point = 0;
+	  auto wperiod = check_time;
+	  if (erased_num >= erase_max) {
+	    wperiod = duration_cast<milliseconds>(aggressive_check_time);
+	  } else {
+	    // clean finished, refresh
+	    last_erase_point = 0;
 	  }
+	  cleaning_job->try_update(wperiod);
 	} // if
       } // do_clean
 

@@ -73,6 +73,12 @@ void crimson::RunEvery::join() {
   thd.join();
 }
 
+// mtx must be held by caller
+void crimson::RunEvery::try_update(milliseconds _wait_period) {
+  if (_wait_period != wait_period) {
+    wait_period = _wait_period;
+  }
+}
 
 void crimson::RunEvery::run() {
   Lock l(mtx);
