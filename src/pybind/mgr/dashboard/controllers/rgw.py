@@ -2,16 +2,17 @@
 from __future__ import absolute_import
 
 import json
+
 import cherrypy
 
 from . import ApiController, BaseController, RESTController, Endpoint, \
-              ReadPermission
+    ReadPermission
 from .. import logger
+from ..exceptions import DashboardException
+from ..rest_client import RequestException
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.rgw_client import RgwClient
-from ..rest_client import RequestException
-from ..exceptions import DashboardException
 
 
 @ApiController('/rgw', Scope.RGW)
@@ -25,21 +26,21 @@ class Rgw(BaseController):
             instance = RgwClient.admin_instance()
             # Check if the service is online.
             if not instance.is_service_online():
-                status['message'] = 'Failed to connect to the Object Gateway\'s Admin Ops API.'
-                raise RequestException(status['message'])
+                msg = 'Failed to connect to the Object Gateway\'s Admin Ops API.'
+                raise RequestException(msg)
             # Ensure the API user ID is known by the RGW.
             if not instance.user_exists():
-                status['message'] = 'The user "{}" is unknown to the Object Gateway.'.format(
+                msg = 'The user "{}" is unknown to the Object Gateway.'.format(
                     instance.userid)
-                raise RequestException(status['message'])
+                raise RequestException(msg)
             # Ensure the system flag is set for the API user ID.
             if not instance.is_system_user():
-                status['message'] = 'The system flag is not set for user "{}".'.format(
+                msg = 'The system flag is not set for user "{}".'.format(
                     instance.userid)
-                raise RequestException(status['message'])
+                raise RequestException(msg)
             status['available'] = True
-        except (RequestException, LookupError):
-            pass
+        except (RequestException, LookupError) as ex:
+            status['message'] = str(ex)
         return status
 
 
