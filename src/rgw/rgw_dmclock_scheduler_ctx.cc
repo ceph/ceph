@@ -156,3 +156,20 @@ PerfCountersRef build(CephContext *cct, const std::string& name)
 
 } // namespace queue_counters
 
+namespace throttle_counters {
+
+PerfCountersRef build(CephContext *cct, const std::string& name)
+{
+  if (!cct->_conf->throttler_perf_counter) {
+    return {};
+  }
+
+  PerfCountersBuilder b(cct, name, l_first, l_last);
+  b.add_u64(l_throttle, "throttle", "Requests throttled");
+
+  auto logger = PerfCountersRef{ b.create_perf_counters(), cct };
+  cct->get_perfcounters_collection()->add(logger.get());
+  return logger;
+}
+
+} // namespace throttle_counters

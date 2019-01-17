@@ -29,6 +29,16 @@ namespace queue_counters {
 
 } // namespace queue_counters
 
+namespace throttle_counters {
+  enum {
+        l_first = 437219,
+        l_throttle,
+        l_last
+  };
+
+  PerfCountersRef build(CephContext *cct, const std::string& name);
+} // namespace throttle
+
 namespace rgw::dmclock {
 
 /// array of per-client counters to serve as GetClientCounters
@@ -41,6 +51,18 @@ class ClientCounters {
     return clients[static_cast<size_t>(client)].get();
   }
 };
+
+class ThrottleCounters {
+  PerfCountersRef counters;
+public:
+  ThrottleCounters(CephContext* const cct,const std::string& name):
+    counters(throttle_counters::build(cct, name)) {}
+
+  PerfCounters* operator()() const {
+    return counters.get();
+  }
+};
+
 
 struct ClientSum {
   uint64_t count{0};
