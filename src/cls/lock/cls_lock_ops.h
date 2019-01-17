@@ -17,11 +17,15 @@ struct cls_lock_lock_op
   string description;
   utime_t duration;
   uint8_t flags;
+  int32_t bid_amount;
+  utime_t bid_duration;
 
-  cls_lock_lock_op() : type(LOCK_NONE), flags(0) {}
+  cls_lock_lock_op() :
+    type(LOCK_NONE), flags(0), bid_amount(-1), bid_duration()
+  {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 2, bl);
     encode(name, bl);
     uint8_t t = (uint8_t)type;
     encode(t, bl);
@@ -30,10 +34,13 @@ struct cls_lock_lock_op
     encode(description, bl);
     encode(duration, bl);
     encode(flags, bl);
+    encode(bid_amount, bl);
+    encode(bid_duration, bl);
     ENCODE_FINISH(bl);
   }
+
   void decode(bufferlist::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(2, 1, 1, bl);
     decode(name, bl);
     uint8_t t;
     decode(t, bl);
@@ -43,6 +50,13 @@ struct cls_lock_lock_op
     decode(description, bl);
     decode(duration, bl);
     decode(flags, bl);
+    if (struct_v >= 2) {
+      decode(bid_amount, bl);
+      decode(bid_duration, bl);
+    } else {
+      bid_amount = -1;
+      bid_duration = utime_t();
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

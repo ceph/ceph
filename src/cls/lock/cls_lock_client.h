@@ -13,17 +13,27 @@ namespace rados {
   namespace cls {
     namespace lock {
       extern void lock(librados::ObjectWriteOperation *rados_op,
-		       const std::string& name, ClsLockType type,
-		       const std::string& cookie, const std::string& tag,
-		       const std::string& description, const utime_t& duration,
-		       uint8_t flags);
+		       const std::string& name,
+		       ClsLockType type,
+		       const std::string& cookie,
+		       const std::string& tag,
+		       const std::string& description,
+		       const utime_t& duration,
+		       uint8_t flags,
+		       int32_t bid_amount = -1,
+		       const utime_t& bid_duration = utime_t());
 
       extern int lock(librados::IoCtx *ioctx,
 		      const std::string& oid,
-		      const std::string& name, ClsLockType type,
-		      const std::string& cookie, const std::string& tag,
-		      const std::string& description, const utime_t& duration,
-		      uint8_t flags);
+		      const std::string& name,
+		      ClsLockType type,
+		      const std::string& cookie,
+		      const std::string& tag,
+		      const std::string& description,
+		      const utime_t& duration,
+		      uint8_t flags,
+		      int32_t bid_amount = -1,
+		      const utime_t& bid_duration = utime_t());
 
       extern void unlock(librados::ObjectWriteOperation *rados_op,
 			 const std::string& name, const std::string& cookie);
@@ -73,10 +83,16 @@ namespace rados {
 	std::string description;
 	utime_t duration;
 	uint8_t flags;
+	int32_t bid_amount;
+	utime_t bid_duration;
 
       public:
 
-	Lock(const std::string& _n) : name(_n), flags(0) {}
+	Lock(const std::string& _n) : name(_n),
+				      flags(0),
+				      bid_amount(-1),
+				      bid_duration(utime_t())
+	{}
 
 	void set_cookie(const std::string& c) { cookie = c; }
 	void set_tag(const std::string& t) { tag = t; }
@@ -84,6 +100,11 @@ namespace rados {
 	void set_duration(const utime_t& e) { duration = e; }
 	void set_duration(const ceph::timespan& d) {
 	  duration = utime_t(ceph::real_clock::zero() + d);
+	}
+	void set_bid_amount(int32_t _amount) { bid_amount = _amount; }
+	void set_bid_duration(const utime_t& e) { bid_duration = e; }
+	void set_bid_duration(const ceph::timespan& d) {
+	  bid_duration = utime_t(ceph::real_clock::zero() + d);
 	}
 
 	void set_may_renew(bool renew) {
@@ -132,7 +153,41 @@ namespace rados {
 	int unlock(librados::IoCtx *ioctx, const std::string& oid);
 	int break_lock(librados::IoCtx *ioctx, const std::string& oid,
 		       const entity_name_t& locker);
-      };
+      }; // class Lock
+
+
+      template<typename T>
+      class BidSet {
+
+	static_assert(std::is_integral<T>::value, "Integral required.");
+
+	std::vector<T> bids;
+
+      public:
+
+	BidSet(T count, T start = 0, T factor = 1) {
+	  bids.reserve(count);
+	  for (T i = 0, v = start; i < count; ++i, v += factor) {
+	    bids.push_back(v);
+	  }
+	  shuffle();
+	}
+
+	T get_bid(T index) const {
+	  return bids.at(index);
+	}
+
+	void shuffle() {
+	  T count = bids.size();
+	  for (T i = count - 1; i >= 1; --i) {
+	    T swap = rand() % (i + 1);
+	    if (i != swap) {
+	      std::swap(bids[i], bids[swap]);
+	    }
+	  }
+	}
+      }; // class BidSet
+
 
     } // namespace lock
   }  // namespace cls

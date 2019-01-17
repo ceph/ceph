@@ -34,6 +34,8 @@ void cls_lock_lock_op::dump(Formatter *f) const
   f->dump_string("description", description);
   f->dump_stream("duration") << duration;
   f->dump_int("flags", (int)flags);
+  f->dump_int("bid_amount", int(bid_amount));
+  f->dump_stream("bid_duration") << bid_duration;
 }
 
 void cls_lock_lock_op::generate_test_instances(list<cls_lock_lock_op*>& o)
