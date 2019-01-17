@@ -169,7 +169,7 @@ class MixedType(MixedStrategy):
 
     def __init__(self, args, data_devs, journal_devs):
         super(MixedType, self).__init__(args, data_devs, journal_devs)
-        self.blank_ssds = []
+        self.blank_journal_devs = []
         self.journals_needed = len(self.data_devs) * self.osds_per_device
         self.journal_size = get_journal_size(args)
         self.system_vgs = lvm.VolumeGroups()
@@ -235,7 +235,7 @@ class MixedType(MixedStrategy):
         validators.has_common_vg(self.db_or_journal_devs)
 
         # find the common VG to calculate how much is available
-        self.common_vg = self.get_common_vg()
+        self.common_vg = self.get_common_vg(self.db_or_journal_devs)
 
         # find how many journals are possible from the common VG
         if self.common_vg:
@@ -244,13 +244,13 @@ class MixedType(MixedStrategy):
             common_vg_size = disk.Size(gb=0)
 
         # non-VG SSDs
-        self.vg_ssds = set([d for d in self.db_or_journal_devs if d.is_lvm_member])
-        self.blank_ssds = set(self.db_or_journal_devs).difference(self.vg_ssds)
-        self.total_blank_ssd_size = disk.Size(b=0)
-        for blank_ssd in self.blank_ssds:
-            self.total_blank_ssd_size += disk.Size(b=blank_ssd.lvm_size.b)
+        vg_ssds = set([d for d in self.db_or_journal_devs if d.is_lvm_member])
+        self.blank_journal_devs = set(self.db_or_journal_devs).difference(vg_ssds)
+        self.total_blank_journal_dev_size = disk.Size(b=0)
+        for blank_journal_dev in self.blank_journal_devs:
+            self.total_blank_journal_dev_size += disk.Size(b=blank_journal_dev.lvm_size.b)
 
-        self.total_available_journal_space = self.total_blank_ssd_size + common_vg_size
+        self.total_available_journal_space = self.total_blank_journal_dev_size + common_vg_size
 
         try:
             self.vg_extents = lvm.sizing(
@@ -283,11 +283,11 @@ class MixedType(MixedStrategy):
             # there isn't a common vg, so a new one must be created with all
             # the blank SSDs
             self.computed['vg'] = {
-                'devices': ", ".join([ssd.abspath for ssd in self.blank_ssds]),
+                'devices': ", ".join([ssd.abspath for ssd in self.blank_journal_devs]),
                 'parts': self.journals_needed,
                 'percentages': self.vg_extents['percentages'],
                 'sizes': self.journal_size.b.as_int(),
-                'size': self.total_blank_ssd_size.b.as_int(),
+                'size': self.total_blank_journal_dev_size.b.as_int(),
                 'human_readable_sizes': str(self.journal_size),
                 'human_readable_size': str(self.total_available_journal_space),
             }
@@ -317,15 +317,15 @@ class MixedType(MixedStrategy):
         Create vgs/lvs from the incoming set of devices, assign their roles
         (data, journal) and offload the OSD creation to ``lvm create``
         """
-        blank_ssd_paths = [d.abspath for d in self.blank_ssds]
+        blank_journal_dev_paths = [d.abspath for d in self.blank_journal_devs]
         data_vgs = dict([(osd['data']['path'], None) for osd in self.computed['osds']])
 
         # no common vg is found, create one with all the blank SSDs
         if not self.common_vg:
-            journal_vg = lvm.create_vg(blank_ssd_paths, name_prefix='ceph-journals')
+            journal_vg = lvm.create_vg(blank_journal_dev_paths, name_prefix='ceph-journals')
         # a vg exists that can be extended
-        elif self.common_vg and blank_ssd_paths:
-            journal_vg = lvm.extend_vg(self.common_vg, blank_ssd_paths)
+        elif self.common_vg and blank_journal_dev_paths:
+            journal_vg = lvm.extend_vg(self.common_vg, blank_journal_dev_paths)
         # one common vg with nothing else to extend can be used directly
         else:
             journal_vg = self.common_vg
