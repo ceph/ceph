@@ -95,22 +95,22 @@ class TestPromptBool(object):
     def test_trueish(self, response):
         fake_input = lambda x: response
         qx = 'what the what?'
-        assert util.prompt_bool(qx, _raw_input=fake_input) is True
+        assert util.prompt_bool(qx, input_=fake_input) is True
 
     @pytest.mark.parametrize('response', false_responses())
     def test_falseish(self, response):
         fake_input = lambda x: response
         qx = 'what the what?'
-        assert util.prompt_bool(qx, _raw_input=fake_input) is False
+        assert util.prompt_bool(qx, input_=fake_input) is False
 
     def test_try_again_true(self):
         responses = ['g', 'h', 'y']
         fake_input = lambda x: responses.pop(0)
         qx = 'what the what?'
-        assert util.prompt_bool(qx, _raw_input=fake_input) is True
+        assert util.prompt_bool(qx, input_=fake_input) is True
 
     def test_try_again_false(self):
         responses = ['g', 'h', 'n']
         fake_input = lambda x: responses.pop(0)
         qx = 'what the what?'
-        assert util.prompt_bool(qx, _raw_input=fake_input) is False
+        assert util.prompt_bool(qx, input_=fake_input) is False

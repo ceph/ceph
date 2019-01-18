@@ -2,6 +2,11 @@ import logging
 from math import floor
 from ceph_volume import terminal
 
+try:
+    input = raw_input  # pylint: disable=redefined-builtin
+except NameError:
+    pass
+
 logger = logging.getLogger(__name__)
 
 
@@ -78,12 +83,12 @@ def str_to_bool(val):
         raise ValueError("Invalid input value: %s" % val)
 
 
-def prompt_bool(question, _raw_input=None):
+def prompt_bool(question, input_=None):
     """
     Interface to prompt a boolean (or boolean-like) response from a user.
     Usually a confirmation.
     """
-    input_prompt = _raw_input or raw_input
+    input_prompt = input_ or input
     prompt_format = '--> {question} '.format(question=question)
     response = input_prompt(prompt_format)
     try:
@@ -92,4 +97,4 @@ def prompt_bool(question, _raw_input=None):
         terminal.error('Valid true responses are: y, yes, <Enter>')
         terminal.error('Valid false responses are: n, no')
         terminal.error('That response was invalid, please try again')
-        return prompt_bool(question, _raw_input=input_prompt)
+        return prompt_bool(question, input_=input_prompt)
