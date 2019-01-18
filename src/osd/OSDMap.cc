@@ -4327,8 +4327,6 @@ int OSDMap::calc_pg_upmaps(
   }
   OSDMap tmp;
   tmp.deepish_copy_from(*this);
-  float start_deviation = 0;
-  float end_deviation = 0;
   int num_changed = 0;
   map<int,set<pg_t>> pgs_by_osd;
   int total_pgs = 0;
@@ -4381,49 +4379,92 @@ int OSDMap::calc_pg_upmaps(
   ldout(cct, 10) << " osd_weight_total " << osd_weight_total << dendl;
   ldout(cct, 10) << " pgs_per_weight " << pgs_per_weight << dendl;
 
-  while (true) {
-    // osd deviation
-    float total_deviation = 0;
-    map<int,float> osd_deviation;       // osd, deviation(pgs)
-    multimap<float,int> deviation_osd;  // deviation(pgs), osd
+  if (max <= 0) {
+    lderr(cct) << __func__ << " abort due to max <= 0" << dendl;
+    return 0;
+  }
+  float decay_factor = 1.0 / float(max);
+  float stddev = 0;
+  map<int,float> osd_deviation;       // osd, deviation(pgs)
+  multimap<float,int> deviation_osd;  // deviation(pgs), osd
+  for (auto& i : pgs_by_osd) {
+    // make sure osd is still there (belongs to this crush-tree)
+    ceph_assert(osd_weight.count(i.first));
+    float target = osd_weight[i.first] * pgs_per_weight;
+    float deviation = (float)i.second.size() - target;
+    ldout(cct, 20) << " osd." << i.first
+                   << "\tpgs " << i.second.size()
+                   << "\ttarget " << target
+                   << "\tdeviation " << deviation
+                   << dendl;
+    osd_deviation[i.first] = deviation;
+    deviation_osd.insert(make_pair(deviation, i.first));
+    stddev += deviation * deviation;
+  }
+  while (max--) {
+    // build overfull and underfull
     set<int> overfull;
-    for (auto& i : pgs_by_osd) {
-      // make sure osd is still there (belongs to this crush-tree)
-      ceph_assert(osd_weight.count(i.first));
-      float target = osd_weight[i.first] * pgs_per_weight;
-      float deviation = (float)i.second.size() - target;
-      ldout(cct, 20) << " osd." << i.first
-		     << "\tpgs " << i.second.size()
-		     << "\ttarget " << target
-		     << "\tdeviation " << deviation
-		     << dendl;
-      osd_deviation[i.first] = deviation;
-      deviation_osd.insert(make_pair(deviation, i.first));
-      if (deviation >= 1.0)
-	overfull.insert(i.first);
-      total_deviation += abs(deviation);
-    }
-    if (num_changed == 0) {
-      start_deviation = total_deviation;
-    }
-    end_deviation = total_deviation;
-
-    // build underfull, sorted from least-full to most-average
     vector<int> underfull;
-    for (auto i = deviation_osd.begin();
-	 i != deviation_osd.end();
-	 ++i) {
-      if (i->first >= -.999)
-	break;
-      underfull.push_back(i->second);
+    bool abort = false;
+    float decay = 0;
+    int decay_count = 0;
+    while (overfull.empty()) {
+      for (auto i = deviation_osd.rbegin(); i != deviation_osd.rend(); i++) {
+        if (i->first >= (1.0 - decay))
+          overfull.insert(i->second);
+      }
+      if (!overfull.empty())
+        break;
+      decay_count++;
+      decay = decay_factor * decay_count;
+      if (decay >= 1.0) {
+        abort = true;
+        break;
+      }
+      ldout(cct, 10) << " decay_factor = " << decay_factor
+                     << " decay_count = " << decay_count
+                     << " decay = " << decay
+                     << dendl;
     }
-    ldout(cct, 10) << " total_deviation " << total_deviation
-		   << " overfull " << overfull
-		   << " underfull " << underfull << dendl;
-    if (overfull.empty() || underfull.empty())
+    if (abort) {
+      lderr(cct) << __func__ << " failed to build overfull aggressively" << dendl;
       break;
+    }
+
+    decay = 0;
+    decay_count = 0;
+    while (underfull.empty()) {
+      for (auto i = deviation_osd.begin(); i != deviation_osd.end(); i++) {
+        if (i->first >= (-.999 + decay))
+          break;
+        underfull.push_back(i->second);
+      }
+      if (!underfull.empty())
+        break;
+      decay_count++;
+      decay = decay_factor * decay_count;
+      if (decay >= .999) {
+        abort = true;
+        break;
+      }
+      ldout(cct, 10) << " decay_factor = " << decay_factor
+                     << " decay_count = " << decay_count
+                     << " decay = " << decay
+                     << dendl;
+    }
+    if (abort) {
+      lderr(cct) << __func__ << " failed to build underfull aggressively" << dendl;
+      break;
+    }
+
+    ldout(cct, 10) << " overfull " << overfull
+                   << " underfull " << underfull
+                   << dendl;
 
     // pick fullest
+    set<pg_t> to_unmap;
+    map<pg_t, mempool::osdmap::vector<pair<int32_t,int32_t>>> to_upmap;
+    auto temp_pgs_by_osd = pgs_by_osd;
     bool restart = false;
     for (auto p = deviation_osd.rbegin(); p != deviation_osd.rend(); ++p) {
       int osd = p->second;
@@ -4438,29 +4479,22 @@ int OSDMap::calc_pg_upmaps(
 		       << " < max ratio " << max_deviation_ratio << dendl;
 	break;
       }
-      int num_to_move = deviation;
-      ldout(cct, 10) << " osd." << osd << " move " << num_to_move << dendl;
-      if (num_to_move < 1)
-	break;
 
       set<pg_t>& pgs = pgs_by_osd[osd];
-
       // look for remaps we can un-remap
       for (auto pg : pgs) {
 	auto p = tmp.pg_upmap_items.find(pg);
 	if (p != tmp.pg_upmap_items.end()) {
 	  for (auto q : p->second) {
 	    if (q.second == osd) {
-	      ldout(cct, 10) << "  dropping pg_upmap_items " << pg
-			     << " " << p->second << dendl;
+	      ldout(cct, 10) << " will try unmap " << pg << " " << p->second
+                             << dendl;
+              to_unmap.insert(pg);
               for (auto i : p->second) {
-                pgs_by_osd[i.second].erase(pg);
-                pgs_by_osd[i.first].insert(pg);
+                temp_pgs_by_osd[i.second].erase(pg);
+                temp_pgs_by_osd[i.first].insert(pg);
               }
-	      tmp.pg_upmap_items.erase(p);
-	      pending_inc->old_pg_upmap_items.insert(pg);
-	      ++num_changed;
-	      restart = true;
+              restart = true;
               break;
 	    }
 	  }
@@ -4472,8 +4506,7 @@ int OSDMap::calc_pg_upmaps(
 	break;
 
       for (auto pg : pgs) {
-	if (tmp.pg_upmap.count(pg) ||
-	    tmp.pg_upmap_items.count(pg)) {
+	if (tmp.have_pg_upmaps(pg)) {
 	  ldout(cct, 20) << "  already remapped " << pg << dendl;
 	  continue;
 	}
@@ -4487,20 +4520,18 @@ int OSDMap::calc_pg_upmaps(
 	  continue;
 	}
 	ceph_assert(orig != out);
-	auto& rmi = tmp.pg_upmap_items[pg];
+	auto& rmi = to_upmap[pg];
 	for (unsigned i = 0; i < out.size(); ++i) {
 	  if (orig[i] != out[i]) {
 	    rmi.push_back(make_pair(orig[i], out[i]));
 	  }
 	}
         for (auto i : rmi) {
-          pgs_by_osd[i.first].erase(pg);
-          pgs_by_osd[i.second].insert(pg);
+          temp_pgs_by_osd[i.first].erase(pg);
+          temp_pgs_by_osd[i.second].insert(pg);
         }
-	pending_inc->new_pg_upmap_items[pg] = rmi;
-	ldout(cct, 10) << "  " << pg << " pg_upmap_items " << rmi << dendl;
+	ldout(cct, 10) << " will try upmap " << pg << " pg_upmap_items " << rmi << dendl;
 	restart = true;
-	++num_changed;
 	break;
       } // pg loop
       if (restart)
@@ -4510,14 +4541,54 @@ int OSDMap::calc_pg_upmaps(
     if (!restart) {
       ldout(cct, 10) << " failed to find any changes to make" << dendl;
       break;
-    }
-    if (--max == 0) {
-      ldout(cct, 10) << " hit max iterations, stopping" << dendl;
-      break;
+    } else {
+      float new_stddev = 0;
+      map<int,float> temp_osd_deviation;
+      multimap<float,int> temp_deviation_osd;
+      for (auto& i : temp_pgs_by_osd) {
+        // make sure osd is still there (belongs to this crush-tree)
+        ceph_assert(osd_weight.count(i.first));
+        float target = osd_weight[i.first] * pgs_per_weight;
+        float deviation = (float)i.second.size() - target;
+        ldout(cct, 20) << " osd." << i.first
+                       << "\tpgs " << i.second.size()
+                       << "\ttarget " << target
+                       << "\tdeviation " << deviation
+                       << dendl;
+        temp_osd_deviation[i.first] = deviation;
+        temp_deviation_osd.insert(make_pair(deviation, i.first));
+        new_stddev += deviation * deviation;
+      }
+      ldout(cct, 10) << " stddev " << stddev << " -> " << new_stddev << dendl;
+      if (new_stddev < stddev) {
+        // looks good, apply change
+        stddev = new_stddev;
+        pgs_by_osd = temp_pgs_by_osd;
+        osd_deviation = temp_osd_deviation;
+        deviation_osd = temp_deviation_osd;
+        for (auto& i : to_unmap) {
+          ldout(cct, 10) << " unmap pg " << i << dendl;
+          ceph_assert(tmp.pg_upmap_items.count(i));
+          tmp.pg_upmap_items.erase(i);
+          pending_inc->old_pg_upmap_items.insert(i);
+          ++num_changed;
+        }
+        for (auto& i : to_upmap) {
+          ldout(cct, 10) << " upmap pg " << i.first
+                         << " pg_upmap_items " << i.second
+                         << dendl;
+          ceph_assert(tmp.pg_upmap_items.count(i.first) == 0);
+          tmp.pg_upmap_items[i.first] = i.second;
+          pending_inc->new_pg_upmap_items[i.first] = i.second;
+          ++num_changed;
+        }
+      } else {
+        ldout(cct, 10) << " failed to find further changes to make" << dendl;
+        break;
+      }
     }
   }
-  ldout(cct, 10) << " start deviation " << start_deviation << dendl;
-  ldout(cct, 10) << " end deviation " << end_deviation << dendl;
+  ldout(cct, 10) << " num_changed = " << num_changed << dendl;
   return num_changed;
 }
 
