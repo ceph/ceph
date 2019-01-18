@@ -4,14 +4,14 @@ ceph-mgr orchestrator interface
 
 Please see the ceph-mgr module developer's guide for more information.
 """
-import time
-
 try:
-    from typing import TypeVar, Generic, List
+    from typing import TypeVar, Generic, List, Optional, Union
     T = TypeVar('T')
     G = Generic[T]
 except ImportError:
     T, G = object, object
+
+import time
 
 
 class _Completion(G):
@@ -183,6 +183,32 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def add_host(self, host):
+        # type: (str) -> WriteCompletion
+        """
+        Add a host to the orchestrator inventory.
+        :param host: hostname
+        """
+        raise NotImplementedError()
+
+    def remote_host(self, host):
+        # type: (str) -> WriteCompletion
+        """
+        Remove a host from the orchestrator inventory.
+        :param host: hostname
+        """
+        raise NotImplementedError()
+
+    def get_hosts(self):
+        # type: () -> ReadCompletion[List[InventoryNode]]
+        """
+        Report the hosts in the cluster.
+
+        The default implementation is extra slow.
+        :return: list of InventoryNodes
+        """
+        return self.get_inventory()
+
     def get_inventory(self, node_filter=None):
         # type: (InventoryFilter) -> ReadCompletion[List[InventoryNode]]
         """
@@ -229,8 +255,8 @@ class Orchestrator(object):
         assert not (service_name and service_id)
         raise NotImplementedError()
 
-    def create_osds(self, osd_spec):
-        # type: (OsdCreationSpec) -> WriteCompletion
+    def create_osds(self, drive_group, all_hosts):
+        # type: (DriveGroupSpec, List[str]) -> WriteCompletion
         """
         Create one or more OSDs within a single Drive Group.
 
@@ -239,12 +265,13 @@ class Orchestrator(object):
         finer-grained OSD feature enablement (choice of backing store,
         compression/encryption, etc).
 
-        :param osd_spec: OsdCreationSpec
+        :param drive_group: DriveGroupSpec
+        :param all_hosts: TODO, this is required because the orchestrator methods are not composable
         """
         raise NotImplementedError()
 
-    def replace_osds(self, osd_spec):
-        # type: (OsdCreationSpec) -> WriteCompletion
+    def replace_osds(self, drive_group):
+        # type: (DriveGroupSpec) -> WriteCompletion
         """
         Like create_osds, but the osd_id_claims must be fully
         populated.
@@ -459,38 +486,94 @@ class ServiceDescription(object):
         return {k: v for (k, v) in out.items() if v is not None}
 
 
+class DeviceSelection(object):
+    def __init__(self, paths=None, id_model=None, size=None, rotates=None, count=None):
+        # type: (List[str], str, str, bool, int) -> None
+        """
+        ephemeral drive group device specification
+
+        :param paths: abs paths to the devices.
+        :param id_model: A wildcard string. e.g: "SDD*"
+        :param size: Size specification of format LOW:HIGH.
+            Can also take the the form :HIGH, LOW:
+            or an exact value (as ceph-volume inventory reports)
+        :param rotates: is the drive rotating or not
+        :param count: if this is present limit the number of drives to this number.
+
+        Any attributes (even none) can be included in the device
+        specification structure.
+
+        TODO: translate from the user interface (Drive Groups) to an actual list of devices.
+        """
+        if paths is None:
+            paths = []
+        self.paths = paths  # type: List[str]
+        if self.paths and any(p is not None for p in [id_model, size, rotates, count]):
+            raise TypeError('`paths` and other parameters are mutually exclusive')
+
+        self.id_model = id_model
+        self.size = size
+        self.rotates = rotates
+        self.count = count
+
+    @classmethod
+    def from_json(cls, device_spec):
+        return cls(**device_spec)
+
+
 class DriveGroupSpec(object):
     """
     Describe a drive group in the same form that ceph-volume
     understands.
     """
-    def __init__(self, devices):
-        self.devices = devices
+    def __init__(self, host_pattern, data_devices, db_devices=None, wal_devices=None, journal_devices=None,
+                 osds_per_device=None, objectstore='bluestore', encrypted=False, db_slots=None,
+                 wal_slots=None):
+        # type: (str, DeviceSelection, Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], int, str, bool, int, int) -> ()
 
+        # concept of applying a drive group to a (set) of hosts is tightly
+        # linked to the drive group itself
+        #
+        # An fnmatch pattern to select hosts. Can also be a single host.
+        self.host_pattern = host_pattern
 
-class OsdCreationSpec(object):
-    """
-    Used during OSD creation.
+        self.data_devices = data_devices
+        self.db_devices = db_devices
+        self.wal_devices = wal_devices
+        self.journal_devices = journal_devices
 
-    The drive names used here may be ephemeral.
-    """
-    def __init__(self):
-        self.format = None  # filestore, bluestore
+        # Number of osd daemons per "DATA" device.
+        # To fully utilize nvme devices multiple osds are required.
+        self.osds_per_device = osds_per_device
 
-        self.node = None  # name of a node
+        assert objectstore in ('filestore', 'bluestore')
+        self.objectstore = objectstore
 
-        # List of device names
-        self.drive_group = None
+        self.encrypted = encrypted
 
+        self.db_slots = db_slots
+        self.wal_slots = wal_slots
+
+        # FIXME: needs ceph-volume support
         # Optional: mapping of drive to OSD ID, used when the
         # created OSDs are meant to replace previous OSDs on
         # the same node.
         self.osd_id_claims = {}
 
-        # Arbitrary JSON-serializable object.
-        # Maybe your orchestrator knows how to do something
-        # special like encrypting drives
-        self.extended = {}
+    @classmethod
+    def from_json(self, json_drive_group):
+        """
+        Initialize and verify 'Drive group' structure
+        :param json_drive_group: A valid json string with a Drive Group
+                                 specification
+        """
+        args = {k: (DeviceSelection.from_json(v) if k.endswith('_devices') else v) for k, v in
+                json_drive_group.items()}
+        return DriveGroupSpec(**args)
+
+    def hosts(self, all_hosts):
+        import fnmatch
+        return fnmatch.filter(all_hosts, self.host_pattern)
 
 
 class StatelessServiceSpec(object):
