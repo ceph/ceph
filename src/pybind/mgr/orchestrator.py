@@ -647,7 +647,10 @@ class InventoryDevice(object):
         self.type = None  # 'ssd', 'hdd', 'nvme'
         self.id = None  # unique within a node (or globally if you like).
         self.size = None  # byte integer.
-        self.extended = None  # arbitrary JSON-serializable object
+        self.rotates = False # indicates if it is a spinning disk
+        self.available = False # can be used to create a new OSD?
+        self.dev_id = None  # vendor/model
+        self.extended = {}  # arbitrary JSON-serializable object
 
         # If this drive is not empty, but is suitable for appending
         # additional journals, wals, or bluestore dbs, then report
@@ -655,7 +658,29 @@ class InventoryDevice(object):
         self.metadata_space_free = None
 
     def to_json(self):
-        return dict(type=self.type, blank=self.blank, id=self.id, size=self.size, **self.extended)
+        return dict(type=self.type, blank=self.blank, id=self.id,
+                    size=self.size, rotates=self.rotates,
+                    available=self.available, dev_id=self.dev_id,
+                    **self.extended)
+
+    def pretty_print(self, only_header=False):
+        """Print a human friendly line with the information of the device
+
+        :param only_header: Print only the name of the device attributes
+
+        Ex:
+        >  Device Path           Type       Size    Rotates  Available Model
+        >     /dev/sdc            hdd   50.00 GB       True       True ATA/QEMU
+
+        """
+        row_format = "  {0:<15} {1:>10} {2:>10} {3:>10} {4:>10} {5:<15}\n"
+        if only_header:
+            return row_format.format("Device Path", "Type", "Size", "Rotates",
+                                     "Available", "Model")
+        else:
+            return row_format.format(self.id, self.type, self.size,
+                                     str(self.rotates), str(self.available),
+                                     self.dev_id)
 
 
 class InventoryNode(object):
