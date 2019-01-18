@@ -1666,7 +1666,7 @@ void MDSRank::standby_replay_restart()
 {
   if (standby_replaying) {
     /* Go around for another pass of replaying in standby */
-    dout(4) << "standby_replay_restart (as standby)" << dendl;
+    dout(5) << "Restarting replay as standby-replay" << dendl;
     mdlog->get_journaler()->reread_head_and_probe(
       new C_MDS_StandbyReplayRestartFinish(
         this,
@@ -1695,7 +1695,11 @@ void MDSRank::standby_replay_restart()
 
 void MDSRank::replay_done()
 {
-  dout(1) << "replay_done" << (standby_replaying ? " (as standby)" : "") << dendl;
+  if (!standby_replaying) {
+    dout(1) << "Finished replaying journal" << dendl;
+  } else {
+    dout(5) << "Finished replaying journal as standby-replay" << dendl;
+  }
 
   if (is_standby_replay()) {
     // The replay was done in standby state, and we are still in that state
@@ -1717,7 +1721,7 @@ void MDSRank::replay_done()
 
     // Reformat and come back here
     if (mdlog->get_journaler()->get_stream_format() < g_conf->mds_journal_format) {
-        dout(4) << "reformatting journal on standbyreplay->replay transition" << dendl;
+        dout(4) << "reformatting journal on standby-replay->replay transition" << dendl;
         mdlog->reopen(new C_MDS_BootStart(this, MDS_BOOT_REPLAY_DONE));
         return;
     }
