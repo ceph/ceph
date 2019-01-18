@@ -3507,7 +3507,10 @@ int OSD::shutdown()
 #ifdef PG_DEBUG_REFS
   service.dump_live_pgids();
 #endif
+
+  osd_lock.Unlock();
   cct->_conf->remove_observer(this);
+  osd_lock.Lock();
 
   dout(10) << "syncing store" << dendl;
   enable_disable_fuse(true);
@@ -6596,6 +6599,22 @@ COMMAND("compact",
         "osd", "rw", "cli,rest")
 };
 
+namespace {
+  class unlock_guard {
+    Mutex& m;
+  public:
+    explicit unlock_guard(Mutex& mutex)
+      : m(mutex)
+    {
+      m.Unlock();
+    }
+    unlock_guard(unlock_guard&) = delete;
+    ~unlock_guard() {
+      m.Lock();
+    }
+  };
+}
+
 void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, bufferlist& data)
 {
   int r = 0;
@@ -6669,21 +6688,19 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     string args = argsvec.front();
     for (vector<string>::iterator a = ++argsvec.begin(); a != argsvec.end(); ++a)
       args += " " + *a;
-    osd_lock.Unlock();
+    unlock_guard unlock{osd_lock};
     r = cct->_conf->injectargs(args, &ss);
-    osd_lock.Lock();
   }
   else if (prefix == "config set") {
     std::string key;
     std::string val;
     cmd_getval(cct, cmdmap, "key", key);
     cmd_getval(cct, cmdmap, "value", val);
-    osd_lock.Unlock();
+    unlock_guard unlock{osd_lock};
     r = cct->_conf->set_val(key, val, true, &ss);
     if (r == 0) {
       cct->_conf->apply_changes(nullptr);
     }
-    osd_lock.Lock();
   }
   else if (prefix == "cluster_log") {
     vector<string> msg;
@@ -6977,6 +6994,7 @@ void OSD::do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, buffe
     cmd_getval(cct, cmdmap, "delay", delay);
     ostringstream oss;
     oss << delay;
+    unlock_guard unlock{osd_lock};
     r = cct->_conf->set_val("osd_recovery_delay_start", oss.str().c_str());
     if (r != 0) {
       ss << "kick_recovery_wq: error setting "
@@ -9980,6 +9998,7 @@ const char** OSD::get_tracked_conf_keys() const
 void OSD::handle_conf_change(const struct md_config_t *conf,
 			     const std::set <std::string> &changed)
 {
+  Mutex::Locker l(osd_lock);
   if (changed.count("osd_max_backfills")) {
     service.local_reserver.set_max(cct->_conf->osd_max_backfills);
     service.remote_reserver.set_max(cct->_conf->osd_max_backfills);
