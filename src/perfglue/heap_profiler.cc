@@ -52,6 +52,16 @@ void ceph_heap_release_free_memory()
   MallocExtension::instance()->ReleaseFreeMemory();
 }
 
+double ceph_heap_get_release_rate()
+{
+  return MallocExtension::instance()->GetMemoryReleaseRate();
+}
+
+void ceph_heap_set_release_rate(double val)
+{
+  MallocExtension::instance()->SetMemoryReleaseRate(val);
+}
+
 bool ceph_heap_get_numeric_property(
   const char *property, size_t *value)
 {
@@ -153,6 +163,18 @@ void ceph_heap_profiler_handle_command(const std::vector<std::string>& cmd,
   } else if (cmd.size() == 1 && cmd[0] == "release") {
     ceph_heap_release_free_memory();
     out << g_conf()->name << " releasing free RAM back to system.";
+  } else if (cmd.size() == 1 && cmd[0] == "get_release_rate") {
+    out << g_conf()->name << " release rate: " 
+	<< std::setprecision(4) << ceph_heap_get_release_rate() << "\n";
+  } else if (cmd.size() == 2 && cmd[0] == "set_release_rate") {
+    try {
+      double val = std::stod(cmd[1]);
+      ceph_heap_set_release_rate(val);
+      out << g_conf()->name <<  " release rate changed to: " 
+          << std::setprecision(4) << ceph_heap_get_release_rate() << "\n";
+    } catch (...) {
+      out << g_conf()->name <<  " *** need an numerical value. ";
+    }
   } else
 #endif
   if (cmd.size() == 1 && cmd[0] == "stats") {
