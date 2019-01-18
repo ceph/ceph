@@ -19,10 +19,11 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
     MODULE_OPTIONS = [
         {'name': 'orchestrator'}
     ]
+
     COMMANDS = [
         {
             'cmd': "orchestrator device ls "
-                   "name=host,type=CephString,req=false"
+                   "name=host,type=CephString,req=false "
                    "name=format,type=CephChoices,strings=json|plain,req=false ",
             "desc": "List devices on a node",
             "perm": "r"
@@ -136,23 +137,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def _list_devices(self, cmd):
         """
-        This (all lines starting with ">") is how it is supposed to work. As of
-        now, it's not yet implemented:
-        > :returns: Either JSON:
-        >     [
-        >       {
-        >         "name": "sda",
-        >         "host": "foo",
-        >         ... lots of stuff from ceph-volume ...
-        >         "stamp": when this state was refreshed
-        >       },
-        >     ]
-        >
-        > or human readable:
-        >
-        >     HOST  DEV  SIZE  DEVID(vendor\\_model\\_serial)   IN-USE  TIMESTAMP
-        >
-        > Note: needs ceph-volume on the host.
+        Provide information about storage devices present in cluster hosts
 
         Note: this does not have to be completely synchronous. Slightly out of
         date hardware inventory is fine as long as hardware ultimately appears
@@ -176,11 +161,17 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         else:
             # Return a human readable version
             result = ""
+
             for inventory_node in completion.result:
-                result += "{0}:\n".format(inventory_node.name)
+                result += "Host {0}:\n".format(inventory_node.name)
+
+                if inventory_node.devices:
+                    result += inventory_node.devices[0].pretty_print(only_header=True)
+                else:
+                    result += "No storage devices found"
+
                 for d in inventory_node.devices:
-                    result += "  {0} ({1}, {2}b)\n".format(
-                        d.id, d.type, d.size)
+                    result += d.pretty_print()
                 result += "\n"
 
             return HandleCommandResult(stdout=result)
