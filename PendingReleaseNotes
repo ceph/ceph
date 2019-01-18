@@ -148,3 +148,10 @@
   are configurable via `ceph fs set`. The MDS config options
   mds_session_timeout, mds_session_autoclose, and mds_max_file_size are now
   obsolete.
+
+* This release fixes the pg log hard limit bug(https://tracker.ceph.com/issues/23979).
+  A flag called pglog_hardlimit has been introduced. It is off by default.
+  This flag enables the feature that limits the length of the pg log. Users should run
+  'ceph osd set pglog_hardlimit' after completely upgrading to 12.2.11. Once all the OSDs
+  have this flag set, the length of the pg log will be capped by a hard limit. We do not
+  recommend unsetting this flag beyond this point.
