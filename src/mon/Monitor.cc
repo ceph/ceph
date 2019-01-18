@@ -3112,9 +3112,7 @@ void Monitor::handle_command(MonOpRequestRef op)
         paxos_service[PAXOS_MGR].get())->get_command_descs();
 
     for (auto& c : leader_mon_commands) {
-      if (!c.is_hidden()) {
-	commands.push_back(c);
-      }
+      commands.push_back(c);
     }
 
     auto features = m->get_connection()->get_features();
