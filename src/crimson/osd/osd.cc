@@ -46,6 +46,17 @@ OSD::OSD(int id, uint32_t nonce)
 
 OSD::~OSD() = default;
 
+seastar::future<> OSD::mkfs(uuid_d cluster_fsid, int whoami)
+{
+  CyanStore store{local_conf().get_val<std::string>("osd_data")};
+  uuid_d osd_fsid;
+  osd_fsid.generate_random();
+  store.write_meta("fsid", osd_fsid.to_string());
+  store.write_meta("ceph_fsid", cluster_fsid.to_string());
+  store.write_meta("whoami", std::to_string(whoami));
+  return seastar::now();
+}
+
 seastar::future<> OSD::start()
 {
   logger().info("start");
