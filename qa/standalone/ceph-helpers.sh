@@ -1137,6 +1137,35 @@ function test_get_not_primary() {
 
 #######################################################################
 
+function _objectstore_tool_nodown() {
+    local dir=$1
+    shift
+    local id=$1
+    shift
+    local osd_data=$dir/$id
+
+    local journal_args
+    if [ "$objectstore_type" == "filestore" ]; then
+	journal_args=" --journal-path $osd_data/journal"
+    fi
+    ceph-objectstore-tool \
+        --data-path $osd_data \
+        $journal_args \
+        "$@" || return 1
+}
+
+function _objectstore_tool_nowait() {
+    local dir=$1
+    shift
+    local id=$1
+    shift
+
+    kill_daemons $dir TERM osd.$id >&2 < /dev/null || return 1
+
+    _objectstore_tool_nodown $dir $id "$@" || return 1
+    activate_osd $dir $id $ceph_osd_args >&2 || return 1
+}
+
 ##
 # Run ceph-objectstore-tool against the OSD **id** using the data path
 # **dir**. The OSD is killed with TERM prior to running
@@ -1158,21 +1187,8 @@ function objectstore_tool() {
     shift
     local id=$1
     shift
-    local osd_data=$dir/$id
 
-    local osd_type=$(cat $osd_data/type)
-
-    kill_daemons $dir TERM osd.$id >&2 < /dev/null || return 1
-
-    local journal_args
-    if [ "$objectstore_type" == "filestore" ]; then
-	journal_args=" --journal-path $osd_data/journal"
-    fi
-    ceph-objectstore-tool \
-        --data-path $osd_data \
-        $journal_args \
-        "$@" || return 1
-    activate_osd $dir $id $ceph_osd_args >&2 || return 1
+    _objectstore_tool_nowait $dir $id "$@" || return 1
     wait_for_clean >&2
 }
 
