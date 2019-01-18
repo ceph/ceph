@@ -491,17 +491,18 @@ public:
   MDSRank *mds;
 
 protected:
-  version_t projected, committing, committed;
+  version_t projected = 0, committing = 0, committed = 0;
 public:
   map<int,xlist<Session*>* > by_state;
   uint64_t set_state(Session *session, int state);
   map<version_t, list<MDSInternalContextBase*> > commit_waiters;
   void update_average_session_age();
 
-  explicit SessionMap(MDSRank *m) : mds(m),
-		       projected(0), committing(0), committed(0),
-                       loaded_legacy(false)
-  { }
+  SessionMap() = delete;
+  explicit SessionMap(MDSRank *m)
+  :
+    mds(m)
+  {}
 
   ~SessionMap() override
   {
@@ -667,7 +668,7 @@ public:
 protected:
   std::set<entity_name_t> dirty_sessions;
   std::set<entity_name_t> null_sessions;
-  bool loaded_legacy;
+  bool loaded_legacy = false;
   void _mark_dirty(Session *session);
 public:
 
