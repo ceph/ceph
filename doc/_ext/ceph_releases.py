@@ -70,7 +70,7 @@ class CephReleases(Directive):
             trow += entry
 
             sorted_releases = sorted(info["releases"],
-                    key=lambda t: t["released"])
+                    key=lambda t: [t["released"]] + list(map(lambda v: int(v), t["version"].split("."))))
             oldest_release = sorted_releases[0]
             newest_release = sorted_releases[-1]
 
