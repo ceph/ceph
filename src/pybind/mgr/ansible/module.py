@@ -21,7 +21,7 @@ WAIT_PERIOD = 10
 # Name of the playbook used in the "get_inventory" method.
 # This playbook is expected to provide a list of storage devices in the host
 # where the playbook is executed.
-GET_STORAGE_DEVICES_CATALOG_PLAYBOOK = "host-disks.yml"
+GET_STORAGE_DEVICES_CATALOG_PLAYBOOK = "storage-inventory.yml"
 
 # Used in the create_osd method
 ADD_OSD_PLAYBOOK = "add-osd.yml"
@@ -119,19 +119,18 @@ class AnsibleReadOperation(orchestrator.ReadCompletion):
 
         processed_result = []
 
-        raw_result = self.pb_execution.get_result(self.event_filter)
 
-        if self.process_output:
-            processed_result = self.process_output(
-                                        raw_result,
-                                        self.ar_client,
-                                        self.pb_execution.play_uuid)
-        else:
-            processed_result = raw_result
+        if self._is_complete:
+            raw_result = self.pb_execution.get_result(self.event_filter)
 
-        #Clean objects to avoid problems between interpreters
-        self.pb_execution = None
-        self.ar_client = None
+            if self.process_output:
+                processed_result = self.process_output(
+                                            raw_result,
+                                            self.ar_client,
+                                            self.pb_execution.play_uuid,
+                                            self.log)
+            else:
+                processed_result = raw_result
 
         self._result = processed_result
 
@@ -196,6 +195,7 @@ class AnsibleChangeOperation(orchestrator.WriteCompletion):
 class Module(MgrModule, orchestrator.Orchestrator):
     """An Orchestrator that uses <Ansible Runner Service> to perform operations
     """
+
     MODULE_OPTIONS = [
         {'name': 'server_url'},
         {'name': 'username'},
@@ -278,7 +278,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         ansible_operation = AnsibleReadOperation(client = self.ar_client,
                                                  playbook = GET_STORAGE_DEVICES_CATALOG_PLAYBOOK,
                                                  logger = self.log,
-                                                 result_pattern = "RESULTS",
+                                                 result_pattern = "list storage inventory",
                                                  params = {})
 
         # Assign the process_output function
@@ -390,7 +390,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
 # Auxiliary functions
 #==============================================================================
 
-def process_inventory_json(inventory_events, ar_client, playbook_uuid):
+def process_inventory_json(inventory_events, ar_client, playbook_uuid, logger):
     """ Adapt the output of the playbook used in 'get_inventory'
         to the Orchestrator expected output (list of InventoryNode)
 
@@ -399,10 +399,10 @@ def process_inventory_json(inventory_events, ar_client, playbook_uuid):
         Example:
         inventory_events =
         {'37-100564f1-9fed-48c2-bd62-4ae8636dfcdb': {'host': '192.168.121.254',
-                                                    'task': 'RESULTS',
+                                                    'task': 'list storage inventory',
                                                     'event': 'runner_on_ok'},
         '36-2016b900-e38f-7dcd-a2e7-00000000000e': {'host': '192.168.121.252'
-                                                    'task': 'RESULTS',
+                                                    'task': 'list storage inventory',
                                                     'event': 'runner_on_ok'}}
     :param ar_client: Ansible Runner Service client
     :param playbook_uuid: Playbook identifier
@@ -414,7 +414,8 @@ def process_inventory_json(inventory_events, ar_client, playbook_uuid):
     inventory_nodes = []
 
     # Loop over the result events and request the event data
-    for event_key, data in inventory_events.items():
+    for event_key, dummy_data in inventory_events.items():
+
         event_response = ar_client.http_get(EVENT_DATA_URL % (playbook_uuid,
                                                               event_key))
 
@@ -422,21 +423,23 @@ def process_inventory_json(inventory_events, ar_client, playbook_uuid):
         if event_response:
             event_data = json.loads(event_response.text)["data"]["event_data"]
 
-            free_disks = event_data["res"]["disks_catalog"]
-            for item, data in free_disks.items():
-                if item not in [host.name for host in inventory_nodes]:
+            host = event_data["host"]
+            devices =  json.loads(event_data["res"]["stdout"])
 
-                    devs = []
-                    for dev_key, dev_data in data.items():
-                        if dev_key not in [device.id for device in devs]:
-                            dev = orchestrator.InventoryDevice()
-                            dev.id = dev_key
-                            dev.type = 'hdd' if dev_data["rotational"] else "sdd/nvme"
-                            dev.size = dev_data["sectorsize"] * dev_data["sectors"]
-                            devs.append(dev)
+            devs = []
+            for storage_device in devices:
+                dev = orchestrator.InventoryDevice()
+                dev.id = storage_device["path"]
+                dev.type = 'hdd' if storage_device["sys_api"]["rotational"] == "1" else 'sdd/nvme'
+                dev.size = storage_device["sys_api"]["human_readable_size"]
+                dev.rotates = storage_device["sys_api"]["rotational"] == "1"
+                dev.available = storage_device["available"]
+                dev.dev_id = "%s/%s" % (storage_device["sys_api"]["vendor"],
+                                        storage_device["sys_api"]["model"])
 
-                    inventory_nodes.append(
-                            orchestrator.InventoryNode(item, devs))
+                devs.append(dev)
+
+            inventory_nodes.append(orchestrator.InventoryNode(host, devs))
 
 
     return inventory_nodes
