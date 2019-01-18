@@ -2719,9 +2719,8 @@ CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
     ldout(cct, 1) << __func__
                   << " existing racing replace happened while replacing."
                   << " existing=" << existing << dendl;
-    WaitFrame wait;
-    bufferlist &bl = wait.get_buffer();
-    return WRITE(bl, "wait", read_frame);
+    RetryGlobalFrame retry(this, exproto->peer_global_seq);
+    return WRITE(retry.get_buffer(), "session retry", read_frame);
   }
 
   if (exproto->peer_global_seq > peer_global_seq) {
