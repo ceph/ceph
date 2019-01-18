@@ -8,8 +8,9 @@
 
 #include "auth/AuthClientHandler.h"
 #include "auth/AuthMethodList.h"
-#include "auth/KeyRing.h"
 #include "auth/RotatingKeyRing.h"
+
+#include "common/hostname.h"
 
 #include "crimson/auth/KeyRing.h"
 #include "crimson/common/config_proxy.h"
@@ -27,6 +28,7 @@
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonMap.h"
+#include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 
 namespace {
@@ -228,8 +230,9 @@ bool Connection::is_my_peer(const entity_addr_t& addr) const
 ceph::net::ConnectionRef Connection::get_conn() {
   return conn;
 }
+
 namespace {
-AuthMethodList create_auth_methods(uint32_t entity_type)
+auto create_auth_methods(uint32_t entity_type)
 {
   auto& conf = ceph::common::local_conf();
   std::string method;
@@ -244,15 +247,13 @@ AuthMethodList create_auth_methods(uint32_t entity_type)
   } else {
     method = conf.get_val<std::string>("auth_client_required");
   }
-  return AuthMethodList(nullptr, method);
+  return std::make_unique<AuthMethodList>(nullptr, method);
 }
 }
 
-Client::Client(const EntityName& name,
-               ceph::net::Messenger& messenger)
-  : entity_name{name},
-    auth_methods{create_auth_methods(entity_name.get_type())},
-    want_keys{CEPH_ENTITY_TYPE_MON |
+Client::Client(ceph::net::Messenger& messenger)
+  // currently, crimson is OSD-only
+  : want_keys{CEPH_ENTITY_TYPE_MON |
               CEPH_ENTITY_TYPE_OSD |
               CEPH_ENTITY_TYPE_MGR},
     timer{[this] { tick(); }},
@@ -262,9 +263,20 @@ Client::Client(const EntityName& name,
 Client::Client(Client&&) = default;
 Client::~Client() = default;
 
+seastar::future<> Client::start() {
+  entity_name = ceph::common::local_conf()->name;
+  // should always be OSD, though
+  auth_methods = create_auth_methods(entity_name.get_type());
+  return load_keyring().then([this] {
+    return monmap.build_initial(ceph::common::local_conf(), false);
+  }).then([this] {
+    return authenticate();
+  });
+}
+
 seastar::future<> Client::load_keyring()
 {
-  if (!auth_methods.is_supported_auth(CEPH_AUTH_CEPHX)) {
+  if (!auth_methods->is_supported_auth(CEPH_AUTH_CEPHX)) {
     return seastar::now();
   } else {
     return ceph::auth::load_from_keyring(&keyring).then([](KeyRing* keyring) {
@@ -446,9 +458,13 @@ std::vector<unsigned> Client::get_random_mons(unsigned n) const
     }
   }
   vector<unsigned> ranks;
-  for (const auto& m : monmap.mon_info) {
-    if (m.second.priority == min_priority) {
-      ranks.push_back(monmap.get_rank(m.first));
+  for (auto [name, info] : monmap.mon_info) {
+    // TODO: #msgr-v2
+    if (info.public_addrs.legacy_addr().is_blank_ip()) {
+      continue;
+    }
+    if (info.priority == min_priority) {
+      ranks.push_back(monmap.get_rank(name));
     }
   }
   std::random_device rd;
@@ -461,11 +477,6 @@ std::vector<unsigned> Client::get_random_mons(unsigned n) const
   }
 }
 
-seastar::future<> Client::build_initial_map()
-{
-  return monmap.build_initial(ceph::common::local_conf(), false);
-}
-
 seastar::future<> Client::authenticate()
 {
   return reopen_session(-1);
@@ -473,9 +484,7 @@ seastar::future<> Client::authenticate()
 
 seastar::future<> Client::stop()
 {
-  return tick_gate.close().finally([this] {
-    return timer.cancel();
-  }).then([this] {
+  return tick_gate.close().then([this] {
     if (active_con) {
       return active_con->close();
     } else {
@@ -503,7 +512,7 @@ seastar::future<> Client::reopen_session(int rank)
     auto& mc = pending_conns.emplace_back(conn, &keyring);
     return mc.authenticate(
       monmap.get_epoch(), entity_name,
-      auth_methods, want_keys).handle_exception([conn](auto ep) {
+      *auth_methods, want_keys).handle_exception([conn](auto ep) {
       return conn->close().then([ep = std::move(ep)] {
         std::rethrow_exception(ep);
       });
@@ -538,6 +547,49 @@ Client::run_command(const std::vector<std::string>& cmd,
   auto& req = mon_commands[tid];
   return active_con->get_conn()->send(m).then([&req] {
     return req.get_future();
+  });
+}
+
+seastar::future<> Client::send_message(MessageRef m)
+{
+  return active_con->get_conn()->send(m);
+}
+
+bool Client::sub_want(const std::string& what, version_t start, unsigned flags)
+{
+  return sub.want(what, start, flags);
+}
+
+void Client::sub_got(const std::string& what, version_t have)
+{
+  sub.got(what, have);
+}
+
+void Client::sub_unwant(const std::string& what)
+{
+  sub.unwant(what);
+}
+
+bool Client::sub_want_increment(const std::string& what,
+                                version_t start,
+                                unsigned flags)
+{
+  return sub.inc_want(what, start, flags);
+}
+
+seastar::future<> Client::renew_subs()
+{
+  if (!sub.have_new()) {
+    logger().warn("{} - empty", __func__);
+    return seastar::now();
+  }
+  logger().trace("{}", __func__);
+
+  auto m = make_message<MMonSubscribe>();
+  m->what = sub.get_subs();
+  m->hostname = ceph_get_short_hostname();
+  return active_con->get_conn()->send(m).then([this] {
+    sub.renewed();
   });
 }
 

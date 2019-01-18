@@ -34,21 +34,26 @@ SocketMessenger::SocketMessenger(const entity_name_t& myname,
   : Messenger{myname}, logic_name{logic_name}, nonce{nonce}
 {}
 
-void SocketMessenger::set_myaddr(const entity_addr_t& addr)
+void SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
 {
-  entity_addr_t my_addr = addr;
-  my_addr.nonce = nonce;
+  auto my_addrs = addrs;
+  for (auto& addr : my_addrs.v) {
+    addr.nonce = nonce;
+  }
   // TODO: propagate to all the cores of the Messenger
-  Messenger::set_myaddr(my_addr);
+  Messenger::set_myaddrs(my_addrs);
 }
 
-void SocketMessenger::bind(const entity_addr_t& addr)
+void SocketMessenger::bind(const entity_addrvec_t& addrs)
 {
+  // TODO: v2: listen on multiple addresses
+  auto addr = addrs.legacy_addr();
+
   if (addr.get_family() != AF_INET) {
     throw std::system_error(EAFNOSUPPORT, std::generic_category());
   }
 
-  set_myaddr(addr);
+  set_myaddrs(addrs);
 
   seastar::socket_address address(addr.in4_addr());
   seastar::listen_options lo;
@@ -125,7 +130,7 @@ void SocketMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   addr.u = peer_addr_for_me.u;
   addr.set_type(peer_addr_for_me.get_type());
   addr.set_port(get_myaddr().get_port());
-  set_myaddr(addr);
+  set_myaddrs(entity_addrvec_t{addr});
 }
 
 void SocketMessenger::set_default_policy(const SocketPolicy& p)

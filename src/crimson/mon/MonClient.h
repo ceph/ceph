@@ -9,7 +9,6 @@
 #include <seastar/core/lowres_clock.hh>
 #include <seastar/core/timer.hh>
 
-#include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
 
 #include "crimson/net/Dispatcher.h"
@@ -24,6 +23,7 @@ namespace ceph::net {
   class Messenger;
 }
 
+class AuthMethodList;
 class MAuthReply;
 struct MMonMap;
 struct MMonSubscribeAck;
@@ -37,9 +37,9 @@ namespace ceph::mon {
 class Connection;
 
 class Client : public ceph::net::Dispatcher {
-  const EntityName entity_name;
+  EntityName entity_name;
   KeyRing keyring;
-  AuthMethodList auth_methods;
+  std::unique_ptr<AuthMethodList> auth_methods;
   const uint32_t want_keys;
 
   MonMap monmap;
@@ -65,17 +65,21 @@ class Client : public ceph::net::Dispatcher {
   MonSub sub;
 
 public:
-  Client(const EntityName& name,
-	 ceph::net::Messenger& messenger);
+  Client(ceph::net::Messenger& messenger);
   Client(Client&&);
   ~Client();
-  seastar::future<> load_keyring();
-  seastar::future<> build_initial_map();
-  seastar::future<> authenticate();
+  seastar::future<> start();
   seastar::future<> stop();
+
   get_version_t get_version(const std::string& map);
   command_result_t run_command(const std::vector<std::string>& cmd,
 			       const bufferlist& bl);
+  seastar::future<> send_message(MessageRef);
+  bool sub_want(const std::string& what, version_t start, unsigned flags);
+  void sub_got(const std::string& what, version_t have);
+  void sub_unwant(const std::string& what);
+  bool sub_want_increment(const std::string& what, version_t start, unsigned flags);
+  seastar::future<> renew_subs();
 
 private:
   void tick();
@@ -95,6 +99,9 @@ private:
   seastar::future<> handle_config(Ref<MConfig> m);
 
 private:
+  seastar::future<> load_keyring();
+  seastar::future<> authenticate();
+
   bool is_hunting() const;
   seastar::future<> reopen_session(int rank);
   std::vector<unsigned> get_random_mons(unsigned n) const;
