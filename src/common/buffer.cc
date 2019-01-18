@@ -1814,8 +1814,12 @@ int buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std::st
   if (len > st.st_size - off) {
     len = st.st_size - off;
   }
-  lseek(fd, off, SEEK_SET);
-  ssize_t ret = safe_read(fd, (void*)this->c_str(), len);
+  ssize_t ret = lseek64(fd, off, SEEK_SET);
+  if (ret != off) {
+    return -errno;
+  }
+
+  ret = read_fd(fd, len);
   if (ret < 0) {
     std::ostringstream oss;
     oss << "bufferlist::read_file(" << fn << "): read error:"

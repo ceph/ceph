@@ -67,7 +67,7 @@ int ObjectCacheFile::read_object_from_file(ceph::bufferlist* read_buf, uint64_t 
   return read_buf->length();
 }
 
-uint64_t ObjectCacheFile::get_file_size() {
+int ObjectCacheFile::get_file_size() {
   struct stat buf;
   int temp_fd = ::open(m_name.c_str(), O_RDONLY);
   if(temp_fd < 0) {

@@ -29,7 +29,7 @@ public:
 
   int write_object_to_file(ceph::bufferlist read_buf, uint64_t object_len);
   int read_object_from_file(ceph::bufferlist* read_buf, uint64_t object_off, uint64_t object_len);
-  uint64_t get_file_size();
+  int get_file_size();
 
 private:
   CephContext *cct;
