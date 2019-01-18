@@ -30,7 +30,7 @@ function run() {
     export CEPH_MON="127.0.0.1:7121" # git grep '\<7121\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
-    CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--mon-host=$CEPH_MON --osd-objectstore=filestore"
 
     export -n CEPH_CLI_TEST_DUP_COMMAND
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
