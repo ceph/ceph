@@ -144,7 +144,7 @@ OSD management
 .. automethod:: Orchestrator.create_osds
 .. automethod:: Orchestrator.replace_osds
 .. automethod:: Orchestrator.remove_osds
-.. autoclass:: OsdCreationSpec
+.. autoclass:: DeviceSelection
 .. autoclass:: DriveGroupSpec
 
 Upgrades
