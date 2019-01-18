@@ -108,12 +108,12 @@
  *
  *  NONE      - no flag assigned
  *  NOFORWARD - command may not be forwarded
- *  OBSOLETE  - command is considered obsolete
+ *  OBSOLETE  - command is obsolete (fully usable, but hidden from CLI help)
  *  DEPRECATED - command is considered deprecated
  *  MGR       - command goes to ceph-mgr (for luminous+)
  *  POLL      - command is intended to be called periodically by the
  *              client (see iostat)
- *  HIDDEN    - command is hidden (no reported by help etc)
+ *  HIDDEN    - command is hidden (unusable by CLI, only usable via JSON)
  *
  * A command should always be first considered DEPRECATED before being
  * considered OBSOLETE, giving due consideration to users and conforming
@@ -282,7 +282,7 @@ COMMAND("versions",
  * MDS commands (MDSMonitor.cc)
  */
 
-COMMAND_WITH_FLAG("mds stat", "show MDS status", "mds", "r", FLAG(HIDDEN))
+COMMAND_WITH_FLAG("mds stat", "show MDS status", "mds", "r", FLAG(OBSOLETE))
 COMMAND_WITH_FLAG("mds dump "
 	"name=epoch,type=CephInt,req=false,range=0", \
 	"dump legacy MDS cluster info, optionally from epoch",
@@ -328,7 +328,7 @@ COMMAND_WITH_FLAG("mds set " \
 COMMAND_WITH_FLAG("mds set_state " \
 	"name=gid,type=CephInt,range=0 " \
 	"name=state,type=CephInt,range=0|20", \
-	"set mds state of <gid> to <numeric-state>", "mds", "rw", FLAG(HIDDEN))
+	"set mds state of <gid> to <numeric-state>", "mds", "rw", FLAG(OBSOLETE))
 COMMAND("mds fail name=role_or_gid,type=CephString", \
 	"Mark MDS failed: trigger a failover if a standby is available",
         "mds", "rw")
@@ -339,7 +339,7 @@ COMMAND("mds rm " \
 	"remove nonactive mds", "mds", "rw")
 COMMAND_WITH_FLAG("mds rmfailed name=role,type=CephString " \
         "name=yes_i_really_mean_it,type=CephBool,req=false", \
-	"remove failed rank", "mds", "rw", FLAG(HIDDEN))
+	"remove failed rank", "mds", "rw", FLAG(OBSOLETE))
 COMMAND_WITH_FLAG("mds cluster_down", "take MDS cluster down", "mds", "rw", FLAG(OBSOLETE))
 COMMAND_WITH_FLAG("mds cluster_up", "bring MDS cluster up", "mds", "rw", FLAG(OBSOLETE))
 COMMAND("mds compat rm_compat " \
