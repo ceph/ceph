@@ -140,8 +140,6 @@ struct Session : public RefCountedObject {
 
   ceph::spinlock sent_epoch_lock;
   epoch_t last_sent_epoch;
-  ceph::spinlock received_map_lock;
-  epoch_t received_map_epoch; // largest epoch seen in MOSDMap from here
 
   /// protects backoffs; orders inside Backoff::lock *and* PG::backoff_lock
   Mutex backoff_lock;
@@ -156,7 +154,7 @@ struct Session : public RefCountedObject {
     socket_addr(con_->get_peer_socket_addr()),
     wstate(cct),
     session_dispatch_lock("Session::session_dispatch_lock"),
-    last_sent_epoch(0), received_map_epoch(0),
+    last_sent_epoch(0),
     backoff_lock("Session::backoff_lock")
     {}
 
