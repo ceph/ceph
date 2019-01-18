@@ -697,6 +697,12 @@ void OSDMonitor::create_pending()
 
   dout(10) << "create_pending e " << pending_inc.epoch << dendl;
 
+  dout(20) << __func__ << " pending_inc:\n";
+  JSONFormatter jf(true);
+  jf.dump_object("inc", pending_inc);
+  jf.flush(*_dout);
+  *_dout << dendl;
+
   // safety checks (this shouldn't really happen)
   {
     if (osdmap.backfillfull_ratio <= 0) {
@@ -755,6 +761,12 @@ void OSDMonitor::create_pending()
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
   }
+
+  dout(20) << __func__ << " pending_inc:\n";
+  JSONFormatter jf(true);
+  jf.dump_object("inc", pending_inc);
+  jf.flush(*_dout);
+  *_dout << dendl;
 }
 
 creating_pgs_t
@@ -1019,6 +1031,12 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   dout(10) << "encode_pending e " << pending_inc.epoch
 	   << dendl;
 
+  dout(20) << __func__ << " pending_inc:\n";
+  JSONFormatter jf(true);
+  jf.dump_object("inc", pending_inc);
+  jf.flush(*_dout);
+  *_dout << dendl;
+  
   if (do_prune(t)) {
     dout(1) << __func__ << " osdmap full prune encoded e"
             << pending_inc.epoch << dendl;
@@ -1455,6 +1473,12 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     put_version_full(t, pending_inc.epoch, fullbl);
   }
 
+  dout(20) << __func__ << " final pending_inc:\n";
+  JSONFormatter jf(true);
+  jf.dump_object("inc", pending_inc);
+  jf.flush(*_dout);
+  *_dout << dendl;
+  
   // encode
   ceph_assert(get_last_committed() + 1 == pending_inc.epoch);
   bufferlist bl;
@@ -3207,6 +3231,13 @@ bool OSDMonitor::prepare_alive(MonOpRequestRef op)
 
   update_up_thru(from, m->version); // set to the latest map the OSD has
   wait_for_finished_proposal(op, new C_ReplyMap(this, op, m->version));
+
+  dout(20) << __func__ << " pending_inc:\n";
+  JSONFormatter jf(true);
+  jf.dump_object("inc", pending_inc);
+  jf.flush(*_dout);
+  *_dout << dendl;
+
   return true;
 }
 
