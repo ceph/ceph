@@ -1450,7 +1450,7 @@ CtPtr ProtocolV2::send_connect_message() {
 
   if (!authorizer) {
     authorizer =
-        messenger->ms_deliver_get_authorizer(connection->peer_type, false);
+        messenger->ms_deliver_get_authorizer(connection->peer_type);
   }
 
   ceph_msg_connect connect;

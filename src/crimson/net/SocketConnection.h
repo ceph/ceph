@@ -68,7 +68,6 @@ class SocketConnection : public Connection {
   struct Handshake {
     ceph_msg_connect connect;
     ceph_msg_connect_reply reply;
-    bool got_bad_auth = false;
     std::unique_ptr<AuthAuthorizer> authorizer;
     std::chrono::milliseconds backoff;
     uint32_t connect_seq = 0;

@@ -7035,7 +7035,7 @@ void OSD::ms_fast_preprocess(Message *m)
   }
 }
 
-bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
+bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer)
 {
   dout(10) << "OSD::ms_get_authorizer type=" << ceph_entity_type_name(dest_type) << dendl;
 
@@ -7046,16 +7046,6 @@ bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool for
 
   if (dest_type == CEPH_ENTITY_TYPE_MON)
     return true;
-
-  if (force_new) {
-    /* the MonClient checks keys every tick(), so we should just wait for that cycle
-       to get through */
-    auto timeout = g_conf().get_val<int64_t>("rotating_keys_renewal_timeout");
-    if (monc->wait_auth_rotating(timeout) < 0) {
-      derr << "OSD::ms_get_authorizer wait_auth_rotating failed" << dendl;
-      return false;
-    }
-  }
 
   *authorizer = monc->build_authorizer(dest_type);
   return *authorizer != NULL;

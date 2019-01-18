@@ -5859,8 +5859,7 @@ void Monitor::extract_save_mon_key(KeyRing& keyring)
   }
 }
 
-bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer,
-				bool force_new)
+bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer)
 {
   dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id)
 	   << dendl;

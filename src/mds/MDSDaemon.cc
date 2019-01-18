@@ -1169,7 +1169,7 @@ bool MDSDaemon::ms_dispatch2(const Message::ref &m)
   }
 }
 
-bool MDSDaemon::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new)
+bool MDSDaemon::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer)
 {
   dout(10) << "MDSDaemon::ms_get_authorizer type="
            << ceph_entity_type_name(dest_type) << dendl;
@@ -1177,12 +1177,6 @@ bool MDSDaemon::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bo
   /* monitor authorization is being handled on different layer */
   if (dest_type == CEPH_ENTITY_TYPE_MON)
     return true;
-
-  if (force_new) {
-    auto timeout = g_conf().get_val<int64_t>("rotating_keys_renewal_timeout");
-    if (monc->wait_auth_rotating(timeout) < 0)
-      return false;
-  }
 
   *authorizer = monc->build_authorizer(dest_type);
   return *authorizer != NULL;

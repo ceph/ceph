@@ -752,10 +752,10 @@ public:
    * @param force_new True if we want to wait for new keys, false otherwise.
    * @return A pointer to the AuthAuthorizer, if we have one; NULL otherwise
    */
-  AuthAuthorizer *ms_deliver_get_authorizer(int peer_type, bool force_new) {
+  AuthAuthorizer *ms_deliver_get_authorizer(int peer_type) {
     AuthAuthorizer *a = 0;
     for (const auto& dispatcher : dispatchers) {
-      if (dispatcher->ms_get_authorizer(peer_type, &a, force_new))
+      if (dispatcher->ms_get_authorizer(peer_type, &a))
 	return a;
     }
     return NULL;

@@ -51,8 +51,7 @@ public:
   bool ms_handle_reset(Connection *con) override { return false; }
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override { return false; }
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
-                         bool force_new) override;
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer) override;
   int init();
   void shutdown();
 };
