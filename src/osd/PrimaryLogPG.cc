@@ -1569,23 +1569,23 @@ void PrimaryLogPG::calc_trim_to()
   size_t target = cct->_conf->osd_min_pg_log_entries;
   if (is_degraded() ||
       state_test(PG_STATE_RECOVERING |
-		 PG_STATE_RECOVERY_WAIT |
-		 PG_STATE_BACKFILLING |
-		 PG_STATE_BACKFILL_WAIT |
-		 PG_STATE_BACKFILL_TOOFULL)) {
+                 PG_STATE_RECOVERY_WAIT |
+                 PG_STATE_BACKFILLING |
+                 PG_STATE_BACKFILL_WAIT |
+                 PG_STATE_BACKFILL_TOOFULL)) {
     target = cct->_conf->osd_max_pg_log_entries;
   }
 
-  eversion_t limit = MIN(
+  eversion_t limit = std::min(
     min_last_complete_ondisk,
     pg_log.get_can_rollback_to());
   if (limit != eversion_t() &&
       limit != pg_trim_to &&
       pg_log.get_log().approx_size() > target) {
-    size_t num_to_trim = MIN(pg_log.get_log().approx_size() - target,
-			     cct->_conf->osd_pg_log_trim_max);
+    size_t num_to_trim = std::min(pg_log.get_log().approx_size() - target,
+                             cct->_conf->osd_pg_log_trim_max);
     if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
-	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
+        cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
       return;
     }
     list<pg_log_entry_t>::const_iterator it = pg_log.get_log().log.begin();
@@ -1594,15 +1594,72 @@ void PrimaryLogPG::calc_trim_to()
       new_trim_to = it->version;
       ++it;
       if (new_trim_to > limit) {
-	new_trim_to = limit;
-	dout(10) << "calc_trim_to trimming to min_last_complete_ondisk" << dendl;
-	break;
+        new_trim_to = limit;
+        dout(10) << "calc_trim_to trimming to min_last_complete_ondisk" << dendl;
+        break;
       }
     }
     dout(10) << "calc_trim_to " << pg_trim_to << " -> " << new_trim_to << dendl;
     pg_trim_to = new_trim_to;
     assert(pg_trim_to <= pg_log.get_head());
     assert(pg_trim_to <= min_last_complete_ondisk);
+  }
+}
+
+void PrimaryLogPG::calc_trim_to_aggressive()
+{
+  size_t target = cct->_conf->osd_min_pg_log_entries;
+  if (is_degraded() ||
+      state_test(PG_STATE_RECOVERING |
+		 PG_STATE_RECOVERY_WAIT |
+		 PG_STATE_BACKFILLING |
+		 PG_STATE_BACKFILL_WAIT |
+		 PG_STATE_BACKFILL_TOOFULL)) {
+    target = cct->_conf->osd_max_pg_log_entries;
+  }
+  // limit pg log trimming up to the can_rollback_to value
+  eversion_t limit = std::min(
+    pg_log.get_head(),
+    pg_log.get_can_rollback_to());
+  dout(10) << __func__ << " limit = " << limit << dendl;
+
+  if (limit != eversion_t() &&
+      limit != pg_trim_to &&
+      pg_log.get_log().approx_size() > target) {
+    dout(10) << __func__ << " approx pg log length =  "
+             << pg_log.get_log().approx_size() << dendl;
+    size_t num_to_trim = std::min(pg_log.get_log().approx_size() - target,
+				  cct->_conf->osd_pg_log_trim_max);
+    dout(10) << __func__ << " num_to_trim =  " << num_to_trim << dendl;
+    if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
+	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
+      return;
+    }
+    auto it = pg_log.get_log().log.begin(); // oldest log entry
+    auto rit = pg_log.get_log().log.rbegin();
+    eversion_t by_n_to_keep; // start from tail
+    eversion_t by_n_to_trim = eversion_t::max(); // start from head
+    for (size_t i = 0; it != pg_log.get_log().log.end(); ++it, ++rit) {
+      i++;
+      if (i > target && by_n_to_keep == eversion_t()) {
+        by_n_to_keep = rit->version;
+      }
+      if (i >= num_to_trim && by_n_to_trim == eversion_t::max()) {
+        by_n_to_trim = it->version;
+      }
+      if (by_n_to_keep != eversion_t() &&
+          by_n_to_trim != eversion_t::max()) {
+        break;
+      }
+    }
+
+    if (by_n_to_keep == eversion_t()) {
+      return;
+    }
+
+    pg_trim_to = std::min({by_n_to_keep, by_n_to_trim, limit});
+    dout(10) << __func__ << " pg_trim_to now " << pg_trim_to << dendl;
+    assert(pg_trim_to <= pg_log.get_head());
   }
 }
 
@@ -3318,7 +3375,10 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   assert(op->may_write() || op->may_cache());
 
   // trim log?
-  calc_trim_to();
+  if (hard_limit_pglog())
+    calc_trim_to_aggressive();
+  else
+    calc_trim_to();
 
   // verify that we are doing this in order?
   if (cct->_conf->osd_debug_op_order && m->get_source().is_client() &&
@@ -9578,7 +9638,10 @@ void PrimaryLogPG::simple_opc_submit(OpContextUPtr ctx)
   dout(20) << __func__ << " " << repop << dendl;
   issue_repop(repop, ctx.get());
   eval_repop(repop);
-  calc_trim_to();
+  if (hard_limit_pglog())
+    calc_trim_to_aggressive();
+  else
+    calc_trim_to();
   repop->put();
 }
 
@@ -9720,7 +9783,10 @@ void PrimaryLogPG::submit_log_entries(
       assert(r == 0);
     });
 
-  calc_trim_to();
+  if (hard_limit_pglog())
+    calc_trim_to_aggressive();
+  else
+    calc_trim_to();
 }
 
 void PrimaryLogPG::cancel_log_updates()

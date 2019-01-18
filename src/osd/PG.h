@@ -1139,6 +1139,8 @@ public:
 
   virtual void calc_trim_to() = 0;
 
+  virtual void calc_trim_to_aggressive() = 0;
+
   void proc_replica_log(pg_info_t &oinfo, const pg_log_t &olog,
 			pg_missing_t& omissing, pg_shard_t from);
   void proc_master_log(ObjectStore::Transaction& t, pg_info_t &oinfo, pg_log_t &olog,
@@ -2506,6 +2508,10 @@ protected:
     return !(get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES));
   }
 
+  bool hard_limit_pglog() const {
+    return (get_osdmap()->test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT));
+  }
+
   void init_primary_up_acting(
     const vector<int> &newup,
     const vector<int> &newacting,
@@ -2653,7 +2659,6 @@ public:
     ObjectStore::Transaction &t,
     bool transaction_applied = true);
   bool check_log_for_corruption(ObjectStore *store);
-  void trim_log();
 
   std::string get_corrupt_pg_log_name() const;
   static int read_info(

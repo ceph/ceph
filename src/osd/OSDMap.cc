@@ -3153,6 +3153,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",recovery_deletes";
   if (f & CEPH_OSDMAP_PURGED_SNAPDIRS)
     s += ",purged_snapdirs";
+  if (f & CEPH_OSDMAP_PGLOG_HARDLIMIT)
+    s += ",pglog_hardlimit";
   if (s.length())
     s.erase(0, 1);
   return s;
