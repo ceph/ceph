@@ -106,9 +106,15 @@ class RookCluster(object):
     def get_nfs_conf_url(self, nfs_cluster, instance):
         #
         # Fetch cephnfs object for "nfs_cluster" and then return a rados://
-        # URL for the instance within that cluster.
+        # URL for the instance within that cluster. If the fetch fails, just
+        # return None.
         #
-        ceph_nfs = self.rook_api_get("cephnfses/{0}".format(nfs_cluster))
+        try:
+            ceph_nfs = self.rook_api_get("cephnfses/{0}".format(nfs_cluster))
+        except ApiException as e:
+            log.info("Unable to fetch cephnfs object: {}".format(e.status))
+            return None
+
         pool = ceph_nfs['spec']['rados']['pool']
         namespace = ceph_nfs['spec']['rados'].get('namespace', None)
 
