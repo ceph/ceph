@@ -2195,6 +2195,9 @@ struct store_statfs_t
   uint64_t kb() const {
     return total >> 10;
   }
+  uint64_t kb_used() const {
+    return (total - available - internally_reserved) >> 10;
+  }
   uint64_t kb_used_raw() const {
     return get_used_raw() >> 10;
   }

@@ -7840,12 +7840,17 @@ std::vector<Option> get_mds_client_options() {
 
     Option("client_mds_namespace", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
+
     .set_description("CephFS file system name to mount")
     .set_long_description("Use this with ceph-fuse, or with any process "
         "that uses libcephfs.  Programs using libcephfs may also pass "
         "the filesystem name into mount(), which will override this setting. "
         "If no filesystem name is given in mount() or this setting, the default "
         "filesystem will be mounted (usually the first created)."),
+
+    Option("fake_statfs_for_testing", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description("Set a value for kb and compute kb_used from total of num_bytes"),
   });
 }
 

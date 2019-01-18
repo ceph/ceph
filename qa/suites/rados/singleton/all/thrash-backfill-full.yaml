@@ -1,0 +1,49 @@
+roles:
+- - mon.a
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+- - osd.3
+  - osd.4
+  - osd.5
+  - client.0
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
+override:
+  ceph:
+    conf:
+      mon:
+        osd default pool size: 3
+        osd min pg log entries: 5
+        osd max pg log entries: 10
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - but it is still running
+    - missing primary copy of
+    - objects unfound and apparently lost
+    - overall HEALTH_
+    - \(OSDMAP_FLAGS\)
+    - \(SLOW_OPS\)
+    - \(PG_
+    - \(OBJECT_MISPLACED\)
+    - \(OSD_
+    - \(OBJECT_
+    - \(TOO_FEW_PGS\)
+    - \(POOL_BACKFILLFULL\)
+- thrashosds:
+    op_delay: 30
+    clean_interval: 120
+    chance_down: .75
+    min_live: 5
+    min_in: 5
+    chance_test_backfill_full: .5
+- radosbench:
+    clients: [client.0]
+    time: 1800
+    type: rand
+    objectsize: 1048576

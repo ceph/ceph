@@ -1074,6 +1074,7 @@ void PG::clear_primary_state()
   peer_log_requested.clear();
   peer_missing_requested.clear();
   peer_info.clear();
+  peer_bytes.clear();
   peer_missing.clear();
   need_up_thru = false;
   peer_last_complete_ondisk.clear();
@@ -2004,7 +2005,9 @@ void PG::activate(ObjectStore::Transaction& t,
 	pi.last_interval_started = info.last_interval_started;
 	pi.history = info.history;
 	pi.hit_set = info.hit_set;
-	pi.stats.stats.clear();
+        // Save num_bytes for reservation request
+        peer_bytes[peer] = pi.stats.stats.sum.num_bytes;
+        pi.stats.stats.clear();
 
 	// initialize peer with our purged_snaps.
 	pi.purged_snaps = info.purged_snaps;
@@ -4469,8 +4472,25 @@ void PG::handle_scrub_reserve_release(OpRequestRef op)
   clear_scrub_reserved();
 }
 
+// We can zero the value of primary num_bytes as just an atomic.
+// However, setting above zero reserves space for backfill and requires
+// the OSDService::stat_lock which protects all OSD usage
+void PG::set_reserved_num_bytes(int64_t primary, int64_t local) {
+  ceph_assert(osd->stat_lock.is_locked_by_me());
+  primary_num_bytes.store(primary);
+  local_num_bytes.store(local);
+  return;
+}
+
+void PG::clear_reserved_num_bytes() {
+  primary_num_bytes.store(0);
+  local_num_bytes.store(0);
+  return;
+}
+
 void PG::reject_reservation()
 {
+  clear_reserved_num_bytes();
   osd->send_message_osd_cluster(
     primary.osd,
     new MBackfillReserve(
@@ -6836,6 +6856,41 @@ void PG::_delete_some(ObjectStore::Transaction *t)
   }
 }
 
+// Compute pending backfill data
+static int64_t pending_backfill(CephContext *cct, int64_t bf_bytes, int64_t local_bytes)
+{
+    lgeneric_dout(cct, 20) << __func__ << " Adjust local usage " << (local_bytes >> 10) << "KiB"
+		               << " primary usage " << (bf_bytes >> 10) << "KiB" << dendl;
+    return std::max((int64_t)0, bf_bytes - local_bytes);
+}
+
+int PG::pg_stat_adjust(osd_stat_t *ns)
+{
+  osd_stat_t &new_stat = *ns;
+  if (is_primary()) {
+    return 0;
+  }
+  // Adjust the kb_used by adding pending backfill data
+  uint64_t reserved_num_bytes = get_reserved_num_bytes();
+
+  // For now we don't consider projected space gains here
+  // I suggest we have an optional 2 pass backfill that frees up
+  // space in a first pass.  This could be triggered when at nearfull
+  // or near to backfillfull.
+  if (reserved_num_bytes > 0) {
+    // TODO: Handle compression by adjusting by the PGs average
+    // compression precentage.
+    dout(20) << __func__ << " reserved_num_bytes " << (reserved_num_bytes >> 10) << "KiB"
+             << " Before kb_used " << new_stat.statfs.kb_used() << "KiB" << dendl;
+    if (new_stat.statfs.available > reserved_num_bytes)
+      new_stat.statfs.available -= reserved_num_bytes;
+    else
+      new_stat.statfs.available = 0;
+    dout(20) << __func__ << " After kb_used " << new_stat.statfs.kb_used() << "KiB" << dendl;
+    return 1;
+  }
+  return 0;
+}
 
 
 /*------------ Recovery State Machine----------------*/
@@ -7387,6 +7442,8 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserve
 {
   PG *pg = context< RecoveryMachine >().pg;
 
+  int64_t num_bytes = pg->info.stats.stats.sum.num_bytes;
+  ldout(pg->cct, 10) << __func__ << " num_bytes " << num_bytes << dendl;
   if (backfill_osd_it != context< Active >().remote_shards_to_reserve_backfill.end()) {
     //The primary never backfills itself
     ceph_assert(*backfill_osd_it != pg->pg_whoami);
@@ -7398,11 +7455,14 @@ PG::RecoveryState::WaitRemoteBackfillReserved::react(const RemoteBackfillReserve
 	MBackfillReserve::REQUEST,
 	spg_t(pg->info.pgid.pgid, backfill_osd_it->shard),
 	pg->get_osdmap_epoch(),
-	pg->get_backfill_priority()),
+	pg->get_backfill_priority(),
+        num_bytes,
+        pg->peer_bytes[*backfill_osd_it]),
       con.get());
     }
     ++backfill_osd_it;
   } else {
+    pg->peer_bytes.clear();
     post_event(AllBackfillsReserved());
   }
   return discard_event();
@@ -7592,6 +7652,7 @@ PG::RecoveryState::RepWaitRecoveryReserved::react(
   const RemoteReservationCanceled &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  pg->clear_reserved_num_bytes();
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
   return transit<RepNotRecovering>();
 }
@@ -7616,18 +7677,64 @@ boost::statechart::result
 PG::RecoveryState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  // Use tentative_bacfill_full() to make sure enough
+  // space is available to handle target bytes from primary.
+
+  // TODO: If we passed num_objects from primary we could account for
+  // an estimate of the metadata overhead.
+
+  // TODO: If we had compressed_allocated and compressed_original from primary
+  // we could compute compression ratio and adjust accordingly.
+
+  // XXX: There is no way to get omap overhead and this would only apply
+  // to whatever possibly different partition that is storing the database.
+
+  // update_osd_stat() from heartbeat will do this on a new
+  // statfs using pg->primary_num_bytes.
+  uint64_t pending_adjustment = 0;
+  int64_t primary_num_bytes = evt.primary_num_bytes;
+  int64_t local_num_bytes = evt.local_num_bytes;
+  if (primary_num_bytes) {
+    // For erasure coded pool overestimate by a full stripe per object
+    // because we don't know how each objected rounded to the nearest stripe
+    if (pg->pool.info.is_erasure()) {
+      primary_num_bytes /= (int)pg->get_pgbackend()->get_ec_data_chunk_count();
+      primary_num_bytes += pg->get_pgbackend()->get_ec_stripe_chunk_size() * pg->info.stats.stats.sum.num_objects;
+      local_num_bytes /= (int)pg->get_pgbackend()->get_ec_data_chunk_count();
+      local_num_bytes += pg->get_pgbackend()->get_ec_stripe_chunk_size() * pg->info.stats.stats.sum.num_objects;
+    }
+    pending_adjustment = pending_backfill(pg->cct, primary_num_bytes, local_num_bytes);
+    ldout(pg->cct, 10) << __func__ << " primary_num_bytes " << (primary_num_bytes >> 10) << "KiB"
+                       << " local " << (local_num_bytes >> 10) << "KiB"
+                       << " pending_adjustments " << (pending_adjustment >> 10) << "KiB"
+                       << dendl;
+  }
+  // This lock protects not only the stats OSDService but also setting the pg primary_num_bytes
+  // That's why we don't immediately unlock
+  Mutex::Locker l(pg->osd->stat_lock);
+  osd_stat_t cur_stat = pg->osd->osd_stat;
   if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
       (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
     ldout(pg->cct, 10) << "backfill reservation rejected: failure injection"
 		       << dendl;
     post_event(RejectRemoteReservation());
   } else if (!pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
-      pg->osd->check_backfill_full(pg)) {
+      pg->osd->tentative_backfill_full(pg, pending_adjustment, cur_stat)) {
     ldout(pg->cct, 10) << "backfill reservation rejected: backfill full"
 		       << dendl;
     post_event(RejectRemoteReservation());
   } else {
     Context *preempt = nullptr;
+    // Don't reserve space if skipped reservation check, this is used
+    // to test the other backfill full check AND in case a corruption
+    // of num_bytes requires ignoring that value and trying the
+    // backfill anyway.
+    if (primary_num_bytes && !pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation)
+      pg->set_reserved_num_bytes(primary_num_bytes, local_num_bytes);
+    else
+      pg->clear_reserved_num_bytes();
+    // Use un-ec-adjusted bytes for stats.
+    pg->info.stats.stats.sum.num_bytes = evt.local_num_bytes;
     if (HAVE_FEATURE(pg->upacting_features, RECOVERY_RESERVATION_2)) {
       // older peers will interpret preemption as TOOFULL
       preempt = new QueuePeeringEvt<RemoteBackfillPreempted>(
@@ -7685,28 +7792,14 @@ PG::RecoveryState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &
 {
   PG *pg = context< RecoveryMachine >().pg;
 
-  if (pg->cct->_conf->osd_debug_reject_backfill_probability > 0 &&
-      (rand()%1000 < (pg->cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
-    ldout(pg->cct, 10) << "backfill reservation rejected after reservation: "
-		       << "failure injection" << dendl;
-    post_event(RejectRemoteReservation());
-    return discard_event();
-  } else if (!pg->cct->_conf->osd_debug_skip_full_check_in_backfill_reservation &&
-	     pg->osd->check_backfill_full(pg)) {
-    ldout(pg->cct, 10) << "backfill reservation rejected after reservation: backfill full"
-		       << dendl;
-    post_event(RejectRemoteReservation());
-    return discard_event();
-  } else {
-    pg->osd->send_message_osd_cluster(
+  pg->osd->send_message_osd_cluster(
       pg->primary.osd,
       new MBackfillReserve(
 	MBackfillReserve::GRANT,
 	spg_t(pg->info.pgid.pgid, pg->primary.shard),
 	pg->get_osdmap_epoch()),
       pg->get_osdmap_epoch());
-    return transit<RepRecovering>();
-  }
+  return transit<RepRecovering>();
 }
 
 boost::statechart::result
@@ -7724,6 +7817,7 @@ PG::RecoveryState::RepWaitBackfillReserved::react(
   const RemoteReservationRejected &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  pg->clear_reserved_num_bytes();
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
   return transit<RepNotRecovering>();
 }
@@ -7733,6 +7827,7 @@ PG::RecoveryState::RepWaitBackfillReserved::react(
   const RemoteReservationCanceled &evt)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  pg->clear_reserved_num_bytes();
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
   return transit<RepNotRecovering>();
 }
@@ -7741,6 +7836,7 @@ boost::statechart::result
 PG::RecoveryState::RepWaitBackfillReserved::react(const RecoveryDone&)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  pg->clear_reserved_num_bytes();
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
   return transit<RepNotRecovering>();
 }
@@ -7757,6 +7853,7 @@ boost::statechart::result
 PG::RecoveryState::RepRecovering::react(const RemoteRecoveryPreempted &)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  pg->clear_reserved_num_bytes();
   pg->osd->send_message_osd_cluster(
     pg->primary.osd,
     new MRecoveryReserve(
@@ -7771,6 +7868,7 @@ boost::statechart::result
 PG::RecoveryState::RepRecovering::react(const BackfillTooFull &)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  pg->clear_reserved_num_bytes();
   pg->osd->send_message_osd_cluster(
     pg->primary.osd,
     new MBackfillReserve(
@@ -7785,6 +7883,7 @@ boost::statechart::result
 PG::RecoveryState::RepRecovering::react(const RemoteBackfillPreempted &)
 {
   PG *pg = context< RecoveryMachine >().pg;
+  pg->clear_reserved_num_bytes();
   pg->osd->send_message_osd_cluster(
     pg->primary.osd,
     new MBackfillReserve(
@@ -7799,6 +7898,7 @@ void PG::RecoveryState::RepRecovering::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
+  pg->clear_reserved_num_bytes();
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_reprecovering_latency, dur);
@@ -8625,6 +8725,7 @@ void PG::RecoveryState::ReplicaActive::exit()
 {
   context< RecoveryMachine >().log_exit(state_name, enter_time);
   PG *pg = context< RecoveryMachine >().pg;
+  pg->clear_reserved_num_bytes();
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
   utime_t dur = ceph_clock_now() - enter_time;
   pg->osd->recoverystate_perf->tinc(rs_replicaactive_latency, dur);

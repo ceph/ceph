@@ -905,6 +905,7 @@ public:
 
   void set_statfs(const struct store_statfs_t &stbuf);
   osd_stat_t set_osd_stat(vector<int>& hb_peers, int num_pgs);
+  float compute_adjusted_ratio(osd_stat_t new_stat, float *pratio, uint64_t adjust_used = 0);
   osd_stat_t get_osd_stat() {
     std::lock_guard l(stat_lock);
     ++seq;
@@ -946,15 +947,19 @@ private:
     else
       return INVALID;
   }
-  double cur_ratio;  ///< current utilization
+  double cur_ratio, physical_ratio;  ///< current utilization
   mutable int64_t injectfull = 0;
   s_names injectfull_state = NONE;
   float get_failsafe_full_ratio();
+  bool _check_inject_full(DoutPrefixProvider *dpp, s_names type) const;
   bool _check_full(DoutPrefixProvider *dpp, s_names type) const;
 public:
-  void check_full_status(float ratio);
+  void check_full_status(float ratio, float pratio);
+  s_names recalc_full_state(float ratio, float pratio, string &inject);
+  bool _tentative_full(DoutPrefixProvider *dpp, s_names type, uint64_t adjust_used, osd_stat_t);
   bool check_failsafe_full(DoutPrefixProvider *dpp) const;
   bool check_full(DoutPrefixProvider *dpp) const;
+  bool tentative_backfill_full(DoutPrefixProvider *dpp, uint64_t adjust_used, osd_stat_t);
   bool check_backfill_full(DoutPrefixProvider *dpp) const;
   bool check_nearfull(DoutPrefixProvider *dpp) const;
   bool is_failsafe_full() const;
