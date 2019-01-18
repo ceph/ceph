@@ -4576,6 +4576,41 @@ TEST_P(StoreTest, Synthetic) {
   doSyntheticTest(10000, 400*1024, 40*1024, 0);
 }
 
+TEST_P(StoreTestSpecificAUSize, BlueFSExtenderTest) {
+  if(string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_block_db_size", "0");
+  SetVal(g_conf(), "bluestore_block_wal_size", "0");
+  SetVal(g_conf(), "bluestore_bluefs_min", "12582912");
+  SetVal(g_conf(), "bluestore_bluefs_min_free", "4194304");
+  SetVal(g_conf(), "bluestore_bluefs_gift_ratio", "0");
+  SetVal(g_conf(), "bluestore_bluefs_min_ratio", "0");
+  SetVal(g_conf(), "bluestore_bluefs_balance_interval", "100000");
+  SetVal(g_conf(), "bluestore_bluefs_db_compatibility", "false");
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(4096);
+
+  doSyntheticTest(10000, 400*1024, 40*1024, 0);
+
+  BlueStore* bstore = NULL;
+  EXPECT_NO_THROW(bstore = dynamic_cast<BlueStore*> (store.get()));
+
+  // verify downgrades are broken and repair that
+  bstore->umount();
+  ASSERT_EQ(bstore->fsck(false), 0);
+
+  SetVal(g_conf(), "bluestore_bluefs_db_compatibility", "true");
+  g_conf().apply_changes(nullptr);
+
+  ASSERT_EQ(bstore->fsck(false), 1);
+  ASSERT_EQ(bstore->repair(false), 0);
+  ASSERT_EQ(bstore->fsck(false), 0);
+  bstore->mount();
+}
+
 #if defined(WITH_BLUESTORE)
 TEST_P(StoreTestSpecificAUSize, SyntheticMatrixSharding) {
   if (string(GetParam()) != "bluestore")
@@ -7425,8 +7460,6 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairTest) {
     ASSERT_EQ(bstore->fsck(false), 3);
     ASSERT_LE(bstore->repair(false), 0);
     ASSERT_EQ(bstore->fsck(false), 0);
-    SetVal(g_conf(), "bluestore_debug_inject_bug21040", "true");
-    g_ceph_context->_conf.apply_changes(nullptr);
   }
 
   // enable per-pool stats collection hence causing fsck to fail
@@ -7603,11 +7636,11 @@ TEST_P(StoreTest, allocateBlueFSTest) {
 
   uint64_t to_alloc = g_conf().get_val<Option::size_t>("bluefs_alloc_size");
 
-  int r = bstore->allocate_bluefs_freespace(to_alloc);
+  int r = bstore->allocate_bluefs_freespace(to_alloc, nullptr);
   ASSERT_EQ(r, 0);
-  r = bstore->allocate_bluefs_freespace(statfs.total);
+  r = bstore->allocate_bluefs_freespace(statfs.total, nullptr);
   ASSERT_EQ(r, -ENOSPC);
-  r = bstore->allocate_bluefs_freespace(to_alloc * 16);
+  r = bstore->allocate_bluefs_freespace(to_alloc * 16, nullptr);
   ASSERT_EQ(r, 0);
   store->umount();
   ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly

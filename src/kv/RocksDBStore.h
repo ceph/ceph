@@ -90,7 +90,7 @@ class RocksDBStore : public KeyValueDB {
   int submit_common(rocksdb::WriteOptions& woptions, KeyValueDB::Transaction t);
   int install_cf_mergeop(const string &cf_name, rocksdb::ColumnFamilyOptions *cf_opt);
   int create_db_dir();
-  int do_open(ostream &out, bool create_if_missing,
+  int do_open(ostream &out, bool create_if_missing, bool open_readonly,
 	      const vector<ColumnFamily>* cfs = nullptr);
   int load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt);
 
@@ -167,11 +167,15 @@ public:
   static bool check_omap_dir(string &omap_dir);
   /// Opens underlying db
   int open(ostream &out, const vector<ColumnFamily>& cfs = {}) override {
-    return do_open(out, false, &cfs);
+    return do_open(out, false, false, &cfs);
   }
   /// Creates underlying db if missing and opens it
   int create_and_open(ostream &out,
 		      const vector<ColumnFamily>& cfs = {}) override;
+
+  int open_read_only(ostream &out, const vector<ColumnFamily>& cfs = {}) override {
+    return do_open(out, false, true, &cfs);
+  }
 
   void close() override;
 

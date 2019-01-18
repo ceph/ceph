@@ -161,6 +161,11 @@ public:
   // vector cfs contains column families to be created when db is created.
   virtual int create_and_open(std::ostream &out,
 			      const vector<ColumnFamily>& cfs = {}) = 0;
+
+  virtual int open_read_only(ostream &out, const vector<ColumnFamily>& cfs = {}) {
+    return -ENOTSUP;
+  }
+
   virtual void close() { }
 
   /// Try to repair K/V database. leveldb and rocksdb require that database must be not opened.
