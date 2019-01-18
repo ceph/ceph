@@ -100,7 +100,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "count(sum by (instance) (ceph_disk_occupation))",
+          "expr": "count(sum by (hostname) (ceph_osd_metadata))",
           "format": "time_series",
           "instant": true,
           "intervalFactor": 1,
