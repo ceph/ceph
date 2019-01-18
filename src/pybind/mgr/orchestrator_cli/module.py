@@ -191,7 +191,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         services = completion.result
 
         # Sort the list for display
-        services.sort(key=lambda s: (s.service_type, s.nodename, s.daemon_name))
+        services.sort(key=lambda s: (s.service_type, s.nodename, s.service_instance))
 
         if len(services) == 0:
             return HandleCommandResult(stdout="No services reported")
@@ -201,9 +201,14 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         else:
             lines = []
             for s in services:
-                lines.append("{0}.{1} {2} {3} {4} {5}".format(
+                if s.service == None:
+                    service_id = s.service_instance
+                else:
+                    service_id = "{0}.{1}".format(s.service, s.service_instance)
+
+                lines.append("{0} {1} {2} {3} {4} {5}".format(
                     s.service_type,
-                    s.daemon_name,
+                    service_id,
                     s.nodename,
                     s.container_id,
                     s.version,
