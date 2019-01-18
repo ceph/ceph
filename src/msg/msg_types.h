@@ -285,6 +285,13 @@ struct entity_addr_t {
     u.sa.sa_family = f;
   }
 
+  bool is_ipv4() const {
+    return u.sa.sa_family == AF_INET;
+  }
+  bool is_ipv6() const {
+    return u.sa.sa_family == AF_INET6;
+  }
+
   sockaddr_in &in4_addr() {
     return u.sin;
   }

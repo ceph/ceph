@@ -14,7 +14,7 @@
   $ monmaptool --add baz 4.5.6.7:8901 mymonmap
   monmaptool: monmap file mymonmap
   monmaptool: writing epoch 0 to mymonmap (3 monitors)
-  $ monmaptool --addv fiz v2:172.21.15.68:6791,v1:172.21.15.68:6792 mymonmap
+  $ monmaptool --addv fiz '[v2:172.21.15.68:6791,v1:172.21.15.68:6792]' mymonmap
   monmaptool: monmap file mymonmap
   monmaptool: writing epoch 0 to mymonmap (4 monitors)
   $ monmaptool --print mymonmap

@@ -434,7 +434,7 @@ int MonMap::init_with_ips(const std::string& ips,
 			  bool for_mkfs,
 			  const std::string &prefix)
 {
-  vector<entity_addr_t> addrs;
+  vector<entity_addrvec_t> addrs;
   if (!parse_ip_port_vec(
 	ips.c_str(), addrs,
 	entity_addr_t::TYPE_ANY)) {
@@ -449,7 +449,13 @@ int MonMap::init_with_ips(const std::string& ips,
     string name;
     name = prefix;
     name += n;
-    _add_ambiguous_addr(name, addrs[i], 0, for_mkfs);
+    if (addrs[i].v.size() == 1) {
+      _add_ambiguous_addr(name, addrs[i].front(), 0, for_mkfs);
+    } else {
+      // they specified an addrvec, so let's assume they also specified
+      // the addr *type* and *port*.  (we could possibly improve this?)
+      add(name, addrs[i], 0);
+    }
   }
   return 0;
 }
@@ -463,7 +469,7 @@ int MonMap::init_with_hosts(const std::string& hostlist,
   if (!hosts)
     return -EINVAL;
 
-  vector<entity_addr_t> addrs;
+  vector<entity_addrvec_t> addrs;
   bool success = parse_ip_port_vec(
     hosts, addrs,
     for_mkfs ? entity_addr_t::TYPE_MSGR2 : entity_addr_t::TYPE_ANY);
@@ -478,7 +484,11 @@ int MonMap::init_with_hosts(const std::string& hostlist,
     n[1] = 0;
     string name = prefix;
     name += n;
-    _add_ambiguous_addr(name, addrs[i], 0);
+    if (addrs[i].v.size() == 1) {
+      _add_ambiguous_addr(name, addrs[i].front(), 0);
+    } else {
+      add(name, addrs[i], 0);
+    }
   }
   calc_legacy_ranks();
   return 0;
