@@ -396,7 +396,7 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
 			     CephXServiceTicketInfo& ticket_info,
 			     std::unique_ptr<AuthAuthorizerChallenge> *challenge,
 			     CryptoKey *connection_secret,
-			     bufferlist& reply_bl)
+			     bufferlist *reply_bl)
 {
   __u8 authorizer_v;
   uint32_t service_id;
@@ -471,7 +471,7 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
       ldout(cct,10) << __func__ << " adding server_challenge " << c->server_challenge
 		    << dendl;
 
-      encode_encrypt_enc_bl(cct, *c, ticket_info.session_key, reply_bl, error);
+      encode_encrypt_enc_bl(cct, *c, ticket_info.session_key, *reply_bl, error);
       if (!error.empty()) {
 	ldout(cct, 10) << "verify_authorizer: encode_encrypt error: " << error << dendl;
 	return false;
@@ -505,13 +505,13 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
     reply.connection_secret = *connection_secret;
   }
 #endif
-  if (encode_encrypt(cct, reply, ticket_info.session_key, reply_bl, error)) {
+  if (encode_encrypt(cct, reply, ticket_info.session_key, *reply_bl, error)) {
     ldout(cct, 10) << "verify_authorizer: encode_encrypt error: " << error << dendl;
     return false;
   }
 
   ldout(cct, 10) << "verify_authorizer ok nonce " << hex << auth_msg.nonce << dec
-	   << " reply_bl.length()=" << reply_bl.length() <<  dendl;
+	   << " reply_bl.length()=" << reply_bl->length() <<  dendl;
   return true;
 }
 

@@ -428,7 +428,7 @@ extern bool cephx_verify_authorizer(
   CephXServiceTicketInfo& ticket_info,
   std::unique_ptr<AuthAuthorizerChallenge> *challenge,
   CryptoKey *connection_secret,
-  bufferlist& reply_bl);
+  bufferlist *reply_bl);
 
 
 
