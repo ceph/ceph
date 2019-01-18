@@ -157,6 +157,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
     });
 
     self->py_modules->get_monc().start_mon_command(
+        name,
         {cmd_json},
         {},
         &command_c->outbl,
