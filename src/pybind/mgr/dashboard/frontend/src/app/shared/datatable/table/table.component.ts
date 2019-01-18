@@ -1,5 +1,6 @@
 import {
   AfterContentChecked,
+  ChangeDetectorRef,
   Component,
   EventEmitter,
   Input,
@@ -159,7 +160,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   // table columns after the browser window has been resized.
   private currentWidth: number;
 
-  constructor(private ngZone: NgZone) {}
+  constructor(private ngZone: NgZone, private cdRef: ChangeDetectorRef) {}
 
   ngOnInit() {
     this._addTemplates();
@@ -451,6 +452,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       this.table.onColumnSort({ sorts: this.userConfig.sorts });
     }
     this.table.recalculate();
+    this.cdRef.detectChanges();
   }
 
   createSortingDefinition(prop: TableColumnProp): SortPropDir[] {
