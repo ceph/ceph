@@ -1422,6 +1422,7 @@ CtPtr ProtocolV2::handle_server_addrvec_and_identify(char *buffer, int r) {
     ldout(cct, 20) << "encoding addr " << a
 		   << " instead of non-v2 myaddrs " << messenger->get_myaddrs()
 		   << dendl;
+    assert(!messenger->did_bind);  // shouldn't happen; see AsyncMessenger::_filter_addrs
     encode(a, myaddrbl, -1ll);
   }
   bufferlist conbl;

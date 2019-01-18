@@ -611,13 +611,14 @@ entity_addrvec_t AsyncMessenger::_filter_addrs(int type,
 					       const entity_addrvec_t& addrs)
 {
   if (did_bind &&
-      !get_myaddrs().has_msgr2() &&
-      get_mytype() == type) {
-    // if we are bound to v1 only, and we are connecting to a peer, we cannot
-    // use the peer's v2 address (yet). otherwise the connection is assymetrical,
-    // because they would have to use v1 to connect to us, and we would use v2,
-    // and connection race detection etc would totally break down (among other
-    // things).
+      !get_myaddrs().has_msgr2()) {
+    // if we are bound to v1 only, we cannot use the peer's v2 address
+    // (yet).  if this is a peer that connects to us, the connection
+    // is assymetrical, because they would have to use v1 to connect
+    // to us, and we would use v2, and connection race detection etc
+    // would totally break down (among other things).  if we are say
+    // an osd connecting to the mon, we don't want to let the mon
+    // infer we are a v2 endpoint when we bound to a v1 port only.
     ldout(cct, 10) << __func__ << " " << addrs << " type " << type
 		   << " limiting to v1 ()" << dendl;
     entity_addrvec_t r;
