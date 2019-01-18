@@ -122,6 +122,13 @@ public:
     return modules.at(module_name);
   }
 
+  bool module_exists(const std::string &module_name) const
+  {
+    std::lock_guard l(lock);
+    auto mod_iter = modules.find(module_name);
+    return mod_iter != modules.end();
+  }
+
   /**
    * Pass through command to the named module for execution.
    *

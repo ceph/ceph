@@ -890,6 +890,23 @@ class MgrModule(ceph_module.BaseMgrModule):
         self._validate_module_option(key)
         return self._get_module_option(key, default)
 
+    def get_module_option_ex(self, module, key, default=None):
+        """
+        Retrieve the value of a persistent configuration setting
+        for the specified module.
+
+        :param str module: The name of the module, e.g. 'dashboard'
+            or 'telemetry'.
+        :param str key: The configuration key, e.g. 'server_addr'.
+        :param str,None default: The default value to use when the
+            returned value is ``None``. Defaults to ``None``.
+        :return: str,int,bool,float,None
+        """
+        if module == self.module_name:
+            self._validate_module_option(key)
+        r = self._ceph_get_module_option_ex(module, key)
+        return default if r is None else r
+
     def get_store_prefix(self, key_prefix):
         """
         Retrieve a dict of KV store keys to values, where the keys
@@ -932,6 +949,19 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         self._validate_module_option(key)
         return self._set_module_option(key, val)
+
+    def set_module_option_ex(self, module, key, val):
+        """
+        Set the value of a persistent configuration setting
+        for the specified module.
+
+        :param str module:
+        :param str key:
+        :param str val:
+        """
+        if module == self.module_name:
+            self._validate_module_option(key)
+        return self._ceph_set_module_option_ex(module, key, str(val))
 
     def set_localized_module_option(self, key, val):
         """

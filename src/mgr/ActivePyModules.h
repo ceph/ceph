@@ -32,6 +32,7 @@
 
 class health_check_map_t;
 class DaemonServer;
+class PyModuleRegistry;
 
 class ActivePyModules
 {
@@ -46,6 +47,7 @@ class ActivePyModules
   Client   &client;
   Finisher &finisher;
   DaemonServer &server;
+  PyModuleRegistry &py_module_registry;
 
 
   mutable Mutex lock{"ActivePyModules::lock"};
@@ -55,7 +57,7 @@ public:
             std::map<std::string, std::string> store_data,
             DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
             LogChannelRef clog_, LogChannelRef audit_clog_, Objecter &objecter_, Client &client_,
-            Finisher &f, DaemonServer &server);
+            Finisher &f, DaemonServer &server, PyModuleRegistry &pmr);
 
   ~ActivePyModules();
 
@@ -109,6 +111,9 @@ public:
       const std::string &key, std::string *val) const;
   void set_config(const std::string &module_name,
       const std::string &key, const boost::optional<std::string> &val);
+
+  PyObject *get_typed_config(const std::string &module_name,
+    const std::string &key) const;
 
   void set_health_checks(const std::string& module_name,
 			 health_check_map_t&& checks);
@@ -165,4 +170,3 @@ public:
   void cluster_log(const std::string &channel, clog_type prio,
     const std::string &message);
 };
-

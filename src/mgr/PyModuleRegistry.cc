@@ -199,7 +199,8 @@ void PyModuleRegistry::active_start(
 
   active_modules.reset(new ActivePyModules(
               module_config, kv_store, ds, cs, mc,
-              clog_, audit_clog_, objecter_, client_, f, server));
+              clog_, audit_clog_, objecter_, client_, f, server,
+              *this));
 
   for (const auto &i : modules) {
     // Anything we're skipping because of !can_run will be flagged
