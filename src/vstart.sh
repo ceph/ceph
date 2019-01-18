@@ -692,7 +692,7 @@ start_mon() {
 			A="v2:$IP:$(($CEPH_PORT+$count+1))"
 		    fi
 		    if [ $msgr -eq 21 ]; then
-			A="v2:$IP:$(($CEPH_PORT+$count)),v1:$IP:$(($CEPH_PORT+$count+1))"
+			A="[v2:$IP:$(($CEPH_PORT+$count)),v1:$IP:$(($CEPH_PORT+$count+1))]"
 		    fi
 		    str="$str --addv $f $A"
 		    mon_host="$mon_host $A"

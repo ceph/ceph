@@ -201,21 +201,40 @@ void ceph_arg_value_type(const char * nextargstr, bool *bool_option, bool *bool_
   return;
 }
 
-bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec, int type)
+
+bool parse_ip_port_vec(const char *s, vector<entity_addrvec_t>& vec, int type)
 {
-  const char *p = s;
-  const char *end = p + strlen(p);
-  while (p < end) {
-    entity_addr_t a;
-    //cout << " parse at '" << p << "'" << std::endl;
-    if (!a.parse(p, &p, type)) {
-      //dout(0) << " failed to parse address '" << p << "'" << dendl;
-      return false;
+  // first split by [ ;], which are not valid for an addrvec
+  list<string> items;
+  get_str_list(s, " ;", items);
+
+  for (auto& i : items) {
+    const char *s = i.c_str();
+    while (*s) {
+      const char *end;
+
+      // try parsing as an addr
+      entity_addr_t a;
+      if (a.parse(s, &end, type)) {
+	vec.push_back(entity_addrvec_t(a));
+	s = end;
+	if (*s == ',') {
+	  ++s;
+	}
+	continue;
+      }
+
+      // ok, try parsing as an addrvec
+      entity_addrvec_t av;
+      if (!av.parse(s, &end)) {
+	return false;
+      }
+      vec.push_back(av);
+      s = end;
+      if (*s == ',') {
+	++s;
+      }
     }
-    //cout << " got " << a << ", rest is '" << p << "'" << std::endl;
-    vec.push_back(a);
-    while (*p == ',' || *p == ' ' || *p == ';')
-      p++;
   }
   return true;
 }
