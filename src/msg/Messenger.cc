@@ -166,11 +166,11 @@ bool Messenger::ms_deliver_verify_authorizer(
 	cct,
 	ks,
 	authorizer,
-	authorizer_reply,
-	con->peer_name,
-	con->peer_global_id,
-	con->peer_caps_info,
-	session_key,
+	&authorizer_reply,
+	&con->peer_name,
+	&con->peer_global_id,
+	&con->peer_caps_info,
+	&session_key,
 	connection_secret,
 	challenge);
       if (isvalid) {

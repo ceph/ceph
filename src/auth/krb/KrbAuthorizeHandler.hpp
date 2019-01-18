@@ -19,13 +19,18 @@
 #include "auth/AuthAuthorizeHandler.h"
 
 class KrbAuthorizeHandler : public AuthAuthorizeHandler {
-  bool verify_authorizer(CephContext*, KeyStore*, 
-                         bufferlist&, bufferlist&,
-                         EntityName&, uint64_t&, 
-                         AuthCapsInfo&, CryptoKey&,
-			 CryptoKey *connection_secret,
-                         std::unique_ptr<
-                          AuthAuthorizerChallenge>* = nullptr) override;
+  bool verify_authorizer(
+    CephContext*,
+    KeyStore*,
+    const bufferlist&,
+    bufferlist *,
+    EntityName *,
+    uint64_t *,
+    AuthCapsInfo *,
+    CryptoKey *,
+    CryptoKey *connection_secret,
+    std::unique_ptr<
+    AuthAuthorizerChallenge>* = nullptr) override;
 
   int authorizer_session_crypto() override { 
     return SESSION_SYMMETRIC_AUTHENTICATE; 
