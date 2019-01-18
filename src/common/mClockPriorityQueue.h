@@ -293,11 +293,11 @@ namespace ceph {
     }
 
     void enqueue_strict(K cl, unsigned priority, T&& item) override final {
-      high_queue[priority].enqueue(cl, 0, std::move(item));
+      high_queue[priority].enqueue(cl, 1, std::move(item));
     }
 
     void enqueue_strict_front(K cl, unsigned priority, T&& item) override final {
-      high_queue[priority].enqueue_front(cl, 0, std::move(item));
+      high_queue[priority].enqueue_front(cl, 1, std::move(item));
     }
 
     void enqueue(K cl, unsigned priority, unsigned cost, T&& item) override final {
