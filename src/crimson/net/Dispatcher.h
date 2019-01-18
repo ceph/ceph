@@ -53,7 +53,7 @@ class Dispatcher {
     return seastar::make_ready_future<msgr_tag_t, bufferlist>(0, bufferlist{});
   }
   virtual seastar::future<std::unique_ptr<AuthAuthorizer>>
-  ms_get_authorizer(peer_type_t, bool force_new);
+  ms_get_authorizer(peer_type_t);
 };
 
 } // namespace ceph::net

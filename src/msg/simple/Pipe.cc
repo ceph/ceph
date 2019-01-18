@@ -993,8 +993,6 @@ void Pipe::set_socket_options()
 
 int Pipe::connect()
 {
-  bool got_bad_auth = false;
-
   ldout(msgr->cct,10) << "connect " << connect_seq << dendl;
   ceph_assert(pipe_lock.is_locked());
 
@@ -1148,7 +1146,7 @@ int Pipe::connect()
 
   while (1) {
     if (!authorizer) {
-      authorizer = msgr->ms_deliver_get_authorizer(peer_type, false);
+      authorizer = msgr->ms_deliver_get_authorizer(peer_type);
     }
     bufferlist authorizer_reply;
 
@@ -1260,13 +1258,7 @@ int Pipe::connect()
 
     if (reply.tag == CEPH_MSGR_TAG_BADAUTHORIZER) {
       ldout(msgr->cct,0) << "connect got BADAUTHORIZER" << dendl;
-      if (got_bad_auth)
-        goto stop_locked;
-      got_bad_auth = true;
-      pipe_lock.Unlock();
-      delete authorizer;
-      authorizer = msgr->ms_deliver_get_authorizer(peer_type, true);
-      continue;
+      goto fail_locked;
     }
     if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
       ldout(msgr->cct,0) << "connect got RESETSESSION" << dendl;

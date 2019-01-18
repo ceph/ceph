@@ -238,7 +238,9 @@ public:
    *
    * @return True if this function call properly filled in *a, false otherwise.
    */
-  virtual bool ms_get_authorizer(int dest_type, AuthAuthorizer **a, bool force_new) { return false; }
+  virtual bool ms_get_authorizer(int dest_type, AuthAuthorizer **a) {
+    return false;
+  }
   /**
    * @} //Authentication
    */
