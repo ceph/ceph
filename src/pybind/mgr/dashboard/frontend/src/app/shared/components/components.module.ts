@@ -20,6 +20,7 @@ import { InfoPanelComponent } from './info-panel/info-panel.component';
 import { LanguageSelectorComponent } from './language-selector/language-selector.component';
 import { LoadingPanelComponent } from './loading-panel/loading-panel.component';
 import { ModalComponent } from './modal/modal.component';
+import { RefreshSelectorComponent } from './refresh-selector/refresh-selector.component';
 import { SelectBadgesComponent } from './select-badges/select-badges.component';
 import { SelectComponent } from './select/select.component';
 import { SparklineComponent } from './sparkline/sparkline.component';
@@ -59,7 +60,8 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     WarningPanelComponent,
     LanguageSelectorComponent,
     GrafanaComponent,
-    SelectComponent
+    SelectComponent,
+    RefreshSelectorComponent
   ],
   providers: [],
   exports: [
@@ -76,7 +78,8 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     WarningPanelComponent,
     LanguageSelectorComponent,
     GrafanaComponent,
-    SelectComponent
+    SelectComponent,
+    RefreshSelectorComponent
   ],
   entryComponents: [ModalComponent, CriticalConfirmationModalComponent, ConfirmationModalComponent]
 })
