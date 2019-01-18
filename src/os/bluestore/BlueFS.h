@@ -42,6 +42,15 @@ enum {
   l_bluefs_last,
 };
 
+class BlueFSDeviceExpander {
+protected:
+  ~BlueFSDeviceExpander() {}
+public:
+  virtual uint64_t get_recommended_expansion_delta(uint64_t bluefs_free,
+    uint64_t bluefs_total) = 0;
+  virtual int allocate_freespace(uint64_t size, PExtentVector& extents) = 0;
+};
+
 class BlueFS {
 public:
   CephContext* cct;
@@ -275,6 +284,8 @@ private:
 
   BlockDevice::aio_callback_t discard_cb[3]; //discard callbacks for each dev
 
+  BlueFSDeviceExpander* slow_dev_expander = nullptr;
+
   void _init_logger();
   void _shutdown_logger();
   void _update_logger_stats();
@@ -287,6 +298,8 @@ private:
   FileRef _get_file(uint64_t ino);
   void _drop_link(FileRef f);
 
+  int _get_slow_device_id() { return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB; }
+  int _expand_slow_device(uint64_t min_size, PExtentVector& extents);
   int _allocate(uint8_t bdev, uint64_t len,
 		bluefs_fnode_t* node);
   int _allocate_without_fallback(uint8_t id, uint64_t len,
@@ -364,6 +377,8 @@ private:
     return 4096;
   }
 
+  void _add_block_extent(unsigned bdev, uint64_t offset, uint64_t len);
+
 public:
   BlueFS(CephContext* cct);
   ~BlueFS();
@@ -440,12 +455,20 @@ public:
   /// sync any uncommitted state to disk
   void sync_metadata();
 
+  void set_slow_device_expander(BlueFSDeviceExpander* a) {
+    slow_dev_expander = a;
+  }
   int add_block_device(unsigned bdev, const string& path, bool trim);
   bool bdev_support_label(unsigned id);
   uint64_t get_block_device_size(unsigned bdev);
 
   /// gift more block space
-  void add_block_extent(unsigned bdev, uint64_t offset, uint64_t len);
+  void add_block_extent(unsigned bdev, uint64_t offset, uint64_t len) {
+    std::unique_lock l(lock);
+    _add_block_extent(bdev, offset, len);
+    int r = _flush_and_sync_log(l);
+    ceph_assert(r == 0);
+  }
 
   /// reclaim block space
   int reclaim_blocks(unsigned bdev, uint64_t want,

@@ -232,6 +232,9 @@ struct bluefs_transaction_t {
     encode((__u8)OP_JUMP_SEQ, op_bl);
     encode(next_seq, op_bl);
   }
+  void claim_ops(bluefs_transaction_t& from) {
+    op_bl.claim_append(from.op_bl);
+  }
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& p);
