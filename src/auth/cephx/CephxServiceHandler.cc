@@ -212,7 +212,7 @@ int CephxServiceHandler::handle_request(
       if (!cephx_verify_authorizer(
 	    cct, key_server, indata, auth_ticket_info, nullptr,
 	    nullptr,
-	    tmp_bl)) {
+	    &tmp_bl)) {
         ret = -EPERM;
 	break;
       }
