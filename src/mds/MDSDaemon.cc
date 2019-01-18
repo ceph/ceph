@@ -829,6 +829,9 @@ int MDSDaemon::_handle_command(
       cmd_getval(cct, cmdmap, "heapcmd", heapcmd);
       vector<string> heapcmd_vec;
       get_str_vec(heapcmd, heapcmd_vec);
+      string value;
+      if (cmd_getval(cct, cmdmap, "value", value))
+	 heapcmd_vec.push_back(value);
       ceph_heap_profiler_handle_command(heapcmd_vec, ds);
     }
   } else if (prefix == "cpu_profiler") {

@@ -3294,7 +3294,8 @@ void OSD::final_init()
 
   r = admin_socket->register_command( "heap",
                                       "heap " \
-                                      "name=heapcmd,type=CephString",
+                                      "name=heapcmd,type=CephString " \
+                                      "name=value,type=CephString,req=false",
                                       asok_hook,
                                       "show heap usage info (available only if "
                                       "compiled with tcmalloc)");
@@ -6411,8 +6412,10 @@ COMMAND("bench " \
 	"osd", "rw")
 COMMAND("flush_pg_stats", "flush pg stats", "osd", "rw")
 COMMAND("heap " \
-	"name=heapcmd,type=CephChoices,strings=dump|start_profiler|stop_profiler|release|stats", \
-	"show heap usage info (available only if compiled with tcmalloc)", \
+	"name=heapcmd,type=CephChoices,strings="\
+	    "dump|start_profiler|stop_profiler|release|get_release_rate|set_release_rate|stats " \
+	"name=value,type=CephString,req=false",
+	"show heap usage info (available only if compiled with tcmalloc)",
 	"osd", "rw")
 COMMAND("debug dump_missing " \
 	"name=filename,type=CephFilepath",
@@ -11018,10 +11021,15 @@ int heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f,
   if (!cmd_getval(&cct, cmdmap, "heapcmd", cmd)) {
         os << "unable to get value for command \"" << cmd << "\"";
        return -EINVAL;
-   }
+  }
   
   std::vector<std::string> cmd_vec;
   get_str_vec(cmd, cmd_vec);
+
+  string val;
+  if (cmd_getval(&cct, cmdmap, "value", val)) {
+    cmd_vec.push_back(val);
+  }
   
   ceph_heap_profiler_handle_command(cmd_vec, os);
   
