@@ -2,6 +2,7 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
+import { Subscription } from 'rxjs/Subscription';
 
 import { HealthService } from '../../../shared/api/health.service';
 import { Permissions } from '../../../shared/models/permissions';
@@ -10,6 +11,7 @@ import {
   FeatureTogglesMap$,
   FeatureTogglesService
 } from '../../../shared/services/feature-toggles.service';
+import { RefreshIntervalService } from '../../../shared/services/refresh-interval.service';
 import { PgCategoryService } from '../../shared/pg-category.service';
 import { HealthPieColor } from '../health-pie/health-pie-color.enum';
 
@@ -20,7 +22,7 @@ import { HealthPieColor } from '../health-pie/health-pie-color.enum';
 })
 export class HealthComponent implements OnInit, OnDestroy {
   healthData: any;
-  interval: number;
+  interval = new Subscription();
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
 
@@ -29,7 +31,8 @@ export class HealthComponent implements OnInit, OnDestroy {
     private i18n: I18n,
     private authStorageService: AuthStorageService,
     private pgCategoryService: PgCategoryService,
-    private featureToggles: FeatureTogglesService
+    private featureToggles: FeatureTogglesService,
+    private refreshIntervalService: RefreshIntervalService
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
@@ -37,13 +40,13 @@ export class HealthComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.getHealth();
-    this.interval = window.setInterval(() => {
+    this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
       this.getHealth();
-    }, 5000);
+    });
   }
 
   ngOnDestroy() {
-    clearInterval(this.interval);
+    this.interval.unsubscribe();
   }
 
   getHealth() {

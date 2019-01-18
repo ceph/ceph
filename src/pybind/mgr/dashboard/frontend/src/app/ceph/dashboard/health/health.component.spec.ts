@@ -12,6 +12,7 @@ import { HealthService } from '../../../shared/api/health.service';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { FeatureTogglesService } from '../../../shared/services/feature-toggles.service';
+import { RefreshIntervalService } from '../../../shared/services/refresh-interval.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { PgCategoryService } from '../../shared/pg-category.service';
 import { HealthPieColor } from '../health-pie/health-pie-color.enum';
@@ -62,7 +63,8 @@ describe('HealthComponent', () => {
     providers: [
       i18nProviders,
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
-      PgCategoryService
+      PgCategoryService,
+      RefreshIntervalService
     ]
   });
 
