@@ -62,7 +62,9 @@ if(WITH_TESTS)
 endif(WITH_TESTS)
 endif(WITH_LIBCEPHFS)
 
-add_executable(ceph-kvstore-tool ceph_kvstore_tool.cc)
+add_executable(ceph-kvstore-tool
+  kvstore_tool.cc
+  ceph_kvstore_tool.cc)
 target_link_libraries(ceph-kvstore-tool os global)
 install(TARGETS ceph-kvstore-tool DESTINATION bin)
 
