@@ -204,7 +204,11 @@ int StoreTool::copy_store_to(const string& type, const string& other_path,
   uint64_t total_size = 0;
   uint64_t total_txs = 0;
 
-  auto started_at = coarse_mono_clock::now();
+  auto duration = [start=coarse_mono_clock::now()] {
+    const auto now = coarse_mono_clock::now();
+    auto seconds = std::chrono::duration<double>(now - start);
+    return seconds.count();
+  };
 
   do {
     int num_keys = 0;
@@ -228,15 +232,11 @@ int StoreTool::copy_store_to(const string& type, const string& other_path,
     if (num_keys > 0)
       other->submit_transaction_sync(tx);
 
-    auto cur_duration = std::chrono::duration<double>(coarse_mono_clock::now() -
-                                                      started_at);
-    std::cout << "ts = " << cur_duration.count() << "s, copied " << total_keys
+    std::cout << "ts = " << duration() << "s, copied " << total_keys
               << " keys so far (" << byte_u_t(total_size) << ")"
               << std::endl;
 
   } while (it->valid());
-
-  auto time_taken = std::chrono::duration<double>(coarse_mono_clock::now() - started_at);
 
   std::cout << "summary:" << std::endl;
   std::cout << "  copied " << total_keys << " keys" << std::endl;
@@ -244,7 +244,7 @@ int StoreTool::copy_store_to(const string& type, const string& other_path,
   std::cout << "  total size " << byte_u_t(total_size) << std::endl;
   std::cout << "  from '" << store_path << "' to '" << other_path << "'"
             << std::endl;
-  std::cout << "  duration " << time_taken.count() << " seconds" << std::endl;
+  std::cout << "  duration " << duration() << " seconds" << std::endl;
 
   return 0;
 }
