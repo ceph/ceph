@@ -1,6 +1,10 @@
 13.2.7
 ======
 
+* The MDS cache trimming is now throttled. Dropping the MDS cache
+  via the `ceph tell mds.<foo> cache drop` command or large reductions in the
+  cache size will no longer cause service unavailability.
+
 * The `cache drop` admin socket command has been removed. The `ceph tell mds.X
   cache drop` remains.
 
