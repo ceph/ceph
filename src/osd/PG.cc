@@ -2774,14 +2774,14 @@ void PG::_update_calc_stats()
         for (auto& ml: sml.second) {
           int missing_shards;
           if (sml.first == shard_id_t::NO_SHARD) {
-            dout(0) << __func__ << " ml " << ml.second << " upset size " << upset.size() << " up " << ml.first.up << dendl;
+            dout(20) << __func__ << " ml " << ml.second << " upset size " << upset.size() << " up " << ml.first.up << dendl;
             missing_shards = (int)upset.size() - ml.first.up;
           } else {
 	    // Handle shards not even in upset below
             if (!find_shard(upset, sml.first))
 	      continue;
 	    missing_shards = std::max(0, 1 - ml.first.up);
-            dout(0) << __func__ << " shard " << sml.first << " ml " << ml.second << " missing shards " << missing_shards << dendl;
+            dout(20) << __func__ << " shard " << sml.first << " ml " << ml.second << " missing shards " << missing_shards << dendl;
           }
           int odegraded = ml.second * missing_shards;
           // Copies on other osds but limited to the possible degraded
