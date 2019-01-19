@@ -165,6 +165,10 @@
   respectively.  This is to clarify that these warnings are related to pg scrubbing
   and are a ratio of the related interval.  These options are now enabled by default.
 
+* The MDS cache trimming is now throttled. Dropping the MDS cache
+  via the `ceph tell mds.<foo> cache drop` command or large reductions in the
+  cache size will no longer cause service unavailability.
+
 >=13.1.0
 --------
 
