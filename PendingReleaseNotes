@@ -5,6 +5,10 @@
 from the 13.2.0 release notes (?), so include them in 13.2.1 release
 notes (?))
 
+* The MDS cache trimming is now throttled. Dropping the MDS cache
+  via the `ceph tell mds.<foo> cache drop` command or large reductions in the
+  cache size will no longer cause service unavailability.
+
 * The Telegraf module for the Manager allows for sending statistics to
   an Telegraf Agent over TCP, UDP or a UNIX Socket. Telegraf can then
   send the statistics to databases like InfluxDB, ElasticSearch, Graphite
