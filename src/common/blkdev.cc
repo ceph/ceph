@@ -92,7 +92,7 @@ int BlkDev::get_devid(dev_t *id) const
   } else {
     char path[PATH_MAX];
     snprintf(path, sizeof(path), "/dev/%s", devname.c_str());
-    stat(path, &st);
+    r = stat(path, &st);
   }
   if (r < 0) {
     return -errno;
