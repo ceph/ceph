@@ -742,12 +742,15 @@ public:
 			    set<int> *children,
 			    bool exclude_shadow = true) const;
 
+
   /**
-    * get failure-domain type of a specific crush rule
-    * @param rule_id crush rule id
-    * @return type of failure-domain or a negative errno on error.
-    */
-  int get_rule_failure_domain(int rule_id);
+   * verify upmapping results.
+   * return 0 on success or a negative errno on error.
+   */
+  int verify_upmap(CephContext *cct,
+                   int rule_id,
+                   int pool_size,
+                   const vector<int>& up);
 
   /**
     * enumerate leaves(devices) of given node
