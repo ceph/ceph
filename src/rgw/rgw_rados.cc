@@ -1002,41 +1002,51 @@ int RGWRados::get_required_alignment(const rgw_pool& pool, uint64_t *alignment)
   return 0;
 }
 
-int RGWRados::get_max_chunk_size(const rgw_pool& pool, uint64_t *max_chunk_size)
+void RGWRados::get_max_aligned_size(uint64_t size, uint64_t alignment, uint64_t *max_size)
 {
-  uint64_t alignment = 0;
+  if (alignment == 0) {
+    *max_size = size;
+    return;
+  }
+
+  if (size <= alignment) {
+    *max_size = alignment;
+    return;
+  }
+
+  *max_size = size - (size % alignment);
+}
+
+int RGWRados::get_max_chunk_size(const rgw_pool& pool, uint64_t *max_chunk_size, uint64_t *palignment)
+{
+  uint64_t alignment;
   int r = get_required_alignment(pool, &alignment);
   if (r < 0) {
     return r;
   }
 
+  if (palignment) {
+    *palignment = alignment;
+  }
+
   uint64_t config_chunk_size = cct->_conf->rgw_max_chunk_size;
 
-  if (alignment == 0) {
-    *max_chunk_size = config_chunk_size;
-    return 0;
-  }
-
-  if (config_chunk_size <= alignment) {
-    *max_chunk_size = alignment;
-    return 0;
-  }
-
-  *max_chunk_size = config_chunk_size - (config_chunk_size % alignment);
+  get_max_aligned_size(config_chunk_size, alignment, max_chunk_size);
 
   ldout(cct, 20) << "max_chunk_size=" << *max_chunk_size << dendl;
 
   return 0;
 }
 
-int RGWRados::get_max_chunk_size(const rgw_placement_rule& placement_rule, const rgw_obj& obj, uint64_t *max_chunk_size)
+int RGWRados::get_max_chunk_size(const rgw_placement_rule& placement_rule, const rgw_obj& obj,
+                                 uint64_t *max_chunk_size, uint64_t *palignment)
 {
   rgw_pool pool;
   if (!get_obj_data_pool(placement_rule, obj, &pool)) {
     ldout(cct, 0) << "ERROR: failed to get data pool for object " << obj << dendl;
     return -EIO;
   }
-  return get_max_chunk_size(pool, max_chunk_size);
+  return get_max_chunk_size(pool, max_chunk_size, palignment);
 }
 
 class RGWIndexCompletionManager;

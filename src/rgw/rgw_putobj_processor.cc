@@ -200,16 +200,17 @@ int AtomicObjectProcessor::process_first_chunk(bufferlist&& data,
 
 int AtomicObjectProcessor::prepare()
 {
-  uint64_t max_head_chunk_size = 0;
+  uint64_t max_head_chunk_size;
   uint64_t head_max_size;
   uint64_t chunk_size = 0;
+  uint64_t alignment;
   rgw_pool head_pool;
 
   if (!store->get_obj_data_pool(bucket_info.placement_rule, head_obj, &head_pool)) {
     return -EIO;
   }
 
-  int r = store->get_max_chunk_size(head_pool, &max_head_chunk_size);
+  int r = store->get_max_chunk_size(head_pool, &max_head_chunk_size, &alignment);
   if (r < 0) {
     return r;
   }
@@ -239,8 +240,12 @@ int AtomicObjectProcessor::prepare()
     chunk_size = max_head_chunk_size;
   }
 
+  uint64_t stripe_size;
   const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
-  manifest.set_trivial_rule(head_max_size, default_stripe_size);
+
+  store->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
+
+  manifest.set_trivial_rule(head_max_size, stripe_size);
 
   r = manifest_gen.create_begin(store->ctx(), &manifest,
                                 bucket_info.placement_rule,
@@ -355,10 +360,24 @@ int MultipartObjectProcessor::process_first_chunk(bufferlist&& data,
 
 int MultipartObjectProcessor::prepare_head()
 {
-  int r = manifest_gen.create_begin(store->ctx(), &manifest,
-                                    bucket_info.placement_rule,
-                                    &tail_placement_rule,
-                                    target_obj.bucket, target_obj);
+  const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
+  uint64_t chunk_size;
+  uint64_t stripe_size;
+  uint64_t alignment;
+
+  int r = store->get_max_chunk_size(tail_placement_rule, target_obj, &chunk_size, &alignment);
+  if (r < 0) {
+    ldout(store->ctx(), 0) << "ERROR: unexpected: get_max_chunk_size(): placement_rule=" << tail_placement_rule.to_str() << " obj=" << target_obj << " returned r=" << r << dendl;
+    return r;
+  }
+  store->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
+
+  manifest.set_multipart_part_rule(stripe_size, part_num);
+
+  r = manifest_gen.create_begin(store->ctx(), &manifest,
+                                bucket_info.placement_rule,
+                                &tail_placement_rule,
+                                target_obj.bucket, target_obj);
   if (r < 0) {
     return r;
   }
@@ -367,16 +386,11 @@ int MultipartObjectProcessor::prepare_head()
   rgw_raw_obj_to_obj(head_obj.bucket, stripe_obj, &head_obj);
   head_obj.index_hash_source = target_obj.key.name;
 
-  uint64_t chunk_size = 0;
-  r = store->get_max_chunk_size(stripe_obj.pool, &chunk_size);
-  if (r < 0) {
-    return r;
-  }
   r = writer.set_stripe_obj(stripe_obj);
   if (r < 0) {
     return r;
   }
-  uint64_t stripe_size = manifest_gen.cur_stripe_max_size();
+  stripe_size = manifest_gen.cur_stripe_max_size();
 
   uint64_t max_head_size = std::min(chunk_size, stripe_size);
   set_head_chunk_size(max_head_size);
@@ -388,8 +402,6 @@ int MultipartObjectProcessor::prepare_head()
 
 int MultipartObjectProcessor::prepare()
 {
-  const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
-  manifest.set_multipart_part_rule(default_stripe_size, part_num);
   manifest.set_prefix(target_obj.key.name + "." + upload_id);
 
   return prepare_head();
