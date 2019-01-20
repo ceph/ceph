@@ -18,6 +18,11 @@
 #include "Crypto.h"
 #include "common/entity_name.h"
 
+enum {
+  AUTH_MODE_AUTHORIZER = 1,
+  AUTH_MODE_MON = 100,
+};
+
 class Cond;
 
 struct EntityAuth {
