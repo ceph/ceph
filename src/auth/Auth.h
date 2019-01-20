@@ -154,9 +154,16 @@ struct AuthAuthorizerChallenge {
 };
 
 struct AuthConnectionMeta {
-  uint32_t auth_method = CEPH_AUTH_UNKNOWN;
-  CryptoKey session_key;
-  CryptoKey connection_secret;
+  uint32_t auth_method = CEPH_AUTH_UNKNOWN;  //< CEPH_AUTH_*
+
+  /// client: initial empty, but populated if server said bad method
+  std::vector<uint32_t> allowed_methods;
+
+  int auth_mode = 0;  ///< server: AUTH_MODE_*
+
+  CryptoKey session_key;         ///< per-ticket key
+  CryptoKey connection_secret;   ///< per-connection key
+
   std::unique_ptr<AuthAuthorizer> authorizer;
   std::unique_ptr<AuthAuthorizerChallenge> authorizer_challenge;
 };
