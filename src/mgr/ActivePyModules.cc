@@ -299,13 +299,14 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     );
     return f.get();
   } else if (what == "devices") {
-    PyEval_RestoreThread(tstate);
     f.open_array_section("devices");
-    daemon_state.with_devices([&f] (const DeviceState& dev) {
-      f.dump_object("device", dev);
-    });
-
-    PyEval_RestoreThread(tstate);
+    daemon_state.with_devices2(
+      [&tstate]() {
+	PyEval_RestoreThread(tstate);
+      },
+      [&f] (const DeviceState& dev) {
+	f.dump_object("device", dev);
+      });
     f.close_section();
     return f.get();
   } else if (what.size() > 7 &&

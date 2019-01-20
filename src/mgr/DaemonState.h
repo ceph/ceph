@@ -334,6 +334,17 @@ public:
     }
   }
 
+  template<typename CallbackInitial, typename Callback, typename...Args>
+  void with_devices2(CallbackInitial&& cbi,  // with lock taken
+		     Callback&& cb,          // for each device
+		     Args&&... args) const {
+    RWLock::RLocker l(lock);
+    cbi();
+    for (auto& i : devices) {
+      std::forward<Callback>(cb)(*i.second, std::forward<Args>(args)...);
+    }
+  }
+
   void list_devids_by_server(const std::string& server,
 			     std::set<std::string> *ls) {
     auto m = get_by_server(server);
