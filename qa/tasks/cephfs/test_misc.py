@@ -218,6 +218,13 @@ class TestMisc(CephFSTestCase):
         info = self.fs.mds_asok(['dump', 'inode', '1'])
         assert(info['path'] == "/")
 
+    def test_dump_inode_hexademical(self):
+        self.mount_a.run_shell(["mkdir", "-p", "foo"])
+        ino = self.mount_a.path_to_ino("foo")
+        assert type(ino) is int
+        info = self.fs.mds_asok(['dump', 'inode', hex(ino)])
+        assert info['path'] == "/foo"
+
     def _run_drop_cache_cmd(self, timeout, use_tell):
         drop_res = None
         if use_tell:
