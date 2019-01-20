@@ -1,4 +1,6 @@
-Sphinx == 1.6.3
+Sphinx == 1.8.3
 git+https://github.com/ceph/sphinx-ditaa.git@py3#egg=sphinx-ditaa
 git+https://github.com/michaeljones/breathe#egg=breathe
-pyyaml==3.13
+# 4.2 is not yet release at the time of writing, to address CVE-2017-18342,
+# we have to use its beta release.
+pyyaml>=4.2b1
