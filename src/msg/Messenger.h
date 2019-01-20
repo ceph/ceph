@@ -47,6 +47,8 @@
 class Timer;
 
 class AuthAuthorizerHandlerRegistry;
+class AuthClient;
+class AuthServer;
 
 class Messenger {
 private:
@@ -72,6 +74,9 @@ protected:
   int socket_priority;
 
 public:
+  AuthClient *auth_client = 0;
+  AuthServer *auth_server = 0;
+
   /**
    * Various Messenger conditional config/type flags to allow
    * different "transport" Messengers to tune themselves
@@ -179,6 +184,13 @@ public:
    */
   uint32_t get_magic() { return magic; }
   void set_magic(int _magic) { magic = _magic; }
+
+  void set_auth_client(AuthClient *ac) {
+    auth_client = ac;
+  }
+  void set_auth_server(AuthServer *as) {
+    auth_server = as;
+  }
 
 protected:
   /**
