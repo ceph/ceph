@@ -55,7 +55,13 @@ public:
       supported{cct_, methods}
   {}
   ~AuthAuthorizeHandlerRegistry();
-  
+
+  void get_supported_methods(std::vector<uint32_t> *v) {
+    v->clear();
+    for (auto m : supported.get_supported_set()) {
+      v->push_back(m);
+    }
+  }
   AuthAuthorizeHandler *get_handler(int protocol);
 };
 
