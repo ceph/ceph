@@ -7113,21 +7113,6 @@ void OSD::ms_fast_dispatch(Message *m)
   OID_EVENT_TRACE_WITH_MSG(m, "MS_FAST_DISPATCH_END", false); 
 }
 
-void OSD::ms_fast_preprocess(Message *m)
-{
-  if (m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
-    if (m->get_type() == CEPH_MSG_OSD_MAP) {
-      MOSDMap *mm = static_cast<MOSDMap*>(m);
-      auto priv = m->get_connection()->get_priv();
-      if (auto s = static_cast<Session*>(priv.get()); s) {
-	s->received_map_lock.lock();
-	s->received_map_epoch = mm->get_last();
-	s->received_map_lock.unlock();
-      }
-    }
-  }
-}
-
 bool OSD::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer)
 {
   dout(10) << "OSD::ms_get_authorizer type=" << ceph_entity_type_name(dest_type) << dendl;
