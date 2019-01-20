@@ -55,7 +55,6 @@ MonClient::MonClient(CephContext *cct_) :
   timer(cct_, monc_lock),
   finisher(cct_),
   initialized(false),
-  no_keyring_disabled_cephx(false),
   log_client(NULL),
   more_log_pending(false),
   want_monmap(true),
