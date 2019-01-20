@@ -184,3 +184,12 @@ fail:
   return (errno = save_errno, -1);
 #endif
 }
+
+#if defined(__FreeBSD__)
+int sched_setaffinity(pid_t pid, size_t cpusetsize,
+                      cpu_set_t *mask)
+{
+  return 0;
+}
+#endif
+

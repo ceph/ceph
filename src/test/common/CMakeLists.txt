@@ -28,12 +28,15 @@ add_executable(unittest_lockdep
 add_ceph_unittest(unittest_lockdep)
 target_link_libraries(unittest_lockdep ceph-common global)
 
+# FreeBSD only has shims to support NUMA, no functional code.
+if(LINUX)
 # unittest_numa
 add_executable(unittest_numa
   test_numa.cc
   )
 add_ceph_unittest(unittest_numa)
 target_link_libraries(unittest_numa ceph-common)
+endif()
 
 # unittest_bloom_filter
 add_executable(unittest_bloom_filter
