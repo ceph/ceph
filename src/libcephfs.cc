@@ -852,6 +852,27 @@ extern "C" int ceph_fsetxattr(struct ceph_mount_info *cmount, int fd, const char
 }
 /* end xattr support */
 
+extern "C" int ceph_stat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->stat(path, stbuf, cmount->default_perms);
+}
+
+extern "C" int ceph_fstat(struct ceph_mount_info *cmount, int fd, struct stat *stbuf)
+{
+  if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->fstat(fd, stbuf, cmount->default_perms);
+}
+
+extern int ceph_lstat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf)
+{
+   if (!cmount->is_mounted())
+    return -ENOTCONN;
+  return cmount->get_client()->lstat(path, stbuf, cmount->default_perms);
+}
+
 extern "C" int ceph_chmod(struct ceph_mount_info *cmount, const char *path, mode_t mode)
 {
   if (!cmount->is_mounted())
@@ -1059,7 +1080,6 @@ extern "C" int ceph_sync_fs(struct ceph_mount_info *cmount)
     return -ENOTCONN;
   return cmount->get_client()->sync_fs();
 }
-
 
 extern "C" int ceph_get_file_stripe_unit(struct ceph_mount_info *cmount, int fh)
 {
