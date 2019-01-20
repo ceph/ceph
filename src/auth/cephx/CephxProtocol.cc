@@ -300,7 +300,7 @@ CephXAuthorizer *CephXTicketHandler::build_authorizer(uint64_t global_id) const
   a->session_key = session_key;
   cct->random()->get_bytes((char*)&a->nonce, sizeof(a->nonce));
 
-  __u8 authorizer_v = 1;
+  __u8 authorizer_v = 1; // see AUTH_MODE_* in Auth.h
   encode(authorizer_v, a->bl);
   encode(global_id, a->bl);
   encode(service_id, a->bl);

@@ -20,7 +20,7 @@
 struct AuthUnknownAuthorizer : public AuthAuthorizer {
   AuthUnknownAuthorizer() : AuthAuthorizer(CEPH_AUTH_UNKNOWN) { }
   bool build_authorizer(const EntityName &ename, uint64_t global_id) {
-    __u8 struct_v = 1;
+    __u8 struct_v = 1; // see AUTH_MODE_* in Auth.h
     encode(struct_v, bl);
     encode(ename, bl);
     encode(global_id, bl);
