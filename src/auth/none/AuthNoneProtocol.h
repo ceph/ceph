@@ -22,7 +22,7 @@ class CephContext;
 struct AuthNoneAuthorizer : public AuthAuthorizer {
   AuthNoneAuthorizer() : AuthAuthorizer(CEPH_AUTH_NONE) { }
   bool build_authorizer(const EntityName &ename, uint64_t global_id) {
-    __u8 struct_v = 1;
+    __u8 struct_v = 1; // see AUTH_MODE_* in Auth.h
     encode(struct_v, bl);
     encode(ename, bl);
     encode(global_id, bl);
