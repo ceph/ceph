@@ -260,6 +260,10 @@
   specified in the ``[global]`` section to allow daemons and clients
   to discover the monitors.
 
+* New command `fs fail` has been added to quickly bring down a file
+  system. This is a single command that unsets the joinable flag on the file
+  system and brings down all of its ranks.
+
 
 Upgrading from Luminous
 -----------------------

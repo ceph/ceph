@@ -76,6 +76,63 @@ class FlagSetHandler : public FileSystemCommandHandler
   }
 };
 
+class FailHandler : public FileSystemCommandHandler
+{
+  public:
+  FailHandler()
+    : FileSystemCommandHandler("fs fail")
+  {
+  }
+
+  int handle(
+      Monitor* mon,
+      FSMap& fsmap,
+      MonOpRequestRef op,
+      const cmdmap_t& cmdmap,
+      std::stringstream& ss) override
+  {
+    if (!mon->osdmon()->is_writeable()) {
+      // not allowed to write yet, so retry when we can
+      mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
+      return -EAGAIN;
+    }
+
+    std::string fs_name;
+    if (!cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name) || fs_name.empty()) {
+      ss << "Missing filesystem name";
+      return -EINVAL;
+    }
+
+    auto fs = fsmap.get_filesystem(fs_name);
+    if (fs == nullptr) {
+      ss << "Not found: '" << fs_name << "'";
+      return -ENOENT;
+    }
+
+    auto f = [](auto fs) {
+      fs->mds_map.set_flag(CEPH_MDSMAP_NOT_JOINABLE);
+    };
+    fsmap.modify_filesystem(fs->fscid, std::move(f));
+
+    std::vector<mds_gid_t> to_fail;
+    for (const auto& p : fs->mds_map.get_mds_info()) {
+      to_fail.push_back(p.first);
+    }
+
+    for (const auto& gid : to_fail) {
+      mon->mdsmon()->fail_mds_gid(fsmap, gid);
+    }
+    if (!to_fail.empty()) {
+      mon->osdmon()->propose_pending();
+    }
+
+    ss << fs_name;
+    ss << " marked not joinable; MDS cannot join the cluster. All MDS ranks marked failed.";
+
+    return 0;
+  }
+};
+
 class FsNewHandler : public FileSystemCommandHandler
 {
   public:
@@ -691,7 +748,7 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
 
     // Check that no MDS daemons are active
     if (fs->mds_map.get_num_up_mds() > 0) {
-      ss << "all MDS daemons must be inactive before removing filesystem";
+      ss << "all MDS daemons must be inactive/failed before removing filesystem. See `ceph fs fail`.";
       return -EINVAL;
     }
 
@@ -878,6 +935,7 @@ FileSystemCommandHandler::load(Paxos *paxos)
   std::list<std::shared_ptr<FileSystemCommandHandler> > handlers;
 
   handlers.push_back(std::make_shared<SetHandler>());
+  handlers.push_back(std::make_shared<FailHandler>());
   handlers.push_back(std::make_shared<FlagSetHandler>());
   handlers.push_back(std::make_shared<AddDataPoolHandler>(paxos));
   handlers.push_back(std::make_shared<RemoveDataPoolHandler>());

@@ -129,9 +129,17 @@ client I/O is stopped.
 Taking the cluster down rapidly for deletion or disaster recovery
 -----------------------------------------------------------------
 
-To allow rapidly deleting a file system (for testing) or to quickly bring MDS
-daemons down, the operator may also set a flag to prevent standbys from
-activating on the file system. This is done using the ``joinable`` flag:
+To allow rapidly deleting a file system (for testing) or to quickly bring the
+file system and MDS daemons down, use the ``fs fail`` command:
+
+::
+
+    fs fail <fs_name>
+
+This command sets a file system flag to prevent standbys from
+activating on the file system (the ``joinable`` flag).
+
+This process can also be done manually by doing the following:
 
 ::
 
@@ -147,6 +155,12 @@ respawn as standbys. The file system will be left in a degraded state.
 
 Once all ranks are inactive, the file system may also be deleted or left in
 this state for other purposes (perhaps disaster recovery).
+
+To bring the cluster back up, simply set the joinable flag:
+
+::
+
+    fs set <fs_name> joinable true
 
 
 Daemons
