@@ -2,6 +2,7 @@ set(auth_srcs
   AuthAuthorizeHandler.cc
   AuthClientHandler.cc
   AuthMethodList.cc
+  AuthServer.cc
   AuthSessionHandler.cc
   Crypto.cc
   KeyRing.cc
