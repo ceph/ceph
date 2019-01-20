@@ -3898,9 +3898,9 @@ void Monitor::handle_forward(MonOpRequestRef op)
     ceph_assert(req != NULL);
 
     ConnectionRef c(new AnonConnection(cct, m->client_socket_addr));
-    MonSession *s = new MonSession(req->get_source(),
-				   req->get_source_addrs(),
-				   static_cast<Connection*>(c.get()));
+    MonSession *s = new MonSession(static_cast<Connection*>(c.get()));
+    s->_ident(req->get_source(),
+	      req->get_source_addrs());
     c->set_priv(RefCountedPtr{s, false});
     c->set_peer_addrs(m->client_addrs);
     c->set_peer_type(m->client_type);
