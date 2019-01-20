@@ -382,13 +382,18 @@ private:
   void trim_cache() {
     dout(20) << __func__ << dendl;
 
-    if (!mdcache->trim(UINT64_MAX)) {
-      cmd_err(f, "failed to trim cache");
-      complete(-EINVAL);
-      return;
+    auto [throttled, count] = mdcache->trim(UINT64_MAX);
+    dout(10) << __func__
+             << (throttled ? " (throttled)" : "")
+             << " trimmed " << count << " caps" << dendl;
+    if (throttled && count > 0) {
+      auto timer = new FunctionContext([this](int _) {
+        trim_cache();
+      });
+      mds->timer.add_event_after(1.0, timer);
+    } else {
+      cache_status();
     }
-
-    cache_status();
   }
 
   void cache_status() {
