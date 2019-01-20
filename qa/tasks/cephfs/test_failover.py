@@ -26,7 +26,7 @@ class TestClusterResize(CephFSTestCase):
         original_ranks = set([info['gid'] for info in status.get_ranks(fscid)])
         original_standbys = set([info['gid'] for info in status.get_standbys()])
 
-        oldmax = self.fs.get_mds_map(status)['max_mds']
+        oldmax = self.fs.get_var('max_mds')
         self.assertTrue(n > oldmax)
         self.fs.set_max_mds(n)
 
@@ -46,7 +46,7 @@ class TestClusterResize(CephFSTestCase):
         original_ranks = set([info['gid'] for info in status.get_ranks(fscid)])
         original_standbys = set([info['gid'] for info in status.get_standbys()])
 
-        oldmax = self.fs.get_mds_map(status)['max_mds']
+        oldmax = self.fs.get_var('max_mds')
         self.assertTrue(n < oldmax)
         self.fs.set_max_mds(n)
 
@@ -90,6 +90,21 @@ class TestClusterResize(CephFSTestCase):
         self.shrink(2)
         self.wait_for_health_clear(30)
 
+    def test_down_health(self):
+        """
+        That marking a FS down does not generate a health warning
+        """
+
+        self.fs.set_down()
+        try:
+            self.wait_for_health("", 30)
+            raise RuntimeError("got health warning?")
+        except RuntimeError as e:
+            if "Timed out after" in str(e):
+                pass
+            else:
+                raise
+
     def test_down_twice(self):
         """
         That marking a FS down twice does not wipe old_max_mds.
@@ -97,26 +112,33 @@ class TestClusterResize(CephFSTestCase):
 
         self.grow(2)
         self.fs.set_down()
-        self.wait_for_health("MDS_ALL_DOWN", 30)
+        self.fs.wait_for_daemons()
         self.fs.set_down(False)
-        mdsmap = self.fs.get_mds_map()
-        self.assertTrue(mdsmap["max_mds"] == 2)
+        self.assertEqual(self.fs.get_var("max_mds"), 2)
         self.fs.wait_for_daemons(timeout=60)
 
-    def test_all_down(self):
+    def test_down_grow(self):
         """
-        That a health error is generated when FS has no active MDS and cleared
-        when actives come back online.
+        That setting max_mds undoes down.
         """
 
         self.fs.set_down()
-        self.wait_for_health("MDS_ALL_DOWN", 30)
-        self.fs.set_down(False)
-        self.wait_for_health_clear(30)
-        self.fs.set_down(True)
-        self.wait_for_health("MDS_ALL_DOWN", 30)
+        self.fs.wait_for_daemons()
         self.grow(2)
-        self.wait_for_health_clear(30)
+        self.fs.wait_for_daemons()
+
+    def test_down(self):
+        """
+        That down setting toggles and sets max_mds appropriately.
+        """
+
+        self.fs.set_down()
+        self.fs.wait_for_daemons()
+        self.assertEqual(self.fs.get_var("max_mds"), 0)
+        self.fs.set_down(False)
+        self.assertEqual(self.fs.get_var("max_mds"), 1)
+        self.fs.wait_for_daemons()
+        self.assertEqual(self.fs.get_var("max_mds"), 1)
 
     def test_hole(self):
         """

@@ -496,7 +496,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
   }
 
   // MDS_ALL_DOWN
-  if ((mds_rank_t)get_num_up_mds() == 0) {
+  if ((mds_rank_t)get_num_up_mds() == 0 && get_max_mds() > 0) {
     health_check_t &check = checks->add(
       "MDS_ALL_DOWN", HEALTH_ERR,
       "%num% filesystem%plurals% %isorare% offline");

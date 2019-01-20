@@ -602,8 +602,8 @@ class Filesystem(MDSCluster):
             status = self.status()
         return status.get_fsmap(self.id)['mdsmap']
 
-    def get_var(self, var):
-        return self.status().get_fsmap(self.id)['mdsmap'][var]
+    def get_var(self, var, status=None):
+        return self.get_mds_map(status=status)[var]
 
     def add_data_pool(self, name):
         self.mon_manager.raw_cluster_cmd('osd', 'pool', 'create', name, self.get_pgs_per_fs_pool().__str__())
