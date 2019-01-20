@@ -23,24 +23,35 @@ namespace immutable_obj_cache {
 
 class CacheClient {
 public:
+
   CacheClient(const std::string& file, CephContext* ceph_ctx);
   ~CacheClient();
   void run();
   bool is_session_work();
-
   void close();
   int stop();
   int connect();
-
   void lookup_object(std::string pool_name, std::string oid, GenContext<ObjectCacheRequest*>* on_finish);
+  int register_client(Context* on_finish);
+
+private:
+
   void send_message();
   void try_send();
   void fault(const int err_type, const boost::system::error_code& err);
   void try_receive();
   void receive_message();
-  int register_client(Context* on_finish);
-
+  void process(ObjectCacheRequest* reply, uint64_t seq_id);
+  void read_reply_header();
+  void handle_reply_header(bufferptr bp_head,
+                           const boost::system::error_code& ec, size_t bytes_transferred);
+  void read_reply_data(bufferptr&& bp_head, bufferptr&& bp_data,
+                       const uint64_t data_len, const uint64_t seq_id);
+  void handle_reply_data(bufferptr bp_head, bufferptr bp_data,
+                        const uint64_t data_len, const uint64_t seq_id,
+                        const boost::system::error_code& ec, size_t bytes_transferred);
 private:
+
   CephContext* cct;
   boost::asio::io_service m_io_service;
   boost::asio::io_service::work m_io_service_work;
@@ -59,7 +70,6 @@ private:
   std::atomic<bool> m_reading;
   std::atomic<uint64_t> m_sequence_id;
   Mutex m_lock;
-  Mutex m_map_lock;
   std::map<uint64_t, ObjectCacheRequest*> m_seq_to_req;
   bufferlist m_outcoming_bl;
   char* m_header_buffer;
