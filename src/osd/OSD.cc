@@ -3866,11 +3866,6 @@ int OSD::shutdown()
     store->flush_journal();
   }
 
-  store->umount();
-  delete store;
-  store = 0;
-  dout(10) << "Store synced" << dendl;
-
   monc->shutdown();
   osd_lock.Unlock();
 
@@ -3880,6 +3875,13 @@ int OSD::shutdown()
     s->shard_osdmap = OSDMapRef();
   }
   service.shutdown();
+
+  std::lock_guard lock(osd_lock);
+  store->umount();
+  delete store;
+  store = nullptr;
+  dout(10) << "Store synced" << dendl;
+
   op_tracker.on_shutdown();
 
   class_handler->shutdown();
