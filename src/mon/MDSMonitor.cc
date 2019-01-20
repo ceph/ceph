@@ -1111,6 +1111,8 @@ bool MDSMonitor::fail_mds_gid(FSMap &fsmap, mds_gid_t gid)
   const MDSMap::mds_info_t &info = fsmap.get_info_gid(gid);
   dout(1) << "fail_mds_gid " << gid << " mds." << info.name << " role " << info.rank << dendl;
 
+  ceph_assert(mon->osdmon()->is_writeable());
+
   epoch_t blacklist_epoch = 0;
   if (info.rank >= 0 && info.state != MDSMap::STATE_STANDBY_REPLAY) {
     utime_t until = ceph_clock_now();
