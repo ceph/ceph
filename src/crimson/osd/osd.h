@@ -8,7 +8,6 @@
 
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Dispatcher.h"
-#include "crimson/os/cyan_store.h"
 #include "crimson/osd/chained_dispatchers.h"
 #include "crimson/osd/state.h"
 
@@ -19,6 +18,11 @@ class OSDMap;
 
 namespace ceph::net {
   class Messenger;
+}
+
+namespace ceph::os {
+  class CyanStore;
+  struct Collection;
 }
 
 class OSD : public ceph::net::Dispatcher {
@@ -36,7 +40,9 @@ class OSD : public ceph::net::Dispatcher {
   std::map<epoch_t, seastar::lw_shared_ptr<OSDMap>> osdmaps;
   seastar::lw_shared_ptr<OSDMap> osdmap;
   // TODO: use a wrapper for ObjectStore
-  std::unique_ptr<CyanStore> store;
+  std::unique_ptr<ceph::os::CyanStore> store;
+  using CollectionRef = boost::intrusive_ptr<ceph::os::Collection>;
+  CollectionRef meta_coll;
 
   OSDState state;
 
