@@ -5,6 +5,10 @@
 #include "messages/MOSDMap.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/SocketMessenger.h"
+#include "crimson/os/cyan_collection.h"
+#include "crimson/os/cyan_object.h"
+#include "crimson/os/cyan_store.h"
+#include "crimson/os/Transaction.h"
 
 namespace {
   seastar::logger& logger() {
@@ -19,6 +23,7 @@ namespace {
 }
 
 using ceph::common::local_conf;
+using ceph::os::CyanStore;
 
 OSD::OSD(int id, uint32_t nonce)
   : whoami{id},
@@ -48,7 +53,7 @@ OSD::~OSD() = default;
 
 seastar::future<> OSD::mkfs(uuid_d cluster_fsid, int whoami)
 {
-  CyanStore store{local_conf().get_val<std::string>("osd_data")};
+  ceph::os::CyanStore store{local_conf().get_val<std::string>("osd_data")};
   uuid_d osd_fsid;
   osd_fsid.generate_random();
   store.write_meta("fsid", osd_fsid.to_string());
@@ -60,9 +65,12 @@ seastar::future<> OSD::mkfs(uuid_d cluster_fsid, int whoami)
 seastar::future<> OSD::start()
 {
   logger().info("start");
-  auto& conf = local_conf();
-  store = std::make_unique<CyanStore>(conf.get_val<std::string>("osd_data"));
-  return read_superblock().then([this] {
+  const auto data_path = local_conf().get_val<std::string>("osd_data");
+  store = std::make_unique<ceph::os::CyanStore>(data_path);
+  return store->mount().then([this] {
+    meta_coll = store->open_collection(coll_t::meta());
+    return read_superblock();
+  }).then([this] {
     osdmap = get_map(superblock.current_epoch);
     return client_msgr->start(&dispatchers);
   }).then([this] {
@@ -220,15 +228,22 @@ seastar::future<> OSD::osdmap_subscribe(version_t epoch, bool force_request)
   }
 }
 
+void OSD::write_superblock(ceph::os::Transaction& t)
+{
+  bufferlist bl;
+  encode(superblock, bl);
+  t.write(meta_coll->cid, OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
+}
+
 seastar::future<> OSD::read_superblock()
 {
   // just-enough superblock so mon can ack my MOSDBoot
-  // might want to have a PurpleStore which is able to read the meta data for us.
-  string ceph_fsid = store->read_meta("ceph_fsid");
-  superblock.cluster_fsid.parse(ceph_fsid.c_str());
-  string osd_fsid = store->read_meta("fsid");
-  superblock.osd_fsid.parse(osd_fsid.c_str());
-  return seastar::now();
+  return store->read(meta_coll, OSD_SUPERBLOCK_GOBJECT, 0, 0)
+    .then([this] (bufferlist&& bl) {
+      auto p = bl.cbegin();
+      decode(superblock, p);
+      return seastar::now();
+  });
 }
 
 seastar::future<> OSD::handle_osd_map(ceph::net::ConnectionRef conn,
