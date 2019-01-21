@@ -851,8 +851,13 @@
   rbd help group list
   usage: rbd group list [--pool <pool>] [--namespace <namespace>] 
                         [--format <format>] [--pretty-format] 
+                        <pool-spec> 
   
   List rbd groups.
+  
+  Positional arguments
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace-name>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1319,13 +1324,13 @@
   rbd help list
   usage: rbd list [--long] [--pool <pool>] [--namespace <namespace>] 
                   [--format <format>] [--pretty-format] 
-                  <pool-name> <namespace-name> 
+                  <pool-spec> 
   
   List rbd images.
   
   Positional arguments
-    <pool-name>          pool name
-    <namespace-name>     namespace name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace-name>]
   
   Optional arguments
     -l [ --long ]        long listing format
@@ -1744,13 +1749,13 @@
   
   rbd help namespace create
   usage: rbd namespace create [--pool <pool>] [--namespace <namespace>] 
-                              <pool-name> <namespace-name> 
+                              <pool-spec> 
   
   Create an RBD image namespace.
   
   Positional arguments
-    <pool-name>          pool name
-    <namespace-name>     namespace name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace-name>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1772,13 +1777,13 @@
   
   rbd help namespace remove
   usage: rbd namespace remove [--pool <pool>] [--namespace <namespace>] 
-                              <pool-name> <namespace-name> 
+                              <pool-spec> 
   
   Remove an RBD image namespace.
   
   Positional arguments
-    <pool-name>          pool name
-    <namespace-name>     namespace name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace-name>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1841,12 +1846,13 @@
   rbd help pool stats
   usage: rbd pool stats [--pool <pool>] [--namespace <namespace>] 
                         [--format <format>] [--pretty-format] 
-                        <pool-name> 
+                        <pool-spec> 
   
   Display pool statistics.
   
   Positional arguments
-    <pool-name>          pool name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace-name>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2141,13 +2147,13 @@
   rbd help trash list
   usage: rbd trash list [--pool <pool>] [--namespace <namespace>] [--all] 
                         [--long] [--format <format>] [--pretty-format] 
-                        <pool-name> <namespace-name> 
+                        <pool-spec> 
   
   List trash images.
   
   Positional arguments
-    <pool-name>          pool name
-    <namespace-name>     namespace name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace-name>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2180,13 +2186,13 @@
   usage: rbd trash purge [--pool <pool>] [--namespace <namespace>] 
                          [--no-progress] [--expired-before <expired-before>] 
                          [--threshold <threshold>] 
-                         <pool-name> <namespace-name> 
+                         <pool-spec> 
   
   Remove all expired images from trash.
   
   Positional arguments
-    <pool-name>           pool name
-    <namespace-name>      namespace name
+    <pool-spec>           pool specification
+                          (example: <pool-name>[/<namespace-name>]
   
   Optional arguments
     -p [ --pool ] arg     pool name

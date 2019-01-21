@@ -166,20 +166,19 @@ void add_snap_id_option(po::options_description *opt) {
 }
 
 void add_pool_options(boost::program_options::options_description *pos,
-                      boost::program_options::options_description *opt) {
-  pos->add_options()
-    ("pool-name", "pool name");
+                      boost::program_options::options_description *opt,
+                      bool namespaces_supported) {
   opt->add_options()
     ((POOL_NAME + ",p").c_str(), po::value<std::string>(), "pool name");
-}
-
-void add_namespace_options(boost::program_options::options_description *pos,
-                           boost::program_options::options_description *opt) {
-  if (pos != nullptr) {
+  if (namespaces_supported) {
+    add_namespace_option(opt, ARGUMENT_MODIFIER_NONE);
     pos->add_options()
-      ("namespace-name", "namespace name");
+      ("pool-spec", "pool specification\n"
+       "(example: <pool-name>[/<namespace-name>]");
+  } else {
+    pos->add_options()
+      ("pool-name", "pool name");
   }
-  add_namespace_option(opt, ARGUMENT_MODIFIER_NONE);
 }
 
 void add_image_spec_options(po::options_description *pos,

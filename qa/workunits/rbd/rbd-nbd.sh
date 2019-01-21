@@ -53,7 +53,7 @@ setup()
     DATA=${TEMPDIR}/data
     dd if=/dev/urandom of=${DATA} bs=1M count=${SIZE}
 
-    rbd namespace create ${POOL} ${NS}
+    rbd namespace create ${POOL}/${NS}
 
     for ns in '' ${NS}; do
         rbd --dest-pool ${POOL} --dest-namespace "${ns}" --no-progress import \
@@ -83,7 +83,7 @@ function cleanup()
 	    rbd -p ${POOL} --namespace "${ns}" remove ${IMAGE}
         fi
     done
-    rbd namespace remove ${POOL} ${NS}
+    rbd namespace remove ${POOL}/${NS}
 }
 
 function expect_false()
