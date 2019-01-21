@@ -5,10 +5,10 @@ the current directory.  Each test that is discovered will be passed the
 teuthology ctx and config args that each teuthology task usually gets.
 This allows the tests to operate against the cluster.
 
-An example:
+An example::
 
-tasks
-  - tests:
+    tasks
+      - tests:
 
 """
 import logging

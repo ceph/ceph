@@ -13,20 +13,21 @@ def task(ctx, config):
     """
     Sequentialize a group of tasks into one executable block
 
-    example:
-    - sequential:
-       - tasktest:
-       - tasktest:
+    example::
 
-    You can also reference the job from elsewhere:
+        - sequential:
+           - tasktest:
+           - tasktest:
 
-    foo:
-      tasktest:
-    tasks:
-    - sequential:
-      - tasktest:
-      - foo
-      - tasktest:
+    You can also reference the job from elsewhere::
+
+        foo:
+          tasktest:
+        tasks:
+        - sequential:
+          - tasktest:
+          - foo
+          - tasktest:
 
     That is, if the entry is not a dict, we will look it up in the top-level
     config.

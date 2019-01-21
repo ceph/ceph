@@ -17,12 +17,12 @@ def task(ctx, config):
     This will initially sync the clocks.  Eventually it should let us also
     skew by some number of seconds.
 
-    example:
+    example::
 
-    tasks:
-    - clock:
-    - ceph:
-    - interactive:
+        tasks:
+        - clock:
+        - ceph:
+        - interactive:
 
     to sync.
 

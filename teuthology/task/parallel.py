@@ -14,28 +14,29 @@ def task(ctx, config):
     """
     Run a group of tasks in parallel.
 
-    example:
-    - parallel:
-       - tasktest:
-       - tasktest:
+    example::
+
+        - parallel:
+           - tasktest:
+           - tasktest:
 
     You can also define tasks in a top-level section outside of
     'tasks:', and reference them here.
 
     The referenced section must contain a list of tasks to run
     sequentially, or a single task as a dict. The latter is only
-    available for backwards compatibility with existing suites:
+    available for backwards compatibility with existing suites::
 
-    tasks:
-    - parallel:
-      - tasktest: # task inline
-      - foo       # reference to top-level 'foo' section
-      - bar       # reference to top-level 'bar' section
-    foo:
-    - tasktest1:
-    - tasktest2:
-    bar:
-      tasktest: # note the list syntax from 'foo' is preferred
+        tasks:
+        - parallel:
+          - tasktest: # task inline
+          - foo       # reference to top-level 'foo' section
+          - bar       # reference to top-level 'bar' section
+        foo:
+        - tasktest1:
+        - tasktest2:
+        bar:
+          tasktest: # note the list syntax from 'foo' is preferred
 
     That is, if the entry is not a dict, we will look it up in the top-level
     config.
