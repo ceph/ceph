@@ -1383,7 +1383,7 @@ bool MDSDaemon::ms_verify_authorizer(Connection *con, int peer_type,
     // It doesn't go into a SessionMap instance until it sends an explicit
     // request to open a session (initial state of Session is `closed`)
     if (!s) {
-      s = new Session;
+      s = new Session(nullptr);
       s->info.auth_name = name;
       s->info.inst.addr = con->get_peer_addr();
       s->info.inst.name = n;

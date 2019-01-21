@@ -546,8 +546,8 @@ void SessionMapStore::decode_legacy(bufferlist::iterator& p)
     decode(n, p);
     
     while (n-- && !p.end()) {
-      bufferlist::iterator p2 = p;
-      Session *s = new Session;
+      auto p2 = p;
+      Session *s = new Session(ConnectionRef());
       s->info.decode(p);
       if (session_map.count(s->info.inst.name)) {
 	// eager client connected too fast!  aie.
