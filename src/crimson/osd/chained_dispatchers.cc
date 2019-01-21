@@ -39,16 +39,14 @@ ChainedDispatchers::ms_handle_remote_reset(ceph::net::ConnectionRef conn) {
 }
 
 seastar::future<std::unique_ptr<AuthAuthorizer>>
-ChainedDispatchers::ms_get_authorizer(peer_type_t peer_type, bool force_new)
+ChainedDispatchers::ms_get_authorizer(peer_type_t peer_type)
 {
   // since dispatcher returns a nullptr if it does not have the authorizer,
   // let's use the chain-of-responsibility pattern here.
   struct Params {
     peer_type_t peer_type;
-    bool force_new;
     std::deque<Dispatcher*>::iterator first, last;
-  } params = {peer_type, force_new,
-              dispatchers.begin(), dispatchers.end()};
+  } params = {peer_type, dispatchers.begin(), dispatchers.end()};
   return seastar::do_with(Params{params}, [this] (Params& params) {
     using result_t = std::unique_ptr<AuthAuthorizer>;
     return seastar::repeat_until_value([&] () {
@@ -57,8 +55,7 @@ ChainedDispatchers::ms_get_authorizer(peer_type_t peer_type, bool force_new)
         // just give up
         return seastar::make_ready_future<std::optional<result_t>>(result_t{});
       } else {
-        return (*first)->ms_get_authorizer(params.peer_type,
-                                           params.force_new)
+        return (*first)->ms_get_authorizer(params.peer_type)
           .then([&] (auto&& auth)-> std::optional<result_t> {
           if (auth) {
             // hooray!
