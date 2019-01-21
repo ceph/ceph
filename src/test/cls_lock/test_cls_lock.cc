@@ -563,3 +563,78 @@ TEST(ClsLock, TestExclusiveEphemeralStealExclusive) {
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
+
+
+TEST(ClsLock, TestBiddedLock) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  Rados cluster2;
+  IoCtx ioctx2;
+  ASSERT_EQ("", connect_cluster_pp(cluster2));
+  cluster2.ioctx_create(pool_name.c_str(), ioctx2);
+
+  string oid = "bidding_test";
+  bufferlist bl;
+  string lock_name = "mylock";
+
+  ASSERT_EQ(0, ioctx.write(oid, bl, bl.length(), 0));
+
+  const utime_t lock_duration_time(5, 0);
+  const utime_t bid_duration_time(8, 0);
+
+  /* test lock object */
+  Lock l(lock_name);
+  l.set_duration(lock_duration_time);
+  l.set_bid_amount(3);
+  l.set_bid_duration(bid_duration_time);
+
+  ASSERT_EQ(-EINVAL, l.lock_shared(&ioctx, oid)) <<
+    " cannot have a bidded lock that's a shared lock";
+
+  ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
+
+  Lock l2(lock_name);
+  l2.set_duration(lock_duration_time);
+  l2.set_bid_amount(1);
+  l2.set_bid_duration(bid_duration_time);
+
+  /* even though this has a lower bid, the lock is already taken */
+  ASSERT_EQ(-EBUSY, l2.lock_exclusive(&ioctx2, oid));
+
+  ASSERT_EQ(0, l.unlock(&ioctx, oid));
+
+  // someone else has a lower bid
+  ASSERT_EQ(-EBUSY, l.lock_exclusive(&ioctx, oid));
+
+  // this is the lowest bid, so it should succeed
+  ASSERT_EQ(0, l2.lock_exclusive(&ioctx2, oid));
+
+  sleep(1);
+
+  // let's renew this lock, but with a higher bid; should still succeed
+  l2.set_bid_amount(30);
+  l2.set_may_renew(true);
+  ASSERT_EQ(0, l2.lock_exclusive(&ioctx2, oid));
+
+  sleep(3);
+
+  ASSERT_EQ(-EBUSY, l.lock_exclusive(&ioctx, oid));
+
+  sleep(6);
+
+  ASSERT_EQ(-ENOENT, l2.unlock(&ioctx2, oid));
+
+  // let the lower l1 bid expire
+  sleep(5);
+
+  // so l2 should succeed even though l1 had a lower bid that expired
+  ASSERT_EQ(0, l2.lock_exclusive(&ioctx2, oid));
+
+  ASSERT_EQ(0, l2.unlock(&ioctx2, oid));
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
