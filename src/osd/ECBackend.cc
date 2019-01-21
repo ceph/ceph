@@ -1861,9 +1861,9 @@ bool ECBackend::try_state_to_reads()
     return false;
   }
 
-  op->using_cache = pipeline_state.caching_enabled();
-
-  if (op->invalidates_cache()) {
+  if (!pipeline_state.caching_enabled()) {
+    op->using_cache = false;
+  } else if (op->invalidates_cache()) {
     dout(20) << __func__ << ": invalidating cache after this op"
 	     << dendl;
     pipeline_state.invalidate();
