@@ -38,7 +38,7 @@ def selective_update(a, b, func):
     pairs in the second dict and merges them into the first dict if func()
     returns a "Truthy" value.
 
-    Example:
+    Example::
 
         >>> a = dict(x=0, y=1, z=3)
         >>> b = dict(x=1, y=2, z=0)

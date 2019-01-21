@@ -12,12 +12,13 @@ def task(ctx, config):
     """
     Loop a sequential group of tasks
 
-    example:
-    - loop:
-       count: 10
-       body:
-         - tasktest:
-         - tasktest:
+    example::
+
+        - loop:
+           count: 10
+           body:
+             - tasktest:
+             - tasktest:
 
     :param ctx: Context
     :param config: Configuration

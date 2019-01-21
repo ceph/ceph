@@ -25,7 +25,7 @@ def task(ctx, config):
 
     If the command a list, we simply join it with ;'s.
 
-    Example:
+    Example::
 
        tasks:
        - install:

@@ -25,17 +25,19 @@ def task(ctx, config):
     Optional entries are the "offset" and "length" of the lock. You can also specify a
     "maxwait" timeout period which fails if the executable takes longer
     to complete, and an "expectfail".
-    An example:
-    tasks:
-    - ceph:
-    - ceph-fuse: [client.0, client.1]
-    - lockfile:
-      [{client:client.0, file:testfile, holdtime:10},
-      {client:client.1, file:testfile, holdtime:0, maxwait:0, expectfail:true},
-      {client:client.1, file:testfile, holdtime:0, maxwait:15, expectfail:false},
-      10,
-      {client: client.1, lockfile: testfile, holdtime: 5},
-      {client: client.2, lockfile: testfile, holdtime: 5, maxwait: 1, expectfail: True}]
+
+    An example::
+
+        tasks:
+        - ceph:
+        - ceph-fuse: [client.0, client.1]
+        - lockfile:
+          [{client:client.0, file:testfile, holdtime:10},
+          {client:client.1, file:testfile, holdtime:0, maxwait:0, expectfail:true},
+          {client:client.1, file:testfile, holdtime:0, maxwait:15, expectfail:false},
+          10,
+          {client: client.1, lockfile: testfile, holdtime: 5},
+          {client: client.2, lockfile: testfile, holdtime: 5, maxwait: 1, expectfail: True}]
 
 
     In the past this test would have failed; there was a bug where waitlocks weren't

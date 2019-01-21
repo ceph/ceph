@@ -15,13 +15,13 @@ def task(ctx, config):
     Measure the time that this set of tasks takes and save that value in the summary file.
     Config is a description of what we are timing.
 
-    example:
+    example::
 
-    tasks:
-    - ceph:
-    - foo:
-    - timer: "fsx run"
-    - fsx:
+        tasks:
+        - ceph:
+        - foo:
+        - timer: "fsx run"
+        - fsx:
 
     """
     start = datetime.datetime.now()

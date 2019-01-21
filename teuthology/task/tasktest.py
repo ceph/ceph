@@ -15,16 +15,16 @@ def task(ctx, config):
     destroyed/cleaned up.  This task was used to test parallel and
     sequential task options.
 
-    example:
+    example::
 
-    tasks:
-    - sequential:
+        tasks:
+        - sequential:
+            - tasktest:
+                - id: 'foo'
+            - tasktest:
+                - id: 'bar'
+                - delay:5
         - tasktest:
-            - id: 'foo'
-        - tasktest:
-            - id: 'bar'
-            - delay:5
-    - tasktest:
 
     The above yaml will sequentially start a test task named foo and a test
     task named bar.  Bar will take 5 seconds to complete.  After foo and bar
