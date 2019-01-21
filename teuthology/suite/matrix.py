@@ -196,7 +196,7 @@ class Concat(Matrix):
 
     def tostr(self, depth):
         ret = '\t'*depth + "Concat({item}):\n".format(item=self.item)
-        return ret + ''.join([i[1].tostr(depth+1) for i in self.submats])
+        return ret + ''.join([i.tostr(depth+1) for i in self.submats])
 
 class PickRandom(Matrix):
     """
@@ -220,7 +220,7 @@ class PickRandom(Matrix):
 
     def tostr(self, depth):
         ret = '\t'*depth + "PickRandom({item}):\n".format(item=self.item)
-        return ret + ''.join([i[1].tostr(depth+1) for i in self.submats])
+        return ret + ''.join([i.tostr(depth+1) for i in self.submats])
 
 class Sum(Matrix):
     """
