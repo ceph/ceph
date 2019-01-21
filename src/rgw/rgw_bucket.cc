@@ -2545,7 +2545,7 @@ WRITE_CLASS_ENCODER(archive_meta_info)
 class RGWArchiveBucketMetadataHandler : public RGWBucketMetadataHandler {
 public:
   int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
-    ldout(store->ctx(), 0) << "SKIP: bucket removal is not allowed on archive zone: bucket:" << entry << " ... proceeding to rename" << dendl;
+    ldout(store->ctx(), 5) << "SKIP: bucket removal is not allowed on archive zone: bucket:" << entry << " ... proceeding to rename" << dendl;
 
     string tenant_name, bucket_name;
     parse_bucket(entry, &tenant_name, &bucket_name);
