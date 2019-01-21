@@ -188,6 +188,8 @@ void MDBalancer::tick()
     send_heartbeat();
     num_bal_times--;
   }
+
+  mds->mdcache->show_subtrees(10, true);
 }
 
 
