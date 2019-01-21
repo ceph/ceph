@@ -171,7 +171,6 @@ class Module(MgrModule):
 
         df = self.get('df')
         data['num_pools'] = len(df['pools'])
-        data['total_objects'] = df['stats']['total_objects']
         data['total_used_bytes'] = df['stats']['total_used_bytes']
         data['total_bytes'] = df['stats']['total_bytes']
         data['total_avail_bytes'] = df['stats']['total_avail_bytes']
