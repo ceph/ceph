@@ -65,6 +65,12 @@ namespace crimson {
       std::numeric_limits<double>::lowest();
     constexpr uint tag_modulo = 1000000;
 
+    constexpr auto standard_idle_age  = std::chrono::seconds(300);
+    constexpr auto standard_erase_age = std::chrono::seconds(600);
+    constexpr auto standard_check_time = std::chrono::seconds(60);
+    constexpr auto aggressive_check_time = std::chrono::seconds(5);
+    constexpr uint standard_erase_max = 100;
+
     enum class AtLimit {
       // requests are delayed until the limit is restored
       Wait,
@@ -806,6 +812,10 @@ namespace crimson {
       Duration                  erase_age;
       Duration                  check_time;
       std::deque<MarkPoint>     clean_mark_points;
+      // max number of clients to erase at a time
+      Counter erase_max;
+      // unfinished last erase point
+      Counter last_erase_point = 0;
 
       // NB: All threads declared at end, so they're destructed first!
 
@@ -835,7 +845,8 @@ namespace crimson {
 	finishing(false),
 	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
 	erase_age(std::chrono::duration_cast<Duration>(_erase_age)),
-	check_time(std::chrono::duration_cast<Duration>(_check_time))
+	check_time(std::chrono::duration_cast<Duration>(_check_time)),
+	erase_max(standard_erase_max)
       {
 	assert(_erase_age >= _idle_age);
 	assert(_check_time < _idle_age);
@@ -1196,10 +1207,11 @@ namespace crimson {
 
 	// first erase the super-old client records
 
-	Counter erase_point = 0;
+	Counter erase_point = last_erase_point;
 	auto point = clean_mark_points.front();
 	while (point.first <= now - erase_age) {
-	  erase_point = point.second;
+	  last_erase_point = point.second;
+	  erase_point = last_erase_point;
 	  clean_mark_points.pop_front();
 	  point = clean_mark_points.front();
 	}
@@ -1213,16 +1225,29 @@ namespace crimson {
 	  }
 	}
 
+	Counter erased_num = 0;
 	if (erase_point > 0 || idle_point > 0) {
 	  for (auto i = client_map.begin(); i != client_map.end(); /* empty */) {
 	    auto i2 = i++;
-	    if (erase_point && i2->second->last_tick <= erase_point) {
+	    if (erase_point &&
+	        erased_num < erase_max &&
+	        i2->second->last_tick <= erase_point) {
 	      delete_from_heaps(i2->second);
 	      client_map.erase(i2);
+	      erased_num++;
 	    } else if (idle_point && i2->second->last_tick <= idle_point) {
 	      i2->second->idle = true;
 	    }
 	  } // for
+
+	  auto wperiod = check_time;
+	  if (erased_num >= erase_max) {
+	    wperiod = duration_cast<milliseconds>(aggressive_check_time);
+	  } else {
+	    // clean finished, refresh
+	    last_erase_point = 0;
+	  }
+	  cleaning_job->try_update(wperiod);
 	} // if
       } // do_clean
 
@@ -1303,9 +1328,9 @@ namespace crimson {
 			AtLimitParam at_limit_param = AtLimit::Wait,
 			double _anticipation_timeout = 0.0) :
 	PullPriorityQueue(_client_info_f,
-			  std::chrono::minutes(10),
-			  std::chrono::minutes(15),
-			  std::chrono::minutes(6),
+			  standard_idle_age,
+			  standard_erase_age,
+			  standard_check_time,
 			  at_limit_param,
 			  _anticipation_timeout)
       {
@@ -1542,9 +1567,9 @@ namespace crimson {
 	PushPriorityQueue(_client_info_f,
 			  _can_handle_f,
 			  _handle_f,
-			  std::chrono::minutes(10),
-			  std::chrono::minutes(15),
-			  std::chrono::minutes(6),
+			  standard_idle_age,
+			  standard_erase_age,
+			  standard_check_time,
 			  at_limit_param,
 			  _anticipation_timeout)
       {

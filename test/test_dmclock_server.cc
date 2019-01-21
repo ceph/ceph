@@ -100,7 +100,7 @@ namespace crimson {
     TEST(dmclock_server, client_idle_erase) {
       using ClientId = int;
       using Queue = dmc::PushPriorityQueue<ClientId,Request>;
-      int client = 17;
+      ClientId client = 17;
       double reservation = 100.0;
 
       dmc::ClientInfo ci(reservation, 1.0, 0.0);
