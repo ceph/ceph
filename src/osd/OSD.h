@@ -34,6 +34,7 @@
 #include "OSDCap.h" 
  
 #include "auth/KeyRing.h"
+
 #include "osd/ClassHandler.h"
 
 #include "include/CompatSet.h"
@@ -237,8 +238,6 @@ class KeyStore;
 
 class Watch;
 class PrimaryLogPG;
-
-class AuthAuthorizeHandlerRegistry;
 
 class TestOpsSocketHook;
 struct C_FinishSplits;
@@ -1277,9 +1276,6 @@ protected:
 
   const double OSD_TICK_INTERVAL = { 1.0 };
   double get_tick_interval() const;
-
-  AuthAuthorizeHandlerRegistry *authorize_handler_cluster_registry;
-  AuthAuthorizeHandlerRegistry *authorize_handler_service_registry;
 
   Messenger   *cluster_messenger;
   Messenger   *client_messenger;
