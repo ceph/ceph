@@ -76,14 +76,6 @@ DaemonServer::DaemonServer(MonClient *monc_,
       py_modules(py_modules_),
       clog(clog_),
       audit_clog(audit_clog_),
-      auth_cluster_registry(g_ceph_context,
-                    g_conf()->auth_supported.empty() ?
-                      g_conf()->auth_cluster_required :
-                      g_conf()->auth_supported),
-      auth_service_registry(g_ceph_context,
-                   g_conf()->auth_supported.empty() ?
-                      g_conf()->auth_service_required :
-                      g_conf()->auth_supported),
       lock("DaemonServer"),
       pgmap_ready(false),
       timer(g_ceph_context, lock),
