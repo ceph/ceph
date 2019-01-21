@@ -342,8 +342,10 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector, int *sl
     while (i != sdata->ops_in_flight_sharded.end() &&
 	   i->get_initiated() < too_old) {
 
-      if (!i->warn_interval_multiplier)
+      if (!i->warn_interval_multiplier) {
 	continue;
+	++i;
+      }
 
       (*slow)++;
 
