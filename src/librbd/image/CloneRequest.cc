@@ -342,7 +342,7 @@ void CloneRequest<I>::attach_parent() {
   auto ctx = create_context_callback<
     CloneRequest<I>, &CloneRequest<I>::handle_attach_parent>(this);
   auto req = AttachParentRequest<I>::create(
-    *m_imctx, m_pspec, m_size, ctx);
+    *m_imctx, m_pspec, m_size, false, ctx);
   req->send();
 }
 

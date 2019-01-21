@@ -32,7 +32,7 @@ struct AttachParentRequest<MockTestImageCtx> {
   static AttachParentRequest* s_instance;
   static AttachParentRequest* create(MockTestImageCtx&,
                                      const cls::rbd::ParentImageSpec& pspec,
-                                     uint64_t parent_overlap,
+                                     uint64_t parent_overlap, bool reattach,
                                      Context *on_finish) {
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
