@@ -193,8 +193,7 @@ protected:
       this->payload.append((char *)&t, sizeof(t));
     } else if constexpr (std::is_same<T, signature_t const>()) {
       ceph_assert(protocol);
-      protocol->sign_payload(this->payload);
-      protocol->encrypt_payload(this->payload);
+      protocol->authencrypt_payload(this->payload);
     } else {
       encode(t, this->payload, features);
     }
@@ -332,8 +331,7 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args..., signature_t> {
   SignedEncryptedFrame(ProtocolV2 *protocol, char *payload, uint32_t length)
       : PayloadFrame<T, Args..., signature_t>(protocol) {
     ceph_assert(protocol);
-    protocol->decrypt_payload(payload, length);
-    protocol->verify_signature(payload, length);
+    protocol->authdecrypt_payload(payload, length);
     this->decode_frame(payload, length);
   }
 
@@ -920,8 +918,7 @@ ssize_t ProtocolV2::write_message(Message *m, bufferlist &bl, bool more) {
     flat_bl.claim_append(bl);
   }
 
-  sign_payload(flat_bl);
-  encrypt_payload(flat_bl);
+  authencrypt_payload(flat_bl);
   MessageFrame message(this, header2, flat_bl);
 
   ldout(cct, 5) << __func__ << " sending message m=" << m
@@ -1213,6 +1210,16 @@ void ProtocolV2::calculate_payload_size(uint32_t length, uint32_t *total_len,
   ldout(cct, 21) << __func__ << " length=" << length << " total_len=" << total_l
                  << " sig_pad_len=" << sig_pad_l << " enc_pad_len=" << enc_pad_l
                  << dendl;
+}
+
+void ProtocolV2::authencrypt_payload(bufferlist &payload) {
+  sign_payload(payload);
+  encrypt_payload(payload);
+}
+
+void ProtocolV2::authdecrypt_payload(char *payload, uint32_t &length) {
+  decrypt_payload(payload, length);
+  verify_signature(payload, length);
 }
 
 CtPtr ProtocolV2::read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
@@ -1917,8 +1924,7 @@ CtPtr ProtocolV2::handle_message_complete() {
     msg_payload.claim_append(extra);
 
     uint32_t payload_len = msg_payload.length();
-    decrypt_payload(msg_payload.c_str(), payload_len);
-    verify_signature(msg_payload.c_str(), payload_len);
+    authdecrypt_payload(msg_payload.c_str(), payload_len);
 
     front.clear();
     middle.clear();
