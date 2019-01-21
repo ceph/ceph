@@ -281,7 +281,6 @@ class Module(MgrModule):
         report['usage'] = {
             'pools': len(df['pools']),
             'pg_num:': num_pg,
-            'total_objects': df['stats']['total_objects'],
             'total_used_bytes': df['stats']['total_used_bytes'],
             'total_bytes': df['stats']['total_bytes'],
             'total_avail_bytes': df['stats']['total_avail_bytes']
