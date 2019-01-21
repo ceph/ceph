@@ -2,7 +2,7 @@
 Archive Sync Module
 ===================
 
-.. versionadded:: Mimic
+.. versionadded:: Nautilus
 
 This sync module leverages the versioning feature of the S3 objects in RGW to
 have an archive zone that captures the different versions of the S3 objects
