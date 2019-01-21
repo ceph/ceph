@@ -19,6 +19,7 @@
 #include "common/entity_name.h"
 
 enum {
+  AUTH_MODE_NONE = 0,
   AUTH_MODE_AUTHORIZER = 1,
   AUTH_MODE_MON = 100,
 };
@@ -159,7 +160,24 @@ struct AuthConnectionMeta {
   /// client: initial empty, but populated if server said bad method
   std::vector<uint32_t> allowed_methods;
 
-  int auth_mode = 0;  ///< server: AUTH_MODE_*
+  int auth_mode = 0;  ///< AUTH_MODE_*
+
+  enum {
+    CON_MODE_INTEGRITY,     // crc: protect against bit errors
+    CON_MODE_AUTHENTICITY,  // secure hash: protect against MITM
+    CON_MODE_SECRECY,       // encrypted
+  };
+  int con_mode = CON_MODE_INTEGRITY;
+
+  bool is_integrity_mode() {
+    return con_mode == CON_MODE_INTEGRITY;
+  }
+  bool is_authenticity_mode() {
+    return con_mode == CON_MODE_AUTHENTICITY;
+  }
+  bool is_secrecy_mode() {
+    return con_mode == CON_MODE_SECRECY;
+  }
 
   CryptoKey session_key;         ///< per-ticket key
   CryptoKey connection_secret;   ///< per-connection key

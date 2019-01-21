@@ -144,7 +144,9 @@ private:
   bool prepare_global_id(MonOpRequestRef op);
   bool should_increase_max_global_id();
   void increase_max_global_id();
+public:
   uint64_t assign_global_id(bool should_increase_max);
+private:
   // propose pending update to peers
   void encode_pending(MonitorDBStore::TransactionRef t) override;
   void encode_full(MonitorDBStore::TransactionRef t) override;

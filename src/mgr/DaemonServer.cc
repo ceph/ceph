@@ -111,6 +111,8 @@ int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 			   getpid(), 0);
   msgr->set_default_policy(Messenger::Policy::stateless_server(0));
 
+  msgr->set_auth_client(monc);
+
   // throttle clients
   msgr->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
 			      client_byte_throttler.get(),
@@ -144,6 +146,9 @@ int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 
   msgr->start();
   msgr->add_dispatcher_tail(this);
+
+  msgr->set_auth_server(monc);
+  monc->set_handle_authentication_dispatcher(this);
 
   started_at = ceph_clock_now();
 
