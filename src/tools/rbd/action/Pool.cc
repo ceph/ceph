@@ -19,7 +19,7 @@ namespace po = boost::program_options;
 
 void get_arguments_init(po::options_description *positional,
                         po::options_description *options) {
-  at::add_pool_options(positional, options);
+  at::add_pool_options(positional, options, false);
   options->add_options()
       ("force", po::bool_switch(),
        "force initialize pool for RBD use if registered by another application");
@@ -27,12 +27,17 @@ void get_arguments_init(po::options_description *positional,
 
 int execute_init(const po::variables_map &vm,
                  const std::vector<std::string> &ceph_global_init_args) {
+  std::string pool_name;
   size_t arg_index = 0;
-  std::string pool_name = utils::get_pool_name(vm, &arg_index);
+  int r = utils::get_pool_and_namespace_names(vm, true, false, &pool_name,
+                                              nullptr, &arg_index);
+  if (r < 0) {
+    return r;
+  }
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  int r = utils::init(pool_name, "", &rados, &io_ctx);
+  r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -54,19 +59,23 @@ int execute_init(const po::variables_map &vm,
 
 void get_arguments_stats(po::options_description *positional,
                          po::options_description *options) {
-  at::add_pool_options(positional, options);
-  at::add_namespace_option(options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_pool_options(positional, options, true);
   at::add_format_options(options);
 }
 
 int execute_stats(const po::variables_map &vm,
                   const std::vector<std::string> &ceph_global_init_args) {
+  std::string pool_name;
+  std::string namespace_name;
   size_t arg_index = 0;
-  std::string pool_name = utils::get_pool_name(vm, &arg_index);
-  std::string namespace_name = utils::get_namespace_name(vm, &arg_index);
+  int r = utils::get_pool_and_namespace_names(vm, true, false, &pool_name,
+                                              &namespace_name, &arg_index);
+  if (r < 0) {
+    return r;
+  }
 
   at::Format::Formatter formatter;
-  int r = utils::get_formatter(vm, &formatter);
+  r = utils::get_formatter(vm, &formatter);
   if (r < 0) {
     return r;
   }

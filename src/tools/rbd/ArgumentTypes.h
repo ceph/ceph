@@ -143,9 +143,8 @@ void add_snap_option(boost::program_options::options_description *opt,
 void add_snap_id_option(boost::program_options::options_description *opt);
 
 void add_pool_options(boost::program_options::options_description *pos,
-                      boost::program_options::options_description *opt);
-void add_namespace_options(boost::program_options::options_description *pos,
-                           boost::program_options::options_description *opt);
+                      boost::program_options::options_description *opt,
+                      bool namespaces_supported);
 
 void add_image_spec_options(boost::program_options::options_description *pos,
                             boost::program_options::options_description *opt,
