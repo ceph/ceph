@@ -25,6 +25,7 @@ export class ConfigurationComponent implements OnInit {
     {
       label: this.i18n('Level'),
       prop: 'level',
+      initValue: 'basic',
       value: 'basic',
       options: ['basic', 'advanced', 'dev'],
       applyFilter: (row, value) => {
@@ -42,6 +43,7 @@ export class ConfigurationComponent implements OnInit {
     {
       label: this.i18n('Service'),
       prop: 'services',
+      initValue: 'any',
       value: 'any',
       options: ['any', 'mon', 'mgr', 'osd', 'mds', 'common', 'mds_client', 'rgw'],
       applyFilter: (row, value) => {
@@ -55,6 +57,7 @@ export class ConfigurationComponent implements OnInit {
     {
       label: this.i18n('Source'),
       prop: 'source',
+      initValue: 'any',
       value: 'any',
       options: ['any', 'mon'],
       applyFilter: (row, value) => {
@@ -123,6 +126,13 @@ export class ConfigurationComponent implements OnInit {
   }
 
   updateFilter() {
+    this.data = [...this.data];
+  }
+
+  resetFilter() {
+    this.filters.forEach((item) => {
+      item.value = item.initValue;
+    });
     this.data = [...this.data];
   }
 }
