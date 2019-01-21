@@ -21,6 +21,7 @@ from teuthology.repo_utils import fetch_qa_suite, fetch_teuthology
 from teuthology.orchestra.opsys import OS
 from teuthology.packaging import get_builder_project
 from teuthology.repo_utils import build_git_url
+from teuthology.suite.build_matrix import combine_path
 from teuthology.task.install import get_flavor
 
 log = logging.getLogger(__name__)
@@ -483,3 +484,42 @@ def find_git_parent(project, sha1):
         return sha1s[1]
     else:
         return None
+
+
+def filter_configs(configs, suite_name=None,
+                            filter_in=None,
+                            filter_out=None,
+                            filter_all=None,
+                            filter_fragments=True):
+    """
+    Returns a generator for pairs of description and fragment paths.
+
+    Usage:
+
+        configs = build_matrix(path, subset, seed)
+        for description, fragments in filter_configs(configs):
+            pass
+    """
+    for item in configs:
+        fragment_paths = item[1]
+        description = combine_path(suite_name, item[0]) \
+                                        if suite_name else item[0]
+        base_frag_paths = [strip_fragment_path(x)
+                                        for x in fragment_paths]
+        def matches(f):
+            if f in description:
+                return True
+            if filter_fragments and \
+                    any(f in path for path in base_frag_paths):
+                return True
+            return False
+        if filter_all:
+            if not all(matches(f) for f in filter_all):
+                continue
+        if filter_in:
+            if not any(matches(f) for f in filter_in):
+                continue
+        if filter_out:
+            if any(matches(f) for f in filter_out):
+                continue
+        yield([description, fragment_paths])
