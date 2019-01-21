@@ -18,6 +18,12 @@
         <option *ngFor="let opt of filter.options">{{ opt }}</option>
       </select>
     </div>
+    <a class="fa-stack" 
+       title="Reset filters" 
+       (click)="resetFilter()">
+      <i class="fa fa-filter fa-stack-2x"></i>
+      <i class="fa fa-times fa-stack-1x" style="margin-left: 8px; margin-top: 5px;"></i>
+    </a>
   </div>
   <cd-configuration-details cdTableDetail
                             [selection]="selection">
