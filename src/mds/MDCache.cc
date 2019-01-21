@@ -11965,7 +11965,7 @@ void MDCache::force_readonly()
 // ==============================================================
 // debug crap
 
-void MDCache::show_subtrees(int dbl)
+void MDCache::show_subtrees(int dbl, bool force_print)
 {
   if (g_conf->mds_thrash_exports)
     dbl += 15;
@@ -11977,6 +11977,13 @@ void MDCache::show_subtrees(int dbl)
 
   if (subtrees.empty()) {
     dout(dbl) << "show_subtrees - no subtrees" << dendl;
+    return;
+  }
+
+  if (!force_print && subtrees.size() > SUBTREES_COUNT_THRESHOLD &&
+      !g_conf->subsys.should_gather(ceph_subsys_mds, 25)) {
+    dout(dbl) << "number of subtrees = " << subtrees.size() << "; not "
+		"printing subtrees" << dendl;
     return;
   }
 
@@ -12000,10 +12007,10 @@ void MDCache::show_subtrees(int dbl)
 
   set<CDir*> subtrees_seen;
 
-  int depth = 0;
+  unsigned int depth = 0;
   while (!q.empty()) {
     CDir *dir = q.front().first;
-    int d = q.front().second;
+    unsigned int d = q.front().second;
     q.pop_front();
 
     if (subtrees.count(dir) == 0) continue;
@@ -12029,6 +12036,12 @@ void MDCache::show_subtrees(int dbl)
     }
   }
 
+  if (!force_print && depth > SUBTREES_DEPTH_THRESHOLD &&
+      !g_conf->subsys.should_gather(ceph_subsys_mds, 25)) {
+    dout(dbl) << "max depth among subtrees = " << depth << "; not printing "
+		"subtrees" << dendl;
+    return;
+  }
 
   // print tree
   for (list<CDir*>::iterator p = basefrags.begin(); p != basefrags.end(); ++p) 
