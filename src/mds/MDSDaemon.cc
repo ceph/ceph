@@ -492,6 +492,10 @@ int MDSDaemon::init()
     return r;
   }
 
+  messenger->set_auth_client(monc);
+  messenger->set_auth_server(monc);
+  monc->set_handle_authentication_dispatcher(this);
+
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&log_client);
 
