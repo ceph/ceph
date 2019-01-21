@@ -30,7 +30,6 @@ using std::set;
 
 class CInode;
 struct MDRequestImpl;
-class DecayCounter;
 
 #include "CInode.h"
 #include "Capability.h"
@@ -96,9 +95,9 @@ public:
   }
 
 private:
-  int state;
-  uint64_t state_seq;
-  int importing_count;
+  int state = STATE_CLOSED;
+  uint64_t state_seq = 0;
+  int importing_count = 0;
   friend class SessionMap;
 
   // Human (friendly) name is soft state generated from client metadata
@@ -154,8 +153,8 @@ public:
   // Ephemeral state for tracking progress of capability recalls
   time recalled_at = time::min();  // When was I asked to SESSION_RECALL?
   time last_recall_sent = time::min();
-  uint32_t recall_count;  // How many caps was I asked to SESSION_RECALL?
-  uint32_t recall_release_count;  // How many caps have I actually revoked?
+  uint32_t recall_count = 0;  // How many caps was I asked to SESSION_RECALL?
+  uint32_t recall_release_count = 0;  // How many caps have I actually revoked?
 
   session_info_t info;                         ///< durable bits
 
@@ -244,8 +243,8 @@ public:
 
   // -- caps --
 private:
-  uint32_t cap_gen;
-  version_t cap_push_seq;        // cap push seq #
+  uint32_t cap_gen = 0;
+  version_t cap_push_seq = 0;        // cap push seq #
   map<version_t, list<MDSInternalContextBase*> > waitfor_flush; // flush session messages
 
 public:
@@ -284,16 +283,16 @@ public:
   }
 
   // -- leases --
-  uint32_t lease_seq;
+  uint32_t lease_seq = 0;
 
   // -- completed requests --
 private:
   // Has completed_requests been modified since the last time we
   // wrote this session out?
-  bool completed_requests_dirty;
+  bool completed_requests_dirty = false;
 
-  unsigned num_trim_flushes_warnings;
-  unsigned num_trim_requests_warnings;
+  unsigned num_trim_flushes_warnings = 0;
+  unsigned num_trim_requests_warnings = 0;
 public:
   void add_completed_request(ceph_tid_t t, inodeno_t created) {
     info.completed_requests[t] = created;
@@ -368,18 +367,15 @@ public:
   int check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
 		   const vector<uint64_t> *gid_list, int new_uid, int new_gid);
 
-
-  Session() : 
-    state(STATE_CLOSED), state_seq(0), importing_count(0),
-    birth_time(clock::now()), recall_count(0),
-    recall_release_count(0), auth_caps(g_ceph_context),
-    connection(NULL), item_session_list(this),
-    requests(0),  // member_offset passed to front() manually
-    cap_gen(0), cap_push_seq(0),
-    lease_seq(0),
-    completed_requests_dirty(false),
-    num_trim_flushes_warnings(0),
-    num_trim_requests_warnings(0) { }
+  Session() = delete;
+  Session(ConnectionRef con) :
+    birth_time(clock::now()),
+    auth_caps(g_ceph_context),
+    item_session_list(this),
+    requests(0)  // member_offset passed to front() manually
+  {
+    connection = std::move(con);
+  }
   ~Session() override {
     if (state == STATE_CLOSED) {
       item_session_list.remove_myself();
@@ -475,7 +471,7 @@ public:
     if (session_map_entry != session_map.end()) {
       s = session_map_entry->second;
     } else {
-      s = session_map[i.name] = new Session;
+      s = session_map[i.name] = new Session(ConnectionRef());
       s->info.inst = i;
       s->last_cap_renew = Session::clock::now();
       if (logger) {
