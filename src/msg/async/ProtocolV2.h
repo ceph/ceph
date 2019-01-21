@@ -204,6 +204,10 @@ public:
                               uint32_t *sig_pad_len = nullptr,
                               uint32_t *enc_pad_len = nullptr);
 
+  // We are doing *authenticated encryption*
+  void authencrypt_payload(ceph::bufferlist &payload);
+  void authdecrypt_payload(char *payload, uint32_t &length);
+
 private:
   // Client Protocol
   CONTINUATION_DECL(ProtocolV2, start_client_banner_exchange);
