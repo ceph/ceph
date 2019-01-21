@@ -445,6 +445,110 @@ TEST(cls_rgw, index_list)
     ASSERT_EQ(it2->first.compare(keys[i]), 0);
 }
 
+static int bucket_list_versions(librados::IoCtx& ioctx, const string& oid,
+                                rgw_cls_list_ret *pdata)
+{
+  struct rgw_cls_list_op call;
+  call.num_entries = 10;
+  call.list_versions = true;
+
+  bufferlist in;
+  ::encode(call, in);
+
+  librados::ObjectReadOperation op;
+  bufferlist out;
+  op.exec(RGW_CLASS, RGW_BUCKET_LIST, in, &out, nullptr);
+
+  int ret = ioctx.operate(oid, &op, nullptr);
+  if (ret < 0) {
+    return ret;
+  }
+  try {
+    bufferlist::iterator p = out.begin();
+    ::decode(*pdata, p);
+    return 0;
+  } catch (const buffer::error& e) {
+    return -EIO;
+  }
+}
+
+TEST(cls_rgw, null_link_unlink_list)
+{
+  const std::string bucket_oid = "null_link_unlink_list";
+  const std::string obj = "obj";
+  std::string tag = "tag";
+  const std::string loc = "loc";
+  std::string olh_tag_str = "olh-tag";
+  const cls_rgw_obj_key key(obj);
+  // initialize empty bucket
+  {
+    ObjectWriteOperation op;
+    cls_rgw_bucket_init_index(op);
+    ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+  }
+  // verify bucket is empty
+  {
+    rgw_cls_list_ret results;
+    int ret = bucket_list_versions(ioctx, bucket_oid, &results);
+    ASSERT_EQ(0, ret);
+    EXPECT_EQ(0u, results.dir.m.size());
+  }
+  // prepare object creation
+  {
+    ObjectWriteOperation op;
+    rgw_zone_set zones_trace;
+    cls_rgw_bucket_prepare_op(op, CLS_RGW_OP_ADD, tag, key, loc, true,
+                              RGW_BILOG_FLAG_VERSIONED_OP, zones_trace);
+    ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+  }
+  // complete object creation
+  {
+    ObjectWriteOperation op;
+    rgw_bucket_entry_ver ver;
+    ver.pool = ioctx.get_id();
+    ver.epoch = 1;
+    rgw_bucket_dir_entry_meta meta;
+    meta.category = 0;
+    meta.size = 4;
+    cls_rgw_bucket_complete_op(op, CLS_RGW_OP_ADD, tag, ver, key, meta, nullptr,
+                               true, RGW_BILOG_FLAG_VERSIONED_OP, nullptr);
+    ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+  }
+  // link the null version
+  {
+    ObjectWriteOperation op;
+    bufferlist olh_tag = bufferlist::static_from_string(olh_tag_str);
+    rgw_bucket_dir_entry_meta meta;
+    meta.category = 0;
+    meta.size = 4;
+    rgw_zone_set zones_trace;
+    int ret = cls_rgw_bucket_link_olh(ioctx, op, bucket_oid, key, olh_tag,
+                                      false, "op-tag", &meta, 0,
+                                      ceph::real_time{}, false, true,
+                                      zones_trace);
+    ASSERT_EQ(0, ret);
+  }
+  // unlink the null version
+  {
+    ObjectWriteOperation op;
+    bufferlist olh_tag = bufferlist::static_from_string(olh_tag_str);
+    rgw_bucket_dir_entry_meta meta;
+    meta.category = 0;
+    meta.size = 4;
+    rgw_zone_set zones_trace;
+    int ret = cls_rgw_bucket_unlink_instance(ioctx, op, bucket_oid, key,
+                                             "op-tag", olh_tag_str, 0,
+                                             true, zones_trace);
+    ASSERT_EQ(0, ret);
+  }
+  // verify bucket is empty
+  {
+    rgw_cls_list_ret results;
+    int ret = bucket_list_versions(ioctx, bucket_oid, &results);
+    ASSERT_EQ(0, ret);
+    EXPECT_EQ(0u, results.dir.m.size());
+  }
+}
 
 TEST(cls_rgw, bi_list)
 {
