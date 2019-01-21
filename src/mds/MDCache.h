@@ -305,6 +305,9 @@ public:
 
 
   // -- subtrees --
+private:
+  static const unsigned int SUBTREES_COUNT_THRESHOLD = 5;
+  static const unsigned int SUBTREES_DEPTH_THRESHOLD = 5;
 protected:
   /* subtree keys and each tree's non-recursive nested subtrees (the "bounds") */
   map<CDir*,set<CDir*> > subtrees;
@@ -1234,7 +1237,7 @@ public:
   // == crap fns ==
  public:
   void show_cache();
-  void show_subtrees(int dbl=10);
+  void show_subtrees(int dbl=10, bool force_print=false);
 
   CInode *hack_pick_random_inode() {
     assert(!inode_map.empty());
