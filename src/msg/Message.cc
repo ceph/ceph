@@ -175,6 +175,7 @@
 #include "messages/MHeartbeat.h"
 
 #include "messages/MMDSTableRequest.h"
+#include "messages/MMDSMetrics.h"
 
 //#include "messages/MInodeUpdate.h"
 #include "messages/MCacheExpire.h"
@@ -831,6 +832,10 @@ Message *decode_message(CephContext *cct,
 
   case MSG_MDS_LOCK:
     m = make_message<MLock>();
+    break;
+
+  case MSG_MDS_METRICS:
+    m = make_message<MMDSMetrics>();
     break;
 
   case MSG_MGR_BEACON:
