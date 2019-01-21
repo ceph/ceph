@@ -261,7 +261,10 @@ class ClusterAPI(object):
         total_size = round(float(ceph_stats.get('total_bytes', 0)) / GB)
         avail_size = round(float(ceph_stats.get('total_avail_bytes', 0)) / GB, 2)
         raw_used_size = round(float(ceph_stats.get('total_used_bytes', 0)) / GB, 2)
-        raw_used_percent = round(float(raw_used_size) / float(total_size) * 100, 2)
+        if total_size != 0:
+            raw_used_percent = round(float(raw_used_size) / float(total_size) * 100, 2)
+        else:
+            raw_used_percent = 0
         return {'total_size': total_size, 'avail_size': avail_size, 'raw_used_size': raw_used_size,
                 'used_percent': raw_used_percent}
 
