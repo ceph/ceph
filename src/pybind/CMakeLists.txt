@@ -104,6 +104,7 @@ if(WITH_MGR)
     DESTINATION ${CMAKE_INSTALL_PKGLIBDIR}
     REGEX ".*/CMakeLists.txt" EXCLUDE
     REGEX ".*/\\.gitignore" EXCLUDE
-    REGEX ".*/hello/.*" EXCLUDE)
+    REGEX ".*/hello/.*" EXCLUDE
+    REGEX ".*/osd_perf_query/.*" EXCLUDE)
   add_subdirectory(mgr)
 endif(WITH_MGR)
