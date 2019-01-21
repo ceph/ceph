@@ -177,7 +177,7 @@ void SetHeadRequest<I>::send_attach_parent() {
       finish_op_ctx->complete(0);
     });
   auto req = image::AttachParentRequest<I>::create(
-    *m_image_ctx, m_parent_spec, m_parent_overlap, ctx);
+    *m_image_ctx, m_parent_spec, m_parent_overlap, false, ctx);
   req->send();
 }
 

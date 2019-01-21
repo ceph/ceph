@@ -72,7 +72,7 @@ TEST_F(TestMockImageAttachParentRequest, ParentAttachSuccess) {
 
   C_SaferCond ctx;
   auto req = MockAttachParentRequest::create(mock_image_ctx, parent_image_spec,
-                                             234, &ctx);
+                                             234, false, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -91,7 +91,7 @@ TEST_F(TestMockImageAttachParentRequest, SetParentSuccess) {
 
   C_SaferCond ctx;
   auto req = MockAttachParentRequest::create(mock_image_ctx, parent_image_spec,
-                                             234, &ctx);
+                                             234, false, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
@@ -109,7 +109,7 @@ TEST_F(TestMockImageAttachParentRequest, ParentAttachError) {
 
   C_SaferCond ctx;
   auto req = MockAttachParentRequest::create(mock_image_ctx, parent_image_spec,
-                                             234, &ctx);
+                                             234, false, &ctx);
   req->send();
   ASSERT_EQ(-EPERM, ctx.wait());
 }
@@ -128,7 +128,7 @@ TEST_F(TestMockImageAttachParentRequest, SetParentError) {
 
   C_SaferCond ctx;
   auto req = MockAttachParentRequest::create(mock_image_ctx, parent_image_spec,
-                                             234, &ctx);
+                                             234, false, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -146,7 +146,7 @@ TEST_F(TestMockImageAttachParentRequest, NamespaceUnsupported) {
 
   C_SaferCond ctx;
   auto req = MockAttachParentRequest::create(mock_image_ctx, parent_image_spec,
-                                             234, &ctx);
+                                             234, false, &ctx);
   req->send();
   ASSERT_EQ(-EXDEV, ctx.wait());
 }
