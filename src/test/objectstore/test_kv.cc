@@ -383,6 +383,10 @@ TEST_P(KVTest, RocksDBIteratorTest) {
     cout << "write some kv pairs into default and new CFs" << std::endl;
     t->set("prefix", "key1", bl1);
     t->set("prefix", "key2", bl2);
+    KeyValueDB::ColumnFamilyHandle cf1h;
+    ASSERT_NE(cf1h = db->column_family_handle("cf1"), nullptr);
+
+    t->select(cf1h);
     t->set("cf1", "key1", bl1);
     t->set("cf1", "key2", bl2);
     ASSERT_EQ(0, db->submit_transaction_sync(t));
@@ -519,6 +523,24 @@ TEST_P(KVTest, RocksDBIteratorColumnFamiliesTest) {
     ASSERT_EQ(1, iter->valid());
     ASSERT_EQ("key2", iter->key());
     ASSERT_EQ("world", _bl_to_str(iter->value()));
+  }
+  {
+    cout << "iterating the specialized CF" << std::endl;
+    KeyValueDB::Iterator iter = db->get_iterator_cf(cf1h, "cf1");
+    iter->seek_to_first();
+    ASSERT_EQ(1, iter->valid());
+    ASSERT_EQ("key1", iter->key());
+    ASSERT_EQ("hello", _bl_to_str(iter->value()));
+    auto a = iter->raw_key();
+    ASSERT_EQ("cf1", a.first);
+    ASSERT_EQ("key1", a.second);
+    ASSERT_EQ(0, iter->next());
+    ASSERT_EQ(1, iter->valid());
+    ASSERT_EQ("key2", iter->key());
+    ASSERT_EQ("world", _bl_to_str(iter->value()));
+    a = iter->raw_key();
+    ASSERT_EQ("cf1", a.first);
+    ASSERT_EQ("key2", a.second);
   }
   {
     cout << "iterating the new CF" << std::endl;
