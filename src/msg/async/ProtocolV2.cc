@@ -625,7 +625,7 @@ CtPtr ProtocolV2::_fault() {
   requeue_sent();
 
   if (out_queue.empty() && state >= START_ACCEPT &&
-      state <= ACCEPTING_SESSION) {
+      state <= ACCEPTING_SESSION && !replacing) {
     ldout(cct, 10) << __func__ << " with nothing to send and in the half "
                    << " accept state just closed" << dendl;
     connection->write_lock.unlock();
@@ -1477,6 +1477,8 @@ CtPtr ProtocolV2::handle_ident(char *payload, uint32_t length) {
 
 CtPtr ProtocolV2::ready() {
   ldout(cct, 25) << __func__ << dendl;
+
+  replacing = false;
 
   // make sure no pending tick timer
   if (connection->last_tick_id) {
@@ -2947,7 +2949,6 @@ CtPtr ProtocolV2::send_server_ident() {
   connection->inject_delay();
 
   connection->lock.lock();
-  replacing = false;
 
   if (r < 0) {
     ldout(cct, 1) << __func__ << " existing race replacing process for addr = "
@@ -3004,7 +3005,6 @@ CtPtr ProtocolV2::send_reconnect_ok() {
   connection->inject_delay();
 
   connection->lock.lock();
-  replacing = false;
 
   if (r < 0) {
     ldout(cct, 1) << __func__ << " existing race replacing process for addr = "
