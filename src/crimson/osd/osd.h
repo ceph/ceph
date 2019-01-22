@@ -67,7 +67,7 @@ public:
   OSD(int id, uint32_t nonce);
   ~OSD();
 
-  static seastar::future<> mkfs(uuid_d fsid, int whoami);
+  seastar::future<> mkfs(uuid_d fsid);
 
   seastar::future<> start();
   seastar::future<> stop();
