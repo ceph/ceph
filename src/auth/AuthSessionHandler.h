@@ -41,6 +41,21 @@ struct AuthSessionHandler {
   }
 };
 
+struct DummyAuthSessionHandler : AuthSessionHandler {
+  int sign_message(Message*) final {
+    return 0;
+  }
+  int check_message_signature(Message*) final {
+    return 0;
+  }
+  int encrypt_message(Message*) final {
+    return 0;
+  }
+  int decrypt_message(Message*) final {
+    return 0;
+  }
+};
+
 extern AuthSessionHandler *get_auth_session_handler(
   CephContext *cct, int protocol,
   const CryptoKey& key,
