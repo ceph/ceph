@@ -19,8 +19,15 @@ public:
 
   virtual void get_supported_auth_methods(
     int peer_type,
-    std::vector<uint32_t> *methods) {
-    auth_registry.get_supported_methods(peer_type, methods);
+    std::vector<uint32_t> *methods,
+    std::vector<uint32_t> *modes = nullptr) {
+    auth_registry.get_supported_methods(peer_type, methods, modes);
+  }
+  virtual void get_supported_con_modes(
+    int peer_type,
+    uint32_t auth_method,
+    std::vector<uint32_t> *modes) {
+    auth_registry.get_supported_modes(peer_type, auth_method, modes);
   }
 
   AuthAuthorizeHandler *get_auth_authorize_handler(
