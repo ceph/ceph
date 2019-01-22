@@ -51,15 +51,62 @@ OSD::OSD(int id, uint32_t nonce)
 
 OSD::~OSD() = default;
 
-seastar::future<> OSD::mkfs(uuid_d cluster_fsid, int whoami)
+namespace {
+// Initial features in new superblock.
+// Features here are also automatically upgraded
+CompatSet get_osd_initial_compat_set()
 {
-  ceph::os::CyanStore store{local_conf().get_val<std::string>("osd_data")};
+  CompatSet::FeatureSet ceph_osd_feature_compat;
+  CompatSet::FeatureSet ceph_osd_feature_ro_compat;
+  CompatSet::FeatureSet ceph_osd_feature_incompat;
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BASE);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_PGINFO);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_OLOC);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEC);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_CATEGORIES);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_HOBJECTPOOL);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_BIGINFO);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEVELDBINFO);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_LEVELDBLOG);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_HINTS);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_PGMETA);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_MISSING);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_FASTINFO);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_RECOVERY_DELETES);
+  return CompatSet(ceph_osd_feature_compat,
+                   ceph_osd_feature_ro_compat,
+                   ceph_osd_feature_incompat);
+}
+}
+
+seastar::future<> OSD::mkfs(uuid_d cluster_fsid)
+{
+  const auto data_path = local_conf().get_val<std::string>("osd_data");
+  store = std::make_unique<ceph::os::CyanStore>(data_path);
   uuid_d osd_fsid;
   osd_fsid.generate_random();
-  store.write_meta("fsid", osd_fsid.to_string());
-  store.write_meta("ceph_fsid", cluster_fsid.to_string());
-  store.write_meta("whoami", std::to_string(whoami));
-  return seastar::now();
+  return store->mkfs(osd_fsid).then([this] {
+    return store->mount();
+  }).then([cluster_fsid, osd_fsid, this] {
+    superblock.cluster_fsid = cluster_fsid;
+    superblock.osd_fsid = osd_fsid;
+    superblock.whoami = whoami;
+    superblock.compat_features = get_osd_initial_compat_set();
+
+    bufferlist bl;
+    encode(superblock, bl);
+
+    auto ch = store->create_new_collection(coll_t::meta());
+    ceph::os::Transaction t;
+    t.create_collection(coll_t::meta(), 0);
+    t.write(coll_t::meta(), OSD_SUPERBLOCK_GOBJECT, 0, bl.length(), bl);
+    return store->do_transaction(ch, std::move(t));
+  }).then([cluster_fsid, this] {
+    store->write_meta("ceph_fsid", cluster_fsid.to_string());
+    store->write_meta("whoami", std::to_string(whoami));
+    return seastar::now();
+  });
 }
 
 seastar::future<> OSD::start()

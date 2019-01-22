@@ -37,6 +37,8 @@ int main(int argc, char* argv[])
                                               &cluster,
                                               &conf_file_list);
   seastar::app_template app;
+  app.add_options()
+    ("mkfs", "create a [new] data directory");
   seastar::sharded<OSD> osd;
 
   using ceph::common::sharded_conf;
@@ -46,6 +48,7 @@ int main(int argc, char* argv[])
   args.insert(begin(args), argv[0]);
   try {
     return app.run_deprecated(args.size(), const_cast<char**>(args.data()), [&] {
+      auto& config = app.configuration();
       seastar::engine().at_exit([] {
         return sharded_conf().stop();
       });
@@ -62,8 +65,13 @@ int main(int argc, char* argv[])
       }).then([&] {
         return osd.start_single(std::stoi(local_conf()->name.get_id()),
                                 static_cast<uint32_t>(getpid()));
-      }).then([&] {
-        return osd.invoke_on(0, &OSD::start);
+      }).then([&osd, mkfs = config.count("mkfs")] {
+        if (mkfs) {
+          return osd.invoke_on(0, &OSD::mkfs,
+                               local_conf().get_val<uuid_d>("fsid"));
+        } else {
+          return osd.invoke_on(0, &OSD::start);
+        }
       });
     });
   } catch (...) {
