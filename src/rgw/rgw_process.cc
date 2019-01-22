@@ -213,6 +213,7 @@ int process_request(RGWRados* const store,
     }
     ldpp_dout(op,0) << "Scheduling request failed with " << ret << dendl;
     abort_early(s, op, ret, handler);
+    goto done;
   }
   req->op = op;
   dout(10) << "op=" << typeid(*op).name() << dendl;
