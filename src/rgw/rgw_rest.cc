@@ -1632,8 +1632,8 @@ int RGWCompleteMultipart_ObjStore::get_params()
     return op_ret;
   }
 
-#define COMPLETE_MULTIPART_MAX_LEN (1024 * 1024) /* api defines max 10,000 parts, this should be enough */
-  op_ret = rgw_rest_read_all_input(s, &data, &len, COMPLETE_MULTIPART_MAX_LEN);
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  op_ret = rgw_rest_read_all_input(s, &data, &len, max_size);
   if (op_ret < 0)
     return op_ret;
 
