@@ -1,6 +1,8 @@
 import { NgModule } from '@angular/core';
 import { ActivatedRouteSnapshot, RouterModule, Routes } from '@angular/router';
 
+import * as _ from 'lodash';
+
 import { IscsiTargetFormComponent } from './ceph/block/iscsi-target-form/iscsi-target-form.component';
 import { IscsiTargetListComponent } from './ceph/block/iscsi-target-list/iscsi-target-list.component';
 import { IscsiComponent } from './ceph/block/iscsi/iscsi.component';
@@ -13,6 +15,8 @@ import { ConfigurationComponent } from './ceph/cluster/configuration/configurati
 import { CrushmapComponent } from './ceph/cluster/crushmap/crushmap.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
 import { LogsComponent } from './ceph/cluster/logs/logs.component';
+import { MgrModuleFormComponent } from './ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component';
+import { MgrModuleListComponent } from './ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
 import { PrometheusListComponent } from './ceph/cluster/prometheus/prometheus-list/prometheus-list.component';
@@ -36,8 +40,6 @@ import { SsoNotFoundComponent } from './core/auth/sso/sso-not-found/sso-not-foun
 import { UserFormComponent } from './core/auth/user-form/user-form.component';
 import { UserListComponent } from './core/auth/user-list/user-list.component';
 import { ForbiddenComponent } from './core/forbidden/forbidden.component';
-import { MgrModulesListComponent } from './core/mgr-modules/mgr-modules-list/mgr-modules-list.component';
-import { TelemetryComponent } from './core/mgr-modules/telemetry/telemetry.component';
 import { NotFoundComponent } from './core/not-found/not-found.component';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
@@ -63,6 +65,14 @@ export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
     result.push({ text: 'Performance Counters', path: '' });
 
     return result;
+  }
+}
+
+export class StartCaseBreadcrumbsResolver extends BreadcrumbsResolver {
+  resolve(route: ActivatedRouteSnapshot) {
+    const path = route.params.name;
+    const text = _.startCase(path);
+    return [{ text: text, path: path }];
   }
 }
 
@@ -138,10 +148,19 @@ const routes: Routes = [
     path: 'mgr-modules',
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Manager Modules' },
+    data: { breadcrumbs: 'Cluster/Manager modules' },
     children: [
-      { path: '', component: MgrModulesListComponent },
-      { path: 'edit/telemetry', component: TelemetryComponent, data: { breadcrumbs: 'Telemetry' } }
+      {
+        path: '',
+        component: MgrModuleListComponent
+      },
+      {
+        path: 'edit/:name',
+        component: MgrModuleFormComponent,
+        data: {
+          breadcrumbs: StartCaseBreadcrumbsResolver
+        }
+      }
     ]
   },
   // Pools
@@ -349,6 +368,6 @@ const routes: Routes = [
 @NgModule({
   imports: [RouterModule.forRoot(routes, { useHash: true })],
   exports: [RouterModule],
-  providers: [PerformanceCounterBreadcrumbsResolver]
+  providers: [StartCaseBreadcrumbsResolver, PerformanceCounterBreadcrumbsResolver]
 })
 export class AppRoutingModule {}
