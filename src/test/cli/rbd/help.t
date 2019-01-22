@@ -106,6 +106,8 @@
       namespace remove (namespace rm)   Remove an RBD image namespace.
       object-map check                  Verify the object map is correct.
       object-map rebuild                Rebuild an invalid object map.
+      perf image iostat                 Display image IO statistics.
+      perf image iotop                  Display a top-like IO monitor.
       pool init                         Initialize pool for use by RBD.
       pool stats                        Display pool statistics.
       remove (rm)                       Delete an image.
@@ -1828,6 +1830,43 @@
     --image arg           image name
     --snap arg            snapshot name
     --no-progress         disable progress output
+  
+  rbd help perf image iostat
+  usage: rbd perf image iostat [--pool <pool>] [--namespace <namespace>] 
+                               [--iterations <iterations>] [--sort-by <sort-by>] 
+                               [--format <format>] [--pretty-format] 
+                               <pool-spec> 
+  
+  Display image IO statistics.
+  
+  Positional arguments
+    <pool-spec>                pool specification
+                               (example: <pool-name>[/<namespace-name>]
+  
+  Optional arguments
+    -p [ --pool ] arg          pool name
+    --namespace arg            namespace name
+    --iterations arg           iterations of metric collection [> 0]
+    --sort-by arg (=write_ops) sort-by IO metric (write-ops, read-ops,
+                               write-bytes, read-bytes, write-latency,
+                               read-latency) [default: write-ops]
+    --format arg               output format (plain, json, or xml) [default:
+                               plain]
+    --pretty-format            pretty formatting (json and xml)
+  
+  rbd help perf image iotop
+  usage: rbd perf image iotop [--pool <pool>] [--namespace <namespace>] 
+                              <pool-spec> 
+  
+  Display a top-like IO monitor.
+  
+  Positional arguments
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace-name>]
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
   
   rbd help pool init
   usage: rbd pool init [--pool <pool>] [--force] 
