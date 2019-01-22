@@ -92,6 +92,14 @@ class TestDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
 
+    def test_is_ceph_disk_member_not_available(self, device_info):
+        lsblk = {"PARTLABEL": "ceph data"}
+        device_info(lsblk=lsblk)
+        disk = device.Device("/dev/sda")
+        assert disk.is_ceph_disk_member
+        assert not disk.available
+        assert "Used by ceph-disk" in disk.rejected_reasons
+
     def test_is_not_ceph_disk_member_lsblk(self, device_info):
         lsblk = {"PARTLABEL": "gluster partition"}
         device_info(lsblk=lsblk)
