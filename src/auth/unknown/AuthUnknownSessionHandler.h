@@ -17,16 +17,10 @@
 
 #define dout_subsys ceph_subsys_auth
 
-class CephContext;
-
-class AuthUnknownSessionHandler  : public AuthSessionHandler {
+class AuthUnknownSessionHandler : public AuthSessionHandler {
 public:
-  AuthUnknownSessionHandler(CephContext *cct_,
-			    const CryptoKey& session_key,
-			    const std::string& connection_secret)
-    : AuthSessionHandler(cct_, CEPH_AUTH_UNKNOWN,
-			 session_key, connection_secret) {}
-  ~AuthUnknownSessionHandler() override {}
+  AuthUnknownSessionHandler() = default;
+  ~AuthUnknownSessionHandler() override = default;
   
   // The Unknown suite neither signs nor encrypts messages, so these functions just return success.
   // Since nothing was signed or encrypted, don't increment the stats.  PLR

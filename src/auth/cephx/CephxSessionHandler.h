@@ -20,16 +20,24 @@ class CephContext;
 class Message;
 
 class CephxSessionHandler  : public AuthSessionHandler {
+  CephContext *cct;
+  int protocol;
+  CryptoKey key;                  // per mon authentication
+  std::string connection_secret;  // per connection
   uint64_t features;
 
 public:
-  CephxSessionHandler(CephContext *cct_,
+  CephxSessionHandler(CephContext *cct,
 		      const CryptoKey& session_key,
 		      const std::string& connection_secret,
-		      uint64_t features)
-    : AuthSessionHandler(cct_, CEPH_AUTH_CEPHX, session_key, connection_secret),
-      features(features) {}
-  ~CephxSessionHandler() override {}
+		      const uint64_t features)
+    : cct(cct),
+      protocol(CEPH_AUTH_CEPHX),
+      key(session_key),
+      connection_secret(connection_secret),
+      features(features) {
+  }
+  ~CephxSessionHandler() override = default;
 
   int _calc_signature(Message *m, uint64_t *psig);
 
