@@ -204,9 +204,9 @@ class CephFS(RESTController):
             )
 
         df = mgr.get("df")
-        pool_stats = dict([(p['id'], p['stats']) for p in df['pools']])
+        pool_stats = {p['id']: p['stats'] for p in df['pools']}
         osdmap = mgr.get("osd_map")
-        pools = dict([(p['pool'], p) for p in osdmap['pools']])
+        pools = {p['pool']: p for p in osdmap['pools']}
         metadata_pool_id = mdsmap['metadata_pool']
         data_pool_ids = mdsmap['data_pools']
 
