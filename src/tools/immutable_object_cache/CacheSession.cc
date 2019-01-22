@@ -46,6 +46,7 @@ void CacheSession::start() {
 }
 
 void CacheSession::read_request_header() {
+  ldout(cct, 20) << dendl;
   boost::asio::async_read(m_dm_socket,
                           boost::asio::buffer(m_head_buffer, sizeof(ObjectCacheMsgHeader)),
                           boost::asio::transfer_exactly(sizeof(ObjectCacheMsgHeader)),
@@ -56,7 +57,8 @@ void CacheSession::read_request_header() {
 }
 
 void CacheSession::handle_request_header(const boost::system::error_code& err,
-                               size_t bytes_transferred) {
+                                         size_t bytes_transferred) {
+  ldout(cct, 20) << dendl;
   if(err || bytes_transferred != sizeof(ObjectCacheMsgHeader)) {
     fault();
     return;
@@ -72,6 +74,7 @@ void CacheSession::handle_request_header(const boost::system::error_code& err,
 }
 
 void CacheSession::read_request_data(uint64_t data_len) {
+  ldout(cct, 20) << dendl;
   bufferptr bp_data(buffer::create(data_len));
   boost::asio::async_read(m_dm_socket,
                           boost::asio::buffer(bp_data.c_str(), bp_data.length()),
@@ -85,6 +88,7 @@ void CacheSession::read_request_data(uint64_t data_len) {
 void CacheSession::handle_request_data(bufferptr bp, uint64_t data_len,
                                       const boost::system::error_code& err,
                                       size_t bytes_transferred) {
+  ldout(cct, 20) << dendl;
   if(err || bytes_transferred != data_len) {
     fault();
     return;
@@ -99,10 +103,12 @@ void CacheSession::handle_request_data(bufferptr bp, uint64_t data_len,
 }
 
 void CacheSession::process(ObjectCacheRequest* req) {
+  ldout(cct, 20) << dendl;
    m_server_process_msg(m_session_id, req);
 }
 
 void CacheSession::send(ObjectCacheRequest* reply) {
+  ldout(cct, 20) << dendl;
   reply->m_head_buffer.clear();
   reply->m_data_buffer.clear();
   reply->encode();
@@ -123,6 +129,7 @@ void CacheSession::send(ObjectCacheRequest* reply) {
 }
 
 void CacheSession::fault() {
+  ldout(cct, 20) << dendl;
   // TODO
 }
 

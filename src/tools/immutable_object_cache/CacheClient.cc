@@ -99,8 +99,8 @@ namespace immutable_obj_cache {
     return 0;
   }
 
-  void CacheClient::lookup_object(std::string pool_name, std::string oid,
-                                  GenContext<ObjectCacheRequest*>* on_finish) {
+  void CacheClient::lookup_object(std::string pool_nspace, uint64_t pool_id, uint64_t snap_id,
+                                  std::string oid, GenContext<ObjectCacheRequest*>* on_finish) {
 
     ObjectCacheRequest* req = new ObjectCacheRequest();
     req->m_head.version = 0;
@@ -109,7 +109,10 @@ namespace immutable_obj_cache {
     req->m_head.padding = 0;
     req->m_head.seq = ++m_sequence_id;
 
-    req->m_data.m_pool_name = pool_name;
+    req->m_data.m_pool_id = pool_id;
+    req->m_data.m_snap_id = snap_id;
+    req->m_data.m_pool_name = "";
+    req->m_data.m_pool_namespace = pool_nspace;
     req->m_data.m_oid = oid;
     req->m_process_msg = on_finish;
     req->encode();
