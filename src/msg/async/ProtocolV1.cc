@@ -957,7 +957,14 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
         cct->_conf->ms_die_on_old_message) {
       ceph_assert(0 == "old msgs despite reconnect_seq feature");
     }
-    return nullptr;
+    state = OPENED;
+    // clean up local buffer references
+    data_buf.clear();
+    front.clear();
+    middle.clear();
+    data.clear();
+  
+    return CONTINUE(wait_message);
   }
   if (message->get_seq() > cur_seq + 1) {
     ldout(cct, 0) << __func__ << " missed message?  skipped from seq "
