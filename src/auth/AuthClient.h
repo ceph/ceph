@@ -14,7 +14,9 @@ public:
 
   virtual int get_auth_request(
     Connection *con,
-    uint32_t *method, bufferlist *out) = 0;
+    uint32_t *method,
+    std::vector<uint32_t> *preferred_modes,
+    bufferlist *out) = 0;
   virtual int handle_auth_reply_more(
     Connection *con,
     const bufferlist& bl,
@@ -22,6 +24,7 @@ public:
   virtual int handle_auth_done(
     Connection *con,
     uint64_t global_id,
+    uint32_t con_mode,
     const bufferlist& bl,
     CryptoKey *session_key,
     CryptoKey *connection_key) = 0;
@@ -29,5 +32,6 @@ public:
     Connection *con,
     uint32_t old_auth_method,
     int result,
-    const std::vector<uint32_t>& allowed_methods) = 0;
+    const std::vector<uint32_t>& allowed_methods,
+    const std::vector<uint32_t>& allowed_modes) = 0;
 };

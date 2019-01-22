@@ -162,21 +162,16 @@ struct AuthConnectionMeta {
 
   int auth_mode = 0;  ///< AUTH_MODE_*
 
-  enum {
-    CON_MODE_INTEGRITY,     // crc: protect against bit errors
-    CON_MODE_AUTHENTICITY,  // secure hash: protect against MITM
-    CON_MODE_SECRECY,       // encrypted
-  };
-  int con_mode = CON_MODE_INTEGRITY;
+  /// server: client's preferred con_modes
+  std::vector<uint32_t> preferred_con_modes;
 
-  bool is_integrity_mode() {
-    return con_mode == CON_MODE_INTEGRITY;
+  int con_mode = 0;  ///< negotiated mode
+
+  bool is_mode_crc() {
+    return con_mode == CEPH_CON_MODE_CRC;
   }
-  bool is_authenticity_mode() {
-    return con_mode == CON_MODE_AUTHENTICITY;
-  }
-  bool is_secrecy_mode() {
-    return con_mode == CON_MODE_SECRECY;
+  bool is_mode_secure() {
+    return con_mode == CEPH_CON_MODE_SECURE;
   }
 
   CryptoKey session_key;         ///< per-ticket key

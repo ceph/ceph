@@ -128,7 +128,9 @@ public:
   }
 
   int get_auth_request(
-    uint32_t *method, bufferlist *out,
+    uint32_t *method,
+    std::vector<uint32_t> *preferred_modes,
+    bufferlist *out,
     const EntityName& entity_name,
     uint32_t want_keys,
     RotatingKeyRing* keyring);
@@ -143,7 +145,8 @@ public:
   int handle_auth_bad_method(
     uint32_t old_auth_method,
     int result,
-    const std::vector<uint32_t>& allowed_methods);
+    const std::vector<uint32_t>& allowed_methods,
+    const std::vector<uint32_t>& allowed_modes);
 
   bool is_con(Connection *c) const {
     return con.get() == c;
@@ -269,6 +272,7 @@ public:
   int get_auth_request(
     Connection *con,
     uint32_t *method,
+    std::vector<uint32_t> *preferred_modes,
     bufferlist *bl) override;
   int handle_auth_reply_more(
     Connection *con,
@@ -277,6 +281,7 @@ public:
   int handle_auth_done(
     Connection *con,
     uint64_t global_id,
+    uint32_t con_mode,
     const bufferlist& bl,
     CryptoKey *session_key,
     CryptoKey *connection_key) override;
@@ -284,7 +289,8 @@ public:
     Connection *con,
     uint32_t old_auth_method,
     int result,
-    const std::vector<uint32_t>& allowed_methods) override;
+    const std::vector<uint32_t>& allowed_methods,
+    const std::vector<uint32_t>& allowed_modes) override;
   // AuthServer
   int handle_auth_request(
     Connection *con,

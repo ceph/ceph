@@ -5867,15 +5867,22 @@ void Monitor::extract_save_mon_key(KeyRing& keyring)
 // AuthClient methods -- for mon <-> mon communication
 int Monitor::get_auth_request(
   Connection *con,
-  uint32_t *method, bufferlist *out)
+  uint32_t *method,
+  vector<uint32_t> *preferred_modes,
+  bufferlist *out)
 {
   AuthAuthorizer *auth;
   if (!ms_get_authorizer(con->get_peer_type(), &auth)) {
     return -EACCES;
   }
+  if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
+    return -EACCES;
+  }
   auto auth_meta = con->get_auth_meta();
   auth_meta->authorizer.reset(auth);
   *method = auth->protocol;
+  auth_registry.get_supported_modes(CEPH_ENTITY_TYPE_MON, auth->protocol,
+				    preferred_modes);
   *out = auth->bl;
   return 0;
 }
@@ -5898,6 +5905,7 @@ int Monitor::handle_auth_reply_more(
 int Monitor::handle_auth_done(
   Connection *con,
   uint64_t global_id,
+  uint32_t con_mode,
   const bufferlist& bl,
   CryptoKey *session_key,
   CryptoKey *connection_key)
@@ -5917,7 +5925,8 @@ int Monitor::handle_auth_bad_method(
   Connection *con,
   uint32_t old_auth_method,
   int result,
-  const std::vector<uint32_t>& allowed_methods)
+  const std::vector<uint32_t>& allowed_methods,
+  const std::vector<uint32_t>& allowed_modes)
 {
   derr << __func__ << " hmm, they didn't like " << old_auth_method
        << " result " << cpp_strerror(result) << dendl;

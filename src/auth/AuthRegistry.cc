@@ -67,6 +67,33 @@ void AuthRegistry::_parse_method_list(const string& s,
   ldout(cct,20) << __func__ << " " << s << " -> " << *v << dendl;
 }
 
+void AuthRegistry::_parse_mode_list(const string& s,
+				    std::vector<uint32_t> *v)
+{
+  std::list<std::string> sup_list;
+  get_str_list(s, sup_list);
+  if (sup_list.empty()) {
+    lderr(cct) << "WARNING: empty auth protocol list" << dendl;
+  }
+  for (auto& i : sup_list) {
+    ldout(cct, 5) << "adding con mode: " << i << dendl;
+    if (i == "crc") {
+      v->push_back(CEPH_CON_MODE_CRC);
+    } else if (i == "secure") {
+      v->push_back(CEPH_CON_MODE_SECURE);
+    } else {
+      v->push_back(CEPH_CON_MODE_UNKNOWN);
+      lderr(cct) << "WARNING: unknown connection mode " << i << dendl;
+    }
+  }
+  if (v->empty()) {
+    lderr(cct) << "WARNING: no connection modes defined, use 'crc' by default"
+	       << dendl;
+    v->push_back(CEPH_CON_MODE_CRC);
+  }
+  ldout(cct,20) << __func__ << " " << s << " -> " << *v << dendl;
+}
+
 void AuthRegistry::_refresh_config()
 {
   if (cct->_conf->auth_supported.size()) {
@@ -78,6 +105,16 @@ void AuthRegistry::_refresh_config()
     _parse_method_list(cct->_conf->auth_service_required, &service_methods);
     _parse_method_list(cct->_conf->auth_client_required, &client_methods);
   }
+  _parse_mode_list(cct->_conf.get_val<string>("ms_mon_cluster_mode"),
+		   &mon_cluster_modes);
+  _parse_mode_list(cct->_conf.get_val<string>("ms_mon_service_mode"),
+		   &mon_service_modes);
+  _parse_mode_list(cct->_conf.get_val<string>("ms_cluster_mode"),
+		   &cluster_modes);
+  _parse_mode_list(cct->_conf.get_val<string>("ms_service_mode"),
+		   &service_modes);
+  _parse_mode_list(cct->_conf.get_val<string>("ms_client_mode"),
+		   &client_modes);
 
   ldout(cct,10) << __func__ << " cluster_methods " << cluster_methods
 		<< " service_methods " << service_methods
@@ -103,23 +140,68 @@ void AuthRegistry::_refresh_config()
   }
 }
 
-void AuthRegistry::get_supported_methods(int peer_type,
-					 std::vector<uint32_t> *v)
+void AuthRegistry::get_supported_methods(
+  int peer_type,
+  std::vector<uint32_t> *methods,
+  std::vector<uint32_t> *modes)
 {
-  if (cct->get_module_type() == CEPH_ENTITY_TYPE_CLIENT) {
-    *v = client_methods;
+  switch (cct->get_module_type()) {
+  case CEPH_ENTITY_TYPE_CLIENT:
+    // i am client
+    if (methods) {
+      *methods = client_methods;
+    }
+    if (modes) {
+      *modes = client_modes;
+    }
     return;
-  }
-  switch (peer_type) {
   case CEPH_ENTITY_TYPE_MON:
-  case CEPH_ENTITY_TYPE_MGR:
-  case CEPH_ENTITY_TYPE_MDS:
-  case CEPH_ENTITY_TYPE_OSD:
-    *v = cluster_methods;
-    break;
+    // i am mon
+    switch (peer_type) {
+    case CEPH_ENTITY_TYPE_MON:
+      // they are mon
+      if (methods) {
+	*methods = cluster_methods;
+      }
+      if (modes) {
+	*modes = mon_cluster_modes;
+      }
+      break;
+    default:
+      // they are anything but mons
+      if (methods) {
+	*methods = service_methods;
+      }
+      if (modes) {
+	*modes = mon_service_modes;
+      }
+    }
+    return;
   default:
-    *v = service_methods;
-    break;
+    // i am a non-mon daemon
+    switch (peer_type) {
+    case CEPH_ENTITY_TYPE_MON:
+    case CEPH_ENTITY_TYPE_MGR:
+    case CEPH_ENTITY_TYPE_MDS:
+    case CEPH_ENTITY_TYPE_OSD:
+      // they are another daemon
+      if (methods) {
+	*methods = cluster_methods;
+      }
+      if (modes) {
+	*modes = cluster_modes;
+      }
+      break;
+    default:
+      // they are a client
+      if (methods) {
+	*methods = service_methods;
+      }
+      if (modes) {
+	*modes = service_modes;
+      }
+      break;
+    }
   }
 }
 
@@ -135,6 +217,25 @@ bool AuthRegistry::any_supported_methods(int peer_type)
   std::vector<uint32_t> s;
   get_supported_methods(peer_type, &s);
   return !s.empty();
+}
+
+void AuthRegistry::get_supported_modes(
+  int peer_type,
+  uint32_t auth_method,
+  std::vector<uint32_t> *modes)
+{
+  std::vector<uint32_t> s;
+  get_supported_methods(peer_type, nullptr, &s);
+  if (auth_method == CEPH_AUTH_NONE) {
+    // filter out all but crc for AUTH_NONE
+    for (auto mode : s) {
+      if (mode == CEPH_CON_MODE_CRC) {
+	modes->push_back(mode);
+      }
+    }
+  } else {
+    *modes = s;
+  }
 }
 
 AuthAuthorizeHandler *AuthRegistry::get_handler(int peer_type, int method)
