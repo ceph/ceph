@@ -57,10 +57,6 @@ public:
   virtual int decrypt_bufferlist(bufferlist &in, bufferlist &out) {
     return 0;
   }
-
-  int get_protocol() {return protocol;}
-  CryptoKey get_key() {return key;}
-
 };
 
 extern AuthSessionHandler *get_auth_session_handler(

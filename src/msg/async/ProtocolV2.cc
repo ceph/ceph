@@ -80,7 +80,7 @@ void ProtocolV2::run_continuation(CtPtr continuation) {
 }
 
 void ProtocolV2::calc_signature(const char *in, uint32_t length, char *out) {
-  auto secret = session_security->get_key().get_secret();
+  auto secret = auth_meta.session_key.get_secret();
   ceph::crypto::HMACSHA256 hmac((const unsigned char *)secret.c_str(),
                                 secret.length());
   hmac.Update((const unsigned char *)in, length);
@@ -1143,15 +1143,14 @@ void ProtocolV2::calculate_payload_size(uint32_t length, uint32_t *total_len,
     if (is_signed) {
       total_l += SIGNATURE_BLOCK_SIZE;
     }
-    uint32_t block_size = session_security->get_key().get_max_outbuf_size(0);
+    uint32_t block_size = auth_meta.session_key.get_max_outbuf_size(0);
     uint32_t pad_len = block_size - (total_l % block_size);
     if (is_signed) {
       sig_pad_l = pad_len;
     } else if (!is_signed) {
       enc_pad_l = pad_len;
     }
-    total_l =
-        session_security->get_key().get_max_outbuf_size(total_l + pad_len);
+    total_l = auth_meta.session_key.get_max_outbuf_size(total_l + pad_len);
   }
 
   if (sig_pad_len) {
