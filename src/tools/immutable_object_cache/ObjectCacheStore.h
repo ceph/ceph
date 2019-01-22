@@ -27,38 +27,32 @@ class ObjectCacheStore
   public:
     ObjectCacheStore(CephContext *cct, ContextWQ* work_queue);
     ~ObjectCacheStore();
-
     int init(bool reset);
-
     int shutdown();
-
     int init_cache();
-    int lookup_object(std::string pool_name, std::string object_name);
+    int lookup_object(std::string pool_nspace,
+                      uint64_t pool_id, uint64_t snap_id,
+                      std::string object_name);
 
   private:
+    std::string generate_cache_file_name(std::string pool_nspace, uint64_t pool_id,
+                                         uint64_t snap_id, std::string oid);
     int evict_objects();
-
-    int do_promote(std::string pool_name, std::string object_name);
-
+    int do_promote(std::string pool_nspace, uint64_t pool_id,
+                    uint64_t snap_id, std::string object_name);
     int promote_object(librados::IoCtx*, std::string object_name,
                        librados::bufferlist* read_buf,
                        Context* on_finish);
-
    int handle_promote_callback(int, bufferlist*, std::string);
    int do_evict(std::string cache_file);
 
     CephContext *m_cct;
     ContextWQ* m_work_queue;
     RadosRef m_rados;
-
-
-    std::map<std::string, librados::IoCtx*> m_ioctxs;
+    std::map<uint64_t, librados::IoCtx*> m_ioctxs;
     Mutex m_ioctxs_lock;
-
     ObjectCacheFile *m_cache_file;
-
     Policy* m_policy;
-
     //TODO(): make this configurable
     int m_dir_num = 10;
     uint64_t object_cache_max_size;

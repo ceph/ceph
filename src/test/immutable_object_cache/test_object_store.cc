@@ -67,7 +67,7 @@ public:
   }
 
   void lookup_object_cache_store(std::string pool_name, std::string vol_name, std::string obj_name, int& ret) {
-    ret = m_object_cache_store->lookup_object(pool_name, obj_name);
+    ret = m_object_cache_store->lookup_object(pool_name, 1, 2, obj_name);
   }
 
   void TearDown() override {

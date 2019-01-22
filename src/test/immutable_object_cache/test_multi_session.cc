@@ -123,7 +123,7 @@ public:
       });
       m_send_request_index++;
       // here just for concurrently testing register + lookup, so fix object id.
-      m_cache_client_vec[index]->lookup_object(pool, "1234", ctx);
+      m_cache_client_vec[index]->lookup_object(pool, 1, 2, "1234", ctx);
     }
 
     if (is_last) {
