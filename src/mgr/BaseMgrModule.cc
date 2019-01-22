@@ -404,19 +404,35 @@ ceph_get_module_option_ex(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_get_module_option(BaseMgrModule *self, PyObject *args)
 {
+  // Do not call ceph_get_module_option_ex() here, otherwise
+  // it will end up in a dead-lock in some situations.
+  // Call stack:
+  // PyModuleRegistry::active_start()
+  // ActivePyModules::start_one()
+  // ActivePyModule::load()
+  // ...
+  // ActivePyModules::get_typed_config()
+  // PyModuleRegistry::module_exists()
   char *key = nullptr;
   if (!PyArg_ParseTuple(args, "s:ceph_get_module_option", &key)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
-  auto pKey = PyString_FromString(key);
-  auto pModule = PyString_FromString(self->this_module->get_name().c_str());
-  auto pArgs = PyTuple_Pack(2, pModule, pKey);
-  Py_DECREF(pKey);
-  Py_DECREF(pModule);
-  auto pResult = ceph_get_module_option_ex(self, pArgs);
-  Py_DECREF(pArgs);
-  return pResult;
+
+  PyThreadState *tstate = PyEval_SaveThread();
+  std::string value;
+  bool found = self->py_modules->get_config(self->this_module->get_name(),
+      key, &value);
+
+  PyEval_RestoreThread(tstate);
+
+  if (found) {
+    dout(10) << __func__ << " " << key << " found: " << value.c_str() << dendl;
+    return self->this_module->py_module->get_typed_option_value(key, value);
+  } else {
+    dout(4) << __func__ << " " << key << " not found " << dendl;
+    Py_RETURN_NONE;
+  }
 }
 
 static PyObject*
