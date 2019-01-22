@@ -32,6 +32,14 @@ $vstart_path/mrun $name ceph -c $run_root/ceph.conf \
 	-k $run_root/keyring auth get-or-create client.rgw.$port mon \
 	'allow rw' osd 'allow rwx' mgr 'allow rw' >> $run_root/keyring
 
+if [ -z "$RUNGDB" ] ;then
 $vstart_path/mrun $name radosgw --rgw-frontends="$rgw_frontend port=$port" \
 	-n client.rgw.$port --pid-file=$pidfile \
 	--admin-socket=$asokfile "$@" --log-file=$logfile
+else
+    cat >gdb.cmds <<EOF
+alias runrgw = run --rgw-frontends="$rgw_frontend port=$port" -n client.rgw --pid-file=$pidfile --admin-socket=$asokfile "$@" --log-file=$logfile
+EOF
+    echo 'You can launch with `runrgw`.'
+    gdb bin/radosgw -x gdb.cmds
+fi

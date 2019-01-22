@@ -166,8 +166,12 @@ static RGWRESTMgr *rest_filter(RGWRados *store, int dialect, RGWRESTMgr *orig)
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
  */
-int main(int argc, const char **argv)
+int main(int argc, const char **argv, const char** arge)
 {
+  if (secure_getenv ("WAITGDB")) {
+    sleep(120);
+  }
+
   // dout() messages will be sent to stderr, but FCGX wants messages on stdout
   // Redirect stderr to stdout.
   TEMP_FAILURE_RETRY(close(STDERR_FILENO));
