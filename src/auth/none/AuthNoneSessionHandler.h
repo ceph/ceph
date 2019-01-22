@@ -15,15 +15,10 @@
 #include "auth/AuthSessionHandler.h"
 #include "msg/Message.h"
 
-class CephContext;
-
-class AuthNoneSessionHandler  : public AuthSessionHandler {
+class AuthNoneSessionHandler : public AuthSessionHandler {
 public:
-  AuthNoneSessionHandler(CephContext *cct_,
-			 const CryptoKey& session_key,
-			 const std::string& connection_secret)
-    : AuthSessionHandler(cct_, CEPH_AUTH_NONE, session_key, connection_secret) {}
-  ~AuthNoneSessionHandler() override {}
+  AuthNoneSessionHandler() = default;
+  ~AuthNoneSessionHandler() override = default;
   
   // The None suite neither signs nor encrypts messages, so these functions just return success.
   // Since nothing was signed or encrypted, don't increment the stats.  PLR
