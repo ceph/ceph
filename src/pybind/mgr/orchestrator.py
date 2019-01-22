@@ -7,7 +7,7 @@ Please see the ceph-mgr module developer's guide for more information.
 import six
 
 try:
-    from typing import TypeVar, Generic, List, Optional, Union
+    from typing import TypeVar, Generic, List, Optional, Union, Tuple
     T = TypeVar('T')
     G = Generic[T]
 except ImportError:
@@ -151,6 +151,7 @@ class Orchestrator(object):
         return True
 
     def available(self):
+        # type: () -> Tuple[Optional[bool], Optional[str]]
         """
         Report whether we can talk to the orchestrator.  This is the
         place to give the user a meaningful message if the orchestrator
@@ -670,9 +671,10 @@ class InventoryFilter(object):
                  in e.g. OSD servers.
 
     """
-    def __init__(self):
-        self.labels = None  # Optional: get info about nodes matching labels
-        self.nodes = None  # Optional: get info about certain named nodes only
+    def __init__(self, labels=None, nodes=None):
+        # type: (List[str], List[str]) -> None
+        self.labels = labels  # Optional: get info about nodes matching labels
+        self.nodes = nodes  # Optional: get info about certain named nodes only
 
 
 class InventoryDevice(object):
@@ -775,6 +777,7 @@ class OrchestratorClientMixin(Orchestrator):
         return self.remote(o, meth, *args, **kwargs)
 
     def _orchestrator_wait(self, completions):
+        # type: (List[_Completion]) -> None
         """
         Helper to wait for completions to complete (reads) or
         become persistent (writes).
