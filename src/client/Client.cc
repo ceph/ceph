@@ -2144,6 +2144,10 @@ void Client::handle_client_session(const MConstRef<MClientSession>& m)
     break;
 
   case CEPH_SESSION_FLUSHMSG:
+    /* flush cap release */
+    if (auto& m = session->release; m) {
+      session->con->send_message2(std::move(m));
+    }
     session->con->send_message2(MClientSession::create(CEPH_SESSION_FLUSHMSG_ACK, m->get_seq()));
     break;
 
