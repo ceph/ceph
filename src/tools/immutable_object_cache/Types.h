@@ -22,14 +22,19 @@ struct ObjectCacheMsgHeader {
     void decode(bufferlist::const_iterator& it);
 };
 
+// TODO : cleanup useless data
 class ObjectCacheMsgData {
 public:
   uint64_t m_image_size;
   uint64_t m_read_offset;
   uint64_t m_read_len;
+  uint64_t m_pool_id;
+  uint64_t m_snap_id;
   std::string m_pool_name;
   std::string m_image_name;
   std::string m_oid;
+  std::string m_pool_namespace; // TODO : Jason suggestion
+  std::string m_cache_path;
 
   void encode(bufferlist& bl);
   void decode(bufferlist& bl);

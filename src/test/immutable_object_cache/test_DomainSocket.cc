@@ -120,7 +120,7 @@ public:
         usleep(1);
       }
 
-      m_cache_client->lookup_object("test_pool", "123456", ctx);
+      m_cache_client->lookup_object("test_pool", 1, 2, "123456", ctx);
       m_send_request_index++;
     }
     m_wait_event.wait();
@@ -133,7 +133,7 @@ public:
        hit = ack->m_head.type == RBDSC_READ_REPLY;
        m_wait_event.signal();
     });
-    m_cache_client->lookup_object(pool_name, object_id, ctx);
+    m_cache_client->lookup_object(pool_name, 1, 2, object_id, ctx);
     m_wait_event.wait();
     return hit;
   }

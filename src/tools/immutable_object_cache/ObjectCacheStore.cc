@@ -45,7 +45,7 @@ int ObjectCacheStore::init(bool reset) {
 
   ret = m_rados->connect();
   if(ret < 0 ) {
-    lderr(m_cct) << "fail to conect to cluster" << dendl;
+    lderr(m_cct) << "fail to connect to cluster" << dendl;
     return ret;
   }
 
@@ -87,29 +87,32 @@ int ObjectCacheStore::init_cache() {
   return 0;
 }
 
-int ObjectCacheStore::do_promote(std::string pool_name, std::string object_name) {
+int ObjectCacheStore::do_promote(std::string pool_nspace,
+                                  uint64_t pool_id, uint64_t snap_id,
+                                  std::string object_name) {
   ldout(m_cct, 20) << "to promote object = "
-                   << object_name << " from pool: "
-                   << pool_name << dendl;
+                   << object_name << " from pool ID : "
+                   << pool_id << dendl;
 
   int ret = 0;
-  std::string cache_file_name =  pool_name + object_name;
+  std::string cache_file_name = std::move(generate_cache_file_name(pool_nspace,
+                                          pool_id, snap_id, object_name));
   {
     Mutex::Locker _locker(m_ioctxs_lock);
-    if (m_ioctxs.find(pool_name) == m_ioctxs.end()) {
+    if (m_ioctxs.find(pool_id) == m_ioctxs.end()) {
       librados::IoCtx* io_ctx = new librados::IoCtx();
-      ret = m_rados->ioctx_create(pool_name.c_str(), *io_ctx);
+      ret = m_rados->ioctx_create2(pool_id, *io_ctx);
       if (ret < 0) {
         lderr(m_cct) << "fail to create ioctx" << dendl;
         return ret;
       }
-      m_ioctxs.emplace(pool_name, io_ctx);
+      m_ioctxs.emplace(pool_id, io_ctx);
     }
   }
 
-  ceph_assert(m_ioctxs.find(pool_name) != m_ioctxs.end());
+  ceph_assert(m_ioctxs.find(pool_id) != m_ioctxs.end());
 
-  librados::IoCtx* ioctx = m_ioctxs[pool_name];
+  librados::IoCtx* ioctx = m_ioctxs[pool_id];
 
   librados::bufferlist* read_buf = new librados::bufferlist();
 
@@ -169,17 +172,19 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
   return ret;
 }
 
-int ObjectCacheStore::lookup_object(std::string pool_name,
+int ObjectCacheStore::lookup_object(std::string pool_nspace,
+                                    uint64_t pool_id, uint64_t snap_id,
                                     std::string object_name) {
   ldout(m_cct, 20) << "object name = " << object_name
-                   << " in pool: " << pool_name << dendl;
+                   << " in pool ID : " << pool_id << dendl;
 
   int pret = -1;
-  cache_status_t ret = m_policy->lookup_object(pool_name + object_name);
+  cache_status_t ret = m_policy->lookup_object(
+                        generate_cache_file_name(pool_nspace, pool_id, snap_id, object_name));
 
   switch(ret) {
     case OBJ_CACHE_NONE: {
-      pret = do_promote(pool_name, object_name);
+      pret = do_promote(pool_nspace, pool_id, snap_id, object_name);
       if (pret < 0) {
         lderr(m_cct) << "fail to start promote" << dendl;
       }
@@ -248,6 +253,15 @@ int ObjectCacheStore::do_evict(std::string cache_file) {
   }
 
   return ret;
+}
+
+std::string ObjectCacheStore::generate_cache_file_name(std::string pool_nspace,
+                                                       uint64_t pool_id,
+                                                       uint64_t snap_id,
+                                                       std::string oid) {
+  return pool_nspace + ":" +
+         std::to_string(pool_id) + ":" +
+         std::to_string(snap_id) + ":" + oid;
 }
 
 } // namespace immutable_obj_cache

@@ -32,9 +32,13 @@ void ObjectCacheMsgData::encode(bufferlist& bl) {
   ceph::encode(m_image_size, bl);
   ceph::encode(m_read_offset, bl);
   ceph::encode(m_read_len, bl);
+  ceph::encode(m_pool_id, bl);
+  ceph::encode(m_snap_id, bl);
   ceph::encode(m_pool_name, bl);
   ceph::encode(m_image_name, bl);
   ceph::encode(m_oid, bl);
+  ceph::encode(m_pool_namespace, bl);
+  ceph::encode(m_cache_path, bl);
 }
 
 void ObjectCacheMsgData::decode(bufferlist& bl) {
@@ -42,9 +46,13 @@ void ObjectCacheMsgData::decode(bufferlist& bl) {
   ceph::decode(m_image_size, i);
   ceph::decode(m_read_offset, i);
   ceph::decode(m_read_len, i);
+  ceph::decode(m_pool_id, i);
+  ceph::decode(m_snap_id, i);
   ceph::decode(m_pool_name, i);
   ceph::decode(m_image_name, i);
   ceph::decode(m_oid, i);
+  ceph::decode(m_pool_namespace, i);
+  ceph::decode(m_cache_path, i);
 }
 
 void ObjectCacheRequest::encode() {

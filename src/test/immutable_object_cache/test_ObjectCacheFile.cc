@@ -105,7 +105,7 @@ TEST_F(TestObjectCacheFile, test_read_object_from_file) {
   sub_bl.substr_of(*buf_1, 2, 4);
   ASSERT_EQ(0, (strncmp(sub_bl.c_str(), buf_5->c_str(), 4)));
 
-  ASSERT_EQ(m_cache_file_1->read_object_from_file(buf_6, 12, 4), -1);
+  ASSERT_EQ(m_cache_file_1->read_object_from_file(buf_6, 12, 4), 0);
   ASSERT_EQ(0, buf_6->length());
 
 
