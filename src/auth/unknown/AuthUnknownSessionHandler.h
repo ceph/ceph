@@ -28,10 +28,6 @@ public:
 			 session_key, connection_secret) {}
   ~AuthUnknownSessionHandler() override {}
   
-  bool no_security() override {
-    return true;
-  }
-
   // The Unknown suite neither signs nor encrypts messages, so these functions just return success.
   // Since nothing was signed or encrypted, don't increment the stats.  PLR
 
