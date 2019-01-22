@@ -46,16 +46,5 @@ public:
 
   int encrypt_bufferlist(bufferlist &in, bufferlist &out) override;
   int decrypt_bufferlist(bufferlist &in, bufferlist &out) override;
-
-  // Cephx does not currently encrypt messages, so just return 0 if called.  PLR
-
-  int encrypt_message(Message *m) override {
-    return 0;
-  }
-
-  int decrypt_message(Message *m) override {
-    return 0;
-  }
-
 };
 

@@ -30,8 +30,6 @@ struct AuthSessionHandler {
   virtual ~AuthSessionHandler() = default;
   virtual int sign_message(Message *message) = 0;
   virtual int check_message_signature(Message *message) = 0;
-  virtual int encrypt_message(Message *message) = 0;
-  virtual int decrypt_message(Message *message) = 0;
 
   virtual int encrypt_bufferlist(bufferlist &in, bufferlist &out) {
     return 0;
@@ -46,12 +44,6 @@ struct DummyAuthSessionHandler : AuthSessionHandler {
     return 0;
   }
   int check_message_signature(Message*) final {
-    return 0;
-  }
-  int encrypt_message(Message*) final {
-    return 0;
-  }
-  int decrypt_message(Message*) final {
     return 0;
   }
 };
