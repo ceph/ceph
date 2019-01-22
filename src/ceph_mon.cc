@@ -242,7 +242,8 @@ int main(int argc, const char **argv)
     { "leveldb_cache_size", "536870912" },
     { "leveldb_block_size", "65536" },
     { "leveldb_compression", "false"},
-    { "leveldb_log", "" }
+    { "leveldb_log", "" },
+    { "keyring", "$mon_data/keyring" },
   };
 
   int flags = 0;
