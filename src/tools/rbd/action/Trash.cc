@@ -393,11 +393,12 @@ int execute_purge (const po::variables_map &vm,
     return r;
   }
 
-  std::remove_if(trash_entries.begin(), trash_entries.end(),
-    [](librbd::trash_image_info_t info) {
-      return info.source != RBD_TRASH_IMAGE_SOURCE_USER;
-    }
-  );
+  trash_entries.erase(
+      std::remove_if(trash_entries.begin(), trash_entries.end(),
+                     [](librbd::trash_image_info_t info) {
+                       return info.source != RBD_TRASH_IMAGE_SOURCE_USER;
+                     }),
+  trash_entries.end());
 
   std::vector<const char *> to_be_removed;
 
