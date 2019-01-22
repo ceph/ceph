@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include "AuthAuthorizeHandler.h"
+#include "AuthRegistry.h"
 
 #include <vector>
 
@@ -11,20 +11,23 @@ class CephContext;
 class Connection;
 
 class AuthServer {
-private:
-  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_service_registry;
-  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_cluster_registry;
 public:
-  AuthServer(CephContext *cct);
-  virtual ~AuthServer() {}
+  AuthRegistry auth_registry;
 
-  AuthAuthorizeHandler *get_auth_authorize_handler(
-    int peer_type,
-    int auth_method);
+  AuthServer(CephContext *cct) : auth_registry(cct) {}
+  virtual ~AuthServer() {}
 
   virtual void get_supported_auth_methods(
     int peer_type,
-    std::vector<uint32_t> *methods);
+    std::vector<uint32_t> *methods) {
+    auth_registry.get_supported_methods(peer_type, methods);
+  }
+
+  AuthAuthorizeHandler *get_auth_authorize_handler(
+    int peer_type,
+    int auth_method) {
+    return auth_registry.get_handler(peer_type, auth_method);
+  }
 
   virtual int handle_auth_request(
     Connection *con,

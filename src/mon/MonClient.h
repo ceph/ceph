@@ -27,6 +27,7 @@
 
 #include "auth/AuthClient.h"
 #include "auth/AuthServer.h"
+#include "auth/AuthRegistry.h"
 
 class MMonMap;
 class MConfig;
@@ -102,7 +103,7 @@ public:
   MonConnection(CephContext *cct,
 		ConnectionRef conn,
 		uint64_t global_id,
-		const list<uint32_t>& auto_supported);
+		AuthRegistry *auth_registry);
   ~MonConnection();
   MonConnection(MonConnection&& rhs) = default;
   MonConnection& operator=(MonConnection&&) = default;
@@ -114,8 +115,7 @@ public:
 		  RotatingKeyRing* keyring);
   int authenticate(MAuthReply *m);
   void start(epoch_t epoch,
-             const EntityName& entity_name,
-             const AuthMethodList& auth_supported);
+             const EntityName& entity_name);
   bool have_session() const;
   uint64_t get_global_id() const {
     return global_id;
@@ -174,7 +174,8 @@ private:
 
   std::unique_ptr<AuthClientHandler> auth;
   uint64_t global_id;
-  const list<uint32_t>& auth_supported;
+
+  AuthRegistry *auth_registry;
 };
 
 class MonClient : public Dispatcher,
@@ -200,15 +201,11 @@ private:
 
   bool initialized;
   bool stopping = false;
-  bool no_keyring_disabled_cephx = false;
-  bool no_ktfile_disabled_krb = false;
 
   LogClient *log_client;
   bool more_log_pending;
 
   void send_log(bool flush = false);
-
-  std::unique_ptr<AuthMethodList> auth_supported;
 
   bool ms_dispatch(Message *m) override;
   bool ms_handle_reset(Connection *con) override;

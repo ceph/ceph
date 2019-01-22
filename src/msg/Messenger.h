@@ -35,7 +35,7 @@
 #include "include/ceph_features.h"
 #include "auth/Crypto.h"
 #include "common/item_history.h"
-#include "auth/AuthAuthorizeHandler.h"
+#include "auth/AuthRegistry.h"
 #include "include/ceph_assert.h"
 
 #include <errno.h>
@@ -46,7 +46,6 @@
 
 class Timer;
 
-class AuthAuthorizerHandlerRegistry;
 class AuthClient;
 class AuthServer;
 
@@ -96,8 +95,7 @@ public:
 
 protected:
   // for authentication
-  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_service_registry;
-  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_cluster_registry;
+  AuthRegistry auth_registry;
 
 public:
   /**
