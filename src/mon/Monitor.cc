@@ -883,6 +883,8 @@ int Monitor::init()
   mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
   mgr_messenger->set_auth_client(this);
 
+  auth_registry.refresh_config();
+
   bootstrap();
   // add features of myself into feature_map
   session_map.feature_map.add_mon(con_self->get_features());

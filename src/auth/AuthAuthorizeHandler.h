@@ -16,7 +16,6 @@
 #define CEPH_AUTHAUTHORIZEHANDLER_H
 
 #include "Auth.h"
-#include "AuthMethodList.h"
 #include "include/types.h"
 #include "common/ceph_mutex.h"
 // Different classes of session crypto handling
@@ -42,27 +41,6 @@ struct AuthAuthorizeHandler {
     CryptoKey *connection_secret,
     std::unique_ptr<AuthAuthorizerChallenge> *challenge) = 0;
   virtual int authorizer_session_crypto() = 0;
-};
-
-class AuthAuthorizeHandlerRegistry {
-  ceph::mutex m_lock;
-  map<int,AuthAuthorizeHandler*> m_authorizers;
-  AuthMethodList supported;
-
-public:
-  AuthAuthorizeHandlerRegistry(CephContext *cct_, const std::string &methods)
-    : m_lock{ceph::make_mutex("AuthAuthorizeHandlerRegistry::m_lock")},
-      supported{cct_, methods}
-  {}
-  ~AuthAuthorizeHandlerRegistry();
-
-  void get_supported_methods(std::vector<uint32_t> *v) {
-    v->clear();
-    for (auto m : supported.get_supported_set()) {
-      v->push_back(m);
-    }
-  }
-  AuthAuthorizeHandler *get_handler(int protocol);
 };
 
 #endif

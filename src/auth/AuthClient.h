@@ -6,7 +6,6 @@
 #include <vector>
 
 class EntityName;
-class AuthMethodList;
 class CryptoKey;
 
 class AuthClient {

@@ -58,19 +58,10 @@ Messenger::Messenger(CephContext *cct_, entity_name_t w)
     socket_priority(-1),
     cct(cct_),
     crcflags(get_default_crc_flags(cct->_conf)),
-    auth_ah_service_registry(
-      new AuthAuthorizeHandlerRegistry(
-	cct,
-	cct->_conf->auth_supported.empty() ?
-	cct->_conf->auth_service_required :
-	cct->_conf->auth_supported)),
-    auth_ah_cluster_registry(
-      new AuthAuthorizeHandlerRegistry(
-	cct,
-	cct->_conf->auth_supported.empty() ?
-	cct->_conf->auth_cluster_required :
-	cct->_conf->auth_supported))
-{}
+    auth_registry(cct)
+{
+  auth_registry.refresh_config();
+}
 
 void Messenger::set_endpoint_addr(const entity_addr_t& a,
                                   const entity_name_t &name)
@@ -138,16 +129,7 @@ bool Messenger::ms_deliver_verify_authorizer(
       }
     }
   }
-  AuthAuthorizeHandler *ah = 0;
-  switch (peer_type) {
-  case CEPH_ENTITY_TYPE_MDS:
-  case CEPH_ENTITY_TYPE_MON:
-  case CEPH_ENTITY_TYPE_OSD:
-    ah = auth_ah_cluster_registry->get_handler(protocol);
-    break;
-  default:
-    ah = auth_ah_service_registry->get_handler(protocol);
-  }
+  AuthAuthorizeHandler *ah = auth_registry.get_handler(peer_type, protocol);
   if (get_mytype() == CEPH_ENTITY_TYPE_MON &&
       peer_type != CEPH_ENTITY_TYPE_MON) {
     // the monitor doesn't do authenticators for msgr1.
