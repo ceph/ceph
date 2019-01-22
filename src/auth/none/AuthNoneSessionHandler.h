@@ -25,10 +25,6 @@ public:
     : AuthSessionHandler(cct_, CEPH_AUTH_NONE, session_key, connection_secret) {}
   ~AuthNoneSessionHandler() override {}
   
-  bool no_security() override {
-    return true;
-  }
-
   // The None suite neither signs nor encrypts messages, so these functions just return success.
   // Since nothing was signed or encrypted, don't increment the stats.  PLR
 

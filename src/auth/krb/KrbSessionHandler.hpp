@@ -43,7 +43,7 @@ class KrbSessionHandler : public AuthSessionHandler {
 			 connection_secret) { }
     ~KrbSessionHandler() override = default; 
 
-    bool no_security() override { return true; }
+    // No security
     int sign_message(Message* msg) override { return 0; }
     int check_message_signature(Message* msg) override { return 0; }
     int encrypt_message(Message* msg) override { return 0; }

@@ -45,7 +45,6 @@ public:
       connection_secret(cs_) {}
   virtual ~AuthSessionHandler() { }
 
-  virtual bool no_security() = 0;
   virtual int sign_message(Message *message) = 0;
   virtual int check_message_signature(Message *message) = 0;
   virtual int encrypt_message(Message *message) = 0;

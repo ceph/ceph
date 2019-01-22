@@ -31,10 +31,6 @@ public:
       features(features) {}
   ~CephxSessionHandler() override {}
 
-  bool no_security() override {
-    return false;
-  }
-
   int _calc_signature(Message *m, uint64_t *psig);
 
   int sign_message(Message *m) override;
