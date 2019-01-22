@@ -27,7 +27,6 @@
 AuthSessionHandler *get_auth_session_handler(
   CephContext *cct, int protocol,
   const CryptoKey& key,
-  const std::string& connection_secret,
   uint64_t features)
 {
 
@@ -41,7 +40,7 @@ AuthSessionHandler *get_auth_session_handler(
     if (key.get_type() == CEPH_CRYPTO_NONE) {
       return nullptr;
     }
-    return new CephxSessionHandler(cct, key, connection_secret, features);
+    return new CephxSessionHandler(cct, key, features);
   case CEPH_AUTH_NONE:
     return new AuthNoneSessionHandler();
   case CEPH_AUTH_UNKNOWN:
@@ -53,4 +52,11 @@ AuthSessionHandler *get_auth_session_handler(
   default:
     return nullptr;
   }
+}
+
+std::unique_ptr<AuthStreamHandler> AuthStreamHandler::create_stream_handler(
+    CephContext* ctx,
+    const class AuthConnectionMeta& auth_meta)
+{
+  return std::make_unique<AuthStreamHandler>();
 }
