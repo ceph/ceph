@@ -3,7 +3,7 @@
           [data]="modules"
           [columns]="columns"
           columnMode="flex"
-          selectionType="multi"
+          selectionType="single"
           (updateSelection)="updateSelection($event)"
           identifier="module"
           (fetchData)="getModuleList($event)">
@@ -12,4 +12,7 @@
                     [selection]="selection"
                     [tableActions]="tableActions">
   </cd-table-actions>
+  <cd-mgr-module-details cdTableDetail
+                         [selection]="selection">
+  </cd-mgr-module-details>
 </cd-table>

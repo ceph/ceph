@@ -11,21 +11,26 @@ from ..tools import find_object_in_list, str_to_bool
 
 @ApiController('/mgr/module', Scope.CONFIG_OPT)
 class MgrModules(RESTController):
-    managed_modules = ['telemetry']
+    ignore_modules = ['selftest']
 
     def list(self):
         """
         Get the list of managed modules.
-        :return: A list of objects with the fields 'name' and 'enabled'.
+        :return: A list of objects with the fields 'enabled', 'name' and 'options'.
         :rtype: list
         """
         result = []
         mgr_map = mgr.get('mgr_map')
         for module_config in mgr_map['available_modules']:
-            if self._is_module_managed(module_config['name']):
-                result.append({'name': module_config['name'], 'enabled': False})
+            if module_config['name'] not in self.ignore_modules:
+                result.append({
+                    'name': module_config['name'],
+                    'enabled': False,
+                    'options': self._convert_module_options(
+                        module_config['module_options'])
+                })
         for name in mgr_map['modules']:
-            if self._is_module_managed(name):
+            if name not in self.ignore_modules:
                 obj = find_object_in_list('name', name, result)
                 obj['enabled'] = True
         return result
@@ -66,6 +71,8 @@ class MgrModules(RESTController):
     def enable(self, module_name):
         """
         Enable the specified Ceph Mgr module.
+        :param module_name: The name of the Ceph Mgr module.
+        :type module_name: str
         """
         assert self._is_module_managed(module_name)
         CephService.send_command(
@@ -76,10 +83,24 @@ class MgrModules(RESTController):
     def disable(self, module_name):
         """
         Disable the specified Ceph Mgr module.
+        :param module_name: The name of the Ceph Mgr module.
+        :type module_name: str
         """
         assert self._is_module_managed(module_name)
         CephService.send_command(
             'mon', 'mgr module disable', module=module_name)
+
+    @RESTController.Resource('GET')
+    def options(self, module_name):
+        """
+        Get the module options of the specified Ceph Mgr module.
+        :param module_name: The name of the Ceph Mgr module.
+        :type module_name: str
+        :return: The module options as list of dicts.
+        :rtype: list
+        """
+        assert self._is_module_managed(module_name)
+        return self._get_module_options(module_name)
 
     def _is_module_managed(self, module_name):
         """
@@ -90,7 +111,13 @@ class MgrModules(RESTController):
             this service, otherwise ``false``.
         :rtype: bool
         """
-        return module_name in self.managed_modules
+        if module_name in self.ignore_modules:
+            return False
+        mgr_map = mgr.get('mgr_map')
+        for module_config in mgr_map['available_modules']:
+            if module_name == module_config['name']:
+                return True
+        return False
 
     def _get_module_config(self, module_name):
         """
@@ -114,16 +141,28 @@ class MgrModules(RESTController):
         :rtype: dict
         """
         options = self._get_module_config(module_name)['module_options']
-        # Workaround a possible bug in the Ceph Mgr implementation. The
-        # 'default_value' field is always returned as a string.
+        return self._convert_module_options(options)
+
+    def _convert_module_options(self, options):
+        # Workaround a possible bug in the Ceph Mgr implementation.
+        # Various fields (e.g. default_value, min, max) are always
+        # returned as a string.
         for option in options.values():
             if option['type'] == 'str':
-                if option['default_value'] == 'None':
+                if option['default_value'] == 'None':  # This is Python None
                     option['default_value'] = ''
             elif option['type'] == 'bool':
-                option['default_value'] = str_to_bool(option['default_value'])
+                if option['default_value'] == '':
+                    option['default_value'] = False
+                else:
+                    option['default_value'] = str_to_bool(
+                        option['default_value'])
             elif option['type'] == 'float':
-                option['default_value'] = float(option['default_value'])
+                for name in ['default_value', 'min', 'max']:
+                    if option[name]:  # Skip empty entries
+                        option[name] = float(option[name])
             elif option['type'] in ['uint', 'int', 'size', 'secs']:
-                option['default_value'] = int(option['default_value'])
+                for name in ['default_value', 'min', 'max']:
+                    if option[name]:  # Skip empty entries
+                        option[name] = int(option[name])
         return options

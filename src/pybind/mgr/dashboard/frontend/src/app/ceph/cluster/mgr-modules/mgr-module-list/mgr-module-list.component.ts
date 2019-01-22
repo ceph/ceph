@@ -4,23 +4,23 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BlockUI, NgBlockUI } from 'ng-block-ui';
 import { timer as observableTimer } from 'rxjs';
 
-import { MgrModuleService } from '../../../shared/api/mgr-module.service';
-import { TableComponent } from '../../../shared/datatable/table/table.component';
-import { CellTemplate } from '../../../shared/enum/cell-template.enum';
-import { CdTableAction } from '../../../shared/models/cd-table-action';
-import { CdTableColumn } from '../../../shared/models/cd-table-column';
-import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
-import { CdTableSelection } from '../../../shared/models/cd-table-selection';
-import { Permission } from '../../../shared/models/permissions';
-import { AuthStorageService } from '../../../shared/services/auth-storage.service';
-import { NotificationService } from '../../../shared/services/notification.service';
+import { MgrModuleService } from '../../../../shared/api/mgr-module.service';
+import { TableComponent } from '../../../../shared/datatable/table/table.component';
+import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
+import { CdTableAction } from '../../../../shared/models/cd-table-action';
+import { CdTableColumn } from '../../../../shared/models/cd-table-column';
+import { CdTableFetchDataContext } from '../../../../shared/models/cd-table-fetch-data-context';
+import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
+import { Permission } from '../../../../shared/models/permissions';
+import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
+import { NotificationService } from '../../../../shared/services/notification.service';
 
 @Component({
-  selector: 'cd-mgr-modules-list',
-  templateUrl: './mgr-modules-list.component.html',
-  styleUrls: ['./mgr-modules-list.component.scss']
+  selector: 'cd-mgr-module-list',
+  templateUrl: './mgr-module-list.component.html',
+  styleUrls: ['./mgr-module-list.component.scss']
 })
-export class MgrModulesListComponent {
+export class MgrModuleListComponent {
   @ViewChild(TableComponent)
   table: TableComponent;
   @BlockUI()
@@ -49,6 +49,7 @@ export class MgrModulesListComponent {
         name: this.i18n('Enabled'),
         prop: 'enabled',
         flexGrow: 1,
+        cellClass: 'text-center',
         cellTransformation: CellTemplate.checkIcon
       }
     ];
@@ -56,10 +57,17 @@ export class MgrModulesListComponent {
       this.selection.first() && encodeURIComponent(this.selection.first().name);
     this.tableActions = [
       {
+        name: this.i18n('Edit'),
         permission: 'update',
-        icon: 'fa-pencil',
+        disable: () => {
+          if (!this.selection.hasSelection) {
+            return true;
+          }
+          // Disable the 'edit' button when the module has no options.
+          return Object.values(this.selection.first().options).length === 0;
+        },
         routerLink: () => `/mgr-modules/edit/${getModuleUri()}`,
-        name: this.i18n('Edit')
+        icon: 'fa-pencil'
       },
       {
         name: this.i18n('Enable'),
@@ -101,6 +109,12 @@ export class MgrModulesListComponent {
    */
   isTableActionDisabled(state: 'enabled' | 'disabled') {
     if (!this.selection.hasSelection) {
+      return true;
+    }
+    // Make sure the user can't modify the run state of the 'Dashboard' module.
+    // This check is only done in the UI because the REST API should still be
+    // able to do so.
+    if (this.selection.first().name === 'dashboard') {
       return true;
     }
     switch (state) {
