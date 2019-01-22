@@ -1681,7 +1681,8 @@ CtPtr ProtocolV1::client_ready() {
     ldout(cct, 10) << __func__ << " setting up session_security with auth "
 		   << authorizer << dendl;
     session_security.reset(get_auth_session_handler(
-        cct, authorizer->protocol, authorizer->session_key,
+        cct, authorizer->protocol,
+	authorizer->session_key,
 	string() /* connection_secret */,
         connection->get_features()));
   } else {
