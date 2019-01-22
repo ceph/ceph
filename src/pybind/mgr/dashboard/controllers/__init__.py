@@ -282,7 +282,7 @@ class Task(object):
     def __init__(self, name, metadata, wait_for=5.0, exception_handler=None):
         self.name = name
         if isinstance(metadata, list):
-            self.metadata = dict([(e[1:-1], e) for e in metadata])
+            self.metadata = {e[1:-1]: e for e in metadata}
         else:
             self.metadata = metadata
         self.wait_for = wait_for

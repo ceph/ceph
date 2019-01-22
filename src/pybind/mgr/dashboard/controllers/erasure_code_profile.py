@@ -59,7 +59,7 @@ class ErasureCodeProfile(RESTController):
             # Because 'shec' is experimental it's not included
             'plugins': config['osd_erasure_code_plugins'].split() + ['shec'],
             'directory': config['erasure_code_dir'],
-            'devices': list(set([device['class'] for device in osd_map_crush['devices']])),
+            'devices': list({device['class'] for device in osd_map_crush['devices']}),
             'failure_domains': [domain['name'] for domain in osd_map_crush['types']],
             'names': [name for name, _ in
                       mgr.get('osd_map').get('erasure_code_profiles', {}).items()]

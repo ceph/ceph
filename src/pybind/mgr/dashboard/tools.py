@@ -225,7 +225,7 @@ class ViewCache(object):
                         # pylint: disable=raising-bad-type
                         raise self.exception
                     return ViewCache.VALUE_OK, self.value
-                elif self.value_when is not None:
+                if self.value_when is not None:
                     # We have some data, but it doesn't meet freshness requirements
                     return ViewCache.VALUE_STALE, self.value
                 # We have no data, not even stale data
@@ -832,6 +832,7 @@ def getargspec(func):
             func = func.__wrapped__
     except AttributeError:
         pass
+    # pylint: disable=deprecated-method
     return _getargspec(func)
 
 
