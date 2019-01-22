@@ -52,32 +52,6 @@ class RookCluster(object):
         #  be formalized at some point)
         return self.cluster_name
 
-    def init_rook(self):
-        """
-        Create a passive Rook configuration for this Ceph cluster.  This
-        will prompt Rook to start watching for other resources within
-        the cluster (e.g. Filesystem CRDs), but no other action will happen.
-        """
-
-        # TODO: complete or remove this functionality: if Rook wasn't
-        # already running, then we would need to supply it with
-        # keys and ceph.conf as well as creating the cluster CRD
-
-        cluster_crd = {
-            "apiVersion": ROOK_API_NAME,
-            "kind": "CephCluster",
-            "metadata": {
-                "name": self.cluster_name,
-                "namespace": self.cluster_name
-            },
-            "spec": {
-                "backend": "ceph",
-                "hostNetwork": True
-            }
-        }
-
-        self.rook_api_post("cephclusters", body=cluster_crd)
-
     def rook_url(self, path):
         prefix = "/apis/ceph.rook.io/%s/namespaces/%s/" % (
             ROOK_API_VERSION, self.rook_namespace)
@@ -138,9 +112,15 @@ class RookCluster(object):
     def get_nfs_conf_url(self, nfs_cluster, instance):
         #
         # Fetch cephnfs object for "nfs_cluster" and then return a rados://
-        # URL for the instance within that cluster.
+        # URL for the instance within that cluster. If the fetch fails, just
+        # return None.
         #
-        ceph_nfs = self.rook_api_get("cephnfses/{0}".format(nfs_cluster))
+        try:
+            ceph_nfs = self.rook_api_get("cephnfses/{0}".format(nfs_cluster))
+        except ApiException as e:
+            log.info("Unable to fetch cephnfs object: {}".format(e.status))
+            return None
+
         pool = ceph_nfs['spec']['rados']['pool']
         namespace = ceph_nfs['spec']['rados'].get('namespace', None)
 

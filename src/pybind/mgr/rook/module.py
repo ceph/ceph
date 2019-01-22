@@ -273,11 +273,6 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             self._k8s,
             cluster_name)
 
-
-        # In case Rook isn't already clued in to this ceph
-        # cluster's existence, initialize it.
-        # self._rook_cluster.init_rook()
-
         self._initialized.set()
 
         while not self._shutdown.is_set():
