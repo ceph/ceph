@@ -22,6 +22,7 @@
 #include "rgw_cr_rest.h"
 #include "rgw_http_client.h"
 #include "rgw_sync_trace.h"
+#include "rgw_bid_lock.h"
 
 #include "cls/lock/cls_lock_client.h"
 
@@ -707,7 +708,7 @@ public:
     }
     return 0;
   }
-};
+}; // RGWInitSyncStatusCoroutine
 
 class RGWReadSyncStatusMarkersCR : public RGWShardCollectCR {
   static constexpr int MAX_CONCURRENT_SHARDS = 16;
@@ -1012,12 +1013,15 @@ class RGWReadRemoteMetadataCR : public RGWCoroutine {
 
 public:
   RGWReadRemoteMetadataCR(RGWMetaSyncEnv *_sync_env,
-                                                      const string& _section, const string& _key, bufferlist *_pbl,
-                                                      const RGWSyncTraceNodeRef& _tn_parent) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
-                                                      http_op(NULL),
-                                                      section(_section),
-                                                      key(_key),
-						      pbl(_pbl) {
+			  const string& _section, const string& _key,
+			  bufferlist *_pbl,
+			  const RGWSyncTraceNodeRef& _tn_parent) :
+    RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+    http_op(NULL),
+    section(_section),
+    key(_key),
+    pbl(_pbl)
+  {
     tn = sync_env->sync_tracer->add_node(_tn_parent, "read_remote_meta",
                                          section + ":" + key);
   }
@@ -1534,9 +1538,10 @@ public:
 	uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
         string lock_name = "sync_lock";
         RGWRados *store = sync_env->store;
-        lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
-                                                rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
-                                                lock_name, lock_duration, this));
+        lease_cr.reset(
+	  new RGWContinuousLeaseCR(sync_env->async_rados, store,
+				   rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
+				   lock_name, lock_duration, this));
         lease_stack.reset(spawn(lease_cr.get(), false));
         lost_lock = false;
       }
@@ -1873,7 +1878,7 @@ public:
                                                           rgw_raw_obj(pool, sync_env->shard_obj_name(shard_id)),
                                                           &sync_marker);
   }
-};
+}; // RGWMetaSyncShardControlCR
 
 class RGWMetaSyncCR : public RGWCoroutine {
   RGWMetaSyncEnv *sync_env;
@@ -1932,6 +1937,8 @@ public:
           auto mdlog = sync_env->store->meta_mgr->get_log(period_id);
 
           tn->log(1, SSTR("realm epoch=" << realm_epoch << " period id=" << period_id));
+
+	  BidVector<uint32_t> shard_bids(sync_status.sync_markers.size(), 1);
 
           // prevent wakeup() from accessing shard_crs while we're spawning them
           std::lock_guard<std::mutex> lock(mutex);
@@ -1999,7 +2006,7 @@ public:
     }
     iter->second.first->wakeup();
   }
-};
+}; // class RGWMetaSyncCR
 
 void RGWRemoteMetaLog::init_sync_env(RGWMetaSyncEnv *env) {
   env->dpp = dpp;

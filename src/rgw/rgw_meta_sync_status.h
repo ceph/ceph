@@ -97,6 +97,8 @@ WRITE_CLASS_ENCODER(rgw_meta_sync_marker)
 
 struct rgw_meta_sync_status {
   rgw_meta_sync_info sync_info;
+
+  // map shard number -> rgw_meta_sync_marker
   map<uint32_t, rgw_meta_sync_marker> sync_markers;
 
   rgw_meta_sync_status() {}
