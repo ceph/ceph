@@ -344,18 +344,6 @@ private:
     f->close_section();
 
     // we can still continue after recall timeout
-    trim_cache();
-  }
-
-  void trim_cache() {
-    dout(20) << __func__ << dendl;
-
-    if (!mdcache->trim(UINT64_MAX)) {
-      cmd_err(f, "failed to trim cache");
-      complete(-EINVAL);
-      return;
-    }
-
     flush_journal();
   }
 
@@ -384,6 +372,18 @@ private:
     f->dump_int("return_code", r);
     f->dump_string("message", ss.str());
     f->close_section();
+
+    trim_cache();
+  }
+
+  void trim_cache() {
+    dout(20) << __func__ << dendl;
+
+    if (!mdcache->trim(UINT64_MAX)) {
+      cmd_err(f, "failed to trim cache");
+      complete(-EINVAL);
+      return;
+    }
 
     cache_status();
   }
