@@ -511,6 +511,14 @@ static inline std::string get_v4_canonical_uri(const req_info& info) {
   return canonical_uri;
 }
 
+static inline const string calc_v4_payload_hash(const string& payload)
+{
+  ceph::crypto::SHA256* sha256_hash = calc_hash_sha256_open_stream();
+  calc_hash_sha256_update_stream(sha256_hash, payload.c_str(), payload.length());
+  const auto payload_hash = calc_hash_sha256_close_stream(&sha256_hash);
+  return payload_hash;
+}
+
 static inline const char* get_v4_exp_payload_hash(const req_info& info)
 {
   /* In AWSv4 the hash of real, transferred payload IS NOT necessary to form
