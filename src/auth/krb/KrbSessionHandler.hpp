@@ -29,21 +29,7 @@
  
 #define dout_subsys ceph_subsys_auth
 
-class Message;
-
-class KrbSessionHandler : public AuthSessionHandler {
-
-  public:
-    KrbSessionHandler() = default;
-    ~KrbSessionHandler() override = default; 
-
-    // No security
-    int sign_message(Message* msg) override { return 0; }
-    int check_message_signature(Message* msg) override { return 0; }
-    int encrypt_message(Message* msg) override { return 0; }
-    int decrypt_message(Message* msg) override { return 0; }
-
-  private:
+struct KrbSessionHandler : DummyAuthSessionHandler {
 };
 
 #endif    //-- KRB_SESSION_HANDLER_HPP
