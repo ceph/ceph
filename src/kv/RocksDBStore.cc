@@ -2090,6 +2090,7 @@ public:
     return dbiter->status().ok() ? 0 : -1;
   }
   bool valid() override {
+    ldout((g_ceph_context), 10) <<  __func__ << " valid=" << dbiter->Valid() << dendl;
     if (!dbiter->Valid())
       return false;
     std::string p;
@@ -2103,7 +2104,9 @@ public:
   }
   std::pair<std::string, std::string> raw_key() override {
     std::string p, k;
+    ldout((g_ceph_context), 0) <<  __func__ << " dbiter->key=" << dbiter->key().ToString(true) << dendl;
     RocksDBStore::split_key(dbiter->key(), &p, &k);
+    ldout((g_ceph_context), 0) <<  __func__ << " p=" << p << " k=" << k << dendl;
     return make_pair(p, k);
   }
   bufferlist value() override {
@@ -2140,6 +2143,24 @@ KeyValueDB::Iterator RocksDBStore::get_iterator(const std::string& prefix)
 KeyValueDB::Iterator RocksDBStore::get_iterator_cf(ColumnFamilyHandle cfh, const std::string& prefix)
 {
   rocksdb::ColumnFamilyHandle *cf_handle =
+      static_cast<rocksdb::ColumnFamilyHandle*>(cfh.priv);
+  if (cf_handle == nullptr) {
+    cf_handle = cf_get_mono_handle(prefix);
+    if (cf_handle != nullptr) {
+      return std::make_shared<CFIteratorImpl>(
+          prefix,
+          db->NewIterator(rocksdb::ReadOptions(), cf_handle));
+    } else {
+      return KeyValueDB::get_iterator(prefix);
+    }
+  } else {
+      return std::make_shared<CFUnboundIteratorImpl>(
+          prefix,
+          db->NewIterator(rocksdb::ReadOptions(), cf_handle));
+  }
+
+#if 0
+  rocksdb::ColumnFamilyHandle *cf_handle =
     static_cast<rocksdb::ColumnFamilyHandle*>(cfh.priv);
   if (cfh.priv == nullptr)
     cf_handle = default_cf;
@@ -2152,4 +2173,5 @@ KeyValueDB::Iterator RocksDBStore::get_iterator_cf(ColumnFamilyHandle cfh, const
         prefix,
         db->NewIterator(rocksdb::ReadOptions(), cf_handle));
   }
+#endif
 }

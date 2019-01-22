@@ -435,6 +435,10 @@ TEST_P(KVTest, RocksDBIteratorTest) {
     cout << "write some kv pairs into default and new CFs" << std::endl;
     t->set("prefix", "key1", bl1);
     t->set("prefix", "key2", bl2);
+    KeyValueDB::ColumnFamilyHandle cf1h;
+    ASSERT_NE(cf1h = db->column_family_handle("cf1"), nullptr);
+
+    t->select(cf1h);
     t->set("cf1", "key1", bl1);
     t->set("cf1", "key2", bl2);
     ASSERT_EQ(0, db->submit_transaction_sync(t));

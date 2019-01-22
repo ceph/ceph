@@ -311,6 +311,7 @@ public:
       }
       position = 0;
       //TODO sort current_iterators
+      std::sort(current_shards_iterators.begin(), current_shards_iterators.end(), KeyLess(*this));
       return true;
     }
     int compare(const std::string& a, const std::string& b) {
@@ -318,6 +319,17 @@ public:
       rocksdb::Slice _b(b.data(), b.size());
       return db_hash.comparator->Compare(_a, _b);
     }
+    struct KeyLess {
+      WholeSpaceIteratorMerged_Impl& iter;
+      KeyLess(WholeSpaceIteratorMerged_Impl& iter) : iter(iter) {};
+      bool operator()(KeyValueDB::Iterator a, KeyValueDB::Iterator b) const
+      {
+        if (!a->valid())
+          return false;
+        return iter.compare(a->key(), b->key()) < 0;
+      }
+    };
+
   public:
     WholeSpaceIteratorMerged_Impl(BlueStore_DB_Hash &db_hash) : db_hash(db_hash), position(-1) {
 
@@ -363,16 +375,6 @@ public:
       for(auto& it: current_shards_iterators) {
         it->upper_bound(after);
       }
-      struct KeyLess {
-        WholeSpaceIteratorMerged_Impl& iter;
-        KeyLess(WholeSpaceIteratorMerged_Impl& iter) : iter(iter) {};
-        bool operator()(KeyValueDB::Iterator a, KeyValueDB::Iterator b) const
-        {
-          if (!a->valid())
-            return false;
-          return iter.compare(a->key(), b->key()) < 0;
-        }
-      };
       std::sort(current_shards_iterators.begin(), current_shards_iterators.end(), KeyLess(*this));
       return 0;
     }
@@ -486,6 +488,7 @@ public:
       return current_shards_iterators[position]->key();
     }
     pair<string,string> raw_key() override {
+      //ceph_assert(false);
       return current_shards_iterators[position]->raw_key();
     }
     bool raw_key_is_prefixed(const string &prefix) override {
