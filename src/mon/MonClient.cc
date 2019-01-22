@@ -1212,6 +1212,7 @@ void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
 int MonClient::get_auth_request(
   Connection *con,
   uint32_t *auth_method,
+  std::vector<uint32_t> *preferred_modes,
   bufferlist *bl)
 {
   std::lock_guard l(monc_lock);
@@ -1224,7 +1225,7 @@ int MonClient::get_auth_request(
     for (auto& i : pending_cons) {
       if (i.second.is_con(con)) {
 	return i.second.get_auth_request(
-	  auth_method, bl,
+	  auth_method, preferred_modes, bl,
 	  entity_name, want_keys, rotating_secrets.get());
       }
     }
@@ -1239,6 +1240,9 @@ int MonClient::get_auth_request(
   }
   auth_meta->authorizer.reset(auth->build_authorizer(con->get_peer_type()));
   auth_meta->auth_method = auth_meta->authorizer->protocol;
+  auth_registry.get_supported_modes(con->get_peer_type(),
+				    auth_meta->auth_method,
+				    preferred_modes);
   *bl = auth_meta->authorizer->bl;
   return 0;
 }
@@ -1273,6 +1277,7 @@ int MonClient::handle_auth_reply_more(
 int MonClient::handle_auth_done(
   Connection *con,
   uint64_t global_id,
+  uint32_t con_mode,
   const bufferlist& bl,
   CryptoKey *session_key,
   CryptoKey *connection_key)
@@ -1318,7 +1323,8 @@ int MonClient::handle_auth_bad_method(
   Connection *con,
   uint32_t old_auth_method,
   int result,
-  const std::vector<uint32_t>& allowed_methods)
+  const std::vector<uint32_t>& allowed_methods,
+  const std::vector<uint32_t>& allowed_modes)
 {
   con->get_auth_meta()->allowed_methods = allowed_methods;
 
@@ -1328,7 +1334,8 @@ int MonClient::handle_auth_bad_method(
       if (i.second.is_con(con)) {
 	int r = i.second.handle_auth_bad_method(old_auth_method,
 						result,
-						allowed_methods);
+						allowed_methods,
+						allowed_modes);
 	if (r == 0) {
 	  return r; // try another method on this con
 	}
@@ -1461,7 +1468,9 @@ void MonConnection::start(epoch_t epoch,
 }
 
 int MonConnection::get_auth_request(
-  uint32_t *method, bufferlist *bl,
+  uint32_t *method,
+  std::vector<uint32_t> *preferred_modes,
+  bufferlist *bl,
   const EntityName& entity_name,
   uint32_t want_keys,
   RotatingKeyRing* keyring)
@@ -1473,7 +1482,10 @@ int MonConnection::get_auth_request(
     auth_method = as.front();
   }
   *method = auth_method;
-  ldout(cct,10) << __func__ << " method " << *method << dendl;
+  auth_registry->get_supported_modes(con->get_peer_type(), auth_method,
+				     preferred_modes);
+  ldout(cct,10) << __func__ << " method " << *method
+		<< " preferred_modes " << *preferred_modes << dendl;
 
   if (auth) {
     auth.reset();
@@ -1546,7 +1558,8 @@ int MonConnection::handle_auth_done(
 int MonConnection::handle_auth_bad_method(
   uint32_t old_auth_method,
   int result,
-  const std::vector<uint32_t>& allowed_methods)
+  const std::vector<uint32_t>& allowed_methods,
+  const std::vector<uint32_t>& allowed_modes)
 {
   ldout(cct,10) << __func__ << " old_auth_method " << old_auth_method
 		<< " result " << cpp_strerror(result)

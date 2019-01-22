@@ -22,11 +22,20 @@ class AuthRegistry : public md_config_obs_t {
 
   bool _no_keyring_disabled_cephx = false;
 
-  std::vector<uint32_t> cluster_methods; // CEPH_AUTH_*
-  std::vector<uint32_t> service_methods; // CEPH_AUTH_*
-  std::vector<uint32_t> client_methods;  // CEPH_AUTH_*
+  // CEPH_AUTH_*
+  std::vector<uint32_t> cluster_methods;
+  std::vector<uint32_t> service_methods;
+  std::vector<uint32_t> client_methods;
+
+  // CEPH_CON_MODE_*
+  std::vector<uint32_t> mon_cluster_modes;
+  std::vector<uint32_t> mon_service_modes;
+  std::vector<uint32_t> cluster_modes;
+  std::vector<uint32_t> service_modes;
+  std::vector<uint32_t> client_modes;
 
   void _parse_method_list(const string& str, std::vector<uint32_t> *v);
+  void _parse_mode_list(const string& str, std::vector<uint32_t> *v);
   void _refresh_config();
 
 public:
@@ -39,9 +48,15 @@ public:
     _refresh_config();
   }
 
-  void get_supported_methods(int peer_type, std::vector<uint32_t> *v);
+  void get_supported_methods(int peer_type,
+			     std::vector<uint32_t> *methods,
+			     std::vector<uint32_t> *modes=nullptr);
   bool is_supported_method(int peer_type, int method);
   bool any_supported_methods(int peer_type);
+
+  void get_supported_modes(int peer_type,
+			   uint32_t auth_method,
+			   std::vector<uint32_t> *modes);
 
   AuthAuthorizeHandler *get_handler(int peer_type, int method);
 
