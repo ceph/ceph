@@ -30,13 +30,6 @@ struct AuthSessionHandler {
   virtual ~AuthSessionHandler() = default;
   virtual int sign_message(Message *message) = 0;
   virtual int check_message_signature(Message *message) = 0;
-
-  virtual int encrypt_bufferlist(bufferlist &in, bufferlist &out) {
-    return 0;
-  }
-  virtual int decrypt_bufferlist(bufferlist &in, bufferlist &out) {
-    return 0;
-  }
 };
 
 struct DummyAuthSessionHandler : AuthSessionHandler {
@@ -48,10 +41,29 @@ struct DummyAuthSessionHandler : AuthSessionHandler {
   }
 };
 
+// TODO: make this a static member of AuthSessionHandler.
 extern AuthSessionHandler *get_auth_session_handler(
   CephContext *cct, int protocol,
   const CryptoKey& key,
-  const std::string& connection_secret,
   uint64_t features);
+
+
+struct AuthStreamHandler {
+  virtual ~AuthStreamHandler() = default;
+  //virtual ceph::bufferlist authenticated_encrypt(ceph::bufferlist& in) = 0;
+  //virtual ceph::bufferlist authenticated_decrypt(ceph::bufferlist& in) = 0;
+
+  // TODO: kill the dummies
+  int encrypt_bufferlist(bufferlist &in, bufferlist &out) {
+    return 0;
+  }
+  int decrypt_bufferlist(bufferlist &in, bufferlist &out) {
+    return 0;
+  }
+
+  static std::unique_ptr<AuthStreamHandler> create_stream_handler(
+    CephContext* ctx,
+    const class AuthConnectionMeta& auth_meta);
+};
 
 #endif

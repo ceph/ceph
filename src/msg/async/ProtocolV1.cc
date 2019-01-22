@@ -1683,7 +1683,6 @@ CtPtr ProtocolV1::client_ready() {
     session_security.reset(get_auth_session_handler(
         cct, authorizer->protocol,
 	authorizer->session_key,
-	string() /* connection_secret */,
         connection->get_features()));
   } else {
     // We have no authorizer, so we shouldn't be applying security to messages
@@ -2355,7 +2354,6 @@ CtPtr ProtocolV1::open(ceph_msg_connect_reply &reply,
   session_security.reset(
       get_auth_session_handler(cct, connect_msg.authorizer_protocol,
                                session_key,
-			       string() /* connection secret */,
 			       connection->get_features()));
 
   bufferlist reply_bl;

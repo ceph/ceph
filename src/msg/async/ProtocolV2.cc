@@ -2245,10 +2245,7 @@ CtPtr ProtocolV2::handle_auth_done(char *payload, uint32_t length) {
     return _fault();
   }
   session_security.reset(
-    get_auth_session_handler(
-      cct, auth_meta->auth_method, auth_meta->session_key,
-      auth_meta->connection_secret,
-      CEPH_FEATURE_MSG_AUTH | CEPH_FEATURE_CEPHX_V2));
+    AuthStreamHandler::create_stream_handler(cct, auth_meta).release());
 
   if (!server_cookie) {
     ceph_assert(connect_seq == 0);
