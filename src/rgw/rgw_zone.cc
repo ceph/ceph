@@ -76,7 +76,7 @@ int RGWZoneGroup::create_default(bool old_format)
   RGWZoneGroupPlacementTarget placement_target;
   placement_target.name = "default-placement";
   placement_targets[placement_target.name] = placement_target;
-  default_placement = "default-placement";
+  default_placement.name = "default-placement";
 
   RGWZoneParams zone_params(default_zone_name);
 
@@ -290,7 +290,7 @@ void RGWZoneGroup::post_process_params()
   }
 
   if (default_placement.empty() && !placement_targets.empty()) {
-    default_placement = placement_targets.begin()->first;
+    default_placement.init(placement_targets.begin()->first, RGW_STORAGE_CLASS_STANDARD);
   }
 }
 
@@ -1547,7 +1547,11 @@ int get_zones_pool_set(CephContext* cct,
       pool_names.insert(zone.reshard_pool);
       for(auto& iter : zone.placement_pools) {
 	pool_names.insert(iter.second.index_pool);
-	pool_names.insert(iter.second.data_pool);
+        for (auto& pi : iter.second.storage_classes.get_all()) {
+          if (pi.second.data_pool) {
+            pool_names.insert(pi.second.data_pool.get());
+          }
+        }
 	pool_names.insert(iter.second.data_extra_pool);
       }
     }
@@ -1621,8 +1625,13 @@ int RGWZoneParams::fix_pool_names()
   for(auto& iter : placement_pools) {
     iter.second.index_pool = fix_zone_pool_dup(pools, name, "." + default_bucket_index_pool_suffix,
                                                iter.second.index_pool);
-    iter.second.data_pool = fix_zone_pool_dup(pools, name, "." + default_storage_pool_suffix,
-                                              iter.second.data_pool);
+    for (auto& pi : iter.second.storage_classes.get_all()) {
+      if (pi.second.data_pool) {
+        rgw_pool& pool = pi.second.data_pool.get();
+        pool = fix_zone_pool_dup(pools, name, "." + default_storage_pool_suffix,
+                                 pool);
+      }
+    }
     iter.second.data_extra_pool= fix_zone_pool_dup(pools, name, "." + default_storage_extra_pool_suffix,
                                                    iter.second.data_extra_pool);
   }
@@ -1642,7 +1651,8 @@ int RGWZoneParams::create(bool exclusive)
     /* a new system, let's set new placement info */
     RGWZonePlacementInfo default_placement;
     default_placement.index_pool = name + "." + default_bucket_index_pool_suffix;
-    default_placement.data_pool =  name + "." + default_storage_pool_suffix;
+    rgw_pool pool = name + "." + default_storage_pool_suffix;
+    default_placement.storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
     default_placement.data_extra_pool = name + "." + default_storage_extra_pool_suffix;
     placement_pools["default-placement"] = default_placement;
   }
@@ -1742,14 +1752,14 @@ int RGWZoneParams::set_as_default(bool exclusive)
   return RGWSystemMetaObj::set_as_default(exclusive);
 }
 
-const string& RGWZoneParams::get_compression_type(const string& placement_rule) const
+const string& RGWZoneParams::get_compression_type(const rgw_placement_rule& placement_rule) const
 {
   static const std::string NONE{"none"};
-  auto p = placement_pools.find(placement_rule);
+  auto p = placement_pools.find(placement_rule.name);
   if (p == placement_pools.end()) {
     return NONE;
   }
-  const auto& type = p->second.compression_type;
+  const auto& type = p->second.get_compression_type(placement_rule.storage_class);
   return !type.empty() ? type : NONE;
 }
 

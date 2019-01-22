@@ -408,7 +408,7 @@ def create_zone_pools(ctx, zone):
     gateway = zone.gateways[0]
     cluster = zone.cluster
     for pool_config in zone.data.get('placement_pools', []):
-        pool_name = pool_config['val']['data_pool']
+        pool_name = pool_config['val']['storage_classes']['STANDARD']['data_pool']
         if ctx.rgw.ec_data_pool:
             create_ec_pool(gateway.remote, pool_name, zone.name, 64,
                            ctx.rgw.erasure_code_profile, cluster.name, 'rgw')

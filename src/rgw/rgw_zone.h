@@ -151,35 +151,142 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWSystemMetaObj)
 
-struct RGWZonePlacementInfo {
-  rgw_pool index_pool;
-  rgw_pool data_pool;
-  rgw_pool data_extra_pool; /* if not set we should use data_pool */
-  RGWBucketIndexType index_type;
-  std::string compression_type;
-
-  RGWZonePlacementInfo() : index_type(RGWBIType_Normal) {}
+struct RGWZoneStorageClass {
+  boost::optional<rgw_pool> data_pool;
+  boost::optional<std::string> compression_type;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(6, 1, bl);
-    encode(index_pool.to_str(), bl);
-    encode(data_pool.to_str(), bl);
-    encode(data_extra_pool.to_str(), bl);
-    encode((uint32_t)index_type, bl);
+    ENCODE_START(1, 1, bl);
+    encode(data_pool, bl);
     encode(compression_type, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(6, bl);
-    std::string index_pool_str;
-    std::string data_pool_str;
+    DECODE_START(1, bl);
+    decode(data_pool, bl);
+    decode(compression_type, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWZoneStorageClass)
+
+
+class RGWZoneStorageClasses {
+  map<string, RGWZoneStorageClass> m;
+
+  /* in memory only */
+  RGWZoneStorageClass *standard_class;
+
+public:
+  RGWZoneStorageClasses() {
+    standard_class = &m[RGW_STORAGE_CLASS_STANDARD];
+  }
+  RGWZoneStorageClasses(const RGWZoneStorageClasses& rhs) {
+    m = rhs.m;
+    standard_class = &m[RGW_STORAGE_CLASS_STANDARD];
+  }
+  RGWZoneStorageClasses& operator=(const RGWZoneStorageClasses& rhs) {
+    m = rhs.m;
+    standard_class = &m[RGW_STORAGE_CLASS_STANDARD];
+    return *this;
+  }
+
+  const RGWZoneStorageClass& get_standard() const {
+    return *standard_class;
+  }
+
+  bool find(const string& sc, const RGWZoneStorageClass **pstorage_class) const {
+    auto iter = m.find(sc);
+    if (iter == m.end()) {
+      return false;
+    }
+    *pstorage_class = &iter->second;
+    return true;
+  }
+
+  bool exists(const string& sc) const {
+    if (sc.empty()) {
+      return true;
+    }
+    auto iter = m.find(sc);
+    return (iter != m.end());
+  }
+
+  const map<string, RGWZoneStorageClass>& get_all() const {
+    return m;
+  }
+
+  map<string, RGWZoneStorageClass>& get_all() {
+    return m;
+  }
+
+  void set_storage_class(const string& sc, const rgw_pool *data_pool, const string *compression_type) {
+    const string *psc = &sc;
+    if (sc.empty()) {
+      psc = &RGW_STORAGE_CLASS_STANDARD;
+    }
+    RGWZoneStorageClass& storage_class = m[*psc];
+    if (data_pool) {
+      storage_class.data_pool = *data_pool;
+    }
+    if (compression_type) {
+      storage_class.compression_type = *compression_type;
+    }
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(m, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(m, bl);
+    standard_class = &m[RGW_STORAGE_CLASS_STANDARD];
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(RGWZoneStorageClasses)
+
+struct RGWZonePlacementInfo {
+  rgw_pool index_pool;
+  rgw_pool data_extra_pool; /* if not set we should use data_pool */
+  RGWZoneStorageClasses storage_classes;
+  RGWBucketIndexType index_type;
+
+  RGWZonePlacementInfo() : index_type(RGWBIType_Normal) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(7, 1, bl);
+    encode(index_pool.to_str(), bl);
+    rgw_pool standard_data_pool = get_data_pool(RGW_STORAGE_CLASS_STANDARD);
+    encode(standard_data_pool.to_str(), bl);
+    encode(data_extra_pool.to_str(), bl);
+    encode((uint32_t)index_type, bl);
+    string standard_compression_type = get_compression_type(RGW_STORAGE_CLASS_STANDARD);
+    encode(standard_compression_type, bl);
+    encode(storage_classes, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(7, bl);
+    string index_pool_str;
+    string data_pool_str;
     decode(index_pool_str, bl);
     index_pool = rgw_pool(index_pool_str);
     decode(data_pool_str, bl);
-    data_pool = rgw_pool(data_pool_str);
+    rgw_pool standard_data_pool(data_pool_str);
     if (struct_v >= 4) {
-      std::string data_extra_pool_str;
+      string data_extra_pool_str;
       decode(data_extra_pool_str, bl);
       data_extra_pool = rgw_pool(data_extra_pool_str);
     }
@@ -188,19 +295,56 @@ struct RGWZonePlacementInfo {
       decode(it, bl);
       index_type = (RGWBucketIndexType)it;
     }
+    string standard_compression_type;
     if (struct_v >= 6) {
-      decode(compression_type, bl);
+      decode(standard_compression_type, bl);
+    }
+    if (struct_v >= 7) {
+      decode(storage_classes, bl);
+    } else {
+      storage_classes.set_storage_class(RGW_STORAGE_CLASS_STANDARD, &standard_data_pool,
+                                        (!standard_compression_type.empty() ? &standard_compression_type : nullptr));
     }
     DECODE_FINISH(bl);
   }
   const rgw_pool& get_data_extra_pool() const {
+    static rgw_pool no_pool;
     if (data_extra_pool.empty()) {
-      return data_pool;
+      return storage_classes.get_standard().data_pool.get_value_or(no_pool);
     }
     return data_extra_pool;
   }
+  const rgw_pool& get_data_pool(const string& sc) const {
+    const RGWZoneStorageClass *storage_class;
+    static rgw_pool no_pool;
+
+    if (!storage_classes.find(sc, &storage_class)) {
+      return storage_classes.get_standard().data_pool.get_value_or(no_pool);
+    }
+
+    return storage_class->data_pool.get_value_or(no_pool);
+  }
+  const rgw_pool& get_standard_data_pool() const {
+    return get_data_pool(RGW_STORAGE_CLASS_STANDARD);
+  }
+
+  const string& get_compression_type(const string& sc) const {
+    const RGWZoneStorageClass *storage_class;
+    static string no_compression;
+
+    if (!storage_classes.find(sc, &storage_class)) {
+      return no_compression;
+    }
+    return storage_class->compression_type.get_value_or(no_compression);
+  }
+
+  bool storage_class_exists(const string& sc) const {
+    return storage_classes.exists(sc);
+  }
+
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+
 };
 WRITE_CLASS_ENCODER(RGWZonePlacementInfo)
 
@@ -251,7 +395,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   int create(bool exclusive = true) override;
   int fix_pool_names();
 
-  const std::string& get_compression_type(const std::string& placement_rule) const;
+  const string& get_compression_type(const rgw_placement_rule& placement_rule) const;
   
   void encode(bufferlist& bl) const override {
     ENCODE_START(12, 1, bl);
@@ -356,7 +500,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   /*
    * return data pool of the head object
    */
-  bool get_head_data_pool(const std::string& placement_id, const rgw_obj& obj, rgw_pool *pool) const {
+  bool get_head_data_pool(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_pool *pool) const {
     const rgw_data_placement_target& explicit_placement = obj.bucket.explicit_placement;
     if (!explicit_placement.data_pool.empty()) {
       if (!obj.in_extra_data) {
@@ -366,19 +510,27 @@ struct RGWZoneParams : RGWSystemMetaObj {
       }
       return true;
     }
-    if (placement_id.empty()) {
+    if (placement_rule.empty()) {
       return false;
     }
-    auto iter = placement_pools.find(placement_id);
+    auto iter = placement_pools.find(placement_rule.name);
     if (iter == placement_pools.end()) {
       return false;
     }
     if (!obj.in_extra_data) {
-      *pool = iter->second.data_pool;
+      *pool = iter->second.get_data_pool(placement_rule.storage_class);
     } else {
       *pool = iter->second.get_data_extra_pool();
     }
     return true;
+  }
+
+  bool valid_placement(const rgw_placement_rule& rule) const {
+    auto iter = placement_pools.find(rule.name);
+    if (iter == placement_pools.end()) {
+      return false;
+    }
+    return iter->second.storage_class_exists(rule.storage_class);
   }
 };
 WRITE_CLASS_ENCODER(RGWZoneParams)
@@ -490,6 +642,7 @@ WRITE_CLASS_ENCODER(RGWDefaultZoneGroupInfo)
 struct RGWZoneGroupPlacementTarget {
   std::string name;
   set<std::string> tags;
+  set<std::string> storage_classes;
 
   bool user_permitted(const list<std::string>& user_tags) const {
     if (tags.empty()) {
@@ -504,23 +657,29 @@ struct RGWZoneGroupPlacementTarget {
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(name, bl);
     encode(tags, bl);
+    encode(storage_classes, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(name, bl);
     decode(tags, bl);
+    if (struct_v >= 2) {
+      decode(storage_classes, bl);
+    }
+    if (storage_classes.empty()) {
+      storage_classes.insert(RGW_STORAGE_CLASS_STANDARD);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTarget)
-
 
 struct RGWZoneGroup : public RGWSystemMetaObj {
   std::string api_name;
@@ -531,7 +690,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   map<std::string, RGWZone> zones;
 
   map<std::string, RGWZoneGroupPlacementTarget> placement_targets;
-  std::string default_placement;
+  rgw_placement_rule default_placement;
 
   list<std::string> hostnames;
   list<std::string> hostnames_s3website;

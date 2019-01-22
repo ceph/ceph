@@ -901,7 +901,7 @@ class RGWCreateBucket : public RGWOp {
 protected:
   RGWAccessControlPolicy policy;
   string location_constraint;
-  string placement_rule;
+  rgw_placement_rule placement_rule;
   RGWBucketInfo info;
   obj_version ep_objv;
   bool has_cors;
@@ -1199,7 +1199,7 @@ protected:
   uint32_t policy_rw_mask;
   RGWAccessControlPolicy policy;
   RGWCORSConfiguration cors_config;
-  string placement_rule;
+  rgw_placement_rule placement_rule;
   boost::optional<std::string> swift_ver_location;
 
 public:
@@ -1324,6 +1324,8 @@ protected:
   boost::optional<ceph::real_time> delete_at;
   bool copy_if_newer;
 
+  bool need_to_check_storage_class = false;
+
   int init_common();
 
 public:
@@ -1359,6 +1361,10 @@ public:
   void pre_exec() override;
   void execute() override;
   void progress_cb(off_t ofs);
+
+  virtual int check_storage_class(const rgw_placement_rule& src_placement) {
+    return 0;
+  }
 
   virtual int init_dest_policy() { return 0; }
   virtual int get_params() = 0;
@@ -1902,7 +1908,8 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
   static const std::set<std::string> blacklisted_headers = {
       "x-amz-server-side-encryption-customer-algorithm",
       "x-amz-server-side-encryption-customer-key",
-      "x-amz-server-side-encryption-customer-key-md5"
+      "x-amz-server-side-encryption-customer-key-md5",
+      "x-amz-storage-class"
   };
 
   size_t valid_meta_count = 0;
