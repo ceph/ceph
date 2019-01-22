@@ -43,12 +43,12 @@ AuthSessionHandler *get_auth_session_handler(
     }
     return new CephxSessionHandler(cct, key, connection_secret, features);
   case CEPH_AUTH_NONE:
-    return new AuthNoneSessionHandler(cct, key, connection_secret);
+    return new AuthNoneSessionHandler();
   case CEPH_AUTH_UNKNOWN:
-    return new AuthUnknownSessionHandler(cct, key, connection_secret);
+    return new AuthUnknownSessionHandler();
 #ifdef HAVE_GSSAPI
   case CEPH_AUTH_GSS: 
-    return new KrbSessionHandler(cct, key, connection_secret);
+    return new KrbSessionHandler();
 #endif
   default:
     return nullptr;
