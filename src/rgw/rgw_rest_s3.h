@@ -274,6 +274,7 @@ public:
 
   int init_dest_policy() override;
   int get_params() override;
+  int check_storage_class(const rgw_placement_rule& src_placement);
   void send_partial_response(off_t ofs) override;
   void send_response() override;
 };
@@ -298,7 +299,7 @@ public:
 
 class RGWGetLC_ObjStore_S3 : public RGWGetLC_ObjStore {
 protected:
-  RGWLifecycleConfiguration_S3  config;
+  RGWLifecycleConfiguration_S3 config;
 public:
   RGWGetLC_ObjStore_S3() {}
   ~RGWGetLC_ObjStore_S3() override {}

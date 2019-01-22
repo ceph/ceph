@@ -21,6 +21,7 @@ public:
   ~XMLObjIter();
   void set(const XMLObjIter::map_iter_t &_cur, const XMLObjIter::map_iter_t &_end);
   XMLObj *get_next();
+  bool get_name(string *name) const;
 };
 
 /**
@@ -46,11 +47,13 @@ public:
   bool xml_start(XMLObj *parent, const char *el, const char **attr);
   virtual bool xml_end(const char *el);
   virtual void xml_handle_data(const char *s, int len);
-  string& get_data();
+  const string& get_data();
+  const string& get_obj_type();
   XMLObj *get_parent();
   void add_child(string el, XMLObj *obj);
   bool get_attr(string name, string& attr);
   XMLObjIter find(string name);
+  XMLObjIter find_first();
   XMLObj *find_first(string name);
 
   friend ostream& operator<<(ostream &out, const XMLObj &obj);
@@ -110,12 +113,20 @@ public:
   template<class T>
   static bool decode_xml(const char *name, T& val, XMLObj *obj, bool mandatory = false);
 
+  template<class T>
+  static bool decode_xml(const char *name, std::vector<T>& v, XMLObj *obj, bool mandatory = false);
+
   template<class C>
   static bool decode_xml(const char *name, C& container, void (*cb)(C&, XMLObj *obj), XMLObj *obj, bool mandatory = false);
 
   template<class T>
   static void decode_xml(const char *name, T& val, T& default_val, XMLObj *obj);
 };
+
+static inline ostream& operator<<(ostream &out, RGWXMLDecoder::err& err)
+{
+  return out << err.message;
+}
 
 template<class T>
 void decode_xml_obj(T& val, XMLObj *obj)
@@ -155,21 +166,6 @@ void do_decode_xml_obj(list<T>& l, const string& name, XMLObj *obj)
 }
 
 template<class T>
-void do_decode_xml_obj(vector<T>& l, const string& name, XMLObj *obj)
-{
-  l.clear();
-
-  XMLObjIter iter = obj->find(name);
-  XMLObj *o;
-
-  while (o = iter.get_next()) {
-    T val;
-    decode_xml_obj(val, o);
-    l.push_back(val);
-  }
-}
-
-template<class T>
 bool RGWXMLDecoder::decode_xml(const char *name, T& val, XMLObj *obj, bool mandatory)
 {
   XMLObjIter iter = obj->find(name);
@@ -191,6 +187,36 @@ bool RGWXMLDecoder::decode_xml(const char *name, T& val, XMLObj *obj, bool manda
     throw err(s);
   }
 
+  return true;
+}
+
+template<class T>
+bool RGWXMLDecoder::decode_xml(const char *name, std::vector<T>& v, XMLObj *obj, bool mandatory)
+{
+  XMLObjIter iter = obj->find(name);
+  XMLObj *o = iter.get_next();
+
+  v.clear();
+
+  if (!o) {
+    if (mandatory) {
+      string s = "missing mandatory field " + string(name);
+      throw err(s);
+    }
+    return false;
+  }
+
+  do {
+    T val;
+    try {
+      decode_xml_obj(val, o);
+    } catch (err& e) {
+      string s = string(name) + ": ";
+      s.append(e.message);
+      throw err(s);
+    }
+    v.push_back(val);
+  } while ((o = iter.get_next()));
   return true;
 }
 
@@ -244,6 +270,14 @@ template<class T>
 static void encode_xml(const char *name, const T& val, ceph::Formatter *f)
 {
   f->open_object_section(name);
+  val.dump_xml(f);
+  f->close_section();
+}
+
+template<class T>
+static void encode_xml(const char *name, const char *ns, const T& val, ceph::Formatter *f)
+{
+  f->open_object_section_in_ns(name, ns);
   val.dump_xml(f);
   f->close_section();
 }

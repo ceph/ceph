@@ -7,3 +7,4 @@ overrides:
         rgw crypt require ssl: false
   rgw:
     compression type: random
+    storage classes: LUKEWARM, FROZEN

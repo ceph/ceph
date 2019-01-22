@@ -289,6 +289,7 @@ void usage()
   cout << "   --read-only               set zone as read-only (when adding to zonegroup)\n";
   cout << "   --redirect-zone           specify zone id to redirect when response is 404 (not found)\n";
   cout << "   --placement-id            placement id for zonegroup placement commands\n";
+  cout << "   --storage-class           storage class for zonegroup placement commands\n";
   cout << "   --tags=<list>             list of tags for zonegroup placement add and modify commands\n";
   cout << "   --tags-add=<list>         list of tags to add for zonegroup placement modify command\n";
   cout << "   --tags-rm=<list>          list of tags to remove for zonegroup placement modify command\n";
@@ -1298,11 +1299,8 @@ static bool decode_dump(const char *field_name, bufferlist& bl, Formatter *f)
 
 static bool dump_string(const char *field_name, bufferlist& bl, Formatter *f)
 {
-  string val;
-  if (bl.length() > 0) {
-    val.assign(bl.c_str());
-  }
-  f->dump_string(field_name, val);
+  string val = bl.to_str();
+  f->dump_string(field_name, val.c_str() /* hide encoded null termination chars */);
 
   return true;
 }
@@ -2800,6 +2798,7 @@ int main(int argc, const char **argv)
   string quota_scope;
   string object_version;
   string placement_id;
+  string storage_class;
   list<string> tags;
   list<string> tags_add;
   list<string> tags_rm;
@@ -3112,6 +3111,8 @@ int main(int argc, const char **argv)
       zonegroup_new_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--placement-id", (char*)NULL)) {
       placement_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--storage-class", (char*)NULL)) {
+      storage_class = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--tags", (char*)NULL)) {
       get_str_list(val, tags);
     } else if (ceph_argparse_witharg(args, i, &val, "--tags-add", (char*)NULL)) {
@@ -4289,6 +4290,17 @@ int main(int argc, const char **argv)
           return EINVAL;
         }
 
+        rgw_placement_rule rule;
+        rule.from_str(placement_id);
+
+        if (!rule.storage_class.empty() && !storage_class.empty() &&
+            rule.storage_class != storage_class) {
+          cerr << "ERROR: provided contradicting storage class configuration" << std::endl;
+          return EINVAL;
+        } else if (rule.storage_class.empty()) {
+          rule.storage_class = storage_class;
+        }
+
 	RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
 	int ret = zonegroup.init(g_ceph_context, store->svc.sysobj);
 	if (ret < 0) {
@@ -4296,14 +4308,8 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-        if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_ADD) {
-          RGWZoneGroupPlacementTarget target;
-          target.name = placement_id;
-          for (auto& t : tags) {
-            target.tags.insert(t);
-          }
-          zonegroup.placement_targets[placement_id] = target;
-        } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_MODIFY) {
+        if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_ADD ||
+            opt_cmd == OPT_ZONEGROUP_PLACEMENT_MODIFY) {
           RGWZoneGroupPlacementTarget& target = zonegroup.placement_targets[placement_id];
           if (!tags.empty()) {
             target.tags.clear();
@@ -4318,6 +4324,7 @@ int main(int argc, const char **argv)
           for (auto& t : tags_add) {
             target.tags.insert(t);
           }
+          target.storage_classes.insert(rule.get_storage_class());
         } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_RM) {
           zonegroup.placement_targets.erase(placement_id);
         } else if (opt_cmd == OPT_ZONEGROUP_PLACEMENT_DEFAULT) {
@@ -4326,7 +4333,7 @@ int main(int argc, const char **argv)
                 << placement_id << "'" << std::endl;
             return -ENOENT;
           }
-          zonegroup.default_placement = placement_id;
+          zonegroup.default_placement = rule;
         }
 
         zonegroup.post_process_params();
@@ -4759,58 +4766,64 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-        if (opt_cmd == OPT_ZONE_PLACEMENT_ADD) {
-          // pool names are required
-          if (!index_pool || index_pool->empty() ||
-              !data_pool || data_pool->empty()) {
-            cerr << "ERROR: need to specify both --index-pool and --data-pool" << std::endl;
-            return EINVAL;
-          }
+        if (opt_cmd == OPT_ZONE_PLACEMENT_ADD ||
+	    opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
+	  RGWZoneGroup zonegroup(zonegroup_id, zonegroup_name);
+	  ret = zonegroup.init(g_ceph_context, store->svc.sysobj);
+	  if (ret < 0) {
+	    cerr << "failed to init zonegroup: " << cpp_strerror(-ret) << std::endl;
+	    return -ret;
+	  }
+
+	  auto ptiter = zonegroup.placement_targets.find(placement_id);
+	  if (ptiter == zonegroup.placement_targets.end()) {
+	    cerr << "ERROR: placement id '" << placement_id << "' is not configured in zonegroup placement targets" << std::endl;
+	    return EINVAL;
+	  }
+
+	  storage_class = rgw_placement_rule::get_canonical_storage_class(storage_class);
+	  if (ptiter->second.storage_classes.find(storage_class) == ptiter->second.storage_classes.end()) {
+	    cerr << "ERROR: storage class '" << storage_class << "' is not defined in zonegroup '" << placement_id << "' placement target" << std::endl;
+	    return EINVAL;
+	  }
 
           RGWZonePlacementInfo& info = zone.placement_pools[placement_id];
 
-          info.index_pool = *index_pool;
-          info.data_pool = *data_pool;
+	  string opt_index_pool = index_pool.value_or(string());
+	  string opt_data_pool = data_pool.value_or(string());
+
+	  if (!opt_index_pool.empty()) {
+	    info.index_pool = opt_index_pool;
+	  }
+
+	  if (info.index_pool.empty()) {
+            cerr << "ERROR: index pool not configured, need to specify --index-pool" << std::endl;
+            return EINVAL;
+	  }
+
+	  if (opt_data_pool.empty()) {
+	    const RGWZoneStorageClass *porig_sc{nullptr};
+	    if (info.storage_classes.find(storage_class, &porig_sc)) {
+	      if (porig_sc->data_pool) {
+		opt_data_pool = porig_sc->data_pool->to_str();
+	      }
+	    }
+	    if (opt_data_pool.empty()) {
+	      cerr << "ERROR: data pool not configured, need to specify --data-pool" << std::endl;
+	      return EINVAL;
+	    }
+	  }
+
+          rgw_pool dp = opt_data_pool;
+          info.storage_classes.set_storage_class(storage_class, &dp, compression_type.get_ptr());
+
           if (data_extra_pool) {
             info.data_extra_pool = *data_extra_pool;
           }
           if (index_type_specified) {
-            info.index_type = placement_index_type;
-          }
-          if (compression_type) {
-            info.compression_type = *compression_type;
+	    info.index_type = placement_index_type;
           }
 
-          ret = check_pool_support_omap(info.get_data_extra_pool());
-          if (ret < 0) {
-             cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool() 
-                 << "' does not support omap" << std::endl;
-             return ret;
-          }
-        } else if (opt_cmd == OPT_ZONE_PLACEMENT_MODIFY) {
-          auto p = zone.placement_pools.find(placement_id);
-          if (p == zone.placement_pools.end()) {
-            cerr << "ERROR: zone placement target '" << placement_id
-                << "' not found" << std::endl;
-            return -ENOENT;
-          }
-          auto& info = p->second;
-          if (index_pool && !index_pool->empty()) {
-            info.index_pool = *index_pool;
-          }
-          if (data_pool && !data_pool->empty()) {
-            info.data_pool = *data_pool;
-          }
-          if (data_extra_pool) {
-            info.data_extra_pool = *data_extra_pool;
-          }
-          if (index_type_specified) {
-            info.index_type = placement_index_type;
-          }
-          if (compression_type) {
-            info.compression_type = *compression_type;
-          }
-          
           ret = check_pool_support_omap(info.get_data_extra_pool());
           if (ret < 0) {
              cerr << "ERROR: the data extra (non-ec) pool '" << info.get_data_extra_pool() 

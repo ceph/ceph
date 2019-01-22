@@ -1436,7 +1436,7 @@ static int bucket_stats(RGWRados *store, const std::string& tenant_name, std::st
   formatter->dump_string("bucket", bucket.name);
   formatter->dump_string("tenant", bucket.tenant);
   formatter->dump_string("zonegroup", bucket_info.zonegroup);
-  formatter->dump_string("placement_rule", bucket_info.placement_rule);
+  formatter->dump_string("placement_rule", bucket_info.placement_rule.to_str());
   ::encode_json("explicit_placement", bucket.explicit_placement, formatter);
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);

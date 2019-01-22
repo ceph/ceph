@@ -592,6 +592,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        src_obj,
                        bucket_info, /* dest */
                        bucket_info, /* source */
+		       dest_placement_rule,
                        NULL, /* real_time* src_mtime, */
                        NULL, /* real_time* mtime, */
                        NULL, /* const real_time* mod_ptr, */

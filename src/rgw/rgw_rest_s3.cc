@@ -290,12 +290,20 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
       if (aiter != rgw_to_http_attrs.end()) {
         if (response_attrs.count(aiter->second) == 0) {
           /* Was not already overridden by a response param. */
-          response_attrs[aiter->second] = iter->second.c_str();
+
+          size_t len = iter->second.length();
+          string s(iter->second.c_str(), len);
+          while (len && !s[len - 1]) {
+            --len;
+            s.resize(len);
+          }
+          response_attrs[aiter->second] = s;
         }
       } else if (iter->first.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
         /* Special handling for content_type. */
         if (!content_type) {
-          content_type = iter->second.c_str();
+          content_type_str = rgw_bl_str(iter->second);
+          content_type = content_type_str.c_str();
         }
       } else if (strcmp(name, RGW_ATTR_SLO_UINDICATOR) == 0) {
         // this attr has an extra length prefix from encode() in prior versions
@@ -402,7 +410,7 @@ void RGWGetObjTags_ObjStore_S3::send_response_data(bufferlist& bl)
 
 int RGWPutObjTags_ObjStore_S3::get_params()
 {
-  RGWObjTagsXMLParser parser;
+  RGWXMLParser parser;
 
   if (!parser.init()){
     return -EINVAL;
@@ -421,17 +429,17 @@ int RGWPutObjTags_ObjStore_S3::get_params()
     return -ERR_MALFORMED_XML;
   }
 
-  RGWObjTagSet_S3 *obj_tags_s3;
-  RGWObjTagging_S3 *tagging;
+  RGWObjTagging_S3 tagging;
 
-  tagging = static_cast<RGWObjTagging_S3 *>(parser.find_first("Tagging"));
-  obj_tags_s3 = static_cast<RGWObjTagSet_S3 *>(tagging->find_first("TagSet"));
-  if(!obj_tags_s3){
+  try {
+    RGWXMLDecoder::decode_xml("Tagging", tagging, &parser);
+  } catch (RGWXMLDecoder::err& err) {
+    ldout(s->cct, 5) << "Malformed tagging request: " << err << dendl;
     return -ERR_MALFORMED_XML;
   }
 
   RGWObjTags obj_tags;
-  r = obj_tags_s3->rebuild(obj_tags);
+  r = tagging.rebuild(obj_tags);
   if (r < 0)
     return r;
 
@@ -754,7 +762,8 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       if (!iter->is_delete_marker()) {
 	s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
 	s->formatter->dump_int("Size", iter->meta.accounted_size);
-	s->formatter->dump_string("StorageClass", "STANDARD");
+	auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
+	s->formatter->dump_string("StorageClass", storage_class.c_str());
       }
       dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       s->formatter->close_section();
@@ -831,7 +840,8 @@ void RGWListBucket_ObjStore_S3::send_response()
       dump_time(s, "LastModified", &iter->meta.mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
       s->formatter->dump_int("Size", iter->meta.accounted_size);
-      s->formatter->dump_string("StorageClass", "STANDARD");
+      auto& storage_class = rgw_placement_rule::get_canonical_storage_class(iter->meta.storage_class);
+      s->formatter->dump_string("StorageClass", storage_class.c_str());
       dump_owner(s, iter->meta.owner, iter->meta.owner_display_name);
       if (s->system_request) {
         s->formatter->dump_string("RgwxTag", iter->tag);
@@ -1241,8 +1251,10 @@ int RGWCreateBucket_ObjStore_S3::get_params()
 
   size_t pos = location_constraint.find(':');
   if (pos != string::npos) {
-    placement_rule = location_constraint.substr(pos + 1);
+    placement_rule.init(location_constraint.substr(pos + 1), s->info.storage_class);
     location_constraint = location_constraint.substr(0, pos);
+  } else {
+    placement_rule.storage_class = s->info.storage_class;
   }
 
   return 0;
@@ -1754,7 +1766,7 @@ int RGWPostObj_ObjStore_S3::get_tags()
 {
   string tags_str;
   if (part_str(parts, "tagging", &tags_str)) {
-    RGWObjTagsXMLParser parser;
+    RGWXMLParser parser;
     if (!parser.init()){
       ldout(s->cct, 0) << "Couldn't init RGWObjTags XML parser" << dendl;
       err_msg = "Server couldn't process the request";
@@ -1766,17 +1778,17 @@ int RGWPostObj_ObjStore_S3::get_tags()
       return -EINVAL;
     }
 
-    RGWObjTagSet_S3 *obj_tags_s3;
-    RGWObjTagging_S3 *tagging;
+    RGWObjTagging_S3 tagging;
 
-    tagging = static_cast<RGWObjTagging_S3 *>(parser.find_first("Tagging"));
-    obj_tags_s3 = static_cast<RGWObjTagSet_S3 *>(tagging->find_first("TagSet"));
-    if(!obj_tags_s3){
-      return -ERR_MALFORMED_XML;
+    try {
+      RGWXMLDecoder::decode_xml("Tagging", tagging, &parser);
+    } catch (RGWXMLDecoder::err& err) {
+      ldout(s->cct, 5) << "Malformed tagging request: " << err << dendl;
+      return -EINVAL;
     }
 
     RGWObjTags obj_tags;
-    int r = obj_tags_s3->rebuild(obj_tags);
+    int r = tagging.rebuild(obj_tags);
     if (r < 0)
       return r;
 
@@ -2195,10 +2207,19 @@ int RGWCopyObj_ObjStore_S3::get_params()
       (dest_object.compare(src_object.name) == 0) &&
       src_object.instance.empty() &&
       (attrs_mod != RGWRados::ATTRSMOD_REPLACE)) {
+    need_to_check_storage_class = true;
+  }
+
+  return 0;
+}
+
+int RGWCopyObj_ObjStore_S3::check_storage_class(const rgw_placement_rule& src_placement)
+{
+  if (src_placement == s->dest_placement) {
     /* can only copy object into itself if replacing attrs */
     s->err.message = "This copy request is illegal because it is trying to copy "
-                     "an object to itself without changing the object's metadata, "
-                     "storage class, website redirect location or encryption attributes.";
+      "an object to itself without changing the object's metadata, "
+      "storage class, website redirect location or encryption attributes.";
     ldout(s->cct, 0) << s->err.message << dendl;
     return -ERR_INVALID_REQUEST;
   }
@@ -2333,7 +2354,7 @@ void RGWGetLC_ObjStore_S3::send_response()
   if (op_ret < 0)
     return;
 
-  config.dump_xml(s->formatter);
+  encode_xml("LifecycleConfiguration", XMLNS_AWS_S3, config, s->formatter);
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
@@ -2526,7 +2547,7 @@ public:
     if (!field)
       return 0;
 
-    string& s = field->get_data();
+    auto& s = field->get_data();
 
     if (stringcasecmp(s, "Requester") == 0) {
       *requester_pays = true;
@@ -2885,10 +2906,16 @@ void RGWGetObjLayout_ObjStore_S3::send_response()
   for (auto miter = manifest->obj_begin(); miter != manifest->obj_end(); ++miter) {
     f.open_object_section("obj");
     rgw_raw_obj raw_loc = miter.get_location().get_raw_obj(store);
+    uint64_t ofs = miter.get_ofs();
+    uint64_t left = manifest->get_obj_size() - ofs;
     ::encode_json("ofs", miter.get_ofs(), &f);
     ::encode_json("loc", raw_loc, &f);
     ::encode_json("loc_ofs", miter.location_ofs(), &f);
-    ::encode_json("loc_size", miter.get_stripe_size(), &f);
+    uint64_t loc_size = miter.get_stripe_size();
+    if (loc_size > left) {
+      loc_size = left;
+    }
+    ::encode_json("loc_size", loc_size, &f);
     f.close_section();
     rgw_flush_formatter(s, &f);
   }
@@ -3433,6 +3460,11 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
       ldout(s->cct, 0) << "failed to parse copy location" << dendl;
       return -EINVAL; // XXX why not -ERR_INVALID_BUCKET_NAME or -ERR_BAD_URL?
     }
+  }
+
+  const char *sc = s->info.env->get("HTTP_X_AMZ_STORAGE_CLASS");
+  if (sc) {
+    s->info.storage_class = sc;
   }
 
   return RGWHandler_REST::init(store, s, cio);
