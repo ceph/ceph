@@ -394,9 +394,26 @@ Alternatively, you can use Python's native package installation method::
   $ pip install coverage
 
 To run the tests, run ``run-tox.sh`` in the dashboard directory (where
-``tox.ini`` is located).
+``tox.ini`` is located)::
 
-We also collect coverage information from the backend code. You can check the
+  ## Run Python 2+3 tests+lint commands:
+  $ ./run-tox.sh
+
+  ## Run Python 3 tests+lint commands:
+  $ WITH_PYTHON2=OFF ./run-tox.sh
+
+  ## Run Python 3 arbitrary command (e.g. 1 single test):
+  $ WITH_PYTHON2=OFF ./run-tox.sh pytest tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
+
+You can also run tox instead of ``run-tox.sh``::
+
+  ## Run Python 3 tests command:
+  $ CEPH_BUILD_DIR=.tox tox -e py3-cov
+
+  ## Run Python 3 arbitrary command (e.g. 1 single test):
+  $ CEPH_BUILD_DIR=.tox tox -e py3-run pytest tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
+
+We also collect coverage information from the backend code when you run tests. You can check the
 coverage information provided by the tox output, or by running the following
 command after tox has finished successfully::
 
@@ -404,11 +421,6 @@ command after tox has finished successfully::
 
 This command will create a directory ``htmlcov`` with an HTML representation of
 the code coverage of the backend.
-
-You can also run a single step of the tox script (aka tox environment), for
-instance if you only want to run the linting tools, do::
-
-  $ tox -e lint
 
 API tests based on Teuthology
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
