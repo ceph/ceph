@@ -819,7 +819,6 @@ int Pipe::accept()
       get_auth_session_handler(msgr->cct,
 			       connect.authorizer_protocol,
 			       session_key,
-			       string(), /* connection_secret */
 			       connection_state->get_features()));
 
   // notify
@@ -1346,7 +1345,6 @@ int Pipe::connect()
 	      msgr->cct,
 	      authorizer->protocol,
 	      authorizer->session_key,
-	      string() /* connection secret*/,
 	      connection_state->get_features()));
       }  else {
         // We have no authorizer, so we shouldn't be applying security to messages in this pipe.  PLR
