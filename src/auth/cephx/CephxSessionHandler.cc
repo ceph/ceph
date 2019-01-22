@@ -181,29 +181,6 @@ int CephxSessionHandler::check_message_signature(Message *m)
   return 0;
 }
 
-int CephxSessionHandler::sign_bufferlist(bufferlist &in, bufferlist &out)
-{
-  char exp_buf[CryptoKey::get_max_outbuf_size(in.length())];
-
-  try {
-    const CryptoKey::in_slice_t sin{in.length(),
-        reinterpret_cast<const unsigned char *>(in.c_str())};
-    const CryptoKey::out_slice_t sout{
-        sizeof(exp_buf),
-        reinterpret_cast<unsigned char *>(&exp_buf)};
-    key.encrypt(cct, sin, sout);
-  }
-  catch (std::exception &e) {
-    lderr(cct) << __func__ << " failed to encrypt signature block" << dendl;
-    return -1;
-  }
-
-
-  out.append(exp_buf, sizeof(exp_buf));
-
-  return 0;
-}
-
 int CephxSessionHandler::encrypt_bufferlist(bufferlist &in, bufferlist &out) {
   std::string error;
   try {
