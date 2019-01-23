@@ -232,10 +232,10 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         self.wait([host_completion])
         all_hosts = [h.name for h in host_completion.result]
 
-        completion = self.create_osds(spec, all_hosts)
-        self._orchestrator_wait([completion])
-        #return result
-        return HandleCommandResult(stdout=completion.result)
+        try:
+            json_dg = json.loads(params)
+        except ValueError as msg:
+            return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
     def _add_stateless_svc(self, svc_type, spec):
         completion = self.add_stateless_service(svc_type, spec)

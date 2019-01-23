@@ -104,16 +104,19 @@ class AnsibleReadOperation(orchestrator.ReadCompletion):
 
         processed_result = []
 
-        if self._is_complete:
-            raw_result = self.pb_execution.get_result(self.event_filter)
+        raw_result = self.pb_execution.get_result(self.event_filter)
 
-            if self.process_output:
-                processed_result = self.process_output(
-                                            raw_result,
-                                            self.ar_client,
-                                            self.pb_execution.play_uuid)
-            else:
-                processed_result = raw_result
+        if self.process_output:
+            processed_result = self.process_output(
+                                        raw_result,
+                                        self.ar_client,
+                                        self.pb_execution.play_uuid)
+        else:
+            processed_result = raw_result
+
+        #Clean objects to avoid problems between interpreters
+        self.pb_execution = None
+        self.ar_client = None
 
         self._result = processed_result
 
