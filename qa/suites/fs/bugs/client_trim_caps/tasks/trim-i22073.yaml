@@ -10,7 +10,6 @@ overrides:
 tasks:
 - exec:
     mon.a:
-    - "ceph tell mds.* config set mds_max_ratio_caps_per_client 1"
     - "ceph tell mds.* config set mds_min_caps_per_client 1"
 - background_exec:
     mon.a:

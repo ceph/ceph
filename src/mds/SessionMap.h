@@ -27,6 +27,7 @@ using std::set;
 #include "mdstypes.h"
 #include "mds/MDSAuthCaps.h"
 #include "common/perf_counters.h"
+#include "common/DecayCounter.h"
 
 class CInode;
 struct MDRequestImpl;
@@ -112,6 +113,9 @@ private:
   // request load average for this session
   DecayCounter load_avg;
 
+  // caps being recalled recently by this session
+  DecayCounter cap_recalled;
+
   // session start time -- used to track average session time
   // note that this is initialized in the constructor rather
   // than at the time of adding a session to the sessionmap
@@ -153,10 +157,11 @@ public:
   const std::string& get_human_name() const {return human_name;}
 
   // Ephemeral state for tracking progress of capability recalls
-  time recalled_at = clock::zero();  // When was I asked to SESSION_RECALL?
-  time last_recall_sent = clock::zero();
+  time recalled_at = clock::zero();  // When was I first asked to SESSION_RECALL?
+  time released_at = clock::zero();  // When did the session last release caps?
   uint32_t recall_count = 0;  // How many caps was I asked to SESSION_RECALL?
   uint32_t recall_release_count = 0;  // How many caps have I actually revoked?
+  uint32_t recall_limit = 0;  // New limit in SESSION_RECALL
 
   session_info_t info;                         ///< durable bits
 
@@ -177,7 +182,10 @@ public:
 
   void notify_cap_release(size_t n_caps);
   void notify_recall_sent(const size_t new_limit);
-  void clear_recalled_at();
+  auto cap_recalled_counter() const {
+    return cap_recalled.get();
+  }
+  void clear_recalled();
 
   inodeno_t next_ino() const {
     if (info.prealloc_inos.empty())
@@ -376,6 +384,7 @@ public:
 
   Session() = delete;
   Session(ConnectionRef con) :
+    cap_recalled(g_conf().get_val<double>("mds_recall_max_decay_rate")),
     birth_time(clock::now()),
     auth_caps(g_ceph_context),
     item_session_list(this),
@@ -524,10 +533,7 @@ public:
   void update_average_session_age();
 
   SessionMap() = delete;
-  explicit SessionMap(MDSRank *m)
-  :
-    mds(m)
-  {}
+  explicit SessionMap(MDSRank *m) : mds(m) {}
 
   ~SessionMap() override
   {
@@ -621,12 +627,20 @@ public:
 
   void dump();
 
-  void get_client_session_set(set<Session*>& s) const {
-    for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
-	 p != session_map.end();
-	 ++p)
-      if (p->second->info.inst.name.is_client())
-	s.insert(p->second);
+  template<typename F>
+  void get_client_sessions(F&& f) const {
+    for (const auto& p : session_map) {
+      auto& session = p.second;
+      if (session->info.inst.name.is_client())
+	f(session);
+    }
+  }
+  template<typename C>
+  void get_client_session_set(C& c) const {
+    auto f = [&c](auto& s) {
+      c.insert(s);
+    };
+    get_client_sessions(f);
   }
 
   void replay_open_sessions(map<client_t,entity_inst_t>& client_map,

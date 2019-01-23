@@ -17,6 +17,7 @@
 
 #include <boost/config/warning_disable.hpp>
 #include <boost/fusion/include/std_pair.hpp>
+#include <boost/range/adaptor/reversed.hpp>
 
 #include "MDSRank.h"
 #include "Server.h"
@@ -49,6 +50,7 @@
 #include "osd/OSDMap.h"
 
 #include <errno.h>
+#include <math.h>
 
 #include <list>
 #include <iostream>
@@ -188,7 +190,8 @@ Server::Server(MDSRank *m) :
   reconnect_done(NULL),
   failed_reconnects(0),
   reconnect_evicting(false),
-  terminating_sessions(false)
+  terminating_sessions(false),
+  recall_counter(g_conf().get_val<double>("mds_recall_max_decay_rate"))
 {
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
 }
@@ -1072,6 +1075,9 @@ void Server::handle_conf_change(const ConfigProxy& conf,
     dout(20) << __func__ << " cap revoke eviction timeout changed to "
             << cap_revoke_eviction_timeout << dendl;
   }
+  if (changed.count("mds_recall_max_decay_rate")) {
+    recall_counter = DecayCounter(g_conf().get_val<double>("mds_recall_max_decay_rate"));
+  }
 }
 
 /*
@@ -1510,62 +1516,99 @@ void Server::recover_filelocks(CInode *in, bufferlist locks, int64_t client)
   }
 }
 
-
 /**
  * Call this when the MDCache is oversized, to send requests to the clients
  * to trim some caps, and consequently unpin some inodes in the MDCache so
  * that it can trim too.
  */
-void Server::recall_client_state(double ratio, bool flush_client_session,
-                                 MDSGatherBuilder *gather) {
-  if (flush_client_session) {
-    assert(gather != nullptr);
-  }
+std::pair<bool, uint64_t> Server::recall_client_state(MDSGatherBuilder* gather, RecallFlags flags)
+{
+  const auto now = clock::now();
+  const bool steady = flags&RecallFlags::STEADY;
 
-  /* try to recall at least 80% of all caps */
-  uint64_t max_caps_per_client = Capability::count() * g_conf().get_val<double>("mds_max_ratio_caps_per_client");
-  uint64_t min_caps_per_client = g_conf().get_val<uint64_t>("mds_min_caps_per_client");
-  if (max_caps_per_client < min_caps_per_client) {
-    dout(0) << "max_caps_per_client " << max_caps_per_client
-            << " < min_caps_per_client " << min_caps_per_client << dendl;
-    max_caps_per_client = min_caps_per_client + 1;
-  }
+  const auto min_caps_per_client = g_conf().get_val<uint64_t>("mds_min_caps_per_client");
+  const auto recall_global_max_decay_threshold = g_conf().get_val<Option::size_t>("mds_recall_global_max_decay_threshold");
+  const auto recall_max_caps = g_conf().get_val<Option::size_t>("mds_recall_max_caps");
+  const auto recall_max_decay_threshold = g_conf().get_val<Option::size_t>("mds_recall_max_decay_threshold");
 
-  /* unless this ratio is smaller: */
-  /* ratio: determine the amount of caps to recall from each client. Use
-   * percentage full over the cache reservation. Cap the ratio at 80% of client
-   * caps. */
-  if (ratio < 0.0)
-    ratio = 1.0 - fmin(0.80, mdcache->cache_toofull_ratio());
+  dout(10) << __func__ << ": caps per client " << min_caps_per_client << "/" << Capability::count() << dendl;
 
-  dout(10) << __func__ << ": ratio=" << ratio << ", caps per client "
-           << min_caps_per_client << "-" << max_caps_per_client << dendl;
+  /* trim caps of sessions with the most caps first */
+  std::multimap<uint64_t, Session*> caps_session;
+  auto f = [&caps_session](auto& s) {
+    caps_session.emplace(std::piecewise_construct, std::forward_as_tuple(s->caps.size()), std::forward_as_tuple(s));
+  };
+  mds->sessionmap.get_client_sessions(std::move(f));
 
-  set<Session*> sessions;
-  mds->sessionmap.get_client_session_set(sessions);
-
-  for (auto &session : sessions) {
+  std::pair<bool, uint64_t> result = {false, 0};
+  auto& [throttled, caps_recalled] = result;
+  last_recall_state = now;
+  for (const auto& [num_caps, session] : boost::adaptors::reverse(caps_session)) {
     if (!session->is_open() ||
         !session->get_connection() ||
 	!session->info.inst.name.is_client())
       continue;
 
     dout(10) << " session " << session->info.inst
-	     << " caps " << session->caps.size()
+	     << " caps " << num_caps
 	     << ", leases " << session->leases.size()
 	     << dendl;
 
-    uint64_t newlim = std::max(std::min<uint64_t>((session->caps.size() * ratio), max_caps_per_client), min_caps_per_client);
-    if (session->caps.size() > newlim) {
+    uint64_t newlim;
+    if (num_caps < recall_max_caps || (num_caps-recall_max_caps) < min_caps_per_client) {
+      newlim = min_caps_per_client;
+    } else {
+      newlim = num_caps-recall_max_caps;
+    }
+    if (num_caps > newlim) {
+      /* now limit the number of caps we recall at a time to prevent overloading ourselves */
+      uint64_t recall = std::min<uint64_t>(recall_max_caps, num_caps-newlim);
+      newlim = num_caps-recall;
+      const uint64_t session_recall_counter = session->cap_recalled_counter();
+      const uint64_t global_recall_counter = recall_counter.get();
+      if (session_recall_counter+recall > recall_max_decay_threshold) {
+        dout(15) << "  session recall threshold (" << recall_max_decay_threshold << ") hit at " << session_recall_counter << "; skipping!" << dendl;
+        throttled = true;
+        continue;
+      } else if (global_recall_counter+recall > recall_global_max_decay_threshold) {
+        dout(15) << "  global recall threshold (" << recall_global_max_decay_threshold << ") hit at " << global_recall_counter << "; skipping!" << dendl;
+        throttled = true;
+        break;
+      }
+
+      // now check if we've recalled caps recently and the client is unlikely to satisfy a new recall
+      const auto& recalled_at = session->recalled_at;
+      auto last_recalled = std::chrono::duration<double>(now-recalled_at).count();
+      const auto& released_at = session->released_at;
+      const auto& last_recall_count = session->recall_count;
+      const auto& last_recall_release_count = session->recall_release_count;
+      const auto& last_recall_limit = session->recall_limit;
+      bool limit_similarity = (abs((double)num_caps-last_recall_limit+recall_max_caps)/(num_caps+recall_max_caps)) < 0.05;
+      if (last_recalled < 3600.0 && released_at < recalled_at && last_recall_count > 2*last_recall_release_count && limit_similarity && steady) {
+        /* The session has recently (1hr) been asked to release caps and we
+         * were unable to get at least half of the recalled caps.
+         */
+        dout(15) << "  last recalled " << last_recall_count << "/" << (last_recall_count+last_recall_limit)
+                 << " caps " << last_recalled << "s ago; released "
+                 << last_recall_release_count << " caps. Skipping because we are unlikely to get more released." << dendl;
+        continue;
+      }
+
       auto m = MClientSession::create(CEPH_SESSION_RECALL_STATE);
       m->head.max_caps = newlim;
       mds->send_message_client(m, session);
-      if (flush_client_session) {
+      if (gather) {
         flush_session(session, gather);
       }
       session->notify_recall_sent(newlim);
+      recall_counter.hit(recall);
+      caps_recalled += recall;
     }
   }
+
+  dout(7) << "recalled" << (throttled ? " (throttled)" : "") << " " << caps_recalled << " client caps." << dendl;
+
+  return result;
 }
 
 void Server::force_clients_readonly()
