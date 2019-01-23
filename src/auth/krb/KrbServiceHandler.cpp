@@ -28,11 +28,12 @@
 
 int KrbServiceHandler::handle_request(
   bufferlist::const_iterator& indata,
+  size_t connection_secret_required_length,
   bufferlist *buff_list,
   uint64_t *global_id,
   AuthCapsInfo *caps,
   CryptoKey *session_key,
-  CryptoKey *connection_secret)
+  std::string *connection_secret)
 {
   auto result(0);
   gss_buffer_desc gss_buffer_in = {0, nullptr};
@@ -153,10 +154,11 @@ int KrbServiceHandler::handle_request(
 
 int KrbServiceHandler::start_session(
   const EntityName& name,
+  size_t connection_secret_required_length,
   bufferlist *buff_list,
   AuthCapsInfo *caps,
   CryptoKey *session_key,
-  CryptoKey *connection_secret)
+  std::string *connection_secret)
 {
   gss_buffer_desc gss_buffer_in = {0, nullptr};
   gss_OID gss_object_id = GSS_C_NT_HOSTBASED_SERVICE;

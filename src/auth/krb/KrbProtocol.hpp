@@ -86,7 +86,7 @@ class KrbAuthorizer : public AuthAuthorizer {
     }
 
     bool verify_reply(bufferlist::const_iterator& buff_list,
-		      CryptoKey *connection_secret) override { 
+		      std::string *connection_secret) override {
       return true; 
     }
     bool add_challenge(CephContext* ceph_ctx, 

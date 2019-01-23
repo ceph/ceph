@@ -30,17 +30,19 @@ public:
   ~CephxServiceHandler() override {}
   
   int start_session(const EntityName& name,
+		    size_t connection_secret_required_length,
 		    bufferlist *result_bl,
 		    AuthCapsInfo *caps,
 		    CryptoKey *session_key,
-		    CryptoKey *connection_secret) override;
+		    std::string *connection_secret) override;
   int handle_request(
     bufferlist::const_iterator& indata,
+    size_t connection_secret_required_length,
     bufferlist *result_bl,
     uint64_t *global_id,
     AuthCapsInfo *caps,
     CryptoKey *session_key,
-    CryptoKey *connection_secret) override;
+    std::string *connection_secret) override;
 
   void build_cephx_response_header(int request_type, int status, bufferlist& bl);
 };

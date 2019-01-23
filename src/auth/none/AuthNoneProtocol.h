@@ -29,7 +29,7 @@ struct AuthNoneAuthorizer : public AuthAuthorizer {
     return 0;
   }
   bool verify_reply(bufferlist::const_iterator& reply,
-		    CryptoKey *connection_secret) override { return true; }
+		    std::string *connection_secret) override { return true; }
   bool add_challenge(CephContext *cct, const bufferlist& ch) override {
     return true;
   }

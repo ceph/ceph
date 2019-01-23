@@ -525,7 +525,8 @@ int Pipe::accept()
     had_challenge = (bool)authorizer_challenge;
     authorizer_reply.clear();
     if (!msgr->ms_deliver_verify_authorizer(
-	  connection_state.get(), peer_type, connect.authorizer_protocol, authorizer,
+	  connection_state.get(), peer_type, connect.authorizer_protocol,
+	  authorizer,
 	  authorizer_reply, authorizer_valid, session_key,
 	  nullptr /* connection_secret */,
 	  need_challenge ? &authorizer_challenge : nullptr) ||
@@ -819,7 +820,7 @@ int Pipe::accept()
       get_auth_session_handler(msgr->cct,
 			       connect.authorizer_protocol,
 			       session_key,
-			       session_key, /* connection_secret */
+			       string(), /* connection_secret */
 			       connection_state->get_features()));
 
   // notify
@@ -1346,7 +1347,7 @@ int Pipe::connect()
 	      msgr->cct,
 	      authorizer->protocol,
 	      authorizer->session_key,
-	      authorizer->session_key /* connection secret*/,
+	      string() /* connection secret*/,
 	      connection_state->get_features()));
       }  else {
         // We have no authorizer, so we shouldn't be applying security to messages in this pipe.  PLR

@@ -393,9 +393,10 @@ bool cephx_decode_ticket(CephContext *cct, KeyStore *keys, uint32_t service_id,
  */
 bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
 			     bufferlist::const_iterator& indata,
+			     size_t connection_secret_required_len,
 			     CephXServiceTicketInfo& ticket_info,
 			     std::unique_ptr<AuthAuthorizerChallenge> *challenge,
-			     CryptoKey *connection_secret,
+			     std::string *connection_secret,
 			     bufferlist *reply_bl)
 {
   __u8 authorizer_v;
@@ -496,12 +497,11 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
 #ifndef WITH_SEASTAR
   if (connection_secret) {
     // generate a connection secret
-    bufferptr bp;
-    CryptoHandler *crypto = cct->get_crypto_handler(CEPH_CRYPTO_AES);
-    assert(crypto);
-    int r = crypto->create(cct->random(), bp);
-    assert(r >= 0);
-    connection_secret->set_secret(CEPH_CRYPTO_AES, bp, ceph_clock_now());
+    connection_secret->resize(connection_secret_required_len);
+    if (connection_secret_required_len) {
+      cct->random()->get_bytes(connection_secret->data(),
+			       connection_secret_required_len);
+    }
     reply.connection_secret = *connection_secret;
   }
 #endif
@@ -516,7 +516,7 @@ bool cephx_verify_authorizer(CephContext *cct, KeyStore *keys,
 }
 
 bool CephXAuthorizer::verify_reply(bufferlist::const_iterator& indata,
-				   CryptoKey *connection_secret)
+				   std::string *connection_secret)
 {
   CephXAuthorizeReply reply;
 
@@ -534,7 +534,7 @@ bool CephXAuthorizer::verify_reply(bufferlist::const_iterator& indata,
   }
 
   if (connection_secret &&
-      reply.connection_secret.get_type()) {
+      reply.connection_secret.size()) {
     *connection_secret = reply.connection_secret;
   }
   return true;

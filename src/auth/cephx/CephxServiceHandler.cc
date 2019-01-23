@@ -27,11 +27,13 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx server " << entity_name << ": "
 
-int CephxServiceHandler::start_session(const EntityName& name,
-				       bufferlist *result_bl,
-				       AuthCapsInfo *caps,
-				       CryptoKey *session_key,
-				       CryptoKey *connection_secret)
+int CephxServiceHandler::start_session(
+  const EntityName& name,
+  size_t connection_secret_required_length,
+  bufferlist *result_bl,
+  AuthCapsInfo *caps,
+  CryptoKey *session_key,
+  std::string *connection_secret)
 {
   entity_name = name;
 
@@ -49,11 +51,12 @@ int CephxServiceHandler::start_session(const EntityName& name,
 
 int CephxServiceHandler::handle_request(
   bufferlist::const_iterator& indata,
+  size_t connection_secret_required_len,
   bufferlist *result_bl,
   uint64_t *global_id,
   AuthCapsInfo *caps,
   CryptoKey *psession_key,
-  CryptoKey *pconnection_secret)
+  std::string *pconnection_secret)
 {
   int ret = 0;
 
@@ -169,9 +172,19 @@ int CephxServiceHandler::handle_request(
 	  // generate a connection_secret
 	  bufferlist cbl;
 	  if (pconnection_secret) {
-	    key_server->generate_secret(*pconnection_secret);
-	    string err;
-	    encode_encrypt(cct, *pconnection_secret, session_key, cbl, err);
+	    pconnection_secret->resize(connection_secret_required_len);
+	    if (connection_secret_required_len) {
+	      cct->random()->get_bytes(pconnection_secret->data(),
+				       connection_secret_required_len);
+	    }
+	    std::string err;
+	    if (encode_encrypt(cct, *pconnection_secret, session_key, cbl,
+			       err) < 0) {
+	      lderr(cct) << __func__ << " failed to encrypt connection secret, "
+			 << err << dendl;
+	      ret = -EACCES;
+	      break;
+	    }
 	  }
 	  encode(cbl, *result_bl);
 	  // provite all of the other tickets at the same time
@@ -213,7 +226,7 @@ int CephxServiceHandler::handle_request(
       CephXServiceTicketInfo auth_ticket_info;
       // note: no challenge here.
       if (!cephx_verify_authorizer(
-	    cct, key_server, indata, auth_ticket_info, nullptr,
+	    cct, key_server, indata, 0, auth_ticket_info, nullptr,
 	    nullptr,
 	    &tmp_bl)) {
         ret = -EPERM;

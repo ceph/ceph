@@ -5908,12 +5908,12 @@ int Monitor::handle_auth_done(
   uint32_t con_mode,
   const bufferlist& bl,
   CryptoKey *session_key,
-  CryptoKey *connection_key)
+  std::string *connection_secret)
 {
   // verify authorizer reply
   auto auth_meta = con->get_auth_meta();
   auto p = bl.begin();
-  if (!auth_meta->authorizer->verify_reply(p, &auth_meta->connection_secret)) {
+  if (!auth_meta->authorizer->verify_reply(p, connection_secret)) {
     dout(0) << __func__ << " failed verifying authorizer reply" << dendl;
     return -EACCES;
   }
@@ -6058,6 +6058,7 @@ int Monitor::handle_auth_request(
       cct,
       &keyring,
       payload,
+      auth_meta->get_connection_secret_length(),
       reply,
       &con->peer_name,
       &con->peer_global_id,
@@ -6145,17 +6146,24 @@ int Monitor::handle_auth_request(
     s->auth_handler = auth_handler;
     con->set_priv(RefCountedPtr{s, false});
 
-    r = s->auth_handler->start_session(entity_name, reply,
-				       &con->peer_caps_info,
-				       &auth_meta->session_key,
-				       &auth_meta->connection_secret);
+    r = s->auth_handler->start_session(
+      entity_name,
+      auth_meta->get_connection_secret_length(),
+      reply,
+      &con->peer_caps_info,
+      &auth_meta->session_key,
+      &auth_meta->connection_secret);
   } else {
     priv = con->get_priv();
     s = static_cast<MonSession*>(priv.get());
-    r = s->auth_handler->handle_request(p, reply, &con->peer_global_id,
-					&con->peer_caps_info,
-					&auth_meta->session_key,
-					&auth_meta->connection_secret);
+    r = s->auth_handler->handle_request(
+      p,
+      auth_meta->get_connection_secret_length(),
+      reply,
+      &con->peer_global_id,
+      &con->peer_caps_info,
+      &auth_meta->session_key,
+      &auth_meta->connection_secret);
   }
   if (r > 0 &&
       !s->authenticated) {

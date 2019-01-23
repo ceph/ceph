@@ -27,20 +27,22 @@ public:
   ~AuthNoneServiceHandler() override {}
   
   int start_session(const EntityName& name,
+		    size_t connection_secret_required_length,
 		    bufferlist *result_bl,
 		    AuthCapsInfo *caps,
 		    CryptoKey *session_key,
-		    CryptoKey *connection_secret) override {
+		    std::string *connection_secret) override {
     entity_name = name;
     caps->allow_all = true;
     return 1;
   }
   int handle_request(bufferlist::const_iterator& indata,
+		     size_t connection_secret_required_length,
 		     bufferlist *result_bl,
 		     uint64_t *global_id,
 		     AuthCapsInfo *caps,
 		     CryptoKey *session_key,
-		     CryptoKey *connection_secret) override {
+		     std::string *connection_secret) override {
     return 0;
   }
   void build_cephx_response_header(int request_type, int status,
