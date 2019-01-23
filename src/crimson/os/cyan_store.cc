@@ -132,11 +132,11 @@ seastar::future<bufferlist> CyanStore::read(CollectionRef c,
   logger().info("{} {} {} {}~{}",
                 __func__, c->cid, oid, offset, len);
   if (!c->exists) {
-    throw std::runtime_error("collection does not exist");
+    throw std::runtime_error(fmt::format("collection does not exist: {}", c->cid));
   }
   ObjectRef o = c->get_object(oid);
   if (!o) {
-    throw std::runtime_error("object does not exist");
+    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
   }
   if (offset >= o->get_size())
     return seastar::make_ready_future<bufferlist>();
