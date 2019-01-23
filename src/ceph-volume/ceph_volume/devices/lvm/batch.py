@@ -245,6 +245,12 @@ class Batch(object):
             action='store_true',
             help='Only prepare all OSDs, do not activate',
         )
+        parser.add_argument(
+            '--osd-ids',
+            nargs='*',
+            default=[],
+            help='Reuse existing OSD ids',
+        )
         self.args = parser.parse_args(argv)
         self.parser = parser
 

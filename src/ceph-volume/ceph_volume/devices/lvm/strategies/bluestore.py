@@ -7,6 +7,7 @@ from .strategies import MixedStrategy
 from ceph_volume.devices.lvm.create import Create
 from ceph_volume.devices.lvm.prepare import Prepare
 from ceph_volume.util import templates
+from ceph_volume.util.prepare import osd_id_available
 from ceph_volume.exceptions import SizeAllocationError
 
 
@@ -39,6 +40,9 @@ class SingleType(Strategy):
 
         for osd in self.computed['osds']:
             string += templates.osd_header
+            if 'osd_id' in osd:
+                string += templates.osd_reused_id.format(
+                    id_=osd['osd_id'])
             string += templates.osd_component.format(
                 _type='[data]',
                 path=osd['data']['path'],
@@ -60,6 +64,9 @@ class SingleType(Strategy):
 
         # make sure that data devices do not have any LVs
         validators.no_lvm_membership(self.data_devs)
+
+        if self.osd_ids:
+            self._validate_osd_ids()
 
     def compute(self):
         """
@@ -108,6 +115,9 @@ class SingleType(Strategy):
                     command.append('--no-systemd')
                 if self.args.crush_device_class:
                     command.extend(['--crush-device-class', self.args.crush_device_class])
+
+                if self.osd_ids:
+                    command.extend(['--osd-id', self.osd_ids.pop(0)])
 
                 if self.args.prepare:
                     Prepare(command).main()
@@ -189,6 +199,9 @@ class MixedType(MixedStrategy):
         string += templates.osd_component_titles
         for osd in self.computed['osds']:
             string += templates.osd_header
+            if 'osd_id' in osd:
+                string += templates.osd_reused_id.format(
+                    id_=osd['osd_id'])
             string += templates.osd_component.format(
                 _type='[data]',
                 path=osd['data']['path'],
@@ -270,6 +283,9 @@ class MixedType(MixedStrategy):
                     osd['block.wal']['size'] = int(self.block_wal_size.b)
                     osd['block.wal']['human_readable_size'] = str(self.block_wal_size)
                     osd['block.wal']['percentage'] = self.wal_vg_extents['percentages']
+
+                if self.osd_ids:
+                    osd['osd_id'] = self.osd_ids.pop(0)
 
                 osds.append(osd)
 
@@ -365,6 +381,8 @@ class MixedType(MixedStrategy):
                 command.append('--no-systemd')
             if self.args.crush_device_class:
                 command.extend(['--crush-device-class', self.args.crush_device_class])
+            if 'osd_id' in osd:
+                command.extend(['--osd-id', osd['osd_id']])
 
             if self.args.prepare:
                 Prepare(command).main()
@@ -388,6 +406,9 @@ class MixedType(MixedStrategy):
 
         if self.wal_devs:
             self._validate_wal_devs()
+
+        if self.osd_ids:
+            self._validate_osd_ids()
 
     def _validate_db_devs(self):
         # do not allow non-common VG to continue
@@ -510,3 +531,4 @@ class MixedType(MixedStrategy):
                 self.block_wal_size,
             )
             raise RuntimeError(msg)
+
