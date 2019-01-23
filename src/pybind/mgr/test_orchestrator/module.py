@@ -1,5 +1,6 @@
 import json
 import re
+import os
 import threading
 import functools
 import uuid
@@ -196,9 +197,9 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             c_v_out = check_output(['ceph-volume', 'inventory', '--format', 'json'])
         except OSError:
             cmd = """
-            . /tmp/ceph-volume-virtualenv/bin/activate
+            . {}/ceph-volume-virtualenv/bin/activate
             ceph-volume inventory --format json
-            """
+            """.format(tmpdir=os.environ.get('TMPDIR', '/tmp'))
             c_v_out = check_output(cmd, shell=True)
 
         for out in c_v_out.splitlines():

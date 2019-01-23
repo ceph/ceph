@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # run from ./ or from ../
-: ${MGR_ANSIBLE_VIRTUALENV:=/tmp/mgr-ansible-virtualenv}
+: ${MGR_ANSIBLE_VIRTUALENV:=$CEPH_BUILD_DIR/mgr-ansible-virtualenv}
 : ${WITH_PYTHON2:=ON}
 : ${WITH_PYTHON3:=ON}
 : ${CEPH_BUILD_DIR:=$PWD/.tox}

@@ -459,7 +459,7 @@ install(TARGETS librados-config DESTINATION bin)
 # virtualenv base directory for ceph-disk and ceph-detect-init
 set(CEPH_BUILD_VIRTUALENV $ENV{TMPDIR})
 if(NOT CEPH_BUILD_VIRTUALENV)
-  set(CEPH_BUILD_VIRTUALENV /tmp)
+  set(CEPH_BUILD_VIRTUALENV ${CMAKE_BINARY_DIR})
 endif()
 
 add_subdirectory(pybind)

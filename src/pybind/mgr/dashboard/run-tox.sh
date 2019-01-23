@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # run from ./ or from ../
-: ${MGR_DASHBOARD_VIRTUALENV:=/tmp/mgr-dashboard-virtualenv}
+: ${MGR_DASHBOARD_VIRTUALENV:=$CEPH_BUILD_DIR/mgr-dashboard-virtualenv}
 : ${WITH_PYTHON2:=ON}
 : ${WITH_PYTHON3:=ON}
 : ${CEPH_BUILD_DIR:=$PWD/.tox}
