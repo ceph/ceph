@@ -230,6 +230,54 @@ Example:
       Some <strong>helper</strong> html text
     </cd-helper>
 
+Frontend branding
+~~~~~~~~~~~~~~~~~
+
+Every vendor can customize the 'Ceph dashboard' to his needs. No matter if
+logo, HTML-Template or TypeScript, every file inside the frontend folder can be
+replaced.
+
+To replace files, open ``./frontend/angular.json`` and scroll to the section
+``fileReplacements`` inside the production configuration. Here you can add the
+files you wish to brand. We recommend to place the branded version of a file in
+the same directory as the original one and to add a ``.brand`` to the file
+name, right in front of the file extension. A ``fileReplacement`` could for
+example look like this:
+
+.. code:: javascript
+
+    {
+      "replace": "src/app/core/auth/login/login.component.html",
+      "with": "src/app/core/auth/login/login.component.brand.html"
+    }
+
+To serve or build the branded user interface run:
+
+    $ npm run start -- --prod
+
+or
+
+    $ npm run build -- --prod
+
+Unfortunately it's currently not possible to use multiple configurations when
+serving or building the UI at the same time. That means a configuration just
+for the branding ``fileReplacements`` is not an option, because you want to use
+the production configuration anyway
+(https://github.com/angular/angular-cli/issues/10612).
+Furthermore it's also not possible to use glob expressions for
+``fileReplacements``. As long as the feature hasn't been implemented, you have
+to add the file replacements manually to the angular.json file
+(https://github.com/angular/angular-cli/issues/12354).
+
+Nevertheless you should stick to the suggested naming scheme because it makes
+it easier for you to use glob expressions once it's supported in the future.
+
+To change the variable defaults you can overwrite them in the file
+``./frontend/src/vendor.variables.scss``. Just reassign the variable you want
+to change, for example ``$color-primary: teal;``
+To overwrite or extend the default CSS, you can add your own styles in
+``./frontend/src/vendor.overrides.scss``.
+
 I18N
 ----
 
