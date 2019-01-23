@@ -32,8 +32,10 @@ namespace {
 
 SocketMessenger::SocketMessenger(const entity_name_t& myname,
                                  const std::string& logic_name,
-                                 uint32_t nonce)
+                                 uint32_t nonce,
+                                 int master_sid)
   : Messenger{myname},
+    master_sid{master_sid},
     sid{seastar::engine().cpu_id()},
     logic_name{logic_name},
     nonce{nonce}
@@ -231,6 +233,9 @@ void SocketMessenger::set_policy_throttler(entity_type_t peer_type,
 seastar::shard_id SocketMessenger::locate_shard(const entity_addr_t& addr)
 {
   ceph_assert(addr.get_family() == AF_INET);
+  if (master_sid >= 0) {
+    return master_sid;
+  }
   std::size_t seed = 0;
   boost::hash_combine(seed, addr.u.sin.sin_addr.s_addr);
   //boost::hash_combine(seed, addr.u.sin.sin_port);
@@ -260,6 +265,9 @@ void SocketMessenger::unaccept_conn(SocketConnectionRef conn)
 
 void SocketMessenger::register_conn(SocketConnectionRef conn)
 {
+  if (master_sid >= 0) {
+    ceph_assert(static_cast<int>(sid) == master_sid);
+  }
   auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
   std::ignore = i;
   ceph_assert(added);

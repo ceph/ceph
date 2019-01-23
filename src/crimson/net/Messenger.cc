@@ -9,9 +9,10 @@ namespace ceph::net {
 seastar::future<Messenger*>
 Messenger::create(const entity_name_t& name,
                   const std::string& lname,
-                  const uint64_t nonce)
+                  const uint64_t nonce,
+                  const int master_sid)
 {
-  return create_sharded<SocketMessenger>(name, lname, nonce)
+  return create_sharded<SocketMessenger>(name, lname, nonce, master_sid)
     .then([](Messenger *msgr) {
       return msgr;
     });
