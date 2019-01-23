@@ -261,7 +261,7 @@ typedef C_ContextsBase<Context, Context> C_Contexts;
  * BUG:? only reports error from last sub to have an error return
  */
 template <class ContextType, class ContextInstanceType>
-class C_GatherBase : public ContextType {
+class C_GatherBase {
 private:
   CephContext *cct;
   int result;
@@ -334,7 +334,7 @@ public:
   {
     mydout(cct,10) << "C_GatherBase " << this << ".new" << dendl;
   }
-  ~C_GatherBase() override {
+  ~C_GatherBase() {
     mydout(cct,10) << "C_GatherBase " << this << ".delete" << dendl;
   }
   void set_finisher(ContextType *onfinish_) {
@@ -364,9 +364,6 @@ public:
 #endif
     mydout(cct,10) << "C_GatherBase " << this << ".new_sub is " << sub_created_count << " " << s << dendl;
     return s;
-  }
-  void finish(int r) override {
-    ceph_abort();    // nobody should ever call me.
   }
 
   inline int get_sub_existing_count() const {
