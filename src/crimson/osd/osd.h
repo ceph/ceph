@@ -15,6 +15,7 @@
 
 class MOSDMap;
 class OSDMap;
+class OSDMeta;
 
 namespace ceph::net {
   class Messenger;
@@ -23,6 +24,7 @@ namespace ceph::net {
 namespace ceph::os {
   class CyanStore;
   struct Collection;
+  class Transaction;
 }
 
 class OSD : public ceph::net::Dispatcher {
@@ -38,11 +40,11 @@ class OSD : public ceph::net::Dispatcher {
 
   // TODO: use LRU cache
   std::map<epoch_t, seastar::lw_shared_ptr<OSDMap>> osdmaps;
+  std::map<epoch_t, bufferlist> map_bl_cache;
   seastar::lw_shared_ptr<OSDMap> osdmap;
   // TODO: use a wrapper for ObjectStore
   std::unique_ptr<ceph::os::CyanStore> store;
-  using CollectionRef = boost::intrusive_ptr<ceph::os::Collection>;
-  CollectionRef meta_coll;
+  std::unique_ptr<OSDMeta> meta_coll;
 
   OSDState state;
 
@@ -72,16 +74,22 @@ public:
   seastar::future<> start();
   seastar::future<> stop();
 
+  static ghobject_t get_osdmap_pobject_name(epoch_t epoch);
+
 private:
   seastar::future<> start_boot();
   seastar::future<> _preboot(version_t newest_osdmap, version_t oldest_osdmap);
   seastar::future<> _send_boot();
 
-  seastar::lw_shared_ptr<OSDMap> get_map(epoch_t e);
-  // TODO: should batch the write op along with superdisk modification as a
-  //       transaction
-  void store_maps(epoch_t start, Ref<MOSDMap> m);
+  seastar::future<seastar::lw_shared_ptr<OSDMap>> get_map(epoch_t e);
+  seastar::future<bufferlist> load_map_bl(epoch_t e);
+  void store_map_bl(ceph::os::Transaction& t,
+                    epoch_t e, bufferlist&& bl);
+  seastar::future<> store_maps(ceph::os::Transaction& t,
+                               epoch_t start, Ref<MOSDMap> m);
   seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
+
+  void write_superblock(ceph::os::Transaction& t);
   seastar::future<> read_superblock();
 
   seastar::future<> handle_osd_map(ceph::net::ConnectionRef conn,
