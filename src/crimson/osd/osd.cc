@@ -10,6 +10,8 @@
 #include "crimson/os/cyan_store.h"
 #include "crimson/os/Transaction.h"
 #include "crimson/osd/osd_meta.h"
+#include "crimson/osd/pg.h"
+#include "crimson/osd/pg_meta.h"
 
 namespace {
   seastar::logger& logger() {
@@ -122,6 +124,8 @@ seastar::future<> OSD::start()
     return get_map(superblock.current_epoch);
   }).then([this](seastar::lw_shared_ptr<OSDMap> map) {
     osdmap = std::move(map);
+    return load_pgs();
+  }).then([this] {
     return client_msgr->start(&dispatchers);
   }).then([this] {
     return monc.start();
@@ -201,6 +205,57 @@ seastar::future<> OSD::stop()
     return monc.stop();
   }).then([this] {
     return client_msgr->shutdown();
+  });
+}
+
+seastar::future<> OSD::load_pgs()
+{
+  return seastar::parallel_for_each(store->list_collections(),
+    [this](auto coll) {
+      spg_t pgid;
+      if (coll.is_pg(&pgid)) {
+        return load_pg(pgid).then([pgid, this](auto&& pg) {
+          logger().info("load_pgs: loaded {}", pgid);
+          pgs.emplace(pgid, std::move(pg));
+          return seastar::now();
+        });
+      } else if (coll.is_temp(&pgid)) {
+        // TODO: remove the collection
+        return seastar::now();
+      } else {
+        logger().warn("ignoring unrecognized collection: {}", coll);
+        return seastar::now();
+      }
+    });
+}
+
+seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
+{
+  using ec_profile_t = map<string,string>;
+  return PGMeta{store.get(), pgid}.get_epoch().then([this](epoch_t e) {
+    return get_map(e);
+  }).then([pgid, this] (auto&& create_map) {
+    if (create_map->have_pg_pool(pgid.pool())) {
+      pg_pool_t pi = *create_map->get_pg_pool(pgid.pool());
+      string name = create_map->get_pool_name(pgid.pool());
+      ec_profile_t ec_profile;
+      if (pi.is_erasure()) {
+        ec_profile = create_map->get_erasure_code_profile(pi.erasure_code_profile);
+      }
+      return seastar::make_ready_future<pg_pool_t,
+                                        string,
+                                        ec_profile_t>(std::move(pi),
+                                                      std::move(name),
+                                                      std::move(ec_profile));
+    } else {
+      // pool was deleted; grab final pg_pool_t off disk.
+      return meta_coll->load_final_pool_info(pgid.pool());
+    }
+  }).then([this](pg_pool_t&& pool, string&& name, ec_profile_t&& ec_profile) {
+    Ref<PG> pg{new PG{std::move(pool),
+                      std::move(name),
+                      std::move(ec_profile)}};
+    return seastar::make_ready_future<Ref<PG>>(std::move(pg));
   });
 }
 
