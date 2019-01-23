@@ -5,8 +5,6 @@ using namespace ceph::immutable_obj_cache;
 
 TEST(test_for_message, test_1) 
 {
-  std::string pool_name("this is a pool name");
-  std::string image_name("this is an image name");
   std::string oid_name("this is a oid name");
 
   ObjectCacheMsgHeader header;
@@ -23,11 +21,8 @@ TEST(test_for_message, test_1)
 
   req.m_head = header;
 
-  req.m_data.m_image_size = 111111;
   req.m_data.m_read_offset = 222222;
   req.m_data.m_read_len = 333333;
-  req.m_data.m_pool_name = pool_name;
-  req.m_data.m_image_name = image_name;
   req.m_data.m_oid = oid_name;
 
   req.encode();
@@ -49,10 +44,7 @@ TEST(test_for_message, test_1)
   ASSERT_EQ(req_decode->m_head.reserved, header.reserved);
 
 
-  ASSERT_EQ(req_decode->m_data.m_image_size, 111111);
   ASSERT_EQ(req_decode->m_data.m_read_offset, 222222);
   ASSERT_EQ(req_decode->m_data.m_read_len, 333333);
-  ASSERT_EQ(req_decode->m_data.m_pool_name, pool_name);
-  ASSERT_EQ(req_decode->m_data.m_image_name, image_name);
   ASSERT_EQ(req_decode->m_data.m_oid, oid_name);
 }
