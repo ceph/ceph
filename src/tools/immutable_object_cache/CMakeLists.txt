@@ -12,16 +12,9 @@ set(ceph_immutable_object_cache_files
 add_library(ceph_immutable_object_cache_lib STATIC ${ceph_immutable_object_cache_files})
 
 add_executable(ceph-immutable-object-cache
-  ObjectCacheFile.cc
-  ObjectCacheStore.cc
-  CacheController.cc
-  CacheServer.cc
-  CacheSession.cc
-  SimplePolicy.cc
-  Utils.cc
-  Types.cc
   main.cc)
 target_link_libraries(ceph-immutable-object-cache
+  ceph_immutable_object_cache_lib
   librados-cxx
   stdc++fs
   global)
