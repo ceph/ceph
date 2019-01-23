@@ -2517,18 +2517,6 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
   } else if (command == "cache status") {
     std::lock_guard l(mds_lock);
     mdcache->cache_status(f);
-  } else if (command == "cache drop") {
-    int64_t timeout;
-    if (!cmd_getval(g_ceph_context, cmdmap, "timeout", timeout)) {
-      timeout = 0;
-    }
-
-    C_SaferCond cond;
-    command_cache_drop((uint64_t)timeout, f, &cond);
-    int r = cond.wait();
-    if (r != 0) {
-      f->flush(ss);
-    }
   } else if (command == "dump tree") {
     command_dump_tree(cmdmap, ss, f);
   } else if (command == "dump loads") {
