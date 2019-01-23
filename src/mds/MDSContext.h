@@ -218,17 +218,8 @@ protected:
   MDSRank *get_mds() override;
 };
 
-
-class MDSGather : public C_GatherBase<MDSInternalContextBase, MDSInternalContextGather>
-{
-public:
-  MDSGather(CephContext *cct, MDSInternalContextBase *onfinish) : C_GatherBase<MDSInternalContextBase, MDSInternalContextGather>(cct, onfinish) {}
-protected:
-  MDSRank *get_mds() override {return NULL;}
-};
-
-
-typedef C_GatherBuilderBase<MDSInternalContextBase, MDSGather> MDSGatherBuilder;
+using MDSGather = C_GatherBase<MDSInternalContextBase, MDSInternalContextGather>;
+using MDSGatherBuilder = C_GatherBuilderBase<MDSInternalContextBase, MDSGather>;
 
 using MDSContextFactory = ContextFactory<MDSInternalContextBase>;
 
