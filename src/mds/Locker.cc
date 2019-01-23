@@ -57,7 +57,7 @@ static ostream& _prefix(std::ostream *_dout, MDSRank *mds) {
 }
 
 
-class LockerContext : public MDSInternalContextBase {
+class LockerContext : public MDSContext {
 protected:
   Locker *locker;
   MDSRank *get_mds() override
@@ -805,7 +805,7 @@ void Locker::drop_locks_for_fragment_unfreeze(MutationImpl *mut)
 
 // generics
 
-void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, MDSInternalContextBase::vec *pfinishers)
+void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, MDSContext::vec *pfinishers)
 {
   dout(10) << "eval_gather " << *lock << " on " << *lock->get_parent() << dendl;
   ceph_assert(!lock->is_stable());
@@ -1028,7 +1028,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, MDSInt
 bool Locker::eval(CInode *in, int mask, bool caps_imported)
 {
   bool need_issue = caps_imported;
-  MDSInternalContextBase::vec finishers;
+  MDSContext::vec finishers;
   
   dout(10) << "eval " << mask << " " << *in << dendl;
 
@@ -1191,7 +1191,7 @@ void Locker::try_eval(SimpleLock *lock, bool *pneed_issue)
 void Locker::eval_cap_gather(CInode *in, set<CInode*> *issue_set)
 {
   bool need_issue = false;
-  MDSInternalContextBase::vec finishers;
+  MDSContext::vec finishers;
 
   // kick locks now
   if (!in->filelock.is_stable())
@@ -1216,7 +1216,7 @@ void Locker::eval_cap_gather(CInode *in, set<CInode*> *issue_set)
 void Locker::eval_scatter_gathers(CInode *in)
 {
   bool need_issue = false;
-  MDSInternalContextBase::vec finishers;
+  MDSContext::vec finishers;
 
   dout(10) << "eval_scatter_gathers " << *in << dendl;
 
@@ -1295,7 +1295,7 @@ bool Locker::_rdlock_kick(SimpleLock *lock, bool as_anon)
   return false;
 }
 
-bool Locker::rdlock_try(SimpleLock *lock, client_t client, MDSInternalContextBase *con)
+bool Locker::rdlock_try(SimpleLock *lock, client_t client, MDSContext *con)
 {
   dout(7) << "rdlock_try on " << *lock << " on " << *lock->get_parent() << dendl;  
 
@@ -4578,7 +4578,7 @@ void Locker::mark_updated_scatterlock(ScatterLock *lock)
  * we need to lock|scatter in order to push fnode changes into the
  * inode.dirstat.
  */
-void Locker::scatter_nudge(ScatterLock *lock, MDSInternalContextBase *c, bool forcelockchange)
+void Locker::scatter_nudge(ScatterLock *lock, MDSContext *c, bool forcelockchange)
 {
   CInode *p = static_cast<CInode *>(lock->get_parent());
 

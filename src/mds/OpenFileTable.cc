@@ -208,10 +208,10 @@ class C_IO_OFT_Save : public MDSIOContextBase {
 protected:
   OpenFileTable *oft;
   uint64_t log_seq;
-  MDSInternalContextBase *fin;
+  MDSContext *fin;
   MDSRank *get_mds() override { return oft->mds; }
 public:
-  C_IO_OFT_Save(OpenFileTable *t, uint64_t s, MDSInternalContextBase *c) :
+  C_IO_OFT_Save(OpenFileTable *t, uint64_t s, MDSContext *c) :
     oft(t), log_seq(s), fin(c) {}
   void finish(int r) {
     oft->_commit_finish(r, log_seq, fin);
@@ -221,7 +221,7 @@ public:
   }
 };
 
-void OpenFileTable::_commit_finish(int r, uint64_t log_seq, MDSInternalContextBase *fin)
+void OpenFileTable::_commit_finish(int r, uint64_t log_seq, MDSContext *fin)
 {
   dout(10) << __func__ << " log_seq " << log_seq << dendl;
   if (r < 0) {
@@ -242,11 +242,11 @@ class C_IO_OFT_Journal : public MDSIOContextBase {
 protected:
   OpenFileTable *oft;
   uint64_t log_seq;
-  MDSInternalContextBase *fin;
+  MDSContext *fin;
   std::map<unsigned, std::vector<ObjectOperation> > ops_map;
   MDSRank *get_mds() override { return oft->mds; }
 public:
-  C_IO_OFT_Journal(OpenFileTable *t, uint64_t s, MDSInternalContextBase *c,
+  C_IO_OFT_Journal(OpenFileTable *t, uint64_t s, MDSContext *c,
 		   std::map<unsigned, std::vector<ObjectOperation> >& ops) :
     oft(t), log_seq(s), fin(c) {
     ops_map.swap(ops);
@@ -259,7 +259,7 @@ public:
   }
 };
 
-void OpenFileTable::_journal_finish(int r, uint64_t log_seq, MDSInternalContextBase *c,
+void OpenFileTable::_journal_finish(int r, uint64_t log_seq, MDSContext *c,
 				    std::map<unsigned, std::vector<ObjectOperation> >& ops_map)
 {
   dout(10) << __func__ << " log_seq " << log_seq << dendl;
@@ -286,7 +286,7 @@ void OpenFileTable::_journal_finish(int r, uint64_t log_seq, MDSInternalContextB
   return;
 }
 
-void OpenFileTable::commit(MDSInternalContextBase *c, uint64_t log_seq, int op_prio)
+void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 {
   dout(10) << __func__ << " log_seq " << log_seq << dendl;
 
@@ -924,7 +924,7 @@ out:
   waiting_for_load.clear();
 }
 
-void OpenFileTable::load(MDSInternalContextBase *onload)
+void OpenFileTable::load(MDSContext *onload)
 {
   dout(10) << __func__ << dendl;
   ceph_assert(!load_done);
@@ -976,7 +976,7 @@ bool OpenFileTable::get_ancestors(inodeno_t ino, vector<inode_backpointer_t>& an
   return true;
 }
 
-class C_OFT_OpenInoFinish: public MDSInternalContextBase {
+class C_OFT_OpenInoFinish: public MDSContext {
   OpenFileTable *oft;
   inodeno_t ino;
   MDSRank *get_mds() override { return oft->mds; }

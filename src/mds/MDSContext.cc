@@ -21,23 +21,12 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 
-void MDSInternalContextBase::complete(int r) {
+void MDSContext::complete(int r) {
   MDSRank *mds = get_mds();
-
-  dout(10) << "MDSInternalContextBase::complete: " << typeid(*this).name() << dendl;
-  ceph_assert(mds != NULL);
+  ceph_assert(mds != nullptr);
   ceph_assert(mds->mds_lock.is_locked_by_me());
-  MDSContext::complete(r);
-}
-
-
-MDSRank *MDSInternalContext::get_mds() {
-  return mds;
-}
-
-MDSRank *MDSInternalContextWrapper::get_mds()
-{
-  return mds;
+  dout(10) << "MDSContext::complete: " << typeid(*this).name() << dendl;
+  return Context::complete(r);
 }
 
 void MDSInternalContextWrapper::finish(int r)
@@ -126,14 +115,6 @@ void MDSLogContextBase::complete(int r) {
   mdlog->set_safe_pos(safe_pos);
 }
 
-MDSRank *MDSIOContext::get_mds() {
-  return mds;
-}
-
-MDSRank *MDSIOContextWrapper::get_mds() {
-  return mds;
-}
-
 void MDSIOContextWrapper::finish(int r)
 {
   fin->complete(r);
@@ -148,10 +129,3 @@ void C_IO_Wrapper::complete(int r)
     MDSIOContext::complete(r);
   }
 }
-
-MDSRank *MDSInternalContextGather::get_mds()
-{
-  derr << "Forbidden call to MDSInternalContextGather::get_mds by " << typeid(*this).name() << dendl;
-  ceph_abort();
-}
-

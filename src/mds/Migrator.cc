@@ -67,7 +67,7 @@
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".migrator "
 
 
-class MigratorContext : public MDSInternalContextBase {
+class MigratorContext : public MDSContext {
 protected:
   Migrator *mig;
   MDSRank *get_mds() override {
@@ -1665,7 +1665,7 @@ void Migrator::finish_export_inode_caps(CInode *in, mds_rank_t peer,
 
 void Migrator::finish_export_inode(CInode *in, mds_rank_t peer,
 				   map<client_t,Capability::Import>& peer_imported,
-				   MDSInternalContextBase::vec& finished)
+				   MDSContext::vec& finished)
 {
   dout(12) << "finish_export_inode " << *in << dendl;
 
@@ -1802,7 +1802,7 @@ uint64_t Migrator::encode_export_dir(bufferlist& exportbl,
 
 void Migrator::finish_export_dir(CDir *dir, mds_rank_t peer,
 				 map<inodeno_t,map<client_t,Capability::Import> >& peer_imported,
-				 MDSInternalContextBase::vec& finished, int *num_dentries)
+				 MDSContext::vec& finished, int *num_dentries)
 {
   dout(10) << "finish_export_dir " << *dir << dendl;
 
@@ -2142,7 +2142,7 @@ void Migrator::export_finish(CDir *dir)
   
   // finish export (adjust local cache state)
   int num_dentries = 0;
-  MDSInternalContextBase::vec finished;
+  MDSContext::vec finished;
   finish_export_dir(dir, it->second.peer,
 		    it->second.peer_imported, finished, &num_dentries);
 
@@ -2228,7 +2228,7 @@ private:
 class C_MDS_ExportDiscoverFactory : public MDSContextFactory {
 public:
   C_MDS_ExportDiscoverFactory(Migrator *mig, MExportDirDiscover::const_ref m) : mig(mig), m(m) {}
-  MDSInternalContextBase *build() {
+  MDSContext *build() {
     return new C_MDS_ExportDiscover(mig, m);
   }
 private:
@@ -2381,7 +2381,7 @@ private:
 class C_MDS_ExportPrepFactory : public MDSContextFactory {
 public:
   C_MDS_ExportPrepFactory(Migrator *mig, MExportDirPrep::const_ref m) : mig(mig), m(m) {}
-  MDSInternalContextBase *build() {
+  MDSContext *build() {
     return new C_MDS_ExportPrep(mig, m);
   }
 private:
@@ -2396,7 +2396,7 @@ void Migrator::handle_export_prep(const MExportDirPrep::const_ref &m, bool did_a
 
   CDir *dir;
   CInode *diri;
-  MDSInternalContextBase::vec finished;
+  MDSContext::vec finished;
 
   // assimilate root dir.
   map<dirfrag_t,import_state_t>::iterator it = import_state.find(m->get_dirfrag());
@@ -2738,7 +2738,7 @@ void Migrator::import_remove_pins(CDir *dir, set<CDir*>& bounds)
 
 class C_MDC_QueueContexts : public MigratorContext {
 public:
-  MDSInternalContextBase::vec contexts;
+  MDSContext::vec contexts;
   C_MDC_QueueContexts(Migrator *m) : MigratorContext(m) {}
   void finish(int r) override {
     // execute contexts immediately after 'this' context
@@ -3304,7 +3304,7 @@ int Migrator::decode_import_dir(bufferlist::const_iterator& blp,
   // take all waiters on this dir
   // NOTE: a pass of imported data is guaranteed to get all of my waiters because
   // a replica's presense in my cache implies/forces it's presense in authority's.
-  MDSInternalContextBase::vec waiters;
+  MDSContext::vec waiters;
   dir->take_waiting(CDir::WAIT_ANY_MASK, waiters);
   for (auto c : waiters)
     dir->add_waiter(CDir::WAIT_UNFREEZE, c);  // UNFREEZE will get kicked both on success or failure

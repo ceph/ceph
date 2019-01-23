@@ -270,7 +270,7 @@ void SessionMap::_load_finish(
  * Populate session state from OMAP records in this
  * rank's sessionmap object.
  */
-void SessionMap::load(MDSInternalContextBase *onload)
+void SessionMap::load(MDSContext *onload)
 {
   dout(10) << "load" << dendl;
 
@@ -373,7 +373,7 @@ public:
 };
 }
 
-void SessionMap::save(MDSInternalContextBase *onsave, version_t needv)
+void SessionMap::save(MDSContext *onsave, version_t needv)
 {
   dout(10) << __func__ << ": needv " << needv << ", v " << version << dendl;
  
@@ -722,9 +722,9 @@ version_t SessionMap::mark_projected(Session *s)
 
 namespace {
 class C_IO_SM_Save_One : public SessionMapIOContext {
-  MDSInternalContextBase *on_safe;
+  MDSContext *on_safe;
 public:
-  C_IO_SM_Save_One(SessionMap *cm, MDSInternalContextBase *on_safe_)
+  C_IO_SM_Save_One(SessionMap *cm, MDSContext *on_safe_)
     : SessionMapIOContext(cm), on_safe(on_safe_) {}
   void finish(int r) override {
     if (r != 0) {
@@ -810,7 +810,7 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
       SnapContext snapc;
       object_t oid = get_object_name();
       object_locator_t oloc(mds->mdsmap->get_metadata_pool());
-      MDSInternalContextBase *on_safe = gather_bld->new_sub();
+      MDSContext *on_safe = gather_bld->new_sub();
       mds->objecter->mutate(oid, oloc, op, snapc,
 			    ceph::real_clock::now(), 0,
 			    new C_OnFinisher(

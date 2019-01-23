@@ -257,7 +257,7 @@ void MDSTableServer::_server_update_logged(bufferlist& bl)
 
 // recovery
 
-class C_ServerRecovery : public MDSInternalContextBase {
+class C_ServerRecovery : public MDSContext {
   MDSTableServer *server;
   MDSRank *get_mds() override { return server->mds; }
 public:
