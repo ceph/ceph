@@ -1410,17 +1410,13 @@ int RGWRados::init_rados()
     }
   }
 
-  auto handles = std::vector<librados::Rados>{static_cast<size_t>(1)};
-
-  for (auto& r : handles) {
-    ret = r.init_with_context(cct);
-    if (ret < 0) {
-      return ret;
-    }
-    ret = r.connect();
-    if (ret < 0) {
-      return ret;
-    }
+  ret = rados.init_with_context(cct);
+  if (ret < 0) {
+    return ret;
+  }
+  ret = rados.connect();
+  if (ret < 0) {
+    return ret;
   }
 
   auto crs = std::unique_ptr<RGWCoroutinesManagerRegistry>{
@@ -1433,15 +1429,13 @@ int RGWRados::init_rados()
   meta_mgr = new RGWMetadataManager(cct, this);
   data_log = new RGWDataChangesLog(cct, this);
   cr_registry = crs.release();
-
-  std::swap(handles, rados);
   return ret;
 }
 
 int RGWRados::register_to_service_map(const string& daemon_type, const map<string, string>& meta)
 {
   map<string,string> metadata = meta;
-  metadata["num_handles"] = stringify(rados.size());
+  metadata["num_handles"] = "1"s;
   metadata["zonegroup_id"] = svc.zone->get_zonegroup().get_id();
   metadata["zonegroup_name"] = svc.zone->get_zonegroup().get_name();
   metadata["zone_name"] = svc.zone->zone_name();
@@ -1450,7 +1444,7 @@ int RGWRados::register_to_service_map(const string& daemon_type, const map<strin
   if (name.compare(0, 4, "rgw.") == 0) {
     name = name.substr(4);
   }
-  int ret = rados[0].service_daemon_register(daemon_type, name, metadata);
+  int ret = rados.service_daemon_register(daemon_type, name, metadata);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: service_daemon_register() returned ret=" << ret << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -1461,7 +1455,7 @@ int RGWRados::register_to_service_map(const string& daemon_type, const map<strin
 
 int RGWRados::update_service_map(std::map<std::string, std::string>&& status)
 {
-  int ret = rados[0].service_daemon_update_status(move(status));
+  int ret = rados.service_daemon_update_status(move(status));
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: service_daemon_update_status() returned ret=" << ret << ": " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -10079,28 +10073,7 @@ void RGWStoreManager::close_storage(RGWRados *store)
 
 librados::Rados* RGWRados::get_rados_handle()
 {
-  if (rados.size() == 1) {
-    return &rados[0];
-  } else {
-    handle_lock.get_read();
-    pthread_t id = pthread_self();
-    std::map<pthread_t, int>:: iterator it = rados_map.find(id);
-
-    if (it != rados_map.end()) {
-      handle_lock.put_read();
-      return &rados[it->second];
-    } else {
-      handle_lock.put_read();
-      handle_lock.get_write();
-      const uint32_t handle = next_rados_handle;
-      rados_map[id] = handle;
-      if (++next_rados_handle == rados.size()) {
-        next_rados_handle = 0;
-      }
-      handle_lock.put_write();
-      return &rados[handle];
-    }
-  }
+  return &rados;
 }
 
 int RGWRados::delete_raw_obj_aio(const rgw_raw_obj& obj, list<librados::AioCompletion *>& handles)
