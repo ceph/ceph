@@ -16,6 +16,7 @@
 class MOSDMap;
 class OSDMap;
 class OSDMeta;
+class PG;
 
 namespace ceph::net {
   class Messenger;
@@ -26,6 +27,8 @@ namespace ceph::os {
   struct Collection;
   class Transaction;
 }
+
+template<typename T> using Ref = boost::intrusive_ptr<T>;
 
 class OSD : public ceph::net::Dispatcher {
   seastar::gate gate;
@@ -46,6 +49,7 @@ class OSD : public ceph::net::Dispatcher {
   std::unique_ptr<ceph::os::CyanStore> store;
   std::unique_ptr<OSDMeta> meta_coll;
 
+  std::unordered_map<spg_t, Ref<PG>> pgs;
   OSDState state;
 
   /// _first_ epoch we were marked up (after this process started)
@@ -80,6 +84,9 @@ private:
   seastar::future<> start_boot();
   seastar::future<> _preboot(version_t newest_osdmap, version_t oldest_osdmap);
   seastar::future<> _send_boot();
+
+  seastar::future<Ref<PG>> load_pg(spg_t pgid);
+  seastar::future<> load_pgs();
 
   seastar::future<seastar::lw_shared_ptr<OSDMap>> get_map(epoch_t e);
   seastar::future<bufferlist> load_map_bl(epoch_t e);
