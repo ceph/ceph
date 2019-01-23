@@ -260,11 +260,6 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
                                      "show cache status");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("cache drop",
-                                     "cache drop name=timeout,type=CephInt,range=0,req=false",
-                                     asok_hook,
-                                     "drop cache");
-  ceph_assert(r == 0);
   r = admin_socket->register_command("dump tree",
 				     "dump tree "
 				     "name=root,type=CephString,req=true "
