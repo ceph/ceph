@@ -25,7 +25,7 @@ typedef shared_ptr<librados::IoCtx> IoCtxRef;
 class ObjectCacheStore
 {
   public:
-    ObjectCacheStore(CephContext *cct, ContextWQ* work_queue);
+    ObjectCacheStore(CephContext *cct);
     ~ObjectCacheStore();
     int init(bool reset);
     int shutdown();
@@ -47,7 +47,6 @@ class ObjectCacheStore
    int do_evict(std::string cache_file);
 
     CephContext *m_cct;
-    ContextWQ* m_work_queue;
     RadosRef m_rados;
     std::map<uint64_t, librados::IoCtx*> m_ioctxs;
     Mutex m_ioctxs_lock;
