@@ -1270,10 +1270,7 @@ class RGWRados : public AdminSocketHook
 protected:
   CephContext *cct;
 
-  std::vector<librados::Rados> rados;
-  uint32_t next_rados_handle;
-  RWLock handle_lock;
-  std::map<pthread_t, int> rados_map;
+  librados::Rados rados;
 
   using RGWChainedCacheImpl_bucket_info_entry = RGWChainedCacheImpl<bucket_info_entry>;
   RGWChainedCacheImpl_bucket_info_entry *binfo_cache;
@@ -1307,8 +1304,6 @@ public:
                bucket_id_lock("rados_bucket_id"),
                bucket_index_max_shards(0),
                max_bucket_id(0), cct(NULL),
-               next_rados_handle(0),
-               handle_lock("rados_handle_lock"),
                binfo_cache(NULL), obj_tombstone_cache(nullptr),
                pools_initialized(false),
                quota_handler(NULL),
