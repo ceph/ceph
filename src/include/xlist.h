@@ -32,7 +32,9 @@ public:
     }
 
     item(const item& other) = delete;
+    item(item&& other) = delete;
     const item& operator= (const item& right) = delete;
+    item& operator= (item&& right) = delete;
 
     xlist* get_list() { return _list; }
     bool is_on_list() const { return _list ? true:false; }
