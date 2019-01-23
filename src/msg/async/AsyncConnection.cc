@@ -285,8 +285,8 @@ ssize_t AsyncConnection::write(bufferlist &bl,
                                bool more) {
     send_lock.lock();
     outcoming_bl.claim_append(bl);
-    send_lock.unlock();
     ssize_t r = _try_send(more);
+    send_lock.unlock();
     if (r > 0) {
       std::unique_lock<std::mutex> l(write_lock);
       writeCallback = callback;
@@ -294,6 +294,7 @@ ssize_t AsyncConnection::write(bufferlist &bl,
     return r;
 }
 
+// must be called with send_lock
 // return the remaining bytes, it may larger than the length of ptr
 // else return < 0 means error
 ssize_t AsyncConnection::_try_send(bool more)
@@ -307,28 +308,23 @@ ssize_t AsyncConnection::_try_send(bool more)
   }
 
   ceph_assert(center->in_thread());
-  {
-    std::lock_guard<std::mutex> l(send_lock);
-    ldout(async_msgr->cct, 25) << __func__ << " cs.send " << outcoming_bl.length()
-                               << " bytes" << dendl;
-    ssize_t r = cs.send(outcoming_bl, more);
-    if (r < 0) {
-      ldout(async_msgr->cct, 1) << __func__ << " send error: " << cpp_strerror(r) << dendl;
-      return r;
-    }
-    protocol->add_sent(r);
-    ldout(async_msgr->cct, 10) << __func__ << " sent bytes " << r
-                               << " remaining bytes " << outcoming_bl.length() << dendl;
-    remaining = outcoming_bl.length(); 
+  ldout(async_msgr->cct, 25) << __func__ << " cs.send " << outcoming_bl.length()
+                             << " bytes" << dendl;
+  ssize_t r = cs.send(outcoming_bl, more);
+  if (r < 0) {
+    ldout(async_msgr->cct, 1) << __func__ << " send error: " << cpp_strerror(r) << dendl;
+    return r;
   }
+  protocol->add_sent(r);
+  ldout(async_msgr->cct, 10) << __func__ << " sent bytes " << r
+                             << " remaining bytes " << outcoming_bl.length() << dendl;
 
-  bool queued = is_queued();
-  if (!open_write && queued) {
+  if (!open_write && is_queued()) {
     center->create_file_event(cs.fd(), EVENT_WRITABLE, write_handler);
     open_write = true;
   }
 
-  if (open_write && !queued) {
+  if (open_write && !is_queued()) {
     center->delete_file_event(cs.fd(), EVENT_WRITABLE);
     open_write = false;
     if (writeCallback) {
@@ -336,7 +332,7 @@ ssize_t AsyncConnection::_try_send(bool more)
     }
   }
 
-  return remaining;
+  return outcoming_bl.length();
 }
 
 
@@ -561,8 +557,8 @@ void AsyncConnection::_stop() {
   center->dispatch_event_external(EventCallbackRef(new C_clean_handler(this)));
 }
 
+// must be called with send_lock
 bool AsyncConnection::is_queued() const {
-  std::lock_guard<std::mutex> l(send_lock);
   return outcoming_bl.length();
 }
 

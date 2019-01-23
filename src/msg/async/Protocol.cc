@@ -360,14 +360,13 @@ void ProtocolV1::write_event() {
 
     // if r > 0 mean data still lefted, so no need _try_send.
     if (r == 0) {
+      connection->send_lock.lock();
       uint64_t left = ack_left;
       if (left) {
         ceph_le64 s;
         s = in_seq;
-        connection->send_lock.lock();
         connection->outcoming_bl.append(CEPH_MSGR_TAG_ACK);
         connection->outcoming_bl.append((char *)&s, sizeof(s));
-        connection->send_lock.unlock();
         ldout(cct, 10) << __func__ << " try send msg ack, acked " << left
                        << " messages" << dendl;
         ack_left -= left;
@@ -376,6 +375,7 @@ void ProtocolV1::write_event() {
       } else if (is_queued()) {
         r = connection->_try_send();
       }
+      connection->send_lock.unlock();
     }
 
     connection->logger->tinc(l_msgr_running_send_time,
@@ -390,13 +390,19 @@ void ProtocolV1::write_event() {
   } else {
     connection->write_lock.unlock();
     connection->lock.lock();
-    connection->write_lock.lock();
-    if (state == STANDBY && !connection->policy.server && is_queued()) {
+    connection->write_lock.lock()
+    connection->send_lock.lock();
+    bool queued = is_queued();
+    connection->send_lock.unlock();
+
+    if (state == STANDBY && !connection->policy.server && queued) {
       ldout(cct, 10) << __func__ << " policy.server is false" << dendl;
       connection->_connect();
     } else if (connection->cs && state != NONE && state != CLOSED &&
                state != START_CONNECT) {
+      connection->send_lock.lock();
       r = connection->_try_send();
+      connection->send_lock.unlock();
       if (r < 0) {
         ldout(cct, 1) << __func__ << " send outcoming bl failed" << dendl;
         connection->write_lock.unlock();
@@ -454,7 +460,7 @@ void ProtocolV1::cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops)
       unsigned o, len;
       if ((*it)->start < sent_pos) {
         o = 0;
-        len -= (sent_pos - (*it)->start);
+        len = (*it)->len - (sent_pos - (*it)->start);
       } else {
         o = (*it)->start - sent_pos;
         len = (*it)->len;
@@ -525,8 +531,11 @@ CtPtr ProtocolV1::ready() {
       connection->inactive_timeout_us, connection->tick_handler);
 
   connection->write_lock.lock();
+  connection->send_lock.lock();
+  bool queued = is_queued();
+  connection->send_lock.unlock();
   can_write = WriteStatus::CANWRITE;
-  if (is_queued()) {
+  if (queued) {
     connection->center->dispatch_event_external(connection->write_handler);
   }
   connection->write_lock.unlock();
@@ -1221,8 +1230,8 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
   ldout(cct, 20) << __func__ << " sending " << m->get_seq() << " " << m
                  << dendl;
   ssize_t total_send_size = connection->outcoming_bl.length();
-  connection->send_lock.unlock();
   ssize_t rc = connection->_try_send(more);
+  connection->send_lock.unlock();
   if (rc < 0) {
     ldout(cct, 1) << __func__ << " error sending " << m << ", "
                   << cpp_strerror(rc) << dendl;

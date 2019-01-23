@@ -626,7 +626,7 @@ using namespace ceph;
       buffer::raw *tr = _raw;
       _raw = tr->clone();
       _raw->nref = 1;
-      if (unlikely(--tr->nref == 0)) {
+      if (likely(--tr->nref == 0)) {
         ANNOTATE_HAPPENS_AFTER(&tr->nref);
         ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&tr->nref);
         delete tr;
