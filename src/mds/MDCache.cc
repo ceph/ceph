@@ -7565,8 +7565,7 @@ void MDCache::check_memory_usage()
   mds->mlogger->set(l_mdm_heap, last.get_heap());
 
   if (cache_toofull()) {
-    last_recall_state = clock::now();
-    mds->server->recall_client_state(-1.0, false, nullptr);
+    mds->server->recall_client_state(nullptr);
   }
 
   // If the cache size had exceeded its limit, but we're back in bounds
