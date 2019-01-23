@@ -31,11 +31,13 @@ class ObjectCacheStore
     int init_cache();
     int lookup_object(std::string pool_nspace,
                       uint64_t pool_id, uint64_t snap_id,
-                      std::string object_name);
+                      std::string object_name,
+                      std::string& target_cache_file_path);
 
   private:
     std::string generate_cache_file_name(std::string pool_nspace, uint64_t pool_id,
                                          uint64_t snap_id, std::string oid);
+    std::string generate_cache_file_path(std::string cache_file_name);
     int evict_objects();
     int do_promote(std::string pool_nspace, uint64_t pool_id,
                     uint64_t snap_id, std::string object_name);

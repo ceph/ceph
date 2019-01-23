@@ -83,7 +83,8 @@ void CacheController::handle_request(uint64_t session_id, ObjectCacheRequest* re
       int ret = m_object_cache_store->lookup_object(req->m_data.m_pool_namespace,
                                                     req->m_data.m_pool_id,
                                                     req->m_data.m_snap_id,
-                                                    req->m_data.m_oid);
+                                                    req->m_data.m_oid,
+                                                    req->m_data.m_cache_path);
       if (ret < 0) {
         req->m_head.type = RBDSC_READ_RADOS;
       } else {

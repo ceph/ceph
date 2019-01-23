@@ -141,15 +141,9 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
     ret = 0;
   }
 
-  std::string cache_dir = "";
   uint32_t file_size = ret;
 
-  if (m_dir_num > 0) {
-    auto const pos = cache_file_name.find_last_of('.');
-    cache_dir = "/" + std::to_string(stoul(cache_file_name.substr(pos+1)) % m_dir_num);
-  }
-  // write to cache
-  std::string cache_file_path = cache_dir + "/" + cache_file_name;
+  std::string cache_file_path = std::move(generate_cache_file_path(cache_file_name));
 
   ret = read_buf->write_file(cache_file_path.c_str());
   if (ret < 0) {
@@ -174,13 +168,16 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
 
 int ObjectCacheStore::lookup_object(std::string pool_nspace,
                                     uint64_t pool_id, uint64_t snap_id,
-                                    std::string object_name) {
+                                    std::string object_name,
+                                    std::string& target_cache_file_path) {
   ldout(m_cct, 20) << "object name = " << object_name
                    << " in pool ID : " << pool_id << dendl;
 
   int pret = -1;
-  cache_status_t ret = m_policy->lookup_object(
-                        generate_cache_file_name(pool_nspace, pool_id, snap_id, object_name));
+  std::string cache_file_name = std::move(generate_cache_file_name(pool_nspace,
+                                            pool_id, snap_id, object_name));
+
+  cache_status_t ret = m_policy->lookup_object(cache_file_name);
 
   switch(ret) {
     case OBJ_CACHE_NONE: {
@@ -191,6 +188,8 @@ int ObjectCacheStore::lookup_object(std::string pool_nspace,
       return -1;
     }
     case OBJ_CACHE_PROMOTED:
+      // librbd hook will go to target_cache_file_path to read data
+      target_cache_file_path = std::move(generate_cache_file_path(cache_file_name));
       return 0;
     case OBJ_CACHE_SKIP:
       return -1;
@@ -236,13 +235,7 @@ int ObjectCacheStore::do_evict(std::string cache_file) {
     return 0;
   }
 
-  std::string cache_dir = m_cache_root_dir;
-
-   if (m_dir_num > 0) {
-    auto const pos = cache_file.find_last_of('.');
-    cache_dir = cache_dir + "/" + std::to_string(stoul(cache_file.substr(pos+1)) % m_dir_num);
-  }
-  std::string cache_file_path = cache_dir + "/" + cache_file;
+  std::string cache_file_path = std::move(generate_cache_file_path(cache_file));
 
   ldout(m_cct, 20) << "delete file: " << cache_file_path << dendl;
   int ret = std::remove(cache_file_path.c_str());
@@ -259,9 +252,20 @@ std::string ObjectCacheStore::generate_cache_file_name(std::string pool_nspace,
                                                        uint64_t pool_id,
                                                        uint64_t snap_id,
                                                        std::string oid) {
-  return pool_nspace + ":" +
-         std::to_string(pool_id) + ":" +
+  return pool_nspace + ":" + std::to_string(pool_id) + ":" +
          std::to_string(snap_id) + ":" + oid;
+}
+
+std::string ObjectCacheStore::generate_cache_file_path(std::string cache_file_name) {
+
+  std::string cache_file_dir = "";
+
+  if(m_dir_num > 0) {
+    auto const pos = cache_file_name.find_last_of('.');
+    cache_file_dir = std::to_string(stoul(cache_file_name.substr(pos+1)) % m_dir_num);
+  }
+
+  return m_cache_root_dir + cache_file_dir + "/" + cache_file_name;
 }
 
 } // namespace immutable_obj_cache
