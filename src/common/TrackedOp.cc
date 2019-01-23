@@ -343,8 +343,8 @@ bool OpTracker::check_ops_in_flight(std::vector<string> &warning_vector, int *sl
 	   i->get_initiated() < too_old) {
 
       if (!i->warn_interval_multiplier) {
-	continue;
 	++i;
+	continue;
       }
 
       (*slow)++;
