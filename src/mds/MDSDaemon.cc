@@ -387,8 +387,10 @@ const char** MDSDaemon::get_tracked_conf_keys() const
     "mds_inject_migrator_message_loss",
     "host",
     "fsid",
-    "mds_request_load_average_decay_rate",
     "mds_cap_revoke_eviction_timeout",
+    // SessionMap
+    "mds_request_load_average_decay_rate",
+    "mds_recall_max_decay_rate",
     NULL
   };
   return KEYS;
