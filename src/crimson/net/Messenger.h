@@ -90,7 +90,10 @@ class Messenger {
   virtual void print(ostream& out) const = 0;
 
   static seastar::future<Messenger*>
-  create(const entity_name_t& name, const std::string& lname, const uint64_t nonce);
+  create(const entity_name_t& name,
+         const std::string& lname,
+         const uint64_t nonce,
+         const int master_sid=-1);
 };
 
 inline ostream& operator<<(ostream& out, const Messenger& msgr) {

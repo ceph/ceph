@@ -31,6 +31,7 @@ namespace ceph::net {
 using SocketPolicy = ceph::net::Policy<ceph::thread::Throttle>;
 
 class SocketMessenger final : public Messenger, public seastar::peering_sharded_service<SocketMessenger> {
+  const int master_sid;
   const seastar::shard_id sid;
   seastar::promise<> shutdown_promise;
 
@@ -53,15 +54,17 @@ class SocketMessenger final : public Messenger, public seastar::peering_sharded_
                                                  const entity_type_t& peer_type);
   seastar::future<> do_shutdown();
   // conn sharding options:
-  // 1. Simplest: sharded by ip only
-  // 2. Balanced: sharded by ip + port + nonce,
+  // 0. Compatible (master_sid >= 0): place all connections to one master shard
+  // 1. Simplest (master_sid < 0): sharded by ip only
+  // 2. Balanced (not implemented): sharded by ip + port + nonce,
   //        but, need to move SocketConnection between cores.
   seastar::shard_id locate_shard(const entity_addr_t& addr);
 
  public:
   SocketMessenger(const entity_name_t& myname,
                   const std::string& logic_name,
-                  uint32_t nonce);
+                  uint32_t nonce,
+                  int master_sid);
 
   seastar::future<> set_myaddrs(const entity_addrvec_t& addr) override;
 
