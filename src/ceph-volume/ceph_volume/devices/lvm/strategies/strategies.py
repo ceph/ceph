@@ -1,4 +1,5 @@
 import json
+from ceph_volume.util.prepare import osd_id_available
 
 class Strategy(object):
 
@@ -9,6 +10,7 @@ class Strategy(object):
         empty list for wal_devs.
         '''
         self.args = args
+        self.osd_ids = args.osd_ids
         self.osds_per_device = args.osds_per_device
         self.devices = data_devs + wal_devs + db_or_journal_devs
         self.data_devs = data_devs
@@ -35,6 +37,14 @@ class Strategy(object):
         report = self.computed.copy()
         report['filtered_devices'] = filtered_devices
         print(json.dumps(self.computed, indent=4, sort_keys=True))
+
+    def _validate_osd_ids(self):
+        unavailable_ids = [id_ for id_ in self.osd_ids if
+                           not osd_id_available(id_)]
+        if unavailable_ids:
+            msg = ("Not all specfied OSD ids are available: {}"
+                   "unavailable").format(",".join(unavailable_ids))
+            raise RuntimeError(msg)
 
     @property
     def total_osds(self):

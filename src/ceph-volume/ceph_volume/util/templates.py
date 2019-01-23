@@ -7,6 +7,10 @@ osd_component_titles = """
   Type            Path                                                    LV Size         % of device"""
 
 
+osd_reused_id = """
+  OSD id {id_: <55}"""
+
+
 osd_component = """
   {_type: <15} {path: <55} {size: <15} {percent}%"""
 
