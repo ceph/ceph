@@ -792,8 +792,9 @@ public:
   bool ms_deliver_verify_authorizer(
     Connection *con, int peer_type,
     int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-    bool& isvalid, CryptoKey& session_key,
-    CryptoKey *connection_secret,
+    bool& isvalid,
+    CryptoKey& session_key,
+    std::string *connection_secret,
     std::unique_ptr<AuthAuthorizerChallenge> *challenge);
 
   /**

@@ -1280,7 +1280,7 @@ int MonClient::handle_auth_done(
   uint32_t con_mode,
   const bufferlist& bl,
   CryptoKey *session_key,
-  CryptoKey *connection_key)
+  std::string *connection_secret)
 {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     std::lock_guard l(monc_lock);
@@ -1288,7 +1288,7 @@ int MonClient::handle_auth_done(
       if (i.second.is_con(con)) {
 	int r = i.second.handle_auth_done(
 	  global_id, bl,
-	  session_key, connection_key);
+	  session_key, connection_secret);
 	if (r) {
 	  pending_cons.erase(i.first);
 	  if (!pending_cons.empty()) {
@@ -1383,6 +1383,7 @@ int MonClient::handle_auth_request(
     cct,
     rotating_secrets.get(),
     payload,
+    auth_meta->get_connection_secret_length(),
     reply,
     &con->peer_name,
     &con->peer_global_id,
@@ -1538,7 +1539,7 @@ int MonConnection::handle_auth_done(
   uint64_t new_global_id,
   const bufferlist& bl,
   CryptoKey *session_key,
-  CryptoKey *connection_secret)
+  std::string *connection_secret)
 {
   ldout(cct,10) << __func__ << " global_id " << new_global_id
 		<< " payload " << bl.length()

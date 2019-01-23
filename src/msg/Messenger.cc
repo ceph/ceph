@@ -117,7 +117,7 @@ bool Messenger::ms_deliver_verify_authorizer(
   bufferlist& authorizer_reply,
   bool& isvalid,
   CryptoKey& session_key,
-  CryptoKey *connection_secret,
+  std::string *connection_secret,
   std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
   if (authorizer.length() == 0) {
@@ -150,6 +150,7 @@ bool Messenger::ms_deliver_verify_authorizer(
 	cct,
 	ks,
 	authorizer,
+	0,
 	&authorizer_reply,
 	&con->peer_name,
 	&con->peer_global_id,

@@ -2397,7 +2397,22 @@ CtPtr ProtocolV2::handle_auth_request(char *payload, uint32_t length) {
                  << ", payload_len=" << request.auth_payload().length() << ")"
                  << dendl;
   auth_meta.auth_method = request.method();
-  auth_meta.preferred_con_modes = request.preferred_modes();
+
+  // select a connection mode
+  auto& preferred_modes = request.preferred_modes();
+  std::vector<uint32_t> allowed_modes;
+  messenger->auth_server->get_supported_con_modes(
+    connection->get_peer_type(), auth_meta.auth_method, &allowed_modes);
+  for (auto mode : allowed_modes) {
+    if (std::find(preferred_modes.begin(), preferred_modes.end(), mode)
+	!= preferred_modes.end()) {
+      auth_meta.con_mode = mode;
+      break;
+    }
+  }
+  if (auth_meta.con_mode == CEPH_CON_MODE_UNKNOWN) {
+    return _auth_bad_method(-EOPNOTSUPP);
+  }
   return _handle_auth_request(request.auth_payload(), false);
 }
 
@@ -2437,29 +2452,9 @@ CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
     return _fault();
   }
   if (r == 1) {
-    // select a connection mode
-    std::vector<uint32_t> allowed_modes;
-    messenger->auth_server->get_supported_con_modes(
-      connection->get_peer_type(), auth_meta.auth_method, &allowed_modes);
-    for (auto mode : allowed_modes) {
-      if (std::find(auth_meta.preferred_con_modes.begin(),
-		    auth_meta.preferred_con_modes.end(),
-		    mode) != auth_meta.preferred_con_modes.end()) {
-	auth_meta.con_mode = mode;
-	break;
-      }
-    }
-    if (auth_meta.con_mode == 0) {
-      ldout(cct, 1) << __func__ << " failed to select connection mode, i allow "
-		    << allowed_modes
-		    << ", client prefers " << auth_meta.preferred_con_modes
-		    << dendl;
-      return _auth_bad_method(-EOPNOTSUPP);
-    } else {
-      AuthDoneFrame auth_done(connection->peer_global_id, auth_meta.con_mode,
-			      reply);
-      return WRITE(auth_done.get_buffer(), "auth done", read_frame);
-    }
+    AuthDoneFrame auth_done(connection->peer_global_id, auth_meta.con_mode,
+			    reply);
+    return WRITE(auth_done.get_buffer(), "auth done", read_frame);
   } else if (r == 0) {
     AuthReplyMoreFrame more(reply);
     return WRITE(more.get_buffer(), "auth reply more", read_frame);

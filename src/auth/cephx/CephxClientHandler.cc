@@ -119,7 +119,7 @@ int CephxClientHandler::handle_response(
   int ret,
   bufferlist::const_iterator& indata,
   CryptoKey *session_key,
-  CryptoKey *connection_secret)
+  std::string *connection_secret)
 {
   ldout(cct, 10) << this << " handle_response ret = " << ret << dendl;
   
@@ -178,7 +178,8 @@ int CephxClientHandler::handle_response(
 	      lderr(cct) << __func__ << " failed to decrypt connection_secret"
 			 << dendl;
 	    } else {
-	      ldout(cct, 10) << " got connection_secret " << dendl;
+	      ldout(cct, 10) << " got connection_secret "
+			     << connection_secret->size() << " bytes" << dendl;
 	    }
 	  }
 	  if (extra_tickets.length())  {

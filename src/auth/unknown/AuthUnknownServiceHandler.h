@@ -27,18 +27,20 @@ public:
   ~AuthUnknownServiceHandler() {}
   
   int start_session(const EntityName& name,
+		    size_t connection_secret_required_length,
 		    bufferlist *result_bl,
 		    AuthCapsInfo *caps,
 		    CryptoKey *session_key,
-		    CryptoKey *connection_secret) {
+		    std::string *connection_secret) {
     return 1;
   }
   int handle_request(bufferlist::iterator& indata,
+		     size_t connection_secret_required_length,
 		     bufferlist *result_bl,
 		     uint64_t *global_id,
 		     AuthCapsInfo *caps,
 		     CryptoKey *session_key,
-		     CryptoKey *connection_secret) {
+		     std::string *connection_secret) {
     ceph_abort();  // shouldn't get called
     return 0;
   }
