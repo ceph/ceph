@@ -248,7 +248,8 @@ public:
                Formatter *f, Context *on_finish)
     : MDSInternalContext(mds),
       server(server), mdcache(mdcache), mdlog(mdlog),
-      recall_timeout(recall_timeout), f(f), on_finish(on_finish),
+      recall_timeout(recall_timeout), recall_start(mono_clock::now()),
+      f(f), on_finish(on_finish),
       whoami(mds->whoami), incarnation(mds->incarnation) {
   }
 
@@ -320,11 +321,14 @@ private:
     f->open_object_section("result");
 
     MDSGatherBuilder *gather = new MDSGatherBuilder(g_ceph_context);
-    server->recall_client_state(1.0, true, gather);
+    auto [throttled, count] = server->recall_client_state(gather, Server::RecallFlags::STEADY);
+    dout(10) << __func__
+             << (throttled ? " (throttled)" : "")
+             << " recalled " << count << " caps" << dendl;
+
     if (!gather->has_subs()) {
-      handle_recall_client_state(0);
       delete gather;
-      return;
+      return handle_recall_client_state(0);
     }
 
     C_ContextTimeout *ctx = new C_ContextTimeout(
@@ -416,6 +420,7 @@ private:
   MDCache *mdcache;
   MDLog *mdlog;
   uint64_t recall_timeout;
+  mono_time recall_start;
   Formatter *f;
   Context *on_finish;
 
