@@ -2735,17 +2735,18 @@ CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
     ldout(cct, 1) << __func__
                   << " existing racing replace happened while replacing."
                   << " existing=" << existing << dendl;
-    RetryGlobalFrame retry(this, exproto->peer_global_seq);
-    return WRITE(retry.get_buffer(), "session retry", read_frame);
+    WaitFrame wait;
+    return WRITE(wait.get_buffer(), "wait", read_frame);
   }
 
   if (exproto->peer_global_seq > peer_global_seq) {
     ldout(cct, 1) << __func__ << " this is a stale connection, peer_global_seq="
                   << peer_global_seq
                   << " existing->peer_global_seq=" << exproto->peer_global_seq
-                  << ", ask client to retry global" << dendl;
-    RetryGlobalFrame retry(this, exproto->peer_global_seq);
-    return WRITE(retry.get_buffer(), "session retry", read_frame);
+                  << ", stopping this connection." << dendl;
+    stop();
+    connection->dispatch_queue->queue_reset(connection);
+    return nullptr;
   }
 
   if (existing->policy.lossy) {
