@@ -437,7 +437,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
         return start_boot();
       }
     } else {
-      logger().info("osd.{}: now ???", whoami);
+      logger().info("osd.{}: now {}", whoami, state);
       // XXX
       return seastar::now();
     }
