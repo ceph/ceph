@@ -75,7 +75,7 @@ private:
   char *temp_buffer;
   State state;
   uint64_t peer_required_features;
-  std::shared_ptr<AuthStreamHandler> session_security;
+  AuthStreamHandler::rxtx_t session_security;
 
   uint64_t client_cookie;
   uint64_t server_cookie;
@@ -110,7 +110,6 @@ private:
 
   ostream &_conn_prefix(std::ostream *_dout);
   void run_continuation(Ct<ProtocolV2> *continuation);
-  void calc_signature(const char *in, uint32_t length, char *out);
 
   Ct<ProtocolV2> *read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
                        int len, char *buffer = nullptr);
@@ -198,14 +197,9 @@ public:
   virtual void write_event() override;
   virtual bool is_queued() override;
 
-  void sign_payload(bufferlist &payload);
-  void verify_signature(char *payload, uint32_t length);
-  void encrypt_payload(bufferlist &payload);
-  void decrypt_payload(char *payload, uint32_t &length);
-  void calculate_payload_size(uint32_t length, uint32_t *total_len,
-                              uint32_t *sig_pad_len = nullptr,
-                              uint32_t *enc_pad_len = nullptr);
-
+  uint32_t calculate_payload_size(
+    AuthStreamHandler *stream_handler,
+    uint32_t length);
   // We are doing *authenticated encryption*
   void authencrypt_payload(ceph::bufferlist &payload);
   void authdecrypt_payload(char *payload, uint32_t &length);

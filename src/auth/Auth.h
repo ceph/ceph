@@ -170,10 +170,10 @@ struct AuthConnectionMeta {
 
   int con_mode = 0;  ///< negotiated mode
 
-  bool is_mode_crc() {
+  bool is_mode_crc() const {
     return con_mode == CEPH_CON_MODE_CRC;
   }
-  bool is_mode_secure() {
+  bool is_mode_secure() const {
     return con_mode == CEPH_CON_MODE_SECURE;
   }
 

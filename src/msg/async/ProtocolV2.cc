@@ -42,23 +42,6 @@ const uint64_t msgr2_frame_assumed =
 
 using CtPtr = Ct<ProtocolV2> *;
 
-struct SHA256SignatureError : public std::exception {
-  sha256_digest_t sig1;
-  sha256_digest_t sig2;
-  std::string reason;
-
-  SHA256SignatureError(const char *sig1, const char *sig2)
-      : sig1((const unsigned char *)sig1), sig2((const unsigned char *)sig2) {
-    std::stringstream ss;
-    ss << " signature mismatch: calc signature=" << this->sig1
-       << " msg signature=" << this->sig2;
-    reason = ss.str();
-  }
-
-  const char *what() const throw() { return reason.c_str(); }
-};
-
-struct DecryptionError : public std::exception {};
 
 void ProtocolV2::run_continuation(CtPtr continuation) {
   try {
@@ -75,20 +58,7 @@ void ProtocolV2::run_continuation(CtPtr continuation) {
   }
 }
 
-void ProtocolV2::calc_signature(const char *in, uint32_t length, char *out) {
-  auto secret = auth_meta.session_key.get_secret();
-  ceph::crypto::HMACSHA256 hmac((const unsigned char *)secret.c_str(),
-                                secret.length());
-  hmac.Update((const unsigned char *)in, length);
-  hmac.Final((unsigned char *)out);
-}
-
 const int ASYNC_COALESCE_THRESHOLD = 256;
-
-/* HMAC Block Size
- * Currently we're using only SHA256 for computing the HMAC
- */
-const int SIGNATURE_BLOCK_SIZE = CEPH_CRYPTO_HMACSHA256_DIGESTSIZE;
 
 #define WRITE(B, D, C) write(D, CONTINUATION(C), B)
 
@@ -1093,132 +1063,29 @@ bool ProtocolV2::is_queued() {
   return !out_queue.empty() || connection->is_queued();
 }
 
-void ProtocolV2::sign_payload(bufferlist &payload) {
-  ldout(cct, 21) << __func__ << " len=" << payload.length() << dendl;
-
-  if (false && session_security) {
-    uint32_t pad_len;
-    calculate_payload_size(payload.length(), nullptr, &pad_len);
-    auto padding = bufferptr(buffer::create(pad_len));
-    cct->random()->get_bytes((char *)padding.raw_c_str(), pad_len);
-    payload.push_back(padding);
-
-    auto signature =
-        bufferptr(buffer::create(CEPH_CRYPTO_HMACSHA256_DIGESTSIZE));
-    calc_signature(payload.c_str(), payload.length(),
-                   (char *)signature.raw_c_str());
-
-    uint64_t s1 = *(uint64_t *)signature.raw_c_str();
-    uint64_t s2 = *(uint64_t *)(signature.raw_c_str() + 8);
-    uint64_t s3 = *(uint64_t *)(signature.raw_c_str() + 16);
-    uint64_t s4 = *(uint64_t *)(signature.raw_c_str() + 24);
-    ldout(cct, 15) << __func__ << " payload signature=" << std::hex << s4 << s3
-                   << s2 << s1 << std::dec << dendl;
-
-    payload.push_back(signature);
+uint32_t ProtocolV2::calculate_payload_size(
+  AuthStreamHandler *stream_handler,
+  uint32_t length)
+{
+  if (stream_handler) {
+    return stream_handler->calculate_payload_size(length);
+  } else {
+    return length;
   }
-}
-
-void ProtocolV2::verify_signature(char *payload, uint32_t length) {
-  ldout(cct, 21) << __func__ << " len=" << length << dendl;
-
-  if (false && session_security) {
-    uint32_t payload_len = length - CEPH_CRYPTO_HMACSHA256_DIGESTSIZE;
-    const char *p = payload + payload_len;
-    char signature[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
-    calc_signature(payload, payload_len, signature);
-
-    auto r = memcmp(p, signature, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE);
-
-    if (r != 0) {  // signature mismatch
-      ldout(cct, 1) << __func__ << " signature verification failed" << dendl;
-      throw SHA256SignatureError(signature, p);
-    }
-  }
-}
-
-void ProtocolV2::encrypt_payload(bufferlist &payload) {
-  ldout(cct, 21) << __func__ << " len=" << payload.length() << dendl;
-  if (auth_meta->is_mode_secure()) {
-    uint32_t pad_len;
-    calculate_payload_size(payload.length(), nullptr, nullptr, &pad_len);
-    if (pad_len) {
-      auto padding = bufferptr(buffer::create(pad_len));
-      cct->random()->get_bytes((char *)padding.raw_c_str(), pad_len);
-      payload.push_back(padding);
-    }
-
-    bufferlist tmp;
-    tmp.claim(payload);
-    session_security->encrypt_bufferlist(tmp, payload);
-  }
-}
-
-void ProtocolV2::decrypt_payload(char *payload, uint32_t &length) {
-  ldout(cct, 21) << __func__ << " len=" << length << dendl;
-  if (auth_meta->is_mode_secure() && session_security) {
-    bufferlist in;
-    in.push_back(buffer::create_static(length, payload));
-    bufferlist out;
-    if (session_security->decrypt_bufferlist(in, out) < 0) {
-      throw DecryptionError();
-    }
-    ceph_assert(out.length() <= length);
-    memcpy(payload, out.c_str(), out.length());
-    length = out.length();
-  }
-}
-
-void ProtocolV2::calculate_payload_size(uint32_t length, uint32_t *total_len,
-                                        uint32_t *sig_pad_len,
-                                        uint32_t *enc_pad_len) {
-  bool is_signed = auth_meta->is_mode_secure(); // REMOVE ME
-  bool is_encrypted = auth_meta->is_mode_secure();
-
-  uint32_t sig_pad_l = 0;
-  uint32_t enc_pad_l = 0;
-  uint32_t total_l = length;
-
-  if (is_signed && !is_encrypted) {
-    sig_pad_l = SIGNATURE_BLOCK_SIZE - (length % SIGNATURE_BLOCK_SIZE);
-    total_l += sig_pad_l + SIGNATURE_BLOCK_SIZE;
-  } else if (is_encrypted) {
-    if (is_signed) {
-      total_l += SIGNATURE_BLOCK_SIZE;
-    }
-    uint32_t block_size = auth_meta.session_key.get_max_outbuf_size(0);
-    uint32_t pad_len = block_size - (total_l % block_size);
-    if (is_signed) {
-      sig_pad_l = pad_len;
-    } else if (!is_signed) {
-      enc_pad_l = pad_len;
-    }
-    total_l = auth_meta.session_key.get_max_outbuf_size(total_l + pad_len);
-  }
-
-  if (sig_pad_len) {
-    *sig_pad_len = sig_pad_l;
-  }
-  if (enc_pad_len) {
-    *enc_pad_len = enc_pad_l;
-  }
-  if (total_len) {
-    *total_len = total_l;
-  }
-
-  ldout(cct, 21) << __func__ << " length=" << length << " total_len=" << total_l
-                 << " sig_pad_len=" << sig_pad_l << " enc_pad_len=" << enc_pad_l
-                 << dendl;
 }
 
 void ProtocolV2::authencrypt_payload(bufferlist &payload) {
-  sign_payload(payload);
-  encrypt_payload(payload);
+  // using tx
+  if (session_security.tx) {
+    session_security.tx->authenticated_encrypt(payload);
+  }
 }
 
 void ProtocolV2::authdecrypt_payload(char *payload, uint32_t &length) {
-  decrypt_payload(payload, length);
-  verify_signature(payload, length);
+  // using rx
+  if (session_security.rx) {
+    session_security.rx->authenticated_decrypt(payload, length);
+  }
 }
 
 CtPtr ProtocolV2::read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
@@ -1602,8 +1469,8 @@ CtPtr ProtocolV2::handle_message() {
 #endif
   recv_stamp = ceph_clock_now();
 
-  uint32_t header_len;
-  calculate_payload_size(sizeof(ceph_msg_header2), &header_len);
+  const uint32_t header_len = calculate_payload_size(
+    session_security.rx.get(), sizeof(ceph_msg_header2));
   return READ(header_len, handle_message_header);
 }
 
@@ -1615,8 +1482,8 @@ CtPtr ProtocolV2::handle_message_header(char *buffer, int r) {
     return _fault();
   }
 
-  uint32_t header_len;
-  calculate_payload_size(sizeof(ceph_msg_header2), &header_len);
+  const uint32_t header_len = calculate_payload_size(
+    session_security.rx.get(), sizeof(ceph_msg_header2));
 
   MessageHeaderFrame header_frame(this, buffer, header_len);
   ceph_msg_header2 &header = header_frame.header();
@@ -1853,7 +1720,8 @@ CtPtr ProtocolV2::read_message_data() {
     // the message payload
     ldout(cct, 1) << __func__ << " reading message payload extra bytes left="
                   << next_payload_len << dendl;
-    ceph_assert(session_security && (auth_meta->is_mode_secure()));
+    ceph_assert(session_security.rx && session_security.tx &&
+		auth_meta->is_mode_secure());
     extra.push_back(buffer::create(next_payload_len));
     return READB(next_payload_len, extra.c_str(), handle_message_extra_bytes);
   }
@@ -2244,8 +2112,8 @@ CtPtr ProtocolV2::handle_auth_done(char *payload, uint32_t length) {
   if (r < 0) {
     return _fault();
   }
-  session_security.reset(
-    AuthStreamHandler::create_stream_handler(cct, auth_meta).release());
+  session_security =
+    AuthStreamHandler::create_stream_handler_pair(cct, auth_meta);
 
   if (!server_cookie) {
     ceph_assert(connect_seq == 0);
