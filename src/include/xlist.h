@@ -24,21 +24,16 @@
 template<typename T>
 class xlist {
 public:
-  struct item {
-    T _item;
-    item *_prev, *_next;
-    xlist *_list;
-    
-    item(T i) : _item(i), _prev(0), _next(0), _list(0) {}
+  class item {
+  public:
+    item(T i) : _item(i) {}
     ~item() { 
       ceph_assert(!is_on_list());
-      //remove_myself();
     }
 
     item(const item& other) = delete;
     const item& operator= (const item& right) = delete;
 
-    
     xlist* get_list() { return _list; }
     bool is_on_list() const { return _list ? true:false; }
     bool remove_myself() {
@@ -57,6 +52,12 @@ public:
       ceph_assert(_list);
       _list->push_back(this);
     }
+
+  private:
+    friend xlist;
+    T _item;
+    item *_prev = nullptr, *_next = nullptr;
+    xlist *_list = nullptr;
   };
 
   typedef item* value_type;
