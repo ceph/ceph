@@ -77,7 +77,7 @@ void MDSTableClient::handle_request(const MMDSTableRequest::const_ref &m)
 
       ceph_assert(g_conf()->mds_kill_mdstable_at != 3);
 
-      MDSInternalContextBase *onfinish = pending_prepare[reqid].onfinish;
+      MDSContext *onfinish = pending_prepare[reqid].onfinish;
       *pending_prepare[reqid].ptid = tid;
       if (pending_prepare[reqid].pbl)
 	*pending_prepare[reqid].pbl = m->bl;
@@ -156,7 +156,7 @@ void MDSTableClient::_logged_ack(version_t tid)
 }
 
 void MDSTableClient::_prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl,
-			      MDSInternalContextBase *onfinish)
+			      MDSContext *onfinish)
 {
   if (last_reqid == ~0ULL) {
     dout(10) << "tableserver is not ready yet, waiting for request id" << dendl;

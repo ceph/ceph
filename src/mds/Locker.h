@@ -85,9 +85,9 @@ public:
   void drop_rdlocks_for_early_reply(MutationImpl *mut);
   void drop_locks_for_fragment_unfreeze(MutationImpl *mut);
 
-  void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, MDSInternalContextBase::vec *pfinishers=0);
+  void eval_gather(SimpleLock *lock, bool first=false, bool *need_issue=0, MDSContext::vec *pfinishers=0);
   void eval(SimpleLock *lock, bool *need_issue);
-  void eval_any(SimpleLock *lock, bool *need_issue, MDSInternalContextBase::vec *pfinishers=0, bool first=false) {
+  void eval_any(SimpleLock *lock, bool *need_issue, MDSContext::vec *pfinishers=0, bool first=false) {
     if (!lock->is_stable())
       eval_gather(lock, first, need_issue, pfinishers);
     else if (lock->get_parent()->is_auth())
@@ -103,7 +103,7 @@ public:
   void try_eval(SimpleLock *lock, bool *pneed_issue);
 
   bool _rdlock_kick(SimpleLock *lock, bool as_anon);
-  bool rdlock_try(SimpleLock *lock, client_t client, MDSInternalContextBase *c);
+  bool rdlock_try(SimpleLock *lock, client_t client, MDSContext *c);
   bool rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon=false);
   void rdlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut, bool *pneed_issue);
   bool can_rdlock_set(MutationImpl::LockOpVec& lov);
@@ -127,7 +127,7 @@ public:
   // simple
 public:
   void try_simple_eval(SimpleLock *lock);
-  bool simple_rdlock_try(SimpleLock *lock, MDSInternalContextBase *con);
+  bool simple_rdlock_try(SimpleLock *lock, MDSContext *con);
 protected:
   void simple_eval(SimpleLock *lock, bool *need_issue);
   void handle_simple_lock(SimpleLock *lock, const MLock::const_ref &m);
@@ -145,7 +145,7 @@ public:
   void scatter_eval(ScatterLock *lock, bool *need_issue);        // public for MDCache::adjust_subtree_auth()
 
   void scatter_tick();
-  void scatter_nudge(ScatterLock *lock, MDSInternalContextBase *c, bool forcelockchange=false);
+  void scatter_nudge(ScatterLock *lock, MDSContext *c, bool forcelockchange=false);
 
 protected:
   void handle_scatter_lock(ScatterLock *lock, const MLock::const_ref &m);

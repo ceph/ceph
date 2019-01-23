@@ -2671,7 +2671,7 @@ void EFragment::replay(MDSRank *mds)
   dout(10) << "EFragment.replay " << op_name(op) << " " << ino << " " << basefrag << " by " << bits << dendl;
 
   list<CDir*> resultfrags;
-  MDSInternalContextBase::vec waiters;
+  MDSContext::vec waiters;
 
   // in may be NULL if it wasn't in our cache yet.  if it's a prepare
   // it will be once we replay the metablob , but first we need to

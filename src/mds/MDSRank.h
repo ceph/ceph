@@ -261,7 +261,7 @@ class MDSRank {
     } progress_thread;
 
     list<Message::const_ref> waiting_for_nolaggy;
-    MDSInternalContextBase::que finished_queue;
+    MDSContext::que finished_queue;
     // Dispatch, retry, queues
     int dispatch_depth;
     void inc_dispatch_depth() { ++dispatch_depth; }
@@ -279,12 +279,12 @@ class MDSRank {
 
     ceph_tid_t last_tid;    // for mds-initiated requests (e.g. stray rename)
 
-    MDSInternalContextBase::vec waiting_for_active, waiting_for_replay, waiting_for_rejoin,
+    MDSContext::vec waiting_for_active, waiting_for_replay, waiting_for_rejoin,
 				waiting_for_reconnect, waiting_for_resolve;
-    MDSInternalContextBase::vec waiting_for_any_client_connection;
-    MDSInternalContextBase::que replay_queue;
-    map<mds_rank_t, MDSInternalContextBase::vec > waiting_for_active_peer;
-    map<epoch_t, MDSInternalContextBase::vec > waiting_for_mdsmap;
+    MDSContext::vec waiting_for_any_client_connection;
+    MDSContext::que replay_queue;
+    map<mds_rank_t, MDSContext::vec > waiting_for_active_peer;
+    map<epoch_t, MDSContext::vec > waiting_for_mdsmap;
 
     epoch_t osd_epoch_barrier;
 
@@ -310,18 +310,18 @@ class MDSRank {
     void create_logger();
   public:
 
-    void queue_waiter(MDSInternalContextBase *c) {
+    void queue_waiter(MDSContext *c) {
       finished_queue.push_back(c);
       progress_thread.signal();
     }
-    void queue_waiters(MDSInternalContextBase::vec& ls) {
-      MDSInternalContextBase::vec v;
+    void queue_waiters(MDSContext::vec& ls) {
+      MDSContext::vec v;
       v.swap(ls);
       std::copy(v.begin(), v.end(), std::back_inserter(finished_queue));
       progress_thread.signal();
     }
-    void queue_waiters_front(MDSInternalContextBase::vec& ls) {
-      MDSInternalContextBase::vec v;
+    void queue_waiters_front(MDSContext::vec& ls) {
+      MDSContext::vec v;
       v.swap(ls);
       std::copy(v.rbegin(), v.rend(), std::front_inserter(finished_queue));
       progress_thread.signal();
@@ -393,39 +393,39 @@ class MDSRank {
     void send_message_client(const Message::ref& m, Session* session);
     void send_message(const Message::ref& m, const ConnectionRef& c);
 
-    void wait_for_active_peer(mds_rank_t who, MDSInternalContextBase *c) { 
+    void wait_for_active_peer(mds_rank_t who, MDSContext *c) { 
       waiting_for_active_peer[who].push_back(c);
     }
-    void wait_for_cluster_recovered(MDSInternalContextBase *c) {
+    void wait_for_cluster_recovered(MDSContext *c) {
       ceph_assert(cluster_degraded);
       waiting_for_active_peer[MDS_RANK_NONE].push_back(c);
     }
 
-    void wait_for_any_client_connection(MDSInternalContextBase *c) {
+    void wait_for_any_client_connection(MDSContext *c) {
       waiting_for_any_client_connection.push_back(c);
     }
     void kick_waiters_for_any_client_connection(void) {
       finish_contexts(g_ceph_context, waiting_for_any_client_connection);
     }
-    void wait_for_active(MDSInternalContextBase *c) {
+    void wait_for_active(MDSContext *c) {
       waiting_for_active.push_back(c);
     }
-    void wait_for_replay(MDSInternalContextBase *c) { 
+    void wait_for_replay(MDSContext *c) { 
       waiting_for_replay.push_back(c); 
     }
-    void wait_for_rejoin(MDSInternalContextBase *c) {
+    void wait_for_rejoin(MDSContext *c) {
       waiting_for_rejoin.push_back(c);
     }
-    void wait_for_reconnect(MDSInternalContextBase *c) {
+    void wait_for_reconnect(MDSContext *c) {
       waiting_for_reconnect.push_back(c);
     }
-    void wait_for_resolve(MDSInternalContextBase *c) {
+    void wait_for_resolve(MDSContext *c) {
       waiting_for_resolve.push_back(c);
     }
-    void wait_for_mdsmap(epoch_t e, MDSInternalContextBase *c) {
+    void wait_for_mdsmap(epoch_t e, MDSContext *c) {
       waiting_for_mdsmap[e].push_back(c);
     }
-    void enqueue_replay(MDSInternalContextBase *c) {
+    void enqueue_replay(MDSContext *c) {
       replay_queue.push_back(c);
     }
 
@@ -579,14 +579,14 @@ protected:
  * The finish function calls functions which
  * will put the Message exactly once.*/
 class C_MDS_RetryMessage : public MDSInternalContext {
-protected:
-  Message::const_ref m;
 public:
   C_MDS_RetryMessage(MDSRank *mds, const Message::const_ref &m)
     : MDSInternalContext(mds), m(m) {}
   void finish(int r) override {
-    mds->retry_dispatch(m);
+    get_mds()->retry_dispatch(m);
   }
+protected:
+  Message::const_ref m;
 };
 
 class CF_MDS_RetryMessageFactory : public MDSContextFactory {
@@ -594,7 +594,7 @@ public:
   CF_MDS_RetryMessageFactory(MDSRank *mds, const Message::const_ref &m)
     : mds(mds), m(m) {}
 
-  MDSInternalContextBase *build() {
+  MDSContext *build() {
     return new C_MDS_RetryMessage(mds, m);
   }
 

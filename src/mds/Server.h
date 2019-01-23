@@ -94,7 +94,7 @@ private:
   bool is_full;
 
   // State for while in reconnect
-  MDSInternalContext *reconnect_done;
+  MDSContext *reconnect_done;
   int failed_reconnects;
   bool reconnect_evicting;  // true if I am waiting for evictions to complete
                             // before proceeding to reconnect_gather_finish
@@ -159,7 +159,7 @@ public:
   void finish_reclaim_session(Session *session, const MClientReclaimReply::ref &reply=nullptr);
   void handle_client_reclaim(const MClientReclaim::const_ref &m);
 
-  void reconnect_clients(MDSInternalContext *reconnect_done_);
+  void reconnect_clients(MDSContext *reconnect_done_);
   void handle_client_reconnect(const MClientReconnect::const_ref &m);
   void infer_supported_features(Session *session, client_metadata_t& client_metadata);
   void update_required_client_features();

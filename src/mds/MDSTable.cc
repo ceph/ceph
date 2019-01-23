@@ -58,7 +58,7 @@ public:
   }
 };
 
-void MDSTable::save(MDSInternalContextBase *onfinish, version_t v)
+void MDSTable::save(MDSContext *onfinish, version_t v)
 {
   if (v > 0 && v <= committing_version) {
     dout(10) << "save v " << version << " - already saving "
@@ -104,7 +104,7 @@ void MDSTable::save_2(int r, version_t v)
   dout(10) << "save_2 v " << v << dendl;
   committed_version = v;
   
-  MDSInternalContextBase::vec ls;
+  MDSContext::vec ls;
   while (!waitfor_save.empty()) {
     auto it = waitfor_save.begin();
     if (it->first > v) break;
@@ -150,7 +150,7 @@ object_t MDSTable::get_object_name() const
   return object_t(n);
 }
 
-void MDSTable::load(MDSInternalContextBase *onfinish)
+void MDSTable::load(MDSContext *onfinish)
 { 
   dout(10) << "load" << dendl;
 

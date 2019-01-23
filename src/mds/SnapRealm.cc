@@ -102,13 +102,13 @@ void SnapRealm::remove_open_past_parent(inodeno_t ino, snapid_t last)
   }
 }
 
-struct C_SR_RetryOpenParents : public MDSInternalContextBase {
+struct C_SR_RetryOpenParents : public MDSContext {
   SnapRealm *sr;
   snapid_t first, last, parent_last;
   inodeno_t parent;
-  MDSInternalContextBase* fin;
+  MDSContext* fin;
   C_SR_RetryOpenParents(SnapRealm *s, snapid_t f, snapid_t l, snapid_t pl,
-			inodeno_t p, MDSInternalContextBase *c) :
+			inodeno_t p, MDSContext *c) :
     sr(s), first(f), last(l), parent_last(pl),  parent(p), fin(c) {
     sr->inode->get(CInode::PIN_OPENINGSNAPPARENTS);
   }
@@ -137,7 +137,7 @@ void SnapRealm::_remove_missing_parent(snapid_t snapid, inodeno_t parent, int er
   }
 }
 
-bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, snapid_t last)
+bool SnapRealm::_open_parents(MDSContext *finish, snapid_t first, snapid_t last)
 {
   dout(10) << "open_parents [" << first << "," << last << "]" << dendl;
   if (open) 
@@ -198,7 +198,7 @@ bool SnapRealm::_open_parents(MDSInternalContextBase *finish, snapid_t first, sn
   return true;
 }
 
-bool SnapRealm::open_parents(MDSInternalContextBase *retryorfinish) {
+bool SnapRealm::open_parents(MDSContext *retryorfinish) {
   if (!_open_parents(retryorfinish))
     return false;
   delete retryorfinish;

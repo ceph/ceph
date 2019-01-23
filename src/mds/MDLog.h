@@ -100,7 +100,7 @@ protected:
   friend class ReplayThread;
   friend class C_MDL_Replay;
 
-  MDSInternalContextBase::vec waitfor_replay;
+  MDSContext::vec waitfor_replay;
 
   void _replay();         // old way
   void _replay_thread();  // new way
@@ -108,17 +108,17 @@ protected:
   // Journal recovery/rewrite logic
   class RecoveryThread : public Thread {
     MDLog *log;
-    MDSInternalContextBase *completion;
+    MDSContext *completion;
   public:
-    void set_completion(MDSInternalContextBase *c) {completion = c;}
+    void set_completion(MDSContext *c) {completion = c;}
     explicit RecoveryThread(MDLog *l) : log(l), completion(NULL) {}
     void* entry() override {
       log->_recovery_thread(completion);
       return 0;
     }
   } recovery_thread;
-  void _recovery_thread(MDSInternalContextBase *completion);
-  void _reformat_journal(JournalPointer const &jp, Journaler *old_journal, MDSInternalContextBase *completion);
+  void _recovery_thread(MDSContext *completion);
+  void _reformat_journal(JournalPointer const &jp, Journaler *old_journal, MDSContext *completion);
 
   // -- segments --
   map<uint64_t,LogSegment*> segments;
@@ -215,7 +215,7 @@ private:
   // -- segments --
   void _start_new_segment();
   void _prepare_new_segment();
-  void _journal_segment_subtree_map(MDSInternalContextBase *onsync);
+  void _journal_segment_subtree_map(MDSContext *onsync);
 public:
   void start_new_segment() {
     std::lock_guard l(submit_mutex);
@@ -225,7 +225,7 @@ public:
     std::lock_guard l(submit_mutex);
     _prepare_new_segment();
   }
-  void journal_segment_subtree_map(MDSInternalContextBase *onsync=NULL) {
+  void journal_segment_subtree_map(MDSContext *onsync=NULL) {
     submit_mutex.Lock();
     _journal_segment_subtree_map(onsync);
     submit_mutex.Unlock();
@@ -293,7 +293,7 @@ public:
   }
   bool entry_is_open() const { return cur_event != NULL; }
 
-  void wait_for_safe( MDSInternalContextBase *c );
+  void wait_for_safe( MDSContext *c );
   void flush();
   bool is_flushed() const {
     return unflushed == 0;
@@ -319,14 +319,14 @@ public:
   };
 
 private:
-  void write_head(MDSInternalContextBase *onfinish);
+  void write_head(MDSContext *onfinish);
 
 public:
-  void create(MDSInternalContextBase *onfinish);  // fresh, empty log! 
-  void open(MDSInternalContextBase *onopen);      // append() or replay() to follow!
-  void reopen(MDSInternalContextBase *onopen);
+  void create(MDSContext *onfinish);  // fresh, empty log! 
+  void open(MDSContext *onopen);      // append() or replay() to follow!
+  void reopen(MDSContext *onopen);
   void append();
-  void replay(MDSInternalContextBase *onfinish);
+  void replay(MDSContext *onfinish);
 
   void standby_trim_segments();
 

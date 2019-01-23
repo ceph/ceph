@@ -33,7 +33,7 @@ private:
     set<mds_rank_t> notify_ack_gather;
     mds_rank_t mds;
     MMDSTableRequest::ref reply;
-    MDSInternalContextBase *onfinish;
+    MDSContext *onfinish;
     notify_info_t() : reply(NULL), onfinish(NULL) {}
   };
   map<version_t, notify_info_t> pending_notifies;

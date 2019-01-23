@@ -79,7 +79,7 @@ public:
       get_state() == LOCK_MIX;
   }
 
-  void set_xlock_snap_sync(MDSInternalContextBase *c)
+  void set_xlock_snap_sync(MDSContext *c)
   {
     ceph_assert(get_type() == CEPH_LOCK_IFILE);
     ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE);
@@ -197,7 +197,7 @@ public:
     encode(s, bl);
   }
 
-  void decode_state_rejoin(bufferlist::const_iterator& p, MDSInternalContextBase::vec& waiters, bool survivor) {
+  void decode_state_rejoin(bufferlist::const_iterator& p, MDSContext::vec& waiters, bool survivor) {
     SimpleLock::decode_state_rejoin(p, waiters, survivor);
     if (is_flushing()) {
       set_dirty();
