@@ -8,13 +8,12 @@
 #include "common/Mutex.h"
 #include "include/rados/librados.hpp"
 
-#include "ObjectCacheFile.h"
 #include "SimplePolicy.h"
 
 
 using librados::Rados;
 using librados::IoCtx;
-class ContextWQ;
+class Context;
 
 namespace ceph {
 namespace immutable_obj_cache {
@@ -50,7 +49,6 @@ class ObjectCacheStore
     RadosRef m_rados;
     std::map<uint64_t, librados::IoCtx*> m_ioctxs;
     Mutex m_ioctxs_lock;
-    ObjectCacheFile *m_cache_file;
     Policy* m_policy;
     //TODO(): make this configurable
     int m_dir_num = 10;

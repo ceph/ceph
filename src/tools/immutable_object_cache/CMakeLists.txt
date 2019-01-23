@@ -1,5 +1,4 @@
 set(ceph_immutable_object_cache_files
-  ObjectCacheFile.cc
   ObjectCacheStore.cc
   CacheController.cc
   CacheServer.cc

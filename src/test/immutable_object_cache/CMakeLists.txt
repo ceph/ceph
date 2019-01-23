@@ -2,7 +2,6 @@
 add_executable(unittest_ceph_immutable_obj_cache
   test_main.cc
   test_SimplePolicy.cc
-  test_ObjectCacheFile.cc
   test_DomainSocket.cc
   test_multi_session.cc
   test_object_store.cc

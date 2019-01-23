@@ -149,9 +149,9 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
     cache_dir = "/" + std::to_string(stoul(cache_file_name.substr(pos+1)) % m_dir_num);
   }
   // write to cache
-  ObjectCacheFile cache_file(m_cct, cache_dir + "/" + cache_file_name);
+  std::string cache_file_path = cache_dir + "/" + cache_file_name;
 
-  ret = cache_file.write_object_to_file(*read_buf, file_size);
+  ret = read_buf->write_file(cache_file_path.c_str());
   if (ret < 0) {
     lderr(m_cct) << "fail to write cache file" << dendl;
 
