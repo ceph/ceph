@@ -1216,7 +1216,7 @@ inline namespace v14_2_0 {
 
     void write_stream(std::ostream &out) const;
     void hexdump(std::ostream &out, bool trailing_newline = true) const;
-    int pread_file(const char *fn, uint64_t off, uint64_t len, std::string *error);
+    ssize_t pread_file(const char *fn, uint64_t off, uint64_t len, std::string *error);
     int read_file(const char *fn, std::string *error);
     ssize_t read_fd(int fd, size_t len);
     int write_file(const char *fn, int mode=0644);
