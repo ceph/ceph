@@ -62,14 +62,17 @@ class RadosZone(Zone):
             b1 = self.get_bucket(bucket_name)
             b2 = zone_conn.get_bucket(bucket_name)
 
+            b1_versions = b1.list_versions()
             log.debug('bucket1 objects:')
-            for o in b1.get_all_versions():
-                log.debug('o=%s', o.name)
-            log.debug('bucket2 objects:')
-            for o in b2.get_all_versions():
+            for o in b1_versions:
                 log.debug('o=%s', o.name)
 
-            for k1, k2 in zip_longest(b1.get_all_versions(), b2.get_all_versions()):
+            b2_versions = b2.list_versions()
+            log.debug('bucket2 objects:')
+            for o in b2_versions:
+                log.debug('o=%s', o.name)
+
+            for k1, k2 in zip_longest(b1_versions, b2_versions):
                 if k1 is None:
                     log.critical('key=%s is missing from zone=%s', k2.name, self.name)
                     assert False
