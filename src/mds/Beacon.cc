@@ -390,35 +390,39 @@ void Beacon::notify_health(MDSRank const *mds)
   {
     set<Session*> sessions;
     mds->sessionmap.get_client_session_set(sessions);
+    auto now = clock::now();
 
-    auto mds_recall_state_timeout = g_conf->mds_recall_state_timeout;
-    auto last_recall = mds->mdcache->last_recall_state;
-    auto last_recall_span = std::chrono::duration<double>(clock::now()-last_recall).count();
-    bool recall_state_timedout = last_recall_span > mds_recall_state_timeout;
+    const auto mds_recall_state_timeout = g_conf->mds_recall_state_timeout;
+    const auto last_recall = mds->server->last_recalled();
+    const auto last_recall_span = std::chrono::duration<double>(clock::now()-last_recall).count();
+    const bool recall_state_timedout = last_recall_span > mds_recall_state_timeout;
 
     std::list<MDSHealthMetric> late_recall_metrics;
     std::list<MDSHealthMetric> large_completed_requests_metrics;
     for (auto& session : sessions) {
-      if (session->recalled_at != Session::time::min()) {
-        auto last_recall_sent = session->last_recall_sent;
-        auto recalled_at = session->recalled_at;
-        auto recalled_at_span = std::chrono::duration<double>(clock::now()-recalled_at).count();
+      const auto& recall_release_count = session->recall_release_count;
+      const auto& recall_count = session->recall_count;
+      if (recall_release_count < recall_count) {
+        const auto& recalled_at = session->recalled_at;
+        const auto& released_at = session->released_at;
+        const auto recalled_at_span = std::chrono::duration<double>(now-recalled_at).count();
+        const auto released_at_span = std::chrono::duration<double>(now-released_at).count();
 
-        dout(20) << "Session servicing RECALL " << session->info.inst
-          << ": " << recalled_at_span << "s ago " << session->recall_release_count
-          << "/" << session->recall_count << dendl;
-	if (recall_state_timedout || last_recall_sent < last_recall) {
+        dout(20) << "Session " << session->info.inst
+          << " last released " << recall_release_count << "/" << recall_count << " caps "
+          << released_at_span << "s ago " << dendl;
+	if (recall_state_timedout) {
 	  dout(20) << "  no longer recall" << dendl;
-	  session->clear_recalled_at();
-	} else if (recalled_at_span > mds_recall_state_timeout) {
-          dout(20) << "  exceeded timeout " << recalled_at_span << " vs. " << mds_recall_state_timeout << dendl;
+          session->clear_recalled();
+	} else if (released_at_span > mds_recall_state_timeout && recalled_at_span > mds_recall_state_timeout) {
+          dout(20) << "  exceeded timeout " << released_at_span << " vs. " << mds_recall_state_timeout << dendl;
           std::ostringstream oss;
 	  oss << "Client " << session->get_human_name() << " failing to respond to cache pressure";
           MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL, HEALTH_WARN, oss.str());
           m.metadata["client_id"] = stringify(session->get_client());
           late_recall_metrics.push_back(m);
         } else {
-          dout(20) << "  within timeout " << recalled_at_span << " vs. " << mds_recall_state_timeout << dendl;
+          dout(20) << "  within timeout " << released_at_span << " vs. " << mds_recall_state_timeout << dendl;
         }
       }
       if ((session->get_num_trim_requests_warnings() > 0 &&

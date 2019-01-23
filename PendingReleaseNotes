@@ -5,6 +5,10 @@
   via the `ceph tell mds.<foo> cache drop` command or large reductions in the
   cache size will no longer cause service unavailability.
 
+* The CephFS MDS behavior with recalling caps has been significantly improved
+  to not attempt recalling too many caps at once, leading to instability.
+  MDS with a large cache (64GB+) should be more stable.
+
 * The `cache drop` admin socket command has been removed. The `ceph tell mds.X
   cache drop` remains.
 

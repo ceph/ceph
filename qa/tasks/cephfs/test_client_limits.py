@@ -47,7 +47,6 @@ class TestClientLimits(CephFSTestCase):
 
         mds_min_caps_per_client = int(self.fs.get_config("mds_min_caps_per_client"))
         self.assertTrue(open_files >= mds_min_caps_per_client)
-        mds_max_ratio_caps_per_client = float(self.fs.get_config("mds_max_ratio_caps_per_client"))
 
         mount_a_client_id = self.mount_a.get_global_id()
         path = "subdir/mount_a" if use_subdir else "mount_a"
@@ -84,12 +83,11 @@ class TestClientLimits(CephFSTestCase):
 
         # The remaining caps should comply with the numbers sent from MDS in SESSION_RECALL message,
         # which depend on the caps outstanding, cache size and overall ratio
-        recall_expected_value = int((1.0-mds_max_ratio_caps_per_client)*(open_files+2))
         def expected_caps():
             num_caps = self.get_session(mount_a_client_id)['num_caps']
             if num_caps <= mds_min_caps_per_client:
                 return True
-            elif recall_expected_value*.95 <= num_caps <= recall_expected_value*1.05:
+            elif num_caps < cache_size:
                 return True
             else:
                 return False
