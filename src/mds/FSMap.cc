@@ -15,6 +15,8 @@
 
 #include "FSMap.h"
 
+#include "common/StackStringStream.h"
+
 #include <sstream>
 #ifdef WITH_SEASTAR
 #include "crimson/common/config_proxy.h"
@@ -100,8 +102,8 @@ void FSMap::print(ostream& out) const
     out << "No filesystems configured" << std::endl;
   }
 
-  for (const auto &fs : filesystems) {
-    fs.second->print(out);
+  for (const auto& p : filesystems) {
+    p.second->print(out);
     out << " " << std::endl << " " << std::endl;  // Space out a bit
   }
 
@@ -119,23 +121,53 @@ void FSMap::print(ostream& out) const
 
 void FSMap::print_summary(Formatter *f, ostream *out) const
 {
-  map<mds_role_t,string> by_rank;
-  map<string,int> by_state;
-
   if (f) {
     f->dump_unsigned("epoch", get_epoch());
-    for (auto i : filesystems) {
-      auto fs = i.second;
+    for (const auto &p : filesystems) {
+      auto& fs = p.second;
       f->dump_unsigned("id", fs->fscid);
       f->dump_unsigned("up", fs->mds_map.up.size());
       f->dump_unsigned("in", fs->mds_map.in.size());
       f->dump_unsigned("max", fs->mds_map.max_mds);
     }
   } else {
-    for (auto i : filesystems) {
-      auto fs = i.second;
-      *out << fs->mds_map.fs_name << "-" << fs->mds_map.up.size() << "/"
-	   << fs->mds_map.in.size() << "/" << fs->mds_map.max_mds << " up ";
+    auto count = filesystems.size();
+    if (count <= 3) {
+      bool first = true;
+      for (const auto& p : filesystems) {
+        const auto& fs = p.second;
+        if (!first) {
+          *out << " ";
+        }
+        if (fs->mds_map.is_degraded()) {
+          *out << fs->mds_map.fs_name << ":" << fs->mds_map.up.size() << "/" << fs->mds_map.in.size();
+        } else {
+          *out << fs->mds_map.fs_name << ":" << fs->mds_map.in.size();
+        }
+        first = false;
+      }
+    } else {
+      *out << count << " fs";
+      unsigned degraded = 0;
+      CachedStackStringStream css;
+      *css << " (degraded: ";
+      for (const auto& p : filesystems) {
+        const auto& fs = p.second;
+        if (fs->mds_map.is_degraded()) {
+          degraded++;
+          if (degraded <= 3) {
+            *css << fs->mds_map.fs_name << ":" << fs->mds_map.up.size() << "/" << fs->mds_map.in.size();
+          }
+        }
+      }
+      if (degraded > 0) {
+        if (degraded <= 3) {
+          *css << ")";
+          *out << css->strv();
+        } else {
+          *out << " (degraded: " << degraded << " fs)";
+        }
+      }
     }
   }
 
@@ -143,70 +175,77 @@ void FSMap::print_summary(Formatter *f, ostream *out) const
     f->open_array_section("by_rank");
   }
 
-  const auto all_info = get_mds_info();
-  for (const auto &p : all_info) {
-    const auto &info = p.second;
-    string s = ceph_mds_state_name(info.state);
+  std::map<MDSMap::DaemonState,unsigned> by_state;
+  std::map<mds_role_t, std::string> by_rank;
+  for (const auto& [gid, fscid] : mds_roles) {
+    if (fscid == FS_CLUSTER_ID_NONE)
+      continue;
+
+    const auto& info = filesystems.at(fscid)->mds_map.get_info_gid(gid);
+    auto s = std::string(ceph_mds_state_name(info.state));
     if (info.laggy()) {
       s += "(laggy or crashed)";
     }
 
-    const fs_cluster_id_t fscid = mds_roles.at(info.global_id);
-
-    if (info.rank != MDS_RANK_NONE &&
-        info.state != MDSMap::STATE_STANDBY_REPLAY) {
-      if (f) {
-        f->open_object_section("mds");
-        f->dump_unsigned("filesystem_id", fscid);
-        f->dump_unsigned("rank", info.rank);
-        f->dump_string("name", info.name);
-        f->dump_string("status", s);
-        f->close_section();
-      } else {
-        by_rank[mds_role_t(fscid, info.rank)] = info.name + "=" + s;
-      }
+    if (f) {
+      f->open_object_section("mds");
+      f->dump_unsigned("filesystem_id", fscid);
+      f->dump_unsigned("rank", info.rank);
+      f->dump_string("name", info.name);
+      f->dump_string("status", s);
+      f->dump_unsigned("gid", gid);
+      f->close_section();
     } else {
-      by_state[s]++;
+      by_rank[mds_role_t(fscid, info.rank)] = info.name + "=" + s;
     }
+    by_state[info.state]++;
   }
 
   if (f) {
     f->close_section();
   } else {
-    if (!by_rank.empty()) {
+    if (0 < by_rank.size() && by_rank.size() < 5) {
       if (filesystems.size() > 1) {
         // Disambiguate filesystems
         std::map<std::string, std::string> pretty;
-        for (auto i : by_rank) {
-          const auto &fs_name = filesystems.at(i.first.fscid)->mds_map.fs_name;
-          std::ostringstream o;
-          o << "[" << fs_name << ":" << i.first.rank << "]";
-          pretty[o.str()] = i.second;
+        for (const auto& [role,status] : by_rank) {
+          const auto &fs_name = filesystems.at(role.fscid)->mds_map.fs_name;
+          CachedStackStringStream css;
+          *css << fs_name << ":" << role.rank;
+          pretty.emplace(std::piecewise_construct, std::forward_as_tuple(css->strv()), std::forward_as_tuple(status));
         }
         *out << " " << pretty;
       } else {
         // Omit FSCID in output when only one filesystem exists
         std::map<mds_rank_t, std::string> shortened;
-        for (auto i : by_rank) {
-          shortened[i.first.rank] = i.second;
+        for (const auto& [role,status] : by_rank) {
+          shortened[role.rank] = status;
         }
         *out << " " << shortened;
+      }
+    } else {
+      for (const auto& [state, count] : by_state) {
+        auto s = std::string_view(ceph_mds_state_name(state));
+        *out << " " << count << " " << s;
       }
     }
   }
 
-  for (map<string,int>::reverse_iterator p = by_state.rbegin(); p != by_state.rend(); ++p) {
+  {
+    auto state = MDSMap::DaemonState::STATE_STANDBY;
+    auto name = ceph_mds_state_name(state);
+    auto count = standby_daemons.size();
     if (f) {
-      f->dump_unsigned(p->first.c_str(), p->second);
+      f->dump_unsigned(name, count);
     } else {
-      *out << ", " << p->second << " " << p->first;
+      *out << ", " << count << " " << name;
     }
   }
 
   size_t failed = 0;
   size_t damaged = 0;
-  for (auto i : filesystems) {
-    auto fs = i.second;
+  for (const auto& p : filesystems) {
+    auto& fs = p.second;
     failed += fs->mds_map.failed.size();
     damaged += fs->mds_map.damaged.size();
   }
