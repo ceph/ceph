@@ -1724,7 +1724,7 @@ void buffer::list::decode_base64(buffer::list& e)
   push_back(std::move(bp));
 }
 
-int buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std::string *error)
+ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std::string *error)
 {
   int fd = TEMP_FAILURE_RETRY(::open(fn, O_RDONLY|O_CLOEXEC));
   if (fd < 0) {
@@ -1749,9 +1749,10 @@ int buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std::st
 
   if (off > st.st_size) {
     std::ostringstream oss;
-    oss << "bufferlist::read_file(" << fn << "): read error: size < offset";
+    oss << "bufferlist::read_file(" << fn << "): read error: size < offset "
+        << cpp_strerror(-1);
     VOID_TEMP_FAILURE_RETRY(::close(fd));
-    return -1;
+    return 0;
   }
 
   if (len > st.st_size - off) {
