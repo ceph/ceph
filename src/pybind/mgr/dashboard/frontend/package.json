@@ -93,7 +93,7 @@
     "jest-canvas-mock": "1.1.0",
     "jest-preset-angular": "6.0.2",
     "jest-silent-reporter": "0.1.1",
-    "prettier": "1.14.3",
+    "prettier": "1.16.4",
     "protractor": "5.4.2",
     "replace-in-file": "^3.4.2",
     "ts-node": "7.0.1",

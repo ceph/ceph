@@ -57,8 +57,8 @@ export class TableActionsComponent implements OnInit {
   }
 
   private updateDropDownActions() {
-    this.dropDownActions = this.tableActions.filter(
-      (action) => (action.visible ? action.visible(this.selection) : action)
+    this.dropDownActions = this.tableActions.filter((action) =>
+      action.visible ? action.visible(this.selection) : action
     );
   }
 
