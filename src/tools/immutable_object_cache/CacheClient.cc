@@ -111,7 +111,6 @@ namespace immutable_obj_cache {
 
     req->m_data.m_pool_id = pool_id;
     req->m_data.m_snap_id = snap_id;
-    req->m_data.m_pool_name = "";
     req->m_data.m_pool_namespace = pool_nspace;
     req->m_data.m_oid = oid;
     req->m_process_msg = on_finish;
