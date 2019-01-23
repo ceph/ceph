@@ -839,8 +839,8 @@ namespace crimson {
 			AtLimitParam at_limit_param,
 			double _anticipation_timeout) :
 	client_info_f(_client_info_f),
-	at_limit(get_or_default<AtLimit>(at_limit_param, AtLimit::Reject)),
-	reject_threshold(get_or_default<RejectThreshold>(at_limit_param, 0)),
+	at_limit(get_or_default(at_limit_param, AtLimit::Reject)),
+	reject_threshold(get_or_default(at_limit_param, RejectThreshold{0})),
 	anticipation_timeout(_anticipation_timeout),
 	finishing(false),
 	idle_age(std::chrono::duration_cast<Duration>(_idle_age)),
