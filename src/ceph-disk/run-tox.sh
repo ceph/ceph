@@ -16,7 +16,7 @@
 #
 
 # run from the ceph-disk directory or from its parent
-: ${CEPH_DISK_VIRTUALENV:=/tmp/ceph-disk-virtualenv}
+: ${CEPH_DISK_VIRTUALENV:=$CEPH_BUILD_DIR/ceph-disk-virtualenv}
 test -d ceph-disk && cd ceph-disk
 
 if [ -e tox.ini ]; then
