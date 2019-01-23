@@ -654,7 +654,10 @@ CtPtr ProtocolV2::_fault() {
 
   connection->write_lock.unlock();
 
-  if (state != START_CONNECT && state != CONNECTING && state != WAIT) {
+  if (state != START_CONNECT &&
+      state != CONNECTING &&
+      state != WAIT &&
+      state != ACCEPTING_SESSION /* due to connection race */) {
     // policy maybe empty when state is in accept
     if (connection->policy.server) {
       ldout(cct, 1) << __func__ << " server, going to standby" << dendl;
