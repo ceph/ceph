@@ -255,7 +255,7 @@ class Orchestrator(object):
         assert not (service_name and service_id)
         raise NotImplementedError()
 
-    def create_osds(self, drive_group, all_hosts):
+    def create_osds(self, drive_group, all_hosts=None):
         # type: (DriveGroupSpec, List[str]) -> WriteCompletion
         """
         Create one or more OSDs within a single Drive Group.
@@ -267,6 +267,9 @@ class Orchestrator(object):
 
         :param drive_group: DriveGroupSpec
         :param all_hosts: TODO, this is required because the orchestrator methods are not composable
+                Probably this parameter can be easily removed because each orchestrator can use
+                the "get_inventory" method and the "drive_group.host_pattern" attribute
+                to obtain the list of hosts where to apply the operation
         """
         raise NotImplementedError()
 
@@ -278,10 +281,9 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_osds(self, node, osd_ids):
-        # type: (str, List[str]) -> WriteCompletion
+    def remove_osds(self, osd_ids):
+        # type: (List[str]) -> WriteCompletion
         """
-        :param node: A node name, must exist.
         :param osd_ids: list of OSD IDs
 
         Note that this can only remove OSDs that were successfully

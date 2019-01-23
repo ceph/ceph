@@ -117,6 +117,17 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             "cmd": "orchestrator status",
             "desc": "Report configured backend and its status",
             "perm": "r"
+        },
+        {   'cmd': "orchestrator osd create "
+                   "name=drive_group,type=CephString,req=false ",
+            "desc": "OSD's creation following specification \
+                     in <drive_group> parameter or readed from -i <file> input.",
+            "perm": "rw"
+        },
+        {   'cmd': "orchestrator osd remove "
+                   "name=osd_ids,type=CephInt,n=N ",
+            "desc": "Remove Osd's",
+            "perm": "rw"
         }
     ]
 
@@ -228,14 +239,68 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         spec = orchestrator.DriveGroupSpec(node_name, data_devices=devs)
 
         # TODO: Remove this and make the orchestrator composable
+        # or
+        # Probably this should be moved to each of the orchestrators,
+        # then we wouldn't need the "all_hosts" parameter at all.
         host_completion = self.get_hosts()
         self.wait([host_completion])
         all_hosts = [h.name for h in host_completion.result]
+
+        completion = self.create_osds(spec, all_hosts=all_hosts)
+        self._orchestrator_wait([completion])
+
+        return HandleCommandResult()
+
+    def _create_osd(self, inbuf, cmd):
+        """Create one or more OSDs
+
+        :cmd : Arguments for the create osd
+        """
+        #Obtain/validate parameters for the operation
+        cmdline_error = ""
+        if "drive_group" in cmd.keys():
+            params = cmd["drive_group"]
+        elif inbuf:
+            params = inbuf
+        else:
+            cmdline_error = "Please, use 'drive_group' parameter \
+                             or specify -i <input file>"
+
+        if cmdline_error:
+            return HandleCommandResult(-errno.EINVAL, stderr=cmdline_error)
 
         try:
             json_dg = json.loads(params)
         except ValueError as msg:
             return HandleCommandResult(-errno.EINVAL, stderr=msg)
+
+        # Create the drive group
+        drive_group = orchestrator.DriveGroupSpec.from_json(json_dg)
+        #Read other Drive_group
+
+        #Launch the operation in the orchestrator module
+        completion = self.create_osds(drive_group)
+
+        #Wait until the operation finishes
+        self._orchestrator_wait([completion])
+
+        #return result
+        return HandleCommandResult(stdout=completion.result)
+
+    def _remove_osd(self, cmd):
+        """
+        Remove OSD's
+        :cmd : Arguments for remove the osd
+        """
+
+        #Launch the operation in the orchestrator module
+        completion = self.remove_osds(cmd["osd_ids"])
+
+        #Wait until the operation finishes
+        self._orchestrator_wait([completion])
+
+        #return result
+        return HandleCommandResult(stdout=completion.result)
 
     def _add_stateless_svc(self, svc_type, spec):
         completion = self.add_stateless_service(svc_type, spec)
@@ -328,7 +393,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             enabled = module['name'] in mgr_map['modules']
             if not enabled:
                 return HandleCommandResult(-errno.EINVAL,
-                                           stdout="Module '{module_name}' is not enabled. \n Run "
+                                           stderr="Module '{module_name}' is not enabled. \n Run "
                                                   "`ceph mgr module enable {module_name}` "
                                                   "to enable.".format(module_name=module_name))
 
@@ -352,7 +417,8 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         try:
             avail, why = self.available()
         except NoOrchestrator:
-            return HandleCommandResult(stderr="No orchestrator configured (try "
+            return HandleCommandResult(-errno.ENODEV,
+                                       stderr="No orchestrator configured (try "
                                        "`ceph orchestrator set backend`)")
 
         if avail is None:
@@ -406,5 +472,9 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             return self._set_backend(cmd)
         elif cmd['prefix'] == "orchestrator status":
             return self._status()
+        elif cmd['prefix'] == "orchestrator osd create":
+            return self._create_osd(_, cmd)
+        elif cmd['prefix'] == "orchestrator osd remove":
+            return self._remove_osd(cmd)
         else:
             raise NotImplementedError()
