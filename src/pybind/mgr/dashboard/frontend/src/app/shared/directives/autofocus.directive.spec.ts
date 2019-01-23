@@ -8,18 +8,20 @@ import { AutofocusDirective } from './autofocus.directive';
 @Component({
   template: `
     <form>
-      <input id="x" type="text">
-      <input id="y" type="password" autofocus>
-    </form>`
+      <input id="x" type="text" />
+      <input id="y" type="password" autofocus />
+    </form>
+  `
 })
 export class PasswordFormComponent {}
 
 @Component({
   template: `
     <form>
-      <input id="x" type="checkbox" autofocus>
-      <input id="y" type="text">
-    </form>`
+      <input id="x" type="checkbox" autofocus />
+      <input id="y" type="text" />
+    </form>
+  `
 })
 export class CheckboxFormComponent {}
 

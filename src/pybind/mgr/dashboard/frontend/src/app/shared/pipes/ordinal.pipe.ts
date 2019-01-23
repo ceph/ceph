@@ -14,12 +14,12 @@ export class OrdinalPipe implements PipeTransform {
       (Math.floor(num / 10) === 1
         ? 'th'
         : num % 10 === 1
-          ? 'st'
-          : num % 10 === 2
-            ? 'nd'
-            : num % 10 === 3
-              ? 'rd'
-              : 'th')
+        ? 'st'
+        : num % 10 === 2
+        ? 'nd'
+        : num % 10 === 3
+        ? 'rd'
+        : 'th')
     );
   }
 }
