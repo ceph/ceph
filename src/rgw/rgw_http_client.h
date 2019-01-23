@@ -76,6 +76,7 @@ class RGWHTTPClient : public RGWIOProvider
   bufferlist::iterator send_iter;
   bool has_send_len;
   long http_status;
+  bool send_data_hint{false};
   size_t receive_pause_skip{0}; /* how many bytes to skip next time receive_data is called
                                    due to being paused */
 
@@ -86,6 +87,7 @@ class RGWHTTPClient : public RGWIOProvider
   bool verify_ssl; // Do not validate self signed certificates, default to false
 
   std::atomic<unsigned> stopped { 0 };
+
 
 protected:
   CephContext *cct;
@@ -99,8 +101,7 @@ protected:
 
   RGWHTTPManager *get_manager();
 
-  int init_request(rgw_http_req_data *req_data,
-                   bool send_data_hint = false);
+  int init_request(rgw_http_req_data *req_data);
 
   virtual int receive_header(void *ptr, size_t len) {
     return 0;
@@ -165,6 +166,9 @@ public:
     has_send_len = true;
   }
 
+  void set_send_data_hint(bool hint) {
+    send_data_hint = hint;
+  }
 
   long get_http_status() const {
     return http_status;
@@ -347,7 +351,7 @@ public:
   int start();
   void stop();
 
-  int add_request(RGWHTTPClient *client, bool send_data_hint = false);
+  int add_request(RGWHTTPClient *client);
   int remove_request(RGWHTTPClient *client);
   int set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetState state);
 };
