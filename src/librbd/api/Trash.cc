@@ -284,11 +284,12 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
     return r;
   }
 
-  std::remove_if(trash_entries.begin(), trash_entries.end(),
-      [](librbd::trash_image_info_t info) {
-        return info.source != RBD_TRASH_IMAGE_SOURCE_USER;
-      }
-  );
+  trash_entries.erase(
+      std::remove_if(trash_entries.begin(), trash_entries.end(),
+                     [](librbd::trash_image_info_t info) {
+                       return info.source != RBD_TRASH_IMAGE_SOURCE_USER;
+                     }),
+      trash_entries.end());
 
   std::set<std::string> to_be_removed;
   if (threshold != -1) {
