@@ -329,7 +329,7 @@ public:
 				std::map<client_t,client_metadata_t>& exported_client_metadata_map);
   void finish_export_inode(CInode *in, mds_rank_t target,
 			   std::map<client_t,Capability::Import>& peer_imported,
-			   MDSInternalContextBase::vec& finished);
+			   MDSContext::vec& finished);
   void finish_export_inode_caps(CInode *in, mds_rank_t target,
 			        std::map<client_t,Capability::Import>& peer_imported);
 
@@ -340,7 +340,7 @@ public:
 			std::map<client_t,client_metadata_t>& exported_client_metadata_map);
   void finish_export_dir(CDir *dir, mds_rank_t target,
 			 std::map<inodeno_t,std::map<client_t,Capability::Import> >& peer_imported,
-			 MDSInternalContextBase::vec& finished, int *num_dentries);
+			 MDSContext::vec& finished, int *num_dentries);
 
   void clear_export_proxy_pins(CDir *dir);
 

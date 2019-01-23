@@ -263,7 +263,7 @@ public:
 private:
   uint32_t cap_gen = 0;
   version_t cap_push_seq = 0;        // cap push seq #
-  map<version_t, MDSInternalContextBase::vec > waitfor_flush; // flush session messages
+  map<version_t, MDSContext::vec > waitfor_flush; // flush session messages
 
 public:
   xlist<Capability*> caps;     // inodes with caps; front=most recently used
@@ -277,11 +277,11 @@ public:
   version_t inc_push_seq() { return ++cap_push_seq; }
   version_t get_push_seq() const { return cap_push_seq; }
 
-  version_t wait_for_flush(MDSInternalContextBase* c) {
+  version_t wait_for_flush(MDSContext* c) {
     waitfor_flush[get_push_seq()].push_back(c);
     return get_push_seq();
   }
-  void finish_flush(version_t seq, MDSInternalContextBase::vec& ls) {
+  void finish_flush(version_t seq, MDSContext::vec& ls) {
     while (!waitfor_flush.empty()) {
       auto it = waitfor_flush.begin();
       if (it->first > seq)
@@ -536,7 +536,7 @@ protected:
 public:
   map<int,xlist<Session*>* > by_state;
   uint64_t set_state(Session *session, int state);
-  map<version_t, MDSInternalContextBase::vec > commit_waiters;
+  map<version_t, MDSContext::vec > commit_waiters;
   void update_average_session_age();
 
   SessionMap() = delete;
@@ -688,11 +688,11 @@ public:
 
   // -- loading, saving --
   inodeno_t ino;
-  MDSInternalContextBase::vec waiting_for_load;
+  MDSContext::vec waiting_for_load;
 
   object_t get_object_name() const;
 
-  void load(MDSInternalContextBase *onload);
+  void load(MDSContext *onload);
   void _load_finish(
       int operation_r,
       int header_r,
@@ -705,7 +705,7 @@ public:
   void load_legacy();
   void _load_legacy_finish(int r, bufferlist &bl);
 
-  void save(MDSInternalContextBase *onsave, version_t needv=0);
+  void save(MDSContext *onsave, version_t needv=0);
   void _save_finish(version_t v);
 
 protected:

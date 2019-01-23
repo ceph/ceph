@@ -8,7 +8,7 @@
 uint64_t MDSCacheObject::last_wait_seq = 0;
 
 void MDSCacheObject::finish_waiting(uint64_t mask, int result) {
-  MDSInternalContextBase::vec finished;
+  MDSContext::vec finished;
   take_waiting(mask, finished);
   finish_contexts(g_ceph_context, finished, result);
 }

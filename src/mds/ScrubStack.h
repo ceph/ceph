@@ -78,7 +78,7 @@ public:
    *               was initiated
    */
   void enqueue_inode_top(CInode *in, ScrubHeaderRef& header,
-			 MDSInternalContextBase *on_finish) {
+			 MDSContext *on_finish) {
     enqueue_inode(in, header, on_finish, true);
     scrub_origins.emplace(in);
   }
@@ -86,7 +86,7 @@ public:
    * starting this one.
    */
   void enqueue_inode_bottom(CInode *in, ScrubHeaderRef& header,
-			    MDSInternalContextBase *on_finish) {
+			    MDSContext *on_finish) {
     enqueue_inode(in, header, on_finish, false);
     scrub_origins.emplace(in);
   }
@@ -153,9 +153,9 @@ private:
    * the given scrub params, and then try and kick off more scrubbing.
    */
   void enqueue_inode(CInode *in, ScrubHeaderRef& header,
-                      MDSInternalContextBase *on_finish, bool top);
+                      MDSContext *on_finish, bool top);
   void _enqueue_inode(CInode *in, CDentry *parent, ScrubHeaderRef& header,
-                      MDSInternalContextBase *on_finish, bool top);
+                      MDSContext *on_finish, bool top);
   /**
    * Kick off as many scrubs as are appropriate, based on the current
    * state of the stack.
