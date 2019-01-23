@@ -7035,22 +7035,6 @@ static std::vector<Option> get_rbd_options() {
     .set_default(false)
     .set_description("whether to block writes to the cache before the aio_write call completes"),
 
-    Option("immutable_object_cache_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("/tmp")
-    .set_description("immutable object cache data dir"),
-
-    Option("immutable_object_cache_sock", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("/var/run/ceph/immutable_object_cache_sock")
-    .set_description("immutable object cache domain socket"),
-
-    Option("immutable_object_cache_max_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(1_G)
-    .set_description("max immutable object cache data size"),
-
-    Option("immutable_object_cache_max_inflight_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(128)
-    .set_description("max immutable object caching inflight ops"),
-
     Option("rbd_concurrent_management_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)
     .set_min(1)
@@ -7401,6 +7385,26 @@ static std::vector<Option> get_rbd_mirror_options() {
                           "mgr_stats_threshold.")
     .set_min_max((int64_t)PerfCountersBuilder::PRIO_DEBUGONLY,
                  (int64_t)PerfCountersBuilder::PRIO_CRITICAL + 1),
+  });
+}
+
+static std::vector<Option> get_immutable_object_cache_options() {
+  return std::vector<Option>({
+    Option("immutable_object_cache_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/tmp")
+    .set_description("immutable object cache data dir"),
+
+    Option("immutable_object_cache_sock", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("/var/run/ceph/immutable_object_cache_sock")
+    .set_description("immutable object cache domain socket"),
+
+    Option("immutable_object_cache_max_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(1_G)
+    .set_description("max immutable object cache data size"),
+
+    Option("immutable_object_cache_max_inflight_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(128)
+    .set_description("max immutable object caching inflight ops"),
   });
 }
 
@@ -8157,6 +8161,7 @@ static std::vector<Option> build_options()
   ingest(get_rgw_options(), "rgw");
   ingest(get_rbd_options(), "rbd");
   ingest(get_rbd_mirror_options(), "rbd-mirror");
+  ingest(get_immutable_object_cache_options(), "immutable-objet-cache");
   ingest(get_mds_options(), "mds");
   ingest(get_mds_client_options(), "mds_client");
 
