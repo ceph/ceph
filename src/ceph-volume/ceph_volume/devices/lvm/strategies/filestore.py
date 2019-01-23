@@ -52,6 +52,9 @@ class SingleType(Strategy):
 
         for osd in self.computed['osds']:
             string += templates.osd_header
+            if 'osd_id' in osd:
+                string += templates.osd_reused_id.format(
+                    id_=osd['osd_id'])
             string += templates.osd_component.format(
                 _type='[data]',
                 path=osd['data']['path'],
@@ -83,6 +86,9 @@ class SingleType(Strategy):
         # make sure that data devices do not have any LVs
         validators.no_lvm_membership(self.data_devs)
 
+        if self.osd_ids:
+            self._validate_osd_ids()
+
     def compute(self):
         """
         Go through the rules needed to properly size the lvs, return
@@ -107,6 +113,10 @@ class SingleType(Strategy):
                 osd['journal']['size'] = journal_size.b.as_int()
                 osd['journal']['percentage'] = int(100 - data_percentage)
                 osd['journal']['human_readable_size'] = str(journal_size)
+
+                if self.osd_ids:
+                    osd['osd_id'] = self.osd_ids.pop()
+
                 osds.append(osd)
 
         self.computed['changed'] = len(osds) > 0
@@ -150,6 +160,8 @@ class SingleType(Strategy):
                 command.append('--no-systemd')
             if self.args.crush_device_class:
                 command.extend(['--crush-device-class', self.args.crush_device_class])
+            if 'osd_id' in osd:
+                command.extend(['--osd-id', osd['osd_id']])
 
             if self.args.prepare:
                 Prepare(command).main()
@@ -205,6 +217,9 @@ class MixedType(MixedStrategy):
 
         for osd in self.computed['osds']:
             string += templates.osd_header
+            if 'osd_id' in osd:
+                string += templates.osd_reused_id.format(
+                    id_=osd['osd_id'])
             string += templates.osd_component.format(
                 _type='[data]',
                 path=osd['data']['path'],
@@ -271,6 +286,9 @@ class MixedType(MixedStrategy):
             )
             raise RuntimeError(msg)
 
+        if self.osd_ids:
+            self._validate_osd_ids()
+
     def compute(self):
         """
         Go through the rules needed to properly size the lvs, return
@@ -308,6 +326,10 @@ class MixedType(MixedStrategy):
                 osd['journal']['size'] = self.journal_size.b.as_int()
                 osd['journal']['percentage'] = int(self.journal_size.gb * 100 / vg_free)
                 osd['journal']['human_readable_size'] = str(self.journal_size)
+
+                if self.osd_ids:
+                    osd['osd_id'] = self.osd_ids.pop(0)
+
                 osds.append(osd)
 
         self.computed['changed'] = len(osds) > 0
@@ -361,6 +383,8 @@ class MixedType(MixedStrategy):
                 command.append('--no-systemd')
             if self.args.crush_device_class:
                 command.extend(['--crush-device-class', self.args.crush_device_class])
+            if 'osd_id' in osd:
+                command.extend(['--osd-id', osd['osd_id']])
 
             if self.args.prepare:
                 Prepare(command).main()

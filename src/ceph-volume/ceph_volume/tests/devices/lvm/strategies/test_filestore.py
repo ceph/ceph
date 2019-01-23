@@ -7,7 +7,8 @@ class TestSingleType(object):
 
     def test_hdd_device_is_large_enough(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '5120')
-        args = factory(filtered_devices=[], osds_per_device=1, journal_size=None)
+        args = factory(filtered_devices=[], osds_per_device=1,
+                       journal_size=None, osd_ids=[])
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=12073740000))
         ]
@@ -19,7 +20,8 @@ class TestSingleType(object):
 
     def test_hdd_device_with_large_journal(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '5120')
-        args = factory(filtered_devices=[], osds_per_device=1, journal_size=None)
+        args = factory(filtered_devices=[], osds_per_device=1,
+                       journal_size=None, osd_ids=[])
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
         ]
@@ -30,7 +32,8 @@ class TestSingleType(object):
 
     def test_ssd_device_is_large_enough(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '5120')
-        args = factory(filtered_devices=[], osds_per_device=1, journal_size=None)
+        args = factory(filtered_devices=[], osds_per_device=1,
+                       journal_size=None, osd_ids=[])
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=12073740000))
         ]
@@ -42,7 +45,8 @@ class TestSingleType(object):
 
     def test_ssd_device_with_large_journal(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '5120')
-        args = factory(filtered_devices=[], osds_per_device=1, journal_size=None)
+        args = factory(filtered_devices=[], osds_per_device=1,
+                       journal_size=None, osd_ids=[])
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
         ]
@@ -53,7 +57,8 @@ class TestSingleType(object):
 
     def test_ssd_device_multi_osd(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '5120')
-        args = factory(filtered_devices=[], osds_per_device=4, journal_size=None)
+        args = factory(filtered_devices=[], osds_per_device=4,
+                       journal_size=None, osd_ids=[])
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=16073740000))
         ]
@@ -64,7 +69,8 @@ class TestSingleType(object):
 
     def test_hdd_device_multi_osd(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '5120')
-        args = factory(filtered_devices=[], osds_per_device=4, journal_size=None)
+        args = factory(filtered_devices=[], osds_per_device=4,
+                       journal_size=None, osd_ids=[])
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=16073740000))
         ]
@@ -75,7 +81,8 @@ class TestSingleType(object):
 
     def test_device_is_lvm_member_fails(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '5120')
-        args = factory(filtered_devices=[], osds_per_device=1, journal_size=None)
+        args = factory(filtered_devices=[], osds_per_device=1,
+                       journal_size=None, osd_ids=[])
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=True, sys_api=dict(rotational='1', size=12073740000))
         ]
@@ -85,7 +92,8 @@ class TestSingleType(object):
 
     def test_hdd_device_with_small_configured_journal(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '120')
-        args = factory(filtered_devices=[], osds_per_device=1, journal_size=None)
+        args = factory(filtered_devices=[], osds_per_device=1,
+                       journal_size=None, osd_ids=[])
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
         ]
@@ -96,7 +104,8 @@ class TestSingleType(object):
 
     def test_ssd_device_with_small_configured_journal(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '120')
-        args = factory(filtered_devices=[], osds_per_device=1, journal_size=None)
+        args = factory(filtered_devices=[], osds_per_device=1,
+                       journal_size=None, osd_ids=[])
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000))
         ]
@@ -110,7 +119,8 @@ class TestMixedType(object):
 
     def test_minimum_size_is_not_met(self, stub_vgs, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '120')
-        args = factory(filtered_devices=[], osds_per_device=1, journal_size=None)
+        args = factory(filtered_devices=[], osds_per_device=1,
+                       journal_size=None, osd_ids=[])
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000)),
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
@@ -122,7 +132,8 @@ class TestMixedType(object):
 
     def test_ssd_device_is_not_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '7120')
-        args = factory(filtered_devices=[], osds_per_device=1, journal_size=None)
+        args = factory(filtered_devices=[], osds_per_device=1,
+                       journal_size=None, osd_ids=[])
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000)),
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=6073740000))
@@ -134,7 +145,8 @@ class TestMixedType(object):
 
     def test_hdd_device_is_lvm_member_fails(self, stub_vgs, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '5120')
-        args = factory(filtered_devices=[], osds_per_device=1, journal_size=None)
+        args = factory(filtered_devices=[], osds_per_device=1,
+                       journal_size=None, osd_ids=[])
         devices = [
             fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=6073740000)),
             fakedevice(used_by_ceph=False, is_lvm_member=True, sys_api=dict(rotational='1', size=6073740000))
@@ -159,7 +171,8 @@ class TestMixedType(object):
         ])
 
         conf_ceph(get_safe=lambda *a: '5120')
-        args = factory(filtered_devices=[], osds_per_device=1, journal_size=None)
+        args = factory(filtered_devices=[], osds_per_device=1,
+                       journal_size=None, osd_ids=[])
         devices = [ssd, hdd]
         result = filestore.MixedType.with_auto_devices(args, devices).computed['osds'][0]
         assert result['journal']['path'] == 'vg: fast'
@@ -190,7 +203,8 @@ class TestMixedType(object):
         ])
 
         conf_ceph(get_safe=lambda *a: '5120')
-        args = factory(filtered_devices=[], osds_per_device=1, journal_size=None)
+        args = factory(filtered_devices=[], osds_per_device=1,
+                       journal_size=None, osd_ids=[])
         devices = [ssd1, ssd2, hdd]
         with pytest.raises(RuntimeError) as error:
             filestore.MixedType.with_auto_devices(args, devices)
@@ -199,7 +213,8 @@ class TestMixedType(object):
 
     def test_ssd_device_fails_multiple_osds(self, stub_vgs, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '15120')
-        args = factory(filtered_devices=[], osds_per_device=2, journal_size=None)
+        args = factory(filtered_devices=[], osds_per_device=2,
+                       journal_size=None, osd_ids=[])
         devices = [
             fakedevice(is_lvm_member=False, sys_api=dict(rotational='0', size=16073740000)),
             fakedevice(is_lvm_member=False, sys_api=dict(rotational='1', size=16073740000))
