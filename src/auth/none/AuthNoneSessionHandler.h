@@ -21,7 +21,7 @@ class AuthNoneSessionHandler  : public AuthSessionHandler {
 public:
   AuthNoneSessionHandler(CephContext *cct_,
 			 const CryptoKey& session_key,
-			 const CryptoKey& connection_secret)
+			 const std::string& connection_secret)
     : AuthSessionHandler(cct_, CEPH_AUTH_NONE, session_key, connection_secret) {}
   ~AuthNoneSessionHandler() override {}
   

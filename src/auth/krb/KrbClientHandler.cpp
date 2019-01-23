@@ -93,7 +93,7 @@ int KrbClientHandler::handle_response(
   int ret,
   bufferlist::const_iterator& buff_list,
   CryptoKey *session_key,
-  CryptoKey *connection_secret)
+  std::string *connection_secret)
 {
   auto result(ret);
   gss_buffer_desc gss_buffer_in = {0, nullptr};

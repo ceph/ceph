@@ -31,7 +31,7 @@ public:
   int build_request(bufferlist& bl) const { return 0; }
   int handle_response(int ret, bufferlist::iterator& iter,
 		      CryptoKey *session_key,
-		      CryptoKey *connection_secret) { return 0; }
+		      std::string *connection_secret) { return 0; }
   bool build_rotating_request(bufferlist& bl) const { return false; }
 
   int get_protocol() const { return CEPH_AUTH_UNKNOWN; }

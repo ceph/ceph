@@ -18,12 +18,13 @@ bool AuthUnknownAuthorizeHandler::verify_authorizer(
   CephContext *cct,
   KeyStore *keys,
   const bufferlist& authorizer_data,
+  size_t connection_secret_required_len,
   bufferlist * authorizer_reply,
   EntityName *entity_name,
   uint64_t *global_id,
   AuthCapsInfo *caps_info,
   CryptoKey *session_key,
-  CryptoKey *connection_secret,
+  std::string *connection_secret,
   std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
   // For unknown authorizers, there's nothing to verify.  They're "OK" by definition.  PLR

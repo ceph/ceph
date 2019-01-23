@@ -37,16 +37,18 @@ public:
   virtual ~AuthServiceHandler() { }
 
   virtual int start_session(const EntityName& name,
+			    size_t connection_secret_required_length,
 			    bufferlist *result,
 			    AuthCapsInfo *caps,
 			    CryptoKey *session_key,
-			    CryptoKey *connection_secret) = 0;
+			    std::string *connection_secret) = 0;
   virtual int handle_request(bufferlist::const_iterator& indata,
+			     size_t connection_secret_required_length,
 			     bufferlist *result,
 			     uint64_t *global_id,
 			     AuthCapsInfo *caps,
 			     CryptoKey *session_key,
-			     CryptoKey *connection_secret) = 0;
+			     std::string *connection_secret) = 0;
 
   EntityName& get_entity_name() { return entity_name; }
 };

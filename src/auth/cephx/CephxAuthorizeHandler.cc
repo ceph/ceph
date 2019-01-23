@@ -10,12 +10,13 @@ bool CephxAuthorizeHandler::verify_authorizer(
   CephContext *cct,
   KeyStore *keys,
   const bufferlist& authorizer_data,
+  size_t connection_secret_required_len,
   bufferlist *authorizer_reply,
   EntityName *entity_name,
   uint64_t *global_id,
   AuthCapsInfo *caps_info,
   CryptoKey *session_key,
-  CryptoKey *connection_secret,
+  std::string *connection_secret,
   std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
   auto iter = authorizer_data.cbegin();
@@ -27,7 +28,9 @@ bool CephxAuthorizeHandler::verify_authorizer(
 
   CephXServiceTicketInfo auth_ticket_info;
 
-  bool isvalid = cephx_verify_authorizer(cct, keys, iter, auth_ticket_info,
+  bool isvalid = cephx_verify_authorizer(cct, keys, iter,
+					 connection_secret_required_len,
+					 auth_ticket_info,
 					 challenge, connection_secret,
 					 authorizer_reply);
 

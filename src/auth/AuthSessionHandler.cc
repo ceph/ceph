@@ -27,7 +27,7 @@
 AuthSessionHandler *get_auth_session_handler(
   CephContext *cct, int protocol,
   const CryptoKey& key,
-  const CryptoKey& connection_secret,
+  const std::string& connection_secret,
   uint64_t features)
 {
 

@@ -30,15 +30,15 @@ struct AuthSessionHandler {
 protected:
   CephContext *cct;
   int protocol;
-  CryptoKey key;                // per mon authentication
-  CryptoKey connection_secret;  // per connection
+  CryptoKey key;                  // per mon authentication
+  std::string connection_secret;  // per connection
 
 public:
   explicit AuthSessionHandler(CephContext *cct_) : cct(cct_), protocol(CEPH_AUTH_UNKNOWN) {}
 
   AuthSessionHandler(CephContext *cct_, int protocol_,
 		     const CryptoKey& key_,
-		     const CryptoKey& cs_)
+		     const std::string& cs_)
     : cct(cct_),
       protocol(protocol_),
       key(key_),
@@ -69,7 +69,7 @@ public:
 extern AuthSessionHandler *get_auth_session_handler(
   CephContext *cct, int protocol,
   const CryptoKey& key,
-  const CryptoKey& connection_secret,
+  const std::string& connection_secret,
   uint64_t features);
 
 #endif

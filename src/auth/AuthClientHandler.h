@@ -54,7 +54,7 @@ public:
   virtual int build_request(bufferlist& bl) const = 0;
   virtual int handle_response(int ret, bufferlist::const_iterator& iter,
 			      CryptoKey *session_key,
-			      CryptoKey *connection_secret) = 0;
+			      std::string *connection_secret) = 0;
   virtual bool build_rotating_request(bufferlist& bl) const = 0;
 
   virtual AuthAuthorizer *build_authorizer(uint32_t service_id) const = 0;

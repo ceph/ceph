@@ -234,6 +234,7 @@ int XioConnection::passive_setup()
   msgr->ms_deliver_verify_authorizer(
     this, peer_type, CEPH_AUTH_NONE,
     auth.bl,
+    0,
     authorizer_reply,
     authorizer_valid,
     session_key);

@@ -54,7 +54,7 @@ class KrbClientHandler : public AuthClientHandler {
     int handle_response(int ret, 
                         bufferlist::const_iterator& buff_list,
 			CryptoKey *session_key,
-			CryptoKey *connection_secret) override;
+			std::string *connection_secret) override;
 
     bool build_rotating_request(bufferlist& buff_list) const override { 
       return false; 

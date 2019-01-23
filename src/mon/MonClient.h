@@ -141,7 +141,7 @@ public:
     uint64_t global_id,
     const bufferlist& bl,
     CryptoKey *session_key,
-    CryptoKey *connection_secret);
+    std::string *connection_secret);
   int handle_auth_bad_method(
     uint32_t old_auth_method,
     int result,
@@ -284,7 +284,7 @@ public:
     uint32_t con_mode,
     const bufferlist& bl,
     CryptoKey *session_key,
-    CryptoKey *connection_key) override;
+    std::string *connection_secret) override;
   int handle_auth_bad_method(
     Connection *con,
     uint32_t old_auth_method,
