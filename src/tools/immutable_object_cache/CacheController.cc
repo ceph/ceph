@@ -25,12 +25,19 @@ CacheController::~CacheController() {
 int CacheController::init() {
   ldout(m_cct, 20) << dendl;
 
-  m_object_cache_store = new ObjectCacheStore(m_cct, pcache_op_work_queue);
+  m_object_cache_store = new ObjectCacheStore(m_cct);
   //TODO(): make this configurable
   int r = m_object_cache_store->init(true);
   if (r < 0) {
     lderr(m_cct) << "init error\n" << dendl;
+    return r;
   }
+
+  r = m_object_cache_store->init_cache();
+  if (r < 0) {
+    lderr(m_cct) << "init error\n" << dendl;
+  }
+
   return r;
 }
 
@@ -65,8 +72,7 @@ void CacheController::handle_request(uint64_t session_id, ObjectCacheRequest* re
 
   switch (req->m_head.type) {
     case RBDSC_REGISTER: {
-      // init cache layout for volume
-      m_object_cache_store->init_cache();
+      // TODO(): skip register and allow clients to lookup directly
       req->m_head.type = RBDSC_REGISTER_REPLY;
       m_cache_server->send(session_id, req);
 

@@ -16,8 +16,8 @@ namespace efs = std::experimental::filesystem;
 namespace ceph {
 namespace immutable_obj_cache {
 
-ObjectCacheStore::ObjectCacheStore(CephContext *cct, ContextWQ* work_queue)
-      : m_cct(cct), m_work_queue(work_queue), m_rados(new librados::Rados()),
+ObjectCacheStore::ObjectCacheStore(CephContext *cct)
+      : m_cct(cct), m_rados(new librados::Rados()),
         m_ioctxs_lock("ceph::cache::ObjectCacheStore::m_ioctxs_lock") {
 
   object_cache_max_size =

@@ -54,7 +54,7 @@ public:
     ASSERT_EQ(0, m_test_rados->ioctx_create(m_temp_pool_name.c_str(), m_local_io_ctx));
     m_temp_volume_name = "test_volume";
     m_ceph_context = reinterpret_cast<CephContext*>(m_test_rados->cct());
-    m_object_cache_store = new ObjectCacheStore(m_ceph_context, nullptr);
+    m_object_cache_store = new ObjectCacheStore(m_ceph_context);
   }
 
   void init_object_cache_store(std::string pool_name, std::string vol_name, uint64_t vol_size, bool reset) {
