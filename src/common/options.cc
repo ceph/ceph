@@ -1006,15 +1006,6 @@ std::vector<Option> get_global_options() {
     .set_description("Maximum threadpool size of AsyncMessenger")
     .add_see_also("ms_async_op_threads"),
 
-    Option("ms_async_set_affinity", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
-    .set_description("Set CPU affinity for AsyncMessenger worker threads"),
-
-    Option("ms_async_affinity_cores", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("")
-    .set_description("List of cores to set worker thread affinity")
-    .add_see_also("ms_async_set_affinity"),
-
     Option("ms_async_rdma_device_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description(""),
