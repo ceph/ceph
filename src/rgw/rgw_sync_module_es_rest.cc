@@ -20,6 +20,7 @@ struct es_index_obj_response {
     ceph::real_time mtime;
     string etag;
     string content_type;
+    string storage_class;
     map<string, string> custom_str;
     map<string, int64_t> custom_int;
     map<string, string> custom_date;
@@ -41,6 +42,7 @@ struct es_index_obj_response {
       parse_time(mtime_str.c_str(), &mtime);
       JSONDecoder::decode_json("etag", etag, obj);
       JSONDecoder::decode_json("content_type", content_type, obj);
+      JSONDecoder::decode_json("storage_class", storage_class, obj);
       list<_custom_entry<string> > str_entries;
       JSONDecoder::decode_json("custom-string", str_entries, obj);
       for (auto& e : str_entries) {
@@ -183,6 +185,8 @@ void RGWMetadataSearchOp::execute()
                                   { "last_modified", "meta.mtime" },
                                   { "contenttype", "meta.content_type" },
                                   { "content_type", "meta.content_type" },
+                                  { "storageclass", "meta.storage_class" },
+                                  { "storage_class", "meta.storage_class" },
   };
   es_query.set_field_aliases(&aliases);
 
@@ -193,7 +197,8 @@ void RGWMetadataSearchOp::execute()
                                                            {"meta.etag", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"meta.content_type", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"meta.mtime", ESEntityTypeMap::ES_ENTITY_DATE},
-                                                           {"meta.size", ESEntityTypeMap::ES_ENTITY_INT} };
+                                                           {"meta.size", ESEntityTypeMap::ES_ENTITY_INT},
+                                                           {"meta.storage_class", ESEntityTypeMap::ES_ENTITY_STR} };
   ESEntityTypeMap gm(generic_map);
   es_query.set_generic_type_map(&gm);
 
@@ -334,6 +339,7 @@ public:
       s->formatter->dump_int("Size", e.meta.size);
       s->formatter->dump_format("ETag", "\"%s\"", e.meta.etag.c_str());
       s->formatter->dump_string("ContentType", e.meta.content_type.c_str());
+      s->formatter->dump_string("StorageClass", e.meta.storage_class.c_str());
       dump_owner(s, e.owner.get_id(), e.owner.get_display_name());
       s->formatter->open_array_section("CustomMetadata");
       for (auto& m : e.meta.custom_str) {
