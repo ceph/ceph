@@ -1468,7 +1468,7 @@ namespace rgw {
                       &s->dest_placement,
                       s->bucket_owner.get_id(),
                       *static_cast<RGWObjectCtx *>(s->obj_ctx),
-                      obj, olh_epoch, s->req_id);
+                      obj, olh_epoch, s->req_id, this);
 
     op_ret = processor->prepare();
     if (op_ret < 0) {
