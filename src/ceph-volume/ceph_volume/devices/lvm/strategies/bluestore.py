@@ -396,7 +396,11 @@ class MixedType(MixedStrategy):
         those LVs would be large enough to accommodate a block.db
         """
         # validate minimum size for all devices
-        validators.minimum_device_size(self.devices, osds_per_device=self.osds_per_device)
+        validators.minimum_device_size(self.data_devs + self.db_or_journal_devs,
+                                       osds_per_device=self.osds_per_device)
+        validators.minimum_device_size(self.wal_devs,
+                                      osds_per_device=self.osds_per_device,
+                                      min_size=1)
 
         # make sure that data devices do not have any LVs
         validators.no_lvm_membership(self.data_devs)
