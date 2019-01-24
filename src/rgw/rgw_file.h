@@ -585,6 +585,7 @@ namespace rgw {
 		bool *eof, uint32_t flags);
 
     int write(uint64_t off, size_t len, size_t *nbytes, void *buffer);
+    int fsync();
 
     int commit(uint64_t offset, uint64_t length, uint32_t flags) {
       /* NFS3 and NFSv4 COMMIT implementation
@@ -2339,6 +2340,7 @@ public:
   off_t real_ofs;
   size_t bytes_written;
   bool eio;
+  bool flushed;
 
   RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user, RGWFileHandle* _fh,
 		  const std::string& _bname, const std::string& _oname)
@@ -2416,6 +2418,7 @@ public:
   int exec_start() override;
   int exec_continue() override;
   int exec_finish() override;
+  int fsync();
 
   void send_response() override {}
 

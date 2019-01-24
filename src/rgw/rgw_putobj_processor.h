@@ -81,6 +81,7 @@ class RadosWriter : public DataProcessor {
   const RGWBucketInfo& bucket_info;
   RGWObjectCtx& obj_ctx;
   const rgw_obj& head_obj;
+  //rgw_obj head_obj;
   RGWSI_RADOS::Obj stripe_obj; // current stripe object
   RawObjSet written; // set of written objects for deletion
 
@@ -160,6 +161,13 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
   {}
 
   // prepare a trivial manifest
+  int flush(size_t accounted_size, const std::string& etag,
+               ceph::real_time *mtime, ceph::real_time set_mtime,
+               std::map<std::string, bufferlist>& attrs,
+               ceph::real_time delete_at,
+               const char *if_match, const char *if_nomatch,
+               const std::string *user_data,
+               rgw_zone_set *zones_trace, bool *canceled);
   int prepare() override;
   // write the head object atomically in a bucket index transaction
   int complete(size_t accounted_size, const std::string& etag,

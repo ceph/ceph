@@ -193,7 +193,7 @@ int ManifestObjectProcessor::next(uint64_t offset, uint64_t *pstripe_size)
 int AtomicObjectProcessor::process_first_chunk(bufferlist&& data,
                                                DataProcessor **processor)
 {
-  first_chunk = std::move(data);
+  first_chunk.claim_append(data);
   *processor = &stripe;
   return 0;
 }
@@ -234,6 +234,59 @@ int AtomicObjectProcessor::prepare()
   // initialize the processors
   chunk = ChunkProcessor(&writer, chunk_size);
   stripe = StripeProcessor(&chunk, this, stripe_size);
+  return 0;
+}
+
+int AtomicObjectProcessor::flush(size_t accounted_size,
+                                    const std::string& etag,
+                                    ceph::real_time *mtime,
+                                    ceph::real_time set_mtime,
+                                    std::map<std::string, bufferlist>& attrs,
+                                    ceph::real_time delete_at,
+                                    const char *if_match,
+                                    const char *if_nomatch,
+                                    const std::string *user_data,
+                                    rgw_zone_set *zones_trace,
+                                    bool *pcanceled)
+{
+  int r = writer.drain();
+  if (r < 0) {
+    return r;
+  }
+  const uint64_t actual_size = get_actual_size();
+  r = manifest_gen.create_next(actual_size);
+  if (r < 0) {
+    return r;
+  }
+
+  obj_ctx.set_atomic(head_obj);
+
+  RGWRados::Object op_target(store, bucket_info, obj_ctx, head_obj);
+
+  /* some object types shouldn't be versioned, e.g., multipart parts */
+  op_target.set_versioning_disabled(!bucket_info.versioning_enabled());
+
+  RGWRados::Object::Write obj_op(&op_target);
+
+  obj_op.meta.data = &first_chunk;
+  obj_op.meta.manifest = &manifest;
+  obj_op.meta.ptag = &unique_tag; /* use req_id as operation tag */
+  obj_op.meta.if_match = if_match;
+  obj_op.meta.if_nomatch = if_nomatch;
+  obj_op.meta.mtime = mtime;
+  obj_op.meta.set_mtime = set_mtime;
+  obj_op.meta.owner = owner;
+  obj_op.meta.flags = PUT_OBJ_CREATE;
+  obj_op.meta.olh_epoch = olh_epoch;
+  obj_op.meta.delete_at = delete_at;
+  obj_op.meta.user_data = user_data;
+  obj_op.meta.zones_trace = zones_trace;
+  obj_op.meta.modify_tail = true;
+
+  r = obj_op.write_meta(actual_size, accounted_size, attrs);
+  if (r < 0) {
+    return r;
+  }
   return 0;
 }
 

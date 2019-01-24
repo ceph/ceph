@@ -36,6 +36,11 @@ namespace ceph {
 	ceph_assert_always(ctx);
 	Restart();
       }
+      Digest (const Digest& dgt) {
+        ctx = PK11_CloneContext(dgt.ctx);
+        ceph_assert_always(ctx);
+        digest_size = dgt.digest_size;
+      }
       ~Digest () {
 	PK11_DestroyContext(ctx, PR_TRUE);
       }

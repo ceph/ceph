@@ -1231,6 +1231,42 @@ namespace rgw {
     return rc;
   } /* RGWFileHandle::readdir */
 
+  int RGWFileHandle::fsync()
+  {
+    using std::get;
+
+    lock_guard guard(mtx);
+
+    int rc = 0;
+
+    file* f = get<file>(&variant_type);
+    if (! f)
+      return -EISDIR;
+
+    if (deleted()) {
+      lsubdout(fs->get_context(), rgw, 5)
+        << __func__
+        << " fsync attempted on deleted object "
+        << this->object_name()
+        << dendl;
+      /* zap fsync transaction, if any */
+      if (f->write_req) {
+        delete f->write_req;
+        f->write_req = nullptr;
+      }
+      return -ESTALE;
+    }
+
+    if (! f->write_req) {
+      /* nothing to flush */
+      return rc;
+    }
+
+    /* flushing data */
+    rc = f->write_req->fsync();
+    return rc;
+  }
+
   int RGWFileHandle::write(uint64_t off, size_t len, size_t *bytes_written,
 			   void *buffer)
   {
@@ -1513,6 +1549,114 @@ namespace rgw {
     return op_ret;
   } /* exec_continue */
 
+  int RGWWriteRequest::fsync()
+  {
+    buffer::list bl, aclbl, ux_key, ux_attrs;
+    map<string, string>::iterator iter;
+    char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+    unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+    struct req_state* s = get_state();
+    MD5 hash_tmp(hash);
+
+    size_t osize = rgw_fh->get_size();
+    struct timespec octime = rgw_fh->get_ctime();
+    struct timespec omtime = rgw_fh->get_mtime();
+    real_time appx_t = real_clock::now();
+
+    s->obj_size = bytes_written;
+    perfcounter->inc(l_rgw_put_b, s->obj_size);
+
+    // flush data in filters
+    op_ret = filter->process({}, s->obj_size);
+    if (op_ret < 0) {
+      goto done;
+    }
+
+    op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
+				      user_quota, bucket_quota, s->obj_size, true);
+    /* max_size exceed */
+    if (op_ret < 0) {
+      goto done;
+    }
+
+    op_ret = get_store()->check_bucket_shards(s->bucket_info, s->bucket,
+					      bucket_quota);
+    if (op_ret < 0) {
+      goto done;
+    }
+
+    hash_tmp.Final(m);
+
+    if (compressor && compressor->is_compressed()) {
+      bufferlist tmp;
+      RGWCompressionInfo cs_info;
+      cs_info.compression_type = plugin->get_type_name();
+      cs_info.orig_size = s->obj_size;
+      cs_info.blocks = std::move(compressor->get_compression_blocks());
+      encode(cs_info, tmp);
+      attrs[RGW_ATTR_COMPRESSION] = tmp;
+      ldout(s->cct, 20) << "storing " << RGW_ATTR_COMPRESSION
+			<< " with type=" << cs_info.compression_type
+			<< ", orig_size=" << cs_info.orig_size
+			<< ", blocks=" << cs_info.blocks.size() << dendl;
+    }
+
+    buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
+    etag = calc_md5;
+    bl.append(etag.c_str(), etag.size() + 1);
+    attrs[RGW_ATTR_ETAG] = std::move(bl);
+
+    policy.encode(aclbl);
+    attrs[RGW_ATTR_ACL] = std::move(aclbl);
+
+    /* unix attrs */
+    rgw_fh->set_mtime(real_clock::to_timespec(appx_t));
+    rgw_fh->set_ctime(real_clock::to_timespec(appx_t));
+    rgw_fh->set_size(bytes_written);
+    rgw_fh->encode_attrs(ux_key, ux_attrs);
+
+    attrs[RGW_ATTR_UNIX_KEY1] = std::move(ux_key);
+    attrs[RGW_ATTR_UNIX1] = std::move(ux_attrs);
+
+    for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end();
+	 ++iter) {
+      buffer::list& attrbl = attrs[iter->first];
+      const string& val = iter->second;
+      attrbl.append(val.c_str(), val.size() + 1);
+    }
+
+    op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+    if (op_ret < 0) {
+      goto done;
+    }
+    encode_delete_at_attr(delete_at, attrs);
+
+    /* Add a custom metadata to expose the information whether an object
+     * is an SLO or not. Appending the attribute must be performed AFTER
+     * processing any input from user in order to prohibit overwriting. */
+    if (unlikely(!! slo_info)) {
+      buffer::list slo_userindicator_bl;
+      using ceph::encode;
+      encode("True", slo_userindicator_bl);
+      emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
+    }
+
+    op_ret = processor->flush(s->obj_size, etag, &mtime, real_time(), attrs,
+                                 (delete_at ? *delete_at : real_time()),
+                                if_match, if_nomatch, nullptr, nullptr, nullptr);
+    if (op_ret != 0) {
+      /* revert attr updates */
+      rgw_fh->set_mtime(omtime);
+      rgw_fh->set_ctime(octime);
+      rgw_fh->set_size(osize);
+    }
+    // flushed = true;
+
+  done:
+    perfcounter->tinc(l_rgw_put_lat, s->time_elapsed());
+    return op_ret;
+  }
+
   int RGWWriteRequest::exec_finish()
   {
     buffer::list bl, aclbl, ux_key, ux_attrs;
@@ -1568,10 +1712,10 @@ namespace rgw {
     etag = calc_md5;
 
     bl.append(etag.c_str(), etag.size() + 1);
-    emplace_attr(RGW_ATTR_ETAG, std::move(bl));
+    attrs[RGW_ATTR_ETAG] = std::move(bl);
 
     policy.encode(aclbl);
-    emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
+    attrs[RGW_ATTR_ACL] = std::move(aclbl);
 
     /* unix attrs */
     rgw_fh->set_mtime(real_clock::to_timespec(appx_t));
@@ -1579,8 +1723,8 @@ namespace rgw {
     rgw_fh->set_size(bytes_written);
     rgw_fh->encode_attrs(ux_key, ux_attrs);
 
-    emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
-    emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
+    attrs[RGW_ATTR_UNIX_KEY1] = std::move(ux_key);
+    attrs[RGW_ATTR_UNIX1] = std::move(ux_attrs);    
 
     for (iter = s->generic_attrs.begin(); iter != s->generic_attrs.end();
 	 ++iter) {
@@ -2293,7 +2437,23 @@ int rgw_writev(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
 int rgw_fsync(struct rgw_fs *rgw_fs, struct rgw_file_handle *handle,
 	      uint32_t flags)
 {
-  return 0;
+  RGWFileHandle* rgw_fh = get_rgwfh(handle);
+  int rc;
+
+  if (! rgw_fh->is_file())
+    return -EISDIR;
+
+  if (! rgw_fh->is_open()) {
+    if (flags & RGW_OPEN_FLAG_V3) {
+      rc = rgw_fh->open(flags);
+      if (!! rc)
+        return rc;
+    } else
+      return -EPERM;
+  }
+
+  rc = rgw_fh->fsync();
+  return rc;
 }
 
 int rgw_commit(struct rgw_fs *rgw_fs, struct rgw_file_handle *fh,
