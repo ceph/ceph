@@ -87,6 +87,7 @@ private:
   uint64_t connect_seq;
   uint64_t peer_global_seq;
   uint64_t message_seq;
+  bool reconnecting;
   bool replacing;
   bool can_write;
   std::map<int, std::list<std::pair<bufferlist, Message *>>> out_queue;
@@ -252,7 +253,7 @@ private:
   Ct<ProtocolV2> *handle_reconnect(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_existing_connection(AsyncConnectionRef existing);
   Ct<ProtocolV2> *reuse_connection(AsyncConnectionRef existing,
-                                   ProtocolV2 *exproto, bool reconnect);
+                                   ProtocolV2 *exproto);
   Ct<ProtocolV2> *send_server_ident();
   Ct<ProtocolV2> *send_reconnect_ok();
   Ct<ProtocolV2> *server_ready();
