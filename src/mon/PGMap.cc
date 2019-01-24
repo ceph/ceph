@@ -1094,6 +1094,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
   ceph_assert(inc.version == version+1);
   version++;
 
+  pool_stat_t pg_sum_old = pg_sum;
   mempool::pgmap::unordered_map<int32_t, pool_stat_t> pg_pool_sum_old;
   pg_pool_sum_old = pg_pool_sum;
 
@@ -1183,7 +1184,6 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
     }
   }
 
-  pool_stat_t pg_sum_old = pg_sum;
   // skip calculating delta while sum was not synchronized
   if (!stamp.is_zero() && !pg_sum_old.stats.sum.is_zero()) {
     utime_t delta_t;
