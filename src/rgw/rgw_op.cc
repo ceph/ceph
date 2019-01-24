@@ -3662,7 +3662,7 @@ void RGWPutObj::execute()
     processor.emplace<MultipartObjectProcessor>(
         &aio, store, s->bucket_info, pdest_placement,
         s->owner.get_id(), obj_ctx, obj,
-        multipart_upload_id, multipart_part_num, multipart_part_str);
+        multipart_upload_id, multipart_part_num, multipart_part_str, this);
   } else if(append) {
     if (s->bucket_info.versioned()) {
       op_ret = -ERR_INVALID_BUCKET_STATE;
@@ -3671,7 +3671,7 @@ void RGWPutObj::execute()
     pdest_placement = &s->dest_placement;
     processor.emplace<AppendObjectProcessor>(
             &aio, store, s->bucket_info, pdest_placement, s->bucket_owner.get_id(),obj_ctx, obj,
-            s->req_id, position, &cur_accounted_size);
+            s->req_id, position, &cur_accounted_size, this);
   } else {
     if (s->bucket_info.versioning_enabled()) {
       if (!version_id.empty()) {
@@ -3684,7 +3684,7 @@ void RGWPutObj::execute()
     pdest_placement = &s->dest_placement;
     processor.emplace<AtomicObjectProcessor>(
         &aio, store, s->bucket_info, pdest_placement,
-        s->bucket_owner.get_id(), obj_ctx, obj, olh_epoch, s->req_id);
+        s->bucket_owner.get_id(), obj_ctx, obj, olh_epoch, s->req_id, this);
   }
 
   op_ret = processor->prepare();
@@ -4005,7 +4005,7 @@ void RGWPostObj::execute()
                                     &s->dest_placement,
                                     s->bucket_owner.get_id(),
                                     *static_cast<RGWObjectCtx*>(s->obj_ctx),
-                                    obj, 0, s->req_id);
+                                    obj, 0, s->req_id, this);
     op_ret = processor.prepare();
     if (op_ret < 0) {
       return;
@@ -6748,7 +6748,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   using namespace rgw::putobj;
 
   AtomicObjectProcessor processor(&aio, store, binfo, &s->dest_placement, bowner.get_id(),
-                                  obj_ctx, obj, 0, s->req_id);
+                                  obj_ctx, obj, 0, s->req_id, this);
 
   op_ret = processor.prepare();
   if (op_ret < 0) {
