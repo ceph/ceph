@@ -307,6 +307,7 @@ struct es_index_mappings {
     encode_json("content_encoding", es_dump_type(string_type), f);
     encode_json("content_language", es_dump_type(string_type), f);
     encode_json("content_type", es_dump_type(string_type), f);
+    encode_json("storage_class", es_dump_type(string_type), f);
     encode_json("etag", es_dump_type(string_type), f);
     encode_json("expires", es_dump_type(string_type), f);
     f->open_object_section("mtime");
