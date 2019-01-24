@@ -4247,6 +4247,11 @@ std::mutex rgw::auth::s3::LDAPEngine::mtx;
 
 void rgw::auth::s3::LDAPEngine::init(CephContext* const cct)
 {
+  if (! cct->_conf->rgw_s3_auth_use_ldap ||
+      ! cct->_conf->rgw_ldap_uri.empty()) {
+    return;
+  }
+
   if (! ldh) {
     std::lock_guard<std::mutex> lck(mtx);
     if (! ldh) {
@@ -4264,6 +4269,11 @@ void rgw::auth::s3::LDAPEngine::init(CephContext* const cct)
       ldh->bind();
     }
   }
+}
+
+bool rgw::auth::s3::LDAPEngine::valid() {
+  std::lock_guard<std::mutex> lck(mtx);
+  return (!!ldh);
 }
 
 rgw::auth::RemoteApplier::acl_strategy_t
