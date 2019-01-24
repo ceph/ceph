@@ -2848,7 +2848,7 @@ CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
   exproto->can_write = false;
   exproto->reconnecting = reconnecting;
   exproto->replacing = true;
-  exproto->session_security = session_security;
+  std::swap(exproto->session_security, session_security);
   exproto->auth_meta = auth_meta;
   existing->state_offset = 0;
   // avoid previous thread modify event
