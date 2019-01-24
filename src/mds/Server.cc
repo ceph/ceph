@@ -1525,18 +1525,28 @@ std::pair<bool, uint64_t> Server::recall_client_state(MDSGatherBuilder* gather, 
 {
   const auto now = clock::now();
   const bool steady = flags&RecallFlags::STEADY;
+  const bool enforce_max = flags&RecallFlags::ENFORCE_MAX;
 
+  const auto max_caps_per_client = g_conf().get_val<uint64_t>("mds_max_caps_per_client");
   const auto min_caps_per_client = g_conf().get_val<uint64_t>("mds_min_caps_per_client");
   const auto recall_global_max_decay_threshold = g_conf().get_val<Option::size_t>("mds_recall_global_max_decay_threshold");
   const auto recall_max_caps = g_conf().get_val<Option::size_t>("mds_recall_max_caps");
   const auto recall_max_decay_threshold = g_conf().get_val<Option::size_t>("mds_recall_max_decay_threshold");
 
-  dout(10) << __func__ << ": caps per client " << min_caps_per_client << "/" << Capability::count() << dendl;
+  dout(10) << __func__ << ":"
+           << " min=" << min_caps_per_client
+           << " max=" << max_caps_per_client
+           << " total=" << Capability::count()
+           << " flags=0x" << std::hex << flags
+           << dendl;
 
   /* trim caps of sessions with the most caps first */
   std::multimap<uint64_t, Session*> caps_session;
-  auto f = [&caps_session](auto& s) {
-    caps_session.emplace(std::piecewise_construct, std::forward_as_tuple(s->caps.size()), std::forward_as_tuple(s));
+  auto f = [&caps_session, enforce_max, max_caps_per_client](auto& s) {
+    auto num_caps = s->caps.size();
+    if (!enforce_max || num_caps > max_caps_per_client) {
+      caps_session.emplace(std::piecewise_construct, std::forward_as_tuple(num_caps), std::forward_as_tuple(s));
+    }
   };
   mds->sessionmap.get_client_sessions(std::move(f));
 
