@@ -23,7 +23,7 @@ def create_dmcrypt_key():
     )
     # The size of the key is defined in bits, so we must transform that
     # value to bytes (dividing by 8) because we read in bytes, not bits
-    random_string = os.urandom(dmcrypt_key_size / 8)
+    random_string = os.urandom(int(dmcrypt_key_size / 8))
     key = base64.b64encode(random_string).decode('utf-8')
     return key
 
