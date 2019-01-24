@@ -48,6 +48,7 @@ namespace {
   bool do_delete = false;
   bool do_stat = false; // stat objects (not buckets)
   bool do_hexdump = false;
+  bool do_fsync = false;
 
   bool object_open = false;
 
@@ -220,7 +221,7 @@ TEST(LibRGW, LIST_OBJECTS) {
 }
 
 TEST(LibRGW, LOOKUP_OBJECT) {
-  if (do_get || do_stat || do_put || do_bulk || do_readv || do_writev) {
+  if (do_get || do_stat || do_put || do_bulk || do_readv || do_writev || do_fsync) {
     int ret = rgw_lookup(fs, bucket_fh, object_name.c_str(), &object_fh,
 			RGW_LOOKUP_FLAG_CREATE);
     ASSERT_EQ(ret, 0);
@@ -228,7 +229,7 @@ TEST(LibRGW, LOOKUP_OBJECT) {
 }
 
 TEST(LibRGW, OBJ_OPEN) {
-  if (do_get || do_put || do_readv || do_writev) {
+  if (do_get || do_put || do_readv || do_writev|| do_fsync) {
     int ret = rgw_open(fs, object_fh, 0 /* posix flags */, 0 /* flags */);
     ASSERT_EQ(ret, 0);
     object_open = true;
@@ -241,6 +242,35 @@ TEST(LibRGW, PUT_OBJECT) {
     string data = "hi mom"; // fix this
     int ret = rgw_write(fs, object_fh, 0, data.length(), &nbytes,
 			(void*) data.c_str(), RGW_WRITE_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+    ASSERT_EQ(nbytes, data.length());
+  }
+}
+
+TEST(LibRGW, FSYNC_OBJECT) {
+  if (do_fsync) {
+    size_t nbytes;
+    struct stat st;
+    string data = "hi mom";
+    int ret = rgw_write(fs, object_fh, 0, data.length(), &nbytes,
+			(void*) data.c_str(), RGW_WRITE_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+    ASSERT_EQ(nbytes, data.length());
+
+    // flush data
+    ret = rgw_fsync(fs, object_fh, RGW_FSYNC_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+
+    // verify
+    ret = rgw_getattr(fs, object_fh, &st, RGW_GETATTR_FLAG_NONE);
+    ASSERT_EQ(ret, 0);
+    ASSERT_EQ(st.st_size, 6);
+
+    // go on writing
+    data = " how are you";
+    ret = rgw_write(fs, object_fh, 6, data.length(), &nbytes,
+                        (void*) data.c_str(), RGW_WRITE_FLAG_NONE);
+
     ASSERT_EQ(ret, 0);
     ASSERT_EQ(nbytes, data.length());
   }
@@ -466,7 +496,10 @@ int main(int argc, char *argv[])
     } else if (ceph_argparse_flag(args, arg_iter, "--hexdump",
 					    (char*) nullptr)) {
       do_hexdump = true;
-    } else {
+    } else if (ceph_argparse_flag(args, arg_iter, "--fsync",
+					    (char*) nullptr)) { 
+      do_fsync = true;
+    }  else {
       ++arg_iter;
     }
   }
