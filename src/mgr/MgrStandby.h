@@ -50,6 +50,7 @@ protected:
   LogChannelRef clog, audit_clog;
 
   Mutex lock;
+  Finisher finisher;
   SafeTimer timer;
 
   PyModuleRegistry py_module_registry;

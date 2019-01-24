@@ -382,27 +382,30 @@ PyObject *ActivePyModules::get_python(const std::string &what)
   }
 }
 
-int ActivePyModules::start_one(PyModuleRef py_module)
+void ActivePyModules::start_one(PyModuleRef py_module)
 {
   std::lock_guard l(lock);
 
   ceph_assert(modules.count(py_module->get_name()) == 0);
 
-  modules[py_module->get_name()].reset(new ActivePyModule(py_module, clog));
-  auto active_module = modules.at(py_module->get_name()).get();
+  const auto name = py_module->get_name();
+  modules[name].reset(new ActivePyModule(py_module, clog));
+  auto active_module = modules.at(name).get();
 
-  int r = active_module->load(this);
-  if (r != 0) {
-    // the class instance wasn't created... remove it from the set of activated
-    // modules so commands and notifications aren't delivered.
-    modules.erase(py_module->get_name());
-    return r;
-  } else {
-    dout(4) << "Starting thread for " << py_module->get_name() << dendl;
-    active_module->thread.create(active_module->get_thread_name());
-
-    return 0;
-  }
+  // Send all python calls down a Finisher to avoid blocking
+  // C++ code, and avoid any potential lock cycles.
+  finisher.queue(new FunctionContext([this, active_module, name](int) {
+    int r = active_module->load(this);
+    if (r != 0) {
+      derr << "Failed to run module in active mode ('" << name << "')"
+           << dendl;
+      std::lock_guard l(lock);
+      modules.erase(name);
+    } else {
+      dout(4) << "Starting thread for " << name << dendl;
+      active_module->thread.create(active_module->get_thread_name());
+    }
+  }));
 }
 
 void ActivePyModules::shutdown()

@@ -13,6 +13,7 @@
 
 #include "StandbyPyModules.h"
 
+#include "common/Finisher.h"
 #include "common/debug.h"
 #include "common/errno.h"
 
@@ -36,9 +37,11 @@ StandbyPyModules::StandbyPyModules(
     const MgrMap &mgr_map_,
     PyModuleConfig &module_config,
     LogChannelRef clog_,
-    MonClient &monc_)
+    MonClient &monc_,
+    Finisher &f)
     : state(module_config, monc_),
-      clog(clog_)
+      clog(clog_),
+      finisher(f)
 {
   state.set_mgr_map(mgr_map_);
 }
@@ -72,29 +75,30 @@ void StandbyPyModules::shutdown()
   modules.clear();
 }
 
-int StandbyPyModules::start_one(PyModuleRef py_module)
+void StandbyPyModules::start_one(PyModuleRef py_module)
 {
   std::lock_guard l(lock);
-  const std::string &module_name = py_module->get_name();
+  const auto name = py_module->get_name();
 
-  ceph_assert(modules.count(module_name) == 0);
+  ceph_assert(modules.count(name) == 0);
 
-  modules[module_name].reset(new StandbyPyModule(
-      state,
-      py_module, clog));
+  modules[name].reset(new StandbyPyModule(state, py_module, clog));
+  auto standby_module = modules.at(name).get();
 
-  int r = modules[module_name]->load();
-  if (r != 0) {
-    modules.erase(module_name);
-    return r;
-  } else {
-    dout(4) << "Starting thread for " << module_name << dendl;
-    // Giving Thread the module's module_name member as its
-    // char* thread name: thread must not outlive module class lifetime.
-    modules[module_name]->thread.create(
-        modules[module_name]->get_name().c_str());
-    return 0;
-  }
+  // Send all python calls down a Finisher to avoid blocking
+  // C++ code, and avoid any potential lock cycles.
+  finisher.queue(new FunctionContext([this, standby_module, name](int) {
+    int r = standby_module->load();
+    if (r != 0) {
+      derr << "Failed to run module in standby mode ('" << name << "')"
+           << dendl;
+      std::lock_guard l(lock);
+      modules.erase(name);
+    } else {
+      dout(4) << "Starting thread for " << name << dendl;
+      standby_module->thread.create(standby_module->get_thread_name());
+    }
+  }));
 }
 
 int StandbyPyModule::load()
