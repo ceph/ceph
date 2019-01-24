@@ -63,6 +63,11 @@ CephContext::CephContext()
 CephContext::~CephContext()
 {}
 
+int CephContext::get_module_type() const
+{
+  return module_type;
+}
+
 CryptoRandom* CephContext::random() const
 {
   return _crypto_random.get();
