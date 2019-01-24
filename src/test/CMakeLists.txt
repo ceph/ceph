@@ -349,6 +349,7 @@ target_link_libraries(ceph_test_librgw_admin_user
   cls_otp_client
   librados
   ceph-common
+  fmt
   ${UNITTEST_LIBS}
   ${EXTRALIBS}
    )
