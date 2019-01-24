@@ -78,8 +78,8 @@ struct AuthStreamHandler {
     //rxtx_t(rxtx_t&& r) : rx(std::move(rx)), tx(std::move(tx)) {}
     // Each peer can use different handlers.
     // Hmm, isn't that too much flexbility?
-    std::shared_ptr<AuthStreamHandler> rx;
-    std::shared_ptr<AuthStreamHandler> tx;
+    std::unique_ptr<AuthStreamHandler> rx;
+    std::unique_ptr<AuthStreamHandler> tx;
   };
   static rxtx_t create_stream_handler_pair(
     CephContext* ctx,
