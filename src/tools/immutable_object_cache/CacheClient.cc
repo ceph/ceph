@@ -57,7 +57,7 @@ namespace immutable_obj_cache {
     return 0;
   }
 
-  // just when error occur, call this method.
+  // close domain socket
   void CacheClient::close() {
     m_session_work.store(false);
     boost::system::error_code close_ec;
@@ -65,37 +65,16 @@ namespace immutable_obj_cache {
     if(close_ec) {
        ldout(cct, 20) << "close: " << close_ec.message() << dendl;
     }
-    ldout(cct, 20) << "session don't work, later all request will be" <<
-                      " dispatched to rados layer" << dendl;
   }
 
   int CacheClient::connect() {
     boost::system::error_code ec;
     m_dm_socket.connect(m_ep, ec);
     if(ec) {
-      if(ec == boost::asio::error::connection_refused) {
-        ldout(cct, 20) << ec.message()
-                       << " : immutable-object-cache daemon is down?"
-                       << "Now data will be read from ceph cluster " << dendl;
-      } else {
-        ldout(cct, 20) << "connect: " << ec.message() << dendl;
-      }
-
-      if(m_dm_socket.is_open()) {
-        // Set to indicate what error occurred, if any.
-        // Note that, even if the function indicates an error,
-        // the underlying descriptor is closed.
-        boost::system::error_code close_ec;
-        m_dm_socket.close(close_ec);
-        if(close_ec) {
-          ldout(cct, 20) << "close: " << close_ec.message() << dendl;
-        }
-      }
+      fault(ASIO_ERROR_CONNECT, ec);
       return -1;
     }
-
     ldout(cct, 20) <<"connect success"<< dendl;
-
     return 0;
   }
 
@@ -300,16 +279,41 @@ namespace immutable_obj_cache {
     }
   }
 
+  // if there is one request fails, just execute fault, then shutdown RO.
   void CacheClient::fault(const int err_type, const boost::system::error_code& ec) {
     ldout(cct, 20) << "fault." << ec.message() << dendl;
-    // if one request fails, just call its callback, then close this socket.
+
+    if(err_type == ASIO_ERROR_CONNECT) {
+       ceph_assert(!m_session_work.load());
+       std::cout << "connect fails." << std::endl;
+       if(ec == boost::asio::error::connection_refused) {
+         ldout(cct, 20) << "Connecting RO daenmon fails : "<< ec.message()
+                        << ". Immutable-object-cache daemon is down ? "
+                        << "Data will be read from ceph cluster " << dendl;
+       } else {
+         ldout(cct, 20) << "Connecting RO daemon fails : " << ec.message() << dendl;
+       }
+
+       if(m_dm_socket.is_open()) {
+         // Set to indicate what error occurred, if any.
+         // Note that, even if the function indicates an error,
+         // the underlying descriptor is closed.
+         boost::system::error_code close_ec;
+         m_dm_socket.close(close_ec);
+         if(close_ec) {
+           ldout(cct, 20) << "close: " << close_ec.message() << dendl;
+         }
+      }
+      return;
+    }
+
     if(!m_session_work.load()) {
       return;
     }
 
     // when current session don't work, ASIO will don't receive any new request from hook.
     // On the other hand, for pending request of ASIO, cancle these request, then call their callback.
-    // there request which are cancled by fault, will be re-dispatched to RADOS layer.
+    // these request which are cancled by this method, will be re-dispatched to RADOS layer.
     //
     // make sure just have one thread to modify execute below code.
     m_session_work.store(false);
@@ -329,10 +333,6 @@ namespace immutable_obj_cache {
        ceph_assert(0);
     }
 
-    if(err_type == ASIO_ERROR_CONNECT) {
-       ldout(cct, 20) << "ASIO async connect fails : " << ec.message() << dendl;
-    }
-
     // currently, for any asio error, just shutdown RO.
     close();
 
@@ -346,8 +346,9 @@ namespace immutable_obj_cache {
       m_seq_to_req.clear();
     }
 
-    ldout(cct, 20) << "Because ASIO fails, just shutdown RO. Later all reading \
-                       will be re-dispatched RADOS layer"  << ec.message() << dendl;
+    ldout(cct, 20) << "Because ASIO domain socket fails, just shutdown RO.\
+                       Later all reading will be re-dispatched RADOS layer"
+                       << ec.message() << dendl;
   }
 
 
