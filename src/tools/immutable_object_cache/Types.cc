@@ -29,6 +29,7 @@ void ObjectCacheMsgHeader::decode(bufferlist::const_iterator& it) {
 }
 
 void ObjectCacheMsgData::encode(bufferlist& bl) {
+  ENCODE_START(1, 1, bl);
   ceph::encode(m_read_offset, bl);
   ceph::encode(m_read_len, bl);
   ceph::encode(m_pool_id, bl);
@@ -36,10 +37,12 @@ void ObjectCacheMsgData::encode(bufferlist& bl) {
   ceph::encode(m_oid, bl);
   ceph::encode(m_pool_namespace, bl);
   ceph::encode(m_cache_path, bl);
+  ENCODE_FINISH(bl);
 }
 
 void ObjectCacheMsgData::decode(bufferlist& bl) {
   auto i = bl.cbegin();
+  DECODE_START(1, i);
   ceph::decode(m_read_offset, i);
   ceph::decode(m_read_len, i);
   ceph::decode(m_pool_id, i);
@@ -47,11 +50,11 @@ void ObjectCacheMsgData::decode(bufferlist& bl) {
   ceph::decode(m_oid, i);
   ceph::decode(m_pool_namespace, i);
   ceph::decode(m_cache_path, i);
+  DECODE_FINISH(i);
 }
 
 void ObjectCacheRequest::encode() {
   m_data.encode(m_data_buffer);
-  m_head.data_len = m_data_buffer.length();
   m_head.data_len = m_data_buffer.length();
   ceph_assert(m_head_buffer.length() == 0);
   m_head.encode(m_head_buffer);
