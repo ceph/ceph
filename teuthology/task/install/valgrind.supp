@@ -571,3 +571,15 @@
   fun:Py*
   ...
 }
+
+{
+  something in glibc
+  Memcheck:Leak
+  match-leak-kinds: all
+  ...
+  fun:strdup
+  fun:__trans_list_add
+  ...
+  fun:_dl_init
+  ...
+}
