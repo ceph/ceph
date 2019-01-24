@@ -157,6 +157,7 @@ public:
   enum RecallFlags {
     NONE = 0,
     STEADY = (1<<0),
+    ENFORCE_MAX = (1<<1),
   };
   std::pair<bool, uint64_t> recall_client_state(MDSGatherBuilder* gather, enum RecallFlags=RecallFlags::NONE);
   void force_clients_readonly();

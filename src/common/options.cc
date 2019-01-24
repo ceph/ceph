@@ -7179,6 +7179,10 @@ std::vector<Option> get_mds_options() {
     .set_default(100)
     .set_description("minimum number of capabilities a client may hold"),
 
+    Option("mds_max_caps_per_client", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1_M)
+    .set_description("maximum number of capabilities a client may hold"),
+
     Option("mds_hack_allow_loading_invalid_metadata", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
      .set_default(0)
      .set_description("INTENTIONALLY CAUSE DATA LOSS by bypasing checks for invalid metadata on disk. Allows testing repair tools."),

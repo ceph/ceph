@@ -9,6 +9,12 @@
   to not attempt recalling too many caps at once, leading to instability.
   MDS with a large cache (64GB+) should be more stable.
 
+* MDS now provides a config option "mds_max_caps_per_client" (default: 1M) to
+  limit the number of caps a client session may hold. Long running client
+  sessions with a large number of caps have been a source of instability in the
+  MDS when all of these caps need to be processed during certain session
+  events. It is recommended to not unnecessarily increase this value.
+
 * The `cache drop` admin socket command has been removed. The `ceph tell mds.X
   cache drop` remains.
 
