@@ -1749,8 +1749,8 @@ ssize_t buffer::list::pread_file(const char *fn, uint64_t off, uint64_t len, std
 
   if (off > st.st_size) {
     std::ostringstream oss;
-    oss << "bufferlist::read_file(" << fn << "): read error: size < offset "
-        << cpp_strerror(-1);
+    oss << "bufferlist::read_file(" << fn << "): read error: size < offset";
+    *error = oss.str();
     VOID_TEMP_FAILURE_RETRY(::close(fd));
     return 0;
   }
