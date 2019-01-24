@@ -464,8 +464,8 @@ AuthStreamHandler::rxtx_t AuthStreamHandler::create_stream_handler_pair(
     ::memcpy(&tx_nonce, auth_meta.connection_secret.c_str() + 16 + sizeof(rx_nonce),
       sizeof(tx_nonce));
     return {
-      std::make_shared<AES128GCM_StreamHandler>(cct, auth_meta, rx_nonce),
-      std::make_shared<AES128GCM_StreamHandler>(cct, auth_meta, tx_nonce)
+      std::make_unique<AES128GCM_StreamHandler>(cct, auth_meta, rx_nonce),
+      std::make_unique<AES128GCM_StreamHandler>(cct, auth_meta, tx_nonce)
     };
   } else {
     return { nullptr, nullptr };
