@@ -1078,6 +1078,8 @@ void ProtocolV2::authencrypt_payload(bufferlist &payload) {
   // using tx
   if (session_security.tx) {
     session_security.tx->authenticated_encrypt(payload);
+    // padding will be always present
+    ceph_assert_always(payload.length() > 0);
   }
 }
 
@@ -1791,6 +1793,7 @@ CtPtr ProtocolV2::handle_message_complete() {
     msg_payload.claim_append(extra);
 
     uint32_t payload_len = msg_payload.length();
+    ceph_assert_always(payload_len > 0);
     authdecrypt_payload(msg_payload.c_str(), payload_len);
 
     front.clear();
