@@ -2322,6 +2322,13 @@ CtPtr ProtocolV2::handle_server_ident(char *payload, uint32_t length) {
                 << " flags=" << server_ident.flags() << " cookie=" << std::dec
                 << server_ident.cookie() << dendl;
 
+  // is this who we intended to talk to?
+  if (*connection->peer_addrs != server_ident.addrs()) {
+    ldout(cct,1) << __func__ << " peer identifies as " << server_ident.addrs()
+		 << " not " << *connection->peer_addrs << dendl;
+    return _fault();
+  }
+
   connection->lock.unlock();
   messenger->learned_addr(server_ident.peer_addr());
   if (cct->_conf->ms_inject_internal_delays &&
