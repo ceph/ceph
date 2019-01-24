@@ -283,7 +283,7 @@ BuildRequires:	python%{_python_buildid}-Routes
 BuildRequires:	python%{_python_buildid}-Werkzeug
 BuildRequires:	python%{_python_buildid}-numpy-devel
 BuildRequires:	python%{_python_buildid}-bcrypt
-BuildRequires:  libxmlsec1-1
+BuildRequires:  xmlsec1-devel
 %endif
 %endif
 # lttng and babeltrace for rbd-replay-prep
