@@ -99,7 +99,7 @@ public:
                 MonClient &mc, LogChannelRef clog_, LogChannelRef audit_clog_,
                 Objecter &objecter_, Client &client_, Finisher &f,
                 DaemonServer &server);
-  void standby_start(MonClient &mc);
+  void standby_start(MonClient &mc, Finisher &f);
 
   bool is_standby_running() const
   {

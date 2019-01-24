@@ -26,6 +26,8 @@
 #include "mon/MgrMap.h"
 #include "mgr/PyModuleRunner.h"
 
+class Finisher;
+
 /**
  * State that is read by all modules running in standby mode
  */
@@ -105,15 +107,18 @@ private:
 
   LogChannelRef clog;
 
+  Finisher &finisher;
+
 public:
 
   StandbyPyModules(
       const MgrMap &mgr_map_,
       PyModuleConfig &module_config,
       LogChannelRef clog_,
-      MonClient &monc);
+      MonClient &monc,
+      Finisher &f);
 
-  int start_one(PyModuleRef py_module);
+  void start_one(PyModuleRef py_module);
 
   void shutdown();
 
