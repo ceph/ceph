@@ -6,15 +6,39 @@
 #include <amqp_tcp_socket.h>
 #include <string>
 #include <stdarg.h>
-#include <unistd.h>
+#include <mutex>
 #include <boost/lockfree/queue.hpp>
 
 namespace amqp_mock {
+
+std::mutex set_valid_lock;
 int VALID_PORT(5672);
 std::string VALID_HOST("localhost");
 std::string VALID_VHOST("/");
 std::string VALID_USER("guest");
 std::string VALID_PASSWORD("guest");
+
+void set_valid_port(int port) {
+  std::lock_guard<std::mutex> lock(set_valid_lock);
+  VALID_PORT = port;
+}
+
+void set_valid_host(const std::string& host) {
+  std::lock_guard<std::mutex> lock(set_valid_lock);
+  VALID_HOST = host;
+}
+
+void set_valid_vhost(const std::string& vhost) {
+  std::lock_guard<std::mutex> lock(set_valid_lock);
+  VALID_VHOST = vhost;
+}
+
+void set_valid_user(const std::string& user, const std::string& password) {
+  std::lock_guard<std::mutex> lock(set_valid_lock);
+  VALID_USER = user;
+  VALID_PASSWORD = password;
+}
+
 bool FAIL_NEXT_WRITE(false);
 bool FAIL_NEXT_READ(false);
 bool REPLY_ACK(true);
@@ -87,11 +111,14 @@ int amqp_socket_open(amqp_socket_t *self, const char *host, int port) {
   if (!self) {
     return -1;
   }
-  if (std::string(host) != VALID_HOST) {
-    return -2;
-  } 
-  if (port != VALID_PORT) {
-    return -3;
+  {
+    std::lock_guard<std::mutex> lock(set_valid_lock);
+    if (std::string(host) != VALID_HOST) {
+      return -2;
+    } 
+    if (port != VALID_PORT) {
+      return -3;
+    }
   }
   self->open_called = true;
   return 0;

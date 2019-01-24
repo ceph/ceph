@@ -5,11 +5,11 @@
 #include <string>
 
 namespace amqp_mock {
-extern int VALID_PORT;              // default 5672
-extern std::string VALID_HOST;      // default "localhost"
-extern std::string VALID_VHOST;     // default "/"
-extern std::string VALID_USER;      // default "guest"
-extern std::string VALID_PASSWORD;  // default "guest"
+void set_valid_port(int port);
+void set_valid_host(const std::string& host);
+void set_valid_vhost(const std::string& vhost);
+void set_valid_user(const std::string& user, const std::string& password);
+  
 extern bool FAIL_NEXT_WRITE;        // default "false"
 extern bool FAIL_NEXT_READ;         // default "false"
 extern bool REPLY_ACK;              // default "true"

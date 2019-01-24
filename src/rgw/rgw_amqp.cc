@@ -24,6 +24,25 @@
 
 namespace rgw::amqp {
 
+// RGW AMQP status codes for publishing
+static const int RGW_AMQP_STATUS_BROKER_NACK =          -0x1001;
+static const int RGW_AMQP_STATUS_CONNECTION_CLOSED =    -0x1002;
+static const int RGW_AMQP_STATUS_QUEUE_FULL =           -0x1003;
+static const int RGW_AMQP_STATUS_MAX_INFLIGHT =         -0x1004;
+// RGW AMQP status code for connection opening
+static const int RGW_AMQP_STATUS_CONN_ALLOC_FAILED =    -0x2001;
+static const int RGW_AMQP_STATUS_SOCKET_ALLOC_FAILED =  -0x2002;
+static const int RGW_AMQP_STATUS_SOCKET_OPEN_FAILED =   -0x2003;
+static const int RGW_AMQP_STATUS_LOGIN_FAILED =         -0x2004;
+static const int RGW_AMQP_STATUS_CHANNEL_OPEN_FAILED =  -0x2005;
+static const int RGW_AMQP_STATUS_VERIFY_EXCHANGE_FAILED = -0x2006;
+static const int RGW_AMQP_STATUS_Q_DECLARE_FAILED =     -0x2007;
+static const int RGW_AMQP_STATUS_CONFIRM_DECLARE_FAILED = -0x2008;
+static const int RGW_AMQP_STATUS_CONSUME_DECLARE_FAILED = -0x2009;
+
+static const int RGW_AMQP_RESPONSE_SOCKET_ERROR =       -0x3008;
+static const int RGW_AMQP_NO_REPLY_CODE =               0x0;
+
 // key class for the connection list
 struct connection_id_t {
   std::string host;
@@ -48,32 +67,104 @@ struct connection_id_t {
   };
 };
 
-// struct for holding the connection state object
-// as well as the exchange
-struct connection_t {
-  amqp_connection_state_t state;
-  const std::string exchange;
-  const amqp_bytes_t reply_to_queue;
-  bool mark_for_deletion;
-  uint64_t delivery_tag;
-  
-  connection_t(amqp_connection_state_t _state, 
-      const std::string _exchange,
-      const amqp_bytes_t& _reply_to_queue) :
-    state(_state), 
-    exchange(_exchange), 
-    reply_to_queue(amqp_bytes_malloc_dup(_reply_to_queue)),
-    mark_for_deletion(false),
-    delivery_tag(1) {}
-
-    // an explicit destructor, to be used only when
-    // the connection is removed fro mthe list
-    void destroy() {
-      amqp_destroy_connection(state);
-      state = nullptr;
-      amqp_bytes_free(reply_to_queue);
+// connection_t state cleaner
+// could be used for automatic cleanup when getting out of scope
+class ConnectionCleaner {
+  private:
+    amqp_connection_state_t conn;
+  public:
+    ConnectionCleaner(amqp_connection_state_t _conn) : conn(_conn) {}
+    ~ConnectionCleaner() {
+      if (conn) {
+        amqp_destroy_connection(conn);
+      }
+    }
+    // call reset() if cleanup is not needed anymore
+    void reset() {
+      conn = nullptr;
     }
 };
+
+// struct for holding the callback and its tag in the callback list
+struct reply_callback_with_tag_t {
+  uint64_t tag;
+  reply_callback_t cb;
+  
+  reply_callback_with_tag_t(uint64_t _tag, reply_callback_t _cb) : tag(_tag), cb(_cb) {}
+  
+  bool operator==(uint64_t rhs) {
+    return tag == rhs;
+  }
+};
+
+typedef std::vector<reply_callback_with_tag_t> CallbackList;
+
+// struct for holding the connection state object as well as the exchange
+// it is used inside an intrusive ref counted pointer (boost::intrusive_ptr)
+// since references to deleted objects may still exist in the calling code
+struct connection_t {
+  amqp_connection_state_t state;
+  std::string exchange;
+  std::string user;
+  std::string password;
+  amqp_bytes_t reply_to_queue;
+  bool marked_for_deletion;
+  uint64_t delivery_tag;
+  int status;
+  int reply_type;
+  int reply_code;
+  mutable std::atomic<int> ref_count;
+  CallbackList callbacks;
+
+  // default ctor
+  connection_t() :
+    state(nullptr),
+    reply_to_queue(amqp_empty_bytes),
+    marked_for_deletion(false),
+    delivery_tag(1),
+    status(AMQP_STATUS_OK),
+    reply_type(AMQP_RESPONSE_NORMAL),
+    reply_code(RGW_AMQP_NO_REPLY_CODE),
+    ref_count(0) {}
+
+  // cleanup of all internal connection resource
+  // the object can still remain, and internal connection
+  // resources created again on successfull reconnections
+  void destroy(int s) {
+    status = s;
+    ConnectionCleaner clean_state(state);
+    state = nullptr;
+    amqp_bytes_free(reply_to_queue);
+    reply_to_queue = amqp_empty_bytes;
+    // fire all remaining callbacks
+    std::for_each(callbacks.begin(), callbacks.end(), [s](auto& cb_tag) {
+        cb_tag.cb(s);
+      });
+    delivery_tag = 1;
+  }
+
+  bool is_ok() const {
+    return (state != nullptr && !marked_for_deletion);
+  }
+
+  // dtor also destroys the internals
+  ~connection_t() {
+    destroy(RGW_AMQP_STATUS_CONNECTION_CLOSED);
+  }
+
+  friend void intrusive_ptr_add_ref(const connection_t* p);
+  friend void intrusive_ptr_release(const connection_t* p);
+};
+
+// these are required interfaces so that connection_t could be used inside boost::intrusive_ptr
+void intrusive_ptr_add_ref(const connection_t* p) {
+  ++p->ref_count;
+}
+void intrusive_ptr_release(const connection_t* p) {
+  if (--p->ref_count == 0) {
+    delete p;
+  }
+}
 
 // convert connection info to string
 std::string to_string(const amqp_connection_info& info) {
@@ -88,7 +179,25 @@ std::string to_string(const amqp_connection_info& info) {
   return ss.str();
 }
 
-// convert error reply to string
+// convert reply to error code
+int reply_to_code(const amqp_rpc_reply_t& reply) {
+  switch (reply.reply_type) {
+    case AMQP_RESPONSE_NONE:
+    case AMQP_RESPONSE_NORMAL:
+      return RGW_AMQP_NO_REPLY_CODE;
+    case AMQP_RESPONSE_LIBRARY_EXCEPTION:
+      return reply.library_error;
+    case AMQP_RESPONSE_SERVER_EXCEPTION: 
+      if (reply.reply.decoded) {
+        const amqp_connection_close_t* m = (amqp_connection_close_t*)reply.reply.decoded;
+        return m->reply_code;
+      }
+      return reply.reply.id;
+  }
+  return RGW_AMQP_NO_REPLY_CODE;
+}
+
+// convert reply to string
 std::string to_string(const amqp_rpc_reply_t& reply) {
   std::stringstream ss;
   switch (reply.reply_type) {
@@ -145,7 +254,7 @@ std::string to_string(amqp_status_enum s) {
     case AMQP_STATUS_BAD_URL:
       return "AMQP_STATUS_BAD_URL";
     case AMQP_STATUS_SOCKET_ERROR:
-      return "AMQP_STATUS_SOCKET_ERROR: " + std::to_string(errno);
+      return "AMQP_STATUS_SOCKET_ERROR";
     case AMQP_STATUS_INVALID_PARAMETER:
       return "AMQP_STATUS_INVALID_PARAMETER"; 
     case AMQP_STATUS_TABLE_TOO_BIG:
@@ -173,7 +282,7 @@ std::string to_string(amqp_status_enum s) {
     case _AMQP_STATUS_NEXT_VALUE:
       return "AMQP_STATUS_INTERNAL"; 
     case AMQP_STATUS_TCP_ERROR:
-        return "AMQP_STATUS_TCP_ERROR: " + std::to_string(errno);
+        return "AMQP_STATUS_TCP_ERROR";
     case AMQP_STATUS_TCP_SOCKETLIB_INIT_ERROR:
       return "AMQP_STATUS_TCP_SOCKETLIB_INIT_ERROR";
     case _AMQP_STATUS_TCP_NEXT_VALUE:
@@ -192,78 +301,96 @@ std::string to_string(amqp_status_enum s) {
   return "AMQP_STATUS_UNKNOWN";
 }
 
-// RGW AMQP status codes
-static const int RGW_AMQP_STATUS_BROKER_NACK = -1000;
-static const int RGW_AMQP_STATUS_CONNECTION_CLOSED = -1001;
-static const int RGW_AMQP_STATUS_QUEUE_FULL = -1002;
-static const int RGW_AMQP_STATUS_MAX_INFLIGHT = -1003;
+// TODO: add status_to_string on the connection object to prinf full status
 
 // convert int status to string - including RGW specific values
 std::string status_to_string(int s) {
-  if (s == RGW_AMQP_STATUS_BROKER_NACK) {
-    return "RGW_AMQP_STATUS_BROKER_NACK";
-  } else if (s == RGW_AMQP_STATUS_CONNECTION_CLOSED) {
-    return "RGW_AMQP_STATUS_CONNECTION_CLOSED";
-  } else if (s == RGW_AMQP_STATUS_QUEUE_FULL) {
-    return "RGW_AMQP_STATUS_QUEUE_FULL";
-  } else if (s == RGW_AMQP_STATUS_MAX_INFLIGHT) {
-    return "RGW_AMQP_STATUS_MAX_INFLIGHT";
+  switch (s) {
+    case RGW_AMQP_STATUS_BROKER_NACK:
+      return "RGW_AMQP_STATUS_BROKER_NACK";
+    case RGW_AMQP_STATUS_CONNECTION_CLOSED:
+      return "RGW_AMQP_STATUS_CONNECTION_CLOSED";
+    case RGW_AMQP_STATUS_QUEUE_FULL:
+      return "RGW_AMQP_STATUS_QUEUE_FULL";
+    case RGW_AMQP_STATUS_MAX_INFLIGHT:
+      return "RGW_AMQP_STATUS_MAX_INFLIGHT";
+    case RGW_AMQP_STATUS_CONN_ALLOC_FAILED:
+      return "RGW_AMQP_STATUS_CONN_ALLOC_FAILED";
+    case RGW_AMQP_STATUS_SOCKET_ALLOC_FAILED:
+      return "RGW_AMQP_STATUS_SOCKET_ALLOC_FAILED";
+    case RGW_AMQP_STATUS_SOCKET_OPEN_FAILED:
+      return "RGW_AMQP_STATUS_SOCKET_OPEN_FAILED";
+    case RGW_AMQP_STATUS_LOGIN_FAILED:
+      return "RGW_AMQP_STATUS_LOGIN_FAILED";
+    case RGW_AMQP_STATUS_CHANNEL_OPEN_FAILED:
+      return "RGW_AMQP_STATUS_CHANNEL_OPEN_FAILED";
+    case RGW_AMQP_STATUS_VERIFY_EXCHANGE_FAILED:
+      return "RGW_AMQP_STATUS_VERIFY_EXCHANGE_FAILED";
+    case RGW_AMQP_STATUS_Q_DECLARE_FAILED:
+      return "RGW_AMQP_STATUS_Q_DECLARE_FAILED";
+    case RGW_AMQP_STATUS_CONFIRM_DECLARE_FAILED:
+      return "RGW_AMQP_STATUS_CONFIRM_DECLARE_FAILED";
+    case RGW_AMQP_STATUS_CONSUME_DECLARE_FAILED:
+      return "RGW_AMQP_STATUS_CONSUME_DECLARE_FAILED";
   }
   return to_string((amqp_status_enum)s);
 }
 
-// in case of RPC calls, getting ther RPC reply and throwing if an error detected
-void throw_on_reply_error(amqp_connection_state_t conn, const std::string& prefix_text) {
-    const auto reply = amqp_get_rpc_reply(conn);
-    if (reply.reply_type != AMQP_RESPONSE_NORMAL) {
-      throw(connection_error(prefix_text + to_string(reply)));
-    }
-}
+// check the result from calls and return if error (=null)
+#define RETURN_ON_ERROR(C, S, OK) \
+  if (!OK) { \
+    C->status = S; \
+    return C; \
+  }
 
-// connection_t state cleaner
-// could be used for automatic cleanup when getting out of scope
-class ConnectionCleaner {
-  private:
-    amqp_connection_state_t conn;
-  public:
-    ConnectionCleaner(amqp_connection_state_t _conn) : conn(_conn) {}
-    ~ConnectionCleaner() {
-      if (conn) {
-        amqp_destroy_connection(conn);
-      }
+// in case of RPC calls, getting the RPC reply and return if an error is detected
+#define RETURN_ON_REPLY_ERROR(C, ST, S) { \
+      const auto reply = amqp_get_rpc_reply(ST); \
+      if (reply.reply_type != AMQP_RESPONSE_NORMAL) { \
+        C->status = S; \
+        C->reply_type = reply.reply_type; \
+        C->reply_code = reply_to_code(reply); \
+        return C; \
+      } \
     }
-    // call reset() if cleanup is not needed anymore
-    void reset() {
-      conn = nullptr;
-    }
-};
 
 static const amqp_channel_t CHANNEL_ID = 1;
 static const amqp_channel_t CONFIRMING_CHANNEL_ID = 2;
 
-// utility function to create a connection
-// TODO: retry in case an error is recoverable
-connection_t create_connection(const amqp_connection_info& info, 
-    const std::string& exchange) { 
-  // create connection state
-  auto conn = amqp_new_connection();
-  ConnectionCleaner guard(conn);
-  if (!conn) {
-    throw (connection_error("failed to allocate connection"));
+// utility function to create a connection, when the connection object already exists
+connection_ptr_t& create_connection(connection_ptr_t& conn, const amqp_connection_info& info) {
+  // pointer must be valid and not marked for deletion
+  ceph_assert(conn && !conn->marked_for_deletion);
+  
+  // reset all status codes
+  conn->status = AMQP_STATUS_OK; 
+  conn->reply_type = AMQP_RESPONSE_NORMAL;
+  conn->reply_code = RGW_AMQP_NO_REPLY_CODE;
+
+  auto state = amqp_new_connection();
+  if (!state) {
+    conn->status = RGW_AMQP_STATUS_CONN_ALLOC_FAILED;
+    return conn;
   }
+  // make sure tha the connection state is cleaned up in case of error
+  ConnectionCleaner state_guard(state);
 
   // create and open socket
-  auto socket = amqp_tcp_socket_new(conn);
+  auto socket = amqp_tcp_socket_new(state);
   if (!socket) {
-    throw(connection_error("failed to allocate socket"));
+    conn->status = RGW_AMQP_STATUS_SOCKET_ALLOC_FAILED;
+    return conn;
   }
   const auto s = amqp_socket_open(socket, info.host, info.port);
   if (s < 0) {
-    throw(connection_error("failed to connect to broker: " + to_string((amqp_status_enum)s)));
+    conn->status = RGW_AMQP_STATUS_SOCKET_OPEN_FAILED;
+    conn->reply_type = RGW_AMQP_RESPONSE_SOCKET_ERROR;
+    conn->reply_code = s;
+    return conn;
   }
 
   // login to broker
-  const auto reply = amqp_login(conn,
+  const auto reply = amqp_login(state,
       info.vhost, 
       AMQP_DEFAULT_MAX_CHANNELS,
       AMQP_DEFAULT_FRAME_SIZE,
@@ -272,51 +399,47 @@ connection_t create_connection(const amqp_connection_info& info,
       info.user,
       info.password);
   if (reply.reply_type != AMQP_RESPONSE_NORMAL) {
-    throw(connection_error("failed to login to broker: " + to_string(reply)));
+    conn->status = RGW_AMQP_STATUS_LOGIN_FAILED;
+    conn->reply_type = reply.reply_type;
+    conn->reply_code = reply_to_code(reply);
+    return conn;
   }
 
   // open channels
   {
-    const auto ok = amqp_channel_open(conn, CHANNEL_ID);
-    if (!ok) {
-      throw(connection_error("failed to open channel (client): " + std::to_string(CHANNEL_ID)));
-    }
-    throw_on_reply_error(conn, "failed to open channel (broker): ");
+    const auto ok = amqp_channel_open(state, CHANNEL_ID);
+    RETURN_ON_ERROR(conn, RGW_AMQP_STATUS_CHANNEL_OPEN_FAILED, ok);
+    RETURN_ON_REPLY_ERROR(conn, state, RGW_AMQP_STATUS_CHANNEL_OPEN_FAILED);
   }
   {
-    const auto ok = amqp_channel_open(conn, CONFIRMING_CHANNEL_ID);
-    if (!ok) {
-      throw(connection_error("failed to open channel (client): " + std::to_string(CONFIRMING_CHANNEL_ID)));
-    }
-    throw_on_reply_error(conn, "failed to open channel (broker): ");
+    const auto ok = amqp_channel_open(state, CONFIRMING_CHANNEL_ID);
+    RETURN_ON_ERROR(conn, RGW_AMQP_STATUS_CHANNEL_OPEN_FAILED, ok);
+    RETURN_ON_REPLY_ERROR(conn, state, RGW_AMQP_STATUS_CHANNEL_OPEN_FAILED);
   }
   {
-    const auto ok = amqp_confirm_select(conn, CONFIRMING_CHANNEL_ID);
-    if (!ok) {
-      throw(connection_error("failed to set channel to 'confirm' mode (client): " + std::to_string(CONFIRMING_CHANNEL_ID)));
-    }
-    throw_on_reply_error(conn, "failed to set channel to 'confirm' mode (broker): ");
+    const auto ok = amqp_confirm_select(state, CONFIRMING_CHANNEL_ID);
+    RETURN_ON_ERROR(conn, RGW_AMQP_STATUS_CONFIRM_DECLARE_FAILED, ok);
+    RETURN_ON_REPLY_ERROR(conn, state, RGW_AMQP_STATUS_CONFIRM_DECLARE_FAILED);
   }
 
   // verify that the topic exchange is there
+  // TODO: make this step optional
   {
-    const auto ok = amqp_exchange_declare(conn, 
+    const auto ok = amqp_exchange_declare(state, 
       CHANNEL_ID,
-      amqp_cstring_bytes(exchange.c_str()),
+      amqp_cstring_bytes(conn->exchange.c_str()),
       amqp_cstring_bytes("topic"),
       1, // passive - exchange must already exist on broker
       1, // durable
       0, // dont auto-delete
       0, // not internal
       amqp_empty_table);
-    if (!ok) {
-      throw(connection_error("could not query exchange"));
-    }
-    throw_on_reply_error(conn, "exchange not found: ");
+    RETURN_ON_ERROR(conn, RGW_AMQP_STATUS_VERIFY_EXCHANGE_FAILED, ok);
+    RETURN_ON_REPLY_ERROR(conn, state, RGW_AMQP_STATUS_VERIFY_EXCHANGE_FAILED);
   }
   {
     // create queue for confirmations
-    const auto queue_ok  = amqp_queue_declare(conn, 
+    const auto queue_ok = amqp_queue_declare(state, 
         CHANNEL_ID,         // use the regular channel for this call
         amqp_empty_bytes,   // let broker allocate queue name
         0,                  // not passive - create the queue 
@@ -325,16 +448,11 @@ connection_t create_connection(const amqp_connection_info& info,
         1,                  // auto-delete
         amqp_empty_table    // not args TODO add args from conf: TTL, max length etc.
         );
-    if (!queue_ok) {
-      throw(connection_error("failed to create queue for incomming confimations (client)"));
-    }
-    auto reply = amqp_get_rpc_reply(conn);
-    if (reply.reply_type != AMQP_RESPONSE_NORMAL) {
-      throw(connection_error("failed to create queue for incomming confimations (broker):" + to_string(reply)));
-    }
+    RETURN_ON_ERROR(conn, RGW_AMQP_STATUS_Q_DECLARE_FAILED, queue_ok);
+    RETURN_ON_REPLY_ERROR(conn, state, RGW_AMQP_STATUS_Q_DECLARE_FAILED);
 
     // define consumption for connection
-    const auto consume_ok = amqp_basic_consume(conn, 
+    const auto consume_ok = amqp_basic_consume(state, 
         CONFIRMING_CHANNEL_ID, 
         queue_ok->queue,
         amqp_empty_bytes, // broker will generate consumer tag
@@ -344,48 +462,54 @@ connection_t create_connection(const amqp_connection_info& info,
         amqp_empty_table  // no parameters
         );
 
-    if (!consume_ok) {
-      throw(connection_error("failed to define message consumption (client)"));
-    }
-    reply = amqp_get_rpc_reply(conn);
-    if (reply.reply_type != AMQP_RESPONSE_NORMAL) {
-      throw(connection_error("failed to define message consumption (broker):" + to_string(reply)));
-    }
-    //TODO broker generated consumer_tag could be used to cancel sending of n/acks from broker - probably not needed
-
-    guard.reset();
-    return connection_t(conn, exchange, queue_ok->queue);
+    RETURN_ON_ERROR(conn, RGW_AMQP_STATUS_CONSUME_DECLARE_FAILED, consume_ok);
+    RETURN_ON_REPLY_ERROR(conn, state, RGW_AMQP_STATUS_CONSUME_DECLARE_FAILED);
+    // broker generated consumer_tag could be used to cancel sending of n/acks from broker - not needed
+    
+    state_guard.reset();
+    conn->state = state;
+    conn->reply_to_queue = amqp_bytes_malloc_dup(queue_ok->queue);
+    return conn;
   }
+}
+
+// utility function to create a new connection
+connection_ptr_t create_new_connection(const amqp_connection_info& info, 
+    const std::string& exchange) { 
+  // create connection state
+  connection_ptr_t conn = new connection_t;
+  conn->exchange = exchange;
+  conn->user.assign(info.user);
+  conn->password.assign(info.password);
+  return create_connection(conn, info);
 }
 
 /// struct used for holding mesages in the message queue
 struct message_wrapper_t {
-  connection_t& conn; 
+  connection_ptr_t conn; 
   std::string topic;
   std::string message;
   reply_callback_t cb;
   
-  message_wrapper_t(connection_t& _conn,
+  message_wrapper_t(connection_ptr_t& _conn,
       const std::string& _topic,
       const std::string& _message,
       reply_callback_t _cb) : conn(_conn), topic(_topic), message(_message), cb(_cb) {}
 };
 
-// struct for holding the callback and its tag in the callback list
-struct reply_callback_with_tag_t {
-  uint64_t tag;
-  reply_callback_t cb;
-  
-  reply_callback_with_tag_t(uint64_t _tag, reply_callback_t _cb) : tag(_tag), cb(_cb) {}
-  
-  bool operator==(uint64_t rhs) {
-    return tag == rhs;
-  }
-};
 
-typedef std::unordered_map<connection_id_t, connection_t, connection_id_t::hasher> ConnectionList;
-typedef std::vector<reply_callback_with_tag_t> CallbackList;
+typedef std::unordered_map<connection_id_t, connection_ptr_t, connection_id_t::hasher> ConnectionList;
 typedef boost::lockfree::queue<message_wrapper_t*, boost::lockfree::fixed_sized<true>> MessageQueue;
+
+// macros used inside a loop where an iterator is either incremented or reased
+#define INCREMENT_AND_CONTINUE(IT) \
+          ++IT; \
+          continue;
+
+#define ERASE_AND_CONTINUE(IT,CONTAINER) \
+          IT=CONTAINER.erase(IT); \
+          --connection_number; \
+          continue;
 
 class Manager {
 public:
@@ -393,21 +517,22 @@ public:
   const size_t max_inflight;
   const size_t max_queue;
 private:
-  size_t connection_number;
-  std::atomic<bool> stopped;
+  std::atomic<size_t> connection_number;
+  bool stopped;
   struct timeval read_timeout;
   ConnectionList connections;
-  CallbackList callbacks;
   MessageQueue messages;
-  size_t queued;
-  size_t dequeued;
-  std::mutex connections_lock;
+  std::atomic<size_t> queued;
+  std::atomic<size_t> dequeued;
+  mutable std::mutex connections_lock;
   std::thread runner;
 
   void publish_internal(message_wrapper_t* message) {
     const std::unique_ptr<message_wrapper_t> msg_owner(message);
-    if (!message->conn.state) {
-      // connection was deleted while message was in the queue
+    auto& conn = message->conn;
+
+    if (!conn->is_ok()) {
+      // connection had an issue while message was in the queue
       // TODO add error stats
       if (message->cb) {
         message->cb(RGW_AMQP_STATUS_CONNECTION_CLOSED);
@@ -417,15 +542,21 @@ private:
 
     if (message->cb == nullptr) {
       // TODO add error stats
-      amqp_basic_publish(message->conn.state,
+      const auto rc = amqp_basic_publish(conn->state,
         CHANNEL_ID,
-        amqp_cstring_bytes(message->conn.exchange.c_str()),
+        amqp_cstring_bytes(conn->exchange.c_str()),
         amqp_cstring_bytes(message->topic.c_str()),
         1, // mandatory, TODO: take from conf
         0, // not immediate
         nullptr,
         amqp_cstring_bytes(message->message.c_str()));
+      if (rc == AMQP_STATUS_OK) {
         return;
+      }
+      // an error occured, close connection
+      // it will be retied by the main loop
+      conn->destroy(rc);
+      return;
     }
 
     amqp_basic_properties_t props;
@@ -433,11 +564,11 @@ private:
       AMQP_BASIC_DELIVERY_MODE_FLAG | 
       AMQP_BASIC_REPLY_TO_FLAG;
     props.delivery_mode = 2; // persistent delivery TODO take from conf
-    props.reply_to = message->conn.reply_to_queue;
+    props.reply_to = conn->reply_to_queue;
 
-    const auto rc = amqp_basic_publish(message->conn.state,
+    const auto rc = amqp_basic_publish(conn->state,
       CONFIRMING_CHANNEL_ID,
-      amqp_cstring_bytes(message->conn.exchange.c_str()),
+      amqp_cstring_bytes(conn->exchange.c_str()),
       amqp_cstring_bytes(message->topic.c_str()),
       1, // mandatory, TODO: take from conf
       0, // not immediate
@@ -445,13 +576,16 @@ private:
       amqp_cstring_bytes(message->message.c_str()));
 
     if (rc == AMQP_STATUS_OK) {
-      if (callbacks.size() < max_inflight) {
-        callbacks.emplace_back(message->conn.delivery_tag++, message->cb);
+      if (conn->callbacks.size() < max_inflight) {
+        conn->callbacks.emplace_back(conn->delivery_tag++, message->cb);
       } else {
         // immediatly invoke callback with error
         message->cb(RGW_AMQP_STATUS_MAX_INFLIGHT);
       }
     } else {
+      // an error occured, close connection
+      // it will be retied by the main loop
+      conn->destroy(rc);
       // immediatly invoke callback with error
       message->cb(rc);
     }
@@ -462,13 +596,12 @@ private:
   // (2) loop over all connections and read acks
   // (3) manages deleted connections
   // (4) TODO reconnect on conection errors
+  // (5) TODO cleanup timedout callbacks
   void run() {
     amqp_frame_t frame;
-    //PublishInternal publish_internal_func(this);
     while (!stopped) {
 
       // publish all messages in the queue
-      //const auto count = messages.consume_all(publish_internal_func);
       const auto count = messages.consume_all(std::bind(&Manager::publish_internal, this, std::placeholders::_1));
       dequeued += count;
       ConnectionList::iterator conn_it;
@@ -483,78 +616,121 @@ private:
       auto incoming_message = false;
       // loop over all connections to read acks
       for (;conn_it != end_it;) {
-        if (conn_it->second.mark_for_deletion) {
-          conn_it->second.destroy();
+        
+        auto& conn = conn_it->second;
+        // delete the connection if marked for deletion
+        if (conn->marked_for_deletion) {
+          conn->destroy(RGW_AMQP_STATUS_CONNECTION_CLOSED);
           std::lock_guard<std::mutex> lock(connections_lock);
           // erase is safe - does not invalidate any other iterator
           // lock so no insertion happens at the same time
-          conn_it = connections.erase(conn_it);
-          --connection_number;
-          continue;
+          ERASE_AND_CONTINUE(conn_it, connections);
         }
-        const auto rc = amqp_simple_wait_frame_noblock(conn_it->second.state, &frame, &read_timeout);
 
-        // iterator not deleted - increment it
-        // note: the iterator should not be used from now on inside the loop
-        ++conn_it;
+        // try to reconnect the connection if it has an error
+        if (!conn->is_ok()) {
+          // pointers are used temporarily inside the amqp_connection_info object
+          // as read-only values, hence the assignment, and const_cast are safe here
+          amqp_connection_info info;
+          info.host = const_cast<char*>(conn_it->first.host.c_str());
+          info.port = conn_it->first.port;
+          info.vhost = const_cast<char*>(conn_it->first.vhost.c_str());
+          info.user = const_cast<char*>(conn->user.c_str());
+          info.password = const_cast<char*>(conn->password.c_str());
+          if (create_connection(conn, info)->is_ok() == false) {
+            // TODO: add error counter for failed retries
+            // TODO: add exponential backoff for retries
+          }
+          INCREMENT_AND_CONTINUE(conn_it);
+        }
+
+        const auto rc = amqp_simple_wait_frame_noblock(conn->state, &frame, &read_timeout);
 
         if (rc == AMQP_STATUS_TIMEOUT) {
           // TODO mark connection as idle
-          continue;
+          INCREMENT_AND_CONTINUE(conn_it);
         }
        
         // this is just to prevent spinning idle, does not indicate that a message
         // was sucessfully processd or not
         incoming_message = true;
+
+        // check if error occured that require reopening the connection
         if (rc != AMQP_STATUS_OK) {
-          // TODO error handling, add a counter
-          continue;
+          // an error occured, close connection
+          // it will be retied by the main loop
+          conn->destroy(rc);
+          INCREMENT_AND_CONTINUE(conn_it);
         }
 
         if (frame.frame_type != AMQP_FRAME_METHOD) {
-          // handler is for publish confirmation only - ignore all other messages
+          // handler is for publish confirmation only - handle only method frames
           // TODO: add a counter
-          continue;
+          INCREMENT_AND_CONTINUE(conn_it);
         }
 
         uint64_t tag;
         bool multiple;
         int result;
 
-        if (frame.payload.method.id == AMQP_BASIC_ACK_METHOD) {
-          result = AMQP_STATUS_OK;
-          const auto ack = (amqp_basic_ack_t*)frame.payload.method.decoded;
-          ceph_assert(ack);
-          tag = ack->delivery_tag;
-          multiple = ack->multiple;
-        } else if (frame.payload.method.id == AMQP_BASIC_NACK_METHOD) {
-          result = RGW_AMQP_STATUS_BROKER_NACK;
-          const auto nack = (amqp_basic_nack_t*)frame.payload.method.decoded;
-          ceph_assert(nack);
-          tag = nack->delivery_tag;
-          multiple = nack->multiple;
-        } else {
-          // unexpected method
-          // TODO: add a counter
-          continue;
+        switch (frame.payload.method.id) {
+          case AMQP_BASIC_ACK_METHOD: 
+            {
+              result = AMQP_STATUS_OK;
+              const auto ack = (amqp_basic_ack_t*)frame.payload.method.decoded;
+              ceph_assert(ack);
+              tag = ack->delivery_tag;
+              multiple = ack->multiple;
+              break;
+            }
+          case AMQP_BASIC_NACK_METHOD:
+            {
+              result = RGW_AMQP_STATUS_BROKER_NACK;
+              const auto nack = (amqp_basic_nack_t*)frame.payload.method.decoded;
+              ceph_assert(nack);
+              tag = nack->delivery_tag;
+              multiple = nack->multiple;
+              break;
+            }
+          case AMQP_CONNECTION_CLOSE_METHOD:
+            // TODO on channel close, no need to reopen the connection
+          case AMQP_CHANNEL_CLOSE_METHOD:
+            {
+              // other side closed the connection, no need to continue
+              conn->destroy(rc);
+              INCREMENT_AND_CONTINUE(conn_it);
+            }
+          case AMQP_BASIC_RETURN_METHOD:
+            // message was not delivered, returned to sender
+            // TODO: add a counter
+            INCREMENT_AND_CONTINUE(conn_it);
+            break;
+          default:
+            // unexpected method
+            // TODO: add a counter
+            INCREMENT_AND_CONTINUE(conn_it);
         }
 
-        const auto it = std::find(callbacks.begin(), callbacks.end(), tag);
-        if (it != callbacks.end()) {
+        const auto& callbacks_end = conn->callbacks.end();
+        const auto& callbacks_begin = conn->callbacks.begin();
+        const auto it = std::find(callbacks_begin, callbacks_end, tag);
+        if (it != callbacks_end) {
           if (multiple) {
             // n/ack all up to (and including) the tag
-            for (auto rit = it; rit >= callbacks.begin(); --rit) {
+            for (auto rit = it; rit >= callbacks_begin; --rit) {
               rit->cb(result);
-              callbacks.erase(rit);
+              conn->callbacks.erase(rit);
             }
           } else {
             // n/ack a specific tag
             it->cb(result);
-            callbacks.erase(it);
+            conn->callbacks.erase(it);
           }
         } else {
           // TODO add counter for acks with no callback
         }
+        // just increment the iterator
+        ++conn_it;
       }
       // if no messages were received or published, sleep for 100ms
       if (count == 0 && !incoming_message) {
@@ -601,55 +777,63 @@ public:
   }
 
   // disconnect from a broker
-  bool disconnect(connection_t& conn) {
-    if (stopped) {
+  bool disconnect(connection_ptr_t& conn) {
+    if (!conn || stopped) {
       return false;
     }
-    conn.mark_for_deletion = true;
+    conn->marked_for_deletion = true;
     return true;
   }
 
   // connect to a broker, or reuse an existing connection if already connected
-  connection_t& connect(const std::string& url, const std::string& exchange) {
+  connection_ptr_t connect(const std::string& url, const std::string& exchange) {
     if (stopped) {
-      throw(connection_error("manager is stopped"));
+      // TODO: increment counter
+      return nullptr;
     }
 
     struct amqp_connection_info info;
     // cache the URL so that parsing could happen in-place
     std::vector<char> url_cache(url.c_str(), url.c_str()+url.size()+1);
     if (AMQP_STATUS_OK != amqp_parse_url(url_cache.data(), &info)) {
-      throw(connection_error("failed to parse URL: " + url));
+      // TODO: increment counter
+      return nullptr;
     }
 
     const connection_id_t id(info);
     std::lock_guard<std::mutex> lock(connections_lock);
     const auto it = connections.find(id);
     if (it != connections.end()) {
-      if (it->second.mark_for_deletion) {
-        throw(connection_error("connection in process of deletion"));
-      } else if (it->second.exchange != exchange) {
-        throw(connection_error("exchange mismatch: " + it->second.exchange + " != " + exchange));
+      if (it->second->marked_for_deletion) {
+        // TODO: increment counter
+        return nullptr;
+      } else if (it->second->exchange != exchange) {
+        // TODO: increment counter
+        return nullptr;
       }
-      // connection found
+      // connection found - return even if non-ok
       return it->second;
     }
 
     // connection not found, creating a new one
     if (connection_number >= max_connections) {
-      throw(connection_error("max connections reached: " + std::to_string(max_connections)));
+      // TODO: increment counter
+      return nullptr;
     }
-    const auto conn = create_connection(info, exchange);
-    // if connection creation fails, it will throw and exception
+    const auto conn = create_new_connection(info, exchange);
+    // create_new_connection must always return a connection object
+    // even if error occured during creation. 
+    // in such a case the creation will be retried in the main thread
+    ceph_assert(conn);
     ++connection_number;
     return connections.emplace(id, conn).first->second;
   }
 
   // TODO publish with confirm is needed in "none" case as well, cb should be invoked publish is ok (no ack)
-  int publish(connection_t& conn, 
+  int publish(connection_ptr_t& conn, 
     const std::string& topic,
     const std::string& message) {
-    if (!conn.state || conn.mark_for_deletion) {
+    if (!conn || !conn->is_ok()) {
       return RGW_AMQP_STATUS_CONNECTION_CLOSED;
     }
     if (messages.push(new message_wrapper_t(conn, topic, message, nullptr))) {
@@ -659,11 +843,11 @@ public:
     return RGW_AMQP_STATUS_QUEUE_FULL;
   }
   
-  int publish_with_confirm(connection_t& conn, 
+  int publish_with_confirm(connection_ptr_t& conn, 
     const std::string& topic,
     const std::string& message,
     reply_callback_t cb) {
-    if (!conn.state || conn.mark_for_deletion) {
+    if (!conn || !conn->is_ok()) {
       return RGW_AMQP_STATUS_CONNECTION_CLOSED;
     }
     if (messages.push(new message_wrapper_t(conn, topic, message, cb))) {
@@ -679,9 +863,10 @@ public:
     stopped = true;
     runner.join();
     messages.consume_all(delete_message);
-    for (auto& conn : connections) {
-      conn.second.destroy();
-    }
+    // TODO
+    /*for (auto& conn : connections) {
+      conn.second->destroy(RGW_AMQP_STATUS_CONNECTION_CLOSED);
+    }*/
   }
 
   // get the number of connections
@@ -691,7 +876,12 @@ public:
   
   // get the number of in-flight messages
   size_t get_inflight() const {
-    return callbacks.size();
+    size_t sum = 0;
+    std::lock_guard<std::mutex> lock(connections_lock);
+    std::for_each(connections.begin(), connections.end(), [&sum](auto& conn_pair) {
+        sum += conn_pair.second->callbacks.size();
+      });
+    return sum;
   }
 
   // running counter of the queued messages
@@ -710,17 +900,17 @@ public:
 // TODO get parameters from conf
 Manager s_manager(256, 8192, 8192, 100);
 
-connection_t& connect(const std::string& url, const std::string& exchange) {
+connection_ptr_t connect(const std::string& url, const std::string& exchange) {
   return s_manager.connect(url, exchange);
 }
 
-int publish(connection_t& conn, 
+int publish(connection_ptr_t& conn, 
     const std::string& topic,
     const std::string& message) {
   return s_manager.publish(conn, topic, message);
 }
 
-int publish_with_confirm(connection_t& conn, 
+int publish_with_confirm(connection_ptr_t& conn, 
     const std::string& topic,
     const std::string& message,
     reply_callback_t cb) {
@@ -755,7 +945,7 @@ size_t get_max_queue() {
   return s_manager.max_queue;
 }
 
-bool disconnect(connection_t& conn) {
+bool disconnect(connection_ptr_t& conn) {
   return s_manager.disconnect(conn);
 }
 
