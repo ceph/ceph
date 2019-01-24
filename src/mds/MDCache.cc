@@ -1990,7 +1990,7 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
   }
 }
 
-void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct)
+void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct, bool quota_change)
 {
   if (!(mds->is_active() || mds->is_stopping()))
     return;
@@ -1999,7 +1999,9 @@ void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct)
     return;
 
   auto i = in->get_projected_inode();
-  if (!i->quota.is_enable())
+  
+  if (!i->quota.is_enable() &&
+  	  !quota_change)
     return;
 
   // creaete snaprealm for quota inode (quota was set before mimic)
