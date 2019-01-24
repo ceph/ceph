@@ -5,26 +5,34 @@
 
 #include <string>
 #include <functional>
-#include <stdexcept>
+#include <boost/smart_ptr/intrusive_ptr.hpp>
 
 namespace rgw::amqp {
-// farward declaration of coonection object
+// farward declaration of conection object
 struct connection_t;
 
+typedef boost::intrusive_ptr<connection_t> connection_ptr_t;
+
+// required interfaces needed so that connection_t could be used inside boost::intrusive_ptr
+void intrusive_ptr_add_ref(const connection_t* p);
+void intrusive_ptr_release(const connection_t* p);
+
+// the reply callback is expected to get an integer parameter
+// indicating the result, and not to return anything
 typedef std::function<void(int)> reply_callback_t;
 
 // connect to an amqp endpoint
-connection_t& connect(const std::string& url, const std::string& exchange);
+connection_ptr_t connect(const std::string& url, const std::string& exchange);
 
 // publish a message over a connection that was already created
-int publish(connection_t& conn,
+int publish(connection_ptr_t& conn,
     const std::string& topic,
     const std::string& message);
 
 // publish a message over a connection that was already created
 // and pass a callback that will be invoked (async) when broker confirms
 // receiving the message
-int publish_with_confirm(connection_t& conn, 
+int publish_with_confirm(connection_ptr_t& conn, 
     const std::string& topic,
     const std::string& message,
     reply_callback_t cb);
@@ -55,12 +63,7 @@ size_t get_max_inflight();
 size_t get_max_queue();
 
 // disconnect from an amqp broker
-bool disconnect(connection_t& conn);
+bool disconnect(connection_ptr_t& conn);
 
-// exception object for connection establishment error
-struct connection_error : public std::runtime_error {
-  connection_error(const std::string& what_arg) : 
-    std::runtime_error("amqp connection error: " + what_arg) {}
-};
 }
 

@@ -122,9 +122,6 @@ struct PSSubConfig { /* subscription config */
       } catch (const RGWPubSubEndpoint::configuration_error& e) {
           ldout(cct, 0) << "ERROR: failed to create push endpoint: " 
             << push_endpoint_name << " due to: " << e.what() << dendl;
-      } catch (const std::runtime_error& e) {
-        ldout(cct, 0) << "ERROR: failed to connect to push endpoint: " 
-          << push_endpoint_name << " due to: " << e.what() << dendl;
       }
     }
   }
@@ -153,9 +150,6 @@ struct PSSubConfig { /* subscription config */
         push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args));
       } catch (const RGWPubSubEndpoint::configuration_error& e) {
         ldout(cct, 0) << "ERROR: failed to create push endpoint: " 
-          << push_endpoint_name << " due to: " << e.what() << dendl;
-      } catch (const std::runtime_error& e) {
-        ldout(cct, 0) << "ERROR: failed to connect to push endpoint: " 
           << push_endpoint_name << " due to: " << e.what() << dendl;
       }
     }
@@ -1256,7 +1250,7 @@ public:
       if (has_subscriptions && !event_handled) {
         // event is considered "lost" of it has subscriptions on any of its topics
         // but it was not stored in, or pushed to, any of them
-        if (perfcounter) perfcounter->inc(l_rgw_pubsub_event_triggered);
+        if (perfcounter) perfcounter->inc(l_rgw_pubsub_event_lost);
       }
       if (retcode < 0) {
         return set_cr_error(retcode);

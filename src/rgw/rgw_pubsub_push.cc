@@ -13,6 +13,7 @@
 #include "rgw_amqp.h"
 #include <boost/asio/yield.hpp>
 #include <functional>
+#include "rgw_perf_counters.h"
 
 using namespace rgw;
 
@@ -58,12 +59,16 @@ private:
     int send_request() override {
       init_new_io(this);
       const auto rc = sync_env->http_manager->add_request(this);
-      // return zero on sucess, rc o/w
-      return std::max(rc, 0);
+      if (rc < 0) {
+        return rc;
+      }
+      if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_pending);
+      return 0;
     }
 
     // wait for reply
     int request_complete() override {
+      if (perfcounter) perfcounter->dec(l_rgw_pubsub_push_pending);
       if (ack_level == ACK_LEVEL_ANY) {
         return 0;
       } else if (ack_level == ACK_LEVEL_NON_ERROR) {
@@ -116,7 +121,7 @@ class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
     };
     const std::string endpoint;
     const std::string topic;
-    amqp::connection_t& conn;
+    amqp::connection_ptr_t conn;
     ack_level_t ack_level;
     std::string str_ack_level;
 
@@ -135,13 +140,13 @@ class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
   private:
     RGWDataSyncEnv* const sync_env;
     const std::string topic;
-    amqp::connection_t& conn;
+    amqp::connection_ptr_t conn;
     const std::string message;
 
   public:
     NoAckPublishCR(RGWDataSyncEnv* _sync_env,
               const std::string& _topic,
-              amqp::connection_t& _conn,
+              amqp::connection_ptr_t& _conn,
               const std::string& _message) :
       RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
       topic(_topic), conn(_conn), message(_message) {}
@@ -166,14 +171,14 @@ class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
   private:
     RGWDataSyncEnv* const sync_env;
     const std::string topic;
-    amqp::connection_t& conn;
+    amqp::connection_ptr_t conn;
     const std::string message;
     const ack_level_t ack_level; // TODO not used for now
 
   public:
     AckPublishCR(RGWDataSyncEnv* _sync_env,
               const std::string& _topic,
-              amqp::connection_t& _conn,
+              amqp::connection_ptr_t& _conn,
               const std::string& _message,
               ack_level_t _ack_level) :
       RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
@@ -193,6 +198,7 @@ class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
             return set_cr_error(rc);
           }
           // mark as blocked on the amqp answer
+          if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_pending);
           io_block();
           return 0;
         }
@@ -209,6 +215,7 @@ class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
         set_cr_error(status);
       }
       io_complete();
+      if (perfcounter) perfcounter->dec(l_rgw_pubsub_push_pending);
     }
    
     // TODO: why are these mandatory in RGWIOProvider?
