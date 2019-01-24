@@ -153,3 +153,36 @@ class TestMixedTypeLargeAsPossible(object):
             bluestore.MixedType.with_auto_devices(args, devices)
         expected = 'Unable to use device 5.66 GB /dev/sda, LVs would be smaller than 5GB'
         assert expected in str(error)
+
+
+class TestMixedTypeWithExplicitDevices(object):
+
+    def test_multi_hdd_device_is_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
+        conf_ceph(get_safe=lambda *a: None)
+        args = factory(filtered_devices=[], osds_per_device=2,
+                       block_db_size=None, block_wal_size=None,
+                       osd_ids=[])
+        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=60073740000))
+        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=60073740000))
+
+        osd = bluestore.MixedType(args, [hdd], [], [ssd]).computed['osds'][0]
+        assert osd['data']['percentage'] == 50
+        assert osd['data']['human_readable_size'] == '27.97 GB'
+        assert osd['data']['path'] == '/dev/sda'
+        # a new vg will be created
+        assert osd['block.wal']['path'] == 'vg: vg/lv'
+        # as large as possible
+        assert osd['block.wal']['percentage'] == 50
+
+    def test_wal_device_is_not_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
+        conf_ceph(get_safe=lambda *a: None)
+        args = factory(filtered_devices=[], osds_per_device=2,
+                       block_db_size=None, block_wal_size=None,
+                       osd_ids=[])
+        ssd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='0', size=1610612736))
+        hdd = fakedevice(used_by_ceph=False, is_lvm_member=False, sys_api=dict(rotational='1', size=60073740000))
+
+        with pytest.raises(RuntimeError) as error:
+            bluestore.MixedType(args, [hdd], [], [ssd]).computed['osds'][0]
+        expected = 'Unable to use device 1.50 GB /dev/sda, LVs would be smaller than 1GB'
+        assert expected in str(error), str(error)
