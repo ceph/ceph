@@ -259,6 +259,7 @@ public:
     assert(mds->mds_lock.is_locked());
 
     dout(20) << __func__ << dendl;
+    f->open_object_section("result");
     recall_client_state();
   }
 
@@ -317,8 +318,8 @@ private:
 
   void recall_client_state() {
     dout(20) << __func__ << dendl;
-
-    f->open_object_section("result");
+    auto now = mono_clock::now();
+    auto duration = std::chrono::duration<double>(recall_start-now).count();
 
     MDSGatherBuilder *gather = new MDSGatherBuilder(g_ceph_context);
     auto [throttled, count] = server->recall_client_state(gather, Server::RecallFlags::STEADY);
@@ -326,19 +327,30 @@ private:
              << (throttled ? " (throttled)" : "")
              << " recalled " << count << " caps" << dendl;
 
-    if (!gather->has_subs()) {
-      delete gather;
-      return handle_recall_client_state(0);
+    if ((throttled || count > 0) && (recall_timeout == 0 || duration < recall_timeout)) {
+      auto timer = new FunctionContext([this](int _) {
+        recall_client_state();
+      });
+      mds->timer.add_event_after(1.0, timer);
+    } else {
+      if (!gather->has_subs()) {
+        delete gather;
+        return handle_recall_client_state(0);
+      } else if (recall_timeout > 0 && duration > recall_timeout) {
+        delete gather;
+        return handle_recall_client_state(-ETIMEDOUT);
+      } else {
+        uint64_t remaining = (recall_timeout == 0 ? 0 : recall_timeout-duration);
+        C_ContextTimeout *ctx = new C_ContextTimeout(
+          mds, remaining, new FunctionContext([this](int r) {
+              handle_recall_client_state(r);
+            }));
+
+        ctx->start_timer();
+        gather->set_finisher(new MDSInternalContextWrapper(mds, ctx));
+        gather->activate();
+      }
     }
-
-    C_ContextTimeout *ctx = new C_ContextTimeout(
-      mds, recall_timeout, new FunctionContext([this](int r) {
-          handle_recall_client_state(r);
-        }));
-
-    ctx->start_timer();
-    gather->set_finisher(new MDSInternalContextWrapper(mds, ctx));
-    gather->activate();
   }
 
   void handle_recall_client_state(int r) {
