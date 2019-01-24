@@ -664,7 +664,7 @@ std::vector<Option> get_global_options() {
     .set_long_description("This can either be a simple file name to receive all messages, or a list of key/value pairs where the key is the log channel and the value is the filename, which may include $cluster and $channel metavariables"),
 
     Option("mon_cluster_log_file_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("info")
+    .set_default("debug")
     .add_service("mon")
     .set_description("Lowest level to include is cluster log file")
     .add_see_also("mon_cluster_log_file"),
