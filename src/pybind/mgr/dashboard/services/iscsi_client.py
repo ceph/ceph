@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+# pylint: disable=too-many-public-methods
 from __future__ import absolute_import
 
 import json
@@ -163,3 +164,18 @@ class IscsiClient(RestClient):
     def delete_group(self, target_iqn, group_name, request=None):
         logger.debug("iSCSI: Deleting group: %s/%s", target_iqn, group_name)
         return request()
+
+    @RestClient.api_put('/api/discoveryauth')
+    def update_discoveryauth(self, user, password, mutual_user, mutual_password, request=None):
+        logger.debug("iSCSI: Updating discoveryauth: %s/%s/%s/%s", user, password, mutual_user,
+                     mutual_password)
+        chap = ''
+        if user and password:
+            chap = '{}/{}'.format(user, password)
+        chap_mutual = ''
+        if mutual_user and mutual_password:
+            chap_mutual = '{}/{}'.format(mutual_user, mutual_password)
+        return request({
+            'chap': chap,
+            'chap_mutual': chap_mutual
+        })
