@@ -20,7 +20,6 @@ namespace immutable_obj_cache {
       m_lock("ceph::cache::cacheclient::m_lock"),
       m_header_buffer(new char[sizeof(ObjectCacheMsgHeader)])
   {
-    // TODO : release these resources.
     // TODO : configure it.
     m_use_dedicated_worker = true;
     m_worker_thread_num = 2;
@@ -53,6 +52,14 @@ namespace immutable_obj_cache {
 
     if(m_io_thread != nullptr) {
       m_io_thread->join();
+    }
+    if(m_use_dedicated_worker) {
+      m_worker->stop();
+      for(auto thd : m_worker_threads) {
+        thd->join();
+        delete thd;
+      }
+      delete m_worker;
     }
     return 0;
   }
@@ -285,7 +292,6 @@ namespace immutable_obj_cache {
 
     if(err_type == ASIO_ERROR_CONNECT) {
        ceph_assert(!m_session_work.load());
-       std::cout << "connect fails." << std::endl;
        if(ec == boost::asio::error::connection_refused) {
          ldout(cct, 20) << "Connecting RO daenmon fails : "<< ec.message()
                         << ". Immutable-object-cache daemon is down ? "
