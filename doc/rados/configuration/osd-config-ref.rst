@@ -850,30 +850,14 @@ Ceph performs well as the OSD map grows larger.
 
 :Description: The number of OSD maps to keep cached.
 :Type: 32-bit Integer
-:Default: ``500``
-
-
-``osd map cache bl size``
-
-:Description: The size of the in-memory OSD map cache in OSD daemons.
-:Type: 32-bit Integer
 :Default: ``50``
-
-
-``osd map cache bl inc size``
-
-:Description: The size of the in-memory OSD map cache incrementals in
-              OSD daemons.
-
-:Type: 32-bit Integer
-:Default: ``100``
 
 
 ``osd map message max``
 
 :Description: The maximum map entries allowed per MOSDMap message.
 :Type: 32-bit Integer
-:Default: ``100``
+:Default: ``40``
 
 
 
