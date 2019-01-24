@@ -2323,9 +2323,11 @@ CtPtr ProtocolV2::handle_server_ident(char *payload, uint32_t length) {
                 << server_ident.cookie() << dendl;
 
   // is this who we intended to talk to?
-  if (*connection->peer_addrs != server_ident.addrs()) {
+  // be a bit forgiving here, since we may be connecting based on addresses parsed out
+  // of mon_host or something.
+  if (!server_ident.addrs().contains(connection->target_addr)) {
     ldout(cct,1) << __func__ << " peer identifies as " << server_ident.addrs()
-		 << " not " << *connection->peer_addrs << dendl;
+		 << ", does not include " << connection->target_addr << dendl;
     return _fault();
   }
 
