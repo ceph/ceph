@@ -359,6 +359,16 @@ static bool is_sys_attr(const std::string& attr_name){
   return std::find(rgw_sys_attrs.begin(), rgw_sys_attrs.end(), attr_name) != rgw_sys_attrs.end();
 }
 
+static size_t attr_len(const bufferlist& val)
+{
+  size_t len = val.length();
+  if (len && val[len - 1] == '\0') {
+    --len;
+  }
+
+  return len;
+}
+
 struct es_obj_metadata {
   CephContext *cct;
   ElasticConfigRef es_conf;
@@ -391,7 +401,7 @@ struct es_obj_metadata {
 
       if (boost::algorithm::starts_with(attr_name, RGW_ATTR_META_PREFIX)) {
         custom_meta.emplace(attr_name.substr(sizeof(RGW_ATTR_META_PREFIX) - 1),
-                            string(val.c_str(), (val.length() > 0 ? val.length() - 1 : 0)));
+                            string(val.c_str(), attr_len(val)));
         continue;
       }
 
@@ -440,7 +450,7 @@ struct es_obj_metadata {
       } else {
         if (!is_sys_attr(attr_name)) {
           out_attrs.emplace(attr_name.substr(sizeof(RGW_ATTR_PREFIX) - 1),
-                            std::string(val.c_str(), (val.length() > 0 ? val.length() - 1 : 0)));
+                            std::string(val.c_str(), attr_len(val)));
         }
       }
     }
