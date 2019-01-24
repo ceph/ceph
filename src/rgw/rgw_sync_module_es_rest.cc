@@ -180,7 +180,9 @@ void RGWMetadataSearchOp::execute()
                                   { "size", "meta.size" },
                                   { "mtime", "meta.mtime" },
                                   { "lastmodified", "meta.mtime" },
-                                  { "contenttype", "meta.contenttype" },
+                                  { "last_modified", "meta.mtime" },
+                                  { "contenttype", "meta.content_type" },
+                                  { "content_type", "meta.content_type" },
   };
   es_query.set_field_aliases(&aliases);
 
@@ -189,7 +191,7 @@ void RGWMetadataSearchOp::execute()
                                                            {"instance", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"permissions", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"meta.etag", ESEntityTypeMap::ES_ENTITY_STR},
-                                                           {"meta.contenttype", ESEntityTypeMap::ES_ENTITY_STR},
+                                                           {"meta.content_type", ESEntityTypeMap::ES_ENTITY_STR},
                                                            {"meta.mtime", ESEntityTypeMap::ES_ENTITY_DATE},
                                                            {"meta.size", ESEntityTypeMap::ES_ENTITY_INT} };
   ESEntityTypeMap gm(generic_map);
