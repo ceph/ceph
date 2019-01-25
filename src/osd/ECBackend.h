@@ -478,7 +478,7 @@ public:
     bool invalidates_cache() const { return plan.invalidates_cache; }
 
     // must be true if requires_rmw(), must be false if invalidates_cache()
-    bool using_cache = false;
+    bool using_cache = true;
 
     /// In progress read state;
     map<hobject_t,extent_set> pending_read; // subset already being read
