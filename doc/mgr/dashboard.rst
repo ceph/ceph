@@ -18,17 +18,17 @@ one and adds a built-in web based monitoring and administration application to
 the Ceph Manager. The architecture and functionality of this new plugin is
 derived from and inspired by the `openATTIC Ceph management and monitoring tool
 <https://openattic.org/>`_. The development is actively driven by the team
-behind openATTIC at `SUSE <https://www.suse.com/>`_.
+behind openATTIC at `SUSE <https://www.suse.com/>`_, with a lot of support from
+the Ceph community and other companies like Red Hat.
 
-The intention is to reuse as much of the existing openATTIC functionality as
-possible, while adapting it to the different environment. openATTIC is based on
-Django and the Django REST Framework, whereas the dashboard plugin's backend
-code uses the CherryPy framework and a custom REST API implementation. The WebUI
-implementation is based on Angular/TypeScript, merging both functionality from
-the original dashboard as well as adding new functionality originally developed
-for the standalone version of openATTIC. The Ceph Manager Dashboard plugin is
-implemented as a web application that visualizes information and statistics about
-the Ceph cluster using a web server hosted by ``ceph-mgr``.
+
+The dashboard plugin's backend code uses the CherryPy framework and a custom
+REST API implementation. The WebUI implementation is based on
+Angular/TypeScript, merging both functionality from the original dashboard as
+well as adding new functionality originally developed for the standalone version
+of openATTIC. The Ceph Manager Dashboard plugin is implemented as a web
+application that visualizes information and statistics about the Ceph cluster
+using a web server hosted by ``ceph-mgr``.
 
 The dashboard currently provides the following features to monitor and manage
 various aspects of your Ceph cluster:
@@ -37,13 +37,19 @@ various aspects of your Ceph cluster:
   accounts with different permissions (roles). The user accounts and roles
   can be modified on both the command line and via the WebUI.
   See :ref:`dashboard-user-role-management` for details.
+* **Single Sign-On (SSO)**: the dashboard supports authentication
+  via an external identity provider using the SAML 2.0 protocol. See
+  :ref:`dashboard-sso-support` for details.
 * **SSL/TLS support**: All HTTP communication between the web browser and the
   dashboard is secured via SSL. A self-signed certificate can be created with
   a built-in command, but it's also possible to import custom certificates
   signed and issued by a CA. See :ref:`dashboard-ssl-tls-support` for details.
-* **Overall cluster health**: Displays the overall cluster status, storage
-  utilization (e.g. number of objects, raw capacity, usage per pool), a list of
-  pools and their status and usage statistics.
+* **Auditing**: the dashboard backend can be configured to log all PUT, POST
+  and DELETE API requests in the Ceph audit log. See :ref:`dashboard-auditing`
+  for instructions on how to enable this feature.
+* **Internationalization (I18N)**: use the dashboard in different languages.
+* **Overall cluster health**: Displays overall cluster status, performance
+  and capacity metrics.
 * **Cluster logs**: Display the latest updates to the cluster's event and audit
   log files.
 * **Hosts**: Provides a list of all hosts associated to the cluster, which
@@ -51,21 +57,24 @@ various aspects of your Ceph cluster:
 * **Performance counters**: Displays detailed service-specific statistics for
   each running service.
 * **Monitors**: Lists all MONs, their quorum status, open sessions.
-* **Configuration Reference**: Lists all available configuration options,
-  their description and default values.
+* **Configuration Editor**: View all available configuration options,
+  their description, type and default values and edit the current values.
 * **Pools**: List all Ceph pools and their details (e.g. applications, placement
   groups, replication size, EC profile, CRUSH ruleset, etc.)
 * **OSDs**: Lists all OSDs, their status and usage statistics as well as
   detailed information like attributes (OSD map), metadata, performance counters
-  and usage histograms for read/write operations.
+  and usage histograms for read/write operations. Mark OSDs as up/down/out,
+  perform scrub operations. Select between different recovery profiles to adjust
+  the level of backfilling activity.
 * **iSCSI**: Lists all hosts that run the TCMU runner service, displaying all
   images and their performance characteristics (read/write ops, traffic).
 * **RBD**: Lists all RBD images and their properties (size, objects, features).
   Create, copy, modify and delete RBD images. Create, delete and rollback
   snapshots of selected images, protect/unprotect these snapshots against
   modification. Copy or clone snapshots, flatten cloned images.
-* **RBD mirroring**: Lists all active sync daemons and their status, pools and
-  RBD images including their synchronization state.
+* **RBD mirroring**: Enable and configure RBD mirroring to a remote Ceph server.
+  Lists all active sync daemons and their status, pools and RBD images including
+  their synchronization state. 
 * **CephFS**: Lists all active filesystem clients and associated pools,
   including their usage statistics.
 * **Object Gateway**: Lists all active object gateways and their performance
@@ -319,6 +328,8 @@ You need to tell the dashboard on which url Grafana instance is running/deployed
 The format of url is : `<protocol>:<IP-address>:<port>`
 You can directly access Grafana Instance as well to monitor your cluster.
 
+.. _dashboard-sso-support:
+
 Enabling Single Sign-On (SSO)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -564,6 +575,7 @@ to use hyperlinks that include your prefix, you can set the
 
 so you can access the dashboard at ``http://$IP:$PORT/$PREFIX/``.
 
+.. _dashboard-auditing:
 
 Auditing
 --------
