@@ -1,46 +1,268 @@
 import { fakeAsync, tick } from '@angular/core/testing';
-import { AbstractControl, FormControl, FormGroup } from '@angular/forms';
+import { FormControl } from '@angular/forms';
 
 import { of as observableOf } from 'rxjs';
 
+import { FormHelper } from '../../../testing/unit-test-helper';
+import { CdFormGroup } from './cd-form-group';
 import { CdValidators } from './cd-validators';
 
 describe('CdValidators', () => {
+  let formHelper: FormHelper;
+  let form: CdFormGroup;
+
+  const expectValid = (value) => formHelper.expectValidChange('x', value);
+  const expectPatternError = (value) => formHelper.expectErrorChange('x', value, 'pattern');
+  const updateValidity = (controlName) => form.get(controlName).updateValueAndValidity();
+
+  beforeEach(() => {
+    form = new CdFormGroup({
+      x: new FormControl()
+    });
+    formHelper = new FormHelper(form);
+  });
+
   describe('email', () => {
+    beforeEach(() => {
+      form.get('x').setValidators(CdValidators.email);
+    });
+
     it('should not error on an empty email address', () => {
-      const control = new FormControl('');
-      expect(CdValidators.email(control)).toBeNull();
+      expectValid('');
     });
 
     it('should not error on valid email address', () => {
-      const control = new FormControl('dashboard@ceph.com');
-      expect(CdValidators.email(control)).toBeNull();
+      expectValid('dashboard@ceph.com');
     });
 
     it('should error on invalid email address', () => {
-      const control = new FormControl('xyz');
-      expect(CdValidators.email(control)).toEqual({ email: true });
+      formHelper.expectErrorChange('x', 'xyz', 'email');
+    });
+  });
+
+  describe('ip validator', () => {
+    describe('IPv4', () => {
+      beforeEach(() => {
+        form.get('x').setValidators(CdValidators.ip(4));
+      });
+
+      it('should not error on empty addresses', () => {
+        expectValid('');
+      });
+
+      it('should accept valid address', () => {
+        expectValid('19.117.23.141');
+      });
+
+      it('should error containing whitespace', () => {
+        expectPatternError('155.144.133.122 ');
+        expectPatternError('155. 144.133 .122');
+        expectPatternError(' 155.144.133.122');
+      });
+
+      it('should error containing invalid char', () => {
+        expectPatternError('155.144.eee.122 ');
+        expectPatternError('155.1?.133 .1&2');
+      });
+
+      it('should error containing blocks higher than 255', () => {
+        expectPatternError('155.270.133.122');
+        expectPatternError('155.144.133.290');
+      });
+    });
+
+    describe('IPv4', () => {
+      beforeEach(() => {
+        form.get('x').setValidators(CdValidators.ip(6));
+      });
+
+      it('should not error on empty IPv6 addresses', () => {
+        expectValid('');
+      });
+
+      it('should accept valid IPv6 address', () => {
+        expectValid('c4dc:1475:cb0b:24ed:3c80:468b:70cd:1a95');
+      });
+
+      it('should error on IPv6 address containing too many blocks', () => {
+        formHelper.expectErrorChange(
+          'x',
+          'c4dc:14753:cb0b:24ed:3c80:468b:70cd:1a95:a3f3',
+          'pattern'
+        );
+      });
+
+      it('should error on IPv6 address containing more than 4 digits per block', () => {
+        expectPatternError('c4dc:14753:cb0b:24ed:3c80:468b:70cd:1a95');
+      });
+
+      it('should error on IPv6 address containing whitespace', () => {
+        expectPatternError('c4dc:14753:cb0b:24ed:3c80:468b:70cd:1a95 ');
+        expectPatternError('c4dc:14753 :cb0b:24ed:3c80 :468b:70cd :1a95');
+        expectPatternError(' c4dc:14753:cb0b:24ed:3c80:468b:70cd:1a95');
+      });
+
+      it('should error on IPv6 address containing invalid char', () => {
+        expectPatternError('c4dx:14753:cb0b:24ed:3c80:468b:70cd:1a95');
+        expectPatternError('c4da:14753:cb0b:24ed:3$80:468b:70cd:1a95');
+      });
+    });
+
+    it('should accept valid IPv4/6 addresses if not protocol version is given', () => {
+      const x = form.get('x');
+      x.setValidators(CdValidators.ip());
+      expectValid('19.117.23.141');
+      expectValid('c4dc:1475:cb0b:24ed:3c80:468b:70cd:1a95');
+    });
+  });
+
+  describe('uuid validator', () => {
+    const expectUuidError = (value) =>
+      formHelper.expectErrorChange('x', value, 'invalidUuid', true);
+    beforeEach(() => {
+      form.get('x').setValidators(CdValidators.uuid());
+    });
+
+    it('should accept empty value', () => {
+      expectValid('');
+    });
+
+    it('should accept valid version 1 uuid', () => {
+      expectValid('171af0b2-c305-11e8-a355-529269fb1459');
+    });
+
+    it('should accept valid version 4 uuid', () => {
+      expectValid('e33bbcb6-fcc3-40b1-ae81-3f81706a35d5');
+    });
+
+    it('should error on uuid containing too many blocks', () => {
+      expectUuidError('e33bbcb6-fcc3-40b1-ae81-3f81706a35d5-23d3');
+    });
+
+    it('should error on uuid containing too many chars in block', () => {
+      expectUuidError('aae33bbcb6-fcc3-40b1-ae81-3f81706a35d5');
+    });
+
+    it('should error on uuid containing invalid char', () => {
+      expectUuidError('x33bbcb6-fcc3-40b1-ae81-3f81706a35d5');
+      expectUuidError('$33bbcb6-fcc3-40b1-ae81-3f81706a35d5');
+    });
+  });
+
+  describe('number validator', () => {
+    beforeEach(() => {
+      form.get('x').setValidators(CdValidators.number());
+    });
+
+    it('should accept empty value', () => {
+      expectValid('');
+    });
+
+    it('should accept numbers', () => {
+      expectValid(42);
+      expectValid(-42);
+      expectValid('42');
+    });
+
+    it('should error on decimal numbers', () => {
+      expectPatternError(42.3);
+      expectPatternError(-42.3);
+      expectPatternError('42.3');
+    });
+
+    it('should error on chars', () => {
+      expectPatternError('char');
+      expectPatternError('42char');
+    });
+
+    it('should error on whitespaces', () => {
+      expectPatternError('42 ');
+      expectPatternError('4 2');
+    });
+  });
+
+  describe('number validator (without negative values)', () => {
+    beforeEach(() => {
+      form.get('x').setValidators(CdValidators.number(false));
+    });
+
+    it('should accept positive numbers', () => {
+      expectValid(42);
+      expectValid('42');
+    });
+
+    it('should error on negative numbers', () => {
+      expectPatternError(-42);
+      expectPatternError('-42');
+    });
+  });
+
+  describe('decimal number validator', () => {
+    beforeEach(() => {
+      form.get('x').setValidators(CdValidators.decimalNumber());
+    });
+
+    it('should accept empty value', () => {
+      expectValid('');
+    });
+
+    it('should accept numbers and decimal numbers', () => {
+      expectValid(42);
+      expectValid(-42);
+      expectValid(42.3);
+      expectValid(-42.3);
+      expectValid('42');
+      expectValid('42.3');
+    });
+
+    it('should error on chars', () => {
+      expectPatternError('42e');
+      expectPatternError('e42.3');
+    });
+
+    it('should error on whitespaces', () => {
+      expectPatternError('42.3 ');
+      expectPatternError('42 .3');
+    });
+  });
+
+  describe('decimal number validator (without negative values)', () => {
+    beforeEach(() => {
+      form.get('x').setValidators(CdValidators.decimalNumber(false));
+    });
+
+    it('should accept positive numbers and decimals', () => {
+      expectValid(42);
+      expectValid(42.3);
+      expectValid('42');
+      expectValid('42.3');
+    });
+
+    it('should error on negative numbers and decimals', () => {
+      expectPatternError(-42);
+      expectPatternError('-42');
+      expectPatternError(-42.3);
+      expectPatternError('-42.3');
     });
   });
 
   describe('requiredIf', () => {
-    let form: FormGroup;
-
     beforeEach(() => {
-      form = new FormGroup({
+      form = new CdFormGroup({
         x: new FormControl(true),
         y: new FormControl('abc'),
         z: new FormControl('')
       });
+      formHelper = new FormHelper(form);
     });
 
     it('should not error because all conditions are fulfilled', () => {
-      form.get('z').setValue('zyx');
+      formHelper.setValue('z', 'zyx');
       const validatorFn = CdValidators.requiredIf({
         x: true,
         y: 'abc'
       });
-      expect(validatorFn(form.controls['z'])).toBeNull();
+      expect(validatorFn(form.get('z'))).toBeNull();
     });
 
     it('should not error because of unmet prerequisites', () => {
@@ -51,7 +273,7 @@ describe('CdValidators', () => {
       });
       // The validator must succeed because the prereqs do not match, so the
       // validation of the 'z' control will be skipped.
-      expect(validatorFn(form.controls['z'])).toBeNull();
+      expect(validatorFn(form.get('z'))).toBeNull();
     });
 
     it('should error because of an empty value', () => {
@@ -62,11 +284,11 @@ describe('CdValidators', () => {
         y: 'abc'
       });
       // The validator must fail because the value of control 'z' is empty.
-      expect(validatorFn(form.controls['z'])).toEqual({ required: true });
+      expect(validatorFn(form.get('z'))).toEqual({ required: true });
     });
 
     it('should not error because of unsuccessful condition', () => {
-      form.get('z').setValue('zyx');
+      formHelper.setValue('z', 'zyx');
       // Define prereqs that force the validator to validate the value of
       // the 'z' control.
       const validatorFn = CdValidators.requiredIf(
@@ -76,7 +298,7 @@ describe('CdValidators', () => {
         },
         () => false
       );
-      expect(validatorFn(form.controls['z'])).toBeNull();
+      expect(validatorFn(form.get('z'))).toBeNull();
     });
 
     it('should error because of successful condition', () => {
@@ -92,15 +314,13 @@ describe('CdValidators', () => {
         },
         conditionFn
       );
-      expect(validatorFn(form.controls['y'])).toEqual({ required: true });
+      expect(validatorFn(form.get('y'))).toEqual({ required: true });
     });
   });
 
   describe('custom validation', () => {
-    let form: FormGroup;
-
     beforeEach(() => {
-      form = new FormGroup({
+      form = new CdFormGroup({
         x: new FormControl(3, CdValidators.custom('odd', (x) => x % 2 === 1)),
         y: new FormControl(
           5,
@@ -110,31 +330,24 @@ describe('CdValidators', () => {
           })
         )
       });
+      formHelper = new FormHelper(form);
     });
 
     it('should test error and valid condition for odd x', () => {
-      const x = form.get('x');
-      x.updateValueAndValidity();
-      expect(x.hasError('odd')).toBeTruthy();
-      x.setValue(4);
-      expect(x.valid).toBeTruthy();
+      formHelper.expectError('x', 'odd');
+      expectValid(4);
     });
 
     it('should test error and valid condition for y if its dividable by x', () => {
-      const y = form.get('y');
-      y.updateValueAndValidity();
-      expect(y.hasError('not-dividable-by-x')).toBeTruthy();
-      y.setValue(6);
-      y.updateValueAndValidity();
-      expect(y.valid).toBeTruthy();
+      updateValidity('y');
+      formHelper.expectError('y', 'not-dividable-by-x');
+      formHelper.expectValidChange('y', 6);
     });
   });
 
   describe('validate if condition', () => {
-    let form: FormGroup;
-
     beforeEach(() => {
-      form = new FormGroup({
+      form = new CdFormGroup({
         x: new FormControl(3),
         y: new FormControl(5)
       });
@@ -142,87 +355,71 @@ describe('CdValidators', () => {
         CdValidators.custom('min', (x) => x < 7),
         CdValidators.custom('max', (x) => x > 12)
       ]);
+      formHelper = new FormHelper(form);
     });
 
     it('should test min error', () => {
-      const x = form.get('x');
-      const y = form.get('y');
-      expect(x.valid).toBeTruthy();
-      y.setValue(11);
-      x.updateValueAndValidity();
-      expect(x.hasError('min')).toBeTruthy();
+      formHelper.setValue('y', 11);
+      updateValidity('x');
+      formHelper.expectError('x', 'min');
     });
 
     it('should test max error', () => {
-      const x = form.get('x');
-      const y = form.get('y');
-      expect(x.valid).toBeTruthy();
-      y.setValue(11);
-      x.setValue(13);
-      expect(x.hasError('max')).toBeTruthy();
+      formHelper.setValue('y', 11);
+      formHelper.setValue('x', 13);
+      formHelper.expectError('x', 'max');
     });
 
     it('should test valid number with validation', () => {
-      const x = form.get('x');
-      const y = form.get('y');
-      expect(x.valid).toBeTruthy();
-      y.setValue(11);
-      x.setValue(12);
-      expect(x.valid).toBeTruthy();
+      formHelper.setValue('y', 11);
+      formHelper.setValue('x', 12);
+      formHelper.expectValid('x');
     });
   });
 
   describe('match', () => {
-    let form: FormGroup;
-    let x: FormControl;
     let y: FormControl;
 
     beforeEach(() => {
-      x = new FormControl('aaa');
       y = new FormControl('aaa');
-      form = new FormGroup({
-        x: x,
+      form = new CdFormGroup({
+        x: new FormControl('aaa'),
         y: y
       });
+      formHelper = new FormHelper(form);
     });
 
     it('should error when values are different', () => {
-      y.setValue('aab');
+      formHelper.setValue('y', 'aab');
       CdValidators.match('x', 'y')(form);
-      expect(x.hasError('match')).toBeFalsy();
-      expect(y.hasError('match')).toBeTruthy();
+      formHelper.expectValid('x');
+      formHelper.expectError('y', 'match');
     });
 
     it('should not error when values are equal', () => {
       CdValidators.match('x', 'y')(form);
-      expect(x.hasError('match')).toBeFalsy();
-      expect(y.hasError('match')).toBeFalsy();
+      formHelper.expectValid('x');
+      formHelper.expectValid('y');
     });
 
     it('should unset error when values are equal', () => {
       y.setErrors({ match: true });
       CdValidators.match('x', 'y')(form);
-      expect(x.hasError('match')).toBeFalsy();
-      expect(y.hasError('match')).toBeFalsy();
-      expect(y.valid).toBeTruthy();
+      formHelper.expectValid('x');
+      formHelper.expectValid('y');
     });
 
     it('should keep other existing errors', () => {
       y.setErrors({ match: true, notUnique: true });
       CdValidators.match('x', 'y')(form);
-      expect(x.hasError('match')).toBeFalsy();
-      expect(y.hasError('match')).toBeFalsy();
-      expect(y.hasError('notUnique')).toBeTruthy();
-      expect(y.valid).toBeFalsy();
+      formHelper.expectValid('x');
+      formHelper.expectError('y', 'notUnique');
     });
   });
 
   describe('unique', () => {
-    let form: FormGroup;
-    let x: AbstractControl;
-
     beforeEach(() => {
-      form = new FormGroup({
+      form = new CdFormGroup({
         x: new FormControl(
           '',
           null,
@@ -231,34 +428,23 @@ describe('CdValidators', () => {
           })
         )
       });
-      x = form.get('x');
-      x.markAsDirty();
+      formHelper = new FormHelper(form);
     });
 
     it('should not error because of empty input', () => {
-      x.setValue('');
-      expect(x.hasError('notUnique')).toBeFalsy();
-      expect(x.valid).toBeTruthy();
+      expectValid('');
     });
 
-    it(
-      'should not error because of not existing input',
-      fakeAsync(() => {
-        x.setValue('abc');
-        tick(500);
-        expect(x.hasError('notUnique')).toBeFalsy();
-        expect(x.valid).toBeTruthy();
-      })
-    );
+    it('should not error because of not existing input', fakeAsync(() => {
+      formHelper.setValue('x', 'abc', true);
+      tick(500);
+      formHelper.expectValid('x');
+    }));
 
-    it(
-      'should error because of already existing input',
-      fakeAsync(() => {
-        x.setValue('xyz');
-        tick(500);
-        expect(x.hasError('notUnique')).toBeTruthy();
-        expect(x.valid).toBeFalsy();
-      })
-    );
+    it('should error because of already existing input', fakeAsync(() => {
+      formHelper.setValue('x', 'xyz', true);
+      tick(500);
+      formHelper.expectError('x', 'notUnique');
+    }));
   });
 });

@@ -231,7 +231,7 @@ class LocalRemote(object):
 
     def run(self, args, check_status=True, wait=True,
             stdout=None, stderr=None, cwd=None, stdin=None,
-            logger=None, label=None, env=None):
+            logger=None, label=None, env=None, timeout=None):
 
         # We don't need no stinkin' sudo
         args = [a for a in args if a != "sudo"]
@@ -311,6 +311,10 @@ class LocalDaemon(object):
 
     def running(self):
         return self._get_pid() is not None
+
+    def check_status(self):
+        if self.proc:
+            return self.proc.poll()
 
     def _get_pid(self):
         """
@@ -573,8 +577,17 @@ class LocalCephManager(CephManager):
         """
         return LocalRemote()
 
-    def run_ceph_w(self):
-        proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph"), "-w"], wait=False, stdout=StringIO())
+    def run_ceph_w(self, watch_channel=None):
+        """
+        :param watch_channel: Specifies the channel to be watched.
+                              This can be 'cluster', 'audit', ...
+        :type watch_channel: str
+        """
+        args = [os.path.join(BIN_PREFIX, "ceph"), "-w"]
+        if watch_channel is not None:
+            args.append("--watch-channel")
+            args.append(watch_channel)
+        proc = self.controller.run(args, wait=False, stdout=StringIO())
         return proc
 
     def raw_cluster_cmd(self, *args, **kwargs):
@@ -593,9 +606,11 @@ class LocalCephManager(CephManager):
         proc = self.controller.run([os.path.join(BIN_PREFIX, "ceph")] + list(args), **kwargs)
         return proc.exitstatus
 
-    def admin_socket(self, daemon_type, daemon_id, command, check_status=True):
+    def admin_socket(self, daemon_type, daemon_id, command, check_status=True, timeout=None):
         return self.controller.run(
-            args=[os.path.join(BIN_PREFIX, "ceph"), "daemon", "{0}.{1}".format(daemon_type, daemon_id)] + command, check_status=check_status
+            args=[os.path.join(BIN_PREFIX, "ceph"), "daemon", "{0}.{1}".format(daemon_type, daemon_id)] + command,
+            check_status=check_status,
+            timeout=timeout
         )
 
 
@@ -674,7 +689,7 @@ class LocalMDSCluster(LocalCephCluster, MDSCluster):
     def __init__(self, ctx):
         super(LocalMDSCluster, self).__init__(ctx)
 
-        self.mds_ids = ctx.daemons.daemons['mds'].keys()
+        self.mds_ids = ctx.daemons.daemons['ceph.mds'].keys()
         self.mds_daemons = dict([(id_, LocalDaemon("mds", id_)) for id_ in self.mds_ids])
 
     def clear_firewall(self):
@@ -689,7 +704,7 @@ class LocalMgrCluster(LocalCephCluster, MgrCluster):
     def __init__(self, ctx):
         super(LocalMgrCluster, self).__init__(ctx)
 
-        self.mgr_ids = ctx.daemons.daemons['mgr'].keys()
+        self.mgr_ids = ctx.daemons.daemons['ceph.mgr'].keys()
         self.mgr_daemons = dict([(id_, LocalDaemon("mgr", id_)) for id_ in self.mgr_ids])
 
 
@@ -810,6 +825,7 @@ def scan_tests(modules):
     max_required_mds = 0
     max_required_clients = 0
     max_required_mgr = 0
+    require_memstore = False
 
     for suite, case in enumerate_methods(overall_suite):
         max_required_mds = max(max_required_mds,
@@ -818,8 +834,11 @@ def scan_tests(modules):
                                getattr(case, "CLIENTS_REQUIRED", 0))
         max_required_mgr = max(max_required_mgr,
                                getattr(case, "MGRS_REQUIRED", 0))
+        require_memstore = getattr(case, "REQUIRE_MEMSTORE", False) \
+                               or require_memstore
 
-    return max_required_mds, max_required_clients, max_required_mgr
+    return max_required_mds, max_required_clients, \
+            max_required_mgr, require_memstore
 
 
 class LocalCluster(object):
@@ -844,12 +863,13 @@ class LocalContext(object):
         # Inspect ceph.conf to see what roles exist
         for conf_line in open("ceph.conf").readlines():
             for svc_type in ["mon", "osd", "mds", "mgr"]:
-                if svc_type not in self.daemons.daemons:
-                    self.daemons.daemons[svc_type] = {}
+                prefixed_type = "ceph." + svc_type
+                if prefixed_type not in self.daemons.daemons:
+                    self.daemons.daemons[prefixed_type] = {}
                 match = re.match("^\[{0}\.(.+)\]$".format(svc_type), conf_line)
                 if match:
                     svc_id = match.group(1)
-                    self.daemons.daemons[svc_type][svc_id] = LocalDaemon(svc_type, svc_id)
+                    self.daemons.daemons[prefixed_type][svc_id] = LocalDaemon(svc_type, svc_id)
 
     def __del__(self):
         shutil.rmtree(self.teuthology_config['test_path'])
@@ -880,7 +900,8 @@ def exec_test():
         log.error("Some ceph binaries missing, please build them: {0}".format(" ".join(missing_binaries)))
         sys.exit(-1)
 
-    max_required_mds, max_required_clients, max_required_mgr = scan_tests(modules)
+    max_required_mds, max_required_clients, \
+            max_required_mgr, require_memstore = scan_tests(modules)
 
     remote = LocalRemote()
 
@@ -908,8 +929,12 @@ def exec_test():
         vstart_env["OSD"] = "4"
         vstart_env["MGR"] = max(max_required_mgr, 1).__str__()
 
-        remote.run([os.path.join(SRC_PREFIX, "vstart.sh"), "-n", "-d", "--nolockdep"],
-                   env=vstart_env)
+        args = [os.path.join(SRC_PREFIX, "vstart.sh"), "-n", "-d",
+                    "--nolockdep"]
+        if require_memstore:
+            args.append("--memstore")
+
+        remote.run(args, env=vstart_env)
 
         # Wait for OSD to come up so that subsequent injectargs etc will
         # definitely succeed

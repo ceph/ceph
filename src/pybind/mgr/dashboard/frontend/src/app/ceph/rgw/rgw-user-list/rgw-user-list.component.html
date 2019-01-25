@@ -7,77 +7,11 @@
           (updateSelection)="updateSelection($event)"
           identifier="user_id"
           (fetchData)="getUserList($event)">
-  <div class="table-actions">
-    <div class="btn-group" dropdown>
-      <button type="button"
-              class="btn btn-sm btn-primary"
-              *ngIf="permission.create && (
-                       permission.update && permission.delete && !selection.hasSelection ||
-                       !permission.update && !permission.delete ||
-                       !permission.update && permission.delete && !selection.hasMultiSelection ||
-                       permission.update && !selection.hasSingleSelection && !permission.delete)"
-              routerLink="/rgw/user/add">
-        <i class="fa fa-fw fa-plus"></i>
-        <ng-container i18n>Add</ng-container>
-      </button>
-      <button type="button"
-              class="btn btn-sm btn-primary"
-              [ngClass]="{'disabled': !selection.hasSelection}"
-              *ngIf="permission.update && (!permission.create && !selection.hasMultiSelection || selection.hasSingleSelection)"
-              routerLink="/rgw/user/edit/{{ selection.first()?.user_id }}">
-        <i class="fa fa-fw fa-pencil"></i>
-        <ng-container i18n>Edit</ng-container>
-      </button>
-      <button type="button"
-              class="btn btn-sm btn-primary"
-              [ngClass]="{'disabled': !selection.hasSelection}"
-              *ngIf="permission.delete && (!permission.update && !permission.create || selection.hasMultiSelection)"
-              (click)="deleteAction()">
-        <i class="fa fa-fw fa-trash-o"></i>
-        <ng-container i18n>Delete</ng-container>
-      </button>
-      <button type="button"
-              class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split"
-              *ngIf="((permission.create?1:0) + (permission.update?1:0) + (permission.delete?1:0)) > 1"
-              dropdownToggle>
-        <span class="caret"></span>
-        <span class="sr-only"></span>
-      </button>
-      <ul class="dropdown-menu"
-          *dropdownMenu
-          role="menu">
-        <li role="menuitem"
-            *ngIf="permission.create">
-          <a class="dropdown-item"
-             routerLink="/rgw/user/add"
-             i18n>
-            <i class="fa fa-fw fa-plus"></i>
-            Add
-          </a>
-        </li>
-        <li role="menuitem"
-            *ngIf="permission.update"
-            [ngClass]="{'disabled': !selection.hasSingleSelection}">
-          <a class="dropdown-item"
-             routerLink="/rgw/user/edit/{{ selection.first()?.user_id }}"
-             i18n>
-            <i class="fa fa-fw fa-pencil"></i>
-            Edit
-          </a>
-        </li>
-        <li role="menuitem"
-            *ngIf="permission.delete"
-            [ngClass]="{'disabled': !selection.hasSelection}">
-          <a class="dropdown-item"
-             (click)="deleteAction()"
-             i18n>
-            <i class="fa fa-fw fa-trash-o"></i>
-            Delete
-          </a>
-        </li>
-      </ul>
-    </div>
-  </div>
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
   <cd-rgw-user-details cdTableDetail
                        [selection]="selection">
   </cd-rgw-user-details>

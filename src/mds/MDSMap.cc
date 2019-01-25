@@ -77,7 +77,7 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   f->dump_int("incarnation", inc);
   f->dump_stream("state") << ceph_mds_state_name(state);
   f->dump_int("state_seq", state_seq);
-  f->dump_stream("addr") << addrs.legacy_addr();
+  f->dump_stream("addr") << addrs.get_legacy_str();
   f->dump_object("addrs", addrs);
   if (laggy_since != utime_t())
     f->dump_stream("laggy_since") << laggy_since;
@@ -496,7 +496,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
   }
 
   // MDS_ALL_DOWN
-  if ((mds_rank_t)get_num_up_mds() == 0) {
+  if ((mds_rank_t)get_num_up_mds() == 0 && get_max_mds() > 0) {
     health_check_t &check = checks->add(
       "MDS_ALL_DOWN", HEALTH_ERR,
       "%num% filesystem%plurals% %isorare% offline");

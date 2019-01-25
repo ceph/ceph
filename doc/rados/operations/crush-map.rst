@@ -61,7 +61,7 @@ Note:
 The crush location for an OSD is normally expressed via the ``crush location``
 config option being set in the ``ceph.conf`` file.  Each time the OSD starts,
 it verifies it is in the correct location in the CRUSH map and, if it is not,
-it moved itself.  To disable this automatic CRUSH map management, add the
+it moves itself.  To disable this automatic CRUSH map management, add the
 following to your configuration file in the ``[osd]`` section::
 
   osd crush update on start = false
@@ -248,6 +248,11 @@ old Ceph clients.  You can view the CRUSH hierarchy with shadow items
 with::
 
   ceph osd crush tree --show-shadow
+
+For older clusters created before Luminous that relied on manually
+crafted CRUSH maps to maintain per-device-type hierarchies, there is a
+*reclassify* tool available to help transition to device classes
+without triggering data movement (see :ref:`crush-reclassify`).
 
 
 Weights sets

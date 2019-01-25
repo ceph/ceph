@@ -18,6 +18,8 @@
 #include "common/histogram.h"
 #include "common/RWLock.h"
 #include "common/Thread.h"
+#include "common/Clock.h"
+#include "common/ceph_mutex.h"
 #include "include/spinlock.h"
 #include "msg/Message.h"
 
@@ -55,7 +57,7 @@ class OpHistory {
   set<pair<utime_t, TrackedOpRef> > arrived;
   set<pair<double, TrackedOpRef> > duration;
   set<pair<utime_t, TrackedOpRef> > slow_op;
-  Mutex ops_history_lock;
+  ceph::mutex ops_history_lock = ceph::make_mutex("OpHistory::ops_history_lock");
   void cleanup(utime_t now);
   uint32_t history_size;
   uint32_t history_duration;
@@ -66,10 +68,10 @@ class OpHistory {
   friend class OpHistoryServiceThread;
 
 public:
-  OpHistory() : ops_history_lock("OpHistory::Lock"),
-    history_size(0), history_duration(0),
-    history_slow_op_size(0), history_slow_op_threshold(0),
-    shutdown(false), opsvc(this) {
+  OpHistory()
+    : history_size(0), history_duration(0),
+      history_slow_op_size(0), history_slow_op_threshold(0),
+      shutdown(false), opsvc(this) {
     opsvc.create("OpHistorySvc");
   }
   ~OpHistory() {
@@ -232,35 +234,26 @@ protected:
 
   struct Event {
     utime_t stamp;
-    string str;
-    const char *cstr = nullptr;
+    std::string str;
 
-    Event(utime_t t, const string& s) : stamp(t), str(s) {}
-    Event(utime_t t, const char *s) : stamp(t), cstr(s) {}
+    Event(utime_t t, std::string_view s) : stamp(t), str(s) {}
 
     int compare(const char *s) const {
-      if (cstr)
-	return strcmp(cstr, s);
-      else
-	return str.compare(s);
+      return str.compare(s);
     }
 
     const char *c_str() const {
-      if (cstr)
-	return cstr;
-      else
-	return str.c_str();
+      return str.c_str();
     }
 
     void dump(Formatter *f) const {
       f->dump_stream("time") << stamp;
-      f->dump_string("event", c_str());
+      f->dump_string("event", str);
     }
   };
 
   vector<Event> events;    ///< list of events and their times
-  mutable Mutex lock = {"TrackedOp::lock"}; ///< to protect the events list
-  const char *current = 0; ///< the current state the event is in
+  mutable ceph::mutex lock = ceph::make_mutex("TrackedOp::lock"); ///< to protect the events list
   uint64_t seq = 0;        ///< a unique value set by the OpTracker
 
   uint32_t warn_interval_multiplier = 1; //< limits output of a given op warning
@@ -342,7 +335,7 @@ public:
 
   const char *get_desc() const {
     if (!desc || want_new_desc.load()) {
-      Mutex::Locker l(lock);
+      std::lock_guard l(lock);
       _gen_desc();
     }
     return desc;
@@ -365,25 +358,22 @@ public:
   }
 
   double get_duration() const {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     if (!events.empty() && events.rbegin()->compare("done") == 0)
       return events.rbegin()->stamp - get_initiated();
     else
       return ceph_clock_now() - get_initiated();
   }
 
-  void mark_event_string(const string &event,
-			 utime_t stamp=ceph_clock_now());
-  void mark_event(const char *event,
-		  utime_t stamp=ceph_clock_now());
+  void mark_event(std::string_view event, utime_t stamp=ceph_clock_now());
 
   void mark_nowarn() {
     warn_interval_multiplier = 0;
   }
 
-  virtual const char *state_string() const {
-    Mutex::Locker l(lock);
-    return events.rbegin()->c_str();
+  virtual std::string_view state_string() const {
+    std::lock_guard l(lock);
+    return events.empty() ? std::string_view() : std::string_view(events.rbegin()->str);
   }
 
   void dump(utime_t now, Formatter *f) const;

@@ -3,15 +3,21 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 
 import { ChartsModule } from 'ng2-charts/ng2-charts';
-import { AlertModule, ModalModule, PopoverModule, TooltipModule } from 'ngx-bootstrap';
+import { AlertModule } from 'ngx-bootstrap/alert';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
+import { ModalModule } from 'ngx-bootstrap/modal';
+import { PopoverModule } from 'ngx-bootstrap/popover';
+import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { DirectivesModule } from '../directives/directives.module';
 import { PipesModule } from '../pipes/pipes.module';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
-import { DeletionModalComponent } from './deletion-modal/deletion-modal.component';
+import { CriticalConfirmationModalComponent } from './critical-confirmation-modal/critical-confirmation-modal.component';
 import { ErrorPanelComponent } from './error-panel/error-panel.component';
+import { GrafanaComponent } from './grafana/grafana.component';
 import { HelperComponent } from './helper/helper.component';
 import { InfoPanelComponent } from './info-panel/info-panel.component';
+import { LanguageSelectorComponent } from './language-selector/language-selector.component';
 import { LoadingPanelComponent } from './loading-panel/loading-panel.component';
 import { ModalComponent } from './modal/modal.component';
 import { SelectBadgesComponent } from './select-badges/select-badges.component';
@@ -33,7 +39,8 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     ReactiveFormsModule,
     PipesModule,
     ModalModule.forRoot(),
-    DirectivesModule
+    DirectivesModule,
+    BsDropdownModule
   ],
   declarations: [
     ViewCacheComponent,
@@ -46,9 +53,11 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     LoadingPanelComponent,
     InfoPanelComponent,
     ModalComponent,
-    DeletionModalComponent,
+    CriticalConfirmationModalComponent,
     ConfirmationModalComponent,
-    WarningPanelComponent
+    WarningPanelComponent,
+    LanguageSelectorComponent,
+    GrafanaComponent
   ],
   providers: [],
   exports: [
@@ -62,8 +71,10 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     InfoPanelComponent,
     UsageBarComponent,
     ModalComponent,
-    WarningPanelComponent
+    WarningPanelComponent,
+    LanguageSelectorComponent,
+    GrafanaComponent
   ],
-  entryComponents: [ModalComponent, DeletionModalComponent, ConfirmationModalComponent]
+  entryComponents: [ModalComponent, CriticalConfirmationModalComponent, ConfirmationModalComponent]
 })
 export class ComponentsModule {}

@@ -20,7 +20,7 @@ except ImportError:
 
 
 class Module(MgrModule):
-    OPTIONS = [
+    MODULE_OPTIONS = [
             {
                 'name': 'hostname',
                 'default': None
@@ -66,7 +66,7 @@ class Module(MgrModule):
     @property
     def config_keys(self):
         return dict((o['name'], o.get('default', None))
-                for o in self.OPTIONS)
+                for o in self.MODULE_OPTIONS)
 
     COMMANDS = [
         {
@@ -178,12 +178,12 @@ class Module(MgrModule):
         pool_info = {}
 
         df_types = [
-            'bytes_used',
+            'stored',
             'kb_used',
             'dirty',
             'rd',
             'rd_bytes',
-            'raw_bytes_used',
+            'stored_raw',
             'wr',
             'wr_bytes',
             'objects',
@@ -301,28 +301,28 @@ class Module(MgrModule):
 
     def init_module_config(self):
         self.config['hostname'] = \
-            self.get_config("hostname", default=self.config_keys['hostname'])
+            self.get_module_option("hostname", default=self.config_keys['hostname'])
         self.config['port'] = \
-            int(self.get_config("port", default=self.config_keys['port']))
+            int(self.get_module_option("port", default=self.config_keys['port']))
         self.config['database'] = \
-            self.get_config("database", default=self.config_keys['database'])
+            self.get_module_option("database", default=self.config_keys['database'])
         self.config['username'] = \
-            self.get_config("username", default=self.config_keys['username'])
+            self.get_module_option("username", default=self.config_keys['username'])
         self.config['password'] = \
-            self.get_config("password", default=self.config_keys['password'])
+            self.get_module_option("password", default=self.config_keys['password'])
         self.config['interval'] = \
-            int(self.get_config("interval",
+            int(self.get_module_option("interval",
                                 default=self.config_keys['interval']))
         self.config['threads'] = \
-            int(self.get_config("threads",
+            int(self.get_module_option("threads",
                                 default=self.config_keys['threads']))
         self.config['batch_size'] = \
-            int(self.get_config("batch_size",
+            int(self.get_module_option("batch_size",
                                 default=self.config_keys['batch_size']))
-        ssl = self.get_config("ssl", default=self.config_keys['ssl'])
+        ssl = self.get_module_option("ssl", default=self.config_keys['ssl'])
         self.config['ssl'] = ssl.lower() == 'true'
         verify_ssl = \
-            self.get_config("verify_ssl", default=self.config_keys['verify_ssl'])
+            self.get_module_option("verify_ssl", default=self.config_keys['verify_ssl'])
         self.config['verify_ssl'] = verify_ssl.lower() == 'true'
 
     def gather_statistics(self):
@@ -444,7 +444,7 @@ class Module(MgrModule):
 
             self.log.debug('Setting configuration option %s to %s', key, value)
             self.set_config_option(key, value)
-            self.set_config(key, value)
+            self.set_module_option(key, value)
             return 0, 'Configuration option {0} updated'.format(key), ''
         elif cmd['prefix'] == 'influx send':
             self.send_to_influx()

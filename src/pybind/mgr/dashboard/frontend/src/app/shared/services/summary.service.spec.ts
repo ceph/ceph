@@ -46,25 +46,26 @@ describe('SummaryService', () => {
     expect(summaryService).toBeTruthy();
   });
 
-  it(
-    'should call refresh',
-    fakeAsync(() => {
-      authStorageService.set('foobar');
-      let result = false;
-      summaryService.refresh();
-      summaryService.subscribe(() => {
-        result = true;
-      });
-      tick(5000);
-      spyOn(summaryService, 'refresh').and.callFake(() => true);
-      tick(5000);
-      expect(result).toEqual(true);
-    })
-  );
+  it('should call refresh', fakeAsync(() => {
+    summaryService.enablePolling();
+    authStorageService.set('foobar', undefined, undefined);
+    const calledWith = [];
+    summaryService.subscribe((data) => {
+      calledWith.push(data);
+    });
+    expect(calledWith).toEqual([summary]);
+    summaryService.refresh();
+    expect(calledWith).toEqual([summary, summary]);
+    tick(10000);
+    expect(calledWith.length).toEqual(4);
+    // In order to not trigger setInterval again,
+    // which would raise 'Error: 1 timer(s) still in the queue.'
+    window.clearInterval(summaryService.polling);
+  }));
 
   describe('Should test methods after first refresh', () => {
     beforeEach(() => {
-      authStorageService.set('foobar');
+      authStorageService.set('foobar', undefined, undefined);
       summaryService.refresh();
     });
 
@@ -94,6 +95,23 @@ describe('SummaryService', () => {
         metadata: { image_name: 'someImage', pool_name: 'somePool' },
         name: 'rbd/delete'
       });
+    });
+
+    it('should call addRunningTask with duplicate task', () => {
+      let result = summaryService.getCurrentSummary();
+      const exec_task = new ExecutingTask('rbd/delete', {
+        pool_name: 'somePool',
+        image_name: 'someImage'
+      });
+
+      result.executing_tasks = [exec_task];
+      summaryService['summaryDataSource'].next(result);
+      result = summaryService.getCurrentSummary();
+      expect(result.executing_tasks.length).toBe(1);
+
+      summaryService.addRunningTask(exec_task);
+      result = summaryService.getCurrentSummary();
+      expect(result.executing_tasks.length).toBe(1);
     });
   });
 });

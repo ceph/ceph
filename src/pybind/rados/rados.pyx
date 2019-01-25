@@ -23,7 +23,10 @@ import sys
 import threading
 import time
 
-from collections import Callable
+try:
+    from collections.abc import Callable
+except ImportError:
+    from collections import Callable
 from datetime import datetime
 from functools import partial, wraps
 from itertools import chain
@@ -85,9 +88,6 @@ cdef extern from "rados/librados.h" nogil:
 
     cdef uint64_t _LIBRADOS_SNAP_HEAD "LIBRADOS_SNAP_HEAD"
 
-    ctypedef void* rados_t
-    ctypedef void* rados_config_t
-    ctypedef void* rados_ioctx_t
     ctypedef void* rados_xattrs_iter_t
     ctypedef void* rados_omap_iter_t
     ctypedef void* rados_list_ctx_t
@@ -2267,7 +2267,7 @@ cdef class Ioctx(object):
     def aio_write_full(self, object_name, to_write,
                        oncomplete=None, onsafe=None):
         """
-        Asychronously write an entire object
+        Asynchronously write an entire object
 
         The object is filled with the provided data. If the object exists,
         it is atomically truncated and then written.
@@ -2311,7 +2311,7 @@ cdef class Ioctx(object):
               ('onsafe', opt(Callable)))
     def aio_append(self, object_name, to_append, oncomplete=None, onsafe=None):
         """
-        Asychronously append data to an object
+        Asynchronously append data to an object
 
         Queues the write and returns.
 
@@ -2365,7 +2365,7 @@ cdef class Ioctx(object):
               ('oncomplete', opt(Callable)))
     def aio_read(self, object_name, length, offset, oncomplete):
         """
-        Asychronously read data from an object
+        Asynchronously read data from an object
 
         oncomplete will be called with the returned read value as
         well as the completion:
@@ -2488,7 +2488,7 @@ cdef class Ioctx(object):
     @requires(('object_name', str_type), ('oncomplete', opt(Callable)), ('onsafe', opt(Callable)))
     def aio_remove(self, object_name, oncomplete=None, onsafe=None):
         """
-        Asychronously remove an object
+        Asynchronously remove an object
 
         :param object_name: name of the object to remove
         :type object_name: str

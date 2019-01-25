@@ -84,7 +84,7 @@ public:
     STATE_KILLING = 5
   };
 
-  const char *get_state_name(int s) const {
+  static std::string_view get_state_name(int s) {
     switch (s) {
     case STATE_CLOSED: return "closed";
     case STATE_OPENING: return "opening";
@@ -120,6 +120,7 @@ private:
   time birth_time;
 
 public:
+  Session *reclaiming_from = nullptr;
 
   void push_pv(version_t pv)
   {
@@ -202,7 +203,7 @@ public:
     return info.get_client();
   }
 
-  const char *get_state_name() const { return get_state_name(state); }
+  std::string_view get_state_name() const { return get_state_name(state); }
   uint64_t get_state_seq() const { return state_seq; }
   bool is_closed() const { return state == STATE_CLOSED; }
   bool is_opening() const { return state == STATE_OPENING; }
@@ -249,6 +250,7 @@ public:
   xlist<Capability*> caps;     // inodes with caps; front=most recently used
   xlist<ClientLease*> leases;  // metadata leases to clients
   time last_cap_renew = clock::zero();
+  time last_seen = clock::zero();
 
 public:
   version_t inc_push_seq() { return ++cap_push_seq; }
@@ -562,7 +564,7 @@ public:
   // sessions
   void decode_legacy(bufferlist::const_iterator& blp) override;
   bool empty() const { return session_map.empty(); }
-  const ceph::unordered_map<entity_name_t, Session*> &get_sessions() const
+  const ceph::unordered_map<entity_name_t, Session*>& get_sessions() const
   {
     return session_map;
   }

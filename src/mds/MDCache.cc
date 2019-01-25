@@ -369,7 +369,8 @@ void MDCache::create_unlinked_system_inode(CInode *in, inodeno_t ino,
   memset(&in->inode.dir_layout, 0, sizeof(in->inode.dir_layout));
   if (in->inode.is_dir()) {
     in->inode.dir_layout.dl_dir_hash = g_conf()->mds_default_dir_hash;
-    ++in->inode.rstat.rsubdirs;
+    in->inode.rstat.rsubdirs = 1; /* itself */
+    in->inode.rstat.rctime = in->inode.ctime;
   } else {
     in->inode.layout = default_file_layout;
     ++in->inode.rstat.rfiles;
@@ -416,13 +417,12 @@ void MDCache::create_empty_hierarchy(MDSGather *gather)
   adjust_subtree_auth(rootdir, mds->get_nodeid());   
   rootdir->dir_rep = CDir::REP_ALL;   //NONE;
 
-  rootdir->fnode.accounted_fragstat = rootdir->fnode.fragstat;
-  rootdir->fnode.accounted_rstat = rootdir->fnode.rstat;
-
-  root->inode.dirstat = rootdir->fnode.fragstat;
-  root->inode.rstat = rootdir->fnode.rstat;
-  ++root->inode.rstat.rsubdirs;
-  root->inode.accounted_rstat = root->inode.rstat;
+  ceph_assert(rootdir->fnode.accounted_fragstat == rootdir->fnode.fragstat);
+  ceph_assert(rootdir->fnode.fragstat == root->inode.dirstat);
+  ceph_assert(rootdir->fnode.accounted_rstat == rootdir->fnode.rstat);
+  /* Do no update rootdir rstat information of the fragment, rstat upkeep magic
+   * assume version 0 is stale/invalid.
+   */
 
   rootdir->mark_complete();
   rootdir->mark_dirty(rootdir->pre_dirty(), mds->mdlog->get_current_segment());
@@ -492,7 +492,7 @@ struct C_MDC_CreateSystemFile : public MDCacheLogContext {
   }
 };
 
-void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, MDSInternalContextBase *fin)
+void MDCache::_create_system_file(CDir *dir, std::string_view name, CInode *in, MDSInternalContextBase *fin)
 {
   dout(10) << "_create_system_file " << name << " in " << *dir << dendl;
   CDentry *dn = dir->add_null_dentry(name);
@@ -713,13 +713,12 @@ void MDCache::populate_mydir()
     dout(20) << " stray num " << i << " is " << *strays[i] << dendl;
 
     // open all frags
-    list<frag_t> ls;
-    strays[i]->dirfragtree.get_leaves(ls);
-    for (list<frag_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
-      frag_t fg = *p;
-      CDir *dir = strays[i]->get_dirfrag(fg);
+    frag_vec_t leaves;
+    strays[i]->dirfragtree.get_leaves(leaves);
+    for (const auto& leaf : leaves) {
+      CDir *dir = strays[i]->get_dirfrag(leaf);
       if (!dir) {
-	dir = strays[i]->get_or_open_dirfrag(this, fg);
+	dir = strays[i]->get_or_open_dirfrag(this, leaf);
       }
 
       // DamageTable applies special handling to strays: it will
@@ -805,14 +804,6 @@ MDSCacheObject *MDCache::get_object(const MDSCacheObjectInfo &info)
 
 // ====================================================================
 // subtree management
-
-void MDCache::list_subtrees(list<CDir*>& ls)
-{
-  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p)
-    ls.push_back(p->first);
-}
 
 /*
  * adjust the dir_auth of a subtree.
@@ -1140,30 +1131,29 @@ void MDCache::get_force_dirfrag_bound_set(const vector<dirfrag_t>& dfs, set<CDir
     for (set<frag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q)
       tmpdft.force_to_leaf(g_ceph_context, *q);
 
-    for (set<frag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q) {
-      frag_t fg = *q;
-      list<frag_t> fgls;
-      diri->dirfragtree.get_leaves_under(fg, fgls);
-      if (fgls.empty()) {
+    for (const auto& fg : p->second) {
+      frag_vec_t leaves;
+      diri->dirfragtree.get_leaves_under(fg, leaves);
+      if (leaves.empty()) {
 	bool all = true;
 	frag_t approx_fg = diri->dirfragtree[fg.value()];
-	list<frag_t> ls;
-	tmpdft.get_leaves_under(approx_fg, ls);
-	for (list<frag_t>::iterator r = ls.begin(); r != ls.end(); ++r) {
-	  if (p->second.get().count(*r) == 0) {
+        frag_vec_t approx_leaves;
+	tmpdft.get_leaves_under(approx_fg, approx_leaves);
+	for (const auto& leaf : approx_leaves) {
+	  if (p->second.get().count(leaf) == 0) {
 	    // not bound, so the resolve message is from auth MDS of the dirfrag
-	    force_dir_fragment(diri, *r);
+	    force_dir_fragment(diri, leaf);
 	    all = false;
 	  }
 	}
 	if (all)
-	  fgls.push_back(approx_fg);
+	  leaves.push_back(approx_fg);
 	else
-	  diri->dirfragtree.get_leaves_under(fg, fgls);
+	  diri->dirfragtree.get_leaves_under(fg, leaves);
       }
-      dout(10) << "  frag " << fg << " contains " << fgls << dendl;
-      for (list<frag_t>::iterator r = fgls.begin(); r != fgls.end(); ++r) {
-	CDir *dir = diri->get_dirfrag(*r);
+      dout(10) << "  frag " << fg << " contains " << leaves << dendl;
+      for (const auto& leaf : leaves) {
+	CDir *dir = diri->get_dirfrag(leaf);
 	if (dir)
 	  bounds.insert(dir);
       }
@@ -1199,15 +1189,16 @@ void MDCache::map_dirfrag_set(const list<dirfrag_t>& dfs, set<CDir*>& result)
     if (!in)
       continue;
 
-    list<frag_t> fglist;
-    for (set<frag_t>::iterator q = p->second.begin(); q != p->second.end(); ++q)
-      in->dirfragtree.get_leaves_under(*q, fglist);
+    frag_vec_t fgs;
+    for (const auto& fg : p->second) {
+      in->dirfragtree.get_leaves_under(fg, fgs);
+    }
 
-    dout(15) << "map_dirfrag_set " << p->second << " -> " << fglist
+    dout(15) << "map_dirfrag_set " << p->second << " -> " << fgs
 	     << " on " << *in << dendl;
 
-    for (list<frag_t>::iterator q = fglist.begin(); q != fglist.end(); ++q) {
-      CDir *dir = in->get_dirfrag(*q);
+    for (const auto& fg : fgs) {
+      CDir *dir = in->get_dirfrag(fg);
       if (dir)
 	result.insert(dir);
     }
@@ -1346,14 +1337,21 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
       projected_subtree_renames.erase(p);
   }
 
+  vector<CDir*> dfls;
+
+  // adjust total auth pin of freezing subtree
+  if (olddir != newdir) {
+    diri->get_nested_dirfrags(dfls);
+    for (auto dir : dfls)
+      olddir->adjust_freeze_after_rename(dir);
+    dfls.clear();
+  }
+
   // adjust subtree
-  list<CDir*> dfls;
   // make sure subtree dirfrags are at the front of the list
   diri->get_subtree_dirfrags(dfls);
   diri->get_nested_dirfrags(dfls);
-  for (list<CDir*>::iterator p = dfls.begin(); p != dfls.end(); ++p) {
-    CDir *dir = *p;
-
+  for (auto dir : dfls) {
     dout(10) << "dirfrag " << *dir << dendl;
     CDir *oldparent = get_subtree_root(olddir);
     dout(10) << " old parent " << *oldparent << dendl;
@@ -3054,9 +3052,19 @@ void MDCache::handle_mds_failure(mds_rank_t who)
        p != fragments.end(); ) {
     dirfrag_t df = p->first;
     fragment_info_t& info = p->second;
-    ++p;
-    if (info.is_fragmenting())
+
+    if (info.is_fragmenting()) {
+      if (info.notify_ack_waiting.erase(who) &&
+	  info.notify_ack_waiting.empty()) {
+	fragment_drop_locks(info);
+	fragment_maybe_finish(p++);
+      } else {
+	++p;
+      }
       continue;
+    }
+
+    ++p;
     dout(10) << "cancelling fragment " << df << " bit " << info.bits << dendl;
     list<CDir*> dirs;
     info.dirs.swap(dirs);
@@ -4402,28 +4410,27 @@ void MDCache::handle_cache_rejoin_weak(const MMDSCacheRejoin::const_ref &weak)
       dout(0) << " missing dir ino " << p.ino << dendl;
     ceph_assert(diri);
 
-    list<frag_t> ls;
+    frag_vec_t leaves;
     if (diri->dirfragtree.is_leaf(p.frag)) {
-      ls.push_back(p.frag);
+      leaves.push_back(p.frag);
     } else {
-      diri->dirfragtree.get_leaves_under(p.frag, ls);
-      if (ls.empty())
-	ls.push_back(diri->dirfragtree[p.frag.value()]);
+      diri->dirfragtree.get_leaves_under(p.frag, leaves);
+      if (leaves.empty())
+	leaves.push_back(diri->dirfragtree[p.frag.value()]);
     }
-    for (list<frag_t>::iterator q = ls.begin(); q != ls.end(); ++q) {
-      frag_t fg = *q;
-      CDir *dir = diri->get_dirfrag(fg);
+    for (const auto& leaf : leaves) {
+      CDir *dir = diri->get_dirfrag(leaf);
       if (!dir) {
-	dout(0) << " missing dir for " << p.frag << " (which maps to " << fg << ") on " << *diri << dendl;
+	dout(0) << " missing dir for " << p.frag << " (which maps to " << leaf << ") on " << *diri << dendl;
 	continue;
       }
       ceph_assert(dir);
       if (dirs_to_share.count(dir)) {
-	dout(10) << " already have " << p.frag << " -> " << fg << " " << *dir << dendl;
+	dout(10) << " already have " << p.frag << " -> " << leaf << " " << *dir << dendl;
       } else {
 	dirs_to_share.insert(dir);
 	unsigned nonce = dir->add_replica(from);
-	dout(10) << " have " << p.frag << " -> " << fg << " " << *dir << dendl;
+	dout(10) << " have " << p.frag << " -> " << leaf << " " << *dir << dendl;
 	if (ack) {
 	  ack->add_strong_dirfrag(dir->dirfrag(), nonce, dir->dir_rep);
 	  ack->add_dirfrag_base(dir);
@@ -4636,7 +4643,13 @@ void MDCache::handle_cache_rejoin_strong(const MMDSCacheRejoin::const_ref &stron
   mds_rank_t from = mds_rank_t(strong->get_source().num());
 
   // only a recovering node will get a strong rejoin.
-  ceph_assert(mds->is_rejoin());
+  if (!mds->is_rejoin()) {
+    if (mds->get_want_state() == MDSMap::STATE_REJOIN) {
+      mds->wait_for_rejoin(new C_MDS_RetryMessage(mds, strong));
+      return;
+    }
+    ceph_abort_msg("got unexpected rejoin message during recovery");
+  }
 
   // assimilate any potentially dirty scatterlock state
   for (const auto &p : strong->inode_scatterlocks) {
@@ -4678,15 +4691,15 @@ void MDCache::handle_cache_rejoin_strong(const MMDSCacheRejoin::const_ref &stron
       dir->dir_rep = p.second.dir_rep;
     } else {
       dout(10) << " frag " << dirfrag << " doesn't match dirfragtree " << *diri << dendl;
-      list<frag_t> ls;
-      diri->dirfragtree.get_leaves_under(dirfrag.frag, ls);
-      if (ls.empty())
-	ls.push_back(diri->dirfragtree[dirfrag.frag.value()]);
-      dout(10) << " maps to frag(s) " << ls << dendl;
-      for (list<frag_t>::iterator q = ls.begin(); q != ls.end(); ++q) {
-	CDir *dir = diri->get_dirfrag(*q);
+      frag_vec_t leaves;
+      diri->dirfragtree.get_leaves_under(dirfrag.frag, leaves);
+      if (leaves.empty())
+	leaves.push_back(diri->dirfragtree[dirfrag.frag.value()]);
+      dout(10) << " maps to frag(s) " << leaves << dendl;
+      for (const auto& leaf : leaves) {
+	CDir *dir = diri->get_dirfrag(leaf);
 	if (!dir)
-	  dir = rejoin_invent_dirfrag(dirfrag_t(diri->ino(), *q));
+	  dir = rejoin_invent_dirfrag(dirfrag_t(diri->ino(), leaf));
 	else
 	  dout(10) << " have(approx) " << *dir << dendl;
 	dir->add_replica(from, p.second.nonce);
@@ -7513,7 +7526,6 @@ void MDCache::check_memory_usage()
 	   << ", rss " << last.get_rss()
 	   << ", heap " << last.get_heap()
 	   << ", baseline " << baseline.get_heap()
-	   << ", buffers " << (buffer::get_total_alloc() >> 10)
 	   << ", " << num_inodes_with_caps << " / " << CInode::count() << " inodes have caps"
 	   << ", " << Capability::count() << " caps, " << caps_per_inode << " caps per inode"
 	   << dendl;
@@ -7524,7 +7536,7 @@ void MDCache::check_memory_usage()
 
   if (cache_toofull()) {
     last_recall_state = clock::now();
-    mds->server->recall_client_state();
+    mds->server->recall_client_state(-1.0, false, nullptr);
   }
 
   // If the cache size had exceeded its limit, but we're back in bounds
@@ -7668,7 +7680,16 @@ bool MDCache::shutdown_pass()
   // Fully trim the log so that all objects in cache are clean and may be
   // trimmed by a future MDCache::trim. Note that MDSRank::tick does not
   // trim the log such that the cache eventually becomes clean.
-  mds->mdlog->trim(0);
+  if (mds->mdlog->get_num_segments() > 0) {
+    auto ls = mds->mdlog->get_current_segment();
+    if (ls->num_events > 1 || !ls->dirty_dirfrags.empty()) {
+      // Current segment contains events other than subtreemap or
+      // there are dirty dirfrags (see CDir::log_mark_dirty())
+      mds->mdlog->start_new_segment();
+      mds->mdlog->flush();
+    }
+  }
+  mds->mdlog->trim_all();
   if (mds->mdlog->get_num_segments() > 1) {
     dout(7) << "still >1 segments, waiting for log to trim" << dendl;
     return false;
@@ -7701,8 +7722,14 @@ bool MDCache::shutdown_pass()
   ceph_assert(!migrator->is_exporting());
   ceph_assert(!migrator->is_importing());
 
-  if ((myin && myin->is_auth_pinned()) ||
-      (mydir && mydir->is_auth_pinned())) {
+  // replicas may dirty scatter locks
+  if (myin && myin->is_replicated()) {
+    dout(7) << "still have replicated objects" << dendl;
+    return false;
+  }
+
+  if ((myin && myin->get_num_auth_pins()) ||
+      (mydir && (mydir->get_auth_pins() || mydir->get_dir_auth_pins()))) {
     dout(7) << "still have auth pinned objects" << dendl;
     return false;
   }
@@ -7711,9 +7738,11 @@ bool MDCache::shutdown_pass()
   if (!mds->mdlog->is_capped()) {
     dout(7) << "capping the log" << dendl;
     mds->mdlog->cap();
-    mds->mdlog->trim();
   }
   
+  if (!mds->mdlog->empty())
+    mds->mdlog->trim(0);
+
   if (!mds->mdlog->empty()) {
     dout(7) << "waiting for log to flush.. " << mds->mdlog->get_num_events() 
 	    << " in " << mds->mdlog->get_num_segments() << " segments" << dendl;
@@ -7933,6 +7962,9 @@ void MDCache::dispatch(const Message::const_ref &m)
 
   case MSG_MDS_FRAGMENTNOTIFY:
     handle_fragment_notify(MMDSFragmentNotify::msgref_cast(m));
+    break;
+  case MSG_MDS_FRAGMENTNOTIFYACK:
+    handle_fragment_notify_ack(MMDSFragmentNotifyAck::msgref_cast(m));
     break;
 
   case MSG_MDS_FINDINO:
@@ -9180,10 +9212,14 @@ MDRequestRef MDCache::request_start_slave(metareqid_t ri, __u32 attempt, const M
 
 MDRequestRef MDCache::request_start_internal(int op)
 {
+  utime_t now = ceph_clock_now();
   MDRequestImpl::Params params;
   params.reqid.name = entity_name_t::MDS(mds->get_nodeid());
   params.reqid.tid = mds->issue_tid();
-  params.initiated = ceph_clock_now();
+  params.initiated = now;
+  params.throttled = now;
+  params.all_read = now;
+  params.dispatched = now;
   params.internal_op = op;
   MDRequestRef mdr =
       mds->op_tracker.create_request<MDRequestImpl,MDRequestImpl::Params*>(&params);
@@ -10904,13 +10940,15 @@ void MDCache::adjust_dir_fragments(CInode *diri,
 
     // are my constituent bits subtrees?  if so, i will be too.
     // (it's all or none, actually.)
-    bool any_subtree = false;
+    bool any_subtree = false, any_non_subtree = false;
     for (CDir *dir : srcfrags) {
-      if (dir->is_subtree_root()) {
+      if (dir->is_subtree_root())
 	any_subtree = true;
-	break;
-      }
+      else
+	any_non_subtree = true;
     }
+    ceph_assert(!any_subtree || !any_non_subtree);
+
     set<CDir*> new_bounds;
     if (any_subtree)  {
       for (CDir *dir : srcfrags) {
@@ -11090,12 +11128,29 @@ void MDCache::merge_dir(CInode *diri, frag_t frag)
 
 void MDCache::fragment_freeze_dirs(list<CDir*>& dirs)
 {
-  for (list<CDir*>::iterator p = dirs.begin(); p != dirs.end(); ++p) {
-    CDir *dir = *p;
+  bool any_subtree = false, any_non_subtree = false;
+  for (CDir* dir : dirs) {
     dir->auth_pin(dir);  // until we mark and complete them
     dir->state_set(CDir::STATE_FRAGMENTING);
     dir->freeze_dir();
     ceph_assert(dir->is_freezing_dir());
+
+    if (dir->is_subtree_root())
+      any_subtree = true;
+    else
+      any_non_subtree = true;
+  }
+
+  if (any_subtree && any_non_subtree) {
+    // either all dirfrags are subtree roots or all are not.
+    for (CDir *dir : dirs) {
+      if (dir->is_subtree_root()) {
+	ceph_assert(dir->state_test(CDir::STATE_AUXSUBTREE));
+      } else {
+	dir->state_set(CDir::STATE_AUXSUBTREE);
+	adjust_subtree_auth(dir, mds->get_nodeid());
+      }
+    }
   }
 }
 
@@ -11317,29 +11372,29 @@ public:
 
 class C_MDC_FragmentCommit : public MDCacheLogContext {
   dirfrag_t basedirfrag;
-  list<CDir*> resultfrags;
+  MDRequestRef mdr;
 public:
-  C_MDC_FragmentCommit(MDCache *m, dirfrag_t df, list<CDir*>& l) :
-    MDCacheLogContext(m), basedirfrag(df), resultfrags(l) {}
+  C_MDC_FragmentCommit(MDCache *m, dirfrag_t df, const MDRequestRef& r) :
+    MDCacheLogContext(m), basedirfrag(df), mdr(r) {}
   void finish(int r) override {
-    mdcache->_fragment_committed(basedirfrag, resultfrags);
+    mdcache->_fragment_committed(basedirfrag, mdr);
   }
 };
 
-class C_IO_MDC_FragmentFinish : public MDCacheIOContext {
+class C_IO_MDC_FragmentPurgeOld : public MDCacheIOContext {
   dirfrag_t basedirfrag;
-  list<CDir*> resultfrags;
+  int bits;
+  MDRequestRef mdr;
 public:
-  C_IO_MDC_FragmentFinish(MDCache *m, dirfrag_t f, list<CDir*>& l) :
-    MDCacheIOContext(m), basedirfrag(f) {
-    resultfrags.swap(l);
-  }
+  C_IO_MDC_FragmentPurgeOld(MDCache *m, dirfrag_t f, int b,
+			    const MDRequestRef& r) :
+    MDCacheIOContext(m), basedirfrag(f), bits(b), mdr(r) {}
   void finish(int r) override {
     ceph_assert(r == 0 || r == -ENOENT);
-    mdcache->_fragment_finish(basedirfrag, resultfrags);
+    mdcache->_fragment_old_purged(basedirfrag, bits, mdr);
   }
   void print(ostream& out) const override {
-    out << "dirfrags_commit(" << basedirfrag << ")";
+    out << "fragment_purge_old(" << basedirfrag << ")";
   }
 };
 
@@ -11420,8 +11475,8 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
     diri->verify_dirfrags();
   mds->queue_waiters(waiters);
 
-  for (list<frag_t>::iterator p = le->orig_frags.begin(); p != le->orig_frags.end(); ++p)
-    ceph_assert(!diri->dirfragtree.is_leaf(*p));
+  for (const auto& fg : le->orig_frags)
+    ceph_assert(!diri->dirfragtree.is_leaf(fg));
 
   le->metablob.add_dir_context(*info.resultfrags.begin());
   for (list<CDir*>::iterator p = info.resultfrags.begin();
@@ -11468,13 +11523,12 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
 void MDCache::_fragment_logged(MDRequestRef& mdr)
 {
   dirfrag_t basedirfrag = mdr->more()->fragment_base;
-  map<dirfrag_t,fragment_info_t>::iterator it = fragments.find(basedirfrag);
-  ceph_assert(it != fragments.end());
-  fragment_info_t &info = it->second;
+  auto& info = fragments.at(basedirfrag);
   CInode *diri = info.resultfrags.front()->get_inode();
 
   dout(10) << "fragment_logged " << basedirfrag << " bits " << info.bits
 	   << " on " << *diri << dendl;
+  mdr->mark_event("prepare logged");
 
   if (diri->is_auth())
     diri->pop_and_dirty_projected_inode(mdr->ls);
@@ -11502,23 +11556,46 @@ void MDCache::_fragment_logged(MDRequestRef& mdr)
 void MDCache::_fragment_stored(MDRequestRef& mdr)
 {
   dirfrag_t basedirfrag = mdr->more()->fragment_base;
-  map<dirfrag_t,fragment_info_t>::iterator it = fragments.find(basedirfrag);
-  ceph_assert(it != fragments.end());
-  fragment_info_t &info = it->second;
-  CInode *diri = info.resultfrags.front()->get_inode();
+  fragment_info_t &info = fragments.at(basedirfrag);
+  CDir *first = info.resultfrags.front();
+  CInode *diri = first->get_inode();
 
   dout(10) << "fragment_stored " << basedirfrag << " bits " << info.bits
 	   << " on " << *diri << dendl;
+  mdr->mark_event("new frags stored");
 
   // tell peers
-  CDir *first = *info.resultfrags.begin();
+  mds_rank_t diri_auth = (first->is_subtree_root() && !diri->is_auth()) ?
+			  diri->authority().first : CDIR_AUTH_UNKNOWN;
   for (const auto &p : first->get_replicas()) {
     if (mds->mdsmap->get_state(p.first) < MDSMap::STATE_REJOIN ||
 	(mds->mdsmap->get_state(p.first) == MDSMap::STATE_REJOIN &&
 	 rejoin_gather.count(p.first)))
       continue;
 
-    auto notify = MMDSFragmentNotify::create(basedirfrag, info.bits);
+    auto notify = MMDSFragmentNotify::create(basedirfrag, info.bits, mdr->reqid.tid);
+    if (diri_auth != CDIR_AUTH_UNKNOWN && // subtree root
+	diri_auth != p.first) { // not auth mds of diri
+      /*
+       * In the nornal case, mds does not trim dir inode whose child dirfrags
+       * are likely being fragmented (see trim_inode()). But when fragmenting
+       * subtree roots, following race can happen:
+       *
+       * - mds.a (auth mds of dirfrag) sends fragment_notify message to
+       *   mds.c and drops wrlock on dirfragtreelock.
+       * - mds.b (auth mds of dir inode) changes dirfragtreelock state to
+       *   SYNC and send lock message mds.c
+       * - mds.c receives the lock message and changes dirfragtreelock state
+       *   to SYNC
+       * - mds.c trim dirfrag and dir inode from its cache
+       * - mds.c receives the fragment_notify message
+       *
+       * So we need to ensure replicas have received the notify, then unlock
+       * the dirfragtreelock.
+       */
+      notify->mark_ack_wanted();
+      info.notify_ack_waiting.insert(p.first);
+    }
 
     // freshly replicate new dirs to peers
     for (list<CDir*>::iterator q = info.resultfrags.begin();
@@ -11531,10 +11608,8 @@ void MDCache::_fragment_stored(MDRequestRef& mdr)
 
   // journal commit
   EFragment *le = new EFragment(mds->mdlog, EFragment::OP_COMMIT, basedirfrag, info.bits);
-  mds->mdlog->start_submit_entry(le, new C_MDC_FragmentCommit(this, basedirfrag,
-							      info.resultfrags));
+  mds->mdlog->start_submit_entry(le, new C_MDC_FragmentCommit(this, basedirfrag, mdr));
 
-  mds->locker->drop_locks(mdr.get());
 
   // unfreeze resulting frags
   for (list<CDir*>::iterator p = info.resultfrags.begin();
@@ -11554,32 +11629,34 @@ void MDCache::_fragment_stored(MDRequestRef& mdr)
     dir->unfreeze_dir();
   }
 
-  fragments.erase(it);
-  request_finish(mdr);
+  if (info.notify_ack_waiting.empty()) {
+    fragment_drop_locks(info);
+  } else {
+    mds->locker->drop_locks_for_fragment_unfreeze(mdr.get());
+  }
 }
 
-void MDCache::_fragment_committed(dirfrag_t basedirfrag, list<CDir*>& resultfrags)
+void MDCache::_fragment_committed(dirfrag_t basedirfrag, const MDRequestRef& mdr)
 {
   dout(10) << "fragment_committed " << basedirfrag << dendl;
-  map<dirfrag_t, ufragment>::iterator it = uncommitted_fragments.find(basedirfrag);
-  ceph_assert(it != uncommitted_fragments.end());
-  ufragment &uf = it->second;
+  if (mdr)
+    mdr->mark_event("commit logged");
+
+  ufragment &uf = uncommitted_fragments.at(basedirfrag);
 
   // remove old frags
   C_GatherBuilder gather(
     g_ceph_context,
     new C_OnFinisher(
-      new C_IO_MDC_FragmentFinish(this, basedirfrag, resultfrags),
+      new C_IO_MDC_FragmentPurgeOld(this, basedirfrag, uf.bits, mdr),
       mds->finisher));
 
   SnapContext nullsnapc;
   object_locator_t oloc(mds->mdsmap->get_metadata_pool());
-  for (list<frag_t>::iterator p = uf.old_frags.begin();
-       p != uf.old_frags.end();
-       ++p) {
-    object_t oid = CInode::get_object_name(basedirfrag.ino, *p, "");
+  for (const auto& fg : uf.old_frags) {
+    object_t oid = CInode::get_object_name(basedirfrag.ino, fg, "");
     ObjectOperation op;
-    if (*p == frag_t()) {
+    if (fg == frag_t()) {
       // backtrace object
       dout(10) << " truncate orphan dirfrag " << oid << dendl;
       op.truncate(0);
@@ -11597,16 +11674,50 @@ void MDCache::_fragment_committed(dirfrag_t basedirfrag, list<CDir*>& resultfrag
   gather.activate();
 }
 
-void MDCache::_fragment_finish(dirfrag_t basedirfrag, list<CDir*>& resultfrags)
+void MDCache::_fragment_old_purged(dirfrag_t basedirfrag, int bits, const MDRequestRef& mdr)
 {
-  dout(10) << "fragment_finish " << basedirfrag << "resultfrags.size="
-           << resultfrags.size() << dendl;
-  map<dirfrag_t, ufragment>::iterator it = uncommitted_fragments.find(basedirfrag);
-  ceph_assert(it != uncommitted_fragments.end());
-  ufragment &uf = it->second;
+  dout(10) << "fragment_old_purged " << basedirfrag << dendl;
+  if (mdr)
+    mdr->mark_event("old frags purged");
+
+  EFragment *le = new EFragment(mds->mdlog, EFragment::OP_FINISH, basedirfrag, bits);
+  mds->mdlog->start_submit_entry(le);
+
+  finish_uncommitted_fragment(basedirfrag, EFragment::OP_FINISH);
+
+  if (mds->logger) {
+    if (bits > 0) {
+      mds->logger->inc(l_mds_dir_split);
+    } else {
+      mds->logger->inc(l_mds_dir_merge);
+    }
+  }
+
+  if (mdr) {
+    auto it = fragments.find(basedirfrag);
+    ceph_assert(it != fragments.end());
+    it->second.finishing = true;
+    if (it->second.notify_ack_waiting.empty())
+      fragment_maybe_finish(it);
+    else
+      mdr->mark_event("wating for notify acks");
+  }
+}
+
+void MDCache::fragment_drop_locks(fragment_info_t& info)
+{
+  mds->locker->drop_locks(info.mdr.get());
+  request_finish(info.mdr);
+  //info.mdr.reset();
+}
+
+void MDCache::fragment_maybe_finish(const fragment_info_iterator& it)
+{
+  if (!it->second.finishing)
+    return;
 
   // unmark & auth_unpin
-  for (const auto &dir : resultfrags) {
+  for (const auto &dir : it->second.resultfrags) {
     dir->state_clear(CDir::STATE_FRAGMENTING);
     dir->auth_unpin(this);
 
@@ -11617,23 +11728,37 @@ void MDCache::_fragment_finish(dirfrag_t basedirfrag, list<CDir*>& resultfrags)
     mds->balancer->maybe_fragment(dir, false);
   }
 
-  if (mds->logger) {
-    if (resultfrags.size() > 1) {
-      mds->logger->inc(l_mds_dir_split);
-    } else {
-      mds->logger->inc(l_mds_dir_merge);
-    }
+  fragments.erase(it);
+}
+
+
+void MDCache::handle_fragment_notify_ack(const MMDSFragmentNotifyAck::const_ref &ack)
+{
+  dout(10) << "handle_fragment_notify_ack " << *ack << " from " << ack->get_source() << dendl;
+  mds_rank_t from = mds_rank_t(ack->get_source().num());
+
+  if (mds->get_state() < MDSMap::STATE_ACTIVE) {
+    return;
   }
 
-  EFragment *le = new EFragment(mds->mdlog, EFragment::OP_FINISH, basedirfrag, uf.bits);
-  mds->mdlog->start_submit_entry(le);
+  auto it = fragments.find(ack->get_base_dirfrag());
+  if (it == fragments.end() ||
+      it->second.get_tid() != ack->get_tid()) {
+    dout(10) << "handle_fragment_notify_ack obsolete message, dropping" << dendl;
+    return;
+  }
 
-  finish_uncommitted_fragment(basedirfrag, EFragment::OP_FINISH);
+  if (it->second.notify_ack_waiting.erase(from) &&
+      it->second.notify_ack_waiting.empty()) {
+    fragment_drop_locks(it->second);
+    fragment_maybe_finish(it);
+  }
 }
 
 void MDCache::handle_fragment_notify(const MMDSFragmentNotify::const_ref &notify)
 {
   dout(10) << "handle_fragment_notify " << *notify << " from " << notify->get_source() << dendl;
+  mds_rank_t from = mds_rank_t(notify->get_source().num());
 
   if (mds->get_state() < MDSMap::STATE_REJOIN) {
     return;
@@ -11666,15 +11791,21 @@ void MDCache::handle_fragment_notify(const MMDSFragmentNotify::const_ref &notify
     // add new replica dirs values
     auto p = notify->basebl.cbegin();
     while (!p.end())
-      add_replica_dir(p, diri, mds_rank_t(notify->get_source().num()), waiters);
+      add_replica_dir(p, diri, from, waiters);
 
     mds->queue_waiters(waiters);
   } else {
     ceph_abort();
   }
+
+  if (notify->is_ack_wanted()) {
+    auto ack = MMDSFragmentNotifyAck::create(notify->get_base_dirfrag(),
+					     notify->get_bits(), notify->get_tid());
+    mds->send_message_mds(ack, from);
+  }
 }
 
-void MDCache::add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, list<frag_t>& old_frags,
+void MDCache::add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, const frag_vec_t& old_frags,
 				       LogSegment *ls, bufferlist *rollback)
 {
   dout(10) << "add_uncommitted_fragment: base dirfrag " << basedirfrag << " bits " << bits << dendl;
@@ -11705,7 +11836,7 @@ void MDCache::finish_uncommitted_fragment(dirfrag_t basedirfrag, int op)
   }
 }
 
-void MDCache::rollback_uncommitted_fragment(dirfrag_t basedirfrag, list<frag_t>& old_frags)
+void MDCache::rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags)
 {
   dout(10) << "rollback_uncommitted_fragment: base dirfrag " << basedirfrag
            << " old_frags (" << old_frags << ")" << dendl;
@@ -11713,7 +11844,7 @@ void MDCache::rollback_uncommitted_fragment(dirfrag_t basedirfrag, list<frag_t>&
   if (it != uncommitted_fragments.end()) {
     ufragment& uf = it->second;
     if (!uf.old_frags.empty()) {
-      uf.old_frags.swap(old_frags);
+      uf.old_frags = std::move(old_frags);
       uf.committed = true;
     } else {
       uf.ls->uncommitted_fragments.erase(basedirfrag);
@@ -11733,14 +11864,7 @@ void MDCache::rollback_uncommitted_fragments()
     ceph_assert(diri);
 
     if (uf.committed) {
-      list<CDir*> frags;
-      diri->get_dirfrags_under(p->first.frag, frags);
-      for (list<CDir*>::iterator q = frags.begin(); q != frags.end(); ++q) {
-	CDir *dir = *q;
-	dir->auth_pin(this);
-	dir->state_set(CDir::STATE_FRAGMENTING);
-      }
-      _fragment_committed(p->first, frags);
+      _fragment_committed(p->first, MDRequestRef());
       continue;
     }
 
@@ -11751,7 +11875,7 @@ void MDCache::rollback_uncommitted_fragments()
     mds->mdlog->start_entry(le);
     bool diri_auth = (diri->authority() != CDIR_AUTH_UNDEF);
 
-    list<frag_t> old_frags;
+    frag_vec_t old_frags;
     diri->dirfragtree.get_leaves_under(p->first.frag, old_frags);
 
     list<CDir*> resultfrags;
@@ -11761,8 +11885,8 @@ void MDCache::rollback_uncommitted_fragments()
       adjust_dir_fragments(diri, p->first.frag, -uf.bits, resultfrags, waiters, true);
     } else {
       auto bp = uf.rollback.cbegin();
-      for (list<frag_t>::iterator q = uf.old_frags.begin(); q != uf.old_frags.end(); ++q) {
-	CDir *dir = force_dir_fragment(diri, *q);
+      for (const auto& fg : uf.old_frags) {
+	CDir *dir = force_dir_fragment(diri, fg);
 	resultfrags.push_back(dir);
 
 	dirfrag_rollback rollback;
@@ -11809,19 +11933,14 @@ void MDCache::rollback_uncommitted_fragments()
     if (g_conf()->mds_debug_frag)
       diri->verify_dirfrags();
 
-    for (list<frag_t>::iterator q = old_frags.begin(); q != old_frags.end(); ++q)
-      ceph_assert(!diri->dirfragtree.is_leaf(*q));
-
-    for (list<CDir*>::iterator q = resultfrags.begin(); q != resultfrags.end(); ++q) {
-      CDir *dir = *q;
-      dir->auth_pin(this);
-      dir->state_set(CDir::STATE_FRAGMENTING);
+    for (const auto& leaf : old_frags) {
+      ceph_assert(!diri->dirfragtree.is_leaf(leaf));
     }
 
     mds->mdlog->submit_entry(le);
 
     uf.old_frags.swap(old_frags);
-    _fragment_committed(p->first, resultfrags);
+    _fragment_committed(p->first, MDRequestRef());
   }
 }
 
@@ -12021,7 +12140,7 @@ void MDCache::show_cache()
     show_func(p.second);
 }
 
-int MDCache::cache_status(Formatter *f)
+void MDCache::cache_status(Formatter *f)
 {
   f->open_object_section("cache");
 
@@ -12030,7 +12149,6 @@ int MDCache::cache_status(Formatter *f)
   f->close_section();
 
   f->close_section();
-  return 0;
 }
 
 void MDCache::dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f) 
@@ -12072,6 +12190,32 @@ int MDCache::dump_cache(Formatter *f)
 int MDCache::dump_cache(std::string_view fn, Formatter *f)
 {
   int r = 0;
+
+  // dumping large caches may cause mds to hang or worse get killed.
+  // so, disallow the dump if the cache size exceeds the configured
+  // threshold, which is 1G for formatter and unlimited for file (note
+  // that this can be jacked up by the admin... and is nothing but foot
+  // shooting, but the option itself is for devs and hence dangerous to
+  // tune). TODO: remove this when fixed.
+  uint64_t threshold = f ?
+    g_conf().get_val<Option::size_t>("mds_dump_cache_threshold_formatter") :
+    g_conf().get_val<Option::size_t>("mds_dump_cache_threshold_file");
+
+  if (threshold && cache_size() > threshold) {
+    if (f) {
+      std::stringstream ss;
+      ss << "cache usage exceeds dump threshold";
+      f->open_object_section("result");
+      f->dump_string("error", ss.str());
+      f->close_section();
+    } else {
+      derr << "cache usage exceeds dump threshold" << dendl;
+      r = -EINVAL;
+    }
+    return r;
+  }
+
+  r = 0;
   int fd = -1;
 
   if (f) {
@@ -12086,7 +12230,7 @@ int MDCache::dump_cache(std::string_view fn, Formatter *f)
 
     dout(1) << "dump_cache to " << path << dendl;
 
-    fd = ::open(path, O_WRONLY|O_CREAT|O_EXCL, 0600);
+    fd = ::open(path, O_WRONLY|O_CREAT|O_EXCL|O_CLOEXEC, 0600);
     if (fd < 0) {
       derr << "failed to open " << path << ": " << cpp_strerror(errno) << dendl;
       return errno;
@@ -12166,12 +12310,13 @@ void C_MDS_RetryRequest::finish(int r)
 
 class C_MDS_EnqueueScrub : public Context
 {
+  std::string tag;
   Formatter *formatter;
   Context *on_finish;
 public:
   ScrubHeaderRef header;
-  C_MDS_EnqueueScrub(Formatter *f, Context *fin) :
-    formatter(f), on_finish(fin), header(nullptr) {}
+  C_MDS_EnqueueScrub(std::string_view tag, Formatter *f, Context *fin) :
+    tag(tag), formatter(f), on_finish(fin), header(nullptr) {}
 
   Context *take_finisher() {
     Context *fin = on_finish;
@@ -12180,10 +12325,21 @@ public:
   }
 
   void finish(int r) override {
-    if (r < 0) { // we failed the lookup or something; dump ourselves
+    if (r == 0) {
+      // since recursive scrub is asynchronous, dump minimal output
+      // to not upset cli tools.
+      if (header && header->get_recursive()) {
+        formatter->open_object_section("results");
+        formatter->dump_int("return_code", 0);
+        formatter->dump_string("scrub_tag", tag);
+        formatter->dump_string("mode", "asynchronous");
+        formatter->close_section(); // results
+      }
+    } else { // we failed the lookup or something; dump ourselves
       formatter->open_object_section("results");
       formatter->dump_int("return_code", r);
       formatter->close_section(); // results
+      r = 0; // already dumped in formatter
     }
     if (on_finish)
       on_finish->complete(r);
@@ -12206,19 +12362,21 @@ void MDCache::enqueue_scrub(
     mdr->set_filepath(path);
   }
 
-  C_MDS_EnqueueScrub *cs = new C_MDS_EnqueueScrub(f, fin);
+  bool is_internal = false;
+  std::string tag_str(tag);
+  if (tag_str.empty()) {
+    uuid_d uuid_gen;
+    uuid_gen.generate_random();
+    tag_str = uuid_gen.to_string();
+    is_internal = true;
+  }
+
+  C_MDS_EnqueueScrub *cs = new C_MDS_EnqueueScrub(tag_str, f, fin);
   cs->header = std::make_shared<ScrubHeader>(
-      tag, force, recursive, repair, f);
+    tag_str, is_internal, force, recursive, repair, f);
 
   mdr->internal_op_finish = cs;
   enqueue_scrub_work(mdr);
-
-  // since recursive scrub is asynchronous, dump minimal output
-  // to not upset cli tools.
-  if (recursive) {
-    f->open_object_section("results");
-    f->close_section(); // results
-  }
 }
 
 void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
@@ -12239,7 +12397,7 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
   ScrubHeaderRef header = cs->header;
 
   // Cannot scrub same dentry twice at same time
-  if (in->scrub_infop && in->scrub_infop->scrub_in_progress) {
+  if (in->scrub_is_in_progress()) {
     mds->server->respond_to_request(mdr, -EBUSY);
     return;
   } else {
@@ -12459,7 +12617,6 @@ void MDCache::repair_inode_stats_work(MDRequestRef& mdr)
   }
 
   MutationImpl::LockOpVec lov;
-  std::list<frag_t> frags;
 
   if (mdr->ls) // already marked filelock/nestlock dirty ?
     goto do_rdlocks;
@@ -12472,17 +12629,20 @@ void MDCache::repair_inode_stats_work(MDRequestRef& mdr)
 
   // Fetch all dirfrags and mark filelock/nestlock dirty. This will tirgger
   // the scatter-gather process, which will fix any fragstat/rstat errors.
-  diri->dirfragtree.get_leaves(frags);
-  for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
-    CDir *dir = diri->get_dirfrag(*p);
-    if (!dir) {
-      ceph_assert(mdr->is_auth_pinned(diri));
-      dir = diri->get_or_open_dirfrag(this, *p);
-    }
-    if (dir->get_version() == 0) {
-      ceph_assert(dir->is_auth());
-      dir->fetch(new C_MDS_RetryRequest(this, mdr));
-      return;
+  {
+    frag_vec_t leaves;
+    diri->dirfragtree.get_leaves(leaves);
+    for (const auto& leaf : leaves) {
+      CDir *dir = diri->get_dirfrag(leaf);
+      if (!dir) {
+        ceph_assert(mdr->is_auth_pinned(diri));
+        dir = diri->get_or_open_dirfrag(this, leaf);
+      }
+      if (dir->get_version() == 0) {
+        ceph_assert(dir->is_auth());
+        dir->fetch(new C_MDS_RetryRequest(this, mdr));
+        return;
+      }
     }
   }
 
@@ -12512,13 +12672,16 @@ do_rdlocks:
   if (const sr_t *srnode = diri->get_projected_srnode(); srnode)
     nest_info.rsnaps = srnode->snaps.size();
 
-  diri->dirfragtree.get_leaves(frags);
-  for (list<frag_t>::iterator p = frags.begin(); p != frags.end(); ++p) {
-    CDir *dir = diri->get_dirfrag(*p);
-    ceph_assert(dir);
-    ceph_assert(dir->get_version() > 0);
-    dir_info.add(dir->fnode.accounted_fragstat);
-    nest_info.add(dir->fnode.accounted_rstat);
+  {
+    frag_vec_t leaves;
+    diri->dirfragtree.get_leaves(leaves);
+    for (const auto& leaf : leaves) {
+      CDir *dir = diri->get_dirfrag(leaf);
+      ceph_assert(dir);
+      ceph_assert(dir->get_version() > 0);
+      dir_info.add(dir->fnode.accounted_fragstat);
+      nest_info.add(dir->fnode.accounted_rstat);
+    }
   }
 
   if (!dir_info.same_sums(diri->inode.dirstat) ||

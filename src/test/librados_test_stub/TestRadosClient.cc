@@ -12,6 +12,7 @@
 #include <errno.h>
 
 #include <atomic>
+#include <sstream>
 
 static int get_concurrency() {
   int concurrency = 0;
@@ -165,6 +166,25 @@ int TestRadosClient::mon_command(const std::vector<std::string>& cmd,
     } else if ((*j_it)->get_data() == "osd tier remove-overlay") {
       return 0;
     } else if ((*j_it)->get_data() == "osd tier remove") {
+      return 0;
+    } else if ((*j_it)->get_data() == "config-key rm") {
+      return 0;
+    } else if ((*j_it)->get_data() == "df") {
+      std::stringstream str;
+      str << R"({"pools": [)";
+
+      std::list<std::pair<int64_t, std::string>> pools;
+      pool_list(pools);
+      for (auto& pool : pools) {
+        if (pools.begin()->first != pool.first) {
+          str << ",";
+        }
+        str << R"({"name": ")" << pool.second << R"(", "stats": )"
+            << R"({"percent_used": 1.0, "bytes_used": 0, "max_avail": 0}})";
+      }
+
+      str << "]}";
+      outbl->append(str.str());
       return 0;
     }
   }

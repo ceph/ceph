@@ -39,7 +39,7 @@ struct DummyAuthAuthorizer : public AuthAuthorizer {
 struct Server {
   ceph::thread::Throttle byte_throttler;
   static constexpr int64_t server_num = 0;
-  ceph::net::SocketMessenger msgr{entity_name_t::OSD(server_num)};
+  ceph::net::SocketMessenger msgr{entity_name_t::OSD(server_num), "server", 0};
   struct ServerDispatcher : ceph::net::Dispatcher {
     unsigned count = 0;
     seastar::condition_variable on_reply;
@@ -60,7 +60,7 @@ struct Server {
           0, bufferlist{});
     }
     seastar::future<std::unique_ptr<AuthAuthorizer>>
-    ms_get_authorizer(peer_type_t, bool) override {
+    ms_get_authorizer(peer_type_t) override {
       return seastar::make_ready_future<std::unique_ptr<AuthAuthorizer>>(
           new DummyAuthAuthorizer{});
     }
@@ -76,7 +76,7 @@ struct Server {
 struct Client {
   ceph::thread::Throttle byte_throttler;
   static constexpr int64_t client_num = 1;
-  ceph::net::SocketMessenger msgr{entity_name_t::OSD(client_num)};
+  ceph::net::SocketMessenger msgr{entity_name_t::OSD(client_num), "client", 0};
   struct ClientDispatcher : ceph::net::Dispatcher {
     unsigned count = 0;
     seastar::condition_variable on_reply;
@@ -133,14 +133,6 @@ struct Server {
       }
       on_reply.notify_one();
     }
-    bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                              bufferlist& authorizer,
-                              bufferlist& authorizer_reply,
-                              bool& isvalid, CryptoKey& session_key,
-                              std::unique_ptr<AuthAuthorizerChallenge>*) override {
-      isvalid = true;
-      return true;
-    }
     bool ms_dispatch(Message*) override {
       ceph_abort();
     }
@@ -196,14 +188,6 @@ struct Client {
       }
       on_reply.notify_one();
     }
-    bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                              bufferlist& authorizer,
-                              bufferlist& authorizer_reply,
-                              bool& isvalid, CryptoKey& session_key,
-                              std::unique_ptr<AuthAuthorizerChallenge>*) override {
-      isvalid = true;
-      return true;
-    }
     bool ms_dispatch(Message*) override {
       ceph_abort();
     }
@@ -216,7 +200,8 @@ struct Client {
       return true;
     }
     bool ping(Messenger* msgr, const entity_inst_t& peer) {
-      auto conn = msgr->get_connection(peer);
+      auto conn = msgr->connect_to(peer.name.type(),
+                                   entity_addrvec_t{peer.addr});
       replied = false;
       conn->send_message(new MPing);
       std::unique_lock lock{mutex};
@@ -296,7 +281,7 @@ seastar_echo(SeastarContext& sc,
         // bind the server
         server.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
                                          &server.byte_throttler);
-        server.msgr.bind(addr);
+        server.msgr.bind(entity_addrvec_t{addr});
         return server.msgr.start(&server.dispatcher)
           .then([&dispatcher=server.dispatcher, count] {
             return dispatcher.on_reply.wait([&dispatcher, count] {
@@ -351,7 +336,8 @@ static void ceph_echo(CephContext* cct,
     native_pingpong::Client client{cct};
     client.msgr->add_dispatcher_head(&client.dispatcher);
     client.msgr->start();
-    auto conn = client.msgr->get_connection(entity);
+    auto conn = client.msgr->connect_to(entity.name.type(),
+                                        entity_addrvec_t{entity.addr});
     for (unsigned i = 0; i < count; i++) {
       std::cout << "seq=" << i << std::endl;
       client.ping(entity);

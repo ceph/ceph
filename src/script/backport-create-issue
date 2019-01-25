@@ -31,11 +31,13 @@
 import argparse
 import logging
 import re
+import time
 from redminelib import Redmine  # https://pypi.org/project/python-redmine/
 
 redmine_endpoint = "http://tracker.ceph.com"
 project_name = "Ceph"
 release_id = 16
+delay_seconds = 5
 #
 # NOTE: release_id is hard-coded because
 # http://www.redmine.org/projects/redmine/wiki/Rest_CustomFields
@@ -200,6 +202,8 @@ def update_relations(r, issue, dry_run):
                                    "id": release_id,
                                    "value": release,
                                }])
+        logging.debug("Rate-limiting to avoid seeming like a spammer")
+        time.sleep(delay_seconds)
         r.issue_relation.create(issue_id=issue['id'],
                                 issue_to_id=other['id'],
                                 relation_type='copied_to')

@@ -70,7 +70,6 @@ public:
   bool get_available() const { return available; }
   const std::string& get_name() const { return name; }
   const uuid_d& get_fsid() const { return fsid; }
-  std::vector<MgrMap::ModuleInfo>& get_modules() { return modules; }
   const std::map<std::string,std::string>& get_metadata() const {
     return metadata;
   }
@@ -104,7 +103,7 @@ private:
 
 public:
 
-  const char *get_type_name() const override { return "mgrbeacon"; }
+  std::string_view get_type_name() const override { return "mgrbeacon"; }
 
   void print(ostream& out) const override {
     out << get_type_name() << " mgr." << name << "(" << fsid << ","

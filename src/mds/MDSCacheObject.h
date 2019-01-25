@@ -2,6 +2,7 @@
 #define CEPH_MDSCACHEOBJECT_H
 
 #include <ostream>
+#include <string_view>
 
 #include "common/config.h"
 
@@ -69,7 +70,7 @@ class MDSCacheObject {
   static const int PIN_CLIENTLEASE = 1009;
   static const int PIN_DISCOVERBASE = 1010;
 
-  const char *generic_pin_name(int p) const {
+  std::string_view generic_pin_name(int p) const {
     switch (p) {
     case PIN_REPLICATED: return "replicated";
     case PIN_DIRTY: return "dirty";
@@ -82,7 +83,7 @@ class MDSCacheObject {
     case PIN_TEMPEXPORTING: return "tempexporting";
     case PIN_CLIENTLEASE: return "clientlease";
     case PIN_DISCOVERBASE: return "discoverbase";
-    default: ceph_abort(); return 0;
+    default: ceph_abort(); return std::string_view();
     }
   }
 
@@ -157,7 +158,7 @@ protected:
 #endif
     return ref;
   }
-  virtual const char *pin_name(int by) const = 0;
+  virtual std::string_view pin_name(int by) const = 0;
   //bool is_pinned_by(int by) { return ref_set.count(by); }
   //multiset<int>& get_ref_set() { return ref_set; }
 
@@ -216,17 +217,14 @@ protected:
 #endif
   }
 
-  protected:
+protected:
   int auth_pins = 0;
-  int nested_auth_pins = 0;
 #ifdef MDS_AUTHPIN_SET
   mempool::mds_co::multiset<void*> auth_pin_set;
 #endif
 
-  public:
-  bool is_auth_pinned() const { return auth_pins || nested_auth_pins; }
+public:
   int get_num_auth_pins() const { return auth_pins; }
-  int get_num_nested_auth_pins() const { return nested_auth_pins; }
 #ifdef MDS_AUTHPIN_SET
   void print_authpin_set(std::ostream& out) const {
     out << " (" << auth_pin_set << ")";

@@ -1,7 +1,6 @@
 <cd-modal [modalRef]="bsModalRef">
   <ng-container class="modal-title"
-                i18n>Cluster-wide OSD Flags
-  </ng-container>
+                i18n>Cluster-wide OSD Flags</ng-container>
 
   <ng-container class="modal-content">
     <form name="osdFlagsForm"
@@ -32,15 +31,11 @@
         <div class="button-group text-right">
           <cd-submit-button (submitAction)="submitAction()"
                             [form]="osdFlagsForm"
-                            i18n>
-            Submit
-          </cd-submit-button>
+                            i18n>Submit</cd-submit-button>
 
           <button class="btn btn-link btn-sm"
                   (click)="bsModalRef.hide()"
-                  i18n>
-            Cancel
-          </button>
+                  i18n>Cancel</button>
         </div>
       </div>
     </form>

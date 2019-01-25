@@ -34,6 +34,8 @@ AuthMethodList::AuthMethodList(CephContext *cct, std::string str)
       auth_supported.push_back(CEPH_AUTH_CEPHX);
     } else if (iter->compare("none") == 0) {
       auth_supported.push_back(CEPH_AUTH_NONE);
+    } else if (iter->compare("gss") == 0) {
+      auth_supported.push_back(CEPH_AUTH_GSS);
     } else {
       auth_supported.push_back(CEPH_AUTH_UNKNOWN);
       lderr(cct) << "WARNING: unknown auth protocol defined: " << *iter << dendl;

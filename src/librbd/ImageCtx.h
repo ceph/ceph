@@ -7,9 +7,11 @@
 
 #include <list>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
+#include "common/config_proxy.h"
 #include "common/event_socket.h"
 #include "common/Mutex.h"
 #include "common/Readahead.h"
@@ -61,7 +63,12 @@ namespace librbd {
   }
 
   struct ImageCtx {
+    static const string METADATA_CONF_PREFIX;
+
     CephContext *cct;
+    ConfigProxy config;
+    std::set<std::string> config_overrides;
+
     PerfCounters *perfcounter;
     struct rbd_obj_header_ondisk header;
     ::SnapContext snapc;
@@ -121,7 +128,7 @@ namespace librbd {
     char *format_string;
     std::string header_oid;
     std::string id; // only used for new-format images
-    ParentInfo parent_md;
+    ParentImageInfo parent_md;
     ImageCtx *parent;
     ImageCtx *child = nullptr;
     MigrationInfo migration_info;
@@ -165,54 +172,21 @@ namespace librbd {
 
     bool ignore_migrating = false;
 
-    // Configuration
-    static const string METADATA_CONF_PREFIX;
+    /// Cached latency-sensitive configuration settings
     bool non_blocking_aio;
     bool cache;
     bool cache_writethrough_until_flush;
-    uint64_t cache_size;
     uint64_t cache_max_dirty;
-    uint64_t cache_target_dirty;
-    double cache_max_dirty_age;
-    uint32_t cache_max_dirty_object;
-    bool cache_block_writes_upfront;
-    uint32_t concurrent_management_ops;
-    bool balance_snap_reads;
-    bool localize_snap_reads;
-    bool balance_parent_reads;
-    bool localize_parent_reads;
     uint64_t sparse_read_threshold_bytes;
-    uint32_t readahead_trigger_requests;
     uint64_t readahead_max_bytes;
     uint64_t readahead_disable_after_bytes;
     bool clone_copy_on_read;
-    bool blacklist_on_break_lock;
-    uint32_t blacklist_expire_seconds;
-    uint32_t request_timed_out_seconds;
     bool enable_alloc_hint;
-    uint8_t journal_order;
-    uint8_t journal_splay_width;
-    double journal_commit_age;
-    int journal_object_flush_interval;
-    uint64_t journal_object_flush_bytes;
-    double journal_object_flush_age;
-    uint64_t journal_object_max_in_flight_appends;
-    std::string journal_pool;
-    uint32_t journal_max_payload_bytes;
-    int journal_max_concurrent_object_sets;
-    bool mirroring_resync_after_disconnect;
-    uint64_t mirroring_delete_delay;
-    int mirroring_replay_delay;
     bool skip_partial_discard;
     bool blkin_trace_all;
+    uint64_t mirroring_replay_delay;
     uint64_t mtime_update_interval;
     uint64_t atime_update_interval;
-    uint64_t qos_iops_limit;
-    uint64_t qos_bps_limit;
-    uint64_t qos_read_iops_limit;
-    uint64_t qos_write_iops_limit;
-    uint64_t qos_read_bps_limit;
-    uint64_t qos_write_bps_limit;
 
     LibrbdAdminSocketHook *asok_hook;
 
@@ -220,9 +194,6 @@ namespace librbd {
     journal::Policy *journal_policy = nullptr;
 
     ZTracer::Endpoint trace_endpoint;
-
-    static bool _filter_metadata_confs(const string &prefix, std::map<string, bool> &configs,
-                                       const map<string, bufferlist> &pairs, map<string, bufferlist> *res);
 
     // unit test mock helpers
     static ImageCtx* create(const std::string &image_name,
@@ -267,7 +238,7 @@ namespace librbd {
     int get_snap_namespace(librados::snap_t in_snap_id,
 			   cls::rbd::SnapshotNamespace *out_snap_namespace) const;
     int get_parent_spec(librados::snap_t in_snap_id,
-			ParentSpec *pspec) const;
+			cls::rbd::ParentImageSpec *pspec) const;
     int is_snap_protected(librados::snap_t in_snap_id,
 			  bool *is_protected) const;
     int is_snap_unprotected(librados::snap_t in_snap_id,
@@ -289,7 +260,7 @@ namespace librbd {
     void add_snap(cls::rbd::SnapshotNamespace in_snap_namespace,
 		  std::string in_snap_name,
 		  librados::snap_t id,
-		  uint64_t in_size, const ParentInfo &parent,
+		  uint64_t in_size, const ParentImageInfo &parent,
 		  uint8_t protection_status, uint64_t flags, utime_t timestamp);
     void rm_snap(cls::rbd::SnapshotNamespace in_snap_namespace,
 		 std::string in_snap_name,
@@ -310,7 +281,7 @@ namespace librbd {
                    bool *flags_set) const;
     int update_flags(librados::snap_t in_snap_id, uint64_t flag, bool enabled);
 
-    const ParentInfo* get_parent_info(librados::snap_t in_snap_id) const;
+    const ParentImageInfo* get_parent_info(librados::snap_t in_snap_id) const;
     int64_t get_parent_pool_id(librados::snap_t in_snap_id) const;
     std::string get_parent_image_id(librados::snap_t in_snap_id) const;
     uint64_t get_parent_snap_id(librados::snap_t in_snap_id) const;

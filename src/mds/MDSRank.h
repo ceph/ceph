@@ -97,7 +97,6 @@ enum {
   l_mdm_caps,
   l_mdm_rss,
   l_mdm_heap,
-  l_mdm_buf,
   l_mdm_last,
 };
 
@@ -119,6 +118,8 @@ class Objecter;
 class MonClient;
 class Finisher;
 class ScrubStack;
+class C_MDS_Send_Command_Reply;
+class C_ExecAndReply;
 
 /**
  * The public part of this class's interface is what's exposed to all
@@ -134,6 +135,14 @@ class MDSRank {
     int incarnation;
 
   public:
+
+    friend class C_Flush_Journal;
+    friend class C_Drop_Cache;
+
+    friend class C_CacheDropExecAndReply;
+    friend class C_ScrubExecAndReply;
+    friend class C_ScrubControlExecAndReply;
+
     mds_rank_t get_nodeid() const { return whoami; }
     int64_t get_metadata_pool();
 
@@ -270,7 +279,8 @@ class MDSRank {
 
     ceph_tid_t last_tid;    // for mds-initiated requests (e.g. stray rename)
 
-    MDSInternalContextBase::vec waiting_for_active, waiting_for_replay, waiting_for_reconnect, waiting_for_resolve;
+    MDSInternalContextBase::vec waiting_for_active, waiting_for_replay, waiting_for_rejoin,
+				waiting_for_reconnect, waiting_for_resolve;
     MDSInternalContextBase::vec waiting_for_any_client_connection;
     MDSInternalContextBase::que replay_queue;
     map<mds_rank_t, MDSInternalContextBase::vec > waiting_for_active_peer;
@@ -301,10 +311,6 @@ class MDSRank {
   public:
 
     void queue_waiter(MDSInternalContextBase *c) {
-      finished_queue.push_back(c);
-      progress_thread.signal();
-    }
-    void queue_waiter_front(MDSInternalContextBase *c) {
       finished_queue.push_back(c);
       progress_thread.signal();
     }
@@ -407,6 +413,9 @@ class MDSRank {
     void wait_for_replay(MDSInternalContextBase *c) { 
       waiting_for_replay.push_back(c); 
     }
+    void wait_for_rejoin(MDSInternalContextBase *c) {
+      waiting_for_rejoin.push_back(c);
+    }
     void wait_for_reconnect(MDSInternalContextBase *c) {
       waiting_for_reconnect.push_back(c);
     }
@@ -421,6 +430,7 @@ class MDSRank {
     }
 
     bool queue_one_replay();
+    void maybe_clientreplay_done();
 
     void set_osd_epoch_barrier(epoch_t e);
     epoch_t get_osd_epoch_barrier() const {return osd_epoch_barrier;}
@@ -451,9 +461,17 @@ class MDSRank {
 
   protected:
     void dump_clientreplay_status(Formatter *f) const;
-    void command_scrub_path(Formatter *f, std::string_view path, vector<string>& scrubop_vec);
+    void command_scrub_start(Formatter *f,
+                             std::string_view path, std::string_view tag,
+                             const vector<string>& scrubop_vec, Context *on_finish);
     void command_tag_path(Formatter *f, std::string_view path,
                           std::string_view tag);
+    // scrub control commands
+    void command_scrub_abort(Formatter *f, Context *on_finish);
+    void command_scrub_pause(Formatter *f, Context *on_finish);
+    void command_scrub_resume(Formatter *f);
+    void command_scrub_status(Formatter *f);
+
     void command_flush_path(Formatter *f, std::string_view path);
     void command_flush_journal(Formatter *f);
     void command_get_subtrees(Formatter *f);
@@ -470,13 +488,13 @@ class MDSRank {
         std::ostream &ss,
         Formatter *f);
     int _command_export_dir(std::string_view path, mds_rank_t dest);
-    int _command_flush_journal(std::ostream& ss);
     CDir *_command_dirfrag_get(
         const cmdmap_t &cmdmap,
         std::ostream &ss);
     void command_openfiles_ls(Formatter *f);
     void command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f);
     void command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
+    void command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish);
 
   protected:
     Messenger    *messenger;
@@ -552,6 +570,9 @@ class MDSRank {
     void set_mdsmap_multimds_snaps_allowed();
 private:
     mono_time starttime = mono_clock::zero();
+
+protected:
+  Context *create_async_exec_context(C_ExecAndReply *ctx);
 };
 
 /* This expects to be given a reference which it is responsible for.
@@ -605,6 +626,7 @@ public:
     int *r,
     std::stringstream *ds,
     std::stringstream *ss,
+    Context **run_later,
     bool *need_reply);
 
   void dump_sessions(const SessionFilter &filter, Formatter *f) const;

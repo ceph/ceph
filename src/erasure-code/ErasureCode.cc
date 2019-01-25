@@ -25,11 +25,10 @@
 #include "crush/CrushWrapper.h"
 #include "osd/osd_types.h"
 
-
-const unsigned ErasureCode::SIMD_ALIGN = 32;
-
 #define DEFAULT_RULE_ROOT "default"
 #define DEFAULT_RULE_FAILURE_DOMAIN "host"
+
+const unsigned ErasureCode::SIMD_ALIGN = 32;
 
 int ErasureCode::init(
   ErasureCodeProfile &profile,

@@ -21,7 +21,7 @@
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/pool_watcher/Types.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 #include <boost/scope_exit.hpp>
 #include <iostream>
@@ -169,7 +169,7 @@ public:
     {
       librbd::ImageCtx *ictx = new librbd::ImageCtx(parent_image_name.c_str(),
 						    "", "", pioctx, false);
-      ictx->state->open(false);
+      ictx->state->open(0);
       EXPECT_EQ(0, ictx->operations->snap_create(cls::rbd::UserSnapshotNamespace(),
 						 snap_name.c_str()));
       EXPECT_EQ(0, ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),

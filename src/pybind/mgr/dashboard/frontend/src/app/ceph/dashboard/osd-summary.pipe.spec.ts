@@ -1,7 +1,17 @@
+import { TestBed } from '@angular/core/testing';
+import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { OsdSummaryPipe } from './osd-summary.pipe';
 
 describe('OsdSummaryPipe', () => {
-  const pipe = new OsdSummaryPipe();
+  let pipe: OsdSummaryPipe;
+
+  configureTestBed({
+    providers: [OsdSummaryPipe, i18nProviders]
+  });
+
+  beforeEach(() => {
+    pipe = TestBed.get(OsdSummaryPipe);
+  });
 
   it('create an instance', () => {
     expect(pipe).toBeTruthy();
@@ -11,17 +21,107 @@ describe('OsdSummaryPipe', () => {
     expect(pipe.transform(undefined)).toBe('');
   });
 
-  it('transforms with 1 up', () => {
+  it('transforms having 3 osd with 3 up, 3 in, 0 down, 0 out', () => {
     const value = {
-      osds: [{ in: true, out: false }]
+      osds: [{ up: 1, in: 1 }, { up: 1, in: 1 }, { up: 1, in: 1 }]
     };
-    expect(pipe.transform(value)).toBe('1 (0 up, 1 in)');
+    expect(pipe.transform(value)).toEqual([
+      {
+        content: '3 total',
+        class: ''
+      },
+      {
+        content: '',
+        class: 'card-text-line-break'
+      },
+      {
+        content: '3 up, 3 in',
+        class: ''
+      }
+    ]);
   });
 
-  it('transforms with 1 up and 1 in', () => {
+  it('transforms having 3 osd with 2 up, 1 in, 1 down, 1 out', () => {
     const value = {
-      osds: [{ in: true, up: false }, { in: false, up: true }]
+      osds: [{ up: 1, in: 1 }, { up: 1, in: 0 }, { up: 0, in: 0 }]
     };
-    expect(pipe.transform(value)).toBe('2 (1 up, 1 in)');
+    expect(pipe.transform(value)).toEqual([
+      {
+        content: '3 total',
+        class: ''
+      },
+      {
+        content: '',
+        class: 'card-text-line-break'
+      },
+      {
+        content: '2 up, 1 in',
+        class: ''
+      },
+      {
+        content: '',
+        class: 'card-text-line-break'
+      },
+      {
+        content: '1 down, 1 out',
+        class: 'card-text-error'
+      }
+    ]);
+  });
+
+  it('transforms having 3 osd with 2 up, 2 in, 1 down, 0 out', () => {
+    const value = {
+      osds: [{ up: 1, in: 1 }, { up: 1, in: 1 }, { up: 0, in: 0 }]
+    };
+    expect(pipe.transform(value)).toEqual([
+      {
+        content: '3 total',
+        class: ''
+      },
+      {
+        content: '',
+        class: 'card-text-line-break'
+      },
+      {
+        content: '2 up, 2 in',
+        class: ''
+      },
+      {
+        content: '',
+        class: 'card-text-line-break'
+      },
+      {
+        content: '1 down',
+        class: 'card-text-error'
+      }
+    ]);
+  });
+
+  it('transforms having 3 osd with 3 up, 2 in, 0 down, 1 out', () => {
+    const value = {
+      osds: [{ up: 1, in: 1 }, { up: 1, in: 1 }, { up: 1, in: 0 }]
+    };
+    expect(pipe.transform(value)).toEqual([
+      {
+        content: '3 total',
+        class: ''
+      },
+      {
+        content: '',
+        class: 'card-text-line-break'
+      },
+      {
+        content: '3 up, 2 in',
+        class: ''
+      },
+      {
+        content: '',
+        class: 'card-text-line-break'
+      },
+      {
+        content: '1 out',
+        class: 'card-text-error'
+      }
+    ]);
   });
 });

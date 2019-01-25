@@ -36,7 +36,7 @@ protected:
   ~MExportDirAck() override {}
 
 public:
-  const char *get_type_name() const override { return "ExAck"; }
+  std::string_view get_type_name() const override { return "ExAck"; }
     void print(ostream& o) const override {
     o << "export_ack(" << dirfrag << ")";
   }

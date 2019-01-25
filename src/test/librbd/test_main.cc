@@ -4,6 +4,7 @@
 #include "include/rados/librados.hpp"
 #include "global/global_context.h"
 #include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 #include <iostream>
 #include <string>

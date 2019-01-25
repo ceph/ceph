@@ -33,6 +33,7 @@
 template<typename T, typename Map = std::map<T,T>>
 class interval_set {
  public:
+  using value_type = T;
 
   class const_iterator;
 

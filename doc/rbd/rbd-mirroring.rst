@@ -15,8 +15,21 @@ the image within the local cluster.
 
 .. note:: RBD mirroring requires the Ceph Jewel release or later.
 
-.. important:: To use RBD mirroring, you must have two Ceph clusters, each
-   running the ``rbd-mirror`` daemon.
+Depending on the desired needs for replication, RBD mirroring can be configured
+for either one- or two-way replication:
+
+* **One-way Replication**: When data is only mirrored from a primary cluster to
+  a secondary cluster, the ``rbd-mirror`` daemon runs only on the secondary
+  cluster.
+
+* **Two-way Replication**: When data is mirrored from primary images on one
+  cluster to non-primary images on another cluster (and vice-versa), the
+  ``rbd-mirror`` daemon runs on both clusters.
+
+.. important:: Each instance of the ``rbd-mirror`` daemon must be able to
+   connect to both the local and remote Ceph clusters simultaneously (i.e.
+   all monitor and OSD hosts). Additionally, the network must have sufficient
+   bandwidth between the two data centers to handle mirroring workload.
 
 Pool Configuration
 ==================

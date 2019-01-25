@@ -30,7 +30,7 @@ TEST(Log, Simple)
   Log log(&subs);
   log.start();
  
-  log.set_log_file("/tmp/foo");
+  log.set_log_file("foo");
   log.reopen_log_file();
 
   log.set_stderr_level(5, -1);
@@ -59,7 +59,7 @@ TEST(Log, ReuseBad)
   subs.set_gather_level(1, 1);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/foo");
+  log.set_log_file("foo");
   log.reopen_log_file();
 
   const int l = 0;
@@ -91,7 +91,7 @@ TEST(Log, ManyNoGather)
   subs.set_gather_level(1, 1);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -110,34 +110,13 @@ TEST(Log, ManyGatherLog)
   subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
     if (subs.should_gather(1, l)) {
       MutableEntry e(l, 1);
       e.get_ostream() << "this is a long string asdf asdf asdf asdf asdf asdf asd fasd fasdf ";
-      log.submit_entry(std::move(e));
-    }
-  }
-  log.flush();
-  log.stop();
-}
-
-TEST(Log, ManyGatherLogStringAssign)
-{
-  SubsystemMap subs;
-  subs.set_log_level(1, 20);
-  subs.set_gather_level(1, 10);
-  Log log(&subs);
-  log.start();
-  log.set_log_file("/tmp/big");
-  log.reopen_log_file();
-  for (int i=0; i<many; i++) {
-    int l = 10;
-    if (subs.should_gather(1, l)) {
-      MutableEntry e(l, 1);
-      e.get_ostream() << "this i a long stream asdf asdf asdf asdf asdf asdf asdf asdf asdf as fd";
       log.submit_entry(std::move(e));
     }
   }
@@ -152,7 +131,7 @@ TEST(Log, ManyGatherLogStackSpillover)
   subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -175,7 +154,7 @@ TEST(Log, ManyGather)
   subs.set_gather_level(1, 1);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -193,7 +172,7 @@ void do_segv()
   subs.set_gather_level(1, 1);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
 
   log.inject_segv();
@@ -219,13 +198,35 @@ TEST(Log, LargeLog)
   subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   int l = 10;
   {
     MutableEntry e(l, 1);
     std::string msg(10000000, 'a');
     e.get_ostream() << msg;
+    log.submit_entry(std::move(e));
+  }
+  log.flush();
+  log.stop();
+}
+
+TEST(Log, LargeFromSmallLog)
+{
+  SubsystemMap subs;
+  subs.set_log_level(1, 20);
+  subs.set_gather_level(1, 10);
+  Log log(&subs);
+  log.start();
+  log.set_log_file("big");
+  log.reopen_log_file();
+  int l = 10;
+  {
+    MutableEntry e(l, 1);
+    for (int i = 0; i < 1000000; i++) {
+      std::string msg(10, 'a');
+      e.get_ostream() << msg;
+    }
     log.submit_entry(std::move(e));
   }
   log.flush();
@@ -241,7 +242,7 @@ TEST(Log, TimeSwitch)
   subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/time_switch_log");
+  log.set_log_file("time_switch_log");
   log.reopen_log_file();
   int l = 10;
   bool coarse = true;
@@ -340,6 +341,30 @@ TEST(Log, Speed_nogather)
   }
 }
 
+TEST(Log, GarbleRecovery)
+{
+  static const char* test_file="log_for_moment";
+
+  Log* saved = g_ceph_context->_log;
+  Log log(&g_ceph_context->_conf->subsys);
+  log.start();
+  unlink(test_file);
+  log.set_log_file(test_file);
+  log.reopen_log_file();
+  g_ceph_context->_log = &log;
+
+  std::string long_message(1000,'c');
+  ldout(g_ceph_context, 0) << long_message << dendl;
+  ldout(g_ceph_context, 0) << "Prologue" << (std::streambuf*)nullptr << long_message << dendl;
+  ldout(g_ceph_context, 0) << "Epitaph" << long_message << dendl;
+
+  g_ceph_context->_log = saved;
+  log.flush();
+  log.stop();
+  struct stat file_status;
+  ASSERT_EQ(lstat(test_file, &file_status), 0);
+  ASSERT_GT(file_status.st_size, 2000);
+}
 
 int main(int argc, char **argv)
 {

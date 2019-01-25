@@ -12,91 +12,53 @@
  *
  */
 
-#include <tuple>
-#include "auth/Auth.h"
 #include "SocketMessenger.h"
-#include "SocketConnection.h"
+
+#include <tuple>
+
+#include "auth/Auth.h"
+#include "Errors.h"
 #include "Dispatcher.h"
-#include "msg/Message.h"
 
 using namespace ceph::net;
 
-SocketMessenger::SocketMessenger(const entity_name_t& myname)
-  : Messenger{myname}
+namespace {
+  seastar::logger& logger() {
+    return ceph::get_logger(ceph_subsys_ms);
+  }
+}
+
+SocketMessenger::SocketMessenger(const entity_name_t& myname,
+                                 const std::string& logic_name,
+                                 uint32_t nonce)
+  : Messenger{myname}, logic_name{logic_name}, nonce{nonce}
 {}
 
-void SocketMessenger::bind(const entity_addr_t& addr)
+void SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
 {
+  auto my_addrs = addrs;
+  for (auto& addr : my_addrs.v) {
+    addr.nonce = nonce;
+  }
+  // TODO: propagate to all the cores of the Messenger
+  Messenger::set_myaddrs(my_addrs);
+}
+
+void SocketMessenger::bind(const entity_addrvec_t& addrs)
+{
+  // TODO: v2: listen on multiple addresses
+  auto addr = addrs.legacy_addr();
+
   if (addr.get_family() != AF_INET) {
     throw std::system_error(EAFNOSUPPORT, std::generic_category());
   }
 
-  set_myaddr(addr);
+  set_myaddrs(addrs);
 
   seastar::socket_address address(addr.in4_addr());
   seastar::listen_options lo;
   lo.reuse_address = true;
   listener = seastar::listen(address, lo);
-}
-
-seastar::future<> SocketMessenger::dispatch(ConnectionRef conn)
-{
-  auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
-  std::ignore = i;
-  ceph_assert(added);
-
-  return seastar::keep_doing([=] {
-      return conn->read_message()
-        .then([=] (MessageRef msg) {
-          // start dispatch, ignoring exceptions from the application layer
-          seastar::with_gate(pending_dispatch, [=, msg = std::move(msg)] {
-              return dispatcher->ms_dispatch(conn, std::move(msg))
-                .handle_exception([] (std::exception_ptr eptr) {});
-            });
-          // return immediately to start on the next message
-          return seastar::now();
-        });
-    }).handle_exception_type([=] (const std::system_error& e) {
-      if (e.code() == error::connection_aborted ||
-          e.code() == error::connection_reset) {
-        return seastar::with_gate(pending_dispatch, [=] {
-            return dispatcher->ms_handle_reset(conn);
-          });
-      } else if (e.code() == error::read_eof) {
-        return seastar::with_gate(pending_dispatch, [=] {
-            return dispatcher->ms_handle_remote_reset(conn);
-          });
-      } else {
-        throw e;
-      }
-    });
-}
-
-seastar::future<> SocketMessenger::accept(seastar::connected_socket socket,
-                                          seastar::socket_address paddr)
-{
-  // allocate the connection
-  entity_addr_t peer_addr;
-  peer_addr.set_type(entity_addr_t::TYPE_DEFAULT);
-  peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
-  ConnectionRef conn = new SocketConnection(this, get_myaddr(),
-                                            peer_addr, std::move(socket));
-  // initiate the handshake
-  return conn->server_handshake()
-    .then([=] {
-      // notify the dispatcher and allow them to reject the connection
-      return seastar::with_gate(pending_dispatch, [=] {
-          return dispatcher->ms_handle_accept(conn);
-        });
-    }).handle_exception([conn] (std::exception_ptr eptr) {
-      // close the connection before returning errors
-      return seastar::make_exception_future<>(eptr)
-        .finally([conn] { return conn->close(); });
-    }).then([this, conn] {
-      // dispatch messages until the connection closes or the dispatch
-      // queue shuts down
-      return dispatch(std::move(conn));
-    });
 }
 
 seastar::future<> SocketMessenger::start(Dispatcher *disp)
@@ -109,15 +71,17 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
         return listener->accept()
           .then([this] (seastar::connected_socket socket,
                         seastar::socket_address paddr) {
-            // start processing the connection
-            accept(std::move(socket), paddr)
-              .handle_exception([] (std::exception_ptr eptr) {});
+            // allocate the connection
+            entity_addr_t peer_addr;
+            peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
+            SocketConnectionRef conn = new SocketConnection(*this, *dispatcher);
             // don't wait before accepting another
+            conn->start_accept(std::move(socket), peer_addr);
           });
       }).handle_exception_type([this] (const std::system_error& e) {
         // stop gracefully on connection_aborted
         if (e.code() != error::connection_aborted) {
-          throw e;
+          logger().error("{} unexpected error during accept: {}", *this, e);
         }
       });
   }
@@ -125,35 +89,15 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
   return seastar::now();
 }
 
-seastar::future<ceph::net::ConnectionRef>
-SocketMessenger::connect(const entity_addr_t& addr, entity_type_t peer_type)
+ceph::net::ConnectionRef
+SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& peer_type)
 {
-  if (auto found = lookup_conn(addr); found) {
-    return seastar::make_ready_future<ceph::net::ConnectionRef>(found);
+  if (auto found = lookup_conn(peer_addr); found) {
+    return found;
   }
-  return seastar::connect(addr.in4_addr())
-    .then([=] (seastar::connected_socket socket) {
-      ConnectionRef conn = new SocketConnection(this, get_myaddr(), addr,
-                                                std::move(socket));
-      // complete the handshake before returning to the caller
-      return conn->client_handshake(peer_type, get_myname().type())
-        .then([=] {
-          // notify the dispatcher and allow them to reject the connection
-          return seastar::with_gate(pending_dispatch, [=] {
-            return dispatcher->ms_handle_connect(conn);
-          });
-        }).handle_exception([conn] (std::exception_ptr eptr) {
-          // close the connection before returning errors
-          return seastar::make_exception_future<>(eptr)
-            .finally([conn] { return conn->close(); });
-	  // TODO: retry on fault
-        }).then([=] {
-          // dispatch replies on this connection
-          dispatch(conn)
-            .handle_exception([] (std::exception_ptr eptr) {});
-          return conn;
-        });
-    });
+  SocketConnectionRef conn = new SocketConnection(*this, *dispatcher);
+  conn->start_connect(peer_addr, peer_type);
+  return conn;
 }
 
 seastar::future<> SocketMessenger::shutdown()
@@ -162,15 +106,31 @@ seastar::future<> SocketMessenger::shutdown()
     listener->abort_accept();
   }
   // close all connections
-  return seastar::parallel_for_each(connections.begin(), connections.end(),
-    [this] (auto conn) {
-      return conn.second->close();
+  return seastar::parallel_for_each(accepting_conns, [] (auto conn) {
+      return conn->close();
+    }).then([this] {
+      ceph_assert(accepting_conns.empty());
+      return seastar::parallel_for_each(connections, [] (auto conn) {
+          return conn.second->close();
+        });
     }).finally([this] {
-      connections.clear();
-      // closing connections will unblock any dispatchers that were waiting to
-      // send(). wait for any pending calls to finish
-      return pending_dispatch.close();
+      ceph_assert(connections.empty());
     });
+}
+
+void SocketMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
+{
+  if (!get_myaddr().is_blank_ip()) {
+    // already learned or binded
+    return;
+  }
+
+  // Only learn IP address if blank.
+  entity_addr_t addr = get_myaddr();
+  addr.u = peer_addr_for_me.u;
+  addr.set_type(peer_addr_for_me.get_type());
+  addr.set_port(get_myaddr().get_port());
+  set_myaddrs(entity_addrvec_t{addr});
 }
 
 void SocketMessenger::set_default_policy(const SocketPolicy& p)
@@ -191,7 +151,7 @@ void SocketMessenger::set_policy_throttler(entity_type_t peer_type,
   policy_set.set_throttlers(peer_type, throttle, nullptr);
 }
 
-ceph::net::ConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
+ceph::net::SocketConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
 {
   if (auto found = connections.find(addr);
       found != connections.end()) {
@@ -201,29 +161,28 @@ ceph::net::ConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
   }
 }
 
-void SocketMessenger::unregister_conn(ConnectionRef conn)
+void SocketMessenger::accept_conn(SocketConnectionRef conn)
+{
+  accepting_conns.insert(conn);
+}
+
+void SocketMessenger::unaccept_conn(SocketConnectionRef conn)
+{
+  accepting_conns.erase(conn);
+}
+
+void SocketMessenger::register_conn(SocketConnectionRef conn)
+{
+  auto [i, added] = connections.emplace(conn->get_peer_addr(), conn);
+  std::ignore = i;
+  ceph_assert(added);
+}
+
+void SocketMessenger::unregister_conn(SocketConnectionRef conn)
 {
   ceph_assert(conn);
   auto found = connections.find(conn->get_peer_addr());
   ceph_assert(found != connections.end());
   ceph_assert(found->second == conn);
   connections.erase(found);
-}
-
-seastar::future<msgr_tag_t, bufferlist>
-SocketMessenger::verify_authorizer(peer_type_t peer_type,
-				   auth_proto_t protocol,
-				   bufferlist& auth)
-{
-  return seastar::with_gate(pending_dispatch, [=, &auth] {
-      return dispatcher->ms_verify_authorizer(peer_type, protocol, auth);
-    });
-}
-
-seastar::future<std::unique_ptr<AuthAuthorizer>>
-SocketMessenger::get_authorizer(peer_type_t peer_type, bool force_new)
-{
-  return seastar::with_gate(pending_dispatch, [=] {
-      return dispatcher->ms_get_authorizer(peer_type, force_new);
-    });
 }

@@ -17,26 +17,31 @@
 
 #include <map>
 #include <list>
+#ifdef WITH_SEASTAR
+#include <boost/smart_ptr/local_shared_ptr.hpp>
+#else
+#include <memory>
+#endif
+#include "common/ceph_mutex.h"
 #include "common/dout.h"
-#include "common/lock_cond.h"
-#include "common/lock_mutex.h"
-#include "common/lock_policy.h"
-#include "common/lock_shared_ptr.h"
 #include "include/unordered_map.h"
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/ceph_assert.h"
 
-template <class K, class V,
-	  ceph::LockPolicy lock_policy = ceph::LockPolicy::MUTEX>
+template <class K, class V>
 class SharedLRU {
   CephContext *cct;
-  using shared_ptr_trait_t = SharedPtrTrait<lock_policy>;
-  using VPtr = typename shared_ptr_trait_t::template shared_ptr<V>;
-  using WeakVPtr = typename shared_ptr_trait_t::template weak_ptr<V>;
-  LockMutexT<lock_policy> lock;
+#ifdef WITH_SEASTAR
+  using VPtr = boost::local_shared_ptr<V>;
+  using WeakVPtr = boost::weak_ptr<V>;
+#else
+  using VPtr = std::shared_ptr<V>;
+  using WeakVPtr = std::weak_ptr<V>;
+#endif
+  ceph::mutex lock;
   size_t max_size;
-  LockCondT<lock_policy> cond;
+  ceph::condition_variable cond;
   unsigned size;
 public:
   int waiting;
@@ -82,7 +87,7 @@ private:
     if (i != weak_refs.end() && i->second.second == valptr) {
       weak_refs.erase(i);
     }
-    cond.notify_one();
+    cond.notify_all();
   }
 
   class Cleanup {
@@ -99,7 +104,7 @@ private:
 public:
   SharedLRU(CephContext *cct = NULL, size_t max_size = 20)
     : cct(cct),
-      lock{LockMutex<lock_policy>::create("SharedLRU::lock")},
+      lock{ceph::make_mutex("SharedLRU::lock")},
       max_size(max_size),
       size(0), waiting(0) {
     contents.rehash(max_size); 
@@ -116,6 +121,11 @@ public:
 	ceph_assert(weak_refs.empty());
       }
     }
+  }
+
+  int get_count() {
+    std::lock_guard locker{lock};
+    return size;
   }
 
   /// adjust container comparator (for purposes of get_next sort order)
@@ -339,21 +349,33 @@ public:
     VPtr val;
     list<VPtr> to_release;
     {
-      std::lock_guard l{lock};
-      typename map<K, pair<WeakVPtr, V*>, C>::iterator actual =
-	weak_refs.lower_bound(key);
-      if (actual != weak_refs.end() && actual->first == key) {
-        if (existed) 
-          *existed = true;
+      typename map<K, pair<WeakVPtr, V*>, C>::iterator actual;
+      std::unique_lock l{lock};
+      cond.wait(l, [this, &key, &actual, &val] {
+	  actual = weak_refs.lower_bound(key);
+	  if (actual != weak_refs.end() && actual->first == key) {
+	    val = actual->second.first.lock();
+	    if (val) {
+	      return true;
+	    } else {
+	      return false;
+	    }
+	  } else {
+	    return true;
+	  }
+      });
 
-        return actual->second.first.lock();
+      if (val) {
+	if (existed) {
+	  *existed = true;
+	}
+      } else {
+	if (existed) {
+	  *existed = false;
+	}
+	val = VPtr(value, Cleanup(this, key));
+	weak_refs.insert(actual, make_pair(key, make_pair(val, value)));
       }
-
-      if (existed)      
-        *existed = false;
-
-      val = VPtr(value, Cleanup(this, key));
-      weak_refs.insert(actual, make_pair(key, make_pair(val, value)));
       lru_add(key, val, &to_release);
     }
     return val;

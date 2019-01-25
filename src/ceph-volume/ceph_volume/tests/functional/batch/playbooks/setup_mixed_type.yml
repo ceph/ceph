@@ -31,9 +31,11 @@
           modprobe nvme_fabrics
           modprobe loop
           losetup -v /dev/loop0 /opt/loop0_nvme0
+          losetup -v /dev/loop1 /opt/loop1_nvme1
           losetup -l
           nvmetcli restore /opt/loop.json
-          nvme connect -t loop -n testnqn -q hostnqn
+          nvme connect -t loop -n testnqn1 -q hostnqn
+          nvme connect -t loop -n testnqn2 -q hostnqn
           nvme list
         dest: "/opt/ceph-nvme.sh"
 
@@ -60,26 +62,33 @@
         - nvme_loop
         - nvme_fabrics
 
-    - name: check if the nvme file is attached to loop0
-      command: losetup -l /dev/loop0
-      register: losetup_list
+    - name: detach nvme files from loop devices
+      command: "losetup -d /dev/{{ item }}"
+      failed_when: false
+      loop:
+        - loop0
+        - loop1
 
-    - name: detach current nvme0 file
-      command: losetup -d /dev/loop0
-      when: '"loop0_nvme0" in losetup_list.stdout'
-
-    - name: remove previous nvme0 file
+    - name: remove previous nvme files
       file:
-        path: /opt/loop0_nvme0
+        path: "{{ item }}"
         state: absent
+      loop:
+        - /opt/loop0_nvme0
+        - /opt/loop1_nvme1
 
-    - name: create a 15GB sparse file for NVMe
-      command: fallocate -l 15G /opt/loop0_nvme0
+    - name: create 11GB sparse files for NVMe
+      command: "fallocate -l 11G {{ item }}"
+      loop:
+        - /opt/loop0_nvme0
+        - /opt/loop1_nvme1
 
-    - name: setup loop device with sparse file
-      command: losetup /dev/loop0 /opt/loop0_nvme0
-      when:
-        - '"loop0_nvme0" not in losetup_list.stdout'
+    - name: setup loop devices with sparse files
+      command: "losetup /dev/loop{{ item }} /opt/loop{{ item }}_nvme{{ item }}"
+      failed_when: false
+      loop:
+        - 0
+        - 1
 
     - name: create the loop.json file for nvmetcli
       copy:
@@ -102,7 +111,8 @@
                   "portid": 1,
                   "referrals": [],
                   "subsystems": [
-                    "testnqn"
+                    "testnqn1",
+                    "testnqn2"
                   ]
                 }
               ],
@@ -124,7 +134,26 @@
                       "nsid": 1
                     }
                   ],
-                  "nqn": "testnqn"
+                  "nqn": "testnqn1"
+                },
+                {
+                  "allowed_hosts": [
+                    "hostnqn"
+                  ],
+                  "attr": {
+                    "allow_any_host": "0"
+                  },
+                  "namespaces": [
+                    {
+                      "device": {
+                        "nguid": "ef90689c-6c46-d44c-89c1-4067801309a7",
+                        "path": "/dev/loop1"
+                      },
+                      "enable": 1,
+                      "nsid": 2
+                    }
+                  ],
+                  "nqn": "testnqn2"
                 }
               ]
             }
@@ -134,7 +163,10 @@
       command: nvmetcli restore /opt/loop.json
 
     - name: connect the new target as an nvme device
-      command: nvme connect -t loop -n testnqn -q hostnqn
+      command: "nvme connect -t loop -n testnqn{{ item }} -q hostnqn"
+      loop:
+        - 1
+        - 2
 
     - name: debug output for nvme list
       command: nvme list

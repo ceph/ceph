@@ -230,7 +230,7 @@ public:
     encode(gid_list, payload);
   }
 
-  const char *get_type_name() const override { return "creq"; }
+  std::string_view get_type_name() const override { return "creq"; }
   void print(ostream& out) const override {
     out << "client_request(" << get_orig_source() 
 	<< ":" << get_tid() 

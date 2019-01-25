@@ -4,6 +4,9 @@ meta:
    with a separate client 0,1,2 third node.
    Use xfs beneath the osds.
    CephFS tests running on client 2,3
+   #Note-To enable RHEL runs on ovh nodes, add the following to overrides
+   #ansible.cephlab:
+   # skip_tags: entitlements,packages,repos
 roles:
 - - mon.a
   - mgr.x
@@ -20,6 +23,8 @@ roles:
   - client.3
 overrides:
   ceph:
+    mon_bind_msgr2: false
+    mon_bind_addrvec: false
     log-whitelist:
     - scrub mismatch
     - ScrubResult
@@ -34,10 +39,7 @@ overrides:
         mon warn on osd down out interval zero: false
       osd:
         osd_class_load_list: "cephfs hello journal lock log numops rbd refcount 
-                              rgw sdk statelog timeindex user version"
+                              rgw sdk timeindex user version"
         osd_class_default_list: "cephfs hello journal lock log numops rbd refcount 
-                                 rgw sdk statelog timeindex user version"
+                                 rgw sdk timeindex user version"
     fs: xfs
-  #enable RHEL runs on ovh nodes
-  ansible.cephlab:
-    skip_tags: entitlements,packages,repos

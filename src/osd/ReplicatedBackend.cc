@@ -526,7 +526,6 @@ void ReplicatedBackend::op_commit(
   if (op->waiting_for_commit.empty()) {
     op->on_commit->complete(0);
     op->on_commit = 0;
-    ceph_assert(!op->on_commit);
     in_progress_ops.erase(op->tid);
   }
 }
@@ -567,9 +566,7 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
       ceph_assert(ip_op.waiting_for_commit.count(from));
       ip_op.waiting_for_commit.erase(from);
       if (ip_op.op) {
-        ostringstream ss;
-        ss << "sub_op_commit_rec from " << from;
-	ip_op.op->mark_event_string(ss.str());
+	ip_op.op->mark_event("sub_op_commit_rec");
 	ip_op.op->pg_trace.event("sub_op_commit_rec");
       }
     } else {
@@ -904,7 +901,7 @@ Message * ReplicatedBackend::generate_subop(
     reqid, parent->whoami_shard(),
     spg_t(get_info().pgid.pgid, peer.shard),
     soid, acks_wanted,
-    get_osdmap()->get_epoch(),
+    get_osdmap_epoch(),
     parent->get_last_peering_reset_epoch(),
     tid, at_version);
 
@@ -983,7 +980,7 @@ void ReplicatedBackend::issue_op(
       if (op->op && op->op->pg_trace)
 	wr->trace.init("replicated op", nullptr, &op->op->pg_trace);
       get_parent()->send_message_osd_cluster(
-	  shard.osd, wr, get_osdmap()->get_epoch());
+	  shard.osd, wr, get_osdmap_epoch());
     }
   }
 }
@@ -1018,7 +1015,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   rm->op = op;
   rm->ackerosd = ackerosd;
   rm->last_complete = get_info().last_complete;
-  rm->epoch_started = get_osdmap()->get_epoch();
+  rm->epoch_started = get_osdmap_epoch();
 
   ceph_assert(m->logbl.length());
   // shipped transaction and log entries
@@ -1108,12 +1105,12 @@ void ReplicatedBackend::repop_commit(RepModifyRef rm)
   MOSDRepOpReply *reply = new MOSDRepOpReply(
     m,
     get_parent()->whoami_shard(),
-    0, get_osdmap()->get_epoch(), m->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
+    0, get_osdmap_epoch(), m->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
   reply->set_last_complete_ondisk(rm->last_complete);
   reply->set_priority(CEPH_MSG_PRIO_HIGH); // this better match ack priority!
   reply->trace = rm->op->pg_trace;
   get_parent()->send_message_osd_cluster(
-    rm->ackerosd, reply, get_osdmap()->get_epoch());
+    rm->ackerosd, reply, get_osdmap_epoch());
 
   log_subop_stats(get_parent()->get_logger(), rm->op, l_osd_sop_w);
 }
@@ -1534,6 +1531,24 @@ void ReplicatedBackend::submit_push_data(
 		      oi.expected_object_size,
 		      oi.expected_write_size,
 		      oi.alloc_hint_flags);
+    if (get_parent()->pg_is_remote_backfilling()) {
+      struct stat st;
+      uint64_t size = 0;
+      int r = store->stat(ch, ghobject_t(recovery_info.soid), &st);
+      if (r == 0) {
+        size = st.st_size;
+      }
+      // Don't need to do anything if object is still the same size
+      if (size != recovery_info.oi.size) {
+        get_parent()->pg_add_local_num_bytes((int64_t)recovery_info.oi.size - (int64_t)size);
+        get_parent()->pg_add_num_bytes((int64_t)recovery_info.oi.size - (int64_t)size);
+        dout(10) << __func__ << " " << recovery_info.soid
+               << " backfill size " << recovery_info.oi.size
+               << " previous size " << size
+               << " net size " << recovery_info.oi.size - size
+               << dendl;
+      }
+    }
   }
   uint64_t off = 0;
   uint32_t fadvise_flags = CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL;
@@ -1697,7 +1712,7 @@ bool ReplicatedBackend::handle_pull_response(
 
   pi.stat.num_keys_recovered += pop.omap_entries.size();
   pi.stat.num_bytes_recovered += data.length();
-  get_parent()->get_logger()->inc(l_osd_rop, pop.omap_entries.size() + data.length());
+  get_parent()->get_logger()->inc(l_osd_rbytes, pop.omap_entries.size() + data.length());
 
   if (complete) {
     pi.stat.num_objects_recovered++;
@@ -1756,7 +1771,7 @@ void ReplicatedBackend::send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &
        ++i) {
     ConnectionRef con = get_parent()->get_con_osd_cluster(
       i->first.osd,
-      get_osdmap()->get_epoch());
+      get_osdmap_epoch());
     if (!con)
       continue;
     vector<PushOp>::iterator j = i->second.begin();
@@ -1766,7 +1781,7 @@ void ReplicatedBackend::send_pushes(int prio, map<pg_shard_t, vector<PushOp> > &
       MOSDPGPush *msg = new MOSDPGPush();
       msg->from = get_parent()->whoami_shard();
       msg->pgid = get_parent()->primary_spg_t();
-      msg->map_epoch = get_osdmap()->get_epoch();
+      msg->map_epoch = get_osdmap_epoch();
       msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
       msg->set_priority(prio);
       for (;
@@ -1793,7 +1808,7 @@ void ReplicatedBackend::send_pulls(int prio, map<pg_shard_t, vector<PullOp> > &p
        ++i) {
     ConnectionRef con = get_parent()->get_con_osd_cluster(
       i->first.osd,
-      get_osdmap()->get_epoch());
+      get_osdmap_epoch());
     if (!con)
       continue;
     dout(20) << __func__ << ": sending pulls " << i->second
@@ -1802,7 +1817,7 @@ void ReplicatedBackend::send_pulls(int prio, map<pg_shard_t, vector<PullOp> > &p
     msg->from = parent->whoami_shard();
     msg->set_priority(prio);
     msg->pgid = get_parent()->primary_spg_t();
-    msg->map_epoch = get_osdmap()->get_epoch();
+    msg->map_epoch = get_osdmap_epoch();
     msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
     msg->set_pulls(&i->second);
     msg->compute_cost(cct);
@@ -1879,7 +1894,7 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     ceph_assert(iter);
     for (iter->lower_bound(progress.omap_recovered_to);
 	 iter->valid();
-	 iter->next(false)) {
+	 iter->next()) {
       if (!out_op->omap_entries.empty() &&
 	  ((cct->_conf->osd_recovery_max_omap_entries_per_chunk > 0 &&
 	    out_op->omap_entries.size() >= cct->_conf->osd_recovery_max_omap_entries_per_chunk) ||

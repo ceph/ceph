@@ -1,8 +1,9 @@
 import { Component, OnInit } from '@angular/core';
 import { FormGroup } from '@angular/forms';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef } from 'ngx-bootstrap';
+import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { OsdService } from '../../../../shared/api/osd.service';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
@@ -19,78 +20,90 @@ export class OsdFlagsModalComponent implements OnInit {
   allFlags = {
     noin: {
       code: 'noin',
-      name: 'No In',
+      name: this.i18n('No In'),
       value: false,
-      description: 'OSDs that were previously marked out will not be marked back in when they start'
+      description: this.i18n(
+        'OSDs that were previously marked out will not be marked back in when they start'
+      )
     },
     noout: {
       code: 'noout',
-      name: 'No Out',
+      name: this.i18n('No Out'),
       value: false,
-      description: 'OSDs will not automatically be marked out after the configured interval'
+      description: this.i18n(
+        'OSDs will not automatically be marked out after the configured interval'
+      )
     },
     noup: {
       code: 'noup',
-      name: 'No Up',
+      name: this.i18n('No Up'),
       value: false,
-      description: 'OSDs are not allowed to start'
+      description: this.i18n('OSDs are not allowed to start')
     },
     nodown: {
       code: 'nodown',
-      name: 'No Down',
+      name: this.i18n('No Down'),
       value: false,
-      description:
+      description: this.i18n(
         'OSD failure reports are being ignored, such that the monitors will not mark OSDs down'
+      )
     },
     pause: {
       code: 'pause',
-      name: 'Pause',
+      name: this.i18n('Pause'),
       value: false,
-      description: 'Pauses reads and writes'
+      description: this.i18n('Pauses reads and writes')
     },
     noscrub: {
       code: 'noscrub',
-      name: 'No Scrub',
+      name: this.i18n('No Scrub'),
       value: false,
-      description: 'Scrubbing is disabled'
+      description: this.i18n('Scrubbing is disabled')
     },
     'nodeep-scrub': {
       code: 'nodeep-scrub',
-      name: 'No Deep Scrub',
+      name: this.i18n('No Deep Scrub'),
       value: false,
-      description: 'Deep Scrubbing is disabled'
+      description: this.i18n('Deep Scrubbing is disabled')
     },
     nobackfill: {
       code: 'nobackfill',
-      name: 'No Backfill',
+      name: this.i18n('No Backfill'),
       value: false,
-      description: 'Backfilling of PGs is suspended'
+      description: this.i18n('Backfilling of PGs is suspended')
     },
     norecover: {
       code: 'norecover',
-      name: 'No Recover',
+      name: this.i18n('No Recover'),
       value: false,
-      description: 'Recovery of PGs is suspended'
+      description: this.i18n('Recovery of PGs is suspended')
     },
     sortbitwise: {
       code: 'sortbitwise',
-      name: 'Bitwise Sort',
+      name: this.i18n('Bitwise Sort'),
       value: false,
-      description: 'Use bitwise sort',
+      description: this.i18n('Use bitwise sort'),
       disabled: true
     },
     purged_snapdirs: {
       code: 'purged_snapdirs',
-      name: 'Purged Snapdirs',
+      name: this.i18n('Purged Snapdirs'),
       value: false,
-      description: 'OSDs have converted snapsets',
+      description: this.i18n('OSDs have converted snapsets'),
       disabled: true
     },
     recovery_deletes: {
       code: 'recovery_deletes',
-      name: 'Recovery Deletes',
+      name: this.i18n('Recovery Deletes'),
       value: false,
-      description: 'Deletes performed during recovery instead of peering',
+      description: this.i18n('Deletes performed during recovery instead of peering'),
+      disabled: true
+    },
+    pglog_hardlimit: {
+      code: 'pglog_hardlimit',
+      name: this.i18n('PG Log Hard Limit'),
+      value: false,
+      description: this.i18n('Puts a hard limit on pg log length'),
       disabled: true
     }
   };
@@ -100,7 +113,8 @@ export class OsdFlagsModalComponent implements OnInit {
   constructor(
     public bsModalRef: BsModalRef,
     private osdService: OsdService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private i18n: I18n
   ) {}
 
   ngOnInit() {
@@ -126,8 +140,8 @@ export class OsdFlagsModalComponent implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          'OSD Flags were updated successfully.',
-          'OSD Flags'
+          this.i18n('OSD Flags were updated successfully.'),
+          this.i18n('OSD Flags')
         );
         this.bsModalRef.hide();
       },

@@ -59,10 +59,10 @@ filestore.
 	journal_throttle_max_multiple
 
 This scheme will not be inducing any delay between [0, low_threshold].
-In [low_threshhold, high_threshhold), delays should be injected based on a line
-from 0 at low_threshold to high_multiple * (1/expected_throughput) at high_threshhold.
-In [high_threshhold, 1), we want delays injected based on a line from
-(high_multiple * (1/expected_throughput)) at high_threshhold to 
+In [low_threshold, high_threshold), delays should be injected based on a line
+from 0 at low_threshold to high_multiple * (1/expected_throughput) at high_threshold.
+In [high_threshold, 1), we want delays injected based on a line from
+(high_multiple * (1/expected_throughput)) at high_threshold to
 (high_multiple * (1/expected_throughput)) + (max_multiple * (1/expected_throughput)) 
 at 1.
 Now setting *_high_multiple and *_max_multiple to 0 should give us similar effect

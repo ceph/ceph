@@ -59,7 +59,7 @@ void OpRequest::_dump(Formatter *f) const
   }
   {
     f->open_array_section("events");
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     for (auto& i : events) {
       f->dump_object("event", i);
     }
@@ -151,7 +151,7 @@ void OpRequest::mark_flag_point_string(uint8_t flag, const string& s) {
 #ifdef WITH_LTTNG
   uint8_t old_flags = hit_flag_points;
 #endif
-  mark_event_string(s);
+  mark_event(s);
   hit_flag_points |= flag;
   latest_flag_point = flag;
   tracepoint(oprequest, mark_flag_point, reqid.name._type,

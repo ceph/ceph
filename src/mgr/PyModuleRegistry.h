@@ -19,6 +19,7 @@
 
 #include <string>
 #include <map>
+#include <set>
 #include <memory>
 
 #include "common/LogClient.h"
@@ -60,6 +61,7 @@ private:
 
 public:
   void handle_config(const std::string &k, const std::string &v);
+  void handle_config_notify();
 
   /**
    * Get references to all modules (whether they have loaded and/or
@@ -67,7 +69,7 @@ public:
    */
   std::list<PyModuleRef> get_modules() const
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     std::list<PyModuleRef> modules_out;
     for (const auto &i : modules) {
       modules_out.push_back(i.second);
@@ -94,8 +96,9 @@ public:
   void active_start(
                 DaemonStateIndex &ds, ClusterState &cs,
                 const std::map<std::string, std::string> &kv_store,
-                MonClient &mc, LogChannelRef clog_, Objecter &objecter_,
-                Client &client_, Finisher &f, DaemonServer &server);
+                MonClient &mc, LogChannelRef clog_, LogChannelRef audit_clog_,
+                Objecter &objecter_, Client &client_, Finisher &f,
+                DaemonServer &server);
   void standby_start(MonClient &mc);
 
   bool is_standby_running() const
@@ -106,15 +109,6 @@ public:
   void active_shutdown();
   void shutdown();
 
-  template<typename Callback, typename...Args>
-  void with_active_modules(Callback&& cb, Args&&...args) const
-  {
-    Mutex::Locker l(lock);
-    ceph_assert(active_modules != nullptr);
-
-    std::forward<Callback>(cb)(*active_modules, std::forward<Args>(args)...);
-  }
-
   std::vector<MonCommand> get_commands() const;
   std::vector<ModuleCommand> get_py_commands() const;
 
@@ -124,8 +118,15 @@ public:
    */
   PyModuleRef get_module(const std::string &module_name)
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     return modules.at(module_name);
+  }
+
+  bool module_exists(const std::string &module_name) const
+  {
+    std::lock_guard l(lock);
+    auto mod_iter = modules.find(module_name);
+    return mod_iter != modules.end();
   }
 
   /**

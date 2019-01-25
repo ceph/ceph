@@ -14,6 +14,7 @@
  *
  */
 
+#include "include/compat.h"
 #include "common/errno.h"
 #include "Event.h"
 
@@ -141,9 +142,10 @@ int EventCenter::init(int n, unsigned i, const std::string &t)
     return 0;
 
   int fds[2];
-  if (pipe(fds) < 0) {
-    lderr(cct) << __func__ << " can't create notify pipe" << dendl;
-    return -errno;
+  if (pipe_cloexec(fds) < 0) {
+    int e = errno;
+    lderr(cct) << __func__ << " can't create notify pipe: " << cpp_strerror(e) << dendl;
+    return -e;
   }
 
   notify_receive_fd = fds[0];
@@ -453,12 +455,16 @@ int EventCenter::process_events(unsigned timeout_microseconds,  ceph::timespan *
 
 void EventCenter::dispatch_event_external(EventCallbackRef e)
 {
-  external_lock.lock();
-  external_events.push_back(e);
-  bool wake = !external_num_events.load();
-  uint64_t num = ++external_num_events;
-  external_lock.unlock();
-  if (!in_thread() && wake)
+  uint64_t num = 0;
+  {
+    std::lock_guard lock{external_lock};
+    if (external_num_events > 0 && *external_events.rbegin() == e) {
+      return;
+    }
+    external_events.push_back(e);
+    num = ++external_num_events;
+  }
+  if (num == 1 && !in_thread())
     wakeup();
 
   ldout(cct, 30) << __func__ << " " << e << " pending " << num << dendl;

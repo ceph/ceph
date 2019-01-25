@@ -27,6 +27,7 @@ function run() {
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--osd-objectstore=filestore "
 
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
@@ -54,7 +55,7 @@ function get_state() {
     local pgid=$1
     local sname=state
     ceph --format json pg dump pgs 2>/dev/null | \
-        jq -r ".[] | select(.pgid==\"$pgid\") | .$sname"
+        jq -r ".pg_stats | .[] | select(.pgid==\"$pgid\") | .$sname"
 }
 
 function rados_put() {
@@ -321,9 +322,10 @@ function TEST_rep_read_unfound() {
 
     sleep 5
 
+    flush_pg_stats
     ceph --format=json pg dump pgs | jq '.'
 
-    if ! ceph --format=json pg dump pgs | jq '.[0].state' | grep -q recovery_unfound
+    if ! ceph --format=json pg dump pgs | jq '.pg_stats | .[0].state' | grep -q recovery_unfound
     then
       echo "Failure to get to recovery_unfound state"
       return 1

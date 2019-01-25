@@ -135,16 +135,13 @@ public:
    * @defgroup Messaging
    * @{
    */
-  int send_message(Message *m, const entity_inst_t& dest) override {
-    return _send_message(m, dest);
-  }
   int send_to(
     Message *m,
     int type,
     const entity_addrvec_t& addr) override {
     // temporary
-    return send_message(m, entity_inst_t(entity_name_t(type, -1),
-					 addr.legacy_addr()));
+    return _send_message(m, entity_inst_t(entity_name_t(type, -1),
+					  addr.legacy_addr()));
   }
 
   int send_message(Message *m, Connection *con) {
@@ -305,7 +302,7 @@ private:
    */
   ceph::unordered_map<entity_addr_t, Pipe*> rank_pipe;
   /**
-   * list of pipes are in teh process of accepting
+   * list of pipes are in the process of accepting
    *
    * These are not yet in the rank_pipe map.
    */
@@ -351,17 +348,6 @@ public:
    * @{
    */
 
-  /**
-   * This wraps ms_deliver_get_authorizer. We use it for Pipe.
-   */
-  AuthAuthorizer *get_authorizer(int peer_type, bool force_new);
-  /**
-   * This wraps ms_deliver_verify_authorizer; we use it for Pipe.
-   */
-  bool verify_authorizer(Connection *con, int peer_type, int protocol, bufferlist& auth,
-			 bufferlist& auth_reply,
-                         bool& isvalid,CryptoKey& session_key,
-			 std::unique_ptr<AuthAuthorizerChallenge> *challenge);
   /**
    * Increment the global sequence for this SimpleMessenger and return it.
    * This is for the connect protocol, although it doesn't hurt if somebody

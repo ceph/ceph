@@ -212,10 +212,8 @@ these under ``[mon]`` or under the entry for a specific monitor.
 
 .. code-block:: ini
 
-	[mon]
-		mon host = hostname1,hostname2,hostname3
-		mon addr = 10.0.0.10:6789,10.0.0.11:6789,10.0.0.12:6789
-
+	[global]
+		mon host = 10.0.0.2,10.0.0.3,10.0.0.4
 
 .. code-block:: ini
 
@@ -359,7 +357,7 @@ by setting it in the ``[mon]`` section of the configuration file.
 
 :Description: Issue a ``HEALTH_WARN`` in cluster log if the CRUSH's
               ``straw_calc_version`` is zero. See
-              `CRUSH map tunables <../operations/crush-map#tunables>`_ for
+              :ref:`CRUSH map tunables <crush-map-tunables>` for
               details.
 :Type: Boolean
 :Default: True
@@ -377,7 +375,7 @@ by setting it in the ``[mon]`` section of the configuration file.
 
 :Description: The minimum tunable profile version required by the cluster.
               See
-              `CRUSH map tunables <../operations/crush-map#tunables>`_ for
+              :ref:`CRUSH map tunables <crush-map-tunables>` for
               details.
 :Type: String
 :Default: ``firefly``
@@ -1197,7 +1195,7 @@ Miscellaneous
 
 :Description: Largest number of PGs per "involved" OSD to let split create.
               When we increase the ``pg_num`` of a pool, the placement groups
-              will be splitted on all OSDs serving that pool. We want to avoid
+              will be split on all OSDs serving that pool. We want to avoid
               extreme multipliers on PG splits.
 :Type: Integer
 :Default: 300

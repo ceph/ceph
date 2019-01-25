@@ -45,6 +45,8 @@
 #include "PGBackend.h"
 #include "PGPeeringEvent.h"
 
+#include "mgr/OSDPerfMetricTypes.h"
+
 #include <atomic>
 #include <list>
 #include <memory>
@@ -69,6 +71,7 @@ struct OpRequest;
 typedef OpRequest::Ref OpRequestRef;
 class MOSDPGLog;
 class CephContext;
+class DynamicPerfStats;
 
 namespace Scrub {
   class Store;
@@ -154,11 +157,11 @@ class PGRecoveryStats {
   PGRecoveryStats() : lock("PGRecoverStats::lock") {}
 
   void reset() {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     info.clear();
   }
   void dump(ostream& out) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     for (map<const char *,per_state_info>::iterator p = info.begin(); p != info.end(); ++p) {
       per_state_info& i = p->second;
       out << i.enter << "\t" << i.exit << "\t"
@@ -170,7 +173,7 @@ class PGRecoveryStats {
   }
 
   void dump_formatted(Formatter *f) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     f->open_array_section("pg_recovery_stats");
     for (map<const char *,per_state_info>::iterator p = info.begin();
 	 p != info.end(); ++p) {
@@ -197,11 +200,11 @@ class PGRecoveryStats {
   }
 
   void log_enter(const char *s) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     info[s].enter++;
   }
   void log_exit(const char *s, utime_t dur, uint64_t events, utime_t event_dur) {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     per_state_info &i = info[s];
     i.exit++;
     i.total_time += dur;
@@ -255,7 +258,7 @@ public:
 
   ObjectStore::CollectionHandle ch;
 
-  class RecoveryCtx;
+  struct RecoveryCtx;
 
   // -- methods --
   std::ostream& gen_prefix(std::ostream& out) const override;
@@ -266,7 +269,7 @@ public:
     return ceph_subsys_osd;
   }
 
-  OSDMapRef get_osdmap() const {
+  const OSDMapRef& get_osdmap() const {
     ceph_assert(is_locked());
     ceph_assert(osdmap_ref);
     return osdmap_ref;
@@ -399,7 +402,9 @@ public:
     ObjectStore::Transaction *t) = 0;
   void split_into(pg_t child_pgid, PG *child, unsigned split_bits);
   void merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
-		  unsigned split_bits);
+		  unsigned split_bits,
+		  epoch_t dec_last_epoch_started,
+		  epoch_t dec_last_epoch_clean);
   void finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction *t);
 
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
@@ -457,6 +462,8 @@ public:
     OpRequestRef& op,
     ThreadPool::TPHandle &handle
   ) = 0;
+  virtual void clear_cache() = 0;
+  virtual int get_cache_obj_count() = 0;
 
   virtual void snap_trimmer(epoch_t epoch_queued) = 0;
   virtual int do_command(
@@ -477,6 +484,12 @@ public:
   virtual void on_removal(ObjectStore::Transaction *t) = 0;
 
   void _delete_some(ObjectStore::Transaction *t);
+
+  virtual void set_dynamic_perf_stats_queries(
+    const std::list<OSDPerfMetricQuery> &queries) {
+  }
+  virtual void get_dynamic_perf_stats(DynamicPerfStats *stats) {
+  }
 
   // reference counting
 #ifdef PG_DEBUG_REFS
@@ -1071,6 +1084,7 @@ protected:
   bool        need_up_thru;
   set<pg_shard_t>    stray_set;   // non-acting osds that have PG data.
   map<pg_shard_t, pg_info_t>    peer_info;   // info from peers (stray or prior)
+  map<pg_shard_t, int64_t>    peer_bytes;   // Peer's num_bytes from peer_info
   set<pg_shard_t> peer_purged; // peers purged
   map<pg_shard_t, pg_missing_t> peer_missing;
   set<pg_shard_t> peer_log_requested;  // logs i've requested (and start stamps)
@@ -1189,8 +1203,97 @@ protected:
 
   set<pg_shard_t> backfill_targets,  async_recovery_targets;
 
+  // The primary's num_bytes and local num_bytes for this pg, only valid
+  // during backfill for non-primary shards.
+  // Both of these are adjusted for EC to reflect the on-disk bytes
+  std::atomic<int64_t> primary_num_bytes = 0;
+  std::atomic<int64_t> local_num_bytes = 0;
+
+public:
   bool is_backfill_targets(pg_shard_t osd) {
     return backfill_targets.count(osd);
+  }
+
+  // Space reserved for backfill is primary_num_bytes - local_num_bytes
+  // Don't care that difference itself isn't atomic
+  uint64_t get_reserved_num_bytes() {
+    int64_t primary = primary_num_bytes.load();
+    int64_t local = local_num_bytes.load();
+    if (primary > local)
+      return primary - local;
+    else
+      return 0;
+  }
+
+  bool is_remote_backfilling() {
+    return primary_num_bytes.load() > 0;
+  }
+
+  void set_reserved_num_bytes(int64_t primary, int64_t local);
+  void clear_reserved_num_bytes();
+
+  // If num_bytes are inconsistent and local_num- goes negative
+  // it's ok, because it would then be ignored.
+
+  // The value of num_bytes could be negative,
+  // but we don't let local_num_bytes go negative.
+  void add_local_num_bytes(int64_t num_bytes) {
+    if (num_bytes) {
+      int64_t prev = local_num_bytes.fetch_add(num_bytes);
+      ceph_assert(prev >= 0);
+      if (num_bytes < 0 && prev < -num_bytes) {
+        local_num_bytes.store(0);
+      }
+    }
+  }
+  void sub_local_num_bytes(int64_t num_bytes) {
+    ceph_assert(num_bytes >= 0);
+    if (num_bytes) {
+      if (local_num_bytes.fetch_sub(num_bytes) < num_bytes) {
+        local_num_bytes.store(0);
+      }
+    }
+  }
+  // The value of num_bytes could be negative,
+  // but we don't let info.stats.stats.sum.num_bytes go negative.
+  void add_num_bytes(int64_t num_bytes) {
+    ceph_assert(_lock.is_locked_by_me());
+    if (num_bytes) {
+      info.stats.stats.sum.num_bytes += num_bytes;
+      if (info.stats.stats.sum.num_bytes < 0) {
+        info.stats.stats.sum.num_bytes = 0;
+      }
+    }
+  }
+  void sub_num_bytes(int64_t num_bytes) {
+    ceph_assert(_lock.is_locked_by_me());
+    ceph_assert(num_bytes >= 0);
+    if (num_bytes) {
+      info.stats.stats.sum.num_bytes -= num_bytes;
+      if (info.stats.stats.sum.num_bytes < 0) {
+        info.stats.stats.sum.num_bytes = 0;
+      }
+    }
+  }
+
+  // Only used in testing so not worried about needing the PG lock here
+  int64_t get_stats_num_bytes() {
+    Mutex::Locker l(_lock);
+    int num_bytes = info.stats.stats.sum.num_bytes;
+    if (pool.info.is_erasure()) {
+      num_bytes /= (int)get_pgbackend()->get_ec_data_chunk_count();
+      // Round up each object by a stripe
+      num_bytes +=  get_pgbackend()->get_ec_stripe_chunk_size() * info.stats.stats.sum.num_objects;
+    }
+    int64_t lnb = local_num_bytes.load();
+    if (lnb && lnb != num_bytes) {
+      lgeneric_dout(cct, 0) << this << " " << info.pgid << " num_bytes mismatch "
+			    << lnb << " vs stats "
+                            << info.stats.stats.sum.num_bytes << " / chunk "
+                            << get_pgbackend()->get_ec_data_chunk_count()
+                            << dendl;
+    }
+    return num_bytes;
   }
 
 protected:
@@ -1279,7 +1382,7 @@ protected:
   map<hobject_t, list<Context*>> callbacks_for_degraded_object;
 
   map<eversion_t,
-      list<pair<OpRequestRef, version_t> > > waiting_for_ondisk;
+      list<tuple<OpRequestRef, version_t, int> > > waiting_for_ondisk;
 
   void requeue_object_waiters(map<hobject_t, list<OpRequestRef>>& m);
   void requeue_op(OpRequestRef op);
@@ -1329,7 +1432,7 @@ protected:
   /// get priority for pg deletion
   unsigned get_delete_priority();
 
-  void mark_clean();  ///< mark an active pg clean
+  void try_mark_clean();  ///< mark an active pg clean
 
   /// return [start,end) bounds for required past_intervals
   static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
@@ -1374,6 +1477,8 @@ protected:
   }
 
   virtual void calc_trim_to() = 0;
+
+  virtual void calc_trim_to_aggressive() = 0;
 
   void proc_replica_log(pg_info_t &oinfo, const pg_log_t &olog,
 			pg_missing_t& omissing, pg_shard_t from);
@@ -1833,6 +1938,7 @@ protected:
   };
 
 public:
+  int pg_stat_adjust(osd_stat_t *new_stat);
 protected:
 
   struct AdvMap : boost::statechart::event< AdvMap > {
@@ -2743,6 +2849,7 @@ protected:
 
   /// most recently consumed osdmap's require_osd_version
   unsigned last_require_osd_release = 0;
+  bool delete_needs_sleep = false;
 
 protected:
   void reset_min_peer_features() {
@@ -2755,6 +2862,10 @@ protected:
   uint64_t get_min_upacting_features() const { return upacting_features; }
   bool perform_deletes_during_peering() const {
     return !(get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES));
+  }
+
+  bool hard_limit_pglog() const {
+    return (get_osdmap()->test_flag(CEPH_OSDMAP_PGLOG_HARDLIMIT));
   }
 
   void init_primary_up_acting(
@@ -2876,7 +2987,7 @@ protected:
   eversion_t projected_last_update;
   eversion_t get_next_version() const {
     eversion_t at_version(
-      get_osdmap()->get_epoch(),
+      get_osdmap_epoch(),
       projected_last_update.version+1);
     ceph_assert(at_version > info.last_update);
     ceph_assert(at_version > pg_log.get_head());
@@ -2974,7 +3085,7 @@ protected:
     return e <= cur_epoch;
   }
   bool have_same_or_newer_map(epoch_t e) {
-    return e <= get_osdmap()->get_epoch();
+    return e <= get_osdmap_epoch();
   }
 
   bool op_has_sufficient_caps(OpRequestRef& op);

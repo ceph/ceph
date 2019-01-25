@@ -29,6 +29,79 @@ def get_partuuid(device):
     return ' '.join(out).strip()
 
 
+def _blkid_parser(output):
+    """
+    Parses the output from a system ``blkid`` call, requires output to be
+    produced using the ``-p`` flag which bypasses the cache, mangling the
+    names. These names are corrected to what it would look like without the
+    ``-p`` flag.
+
+    Normal output::
+
+        /dev/sdb1: UUID="62416664-cbaf-40bd-9689-10bd337379c3" TYPE="xfs" [...]
+    """
+    # first spaced separated item is garbage, gets tossed:
+    output = ' '.join(output.split()[1:])
+    # split again, respecting possible whitespace in quoted values
+    pairs = output.split('" ')
+    raw = {}
+    processed = {}
+    mapping = {
+        'UUID': 'UUID',
+        'TYPE': 'TYPE',
+        'PART_ENTRY_NAME': 'PARTLABEL',
+        'PART_ENTRY_UUID': 'PARTUUID',
+        'PTTYPE': 'PTTYPE',
+    }
+
+    for pair in pairs:
+        try:
+            column, value = pair.split('=')
+        except ValueError:
+            continue
+        raw[column] = value.strip().strip().strip('"')
+
+    for key, value in raw.items():
+        new_key = mapping.get(key)
+        if not new_key:
+            continue
+        processed[new_key] = value
+
+    return processed
+
+
+def blkid(device):
+    """
+    The blkid interface to its CLI, creating an output similar to what is
+    expected from ``lsblk``. In most cases, ``lsblk()`` should be the preferred
+    method for extracting information about a device. There are some corner
+    cases where it might provide information that is otherwise unavailable.
+
+    The system call uses the ``-p`` flag which bypasses the cache, the caveat
+    being that the keys produced are named completely different to expected
+    names.
+
+    For example, instead of ``PARTLABEL`` it provides a ``PART_ENTRY_NAME``.
+    A bit of translation between these known keys is done, which is why
+    ``lsblk`` should always be preferred: the output provided here is not as
+    rich, given that a translation of keys is required for a uniform interface
+    with the ``-p`` flag.
+
+    Label name to expected output chart:
+
+    cache bypass name               expected name
+
+    UUID                            UUID
+    TYPE                            TYPE
+    PART_ENTRY_NAME                 PARTLABEL
+    PART_ENTRY_UUID                 PARTUUID
+    """
+    out, err, rc = process.call(
+        ['blkid', '-p', device]
+    )
+    return _blkid_parser(' '.join(out))
+
+
 def get_part_entry_type(device):
     """
     Parses the ``ID_PART_ENTRY_TYPE`` from the "low level" (bypasses the cache)
@@ -52,6 +125,23 @@ def get_device_from_partuuid(partuuid):
         ['blkid', '-t', 'PARTUUID="%s"' % partuuid, '-o', 'device']
     )
     return ' '.join(out).strip()
+
+
+def remove_partition(device):
+    """
+    Removes a partition using parted
+
+    :param device: A ``Device()`` object
+    """
+    parent_device = '/dev/%s' % device.disk_api['PKNAME']
+    udev_info = udevadm_property(device.abspath)
+    partition_number = udev_info.get('ID_PART_ENTRY_NUMBER')
+    if not partition_number:
+        raise RuntimeError('Unable to detect the partition number for device: %s' % device.abspath)
+
+    process.run(
+        ['parted', parent_device, '--script', '--', 'rm', partition_number]
+    )
 
 
 def _stat_is_device(stat_obj):
@@ -95,6 +185,47 @@ def device_family(device):
         devices.append(_lsblk_parser(line))
 
     return devices
+
+
+def udevadm_property(device, properties=[]):
+    """
+    Query udevadm for information about device properties.
+    Optionally pass a list of properties to return. A requested property might
+    not be returned if not present.
+
+    Expected output format::
+        # udevadm info --query=property --name=/dev/sda                                  :(
+        DEVNAME=/dev/sda
+        DEVTYPE=disk
+        ID_ATA=1
+        ID_BUS=ata
+        ID_MODEL=SK_hynix_SC311_SATA_512GB
+        ID_PART_TABLE_TYPE=gpt
+        ID_PART_TABLE_UUID=c8f91d57-b26c-4de1-8884-0c9541da288c
+        ID_PATH=pci-0000:00:17.0-ata-3
+        ID_PATH_TAG=pci-0000_00_17_0-ata-3
+        ID_REVISION=70000P10
+        ID_SERIAL=SK_hynix_SC311_SATA_512GB_MS83N71801150416A
+        TAGS=:systemd:
+        USEC_INITIALIZED=16117769
+        ...
+    """
+    out = _udevadm_info(device)
+    ret = {}
+    for line in out:
+        p, v = line.split('=', 1)
+        if not properties or p in properties:
+            ret[p] = v
+    return ret
+
+
+def _udevadm_info(device):
+    """
+    Call udevadm and return the output
+    """
+    cmd = ['udevadm', 'info', '--query=property', device]
+    out, _err, _rc = process.call(cmd)
+    return out
 
 
 def lsblk(device, columns=None, abspath=False):
@@ -438,7 +569,7 @@ class Size(object):
 
         for k, v in kw.items():
             self._convert(v, k)
-            # only pursue the first occurence
+            # only pursue the first occurrence
             break
 
     def _convert(self, size, unit):
@@ -558,7 +689,7 @@ def get_partitions_facts(sys_block_path):
         folder_path = os.path.join(sys_block_path, folder)
         if os.path.exists(os.path.join(folder_path, 'partition')):
             contents = get_file_contents(os.path.join(folder_path, 'partition'))
-            if '1' in contents:
+            if contents:
                 part = {}
                 partname = folder
                 part_sys_block_path = os.path.join(sys_block_path, partname)
@@ -572,6 +703,9 @@ def get_partitions_facts(sys_block_path):
                     part['sectorsize'] = get_file_contents(
                         part_sys_block_path + "/queue/hw_sector_size", 512)
                 part['size'] = human_readable_size(float(part['sectors']) * 512)
+                part['holders'] = []
+                for holder in os.listdir(part_sys_block_path + '/holders'):
+                    part['holders'].append(holder)
 
                 partition_metadata[partname] = part
     return partition_metadata
@@ -579,6 +713,28 @@ def get_partitions_facts(sys_block_path):
 
 def is_mapper_device(device_name):
     return device_name.startswith(('/dev/mapper', '/dev/dm-'))
+
+
+def is_locked_raw_device(disk_path):
+    """
+    A device can be locked by a third party software like a database.
+    To detect that case, the device is opened in Read/Write and exclusive mode
+    """
+    open_flags = (os.O_RDWR | os.O_EXCL)
+    open_mode = 0
+    fd = None
+
+    try:
+        fd = os.open(disk_path, open_flags, open_mode)
+    except OSError:
+        return 1
+
+    try:
+        os.close(fd)
+    except OSError:
+        return 1
+
+    return 0
 
 
 def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/dev/mapper'):
@@ -614,18 +770,20 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
         # Ensure that the diskname is an absolute path and that it never points
         # to a /dev/dm-* device
         diskname = mapper_devs.get(block) or dev_devs.get(block)
+        if not diskname:
+            continue
 
         # If the mapper device is a logical volume it gets excluded
         if is_mapper_device(diskname):
             if lvm.is_lv(diskname):
                 continue
 
-        # If the device reports itself as 'removable', get it excluded
         metadata['removable'] = get_file_contents(os.path.join(sysdir, 'removable'))
-        if metadata['removable'] == '1':
-            continue
+        # Is the device read-only ?
+        metadata['ro'] = get_file_contents(os.path.join(sysdir, 'ro'))
 
-        for key in ['vendor', 'model', 'sas_address', 'sas_device_handle']:
+
+        for key in ['vendor', 'model', 'rev', 'sas_address', 'sas_device_handle']:
             metadata[key] = get_file_contents(sysdir + "/device/" + key)
 
         for key in ['sectors', 'size']:
@@ -636,7 +794,9 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
 
         metadata['partitions'] = get_partitions_facts(sysdir)
 
-        metadata['rotational'] = get_file_contents(sysdir + "/queue/rotational")
+        for key in ['rotational', 'nr_requests']:
+            metadata[key] = get_file_contents(sysdir + "/queue/" + key)
+
         metadata['scheduler_mode'] = ""
         scheduler = get_file_contents(sysdir + "/queue/scheduler")
         if scheduler is not None:
@@ -653,6 +813,7 @@ def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/d
         metadata['human_readable_size'] = human_readable_size(float(size) * 512)
         metadata['size'] = float(size) * 512
         metadata['path'] = diskname
+        metadata['locked'] = is_locked_raw_device(metadata['path'])
 
         device_facts[diskname] = metadata
     return device_facts

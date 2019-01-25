@@ -51,7 +51,7 @@ namespace ceph {
  */
 
 class Logger;
-
+class ContextQueue;
 
 static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) {
   encode(*attrset, bl);
@@ -146,7 +146,7 @@ public:
      * 1) collection is currently idle: the method returns true.  c is
      *    not touched.
      * 2) collection is not idle: the method returns false and c is
-     *    called asyncronously with a value of 0 once all transactions
+     *    called asynchronously with a value of 0 once all transactions
      *    queued on this collection prior to the call have been applied
      *    and committed.
      */
@@ -269,7 +269,7 @@ public:
    *   sobject_encoding detects an older/simpler version of oid
    *   present in pre-bobtail versions of ceph.  use_pool_override
    *   also detects a situation where the pool of an oid can be
-   *   overriden for legacy operations/buffers.  For non-legacy
+   *   overridden for legacy operations/buffers.  For non-legacy
    *   implementations of ObjectStore, neither of these fields are
    *   relevant.
    *
@@ -298,7 +298,7 @@ public:
    * applies independently to each transaction element. For example,
    * if a transaction contains two mutating elements "create A" and
    * "delete B". And an enumeration operation is performed while this
-   * transaction is pending. It is permissable for ObjectStore to
+   * transaction is pending. It is permissible for ObjectStore to
    * report any of the four possible combinations of the existence of
    * A and B.
    *
@@ -446,8 +446,6 @@ public:
     bufferlist data_bl;
     bufferlist op_bl;
 
-    bufferptr op_ptr;
-
     list<Context *> on_applied;
     list<Context *> on_commit;
     list<Context *> on_applied_sync;
@@ -472,7 +470,6 @@ public:
       object_id(other.object_id),
       data_bl(std::move(other.data_bl)),
       op_bl(std::move(other.op_bl)),
-      op_ptr(std::move(other.op_ptr)),
       on_applied(std::move(other.on_applied)),
       on_commit(std::move(other.on_commit)),
       on_applied_sync(std::move(other.on_applied_sync)) {
@@ -488,7 +485,6 @@ public:
       object_id = other.object_id;
       data_bl = std::move(other.data_bl);
       op_bl = std::move(other.op_bl);
-      op_ptr = std::move(other.op_ptr);
       on_applied = std::move(other.on_applied);
       on_commit = std::move(other.on_commit);
       on_applied_sync = std::move(other.on_applied_sync);
@@ -699,15 +695,11 @@ public:
       bufferlist& bl,
       vector<__le32> &cm,
       vector<__le32> &om) {
+      for (auto& bp : bl.buffers()) {
+        ceph_assert(bp.length() % sizeof(Op) == 0);
 
-      list<bufferptr> list = bl.buffers();
-      std::list<bufferptr>::iterator p;
-
-      for(p = list.begin(); p != list.end(); ++p) {
-        ceph_assert(p->length() % sizeof(Op) == 0);
-
-        char* raw_p = p->c_str();
-        char* raw_end = raw_p + p->length();
+        char* raw_p = const_cast<char*>(bp.c_str());
+        char* raw_end = raw_p + bp.length();
         while (raw_p < raw_end) {
           _update_op(reinterpret_cast<Op*>(raw_p), cm, om);
           raw_p += sizeof(Op);
@@ -747,10 +739,12 @@ public:
 
       //the other.op_bl SHOULD NOT be changes during append operation,
       //we use additional bufferlist to avoid this problem
-      bufferptr other_op_bl_ptr(other.op_bl.length());
-      other.op_bl.copy(0, other.op_bl.length(), other_op_bl_ptr.c_str());
       bufferlist other_op_bl;
-      other_op_bl.append(other_op_bl_ptr);
+      {
+        bufferptr other_op_bl_ptr(other.op_bl.length());
+        other.op_bl.copy(0, other.op_bl.length(), other_op_bl_ptr.c_str());
+        other_op_bl.append(std::move(other_op_bl_ptr));
+      }
 
       //update other_op_bl with cm & om
       //When the other is appended to current transaction, all coll_index and
@@ -834,7 +828,7 @@ public:
     bool empty() {
       return !data.ops;
     }
-    /// Number of operations in the transation
+    /// Number of operations in the transaction
     int get_num_ops() {
       return data.ops;
     }
@@ -868,7 +862,7 @@ public:
           objects(t->object_index.size()) {
 
         ops = t->data.ops;
-        op_buffer_p = t->op_bl.get_contiguous(0, t->data.ops * sizeof(Op));
+        op_buffer_p = t->op_bl.c_str();
 
         map<coll_t, __le32>::iterator coll_index_p;
         for (coll_index_p = t->coll_index.begin();
@@ -963,15 +957,12 @@ private:
      * form of seat belts for the decoder.
      */
     Op* _get_next_op() {
-      if (op_ptr.length() == 0 || op_ptr.offset() >= op_ptr.length()) {
-        op_ptr = bufferptr(sizeof(Op) * OPS_PER_PTR);
+      if (op_bl.get_append_buffer_unused_tail_length() < sizeof(Op)) {
+        op_bl.reserve(sizeof(Op) * OPS_PER_PTR);
       }
-      bufferptr ptr(op_ptr, 0, sizeof(Op));
-      op_bl.append(ptr);
-
-      op_ptr.set_offset(op_ptr.offset() + sizeof(Op));
-
-      char* p = ptr.c_str();
+      // append_hole ensures bptr merging. Even huge number of ops
+      // shouldn't result in overpopulating bl::_buffers.
+      char* const p = op_bl.append_hole(sizeof(Op)).c_str();
       memset(p, 0, sizeof(Op));
       return reinterpret_cast<Op*>(p);
     }
@@ -1479,8 +1470,10 @@ public:
 
   virtual void get_db_statistics(Formatter *f) { }
   virtual void generate_db_histogram(Formatter *f) { }
-  virtual void flush_cache() { }
+  virtual int flush_cache(ostream *os = NULL) { return -1; }
   virtual void dump_perf_counters(Formatter *f) {}
+  virtual void dump_cache_stats(Formatter *f) {}
+  virtual void dump_cache_stats(ostream& os) {}
 
   virtual string get_type() = 0;
 
@@ -1553,11 +1546,20 @@ public:
     return is_rotational() ? "hdd" : "ssd";
   }
 
+  virtual int get_numa_node(
+    int *numa_node,
+    set<int> *nodes,
+    set<string> *failed) {
+    return -EOPNOTSUPP;
+  }
+
+
   virtual bool can_sort_nibblewise() {
     return false;   // assume a backend cannot, unless it says otherwise
   }
 
   virtual int statfs(struct store_statfs_t *buf) = 0;
+  virtual int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) = 0;
 
   virtual void collect_metadata(map<string,string> *pm) { }
 
@@ -1617,6 +1619,13 @@ public:
    */
   virtual CollectionHandle create_new_collection(const coll_t &cid) = 0;
 
+  /**
+   * set ContextQueue for a collection
+   *
+   * After that, oncommits of Transaction will queue into commit_queue.
+   * And osd ShardThread will call oncommits.
+   */
+  virtual void set_collection_commit_queue(const coll_t &cid, ContextQueue *commit_queue) = 0;
 
   /**
    * Synchronous read operations

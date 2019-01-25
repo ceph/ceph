@@ -102,12 +102,18 @@ class OsdTest(DashboardTestCase):
         unused_osd_id = max(map(lambda e: e['osd'], osd_dump['osds'])) + 10
         self._get('/api/osd/{}/safe_to_destroy'.format(unused_osd_id))
         self.assertStatus(200)
-        self.assertJsonBody({'safe-to-destroy': True})
+        self.assertJsonBody({
+            'is_safe_to_destroy': True,
+            'active': [],
+            'missing_stats': [],
+            'safe_to_destroy': [unused_osd_id],
+            'stored_pgs': [],
+        })
 
         def get_destroy_status():
             self._get('/api/osd/0/safe_to_destroy')
-            if 'safe-to-destroy' in self.jsonBody():
-                return self.jsonBody()['safe-to-destroy']
+            if 'is_safe_to_destroy' in self.jsonBody():
+                return self.jsonBody()['is_safe_to_destroy']
             return None
         self.wait_until_equal(get_destroy_status, False, 10)
         self.assertStatus(200)
@@ -117,7 +123,8 @@ class OsdFlagsTest(DashboardTestCase):
     def __init__(self, *args, **kwargs):
         super(OsdFlagsTest, self).__init__(*args, **kwargs)
         self._initial_flags = sorted(  # These flags cannot be unset
-            ['sortbitwise', 'recovery_deletes', 'purged_snapdirs'])
+            ['sortbitwise', 'recovery_deletes', 'purged_snapdirs',
+             'pglog_hardlimit'])
 
     @classmethod
     def _get_cluster_osd_flags(cls):
@@ -133,17 +140,17 @@ class OsdFlagsTest(DashboardTestCase):
     def test_list_osd_flags(self):
         flags = self._get('/api/osd/flags')
         self.assertStatus(200)
-        self.assertEqual(len(flags), 3)
+        self.assertEqual(len(flags), 4)
         self.assertEqual(sorted(flags), self._initial_flags)
 
     def test_add_osd_flag(self):
         flags = self._put_flags([
             'sortbitwise', 'recovery_deletes', 'purged_snapdirs', 'noout',
-            'pause'
+            'pause', 'pglog_hardlimit'
         ])
         self.assertEqual(flags, sorted([
             'sortbitwise', 'recovery_deletes', 'purged_snapdirs', 'noout',
-            'pause'
+            'pause', 'pglog_hardlimit'
         ]))
 
         # Restore flags

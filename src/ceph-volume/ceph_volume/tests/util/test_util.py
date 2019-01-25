@@ -15,18 +15,38 @@ class TestAsBytes(object):
 
 class TestStrToInt(object):
 
-    def test_passing_a_float_str(self):
-        result = util.str_to_int("1.99")
+    def test_passing_a_float_str_comma(self):
+        result = util.str_to_int("1,99")
         assert result == 1
 
-    def test_passing_a_float_does_not_round(self):
-        result = util.str_to_int("1.99", round_down=False)
+    def test_passing_a_float_does_not_round_comma(self):
+        result = util.str_to_int("1,99", round_down=False)
+        assert result == 2
+
+    @pytest.mark.parametrize("value", ['2', 2])
+    def test_passing_an_int(self, value):
+        result = util.str_to_int(value)
+        assert result == 2
+
+    @pytest.mark.parametrize("value", ['1.99', 1.99])
+    def test_passing_a_float(self, value):
+        result = util.str_to_int(value)
+        assert result == 1
+
+    @pytest.mark.parametrize("value", ['1.99', 1.99])
+    def test_passing_a_float_does_not_round(self, value):
+        result = util.str_to_int(value, round_down=False)
         assert result == 2
 
     def test_text_is_not_an_integer_like(self):
         with pytest.raises(RuntimeError) as error:
             util.str_to_int("1.4GB")
         assert str(error.value) == "Unable to convert to integer: '1.4GB'"
+
+    def test_input_is_not_string(self):
+        with pytest.raises(RuntimeError) as error:
+            util.str_to_int(None)
+        assert str(error.value) == "Unable to convert to integer: 'None'"
 
 
 def true_responses(upper_casing=False):
@@ -75,22 +95,22 @@ class TestPromptBool(object):
     def test_trueish(self, response):
         fake_input = lambda x: response
         qx = 'what the what?'
-        assert util.prompt_bool(qx, _raw_input=fake_input) is True
+        assert util.prompt_bool(qx, input_=fake_input) is True
 
     @pytest.mark.parametrize('response', false_responses())
     def test_falseish(self, response):
         fake_input = lambda x: response
         qx = 'what the what?'
-        assert util.prompt_bool(qx, _raw_input=fake_input) is False
+        assert util.prompt_bool(qx, input_=fake_input) is False
 
     def test_try_again_true(self):
         responses = ['g', 'h', 'y']
         fake_input = lambda x: responses.pop(0)
         qx = 'what the what?'
-        assert util.prompt_bool(qx, _raw_input=fake_input) is True
+        assert util.prompt_bool(qx, input_=fake_input) is True
 
     def test_try_again_false(self):
         responses = ['g', 'h', 'n']
         fake_input = lambda x: responses.pop(0)
         qx = 'what the what?'
-        assert util.prompt_bool(qx, _raw_input=fake_input) is False
+        assert util.prompt_bool(qx, input_=fake_input) is False

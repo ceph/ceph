@@ -100,6 +100,8 @@ template<class A, class B>
 inline std::ostream& operator<<(std::ostream&out, const std::pair<A,B>& v);
 template<class A, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const std::vector<A,Alloc>& v);
+template<class A, std::size_t N, class Alloc>
+inline std::ostream& operator<<(std::ostream& out, const boost::container::small_vector<A,N,Alloc>& v);
 template<class A, class Comp, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const std::deque<A,Alloc>& v);
 template<typename... Ts>
@@ -136,10 +138,25 @@ inline std::ostream& operator<<(std::ostream& out, const std::pair<A,B>& v) {
 
 template<class A, class Alloc>
 inline std::ostream& operator<<(std::ostream& out, const std::vector<A,Alloc>& v) {
+  bool first = true;
   out << "[";
-  for (auto p = v.begin(); p != v.end(); ++p) {
-    if (p != v.begin()) out << ",";
-    out << *p;
+  for (const auto& p : v) {
+    if (!first) out << ",";
+    out << p;
+    first = false;
+  }
+  out << "]";
+  return out;
+}
+
+template<class A, std::size_t N, class Alloc>
+inline std::ostream& operator<<(std::ostream& out, const boost::container::small_vector<A,N,Alloc>& v) {
+  bool first = true;
+  out << "[";
+  for (const auto& p : v) {
+    if (!first) out << ",";
+    out << p;
+    first = false;
   }
   out << "]";
   return out;
@@ -158,7 +175,7 @@ inline std::ostream& operator<<(std::ostream& out, const std::deque<A,Alloc>& v)
 
 template<typename... Ts>
 inline std::ostream& operator<<(std::ostream& out, const std::tuple<Ts...> &t) {
-  auto f = [n = sizeof...(Ts), i = 0, &out](const auto& e) mutable {
+  auto f = [n = sizeof...(Ts), i = 0U, &out](const auto& e) mutable {
     out << e;
     if (++i != n)
       out << ",";

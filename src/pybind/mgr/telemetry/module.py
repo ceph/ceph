@@ -31,37 +31,45 @@ class Module(MgrModule):
             "distro"
     ]
 
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {
             'name': 'url',
+            'type': 'str',
             'default': 'https://telemetry.ceph.com/report'
         },
         {
             'name': 'enabled',
+            'type': 'bool',
             'default': True
         },
         {
             'name': 'leaderboard',
+            'type': 'bool',
             'default': False
         },
         {
             'name': 'description',
+            'type': 'str',
             'default': None
         },
         {
             'name': 'contact',
+            'type': 'str',
             'default': None
         },
         {
             'name': 'organization',
+            'type': 'str',
             'default': None
         },
         {
             'name': 'proxy',
+            'type': 'str',
             'default': None
         },
         {
             'name': 'interval',
+            'type': 'int',
             'default': 72
         }
     ]
@@ -92,7 +100,7 @@ class Module(MgrModule):
 
     @property
     def config_keys(self):
-        return dict((o['name'], o.get('default', None)) for o in self.OPTIONS)
+        return dict((o['name'], o.get('default', None)) for o in self.MODULE_OPTIONS)
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
@@ -128,7 +136,7 @@ class Module(MgrModule):
 
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():
-            raise RuntimeError('{0} is a unknown configuration '
+            raise RuntimeError('{} is a unknown configuration '
                                'option'.format(option))
 
         if option == 'interval':
@@ -146,20 +154,20 @@ class Module(MgrModule):
 
         if option == 'contact':
             if value and not self.is_valid_email(value):
-                raise RuntimeError('%s is not a valid e-mail address as a '
-                                   'contact', value)
+                raise RuntimeError('{} is not a valid e-mail address as a '
+                                   'contact'.format(value))
 
         if option in ['description', 'organization']:
             if value and len(value) > 256:
-                raise RuntimeError('%s should be limited to 256 '
-                                   'characters', option)
+                raise RuntimeError('{} should be limited to 256 '
+                                   'characters'.format(option))
 
         self.config[option] = value
         return True
 
     def init_module_config(self):
         for key, default in self.config_keys.items():
-            self.set_config_option(key, self.get_config(key, default))
+            self.set_config_option(key, self.get_module_option(key, default))
 
         self.last_upload = self.get_store('last_upload', None)
         if self.last_upload is not None:
@@ -273,7 +281,6 @@ class Module(MgrModule):
         report['usage'] = {
             'pools': len(df['pools']),
             'pg_num:': num_pg,
-            'total_objects': df['stats']['total_objects'],
             'total_used_bytes': df['stats']['total_used_bytes'],
             'total_bytes': df['stats']['total_bytes'],
             'total_avail_bytes': df['stats']['total_avail_bytes']
@@ -308,7 +315,7 @@ class Module(MgrModule):
 
             self.log.debug('Setting configuration option %s to %s', key, value)
             self.set_config_option(key, value)
-            self.set_config(key, value)
+            self.set_module_option(key, value)
             return 0, 'Configuration option {0} updated'.format(key), ''
         elif command['prefix'] == 'telemetry send':
             self.last_report = self.compile_report()

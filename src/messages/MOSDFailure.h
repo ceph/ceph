@@ -114,7 +114,7 @@ public:
     encode(failed_for, payload);
   }
 
-  const char *get_type_name() const override { return "osd_failure"; }
+  std::string_view get_type_name() const override { return "osd_failure"; }
   void print(ostream& out) const override {
     out << "osd_failure("
 	<< (if_osd_failed() ? "failed " : "recovered ")

@@ -72,6 +72,7 @@ def get_pool_id(name, nullfd):
 
 # return a list of unique PGS given an osd subdirectory
 def get_osd_pgs(SUBDIR, ID):
+    export CEPH_ARGS="--osd-objectstore=filestore"
     PGS = []
     if ID:
         endhead = re.compile("{id}.*_head$".format(id=ID))
@@ -83,6 +84,7 @@ def get_osd_pgs(SUBDIR, ID):
 
 # return a sorted list of unique PGs given a directory
 def get_pgs(DIR, ID):
+    export CEPH_ARGS="--osd-objectstore=filestore"
     OSDS = [f for f in os.listdir(DIR) if os.path.isdir(os.path.join(DIR, f)) and f.find("osd") == 0]
     PGS = []
     for d in OSDS:
@@ -93,6 +95,7 @@ def get_pgs(DIR, ID):
 
 # return a sorted list of PGS a subset of ALLPGS that contain objects with prefix specified
 def get_objs(ALLPGS, prefix, DIR, ID):
+    export CEPH_ARGS="--osd-objectstore=filestore"
     OSDS = [f for f in os.listdir(DIR) if os.path.isdir(os.path.join(DIR, f)) and f.find("osd") == 0]
     PGS = []
     for d in OSDS:
@@ -111,6 +114,7 @@ def get_objs(ALLPGS, prefix, DIR, ID):
 
 # return a sorted list of OSDS which have data from a given PG
 def get_osds(PG, DIR):
+    export CEPH_ARGS="--osd-objectstore=filestore"
     ALLOSDS = [f for f in os.listdir(DIR) if os.path.isdir(os.path.join(DIR, f)) and f.find("osd") == 0]
     OSDS = []
     for d in ALLOSDS:
@@ -407,6 +411,7 @@ def kill_daemons():
 
 
 def check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME):
+    export CEPH_ARGS="--osd-objectstore=filestore"
     repcount = 0
     ERRORS = 0
     for rawnsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(SPLIT_NAME) == 0]:
@@ -598,6 +603,7 @@ def test_get_set_inc_osdmap(CFSD_PREFIX, osd_path):
 
 
 def test_removeall(CFSD_PREFIX, db, OBJREPPGS, REP_POOL, CEPH_BIN, OSDDIR, REP_NAME, NUM_CLONED_REP_OBJECTS):
+    export CEPH_ARGS="--osd-objectstore=filestore"
     # Test removeall
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=os.getpid())
     nullfd = open(os.devnull, "w")
@@ -667,6 +673,7 @@ def test_removeall(CFSD_PREFIX, db, OBJREPPGS, REP_POOL, CEPH_BIN, OSDDIR, REP_N
 
 
 def main(argv):
+    export CEPH_ARGS="--osd-objectstore=filestore"
     if sys.version_info[0] < 3:
         sys.stdout = stdout = os.fdopen(sys.stdout.fileno(), 'wb', 0)
     else:
@@ -959,11 +966,6 @@ def main(argv):
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
 
-    # On import can't specify a different shard
-    BADPG = ONEECPG.split('s')[0] + "s10"
-    cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=ONEECOSD, pg=BADPG, file=OTHERFILE)
-    ERRORS += test_failure(cmd, "Can't specify a different shard, must be")
-
     os.unlink(OTHERFILE)
 
     # Prep a valid export file for import failure tests
@@ -972,18 +974,10 @@ def main(argv):
     logging.debug(cmd)
     call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
 
-    # On import can't specify a PG with a non-existent pool
-    cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=ONEOSD, pg="10.0", file=OTHERFILE)
-    ERRORS += test_failure(cmd, "Can't specify a different pgid pool, must be")
-
-    # On import can't specify shard for a replicated export
-    cmd = (CFSD_PREFIX + "--op import --pgid {pg}s0 --file {file}").format(osd=ONEOSD, pg=ONEPG, file=OTHERFILE)
-    ERRORS += test_failure(cmd, "Can't specify a sharded pgid with a non-sharded export")
-
-    # On import can't specify a PG with a bad seed
+    # On import can't specify a different pgid than the file
     TMPPG="{pool}.80".format(pool=REPID)
-    cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=ONEOSD, pg=TMPPG, file=OTHERFILE)
-    ERRORS += test_failure(cmd, "PG {pg} no longer exists".format(pg=TMPPG))
+    cmd = (CFSD_PREFIX + "--op import --pgid 12.dd --file {file}").format(osd=ONEOSD, pg=TMPPG, file=OTHERFILE)
+    ERRORS += test_failure(cmd, "specified pgid 12.dd does not match actual pgid")
 
     os.unlink(OTHERFILE)
     cmd = (CFSD_PREFIX + "--op import --file {FOO}").format(osd=ONEOSD, FOO=OTHERFILE)
@@ -1027,7 +1021,7 @@ def main(argv):
 
     # Specify a bad --op command
     cmd = (CFSD_PREFIX + "--op oops").format(osd=ONEOSD)
-    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, dump-import, trim-pg-log)")
+    ERRORS += test_failure(cmd, "Must provide --op (info, log, remove, mkfs, fsck, repair, export, export-remove, import, list, fix-lost, list-pgs, dump-journal, dump-super, meta-list, get-osdmap, set-osdmap, get-inc-osdmap, set-inc-osdmap, mark-complete, reset-last-complete, dump-import, trim-pg-log)")
 
     # Provide just the object param not a command
     cmd = (CFSD_PREFIX + "object").format(osd=ONEOSD)
@@ -1937,27 +1931,30 @@ def main(argv):
         kill_daemons()
 
         # Now 2 PGs, poolid.0 and poolid.1
+        # make note of pgs before we remove the pgs...
+        osds = get_osds("{pool}.0".format(pool=SPLITID), OSDDIR);
         for seed in range(2):
             pg = "{pool}.{seed}".format(pool=SPLITID, seed=seed)
 
-            which = 0
-            for osd in get_osds(pg, OSDDIR):
+            for osd in osds:
                 cmd = (CFSD_PREFIX + "--force --op remove --pgid {pg}").format(pg=pg, osd=osd)
                 logging.debug(cmd)
                 ret = call(cmd, shell=True, stdout=nullfd)
 
-                # This is weird.  The export files are based on only the EXPORT_PG
-                # and where that pg was before the split.  Use 'which' to use all
-                # export copies in import.
-                mydir = os.path.join(TESTDIR, export_osds[which])
-                fname = os.path.join(mydir, EXPORT_PG)
-                which += 1
-                cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=osd, pg=pg, file=fname)
-                logging.debug(cmd)
-                ret = call(cmd, shell=True, stdout=nullfd)
-                if ret != 0:
-                    logging.error("Import failed from {file} with {ret}".format(file=file, ret=ret))
-                    IMP_ERRORS += 1
+        which = 0
+        for osd in osds:
+            # This is weird.  The export files are based on only the EXPORT_PG
+            # and where that pg was before the split.  Use 'which' to use all
+            # export copies in import.
+            mydir = os.path.join(TESTDIR, export_osds[which])
+            fname = os.path.join(mydir, EXPORT_PG)
+            which += 1
+            cmd = (CFSD_PREFIX + "--op import --pgid {pg} --file {file}").format(osd=osd, pg=EXPORT_PG, file=fname)
+            logging.debug(cmd)
+            ret = call(cmd, shell=True, stdout=nullfd)
+            if ret != 0:
+                logging.error("Import failed from {file} with {ret}".format(file=file, ret=ret))
+                IMP_ERRORS += 1
 
         ERRORS += IMP_ERRORS
 

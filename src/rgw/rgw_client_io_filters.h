@@ -286,11 +286,15 @@ public:
       return DecoratedRestfulClient<T>::send_body(buf, len);
     } else {
       static constexpr char HEADER_END[] = "\r\n";
-      char sizebuf[32];
-      const auto slen = snprintf(sizebuf, sizeof(buf), "%" PRIx64 "\r\n", len);
+      /* https://www.w3.org/Protocols/rfc2616/rfc2616-sec3.html#sec3.6.1 */
+      // TODO: we have no support for sending chunked-encoding
+      // extensions/trailing headers.
+      char chunk_size[32];
+      const auto chunk_size_len = snprintf(chunk_size, sizeof(chunk_size),
+                                           "%" PRIx64 "\r\n", len);
       size_t sent = 0;
 
-      sent += DecoratedRestfulClient<T>::send_body(sizebuf, slen);
+      sent += DecoratedRestfulClient<T>::send_body(chunk_size, chunk_size_len);
       sent += DecoratedRestfulClient<T>::send_body(buf, len);
       sent += DecoratedRestfulClient<T>::send_body(HEADER_END,
                                                    sizeof(HEADER_END) - 1);

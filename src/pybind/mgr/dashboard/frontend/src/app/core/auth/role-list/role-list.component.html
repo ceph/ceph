@@ -7,67 +7,11 @@
           selectionType="single"
           (fetchData)="getRoles()"
           (updateSelection)="updateSelection($event)">
-  <div class="table-actions">
-    <div class="btn-group" dropdown>
-      <button type="button"
-              class="btn btn-sm btn-primary"
-              *ngIf="permission.create && (
-                permission.update && !selection.hasSingleSelection ||
-                !permission.update)"
-              routerLink="/user-management/roles/add">
-        <i class="fa fa-fw fa-plus"></i>
-        <span i18n>Add</span>
-      </button>
-      <button type="button"
-              class="btn btn-sm btn-primary"
-              [ngClass]="{'disabled': !selection.hasSelection || selection.first().system}"
-              *ngIf="permission.update && (!permission.create || selection.hasSingleSelection)"
-              routerLink="/user-management/roles/edit/{{ selection.first()?.name }}">
-        <i class="fa fa-fw fa-pencil"></i>
-        <span i18n>Edit</span>
-      </button>
-      <button type="button"
-              class="btn btn-sm btn-primary"
-              [ngClass]="{'disabled': !selection.hasSelection || selection.first().system}"
-              *ngIf="permission.delete && !permission.create && !permission.update"
-              (click)="deleteRoleModal()">
-        <i class="fa fa-fw fa-trash-o"></i>
-        <span i18n>Delete</span>
-      </button>
-      <button type="button"
-              dropdownToggle
-              class="btn btn-sm btn-primary dropdown-toggle dropdown-toggle-split"
-              *ngIf="((permission.create?1:0) + (permission.update?1:0) + (permission.delete?1:0)) > 1">
-        <span class="caret"></span>
-        <span class="sr-only"></span>
-      </button>
-      <ul *dropdownMenu class="dropdown-menu" role="menu">
-        <li role="menuitem"
-            *ngIf="permission.create">
-          <a class="dropdown-item" routerLink="/user-management/roles/add">
-            <i class="fa fa-fw fa-plus"></i>
-            <span i18n>Add</span>
-          </a>
-        </li>
-        <li role="menuitem"
-            *ngIf="permission.update"
-            [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().system}">
-          <a class="dropdown-item" routerLink="/user-management/roles/edit/{{ selection.first()?.name}}">
-            <i class="fa fa-fw fa-pencil"></i>
-            <span i18n>Edit</span>
-          </a>
-        </li>
-        <li role="menuitem"
-            *ngIf="permission.delete"
-            [ngClass]="{'disabled': !selection.hasSingleSelection || selection.first().system}">
-          <a class="dropdown-item" (click)="deleteRoleModal()">
-            <i class="fa fa-fw fa-trash-o"></i>
-            <span i18n>Delete</span>
-          </a>
-        </li>
-      </ul>
-    </div>
-  </div>
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
   <cd-role-details cdTableDetail
                    [selection]="selection"
                    [scopes]="scopes">

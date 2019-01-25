@@ -224,3 +224,13 @@ def test_mount_unmount():
     cephfs.unmount()
     cephfs.mount()
     test_open()
+
+@with_setup(setup_test)
+def test_mount_root():
+    cephfs.mkdir(b"/mount-directory", 0o755)
+    cephfs.unmount()
+    cephfs.mount(mount_root = b"/mount-directory")
+    cephfs.unmount()
+
+    assert_raises(libcephfs.Error, cephfs.mount, mount_root = b"/nowhere")
+

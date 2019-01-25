@@ -1137,6 +1137,35 @@ function test_get_not_primary() {
 
 #######################################################################
 
+function _objectstore_tool_nodown() {
+    local dir=$1
+    shift
+    local id=$1
+    shift
+    local osd_data=$dir/$id
+
+    local journal_args
+    if [ "$objectstore_type" == "filestore" ]; then
+	journal_args=" --journal-path $osd_data/journal"
+    fi
+    ceph-objectstore-tool \
+        --data-path $osd_data \
+        $journal_args \
+        "$@" || return 1
+}
+
+function _objectstore_tool_nowait() {
+    local dir=$1
+    shift
+    local id=$1
+    shift
+
+    kill_daemons $dir TERM osd.$id >&2 < /dev/null || return 1
+
+    _objectstore_tool_nodown $dir $id "$@" || return 1
+    activate_osd $dir $id $ceph_osd_args >&2 || return 1
+}
+
 ##
 # Run ceph-objectstore-tool against the OSD **id** using the data path
 # **dir**. The OSD is killed with TERM prior to running
@@ -1158,21 +1187,8 @@ function objectstore_tool() {
     shift
     local id=$1
     shift
-    local osd_data=$dir/$id
 
-    local osd_type=$(cat $osd_data/type)
-
-    kill_daemons $dir TERM osd.$id >&2 < /dev/null || return 1
-
-    local journal_args
-    if [ "$objectstore_type" == "filestore" ]; then
-	journal_args=" --journal-path $osd_data/journal"
-    fi
-    ceph-objectstore-tool \
-        --data-path $osd_data \
-        $journal_args \
-        "$@" || return 1
-    activate_osd $dir $id $ceph_osd_args >&2 || return 1
+    _objectstore_tool_nowait $dir $id "$@" || return 1
     wait_for_clean >&2
 }
 
@@ -1238,7 +1254,7 @@ function get_num_active_clean() {
     expression+="select(contains(\"active\") and contains(\"clean\")) | "
     expression+="select(contains(\"stale\") | not)"
     ceph --format json pg dump pgs 2>/dev/null | \
-        jq "[.[] | .state | $expression] | length"
+        jq ".pg_stats | [.[] | .state | $expression] | length"
 }
 
 function test_get_num_active_clean() {
@@ -1295,7 +1311,7 @@ function test_get_num_pgs() {
 # @return 0 on success, 1 on error
 #
 function get_osd_id_used_by_pgs() {
-    ceph --format json pg dump pgs 2>/dev/null | jq '.[] | .up[], .acting[]' | sort
+    ceph --format json pg dump pgs 2>/dev/null | jq '.pg_stats | .[] | .up[], .acting[]' | sort
 }
 
 function test_get_osd_id_used_by_pgs() {
@@ -1369,7 +1385,7 @@ function get_last_scrub_stamp() {
     local pgid=$1
     local sname=${2:-last_scrub_stamp}
     ceph --format json pg dump pgs 2>/dev/null | \
-        jq -r ".[] | select(.pgid==\"$pgid\") | .$sname"
+        jq -r ".pg_stats | .[] | select(.pgid==\"$pgid\") | .$sname"
 }
 
 function test_get_last_scrub_stamp() {
@@ -1933,10 +1949,10 @@ function test_flush_pg_stats()
     rados -p rbd put obj /etc/group
     flush_pg_stats || return 1
     local jq_filter='.pools | .[] | select(.name == "rbd") | .stats'
-    raw_bytes_used=`ceph df detail --format=json | jq "$jq_filter.raw_bytes_used"`
-    bytes_used=`ceph df detail --format=json | jq "$jq_filter.bytes_used"`
-    test $raw_bytes_used -gt 0 || return 1
-    test $raw_bytes_used == $bytes_used || return 1
+    stored=`ceph df detail --format=json | jq "$jq_filter.stored"`
+    stored_raw=`ceph df detail --format=json | jq "$jq_filter.stored_raw"`
+    test $stored -gt 0 || return 1
+    test $stored == $stored_raw || return 1
     teardown $dir
 }
 

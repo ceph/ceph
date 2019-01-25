@@ -10,6 +10,7 @@
 #include "librbd/api/Image.h"
 #include "librbd/api/Migration.h"
 #include "librbd/api/Mirror.h"
+#include "librbd/api/Namespace.h"
 #include "librbd/internal.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
@@ -213,9 +214,11 @@ struct TestMigration : public TestFixture {
     EXPECT_EQ(0, librbd::api::Migration<>::status(m_ioctx, m_image_name,
                                                   &status));
     EXPECT_EQ(status.source_pool_id, m_ioctx.get_id());
+    EXPECT_EQ(status.source_pool_namespace, m_ioctx.get_namespace());
     EXPECT_EQ(status.source_image_name, m_image_name);
     EXPECT_EQ(status.source_image_id, m_image_id);
     EXPECT_EQ(status.dest_pool_id, m_ictx->md_ctx.get_id());
+    EXPECT_EQ(status.dest_pool_namespace, m_ictx->md_ctx.get_namespace());
     EXPECT_EQ(status.dest_image_name, m_ictx->name);
     EXPECT_EQ(status.dest_image_id, m_ictx->id);
     EXPECT_EQ(status.state, state);
@@ -498,6 +501,18 @@ TEST_F(TestMigration, OtherPool)
   ASSERT_EQ(_other_pool_ioctx.get_id(), m_ictx->md_ctx.get_id());
 }
 
+TEST_F(TestMigration, OtherNamespace)
+{
+  ASSERT_EQ(0, librbd::api::Namespace<>::create(_other_pool_ioctx, "ns1"));
+  _other_pool_ioctx.set_namespace("ns1");
+
+  migrate(_other_pool_ioctx, m_image_name);
+
+  ASSERT_EQ(_other_pool_ioctx.get_id(), m_ictx->md_ctx.get_id());
+  ASSERT_EQ(_other_pool_ioctx.get_namespace(), m_ictx->md_ctx.get_namespace());
+  _other_pool_ioctx.set_namespace("");
+}
+
 TEST_F(TestMigration, DataPool)
 {
   ASSERT_EQ(0, m_opts.set(RBD_IMAGE_OPTION_DATA_POOL,
@@ -540,6 +555,21 @@ TEST_F(TestMigration, OtherPoolAbortAfterExecute)
   migration_execute(_other_pool_ioctx, m_image_name);
   migration_status(RBD_IMAGE_MIGRATION_STATE_EXECUTED);
   migration_abort(_other_pool_ioctx, m_image_name);
+}
+
+TEST_F(TestMigration, OtherNamespaceAbortAfterExecute)
+{
+  ASSERT_EQ(0, librbd::api::Namespace<>::create(_other_pool_ioctx, "ns2"));
+  _other_pool_ioctx.set_namespace("ns2");
+
+  migration_prepare(_other_pool_ioctx, m_image_name);
+  migration_status(RBD_IMAGE_MIGRATION_STATE_PREPARED);
+  migration_execute(_other_pool_ioctx, m_image_name);
+  migration_status(RBD_IMAGE_MIGRATION_STATE_EXECUTED);
+  migration_abort(_other_pool_ioctx, m_image_name);
+
+  _other_pool_ioctx.set_namespace("");
+  ASSERT_EQ(0, librbd::api::Namespace<>::remove(_other_pool_ioctx, "ns2"));
 }
 
 TEST_F(TestMigration, MirroringSamePool)

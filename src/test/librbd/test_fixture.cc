@@ -13,6 +13,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/internal.h"
 #include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include <iostream>
 #include <sstream>
 #include <stdlib.h>
@@ -57,6 +58,7 @@ std::string TestFixture::get_temp_image_name() {
 
 void TestFixture::SetUp() {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), m_ioctx));
+  m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
 
   m_image_name = get_temp_image_name();
   m_image_size = 2 << 20;
@@ -78,7 +80,7 @@ int TestFixture::open_image(const std::string &image_name,
   *ictx = new librbd::ImageCtx(image_name.c_str(), "", nullptr, m_ioctx, false);
   m_ictxs.insert(*ictx);
 
-  return (*ictx)->state->open(false);
+  return (*ictx)->state->open(0);
 }
 
 int TestFixture::snap_create(librbd::ImageCtx &ictx,

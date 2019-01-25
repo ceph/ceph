@@ -16,6 +16,7 @@
 #include "ceph_time.h"
 #include "log/LogClock.h"
 #include "config.h"
+#include "strtol.h"
 
 #if defined(__APPLE__)
 #include <mach/mach.h>
@@ -181,4 +182,135 @@ namespace ceph {
     ss << yr << "y";
     return ss.str();
   }
+
+  std::string exact_timespan_str(timespan t)
+  {
+    uint64_t nsec = std::chrono::nanoseconds(t).count();
+    uint64_t sec = nsec / 1000000000;
+    nsec %= 1000000000;
+    uint64_t yr = sec / (60 * 60 * 24 * 365);
+    ostringstream ss;
+    if (yr) {
+      ss << yr << "y";
+      sec -= yr * (60 * 60 * 24 * 365);
+    }
+    uint64_t mn = sec / (60 * 60 * 24 * 30);
+    if (mn >= 3) {
+      ss << mn << "mo";
+      sec -= mn * (60 * 60 * 24 * 30);
+    }
+    uint64_t wk = sec / (60 * 60 * 24 * 7);
+    if (wk >= 2) {
+      ss << wk << "w";
+      sec -= wk * (60 * 60 * 24 * 7);
+    }
+    uint64_t day = sec / (60 * 60 * 24);
+    if (day >= 2) {
+      ss << day << "d";
+      sec -= day * (60 * 60 * 24);
+    }
+    uint64_t hr = sec / (60 * 60);
+    if (hr >= 2) {
+      ss << hr << "h";
+      sec -= hr * (60 * 60);
+    }
+    uint64_t min = sec / 60;
+    if (min >= 2) {
+      ss << min << "m";
+      sec -= min * 60;
+    }
+    if (sec) {
+      ss << sec;
+    }
+    if (nsec) {
+      ss << ((float)nsec / 1000000000);
+    }
+    if (sec || nsec) {
+      ss << "s";
+    }
+    return ss.str();
+  }
+
+  std::chrono::seconds parse_timespan(const std::string& s)
+  {
+    static std::map<string,int> units = {
+      { "s", 1 },
+      { "sec", 1 },
+      { "second", 1 },
+      { "seconds", 1 },
+      { "m", 60 },
+      { "min", 60 },
+      { "minute", 60 },
+      { "minutes", 60 },
+      { "h", 60*60 },
+      { "hr", 60*60 },
+      { "hour", 60*60 },
+      { "hours", 60*60 },
+      { "d", 24*60*60 },
+      { "day", 24*60*60 },
+      { "days", 24*60*60 },
+      { "w", 7*24*60*60 },
+      { "wk", 7*24*60*60 },
+      { "week", 7*24*60*60 },
+      { "weeks", 7*24*60*60 },
+      { "mo", 30*24*60*60 },
+      { "month", 30*24*60*60 },
+      { "months", 30*24*60*60 },
+      { "y", 365*24*60*60 },
+      { "yr", 365*24*60*60 },
+      { "year", 365*24*60*60 },
+      { "years", 365*24*60*60 },
+    };
+
+    auto r = 0s;
+    auto pos = 0u;
+    while (pos < s.size()) {
+      // skip whitespace
+      while (std::isspace(s[pos])) {
+	++pos;
+      }
+      if (pos >= s.size()) {
+	break;
+      }
+
+      // consume any digits
+      auto val_start = pos;
+      while (std::isdigit(s[pos])) {
+	++pos;
+      }
+      if (val_start == pos) {
+	throw invalid_argument("expected digit");
+      }
+      string n = s.substr(val_start, pos - val_start);
+      string err;
+      auto val = strict_strtoll(n.c_str(), 10, &err);
+      if (err.size()) {
+	throw invalid_argument(err);
+      }
+
+      // skip whitespace
+      while (std::isspace(s[pos])) {
+	++pos;
+      }
+
+      // consume unit
+      auto unit_start = pos;
+      while (std::isalpha(s[pos])) {
+	++pos;
+      }
+      if (unit_start != pos) {
+	string unit = s.substr(unit_start, pos - unit_start);
+	auto p = units.find(unit);
+	if (p == units.end()) {
+	  throw invalid_argument("unrecogized unit '"s + unit + "'");
+	}
+	val *= p->second;
+      } else if (pos < s.size()) {
+	throw invalid_argument("unexpected trailing '"s + s.substr(pos) + "'");
+      }
+      r += chrono::seconds(val);
+    }
+    return r;
+  }
+
 }

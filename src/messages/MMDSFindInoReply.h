@@ -31,7 +31,7 @@ protected:
   ~MMDSFindInoReply() override {}
 
 public:
-  const char *get_type_name() const override { return "findinoreply"; }
+  std::string_view get_type_name() const override { return "findinoreply"; }
   void print(ostream &out) const override {
     out << "findinoreply(" << tid << " " << path << ")";
   }

@@ -1,14 +1,16 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { RbdService } from '../../../shared/api/rbd.service';
 import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
-import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
+import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
+import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
@@ -19,6 +21,7 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { RbdParentModel } from '../rbd-form/rbd-parent.model';
+import { RbdTrashMoveModalComponent } from '../rbd-trash-move-modal/rbd-trash-move-modal.component';
 import { RbdModel } from './rbd-model';
 
 @Component({
@@ -40,6 +43,7 @@ export class RbdListComponent implements OnInit {
   flattenTpl: TemplateRef<any>;
 
   permission: Permission;
+  tableActions: CdTableAction[];
   images: any;
   columns: CdTableColumn[];
   retries: number;
@@ -72,61 +76,115 @@ export class RbdListComponent implements OnInit {
     private dimlessPipe: DimlessPipe,
     private modalService: BsModalService,
     private taskWrapper: TaskWrapperService,
-    private taskListService: TaskListService
+    private taskListService: TaskListService,
+    private i18n: I18n
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
+    const getImageUri = () =>
+      this.selection.first() &&
+      `${encodeURI(this.selection.first().pool_name)}/${encodeURI(this.selection.first().name)}`;
+    const addAction: CdTableAction = {
+      permission: 'create',
+      icon: 'fa-plus',
+      routerLink: () => '/block/rbd/add',
+      canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
+      name: this.i18n('Add')
+    };
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: 'fa-pencil',
+      routerLink: () => `/block/rbd/edit/${getImageUri()}`,
+      name: this.i18n('Edit')
+    };
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: 'fa-times',
+      click: () => this.deleteRbdModal(),
+      name: this.i18n('Delete')
+    };
+    const copyAction: CdTableAction = {
+      permission: 'create',
+      canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
+      disable: (selection: CdTableSelection) =>
+        !selection.hasSingleSelection || selection.first().cdExecuting,
+      icon: 'fa-copy',
+      routerLink: () => `/block/rbd/copy/${getImageUri()}`,
+      name: this.i18n('Copy')
+    };
+    const flattenAction: CdTableAction = {
+      permission: 'update',
+      disable: (selection: CdTableSelection) =>
+        !selection.hasSingleSelection || selection.first().cdExecuting || !selection.first().parent,
+      icon: 'fa-chain-broken',
+      click: () => this.flattenRbdModal(),
+      name: this.i18n('Flatten')
+    };
+    const moveAction: CdTableAction = {
+      permission: 'delete',
+      icon: 'fa-trash-o',
+      click: () => this.trashRbdModal(),
+      name: this.i18n('Move to Trash')
+    };
+    this.tableActions = [
+      addAction,
+      editAction,
+      copyAction,
+      flattenAction,
+      deleteAction,
+      moveAction
+    ];
   }
 
   ngOnInit() {
     this.columns = [
       {
-        name: 'Name',
+        name: this.i18n('Name'),
         prop: 'name',
         flexGrow: 2,
         cellTransformation: CellTemplate.executing
       },
       {
-        name: 'Pool',
+        name: this.i18n('Pool'),
         prop: 'pool_name',
         flexGrow: 2
       },
       {
-        name: 'Size',
+        name: this.i18n('Size'),
         prop: 'size',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: 'Objects',
+        name: this.i18n('Objects'),
         prop: 'num_objs',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessPipe
       },
       {
-        name: 'Object size',
+        name: this.i18n('Object size'),
         prop: 'obj_size',
         flexGrow: 1,
         cellClass: 'text-right',
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: 'Provisioned',
+        name: this.i18n('Provisioned'),
         prop: 'disk_usage',
         cellClass: 'text-center',
         flexGrow: 1,
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: 'Total provisioned',
+        name: this.i18n('Total provisioned'),
         prop: 'total_disk_usage',
         cellClass: 'text-center',
         flexGrow: 1,
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: 'Parent',
+        name: this.i18n('Parent'),
         prop: 'parent',
         flexGrow: 2,
         cellTemplate: this.parentTpl
@@ -175,8 +233,24 @@ export class RbdListComponent implements OnInit {
   }
 
   itemFilter(entry, task) {
+    let pool_name_k: string;
+    let image_name_k: string;
+    switch (task.name) {
+      case 'rbd/copy':
+        pool_name_k = 'dest_pool_name';
+        image_name_k = 'dest_image_name';
+        break;
+      case 'rbd/clone':
+        pool_name_k = 'child_pool_name';
+        image_name_k = 'child_image_name';
+        break;
+      default:
+        pool_name_k = 'pool_name';
+        image_name_k = 'image_name';
+        break;
+    }
     return (
-      entry.pool_name === task.metadata['pool_name'] && entry.name === task.metadata['image_name']
+      entry.pool_name === task.metadata[pool_name_k] && entry.name === task.metadata[image_name_k]
     );
   }
 
@@ -187,7 +261,8 @@ export class RbdListComponent implements OnInit {
       'rbd/create',
       'rbd/delete',
       'rbd/edit',
-      'rbd/flatten'
+      'rbd/flatten',
+      'rbd/trash/move'
     ].includes(task.name);
   }
 
@@ -198,19 +273,29 @@ export class RbdListComponent implements OnInit {
   deleteRbdModal() {
     const poolName = this.selection.first().pool_name;
     const imageName = this.selection.first().name;
-    this.modalRef = this.modalService.show(DeletionModalComponent);
-    this.modalRef.content.setUp({
-      metaType: 'RBD',
-      deletionObserver: () =>
-        this.taskWrapper.wrapTaskAroundCall({
-          task: new FinishedTask('rbd/delete', {
-            pool_name: poolName,
-            image_name: imageName
-          }),
-          call: this.rbdService.delete(poolName, imageName)
-        }),
-      modalRef: this.modalRef
+
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      initialState: {
+        itemDescription: 'RBD',
+        submitActionObservable: () =>
+          this.taskWrapper.wrapTaskAroundCall({
+            task: new FinishedTask('rbd/delete', {
+              pool_name: poolName,
+              image_name: imageName
+            }),
+            call: this.rbdService.delete(poolName, imageName)
+          })
+      }
     });
+  }
+
+  trashRbdModal() {
+    const initialState = {
+      metaType: 'RBD',
+      poolName: this.selection.first().pool_name,
+      imageName: this.selection.first().name
+    };
+    this.modalRef = this.modalService.show(RbdTrashMoveModalComponent, { initialState });
   }
 
   flattenRbd(poolName, imageName) {

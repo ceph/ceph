@@ -291,6 +291,7 @@ public:
   }
 
   int statfs(struct store_statfs_t *buf) override;
+  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
 
   bool exists(CollectionHandle &c, const ghobject_t& oid) override;
   int stat(CollectionHandle &c, const ghobject_t& oid,
@@ -321,6 +322,11 @@ public:
     return get_collection(c);
   }
   CollectionHandle create_new_collection(const coll_t& c) override;
+
+  void set_collection_commit_queue(const coll_t& cid,
+				   ContextQueue *commit_queue) override {
+  }
+
   bool collection_exists(const coll_t& c) override;
   int collection_empty(CollectionHandle& c, bool *empty) override;
   int collection_bits(CollectionHandle& c) override;

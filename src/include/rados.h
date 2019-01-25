@@ -159,6 +159,7 @@ extern const char *ceph_osd_state_name(int s);
 #define CEPH_OSDMAP_RECOVERY_DELETES (1<<19) /* deletes performed during recovery instead of peering */
 #define CEPH_OSDMAP_PURGED_SNAPDIRS  (1<<20) /* osds have converted snapsets */
 #define CEPH_OSDMAP_NOSNAPTRIM       (1<<21) /* disable snap trimming */
+#define CEPH_OSDMAP_PGLOG_HARDLIMIT  (1<<22) /* put a hard limit on pg log length */
 
 /* these are hidden in 'ceph status' view */
 #define CEPH_OSDMAP_SEMIHIDDEN_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL|	\
@@ -166,7 +167,8 @@ extern const char *ceph_osd_state_name(int s);
 				      CEPH_OSDMAP_REQUIRE_LUMINOUS |	\
 				      CEPH_OSDMAP_RECOVERY_DELETES |	\
 				      CEPH_OSDMAP_SORTBITWISE |		\
-				      CEPH_OSDMAP_PURGED_SNAPDIRS)
+				      CEPH_OSDMAP_PURGED_SNAPDIRS |     \
+                                      CEPH_OSDMAP_PGLOG_HARDLIMIT)
 #define CEPH_OSDMAP_LEGACY_REQUIRE_FLAGS (CEPH_OSDMAP_REQUIRE_JEWEL |	\
 					  CEPH_OSDMAP_REQUIRE_KRAKEN |	\
 					  CEPH_OSDMAP_REQUIRE_LUMINOUS)
@@ -601,10 +603,11 @@ struct ceph_osd_op {
 		struct {
 			__le64 snapid;
 			__le64 src_version;
-			__u8 flags;
+			__u8 flags; /* CEPH_OSD_COPY_FROM_FLAG_* */
 			/*
-			 * __le32 flags: CEPH_OSD_OP_FLAG_FADVISE_: mean the fadvise flags for dest object
-			 * src_fadvise_flags mean the fadvise flags for src object
+			 * CEPH_OSD_OP_FLAG_FADVISE_*: fadvise flags
+			 * for src object, flags for dest object are in
+			 * ceph_osd_op::flags.
 			 */
 			__le32 src_fadvise_flags;
 		} __attribute__ ((packed)) copy_from;

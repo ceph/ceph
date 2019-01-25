@@ -31,6 +31,7 @@
 #include "ServiceMap.h"
 #include "MgrSession.h"
 #include "DaemonState.h"
+#include "OSDPerfMetricCollector.h"
 
 class MMgrReport;
 class MMgrOpen;
@@ -39,6 +40,7 @@ class MMonMgrReport;
 class MCommand;
 struct MonCommand;
 class CommandContext;
+struct OSDPerfMetricQuery;
 
 
 /**
@@ -111,6 +113,22 @@ private:
   void tick();
   void schedule_tick_locked(double delay_sec);
 
+  class OSDPerfMetricCollectorListener :
+      public OSDPerfMetricCollector::Listener {
+  public:
+    OSDPerfMetricCollectorListener(DaemonServer *server)
+      : server(server) {
+    }
+    void handle_query_updated() override {
+      server->handle_osd_perf_metric_query_updated();
+    }
+  private:
+    DaemonServer *server;
+  };
+  OSDPerfMetricCollectorListener osd_perf_metric_collector_listener;
+  OSDPerfMetricCollector osd_perf_metric_collector;
+  void handle_osd_perf_metric_query_updated();
+
 public:
   int init(uint64_t gid, entity_addrvec_t client_addrs);
   void shutdown();
@@ -127,20 +145,12 @@ public:
   ~DaemonServer() override;
 
   bool ms_dispatch(Message *m) override;
+  int ms_handle_authentication(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer,
-                         bool force_new) override;
-  bool ms_verify_authorizer(
-    Connection *con,
-    int peer_type,
-    int protocol,
-    ceph::bufferlist& authorizer,
-    ceph::bufferlist& authorizer_reply,
-    bool& isvalid,
-    CryptoKey& session_key,
-    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override;
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer) override;
+  KeyStore *ms_get_auth1_authorizer_keystore() override;
 
   bool handle_open(MMgrOpen *m);
   bool handle_close(MMgrClose *m);
@@ -153,6 +163,13 @@ public:
   void adjust_pgs();
 
   void _send_configure(ConnectionRef c);
+
+  OSDPerfMetricQueryID add_osd_perf_query(
+      const OSDPerfMetricQuery &query,
+      const std::optional<OSDPerfMetricLimit> &limit);
+  int remove_osd_perf_query(OSDPerfMetricQueryID query_id);
+  int get_osd_perf_counters(OSDPerfMetricQueryID query_id,
+                            std::map<OSDPerfMetricKey, PerformanceCounters> *c);
 
   virtual const char** get_tracked_conf_keys() const override;
   virtual void handle_conf_change(const ConfigProxy& conf,

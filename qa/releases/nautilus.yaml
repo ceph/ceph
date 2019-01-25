@@ -1,0 +1,6 @@
+tasks:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release nautilus
+      - ceph osd set-require-min-compat-client nautilus
+- ceph.healthy:

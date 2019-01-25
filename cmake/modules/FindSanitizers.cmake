@@ -29,6 +29,15 @@ foreach(component ${Sanitizers_FIND_COMPONENTS})
   list(APPEND Sanitizers_OPTIONS "${Sanitizers_${component}_COMPILE_OPTIONS}")
 endforeach()
 
+if(Sanitizers_address_COMPILE_OPTIONS OR Sanitizers_leak_COMPILE_OPTIONS)
+  # ASAN_LIBRARY will be read by ceph.in to preload the asan library
+  find_library(ASAN_LIBRARY
+    NAMES
+      libasan.so.5
+      libasan.so.4
+      libasan.so.3)
+endif()
+
 if(Sanitizers_OPTIONS)
   string(REPLACE ";" ","
     Sanitizers_COMPILE_OPTIONS

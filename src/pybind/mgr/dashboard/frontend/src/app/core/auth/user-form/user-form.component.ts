@@ -2,13 +2,15 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { AuthService } from '../../../shared/api/auth.service';
 import { RoleService } from '../../../shared/api/role.service';
 import { UserService } from '../../../shared/api/user.service';
 import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
+import { SelectBadgesMessages } from '../../../shared/components/select-badges/select-badges-messages.model';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
@@ -35,6 +37,7 @@ export class UserFormComponent implements OnInit {
   userFormMode = UserFormMode;
   mode: UserFormMode;
   allRoles: Array<UserFormRoleModel>;
+  messages: SelectBadgesMessages;
 
   constructor(
     private authService: AuthService,
@@ -44,9 +47,11 @@ export class UserFormComponent implements OnInit {
     private modalService: BsModalService,
     private roleService: RoleService,
     private userService: UserService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private i18n: I18n
   ) {
     this.createForm();
+    this.messages = new SelectBadgesMessages({ empty: 'There are no roles.' }, this.i18n);
   }
 
   createForm() {
@@ -83,21 +88,10 @@ export class UserFormComponent implements OnInit {
     });
     if (this.mode === this.userFormMode.editing) {
       this.initEdit();
-    } else {
-      this.initAdd();
     }
   }
 
-  initAdd() {
-    ['password', 'confirmpassword'].forEach((controlName) =>
-      this.userForm.get(controlName).setValidators([Validators.required])
-    );
-  }
-
   initEdit() {
-    ['password', 'confirmpassword'].forEach((controlName) =>
-      this.userForm.get(controlName).setValidators([])
-    );
     this.disableForEdit();
     this.route.params.subscribe((params: { username: string }) => {
       const username = params.username;
@@ -132,7 +126,7 @@ export class UserFormComponent implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          `Created user "${userFormModel.username}"`
+          this.i18n('Created user "{{username}}"', { username: userFormModel.username })
         );
         this.router.navigate(['/user-management/users']);
       },
@@ -145,8 +139,8 @@ export class UserFormComponent implements OnInit {
   editAction() {
     if (this.isUserRemovingNeededRolePermissions()) {
       const initialState = {
-        titleText: 'Update user',
-        buttonText: 'Continue',
+        titleText: this.i18n('Update user'),
+        buttonText: this.i18n('Continue'),
         bodyTpl: this.removeSelfUserReadUpdatePermissionTpl,
         onSubmit: () => {
           this.modalRef.hide();
@@ -201,14 +195,13 @@ export class UserFormComponent implements OnInit {
           this.authService.logout(() => {
             this.notificationService.show(
               NotificationType.info,
-              'You were automatically logged out because your roles have been changed.'
+              this.i18n('You were automatically logged out because your roles have been changed.')
             );
-            this.router.navigate(['/login']);
           });
         } else {
           this.notificationService.show(
             NotificationType.success,
-            `Updated user "${userFormModel.username}"`
+            this.i18n('Updated user "{{username}}"', { username: userFormModel.username })
           );
           this.router.navigate(['/user-management/users']);
         }

@@ -28,8 +28,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "cephx client: "
 
-template<LockPolicy lp>
-int CephxClientHandler<lp>::build_request(bufferlist& bl) const
+int CephxClientHandler::build_request(bufferlist& bl) const
 {
   ldout(cct, 10) << "build_request" << dendl;
 
@@ -97,8 +96,7 @@ int CephxClientHandler<lp>::build_request(bufferlist& bl) const
   return 0;
 }
 
-template<LockPolicy lp>
-bool CephxClientHandler<lp>::_need_tickets() const
+bool CephxClientHandler::_need_tickets() const
 {
   // do not bother (re)requesting tickets if we *only* need the MGR
   // ticket; that can happen during an upgrade and we want to avoid a
@@ -107,8 +105,7 @@ bool CephxClientHandler<lp>::_need_tickets() const
   return need && need != CEPH_ENTITY_TYPE_MGR;
 }
 
-template<LockPolicy lp>
-int CephxClientHandler<lp>::handle_response(int ret, bufferlist::const_iterator& indata)
+int CephxClientHandler::handle_response(int ret, bufferlist::const_iterator& indata)
 {
   ldout(cct, 10) << "handle_response ret = " << ret << dendl;
   
@@ -201,16 +198,14 @@ int CephxClientHandler<lp>::handle_response(int ret, bufferlist::const_iterator&
 }
 
 
-template<LockPolicy lp>
-AuthAuthorizer *CephxClientHandler<lp>::build_authorizer(uint32_t service_id) const
+AuthAuthorizer *CephxClientHandler::build_authorizer(uint32_t service_id) const
 {
   ldout(cct, 10) << "build_authorizer for service " << ceph_entity_type_name(service_id) << dendl;
   return tickets.build_authorizer(service_id);
 }
 
 
-template<LockPolicy lp>
-bool CephxClientHandler<lp>::build_rotating_request(bufferlist& bl) const
+bool CephxClientHandler::build_rotating_request(bufferlist& bl) const
 {
   ldout(cct, 10) << "build_rotating_request" << dendl;
   CephXRequestHeader header;
@@ -219,8 +214,7 @@ bool CephxClientHandler<lp>::build_rotating_request(bufferlist& bl) const
   return true;
 }
 
-template<LockPolicy lp>
-void CephxClientHandler<lp>::prepare_build_request()
+void CephxClientHandler::prepare_build_request()
 {
   ldout(cct, 10) << "validate_tickets: want=" << want << " need=" << need
 		 << " have=" << have << dendl;
@@ -231,15 +225,13 @@ void CephxClientHandler<lp>::prepare_build_request()
   ticket_handler = &(tickets.get_handler(CEPH_ENTITY_TYPE_AUTH));
 }
 
-template<LockPolicy lp>
-void CephxClientHandler<lp>::validate_tickets()
+void CephxClientHandler::validate_tickets()
 {
   // lock should be held for write
   tickets.validate_tickets(want, have, need);
 }
 
-template<LockPolicy lp>
-bool CephxClientHandler<lp>::need_tickets()
+bool CephxClientHandler::need_tickets()
 {
   validate_tickets();
 
@@ -250,10 +242,3 @@ bool CephxClientHandler<lp>::need_tickets()
 
   return _need_tickets();
 }
-
-// explicitly instantiate only the classes we need
-#ifdef WITH_SEASTAR
-template class CephxClientHandler<LockPolicy::SINGLE>;
-#else
-template class CephxClientHandler<LockPolicy::MUTEX>;
-#endif

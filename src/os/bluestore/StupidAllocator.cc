@@ -65,7 +65,7 @@ int64_t StupidAllocator::allocate_int(
   uint64_t want_size, uint64_t alloc_unit, int64_t hint,
   uint64_t *offset, uint32_t *length)
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::lock_guard l(lock);
   ldout(cct, 10) << __func__ << " want_size 0x" << std::hex << want_size
 	   	 << " alloc_unit 0x" << alloc_unit
 	   	 << " hint 0x" << hint << std::dec
@@ -229,7 +229,7 @@ int64_t StupidAllocator::allocate(
 void StupidAllocator::release(
   const interval_set<uint64_t>& release_set)
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::lock_guard l(lock);
   for (interval_set<uint64_t>::const_iterator p = release_set.begin();
        p != release_set.end();
        ++p) {
@@ -244,7 +244,7 @@ void StupidAllocator::release(
 
 uint64_t StupidAllocator::get_free()
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::lock_guard l(lock);
   return num_free;
 }
 
@@ -255,7 +255,7 @@ double StupidAllocator::get_fragmentation(uint64_t alloc_unit)
   uint64_t max_intervals = 0;
   uint64_t intervals = 0;
   {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     max_intervals = p2roundup(num_free, alloc_unit) / alloc_unit;
     for (unsigned bin = 0; bin < free.size(); ++bin) {
       intervals += free[bin].num_intervals();
@@ -275,7 +275,7 @@ double StupidAllocator::get_fragmentation(uint64_t alloc_unit)
 
 void StupidAllocator::dump()
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::lock_guard l(lock);
   for (unsigned bin = 0; bin < free.size(); ++bin) {
     ldout(cct, 0) << __func__ << " free bin " << bin << ": "
 	    	  << free[bin].num_intervals() << " extents" << dendl;
@@ -290,7 +290,7 @@ void StupidAllocator::dump()
 
 void StupidAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::lock_guard l(lock);
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
 		 << std::dec << dendl;
   _insert_free(offset, length);
@@ -299,7 +299,7 @@ void StupidAllocator::init_add_free(uint64_t offset, uint64_t length)
 
 void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
-  std::lock_guard<std::mutex> l(lock);
+  std::lock_guard l(lock);
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   	 << std::dec << dendl;
   interval_set_t rm;

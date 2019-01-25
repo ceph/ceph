@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -15,6 +16,8 @@
 #ifndef RGW_REST_CONFIG_H
 #define RGW_REST_CONFIG_H
 
+#include "rgw_zone.h"
+
 class RGWOp_ZoneGroupMap_Get : public RGWRESTOp {
   RGWZoneGroupMap zonegroup_map;
   bool old_format;
@@ -22,8 +25,11 @@ public:
   explicit RGWOp_ZoneGroupMap_Get(bool _old_format):old_format(_old_format) {}
   ~RGWOp_ZoneGroupMap_Get() override {}
 
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("zone", RGW_CAP_READ);
+  }
   int verify_permission() override {
-    return 0; 
+    return check_caps(s->user->caps);
   }
   void execute() override;
   void send_response() override;
@@ -42,7 +48,7 @@ public:
   RGWOp_ZoneConfig_Get() {}
 
   int check_caps(RGWUserCaps& caps) override {
-    return caps.check_cap("admin", RGW_CAP_READ);
+    return caps.check_cap("zone", RGW_CAP_READ);
   }
   int verify_permission() override {
     return check_caps(s->user->caps);

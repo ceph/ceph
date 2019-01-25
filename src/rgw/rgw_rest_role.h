@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_REST_ROLE_H
 #define CEPH_RGW_REST_ROLE_H
 
@@ -13,6 +14,7 @@ protected:
   string policy_name;
   string perm_policy;
   string path_prefix;
+  string max_session_duration;
   RGWRole _role;
 public:
   int verify_permission() override;

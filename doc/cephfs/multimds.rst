@@ -80,20 +80,20 @@ Reducing the number of ranks is as simple as reducing ``max_mds``:
     ...
     # fsmap e10: 1/1/1 up {0=a=up:active}, 2 up:standby
 
-The cluster will automatically deactivate extra ranks incrementally until
-``max_mds`` is reached.
+The cluster will automatically stop extra ranks incrementally until ``max_mds``
+is reached.
 
 See :doc:`/cephfs/administration` for more details which forms ``<role>`` can
 take.
 
-Note: deactivated ranks will first enter the stopping state for a period of
+Note: stopped ranks will first enter the stopping state for a period of
 time while it hands off its share of the metadata to the remaining active
 daemons.  This phase can take from seconds to minutes.  If the MDS appears to
 be stuck in the stopping state then that should be investigated as a possible
 bug.
 
 If an MDS daemon crashes or is killed while in the ``up:stopping`` state, a
-standby will take over and the cluster monitors will against try to deactivate
+standby will take over and the cluster monitors will against try to stop
 the daemon.
 
 When a daemon finishes stopping, it will respawn itself and go back to being a
@@ -123,7 +123,7 @@ to. A default value of ``-1`` indicates the directory is not pinned.
 
 A directory's export pin is inherited from its closest parent with a set export
 pin.  In this way, setting the export pin on a directory affects all of its
-children. However, the parents pin can be overriden by setting the child
+children. However, the parents pin can be overridden by setting the child
 directory's export pin. For example:
 
 ::

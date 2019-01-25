@@ -42,11 +42,11 @@
 
 #include "bluestore_types.h"
 #include "BlockDevice.h"
+#include "BlueFS.h"
 #include "common/EventTrace.h"
 
 class Allocator;
 class FreelistManager;
-class BlueFS;
 class BlueStoreRepairer;
 
 //#define DEBUG_CACHE
@@ -126,7 +126,10 @@ enum {
   l_bluestore_last
 };
 
+#define META_POOL_ID ((uint64_t)-1ull)
+
 class BlueStore : public ObjectStore,
+		  public BlueFSDeviceExpander,
 		  public md_config_obs_t {
   // -----------------------------------------------------
   // types
@@ -328,14 +331,14 @@ public:
 
     // return value is the highest cache_private of a trimmed buffer, or 0.
     int discard(Cache* cache, uint32_t offset, uint32_t length) {
-      std::lock_guard<std::recursive_mutex> l(cache->lock);
+      std::lock_guard l(cache->lock);
       return _discard(cache, offset, length);
     }
     int _discard(Cache* cache, uint32_t offset, uint32_t length);
 
     void write(Cache* cache, uint64_t seq, uint32_t offset, bufferlist& bl,
 	       unsigned flags) {
-      std::lock_guard<std::recursive_mutex> l(cache->lock);
+      std::lock_guard l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
 			     flags);
       b->cache_private = _discard(cache, offset, bl.length());
@@ -343,7 +346,7 @@ public:
     }
     void _finish_write(Cache* cache, uint64_t seq);
     void did_read(Cache* cache, uint32_t offset, bufferlist& bl) {
-      std::lock_guard<std::recursive_mutex> l(cache->lock);
+      std::lock_guard l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
       b->cache_private = _discard(cache, offset, bl.length());
       _add_buffer(cache, b, 1, nullptr);
@@ -361,7 +364,7 @@ public:
     void split(Cache* cache, size_t pos, BufferSpace &r);
 
     void dump(Cache* cache, Formatter *f) const {
-      std::lock_guard<std::recursive_mutex> l(cache->lock);
+      std::lock_guard l(cache->lock);
       f->open_array_section("buffers");
       for (auto& i : buffer_map) {
 	f->open_object_section("buffer");
@@ -438,14 +441,15 @@ public:
 
   /// a lookup table of SharedBlobs
   struct SharedBlobSet {
-    std::mutex lock;   ///< protect lookup, insertion, removal
+    /// protect lookup, insertion, removal
+    ceph::mutex lock = ceph::make_mutex("BlueStore::SharedBlobSet::lock");
 
     // we use a bare pointer because we don't want to affect the ref
     // count
     mempool::bluestore_cache_other::unordered_map<uint64_t,SharedBlob*> sb_map;
 
     SharedBlobRef lookup(uint64_t sbid) {
-      std::lock_guard<std::mutex> l(lock);
+      std::lock_guard l(lock);
       auto p = sb_map.find(sbid);
       if (p == sb_map.end() ||
 	  p->second->nref == 0) {
@@ -455,24 +459,28 @@ public:
     }
 
     void add(Collection* coll, SharedBlob *sb) {
-      std::lock_guard<std::mutex> l(lock);
+      std::lock_guard l(lock);
       sb_map[sb->get_sbid()] = sb;
       sb->coll = coll;
     }
 
-    void remove(SharedBlob *sb) {
-      std::lock_guard<std::mutex> l(lock);
+    bool remove(SharedBlob *sb, bool verify_nref_is_zero=false) {
+      std::lock_guard l(lock);
       ceph_assert(sb->get_parent() == this);
+      if (verify_nref_is_zero && sb->nref != 0) {
+	return false;
+      }
       // only remove if it still points to us
       auto p = sb_map.find(sb->get_sbid());
       if (p != sb_map.end() &&
 	  p->second == sb) {
 	sb_map.erase(p);
       }
+      return true;
     }
 
     bool empty() {
-      std::lock_guard<std::mutex> l(lock);
+      std::lock_guard l(lock);
       return sb_map.empty();
     }
 
@@ -521,7 +529,7 @@ public:
     }
 
     bool can_split() const {
-      std::lock_guard<std::recursive_mutex> l(shared_blob->get_cache()->lock);
+      std::lock_guard l(shared_blob->get_cache()->lock);
       // splitting a BufferSpace writing list is too hard; don't try.
       return shared_blob->bc.writing.empty() &&
              used_in_blob.can_split() &&
@@ -1039,8 +1047,9 @@ public:
     // track txc's that have not been committed to kv store (and whose
     // effects cannot be read via the kvdb read methods)
     std::atomic<int> flushing_count = {0};
-    std::mutex flush_lock;  ///< protect flush_txns
-    std::condition_variable flush_cond;   ///< wait here for uncommitted txns
+    /// protect flush_txns
+    ceph::mutex flush_lock = ceph::make_mutex("BlueStore::Onode::flush_lock");
+    ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
 
     Onode(Collection *c, const ghobject_t& o,
 	  const mempool::bluestore_cache_other::string& k)
@@ -1068,7 +1077,10 @@ public:
   struct Cache {
     CephContext* cct;
     PerfCounters *logger;
-    std::recursive_mutex lock;          ///< protect lru and other structures
+
+    /// protect lru and other structures
+    ceph::recursive_mutex lock = {
+      ceph::make_recursive_mutex("BlueStore::Cache::lock") };
 
     std::atomic<uint64_t> num_extents = {0};
     std::atomic<uint64_t> num_blobs = {0};
@@ -1117,7 +1129,7 @@ public:
 			   uint64_t *bytes) = 0;
 
     bool empty() {
-      std::lock_guard<std::recursive_mutex> l(lock);
+      std::lock_guard l(lock);
       return _get_num_onodes() == 0 && _get_buffer_bytes() == 0;
     }
 
@@ -1207,7 +1219,7 @@ public:
 		   uint64_t *blobs,
 		   uint64_t *buffers,
 		   uint64_t *bytes) override {
-      std::lock_guard<std::recursive_mutex> l(lock);
+      std::lock_guard l(lock);
       *onodes += onode_lru.size();
       *extents += num_extents;
       *blobs += num_blobs;
@@ -1302,7 +1314,7 @@ public:
 		   uint64_t *blobs,
 		   uint64_t *buffers,
 		   uint64_t *bytes) override {
-      std::lock_guard<std::recursive_mutex> l(lock);
+      std::lock_guard l(lock);
       *onodes += onode_lru.size();
       *extents += num_extents;
       *blobs += num_blobs;
@@ -1368,6 +1380,7 @@ public:
 
     //pool options
     pool_opts_t pool_opts;
+    ContextQueue *commit_queue;
 
     OnodeRef get_onode(const ghobject_t& oid, bool create);
 
@@ -1424,7 +1437,7 @@ public:
     int upper_bound(const string &after) override;
     int lower_bound(const string &to) override;
     bool valid() override;
-    int next(bool validate=true) override;
+    int next() override;
     string key() override;
     bufferlist value() override;
     int status() override {
@@ -1448,6 +1461,14 @@ public:
     void reset() {
       *this = volatile_statfs();
     }
+    void publish(store_statfs_t* buf) const {
+      buf->allocated = allocated();
+      buf->data_stored = stored();
+      buf->data_compressed = compressed();
+      buf->data_compressed_original = compressed_original();
+      buf->data_compressed_allocated = compressed_allocated();
+    }
+
     volatile_statfs& operator+=(const volatile_statfs& other) {
       for (size_t i = 0; i < STATFS_LAST; ++i) {
 	values[i] += other.values[i];
@@ -1467,6 +1488,21 @@ public:
       return values[STATFS_COMPRESSED];
     }
     int64_t& compressed_allocated() {
+      return values[STATFS_COMPRESSED_ALLOCATED];
+    }
+    int64_t allocated() const {
+      return values[STATFS_ALLOCATED];
+    }
+    int64_t stored() const {
+      return values[STATFS_STORED];
+    }
+    int64_t compressed_original() const {
+      return values[STATFS_COMPRESSED_ORIGINAL];
+    }
+    int64_t compressed() const {
+      return values[STATFS_COMPRESSED];
+    }
+    int64_t compressed_allocated() const {
       return values[STATFS_COMPRESSED_ALLOCATED];
     }
     volatile_statfs& operator=(const store_statfs_t& st) {
@@ -1585,8 +1621,9 @@ public:
     bluestore_deferred_transaction_t *deferred_txn = nullptr; ///< if any
 
     interval_set<uint64_t> allocated, released;
-    volatile_statfs statfs_delta;
-
+    volatile_statfs statfs_delta;	   ///< overall store statistics delta
+    uint64_t osd_pool_id = META_POOL_ID;    ///< osd pool id we're operating on
+    
     IOContext ioc;
     bool had_ios = false;  ///< true if we submitted IOs before our kv txn
 
@@ -1674,8 +1711,8 @@ public:
 
   class OpSequencer : public RefCountedObject {
   public:
-    std::mutex qlock;
-    std::condition_variable qcond;
+    ceph::mutex qlock = ceph::make_mutex("BlueStore::OpSequencer::qlock");
+    ceph::condition_variable qcond;
     typedef boost::intrusive::list<
       TransContext,
       boost::intrusive::member_hook<
@@ -1691,8 +1728,6 @@ public:
 
     BlueStore *store;
     coll_t cid;
-
-    size_t shard;
 
     uint64_t last_seq = 0;
 
@@ -1713,19 +1748,19 @@ public:
     }
 
     void queue_new(TransContext *txc) {
-      std::lock_guard<std::mutex> l(qlock);
+      std::lock_guard l(qlock);
       txc->seq = ++last_seq;
       q.push_back(*txc);
     }
 
     void drain() {
-      std::unique_lock<std::mutex> l(qlock);
+      std::unique_lock l(qlock);
       while (!q.empty())
 	qcond.wait(l);
     }
 
     void drain_preceding(TransContext *txc) {
-      std::unique_lock<std::mutex> l(qlock);
+      std::unique_lock l(qlock);
       while (!q.empty() && &q.front() != txc)
 	qcond.wait(l);
     }
@@ -1741,7 +1776,7 @@ public:
     }
 
     void flush() {
-      std::unique_lock<std::mutex> l(qlock);
+      std::unique_lock l(qlock);
       while (true) {
 	// set flag before the check because the condition
 	// may become true outside qlock, and we need to make
@@ -1757,7 +1792,7 @@ public:
     }
 
     void flush_all_but_last() {
-      std::unique_lock<std::mutex> l(qlock);
+      std::unique_lock l(qlock);
       assert (q.size() >= 1);
       while (true) {
 	// set flag before the check because the condition
@@ -1780,7 +1815,7 @@ public:
     }
 
     bool flush_commit(Context *c) {
-      std::lock_guard<std::mutex> l(qlock);
+      std::lock_guard l(qlock);
       if (q.empty()) {
 	return true;
       }
@@ -1847,7 +1882,7 @@ private:
   unsigned bluefs_shared_bdev = 0;  ///< which bluefs bdev we are sharing
   bool bluefs_single_shared_device = true;
   mono_time bluefs_last_balance;
-  utime_t next_dump_on_bluefs_balance_failure;
+  utime_t next_dump_on_bluefs_alloc_failure;
 
   KeyValueDB *db = nullptr;
   BlockDevice *bdev = nullptr;
@@ -1865,7 +1900,8 @@ private:
 
   vector<Cache*> cache_shards;
 
-  std::mutex zombie_osr_lock;              ///< protect zombie_osr_set
+  /// protect zombie_osr_set
+  ceph::mutex zombie_osr_lock = ceph::make_mutex("BlueStore::zombie_osr_lock");
   std::map<coll_t,OpSequencerRef> zombie_osr_set; ///< set of OpSequencers for deleted collections
 
   std::atomic<uint64_t> nid_last = {0};
@@ -1879,19 +1915,16 @@ private:
   interval_set<uint64_t> bluefs_extents;  ///< block extents owned by bluefs
   interval_set<uint64_t> bluefs_extents_reclaiming; ///< currently reclaiming
 
-  std::mutex deferred_lock;
+  ceph::mutex deferred_lock = ceph::make_mutex("BlueStore::deferred_lock");
   std::atomic<uint64_t> deferred_seq = {0};
   deferred_osr_queue_t deferred_queue; ///< osr's with deferred io pending
   int deferred_queue_size = 0;         ///< num txc's queued across all osrs
   atomic_int deferred_aggressive = {0}; ///< aggressive wakeup of kv thread
-  Finisher deferred_finisher;
-
-  int m_finisher_num = 1;
-  vector<Finisher*> finishers;
+  Finisher deferred_finisher, finisher;
 
   KVSyncThread kv_sync_thread;
-  std::mutex kv_lock;
-  std::condition_variable kv_cond;
+  ceph::mutex kv_lock = ceph::make_mutex("BlueStore::kv_lock");
+  ceph::condition_variable kv_cond;
   bool _kv_only = false;
   bool kv_sync_started = false;
   bool kv_stop = false;
@@ -1903,8 +1936,8 @@ private:
   deque<DeferredBatch*> deferred_done_queue;   ///< deferred ios done
 
   KVFinalizeThread kv_finalize_thread;
-  std::mutex kv_finalize_lock;
-  std::condition_variable kv_finalize_cond;
+  ceph::mutex kv_finalize_lock = ceph::make_mutex("BlueStore::kv_finalize_lock");
+  ceph::condition_variable kv_finalize_cond;
   deque<TransContext*> kv_committing_to_finalize;   ///< pending finalization
   deque<DeferredBatch*> deferred_stable_to_finalize; ///< pending finalization
 
@@ -1958,28 +1991,35 @@ private:
   double cache_kv_ratio = 0;     ///< cache ratio dedicated to kv (e.g., rocksdb)
   double cache_data_ratio = 0;   ///< cache ratio dedicated to object data
   bool cache_autotune = false;   ///< cache autotune setting
-  uint64_t cache_autotune_chunk_size = 0; ///< cache autotune chunk size
   double cache_autotune_interval = 0; ///< time to wait between cache rebalancing
   uint64_t osd_memory_target = 0;   ///< OSD memory target when autotuning cache
   uint64_t osd_memory_base = 0;     ///< OSD base memory when autotuning cache
   double osd_memory_expected_fragmentation = 0; ///< expected memory fragmentation
-  uint64_t osd_memory_cache_min = 0; ///< Min memory to assign when autotuning cahce
+  uint64_t osd_memory_cache_min = 0; ///< Min memory to assign when autotuning cache
   double osd_memory_cache_resize_interval = 0; ///< Time to wait between cache resizing 
-  std::mutex vstatfs_lock;
+
+  typedef map<uint64_t, volatile_statfs> osd_pools_map;
+
+  ceph::mutex vstatfs_lock = ceph::make_mutex("BlueStore::vstatfs_lock");
   volatile_statfs vstatfs;
+  osd_pools_map osd_pools; // protected by vstatfs_lock as well
+
+  bool per_pool_stat_collection = true;
 
   struct MempoolThread : public Thread {
   public:
     BlueStore *store;
 
-    Cond cond;
-    Mutex lock;
+    ceph::condition_variable cond;
+    ceph::mutex lock = ceph::make_mutex("BlueStore::MempoolThread::lock");
     bool stop = false;
     uint64_t autotune_cache_size = 0;
+    std::shared_ptr<PriorityCache::PriCache> binned_kv_cache = nullptr;
 
     struct MempoolCache : public PriorityCache::PriCache {
       BlueStore *store;
-      int64_t cache_bytes[PriorityCache::Priority::LAST+1];
+      int64_t cache_bytes[PriorityCache::Priority::LAST+1] = {0};
+      int64_t committed_bytes = 0;
       double cache_ratio = 0;
 
       MempoolCache(BlueStore *s) : store(s) {};
@@ -1987,15 +2027,14 @@ private:
       virtual uint64_t _get_used_bytes() const = 0;
 
       virtual int64_t request_cache_bytes(
-          PriorityCache::Priority pri, uint64_t chunk_bytes) const {
+          PriorityCache::Priority pri, uint64_t total_cache) const {
         int64_t assigned = get_cache_bytes(pri);
 
         switch (pri) {
         // All cache items are currently shoved into the LAST priority 
         case PriorityCache::Priority::LAST:
           {
-            uint64_t usage = _get_used_bytes();
-            int64_t request = PriorityCache::get_chunk(usage, chunk_bytes);
+            int64_t request = _get_used_bytes();
             return(request > assigned) ? request - assigned : 0;
           }
         default:
@@ -2022,8 +2061,13 @@ private:
       virtual void add_cache_bytes(PriorityCache::Priority pri, int64_t bytes) {
         cache_bytes[pri] += bytes;
       }
-      virtual int64_t commit_cache_size() {
-        return get_cache_bytes(); 
+      virtual int64_t commit_cache_size(uint64_t total_cache) {
+        committed_bytes = PriorityCache::get_chunk(
+            get_cache_bytes(), total_cache);
+        return committed_bytes;
+      }
+      virtual int64_t get_committed_size() const {
+        return committed_bytes;
       }
       virtual double get_cache_ratio() const {
         return cache_ratio;
@@ -2055,7 +2099,8 @@ private:
       double get_bytes_per_onode() const {
         return (double)_get_used_bytes() / (double)_get_num_onodes();
       }
-    } meta_cache;
+    };
+    std::shared_ptr<MetaCache> meta_cache;
 
     struct DataCache : public MempoolCache {
       DataCache(BlueStore *s) : MempoolCache(s) {};
@@ -2070,14 +2115,14 @@ private:
       virtual string get_cache_name() const {
         return "BlueStore Data Cache";
       }
-    } data_cache;
+    };
+    std::shared_ptr<DataCache> data_cache;
 
   public:
     explicit MempoolThread(BlueStore *s)
       : store(s),
-	lock("BlueStore::MempoolThread::lock"),
-        meta_cache(MetaCache(s)),
-        data_cache(DataCache(s)) {}
+        meta_cache(new MetaCache(s)),
+        data_cache(new DataCache(s)) {}
 
     void *entry() override;
     void init() {
@@ -2085,10 +2130,10 @@ private:
       create("bstore_mempool");
     }
     void shutdown() {
-      lock.Lock();
+      lock.lock();
       stop = true;
-      cond.Signal();
-      lock.Unlock();
+      cond.notify_all();
+      lock.unlock();
       join();
     }
 
@@ -2096,10 +2141,12 @@ private:
     void _adjust_cache_settings();
     void _trim_shards(bool interval_stats);
     void _tune_cache_size(bool interval_stats);
-    void _balance_cache(const std::list<PriorityCache::PriCache *>& caches);
-    void _balance_cache_pri(int64_t *mem_avail, 
-                            const std::list<PriorityCache::PriCache *>& caches, 
-                            PriorityCache::Priority pri);
+    void _balance_cache(
+        const std::list<std::shared_ptr<PriorityCache::PriCache>>& caches);
+    void _balance_cache_pri(
+        int64_t *mem_avail, 
+        const std::list<std::shared_ptr<PriorityCache::PriCache>>& caches, 
+        PriorityCache::Priority pri);
   } mempool_thread;
 
   // --------------------------------------------------------
@@ -2127,13 +2174,38 @@ private:
   // its initialization (and outside of _open_bdev)
   void _validate_bdev();
   void _close_bdev();
+
+  int _minimal_open_bluefs(bool create);
+  void _minimal_close_bluefs();
+  int _open_bluefs(bool create);
+  void _close_bluefs();
+
+  // Limited (u)mount intended for BlueFS operations only
+  int _mount_for_bluefs();
+  void _umount_for_bluefs();
+
+
+  int _is_bluefs(bool create, bool* ret);
+  /*
+  * opens both DB and dependant super_meta, FreelistManager and allocator
+  * in the proper order
+  */
+  int _open_db_and_around(bool read_only);
+  void _close_db_and_around();
+
+  // updates legacy bluefs related recs in DB to a state valid for
+  // downgrades from nautilus.
+  void _sync_bluefs_and_fm();
+
   /*
    * @warning to_repair_db means that we open this db to repair it, will not
    * hold the rocksdb's file lock.
    */
-  int _open_db(bool create, bool to_repair_db=false);
+  int _open_db(bool create,
+	       bool to_repair_db=false,
+	       bool read_only = false);
   void _close_db();
-  int _open_fm(bool create);
+  int _open_fm(KeyValueDB::Transaction t);
   void _close_fm();
   int _open_alloc();
   void _close_alloc();
@@ -2155,11 +2227,12 @@ private:
   int _open_super_meta();
 
   void _open_statfs();
+  void _get_statfs_overall(struct store_statfs_t *buf);
 
-  void _dump_alloc_on_rebalance_failure();
-  int _reconcile_bluefs_freespace();
-  int _balance_bluefs_freespace(PExtentVector *extents);
-  void _commit_bluefs_freespace(const PExtentVector& extents);
+  void _dump_alloc_on_failure();
+
+  int64_t _get_bluefs_size_delta(uint64_t bluefs_free, uint64_t bluefs_total);
+  int _balance_bluefs_freespace();
 
   CollectionRef _get_collection(const coll_t& cid);
   void _queue_reap_collection(CollectionRef& c);
@@ -2228,6 +2301,14 @@ private:
     uint64_t granularity,
     BlueStoreRepairer* repairer,
     store_statfs_t& expected_statfs);
+
+  using  per_pool_statfs =
+    mempool::bluestore_fsck::map<uint64_t, store_statfs_t>;
+  void _fsck_check_pool_statfs(
+    per_pool_statfs& expected_pool_statfs,
+    bool need_per_pool_stats,
+    int& errors,
+    BlueStoreRepairer* repairer);
 
   void _buffer_cache_write(
     TransContext *txc,
@@ -2303,6 +2384,11 @@ public:
     return device_class;
   }
 
+  int get_numa_node(
+    int *numa_node,
+    set<int> *nodes,
+    set<string> *failed) override;
+
   static int get_block_device_fsid(CephContext* cct, const string& path,
 				   uuid_d *fsid);
 
@@ -2337,6 +2423,24 @@ public:
   int _fsck(bool deep, bool repair);
 
   void set_cache_shards(unsigned num) override;
+  void dump_cache_stats(Formatter *f) override {
+    int onode_count = 0, buffers_bytes = 0;
+    for (auto i: cache_shards) {
+      onode_count += i->_get_num_onodes();
+      buffers_bytes += i->_get_buffer_bytes();
+    }
+    f->dump_int("bluestore_onode", onode_count);
+    f->dump_int("bluestore_buffers", buffers_bytes);
+  }
+  void dump_cache_stats(ostream& ss) override {
+    int onode_count = 0, buffers_bytes = 0;
+    for (auto i: cache_shards) {
+      onode_count += i->_get_num_onodes();
+      buffers_bytes += i->_get_buffer_bytes();
+    }
+    ss << "bluestore_onode: " << onode_count;
+    ss << "bluestore_buffers: " << buffers_bytes;
+  }
 
   int validate_hobject_key(const hobject_t &obj) const override {
     return 0;
@@ -2353,15 +2457,25 @@ public:
   void get_db_statistics(Formatter *f) override;
   void generate_db_histogram(Formatter *f) override;
   void _flush_cache();
-  void flush_cache() override;
+  int flush_cache(ostream *os = NULL) override;
   void dump_perf_counters(Formatter *f) override {
     f->open_object_section("perf_counters");
     logger->dump_formatted(f, false);
     f->close_section();
   }
 
+  int add_new_bluefs_device(int id, const string& path);
+  int migrate_to_existing_bluefs_device(const set<int>& devs_source,
+    int id);
+  int migrate_to_new_bluefs_device(const set<int>& devs_source,
+    int id,
+    const string& path);
+  int expand_devices(ostream& out);
+  string get_device_path(unsigned id);
+
 public:
   int statfs(struct store_statfs_t *buf) override;
+  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
 
   void collect_metadata(map<string,string> *pm) override;
 
@@ -2410,6 +2524,8 @@ public:
 
   CollectionHandle open_collection(const coll_t &c) override;
   CollectionHandle create_new_collection(const coll_t& cid) override;
+  void set_collection_commit_queue(const coll_t& cid,
+				   ContextQueue *commit_queue) override;
 
   bool collection_exists(const coll_t& c) override;
   int collection_empty(CollectionHandle& c, bool *empty) override;
@@ -2518,7 +2634,7 @@ public:
 			 const bufferlist& bl);
   void inject_leaked(uint64_t len);
   void inject_false_free(coll_t cid, ghobject_t oid);
-  void inject_statfs(const store_statfs_t& new_statfs);
+  void inject_statfs(const string& key, const store_statfs_t& new_statfs);
   void inject_misreference(coll_t cid1, ghobject_t oid1,
 			   coll_t cid2, ghobject_t oid2,
 			   uint64_t offset);
@@ -2530,6 +2646,13 @@ public:
   bool has_builtin_csum() const override {
     return true;
   }
+
+  /*
+  Allocate space for BlueFS from slow device.
+  Either automatically applies allocated extents to underlying 
+  BlueFS (extents == nullptr) or just return them (non-null extents) provided
+  */
+  int allocate_bluefs_freespace(uint64_t size, PExtentVector* extents);
 
 private:
   bool _debug_data_eio(const ghobject_t& o) {
@@ -2815,7 +2938,34 @@ private:
 			CollectionRef *c,
 			CollectionRef& d,
 			unsigned bits);
+
+private:
+  std::atomic<uint64_t> out_of_sync_fm = {0};
+  // --------------------------------------------------------
+  // BlueFSDeviceExpander implementation
+  uint64_t get_recommended_expansion_delta(uint64_t bluefs_free,
+    uint64_t bluefs_total) override {
+    auto delta = _get_bluefs_size_delta(bluefs_free, bluefs_total);
+    return delta > 0 ? delta : 0;
+  }
+  int allocate_freespace(uint64_t size, PExtentVector& extents) override {
+    return allocate_bluefs_freespace(size, &extents);
+  };
 };
+
+inline ostream& operator<<(ostream& out, const BlueStore::volatile_statfs& s) {
+  return out 
+    << " allocated:"
+      << s.values[BlueStore::volatile_statfs::STATFS_ALLOCATED]
+    << " stored:"
+      << s.values[BlueStore::volatile_statfs::STATFS_STORED]
+    << " compressed:"
+      << s.values[BlueStore::volatile_statfs::STATFS_COMPRESSED]
+    << " compressed_orig:"
+      << s.values[BlueStore::volatile_statfs::STATFS_COMPRESSED_ORIGINAL]
+    << " compressed_alloc:"
+      << s.values[BlueStore::volatile_statfs::STATFS_COMPRESSED_ALLOCATED];
+}
 
 static inline void intrusive_ptr_add_ref(BlueStore::Onode *o) {
   o->get();
@@ -2901,7 +3051,7 @@ public:
 			 const coll_t& cid, const ghobject_t& oid) {
       ceph_assert(granularity); // initialized
       
-      // can't call this func after filter_out has been apllied
+      // can't call this func after filter_out has been applied
       ceph_assert(!was_filtered_out);
       if (!len) {
 	return;
@@ -2965,7 +3115,8 @@ public:
   bool fix_shared_blob(KeyValueDB *db,
 		         uint64_t sbid,
 		       const bufferlist* bl);
-  bool fix_statfs(KeyValueDB *db, const store_statfs_t& new_statfs);
+  bool fix_statfs(KeyValueDB *db, const string& key,
+    const store_statfs_t& new_statfs);
 
   bool fix_leaked(KeyValueDB *db,
 		  FreelistManager* fm,
@@ -2973,6 +3124,7 @@ public:
   bool fix_false_free(KeyValueDB *db,
 		      FreelistManager* fm,
 		      uint64_t offset, uint64_t len);
+  bool fix_bluefs_extents(std::atomic<uint64_t>& out_of_sync_flag);
 
   void init(uint64_t total_space, uint64_t lres_tracking_unit_size);
 
@@ -3013,5 +3165,4 @@ private:
   fsck_interval misreferenced_extents;
 
 };
-
 #endif

@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -101,7 +101,10 @@ class FakeDispatcher : public Dispatcher {
 
   explicit FakeDispatcher(bool s): Dispatcher(g_ceph_context), lock("FakeDispatcher::lock"),
                           is_server(s), got_new(false), got_remote_reset(false),
-                          got_connect(false), loopback(false) {}
+                          got_connect(false), loopback(false) {
+    // don't need authorizers
+    ms_set_require_authorizer(false);
+  }
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
@@ -198,12 +201,8 @@ class FakeDispatcher : public Dispatcher {
     cond.Signal();
   }
 
-  bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                            bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
-    isvalid = true;
-    return true;
+  int ms_handle_authentication(Connection *con) override {
+    return 1;
   }
 
   void reply_message(Message *m) {
@@ -254,6 +253,95 @@ TEST_P(MessengerTest, SimpleTest) {
 
   conn = client_msgr->connect_to(server_msgr->get_mytype(),
 				 server_msgr->get_myaddrs());
+  {
+    m = new MPing();
+    ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
+    while (!cli_dispatcher.got_new)
+      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+    cli_dispatcher.got_new = false;
+  }
+  ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
+
+  // 3. test markdown connection
+  conn->mark_down();
+  ASSERT_FALSE(conn->is_connected());
+
+  // 4. test failed connection
+  server_msgr->shutdown();
+  server_msgr->wait();
+
+  m = new MPing();
+  conn->send_message(m);
+  CHECK_AND_WAIT_TRUE(!conn->is_connected());
+  ASSERT_FALSE(conn->is_connected());
+
+  // 5. loopback connection
+  srv_dispatcher.loopback = true;
+  conn = client_msgr->get_loopback_connection();
+  {
+    m = new MPing();
+    ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
+    while (!cli_dispatcher.got_new)
+      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+    cli_dispatcher.got_new = false;
+  }
+  srv_dispatcher.loopback = false;
+  ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
+  client_msgr->shutdown();
+  client_msgr->wait();
+  server_msgr->shutdown();
+  server_msgr->wait();
+}
+
+TEST_P(MessengerTest, SimpleMsgr2Test) {
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  entity_addr_t legacy_addr;
+  legacy_addr.parse("v1:127.0.0.1");
+  entity_addr_t msgr2_addr;
+  msgr2_addr.parse("v2:127.0.0.1");
+  entity_addrvec_t bind_addrs;
+  bind_addrs.v.push_back(legacy_addr);
+  bind_addrs.v.push_back(msgr2_addr);
+  server_msgr->bindv(bind_addrs);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  // 1. simple round trip
+  MPing *m = new MPing();
+  ConnectionRef conn = client_msgr->connect_to(
+    server_msgr->get_mytype(),
+    server_msgr->get_myaddrs());
+  {
+    ASSERT_EQ(conn->send_message(m), 0);
+    Mutex::Locker l(cli_dispatcher.lock);
+    while (!cli_dispatcher.got_new)
+      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
+    cli_dispatcher.got_new = false;
+  }
+  ASSERT_TRUE(conn->is_connected());
+  ASSERT_EQ(1u, static_cast<Session*>(conn->get_priv().get())->get_count());
+  ASSERT_TRUE(conn->peer_is_osd());
+
+  // 2. test rebind port
+  set<int> avoid_ports;
+  for (int i = 0; i < 10 ; i++) {
+    for (auto a : server_msgr->get_myaddrs().v) {
+      avoid_ports.insert(a.get_port() + i);
+    }
+  }
+  server_msgr->rebind(avoid_ports);
+  for (auto a : server_msgr->get_myaddrs().v) {
+    ASSERT_TRUE(avoid_ports.count(a.get_port()) == 0);
+  }
+
+  conn = client_msgr->connect_to(
+       server_msgr->get_mytype(),
+       server_msgr->get_myaddrs());
   {
     m = new MPing();
     ASSERT_EQ(conn->send_message(m), 0);
@@ -722,7 +810,6 @@ TEST_P(MessengerTest, AuthTest) {
   }
   ASSERT_TRUE(conn->is_connected());
   ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
-
   server_msgr->shutdown();
   client_msgr->shutdown();
   server_msgr->wait();
@@ -838,7 +925,10 @@ class SyntheticDispatcher : public Dispatcher {
 
   SyntheticDispatcher(bool s, SyntheticWorkload *wl):
       Dispatcher(g_ceph_context), lock("SyntheticDispatcher::lock"), is_server(s), got_new(false),
-      got_remote_reset(false), got_connect(false), index(0), workload(wl) {}
+      got_remote_reset(false), got_connect(false), index(0), workload(wl) {
+    // don't need authorizers
+    ms_set_require_authorizer(false);
+  }
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
@@ -917,12 +1007,8 @@ class SyntheticDispatcher : public Dispatcher {
     }
   }
 
-  bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                            bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
-    isvalid = true;
-    return true;
+  int ms_handle_authentication(Connection *con) override {
+    return 1;
   }
 
   void reply_message(const Message *m, Payload& pl) {
@@ -1402,7 +1488,10 @@ class MarkdownDispatcher : public Dispatcher {
  public:
   std::atomic<uint64_t> count = { 0 };
   explicit MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
-                              last_mark(false) {}
+                              last_mark(false) {
+    // don't need authorizers
+    ms_set_require_authorizer(false);
+  }
   bool ms_can_fast_dispatch_any() const override { return false; }
   bool ms_can_fast_dispatch(const Message *m) const override {
     switch (m->get_type()) {
@@ -1464,12 +1553,8 @@ class MarkdownDispatcher : public Dispatcher {
   void ms_fast_dispatch(Message *m) override {
     ceph_abort();
   }
-  bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                            bufferlist& authorizer, bufferlist& authorizer_reply,
-                            bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
-    isvalid = true;
-    return true;
+  int ms_handle_authentication(Connection *con) override {
+    return 1;
   }
 };
 

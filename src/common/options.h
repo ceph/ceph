@@ -13,19 +13,19 @@
 
 struct Option {
   enum type_t {
-    TYPE_UINT,
-    TYPE_INT,
-    TYPE_STR,
-    TYPE_FLOAT,
-    TYPE_BOOL,
-    TYPE_ADDR,
-    TYPE_ADDRVEC,
-    TYPE_UUID,
-    TYPE_SIZE,
-    TYPE_SECS,
+    TYPE_UINT = 0,
+    TYPE_INT = 1,
+    TYPE_STR = 2,
+    TYPE_FLOAT = 3,
+    TYPE_BOOL = 4,
+    TYPE_ADDR = 5,
+    TYPE_ADDRVEC = 6,
+    TYPE_UUID = 7,
+    TYPE_SIZE = 8,
+    TYPE_SECS = 9,
   };
 
-  const char *type_to_str(type_t t) const {
+  static const char *type_to_c_type_str(type_t t) {
     switch (t) {
     case TYPE_UINT: return "uint64_t";
     case TYPE_INT: return "int64_t";
@@ -40,6 +40,54 @@ struct Option {
     default: return "unknown";
     }
   }
+  static const char *type_to_str(type_t t) {
+    switch (t) {
+    case TYPE_UINT: return "uint";
+    case TYPE_INT: return "int";
+    case TYPE_STR: return "str";
+    case TYPE_FLOAT: return "float";
+    case TYPE_BOOL: return "bool";
+    case TYPE_ADDR: return "addr";
+    case TYPE_ADDRVEC: return "addrvec";
+    case TYPE_UUID: return "uuid";
+    case TYPE_SIZE: return "size";
+    case TYPE_SECS: return "secs";
+    default: return "unknown";
+    }
+  }
+  static int str_to_type(const std::string& s) {
+    if (s == "uint") {
+      return TYPE_UINT;
+    }
+    if (s == "int") {
+      return TYPE_INT;
+    }
+    if (s == "str") {
+      return TYPE_STR;
+    }
+    if (s == "float") {
+      return TYPE_FLOAT;
+    }
+    if (s == "bool") {
+      return TYPE_BOOL;
+    }
+    if (s == "addr") {
+      return TYPE_ADDR;
+    }
+    if (s == "addrvec") {
+      return TYPE_ADDRVEC;
+    }
+    if (s == "uuid") {
+      return TYPE_UUID;
+    }
+    if (s == "size") {
+      return TYPE_SIZE;
+    }
+    if (s == "secs") {
+      return TYPE_SECS;
+    }
+    return -1;
+  }
 
   /**
    * Basic: for users, configures some externally visible functional aspect
@@ -47,10 +95,10 @@ struct Option {
    * Development: not for users.  May be dangerous, may not be documented.
    */
   enum level_t {
-    LEVEL_BASIC,
-    LEVEL_ADVANCED,
-    LEVEL_DEV,
-    LEVEL_UNKNOWN,
+    LEVEL_BASIC = 0,
+    LEVEL_ADVANCED = 1,
+    LEVEL_DEV = 2,
+    LEVEL_UNKNOWN = 3,
   };
 
   static const char *level_to_str(level_t l) {
@@ -68,6 +116,8 @@ struct Option {
     FLAG_STARTUP = 0x4,         ///< option can only take effect at startup
     FLAG_CLUSTER_CREATE = 0x8,  ///< option only has effect at cluster creation
     FLAG_CREATE = 0x10,         ///< option only has effect at daemon creation
+    FLAG_MGR = 0x20,            ///< option is a mgr module option
+    FLAG_MINIMAL_CONF = 0x40,   ///< option should go in a minimal ceph.conf
   };
 
   struct size_t {
@@ -285,9 +335,9 @@ struct Option {
     return *this;
   }
 
-  Option& set_enum_allowed(const std::initializer_list<const char*>& allowed)
+  Option& set_enum_allowed(const std::vector<const char*>& allowed)
   {
-    enum_allowed.insert(enum_allowed.end(), allowed);
+    enum_allowed = allowed;
     return *this;
   }
 
@@ -327,9 +377,10 @@ struct Option {
   {
     return
       (has_flag(FLAG_RUNTIME)
-       || type == TYPE_BOOL || type == TYPE_INT
-       || type == TYPE_UINT || type == TYPE_FLOAT
-       || type == TYPE_SIZE || type == TYPE_SECS)
+       || (!has_flag(FLAG_MGR)
+	   && (type == TYPE_BOOL || type == TYPE_INT
+	       || type == TYPE_UINT || type == TYPE_FLOAT
+	       || type == TYPE_SIZE || type == TYPE_SECS)))
       && !has_flag(FLAG_STARTUP)
       && !has_flag(FLAG_CLUSTER_CREATE)
       && !has_flag(FLAG_CREATE);

@@ -71,7 +71,7 @@ public:
     decode(end, p);
   }
 
-  const char *get_type_name() const override { return "osd_backoff"; }
+  std::string_view get_type_name() const override { return "osd_backoff"; }
 
   void print(ostream& out) const override {
     out << "osd_backoff(" << pgid << " " << ceph_osd_backoff_op_name(op)

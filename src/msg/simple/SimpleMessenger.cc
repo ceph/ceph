@@ -425,21 +425,6 @@ Pipe *SimpleMessenger::connect_rank(const entity_addr_t& addr,
 
 
 
-AuthAuthorizer *SimpleMessenger::get_authorizer(int peer_type, bool force_new)
-{
-  return ms_deliver_get_authorizer(peer_type, force_new);
-}
-
-bool SimpleMessenger::verify_authorizer(Connection *con, int peer_type,
-					int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-					bool& isvalid,CryptoKey& session_key,
-					std::unique_ptr<AuthAuthorizerChallenge> *challenge)
-{
-  return ms_deliver_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply,
-				      isvalid, session_key,
-				      challenge);
-}
-
 ConnectionRef SimpleMessenger::connect_to(int type,
 					  const entity_addrvec_t& addrs)
 {
@@ -451,11 +436,11 @@ ConnectionRef SimpleMessenger::connect_to(int type,
 
   // remote
   while (true) {
-    Pipe *pipe = _lookup_pipe(addrs.front());
+    Pipe *pipe = _lookup_pipe(addrs.legacy_addr());
     if (pipe) {
       ldout(cct, 10) << "get_connection " << addrs << " existing " << pipe << dendl;
     } else {
-      pipe = connect_rank(addrs.front(), type, NULL, NULL);
+      pipe = connect_rank(addrs.legacy_addr(), type, NULL, NULL);
       ldout(cct, 10) << "get_connection " << addrs << " new " << pipe << dendl;
     }
     Mutex::Locker l(pipe->pipe_lock);

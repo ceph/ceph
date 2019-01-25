@@ -39,9 +39,21 @@ function(gperf_generate input output)
 endfunction()
 
 set(librgw_common_srcs
+  services/svc_finisher.cc
+  services/svc_notify.cc
+  services/svc_quota.cc
+  services/svc_sync_modules.cc
+  services/svc_rados.cc
+  services/svc_sys_obj.cc
+  services/svc_sys_obj_cache.cc
+  services/svc_sys_obj_core.cc
+  services/svc_zone.cc
+  services/svc_zone_utils.cc
+  rgw_service.cc
   rgw_acl.cc
   rgw_acl_s3.cc
   rgw_acl_swift.cc
+  rgw_aio_throttle.cc
   rgw_auth.cc
   rgw_auth_s3.cc
   rgw_basic_types.cc
@@ -65,6 +77,7 @@ set(librgw_common_srcs
   rgw_metadata.cc
   rgw_multi.cc
   rgw_multi_del.cc
+  rgw_pubsub.cc
   rgw_sync.cc
   rgw_data_sync.cc
   rgw_sync_module.cc
@@ -72,6 +85,8 @@ set(librgw_common_srcs
   rgw_sync_module_es.cc
   rgw_sync_module_es_rest.cc
   rgw_sync_module_log.cc
+  rgw_sync_module_pubsub.cc
+  rgw_sync_module_pubsub_rest.cc
   rgw_sync_log_trim.cc
   rgw_sync_trace.cc
   rgw_period_history.cc
@@ -80,10 +95,13 @@ set(librgw_common_srcs
   rgw_coroutine.cc
   rgw_cr_rados.cc
   rgw_cr_rest.cc
+  rgw_cr_tools.cc
   rgw_object_expirer_core.cc
   rgw_op.cc
   rgw_otp.cc
   rgw_policy_s3.cc
+  rgw_putobj.cc
+  rgw_putobj_processor.cc
   rgw_quota.cc
   rgw_rados.cc
   rgw_resolve.cc
@@ -92,7 +110,6 @@ set(librgw_common_srcs
   rgw_rest_conn.cc
   rgw_rest_log.cc
   rgw_rest_metadata.cc
-  rgw_rest_opstate.cc
   rgw_rest_realm.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
@@ -109,8 +126,14 @@ set(librgw_common_srcs
   rgw_crypt.cc
   rgw_crypt_sanitize.cc
   rgw_iam_policy.cc
-  rgw_rest_user_policy.cc)
+  rgw_rest_user_policy.cc
+  rgw_zone.cc
+  rgw_sts.cc
+  rgw_rest_sts.cc)
+
 add_library(rgw_common OBJECT ${librgw_common_srcs})
+
+target_include_directories(rgw_common SYSTEM PUBLIC "services")
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
@@ -134,14 +157,15 @@ set(rgw_a_srcs
   rgw_rest_config.cc
   rgw_rest_log.cc
   rgw_rest_metadata.cc
-  rgw_rest_opstate.cc
   rgw_rest_realm.cc
   rgw_rest_swift.cc
   rgw_rest_usage.cc
   rgw_rest_user.cc
   rgw_swift_auth.cc
   rgw_usage.cc
-  rgw_opa.cc)
+  rgw_opa.cc
+  rgw_sts.cc
+  rgw_rest_sts.cc)
 
 gperf_generate(${CMAKE_SOURCE_DIR}/src/rgw/rgw_iam_policy_keywords.gperf
   rgw_iam_policy_keywords.frag.cc)
@@ -162,21 +186,22 @@ add_dependencies(rgw_a civetweb_h)
 
 target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
 
-target_link_libraries(rgw_a librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
-  cls_log_client cls_statelog_client cls_timeindex_client cls_version_client
+target_link_libraries(rgw_a PRIVATE
+  librados-cxx cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
+  cls_log_client cls_timeindex_client cls_version_client
   cls_user_client ceph-common common_utf8 global
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS}
   OATH::OATH)
 
-if (WITH_RADOSGW_BEAST_FRONTEND)
-  target_compile_definitions(rgw_a PUBLIC BOOST_COROUTINES_NO_DEPRECATION_WARNING)
-  target_link_libraries(rgw_a Boost::coroutine Boost::context)
+if(WITH_CURL_OPENSSL)
+  # used by rgw_http_client_curl.cc
+  target_link_libraries(rgw_a PRIVATE OpenSSL::Crypto)
 endif()
 
-if (WITH_CURL_OPENSSL OR (WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL))
-  target_link_libraries(rgw_a ${OPENSSL_LIBRARIES})
+if(WITH_BOOST_CONTEXT)
+  target_link_libraries(rgw_a PRIVATE Boost::coroutine Boost::context)
 endif()
 
 set(radosgw_srcs
@@ -189,28 +214,28 @@ if (WITH_RADOSGW_FCGI_FRONTEND)
   list(APPEND radosgw_srcs rgw_fcgi_process.cc)
 endif()
 
-if (WITH_RADOSGW_BEAST_FRONTEND)
+if(WITH_RADOSGW_BEAST_FRONTEND)
   list(APPEND radosgw_srcs
     rgw_asio_client.cc
     rgw_asio_frontend.cc)
-endif (WITH_RADOSGW_BEAST_FRONTEND)
+endif()
 
 add_library(radosgw_a STATIC ${radosgw_srcs}
   $<TARGET_OBJECTS:civetweb_common_objs>)
-target_link_libraries(radosgw_a rgw_a ${SSL_LIBRARIES})
+target_link_libraries(radosgw_a PRIVATE rgw_a)
+if(WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL)
+  # used by rgw_asio_frontend.cc
+  target_link_libraries(radosgw_a PRIVATE OpenSSL::SSL)
+endif()
 
 add_executable(radosgw rgw_main.cc)
 target_link_libraries(radosgw radosgw_a librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
-  cls_log_client cls_statelog_client cls_timeindex_client
+  cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
   ${ALLOC_LIBS})
-# radosgw depends on cls libraries at runtime, but not as link dependencies
-add_dependencies(radosgw cls_rgw cls_lock cls_refcount
-  cls_log cls_statelog cls_timeindex
-  cls_version cls_user cls_otp)
 install(TARGETS radosgw DESTINATION bin)
 
 set(radosgw_admin_srcs
@@ -219,10 +244,10 @@ set(radosgw_admin_srcs
 add_executable(radosgw-admin ${radosgw_admin_srcs})
 target_link_libraries(radosgw-admin rgw_a librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
-  cls_log_client cls_statelog_client cls_timeindex_client
+  cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${SSL_LIBRARIES} ${BLKID_LIBRARIES})
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-admin DESTINATION bin)
 
 set(radosgw_es_srcs
@@ -230,10 +255,10 @@ set(radosgw_es_srcs
 add_executable(radosgw-es ${radosgw_es_srcs})
 target_link_libraries(radosgw-es rgw_a librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
-  cls_log_client cls_statelog_client cls_timeindex_client
+  cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${SSL_LIBRARIES} ${BLKID_LIBRARIES})
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-es DESTINATION bin)
 
 set(radosgw_token_srcs
@@ -248,7 +273,7 @@ set(radosgw_object_expirer_srcs
 add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs})
 target_link_libraries(radosgw-object-expirer rgw_a librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
-  cls_log_client cls_statelog_client cls_timeindex_client
+  cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
@@ -266,7 +291,6 @@ target_link_libraries(rgw PRIVATE
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_timeindex_client
   cls_version_client
   cls_user_client
@@ -289,13 +313,12 @@ add_library(rgw_admin_user SHARED
 add_dependencies(rgw_admin_user civetweb_h)
 
 target_link_libraries(rgw_admin_user PRIVATE
-  librados
+  librados-cxx
   cls_rgw_client
   cls_otp_client
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_timeindex_client
   cls_version_client
   cls_user_client
@@ -307,3 +330,6 @@ target_link_libraries(rgw_admin_user PRIVATE
 set_target_properties(rgw_admin_user PROPERTIES OUTPUT_NAME rgw_admin_user VERSION 1.0.0
   SOVERSION 0)
 install(TARGETS rgw_admin_user DESTINATION ${CMAKE_INSTALL_LIBDIR})
+if(WITH_BOOST_CONTEXT)
+  target_link_libraries(rgw_admin_user PRIVATE Boost::coroutine Boost::context)
+endif()

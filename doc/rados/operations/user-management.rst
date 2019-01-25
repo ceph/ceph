@@ -1,3 +1,5 @@
+.. _user-management:
+
 =================
  User Management
 =================
@@ -446,12 +448,6 @@ For example::
 	ceph auth caps client.john mon 'allow r' osd 'allow rw pool=liverpool'
 	ceph auth caps client.paul mon 'allow rw' osd 'allow rwx pool=liverpool'
 	ceph auth caps client.brian-manager mon 'allow *' osd 'allow *'
-
-To remove a capability, you may reset the capability. If you want the user
-to have no access to a particular daemon that was previously set, specify
-an empty string. For example::
-
-	ceph auth caps client.ringo mon ' ' osd ' '
 
 See `Authorization (Capabilities)`_ for additional details on capabilities.
 

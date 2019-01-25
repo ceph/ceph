@@ -31,7 +31,7 @@ protected:
   ~MMDSFindIno() override {}
 
 public:
-  const char *get_type_name() const override { return "findino"; }
+  std::string_view get_type_name() const override { return "findino"; }
   void print(ostream &out) const override {
     out << "findino(" << tid << " " << ino << ")";
   }

@@ -62,7 +62,7 @@ Additional optional configuration settings are:
 Debugging 
 ---------
 
-By default, a few debugging statments as well as error statements have been set to print in the log files. Users can add more if necessary.
+By default, a few debugging statements as well as error statements have been set to print in the log files. Users can add more if necessary.
 To make use of the debugging option in the module:
 
 - Add this to the ceph.conf file.::
@@ -87,7 +87,7 @@ Pools
 +---------------+-----------------------------------------------------+
 |Counter        | Description                                         |
 +===============+=====================================================+
-|bytes_used     | Bytes used in the pool not including copies         |
+|stored         | Bytes stored in the pool not including copies       |
 +---------------+-----------------------------------------------------+
 |max_avail      | Max available number of bytes in the pool           |
 +---------------+-----------------------------------------------------+
@@ -99,7 +99,7 @@ Pools
 +---------------+-----------------------------------------------------+
 |rd_bytes       | Number of bytes read in the pool                    |
 +---------------+-----------------------------------------------------+
-|raw_bytes_used | Bytes used in pool including copies made            |
+|stored_raw     | Bytes used in pool including copies made            |
 +---------------+-----------------------------------------------------+
 
 ^^^^

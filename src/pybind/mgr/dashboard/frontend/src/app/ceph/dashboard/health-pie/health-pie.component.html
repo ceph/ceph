@@ -1,12 +1,13 @@
 <div class="chart-container">
   <canvas baseChart
           #chartCanvas
-          [datasets]="chart.dataset"
-          [chartType]="chart.chartType"
-          [options]="chart.options"
-          [labels]="chart.labels"
-          width="120"
-          height="120"></canvas>
+          [datasets]="chartConfig.dataset"
+          [chartType]="chartConfig.chartType"
+          [options]="chartConfig.options"
+          [labels]="chartConfig.labels"
+          [colors]="chartConfig.colors"
+          class="chart-canvas">
+  </canvas>
   <div class="chartjs-tooltip"
        #chartTooltip>
     <table></table>

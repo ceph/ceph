@@ -81,7 +81,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateInMemory) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
-    OBJECT_EXISTS, {}, &cond_ctx);
+    OBJECT_EXISTS, {}, false, &cond_ctx);
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
@@ -113,7 +113,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateHeadOnDisk) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
-    OBJECT_EXISTS, {}, &cond_ctx);
+    OBJECT_EXISTS, {}, false, &cond_ctx);
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
@@ -143,7 +143,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateSnapOnDisk) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, snap_id, 0, object_map.size(), OBJECT_NONEXISTENT,
-    OBJECT_EXISTS, {}, &cond_ctx);
+    OBJECT_EXISTS, {}, false, &cond_ctx);
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
@@ -171,7 +171,7 @@ TEST_F(TestMockObjectMapUpdateRequest, UpdateOnDiskError) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
-    OBJECT_EXISTS, {}, &cond_ctx);
+    OBJECT_EXISTS, {}, false, &cond_ctx);
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
@@ -202,7 +202,7 @@ TEST_F(TestMockObjectMapUpdateRequest, RebuildSnapOnDisk) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, snap_id, 0, object_map.size(), OBJECT_EXISTS_CLEAN,
-    boost::optional<uint8_t>(), {}, &cond_ctx);
+    boost::optional<uint8_t>(), {}, false, &cond_ctx);
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
@@ -240,13 +240,40 @@ TEST_F(TestMockObjectMapUpdateRequest, BatchUpdate) {
   C_SaferCond cond_ctx;
   AsyncRequest<> *req = new UpdateRequest<>(
     *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
-    OBJECT_EXISTS, {}, &cond_ctx);
+    OBJECT_EXISTS, {}, false, &cond_ctx);
   {
     RWLock::RLocker snap_locker(ictx->snap_lock);
     RWLock::WLocker object_map_locker(ictx->object_map_lock);
     req->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
+}
+
+TEST_F(TestMockObjectMapUpdateRequest, IgnoreMissingObjectMap) {
+  REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ASSERT_EQ(0, acquire_exclusive_lock(*ictx));
+
+  expect_update(ictx, CEPH_NOSNAP, 0, 1, OBJECT_NONEXISTENT, OBJECT_EXISTS,
+                -ENOENT);
+
+  ceph::BitVector<2> object_map;
+  object_map.resize(1);
+
+  C_SaferCond cond_ctx;
+  AsyncRequest<> *req = new UpdateRequest<>(
+    *ictx, &object_map, CEPH_NOSNAP, 0, object_map.size(), OBJECT_NONEXISTENT,
+    OBJECT_EXISTS, {}, true, &cond_ctx);
+  {
+    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker object_map_locker(ictx->object_map_lock);
+    req->send();
+  }
+  ASSERT_EQ(0, cond_ctx.wait());
+
+  expect_unlock_exclusive_lock(*ictx);
 }
 
 } // namespace object_map

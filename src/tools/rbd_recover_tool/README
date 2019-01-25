@@ -4,9 +4,9 @@
 
   ceph rbd recover tool is used for recovering ceph rbd image, when all ceph services are killed.
 it is based on ceph-0.80.x (Firefly and newer)
-  currently, ceph service(ceph-mon, ceph-osd) evently are not avaiable caused by bugs or sth else
+  currently, ceph service(ceph-mon, ceph-osd) evently are not available caused by bugs or sth else
 , especially on large scale ceph cluster, so that the ceph cluster can not supply service 
-and rbd images can not be accessed. In this case, a tool to recover rbd image is nessecary.
+and rbd images can not be accessed. In this case, a tool to recover rbd image is necessary.
   ceph rbd recover tool is just used for this, it can collect all objects of an image from distributed
 osd nodes with the latest pg epoch, and splice objects by offset to a complete image. To make sure
 object data is complete, this tool does flush osd journal on each osd node before recovering.
@@ -36,9 +36,9 @@ admin_node -----------+---- osd.1
 admin_node: {rbd-recover-tool  common_h  epoch_h  metadata_h  database_h}
 osd:        {osd_job           common_h  epoch_h  metadata_h} #/var/rbd_tool/osd_job
 in this architecture, admin_node acts as client, osds act as server.
-so, they run diffrent files: 
+so, they run different files: 
 on admin_node run:  rbd-recover-tool <action> [<parameters>]
-on osd node run:    ./osd_job <funtion> <parameters>
+on osd node run:    ./osd_job <function> <parameters>
 admin_node will copy files: osd_job, common_h, epoch_h, metadata_h to remote osd node
 
 
@@ -83,7 +83,7 @@ recover <pool_id><image_name>[@[<snap_name>]] [/path/to/store/image]	#recover im
 if admin_node operation is failed, you can check it on osd node
 cd /var/rbd_tool/osd_job
 ./osd_job <operation>
-<opeartion> :
+<operation> :
 do_image_id <image_id_hobject>		#get image id of image format v2 
 do_image_id <image_header_hobject>	#get image id of image format v1
 do_image_metadata_v1 <image_header_hobject>  	#get image metadata of image format v1, maybe pg epoch is not latest

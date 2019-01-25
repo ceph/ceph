@@ -68,7 +68,7 @@ private:
   Context* m_on_finish;
 
   librados::IoCtx m_parent_io_ctx;
-  ParentSpec m_parent_spec;
+  cls::rbd::ParentImageSpec m_parent_spec;
   std::string m_parent_header_name;
 
   cls::rbd::SnapshotNamespace m_parent_snap_namespace;

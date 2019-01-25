@@ -64,7 +64,7 @@ private:
    * /-------<-------\                   |                |     |
    * |               |                   |            (acquired)|
    * |               |                   v                |     |
-   * |               |            AQUIRE EXCLUSIVE LOCK   |     |
+   * |               |           ACQUIRE EXCLUSIVE LOCK   |     |
    * |               |               /   |                |     |
    * |               |------<-------/    |                |     |
    * |               |                   v                |     |

@@ -175,13 +175,13 @@ template <typename I>
 Context *SetSnapRequest<I>::send_refresh_parent(int *result) {
   CephContext *cct = m_image_ctx.cct;
 
-  ParentInfo parent_md;
+  ParentImageInfo parent_md;
   bool refresh_parent;
   {
     RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
     RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
 
-    const ParentInfo *parent_info = m_image_ctx.get_parent_info(m_snap_id);
+    const auto parent_info = m_image_ctx.get_parent_info(m_snap_id);
     if (parent_info == nullptr) {
       *result = -ENOENT;
       lderr(cct) << "failed to retrieve snapshot parent info" << dendl;

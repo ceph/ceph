@@ -26,18 +26,15 @@ describe('TcmuIscsiService', () => {
     expect(service).toBeTruthy();
   });
 
-  it(
-    'should call tcmuiscsi',
-    fakeAsync(() => {
-      let result;
-      service.tcmuiscsi().then((resp) => {
-        result = resp;
-      });
-      const req = httpTesting.expectOne('api/tcmuiscsi');
-      expect(req.request.method).toBe('GET');
-      req.flush(['foo']);
-      tick();
-      expect(result).toEqual(['foo']);
-    })
-  );
+  it('should call tcmuiscsi', fakeAsync(() => {
+    let result;
+    service.tcmuiscsi().subscribe((resp) => {
+      result = resp;
+    });
+    const req = httpTesting.expectOne('api/tcmuiscsi');
+    expect(req.request.method).toBe('GET');
+    req.flush(['foo']);
+    tick();
+    expect(result).toEqual(['foo']);
+  }));
 });

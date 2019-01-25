@@ -16,6 +16,7 @@
 #include "common/Formatter.h"
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_rados.h"
+#include "rgw/rgw_zone.h"
 
 #ifndef CEPH_TEST_RGW_COMMON_H
 #define CEPH_TEST_RGW_COMMON_H
@@ -467,15 +468,15 @@ struct test_rgw_env {
 
   test_rgw_env() {
     test_rgw_init_env(&zonegroup, &zone_params);
-    default_placement.data_pool = rgw_pool(zone_params.placement_pools[zonegroup.default_placement].data_pool);
-    default_placement.data_extra_pool =  rgw_pool(zone_params.placement_pools[zonegroup.default_placement].data_extra_pool);
+    default_placement.data_pool = rgw_pool(zone_params.placement_pools[zonegroup.default_placement.name].get_standard_data_pool());
+    default_placement.data_extra_pool =  rgw_pool(zone_params.placement_pools[zonegroup.default_placement.name].data_extra_pool);
   }
 
   rgw_data_placement_target get_placement(const std::string& placement_id) {
     const RGWZonePlacementInfo& pi = zone_params.placement_pools[placement_id];
     rgw_data_placement_target pt;
     pt.index_pool = pi.index_pool;
-    pt.data_pool = pi.data_pool;
+    pt.data_pool = pi.get_standard_data_pool();
     pt.data_extra_pool = pi.data_extra_pool;
     return pt;
   }

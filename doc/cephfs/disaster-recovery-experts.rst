@@ -183,14 +183,6 @@ The example below shows how to run 4 workers simultaneously:
 It is **important** to ensure that all workers have completed the
 scan_extents phase before any workers enter the scan_inodes phase.
 
-Output of 'scan_links' command includes max used inode number for each
-MDS rank. You may need to update InoTables of each MDS rank.
-
-::
-    cephfs-table-tool recovery-fs:x show inode
-    cephfs-table-tool recovery-fs:x take_inos <max ino of mds.x)
-
-
 After completing the metadata recovery, you may want to run cleanup
 operation to delete ancillary data geneated during recovery.
 
@@ -259,4 +251,4 @@ run a forward scrub to repair them. Ensure you have an MDS running and issue:
 
 ::
 
-    ceph daemon mds.a scrub_path / recursive repair
+    ceph tell mds.a scrub start / recursive repair

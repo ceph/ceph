@@ -10,6 +10,7 @@
 #include "librbd/Utils.h"
 #include "InstanceReplayer.h"
 #include "ImageSyncThrottler.h"
+#include "common/Cond.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
@@ -326,11 +327,12 @@ InstanceWatcher<I>::InstanceWatcher(librados::IoCtx &io_ctx,
     m_lock(unique_lock_name("rbd::mirror::InstanceWatcher::m_lock", this)),
     m_instance_lock(librbd::ManagedLock<I>::create(
       m_ioctx, m_work_queue, m_oid, this, librbd::managed_lock::EXCLUSIVE, true,
-      m_cct->_conf.get_val<int64_t>("rbd_blacklist_expire_seconds"))) {
+      m_cct->_conf.get_val<uint64_t>("rbd_blacklist_expire_seconds"))) {
 }
 
 template <typename I>
 InstanceWatcher<I>::~InstanceWatcher() {
+  ceph_assert(m_requests.empty());
   ceph_assert(m_notify_ops.empty());
   ceph_assert(m_notify_op_tracker.empty());
   ceph_assert(m_suspended_ops.empty());
@@ -404,17 +406,12 @@ void InstanceWatcher<I>::notify_image_acquire(
 
   ceph_assert(m_on_finish == nullptr);
 
-  if (instance_id == m_instance_id) {
-    handle_image_acquire(global_image_id, on_notify_ack);
-  } else {
-    uint64_t request_id = ++m_request_seq;
-    bufferlist bl;
-    encode(NotifyMessage{ImageAcquirePayload{request_id, global_image_id}},
-             bl);
-    auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
-                                           std::move(bl), on_notify_ack);
-    req->send();
-  }
+  uint64_t request_id = ++m_request_seq;
+  bufferlist bl;
+  encode(NotifyMessage{ImageAcquirePayload{request_id, global_image_id}}, bl);
+  auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
+                                         std::move(bl), on_notify_ack);
+  req->send();
 }
 
 template <typename I>
@@ -428,17 +425,12 @@ void InstanceWatcher<I>::notify_image_release(
 
   ceph_assert(m_on_finish == nullptr);
 
-  if (instance_id == m_instance_id) {
-    handle_image_release(global_image_id, on_notify_ack);
-  } else {
-    uint64_t request_id = ++m_request_seq;
-    bufferlist bl;
-    encode(NotifyMessage{ImageReleasePayload{request_id, global_image_id}},
-             bl);
-    auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
-                                           std::move(bl), on_notify_ack);
-    req->send();
-  }
+  uint64_t request_id = ++m_request_seq;
+  bufferlist bl;
+  encode(NotifyMessage{ImageReleasePayload{request_id, global_image_id}}, bl);
+  auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
+                                         std::move(bl), on_notify_ack);
+  req->send();
 }
 
 template <typename I>
@@ -452,17 +444,13 @@ void InstanceWatcher<I>::notify_peer_image_removed(
   Mutex::Locker locker(m_lock);
   ceph_assert(m_on_finish == nullptr);
 
-  if (instance_id == m_instance_id) {
-    handle_peer_image_removed(global_image_id, peer_mirror_uuid, on_notify_ack);
-  } else {
-    uint64_t request_id = ++m_request_seq;
-    bufferlist bl;
-    encode(NotifyMessage{PeerImageRemovedPayload{request_id, global_image_id,
-                                                   peer_mirror_uuid}}, bl);
-    auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
-                                           std::move(bl), on_notify_ack);
-    req->send();
-  }
+  uint64_t request_id = ++m_request_seq;
+  bufferlist bl;
+  encode(NotifyMessage{PeerImageRemovedPayload{request_id, global_image_id,
+                                               peer_mirror_uuid}}, bl);
+  auto req = new C_NotifyInstanceRequest(this, instance_id, request_id,
+                                         std::move(bl), on_notify_ack);
+  req->send();
 }
 
 template <typename I>
@@ -609,7 +597,7 @@ void InstanceWatcher<I>::handle_acquire_leader() {
   Mutex::Locker locker(m_lock);
 
   ceph_assert(m_image_sync_throttler == nullptr);
-  m_image_sync_throttler = ImageSyncThrottler<I>::create();
+  m_image_sync_throttler = ImageSyncThrottler<I>::create(m_cct);
 
   m_leader_instance_id = m_instance_id;
   unsuspend_notify_requests();

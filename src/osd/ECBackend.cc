@@ -329,6 +329,15 @@ void ECBackend::handle_recovery_push(
     ceph_assert(op.data.length() == 0);
   }
 
+  if (get_parent()->pg_is_remote_backfilling()) {
+    get_parent()->pg_add_local_num_bytes(op.data.length());
+    get_parent()->pg_add_num_bytes(op.data.length() * get_ec_data_chunk_count());
+    dout(10) << __func__ << " " << op.soid
+             << " add new actual data by " << op.data.length()
+             << " add new num_bytes by " << op.data.length() * get_ec_data_chunk_count()
+             << dendl;
+  }
+
   if (op.before_progress.first) {
     ceph_assert(op.attrset.count(string("_")));
     m->t.setattrs(
@@ -365,6 +374,20 @@ void ECBackend::handle_recovery_push(
 	ObjectContextRef(),
 	false,
 	&m->t);
+      if (get_parent()->pg_is_remote_backfilling()) {
+        struct stat st;
+        int r = store->stat(ch, ghobject_t(op.soid, ghobject_t::NO_GEN,
+                            get_parent()->whoami_shard().shard), &st);
+        if (r == 0) {
+          get_parent()->pg_sub_local_num_bytes(st.st_size);
+         // XXX: This can be way overestimated for small objects
+         get_parent()->pg_sub_num_bytes(st.st_size * get_ec_data_chunk_count());
+         dout(10) << __func__ << " " << op.soid
+                  << " sub actual data by " << st.st_size
+                  << " sub num_bytes by " << st.st_size * get_ec_data_chunk_count()
+                  << dendl;
+        }
+      }
     }
   }
   m->push_replies[get_parent()->primary_shard()].push_back(PushReplyOp());
@@ -488,7 +511,7 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
        m.pushes.erase(i++)) {
     MOSDPGPush *msg = new MOSDPGPush();
     msg->set_priority(priority);
-    msg->map_epoch = get_parent()->get_epoch();
+    msg->map_epoch = get_osdmap_epoch();
     msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
     msg->from = get_parent()->whoami_shard();
     msg->pgid = spg_t(get_parent()->get_info().pgid.pgid, i->first.shard);
@@ -505,7 +528,7 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
        m.push_replies.erase(i++)) {
     MOSDPGPushReply *msg = new MOSDPGPushReply();
     msg->set_priority(priority);
-    msg->map_epoch = get_parent()->get_epoch();
+    msg->map_epoch = get_osdmap_epoch();
     msg->min_epoch = get_parent()->get_last_peering_reset_epoch();
     msg->from = get_parent()->whoami_shard();
     msg->pgid = spg_t(get_parent()->get_info().pgid.pgid, i->first.shard);
@@ -519,7 +542,7 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
 	get_parent()->bless_context(
 	  new SendPushReplies(
 	    get_parent(),
-	    get_parent()->get_epoch(),
+	    get_osdmap_epoch(),
 	    replies)));
     get_parent()->queue_transaction(std::move(m.t));
   } 
@@ -776,12 +799,12 @@ bool ECBackend::_handle_message(
     const MOSDECSubOpRead *op = static_cast<const MOSDECSubOpRead*>(_op->get_req());
     MOSDECSubOpReadReply *reply = new MOSDECSubOpReadReply;
     reply->pgid = get_parent()->primary_spg_t();
-    reply->map_epoch = get_parent()->get_epoch();
+    reply->map_epoch = get_osdmap_epoch();
     reply->min_epoch = get_parent()->get_interval_start_epoch();
     handle_sub_read(op->op.from, op->op, &(reply->op), _op->pg_trace);
     reply->trace = _op->pg_trace;
     get_parent()->send_message_osd_cluster(
-      op->op.from.osd, reply, get_parent()->get_epoch());
+      op->op.from.osd, reply, get_osdmap_epoch());
     return true;
   }
   case MSG_OSD_EC_READ_REPLY: {
@@ -862,7 +885,7 @@ void ECBackend::sub_write_committed(
     get_parent()->update_last_complete_ondisk(last_complete);
     MOSDECSubOpWriteReply *r = new MOSDECSubOpWriteReply;
     r->pgid = get_parent()->primary_spg_t();
-    r->map_epoch = get_parent()->get_epoch();
+    r->map_epoch = get_osdmap_epoch();
     r->min_epoch = get_parent()->get_interval_start_epoch();
     r->op.tid = tid;
     r->op.last_complete = last_complete;
@@ -873,7 +896,7 @@ void ECBackend::sub_write_committed(
     r->trace = trace;
     r->trace.event("sending sub op commit");
     get_parent()->send_message_osd_cluster(
-      get_parent()->primary_shard().osd, r, get_parent()->get_epoch());
+      get_parent()->primary_shard().osd, r, get_osdmap_epoch());
   }
 }
 
@@ -1001,11 +1024,20 @@ void ECBackend::handle_sub_read(
       }
 
       if (r < 0) {
-	get_parent()->clog_error() << "Error " << r
-				   << " reading object "
-				   << i->first;
-	dout(5) << __func__ << ": Error " << r
-		<< " reading " << i->first << dendl;
+	// if we are doing fast reads, it's possible for one of the shard
+	// reads to cross paths with another update and get a (harmless)
+	// ENOENT.  Suppress the message to the cluster log in that case.
+	if (r == -ENOENT && get_parent()->get_pool().fast_read) {
+	  dout(5) << __func__ << ": Error " << r
+		  << " reading " << i->first << ", fast read, probably ok"
+		  << dendl;
+	} else {
+	  get_parent()->clog_error() << "Error " << r
+				     << " reading object "
+				     << i->first;
+	  dout(5) << __func__ << ": Error " << r
+		  << " reading " << i->first << dendl;
+	}
 	goto error;
       } else {
         dout(20) << __func__ << " read request=" << j->get<1>() << " r=" << r << " len=" << bl.length() << dendl;
@@ -1713,7 +1745,7 @@ void ECBackend::do_read_op(ReadOp &op)
     msg->pgid = spg_t(
       get_parent()->whoami_spg_t().pgid,
       i->first.shard);
-    msg->map_epoch = get_parent()->get_epoch();
+    msg->map_epoch = get_osdmap_epoch();
     msg->min_epoch = get_parent()->get_interval_start_epoch();
     msg->op = i->second;
     msg->op.from = get_parent()->whoami_shard();
@@ -1726,7 +1758,7 @@ void ECBackend::do_read_op(ReadOp &op)
     get_parent()->send_message_osd_cluster(
       i->first.osd,
       msg,
-      get_parent()->get_epoch());
+      get_osdmap_epoch());
   }
   dout(10) << __func__ << ": started " << op << dendl;
 }
@@ -1829,13 +1861,12 @@ bool ECBackend::try_state_to_reads()
     return false;
   }
 
-  if (op->invalidates_cache()) {
+  if (!pipeline_state.caching_enabled()) {
+    op->using_cache = false;
+  } else if (op->invalidates_cache()) {
     dout(20) << __func__ << ": invalidating cache after this op"
 	     << dendl;
     pipeline_state.invalidate();
-    op->using_cache = false;
-  } else {
-    op->using_cache = pipeline_state.caching_enabled();
   }
 
   waiting_state.pop_front();
@@ -2023,11 +2054,11 @@ bool ECBackend::try_reads_to_commit()
     } else {
       MOSDECSubOpWrite *r = new MOSDECSubOpWrite(sop);
       r->pgid = spg_t(get_parent()->primary_spg_t().pgid, i->shard);
-      r->map_epoch = get_parent()->get_epoch();
+      r->map_epoch = get_osdmap_epoch();
       r->min_epoch = get_parent()->get_interval_start_epoch();
       r->trace = trace;
       get_parent()->send_message_osd_cluster(
-	i->osd, r, get_parent()->get_epoch());
+	i->osd, r, get_osdmap_epoch());
     }
   }
   if (should_write_local) {
@@ -2191,6 +2222,10 @@ void ECBackend::objects_read_async(
 	  auto range = got.second.get_containing_range(offset, length);
 	  ceph_assert(range.first != range.second);
 	  ceph_assert(range.first.get_off() <= offset);
+          ldpp_dout(dpp, 30) << "offset: " << offset << dendl;
+          ldpp_dout(dpp, 30) << "range offset: " << range.first.get_off() << dendl;
+          ldpp_dout(dpp, 30) << "length: " << length << dendl;
+          ldpp_dout(dpp, 30) << "range length: " << range.first.get_len()  << dendl;
 	  ceph_assert(
 	    (offset + length) <=
 	    (range.first.get_off() + range.first.get_len()));

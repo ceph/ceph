@@ -724,7 +724,7 @@ public:
 
   /**
    * returns (type_id, type) of all parent buckets between id and
-   * default, can be used to check for anomolous CRUSH maps
+   * default, can be used to check for anomalous CRUSH maps
    */
   map<int, string> get_parent_hierarchy(int id) const;
 
@@ -963,6 +963,9 @@ public:
     return adjust_item_weight_in_loc(cct, id, (int)(weight * (float)0x10000), loc);
   }
   void reweight(CephContext *cct);
+  void reweight_bucket(crush_bucket *b,
+		       crush_choose_arg_map& arg_map,
+		       vector<uint32_t> *weightv);
 
   int adjust_subtree_weight(CephContext *cct, int id, int weight);
   int adjust_subtree_weightf(CephContext *cct, int id, float weight) {
@@ -1201,6 +1204,8 @@ private:
    **/
   int detach_bucket(CephContext *cct, int item);
 
+  int get_new_bucket_id();
+
 public:
   int get_max_buckets() const {
     if (!crush) return -EINVAL;
@@ -1290,6 +1295,7 @@ public:
     const std::set<int32_t>& used_ids,
     int *clone,
     map<int,map<int,vector<int>>> *cmap_item_weight);
+  bool class_is_in_use(int class_id, ostream *ss = nullptr);
   int rename_class(const string& srcname, const string& dstname);
   int populate_classes(
     const std::map<int32_t, map<int32_t, int32_t>>& old_class_bucket);
@@ -1300,6 +1306,15 @@ public:
   int rebuild_roots_with_classes();
   /* remove unused roots generated for class devices */
   int trim_roots_with_class();
+
+  int reclassify(
+    CephContext *cct,
+    ostream& out,
+    const map<string,string>& classify_root,
+    const map<string,pair<string,string>>& classify_bucket
+    );
+
+  int set_subtree_class(const string& name, const string& class_name);
 
   void start_choose_profile() {
     free(crush->choose_tries);

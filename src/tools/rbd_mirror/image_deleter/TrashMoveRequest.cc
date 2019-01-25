@@ -190,7 +190,7 @@ void TrashMoveRequest<I>::open_image() {
 
   Context *ctx = create_context_callback<
     TrashMoveRequest<I>, &TrashMoveRequest<I>::handle_open_image>(this);
-  m_image_ctx->state->open(true, ctx);
+  m_image_ctx->state->open(librbd::OPEN_FLAG_SKIP_OPEN_PARENT, ctx);
 }
 
 template <typename I>
@@ -255,7 +255,8 @@ void TrashMoveRequest<I>::trash_move() {
 
   utime_t delete_time{ceph_clock_now()};
   utime_t deferment_end_time{delete_time};
-  deferment_end_time += m_image_ctx->mirroring_delete_delay;
+  deferment_end_time +=
+    m_image_ctx->config.template get_val<uint64_t>("rbd_mirroring_delete_delay");
 
   m_trash_image_spec = {
     cls::rbd::TRASH_IMAGE_SOURCE_MIRRORING, m_image_ctx->name, delete_time,

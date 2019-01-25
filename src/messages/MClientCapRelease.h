@@ -44,7 +44,7 @@ private:
   ~MClientCapRelease() override {}
 
 public:
-  const char *get_type_name() const override { return "client_cap_release";}
+  std::string_view get_type_name() const override { return "client_cap_release";}
   void print(ostream& out) const override {
     out << "client_cap_release(" << caps.size() << ")";
   }

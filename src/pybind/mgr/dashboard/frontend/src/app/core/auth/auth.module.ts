@@ -3,11 +3,12 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
-import { BsDropdownModule, PopoverModule, TabsModule } from 'ngx-bootstrap';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
+import { PopoverModule } from 'ngx-bootstrap/popover';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
 import { SharedModule } from '../../shared/shared.module';
 import { LoginComponent } from './login/login.component';
-import { LogoutComponent } from './logout/logout.component';
 import { RoleDetailsComponent } from './role-details/role-details.component';
 import { RoleFormComponent } from './role-form/role-form.component';
 import { RoleListComponent } from './role-list/role-list.component';
@@ -28,14 +29,12 @@ import { UserTabsComponent } from './user-tabs/user-tabs.component';
   ],
   declarations: [
     LoginComponent,
-    LogoutComponent,
     RoleDetailsComponent,
     RoleFormComponent,
     RoleListComponent,
     UserTabsComponent,
     UserListComponent,
     UserFormComponent
-  ],
-  exports: [LogoutComponent]
+  ]
 })
 export class AuthModule {}

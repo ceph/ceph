@@ -15,6 +15,8 @@
 #ifndef CEPH_MSG_TYPES_H
 #define CEPH_MSG_TYPES_H
 
+#include <sstream>
+
 #include <netinet/in.h>
 
 #include "include/ceph_features.h"
@@ -232,13 +234,15 @@ struct entity_addr_t {
     TYPE_NONE = 0,
     TYPE_LEGACY = 1,  ///< legacy msgr1 protocol (ceph jewel and older)
     TYPE_MSGR2 = 2,   ///< msgr2 protocol (new in ceph kraken)
+    TYPE_ANY = 3,  ///< ambiguous
   } type_t;
-  static const type_t TYPE_DEFAULT = TYPE_LEGACY;
-  static const char *get_type_name(int t) {
+  static const type_t TYPE_DEFAULT = TYPE_MSGR2;
+  static std::string_view get_type_name(int t) {
     switch (t) {
     case TYPE_NONE: return "none";
-    case TYPE_LEGACY: return "legacy";
-    case TYPE_MSGR2: return "msgr2";
+    case TYPE_LEGACY: return "v1";
+    case TYPE_MSGR2: return "v2";
+    case TYPE_ANY: return "any";
     default: return "???";
     }
   };
@@ -281,6 +285,13 @@ struct entity_addr_t {
     u.sa.sa_family = f;
   }
 
+  bool is_ipv4() const {
+    return u.sa.sa_family == AF_INET;
+  }
+  bool is_ipv6() const {
+    return u.sa.sa_family == AF_INET6;
+  }
+
   sockaddr_in &in4_addr() {
     return u.sin;
   }
@@ -309,10 +320,17 @@ struct entity_addr_t {
   {
     switch (sa->sa_family) {
     case AF_INET:
+      // pre-zero, since we're only copying a portion of the source
+      memset(&u, 0, sizeof(u));
       memcpy(&u.sin, sa, sizeof(u.sin));
       break;
     case AF_INET6:
+      // pre-zero, since we're only copying a portion of the source
+      memset(&u, 0, sizeof(u));
       memcpy(&u.sin6, sa, sizeof(u.sin6));
+      break;
+    case AF_UNSPEC:
+      memset(&u, 0, sizeof(u));
       break;
     default:
       return false;
@@ -414,7 +432,13 @@ struct entity_addr_t {
 
   std::string ip_only_to_str() const;
 
-  bool parse(const char *s, const char **end = 0);
+  std::string get_legacy_str() const {
+    ostringstream ss;
+    ss << get_sockaddr() << "/" << get_nonce();
+    return ss.str();
+  }
+
+  bool parse(const char *s, const char **end = 0, int type=0);
 
   void decode_legacy_addr_after_marker(bufferlist::const_iterator& bl)
   {
@@ -423,11 +447,15 @@ struct entity_addr_t {
     __u16 rest;
     decode(marker, bl);
     decode(rest, bl);
-    type = TYPE_LEGACY;
     decode(nonce, bl);
     sockaddr_storage ss;
     decode(ss, bl);
     set_sockaddr((sockaddr*)&ss);
+    if (get_family() == AF_UNSPEC) {
+      type = TYPE_NONE;
+    } else {
+      type = TYPE_LEGACY;
+    }
   }
 
   // Right now, these only deal with sockaddr_storage that have only family and content.
@@ -445,7 +473,18 @@ struct entity_addr_t {
     }
     encode((__u8)1, bl);
     ENCODE_START(1, 1, bl);
-    encode(type, bl);
+    if (HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      encode(type, bl);
+    } else {
+      // map any -> legacy for old clients.  this is primary for the benefit
+      // of OSDMap's blacklist, but is reasonable in general since any: is
+      // meaningless for pre-nautilus clients or daemons.
+      auto t = type;
+      if (t == TYPE_ANY) {
+	t = TYPE_LEGACY;
+      }
+      encode(t, bl);
+    }
     encode(nonce, bl);
     __u32 elen = get_sockaddr_len();
     encode(elen, bl);
@@ -565,6 +604,26 @@ struct entity_addrvec_t {
     }
     return entity_addr_t();
   }
+  string get_legacy_str() const {
+    return legacy_or_front_addr().get_legacy_str();
+  }
+
+  entity_addr_t msgr2_addr() const {
+    for (auto &a : v) {
+      if (a.type == entity_addr_t::TYPE_MSGR2) {
+        return a;
+      }
+    }
+    return entity_addr_t();
+  }
+  bool has_msgr2() const {
+    for (auto& a : v) {
+      if (a.is_msgr2()) {
+	return true;
+      }
+    }
+    return false;
+  }
 
   bool parse(const char *s, const char **end = 0);
 
@@ -584,10 +643,19 @@ struct entity_addrvec_t {
   void dump(Formatter *f) const;
   static void generate_test_instances(list<entity_addrvec_t*>& ls);
 
-  bool probably_equals(const entity_addrvec_t& o) const {
-    if (o.v.size() != v.size()) {
-      return false;
+  bool legacy_equals(const entity_addrvec_t& o) const {
+    if (v == o.v) {
+      return true;
     }
+    if (v.size() == 1 &&
+	front().is_legacy() &&
+	front() == o.legacy_addr()) {
+      return true;
+    }
+    return false;
+  }
+
+  bool probably_equals(const entity_addrvec_t& o) const {
     for (unsigned i = 0; i < v.size(); ++i) {
       if (!v[i].probably_equals(o.v[i])) {
 	return false;

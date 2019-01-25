@@ -5,114 +5,129 @@
   
   Positional arguments:
     <command>
-      bench                               Simple benchmark.
-      children                            Display children of snapshot.
-      clone                               Clone a snapshot into a CoW child image.
-      copy (cp)                           Copy src image to dest.
-      create                              Create an empty image.
-      deep copy (deep cp)                 Deep copy src image to dest.
-      device list (showmapped)            List mapped rbd images.
-      device map (map)                    Map an image to a block device.
-      device unmap (unmap)                Unmap a rbd device.
-      diff                                Print extents that differ since a
-                                          previous snap, or image creation.
-      disk-usage (du)                     Show disk usage stats for pool, image
-                                          or snapshot.
-      export                              Export image to file.
-      export-diff                         Export incremental diff to file.
-      feature disable                     Disable the specified image feature.
-      feature enable                      Enable the specified image feature.
-      flatten                             Fill clone with parent data (make it
-                                          independent).
-      group create                        Create a group.
-      group image add                     Add an image to a group.
-      group image list (group image ls)   List images in a group.
-      group image remove (group image rm) Remove an image from a group.
-      group list (group ls)               List rbd groups.
-      group remove (group rm)             Delete a group.
-      group rename                        Rename a group within pool.
-      group snap create                   Make a snapshot of a group.
-      group snap list (group snap ls)     List snapshots of a group.
-      group snap remove (group snap rm)   Remove a snapshot from a group.
-      group snap rename                   Rename group's snapshot.
-      group snap rollback                 Rollback group to snapshot.
-      image-meta get                      Image metadata get the value associated
-                                          with the key.
-      image-meta list (image-meta ls)     Image metadata list keys with values.
-      image-meta remove (image-meta rm)   Image metadata remove the key and value
-                                          associated.
-      image-meta set                      Image metadata set key with value.
-      import                              Import image from file.
-      import-diff                         Import an incremental diff.
-      info                                Show information about image size,
-                                          striping, etc.
-      journal client disconnect           Flag image journal client as
-                                          disconnected.
-      journal export                      Export image journal.
-      journal import                      Import image journal.
-      journal info                        Show information about image journal.
-      journal inspect                     Inspect image journal for structural
-                                          errors.
-      journal reset                       Reset image journal.
-      journal status                      Show status of image journal.
-      list (ls)                           List rbd images.
-      lock add                            Take a lock on an image.
-      lock list (lock ls)                 Show locks held on an image.
-      lock remove (lock rm)               Release a lock on an image.
-      merge-diff                          Merge two diff exports together.
-      migration abort                     Cancel interrupted image migration.
-      migration commit                    Commit image migration.
-      migration execute                   Execute image migration.
-      migration prepare                   Prepare image migration.
-      mirror image demote                 Demote an image to non-primary for RBD
-                                          mirroring.
-      mirror image disable                Disable RBD mirroring for an image.
-      mirror image enable                 Enable RBD mirroring for an image.
-      mirror image promote                Promote an image to primary for RBD
-                                          mirroring.
-      mirror image resync                 Force resync to primary image for RBD
-                                          mirroring.
-      mirror image status                 Show RBD mirroring status for an image.
-      mirror pool demote                  Demote all primary images in the pool.
-      mirror pool disable                 Disable RBD mirroring by default within
-                                          a pool.
-      mirror pool enable                  Enable RBD mirroring by default within
-                                          a pool.
-      mirror pool info                    Show information about the pool
-                                          mirroring configuration.
-      mirror pool peer add                Add a mirroring peer to a pool.
-      mirror pool peer remove             Remove a mirroring peer from a pool.
-      mirror pool peer set                Update mirroring peer settings.
-      mirror pool promote                 Promote all non-primary images in the
-                                          pool.
-      mirror pool status                  Show status for all mirrored images in
-                                          the pool.
-      namespace create                    Create an RBD image namespace.
-      namespace list (namespace ls)       List RBD image namespaces.
-      namespace remove (namespace rm)     Remove an RBD image namespace.
-      object-map check                    Verify the object map is correct.
-      object-map rebuild                  Rebuild an invalid object map.
-      pool init                           Initialize pool for use by RBD.
-      remove (rm)                         Delete an image.
-      rename (mv)                         Rename image within pool.
-      resize                              Resize (expand or shrink) image.
-      snap create (snap add)              Create a snapshot.
-      snap limit clear                    Remove snapshot limit.
-      snap limit set                      Limit the number of snapshots.
-      snap list (snap ls)                 Dump list of image snapshots.
-      snap protect                        Prevent a snapshot from being deleted.
-      snap purge                          Delete all unprotected snapshots.
-      snap remove (snap rm)               Delete a snapshot.
-      snap rename                         Rename a snapshot.
-      snap rollback (snap revert)         Rollback image to snapshot.
-      snap unprotect                      Allow a snapshot to be deleted.
-      status                              Show the status of this image.
-      trash list (trash ls)               List trash images.
-      trash move (trash mv)               Move an image to the trash.
-      trash purge                         Remove all expired images from trash.
-      trash remove (trash rm)             Remove an image from trash.
-      trash restore                       Restore an image from trash.
-      watch                               Watch events on image.
+      bench                             Simple benchmark.
+      children                          Display children of snapshot.
+      clone                             Clone a snapshot into a CoW child image.
+      config global get                 Get a global-level configuration override.
+      config global list (... ls)       List global-level configuration overrides.
+      config global remove (... rm)     Remove a global-level configuration
+                                        override.
+      config global set                 Set a global-level configuration override.
+      config image get                  Get an image-level configuration override.
+      config image list (... ls)        List image-level configuration overrides.
+      config image remove (... rm)      Remove an image-level configuration
+                                        override.
+      config image set                  Set an image-level configuration override.
+      config pool get                   Get a pool-level configuration override.
+      config pool list (... ls)         List pool-level configuration overrides.
+      config pool remove (... rm)       Remove a pool-level configuration
+                                        override.
+      config pool set                   Set a pool-level configuration override.
+      copy (cp)                         Copy src image to dest.
+      create                            Create an empty image.
+      deep copy (deep cp)               Deep copy src image to dest.
+      device list (showmapped)          List mapped rbd images.
+      device map (map)                  Map an image to a block device.
+      device unmap (unmap)              Unmap a rbd device.
+      diff                              Print extents that differ since a
+                                        previous snap, or image creation.
+      disk-usage (du)                   Show disk usage stats for pool, image or
+                                        snapshot.
+      export                            Export image to file.
+      export-diff                       Export incremental diff to file.
+      feature disable                   Disable the specified image feature.
+      feature enable                    Enable the specified image feature.
+      flatten                           Fill clone with parent data (make it
+                                        independent).
+      group create                      Create a group.
+      group image add                   Add an image to a group.
+      group image list (... ls)         List images in a group.
+      group image remove (... rm)       Remove an image from a group.
+      group list (group ls)             List rbd groups.
+      group remove (group rm)           Delete a group.
+      group rename                      Rename a group within pool.
+      group snap create                 Make a snapshot of a group.
+      group snap list (... ls)          List snapshots of a group.
+      group snap remove (... rm)        Remove a snapshot from a group.
+      group snap rename                 Rename group's snapshot.
+      group snap rollback               Rollback group to snapshot.
+      image-meta get                    Image metadata get the value associated
+                                        with the key.
+      image-meta list (image-meta ls)   Image metadata list keys with values.
+      image-meta remove (image-meta rm) Image metadata remove the key and value
+                                        associated.
+      image-meta set                    Image metadata set key with value.
+      import                            Import image from file.
+      import-diff                       Import an incremental diff.
+      info                              Show information about image size,
+                                        striping, etc.
+      journal client disconnect         Flag image journal client as disconnected.
+      journal export                    Export image journal.
+      journal import                    Import image journal.
+      journal info                      Show information about image journal.
+      journal inspect                   Inspect image journal for structural
+                                        errors.
+      journal reset                     Reset image journal.
+      journal status                    Show status of image journal.
+      list (ls)                         List rbd images.
+      lock add                          Take a lock on an image.
+      lock list (lock ls)               Show locks held on an image.
+      lock remove (lock rm)             Release a lock on an image.
+      merge-diff                        Merge two diff exports together.
+      migration abort                   Cancel interrupted image migration.
+      migration commit                  Commit image migration.
+      migration execute                 Execute image migration.
+      migration prepare                 Prepare image migration.
+      mirror image demote               Demote an image to non-primary for RBD
+                                        mirroring.
+      mirror image disable              Disable RBD mirroring for an image.
+      mirror image enable               Enable RBD mirroring for an image.
+      mirror image promote              Promote an image to primary for RBD
+                                        mirroring.
+      mirror image resync               Force resync to primary image for RBD
+                                        mirroring.
+      mirror image status               Show RBD mirroring status for an image.
+      mirror pool demote                Demote all primary images in the pool.
+      mirror pool disable               Disable RBD mirroring by default within a
+                                        pool.
+      mirror pool enable                Enable RBD mirroring by default within a
+                                        pool.
+      mirror pool info                  Show information about the pool mirroring
+                                        configuration.
+      mirror pool peer add              Add a mirroring peer to a pool.
+      mirror pool peer remove           Remove a mirroring peer from a pool.
+      mirror pool peer set              Update mirroring peer settings.
+      mirror pool promote               Promote all non-primary images in the
+                                        pool.
+      mirror pool status                Show status for all mirrored images in
+                                        the pool.
+      namespace create                  Create an RBD image namespace.
+      namespace list (namespace ls)     List RBD image namespaces.
+      namespace remove (namespace rm)   Remove an RBD image namespace.
+      object-map check                  Verify the object map is correct.
+      object-map rebuild                Rebuild an invalid object map.
+      pool init                         Initialize pool for use by RBD.
+      pool stats                        Display pool statistics.
+      remove (rm)                       Delete an image.
+      rename (mv)                       Rename image within pool.
+      resize                            Resize (expand or shrink) image.
+      snap create (snap add)            Create a snapshot.
+      snap limit clear                  Remove snapshot limit.
+      snap limit set                    Limit the number of snapshots.
+      snap list (snap ls)               Dump list of image snapshots.
+      snap protect                      Prevent a snapshot from being deleted.
+      snap purge                        Delete all unprotected snapshots.
+      snap remove (snap rm)             Delete a snapshot.
+      snap rename                       Rename a snapshot.
+      snap rollback (snap revert)       Rollback image to snapshot.
+      snap unprotect                    Allow a snapshot to be deleted.
+      status                            Show the status of this image.
+      trash list (trash ls)             List trash images.
+      trash move (trash mv)             Move an image to the trash.
+      trash purge                       Remove all expired images from trash.
+      trash remove (trash rm)           Remove an image from trash.
+      trash restore                     Restore an image from trash.
+      watch                             Watch events on image.
   
   Optional arguments:
     -c [ --conf ] arg     path to cluster configuration
@@ -217,13 +232,166 @@
     --stripe-count arg        stripe count
     --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
     --journal-pool arg        pool for journal objects
   
   Image Features:
     (*) supports enabling/disabling on existing images
     (-) supports disabling-only on existing images
     (+) enabled by default for new images if features not specified
+  
+  rbd help config global get
+  usage: rbd config global get <config-entity> <key> 
+  
+  Get a global-level configuration override.
+  
+  Positional arguments
+    <config-entity>      config entity (global, client, client.<id>)
+    <key>                config key
+  
+  rbd help config global list
+  usage: rbd config global list [--format <format>] [--pretty-format] 
+                                <config-entity> 
+  
+  List global-level configuration overrides.
+  
+  Positional arguments
+    <config-entity>      config entity (global, client, client.<id>)
+  
+  Optional arguments
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help config global remove
+  usage: rbd config global remove <config-entity> <key> 
+  
+  Remove a global-level configuration override.
+  
+  Positional arguments
+    <config-entity>      config entity (global, client, client.<id>)
+    <key>                config key
+  
+  rbd help config global set
+  usage: rbd config global set <config-entity> <key> <value> 
+  
+  Set a global-level configuration override.
+  
+  Positional arguments
+    <config-entity>      config entity (global, client, client.<id>)
+    <key>                config key
+    <value>              config value
+  
+  rbd help config image get
+  usage: rbd config image get [--pool <pool>] [--namespace <namespace>] 
+                              [--image <image>] 
+                              <image-spec> <key> 
+  
+  Get an image-level configuration override.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+    <key>                config key
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+  
+  rbd help config image list
+  usage: rbd config image list [--pool <pool>] [--namespace <namespace>] 
+                               [--image <image>] [--format <format>] 
+                               [--pretty-format] 
+                               <image-spec> 
+  
+  List image-level configuration overrides.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help config image remove
+  usage: rbd config image remove [--pool <pool>] [--namespace <namespace>] 
+                                 [--image <image>] 
+                                 <image-spec> <key> 
+  
+  Remove an image-level configuration override.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+    <key>                config key
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+  
+  rbd help config image set
+  usage: rbd config image set [--pool <pool>] [--namespace <namespace>] 
+                              [--image <image>] 
+                              <image-spec> <key> <value> 
+  
+  Set an image-level configuration override.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+    <key>                config key
+    <value>              config value
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+  
+  rbd help config pool get
+  usage: rbd config pool get <pool-name> <key> 
+  
+  Get a pool-level configuration override.
+  
+  Positional arguments
+    <pool-name>          pool name
+    <key>                config key
+  
+  rbd help config pool list
+  usage: rbd config pool list [--format <format>] [--pretty-format] 
+                              <pool-name> 
+  
+  List pool-level configuration overrides.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
+  
+  rbd help config pool remove
+  usage: rbd config pool remove <pool-name> <key> 
+  
+  Remove a pool-level configuration override.
+  
+  Positional arguments
+    <pool-name>          pool name
+    <key>                config key
+  
+  rbd help config pool set
+  usage: rbd config pool set <pool-name> <key> <value> 
+  
+  Set a pool-level configuration override.
+  
+  Positional arguments
+    <pool-name>          pool name
+    <key>                config key
+    <value>              config value
   
   rbd help copy
   usage: rbd copy [--pool <pool>] [--namespace <namespace>] [--image <image>] 
@@ -268,7 +436,7 @@
     --stripe-count arg           stripe count
     --data-pool arg              data pool
     --journal-splay-width arg    number of active journal objects
-    --journal-object-size arg    size of journal objects
+    --journal-object-size arg    size of journal objects [4K <= size <= 64M]
     --journal-pool arg           pool for journal objects
     --sparse-size arg            sparse size in B/K/M [default: 4K]
     --no-progress                disable progress output
@@ -315,7 +483,7 @@
     --stripe-count arg        stripe count
     --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
     --journal-pool arg        pool for journal objects
     --thick-provision         fully allocate storage and zero image
     -s [ --size ] arg         image size (in M/G/T) [default: M]
@@ -370,7 +538,7 @@
     --stripe-count arg           stripe count
     --data-pool arg              data pool
     --journal-splay-width arg    number of active journal objects
-    --journal-object-size arg    size of journal objects
+    --journal-object-size arg    size of journal objects [4K <= size <= 64M]
     --journal-pool arg           pool for journal objects
     --flatten                    fill clone with parent data (make it independent)
     --no-progress                disable progress output
@@ -573,7 +741,7 @@
     --namespace arg           namespace name
     --image arg               image name
     --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
     --journal-pool arg        pool for journal objects
   
   rbd help flatten
@@ -945,7 +1113,7 @@
     --stripe-count arg        stripe count
     --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
     --journal-pool arg        pool for journal objects
     --sparse-size arg         sparse size in B/K/M [default: 4K]
     --no-progress             disable progress output
@@ -1332,7 +1500,7 @@
     --stripe-count arg        stripe count
     --data-pool arg           data pool
     --journal-splay-width arg number of active journal objects
-    --journal-object-size arg size of journal objects
+    --journal-object-size arg size of journal objects [4K <= size <= 64M]
     --journal-pool arg        pool for journal objects
     --flatten                 fill clone with parent data (make it independent)
   
@@ -1670,6 +1838,23 @@
     --force              force initialize pool for RBD use if registered by
                          another application
   
+  rbd help pool stats
+  usage: rbd pool stats [--pool <pool>] [--namespace <namespace>] 
+                        [--format <format>] [--pretty-format] 
+                        <pool-name> 
+  
+  Display pool statistics.
+  
+  Positional arguments
+    <pool-name>          pool name
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --format arg         output format (plain, json, or xml) [default: plain]
+    --pretty-format      pretty formatting (json and xml)
+  
+  Note: legacy v1 images are not included in stats
   rbd help remove
   usage: rbd remove [--pool <pool>] [--namespace <namespace>] [--image <image>] 
                     [--no-progress] 

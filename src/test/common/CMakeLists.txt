@@ -12,13 +12,30 @@ target_link_libraries(get_command_descriptions
   ${CMAKE_DL_LIBS}
   )
 
-if(HAVE_BLKID)
+# Though FreeBSD has blkdev support, the unittests' mocks only work in Linux
+if(HAVE_BLKID AND LINUX)
   # unittest_blkdev
   add_executable(unittest_blkdev
-    test_blkdev.cc
-    )
-  add_ceph_unittest(unittest_blkdev)
-  target_link_libraries(unittest_blkdev ceph-common ${BLKID_LIBRARIES})
+    test_blkdev.cc)
+  add_ceph_unittest(unittest_blkdev ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_blkdev)
+  target_link_libraries(unittest_blkdev global ${BLKID_LIBRARIES})
+endif()
+
+# unittest_lockdep
+add_executable(unittest_lockdep
+  test_lockdep.cc
+  )
+add_ceph_unittest(unittest_lockdep)
+target_link_libraries(unittest_lockdep ceph-common global)
+
+# FreeBSD only has shims to support NUMA, no functional code.
+if(LINUX)
+# unittest_numa
+add_executable(unittest_numa
+  test_numa.cc
+  )
+add_ceph_unittest(unittest_numa)
+target_link_libraries(unittest_numa ceph-common)
 endif()
 
 # unittest_bloom_filter
@@ -65,6 +82,14 @@ add_executable(unittest_json_formattable
 add_ceph_unittest(unittest_json_formattable ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_json_formattable)
 # add_dependencies(unittest_json_formattable ceph-common)
 target_link_libraries(unittest_json_formattable ceph-common global ${BLKID_LIBRARIES})
+
+# unittest_json_formatter
+add_executable(unittest_json_formatter
+  test_json_formatter.cc
+  )
+add_ceph_unittest(unittest_json_formatter ${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/unittest_json_formatter)
+# add_dependencies(unittest_json_formatter ceph-common)
+target_link_libraries(unittest_json_formatter ceph-common global ${BLKID_LIBRARIES})
 
 # unittest_sharedptr_registry
 add_executable(unittest_sharedptr_registry
@@ -125,13 +150,6 @@ add_executable(unittest_lru
   )
 add_ceph_unittest(unittest_lru)
 target_link_libraries(unittest_lru ceph-common)
-
-# unittest_io_priority
-add_executable(unittest_io_priority
-  test_io_priority.cc
-  )
-add_ceph_unittest(unittest_io_priority)
-target_link_libraries(unittest_io_priority ceph-common)
 
 # unittest_crc32c
 add_executable(unittest_crc32c

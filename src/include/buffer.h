@@ -113,18 +113,6 @@ namespace buffer CEPH_BUFFER_API {
   };
 
 
-  /// total bytes allocated
-  int get_total_alloc();
-
-  /// history total bytes allocated
-  uint64_t get_history_alloc_bytes();
-
-  /// total num allocated
-  uint64_t get_history_alloc_num();
-
-  /// enable/disable alloc tracking
-  void track_alloc(bool b);
-
   /// count of cached crc hits (matching input)
   int get_cached_crc();
   /// count of cached crc hits (mismatching input, required adjustment)
@@ -133,11 +121,6 @@ namespace buffer CEPH_BUFFER_API {
   int get_missed_crc();
   /// enable/disable tracking of cached crcs
   void track_cached_crc(bool b);
-
-  /// count of calls to buffer::ptr::c_str()
-  int get_c_str_accesses();
-  /// enable/disable tracking of buffer::ptr::c_str() calls
-  void track_c_str(bool b);
 
   /*
    * an abstract raw buffer.  with a reference count.
@@ -271,6 +254,8 @@ namespace buffer CEPH_BUFFER_API {
     ptr& operator= (const ptr& p);
     ptr& operator= (ptr&& p) noexcept;
     ~ptr() {
+      // BE CAREFUL: this destructor is called also for hypercombined ptr_node.
+      // After freeing underlying raw, `*this` can become inaccessible as well!
       release();
     }
 
@@ -290,13 +275,10 @@ namespace buffer CEPH_BUFFER_API {
       return begin();
     }
     const_iterator begin_deep(size_t offset=0) const {
-      return const_iterator(this, 0, true);
+      return const_iterator(this, offset, true);
     }
 
     // misc
-    bool at_buffer_head() const { return _off == 0; }
-    bool at_buffer_tail() const;
-
     bool is_aligned(unsigned align) const {
       return ((long)c_str() & (align-1)) == 0;
     }
@@ -364,12 +346,9 @@ namespace buffer CEPH_BUFFER_API {
       return append(s.data(), s.length());
     }
 #endif // __cplusplus >= 201703L
-    void copy_in(unsigned o, unsigned l, const char *src);
-    void copy_in(unsigned o, unsigned l, const char *src, bool crc_reset);
-    void zero();
-    void zero(bool crc_reset);
-    void zero(unsigned o, unsigned l);
-    void zero(unsigned o, unsigned l, bool crc_reset);
+    void copy_in(unsigned o, unsigned l, const char *src, bool crc_reset = true);
+    void zero(bool crc_reset = true);
+    void zero(unsigned o, unsigned l, bool crc_reset = true);
     unsigned append_zeros(unsigned l);
 
 #ifdef HAVE_SEASTAR
@@ -382,48 +361,332 @@ namespace buffer CEPH_BUFFER_API {
   };
 
 
+  struct ptr_hook {
+    mutable ptr_hook* next;
+
+    ptr_hook() = default;
+    ptr_hook(ptr_hook* const next)
+      : next(next) {
+    }
+  };
+
+  class ptr_node : public ptr_hook, public ptr {
+  public:
+    struct cloner {
+      ptr_node* operator()(const ptr_node& clone_this) {
+	return new ptr_node(clone_this);
+      }
+    };
+    struct disposer {
+      void operator()(ptr_node* const delete_this) {
+	if (!dispose_if_hypercombined(delete_this)) {
+	  delete delete_this;
+	}
+      }
+    };
+
+    ~ptr_node() = default;
+
+    static std::unique_ptr<ptr_node, disposer> create(raw* const r) {
+      return create_hypercombined(r);
+    }
+    static std::unique_ptr<ptr_node, disposer> create(const unsigned l) {
+      return create_hypercombined(buffer::create(l));
+    }
+    template <class... Args>
+    static std::unique_ptr<ptr_node, disposer> create(Args&&... args) {
+      return std::unique_ptr<ptr_node, disposer>(
+	new ptr_node(std::forward<Args>(args)...));
+    }
+
+  private:
+    template <class... Args>
+    ptr_node(Args&&... args) : ptr(std::forward<Args>(args)...) {
+    }
+    ptr_node(const ptr_node&) = default;
+
+    ptr& operator= (const ptr& p) = delete;
+    ptr& operator= (ptr&& p) noexcept = delete;
+    ptr_node& operator= (const ptr_node& p) = delete;
+    ptr_node& operator= (ptr_node&& p) noexcept = delete;
+    void swap(ptr& other) noexcept = delete;
+    void swap(ptr_node& other) noexcept = delete;
+
+    static bool dispose_if_hypercombined(ptr_node* delete_this);
+    static std::unique_ptr<ptr_node, disposer> create_hypercombined(raw* r);
+  };
   /*
    * list - the useful bit!
    */
 
   class CEPH_BUFFER_API list {
+  public:
+    // this the very low-level implementation of singly linked list
+    // ceph::buffer::list is built on. We don't use intrusive slist
+    // of Boost (or any other 3rd party) to save extra dependencies
+    // in our public headers.
+    class buffers_t {
+      // _root.next can be thought as _head
+      ptr_hook _root;
+      ptr_hook* _tail;
+      std::size_t _size;
+
+    public:
+      template <class T>
+      class buffers_iterator {
+	typename std::conditional<
+	  std::is_const<T>::value, const ptr_hook*, ptr_hook*>::type cur;
+	template <class U> friend class buffers_iterator;
+      public:
+	using value_type = T;
+	using reference = typename std::add_lvalue_reference<T>::type;
+	using pointer = typename std::add_pointer<T>::type;
+	using difference_type = std::ptrdiff_t;
+	using iterator_category = std::forward_iterator_tag;
+
+	template <class U>
+	buffers_iterator(U* const p)
+	  : cur(p) {
+	}
+	template <class U>
+	buffers_iterator(const buffers_iterator<U>& other)
+	  : cur(other.cur) {
+	}
+	buffers_iterator() = default;
+
+	T& operator*() const {
+	  return *reinterpret_cast<T*>(cur);
+	}
+	T* operator->() const {
+	  return reinterpret_cast<T*>(cur);
+	}
+
+	buffers_iterator& operator++() {
+	  cur = cur->next;
+	  return *this;
+	}
+	buffers_iterator operator++(int) {
+	  const auto temp(*this);
+	  ++*this;
+	  return temp;
+	}
+
+	template <class U>
+	buffers_iterator& operator=(buffers_iterator<U>& other) {
+	  cur = other.cur;
+	  return *this;
+	}
+
+	bool operator==(const buffers_iterator& rhs) const {
+	  return cur == rhs.cur;
+	}
+	bool operator!=(const buffers_iterator& rhs) const {
+	  return !(*this==rhs);
+	}
+
+	using citer_t = buffers_iterator<typename std::add_const<T>::type>;
+	operator citer_t() const {
+	  return citer_t(cur);
+	}
+      };
+
+      typedef buffers_iterator<const ptr_node> const_iterator;
+      typedef buffers_iterator<ptr_node> iterator;
+
+      typedef const ptr_node& const_reference;
+      typedef ptr_node& reference;
+
+      buffers_t()
+        : _root(&_root),
+	  _tail(&_root),
+	  _size(0) {
+      }
+      buffers_t(const buffers_t&) = delete;
+      buffers_t(buffers_t&& other)
+	: _root(other._root.next == &other._root ? &_root : other._root.next),
+	  _tail(other._tail == &other._root ? &_root : other._tail),
+	  _size(other._size) {
+	other._root.next = &other._root;
+	other._tail = &other._root;
+	other._size = 0;
+
+	_tail->next = &_root;
+      }
+      buffers_t& operator=(buffers_t&& other) {
+	if (&other != this) {
+	  clear_and_dispose();
+	  swap(other);
+	}
+	return *this;
+      }
+
+      void push_back(reference item) {
+	item.next = &_root;
+	// this updates _root.next when called on empty
+	_tail->next = &item;
+	_tail = &item;
+	_size++;
+      }
+
+      void push_front(reference item) {
+	item.next = _root.next;
+	_root.next = &item;
+	_tail = _tail == &_root ? &item : _tail;
+	_size++;
+      }
+
+      // *_after
+      iterator erase_after(const_iterator it) {
+	const auto* to_erase = it->next;
+
+	it->next = to_erase->next;
+	_root.next = _root.next == to_erase ? to_erase->next : _root.next;
+	_tail = _tail == to_erase ? (ptr_hook*)&*it : _tail;
+	_size--;
+	return it->next;
+      }
+
+      void insert_after(const_iterator it, reference item) {
+	item.next = it->next;
+	it->next = &item;
+	_root.next = it == end() ? &item : _root.next;
+	_tail = const_iterator(_tail) == it ? &item : _tail;
+	_size++;
+      }
+
+      void splice_back(buffers_t& other) {
+	if (other._size == 0) {
+	  return;
+	}
+
+	other._tail->next = &_root;
+	// will update root.next if empty() == true
+	_tail->next = other._root.next;
+	_tail = other._tail;
+	_size += other._size;
+
+	other._root.next = &other._root;
+	other._tail = &other._root;
+	other._size = 0;
+      }
+
+      std::size_t size() const { return _size; }
+      bool empty() const { return _tail == &_root; }
+
+      const_iterator begin() const {
+	return _root.next;
+      }
+      const_iterator before_begin() const {
+	return &_root;
+      }
+      const_iterator end() const {
+	return &_root;
+      }
+      iterator begin() {
+	return _root.next;
+      }
+      iterator before_begin() {
+	return &_root;
+      }
+      iterator end() {
+	return &_root;
+      }
+
+      reference front() {
+	return reinterpret_cast<reference>(*_root.next);
+      }
+      reference back() {
+	return reinterpret_cast<reference>(*_tail);
+      }
+      const_reference front() const {
+	return reinterpret_cast<const_reference>(*_root.next);
+      }
+      const_reference back() const {
+	return reinterpret_cast<const_reference>(*_tail);
+      }
+
+      void clone_from(const buffers_t& other) {
+	clear_and_dispose();
+	for (auto& node : other) {
+	  ptr_node* clone = ptr_node::cloner()(node);
+	  push_back(*clone);
+	}
+      }
+      void clear_and_dispose() {
+	for (auto it = begin(); it != end(); /* nop */) {
+	  auto& node = *it;
+	  it = it->next;
+	  ptr_node::disposer()(&node);
+	}
+	_root.next = &_root;
+	_tail = &_root;
+	_size = 0;
+      }
+      iterator erase_after_and_dispose(iterator it) {
+	auto* to_dispose = &*std::next(it);
+	auto ret = erase_after(it);
+	ptr_node::disposer()(to_dispose);
+	return ret;
+      }
+
+      void swap(buffers_t& other) {
+	const auto copy_root = _root;
+	_root.next = \
+	  other._root.next == &other._root ? &this->_root : other._root.next;
+	other._root.next = \
+	  copy_root.next == &_root ? &other._root : copy_root.next;
+
+	const auto copy_tail = _tail;
+	_tail = other._tail == &other._root ? &this->_root : other._tail;
+	other._tail = copy_tail == &_root ? &other._root : copy_tail;
+
+	_tail->next = &_root;
+	other._tail->next = &other._root;
+	std::swap(_size, other._size);
+      }
+    };
+
+    class iterator;
+
+  private:
     // my private bits
-    std::list<ptr> _buffers;
+    buffers_t _buffers;
     unsigned _len;
     unsigned _memcopy_count; //the total of memcopy using rebuild().
     ptr append_buffer;  // where i put small appends.
 
-  public:
-    class iterator;
-
-  private:
     template <bool is_const>
-    class CEPH_BUFFER_API iterator_impl
-      : public std::iterator<std::forward_iterator_tag, char> {
+    class CEPH_BUFFER_API iterator_impl {
     protected:
       typedef typename std::conditional<is_const,
 					const list,
 					list>::type bl_t;
       typedef typename std::conditional<is_const,
-					const std::list<ptr>,
-					std::list<ptr> >::type list_t;
+					const buffers_t,
+					buffers_t >::type list_t;
       typedef typename std::conditional<is_const,
-					typename std::list<ptr>::const_iterator,
-					typename std::list<ptr>::iterator>::type list_iter_t;
+					typename buffers_t::const_iterator,
+					typename buffers_t::iterator>::type list_iter_t;
       bl_t* bl;
       list_t* ls;  // meh.. just here to avoid an extra pointer dereference..
-      unsigned off; // in bl
       list_iter_t p;
+      unsigned off; // in bl
       unsigned p_off;   // in *p
       friend class iterator_impl<true>;
 
     public:
+      using iterator_category = std::forward_iterator_tag;
+      using value_type = typename std::conditional<is_const, const char, char>::type;
+      using difference_type = std::ptrdiff_t;
+      using pointer = typename std::add_pointer<value_type>::type;
+      using reference = typename std::add_lvalue_reference<value_type>::type;
+
       // constructor.  position.
       iterator_impl()
 	: bl(0), ls(0), off(0), p_off(0) {}
       iterator_impl(bl_t *l, unsigned o=0);
       iterator_impl(bl_t *l, unsigned o, list_iter_t ip, unsigned po)
-	: bl(l), ls(&bl->_buffers), off(o), p(ip), p_off(po) {}
+	: bl(l), ls(&bl->_buffers), p(ip), off(o), p_off(po) {}
       iterator_impl(const list::iterator& i);
 
       /// get current iterator offset in buffer::list
@@ -438,11 +701,14 @@ namespace buffer CEPH_BUFFER_API {
 	//return off == bl->length();
       }
 
-      void advance(int o);
+      void advance(int o) = delete;
+      void advance(unsigned o);
+      void advance(size_t o) { advance(static_cast<unsigned>(o)); }
       void seek(unsigned o);
       char operator*() const;
       iterator_impl& operator++();
       ptr get_current_ptr() const;
+      bool is_pointing_same_raw(const ptr& other) const;
 
       bl_t& get_bl() const { return *bl; }
 
@@ -483,35 +749,9 @@ namespace buffer CEPH_BUFFER_API {
       iterator() = default;
       iterator(bl_t *l, unsigned o=0);
       iterator(bl_t *l, unsigned o, list_iter_t ip, unsigned po);
-
-      void advance(int o);
-      void seek(unsigned o);
-      using iterator_impl<false>::operator*;
-      char operator*();
-      iterator& operator++();
-      ptr get_current_ptr();
-
-      // copy data out
-      void copy(unsigned len, char *dest);
-      // deprecated, use copy_deep()
-      void copy(unsigned len, ptr &dest) __attribute__((deprecated));
-      void copy_deep(unsigned len, ptr &dest);
-      void copy_shallow(unsigned len, ptr &dest);
-      void copy(unsigned len, list &dest);
-      void copy(unsigned len, std::string &dest);
-      void copy_all(list &dest);
-
       // copy data in
-      void copy_in(unsigned len, const char *src);
-      void copy_in(unsigned len, const char *src, bool crc_reset);
+      void copy_in(unsigned len, const char *src, bool crc_reset = true);
       void copy_in(unsigned len, const list& otherl);
-
-      bool operator==(const iterator& rhs) const {
-	return bl == rhs.bl && off == rhs.off;
-      }
-      bool operator!=(const iterator& rhs) const {
-	return bl != rhs.bl || off != rhs.off;
-      }
     };
 
     class contiguous_appender {
@@ -635,6 +875,26 @@ namespace buffer CEPH_BUFFER_API {
       return contiguous_appender(this, len, deep);
     }
 
+    class contiguous_filler {
+      friend buffer::list;
+      char* pos;
+
+      contiguous_filler(char* const pos) : pos(pos) {}
+
+    public:
+      void copy_in(const unsigned len, const char* const src) {
+	memcpy(pos, src, len);
+	pos += len;
+      }
+      char* c_str() {
+        return pos;
+      }
+    };
+    // The contiguous_filler is supposed to be not costlier than a single
+    // pointer. Keep it dumb, please.
+    static_assert(sizeof(contiguous_filler) == sizeof(char*),
+		  "contiguous_filler should be no costlier than pointer");
+
     class page_aligned_appender {
       bufferlist *pbl;
       unsigned min_alloc;
@@ -701,20 +961,25 @@ namespace buffer CEPH_BUFFER_API {
       reserve(prealloc);
     }
 
-    list(const list& other) : _buffers(other._buffers), _len(other._len),
+    list(const list& other) : _len(other._len),
 			      _memcopy_count(other._memcopy_count) {
+      _buffers.clone_from(other._buffers);
       make_shareable();
     }
     list(list&& other) noexcept;
+
+    ~list() {
+      _buffers.clear_and_dispose();
+    }
+
     list& operator= (const list& other) {
       if (this != &other) {
-        _buffers = other._buffers;
+        _buffers.clone_from(other._buffers);
         _len = other._len;
 	make_shareable();
       }
       return *this;
     }
-
     list& operator= (list&& other) noexcept {
       _buffers = std::move(other._buffers);
       _len = other._len;
@@ -724,9 +989,10 @@ namespace buffer CEPH_BUFFER_API {
       return *this;
     }
 
+    uint64_t get_wasted_space() const;
     unsigned get_num_buffers() const { return _buffers.size(); }
-    const ptr& front() const { return _buffers.front(); }
-    const ptr& back() const { return _buffers.back(); }
+    const ptr_node& front() const { return _buffers.front(); }
+    const ptr_node& back() const { return _buffers.back(); }
 
     int get_mempool() const;
     void reassign_to_mempool(int pool);
@@ -737,7 +1003,7 @@ namespace buffer CEPH_BUFFER_API {
     }
 
     unsigned get_memcopy_count() const {return _memcopy_count; }
-    const std::list<ptr>& buffers() const { return _buffers; }
+    const buffers_t& buffers() const { return _buffers; }
     void swap(list& other) noexcept;
     unsigned length() const {
 #if 0
@@ -757,7 +1023,6 @@ namespace buffer CEPH_BUFFER_API {
       return _len;
     }
 
-    bool contents_equal(buffer::list& other);
     bool contents_equal(const buffer::list& other) const;
 
     bool is_provided_buffer(const char *dst) const;
@@ -772,7 +1037,7 @@ namespace buffer CEPH_BUFFER_API {
 
     // modifiers
     void clear() noexcept {
-      _buffers.clear();
+      _buffers.clear_and_dispose();
       _len = 0;
       _memcopy_count = 0;
       append_buffer = ptr();
@@ -780,17 +1045,27 @@ namespace buffer CEPH_BUFFER_API {
     void push_back(const ptr& bp) {
       if (bp.length() == 0)
 	return;
-      _buffers.push_back(bp);
+      _buffers.push_back(*ptr_node::create(bp).release());
       _len += bp.length();
     }
     void push_back(ptr&& bp) {
       if (bp.length() == 0)
 	return;
       _len += bp.length();
-      _buffers.push_back(std::move(bp));
+      _buffers.push_back(*ptr_node::create(std::move(bp)).release());
     }
-    void push_back(raw *r) {
-      push_back(ptr(r));
+    void push_back(const ptr_node&) = delete;
+    void push_back(ptr_node&) = delete;
+    void push_back(ptr_node&&) = delete;
+    void push_back(std::unique_ptr<ptr_node, ptr_node::disposer> bp) {
+      if (bp->length() == 0)
+	return;
+      _len += bp->length();
+      _buffers.push_back(*bp.release());
+    }
+    void push_back(raw* const r) {
+      _buffers.push_back(*ptr_node::create(r).release());
+      _len += _buffers.back().length();
     }
 
     void zero();
@@ -798,7 +1073,7 @@ namespace buffer CEPH_BUFFER_API {
 
     bool is_contiguous() const;
     void rebuild();
-    void rebuild(ptr& nb);
+    void rebuild(std::unique_ptr<ptr_node, ptr_node::disposer> nb);
     bool rebuild_aligned(unsigned align);
     // max_buffers = 0 mean don't care _buffers.size(), other
     // must make _buffers.size() <= max_buffers after rebuilding.
@@ -820,7 +1095,7 @@ namespace buffer CEPH_BUFFER_API {
 
     // clone non-shareable buffers (make shareable)
     void make_shareable() {
-      std::list<buffer::ptr>::iterator pb;
+      decltype(_buffers)::iterator pb;
       for (pb = _buffers.begin(); pb != _buffers.end(); ++pb) {
         (void) pb->make_shareable();
       }
@@ -831,9 +1106,8 @@ namespace buffer CEPH_BUFFER_API {
     {
       if (this != &bl) {
         clear();
-        std::list<buffer::ptr>::const_iterator pb;
-        for (pb = bl._buffers.begin(); pb != bl._buffers.end(); ++pb) {
-          push_back(*pb);
+	for (const auto& pb : bl._buffers) {
+          push_back(static_cast<const ptr&>(pb));
         }
       }
     }
@@ -865,8 +1139,7 @@ namespace buffer CEPH_BUFFER_API {
     void copy(unsigned off, unsigned len, char *dest) const;
     void copy(unsigned off, unsigned len, list &dest) const;
     void copy(unsigned off, unsigned len, std::string& dest) const;
-    void copy_in(unsigned off, unsigned len, const char *src);
-    void copy_in(unsigned off, unsigned len, const char *src, bool crc_reset);
+    void copy_in(unsigned off, unsigned len, const char *src, bool crc_reset = true);
     void copy_in(unsigned off, unsigned len, const list& src);
 
     typedef iterator iter_hint_t;
@@ -909,6 +1182,7 @@ namespace buffer CEPH_BUFFER_API {
     void append(const ptr& bp, unsigned off, unsigned len);
     void append(const list& bl);
     void append(std::istream& in);
+    contiguous_filler append_hole(unsigned len);
     void append_zero(unsigned len);
     void prepend_zero(unsigned len);
     
@@ -920,11 +1194,6 @@ namespace buffer CEPH_BUFFER_API {
     std::string to_str() const;
 
     void substr_of(const list& other, unsigned off, unsigned len);
-
-    /// return a pointer to a contiguous extent of the buffer,
-    /// reallocating as needed
-    char *get_contiguous(unsigned off,  ///< offset
-			 unsigned len); ///< length
 
     // funky modifer
     void splice(unsigned off, unsigned len, list *claim_by=0 /*, bufferlist& replace_with */);

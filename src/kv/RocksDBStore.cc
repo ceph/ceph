@@ -18,7 +18,6 @@
 #include "rocksdb/filter_policy.h"
 #include "rocksdb/utilities/convenience.h"
 #include "rocksdb/merge_operator.h"
-#include "kv/rocksdb_cache/BinnedLRUCache.h"
 
 using std::string;
 #include "common/perf_counters.h"
@@ -318,9 +317,9 @@ int RocksDBStore::create_and_open(ostream &out,
   if (r < 0)
     return r;
   if (cfs.empty()) {
-    return do_open(out, true, nullptr);
+    return do_open(out, true, false, nullptr);
   } else {
-    return do_open(out, true, &cfs);
+    return do_open(out, true, false, &cfs);
   }
 }
 
@@ -392,6 +391,7 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
 
   if (g_conf()->rocksdb_cache_type == "binned_lru") {
     bbt_opts.block_cache = rocksdb_cache::NewBinnedLRUCache(
+      cct,
       block_cache_size,
       g_conf()->rocksdb_cache_shard_bits);
   } else if (g_conf()->rocksdb_cache_type == "lru") {
@@ -463,9 +463,12 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   return 0;
 }
 
-int RocksDBStore::do_open(ostream &out, bool create_if_missing,
+int RocksDBStore::do_open(ostream &out,
+			  bool create_if_missing,
+			  bool open_readonly,
 			  const vector<ColumnFamily>* cfs)
 {
+  ceph_assert(!(create_if_missing && open_readonly));
   rocksdb::Options opt;
   int r = load_rocksdb_options(create_if_missing, opt);
   if (r) {
@@ -515,7 +518,11 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing,
     dout(1) << __func__ << " column families: " << existing_cfs << dendl;
     if (existing_cfs.empty()) {
       // no column families
-      status = rocksdb::DB::Open(opt, path, &db);
+      if (open_readonly) {
+	status = rocksdb::DB::Open(opt, path, &db);
+      } else {
+	status = rocksdb::DB::OpenForReadOnly(opt, path, &db);
+      }
       if (!status.ok()) {
 	derr << status.ToString() << dendl;
 	return -EINVAL;
@@ -554,8 +561,14 @@ int RocksDBStore::do_open(ostream &out, bool create_if_missing,
 	}
       }
       std::vector<rocksdb::ColumnFamilyHandle*> handles;
-      status = rocksdb::DB::Open(rocksdb::DBOptions(opt),
-				 path, column_families, &handles, &db);
+      if (open_readonly) {
+        status = rocksdb::DB::OpenForReadOnly(rocksdb::DBOptions(opt),
+				              path, column_families,
+					      &handles, &db);
+      } else {
+        status = rocksdb::DB::Open(rocksdb::DBOptions(opt),
+				   path, column_families, &handles, &db);
+      }
       if (!status.ok()) {
 	derr << status.ToString() << dendl;
 	return -EINVAL;
@@ -823,7 +836,8 @@ int RocksDBStore::submit_transaction_sync(KeyValueDB::Transaction t)
 {
   utime_t start = ceph_clock_now();
   rocksdb::WriteOptions woptions;
-  woptions.sync = true;
+  // if disableWAL, sync can't set
+  woptions.sync = !disableWAL;
   
   int result = submit_common(woptions, t);
   
@@ -1213,7 +1227,7 @@ void RocksDBStore::compact_thread_entry()
 
 void RocksDBStore::compact_range_async(const string& start, const string& end)
 {
-  Mutex::Locker l(compact_queue_lock);
+  std::lock_guard l(compact_queue_lock);
 
   // try to merge adjacent ranges.  this is O(n), but the queue should
   // be short.  note that we do not cover all overlap cases and merge
@@ -1266,75 +1280,6 @@ void RocksDBStore::compact_range(const string& start, const string& end)
   rocksdb::Slice cstart(start);
   rocksdb::Slice cend(end);
   db->CompactRange(options, &cstart, &cend);
-}
-
-int64_t RocksDBStore::request_cache_bytes(PriorityCache::Priority pri, uint64_t chunk_bytes) const
-{
-  auto cache = bbt_opts.block_cache;
-
-  int64_t assigned = get_cache_bytes(pri);
-  int64_t usage = 0;
-  int64_t request = 0;
-  switch (pri) {
-  // PRI0 is for rocksdb's high priority items (indexes/filters)
-  case PriorityCache::Priority::PRI0:
-    {
-      usage += cache->GetPinnedUsage();
-      if (g_conf()->rocksdb_cache_type == "binned_lru") {
-        auto binned_cache =
-            std::static_pointer_cast<rocksdb_cache::BinnedLRUCache>(cache);
-        usage += binned_cache->GetHighPriPoolUsage();
-      }
-      break;
-    }
-  // All other cache items are currently shoved into the LAST priority. 
-  case PriorityCache::Priority::LAST:
-    { 
-      usage = get_cache_usage() - cache->GetPinnedUsage(); 
-      if (g_conf()->rocksdb_cache_type == "binned_lru") {
-        auto binned_cache =
-            std::static_pointer_cast<rocksdb_cache::BinnedLRUCache>(cache);
-        usage -= binned_cache->GetHighPriPoolUsage();
-      }
-      break;
-    }
-  default:
-    break;
-  }
-  request = PriorityCache::get_chunk(usage, chunk_bytes);
-  request = (request > assigned) ? request - assigned : 0;
-  dout(10) << __func__ << " Priority: " << static_cast<uint32_t>(pri) 
-           << " Usage: " << usage << " Request: " << request << dendl;
-  return request;
-}
-
-int64_t RocksDBStore::get_cache_usage() const
-{
-  return static_cast<int64_t>(bbt_opts.block_cache->GetUsage());
-}
-
-int64_t RocksDBStore::commit_cache_size()
-{
-  size_t old_bytes = bbt_opts.block_cache->GetCapacity();
-  int64_t total_bytes = get_cache_bytes();
-  dout(10) << __func__ << " old: " << old_bytes
-           << " new: " << total_bytes << dendl;
-  bbt_opts.block_cache->SetCapacity((size_t) total_bytes);
-
-  // Set the high priority pool ratio is this is the binned LRU cache.
-  if (g_conf()->rocksdb_cache_type == "binned_lru") {
-    auto binned_cache =
-        std::static_pointer_cast<rocksdb_cache::BinnedLRUCache>(bbt_opts.block_cache);
-    int64_t high_pri_bytes = get_cache_bytes(PriorityCache::Priority::PRI0);
-    double ratio = (double) high_pri_bytes / total_bytes;
-    dout(10) << __func__ << " High Pri Pool Ratio set to " << ratio << dendl;
-    binned_cache->SetHighPriPoolRatio(ratio);
-  }
-  return total_bytes;
-}
-
-int64_t RocksDBStore::get_cache_capacity() {
-  return bbt_opts.block_cache->GetCapacity();
 }
 
 RocksDBStore::RocksDBWholeSpaceIteratorImpl::~RocksDBWholeSpaceIteratorImpl()
@@ -1504,13 +1449,13 @@ public:
     dbiter->Seek(slice_bound);
     return dbiter->status().ok() ? 0 : -1;
   }
-  int next(bool validate=true) override {
+  int next() override {
     if (valid()) {
       dbiter->Next();
     }
     return dbiter->status().ok() ? 0 : -1;
   }
-  int prev(bool validate=true) override {
+  int prev() override {
     if (valid()) {
       dbiter->Prev();
     }

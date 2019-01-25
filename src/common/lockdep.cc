@@ -269,7 +269,8 @@ static bool does_follow(int a, int b)
   return false;
 }
 
-int lockdep_will_lock(const char *name, int id, bool force_backtrace)
+int lockdep_will_lock(const char *name, int id, bool force_backtrace,
+		      bool recursive)
 {
   pthread_t p = pthread_self();
 
@@ -290,17 +291,19 @@ int lockdep_will_lock(const char *name, int id, bool force_backtrace)
        p != m.end();
        ++p) {
     if (p->first == id) {
-      lockdep_dout(0) << "\n";
-      *_dout << "recursive lock of " << name << " (" << id << ")\n";
-      BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
-      bt->print(*_dout);
-      if (p->second) {
-	*_dout << "\npreviously locked at\n";
-	p->second->print(*_dout);
+      if (!recursive) {
+	lockdep_dout(0) << "\n";
+	*_dout << "recursive lock of " << name << " (" << id << ")\n";
+	BackTrace *bt = new BackTrace(BACKTRACE_SKIP);
+	bt->print(*_dout);
+	if (p->second) {
+	  *_dout << "\npreviously locked at\n";
+	  p->second->print(*_dout);
+	}
+	delete bt;
+	*_dout << dendl;
+	ceph_abort();
       }
-      delete bt;
-      *_dout << dendl;
-      ceph_abort();
     }
     else if (!(follows[p->first][id/8] & (1 << (id % 8)))) {
       // new dependency

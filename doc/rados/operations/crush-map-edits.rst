@@ -377,7 +377,7 @@ A rule takes the following form::
 		min_size <min-size>
 		max_size <max-size>
 		step take <bucket-name> [class <device-class>]
-		step [choose|chooseleaf] [firstn|indep] <N> <bucket-type>
+		step [choose|chooseleaf] [firstn|indep] <N> type <bucket-type>
 		step emit
 	}
 
@@ -439,8 +439,9 @@ A rule takes the following form::
 
 ``step choose firstn {num} type {bucket-type}``
 
-:Description: Selects the number of buckets of the given type. The number is
-              usually the number of replicas in the pool (i.e., pool size).
+:Description: Selects the number of buckets of the given type from within the
+	      current bucket. The number is usually the number of replicas in
+	      the pool (i.e., pool size).
 
               - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
               - If ``{num} > 0 && < pool-num-replicas``, choose that many buckets.
@@ -454,8 +455,8 @@ A rule takes the following form::
 ``step chooseleaf firstn {num} type {bucket-type}``
 
 :Description: Selects a set of buckets of ``{bucket-type}`` and chooses a leaf
-              node from the subtree of each bucket in the set of buckets. The
-              number of buckets in the set is usually the number of replicas in
+              node (that is, an OSD) from the subtree of each bucket in the set of buckets.
+              The number of buckets in the set is usually the number of replicas in
               the pool (i.e., pool size).
 
               - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (all available).
@@ -465,7 +466,6 @@ A rule takes the following form::
 :Purpose: A component of the rule. Usage removes the need to select a device using two steps.
 :Prerequisite: Follows ``step take`` or ``step choose``.
 :Example: ``step chooseleaf firstn 0 type row``
-
 
 
 ``step emit``
@@ -481,144 +481,184 @@ A rule takes the following form::
 .. important:: A given CRUSH rule may be assigned to multiple pools, but it
    is not possible for a single pool to have multiple CRUSH rules.
 
+``firstn`` versus ``indep``
 
-Placing Different Pools on Different OSDS:
-==========================================
+:Description: Controls the replacement strategy CRUSH uses when items (OSDs)
+	      are marked down in the CRUSH map. If this rule is to be used with
+	      replicated pools it should be ``firstn`` and if it's for
+	      erasure-coded pools it should be ``indep``.
 
-Suppose you want to have most pools default to OSDs backed by large hard drives,
-but have some pools mapped to OSDs backed by fast solid-state drives (SSDs).
-It's possible to have multiple independent CRUSH hierarchies within the same
-CRUSH map. Define two hierarchies with two different root nodes--one for hard
-disks (e.g., "root platter") and one for SSDs (e.g., "root ssd") as shown
-below::
+	      The reason has to do with how they behave when a
+	      previously-selected device fails. Let's say you have a PG stored
+	      on OSDs 1, 2, 3, 4, 5. Then 3 goes down.
+	      
+	      With the "firstn" mode, CRUSH simply adjusts its calculation to
+	      select 1 and 2, then selects 3 but discovers it's down, so it
+	      retries and selects 4 and 5, and then goes on to select a new
+	      OSD 6. So the final CRUSH mapping change is
+	      1, 2, 3, 4, 5 -> 1, 2, 4, 5, 6.
 
-  device 0 osd.0
-  device 1 osd.1
-  device 2 osd.2
-  device 3 osd.3
-  device 4 osd.4
-  device 5 osd.5
-  device 6 osd.6
-  device 7 osd.7
+	      But if you're storing an EC pool, that means you just changed the
+	      data mapped to OSDs 4, 5, and 6! So the "indep" mode attempts to
+	      not do that. You can instead expect it, when it selects the failed
+	      OSD 3, to try again and pick out 6, for a final transformation of:
+	      1, 2, 3, 4, 5 -> 1, 2, 6, 4, 5
+	      
+.. _crush-reclassify:
 
-	host ceph-osd-ssd-server-1 {
-		id -1
-		alg straw
-		hash 0
-		item osd.0 weight 1.00
-		item osd.1 weight 1.00
-	}
+Migrating from a legacy SSD rule to device classes
+--------------------------------------------------
 
-	host ceph-osd-ssd-server-2 {
-		id -2
-		alg straw
-		hash 0
-		item osd.2 weight 1.00
-		item osd.3 weight 1.00
-	}
+It used to be necessary to manually edit your CRUSH map and maintain a
+parallel hierarchy for each specialized device type (e.g., SSD) in order to
+write rules that apply to those devices.  Since the Luminous release,
+the *device class* feature has enabled this transparently.
 
-	host ceph-osd-platter-server-1 {
-		id -3
-		alg straw
-		hash 0
-		item osd.4 weight 1.00
-		item osd.5 weight 1.00
-	}
+However, migrating from an existing, manually customized per-device map to
+the new device class rules in the trivial way will cause all data in the
+system to be reshuffled.
 
-	host ceph-osd-platter-server-2 {
-		id -4
-		alg straw
-		hash 0
-		item osd.6 weight 1.00
-		item osd.7 weight 1.00
-	}
+The ``crushtool`` has a few commands that can transform a legacy rule
+and hierarchy so that you can start using the new class-based rules.
+There are three types of transformations possible:
 
-	root platter {
-		id -5
-		alg straw
-		hash 0
-		item ceph-osd-platter-server-1 weight 2.00
-		item ceph-osd-platter-server-2 weight 2.00
-	}
+#. ``--reclassify-root <root-name> <device-class>``
 
-	root ssd {
-		id -6
-		alg straw
-		hash 0
-		item ceph-osd-ssd-server-1 weight 2.00
-		item ceph-osd-ssd-server-2 weight 2.00
-	}
+   This will take everything in the hierarchy beneath root-name and
+   adjust any rules that reference that root via a ``take
+   <root-name>`` to instead ``take <root-name> class <device-class>``.
+   It renumbers the buckets in such a way that the old IDs are instead
+   used for the specified class's "shadow tree" so that no data
+   movement takes place.
 
-	rule data {
-		ruleset 0
-		type replicated
-		min_size 2
-		max_size 2
-		step take platter
-		step chooseleaf firstn 0 type host
-		step emit
-	}
+   For example, imagine you have an existing rule like::
 
-	rule metadata {
-		ruleset 1
-		type replicated
-		min_size 0
-		max_size 10
-		step take platter
-		step chooseleaf firstn 0 type host
-		step emit
-	}
+     rule replicated_ruleset {
+        id 0
+        type replicated
+        min_size 1
+        max_size 10
+        step take default
+        step chooseleaf firstn 0 type rack
+        step emit
+     }
 
-	rule rbd {
-		ruleset 2
-		type replicated
-		min_size 0
-		max_size 10
-		step take platter
-		step chooseleaf firstn 0 type host
-		step emit
-	}
+   If you reclassify the root `default` as class `hdd`, the rule will
+   become::
 
-	rule platter {
-		ruleset 3
-		type replicated
-		min_size 0
-		max_size 10
-		step take platter
-		step chooseleaf firstn 0 type host
-		step emit
-	}
+     rule replicated_ruleset {
+        id 0
+        type replicated
+        min_size 1
+        max_size 10
+        step take default class hdd
+        step chooseleaf firstn 0 type rack
+        step emit
+     }
 
-	rule ssd {
-		ruleset 4
-		type replicated
-		min_size 0
-		max_size 4
-		step take ssd
-		step chooseleaf firstn 0 type host
-		step emit
-	}
+#. ``--set-subtree-class <bucket-name> <device-class>``
 
-	rule ssd-primary {
-		ruleset 5
-		type replicated
-		min_size 5
-		max_size 10
-		step take ssd
-		step chooseleaf firstn 1 type host
-		step emit
-		step take platter
-		step chooseleaf firstn -1 type host
-		step emit
-	}
+   This will mark every device in the subtree rooted at *bucket-name*
+   with the specified device class.
 
-You can then set a pool to use the SSD rule by::
+   This is normally used in conjunction with the ``--reclassify-root``
+   option to ensure that all devices in that root are labeled with the
+   correct class.  In some situations, however, some of those devices
+   (correctly) have a different class and we do not want to relabel
+   them.  In such cases, one can exclude the ``--set-subtree-class``
+   option.  This means that the remapping process will not be perfect,
+   since the previous rule distributed across devices of multiple
+   classes but the adjusted rules will only map to devices of the
+   specified *device-class*, but that often is an accepted level of
+   data movement when the nubmer of outlier devices is small.
 
-  ceph osd pool set <poolname> crush_rule ssd
+#. ``--reclassify-bucket <match-pattern> <device-class> <default-parent>``
 
-Similarly, using the ``ssd-primary`` rule will cause each placement group in the
-pool to be placed with an SSD as the primary and platters as the replicas.
+   This will allow you to merge a parallel type-specific hiearchy with the normal hierarchy.  For example, many users have maps like::
 
+     host node1 {
+        id -2           # do not change unnecessarily
+        # weight 109.152
+        alg straw
+        hash 0  # rjenkins1
+        item osd.0 weight 9.096
+        item osd.1 weight 9.096
+        item osd.2 weight 9.096
+        item osd.3 weight 9.096
+        item osd.4 weight 9.096
+        item osd.5 weight 9.096
+        ...
+     }
+
+     host node1-ssd {
+        id -10          # do not change unnecessarily
+        # weight 2.000
+        alg straw
+        hash 0  # rjenkins1
+        item osd.80 weight 2.000
+	...
+     }
+
+     root default {
+        id -1           # do not change unnecessarily
+        alg straw
+        hash 0  # rjenkins1
+        item node1 weight 110.967
+        ...
+     }
+
+     root ssd {
+        id -18          # do not change unnecessarily
+        # weight 16.000
+        alg straw
+        hash 0  # rjenkins1
+        item node1-ssd weight 2.000
+	...
+     }
+
+   This function will reclassify each bucket that matches a
+   pattern.  The pattern can look like ``%suffix`` or ``prefix%``.
+   For example, in the above example, we would use the pattern
+   ``%-ssd``.  For each matched bucket, the remaining portion of the
+   name (that matches the ``%`` wildcard) specifies the *base bucket*.
+   All devices in the matched bucket are labeled with the specified
+   device class and then moved to the base bucket.  If the base bucket
+   does not exist (e.g., ``node12-ssd`` exists but ``node12`` does
+   not), then it is created and linked underneath the specified
+   *default parent* bucket.  In each case, we are careful to preserve
+   the old bucket IDs for the new shadow buckets to prevent data
+   movement.  Any rules with ``take`` steps referencing the old
+   buckets are adjusted.
+
+#. ``--reclassify-bucket <bucket-name> <device-class> <base-bucket>``
+
+   The same command can also be used without a wildcard to map a
+   single bucket.  For example, in the previous example, we want the
+   ``ssd`` bucket to be mapped to the ``default`` bucket.
+
+The final command to convert the map comprised of the above fragments would be something like::
+
+  $ ceph osd getcrushmap -o original
+  $ crushtool -i original --reclassify \
+      --set-subtree-class default hdd \
+      --reclassify-root default hdd \
+      --reclassify-bucket %-ssd ssd default \
+      --reclassify-bucket ssd ssd default \
+      -o adjusted
+
+In order to ensure that the conversion is correct, there is a ``--compare`` command that will test a large sample of inputs to the CRUSH map and ensure that the same result comes back out.  These inputs are controlled by the same options that apply to the ``--test`` command.  For the above example,::
+
+  $ crushtool -i original --compare adjusted
+  rule 0 had 0/10240 mismatched mappings (0)
+  rule 1 had 0/10240 mismatched mappings (0)
+  maps appear equivalent
+
+If there were difference, you'd see what ratio of inputs are remapped
+in the parentheses.
+
+If you are satisfied with the adjusted map, you can apply it to the cluster with something like::
+
+  ceph osd setcrushmap -i adjusted
 
 Tuning CRUSH, the hard way
 --------------------------

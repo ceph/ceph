@@ -1455,10 +1455,6 @@ instance.
 |                                     | zone group. We do not recommend   |         |                       |
 |                                     | changing this setting.            |         |                       |
 +-------------------------------------+-----------------------------------+---------+-----------------------+
-| ``rgw_num_zone_opstate_shards``     | The maximum number of shards for  | Integer | ``128``               |
-|                                     | keeping inter-zone group          |         |                       |
-|                                     | synchronization progress.         |         |                       |
-+-------------------------------------+-----------------------------------+---------+-----------------------+
 
 
 .. _`Pools`: ../pools

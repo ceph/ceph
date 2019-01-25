@@ -101,7 +101,7 @@ void MDSIOContextBase::complete(int r) {
 
   dout(10) << "MDSIOContextBase::complete: " << typeid(*this).name() << dendl;
   ceph_assert(mds != NULL);
-  Mutex::Locker l(mds->mds_lock);
+  std::lock_guard l(mds->mds_lock);
 
   if (mds->is_daemon_stopping()) {
     dout(4) << "MDSIOContextBase::complete: dropping for stopping "

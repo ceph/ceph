@@ -37,8 +37,11 @@ enum common_init_flags_t {
   // don't drop privileges
   CINIT_FLAG_DEFER_DROP_PRIVILEGES = 0x10,
 
-  // do'nt contact mons for config
+  // don't contact mons for config
   CINIT_FLAG_NO_MON_CONFIG = 0x20,
+
+  // don't expose default cct perf counters
+  CINIT_FLAG_NO_CCT_PERF_COUNTERS = 0x40,
 };
 
 #ifndef WITH_SEASTAR
@@ -69,7 +72,6 @@ CephContext *common_preinit(const CephInitParameters &iparams,
 void complain_about_parse_errors(CephContext *cct,
 				 std::deque<std::string> *parse_errors);
 
-#ifndef WITH_SEASTAR
 /* This function is called after you have done your last
  * fork. When you make this call, the system will initialize everything that
  * cannot be initialized before a fork.
@@ -83,6 +85,5 @@ void complain_about_parse_errors(CephContext *cct,
  * the Ceph libraries would be destroyed by a fork().
  */
 void common_init_finish(CephContext *cct);
-#endif // #ifndef WITH_SEASTAR
 
 #endif

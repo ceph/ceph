@@ -84,13 +84,14 @@ using rgw::IAM::NotAction_t;
 using rgw::IAM::iamCreateRole;
 using rgw::IAM::iamDeleteRole;
 using rgw::IAM::iamAll;
+using rgw::IAM::stsAll;
 
 class FakeIdentity : public Identity {
   const Principal id;
 public:
 
   explicit FakeIdentity(Principal&& id) : id(std::move(id)) {}
-  uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override {
+  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     ceph_abort();
     return 0;
   };
@@ -107,6 +108,16 @@ public:
 
   virtual uint32_t get_perm_mask() const override {
     ceph_abort();
+    return 0;
+  }
+
+  uint32_t get_identity_type() const override {
+    abort();
+    return 0;
+  }
+
+  string get_acct_name() const override {
+    abort();
     return 0;
   }
 
@@ -605,7 +616,7 @@ TEST_F(PolicyTest, Parse6) {
   EXPECT_TRUE(p->statements[0].noprinc.empty());
   EXPECT_EQ(p->statements[0].effect, Effect::Allow);
   Action_t act;
-  for (auto i = 0U; i <= iamAll; i++)
+  for (auto i = 0U; i <= stsAll; i++)
     act[i] = 1;
   EXPECT_EQ(p->statements[0].action, act);
   EXPECT_EQ(p->statements[0].notaction, None);
@@ -1158,7 +1169,7 @@ TEST(MatchPolicy, Resource)
   EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
   EXPECT_FALSE(match_policy("a:b:c", "A:B:C", flag)); // case sensitive
   EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
-  EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
+  EXPECT_TRUE(match_policy("a:*", "a:b:c", flag)); // can span segments
 }
 
 TEST(MatchPolicy, ARN)
@@ -1176,5 +1187,5 @@ TEST(MatchPolicy, String)
   EXPECT_TRUE(match_policy("a:b:c", "a:b:c", flag));
   EXPECT_FALSE(match_policy("a:b:c", "A:B:C", flag)); // case sensitive
   EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
-  EXPECT_FALSE(match_policy("a:*", "a:b:c", flag)); // cannot span segments
+  EXPECT_TRUE(match_policy("a:*", "a:b:c", flag)); // can span segments
 }

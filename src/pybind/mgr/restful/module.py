@@ -80,7 +80,7 @@ class CommandsRequest(object):
         # Gather the results (in parallel)
         results = []
         for index in range(len(commands)):
-            tag = '%s:%d' % (str(self.id), index)
+            tag = '%s:%s:%d' % (__name__, self.id, index)
 
             # Store the result
             result = CommandResult(tag)
@@ -199,7 +199,7 @@ class CommandsRequest(object):
 
 
 class Module(MgrModule):
-    OPTIONS = [
+    MODULE_OPTIONS = [
         {'name': 'server_addr'},
         {'name': 'server_port'},
         {'name': 'key_file'},
@@ -279,11 +279,11 @@ class Module(MgrModule):
             separators=(',', ': '),
         )
 
-        server_addr = self.get_localized_config('server_addr', '::')
+        server_addr = self.get_localized_module_option('server_addr', '::')
         if server_addr is None:
             raise CannotServe('no server_addr configured; try "ceph config-key set mgr/restful/server_addr <ip>"')
 
-        server_port = int(self.get_localized_config('server_port', '8003'))
+        server_port = int(self.get_localized_module_option('server_port', '8003'))
         self.log.info('server_addr: %s server_port: %d',
                       server_addr, server_port)
 
@@ -303,7 +303,7 @@ class Module(MgrModule):
             pkey_tmp.flush()
             pkey_fname = pkey_tmp.name
         else:
-            pkey_fname = self.get_localized_config('key_file')
+            pkey_fname = self.get_localized_module_option('key_file')
 
         if not cert_fname or not pkey_fname:
             raise CannotServe('no certificate configured')
@@ -361,22 +361,21 @@ class Module(MgrModule):
 
 
     def _notify(self, notify_type, tag):
-        if notify_type == "command":
-            # we can safely skip all the sequential commands
-            if tag == 'seq':
-                return
-
-            request = [x for x in self.requests if x.is_running(tag)]
-            if len(request) != 1:
-                self.log.warn("Unknown request '%s'" % str(tag))
-                return
-
-            request = request[0]
+        if notify_type != "command":
+            self.log.debug("Unhandled notification type '%s'", notify_type)
+            return
+        # we can safely skip all the sequential commands
+        if tag == 'seq':
+            return
+        try:
+            with self.requests_lock:
+                request = next(x for x in self.requests if x.is_running(tag))
             request.finish(tag)
             if request.is_ready():
                 request.next()
-        else:
-            self.log.debug("Unhandled notification type '%s'" % notify_type)
+        except StopIteration:
+            # the command was not issued by me
+            pass
 
 
     def create_self_signed_cert(self):
@@ -505,14 +504,15 @@ class Module(MgrModule):
     def get_osd_pools(self):
         osds = dict(map(lambda x: (x['osd'], []), self.get('osd_map')['osds']))
         pools = dict(map(lambda x: (x['pool'], x), self.get('osd_map')['pools']))
-        crush_rules = self.get('osd_map_crush')['rules']
+        crush = self.get('osd_map_crush')
+        crush_rules = crush['rules']
 
         osds_by_pool = {}
         for pool_id, pool in pools.items():
             pool_osds = None
             for rule in [r for r in crush_rules if r['rule_id'] == pool['crush_rule']]:
                 if rule['min_size'] <= pool['size'] <= rule['max_size']:
-                    pool_osds = common.crush_rule_osds(self.get('osd_map_tree')['nodes'], rule)
+                    pool_osds = common.crush_rule_osds(crush['buckets'], rule)
 
             osds_by_pool[pool_id] = pool_osds
 
@@ -585,8 +585,8 @@ class Module(MgrModule):
 
 
     def submit_request(self, _request, **kwargs):
-        request = CommandsRequest(_request)
         with self.requests_lock:
+            request = CommandsRequest(_request)
             self.requests.append(request)
         if kwargs.get('wait', 0):
             while not request.is_finished():
@@ -595,7 +595,7 @@ class Module(MgrModule):
 
 
     def run_command(self, command):
-        # tag with 'seq' so that we can ingore these in notify function
+        # tag with 'seq' so that we can ignore these in notify function
         result = CommandResult('seq')
 
         self.send_command(result, 'mon', '', json.dumps(command), 'seq')

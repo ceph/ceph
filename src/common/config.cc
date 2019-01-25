@@ -75,7 +75,7 @@ int ceph_resolve_file_search(const std::string& filename_list,
   int ret = -ENOENT;
   list<string>::iterator iter;
   for (iter = ls.begin(); iter != ls.end(); ++iter) {
-    int fd = ::open(iter->c_str(), O_RDONLY);
+    int fd = ::open(iter->c_str(), O_RDONLY|O_CLOEXEC);
     if (fd < 0) {
       ret = -errno;
       continue;
@@ -275,10 +275,11 @@ int md_config_t::set_mon_vals(CephContext *cct,
   }
 
   for (auto& i : kv) {
-    if (config_cb && config_cb(i.first, i.second)) {
-      ldout(cct, 4) << __func__ << " callback consumed " << i.first << dendl;
-      continue;
-    } else {
+    if (config_cb) {
+      if (config_cb(i.first, i.second)) {
+	ldout(cct, 4) << __func__ << " callback consumed " << i.first << dendl;
+	continue;
+      }
       ldout(cct, 4) << __func__ << " callback ignored " << i.first << dendl;
     }
     const Option *o = find_option(i.first);

@@ -19,7 +19,7 @@
 #define CEPH_COMMON_PLUGINREGISTRY_H
 
 #include <map>
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 
 class CephContext;
 
@@ -44,7 +44,7 @@ namespace ceph {
   class PluginRegistry {
   public:
     CephContext *cct;
-    Mutex lock;
+    ceph::mutex lock = ceph::make_mutex("PluginRegistery::lock");
     bool loading;
     bool disable_dlclose;
     std::map<std::string,std::map<std::string,Plugin*> > plugins;

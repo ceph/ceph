@@ -1,41 +1,45 @@
 from __future__ import print_function
-import json
 from ceph_volume.util import disk, prepare
 from ceph_volume.api import lvm
 from . import validators
+from .strategies import Strategy
+from .strategies import MixedStrategy
 from ceph_volume.devices.lvm.create import Create
+from ceph_volume.devices.lvm.prepare import Prepare
 from ceph_volume.util import templates
 from ceph_volume.exceptions import SizeAllocationError
 
 
-class SingleType(object):
+def get_journal_size(args):
+    """
+    Helper for Filestore strategies, to prefer the --journal-size value from
+    the CLI over anything that might be in a ceph configuration file (if any).
+    """
+    if args.journal_size:
+        return disk.Size(mb=args.journal_size)
+    else:
+        return prepare.get_journal_size(lv_format=False)
+
+
+class SingleType(Strategy):
     """
     Support for all SSDs, or all HDDs, data and journal LVs will be colocated
     in the same device
     """
 
     def __init__(self, devices, args):
-        self.args = args
-        self.osds_per_device = args.osds_per_device
-        self.devices = devices
-        self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
-        self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
-        self.computed = {'osds': [], 'vgs': []}
-        self.validate()
-        self.compute()
+        super(SingleType, self).__init__(devices, args)
+        self.journal_size = get_journal_size(args)
+        self.validate_compute()
 
-    @property
-    def total_osds(self):
-        if self.hdds:
-            return len(self.hdds) * self.osds_per_device
-        else:
-            return len(self.ssds) * self.osds_per_device
-
-    def report_json(self):
-        print(json.dumps(self.computed, indent=4, sort_keys=True))
+    @staticmethod
+    def type():
+        return "filestore.SingleType"
 
     def report_pretty(self):
         string = ""
+        if self.args.filtered_devices:
+            string += templates.filtered_devices(self.args.filtered_devices)
         string += templates.total_osds.format(
             total_osds=self.total_osds
         )
@@ -67,7 +71,6 @@ class SingleType(object):
         validators.minimum_device_size(self.devices, osds_per_device=self.osds_per_device)
 
         # validate collocation
-        self.journal_size = prepare.get_journal_size(lv_format=False)
         if self.hdds:
             validators.minimum_device_collocated_size(
                 self.hdds, self.journal_size, osds_per_device=self.osds_per_device
@@ -90,22 +93,24 @@ class SingleType(object):
         osds = self.computed['osds']
         for device in devices:
             for osd in range(self.osds_per_device):
-                device_size = disk.Size(b=device.sys_api['size'])
+                device_size = disk.Size(b=device.lvm_size.b)
                 osd_size = device_size / self.osds_per_device
-                journal_size = prepare.get_journal_size(lv_format=False)
+                journal_size = self.journal_size
                 data_size = osd_size - journal_size
                 data_percentage = data_size * 100 / device_size
                 osd = {'data': {}, 'journal': {}}
                 osd['data']['path'] = device.abspath
-                osd['data']['size'] = data_size.b
+                osd['data']['size'] = data_size.b.as_int()
                 osd['data']['parts'] = self.osds_per_device
                 osd['data']['percentage'] = int(data_percentage)
                 osd['data']['human_readable_size'] = str(data_size)
                 osd['journal']['path'] = device.abspath
-                osd['journal']['size'] = journal_size.b
+                osd['journal']['size'] = journal_size.b.as_int()
                 osd['journal']['percentage'] = int(100 - data_percentage)
                 osd['journal']['human_readable_size'] = str(journal_size)
                 osds.append(osd)
+
+        self.computed['changed'] = len(osds) > 0
 
     def execute(self):
         """
@@ -147,10 +152,13 @@ class SingleType(object):
             if self.args.crush_device_class:
                 command.extend(['--crush-device-class', self.args.crush_device_class])
 
-            Create(command).main()
+            if self.args.prepare:
+                Prepare(command).main()
+            else:
+                Create(command).main()
 
 
-class MixedType(object):
+class MixedType(MixedStrategy):
     """
     Supports HDDs with SSDs, journals will be placed on SSDs, while HDDs will
     be used fully for data.
@@ -160,31 +168,21 @@ class MixedType(object):
     """
 
     def __init__(self, devices, args):
-        self.args = args
-        self.osds_per_device = args.osds_per_device
-        self.devices = devices
-        self.hdds = [device for device in devices if device.sys_api['rotational'] == '1']
-        self.ssds = [device for device in devices if device.sys_api['rotational'] == '0']
-        self.computed = {'osds': [], 'vg': None}
+        super(MixedType, self).__init__(devices, args)
         self.blank_ssds = []
         self.journals_needed = len(self.hdds) * self.osds_per_device
-        self.journal_size = prepare.get_journal_size(lv_format=False)
+        self.journal_size = get_journal_size(args)
         self.system_vgs = lvm.VolumeGroups()
-        self.validate()
-        self.compute()
+        self.validate_compute()
 
-    def report_json(self):
-        print(json.dumps(self.computed, indent=4, sort_keys=True))
-
-    @property
-    def total_osds(self):
-        if self.hdds:
-            return len(self.hdds) * self.osds_per_device
-        else:
-            return len(self.ssds) * self.osds_per_device
+    @staticmethod
+    def type():
+        return "filestore.MixedType"
 
     def report_pretty(self):
         string = ""
+        if self.args.filtered_devices:
+            string += templates.filtered_devices(self.args.filtered_devices)
         string += templates.total_osds.format(
             total_osds=self.total_osds
         )
@@ -217,17 +215,6 @@ class MixedType(object):
 
         print(string)
 
-    def get_common_vg(self):
-        # find all the vgs associated with the current device
-        for ssd in self.ssds:
-            for pv in ssd.pvs_api:
-                vg = self.system_vgs.get(vg_name=pv.vg_name)
-                if not vg:
-                    continue
-                # this should give us just one VG, it would've been caught by
-                # the validator otherwise
-                return vg
-
     def validate(self):
         """
         Ensure that the minimum requirements for this type of scenario is
@@ -256,7 +243,7 @@ class MixedType(object):
         self.blank_ssds = set(self.ssds).difference(self.vg_ssds)
         self.total_blank_ssd_size = disk.Size(b=0)
         for blank_ssd in self.blank_ssds:
-            self.total_blank_ssd_size += disk.Size(b=blank_ssd.sys_api['size'])
+            self.total_blank_ssd_size += disk.Size(b=blank_ssd.lvm_size.b)
 
         self.total_available_journal_space = self.total_blank_ssd_size + common_vg_size
 
@@ -291,11 +278,11 @@ class MixedType(object):
             # there isn't a common vg, so a new one must be created with all
             # the blank SSDs
             self.computed['vg'] = {
-                'devices': self.blank_ssds,
+                'devices': ", ".join([ssd.abspath for ssd in self.blank_ssds]),
                 'parts': self.journals_needed,
                 'percentages': self.vg_extents['percentages'],
-                'sizes': self.journal_size.b,
-                'size': int(self.total_blank_ssd_size.b),
+                'sizes': self.journal_size.b.as_int(),
+                'size': self.total_blank_ssd_size.b.as_int(),
                 'human_readable_sizes': str(self.journal_size),
                 'human_readable_size': str(self.total_available_journal_space),
             }
@@ -305,18 +292,20 @@ class MixedType(object):
 
         for device in self.hdds:
             for osd in range(self.osds_per_device):
-                device_size = disk.Size(b=device.sys_api['size'])
+                device_size = disk.Size(b=device.lvm_size.b)
                 data_size = device_size / self.osds_per_device
                 osd = {'data': {}, 'journal': {}}
                 osd['data']['path'] = device.path
-                osd['data']['size'] = data_size.b
+                osd['data']['size'] = data_size.b.as_int()
                 osd['data']['percentage'] = 100 / self.osds_per_device
                 osd['data']['human_readable_size'] = str(data_size)
                 osd['journal']['path'] = 'vg: %s' % vg_name
-                osd['journal']['size'] = self.journal_size.b
+                osd['journal']['size'] = self.journal_size.b.as_int()
                 osd['journal']['percentage'] = int(self.journal_size.gb * 100 / vg_free)
                 osd['journal']['human_readable_size'] = str(self.journal_size)
                 osds.append(osd)
+
+        self.computed['changed'] = len(osds) > 0
 
     def execute(self):
         """
@@ -349,9 +338,8 @@ class MixedType(object):
 
         for osd in self.computed['osds']:
             data_path = osd['data']['path']
-            data_lv_size = disk.Size(b=osd['data']['size']).gb.as_int()
             data_vg = data_vgs[data_path]
-            data_lv_extents = data_vg.sizing(size=data_lv_size)['extents']
+            data_lv_extents = data_vg.sizing(parts=1)['extents']
             data_lv = lvm.create_lv(
                 'osd-data', data_vg.name, extents=data_lv_extents, uuid_name=True
             )
@@ -369,4 +357,7 @@ class MixedType(object):
             if self.args.crush_device_class:
                 command.extend(['--crush-device-class', self.args.crush_device_class])
 
-            Create(command).main()
+            if self.args.prepare:
+                Prepare(command).main()
+            else:
+                Create(command).main()

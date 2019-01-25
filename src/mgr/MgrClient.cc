@@ -39,7 +39,7 @@ MgrClient::MgrClient(CephContext *cct_, Messenger *msgr_)
 
 void MgrClient::init()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   ceph_assert(msgr != nullptr);
 
@@ -48,7 +48,7 @@ void MgrClient::init()
 
 void MgrClient::shutdown()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   ldout(cct, 10) << dendl;
 
   if (connect_retry_callback) {
@@ -83,7 +83,7 @@ void MgrClient::shutdown()
 
 bool MgrClient::ms_dispatch(Message *m)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   switch(m->get_type()) {
   case MSG_MGR_MAP:
@@ -169,10 +169,10 @@ void MgrClient::reconnect()
 
   // resend any pending commands
   for (const auto &p : command_table.get_commands()) {
-    MCommand *m = p.second.get_message({});
+    auto m = p.second.get_message({});
     ceph_assert(session);
     ceph_assert(session->con);
-    session->con->send_message(m);
+    session->con->send_message2(std::move(m));
   }
 }
 
@@ -219,7 +219,7 @@ bool MgrClient::handle_mgr_map(MMgrMap *m)
 
 bool MgrClient::ms_handle_reset(Connection *con)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   if (session && con == session->con) {
     ldout(cct, 4) << __func__ << " con " << con << dendl;
     reconnect();
@@ -257,7 +257,7 @@ void MgrClient::_send_report()
   auto pcc = cct->get_perfcounters_collection();
 
   pcc->with_counters([this, report](
-        const PerfCountersCollection::CounterMap &by_path)
+        const PerfCountersCollectionImpl::CounterMap &by_path)
   {
     // Helper for checking whether a counter should be included
     auto include_counter = [this](
@@ -350,12 +350,16 @@ void MgrClient::_send_report()
   cct->_conf.get_config_bl(last_config_bl_version, &report->config_bl,
 			    &last_config_bl_version);
 
+  if (get_perf_report_cb) {
+    get_perf_report_cb(&report->osd_perf_metric_reports);
+  }
+
   session->con->send_message(report);
 }
 
 void MgrClient::send_pgstats()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   _send_pgstats();
 }
 
@@ -385,6 +389,10 @@ bool MgrClient::handle_mgr_configure(MMgrConfigure *m)
     stats_threshold = m->stats_threshold;
   }
 
+  if (set_perf_queries_cb) {
+    set_perf_queries_cb(m->osd_perf_metric_queries);
+  }
+
   bool starting = (stats_period == 0) && (m->stats_period != 0);
   stats_period = m->stats_period;
   if (starting) {
@@ -407,7 +415,7 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
                   bufferlist *outbl, string *outs,
                   Context *onfinish)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
 
   ldout(cct, 20) << "cmd: " << cmd << dendl;
 
@@ -425,8 +433,8 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
 
   if (session && session->con) {
     // Leaving fsid argument null because it isn't used.
-    MCommand *m = op.get_message({});
-    session->con->send_message(m);
+    auto m = op.get_message({});
+    session->con->send_message2(std::move(m));
   } else {
     ldout(cct, 0) << "no mgr session (no running mgr daemon?), waiting" << dendl;
   }
@@ -471,7 +479,7 @@ int MgrClient::service_daemon_register(
   const std::string& name,
   const std::map<std::string,std::string>& metadata)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   if (service == "osd" ||
       service == "mds" ||
       service == "client" ||
@@ -501,7 +509,7 @@ int MgrClient::service_daemon_register(
 int MgrClient::service_daemon_update_status(
   std::map<std::string,std::string>&& status)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   ldout(cct,10) << status << dendl;
   daemon_status = std::move(status);
   daemon_dirty_status = true;
@@ -510,7 +518,7 @@ int MgrClient::service_daemon_update_status(
 
 void MgrClient::update_daemon_health(std::vector<DaemonHealthMetric>&& metrics)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   daemon_health_metrics = std::move(metrics);
 }
 

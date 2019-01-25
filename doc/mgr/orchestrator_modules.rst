@@ -17,7 +17,7 @@ provides the ability to discover devices and create Ceph services.  This
 includes external projects such as ceph-ansible, DeepSea, and Rook.
 
 An *orchestrator module* is a ceph-mgr module (:ref:`mgr-module-dev`)
-which implements common managment operations using a particular
+which implements common management operations using a particular
 orchestrator.
 
 Orchestrator modules subclass the ``Orchestrator`` class: this class is
@@ -137,7 +137,6 @@ Inventory and status
 
 .. automethod:: Orchestrator.describe_service
 .. autoclass:: ServiceDescription
-.. autoclass:: ServiceLocation
 
 OSD management
 --------------
@@ -145,7 +144,7 @@ OSD management
 .. automethod:: Orchestrator.create_osds
 .. automethod:: Orchestrator.replace_osds
 .. automethod:: Orchestrator.remove_osds
-.. autoclass:: OsdCreationSpec
+.. autoclass:: DeviceSelection
 .. autoclass:: DriveGroupSpec
 
 Upgrades

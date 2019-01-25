@@ -62,7 +62,7 @@ public:
   static const int PIN_EXPORTBOUND = 10;
   static const int PIN_STICKY =      11;
   static const int PIN_SUBTREETEMP = 12;  // used by MDCache::trim_non_auth()
-  const char *pin_name(int p) const override {
+  std::string_view pin_name(int p) const override {
     switch (p) {
     case PIN_DNWAITER: return "dnwaiter";
     case PIN_INOWAITER: return "inowaiter";
@@ -148,7 +148,6 @@ public:
   static const int WAIT_DNLOCK_OFFSET = 4;
 
   static const uint64_t WAIT_ANY_MASK = (uint64_t)(-1);
-  static const uint64_t WAIT_ATFREEZEROOT = (WAIT_UNFREEZE);
   static const uint64_t WAIT_ATSUBTREEROOT = (WAIT_SINGLEAUTH);
 
   // -- dump flags --
@@ -378,7 +377,6 @@ protected:
   static int num_freezing_trees;
 
   int dir_auth_pins;
-  int request_pins;
 
   // cache control  (defined for authority; hints for replicas)
   __s32      dir_rep;
@@ -471,9 +469,6 @@ protected:
  public:
   CDentry* lookup_exact_snap(std::string_view dname, snapid_t last);
   CDentry* lookup(std::string_view n, snapid_t snap=CEPH_NOSNAP);
-  CDentry* lookup(const char *n, snapid_t snap=CEPH_NOSNAP) {
-    return lookup(std::string_view(n), snap);
-  }
 
   CDentry* add_null_dentry(std::string_view dname,
 			   snapid_t first=2, snapid_t last=CEPH_NOSNAP);
@@ -673,15 +668,6 @@ public:
   void first_get() override;
   void last_put() override;
 
-  void request_pin_get() {
-    if (request_pins == 0) get(PIN_REQUEST);
-    request_pins++;
-  }
-  void request_pin_put() {
-    request_pins--;
-    if (request_pins == 0) put(PIN_REQUEST);
-  }
-
   // -- waiters --
 protected:
   mempool::mds_co::compact_map< string_snap_t, MDSInternalContextBase::vec_alloc<mempool::mds_co::pool_allocator> > waiting_on_dentry; // FIXME string_snap_t not in mempool
@@ -710,20 +696,30 @@ public:
 
   // -- auth pins --
   bool can_auth_pin(int *err_ret=nullptr) const override;
-  int get_cum_auth_pins() const { return auth_pins + nested_auth_pins; }
   int get_auth_pins() const { return auth_pins; }
-  int get_nested_auth_pins() const { return nested_auth_pins; }
   int get_dir_auth_pins() const { return dir_auth_pins; }
   void auth_pin(void *who) override;
   void auth_unpin(void *who) override;
 
-  void adjust_nested_auth_pins(int inc, int dirinc, void *by);
+  void adjust_nested_auth_pins(int dirinc, void *by);
   void verify_fragstat();
 
   // -- freezing --
+  struct freeze_tree_state_t {
+    CDir *dir; // freezing/frozen tree root
+    int auth_pins = 0;
+    bool frozen = false;
+    freeze_tree_state_t(CDir *d) : dir(d) {}
+  };
+  // all dirfrags within freezing/frozen tree reference the 'state'
+  std::shared_ptr<freeze_tree_state_t> freeze_tree_state;
+
+  void _walk_tree(std::function<bool(CDir*)> cb);
+
   bool freeze_tree();
   void _freeze_tree();
   void unfreeze_tree();
+  void adjust_freeze_after_rename(CDir *dir);
 
   bool freeze_dir();
   void _freeze_dir();
@@ -731,7 +727,14 @@ public:
 
   void maybe_finish_freeze();
 
-  pair<bool,bool> is_freezing_or_frozen_tree() const;
+  pair<bool,bool> is_freezing_or_frozen_tree() const {
+    if (freeze_tree_state) {
+      if (freeze_tree_state->frozen)
+	return make_pair(false, true);
+      return make_pair(true, false);
+    }
+    return make_pair(false, false);
+  }
 
   bool is_freezing() const override { return is_freezing_dir() || is_freezing_tree(); }
   bool is_freezing_tree() const {
@@ -741,7 +744,6 @@ public:
   }
   bool is_freezing_tree_root() const { return state & STATE_FREEZINGTREE; }
   bool is_freezing_dir() const { return state & STATE_FREEZINGDIR; }
-  CDir *get_freezing_tree_root();
 
   bool is_frozen() const override { return is_frozen_dir() || is_frozen_tree(); }
   bool is_frozen_tree() const {
@@ -751,10 +753,11 @@ public:
   }
   bool is_frozen_tree_root() const { return state & STATE_FROZENTREE; }
   bool is_frozen_dir() const { return state & STATE_FROZENDIR; }
-  
+
   bool is_freezeable(bool freezing=false) const {
     // no nested auth pins.
-    if ((auth_pins-freezing) > 0 || nested_auth_pins > 0) 
+    if (auth_pins - (freezing ? 1 : 0) > 0 ||
+	(freeze_tree_state && freeze_tree_state->auth_pins != auth_pins))
       return false;
 
     // inode must not be frozen.
@@ -763,8 +766,9 @@ public:
 
     return true;
   }
+
   bool is_freezeable_dir(bool freezing=false) const {
-    if ((auth_pins-freezing) > 0 || dir_auth_pins > 0) 
+    if ((auth_pins - freezing) > 0 || dir_auth_pins > 0)
       return false;
 
     // if not subtree root, inode must not be frozen (tree--frozen_dir is okay).
@@ -773,9 +777,6 @@ public:
 
     return true;
   }
-
-  CDir *get_frozen_tree_root();
-
 
   ostream& print_db_line_prefix(ostream& out) override;
   void print(ostream& out) override;

@@ -1314,7 +1314,7 @@ Major Changes from Hammer
   * There have been many improvements to low-level repair tooling
     (ceph-objectstore-tool).
   * The internal ObjectStore API has been significantly cleaned up in order
-    to faciliate new storage backends like BlueStore.
+    to facilitate new storage backends like BlueStore.
 
 - *RGW*:
 

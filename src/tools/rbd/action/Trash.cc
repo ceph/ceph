@@ -24,7 +24,6 @@
 #include <sstream>
 #include <boost/program_options.hpp>
 #include <boost/bind.hpp>
-#include <json_spirit/json_spirit.h>
 
 namespace rbd {
 namespace action {
@@ -86,7 +85,7 @@ int execute_move(const po::variables_map &vm,
     }
   }
 
-  time_t dt = exp_time.sec() - now.sec();
+  time_t dt = (exp_time - now).sec();
   if(dt < 0) {
     std::cerr << "rbd: cannot use a date in the past as an expiration date"
               << std::endl;
@@ -116,32 +115,6 @@ void get_remove_arguments(po::options_description *positional,
       ("force", po::bool_switch(), "force remove of non-expired delayed images");
 }
 
-void remove_error_check(int r) {
-    if (r == -ENOTEMPTY) {
-      std::cerr << "rbd: image has snapshots - these must be deleted"
-                << " with 'rbd snap purge' before the image can be removed."
-                << std::endl;
-    } else if (r == -EBUSY) {
-      std::cerr << "rbd: error: image still has watchers"
-                << std::endl
-                << "This means the image is still open or the client using "
-                << "it crashed. Try again after closing/unmapping it or "
-                << "waiting 30s for the crashed client to timeout."
-                << std::endl;
-    } else if (r == -EMLINK) {
-      std::cerr << std::endl
-		<< "Remove the image from the group and try again."
-		<< std::endl;
-    } else if (r == -EPERM) {
-      std::cerr << std::endl
-                << "Deferment time has not expired, please use --force if you "
-                << "really want to remove the image"
-                << std::endl;
-    } else {
-      std::cerr << "rbd: remove error: " << cpp_strerror(r) << std::endl;
-    }
-}
-
 int execute_remove(const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
@@ -168,7 +141,29 @@ int execute_remove(const po::variables_map &vm,
   r = rbd.trash_remove_with_progress(io_ctx, image_id.c_str(),
                                      vm["force"].as<bool>(), pc);
   if (r < 0) {
-    remove_error_check(r);
+    if (r == -ENOTEMPTY) {
+      std::cerr << "rbd: image has snapshots - these must be deleted"
+                << " with 'rbd snap purge' before the image can be removed."
+                << std::endl;
+    } else if (r == -EBUSY) {
+      std::cerr << "rbd: error: image still has watchers"
+                << std::endl
+                << "This means the image is still open or the client using "
+                << "it crashed. Try again after closing/unmapping it or "
+                << "waiting 30s for the crashed client to timeout."
+                << std::endl;
+    } else if (r == -EMLINK) {
+      std::cerr << std::endl
+                << "Remove the image from the group and try again."
+                << std::endl;
+    } else if (r == -EPERM) {
+      std::cerr << std::endl
+                << "Deferment time has not expired, please use --force if you "
+                << "really want to remove the image"
+                << std::endl;
+    } else {
+      std::cerr << "rbd: remove error: " << cpp_strerror(r) << std::endl;
+    }
     pc.fail();
     return r;
   }
@@ -277,14 +272,20 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
     time_str = time_str.substr(0, time_str.length() - 1);
 
     bool has_parent = false;
-    std::string pool, image, snap, parent;
-    r = im.parent_info(&pool, &image, &snap);
+    std::string parent;
+    librbd::linked_image_spec_t parent_image;
+    librbd::snap_spec_t parent_snap;
+    r = im.get_parent(&parent_image, &parent_snap);
     if (r == -ENOENT) {
       r = 0;
     } else if (r < 0) {
       return r;
     } else {
-      parent = pool + "/" + image + "@" + snap;
+      parent = parent_image.pool_name + "/";
+      if (!parent_image.pool_namespace.empty()) {
+        parent += parent_image.pool_namespace + "/";
+      }
+      parent += parent_image.image_name + "@" + parent_snap.name;
       has_parent = true;
     }
 
@@ -298,9 +299,10 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
                      delete_status(entry.deferment_end_time));
       if (has_parent) {
         f->open_object_section("parent");
-        f->dump_string("pool", pool);
-        f->dump_string("image", image);
-        f->dump_string("snapshot", snap);
+        f->dump_string("pool", parent_image.pool_name);
+        f->dump_string("pool_namespace", parent_image.pool_namespace);
+        f->dump_string("image", parent_image.image_name);
+        f->dump_string("snapshot", parent_snap.name);
         f->close_section();
       }
       f->close_section();
@@ -379,17 +381,20 @@ void get_purge_arguments(po::options_description *positional,
       (EXPIRED_BEFORE.c_str(), po::value<std::string>()->value_name("date"),
        "purges images that expired before the given date");
   options->add_options()
-      (THRESHOLD.c_str(), po::value<double>(),
+      (THRESHOLD.c_str(), po::value<float>(),
        "purges images until the current pool data usage is reduced to X%, "
        "value range: 0.0-1.0");
 }
-
 
 int execute_purge (const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name = utils::get_pool_name(vm, &arg_index);
   std::string namespace_name = utils::get_namespace_name(vm, &arg_index);
+
+  utils::disable_cache();
+
+  librbd::RBD rbd;
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
@@ -398,130 +403,14 @@ int execute_purge (const po::variables_map &vm,
     return r;
   }
 
-  utils::disable_cache();
-
   io_ctx.set_osdmap_full_try();
-  librbd::RBD rbd;
 
-  std::vector<librbd::trash_image_info_t> trash_entries;
-  r = rbd.trash_list(io_ctx, trash_entries);
-  if (r < 0) {
-    return r;
-  }
-
-  std::remove_if(trash_entries.begin(), trash_entries.end(),
-    [](librbd::trash_image_info_t info) {
-      return info.source != RBD_TRASH_IMAGE_SOURCE_USER;
-    }
-  );
-
-  std::vector<const char *> to_be_removed;
+  float threshold = -1;
+  time_t expire_ts = 0;
 
   if (vm.find(THRESHOLD) != vm.end()) {
-    double threshold = vm[THRESHOLD].as<double>();
-    if (threshold < 0 || threshold > 1) {
-      std::cerr << "rbd: argument 'threshold' is out of valid range"
-                << std::endl;
-      return -EINVAL;
-    }
-
-    librados::bufferlist inbl;
-    librados::bufferlist outbl;
-    rados.mon_command("{\"prefix\": \"df\", \"format\": \"json\"}", inbl,
-                      &outbl, NULL);
-
-    json_spirit::mValue json;
-    if(!json_spirit::read(outbl.to_str(), json)) {
-      std::cerr << "rbd: ceph df json output could not be parsed"
-                << std::endl;
-      return -EBADMSG;
-    }
-
-    json_spirit::mArray arr = json.get_obj()["pools"].get_array();
-
-    double pool_percent_used = 0;
-    uint64_t pool_total_bytes = 0;
-
-    std::map<std::string, std::vector<const char *>> datapools;
-
-    std::sort(trash_entries.begin(), trash_entries.end(),
-      [](librbd::trash_image_info_t a, librbd::trash_image_info_t b) {
-        return a.deferment_end_time < b.deferment_end_time;
-      }
-    );
-
-    for (const auto& entry : trash_entries) {
-      librbd::Image image;
-      std::string data_pool;
-      r = utils::open_image_by_id(io_ctx, entry.id, true, &image);
-      if(r < 0) continue;
-
-      int64_t data_pool_id = image.get_data_pool_id();
-      if (data_pool_id != io_ctx.get_id()) {
-        librados::Rados rados(io_ctx);
-        librados::IoCtx data_io_ctx;
-        r = rados.ioctx_create2(data_pool_id, data_io_ctx);
-        if (r < 0) {
-          std::cerr << "rbd: error accessing data pool" << std::endl;
-          continue;
-        }
-        data_pool = data_io_ctx.get_pool_name();
-        datapools[data_pool].push_back(entry.id.c_str());
-      } else {
-        datapools[pool_name].push_back(entry.id.c_str());
-      }
-    }
-
-    uint64_t bytes_to_free = 0;
-
-    for(uint8_t i = 0; i < arr.size(); ++i) {
-      json_spirit::mObject obj = arr[i].get_obj();
-      std::string name = obj.find("name")->second.get_str();
-      auto img = datapools.find(name);
-      if(img != datapools.end()) {
-        json_spirit::mObject stats =  arr[i].get_obj()["stats"].get_obj();
-        pool_percent_used = stats["percent_used"].get_real();
-        if(pool_percent_used <= threshold) continue;
-
-        bytes_to_free = 0;
-
-        pool_total_bytes = stats["max_avail"].get_uint64() +
-                           stats["bytes_used"].get_uint64();
-
-        auto bytes_threshold = (uint64_t)(pool_total_bytes *
-                               (pool_percent_used - threshold));
-
-        librbd::Image curr_img;
-        for(const auto &it : img->second){
-          r = utils::open_image_by_id(io_ctx, it, true, &curr_img);
-          if(r < 0) continue;
-
-          uint64_t img_size; curr_img.size(&img_size);
-          r = curr_img.diff_iterate2(nullptr, 0, img_size, false, true,
-            [](uint64_t offset, size_t len, int exists, void *arg) {
-              auto *to_free = reinterpret_cast<uint64_t*>(arg);
-              if (exists) (*to_free) += len;
-              return 0;
-            }, &bytes_to_free
-          );
-          if(r < 0) continue;
-          to_be_removed.push_back(it);
-          if(bytes_to_free >= bytes_threshold) break;
-        }
-      }
-    }
-    if (bytes_to_free == 0) {
-      std::cout << "rbd: pool usage is lower than or equal to "
-                << (threshold*100)
-                << "%" << endl;
-      std::cout << "Nothing to do" << std::endl;
-      return 0;
-    }
+    threshold = vm[THRESHOLD].as<float>();
   } else {
-    struct timespec now;
-    clock_gettime(CLOCK_REALTIME, &now);
-
-    time_t expire_ts = now.tv_sec;
     if (vm.find(EXPIRED_BEFORE) != vm.end()) {
       utime_t new_time;
       r = utime_t::invoke_date(vm[EXPIRED_BEFORE].as<std::string>(), &new_time);
@@ -532,30 +421,13 @@ int execute_purge (const po::variables_map &vm,
       }
       expire_ts = new_time.sec();
     }
-
-    for(const auto &entry : trash_entries) {
-      if (expire_ts >= entry.deferment_end_time) {
-        to_be_removed.push_back(entry.id.c_str());
-      }
-    }
   }
 
-  uint64_t list_size = to_be_removed.size(), i = 0;
-
-  if(list_size == 0) {
-    std::cout << "rbd: nothing to remove" << std::endl;
+  utils::ProgressContext pc("Removing images", vm[at::NO_PROGRESS].as<bool>());
+  r = rbd.trash_purge_with_progress(io_ctx, expire_ts, threshold, pc);
+  if (r < 0) {
+    pc.fail();
   } else {
-    utils::ProgressContext pc("Removing images",
-                              vm[at::NO_PROGRESS].as<bool>());
-    for(const auto &entry_id : to_be_removed) {
-      r = rbd.trash_remove(io_ctx, entry_id, true);
-      if (r < 0) {
-        remove_error_check(r);
-        pc.fail();
-        return r;
-      }
-      pc.update_progress(++i, list_size);
-    }
     pc.finish();
   }
 

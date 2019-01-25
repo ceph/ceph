@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /**
  * All operations via the rados gateway are carried out by
  * small classes known as RGWOps. This class contains a req_state
@@ -8,6 +9,7 @@
  * These subclasses must be further subclassed (by interface type)
  * to provide additional virtual methods such as send_response or get_params.
  */
+
 #ifndef CEPH_RGW_OP_H
 #define CEPH_RGW_OP_H
 
@@ -37,12 +39,15 @@
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
+#include "rgw_putobj.h"
 
 #include "rgw_lc.h"
 #include "rgw_torrent.h"
 #include "rgw_tag.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
+
+#include "services/svc_sys_obj.h"
 
 #include "include/ceph_assert.h"
 
@@ -62,6 +67,11 @@ class StrategyRegistry;
 }
 }
 
+int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
+                                       RGWRados *store,
+                                       RGWBucketInfo& bucket_info,
+                                       map<string, bufferlist>& bucket_attrs,
+                                       RGWAccessControlPolicy *policy);
 
 class RGWHandler {
 protected:
@@ -92,10 +102,14 @@ public:
   }
 
   virtual int read_permissions(RGWOp* op) = 0;
-  virtual int authorize() = 0;
+  virtual int authorize(const DoutPrefixProvider* dpp) = 0;
   virtual int postauth_init() = 0;
   virtual int error_handler(int err_no, std::string* error_content);
   virtual void dump(const string& code, const string& message) const {}
+
+  virtual bool supports_quota() {
+    return true;
+  }
 };
 
 
@@ -133,9 +147,11 @@ public:
   int get_ret() const { return op_ret; }
 
   virtual int init_processing() {
-    op_ret = init_quota();
-    if (op_ret < 0)
-      return op_ret;
+    if (dialect_handler->supports_quota()) {
+      op_ret = init_quota();
+      if (op_ret < 0)
+        return op_ret;
+    }
 
     return 0;
   }
@@ -162,7 +178,7 @@ public:
    * of special cases. */
   virtual int verify_requester(const rgw::auth::StrategyRegistry& auth_registry) {
     /* TODO(rzarzynski): rename RGWHandler::authorize to generic_authenticate. */
-    return dialect_handler->authorize();
+    return dialect_handler->authorize(this);
   }
   virtual int verify_permission() = 0;
   virtual int verify_op_mask();
@@ -183,6 +199,11 @@ public:
   std::ostream& gen_prefix(std::ostream& out) const override;
   CephContext* get_cct() const override { return s->cct; }
   unsigned get_subsys() const override { return ceph_subsys_rgw; }
+};
+
+class RGWDefaultResponseOp : public RGWOp {
+public:
+  void send_response() override;
 };
 
 class RGWGetObj_Filter : public RGWGetDataCB
@@ -404,6 +425,7 @@ public:
 
   class Deleter {
   protected:
+    const DoutPrefixProvider * dpp;
     unsigned int num_deleted;
     unsigned int num_unfound;
     std::list<fail_desc_t> failures;
@@ -412,8 +434,9 @@ public:
     req_state * const s;
 
   public:
-    Deleter(RGWRados * const str, req_state * const s)
-      : num_deleted(0),
+    Deleter(const DoutPrefixProvider* dpp, RGWRados * const str, req_state * const s)
+      : dpp(dpp),
+        num_deleted(0),
         num_unfound(0),
         store(str),
         s(s) {
@@ -468,7 +491,7 @@ inline ostream& operator<<(ostream& out, const RGWBulkDelete::acct_path_t &o) {
 
 
 class RGWBulkUploadOp : public RGWOp {
-  boost::optional<RGWObjectCtx> dir_ctx;
+  boost::optional<RGWSysObjectCtx> dir_ctx;
 
 protected:
   class fail_desc_t {
@@ -521,10 +544,7 @@ public:
 
   void init(RGWRados* const store,
             struct req_state* const s,
-            RGWHandler* const h) override {
-    RGWOp::init(store, s, h);
-    dir_ctx.emplace(store);
-  }
+            RGWHandler* const h) override;
 
   int verify_permission() override;
   void pre_exec() override;
@@ -881,7 +901,7 @@ class RGWCreateBucket : public RGWOp {
 protected:
   RGWAccessControlPolicy policy;
   string location_constraint;
-  string placement_rule;
+  rgw_placement_rule placement_rule;
   RGWBucketInfo info;
   obj_version ep_objv;
   bool has_cors;
@@ -967,13 +987,10 @@ struct RGWSLOInfo {
   uint64_t total_size;
 
   /* in memory only */
-  char *raw_data;
-  int raw_data_len;
+  bufferlist raw_data;
 
-  RGWSLOInfo() : total_size(0), raw_data(NULL), raw_data_len(0) {}
-  ~RGWSLOInfo() {
-    free(raw_data);
-  }
+  RGWSLOInfo() : total_size(0) {}
+  ~RGWSLOInfo() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -992,9 +1009,6 @@ struct RGWSLOInfo {
 WRITE_CLASS_ENCODER(RGWSLOInfo)
 
 class RGWPutObj : public RGWOp {
-
-  friend class RGWPutObjProcessor;
-
 protected:
   seed torrent;
   off_t ofs;
@@ -1025,6 +1039,10 @@ protected:
   map<string, string> crypt_http_responses;
   string user_data;
 
+  std::string multipart_upload_id;
+  std::string multipart_part_str;
+  int multipart_part_num = 0;
+
   boost::optional<ceph::real_time> delete_at;
 
 public:
@@ -1054,8 +1072,6 @@ public:
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
-  virtual RGWPutObjProcessor *select_processor(RGWObjectCtx& obj_ctx, bool *is_multipart);
-  void dispose_processor(RGWPutObjDataProcessor *processor);
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
@@ -1068,9 +1084,9 @@ public:
     *filter = nullptr;
     return 0;
   }
-  virtual int get_encrypt_filter(std::unique_ptr<RGWPutObjDataProcessor> *filter, RGWPutObjDataProcessor* cb) {
-     *filter = nullptr;
-     return 0;
+  virtual int get_encrypt_filter(std::unique_ptr<rgw::putobj::DataProcessor> *filter,
+                                 rgw::putobj::DataProcessor *cb) {
+    return 0;
   }
 
   int get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len);
@@ -1083,22 +1099,6 @@ public:
   RGWOpType get_type() override { return RGW_OP_PUT_OBJ; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
-
-class RGWPutObj_Filter : public RGWPutObjDataProcessor
-{
-protected:
-  RGWPutObjDataProcessor* next;
-public:
-  explicit RGWPutObj_Filter(RGWPutObjDataProcessor* next) :
-  next(next){}
-  ~RGWPutObj_Filter() override {}
-  int handle_data(bufferlist& bl, off_t ofs, void **phandle, rgw_raw_obj *pobj, bool *again) override {
-    return next->handle_data(bl, ofs, phandle, pobj, again);
-  }
-  int throttle_data(void *handle, const rgw_raw_obj& obj, uint64_t size, bool need_to_wait) override {
-    return next->throttle_data(handle, obj, size, need_to_wait);
-  }
-}; /* RGWPutObj_Filter */
 
 class RGWPostObj : public RGWOp {
 protected:
@@ -1141,8 +1141,8 @@ public:
   void pre_exec() override;
   void execute() override;
 
-  virtual int get_encrypt_filter(std::unique_ptr<RGWPutObjDataProcessor> *filter, RGWPutObjDataProcessor* cb) {
-    *filter = nullptr;
+  virtual int get_encrypt_filter(std::unique_ptr<rgw::putobj::DataProcessor> *filter,
+                                 rgw::putobj::DataProcessor *cb) {
     return 0;
   }
   virtual int get_params() = 0;
@@ -1199,7 +1199,7 @@ protected:
   uint32_t policy_rw_mask;
   RGWAccessControlPolicy policy;
   RGWCORSConfiguration cors_config;
-  string placement_rule;
+  rgw_placement_rule placement_rule;
   boost::optional<std::string> swift_ver_location;
 
 public:
@@ -1314,8 +1314,6 @@ protected:
   RGWBucketInfo src_bucket_info;
   RGWBucketInfo dest_bucket_info;
   string source_zone;
-  string client_id;
-  string op_id;
   string etag;
 
   off_t last_ofs;
@@ -1325,6 +1323,8 @@ protected:
 
   boost::optional<ceph::real_time> delete_at;
   bool copy_if_newer;
+
+  bool need_to_check_storage_class = false;
 
   int init_common();
 
@@ -1362,6 +1362,10 @@ public:
   void execute() override;
   void progress_cb(off_t ofs);
 
+  virtual int check_storage_class(const rgw_placement_rule& src_placement) {
+    return 0;
+  }
+
   virtual int init_dest_policy() { return 0; }
   virtual int get_params() = 0;
   virtual void send_partial_response(off_t ofs) {}
@@ -1390,18 +1394,12 @@ public:
 
 class RGWPutACLs : public RGWOp {
 protected:
-  int len;
-  char *data;
+  bufferlist data;
   ACLOwner owner;
 
 public:
-  RGWPutACLs() {
-    len = 0;
-    data = NULL;
-  }
-  ~RGWPutACLs() override {
-    free(data);
-  }
+  RGWPutACLs() {}
+  ~RGWPutACLs() override {}
 
   int verify_permission() override;
   void pre_exec() override;
@@ -1434,20 +1432,15 @@ public:
 
 class RGWPutLC : public RGWOp {
 protected:
-  int len;
-  char *data;
+  bufferlist data;
   const char *content_md5;
   string cookie;
 
 public:
   RGWPutLC() {
-    len = 0;
-    data = nullptr;
     content_md5 = nullptr;
   }
-  ~RGWPutLC() override {
-    free(data);
-  }
+  ~RGWPutLC() override {}
 
   void init(RGWRados *store, struct req_state *s, RGWHandler *dialect_handler) override {
 #define COOKIE_LEN 16
@@ -1627,8 +1620,7 @@ protected:
   string upload_id;
   string etag;
   string version_id;
-  char *data;
-  int len;
+  bufferlist data;
 
   struct MPSerializer {
     librados::IoCtx ioctx;
@@ -1652,13 +1644,8 @@ protected:
   } serializer;
 
 public:
-  RGWCompleteMultipart() {
-    data = NULL;
-    len = 0;
-  }
-  ~RGWCompleteMultipart() override {
-    free(data);
-  }
+  RGWCompleteMultipart() {}
+  ~RGWCompleteMultipart() override {}
 
   int verify_permission() override;
   void pre_exec() override;
@@ -1808,9 +1795,7 @@ public:
 
 class RGWDeleteMultiObj : public RGWOp {
 protected:
-  int max_to_delete;
-  int len;
-  char *data;
+  bufferlist data;
   rgw_bucket bucket;
   bool quiet;
   bool status_dumped;
@@ -1818,9 +1803,6 @@ protected:
 
 public:
   RGWDeleteMultiObj() {
-    max_to_delete = 1000;
-    len = 0;
-    data = NULL;
     quiet = false;
     status_dumped = false;
   }
@@ -1855,39 +1837,10 @@ extern int rgw_build_object_policies(RGWRados *store, struct req_state *s,
 				     bool prefetch_data);
 extern rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
 						       struct req_state* s);
-
-static inline int put_data_and_throttle(RGWPutObjDataProcessor *processor,
-					bufferlist& data, off_t ofs,
-					bool need_to_wait)
-{
-  bool again = false;
-  do {
-    void *handle = nullptr;
-    rgw_raw_obj obj;
-
-    uint64_t size = data.length();
-
-    int ret = processor->handle_data(data, ofs, &handle, &obj, &again);
-    if (ret < 0)
-      return ret;
-    if (handle != nullptr)
-    {
-      ret = processor->throttle_data(handle, obj, size, need_to_wait);
-      if (ret < 0)
-        return ret;
-    }
-    else
-      break;
-    need_to_wait = false; /* the need to wait only applies to the first
-			   * iteration */
-  } while (again);
-
-  return 0;
-} /* put_data_and_throttle */
-
-
-
-
+extern vector<rgw::IAM::Policy> get_iam_user_policy_from_attr(CephContext* cct,
+                        RGWRados* store,
+                        map<string, bufferlist>& attrs,
+                        const string& tenant);
 
 static inline int get_system_versioning_params(req_state *s,
 					      uint64_t *olh_epoch,
@@ -1955,7 +1908,8 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
   static const std::set<std::string> blacklisted_headers = {
       "x-amz-server-side-encryption-customer-algorithm",
       "x-amz-server-side-encryption-customer-key",
-      "x-amz-server-side-encryption-customer-key-md5"
+      "x-amz-server-side-encryption-customer-key-md5",
+      "x-amz-storage-class"
   };
 
   size_t valid_meta_count = 0;
@@ -2113,14 +2067,10 @@ public:
 };
 
 class RGWPutBucketPolicy : public RGWOp {
-  int len = 0;
-  char *data = nullptr;
+  bufferlist data;
 public:
   RGWPutBucketPolicy() = default;
   ~RGWPutBucketPolicy() {
-    if (data) {
-      free(static_cast<void*>(data));
-    }
   }
   void send_response() override;
   int verify_permission() override;
@@ -2226,6 +2176,36 @@ public:
   const char* name() const override { return "get_cluster_stat"; }
 };
 
+static inline int parse_value_and_bound(
+    const string &input,
+    int &output,
+    const long lower_bound,
+    const long upper_bound,
+    const long default_val)
+{
+  if (!input.empty()) {
+    char *endptr;
+    output = strtol(input.c_str(), &endptr, 10);
+    if (endptr) {
+      if (endptr == input.c_str()) return -EINVAL;
+      while (*endptr && isspace(*endptr)) // ignore white space
+        endptr++;
+      if (*endptr) {
+        return -EINVAL;
+      }
+    }
+    if(output > upper_bound) {
+      output = upper_bound;
+    }
+    if(output < lower_bound) {
+      output = lower_bound;
+    }
+  } else {
+    output = default_val;
+  }
+
+  return 0;
+}
 
 
 #endif /* CEPH_RGW_OP_H */

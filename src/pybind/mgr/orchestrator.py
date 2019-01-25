@@ -4,10 +4,20 @@ ceph-mgr orchestrator interface
 
 Please see the ceph-mgr module developer's guide for more information.
 """
+try:
+    from typing import TypeVar, Generic, List, Optional, Union
+    T = TypeVar('T')
+    G = Generic[T]
+except ImportError:
+    T, G = object, object
+
+import time
 
 
-class _Completion(object):
-    def get_result(self):
+class _Completion(G):
+    @property
+    def result(self):
+        # type: () -> T
         """
         Return the result of the operation that we were waited
         for.  Only valid after calling Orchestrator.wait() on this
@@ -17,14 +27,22 @@ class _Completion(object):
 
     @property
     def is_read(self):
+        # type: () -> bool
         raise NotImplementedError()
 
     @property
     def is_complete(self):
+        # type: () -> bool
         raise NotImplementedError()
 
     @property
     def is_errored(self):
+        # type: () -> bool
+        raise NotImplementedError()
+
+    @property
+    def should_wait(self):
+        # type: () -> bool
         raise NotImplementedError()
 
 
@@ -44,6 +62,14 @@ class ReadCompletion(_Completion):
     def is_read(self):
         return True
 
+    @property
+    def should_wait(self):
+        """Could the external operation be deemed as complete,
+        or should we wait?
+        We must wait for a read operation only if it is not complete.
+        """
+        return not self.is_complete
+
 
 class WriteCompletion(_Completion):
     """
@@ -57,6 +83,7 @@ class WriteCompletion(_Completion):
 
     @property
     def is_persistent(self):
+        # type: () -> bool
         """
         Has the operation updated the orchestrator's configuration
         persistently?  Typically this would indicate that an update
@@ -81,6 +108,15 @@ class WriteCompletion(_Completion):
     @property
     def is_read(self):
         return False
+
+    @property
+    def should_wait(self):
+        """Could the external operation be deemed as complete,
+        or should we wait?
+        We must wait for a write operation only if we know
+        it is not persistent yet.
+        """
+        return not self.is_persistent
 
 
 class Orchestrator(object):
@@ -142,18 +178,48 @@ class Orchestrator(object):
 
         For fast operations (e.g. reading from a database), implementations
         may choose to do blocking IO in this call.
+
+        :rtype: bool
         """
         raise NotImplementedError()
 
-    def get_inventory(self, node_filter=None):
+    def add_host(self, host):
+        # type: (str) -> WriteCompletion
         """
+        Add a host to the orchestrator inventory.
+        :param host: hostname
+        """
+        raise NotImplementedError()
 
-        :param node_filter:
+    def remote_host(self, host):
+        # type: (str) -> WriteCompletion
+        """
+        Remove a host from the orchestrator inventory.
+        :param host: hostname
+        """
+        raise NotImplementedError()
+
+    def get_hosts(self):
+        # type: () -> ReadCompletion[List[InventoryNode]]
+        """
+        Report the hosts in the cluster.
+
+        The default implementation is extra slow.
+        :return: list of InventoryNodes
+        """
+        return self.get_inventory()
+
+    def get_inventory(self, node_filter=None):
+        # type: (InventoryFilter) -> ReadCompletion[List[InventoryNode]]
+        """
+        Returns something that was created by `ceph-volume inventory`.
+
         :return: list of InventoryNode
         """
         raise NotImplementedError()
 
-    def describe_service(self, service_type, service_id):
+    def describe_service(self, service_type=None, service_id=None, node_name=None):
+        # type: (str, str, str) -> ReadCompletion[List[ServiceDescription]]
         """
         Describe a service (of any kind) that is already configured in
         the orchestrator.  For example, when viewing an OSD in the dashboard
@@ -162,10 +228,35 @@ class Orchestrator(object):
 
         When viewing a CephFS filesystem in the dashboard, we would use this
         to display the pods being currently run for MDS daemons.
+
+        Returns a list of ServiceDescription objects.
         """
         raise NotImplementedError()
 
-    def create_osds(self, osd_spec):
+    def service_action(self, action, service_type, service_name=None, service_id=None):
+        # type: (str, str, str, str) -> WriteCompletion
+        """
+        Perform an action (start/stop/reload) on a service.
+
+        Either service_name or service_id must be specified:
+        - If using service_name, perform the action on that entire logical
+          service (i.e. all daemons providing that named service).
+        - If using service_id, perform the action on a single specific daemon
+          instance.
+
+        :param action: one of "start", "stop", "reload"
+        :param service_type: e.g. "mds", "rgw", ...
+        :param service_name: name of logical service ("cephfs", "us-east", ...)
+        :param service_id: service daemon instance (usually a short hostname)
+        :rtype: WriteCompletion
+        """
+        assert action in ["start", "stop", "reload"]
+        assert service_name or service_id
+        assert not (service_name and service_id)
+        raise NotImplementedError()
+
+    def create_osds(self, drive_group, all_hosts):
+        # type: (DriveGroupSpec, List[str]) -> WriteCompletion
         """
         Create one or more OSDs within a single Drive Group.
 
@@ -174,11 +265,13 @@ class Orchestrator(object):
         finer-grained OSD feature enablement (choice of backing store,
         compression/encryption, etc).
 
-        :param osd_spec: OsdCreationSpec
+        :param drive_group: DriveGroupSpec
+        :param all_hosts: TODO, this is required because the orchestrator methods are not composable
         """
         raise NotImplementedError()
 
-    def replace_osds(self, osd_spec):
+    def replace_osds(self, drive_group):
+        # type: (DriveGroupSpec) -> WriteCompletion
         """
         Like create_osds, but the osd_id_claims must be fully
         populated.
@@ -186,6 +279,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def remove_osds(self, node, osd_ids):
+        # type: (str, List[str]) -> WriteCompletion
         """
         :param node: A node name, must exist.
         :param osd_ids: list of OSD IDs
@@ -196,40 +290,57 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def add_stateless_service(self, service_type, spec):
-        assert isinstance(spec, StatelessServiceSpec)
+        # type: (str, StatelessServiceSpec) -> WriteCompletion
+        """
+        Installing and adding a completely new service to the cluster.
+
+        This is not about starting services.
+        """
         raise NotImplementedError()
 
     def update_stateless_service(self, service_type, id_, spec):
-        assert isinstance(spec, StatelessServiceSpec)
+        # type: (str, str, StatelessServiceSpec) -> WriteCompletion
+        """
+        This is about changing / redeploying existing services. Like for
+        example changing the number of service instances.
+
+        :rtype: WriteCompletion
+        """
         raise NotImplementedError()
 
     def remove_stateless_service(self, service_type, id_):
+        # type: (str, str) -> WriteCompletion
+        """
+        Uninstalls an existing service from the cluster.
+
+        This is not about stopping services.
+        """
         raise NotImplementedError()
 
     def add_mon(self, node_name):
+        # type: (str) -> WriteCompletion
         """
         We operate on a node rather than a particular device: it is
         assumed/expected that proper SSD storage is already available
         and accessible in /var.
 
         :param node_name:
-        :return:
         """
         raise NotImplementedError()
 
     def remove_mon(self, node_name):
+        # type: (str) -> WriteCompletion
         """
-
-        :param node_name:
-        :return:
+        :param node_name: Remove MON from that host.
         """
         raise NotImplementedError()
 
     def upgrade_start(self, upgrade_spec):
-        assert isinstance(upgrade_spec, UpgradeSpec)
+        # type: (UpgradeSpec) -> WriteCompletion
         raise NotImplementedError()
 
     def upgrade_status(self):
+        # type: () -> ReadCompletion[UpgradeStatusSpec]
         """
         If an upgrade is currently underway, report on where
         we are in the process, or if some error has occurred.
@@ -239,6 +350,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def upgrade_available(self):
+        # type: () -> ReadCompletion[List[str]]
         """
         Report on what versions are available to upgrade to
 
@@ -301,9 +413,17 @@ class PlacementSpec(object):
         self.label = None
 
 
-class ServiceLocation(object):
+class ServiceDescription(object):
     """
-    See ServiceDescription
+    For responding to queries about the status of a particular service,
+    stateful or stateless.
+
+    This is not about health or performance monitoring of services: it's
+    about letting the orchestrator tell Ceph whether and where a
+    service is scheduled in the cluster.  When an orchestrator tells
+    Ceph "it's running on node123", that's not a promise that the process
+    is literally up this second, it's a description of where the orchestrator
+    has decided the service should run.
     """
     def __init__(self):
         # Node is at the same granularity as InventoryNode
@@ -313,28 +433,92 @@ class ServiceLocation(object):
         # justify having this field here.
         self.container_id = None
 
+        # Some services can be deployed in groups. For example, mds's can
+        # have an active and standby daemons, and nfs-ganesha can run daemons
+        # in parallel. This tag refers to a group of daemons as a whole.
+        #
+        # For instance, a cluster of mds' all service the same fs, and they
+        # will all have the same service value (which may be the
+        # Filesystem name in the FSMap).
+        #
+        # Single-instance services should leave this set to None
+        self.service = None
+
         # The orchestrator will have picked some names for daemons,
         # typically either based on hostnames or on pod names.
         # This is the <foo> in mds.<foo>, the ID that will appear
         # in the FSMap/ServiceMap.
-        self.daemon_name = None
+        self.service_instance = None
+
+        # The type of service (osd, mon, mgr, etc.)
+        self.service_type = None
+
+        # Service version that was deployed
+        self.version = None
+
+        # Location of the service configuration when stored in rados
+        # object. Format: "rados://<pool>/[<namespace/>]<object>"
+        self.rados_config_location = None
+
+        # If the service exposes REST-like API, this attribute should hold
+        # the URL.
+        self.service_url = None
+
+        # Service status: -1 error, 0 stopped, 1 running
+        self.status = None
+
+        # Service status description when status == -1.
+        self.status_desc = None
+
+    def to_json(self):
+        out = {
+            'nodename': self.nodename,
+            'container_id': self.container_id,
+            'service': self.service,
+            'service_instance': self.service_instance,
+            'service_type': self.service_type,
+            'version': self.version,
+            'rados_config_location': self.rados_config_location,
+            'service_url': self.service_url,
+            'status': self.status,
+            'status_desc': self.status_desc,
+        }
+        return {k: v for (k, v) in out.items() if v is not None}
 
 
-class ServiceDescription(object):
-    """
-    For responding to queries about the status of a particular service,
-    stateful or stateless.
+class DeviceSelection(object):
+    def __init__(self, paths=None, id_model=None, size=None, rotates=None, count=None):
+        # type: (List[str], str, str, bool, int) -> None
+        """
+        ephemeral drive group device specification
 
-    This is not about health or performance monitoring of services: it's
-    about letting the orchestrator tell Ceph whether and where a 
-    service is scheduled in the cluster.  When an orchestrator tells
-    Ceph "it's running on node123", that's not a promise that the process
-    is literally up this second, it's a description of where the orchestrator
-    has decided the service should run.
-    """
+        :param paths: abs paths to the devices.
+        :param id_model: A wildcard string. e.g: "SDD*"
+        :param size: Size specification of format LOW:HIGH.
+            Can also take the the form :HIGH, LOW:
+            or an exact value (as ceph-volume inventory reports)
+        :param rotates: is the drive rotating or not
+        :param count: if this is present limit the number of drives to this number.
 
-    def __init__(self):
-        self.locations = []
+        Any attributes (even none) can be included in the device
+        specification structure.
+
+        TODO: translate from the user interface (Drive Groups) to an actual list of devices.
+        """
+        if paths is None:
+            paths = []
+        self.paths = paths  # type: List[str]
+        if self.paths and any(p is not None for p in [id_model, size, rotates, count]):
+            raise TypeError('`paths` and other parameters are mutually exclusive')
+
+        self.id_model = id_model
+        self.size = size
+        self.rotates = rotates
+        self.count = count
+
+    @classmethod
+    def from_json(cls, device_spec):
+        return cls(**device_spec)
 
 
 class DriveGroupSpec(object):
@@ -342,33 +526,54 @@ class DriveGroupSpec(object):
     Describe a drive group in the same form that ceph-volume
     understands.
     """
-    def __init__(self, devices):
-        self.devices = devices
+    def __init__(self, host_pattern, data_devices, db_devices=None, wal_devices=None, journal_devices=None,
+                 osds_per_device=None, objectstore='bluestore', encrypted=False, db_slots=None,
+                 wal_slots=None):
+        # type: (str, DeviceSelection, Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], int, str, bool, int, int) -> ()
 
+        # concept of applying a drive group to a (set) of hosts is tightly
+        # linked to the drive group itself
+        #
+        # An fnmatch pattern to select hosts. Can also be a single host.
+        self.host_pattern = host_pattern
 
-class OsdCreationSpec(object):
-    """
-    Used during OSD creation.
+        self.data_devices = data_devices
+        self.db_devices = db_devices
+        self.wal_devices = wal_devices
+        self.journal_devices = journal_devices
 
-    The drive names used here may be ephemeral.
-    """
-    def __init__(self):
-        self.format = None  # filestore, bluestore
+        # Number of osd daemons per "DATA" device.
+        # To fully utilize nvme devices multiple osds are required.
+        self.osds_per_device = osds_per_device
 
-        self.node = None  # name of a node
+        assert objectstore in ('filestore', 'bluestore')
+        self.objectstore = objectstore
 
-        # List of device names
-        self.drive_group = None
+        self.encrypted = encrypted
 
+        self.db_slots = db_slots
+        self.wal_slots = wal_slots
+
+        # FIXME: needs ceph-volume support
         # Optional: mapping of drive to OSD ID, used when the
         # created OSDs are meant to replace previous OSDs on
         # the same node.
         self.osd_id_claims = {}
 
-        # Arbitrary JSON-serializable object.
-        # Maybe your orchestrator knows how to do something
-        # special like encrypting drives
-        self.extended = {}
+    @classmethod
+    def from_json(self, json_drive_group):
+        """
+        Initialize and verify 'Drive group' structure
+        :param json_drive_group: A valid json string with a Drive Group
+                                 specification
+        """
+        args = {k: (DeviceSelection.from_json(v) if k.endswith('_devices') else v) for k, v in
+                json_drive_group.items()}
+        return DriveGroupSpec(**args)
+
+    def hosts(self, all_hosts):
+        import fnmatch
+        return fnmatch.filter(all_hosts, self.host_pattern)
 
 
 class StatelessServiceSpec(object):
@@ -447,9 +652,62 @@ class InventoryDevice(object):
         # how much space is available.
         self.metadata_space_free = None
 
+    def to_json(self):
+        return dict(type=self.type, blank=self.blank, id=self.id, size=self.size, **self.extended)
+
 
 class InventoryNode(object):
+    """
+    When fetching inventory, all Devices are groups inside of an
+    InventoryNode.
+    """
     def __init__(self, name, devices):
         assert isinstance(devices, list)
         self.name = name  # unique within cluster.  For example a hostname.
-        self.devices = devices  # list of InventoryDevice
+        self.devices = devices  # type: List[InventoryDevice]
+
+    def to_json(self):
+        return {'name': self.name, 'devices': [d.to_json() for d in self.devices]}
+
+
+def _mk_orch_methods(cls):
+    # Needs to be defined outside of for.
+    # Otherwise meth is always bound to last key
+    def shim(method_name):
+        def inner(self, *args, **kwargs):
+            return self._oremote(method_name, args, kwargs)
+        return inner
+
+    for meth in Orchestrator.__dict__:
+        if not meth.startswith('_') and meth not in ['is_orchestrator_module', 'available']:
+            setattr(cls, meth, shim(meth))
+    return cls
+
+
+@_mk_orch_methods
+class OrchestratorClientMixin(Orchestrator):
+    def _oremote(self, meth, args, kwargs):
+        """
+        Helper for invoking `remote` on whichever orchestrator is enabled
+        """
+        try:
+            o = self._select_orchestrator()
+        except AttributeError:
+            o = self.remote('orchestrator_cli', '_select_orchestrator')
+        return self.remote(o, meth, *args, **kwargs)
+
+    def _orchestrator_wait(self, completions):
+        """
+        Helper to wait for completions to complete (reads) or
+        become persistent (writes).
+
+        Waits for writes to be *persistent* but not *effective*.
+        """
+        while not self.wait(completions):
+            if any(c.should_wait for c in completions):
+                time.sleep(5)
+            else:
+                break
+
+        if all(hasattr(c, 'error') and getattr(c, 'error') for c in completions):
+            raise Exception([getattr(c, 'error') for c in completions])

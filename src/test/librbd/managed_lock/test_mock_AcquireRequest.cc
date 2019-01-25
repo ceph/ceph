@@ -36,8 +36,8 @@ struct BreakRequest<librbd::MockImageCtx> {
     CephContext *cct = reinterpret_cast<CephContext *>(ioctx.cct());
     EXPECT_EQ(cct->_conf.get_val<bool>("rbd_blacklist_on_break_lock"),
               blacklist_locker);
-    EXPECT_EQ(cct->_conf.get_val<int64_t>("rbd_blacklist_expire_seconds"),
-              (int)blacklist_expire_seconds);
+    EXPECT_EQ(cct->_conf.get_val<uint64_t>("rbd_blacklist_expire_seconds"),
+              blacklist_expire_seconds);
     EXPECT_FALSE(force_break_lock);
     ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;

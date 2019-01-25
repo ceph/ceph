@@ -367,6 +367,10 @@ IoCtx::IoCtx(const IoCtx& rhs) {
   }
 }
 
+IoCtx::IoCtx(IoCtx&& rhs) noexcept : io_ctx_impl(std::exchange(rhs.io_ctx_impl, nullptr))
+{
+}
+
 IoCtx& IoCtx::operator=(const IoCtx& rhs) {
   if (io_ctx_impl) {
     TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
@@ -378,6 +382,17 @@ IoCtx& IoCtx::operator=(const IoCtx& rhs) {
     TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
     ctx->get();
   }
+  return *this;
+}
+
+librados::IoCtx& librados::IoCtx::operator=(IoCtx&& rhs) noexcept
+{
+  if (io_ctx_impl) {
+    TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+    ctx->put();
+  }
+
+  io_ctx_impl = std::exchange(rhs.io_ctx_impl, nullptr);
   return *this;
 }
 
@@ -458,6 +473,11 @@ int IoCtx::aio_operate(const std::string& oid, AioCompletion *c,
 int IoCtx::aio_remove(const std::string& oid, AioCompletion *c) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->aio_remove(oid, c->pc);
+}
+
+int IoCtx::aio_remove(const std::string& oid, AioCompletion *c, int flags) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->aio_remove(oid, c->pc, flags);
 }
 
 int IoCtx::aio_watch(const std::string& o, AioCompletion *c, uint64_t *handle,
@@ -1027,6 +1047,11 @@ uint64_t Rados::get_instance_id() {
   return impl->get_instance_id();
 }
 
+int Rados::get_min_compatible_osd(int8_t* require_osd_release) {
+  TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
+  return impl->get_min_compatible_osd(require_osd_release);
+}
+
 int Rados::get_min_compatible_client(int8_t* min_compat_client,
                                      int8_t* require_min_compat_client) {
   TestRadosClient *impl = reinterpret_cast<TestRadosClient*>(client);
@@ -1169,6 +1194,12 @@ int cls_cxx_create(cls_method_context_t hctx, bool exclusive) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
   return ctx->io_ctx_impl->create(ctx->oid, exclusive);
+}
+
+int cls_cxx_remove(cls_method_context_t hctx) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  return ctx->io_ctx_impl->remove(ctx->oid, ctx->io_ctx_impl->get_snap_context());
 }
 
 int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t *origin) {
@@ -1416,4 +1447,8 @@ int cls_register_cxx_filter(cls_handle_t hclass,
 {
   librados::TestClassHandler *cls = get_class_handler();
   return cls->create_filter(hclass, filter_name, fn);
+}
+
+int8_t cls_get_required_osd_release(cls_handle_t hclass) {
+  return CEPH_FEATURE_SERVER_NAUTILUS;
 }

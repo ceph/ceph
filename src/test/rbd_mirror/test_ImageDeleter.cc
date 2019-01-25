@@ -112,7 +112,8 @@ public:
       promote_image();
     }
     NoOpProgressContext ctx;
-    int r = remove(m_local_io_ctx, m_image_name, "", ctx, force);
+    int r = librbd::api::Image<>::remove(m_local_io_ctx, m_image_name, "", ctx,
+                                         force);
     EXPECT_EQ(1, r == 0 || r == -ENOENT);
   }
 
@@ -122,7 +123,7 @@ public:
     if (!ictx) {
       ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                           false);
-      r = ictx->state->open(false);
+      r = ictx->state->open(0);
       close = (r == 0);
     }
 
@@ -143,7 +144,7 @@ public:
     if (!ictx) {
       ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                           false);
-      EXPECT_EQ(0, ictx->state->open(false));
+      EXPECT_EQ(0, ictx->state->open(0));
       close = true;
     }
 
@@ -157,7 +158,7 @@ public:
   void create_snapshot(std::string snap_name="snap1", bool protect=false) {
     ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                   false);
-    EXPECT_EQ(0, ictx->state->open(false));
+    EXPECT_EQ(0, ictx->state->open(0));
     {
       RWLock::WLocker snap_locker(ictx->snap_lock);
       ictx->set_journal_policy(new librbd::journal::DisabledPolicy());
@@ -177,7 +178,7 @@ public:
   std::string create_clone() {
     ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                   false);
-    EXPECT_EQ(0, ictx->state->open(false));
+    EXPECT_EQ(0, ictx->state->open(0));
     {
       RWLock::WLocker snap_locker(ictx->snap_lock);
       ictx->set_journal_policy(new librbd::journal::DisabledPolicy());
@@ -209,7 +210,7 @@ public:
   void check_image_deleted() {
     ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                   false);
-    EXPECT_EQ(-ENOENT, ictx->state->open(false));
+    EXPECT_EQ(-ENOENT, ictx->state->open(0));
 
     cls::rbd::MirrorImage mirror_image;
     EXPECT_EQ(-ENOENT, cls_client::mirror_image_get(&m_local_io_ctx,

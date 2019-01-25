@@ -1,12 +1,13 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
+import { RouterTestingModule } from '@angular/router/testing';
 
-import { TabsModule } from 'ngx-bootstrap/tabs/tabs.module';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
-import { ConfigurationService } from '../../../shared/api/configuration.service';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
+import { ConfigurationDetailsComponent } from './configuration-details/configuration-details.component';
 import { ConfigurationComponent } from './configuration.component';
 
 describe('ConfigurationComponent', () => {
@@ -14,9 +15,15 @@ describe('ConfigurationComponent', () => {
   let fixture: ComponentFixture<ConfigurationComponent>;
 
   configureTestBed({
-    declarations: [ConfigurationComponent],
-    providers: [ConfigurationService],
-    imports: [SharedModule, FormsModule, TabsModule.forRoot(), HttpClientTestingModule]
+    declarations: [ConfigurationComponent, ConfigurationDetailsComponent],
+    imports: [
+      SharedModule,
+      FormsModule,
+      TabsModule.forRoot(),
+      HttpClientTestingModule,
+      RouterTestingModule
+    ],
+    providers: i18nProviders
   });
 
   beforeEach(() => {

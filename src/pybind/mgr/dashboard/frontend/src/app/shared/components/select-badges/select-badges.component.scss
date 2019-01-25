@@ -9,16 +9,16 @@
   border-bottom: 1px solid $color-transparent;
   font-size: 12px;
   &:hover {
-    background-color: $color-off-white;
+    background-color: $color-whitesmoke-gray;
   }
 }
 .select-menu-item-icon {
   float: left;
-  padding: 8px 8px 8px 8px;
-  width: 30px;
+  padding: 0.5em;
+  width: 3em;
 }
 .select-menu-item-content {
-  padding: 8px 8px 8px 8px;
+  padding: 0.5em;
 }
 .badge-remove {
   color: $color-solid-white;

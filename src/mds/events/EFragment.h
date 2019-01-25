@@ -33,7 +33,7 @@ public:
   inodeno_t ino;
   frag_t basefrag;
   __s32 bits{0};         // positive for split (from basefrag), negative for merge (to basefrag)
-  list<frag_t> orig_frags;
+  frag_vec_t orig_frags;
   bufferlist rollback;
 
   EFragment() : LogEvent(EVENT_FRAGMENT) { }
@@ -51,7 +51,7 @@ public:
     OP_ROLLBACK = 3,
     OP_FINISH = 4 // finish deleting orphan dirfrags
   };
-  static const char *op_name(int o) {
+  static std::string_view op_name(int o) {
     switch (o) {
     case OP_PREPARE: return "prepare";
     case OP_COMMIT: return "commit";

@@ -1,9 +1,9 @@
 
 =============
-Ceph FS Shell
+CephFS Shell
 =============
 
-The File System (FS) shell includes various shell-like commands that directly interact with the Ceph File System.
+The File System (FS) shell includes various shell-like commands that directly interact with the :term:`Ceph Filesystem`.
 
 Usage :
 
@@ -35,7 +35,7 @@ Options :
 put
 ---
 
-Copy a file/directory to Ceph File System from Local File System.
+Copy a file/directory to Ceph Filesystem from Local Filesystem.
 
 Usage : 
     
@@ -55,13 +55,13 @@ Options :
 get
 ---
  
-Copy a file from Ceph File System to Local File System.
+Copy a file from Ceph Filesystem to Local Filesystem.
 
 Usage : 
 
     get [options] <source_path> [target_path]
 
-* source_path - remote file/directory path which is to be copied to local file system.
+* source_path - remote file/directory path which is to be copied to local filesystem.
     * if `.` copies all the file/directories in the remote working directory.
                     
 * target_path - local directory path where the files/directories are to be copied to.
@@ -337,7 +337,7 @@ Usage:
 locate
 ------
 
-Find a item in File System
+Find an item in Filesystem
 
 Usage:
      locate [options] <name>

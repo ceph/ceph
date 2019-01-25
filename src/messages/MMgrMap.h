@@ -40,7 +40,7 @@ private:
   ~MMgrMap() override {}
 
 public:
-  const char *get_type_name() const override { return "mgrmap"; }
+  std::string_view get_type_name() const override { return "mgrmap"; }
   void print(ostream& out) const override {
     out << get_type_name() << "(e " << map.epoch << ")";
   }

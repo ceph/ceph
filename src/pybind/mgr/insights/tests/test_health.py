@@ -175,7 +175,7 @@ class HealthChecksTest(unittest.TestCase):
 class HealthHistoryTest(unittest.TestCase):
     def _now(self):
         # return some time truncated at 30 minutes past the hour. this lets us
-        # fiddle with time offsets without worrying about accidentically landing
+        # fiddle with time offsets without worrying about accidentally landing
         # on exactly the top of the hour which is the edge of a time slot for
         # tracking health history.
         dt = datetime.datetime.utcnow()

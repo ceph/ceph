@@ -24,12 +24,10 @@
 ThreadPool::ThreadPool(CephContext *cct_, string nm, string tn, int n, const char *option)
   : cct(cct_), name(std::move(nm)), thread_name(std::move(tn)),
     lockname(name + "::lock"),
-    _lock(lockname.c_str()),  // this should be safe due to declaration order
+    _lock(ceph::make_mutex(lockname)),  // this should be safe due to declaration order
     _stop(false),
     _pause(0),
     _draining(0),
-    ioprio_class(-1),
-    ioprio_priority(-1),
     _num_threads(n),
     processing(0)
 {
@@ -72,18 +70,18 @@ void ThreadPool::handle_conf_change(const ConfigProxy& conf,
     int v = atoi(buf);
     free(buf);
     if (v >= 0) {
-      _lock.Lock();
+      _lock.lock();
       _num_threads = v;
       start_threads();
-      _cond.SignalAll();
-      _lock.Unlock();
+      _cond.notify_all();
+      _lock.unlock();
     }
   }
 }
 
 void ThreadPool::worker(WorkThread *wt)
 {
-  _lock.Lock();
+  std::unique_lock ul(_lock);
   ldout(cct,10) << "worker start" << dendl;
   
   std::stringstream ss;
@@ -116,15 +114,15 @@ void ThreadPool::worker(WorkThread *wt)
 			<< " (" << processing << " active)" << dendl;
 	  TPHandle tp_handle(cct, hb, wq->timeout_interval, wq->suicide_interval);
 	  tp_handle.reset_tp_timeout();
-	  _lock.Unlock();
+	  ul.unlock();
 	  wq->_void_process(item, tp_handle);
-	  _lock.Lock();
+	  ul.lock();
 	  wq->_void_process_finish(item);
 	  processing--;
 	  ldout(cct,15) << "worker wq " << wq->name << " done processing " << item
 			<< " (" << processing << " active)" << dendl;
 	  if (_pause || _draining)
-	    _wait_cond.Signal();
+	    _wait_cond.notify_all();
 	  did = true;
 	  break;
 	}
@@ -138,37 +136,30 @@ void ThreadPool::worker(WorkThread *wt)
       hb,
       cct->_conf->threadpool_default_timeout,
       0);
-    _cond.WaitInterval(_lock,
-      utime_t(
-	cct->_conf->threadpool_empty_queue_max_wait, 0));
+    auto wait = std::chrono::seconds(
+      cct->_conf->threadpool_empty_queue_max_wait);
+    _cond.wait_for(ul, wait);
   }
   ldout(cct,1) << "worker finish" << dendl;
 
   cct->get_heartbeat_map()->remove_worker(hb);
-
-  _lock.Unlock();
 }
 
 void ThreadPool::start_threads()
 {
-  ceph_assert(_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(_lock));
   while (_threads.size() < _num_threads) {
     WorkThread *wt = new WorkThread(this);
     ldout(cct, 10) << "start_threads creating and starting " << wt << dendl;
     _threads.insert(wt);
 
     wt->create(thread_name.c_str());
-
-    int r = wt->set_ioprio(ioprio_class, ioprio_priority);
-    if (r < 0)
-      lderr(cct) << " set_ioprio got " << cpp_strerror(r) << dendl;
-
   }
 }
 
 void ThreadPool::join_old_threads()
 {
-  ceph_assert(_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(_lock));
   while (!_old_threads.empty()) {
     ldout(cct, 10) << "join_old_threads joining and deleting " << _old_threads.front() << dendl;
     _old_threads.front()->join();
@@ -186,9 +177,9 @@ void ThreadPool::start()
     cct->_conf.add_observer(this);
   }
 
-  _lock.Lock();
+  _lock.lock();
   start_threads();
-  _lock.Unlock();
+  _lock.unlock();
   ldout(cct,15) << "started" << dendl;
 }
 
@@ -201,11 +192,11 @@ void ThreadPool::stop(bool clear_after)
     cct->_conf.remove_observer(this);
   }
 
-  _lock.Lock();
+  _lock.lock();
   _stop = true;
-  _cond.Signal();
+  _cond.notify_all();
   join_old_threads();
-  _lock.Unlock();
+  _lock.unlock();
   for (set<WorkThread*>::iterator p = _threads.begin();
        p != _threads.end();
        ++p) {
@@ -213,70 +204,52 @@ void ThreadPool::stop(bool clear_after)
     delete *p;
   }
   _threads.clear();
-  _lock.Lock();
+  _lock.lock();
   for (unsigned i=0; i<work_queues.size(); i++)
     work_queues[i]->_clear();
   _stop = false;
-  _lock.Unlock();    
+  _lock.unlock();
   ldout(cct,15) << "stopped" << dendl;
 }
 
 void ThreadPool::pause()
 {
+  std::unique_lock ul(_lock);
   ldout(cct,10) << "pause" << dendl;
-  _lock.Lock();
   _pause++;
-  while (processing)
-    _wait_cond.Wait(_lock);
-  _lock.Unlock();
+  while (processing) {
+    _wait_cond.wait(ul);
+  }
   ldout(cct,15) << "paused" << dendl;
 }
 
 void ThreadPool::pause_new()
 {
   ldout(cct,10) << "pause_new" << dendl;
-  _lock.Lock();
+  _lock.lock();
   _pause++;
-  _lock.Unlock();
+  _lock.unlock();
 }
 
 void ThreadPool::unpause()
 {
   ldout(cct,10) << "unpause" << dendl;
-  _lock.Lock();
+  _lock.lock();
   ceph_assert(_pause > 0);
   _pause--;
-  _cond.Signal();
-  _lock.Unlock();
+  _cond.notify_all();
+  _lock.unlock();
 }
 
 void ThreadPool::drain(WorkQueue_* wq)
 {
+  std::unique_lock ul(_lock);
   ldout(cct,10) << "drain" << dendl;
-  _lock.Lock();
   _draining++;
-  while (processing || (wq != NULL && !wq->_empty()))
-    _wait_cond.Wait(_lock);
-  _draining--;
-  _lock.Unlock();
-}
-
-void ThreadPool::set_ioprio(int cls, int priority)
-{
-  Mutex::Locker l(_lock);
-  ioprio_class = cls;
-  ioprio_priority = priority;
-  for (set<WorkThread*>::iterator p = _threads.begin();
-       p != _threads.end();
-       ++p) {
-    ldout(cct,10) << __func__ 
-		  << " class " << cls << " priority " << priority
-		  << " pid " << (*p)->get_pid()
-		  << dendl;
-    int r = (*p)->set_ioprio(cls, priority);
-    if (r < 0)
-      lderr(cct) << " set_ioprio got " << cpp_strerror(r) << dendl;
+  while (processing || (wq != NULL && !wq->_empty())) {
+    _wait_cond.wait(ul);
   }
+  _draining--;
 }
 
 ShardedThreadPool::ShardedThreadPool(CephContext *pcct_, string nm, string tn,
@@ -285,7 +258,7 @@ ShardedThreadPool::ShardedThreadPool(CephContext *pcct_, string nm, string tn,
   name(std::move(nm)),
   thread_name(std::move(tn)),
   lockname(name + "::lock"),
-  shardedpool_lock(lockname.c_str()),
+  shardedpool_lock(ceph::make_mutex(lockname)),
   num_threads(pnum_threads),
   num_paused(0),
   num_drained(0),
@@ -302,36 +275,34 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
 
   while (!stop_threads) {
     if (pause_threads) {
-      shardedpool_lock.Lock();
+      std::unique_lock ul(shardedpool_lock);
       ++num_paused;
-      wait_cond.Signal();
+      wait_cond.notify_all();
       while (pause_threads) {
        cct->get_heartbeat_map()->reset_timeout(
 	        hb,
 	        wq->timeout_interval, wq->suicide_interval);
-       shardedpool_cond.WaitInterval(shardedpool_lock,
-	   utime_t(
-	   cct->_conf->threadpool_empty_queue_max_wait, 0));
+       shardedpool_cond.wait_for(
+	 ul,
+	 std::chrono::seconds(cct->_conf->threadpool_empty_queue_max_wait));
       }
       --num_paused;
-      shardedpool_lock.Unlock();
     }
     if (drain_threads) {
-      shardedpool_lock.Lock();
+      std::unique_lock ul(shardedpool_lock);
       if (wq->is_shard_empty(thread_index)) {
         ++num_drained;
-        wait_cond.Signal();
+        wait_cond.notify_all();
         while (drain_threads) {
 	  cct->get_heartbeat_map()->reset_timeout(
 	    hb,
 	    wq->timeout_interval, wq->suicide_interval);
-          shardedpool_cond.WaitInterval(shardedpool_lock,
-	    utime_t(
-	      cct->_conf->threadpool_empty_queue_max_wait, 0));
+          shardedpool_cond.wait_for(
+	    ul,
+	    std::chrono::seconds(cct->_conf->threadpool_empty_queue_max_wait));
         }
         --num_drained;
       }
-      shardedpool_lock.Unlock();
     }
 
     cct->get_heartbeat_map()->reset_timeout(
@@ -349,7 +320,7 @@ void ShardedThreadPool::shardedthreadpool_worker(uint32_t thread_index)
 
 void ShardedThreadPool::start_threads()
 {
-  ceph_assert(shardedpool_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(shardedpool_lock));
   int32_t thread_index = 0;
   while (threads_shardedpool.size() < num_threads) {
 
@@ -365,9 +336,9 @@ void ShardedThreadPool::start()
 {
   ldout(cct,10) << "start" << dendl;
 
-  shardedpool_lock.Lock();
+  shardedpool_lock.lock();
   start_threads();
-  shardedpool_lock.Unlock();
+  shardedpool_lock.unlock();
   ldout(cct,15) << "started" << dendl;
 }
 
@@ -389,54 +360,52 @@ void ShardedThreadPool::stop()
 
 void ShardedThreadPool::pause()
 {
+  std::unique_lock ul(shardedpool_lock);
   ldout(cct,10) << "pause" << dendl;
-  shardedpool_lock.Lock();
   pause_threads = true;
   ceph_assert(wq != NULL);
   wq->return_waiting_threads();
   while (num_threads != num_paused){
-    wait_cond.Wait(shardedpool_lock);
+    wait_cond.wait(ul);
   }
-  shardedpool_lock.Unlock();
   ldout(cct,10) << "paused" << dendl; 
 }
 
 void ShardedThreadPool::pause_new()
 {
   ldout(cct,10) << "pause_new" << dendl;
-  shardedpool_lock.Lock();
+  shardedpool_lock.lock();
   pause_threads = true;
   ceph_assert(wq != NULL);
   wq->return_waiting_threads();
-  shardedpool_lock.Unlock();
+  shardedpool_lock.unlock();
   ldout(cct,10) << "paused_new" << dendl;
 }
 
 void ShardedThreadPool::unpause()
 {
   ldout(cct,10) << "unpause" << dendl;
-  shardedpool_lock.Lock();
+  shardedpool_lock.lock();
   pause_threads = false;
   wq->stop_return_waiting_threads();
-  shardedpool_cond.Signal();
-  shardedpool_lock.Unlock();
+  shardedpool_cond.notify_all();
+  shardedpool_lock.unlock();
   ldout(cct,10) << "unpaused" << dendl;
 }
 
 void ShardedThreadPool::drain()
 {
+  std::unique_lock ul(shardedpool_lock);
   ldout(cct,10) << "drain" << dendl;
-  shardedpool_lock.Lock();
   drain_threads = true;
   ceph_assert(wq != NULL);
   wq->return_waiting_threads();
   while (num_threads != num_drained) {
-    wait_cond.Wait(shardedpool_lock);
+    wait_cond.wait(ul);
   }
   drain_threads = false;
   wq->stop_return_waiting_threads();
-  shardedpool_cond.Signal();
-  shardedpool_lock.Unlock();
+  shardedpool_cond.notify_all();
   ldout(cct,10) << "drained" << dendl;
 }
 

@@ -134,6 +134,8 @@ struct InodeStat {
 
   quota_info_t quota;
 
+  mds_rank_t dir_pin;
+
  public:
   InodeStat() {}
   InodeStat(bufferlist::const_iterator& p, const uint64_t features) {
@@ -143,7 +145,7 @@ struct InodeStat {
   void decode(bufferlist::const_iterator &p, const uint64_t features) {
     using ceph::decode;
     if (features == (uint64_t)-1) {
-      DECODE_START(1, p);
+      DECODE_START(2, p);
       decode(vino.ino, p);
       decode(vino.snapid, p);
       decode(rdev, p);
@@ -183,6 +185,11 @@ struct InodeStat {
       decode(layout.pool_ns, p);
       decode(btime, p);
       decode(change_attr, p);
+      if (struct_v > 1) {
+        decode(dir_pin, p);
+      } else {
+        dir_pin = -ENODATA;
+      }
       DECODE_FINISH(p);
     }
     else {
@@ -291,7 +298,7 @@ protected:
   ~MClientReply() override {}
 
 public:
-  const char *get_type_name() const override { return "creply"; }
+  std::string_view get_type_name() const override { return "creply"; }
   void print(ostream& o) const override {
     o << "client_reply(???:" << get_tid();
     o << " = " << get_result();
@@ -329,7 +336,10 @@ public:
   void set_extra_bl(bufferlist& bl) {
     extra_bl.claim(bl);
   }
-  bufferlist &get_extra_bl() {
+  bufferlist& get_extra_bl() {
+    return extra_bl;
+  }
+  const bufferlist& get_extra_bl() const {
     return extra_bl;
   }
 
@@ -338,6 +348,9 @@ public:
     trace_bl.claim(bl);
   }
   bufferlist& get_trace_bl() {
+    return trace_bl;
+  }
+  const bufferlist& get_trace_bl() const {
     return trace_bl;
   }
 };

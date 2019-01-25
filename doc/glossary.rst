@@ -103,7 +103,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		``fsid`` term is used interchangeably with ``uuid``
 
 	OSD uuid
-		Just like the OSD fsid, this is the OSD unique identifer and is used
+		Just like the OSD fsid, this is the OSD unique identifier and is used
 		interchangeably with ``fsid``
 
 	bluestore

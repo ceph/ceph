@@ -27,11 +27,10 @@ class MDSTable {
 public:
   MDSRank *mds;
 protected:
-  const char *table_name;
+  std::string table_name;
   bool per_mds;
   mds_rank_t rank;
 
-  object_t get_object_name() const;
   
   static const int STATE_UNDEF   = 0;
   static const int STATE_OPENING = 1;
@@ -44,7 +43,7 @@ protected:
   map<version_t, MDSInternalContextBase::vec > waitfor_save;
   
 public:
-  MDSTable(MDSRank *m, const char *n, bool is_per_mds) :
+  MDSTable(MDSRank *m, std::string_view n, bool is_per_mds) :
     mds(m), table_name(n), per_mds(is_per_mds), rank(MDS_RANK_NONE),
     state(STATE_UNDEF),
     version(0), committing_version(0), committed_version(0), projected_version(0) {}
@@ -80,6 +79,7 @@ public:
     if (is_active()) save(0);
   }
 
+  object_t get_object_name() const;
   void load(MDSInternalContextBase *onfinish);
   void load_2(int, bufferlist&, Context *onfinish);
 

@@ -155,7 +155,18 @@ PyObject *ActivePyModule::dispatch_remote(
   return remoteResult;
 }
 
-
+void ActivePyModule::config_notify()
+{
+  Gil gil(py_module->pMyThreadState, true);
+  dout(20) << "Calling " << py_module->get_name() << ".config_notify..."
+	   << dendl;
+  auto remoteResult = PyObject_CallMethod(pClassInstance,
+					  const_cast<char*>("config_notify"),
+					  (char*)NULL);
+  if (remoteResult != nullptr) {
+    Py_DECREF(remoteResult);
+  }
+}
 
 int ActivePyModule::handle_command(
   const cmdmap_t &cmdmap,
@@ -182,7 +193,7 @@ int ActivePyModule::handle_command(
   inbuf.copy(0, inbuf.length(), instr);
 
   auto pResult = PyObject_CallMethod(pClassInstance,
-      const_cast<char*>("handle_command"), const_cast<char*>("s#O"),
+      const_cast<char*>("_handle_command"), const_cast<char*>("s#O"),
       instr.c_str(), instr.length(), py_cmd);
 
   Py_DECREF(py_cmd);

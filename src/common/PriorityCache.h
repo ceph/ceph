@@ -27,18 +27,15 @@ namespace PriorityCache {
     LAST = PRI3,
   };
 
-  int64_t get_chunk(uint64_t usage, uint64_t chunk_bytes);
+  int64_t get_chunk(uint64_t usage, uint64_t total_bytes);
 
   struct PriCache {
     virtual ~PriCache();
 
-    /* Ask the cache to request memory for the given priority rounded up to
-     * the nearst chunk_bytes.  This for example, may return the size of all
-     * items associated with this priority plus some additional space for
-     * future growth.  Note that the cache may ultimately be allocated less 
-     * memory than it requests here.
+    /* Ask the cache to request memory for the given priority. Note that the
+     * cache may ultimately be allocated less memory than it requests here.
      */
-    virtual int64_t request_cache_bytes(PriorityCache::Priority pri, uint64_t chunk_bytes) const = 0;
+    virtual int64_t request_cache_bytes(PriorityCache::Priority pri, uint64_t total_cache) const = 0;
 
     // Get the number of bytes currently allocated to the given priority.
     virtual int64_t get_cache_bytes(PriorityCache::Priority pri) const = 0;
@@ -52,8 +49,15 @@ namespace PriorityCache {
     // Allocate additional bytes for a given priority.
     virtual void add_cache_bytes(PriorityCache::Priority pri, int64_t bytes) = 0;
 
-    // Commit the current number of bytes allocated to the cache.
-    virtual int64_t commit_cache_size() = 0;
+    /* Commit the current number of bytes allocated to the cache.  Space is
+     * allocated in chunks based on the allocation size and current total size
+     * of memory available for caches. */
+    virtual int64_t commit_cache_size(uint64_t total_cache) = 0;
+
+    /* Get the current number of bytes allocated to the cache. this may be
+     * larger than the value returned by get_cache_bytes as it includes extra
+     * space for future growth. */
+    virtual int64_t get_committed_size() const = 0;
 
     // Get the ratio of available memory this cache should target.
     virtual double get_cache_ratio() const = 0;

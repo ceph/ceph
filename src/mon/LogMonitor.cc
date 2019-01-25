@@ -187,7 +187,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
              << "' logging " << p->second.length() << " bytes" << dendl;
     string log_file = channels.get_log_file(p->first);
 
-    int fd = ::open(log_file.c_str(), O_WRONLY|O_APPEND|O_CREAT, 0600);
+    int fd = ::open(log_file.c_str(), O_WRONLY|O_APPEND|O_CREAT|O_CLOEXEC, 0600);
     if (fd < 0) {
       int err = -errno;
       dout(1) << "unable to write to '" << log_file << "' for channel '"
@@ -304,7 +304,7 @@ bool LogMonitor::preprocess_log(MonOpRequestRef op)
   dout(10) << "preprocess_log " << *m << " from " << m->get_orig_source() << dendl;
   int num_new = 0;
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session)
     goto done;
   if (!session->is_capable("log", MON_CAP_W)) {
@@ -402,7 +402,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
     mon->reply_command(op, -EINVAL, rs, get_last_committed());
     return true;
   }
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;
@@ -446,6 +446,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
       return entry.prio >= level;
     };
 
+    // Decrement operation that sets to container end when hitting rbegin
     ostringstream ss;
     if (channel == "*") {
       list<LogEntry> full_tail;
@@ -460,7 +461,21 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
       if (rp == full_tail.rend()) {
 	--rp;
       }
-      for (; rp != full_tail.rbegin(); --rp) {
+
+      // Decrement a reverse iterator such that going past rbegin()
+      // sets it to rend().  This is for writing a for() loop that
+      // goes up to (and including) rbegin()
+      auto dec = [&rp, &full_tail] () {
+        if (rp == full_tail.rbegin()) {
+          rp = full_tail.rend();
+        } else {
+          --rp;
+        }
+      };
+
+      // Move forward to the end of the container (decrement the reverse
+      // iterator).
+      for (; rp != full_tail.rend(); dec()) {
 	if (!match(*rp)) {
 	  continue;
 	}
@@ -471,7 +486,6 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
 	}
       }
     } else {
-      derr << "bar" << dendl;
       auto p = summary.tail_by_channel.find(channel);
       if (p != summary.tail_by_channel.end()) {
 	auto rp = p->second.rbegin();
@@ -483,7 +497,21 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
 	if (rp == p->second.rend()) {
 	  --rp;
 	}
-	for (; rp != p->second.rbegin(); --rp) {
+
+        // Decrement a reverse iterator such that going past rbegin()
+        // sets it to rend().  This is for writing a for() loop that
+        // goes up to (and including) rbegin()
+        auto dec = [&rp, &p] () {
+          if (rp == p->second.rbegin()) {
+            rp = p->second.rend();
+          } else {
+            --rp;
+          }
+        };
+
+        // Move forward to the end of the container (decrement the reverse
+        // iterator).
+	for (; rp != p->second.rend(); dec()) {
 	  if (!match(rp->second)) {
 	    continue;
 	  }
@@ -532,7 +560,7 @@ bool LogMonitor::prepare_command(MonOpRequestRef op)
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", get_last_committed());
     return true;

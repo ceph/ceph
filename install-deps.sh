@@ -33,13 +33,9 @@ function install_seastar_deps {
 }
 
 function munge_ceph_spec_in {
+    # http://rpm.org/user_doc/conditional_builds.html
     local OUTFILE=$1
     sed -e 's/@//g' -e 's/%bcond_with make_check/%bcond_without make_check/g' < ceph.spec.in > $OUTFILE
-    if type python2 > /dev/null 2>&1 ; then
-        sed -i -e 's/%bcond_with python2/%bcond_without python2/g' $OUTFILE
-    else
-        sed -i -e 's/%bcond_without python2/%bcond_with python2/g' $OUTFILE
-    fi
     if [ $WITH_SEASTAR ]; then
         sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
     fi
@@ -48,7 +44,7 @@ function munge_ceph_spec_in {
 function ensure_decent_gcc_on_ubuntu {
     # point gcc to the one offered by g++-7 if the used one is not
     # new enough
-    local old=$(gcc -dumpversion)
+    local old=$(gcc -dumpfullversion -dumpversion)
     local new=$1
     local codename=$2
     if dpkg --compare-versions $old ge 7.0; then
@@ -57,9 +53,9 @@ function ensure_decent_gcc_on_ubuntu {
 
     if [ ! -f /usr/bin/g++-${new} ]; then
 	$SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
-deb http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $codename main
-deb [arch=amd64] http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $codename main
-deb [arch=amd64,i386] http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $codename main
+deb [lang=none] http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $codename main
+deb [arch=amd64 lang=none] http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $codename main
+deb [arch=amd64,i386 lang=none] http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $codename main
 EOF
 	# import PPA's signing key into APT's keyring
 	cat << ENDOFKEY | $SUDO apt-key add -
@@ -77,7 +73,7 @@ msyaQpNl/m/lNtOLhR64v5ZybofB2EWkMxUzX8D/FQ==
 =LcUQ
 -----END PGP PUBLIC KEY BLOCK-----
 ENDOFKEY
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-7
     fi
 
@@ -125,6 +121,29 @@ function install_pkg_on_ubuntu {
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y -o Acquire::Languages=none -o Acquire::Translation=none || true
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install --allow-unauthenticated -y $missing_pkgs
     fi
+}
+
+function install_boost_on_ubuntu {
+    local codename=$1
+    install_pkg_on_ubuntu \
+	ceph-libboost1.67 \
+	dd38c27740c1f9a9e6719a07eef84a1369dc168b \
+	$codename \
+	ceph-libboost-atomic1.67-dev \
+	ceph-libboost-chrono1.67-dev \
+	ceph-libboost-container1.67-dev \
+	ceph-libboost-context1.67-dev \
+	ceph-libboost-coroutine1.67-dev \
+	ceph-libboost-date-time1.67-dev \
+	ceph-libboost-filesystem1.67-dev \
+	ceph-libboost-iostreams1.67-dev \
+	ceph-libboost-program-options1.67-dev \
+	ceph-libboost-python1.67-dev \
+	ceph-libboost-random1.67-dev \
+	ceph-libboost-regex1.67-dev \
+	ceph-libboost-system1.67-dev \
+	ceph-libboost-thread1.67-dev \
+	ceph-libboost-timer1.67-dev
 }
 
 function version_lt {
@@ -175,7 +194,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
         devel/py-virtualenv \
         databases/leveldb \
         net/openldap24-client \
-        security/nss \
         archivers/snappy \
         archivers/liblz4 \
         ftp/curl \
@@ -193,16 +211,20 @@ if [ x$(uname)x = xFreeBSDx ]; then
         java/junit \
         lang/python \
         lang/python27 \
+        lang/python36 \
         devel/py-pip \
+        devel/py-flake8 \
         devel/py-argparse \
         devel/py-nose \
         devel/py-prettytable \
-	www/py-routes \
+        www/py-routes \
         www/py-flask \
-	www/node \
-	www/npm \
+        www/node \
+        www/npm \
         www/fcgi \
-	security/oath-toolkit \
+        security/nss \
+        security/kbr5 \
+        security/oath-toolkit \
         sysutils/flock \
         sysutils/fusefs-libs \
 
@@ -223,25 +245,10 @@ else
                 ;;
             *Xenial*)
                 ensure_decent_gcc_on_ubuntu 7 xenial
-                install_pkg_on_ubuntu \
-		    ceph-libboost1.67 \
-		    dd38c27740c1f9a9e6719a07eef84a1369dc168b \
-		    xenial \
-		    ceph-libboost-atomic1.67-dev \
-		    ceph-libboost-chrono1.67-dev \
-		    ceph-libboost-container1.67-dev \
-		    ceph-libboost-context1.67-dev \
-		    ceph-libboost-coroutine1.67-dev \
-		    ceph-libboost-date-time1.67-dev \
-		    ceph-libboost-filesystem1.67-dev \
-		    ceph-libboost-iostreams1.67-dev \
-		    ceph-libboost-program-options1.67-dev \
-		    ceph-libboost-python1.67-dev \
-		    ceph-libboost-random1.67-dev \
-		    ceph-libboost-regex1.67-dev \
-		    ceph-libboost-system1.67-dev \
-		    ceph-libboost-thread1.67-dev \
-		    ceph-libboost-timer1.67-dev
+                install_boost_on_ubuntu xenial
+                ;;
+            *Bionic*)
+                install_boost_on_ubuntu bionic
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -270,10 +277,11 @@ else
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	install_seastar_deps
 	if [ -n "$backports" ] ; then rm $control; fi
+	$SUDO apt-get install -y libxmlsec1 libxmlsec1-nss libxmlsec1-openssl libxmlsec1-dev
         ;;
     centos|fedora|rhel|ol|virtuozzo)
         yumdnf="yum"
-        builddepcmd="yum-builddep -y"
+        builddepcmd="yum-builddep -y --setopt=*.skip_if_unavailable=true"
         if test "$(echo "$VERSION_ID >= 22" | bc)" -ne 0; then
             yumdnf="dnf"
             builddepcmd="dnf -y builddep --allowerasing"
@@ -284,7 +292,6 @@ else
 	    $SUDO yum-config-manager --disable centos-sclo-rh || true
 	    $SUDO yum remove centos-release-scl || true
 	fi
-
         case $ID in
             fedora)
                 if test $yumdnf = yum; then
@@ -301,7 +308,6 @@ else
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$VERSION_ID
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
                 if test $ID = centos -a $VERSION_ID = 7 ; then
-                    $SUDO yum-config-manager --enable cr
 		    case $(uname -m) in
 			x86_64)
 			    $SUDO yum -y install centos-release-scl
@@ -317,8 +323,6 @@ else
                 elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
                     $SUDO yum-config-manager --enable rhel-server-rhscl-7-rpms
                     dts_ver=7
-                elif test $ID = virtuozzo -a $MAJOR_VERSION = 7 ; then
-                    $SUDO yum-config-manager --enable cr
                 fi
                 ;;
         esac
@@ -329,6 +333,8 @@ else
             ensure_decent_gcc_on_rh $dts_ver
 	fi
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
+        # for building python-saml and its dependencies
+        $SUDO $yumdnf install -y xmlsec1 xmlsec1-nss xmlsec1-openssl xmlsec1-devel xmlsec1-openssl-devel libtool-ltdl-devel
         ;;
     opensuse*|suse|sles)
         echo "Using zypper to install dependencies"
@@ -336,6 +342,7 @@ else
         $SUDO $zypp_install systemd-rpm-macros
         munge_ceph_spec_in $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
+        $SUDO $zypp_install libxmlsec1-1 libxmlsec1-nss1 libxmlsec1-openssl1 xmlsec1-devel xmlsec1-openssl-devel
         ;;
     alpine)
         # for now we need the testing repo for leveldb
@@ -379,6 +386,9 @@ function activate_virtualenv() {
         # because CentOS 7 has a buggy old version (v1.10.1)
         # https://github.com/pypa/virtualenv/issues/463
         virtualenv ${env_dir}_tmp
+        # install setuptools before upgrading virtualenv, as the latter needs
+        # a recent setuptools for setup commands like `extras_require`.
+        ${env_dir}_tmp/bin/pip install --upgrade setuptools
         ${env_dir}_tmp/bin/pip install --upgrade virtualenv
         ${env_dir}_tmp/bin/virtualenv --python $interpreter $env_dir
         rm -rf ${env_dir}_tmp
@@ -429,3 +439,4 @@ for interpreter in python2.7 python3 ; do
     rm -rf $top_srcdir/install-deps-$interpreter
 done
 rm -rf $XDG_CACHE_HOME
+git --version || (echo "Dashboard uses git to pull dependencies." ; false)

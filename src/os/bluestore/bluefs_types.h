@@ -146,7 +146,7 @@ struct bluefs_transaction_t {
     OP_NONE = 0,
     OP_INIT,        ///< initial (empty) file system marker
     OP_ALLOC_ADD,   ///< add extent to available block storage (extent)
-    OP_ALLOC_RM,    ///< remove extent from availabe block storage (extent)
+    OP_ALLOC_RM,    ///< remove extent from available block storage (extent)
     OP_DIR_LINK,    ///< (re)set a dir entry (dirname, filename, ino)
     OP_DIR_UNLINK,  ///< remove a dir entry (dirname, filename)
     OP_DIR_CREATE,  ///< create a dir (dirname)
@@ -231,6 +231,9 @@ struct bluefs_transaction_t {
     using ceph::encode;
     encode((__u8)OP_JUMP_SEQ, op_bl);
     encode(next_seq, op_bl);
+  }
+  void claim_ops(bluefs_transaction_t& from) {
+    op_bl.claim_append(from.op_bl);
   }
 
   void encode(bufferlist& bl) const;

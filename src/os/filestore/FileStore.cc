@@ -294,7 +294,7 @@ int FileStore::lfn_open(const coll_t& cid,
     goto fail;
   }
 
-  r = ::open((*path)->path(), flags, 0644);
+  r = ::open((*path)->path(), flags|O_CLOEXEC, 0644);
   if (r < 0) {
     r = -errno;
     dout(10) << "error opening file " << (*path)->path() << " with flags="
@@ -684,7 +684,6 @@ void FileStore::collect_metadata(map<string,string> *pm)
 {
   char partition_path[PATH_MAX];
   char dev_node[PATH_MAX];
-  int rc = 0;
 
   (*pm)["filestore_backend"] = backend->get_name();
   ostringstream ss;
@@ -692,43 +691,39 @@ void FileStore::collect_metadata(map<string,string> *pm)
   (*pm)["filestore_f_type"] = ss.str();
 
   if (cct->_conf->filestore_collect_device_partition_information) {
-    rc = get_device_by_fd(fsid_fd, partition_path, dev_node, PATH_MAX);
-  } else {
-    rc = -EINVAL;
-  }
-
-  switch (rc) {
-    case -EOPNOTSUPP:
-    case -EINVAL:
+    int rc = 0;
+    BlkDev blkdev(fsid_fd);
+    if (rc = blkdev.partition(partition_path, PATH_MAX); rc) {
       (*pm)["backend_filestore_partition_path"] = "unknown";
-      (*pm)["backend_filestore_dev_node"] = "unknown";
-      break;
-    case -ENODEV:
+    } else {
       (*pm)["backend_filestore_partition_path"] = string(partition_path);
+    }
+    if (rc = blkdev.wholedisk(dev_node, PATH_MAX); rc) {
       (*pm)["backend_filestore_dev_node"] = "unknown";
-      break;
-    default:
-      (*pm)["backend_filestore_partition_path"] = string(partition_path);
+    } else {
       (*pm)["backend_filestore_dev_node"] = string(dev_node);
-      if (vdo_fd >= 0) {
-	(*pm)["vdo"] = "true";
-	(*pm)["vdo_physical_size"] =
-	  stringify(4096 * get_vdo_stat(vdo_fd, "physical_blocks"));
-      }
+    }
+    if (rc == 0 && vdo_fd >= 0) {
+      (*pm)["vdo"] = "true";
+      (*pm)["vdo_physical_size"] =
+	stringify(4096 * get_vdo_stat(vdo_fd, "physical_blocks"));
+    }
+    if (journal) {
+      journal->collect_metadata(pm);
+    }
   }
 }
 
 int FileStore::get_devices(set<string> *ls)
 {
-  char partition_path[PATH_MAX];
-  char dev_node[PATH_MAX];
-  int rc = 0;
-  rc = get_device_by_fd(fsid_fd, partition_path, dev_node, PATH_MAX);
-  if (rc == 0) {
-    ls->insert(dev_node);
-    if (strncmp(dev_node, "dm-", 3) == 0) {
-      get_dm_parents(dev_node, ls);
-    }
+  string dev_node;
+  BlkDev blkdev(fsid_fd);
+  if (int rc = blkdev.wholedisk(&dev_node); rc) {
+    return rc;
+  }
+  get_raw_devices(dev_node, ls);
+  if (journal) {
+    journal->get_devices(ls);
   }
   return 0;
 }
@@ -771,6 +766,7 @@ int FileStore::statfs(struct store_statfs_t *buf0)
   // Adjust for writes pending in the journal
   if (journal) {
     uint64_t estimate = journal->get_journal_size_estimate();
+    buf0->internally_reserved = estimate;
     if (buf0->available > estimate)
       buf0->available -= estimate;
     else
@@ -780,6 +776,10 @@ int FileStore::statfs(struct store_statfs_t *buf0)
   return 0;
 }
 
+int FileStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
+{
+  return -ENOTSUP;
+}
 
 void FileStore::new_journal()
 {
@@ -866,7 +866,7 @@ int FileStore::mkfs()
   uuid_d old_omap_fsid;
 
   dout(1) << "mkfs in " << basedir << dendl;
-  basedir_fd = ::open(basedir.c_str(), O_RDONLY);
+  basedir_fd = ::open(basedir.c_str(), O_RDONLY|O_CLOEXEC);
   if (basedir_fd < 0) {
     ret = -errno;
     derr << __FUNC__ << ": failed to open base dir " << basedir << ": " << cpp_strerror(ret) << dendl;
@@ -875,7 +875,7 @@ int FileStore::mkfs()
 
   // open+lock fsid
   snprintf(fsid_fn, sizeof(fsid_fn), "%s/fsid", basedir.c_str());
-  fsid_fd = ::open(fsid_fn, O_RDWR|O_CREAT, 0644);
+  fsid_fd = ::open(fsid_fn, O_RDWR|O_CREAT|O_CLOEXEC, 0644);
   if (fsid_fd < 0) {
     ret = -errno;
     derr << __FUNC__ << ": failed to open " << fsid_fn << ": " << cpp_strerror(ret) << dendl;
@@ -990,7 +990,7 @@ int FileStore::mkfs()
 
       if (backend->can_checkpoint()) {
 	// create snap_1 too
-	current_fd = ::open(current_fn.c_str(), O_RDONLY);
+	current_fd = ::open(current_fn.c_str(), O_RDONLY|O_CLOEXEC);
 	ceph_assert(current_fd >= 0);
 	char s[NAME_MAX];
 	snprintf(s, sizeof(s), COMMIT_SNAP_ITEM, 1ull);
@@ -1015,7 +1015,7 @@ int FileStore::mkfs()
   int omap_fsid_fd;
   char omap_fsid_fn[PATH_MAX];
   snprintf(omap_fsid_fn, sizeof(omap_fsid_fn), "%s/osd_uuid", omap_dir.c_str());
-  omap_fsid_fd = ::open(omap_fsid_fn, O_RDWR|O_CREAT, 0644);
+  omap_fsid_fd = ::open(omap_fsid_fn, O_RDWR|O_CREAT|O_CLOEXEC, 0644);
   if (omap_fsid_fd < 0) {
     ret = -errno;
     derr << __FUNC__ << ": failed to open " << omap_fsid_fn << ": " << cpp_strerror(ret) << dendl;
@@ -1091,7 +1091,7 @@ int FileStore::mkjournal()
   int ret;
   char fn[PATH_MAX];
   snprintf(fn, sizeof(fn), "%s/fsid", basedir.c_str());
-  int fd = ::open(fn, O_RDONLY, 0644);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC, 0644);
   if (fd < 0) {
     int err = errno;
     derr << __FUNC__ << ": open error: " << cpp_strerror(err) << dendl;
@@ -1173,7 +1173,7 @@ bool FileStore::test_mount_in_use()
 
   // verify fs isn't in use
 
-  fsid_fd = ::open(fn, O_RDWR, 0644);
+  fsid_fd = ::open(fn, O_RDWR|O_CLOEXEC, 0644);
   if (fsid_fd < 0)
     return 0;   // no fsid, ok.
   bool inuse = lock_fsid() < 0;
@@ -1188,7 +1188,7 @@ bool FileStore::is_rotational()
   if (backend) {
     rotational = backend->is_rotational();
   } else {
-    int fd = ::open(basedir.c_str(), O_RDONLY);
+    int fd = ::open(basedir.c_str(), O_RDONLY|O_CLOEXEC);
     if (fd < 0)
       return true;
     struct statfs st;
@@ -1212,7 +1212,7 @@ bool FileStore::is_journal_rotational()
   if (backend) {
     journal_rotational = backend->is_journal_rotational();
   } else {
-    int fd = ::open(journalpath.c_str(), O_RDONLY);
+    int fd = ::open(journalpath.c_str(), O_RDONLY|O_CLOEXEC);
     if (fd < 0)
       return true;
     struct statfs st;
@@ -1257,10 +1257,8 @@ int FileStore::_detect_fs()
 
   // vdo
   {
-    char partition_path[PATH_MAX];
     char dev_node[PATH_MAX];
-    int rc = get_device_by_fd(fsid_fd, partition_path, dev_node, PATH_MAX);
-    if (rc == 0) {
+    if (int rc = BlkDev{fsid_fd}.wholedisk(dev_node, PATH_MAX); rc == 0) {
       vdo_fd = get_vdo_stats_handle(dev_node, &vdo_name);
       if (vdo_fd >= 0) {
 	dout(0) << __func__ << " VDO volume " << vdo_name << " for " << dev_node
@@ -1274,7 +1272,7 @@ int FileStore::_detect_fs()
   int x = rand();
   int y = x+1;
   snprintf(fn, sizeof(fn), "%s/xattr_test", basedir.c_str());
-  int tmpfd = ::open(fn, O_CREAT|O_WRONLY|O_TRUNC, 0700);
+  int tmpfd = ::open(fn, O_CREAT|O_WRONLY|O_TRUNC|O_CLOEXEC, 0700);
   if (tmpfd < 0) {
     int ret = -errno;
     derr << __FUNC__ << ": unable to create " << fn << ": " << cpp_strerror(ret) << dendl;
@@ -1413,6 +1411,36 @@ int FileStore::version_stamp_is_valid(uint32_t *version)
     return 0;
 }
 
+int FileStore::flush_cache(ostream *os)
+{
+  string drop_caches_file = "/proc/sys/vm/drop_caches";
+  int drop_caches_fd = ::open(drop_caches_file.c_str(), O_WRONLY|O_CLOEXEC), ret = 0;
+  char buf[2] = "3";
+  size_t len = strlen(buf);
+
+  if (drop_caches_fd < 0) {
+    ret = -errno;
+    derr << __FUNC__ << ": failed to open " << drop_caches_file << ": " << cpp_strerror(ret) << dendl;
+    if (os) {
+      *os << "FileStore flush_cache: failed to open " << drop_caches_file << ": " << cpp_strerror(ret);
+    }
+    return ret;
+  }
+
+  if (::write(drop_caches_fd, buf, len) < 0) {
+    ret = -errno;
+    derr << __FUNC__ << ": failed to write to " << drop_caches_file << ": " << cpp_strerror(ret) << dendl;
+    if (os) {
+      *os << "FileStore flush_cache: failed to write to " << drop_caches_file << ": " << cpp_strerror(ret);
+    }
+    goto out;
+  }
+
+out:
+  ::close(drop_caches_fd);
+  return ret;
+}
+
 int FileStore::write_version_stamp()
 {
   dout(1) << __FUNC__ << ": " << target_version << dendl;
@@ -1451,7 +1479,7 @@ int FileStore::upgrade()
 
 int FileStore::read_op_seq(uint64_t *seq)
 {
-  int op_fd = ::open(current_op_seq_fn.c_str(), O_CREAT|O_RDWR, 0644);
+  int op_fd = ::open(current_op_seq_fn.c_str(), O_CREAT|O_RDWR|O_CLOEXEC, 0644);
   if (op_fd < 0) {
     int r = -errno;
     ceph_assert(!m_filestore_fail_eio || r != -EIO);
@@ -1507,7 +1535,7 @@ int FileStore::mount()
 
   // get fsid
   snprintf(buf, sizeof(buf), "%s/fsid", basedir.c_str());
-  fsid_fd = ::open(buf, O_RDWR, 0644);
+  fsid_fd = ::open(buf, O_RDWR|O_CLOEXEC, 0644);
   if (fsid_fd < 0) {
     ret = -errno;
     derr << __FUNC__ << ": error opening '" << buf << "': "
@@ -1570,7 +1598,7 @@ int FileStore::mount()
   }
 
   // open some dir handles
-  basedir_fd = ::open(basedir.c_str(), O_RDONLY);
+  basedir_fd = ::open(basedir.c_str(), O_RDONLY|O_CLOEXEC);
   if (basedir_fd < 0) {
     ret = -errno;
     derr << __FUNC__ << ": failed to open " << basedir << ": "
@@ -1680,7 +1708,7 @@ int FileStore::mount()
   }
   initial_op_seq = 0;
 
-  current_fd = ::open(current_fn.c_str(), O_RDONLY);
+  current_fd = ::open(current_fn.c_str(), O_RDONLY|O_CLOEXEC);
   if (current_fd < 0) {
     ret = -errno;
     derr << __FUNC__ << ": error opening: " << current_fn << ": " << cpp_strerror(ret) << dendl;
@@ -1731,7 +1759,7 @@ int FileStore::mount()
   } else {
     int omap_fsid_fd;
     // if osd_uuid exists, compares osd_uuid with fsid
-    omap_fsid_fd = ::open(omap_fsid_buf, O_RDONLY, 0644);
+    omap_fsid_fd = ::open(omap_fsid_buf, O_RDONLY|O_CLOEXEC, 0644);
     if (omap_fsid_fd < 0) {
         ret = -errno;
         derr << __FUNC__ << ": error opening '" << omap_fsid_buf << "': "
@@ -2457,7 +2485,7 @@ void FileStore::_set_global_replay_guard(const coll_t& cid,
 
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
-  int fd = ::open(fn, O_RDONLY);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
   if (fd < 0) {
     int err = errno;
     derr << __FUNC__ << ": " << cid << " error " << cpp_strerror(err) << dendl;
@@ -2491,7 +2519,7 @@ int FileStore::_check_global_replay_guard(const coll_t& cid,
 {
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
-  int fd = ::open(fn, O_RDONLY);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
   if (fd < 0) {
     dout(10) << __FUNC__ << ": " << cid << " dne" << dendl;
     return 1;  // if collection does not exist, there is no guard, and we can replay.
@@ -2523,7 +2551,7 @@ void FileStore::_set_replay_guard(const coll_t& cid,
 {
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
-  int fd = ::open(fn, O_RDONLY);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
   if (fd < 0) {
     int err = errno;
     derr << __FUNC__ << ": " << cid << " error " << cpp_strerror(err) << dendl;
@@ -2582,7 +2610,7 @@ void FileStore::_close_replay_guard(const coll_t& cid,
 {
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
-  int fd = ::open(fn, O_RDONLY);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
   if (fd < 0) {
     int err = errno;
     derr << __FUNC__ << ": " << cid << " error " << cpp_strerror(err) << dendl;
@@ -2655,7 +2683,7 @@ int FileStore::_check_replay_guard(const coll_t& cid, const SequencerPosition& s
 
   char fn[PATH_MAX];
   get_cdir(cid, fn, sizeof(fn));
-  int fd = ::open(fn, O_RDONLY);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
   if (fd < 0) {
     dout(10) << __FUNC__ << ": " << cid << " dne" << dendl;
     return 1;  // if collection does not exist, there is no guard, and we can replay.
@@ -3895,10 +3923,10 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 #ifdef CEPH_HAVE_SPLICE
   if (backend->has_splice()) {
     int pipefd[2];
-    if (pipe(pipefd) < 0) {
-      r = -errno;
-      derr << " pipe " << " got " << cpp_strerror(r) << dendl;
-      return r;
+    if (pipe_cloexec(pipefd) < 0) {
+      int e = errno;
+      derr << " pipe " << " got " << cpp_strerror(e) << dendl;
+      return -e;
     }
 
     loff_t dstpos = dstoff;
@@ -5028,7 +5056,7 @@ int FileStore::_collection_set_bits(const coll_t& c, int bits)
   char n[PATH_MAX];
   int r;
   int32_t v = bits;
-  int fd = ::open(fn, O_RDONLY);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
   if (fd < 0) {
     r = -errno;
     goto out;
@@ -5049,7 +5077,7 @@ int FileStore::collection_bits(CollectionHandle& ch)
   int r;
   char n[PATH_MAX];
   int32_t bits;
-  int fd = ::open(fn, O_RDONLY);
+  int fd = ::open(fn, O_RDONLY|O_CLOEXEC);
   if (fd < 0) {
     bits = r = -errno;
     goto out;
@@ -5770,19 +5798,20 @@ int FileStore::_merge_collection(const coll_t& cid,
   bool is_pg = dest.is_pg(&pgid);
   ceph_assert(is_pg);
 
+  int dstcmp = _check_replay_guard(dest, spos);
+  if (dstcmp < 0)
+    return 0;
+
+  int srccmp = _check_replay_guard(cid, spos);
+  if (srccmp < 0)
+    return 0;
+
+  _set_global_replay_guard(cid, spos);
+  _set_replay_guard(cid, spos, true);
+  _set_replay_guard(dest, spos, true);
+
+  // main collection
   {
-    int dstcmp = _check_replay_guard(dest, spos);
-    if (dstcmp < 0)
-      return 0;
-
-    int srccmp = _check_replay_guard(cid, spos);
-    if (srccmp < 0)
-      return 0;
-
-    _set_global_replay_guard(cid, spos);
-    _set_replay_guard(cid, spos, true);
-    _set_replay_guard(dest, spos, true);
-
     Index from;
     r = get_index(cid, &from);
 
@@ -5799,25 +5828,10 @@ int FileStore::_merge_collection(const coll_t& cid,
 
       r = from->merge(bits, to.index);
     }
-
-    _close_replay_guard(cid, spos);
-    _close_replay_guard(dest, spos);
   }
 
   // temp too
   {
-    int dstcmp = _check_replay_guard(dest.get_temp(), spos);
-    if (dstcmp < 0)
-      return 0;
-
-    int srccmp = _check_replay_guard(cid.get_temp(), spos);
-    if (srccmp < 0)
-      return 0;
-
-    _set_global_replay_guard(cid.get_temp(), spos);
-    _set_replay_guard(cid.get_temp(), spos, true);
-    _set_replay_guard(dest.get_temp(), spos, true);
-
     Index from;
     r = get_index(cid.get_temp(), &from);
 
@@ -5834,15 +5848,14 @@ int FileStore::_merge_collection(const coll_t& cid,
 
       r = from->merge(bits, to.index);
     }
-
-    _close_replay_guard(cid.get_temp(), spos);
-    _close_replay_guard(dest.get_temp(), spos);
-
   }
 
   // remove source
-  if (_check_replay_guard(cid, spos) > 0)
-    r = _destroy_collection(cid);
+  _destroy_collection(cid);
+
+  _close_replay_guard(dest, spos);
+  _close_replay_guard(dest.get_temp(), spos);
+  // no need to close guards on cid... it's removed.
 
   if (!r && cct->_conf->filestore_debug_verify_split) {
     vector<ghobject_t> objects;
@@ -6184,6 +6197,11 @@ void FileStore::dump_transactions(vector<ObjectStore::Transaction>& ls, uint64_t
   m_filestore_dump_fmt.close_section();
   m_filestore_dump_fmt.flush(m_filestore_dump);
   m_filestore_dump.flush();
+}
+
+void FileStore::get_db_statistics(Formatter* f)
+{
+  object_map->db->get_statistics(f);
 }
 
 void FileStore::set_xattr_limits_via_conf()

@@ -89,39 +89,16 @@ public:
    * @param a Double pointer to an AuthAuthorizer. The Dispatcher will fill
    * in *a with the correct AuthAuthorizer, if it can. Make sure that you have
    * set *a to NULL before calling in.
-   * @param force_new Force the Dispatcher to wait for a new set of keys before
-   * returning the authorizer.
    *
    * @return True if this function call properly filled in *a, false otherwise.
    */
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **a,
-				 bool force_new) override { return false; };
-
-  /**
-   * Verify the authorizer for a new incoming Connection.
-   *
-   * @param con The new incoming Connection
-   * @param peer_type The type of the endpoint which initiated this Connection
-   * @param protocol The ID of the protocol in use (at time of writing, cephx
-   *  or none)
-   * @param authorizer The authorization string supplied by the remote
-   * @param authorizer_reply Output param: The string we should send back to
-   * the remote to authorize ourselves. Only filled in if isvalid
-   * @param isvalid Output param: True if authorizer is valid, false otherwise
-   *
-   * @return True if we were able to prove or disprove correctness of
-   * authorizer, false otherwise.
-   */
-  bool ms_verify_authorizer(Connection *con, int peer_type,
-			    int protocol, bufferlist& authorizer,
-			    bufferlist& authorizer_reply,
-			    bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override {
-    /* always succeed */
-    isvalid = true;
-    return true;
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **a) override {
+    return false;
   };
 
+  int ms_handle_authentication(Connection *con) override {
+    return 1;
+  }
 };
 
 #endif /* SIMPLEDISPATCHER_H_ */

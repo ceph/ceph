@@ -23,6 +23,12 @@ set(lib_mon_srcs
   ../mds/MDSAuthCaps.cc
   ../mgr/mgr_commands.cc
   ../osd/OSDCap.cc)
+
+if(HAVE_GSSAPI)
+  list(APPEND lib_mon_srcs
+    ${CMAKE_SOURCE_DIR}/src/auth/krb/KrbServiceHandler.cpp)
+endif()
+
 add_library(mon STATIC
   ${lib_mon_srcs}
   $<TARGET_OBJECTS:kv_objs>)

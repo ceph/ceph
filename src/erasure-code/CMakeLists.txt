@@ -20,6 +20,7 @@ endif()
 add_subdirectory(jerasure)
 add_subdirectory(lrc)
 add_subdirectory(shec)
+add_subdirectory(clay)
 
 if (HAVE_BETTER_YASM_ELF64)
   add_subdirectory(isa)
@@ -35,4 +36,5 @@ add_custom_target(erasure_code_plugins DEPENDS
     ${EC_ISA_LIB}
     ec_lrc
     ec_jerasure
-    ec_shec)
+    ec_shec
+    ec_clay)

@@ -1,0 +1,96 @@
+<cd-modal [modalRef]="bsModalRef">
+  <ng-container class="modal-title"
+                i18n>OSD Recovery Priority</ng-container>
+
+  <ng-container class="modal-content">
+    <form class="form-horizontal"
+          #formDir="ngForm"
+          [formGroup]="osdRecvSpeedForm"
+          novalidate>
+      <div class="modal-body">
+        <!-- Priority -->
+        <div class="form-group"
+             [ngClass]="{'has-error': osdRecvSpeedForm.showError('priority', formDir)}">
+          <label class="control-label col-sm-6"
+                 for="priority">
+            <ng-container i18n>Priority</ng-container>
+            <span class="required"></span>
+          </label>
+          <div class="col-sm-6">
+            <select class="form-control"
+                    formControlName="priority"
+                    id="priority"
+                    (change)="onPriorityChange($event.target.value)">
+              <option *ngFor="let priority of priorities"
+                      [value]="priority.name">
+                {{ priority.text }}
+              </option>
+            </select>
+            <span class="help-block"
+                  *ngIf="osdRecvSpeedForm.showError('priority', formDir, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- Customize priority -->
+        <div class="form-group">
+          <div class="col-sm-offset-6 col-sm-6">
+            <div class="checkbox checkbox-primary">
+              <input formControlName="customizePriority"
+                     id="customizePriority"
+                     type="checkbox"
+                     (change)="onCustomizePriorityChange()">
+              <label i18n
+                     for="customizePriority">Customize priority values</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Priority values -->
+        <div class="form-group" *ngFor="let attr of priorityAttrs | keyvalue"
+             [ngClass]="{'has-error': osdRecvSpeedForm.getValue('customizePriority') &&
+             osdRecvSpeedForm.showError(attr.key, formDir)}">
+          <label class="control-label col-sm-6"
+                 [for]="attr.key">{{ attr.value.text }}
+            <cd-helper *ngIf="attr.value.desc">{{ attr.value.desc }}</cd-helper>
+            <span class="required" *ngIf="osdRecvSpeedForm.getValue('customizePriority')"></span>
+          </label>
+          <div class="col-sm-6">
+            <input class="form-control"
+                   type="number"
+                   [id]="attr.key"
+                   [formControlName]="attr.key"
+                   [readonly]="!osdRecvSpeedForm.getValue('customizePriority')">
+            <span class="help-block"
+                  *ngIf="osdRecvSpeedForm.getValue('customizePriority') &&
+                  osdRecvSpeedForm.showError(attr.key, formDir, 'required')"
+                  i18n>This field is required!</span>
+            <span class="help-block"
+                  *ngIf="osdRecvSpeedForm.getValue('customizePriority') &&
+                  osdRecvSpeedForm.showError(attr.key, formDir, 'pattern')"
+                  i18n>{{ attr.value.patternHelpText }}</span>
+            <span class="help-block"
+                  *ngIf="osdRecvSpeedForm.getValue('customizePriority') &&
+                  osdRecvSpeedForm.showError(attr.key, formDir, 'max')"
+                  i18n>The entered value is too high! It must not be greater than {{ attr.value.maxValue }}.</span>
+            <span class="help-block"
+                  *ngIf="osdRecvSpeedForm.getValue('customizePriority') &&
+                  osdRecvSpeedForm.showError(attr.key, formDir, 'min')"
+                  i18n>The entered value is too low! It must not be lower than {{ attr.value.minValue }}.</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="button-group text-right">
+          <cd-submit-button (submitAction)="submitAction()"
+                            [form]="osdRecvSpeedForm"
+                            i18n>Submit</cd-submit-button>
+
+          <button class="btn btn-link btn-sm"
+                  (click)="bsModalRef.hide()"
+                  i18n>Cancel</button>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

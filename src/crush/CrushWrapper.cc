@@ -1536,6 +1536,39 @@ void CrushWrapper::get_subtree_of_type(int type, vector<int> *subtrees)
   }
 }
 
+bool CrushWrapper::class_is_in_use(int class_id, ostream *ss)
+{
+  list<unsigned> rules;
+  for (unsigned i = 0; i < crush->max_rules; ++i) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    for (unsigned j = 0; j < r->len; ++j) {
+      if (r->steps[j].op == CRUSH_RULE_TAKE) {
+        int root = r->steps[j].arg1;
+        for (auto &p : class_bucket) {
+          auto& q = p.second;
+          if (q.count(class_id) && q[class_id] == root) {
+            rules.push_back(i);
+          }
+        }
+      }
+    }
+  }
+  if (rules.empty()) {
+    return false;
+  }
+  if (ss) {
+    ostringstream os;
+    for (auto &p: rules) {
+      os << "'" << get_rule_name(p) <<"',";
+    }
+    string out(os.str());
+    out.resize(out.size() - 1); // drop last ','
+    *ss << "still referenced by crush_rule(s): " << out;
+  }
+  return true;
+}
 
 int CrushWrapper::rename_class(const string& srcname, const string& dstname)
 {
@@ -1645,18 +1678,400 @@ int32_t CrushWrapper::_alloc_class_id() const {
   ceph_abort_msg("no available class id");
 }
 
+int CrushWrapper::set_subtree_class(
+  const string& subtree,
+  const string& new_class)
+{
+  if (!name_exists(subtree)) {
+    return -ENOENT;
+  }
+
+  int new_class_id = get_or_create_class_id(new_class);
+  int id = get_item_id(subtree);
+  list<int> q = { id };
+  while (!q.empty()) {
+    int id = q.front();
+    q.pop_front();
+    crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) {
+      return PTR_ERR(b);
+    }
+    for (unsigned i = 0; i < b->size; ++i) {
+      int item = b->items[i];
+      if (item >= 0) {
+	class_map[item] = new_class_id;
+      } else {
+	q.push_back(item);
+      }
+    }
+  }
+  return 0;
+}
+
+int CrushWrapper::reclassify(
+  CephContext *cct,
+  ostream& out,
+  const map<string,string>& classify_root,
+  const map<string,pair<string,string>>& classify_bucket
+  )
+{
+  map<int,string> reclassified_bucket; // orig_id -> class
+
+  // classify_root
+  for (auto& i : classify_root) {
+    string root = i.first;
+    if (!name_exists(root)) {
+      out << "root " << root << " does not exist" << std::endl;
+      return -EINVAL;
+    }
+    int root_id = get_item_id(root);
+    string new_class = i.second;
+    int new_class_id = get_or_create_class_id(new_class);
+    out << "classify_root " << root << " (" << root_id
+	<< ") as " << new_class << std::endl;
+
+    // validate rules
+    for (unsigned j = 0; j < crush->max_rules; j++) {
+      if (crush->rules[j]) {
+	auto rule = crush->rules[j];
+	for (unsigned k = 0; k < rule->len; ++k) {
+	  if (rule->steps[k].op == CRUSH_RULE_TAKE) {
+	    int step_item = get_rule_arg1(j, k);
+	    int original_item;
+	    int c;
+	    int res = split_id_class(step_item, &original_item, &c);
+	    if (res < 0)
+	      return res;
+	    if (c >= 0) {
+	      if (original_item == root_id) {
+		out << "  rule " << j << " includes take on root "
+		    << root << " class " << c << std::endl;
+		return -EINVAL;
+	      }
+	    }
+	  }
+	}
+      }
+    }
+
+    // rebuild new buckets for root
+    //cout << "before class_bucket: " << class_bucket << std::endl;
+    map<int,int> renumber;
+    list<int> q;
+    q.push_back(root_id);
+    while (!q.empty()) {
+      int id = q.front();
+      q.pop_front();
+      crush_bucket *bucket = get_bucket(id);
+      if (IS_ERR(bucket)) {
+	out << "cannot find bucket " << id
+	    << ": " << cpp_strerror(PTR_ERR(bucket)) << std::endl;
+	return PTR_ERR(bucket);
+      }
+
+      // move bucket
+      int new_id = get_new_bucket_id();
+      out << "  renumbering bucket " << id << " -> " << new_id << std::endl;
+      renumber[id] = new_id;
+      crush->buckets[-1-new_id] = bucket;
+      bucket->id = new_id;
+      crush->buckets[-1-id] = crush_make_bucket(crush,
+						bucket->alg,
+						bucket->hash,
+						bucket->type,
+						0, NULL, NULL);
+      crush->buckets[-1-id]->id = id;
+      for (auto& i : choose_args) {
+	i.second.args[-1-new_id] = i.second.args[-1-id];
+	memset(&i.second.args[-1-id], 0, sizeof(i.second.args[0]));
+      }
+      class_bucket.erase(id);
+      class_bucket[new_id][new_class_id] = id;
+      name_map[new_id] = string(get_item_name(id));
+      name_map[id] = string(get_item_name(id)) + "~" + new_class;
+
+      for (unsigned j = 0; j < bucket->size; ++j) {
+	if (bucket->items[j] < 0) {
+	  q.push_front(bucket->items[j]);
+	} else {
+	  // we don't reclassify the device here; if the users wants that,
+	  // they can pass --set-subtree-class separately.
+	}
+      }
+    }
+    //cout << "mid class_bucket: " << class_bucket << std::endl;
+
+    for (int i = 0; i < crush->max_buckets; ++i) {
+      crush_bucket *b = crush->buckets[i];
+      if (!b) {
+	continue;
+      }
+      for (unsigned j = 0; j < b->size; ++j) {
+	if (renumber.count(b->items[j])) {
+	  b->items[j] = renumber[b->items[j]];
+	}
+      }
+    }
+
+    int r = rebuild_roots_with_classes();
+    if (r < 0) {
+      out << "failed to rebuild_roots_with_classes: " << cpp_strerror(r)
+	  << std::endl;
+      return r;
+    }
+    //cout << "final class_bucket: " << class_bucket << std::endl;
+  }
+
+  // classify_bucket
+  map<int,int> send_to;  // source bucket -> dest bucket
+  map<int,map<int,int>> new_class_bucket;
+  map<int,string> new_bucket_names;
+  map<int,map<string,string>> new_buckets;
+  map<string,int> new_bucket_by_name;
+  for (auto& i : classify_bucket) {
+    const string& match = i.first;  // prefix% or %suffix
+    const string& new_class = i.second.first;
+    const string& default_parent = i.second.second;
+    if (!name_exists(default_parent)) {
+      out << "default parent " << default_parent << " does not exist"
+	  << std::endl;
+      return -EINVAL;
+    }
+    int default_parent_id = get_item_id(default_parent);
+    crush_bucket *default_parent_bucket = get_bucket(default_parent_id);
+    assert(default_parent_bucket);
+    string default_parent_type_name = get_type_name(default_parent_bucket->type);
+
+    out << "classify_bucket " << match << " as " << new_class
+	<< " default bucket " << default_parent
+	<< " (" << default_parent_type_name << ")" << std::endl;
+
+    int new_class_id = get_or_create_class_id(new_class);
+    for (int j = 0; j < crush->max_buckets; ++j) {
+      crush_bucket *b = crush->buckets[j];
+      if (!b || is_shadow_item(b->id)) {
+	continue;
+      }
+      string name = get_item_name(b->id);
+      if (name.length() < match.length()) {
+	continue;
+      }
+      string basename;
+      if (match[0] == '%') {
+	if (match.substr(1) != name.substr(name.size() - match.size() + 1)) {
+	  continue;
+	}
+	basename = name.substr(0, name.size() - match.size() + 1);
+      } else if (match[match.size() - 1] == '%') {
+	if (match.substr(0, match.size() - 1) !=
+	    name.substr(0, match.size() - 1)) {
+	  continue;
+	}
+	basename = name.substr(match.size() - 1);
+      } else if (match == name) {
+	basename = default_parent;
+      } else {
+	continue;
+      }
+      cout << "match " << match << " to " << name << " basename " << basename
+	   << std::endl;
+      // look up or create basename bucket
+      int base_id;
+      if (name_exists(basename)) {
+	base_id = get_item_id(basename);
+	cout << "  have base " << base_id << std::endl;
+      } else if (new_bucket_by_name.count(basename)) {
+	base_id = new_bucket_by_name[basename];
+	cout << "  already creating base " << base_id << std::endl;
+      } else {
+	base_id = get_new_bucket_id();
+	crush->buckets[-1-base_id] = crush_make_bucket(crush,
+						       b->alg,
+						       b->hash,
+						       b->type,
+						       0, NULL, NULL);
+	crush->buckets[-1-base_id]->id = base_id;
+	name_map[base_id] = basename;
+	new_bucket_by_name[basename] = base_id;
+	cout << "  created base " << base_id << std::endl;
+
+	new_buckets[base_id][default_parent_type_name] = default_parent;
+      }
+      send_to[b->id] = base_id;
+      new_class_bucket[base_id][new_class_id] = b->id;
+      new_bucket_names[b->id] = basename + "~" + get_class_name(new_class_id);
+
+      // make sure devices are classified
+      for (unsigned i = 0; i < b->size; ++i) {
+	int item = b->items[i];
+	if (item >= 0) {
+	  class_map[item] = new_class_id;
+	}
+      }
+    }
+  }
+
+  // no name_exists() works below,
+  have_rmaps = false;
+
+  // copy items around
+  //cout << "send_to " << send_to << std::endl;
+  set<int> roots;
+  find_roots(&roots);
+  for (auto& i : send_to) {
+    crush_bucket *from = get_bucket(i.first);
+    crush_bucket *to = get_bucket(i.second);
+    cout << "moving items from " << from->id << " (" << get_item_name(from->id)
+	 << ") to " << to->id << " (" << get_item_name(to->id) << ")"
+	 << std::endl;
+    for (unsigned j = 0; j < from->size; ++j) {
+      int item = from->items[j];
+      int r;
+      map<string,string> to_loc;
+      to_loc[get_type_name(to->type)] = get_item_name(to->id);
+      if (item >= 0) {
+	if (subtree_contains(to->id, item)) {
+	  continue;
+	}
+	map<string,string> from_loc;
+	from_loc[get_type_name(from->type)] = get_item_name(from->id);
+	auto w = get_item_weightf_in_loc(item, from_loc);
+	r = insert_item(cct, item,
+			w,
+			get_item_name(item),
+			to_loc);
+      } else {
+	if (!send_to.count(item)) {
+	  lderr(cct) << "item " << item << " in bucket " << from->id
+	       << " is not also a reclassified bucket" << dendl;
+	  return -EINVAL;
+	}
+	int newitem = send_to[item];
+	if (subtree_contains(to->id, newitem)) {
+	  continue;
+	}
+	r = link_bucket(cct, newitem, to_loc);
+      }
+      if (r != 0) {
+	cout << __func__ << " err from insert_item: " << cpp_strerror(r)
+	     << std::endl;
+	return r;
+      }
+    }
+  }
+
+  // make sure new buckets have parents
+  for (auto& i : new_buckets) {
+    int parent;
+    if (get_immediate_parent_id(i.first, &parent) < 0) {
+      cout << "new bucket " << i.first << " missing parent, adding at "
+	   << i.second << std::endl;
+      int r = link_bucket(cct, i.first, i.second);
+      if (r != 0) {
+	cout << __func__ << " err from insert_item: " << cpp_strerror(r)
+	     << std::endl;
+	return r;
+      }
+    }
+  }
+
+  // set class mappings
+  //cout << "pre class_bucket: " << class_bucket << std::endl;
+  for (auto& i : new_class_bucket) {
+    for (auto& j : i.second) {
+      class_bucket[i.first][j.first] = j.second;
+    }
+
+  }
+  //cout << "post class_bucket: " << class_bucket << std::endl;
+  for (auto& i : new_bucket_names) {
+    name_map[i.first] = i.second;
+  }
+
+  int r = rebuild_roots_with_classes();
+  if (r < 0) {
+    out << "failed to rebuild_roots_with_classes: " << cpp_strerror(r)
+	<< std::endl;
+    return r;
+  }
+  //cout << "final class_bucket: " << class_bucket << std::endl;
+
+  return 0;
+}
+
+int CrushWrapper::get_new_bucket_id()
+{
+  int id = -1;
+  while (crush->buckets[-1-id] &&
+	 -1-id < crush->max_buckets) {
+    id--;
+  }
+  if (-1-id == crush->max_buckets) {
+    ++crush->max_buckets;
+    crush->buckets = (struct crush_bucket**)realloc(
+      crush->buckets,
+      sizeof(crush->buckets[0]) * crush->max_buckets);
+    for (auto& i : choose_args) {
+      assert(i.second.size == (__u32)crush->max_buckets - 1);
+      ++i.second.size;
+      i.second.args = (struct crush_choose_arg*)realloc(
+	i.second.args,
+	sizeof(i.second.args[0]) * i.second.size);
+    }
+  }
+  return id;
+}
+
 void CrushWrapper::reweight(CephContext *cct)
 {
   set<int> roots;
-  find_roots(&roots);
-  for (set<int>::iterator p = roots.begin(); p != roots.end(); ++p) {
-    if (*p >= 0)
+  find_nonshadow_roots(&roots);
+  for (auto id : roots) {
+    if (id >= 0)
       continue;
-    crush_bucket *b = get_bucket(*p);
-    ldout(cct, 5) << "reweight bucket " << *p << dendl;
+    crush_bucket *b = get_bucket(id);
+    ldout(cct, 5) << "reweight root bucket " << id << dendl;
     int r = crush_reweight_bucket(crush, b);
     ceph_assert(r == 0);
+
+    for (auto& i : choose_args) {
+      //cout << "carg " << i.first << std::endl;
+      vector<uint32_t> w;  // discard top-level weights
+      reweight_bucket(b, i.second, &w);
+    }
   }
+  int r = rebuild_roots_with_classes();
+  ceph_assert(r == 0);
+}
+
+void CrushWrapper::reweight_bucket(
+  crush_bucket *b,
+  crush_choose_arg_map& arg_map,
+  vector<uint32_t> *weightv)
+{
+  int idx = -1 - b->id;
+  unsigned npos = arg_map.args[idx].weight_set_positions;
+  //cout << __func__ << " " << b->id << " npos " << npos << std::endl;
+  weightv->resize(npos);
+  for (unsigned i = 0; i < b->size; ++i) {
+    int item = b->items[i];
+    if (item >= 0) {
+      for (unsigned pos = 0; pos < npos; ++pos) {
+	(*weightv)[pos] += arg_map.args[idx].weight_set->weights[i];
+      }
+    } else {
+      vector<uint32_t> subw(npos);
+      crush_bucket *sub = get_bucket(item);
+      assert(sub);
+      reweight_bucket(sub, arg_map, &subw);
+      for (unsigned pos = 0; pos < npos; ++pos) {
+	(*weightv)[pos] += subw[pos];
+	// strash the real bucket weight as the weights for this reference
+	arg_map.args[idx].weight_set->weights[i] = subw[pos];
+      }
+    }
+  }
+  //cout << __func__ << " finish " << b->id << " " << *weightv << std::endl;
 }
 
 int CrushWrapper::add_simple_rule_at(
@@ -1993,6 +2408,7 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
 	weight_set->weights = (__u32*)realloc(weight_set->weights,
 					      new_size * sizeof(__u32));
       } else {
+        free(weight_set->weights);
 	weight_set->weights = NULL;
       }
       weight_set->size = new_size;
@@ -2004,6 +2420,7 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
       if (new_size) {
 	arg->ids = (__s32 *)realloc(arg->ids, new_size * sizeof(__s32));
       } else {
+        free(arg->ids);
 	arg->ids = NULL;
       }
       arg->ids_size = new_size;
@@ -3144,7 +3561,19 @@ public:
     f->open_array_section("nodes");
     Parent::dump(f);
     f->close_section();
+
+    // There is no stray bucket whose id is a negative number, so just get
+    // the max_id and iterate from 0 to max_id to dump stray osds.
     f->open_array_section("stray");
+    int32_t max_id = -1;
+    if (!crush->name_map.empty()) {
+      max_id = crush->name_map.rbegin()->first;
+    }
+    for (int32_t i = 0; i <= max_id; i++) {
+      if (crush->item_exists(i) && !is_touched(i) && should_dump(i)) {
+        dump_item(CrushTreeDumper::Item(i, 0, 0, 0), f);
+      }
+    }
     f->close_section();
   }
 };

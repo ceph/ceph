@@ -386,7 +386,7 @@ void AuthMonitor::encode_full(MonitorDBStore::TransactionRef t)
   ceph_assert(get_last_committed() == version);
 
   bufferlist full_bl;
-  Mutex::Locker l(mon->key_server.get_lock());
+  std::scoped_lock l{mon->key_server.get_lock()};
   dout(20) << __func__ << " key server has "
            << (mon->key_server.has_secrets() ? "" : "no ")
            << "secrets!" << dendl;
@@ -508,7 +508,6 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   }
 
   int ret = 0;
-  AuthCapsInfo caps_info;
   MAuthReply *reply;
   bufferlist response_bl;
   auto indata = m->auth_payload.cbegin();
@@ -526,7 +525,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       decode(struct_v, indata);
       decode(supported, indata);
       decode(entity_name, indata);
-      decode(s->global_id, indata);
+      decode(s->con->peer_global_id, indata);
     } catch (const buffer::error &e) {
       dout(10) << "failed to decode initial auth message" << dendl;
       ret = -EINVAL;
@@ -608,9 +607,9 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   /* assign a new global_id? we assume this should only happen on the first
      request. If a client tries to send it later, it'll screw up its auth
      session */
-  if (!s->global_id) {
-    s->global_id = assign_global_id(op, paxos_writable);
-    if (!s->global_id) {
+  if (!s->con->peer_global_id) {
+    s->con->peer_global_id = assign_global_id(op, paxos_writable);
+    if (!s->con->peer_global_id) {
 
       delete s->auth_handler;
       s->auth_handler = NULL;
@@ -639,31 +638,22 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   try {
     if (start) {
       // new session
-      proto = s->auth_handler->start_session(entity_name, indata, response_bl, caps_info);
+      proto = s->auth_handler->start_session(entity_name, indata, response_bl,
+					     s->con->peer_caps_info);
       ret = 0;
-      if (caps_info.allow_all) {
-	s->caps.set_allow_all();
-	s->authenticated = true;
-      }
     } else {
       // request
-      ret = s->auth_handler->handle_request(indata, response_bl, s->global_id, caps_info);
+      ret = s->auth_handler->handle_request(
+	indata,
+	response_bl,
+	s->con->peer_global_id,
+	s->con->peer_caps_info);
     }
     if (ret == -EIO) {
       wait_for_active(op, new C_RetryMessage(this,op));
       goto done;
     }
-    if (caps_info.caps.length()) {
-      auto p = caps_info.caps.cbegin();
-      string str;
-      try {
-	decode(str, p);
-      } catch (const buffer::error &err) {
-	derr << "corrupt cap data for " << entity_name << " in auth db" << dendl;
-	str.clear();
-      }
-      s->caps.parse(str, NULL);
-      s->authenticated = true;
+    if (mon->ms_handle_authentication(s->con.get()) > 0) {
       finished = true;
     }
   } catch (const buffer::error &err) {
@@ -672,7 +662,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   }
 
 reply:
-  reply = new MAuthReply(proto, &response_bl, ret, s->global_id);
+  reply = new MAuthReply(proto, &response_bl, ret, s->con->peer_global_id);
   mon->send_reply(op, reply);
   if (finished) {
     // always send the latest monmap.
@@ -713,7 +703,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
     return false;
   }
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
@@ -1237,7 +1227,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
@@ -1697,7 +1687,7 @@ bool AuthMonitor::_upgrade_format_to_dumpling()
     // set daemon profiles
     if ((p->first.is_osd() || p->first.is_mds()) &&
         mon_caps == "allow rwx") {
-      new_caps = string("allow profile ") + string(p->first.get_type_name());
+      new_caps = string("allow profile ") + p->first.get_type_name();
     }
 
     // update bootstrap keys

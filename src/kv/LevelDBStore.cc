@@ -255,10 +255,9 @@ void LevelDBStore::LevelDBTransactionImpl::set(
     // make sure the buffer isn't too large or we might crash here...    
     char* slicebuf = (char*) alloca(bllen);
     leveldb::Slice newslice(slicebuf, bllen);
-    std::list<buffer::ptr>::const_iterator pb;
-    for (pb = to_set_bl.buffers().begin(); pb != to_set_bl.buffers().end(); ++pb) {
-      size_t ptrlen = (*pb).length();
-      memcpy((void*)slicebuf, (*pb).c_str(), ptrlen);
+    for (const auto& node : to_set_bl.buffers()) {
+      const size_t ptrlen = node.length();
+      memcpy(static_cast<void*>(slicebuf), node.c_str(), ptrlen);
       slicebuf += ptrlen;
     } 
     bat.Put(leveldb::Slice(key), newslice);
@@ -409,7 +408,7 @@ void LevelDBStore::compact_thread_entry()
 
 void LevelDBStore::compact_range_async(const string& start, const string& end)
 {
-  Mutex::Locker l(compact_queue_lock);
+  std::lock_guard l(compact_queue_lock);
 
   // try to merge adjacent ranges.  this is O(n), but the queue should
   // be short.  note that we do not cover all overlap cases and merge

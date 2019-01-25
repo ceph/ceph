@@ -1,10 +1,11 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
-import { async, ComponentFixture, TestBed } from '@angular/core/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import { TabsModule } from 'ngx-bootstrap';
+import { TabsModule } from 'ngx-bootstrap/tabs';
 
+import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { UserTabsComponent } from './user-tabs.component';
 
@@ -12,18 +13,16 @@ describe('UserTabsComponent', () => {
   let component: UserTabsComponent;
   let fixture: ComponentFixture<UserTabsComponent>;
 
-  beforeEach(async(() => {
-    TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        ToastModule.forRoot(),
-        TabsModule.forRoot(),
-        RouterTestingModule,
-        HttpClientTestingModule
-      ],
-      declarations: [UserTabsComponent]
-    }).compileComponents();
-  }));
+  configureTestBed({
+    imports: [
+      SharedModule,
+      ToastModule.forRoot(),
+      TabsModule.forRoot(),
+      RouterTestingModule,
+      HttpClientTestingModule
+    ],
+    declarations: [UserTabsComponent]
+  });
 
   beforeEach(() => {
     fixture = TestBed.createComponent(UserTabsComponent);

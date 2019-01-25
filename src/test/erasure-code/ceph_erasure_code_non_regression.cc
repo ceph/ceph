@@ -207,7 +207,7 @@ int ErasureCodeNonRegression::decode_erasures(ErasureCodeInterfaceRef erasure_co
       
   }
   map<int,bufferlist> decoded;
-  int code = erasure_code->decode(erasures, available, &decoded, 0);
+  int code = erasure_code->decode(erasures, available, &decoded, available.begin()->second.length());
   if (code)
     return code;
   for (set<int>::iterator erasure = erasures.begin();

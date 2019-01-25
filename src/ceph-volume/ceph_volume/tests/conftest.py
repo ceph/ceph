@@ -1,5 +1,6 @@
 import os
 import pytest
+from ceph_volume.util import disk
 from ceph_volume.api import lvm as lvm_api
 from ceph_volume import conf, configuration
 
@@ -66,6 +67,7 @@ def fakedevice(factory):
             is_lvm_member=True,
         )
         params.update(dict(kw))
+        params['lvm_size'] = disk.Size(b=params['sys_api'].get("size", 0))
         return factory(**params)
     return apply
 
@@ -83,6 +85,22 @@ def stub_call(monkeypatch):
         return stubbed_call
 
     return apply
+
+
+@pytest.fixture(autouse=True)
+def reset_cluster_name(request, monkeypatch):
+    """
+    The globally available ``ceph_volume.conf.cluster`` might get mangled in
+    tests, make sure that after evert test, it gets reset, preventing pollution
+    going into other tests later.
+    """
+    def fin():
+        conf.cluster = None
+        try:
+            os.environ.pop('CEPH_CONF')
+        except KeyError:
+            pass
+    request.addfinalizer(fin)
 
 
 @pytest.fixture
@@ -121,7 +139,7 @@ def conf_ceph_stub(monkeypatch, tmpfile):
 
 @pytest.fixture
 def volumes(monkeypatch):
-    monkeypatch.setattr('ceph_volume.process.call', lambda x: ('', '', 0))
+    monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
     volumes = lvm_api.Volumes()
     volumes._purge()
     return volumes
@@ -129,7 +147,7 @@ def volumes(monkeypatch):
 
 @pytest.fixture
 def volume_groups(monkeypatch):
-    monkeypatch.setattr('ceph_volume.process.call', lambda x: ('', '', 0))
+    monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
     vgs = lvm_api.VolumeGroups()
     vgs._purge()
     return vgs
@@ -144,7 +162,7 @@ def stub_vgs(monkeypatch, volume_groups):
 
 @pytest.fixture
 def pvolumes(monkeypatch):
-    monkeypatch.setattr('ceph_volume.process.call', lambda x: ('', '', 0))
+    monkeypatch.setattr('ceph_volume.process.call', lambda x, **kw: ('', '', 0))
     pvolumes = lvm_api.PVolumes()
     pvolumes._purge()
     return pvolumes
@@ -176,12 +194,20 @@ def tmpfile(tmpdir):
 
 @pytest.fixture
 def device_info(monkeypatch):
-    def apply(devices=None, lsblk=None, lv=None):
+    def apply(devices=None, lsblk=None, lv=None, blkid=None, udevadm=None):
         devices = devices if devices else {}
         lsblk = lsblk if lsblk else {}
+        blkid = blkid if blkid else {}
+        udevadm = udevadm if udevadm else {}
         lv = Factory(**lv) if lv else None
         monkeypatch.setattr("ceph_volume.sys_info.devices", {})
         monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda: devices)
-        monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: lv)
+        if not devices:
+            monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: lv)
+        else:
+            monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: None)
+        monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv", lambda vg_name, lv_uuid: lv)
         monkeypatch.setattr("ceph_volume.util.device.disk.lsblk", lambda path: lsblk)
+        monkeypatch.setattr("ceph_volume.util.device.disk.blkid", lambda path: blkid)
+        monkeypatch.setattr("ceph_volume.util.disk.udevadm_property", lambda *a, **kw: udevadm)
     return apply

@@ -42,9 +42,8 @@ namespace ceph {
 
     typedef std::list<std::pair<cost_t, T> > ListPairs;
 
-    static unsigned filter_list_pairs(ListPairs *l,
-				      std::function<bool (T&&)> f) {
-      unsigned ret = 0;
+    static void filter_list_pairs(ListPairs *l,
+				  std::function<bool (T&&)> f) {
       for (typename ListPairs::iterator i = l->end();
 	   i != l->begin();
 	   /* no inc */
@@ -52,13 +51,11 @@ namespace ceph {
 	auto next = i;
 	--next;
 	if (f(std::move(next->second))) {
-	  ++ret;
 	  l->erase(next);
 	} else {
 	  i = next;
 	}
       }
-      return ret;
     }
 
     struct SubQueue {
@@ -68,7 +65,6 @@ namespace ceph {
       Classes q;
 
       unsigned tokens, max_tokens;
-      int64_t size;
 
       typename Classes::iterator cur;
 
@@ -78,13 +74,12 @@ namespace ceph {
 	: q(other.q),
 	  tokens(other.tokens),
 	  max_tokens(other.max_tokens),
-	  size(other.size),
 	  cur(q.begin()) {}
 
       SubQueue()
 	: tokens(0),
 	  max_tokens(0),
-	  size(0), cur(q.begin()) {}
+	  cur(q.begin()) {}
 
       void set_max_tokens(unsigned mt) {
 	max_tokens = mt;
@@ -117,14 +112,12 @@ namespace ceph {
 	q[cl].emplace_back(cost, std::move(item));
 	if (cur == q.end())
 	  cur = q.begin();
-	size++;
       }
 
       void enqueue_front(K cl, cost_t cost, T&& item) {
 	q[cl].emplace_front(cost, std::move(item));
 	if (cur == q.end())
 	  cur = q.begin();
-	size++;
       }
 
       const std::pair<cost_t, T>& front() const {
@@ -153,12 +146,14 @@ namespace ceph {
 	if (cur == q.end()) {
 	  cur = q.begin();
 	}
-	size--;
       }
 
-      unsigned length() const {
-	ceph_assert(size >= 0);
-	return (unsigned)size;
+      unsigned get_size_slow() const {
+	unsigned count = 0;
+	for (const auto& cls : q) {
+	  count += cls.second.size();
+	}
+	return count;
       }
 
       bool empty() const {
@@ -169,7 +164,7 @@ namespace ceph {
 	for (typename Classes::iterator i = q.begin();
 	     i != q.end();
 	     /* no-inc */) {
-	  size -= filter_list_pairs(&(i->second), f);
+	  filter_list_pairs(&(i->second), f);
 	  if (i->second.empty()) {
 	    if (cur == i) {
 	      ++cur;
@@ -187,7 +182,6 @@ namespace ceph {
 	if (i == q.end()) {
 	  return;
 	}
-	size -= i->second.size();
 	if (i == cur) {
 	  ++cur;
 	}
@@ -201,7 +195,7 @@ namespace ceph {
       }
 
       void dump(ceph::Formatter *f) const {
-	f->dump_int("size", size);
+	f->dump_int("size", get_size_slow());
 	f->dump_int("num_keys", q.size());
       }
     };
@@ -229,13 +223,13 @@ namespace ceph {
       // empty
     }
 
-    unsigned length() const override final {
+    unsigned get_size_slow() const {
       unsigned total = 0;
       total += queue_front.size();
       total += queue.request_count();
       for (auto i = high_queue.cbegin(); i != high_queue.cend(); ++i) {
-	ceph_assert(i->second.length());
-	total += i->second.length();
+	ceph_assert(i->second.get_size_slow());
+	total += i->second.get_size_slow();
       }
       return total;
     }
@@ -299,11 +293,11 @@ namespace ceph {
     }
 
     void enqueue_strict(K cl, unsigned priority, T&& item) override final {
-      high_queue[priority].enqueue(cl, 0, std::move(item));
+      high_queue[priority].enqueue(cl, 1, std::move(item));
     }
 
     void enqueue_strict_front(K cl, unsigned priority, T&& item) override final {
-      high_queue[priority].enqueue_front(cl, 0, std::move(item));
+      high_queue[priority].enqueue_front(cl, 1, std::move(item));
     }
 
     void enqueue(K cl, unsigned priority, unsigned cost, T&& item) override final {

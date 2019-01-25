@@ -1,9 +1,6 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-import time
-import collections
-from collections import defaultdict
 import json
 
 import rados
@@ -30,6 +27,17 @@ class SendCommandError(rados.Error):
 
 
 class CephService(object):
+
+    OSD_FLAG_NO_SCRUB = 'noscrub'
+    OSD_FLAG_NO_DEEP_SCRUB = 'nodeep-scrub'
+
+    PG_STATUS_SCRUBBING = 'scrubbing'
+    PG_STATUS_DEEP_SCRUBBING = 'deep'
+
+    SCRUB_STATUS_DISABLED = 'Disabled'
+    SCRUB_STATUS_ACTIVE = 'Active'
+    SCRUB_STATUS_INACTIVE = 'Inactive'
+
     @classmethod
     def get_service_map(cls, service_name):
         service_map = {}
@@ -92,15 +100,7 @@ class CephService(object):
         pools_w_stats = []
 
         pg_summary = mgr.get("pg_summary")
-        pool_stats = defaultdict(lambda: defaultdict(
-            lambda: collections.deque(maxlen=10)))
-
-        df = mgr.get("df")
-        pool_stats_dict = dict([(p['id'], p['stats']) for p in df['pools']])
-        now = time.time()
-        for pool_id, stats in pool_stats_dict.items():
-            for stat_name, stat_val in stats.items():
-                pool_stats[pool_id][stat_name].appendleft((now, stat_val))
+        pool_stats = mgr.get_updated_pool_stats()
 
         for pool in pools:
             pool['pg_status'] = pg_summary['by_pool'][pool['pool'].__str__()]
@@ -109,7 +109,7 @@ class CephService(object):
 
             def get_rate(series):
                 if len(series) >= 2:
-                    return differentiate(*series[0:1])
+                    return differentiate(*list(series)[-2:])
                 return 0
 
             for stat_name, stat_series in stats.items():
@@ -176,7 +176,7 @@ class CephService(object):
         data = mgr.get_counter(svc_type, svc_name, path)[path]
         if not data:
             return [(0, 0.0)]
-        elif len(data) == 1:
+        if len(data) == 1:
             return [(data[0][0], 0.0)]
         return [(data2[0], differentiate(data1, data2)) for data1, data2 in pairwise(data)]
 
@@ -188,6 +188,67 @@ class CephService(object):
         if data and len(data) > 1:
             return differentiate(*data[-2:])
         return 0.0
+
+    @classmethod
+    def get_client_perf(cls):
+        pools_stats = mgr.get('osd_pool_stats')['pool_stats']
+
+        io_stats = {
+            'read_bytes_sec': 0,
+            'read_op_per_sec': 0,
+            'write_bytes_sec': 0,
+            'write_op_per_sec': 0,
+        }
+        recovery_stats = {'recovering_bytes_per_sec': 0}
+
+        for pool_stats in pools_stats:
+            client_io = pool_stats['client_io_rate']
+            for stat in list(io_stats.keys()):
+                if stat in client_io:
+                    io_stats[stat] += client_io[stat]
+
+            client_recovery = pool_stats['recovery_rate']
+            for stat in list(recovery_stats.keys()):
+                if stat in client_recovery:
+                    recovery_stats[stat] += client_recovery[stat]
+
+        client_perf = io_stats.copy()
+        client_perf.update(recovery_stats)
+
+        return client_perf
+
+    @classmethod
+    def get_scrub_status(cls):
+        enabled_flags = mgr.get('osd_map')['flags_set']
+        if cls.OSD_FLAG_NO_SCRUB in enabled_flags or cls.OSD_FLAG_NO_DEEP_SCRUB in enabled_flags:
+            return cls.SCRUB_STATUS_DISABLED
+
+        grouped_pg_statuses = mgr.get('pg_summary')['all']
+        for grouped_pg_status in grouped_pg_statuses.keys():
+            if len(grouped_pg_status.split(cls.PG_STATUS_SCRUBBING)) > 1 \
+                    or len(grouped_pg_status.split(cls.PG_STATUS_DEEP_SCRUBBING)) > 1:
+                return cls.SCRUB_STATUS_ACTIVE
+
+        return cls.SCRUB_STATUS_INACTIVE
+
+    @classmethod
+    def get_pg_info(cls):
+        pg_summary = mgr.get('pg_summary')
+
+        pgs_per_osd = 0.0
+        total_osds = len(pg_summary['by_osd'])
+        if total_osds > 0:
+            total_pgs = 0.0
+            for _, osd_pg_statuses in pg_summary['by_osd'].items():
+                for _, pg_amount in osd_pg_statuses.items():
+                    total_pgs += pg_amount
+
+            pgs_per_osd = total_pgs / total_osds
+
+        return {
+            'statuses': pg_summary['all'],
+            'pgs_per_osd': pgs_per_osd,
+        }
 
 
 def differentiate(data1, data2):

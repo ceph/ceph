@@ -34,7 +34,7 @@ void ServiceMap::Daemon::dump(Formatter *f) const
   f->dump_unsigned("start_epoch", start_epoch);
   f->dump_stream("start_stamp") << start_stamp;
   f->dump_unsigned("gid", gid);
-  f->dump_stream("addr") << addr;
+  f->dump_string("addr", addr.get_legacy_str());
   f->open_object_section("metadata");
   for (auto& p : metadata) {
     f->dump_string(p.first.c_str(), p.second);

@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/compat.h"
+#include "common/errno.h"
 
 #include <boost/utility/string_ref.hpp>
 
@@ -51,6 +52,9 @@ struct rgw_http_req_data : public RefCountedObject {
 
   int wait() {
     Mutex::Locker l(lock);
+    if (done) {
+      return ret;
+    }
     cond.Wait(lock);
     return ret;
   }
@@ -292,13 +296,6 @@ size_t RGWHTTPClient::receive_http_data(void * const ptr,
 
   bool pause = false;
 
-  size_t& skip_bytes = req_data->client->receive_pause_skip;
-
-  if (skip_bytes >= len) {
-    skip_bytes -= len;
-    return len;
-  }
-
   RGWHTTPClient *client;
 
   {
@@ -308,6 +305,13 @@ size_t RGWHTTPClient::receive_http_data(void * const ptr,
     }
 
     client = req_data->client;
+  }
+
+  size_t& skip_bytes = client->receive_pause_skip;
+
+  if (skip_bytes >= len) {
+    skip_bytes -= len;
+    return len;
   }
 
   int ret = client->receive_data((char *)ptr + skip_bytes, len - skip_bytes, &pause);
@@ -526,11 +530,7 @@ bool RGWHTTPClient::is_done()
  */
 int RGWHTTPClient::wait()
 {
-  if (!req_data->is_done()) {
-    return req_data->wait();
-  }
-
-  return req_data->ret;
+  return req_data->wait();
 }
 
 void RGWHTTPClient::cancel()
@@ -1043,21 +1043,19 @@ int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetSt
 
 int RGWHTTPManager::start()
 {
-  int r = pipe(thread_pipe);
-  if (r < 0) {
-    r = -errno;
-    ldout(cct, 0) << "ERROR: pipe() returned errno=" << r << dendl;
-    return r;
+  if (pipe_cloexec(thread_pipe) < 0) {
+    int e = errno;
+    ldout(cct, 0) << "ERROR: pipe(): " << cpp_strerror(e) << dendl;
+    return -e;
   }
 
   // enable non-blocking reads
-  r = ::fcntl(thread_pipe[0], F_SETFL, O_NONBLOCK);
-  if (r < 0) {
-    r = -errno;
-    ldout(cct, 0) << "ERROR: fcntl() returned errno=" << r << dendl;
+  if (::fcntl(thread_pipe[0], F_SETFL, O_NONBLOCK) < 0) {
+    int e = errno;
+    ldout(cct, 0) << "ERROR: fcntl(): " << cpp_strerror(e) << dendl;
     TEMP_FAILURE_RETRY(::close(thread_pipe[0]));
     TEMP_FAILURE_RETRY(::close(thread_pipe[1]));
-    return r;
+    return -e;
   }
 
 #ifdef HAVE_CURL_MULTI_WAIT
@@ -1156,6 +1154,7 @@ void *RGWHTTPManager::reqs_thread_entry()
               << cct->_conf->rgw_curl_low_speed_limit << " Bytes per second during " << cct->_conf->rgw_curl_low_speed_time << " seconds." << dendl;
           default:
             dout(20) << "ERROR: msg->data.result=" << result << " req_data->id=" << id << " http_status=" << http_status << dendl;
+            dout(20) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << dendl;
 	    break;
         }
       }
@@ -1165,14 +1164,14 @@ void *RGWHTTPManager::reqs_thread_entry()
 
   RWLock::WLocker rl(reqs_lock);
   for (auto r : unregistered_reqs) {
-    _finish_request(r, -ECANCELED);
+    _unlink_request(r);
   }
 
   unregistered_reqs.clear();
 
   auto all_reqs = std::move(reqs);
   for (auto iter : all_reqs) {
-    _finish_request(iter.second, -ECANCELED);
+    _unlink_request(iter.second);
   }
 
   reqs.clear();

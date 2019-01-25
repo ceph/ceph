@@ -17,9 +17,11 @@
  
 #include <stdlib.h>
 #include <ostream>
+#include <string_view>
 
 #include <boost/intrusive/list.hpp>
 
+#include "include/Context.h"
 #include "common/RefCountedObj.h"
 #include "common/ThrottleInterface.h"
 #include "common/config.h"
@@ -152,6 +154,7 @@
 #define MSG_MDS_OPENINO            0x20f
 #define MSG_MDS_OPENINOREPLY       0x210
 #define MSG_MDS_SNAPUPDATE         0x211
+#define MSG_MDS_FRAGMENTNOTIFYACK  0x212
 #define MSG_MDS_LOCK               0x300
 #define MSG_MDS_INODEFILECAPS      0x301
 
@@ -494,7 +497,7 @@ public:
   // virtual bits
   virtual void decode_payload() = 0;
   virtual void encode_payload(uint64_t features) = 0;
-  virtual const char *get_type_name() const = 0;
+  virtual std::string_view get_type_name() const = 0;
   virtual void print(ostream& out) const {
     out << get_type_name() << " magic: " << magic;
   }

@@ -57,7 +57,7 @@ static void usage() {
   generic_server_usage();
 }
 
-static std::string devpath, poolname, imgname, snapname;
+static std::string devpath, poolname, nsname, imgname, snapname;
 static bool readonly = false;
 static bool exclusive = false;
 
@@ -143,6 +143,8 @@ static int do_map(int argc, const char *argv[])
     goto done;
   }
 
+  io_ctx.set_namespace(nsname);
+
   r = rbd.open(io_ctx, image, imgname.c_str());
   if (r < 0) {
     std::cerr << "rbd-ggate: failed to open image " << imgname << ": "
@@ -159,7 +161,8 @@ static int do_map(int argc, const char *argv[])
     }
   }
 
-  desc = "RBD " + poolname + "/" + imgname;
+  desc = "RBD " + poolname + "/" + (nsname.empty() ? "" : nsname + "/") +
+    imgname;
 
   if (!snapname.empty()) {
     r = image.snap_set(snapname.c_str());
@@ -251,8 +254,9 @@ static int do_unmap()
 }
 
 static int parse_imgpath(const std::string &imgpath, std::string *poolname,
-                         std::string *imgname, std::string *snapname) {
-  std::regex pattern("^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$");
+                         std::string *nsname, std::string *imgname,
+                         std::string *snapname) {
+  std::regex pattern("^(?:([^/]+)/(?:([^/@]+)/)?)?([^@]+)(?:@([^/@]+))?$");
   std::smatch match;
   if (!std::regex_match(imgpath, match, pattern)) {
     std::cerr << "rbd-ggate: invalid spec '" << imgpath << "'" << std::endl;
@@ -263,10 +267,14 @@ static int parse_imgpath(const std::string &imgpath, std::string *poolname,
     *poolname = match[1];
   }
 
-  *imgname = match[2];
+  if (match[2].matched) {
+    *nsname = match[2];
+  }
 
-  if (match[3].matched) {
-    *snapname = match[3];
+  *imgname = match[3];
+
+  if (match[4].matched) {
+    *snapname = match[4];
   }
 
   return 0;
@@ -274,8 +282,8 @@ static int parse_imgpath(const std::string &imgpath, std::string *poolname,
 
 static bool find_mapped_dev_by_spec(const std::string &spec,
                                     std::string *devname) {
-  std::string poolname, imgname, snapname;
-  int r = parse_imgpath(spec, &poolname, &imgname, &snapname);
+  std::string poolname, nsname, imgname, snapname;
+  int r = parse_imgpath(spec, &poolname, &nsname, &imgname, &snapname);
   if (r < 0) {
     return false;
   }
@@ -301,9 +309,9 @@ static bool find_mapped_dev_by_spec(const std::string &spec,
       continue;
     }
 
-    std::string p, i, s;
-    parse_imgpath(info.substr(4), &p, &i, &s);
-    if (p == poolname && i == imgname && s == snapname) {
+    std::string p, n, i, s;
+    parse_imgpath(info.substr(4), &p, &n, &i, &s);
+    if (p == poolname && n == nsname && i == imgname && s == snapname) {
       *devname = name;
       return true;
     }
@@ -339,6 +347,7 @@ static int do_list(const std::string &format, bool pretty_format)
   } else {
     tbl.define_column("id", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("pool", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("namespace", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("image", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("snap", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("device", TextTable::LEFT, TextTable::LEFT);
@@ -355,20 +364,22 @@ static int do_list(const std::string &format, bool pretty_format)
     }
 
     std::string poolname;
+    std::string nsname;
     std::string imgname;
     std::string snapname(f ? "" : "-");
-    parse_imgpath(info.substr(4), &poolname, &imgname, &snapname);
+    parse_imgpath(info.substr(4), &poolname, &nsname, &imgname, &snapname);
 
     if (f) {
       f->open_object_section("device");
       f->dump_string("id", id);
       f->dump_string("pool", poolname);
+      f->dump_string("namespace", nsname);
       f->dump_string("image", imgname);
       f->dump_string("snap", snapname);
       f->dump_string("device", "/dev/" + name);
       f->close_section();
     } else {
-      tbl << id << poolname << imgname << snapname << "/dev/" + name
+      tbl << id << poolname << nsname << imgname << snapname << "/dev/" + name
           << TextTable::endrow;
     }
     count++;
@@ -455,7 +466,8 @@ int main(int argc, const char *argv[]) {
         cerr << "rbd-ggate: must specify image-or-snap-spec" << std::endl;
         return EXIT_FAILURE;
       }
-      if (parse_imgpath(*args.begin(), &poolname, &imgname, &snapname) < 0) {
+      if (parse_imgpath(*args.begin(), &poolname, &nsname, &imgname,
+                        &snapname) < 0) {
         return EXIT_FAILURE;
       }
       args.erase(args.begin());

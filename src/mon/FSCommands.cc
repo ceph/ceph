@@ -48,8 +48,8 @@ class FlagSetHandler : public FileSystemCommandHandler
     string flag_val;
     cmd_getval(g_ceph_context, cmdmap, "val", flag_val);
 
-    string confirm;
-    cmd_getval(g_ceph_context, cmdmap, "confirm", confirm);
+    bool sure = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", sure);
 
     if (flag_name == "enable_multiple") {
       bool flag_bool = false;
@@ -64,7 +64,7 @@ class FlagSetHandler : public FileSystemCommandHandler
         ss << "Multiple-filesystems are forbidden until all mons are updated";
         return -EINVAL;
       }
-      if (confirm != "--yes-i-really-mean-it") {
+      if (!sure) {
 	ss << EXPERIMENTAL_WARNING;
       }
       fsmap.set_enable_multiple(flag_bool);
@@ -73,6 +73,63 @@ class FlagSetHandler : public FileSystemCommandHandler
       ss << "Unknown flag '" << flag_name << "'";
       return -EINVAL;
     }
+  }
+};
+
+class FailHandler : public FileSystemCommandHandler
+{
+  public:
+  FailHandler()
+    : FileSystemCommandHandler("fs fail")
+  {
+  }
+
+  int handle(
+      Monitor* mon,
+      FSMap& fsmap,
+      MonOpRequestRef op,
+      const cmdmap_t& cmdmap,
+      std::stringstream& ss) override
+  {
+    if (!mon->osdmon()->is_writeable()) {
+      // not allowed to write yet, so retry when we can
+      mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
+      return -EAGAIN;
+    }
+
+    std::string fs_name;
+    if (!cmd_getval(g_ceph_context, cmdmap, "fs_name", fs_name) || fs_name.empty()) {
+      ss << "Missing filesystem name";
+      return -EINVAL;
+    }
+
+    auto fs = fsmap.get_filesystem(fs_name);
+    if (fs == nullptr) {
+      ss << "Not found: '" << fs_name << "'";
+      return -ENOENT;
+    }
+
+    auto f = [](auto fs) {
+      fs->mds_map.set_flag(CEPH_MDSMAP_NOT_JOINABLE);
+    };
+    fsmap.modify_filesystem(fs->fscid, std::move(f));
+
+    std::vector<mds_gid_t> to_fail;
+    for (const auto& p : fs->mds_map.get_mds_info()) {
+      to_fail.push_back(p.first);
+    }
+
+    for (const auto& gid : to_fail) {
+      mon->mdsmon()->fail_mds_gid(fsmap, gid);
+    }
+    if (!to_fail.empty()) {
+      mon->osdmon()->propose_pending();
+    }
+
+    ss << fs_name;
+    ss << " marked not joinable; MDS cannot join the cluster. All MDS ranks marked failed.";
+
+    return 0;
   }
 };
 
@@ -139,9 +196,9 @@ class FsNewHandler : public FileSystemCommandHandler
       }
     }
 
-    string force_str;
-    cmd_getval(g_ceph_context,cmdmap, "force", force_str);
-    bool force = (force_str == "--force");
+    bool force = false;
+    cmd_getval(g_ceph_context,cmdmap, "force", force);
+
     const pool_stat_t *stat = mon->mgrstatmon()->get_pool_stat(metadata);
     if (stat) {
       int64_t metadata_num_objects = stat->stats.sum.num_objects;
@@ -160,13 +217,16 @@ class FsNewHandler : public FileSystemCommandHandler
       return -EINVAL;
     }
 
-    for (auto fs : fsmap.get_filesystems()) {
+    for (auto& fs : fsmap.get_filesystems()) {
       const std::vector<int64_t> &data_pools = fs->mds_map.get_data_pools();
-      string sure;
+
+      bool sure = false;
+      cmd_getval(g_ceph_context, cmdmap,
+                 "allow_dangerous_metadata_overlay", sure);
+
       if ((std::find(data_pools.begin(), data_pools.end(), data) != data_pools.end()
 	   || fs->mds_map.get_metadata_pool() == metadata)
-	  && ((!cmd_getval(g_ceph_context, cmdmap, "sure", sure)
-	       || sure != "--allow-dangerous-metadata-overlay"))) {
+	  && !sure) {
 	ss << "Filesystem '" << fs_name
 	   << "' is already using one of the specified RADOS pools. This should ONLY be done in emergencies and after careful reading of the documentation. Pass --allow-dangerous-metadata-overlay to permit this.";
 	return -EEXIST;
@@ -303,9 +363,9 @@ public:
       }
 
       if (enable_inline) {
-	string confirm;
-	if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
-	    confirm != "--yes-i-really-mean-it") {
+        bool confirm = false;
+        cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", confirm);
+	if (!confirm) {
 	  ss << EXPERIMENTAL_WARNING;
 	  return -EPERM;
 	}
@@ -614,7 +674,7 @@ class AddDataPoolHandler : public FileSystemCommandHandler
     }
     mon->osdmon()->do_application_enable(poolid,
 					 pg_pool_t::APPLICATION_NAME_CEPHFS,
-					 "data", poolname);
+					 "data", fs_name);
     mon->osdmon()->propose_pending();
 
     fsmap.modify_filesystem(
@@ -674,6 +734,13 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
       const cmdmap_t& cmdmap,
       std::stringstream &ss) override
   {
+    /* We may need to blacklist ranks. */
+    if (!mon->osdmon()->is_writeable()) {
+      // not allowed to write yet, so retry when we can
+      mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
+      return -EAGAIN;
+    }
+
     // Check caller has correctly named the FS to delete
     // (redundant while there is only one FS, but command
     //  syntax should apply to multi-FS future)
@@ -688,14 +755,14 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
 
     // Check that no MDS daemons are active
     if (fs->mds_map.get_num_up_mds() > 0) {
-      ss << "all MDS daemons must be inactive before removing filesystem";
+      ss << "all MDS daemons must be inactive/failed before removing filesystem. See `ceph fs fail`.";
       return -EINVAL;
     }
 
     // Check for confirmation flag
-    string sure;
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
-    if (sure != "--yes-i-really-mean-it") {
+    bool sure = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
       ss << "this is a DESTRUCTIVE operation and will make data in your filesystem permanently" \
             " inaccessible.  Add --yes-i-really-mean-it if you are sure you wish to continue.";
       return -EPERM;
@@ -716,6 +783,9 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
       // Standby replays don't write, so it isn't important to
       // wait for an osdmap propose here: ignore return value.
       mon->mdsmon()->fail_mds_gid(fsmap, gid);
+    }
+    if (!to_fail.empty()) {
+      mon->osdmon()->propose_pending(); /* maybe new blacklists */
     }
 
     fsmap.erase_filesystem(fs->fscid);
@@ -755,9 +825,9 @@ class ResetFilesystemHandler : public FileSystemCommandHandler
     }
 
     // Check for confirmation flag
-    string sure;
-    cmd_getval(g_ceph_context, cmdmap, "sure", sure);
-    if (sure != "--yes-i-really-mean-it") {
+    bool sure = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", sure);
+    if (!sure) {
       ss << "this is a potentially destructive operation, only for use by experts in disaster recovery.  "
         "Add --yes-i-really-mean-it if you are sure you wish to continue.";
       return -EPERM;
@@ -875,6 +945,7 @@ FileSystemCommandHandler::load(Paxos *paxos)
   std::list<std::shared_ptr<FileSystemCommandHandler> > handlers;
 
   handlers.push_back(std::make_shared<SetHandler>());
+  handlers.push_back(std::make_shared<FailHandler>());
   handlers.push_back(std::make_shared<FlagSetHandler>());
   handlers.push_back(std::make_shared<AddDataPoolHandler>(paxos));
   handlers.push_back(std::make_shared<RemoveDataPoolHandler>());

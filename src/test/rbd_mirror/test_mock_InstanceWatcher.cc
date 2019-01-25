@@ -3,7 +3,7 @@
 
 #include "librados/AioCompletionImpl.h"
 #include "librbd/ManagedLock.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
 #include "test/librbd/mock/MockImageCtx.h"
@@ -87,7 +87,7 @@ template <>
 struct ImageSyncThrottler<librbd::MockTestImageCtx> {
   static ImageSyncThrottler* s_instance;
 
-  static ImageSyncThrottler *create() {
+  static ImageSyncThrottler *create(CephContext *cct) {
     ceph_assert(s_instance != nullptr);
     return s_instance;
   }
@@ -908,8 +908,7 @@ TEST_F(TestMockInstanceWatcher_NotifySync, WaitingOnLeaderReleaseLeader) {
 
   C_SaferCond on_start_op_called;
   Context *on_start_ctx;
-  expect_throttler_start_op("sync_id", &on_start_op_called,
-                                          &on_start_ctx);
+  expect_throttler_start_op("sync_id", &on_start_op_called, &on_start_ctx);
   C_SaferCond on_start;
   instance_watcher1->notify_sync_request("sync_id", &on_start);
   ASSERT_EQ(0, on_start_op_called.wait());
@@ -917,10 +916,10 @@ TEST_F(TestMockInstanceWatcher_NotifySync, WaitingOnLeaderReleaseLeader) {
   std::vector<Context *> throttler_queue = {on_start_ctx};
   expect_throttler_destroy(&throttler_queue);
   instance_watcher1->handle_release_leader();
+  expect_throttler_start_op("sync_id");
   instance_watcher2->handle_acquire_leader();
   instance_watcher1->handle_update_leader(instance_id2);
 
-  expect_throttler_start_op("sync_id");
   ASSERT_EQ(0, on_start.wait());
   C_SaferCond on_finish;
   expect_throttler_finish_op("sync_id", &on_finish);
@@ -948,7 +947,7 @@ TEST_F(TestMockInstanceWatcher_NotifySync, StartedOnNonLeaderAcquireLeader) {
   expect_throttler_destroy();
   instance_watcher2->handle_release_leader();
   instance_watcher1->handle_acquire_leader();
-  instance_watcher2->handle_update_leader(instance_id2);
+  instance_watcher2->handle_update_leader(instance_id1);
 
   instance_watcher1->notify_sync_complete("sync_id");
 }

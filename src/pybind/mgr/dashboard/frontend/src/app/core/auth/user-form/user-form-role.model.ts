@@ -1,3 +1,5 @@
+import { SelectBadgesOption } from '../../../shared/components/select-badges/select-badges-option.model';
+
 export class UserFormRoleModel implements SelectBadgesOption {
   name: string;
   description: string;

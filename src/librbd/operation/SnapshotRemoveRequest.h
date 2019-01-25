@@ -97,7 +97,7 @@ private:
   void handle_remove_snap(int r);
 
   void remove_snap_context();
-  int scan_for_parents(ParentSpec &pspec);
+  int scan_for_parents(cls::rbd::ParentImageSpec &pspec);
 
 };
 

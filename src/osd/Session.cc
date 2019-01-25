@@ -13,14 +13,14 @@ void Session::clear_backoffs()
 {
   map<spg_t,map<hobject_t,set<BackoffRef>>> ls;
   {
-    Mutex::Locker l(backoff_lock);
+    std::lock_guard l(backoff_lock);
     ls.swap(backoffs);
     backoff_count = 0;
   }
   for (auto& i : ls) {
     for (auto& p : i.second) {
       for (auto& b : p.second) {
-	Mutex::Locker l(b->lock);
+	std::lock_guard l(b->lock);
 	if (b->pg) {
 	  ceph_assert(b->session == this);
 	  ceph_assert(b->is_new() || b->is_acked());
@@ -44,7 +44,7 @@ void Session::ack_backoff(
   const hobject_t& begin,
   const hobject_t& end)
 {
-  Mutex::Locker l(backoff_lock);
+  std::lock_guard l(backoff_lock);
   auto p = backoffs.find(pgid);
   if (p == backoffs.end()) {
     dout(20) << __func__ << " " << pgid << " " << id << " [" << begin << ","

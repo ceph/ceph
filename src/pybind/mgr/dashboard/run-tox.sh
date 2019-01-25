@@ -20,10 +20,18 @@ export CEPH_BUILD_DIR=$CEPH_BUILD_DIR
 source ${MGR_DASHBOARD_VIRTUALENV}/bin/activate
 
 if [ "$WITH_PYTHON2" = "ON" ]; then
-  ENV_LIST+="py27-cov,py27-lint,"
+  if [[ -n "$@" ]]; then
+    ENV_LIST+="py27-run,"
+  else
+    ENV_LIST+="py27-cov,py27-lint,"
+  fi
 fi
 if [ "$WITH_PYTHON3" = "ON" ]; then
-  ENV_LIST+="py3-cov,py3-lint"
+  if [[ -n "$@" ]]; then
+    ENV_LIST+="py3-run"
+  else
+    ENV_LIST+="py3-cov,py3-lint"
+  fi
 fi
 
-tox -c ${TOX_PATH} -e $ENV_LIST
+tox -c ${TOX_PATH} -e "$ENV_LIST" "$@"

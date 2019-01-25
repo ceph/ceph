@@ -2,16 +2,17 @@
 from __future__ import absolute_import
 
 import json
+
 import cherrypy
 
 from . import ApiController, BaseController, RESTController, Endpoint, \
-              ReadPermission
+    ReadPermission
 from .. import logger
+from ..exceptions import DashboardException
+from ..rest_client import RequestException
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.rgw_client import RgwClient
-from ..rest_client import RequestException
-from ..exceptions import DashboardException
 
 
 @ApiController('/rgw', Scope.RGW)
@@ -25,21 +26,21 @@ class Rgw(BaseController):
             instance = RgwClient.admin_instance()
             # Check if the service is online.
             if not instance.is_service_online():
-                status['message'] = 'Failed to connect to the Object Gateway\'s Admin Ops API.'
-                raise RequestException(status['message'])
+                msg = 'Failed to connect to the Object Gateway\'s Admin Ops API.'
+                raise RequestException(msg)
             # Ensure the API user ID is known by the RGW.
             if not instance.user_exists():
-                status['message'] = 'The user "{}" is unknown to the Object Gateway.'.format(
+                msg = 'The user "{}" is unknown to the Object Gateway.'.format(
                     instance.userid)
-                raise RequestException(status['message'])
+                raise RequestException(msg)
             # Ensure the system flag is set for the API user ID.
             if not instance.is_system_user():
-                status['message'] = 'The system flag is not set for user "{}".'.format(
+                msg = 'The system flag is not set for user "{}".'.format(
                     instance.userid)
-                raise RequestException(status['message'])
+                raise RequestException(msg)
             status['available'] = True
-        except RequestException:
-            pass
+        except (RequestException, LookupError) as ex:
+            status['message'] = str(ex)
         return status
 
 
@@ -105,11 +106,27 @@ class RgwRESTController(RESTController):
 @ApiController('/rgw/bucket', Scope.RGW)
 class RgwBucket(RgwRESTController):
 
+    def _append_bid(self, bucket):
+        """
+        Append the bucket identifier that looks like [<tenant>/]<bucket>.
+        See http://docs.ceph.com/docs/nautilus/radosgw/multitenancy/ for
+        more information.
+        :param bucket: The bucket parameters.
+        :type bucket: dict
+        :return: The modified bucket parameters including the 'bid' parameter.
+        :rtype: dict
+        """
+        if isinstance(bucket, dict):
+            bucket['bid'] = '{}/{}'.format(bucket['tenant'], bucket['bucket']) \
+                if bucket['tenant'] else bucket['bucket']
+        return bucket
+
     def list(self):
         return self.proxy('GET', 'bucket')
 
     def get(self, bucket):
-        return self.proxy('GET', 'bucket', {'bucket': bucket})
+        result = self.proxy('GET', 'bucket', {'bucket': bucket})
+        return self._append_bid(result)
 
     def create(self, bucket, uid):
         try:
@@ -119,11 +136,12 @@ class RgwBucket(RgwRESTController):
             raise DashboardException(e, http_status_code=500, component='rgw')
 
     def set(self, bucket, bucket_id, uid):
-        return self.proxy('PUT', 'bucket', {
+        result = self.proxy('PUT', 'bucket', {
             'bucket': bucket,
             'bucket-id': bucket_id,
             'uid': uid
         }, json_response=False)
+        return self._append_bid(result)
 
     def delete(self, bucket, purge_objects='true'):
         return self.proxy('DELETE', 'bucket', {
@@ -135,11 +153,52 @@ class RgwBucket(RgwRESTController):
 @ApiController('/rgw/user', Scope.RGW)
 class RgwUser(RgwRESTController):
 
+    def _append_uid(self, user):
+        """
+        Append the user identifier that looks like [<tenant>$]<user>.
+        See http://docs.ceph.com/docs/jewel/radosgw/multitenancy/ for
+        more information.
+        :param user: The user parameters.
+        :type user: dict
+        :return: The modified user parameters including the 'uid' parameter.
+        :rtype: dict
+        """
+        if isinstance(user, dict):
+            user['uid'] = '{}${}'.format(user['tenant'], user['user_id']) \
+                if user['tenant'] else user['user_id']
+        return user
+
     def list(self):
-        return self.proxy('GET', 'metadata/user')
+        users = []
+        marker = None
+        while True:
+            params = {}
+            if marker:
+                params['marker'] = marker
+            result = self.proxy('GET', 'user?list', params)
+            users.extend(result['keys'])
+            if not result['truncated']:
+                break
+            # Make sure there is a marker.
+            assert result['marker']
+            # Make sure the marker has changed.
+            assert marker != result['marker']
+            marker = result['marker']
+        return users
 
     def get(self, uid):
-        return self.proxy('GET', 'user', {'uid': uid})
+        result = self.proxy('GET', 'user', {'uid': uid})
+        return self._append_uid(result)
+
+    @Endpoint()
+    @ReadPermission
+    def get_emails(self):
+        emails = []
+        for uid in json.loads(self.list()):
+            user = json.loads(self.get(uid))
+            if user["email"]:
+                emails.append(user["email"])
+        return emails
 
     def create(self, uid, display_name, email=None, max_buckets=None,
                suspended=None, generate_key=None, access_key=None,
@@ -159,7 +218,8 @@ class RgwUser(RgwRESTController):
             params['access-key'] = access_key
         if secret_key is not None:
             params['secret-key'] = secret_key
-        return self.proxy('PUT', 'user', params)
+        result = self.proxy('PUT', 'user', params)
+        return self._append_uid(result)
 
     def set(self, uid, display_name=None, email=None, max_buckets=None,
             suspended=None):
@@ -172,7 +232,8 @@ class RgwUser(RgwRESTController):
             params['max-buckets'] = max_buckets
         if suspended is not None:
             params['suspended'] = suspended
-        return self.proxy('POST', 'user', params)
+        result = self.proxy('POST', 'user', params)
+        return self._append_uid(result)
 
     def delete(self, uid):
         try:

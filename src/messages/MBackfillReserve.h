@@ -22,7 +22,7 @@ class MBackfillReserve : public MessageInstance<MBackfillReserve, MOSDPeeringOp>
 public:
   friend factory;
 private:
-  static constexpr int HEAD_VERSION = 4;
+  static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 4;
 public:
   spg_t pgid;
@@ -38,6 +38,8 @@ public:
   };
   uint32_t type;
   uint32_t priority;
+  int64_t primary_num_bytes;
+  int64_t shard_num_bytes;
 
   spg_t get_spg() const {
     return pgid;
@@ -55,7 +57,7 @@ public:
       return new PGPeeringEvent(
 	query_epoch,
 	query_epoch,
-	RequestBackfillPrio(priority));
+	RequestBackfillPrio(priority, primary_num_bytes, shard_num_bytes));
     case GRANT:
       return new PGPeeringEvent(
 	query_epoch,
@@ -93,15 +95,19 @@ public:
 
   MBackfillReserve()
     : MessageInstance(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
-      query_epoch(0), type(-1), priority(-1) {}
+      query_epoch(0), type(-1), priority(-1), primary_num_bytes(0),
+      shard_num_bytes(0) {}
   MBackfillReserve(int type,
 		   spg_t pgid,
-		   epoch_t query_epoch, unsigned prio = -1)
+		   epoch_t query_epoch, unsigned prio = -1,
+		   int64_t primary_num_bytes = 0,
+                   int64_t shard_num_bytes = 0)
     : MessageInstance(MSG_OSD_BACKFILL_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid), query_epoch(query_epoch),
-      type(type), priority(prio) {}
+      type(type), priority(prio), primary_num_bytes(primary_num_bytes),
+      shard_num_bytes(shard_num_bytes) {}
 
-  const char *get_type_name() const override {
+  std::string_view get_type_name() const override {
     return "MBackfillReserve";
   }
 
@@ -137,6 +143,13 @@ public:
     decode(type, p);
     decode(priority, p);
     decode(pgid.shard, p);
+    if (header.version >= 5) {
+      decode(primary_num_bytes, p);
+      decode(shard_num_bytes, p);
+    } else {
+      primary_num_bytes = 0;
+      shard_num_bytes = 0;
+    }
   }
 
   void encode_payload(uint64_t features) override {
@@ -159,6 +172,8 @@ public:
     encode(type, payload);
     encode(priority, payload);
     encode(pgid.shard, payload);
+    encode(primary_num_bytes, payload);
+    encode(shard_num_bytes, payload);
   }
 };
 

@@ -25,6 +25,7 @@
 
 #include <errno.h>
 #include <cmath>
+#include <string>
 
 #include "include/types.h"
 #include "include/health.h"
@@ -124,6 +125,9 @@ public:
 class Monitor : public Dispatcher,
                 public md_config_obs_t {
 public:
+  int orig_argc = 0;
+  const char **orig_argv = nullptr;
+
   // me
   string name;
   int rank;
@@ -148,7 +152,7 @@ public:
   MonMap *monmap;
   uuid_d fingerprint;
 
-  set<entity_addr_t> extra_probe_peers;
+  set<entity_addrvec_t> extra_probe_peers;
 
   LogClient log_client;
   LogChannelRef clog;
@@ -165,9 +169,13 @@ public:
   vector<MonCommand> local_mon_commands;  // commands i support
   bufferlist local_mon_commands_bl;       // encoded version of above
 
+  vector<MonCommand> prenautilus_local_mon_commands;
+  bufferlist prenautilus_local_mon_commands_bl;
+
   Messenger *mgr_messenger;
   MgrClient mgr_client;
   uint64_t mgr_proxy_bytes = 0;  // in-flight proxied mgr command message bytes
+  std::string gss_ktfile_client{};
 
 private:
   void new_tick();
@@ -297,7 +305,7 @@ private:
    * @} // provider state
    */
   struct SyncProvider {
-    entity_inst_t entity;  ///< who
+    entity_addrvec_t addrs;
     uint64_t cookie;       ///< unique cookie for this sync attempt
     utime_t timeout;       ///< when we give up and expire this attempt
     version_t last_committed; ///< last paxos version on peer
@@ -319,7 +327,7 @@ private:
   /**
    * @} // requester state
    */
-  entity_inst_t sync_provider;   ///< who we are syncing from
+  entity_addrvec_t sync_provider;  ///< who we are syncing from
   uint64_t sync_cookie;          ///< 0 if we are starting, non-zero otherwise
   bool sync_full;                ///< true if we are a full sync, false for recent catch-up
   version_t sync_start_version;  ///< last_committed at sync start
@@ -393,7 +401,7 @@ private:
    * @param entity where to pull committed state from
    * @param full whether to do a full sync or just catch up on recent paxos
    */
-  void sync_start(entity_inst_t &entity, bool full);
+  void sync_start(entity_addrvec_t &addrs, bool full);
 
 public:
   /**
@@ -588,6 +596,7 @@ private:
   void _reset();   ///< called from bootstrap, start_, or join_election
   void wait_for_paxos_write();
   void _finish_svc_election(); ///< called by {win,lose}_election
+  void respawn();
 public:
   void bootstrap();
   void join_election();
@@ -663,7 +672,7 @@ public:
 
   template<typename Func, typename...Args>
   void with_session_map(Func&& func) {
-    Mutex::Locker l(session_map_lock);
+    std::lock_guard l(session_map_lock);
     std::forward<Func>(func)(session_map);
   }
   void send_latest_monmap(Connection *con);
@@ -883,11 +892,11 @@ public:
   void dispatch_op(MonOpRequestRef op);
   //mon_caps is used for un-connected messages from monitors
   MonCap mon_caps;
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
-  bool ms_verify_authorizer(Connection *con, int peer_type,
-			    int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			    bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override;
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer) override;
+  KeyStore *ms_get_auth1_authorizer_keystore();
+public: // for AuthMonitor msgr1:
+  int ms_handle_authentication(Connection *con) override;
+private:
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
@@ -963,19 +972,28 @@ private:
 public:
   static void format_command_descriptions(const std::vector<MonCommand> &commands,
 					  Formatter *f,
+					  uint64_t features,
 					  bufferlist *rdata);
 
   const std::vector<MonCommand> &get_local_commands(mon_feature_t f) {
-    return local_mon_commands;
+    if (f.contains_all(ceph::features::mon::FEATURE_NAUTILUS)) {
+      return local_mon_commands;
+    } else {
+      return prenautilus_local_mon_commands;
+    }
   }
   const bufferlist& get_local_commands_bl(mon_feature_t f) {
-    return local_mon_commands_bl;
+    if (f.contains_all(ceph::features::mon::FEATURE_NAUTILUS)) {
+      return local_mon_commands_bl;
+    } else {
+      return prenautilus_local_mon_commands_bl;
+    }
   }
   void set_leader_commands(const std::vector<MonCommand>& cmds) {
     leader_mon_commands = cmds;
   }
 
-  static bool is_keyring_required();
+  bool is_keyring_required();
 };
 
 #define CEPH_MON_FEATURE_INCOMPAT_BASE CompatSet::Feature (1, "initial feature set (~v.18)")

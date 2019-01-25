@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 '''
 Helper to mount ceph-fuse from /etc/fstab.  To use, add an entry
 like:

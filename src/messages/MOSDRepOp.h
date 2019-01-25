@@ -38,7 +38,7 @@ public:
   spg_t pgid;
 
   bufferlist::const_iterator p;
-  // Decoding flags. Decoding is only needed for messages catched by pipe reader.
+  // Decoding flags. Decoding is only needed for messages caught by pipe reader.
   bool final_decode_needed;
 
   // subop
@@ -81,7 +81,7 @@ public:
 
   void decode_payload() override {
     p = payload.cbegin();
-    // splitted to partial and final
+    // split to partial and final
     decode(map_epoch, p);
     if (header.version >= 2) {
       decode(min_epoch, p);
@@ -163,7 +163,7 @@ private:
   ~MOSDRepOp() override {}
 
 public:
-  const char *get_type_name() const override { return "osd_repop"; }
+  std::string_view get_type_name() const override { return "osd_repop"; }
   void print(ostream& out) const override {
     out << "osd_repop(" << reqid
 	<< " " << pgid << " e" << map_epoch << "/" << min_epoch;

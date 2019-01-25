@@ -30,6 +30,55 @@ export class CdValidators {
   }
 
   /**
+   * Validator function in order to validate IP addresses.
+   * @param {number} version determines the protocol version. It needs to be set to 4 for IPv4 and
+   * to 6 for IPv6 validation. For any other number (it's also the default case) it will return a
+   * function to validate the input string against IPv4 OR IPv6.
+   * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
+   * if the validation failed, otherwise `null`.
+   */
+  static ip(version: number = 0): ValidatorFn {
+    // prettier-ignore
+    const ipv4Rgx =
+      /^((25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.){3}(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/i;
+    const ipv6Rgx = /^(?:[a-f0-9]{1,4}:){7}[a-f0-9]{1,4}$/i;
+
+    if (version === 4) {
+      return Validators.pattern(ipv4Rgx);
+    } else if (version === 6) {
+      return Validators.pattern(ipv6Rgx);
+    } else {
+      return Validators.pattern(new RegExp(ipv4Rgx.source + '|' + ipv6Rgx.source));
+    }
+  }
+
+  /**
+   * Validator function in order to validate numbers.
+   * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
+   * if the validation failed, otherwise `null`.
+   */
+  static number(allowsNegative: boolean = true): ValidatorFn {
+    if (allowsNegative) {
+      return Validators.pattern(/^-?[0-9]+$/i);
+    } else {
+      return Validators.pattern(/^[0-9]+$/i);
+    }
+  }
+
+  /**
+   * Validator function in order to validate decimal numbers.
+   * @returns {ValidatorFn} A validator function that returns an error map containing `pattern`
+   * if the validation failed, otherwise `null`.
+   */
+  static decimalNumber(allowsNegative: boolean = true): ValidatorFn {
+    if (allowsNegative) {
+      return Validators.pattern(/^-?[0-9]+(.[0-9]+)?$/i);
+    } else {
+      return Validators.pattern(/^[0-9]+(.[0-9]+)?$/i);
+    }
+  }
+
+  /**
    * Validator that requires controls to fulfill the specified condition if
    * the specified prerequisites matches. If the prerequisites are fulfilled,
    * then the given function is executed and if it succeeds, the 'required'
@@ -177,6 +226,26 @@ export class CdValidators {
         }),
         take(1)
       );
+    };
+  }
+
+  /**
+   * Validator function for UUIDs.
+   * @param required - Defines if it is mandatory to fill in the UUID
+   * @return Validator function that returns an error object containing `invalidUuid` if the
+   * validation failed, `null` otherwise.
+   */
+  static uuid(required = false): ValidatorFn {
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    return (control: AbstractControl): { [key: string]: any } | null => {
+      if (control.pristine && control.untouched) {
+        return null;
+      } else if (!required && !control.value) {
+        return null;
+      } else if (uuidRe.test(control.value)) {
+        return null;
+      }
+      return { invalidUuid: 'This is not a valid UUID' };
     };
   }
 }

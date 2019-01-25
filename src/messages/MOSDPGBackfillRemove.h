@@ -53,7 +53,7 @@ private:
   ~MOSDPGBackfillRemove() {}
 
 public:
-  const char *get_type_name() const override { return "backfill_remove"; }
+  std::string_view get_type_name() const override { return "backfill_remove"; }
   void print(ostream& out) const override {
     out << "backfill_remove(" << pgid << " e" << map_epoch
 	<< " " << ls << ")";

@@ -281,7 +281,7 @@ void Instances<I>::handle_remove_instances(
   dout(10) << "r=" << r << ", instance_ids=" << instance_ids << dendl;
   ceph_assert(r == 0);
 
-  // fire removed notification now that instaces have been blacklisted
+  // fire removed notification now that instances have been blacklisted
   m_threads->work_queue->queue(
     new C_NotifyInstancesRemoved(this, instance_ids), 0);
 
@@ -314,9 +314,9 @@ void Instances<I>::schedule_remove_task(const utime_t& time) {
     return;
   }
 
-  int after = m_cct->_conf.get_val<int64_t>("rbd_mirror_leader_heartbeat_interval") *
-    (1 + m_cct->_conf.get_val<int64_t>("rbd_mirror_leader_max_missed_heartbeats") +
-     m_cct->_conf.get_val<int64_t>("rbd_mirror_leader_max_acquire_attempts_before_break"));
+  int after = m_cct->_conf.get_val<uint64_t>("rbd_mirror_leader_heartbeat_interval") *
+    (1 + m_cct->_conf.get_val<uint64_t>("rbd_mirror_leader_max_missed_heartbeats") +
+     m_cct->_conf.get_val<uint64_t>("rbd_mirror_leader_max_acquire_attempts_before_break"));
 
   bool schedule = false;
   utime_t oldest_time = time;

@@ -32,6 +32,64 @@ static constexpr auto RGW_AUTH_GRACE = std::chrono::minutes{15};
 // returns true if the request time is within RGW_AUTH_GRACE of the current time
 bool is_time_skew_ok(time_t t);
 
+class STSAuthStrategy : public rgw::auth::Strategy,
+                        public rgw::auth::RemoteApplier::Factory,
+                        public rgw::auth::LocalApplier::Factory,
+                        public rgw::auth::RoleApplier::Factory {
+  typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
+  RGWRados* const store;
+
+  STSEngine  sts_engine;
+
+  aplptr_t create_apl_remote(CephContext* const cct,
+                             const req_state* const s,
+                             rgw::auth::RemoteApplier::acl_strategy_t&& acl_alg,
+                             const rgw::auth::RemoteApplier::AuthInfo &info
+                            ) const override {
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
+      rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
+                               cct->_conf->rgw_keystone_implicit_tenants));
+    return aplptr_t(new decltype(apl)(std::move(apl)));
+  }
+
+  aplptr_t create_apl_local(CephContext* const cct,
+                            const req_state* const s,
+                            const RGWUserInfo& user_info,
+                            const std::string& subuser,
+                            const boost::optional<uint32_t>& perm_mask) const override {
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
+      rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask));
+    return aplptr_t(new decltype(apl)(std::move(apl)));
+  }
+
+  aplptr_t create_apl_role(CephContext* const cct,
+                            const req_state* const s,
+                            const string& role_name,
+                            const rgw_user& user_id,
+                            const vector<std::string>& role_policies) const override {
+    auto apl = rgw::auth::add_sysreq(cct, store, s,
+      rgw::auth::RoleApplier(cct, role_name, user_id, role_policies));
+    return aplptr_t(new decltype(apl)(std::move(apl)));
+  }
+public:
+  STSAuthStrategy(CephContext* const cct,
+                       RGWRados* const store,
+                       AWSEngine::VersionAbstractor* const ver_abstractor)
+    : store(store),
+      sts_engine(cct, store, *ver_abstractor,
+                  static_cast<rgw::auth::LocalApplier::Factory*>(this),
+                  static_cast<rgw::auth::RemoteApplier::Factory*>(this),
+                  static_cast<rgw::auth::RoleApplier::Factory*>(this)) {
+      if (cct->_conf->rgw_s3_auth_use_sts) {
+        add_engine(Control::SUFFICIENT, sts_engine);
+      }
+    }
+
+  const char* get_name() const noexcept override {
+    return "rgw::auth::s3::STSAuthStrategy";
+  }
+};
+
 class ExternalAuthStrategy : public rgw::auth::Strategy,
                              public rgw::auth::RemoteApplier::Factory {
   typedef rgw::auth::IdentityApplier::aplptr_t aplptr_t;
@@ -75,8 +133,7 @@ public:
 
     }
 
-    if (cct->_conf->rgw_s3_auth_use_ldap &&
-        ! cct->_conf->rgw_ldap_uri.empty()) {
+    if (ldap_engine.valid()) {
       add_engine(Control::SUFFICIENT, ldap_engine);
     }
   }
@@ -102,14 +159,16 @@ class AWSAuthStrategy : public rgw::auth::Strategy,
 
   S3AnonymousEngine anonymous_engine;
   ExternalAuthStrategy external_engines;
+  STSAuthStrategy sts_engine;
   LocalEngine local_engine;
 
   aplptr_t create_apl_local(CephContext* const cct,
                             const req_state* const s,
                             const RGWUserInfo& user_info,
-                            const std::string& subuser) const override {
+                            const std::string& subuser,
+                            const boost::optional<uint32_t>& perm_mask) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
-      rgw::auth::LocalApplier(cct, user_info, subuser));
+      rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
@@ -137,8 +196,8 @@ public:
   {
     std::vector <std::string> result;
 
-    const std::set <std::string_view> allowed_auth = { "external", "local" };
-    std::vector <std::string> default_order = { "external", "local"};
+    const std::set <std::string_view> allowed_auth = { "sts", "external", "local" };
+    std::vector <std::string> default_order = { "sts", "external", "local" };
     // supplied strings may contain a space, so let's bypass that
     boost::split(result, cct->_conf->rgw_s3_auth_order,
 		 boost::is_any_of(", "), boost::token_compress_on);
@@ -158,6 +217,7 @@ public:
       anonymous_engine(cct,
                        static_cast<rgw::auth::LocalApplier::Factory*>(this)),
       external_engines(cct, store, &ver_abstractor),
+      sts_engine(cct, store, &ver_abstractor),
       local_engine(cct, store, ver_abstractor,
                    static_cast<rgw::auth::LocalApplier::Factory*>(this)) {
     /* The anonymous auth. */
@@ -167,6 +227,12 @@ public:
 
     auto auth_order = parse_auth_order(cct);
     engine_map_t engine_map;
+
+    /* STS Auth*/
+    if (! sts_engine.is_empty()) {
+      engine_map.insert(std::make_pair("sts", std::cref(sts_engine)));
+    }
+
     /* The external auth. */
     if (! external_engines.is_empty()) {
       engine_map.insert(std::make_pair("external", std::cref(external_engines)));
@@ -175,6 +241,7 @@ public:
     if (cct->_conf->rgw_s3_auth_use_rados) {
       engine_map.insert(std::make_pair("local", std::cref(local_engine)));
     }
+
     add_engines(auth_order, engine_map);
   }
 
@@ -289,7 +356,7 @@ public:
   size_t recv_body(char* buf, size_t max) override;
 
   /* rgw::auth::Completer. */
-  void modify_request_state(req_state* s_rw) override;
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s_rw) override;
   bool complete() override;
 
   /* Factories. */
@@ -326,7 +393,7 @@ public:
   size_t recv_body(char* buf, size_t max) override;
 
   /* rgw::auth::Completer. */
-  void modify_request_state(req_state* s_rw) override;
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s_rw) override;
   bool complete() override;
 
   /* Factories. */
@@ -345,6 +412,7 @@ void rgw_create_s3_canonical_header(
   const char *content_type,
   const char *date,
   const std::map<std::string, std::string>& meta_map,
+  const std::map<std::string, std::string>& qs_map,
   const char *request_uri,
   const std::map<std::string, std::string>& sub_resources,
   std::string& dest_str);
@@ -376,13 +444,14 @@ static constexpr char AWS4_UNSIGNED_PAYLOAD_HASH[] = "UNSIGNED-PAYLOAD";
 static constexpr char AWS4_STREAMING_PAYLOAD_HASH[] = \
   "STREAMING-AWS4-HMAC-SHA256-PAYLOAD";
 
-int parse_credentials(const req_info& info,                     /* in */
-                      boost::string_view& access_key_id,        /* out */
-                      boost::string_view& credential_scope,     /* out */
-                      boost::string_view& signedheaders,        /* out */
-                      boost::string_view& signature,            /* out */
-                      boost::string_view& date,                 /* out */
-                      const bool using_qs);                     /* in */
+int parse_v4_credentials(const req_info& info,                     /* in */
+			 boost::string_view& access_key_id,        /* out */
+			 boost::string_view& credential_scope,     /* out */
+			 boost::string_view& signedheaders,        /* out */
+			 boost::string_view& signature,            /* out */
+			 boost::string_view& date,                 /* out */
+			 boost::string_view& session_token,        /* out */
+			 const bool using_qs);                     /* in */
 
 static inline bool char_needs_aws4_escaping(const char c, bool encode_slash)
 {
@@ -445,7 +514,7 @@ static inline std::string get_v4_canonical_uri(const req_info& info) {
 
 static inline const char* get_v4_exp_payload_hash(const req_info& info)
 {
-  /* In AWSv4 the hash of real, transfered payload IS NOT necessary to form
+  /* In AWSv4 the hash of real, transferred payload IS NOT necessary to form
    * a Canonical Request, and thus verify a Signature. x-amz-content-sha256
    * header lets get the information very early -- before seeing first byte
    * of HTTP body. As a consequence, we can decouple Signature verification

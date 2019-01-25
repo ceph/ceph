@@ -52,7 +52,7 @@ struct DiffContext {
     : callback(callback), callback_arg(callback_arg),
       whole_object(_whole_object), from_snap_id(_from_snap_id),
       end_snap_id(_end_snap_id),
-      throttle(image_ctx.concurrent_management_ops, true) {
+      throttle(image_ctx.config.template get_val<uint64_t>("rbd_concurrent_management_ops"), true) {
   }
 };
 

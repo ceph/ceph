@@ -66,6 +66,10 @@ if(NOT CMAKE_BUILD_TYPE)
   set(CMAKE_BUILD_TYPE "RelWithDebInfo" CACHE STRING "Default BUILD_TYPE is RelWithDebInfo, other options are: Debug, Release, and MinSizeRel." FORCE)
 endif()
 
+if(WITH_CEPH_DEBUG_MUTEX OR CMAKE_BUILD_TYPE STREQUAL Debug)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DCEPH_DEBUG_MUTEX")
+endif()
+
 include(CheckCCompilerFlag)
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   CHECK_C_COMPILER_FLAG("-U_FORTIFY_SOURCE -D_FORTIFY_SOURCE=2" HAS_FORTIFY_SOURCE)
@@ -133,17 +137,6 @@ int main() {
   m.merge(Map{});
 }
 " HAVE_STDLIB_MAP_SPLICING)
-
-if(CMAKE_COMPILER_IS_GNUCXX AND
-    CMAKE_CXX_COMPILER_VERSION VERSION_LESS 5.1)
-  # this is not always correct, as one can use clang with libstdc++ or
-  # use old gcc with new libstdc++, but it covers the most cases.
-  #
-  # libstdc++ 4.9 has O(n) list::size(), and its regex is buggy
-  message(SEND_ERROR "performance regression is expected due to an O(n) "
-    "implementation of 'std::list::size()' in libstdc++ older than 5.1.0, "
-    "Please use GCC 5.1 and up.")
-endif()
 
 ## Handle diagnostics color if compiler supports them.
 CHECK_C_COMPILER_FLAG("-fdiagnostics-color=always"
@@ -284,16 +277,10 @@ include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
 if(WITH_SEASTAR)
-  find_package(fmt 4.0.0 QUIET)
+  find_package(fmt 5.2.1 QUIET)
   if(NOT fmt_FOUND)
     message(STATUS "Could not find fmt, will build it")
-    add_subdirectory(fmt)
-  elseif(fmt_VERSION VERSION_GREATER_EQUAL 5.0.0)
-    message(WARNING "Could NOT find fmt: "
-      "Found unsuitable version \"${fmt_VERSION}\", "
-      "but required is at most \"5.0.0\" (found ${fmt_INCLUDE_DIR}). "
-      "Will build it")
-    add_subdirectory(fmt)
+    add_subdirectory(seastar/fmt)
   endif()
   find_package(c-ares 1.13.0 QUIET)
   if(NOT c-ares_FOUND)
@@ -306,10 +293,13 @@ if(WITH_SEASTAR)
       _find_package(${ARGV})
     endif()
   endmacro ()
+  set(Seastar_HWLOC OFF CACHE BOOL "" FORCE)
+  set(Seastar_STD_OPTIONAL_VARIANT_STRINGVIEW ON CACHE BOOL "" FORCE)
+  set(Seastar_CXX_FLAGS "-Wno-sign-compare;-Wno-attributes" CACHE STRING "" FORCE)
   add_subdirectory(seastar)
   # create the directory so cmake won't complain when looking at the imported
   # target: Seastar exports this directory created at build-time
-  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen")
+  file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/seastar/gen/include")
   add_subdirectory(crimson)
 endif()
 
@@ -370,6 +360,7 @@ set(ceph_common_deps
   ${Backtrace_LIBRARIES}
   ${BLKIN_LIBRARIES}
   ${CRYPTO_LIBS}
+  ${GSSAPI_LIBRARIES}
   ${CMAKE_THREAD_LIBS_INIT}
   ${CMAKE_DL_LIBS})
 if(HAVE_UDEV)
@@ -403,9 +394,9 @@ add_library(ceph-common SHARED ${ceph_common_objs})
 target_link_libraries(ceph-common ${ceph_common_deps})
 # appease dpkg-shlibdeps
 set_target_properties(ceph-common PROPERTIES
-  SOVERSION 0
+  SOVERSION 1
   INSTALL_RPATH "")
-if(NOT APPLE)
+if(NOT APPLE AND NOT FREEBSD)
   # Apple uses Mach-O, not ELF. so this option does not apply to APPLE.
   #
   # prefer the local symbol definitions when binding references to global
@@ -419,7 +410,11 @@ if(NOT APPLE)
     PROPERTY LINK_FLAGS "-Wl,-Bsymbolic -Wl,-Bsymbolic-functions")
 endif()
 
-install(TARGETS ceph-common DESTINATION ${CMAKE_INSTALL_PKGLIBDIR})
+install(
+  TARGETS ceph-common
+  LIBRARY
+  DESTINATION ${CMAKE_INSTALL_PKGLIBDIR}
+  NAMELINK_SKIP)
 
 if(${WITH_LTTNG})
   add_subdirectory(tracing)
@@ -457,7 +452,7 @@ endif()
 set(librados_config_srcs
   librados-config.cc)
 add_executable(librados-config ${librados_config_srcs})
-target_link_libraries(librados-config librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+target_link_libraries(librados-config librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
 
 install(TARGETS librados-config DESTINATION bin)
 
@@ -479,7 +474,7 @@ add_executable(ceph-mon ${ceph_mon_srcs}
 add_dependencies(ceph-mon erasure_code_plugins)
 target_link_libraries(ceph-mon mon os global-static ceph-common
   ${EXTRALIBS}
-  ${CMAKE_DL_LIBS})
+  ${CMAKE_DL_LIBS} ${GSSAPI_LIBRARIES})
 install(TARGETS ceph-mon DESTINATION bin)
 
 # OSD/ObjectStore
@@ -514,13 +509,15 @@ set_target_properties(ceph-osd PROPERTIES
   POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
 install(TARGETS ceph-osd DESTINATION bin)
 
-add_subdirectory(mds)
-set(ceph_mds_srcs
-  ceph_mds.cc)
-add_executable(ceph-mds ${ceph_mds_srcs})
-target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static ceph-common
-  Boost::thread)
-install(TARGETS ceph-mds DESTINATION bin)
+if (WITH_CEPHFS)
+  add_subdirectory(mds)
+  set(ceph_mds_srcs
+    ceph_mds.cc)
+  add_executable(ceph-mds ${ceph_mds_srcs})
+  target_link_libraries(ceph-mds mds ${CMAKE_DL_LIBS} global-static ceph-common
+    Boost::thread)
+  install(TARGETS ceph-mds DESTINATION bin)
+endif()
 
 add_subdirectory(erasure-code)
 
@@ -656,7 +653,7 @@ if(WITH_FUSE)
     client/fuse_ll.cc)
   add_executable(ceph-fuse ${ceph_fuse_srcs})
   target_link_libraries(ceph-fuse ${FUSE_LIBRARIES}
-    client ceph-common global-static)
+    ${GSSAPI_LIBRARIES} client ceph-common global-static)
   set_target_properties(ceph-fuse PROPERTIES
     COMPILE_FLAGS "-I${FUSE_INCLUDE_DIRS}"
     POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
@@ -721,7 +718,7 @@ install(FILES
   sample.ceph.conf
   DESTINATION ${CMAKE_INSTALL_DOCDIR})
 
-# Now create a useable config.h
+# Now create a usable config.h
 configure_file(
   ${CMAKE_SOURCE_DIR}/src/include/config-h.in.cmake
   ${CMAKE_BINARY_DIR}/include/acconfig.h
@@ -731,18 +728,23 @@ configure_file(
 add_custom_target(vstart-base DEPENDS
     ceph-osd
     ceph-mon
-    ceph-mgr
     ceph-authtool
     ceph-conf
     monmaptool
     crushtool
     rados
     cython${PY_BINDING_INFIX}_rados)
+if (WITH_MGR)
+  add_dependencies(vstart-base ceph-mgr)
+endif()
 
-add_custom_target(vstart DEPENDS
-    vstart-base
-    ceph-mds
-    cython${PY_BINDING_INFIX}_rbd)
+add_custom_target(vstart DEPENDS vstart-base)
+if (WITH_RBD)
+  add_dependencies(vstart cython${PY_BINDING_INFIX}_rbd)
+endif()
+if (WITH_CEPHFS)
+  add_dependencies(vstart ceph-mds)
+endif()
 if(WITH_RADOSGW)
   add_dependencies(vstart radosgw radosgw-admin)
 endif(WITH_RADOSGW)
@@ -753,6 +755,10 @@ endif(WITH_LTTNG)
 
 if(WITH_MGR AND WITH_MGR_DASHBOARD_FRONTEND AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
   add_dependencies(vstart mgr-dashboard-frontend-build)
+endif()
+
+if(WITH_MGR)
+  add_dependencies(vstart ceph-volume-venv-setup)
 endif()
 
 # Everything you need to run CephFS tests

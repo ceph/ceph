@@ -62,7 +62,7 @@ private:
   ~MOSDPGRecoveryDelete() {}
 
 public:
-  const char *get_type_name() const { return "recovery_delete"; }
+  std::string_view get_type_name() const { return "recovery_delete"; }
   void print(ostream& out) const {
     out << "MOSDPGRecoveryDelete(" << pgid << " e" << map_epoch << ","
 	<< min_epoch << " " << objects << ")";

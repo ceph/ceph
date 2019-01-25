@@ -228,8 +228,10 @@ void EnableFeaturesRequest<I>::send_create_journal() {
     &EnableFeaturesRequest<I>::handle_create_journal>(this);
 
   journal::CreateRequest<I> *req = journal::CreateRequest<I>::create(
-    image_ctx.md_ctx, image_ctx.id, image_ctx.journal_order,
-    image_ctx.journal_splay_width, image_ctx.journal_pool,
+    image_ctx.md_ctx, image_ctx.id,
+    image_ctx.config.template get_val<uint64_t>("rbd_journal_order"),
+    image_ctx.config.template get_val<uint64_t>("rbd_journal_splay_width"),
+    image_ctx.config.template get_val<std::string>("rbd_journal_pool"),
     cls::journal::Tag::TAG_CLASS_NEW, tag_data,
     librbd::Journal<>::IMAGE_CLIENT_ID, image_ctx.op_work_queue, ctx);
 

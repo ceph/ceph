@@ -58,6 +58,13 @@ GTAGS
 
 # common cmake build dir
 /build
+/build.*
 
 # editor backup files etc.
 \#*\#
+
+.idea
+
+# dashboard
+/src/pybind/mgr/dashboard/frontend/src/environments/environment.ts
+/src/pybind/mgr/dashboard/frontend/src/environments/environment.prod.ts

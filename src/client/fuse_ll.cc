@@ -418,7 +418,7 @@ static void fuse_ll_mkdir(fuse_req_t req, fuse_ino_t parent, const char *name,
   if (cfuse->fino_snap(parent) == CEPH_SNAPDIR &&
       fuse_multithreaded && fuse_syncfs_on_mksnap) {
     int err = 0;
-    int fd = ::open(cfuse->mountpoint, O_RDONLY | O_DIRECTORY);
+    int fd = ::open(cfuse->mountpoint, O_RDONLY | O_DIRECTORY | O_CLOEXEC);
     if (fd < 0) {
       err = errno;
     } else {
@@ -1215,7 +1215,7 @@ uint64_t CephFuse::Handle::fino_snap(uint64_t fino)
     vinodeno_t vino  = client->map_faked_ino(fino);
     return vino.snapid;
   } else {
-    Mutex::Locker l(stag_lock);
+    std::lock_guard l(stag_lock);
     uint64_t stag = FINO_STAG(fino);
     ceph_assert(stag_snap_map.count(stag));
     return stag_snap_map[stag];
@@ -1252,7 +1252,7 @@ uint64_t CephFuse::Handle::make_fake_ino(inodeno_t ino, snapid_t snapid)
     if (snapid == CEPH_NOSNAP && ino == client->get_root_ino())
       return FUSE_ROOT_ID;
 
-    Mutex::Locker l(stag_lock);
+    std::lock_guard l(stag_lock);
     auto p = snap_stag_map.find(snapid);
     if (p != snap_stag_map.end()) {
       inodeno_t fino = MAKE_FINO(ino, p->second);

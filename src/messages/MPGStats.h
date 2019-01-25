@@ -19,18 +19,21 @@
 #include "messages/PaxosServiceMessage.h"
 
 class MPGStats : public MessageInstance<MPGStats, PaxosServiceMessage> {
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 public:
   friend factory;
 
   uuid_d fsid;
-  map<pg_t,pg_stat_t> pg_stat;
+  map<pg_t, pg_stat_t> pg_stat;
   osd_stat_t osd_stat;
+  map<int64_t, store_statfs_t> pool_stat;
   epoch_t epoch = 0;
   utime_t had_map_for;
   
-  MPGStats() : MessageInstance(MSG_PGSTATS, 0) {}
+  MPGStats() : MessageInstance(MSG_PGSTATS, 0, HEAD_VERSION, COMPAT_VERSION) {}
   MPGStats(const uuid_d& f, epoch_t e, utime_t had)
-    : MessageInstance(MSG_PGSTATS, 0),
+    : MessageInstance(MSG_PGSTATS, 0, HEAD_VERSION, COMPAT_VERSION),
       fsid(f),
       epoch(e),
       had_map_for(had)
@@ -40,7 +43,7 @@ private:
   ~MPGStats() override {}
 
 public:
-  const char *get_type_name() const override { return "pg_stats"; }
+  std::string_view get_type_name() const override { return "pg_stats"; }
   void print(ostream& out) const override {
     out << "pg_stats(" << pg_stat.size() << " pgs tid " << get_tid() << " v " << version << ")";
   }
@@ -53,6 +56,7 @@ public:
     encode(pg_stat, payload);
     encode(epoch, payload);
     encode(had_map_for, payload);
+    encode(pool_stat, payload, features);
   }
   void decode_payload() override {
     auto p = payload.cbegin();
@@ -62,6 +66,8 @@ public:
     decode(pg_stat, p);
     decode(epoch, p);
     decode(had_map_for, p);
+    if (header.version >= 2)
+      decode(pool_stat, p);
   }
 };
 

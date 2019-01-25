@@ -13,9 +13,6 @@
 
 class CephContext;
 
-/* this is handy; can't believe it's not standard */
-#define ARRAY_SIZE(a)	(sizeof(a) / sizeof(*a))
-
 typedef boost::variant<std::string,
 		       bool,
 		       int64_t,
@@ -26,18 +23,21 @@ typedef boost::variant<std::string,
 typedef std::map<std::string, cmd_vartype, std::less<>> cmdmap_t;
 
 std::string cmddesc_get_prefix(const std::string &cmddesc);
-void dump_cmd_to_json(ceph::Formatter *f, const std::string& cmd);
+std::string cmddesc_get_prenautilus_compat(const std::string &cmddesc);
+void dump_cmd_to_json(ceph::Formatter *f, uint64_t features,
+                      const std::string& cmd);
 void dump_cmd_and_help_to_json(ceph::Formatter *f,
+			       uint64_t features,
 			       const std::string& secname,
 			       const std::string& cmd,
 			       const std::string& helptext);
 void dump_cmddesc_to_json(ceph::Formatter *jf,
+		          uint64_t features,
 		          const std::string& secname,
 		          const std::string& cmdsig,
 		          const std::string& helptext,
 		          const std::string& module,
 		          const std::string& perm,
-		          const std::string& avail,
 		          uint64_t flags);
 bool cmdmap_from_json(std::vector<std::string> cmd, cmdmap_t *mapp,
 		      std::stringstream &ss);
@@ -55,6 +55,9 @@ struct bad_cmd_get : public std::exception {
     return desc.c_str();
   }
 };
+
+bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,
+		const std::string& k, bool& val);
 
 template <typename T>
 bool cmd_getval(CephContext *cct, const cmdmap_t& cmdmap,

@@ -33,7 +33,7 @@ Synopsis
 
 | **ceph** **log** *<logtext>* [ *<logtext>*... ]
 
-| **ceph** **mds** [ *compat* \| *deactivate* \| *fail* \| *rm* \| *rmfailed* \| *set_state* \| *stat* \| *repaired* ] ...
+| **ceph** **mds** [ *compat* \| *fail* \| *rm* \| *rmfailed* \| *set_state* \| *stat* \| *repaired* ] ...
 
 | **ceph** **mon** [ *add* \| *dump* \| *getmap* \| *remove* \| *stat* ] ...
 
@@ -44,6 +44,8 @@ Synopsis
 | **ceph** **osd** **crush** [ *add* \| *add-bucket* \| *create-or-move* \| *dump* \| *get-tunable* \| *link* \| *move* \| *remove* \| *rename-bucket* \| *reweight* \| *reweight-all* \| *reweight-subtree* \| *rm* \| *rule* \| *set* \| *set-tunable* \| *show-tunables* \| *tunables* \| *unlink* ] ...
 
 | **ceph** **osd** **pool** [ *create* \| *delete* \| *get* \| *get-quota* \| *ls* \| *mksnap* \| *rename* \| *rmsnap* \| *set* \| *set-quota* \| *stats* ] ...
+
+| **ceph** **osd** **pool** **application** [ *disable* \| *enable* \| *get* \| *rm* \| *set* ] ...
 
 | **ceph** **osd** **tier** [ *add* \| *add-cache* \| *cache-mode* \| *remove* \| *remove-overlay* \| *set-overlay* ] ...
 
@@ -371,12 +373,6 @@ Usage::
 
 	ceph mds compat show
 
-Subcommand ``deactivate`` stops mds.
-
-Usage::
-
-	ceph mds deactivate <role>
-
 Subcommand ``fail`` forces mds to status fail.
 
 Usage::
@@ -514,6 +510,7 @@ Usage::
 
   ceph mgr count-metadata <field>
 
+.. _ceph-admin-osd:
 
 osd
 ---
@@ -654,7 +651,7 @@ Usage::
 
 	ceph osd crush remove <name> {<ancestor>}
 
-Subcommand ``rename-bucket`` renames buchket <srcname> to <dstname>
+Subcommand ``rename-bucket`` renames bucket <srcname> to <dstname>
 
 Usage::
 
@@ -1017,6 +1014,48 @@ Subcommand ``stats`` obtain stats from all pools, or from specified pool.
 Usage::
 
 	ceph osd pool stats {<name>}
+
+Subcommand ``application`` is used for adding an annotation to the given
+pool. By default, the possible applications are object, block, and file
+storage (corresponding app-names are "rgw", "rbd", and "cephfs"). However,
+there might be other applications as well. Based on the application, there
+may or may not be some processing conducted.
+
+Subcommand ``disable`` disables the given application on the given pool.
+
+Usage::
+
+        ceph osd pool application disable <pool-name> <app> {--yes-i-really-mean-it}
+
+Subcommand ``enable`` adds an annotation to the given pool for the mentioned
+application.
+
+Usage::
+
+        ceph osd pool application enable <pool-name> <app> {--yes-i-really-mean-it}
+
+Subcommand ``get`` displays the value for the given key that is assosciated
+with the given application of the given pool. Not passing the optional
+arguments would display all key-value pairs for all applications for all
+pools.
+
+Usage::
+
+        ceph osd pool application get {<pool-name>} {<app>} {<key>}
+
+Subcommand ``rm`` removes the key-value pair for the given key in the given
+application of the given pool.
+
+Usage::
+
+        ceph osd pool application rm <pool-name> <app> <key>
+
+Subcommand ``set`` assosciates or updates, if it already exists, a key-value
+pair with the given application for the given pool.
+
+Usage::
+
+        ceph osd pool application set <pool-name> <app> <key> <value>
 
 Subcommand ``primary-affinity`` adjust osd primary-affinity from 0.0 <=<weight>
 <= 1.0

@@ -36,7 +36,6 @@
 PMEMDevice::PMEMDevice(CephContext *cct, aio_callback_t cb, void *cbpriv)
   : BlockDevice(cct, cb, cbpriv),
     fd(-1), addr(0),
-    debug_lock("PMEMDevice::debug_lock"),
     injecting_crash(0)
 {
 }
@@ -61,7 +60,7 @@ int PMEMDevice::open(const string& p)
   int r = 0;
   dout(1) << __func__ << " path " << path << dendl;
 
-  fd = ::open(path.c_str(), O_RDWR);
+  fd = ::open(path.c_str(), O_RDWR | O_CLOEXEC);
   if (fd < 0) {
     r = -errno;
     derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
@@ -129,13 +128,6 @@ void PMEMDevice::close()
   path.clear();
 }
 
-static string get_dev_property(const char *dev, const char *property)
-{
-  char val[1024] = {0};
-  get_block_device_string_property(dev, property, val, sizeof(val));
-  return val;
-}
-
 int PMEMDevice::collect_metadata(const string& prefix, map<string,string> *pm) const
 {
   (*pm)[prefix + "rotational"] = stringify((int)(bool)rotational);
@@ -150,40 +142,23 @@ int PMEMDevice::collect_metadata(const string& prefix, map<string,string> *pm) c
     return -errno;
   if (S_ISBLK(st.st_mode)) {
     (*pm)[prefix + "access_mode"] = "blk";
-    char partition_path[PATH_MAX];
-    char dev_node[PATH_MAX];
-    int rc = get_device_by_fd(fd, partition_path, dev_node, PATH_MAX);
-    switch (rc) {
-    case -EOPNOTSUPP:
-    case -EINVAL:
-      (*pm)[prefix + "partition_path"] = "unknown";
-      (*pm)[prefix + "dev_node"] = "unknown";
-      break;
-    case -ENODEV:
-      (*pm)[prefix + "partition_path"] = string(partition_path);
-      (*pm)[prefix + "dev_node"] = "unknown";
-      break;
-    default:
-      {
-	(*pm)[prefix + "partition_path"] = string(partition_path);
-	(*pm)[prefix + "dev_node"] = string(dev_node);
-	(*pm)[prefix + "model"] = get_dev_property(dev_node, "device/model");
-	(*pm)[prefix + "dev"] = get_dev_property(dev_node, "dev");
+    char buffer[1024] = {0};
+    BlkDev blkdev(fd_buffered);
 
-	// nvme exposes a serial number
-	string serial = get_dev_property(dev_node, "device/serial");
-	if (serial.length()) {
-	  (*pm)[prefix + "serial"] = serial;
-	}
+    blkdev.model(buffer, sizeof(buffer));
+    (*pm)[prefix + "model"] = buffer;
 
-	// nvme has a device/device/* structure; infer from that.  there
-	// is probably a better way?
-	string nvme_vendor = get_dev_property(dev_node, "device/device/vendor");
-	if (nvme_vendor.length()) {
-	  (*pm)[prefix + "type"] = "nvme";
-	}
-      }
-    }
+    buffer[0] = '\0';
+    blkdev.dev(buffer, sizeof(buffer));
+    (*pm)[prefix + "dev"] = buffer;
+
+    // nvme exposes a serial number
+    buffer[0] = '\0';
+    blkdev.serial(buffer, sizeof(buffer));
+    (*pm)[prefix + "serial"] = buffer;
+
+    if (blkdev.is_nvme())
+      (*pm)[prefix + "type"] = "nvme";
   } else {
     (*pm)[prefix + "access_mode"] = "file";
     (*pm)[prefix + "path"] = path;
@@ -209,7 +184,7 @@ void PMEMDevice::aio_submit(IOContext *ioc)
   return;
 }
 
-int PMEMDevice::write(uint64_t off, bufferlist& bl, bool buffered)
+int PMEMDevice::write(uint64_t off, bufferlist& bl, bool buffered, int write_hint = WRITE_LIFE_NOT_SET)
 {
   uint64_t len = bl.length();
   dout(20) << __func__ << " " << off << "~" << len  << dendl;
@@ -243,7 +218,8 @@ int PMEMDevice::aio_write(
   uint64_t off,
   bufferlist &bl,
   IOContext *ioc,
-  bool buffered)
+  bool buffered,
+  int write_hint = WRITE_LIFE_NOT_SET)
 {
   return write(off, bl, buffered);
 }

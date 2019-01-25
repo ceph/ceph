@@ -723,3 +723,80 @@ int CrushTester::test()
 
   return 0;
 }
+
+int CrushTester::compare(CrushWrapper& crush2)
+{
+  if (min_rule < 0 || max_rule < 0) {
+    min_rule = 0;
+    max_rule = crush.get_max_rules() - 1;
+  }
+  if (min_x < 0 || max_x < 0) {
+    min_x = 0;
+    max_x = 1023;
+  }
+
+  // initial osd weights
+  vector<__u32> weight;
+
+  /*
+   * note device weight is set by crushtool
+   * (likely due to a given a command line option)
+   */
+  for (int o = 0; o < crush.get_max_devices(); o++) {
+    if (device_weight.count(o)) {
+      weight.push_back(device_weight[o]);
+    } else if (crush.check_item_present(o)) {
+      weight.push_back(0x10000);
+    } else {
+      weight.push_back(0);
+    }
+  }
+
+  // make adjustments
+  adjust_weights(weight);
+
+  map<int,int> bad_by_rule;
+
+  int ret = 0;
+  for (int r = min_rule; r < crush.get_max_rules() && r <= max_rule; r++) {
+    if (!crush.rule_exists(r)) {
+      if (output_statistics)
+        err << "rule " << r << " dne" << std::endl;
+      continue;
+    }
+    if (ruleset >= 0 &&
+	crush.get_rule_mask_ruleset(r) != ruleset) {
+      continue;
+    }
+    int minr = min_rep, maxr = max_rep;
+    if (min_rep < 0 || max_rep < 0) {
+      minr = crush.get_rule_mask_min_size(r);
+      maxr = crush.get_rule_mask_max_size(r);
+    }
+    int bad = 0;
+    for (int nr = minr; nr <= maxr; nr++) {
+      for (int x = min_x; x <= max_x; ++x) {
+	vector<int> out;
+	crush.do_rule(r, x, out, nr, weight, 0);
+	vector<int> out2;
+	crush2.do_rule(r, x, out2, nr, weight, 0);
+	if (out != out2) {
+	  ++bad;
+	}
+      }
+    }
+    if (bad) {
+      ret = -1;
+    }
+    int max = (maxr - minr + 1) * (max_x - min_x + 1);
+    double ratio = (double)bad / (double)max;
+    cout << "rule " << r << " had " << bad << "/" << max
+	 << " mismatched mappings (" << ratio << ")" << std::endl;
+  }
+  if (ret) {
+    cerr << "warning: maps are NOT equivalent" << std::endl;
+  } else {
+    cout << "maps appear equivalent" << std::endl;
+  }
+  return ret;
+}

@@ -140,8 +140,6 @@ struct Session : public RefCountedObject {
 
   ceph::spinlock sent_epoch_lock;
   epoch_t last_sent_epoch;
-  ceph::spinlock received_map_lock;
-  epoch_t received_map_epoch; // largest epoch seen in MOSDMap from here
 
   /// protects backoffs; orders inside Backoff::lock *and* PG::backoff_lock
   Mutex backoff_lock;
@@ -156,7 +154,7 @@ struct Session : public RefCountedObject {
     socket_addr(con_->get_peer_socket_addr()),
     wstate(cct),
     session_dispatch_lock("Session::session_dispatch_lock"),
-    last_sent_epoch(0), received_map_epoch(0),
+    last_sent_epoch(0),
     backoff_lock("Session::backoff_lock")
     {}
 
@@ -175,7 +173,7 @@ struct Session : public RefCountedObject {
     if (!backoff_count.load()) {
       return nullptr;
     }
-    Mutex::Locker l(backoff_lock);
+    std::lock_guard l(backoff_lock);
     ceph_assert(!backoff_count == backoffs.empty());
     auto i = backoffs.find(pgid);
     if (i == backoffs.end()) {
@@ -203,7 +201,7 @@ struct Session : public RefCountedObject {
     CephContext *cct, spg_t pgid, const hobject_t& oid, const Message *m);
 
   void add_backoff(BackoffRef b) {
-    Mutex::Locker l(backoff_lock);
+    std::lock_guard l(backoff_lock);
     ceph_assert(!backoff_count == backoffs.empty());
     backoffs[b->pgid][b->begin].insert(b);
     ++backoff_count;
@@ -211,7 +209,7 @@ struct Session : public RefCountedObject {
 
   // called by PG::release_*_backoffs and PG::clear_backoffs()
   void rm_backoff(BackoffRef b) {
-    Mutex::Locker l(backoff_lock);
+    std::lock_guard l(backoff_lock);
     ceph_assert(b->lock.is_locked_by_me());
     ceph_assert(b->session == this);
     auto i = backoffs.find(b->pgid);

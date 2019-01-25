@@ -30,8 +30,9 @@ function run() {
     export CEPH_MON="127.0.0.1:7121" # git grep '\<7121\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
-    CEPH_ARGS+="--mon-host=$CEPH_MON "
+    CEPH_ARGS+="--mon-host=$CEPH_MON --osd-objectstore=filestore"
 
+    export -n CEPH_CLI_TEST_DUP_COMMAND
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
     for func in $funcs ; do
         setup $dir || return 1
@@ -83,6 +84,7 @@ function create_scenario() {
     rados -p $poolname mksnap snap${SNAP}
 
     rados -p $poolname rm obj4
+    rados -p $poolname rm obj16
     rados -p $poolname rm obj2
 
     kill_daemons $dir TERM osd || return 1
@@ -90,63 +92,81 @@ function create_scenario() {
     # Don't need to use ceph_objectstore_tool() function because osd stopped
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj1)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" --force remove
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" --force remove || return 1
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj5 | grep \"snapid\":2)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove || return 1
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj5 | grep \"snapid\":1)"
     OBJ5SAVE="$JSON"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove
+    # Starts with a snapmap
+    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
+    grep "_USER_[0-9]*_USER_,MAP_.*[.]1[.]obj5[.][.]" $dir/drk.log || return 1
+    ceph-objectstore-tool --data-path $dir/${osd} --rmtype nosnapmap "$JSON" remove || return 1
+    # Check that snapmap is stil there
+    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
+    grep "_USER_[0-9]*_USER_,MAP_.*[.]1[.]obj5[.][.]" $dir/drk.log || return 1
+    rm -f $dir/drk.log
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj5 | grep \"snapid\":4)"
     dd if=/dev/urandom of=$TESTDATA bs=256 count=18
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" set-bytes $TESTDATA
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" set-bytes $TESTDATA || return 1
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj3)"
     dd if=/dev/urandom of=$TESTDATA bs=256 count=15
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" set-bytes $TESTDATA
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" set-bytes $TESTDATA || return 1
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj4 | grep \"snapid\":7)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove || return 1
+
+    # Starts with a snapmap
+    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
+    grep "_USER_[0-9]*_USER_,MAP_.*[.]7[.]obj16[.][.]" $dir/drk.log || return 1
+    JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj16 | grep \"snapid\":7)"
+    ceph-objectstore-tool --data-path $dir/${osd} --rmtype snapmap "$JSON" remove || return 1
+    # Check that snapmap is now removed
+    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
+    ! grep "_USER_[0-9]*_USER_,MAP_.*[.]7[.]obj16[.][.]" $dir/drk.log || return 1
+    rm -f $dir/drk.log
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj2)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" rm-attr snapset
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" rm-attr snapset || return 1
 
     # Create a clone which isn't in snapset and doesn't have object info
     JSON="$(echo "$OBJ5SAVE" | sed s/snapid\":1/snapid\":7/)"
     dd if=/dev/urandom of=$TESTDATA bs=256 count=7
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" set-bytes $TESTDATA
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" set-bytes $TESTDATA || return 1
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj6)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj7)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset corrupt
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset corrupt || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj8)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset seq
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset seq || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj9)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset clone_size
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset clone_size || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj10)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset clone_overlap
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset clone_overlap || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj11)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset clones
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset clones || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj12)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset head
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset head || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj13)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset snaps
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset snaps || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj14)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset size
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" clear-snapset size || return 1
 
     echo "garbage" > $dir/bad
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj15)"
-    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" set-attr snapset $dir/bad
+    ceph-objectstore-tool --data-path $dir/${osd} "$JSON" set-attr snapset $dir/bad || return 1
     rm -f $dir/bad
+    return 0
 }
 
 function TEST_scrub_snaps() {
     local dir=$1
     local poolname=test
-    local OBJS=15
+    local OBJS=16
     local OSDS=1
 
     TESTDATA="testdata.$$"
@@ -171,7 +191,7 @@ function TEST_scrub_snaps() {
 
     local primary=$(get_primary $poolname obj1)
 
-    create_scenario $dir $poolname $TESTDATA $primary
+    create_scenario $dir $poolname $TESTDATA $primary || return 1
 
     rm -f $TESTDATA
 
@@ -182,7 +202,6 @@ function TEST_scrub_snaps() {
 
     local pgid="${poolid}.0"
     if ! pg_scrub "$pgid" ; then
-        cat $dir/osd.0.log
         return 1
     fi
 
@@ -670,12 +689,28 @@ EOF
         pids+="$(cat $pidfile) "
     done
 
+    ERRORS=0
+
     for i in `seq 1 7`
     do
         rados -p $poolname rmsnap snap$i
     done
-
-    ERRORS=0
+    sleep 5
+    local -i loop=0
+    while ceph pg dump pgs | grep -q snaptrim;
+    do
+        if ceph pg dump pgs | grep -q snaptrim_error;
+        then
+            break
+        fi
+        sleep 2
+        loop+=1
+        if (( $loop >= 10 )) ; then
+            ERRORS=$(expr $ERRORS + 1)
+            break
+        fi
+    done
+    ceph pg dump pgs
 
     for pid in $pids
     do
@@ -711,6 +746,7 @@ EOF
     err_strings[19]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj14:1 : size 1032 != clone_size 1033"
     err_strings[20]="log_channel[(]cluster[)] log [[]ERR[]] : [0-9]*[.]0 scrub 20 errors"
     err_strings[21]="log_channel[(]cluster[)] log [[]ERR[]] : scrub [0-9]*[.]0 .*:::obj15:head : can't decode 'snapset' attr buffer"
+    err_strings[22]="log_channel[(]cluster[)] log [[]ERR[]] : osd[.][0-9]* found snap mapper error on pg 1.0 oid 1:461f8b5e:::obj16:7 snaps missing in mapper, should be: 1,2,3,4,5,6,7 was  r -2...repaired"
 
     for err_string in "${err_strings[@]}"
     do
@@ -734,7 +770,7 @@ EOF
 function _scrub_snaps_multi() {
     local dir=$1
     local poolname=test
-    local OBJS=15
+    local OBJS=16
     local OSDS=2
     local which=$2
 
@@ -761,7 +797,7 @@ function _scrub_snaps_multi() {
     local primary=$(get_primary $poolname obj1)
     local replica=$(get_not_primary $poolname obj1)
 
-    eval create_scenario $dir $poolname $TESTDATA \$$which
+    eval create_scenario $dir $poolname $TESTDATA \$$which || return 1
 
     rm -f $TESTDATA
 
@@ -772,7 +808,6 @@ function _scrub_snaps_multi() {
 
     local pgid="${poolid}.0"
     if ! pg_scrub "$pgid" ; then
-        cat $dir/osd.0.log
         return 1
     fi
 
@@ -1118,6 +1153,8 @@ fi
         pids+="$(cat $pidfile) "
     done
 
+    ERRORS=0
+
     # When removing snapshots with a corrupt replica, it crashes.
     # See http://tracker.ceph.com/issues/23875
     if [ $which = "primary" ];
@@ -1126,9 +1163,23 @@ fi
         do
             rados -p $poolname rmsnap snap$i
         done
+        sleep 5
+        local -i loop=0
+        while ceph pg dump pgs | grep -q snaptrim;
+        do
+            if ceph pg dump pgs | grep -q snaptrim_error;
+            then
+                break
+            fi
+            sleep 2
+            loop+=1
+            if (( $loop >= 10 )) ; then
+                ERRORS=$(expr $ERRORS + 1)
+                break
+            fi
+        done
     fi
-
-    ERRORS=0
+    ceph pg dump pgs
 
     for pid in $pids
     do
@@ -1154,6 +1205,19 @@ fi
     for err_string in "${err_strings[@]}"
     do
         if ! grep "$err_string" $dir/osd.${primary}.log > /dev/null;
+        then
+            echo "Missing log message '$err_string'"
+            ERRORS=$(expr $ERRORS + 1)
+        fi
+    done
+
+    # Check replica specific messages
+    declare -a rep_err_strings
+    osd=$(eval echo \$$which)
+    rep_err_strings[0]="log_channel[(]cluster[)] log [[]ERR[]] : osd[.][0-9]* found snap mapper error on pg 1.0 oid 1:461f8b5e:::obj16:7 snaps missing in mapper, should be: 1,2,3,4,5,6,7 was  r -2...repaired"
+    for err_string in "${rep_err_strings[@]}"
+    do
+        if ! grep "$err_string" $dir/osd.${osd}.log > /dev/null;
         then
             echo "Missing log message '$err_string'"
             ERRORS=$(expr $ERRORS + 1)

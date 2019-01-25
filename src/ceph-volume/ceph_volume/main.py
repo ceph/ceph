@@ -5,17 +5,14 @@ import pkg_resources
 import sys
 import logging
 
-import ceph_volume
 from ceph_volume.decorators import catches
-from ceph_volume import log, devices, configuration, conf, exceptions, terminal
+from ceph_volume import log, devices, configuration, conf, exceptions, terminal, inventory
 
 
 class Volume(object):
     _help = """
 ceph-volume: Deploy Ceph OSDs using different device technologies like lvm or
 physical disks.
-
-Version: {version}
 
 Log Path: {log_path}
 Ceph Conf: {ceph_path}
@@ -30,6 +27,7 @@ Ceph Conf: {ceph_path}
         self.mapper = {
             'lvm': devices.lvm.LVM,
             'simple': devices.simple.Simple,
+            'inventory': inventory.Inventory,
         }
         self.plugin_help = "No plugins found/loaded"
         if argv is None:
@@ -43,7 +41,6 @@ Ceph Conf: {ceph_path}
         warning = 'See "ceph-volume --help" for full list of options.' if warning else ''
         return self._help.format(
             warning=warning,
-            version=ceph_volume.__version__,
             log_path=conf.log_path,
             ceph_path=self.stat_ceph_conf(),
             plugins=self.plugin_help,
@@ -76,11 +73,6 @@ Ceph Conf: {ceph_path}
         if self.plugin_help:
             self.plugin_help = '\nPlugins:\n' + self.plugin_help
 
-    def load_ceph_conf_path(self, cluster_name='ceph'):
-        abspath = '/etc/ceph/%s.conf' % cluster_name
-        conf.path = os.getenv('CEPH_CONF', abspath)
-        conf.cluster = cluster_name
-
     def load_log_path(self):
         conf.log_path = os.getenv('CEPH_VOLUME_LOG_PATH', '/var/log/ceph')
 
@@ -105,7 +97,7 @@ Ceph Conf: {ceph_path}
     def main(self, argv):
         # these need to be available for the help, which gets parsed super
         # early
-        self.load_ceph_conf_path()
+        configuration.load_ceph_conf_path()
         self.load_log_path()
         self.enable_plugins()
         main_args, subcommand_args = self._get_split_args()
@@ -113,7 +105,7 @@ Ceph Conf: {ceph_path}
         # argparse which will end up complaning that there are no args
         if len(argv) <= 1:
             print(self.help(warning=True))
-            return
+            raise SystemExit(0)
         parser = argparse.ArgumentParser(
             prog='ceph-volume',
             formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -143,7 +135,7 @@ Ceph Conf: {ceph_path}
         logger.info("Running command: ceph-volume %s %s", " ".join(main_args), " ".join(subcommand_args))
         # set all variables from args and load everything needed according to
         # them
-        self.load_ceph_conf_path(cluster_name=args.cluster)
+        configuration.load_ceph_conf_path(cluster_name=args.cluster)
         try:
             conf.ceph = configuration.load(conf.path)
         except exceptions.ConfigurationError as error:

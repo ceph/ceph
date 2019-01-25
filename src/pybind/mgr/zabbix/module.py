@@ -55,9 +55,9 @@ class Module(MgrModule):
     @property
     def config_keys(self):
         return dict((o['name'], o.get('default', None))
-                for o in self.OPTIONS)
+                for o in self.MODULE_OPTIONS)
 
-    OPTIONS = [
+    MODULE_OPTIONS = [
             {
                 'name': 'zabbix_sender',
                 'default': '/usr/bin/zabbix_sender'
@@ -68,6 +68,7 @@ class Module(MgrModule):
             },
             {
                 'name': 'zabbix_port',
+                'type': 'int',
                 'default': 10051
             },
             {
@@ -76,6 +77,7 @@ class Module(MgrModule):
             },
             {
                 'name': 'interval',
+                'type': 'secs',
                 'default': 60
             }
     ]
@@ -108,7 +110,7 @@ class Module(MgrModule):
         self.log.debug('Found Ceph fsid %s', self.fsid)
 
         for key, default in self.config_keys.items():
-            self.set_config_option(key, self.get_config(key, default))
+            self.set_config_option(key, self.get_module_option(key, default))
 
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():
@@ -169,7 +171,6 @@ class Module(MgrModule):
 
         df = self.get('df')
         data['num_pools'] = len(df['pools'])
-        data['total_objects'] = df['stats']['total_objects']
         data['total_used_bytes'] = df['stats']['total_used_bytes']
         data['total_bytes'] = df['stats']['total_bytes']
         data['total_avail_bytes'] = df['stats']['total_avail_bytes']
@@ -304,7 +305,7 @@ class Module(MgrModule):
 
             self.log.debug('Setting configuration option %s to %s', key, value)
             if self.set_config_option(key, value):
-                self.set_config(key, value)
+                self.set_module_option(key, value)
                 return 0, 'Configuration option {0} updated'.format(key), ''
 
             return 1,\

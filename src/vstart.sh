@@ -121,6 +121,7 @@ ec=0
 hitset=""
 overwrite_conf=1
 cephx=1 #turn cephx on by default
+gssapi_authx=0
 cache=""
 if [ `uname` = FreeBSD ]; then
     objectstore="filestore"
@@ -154,6 +155,8 @@ keyring_fn="$CEPH_CONF_PATH/keyring"
 osdmap_fn="/tmp/ceph_osdmap.$$"
 monmap_fn="/tmp/ceph_monmap.$$"
 
+msgr="21"
+
 usage="usage: $0 [option]... \nex: MON=3 OSD=1 MDS=1 MGR=1 RGW=1 $0 -n -d\n"
 usage=$usage"options:\n"
 usage=$usage"\t-d, --debug\n"
@@ -169,6 +172,8 @@ usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
 usage=$usage"\t-k keep old configuration files\n"
 usage=$usage"\t-x enable cephx (on by default)\n"
 usage=$usage"\t-X disable cephx\n"
+usage=$usage"\t-g --gssapi enable Kerberos/GSSApi authentication\n"
+usage=$usage"\t-G disable Kerberos/GSSApi authentication\n"
 usage=$usage"\t--hitset <pool> <hit_set_type>: enable hitset tracking\n"
 usage=$usage"\t-e : create an erasure pool\n";
 usage=$usage"\t-o config\t\t add extra config parameters to all sections\n"
@@ -185,6 +190,9 @@ usage=$usage"\t--nolockdep disable lockdep\n"
 usage=$usage"\t--multimds <count> allow multimds with maximum active count\n"
 usage=$usage"\t--without-dashboard: do not run using mgr dashboard\n"
 usage=$usage"\t--bluestore-spdk <vendor>:<device>: enable SPDK and specify the PCI-ID of the NVME device\n"
+usage=$usage"\t--msgr1: use msgr1 only\n"
+usage=$usage"\t--msgr2: use msgr2 only\n"
+usage=$usage"\t--msgr21: use msgr2 and msgr1\n"
 
 usage_exit() {
 	printf "$usage"
@@ -219,6 +227,15 @@ case $1 in
     --short )
 	    short=1
 	    ;;
+    --msgr1 )
+	msgr="1"
+	;;
+    --msgr2 )
+	msgr="2"
+	;;
+    --msgr21 )
+	msgr="21"
+	;;
     --valgrind )
 	    [ -z "$2" ] && usage_exit
 	    valgrind=$2
@@ -290,6 +307,14 @@ case $1 in
     -X )
 	    cephx=0
 	    ;;
+    
+    -g | --gssapi)
+	    gssapi_authx=1 
+	    ;;
+    -G)
+	    gssapi_authx=0 
+	    ;;
+
     -k )
 	    if [ ! -r $conf_fn ]; then
 	        echo "cannot use old configuration: $conf_fn not readable." >&2
@@ -435,8 +460,8 @@ wconf() {
 	fi
 }
 
-get_nvme_serial_number() {
-    sudo lspci -vvv -d $pci_id | grep 'Device Serial Number' | awk '{print $NF}' | sed 's/-//g'
+get_pci_selector() {
+    lspci -mm -n -D -d $pci_id | cut -d' ' -f1
 }
 
 prepare_conf() {
@@ -448,9 +473,25 @@ prepare_conf() {
         heartbeat file = $CEPH_OUT_DIR/\$name.heartbeat
 "
 
-    local mgr_modules="restful status balancer iostat devicehealth"
+    local mgr_modules="restful iostat"
     if $with_mgr_dashboard; then
       mgr_modules="dashboard $mgr_modules"
+    fi
+
+    local msgr_conf=''
+    if [ $msgr -eq 21 ]; then
+	msgr_conf="ms bind msgr2 = true
+ms bind msgr1 = true
+";
+    fi
+    if [ $msgr -eq 2 ]; then
+	msgr_conf="ms bind msgr2 = true
+";
+    fi
+    if [ $msgr -eq 1 ]; then
+	msgr_conf="ms bind msgr2 = false
+ms bind msgr1 = true
+";
     fi
 
     wconf <<EOF
@@ -476,6 +517,7 @@ prepare_conf() {
         enable experimental unrecoverable data corrupting features = *
 	osd_crush_chooseleaf_type = 0
 	debug asok assert abort = true
+$msgr_conf
 $extra_conf
 EOF
 	if [ "$lockdep" -eq 1 ] ; then
@@ -483,7 +525,20 @@ EOF
         lockdep = true
 EOF
 	fi
-	if [ "$cephx" -ne 1 ] ; then
+	if [ "$cephx" -eq 1 ] ; then
+		wconf <<EOF
+	auth cluster required = cephx
+	auth service required = cephx
+	auth client required = cephx
+EOF
+	elif [ "$gssapi_authx" -eq 1 ] ; then
+		wconf <<EOF
+	auth cluster required = gss
+	auth service required = gss
+	auth client required = gss
+	gss ktab client file = $CEPH_DEV_DIR/gss_\$name.keytab
+EOF
+	else 
 		wconf <<EOF
 	auth cluster required = none
 	auth service required = none
@@ -496,7 +551,7 @@ EOF
 	fi
         if [ "$objectstore" == "bluestore" ]; then
             if [ "$spdk_enabled" -eq 1 ]; then
-                if [ "$(get_nvme_serial_number)" == "" ]; then
+                if [ "$(get_pci_selector)" == "" ]; then
                     echo "Not find the specified NVME device, please check."
                     exit
                 fi
@@ -507,7 +562,7 @@ EOF
         bluestore_block_wal_size = 0
         bluestore_block_wal_create = false
         bluestore_spdk_mem = 2048
-        bluestore_block_path = spdk:$(get_nvme_serial_number)"
+        bluestore_block_path = spdk:$(get_pci_selector)"
             else
                 BLUESTORE_OPTS="        bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
         bluestore block db size = 67108864
@@ -525,11 +580,13 @@ EOF
 $extra_conf
 [client.rgw]
         rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
+        admin socket = ${CEPH_OUT_DIR}/radosgw.${CEPH_RGW_PORT}.asok
         ; needed for s3tests
         rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl = false
-        rgw lc debug interval = 10
-
+        ; uncomment the following to set LC days as the value in seconds;
+        ; needed for passing lc time based s3-tests (can be verbose)
+        ; rgw lc debug interval = 10
 [mds]
 $DAEMONOPTS
         mds data = $CEPH_DEV_DIR/mds.\$id
@@ -625,17 +682,31 @@ start_mon() {
 		# build a fresh fs monmap, mon fs
 		local str=""
 		local count=0
+		local mon_host=""
 		for f in $MONS
 		do
-			str="$str --add $f $IP:$(($CEPH_PORT+$count))"
-			wconf <<EOF
+		    if [ $msgr -eq 1 ]; then
+			A="v1:$IP:$(($CEPH_PORT+$count+1))"
+		    fi
+		    if [ $msgr -eq 2 ]; then
+			A="v2:$IP:$(($CEPH_PORT+$count+1))"
+		    fi
+		    if [ $msgr -eq 21 ]; then
+			A="[v2:$IP:$(($CEPH_PORT+$count)),v1:$IP:$(($CEPH_PORT+$count+1))]"
+		    fi
+		    str="$str --addv $f $A"
+		    mon_host="$mon_host $A"
+		    wconf <<EOF
 [mon.$f]
         host = $HOSTNAME
         mon data = $CEPH_DEV_DIR/mon.$f
-        mon addr = $IP:$(($CEPH_PORT+$count))
 EOF
-			count=$(($count + 1))
+		    count=$(($count + 2))
 		done
+		wconf <<EOF
+[global]
+        mon host = $mon_host
+EOF
 		prun "$CEPH_BIN/monmaptool" --create --clobber $str --print "$monmap_fn"
 
 		for f in $MONS
@@ -717,7 +788,7 @@ start_mgr() {
 EOF
 
             if $with_mgr_dashboard ; then
-                ceph_adm config set mgr mgr/dashboard/$name/server_port $MGR_PORT
+                ceph_adm config set mgr mgr/dashboard/$name/server_port $MGR_PORT --force
                 if [ $mgr -eq 1 ]; then
                     DASH_URLS="https://$IP:$MGR_PORT"
                 else
@@ -726,7 +797,7 @@ EOF
             fi
 	    MGR_PORT=$(($MGR_PORT + 1000))
 
-	    ceph_adm config set mgr mgr/restful/$name/server_port $MGR_PORT
+	    ceph_adm config set mgr mgr/restful/$name/server_port $MGR_PORT --force
             if [ $mgr -eq 1 ]; then
                 RESTFUL_URLS="https://$IP:$MGR_PORT"
             else
@@ -814,10 +885,8 @@ EOF
             local fs=0
             for name in a b c d e f g h i j k l m n o p
             do
-                ceph_adm osd pool create "cephfs_data_${name}" 8
-                ceph_adm osd pool create "cephfs_metadata_${name}" 8
-                ceph_adm fs new "cephfs_${name}" "cephfs_metadata_${name}" "cephfs_data_${name}"
-					 ceph_adm fs authorize "cephfs_${name}" "client.fs_${name}" / rwp
+		ceph_adm fs volume create ${name}
+		ceph_adm fs authorize ${name} "client.fs_${name}" / rwp
                 fs=$(($fs + 1))
                 [ $fs -eq $CEPH_NUM_FS ] && break
             done

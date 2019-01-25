@@ -54,13 +54,7 @@ Monitors in the quorum.
 .. note:: You may deploy Ceph with a single monitor, but if the instance fails,
 	       the lack of other monitors may interrupt data service availability.
 
-Ceph Monitors typically listen on port ``6789``. For example:
-
-.. code-block:: ini
-
-	[mon.a]
-	host = hostName
-	mon addr = 150.140.130.120:6789
+Ceph Monitors normally listen on port ``3300`` for the new v2 protocol, and ``6789`` for the old v1 protocol.
 
 By default, Ceph expects that you will store a monitor's data under the
 following path::
@@ -196,12 +190,13 @@ With Ceph, you can run multiple Ceph Storage Clusters on the same hardware.
 Running multiple clusters provides a higher level of isolation compared to
 using different pools on the same cluster with different CRUSH rules. A
 separate cluster will have separate monitor, OSD and metadata server processes.
-When running Ceph with  default settings, the default cluster name is ``ceph``,
-which means you would  save your Ceph configuration file with the file name
-``ceph.conf`` in the  ``/etc/ceph`` default directory.
+When running Ceph with default settings, the default cluster name is ``ceph``,
+which means you would save your Ceph configuration file with the file name
+``ceph.conf`` in the ``/etc/ceph`` default directory.
 
-See `ceph-deploy new`_ for details.
-.. _ceph-deploy new:../ceph-deploy-new
+See `Create a Cluster`_ for details.
+
+.. _Create a Cluster: ../../deployment/ceph-deploy-new
 
 When you run multiple clusters, you must name your cluster and save the Ceph
 configuration file with the name of the cluster. For example, a cluster named
@@ -261,4 +256,3 @@ To invoke a cluster other than the default ``ceph`` cluster, use the
 .. _Network Configuration Reference: ../network-config-ref
 .. _OSD Config Reference: ../osd-config-ref
 .. _Configuring Monitor/OSD Interaction: ../mon-osd-interaction
-.. _ceph-deploy new: ../../deployment/ceph-deploy-new#naming-a-cluster

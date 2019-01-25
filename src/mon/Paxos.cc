@@ -820,7 +820,7 @@ struct C_Committed : public Context {
   explicit C_Committed(Paxos *p) : paxos(p) {}
   void finish(int r) override {
     ceph_assert(r >= 0);
-    Mutex::Locker l(paxos->mon->lock);
+    std::lock_guard l(paxos->mon->lock);
     if (paxos->is_shutdown()) {
       paxos->abort_commit();
       return;

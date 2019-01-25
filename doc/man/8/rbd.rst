@@ -197,6 +197,42 @@ Commands
   The parent snapshot must be protected (see `rbd snap protect`).
   This requires image format 2.
 
+:command:`config global get` *config-entity* *key*
+  Get a global-level configuration override.
+
+:command:`config global list` [--format plain | json | xml] [--pretty-format] *config-entity*
+  List global-level configuration overrides.
+
+:command:`config global set` *config-entity* *key* *value*
+  Set a global-level configuration override.
+
+:command:`config global remove` *config-entity* *key*
+  Remove a global-level configuration override.
+
+:command:`config image get` *image-spec* *key*
+  Get an image-level configuration override.
+
+:command:`config image list` [--format plain | json | xml] [--pretty-format] *image-spec*
+  List image-level configuration overrides.
+
+:command:`config image set` *image-spec* *key* *value*
+  Set an image-level configuration override.
+
+:command:`config image remove` *image-spec* *key*
+  Remove an image-level configuration override.
+
+:command:`config pool get` *pool-name* *key*
+  Get a pool-level configuration override.
+
+:command:`config pool list` [--format plain | json | xml] [--pretty-format] *pool-name*
+  List pool-level configuration overrides.
+
+:command:`config pool set` *pool-name* *key* *value*
+  Set a pool-level configuration override.
+
+:command:`config pool remove` *pool-name* *key*
+  Remove a pool-level configuration override.
+
 :command:`cp` (*src-image-spec* | *src-snap-spec*) *dest-image-spec*
   Copy the content of a src-image into the newly created dest-image.
   dest-image will have the same size, object size, and image format as src-image.
@@ -710,6 +746,10 @@ Per mapping (block device) `rbd device map` options:
   deprovisioning a fully provisioned image (since 4.17). When enabled, discard
   requests will fail with -EOPNOTSUPP, write zeroes requests will fall back to
   manually zeroing.
+
+* abort_on_full - Fail write requests with -ENOSPC when the cluster is full or
+  the data pool reaches its quota (since 5.0).  The default behaviour is to
+  block until the full condition is cleared.
 
 `rbd device unmap` options:
 

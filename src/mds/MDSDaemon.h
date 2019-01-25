@@ -35,7 +35,7 @@
 #include "MDSMap.h"
 #include "MDSRank.h"
 
-#define CEPH_MDS_PROTOCOL    33 /* cluster internal */
+#define CEPH_MDS_PROTOCOL    34 /* cluster internal */
 
 class AuthAuthorizeHandlerRegistry;
 class Messenger;
@@ -51,7 +51,7 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
   bool         stopping;
 
   SafeTimer    timer;
-
+  std::string gss_ktfile_client{};
 
   mono_time get_starttime() const {
     return starttime;
@@ -110,11 +110,9 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
 
  private:
   bool ms_dispatch2(const Message::ref &m) override;
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
-  bool ms_verify_authorizer(Connection *con, int peer_type,
-			       int protocol, bufferlist& authorizer_data, bufferlist& authorizer_reply,
-			    bool& isvalid, CryptoKey& session_key,
-			    std::unique_ptr<AuthAuthorizerChallenge> *challenge) override;
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer) override;
+  int ms_handle_authentication(Connection *con) override;
+  KeyStore *ms_get_auth1_authorizer_keystore() override;
   void ms_handle_accept(Connection *con) override;
   void ms_handle_connect(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;
@@ -168,8 +166,19 @@ protected:
   void _handle_mds_map(const MDSMap &oldmap);
 
 private:
-    mono_time starttime = mono_clock::zero();
-};
+  struct MDSCommand {
+    MDSCommand(std::string_view signature, std::string_view help)
+        : cmdstring(signature), helpstring(help)
+    {}
 
+    std::string cmdstring;
+    std::string helpstring;
+    std::string module = "mds";
+  };
+
+  static const std::vector<MDSCommand>& get_commands();
+
+  mono_time starttime = mono_clock::zero();
+};
 
 #endif

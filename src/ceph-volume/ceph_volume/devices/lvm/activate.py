@@ -3,7 +3,7 @@ import argparse
 import logging
 import os
 from textwrap import dedent
-from ceph_volume import process, conf, decorators, terminal, __release__
+from ceph_volume import process, conf, decorators, terminal, __release__, configuration
 from ceph_volume.util import system, disk
 from ceph_volume.util import prepare as prepare_utils
 from ceph_volume.util import encryption as encryption_utils
@@ -24,14 +24,15 @@ def activate_filestore(lvs, no_systemd=False):
     is_vdo = osd_lv.tags.get('ceph.vdo', '0')
 
     osd_id = osd_lv.tags['ceph.osd_id']
-    conf.cluster = osd_lv.tags['ceph.cluster_name']
+    configuration.load_ceph_conf_path(osd_lv.tags['ceph.cluster_name'])
+    configuration.load()
     # it may have a volume with a journal
     osd_journal_lv = lvs.get(lv_tags={'ceph.type': 'journal'})
     # TODO: add sensible error reporting if this is ever the case
     # blow up with a KeyError if this doesn't exist
     osd_fsid = osd_lv.tags['ceph.osd_fsid']
     if not osd_journal_lv:
-        # must be a disk partition, by quering blkid by the uuid we are ensuring that the
+        # must be a disk partition, by querying blkid by the uuid we are ensuring that the
         # device path is always correct
         journal_uuid = osd_lv.tags['ceph.journal_uuid']
         osd_journal = disk.get_device_from_partuuid(journal_uuid)
@@ -61,6 +62,9 @@ def activate_filestore(lvs, no_systemd=False):
     destination = '/var/lib/ceph/osd/%s-%s' % (conf.cluster, osd_id)
     if not system.device_is_mounted(source, destination=destination):
         prepare_utils.mount_osd(source, osd_id, is_vdo=is_vdo)
+
+    # ensure that the OSD destination is always chowned properly
+    system.chown(destination)
 
     # always re-do the symlink regardless if it exists, so that the journal
     # device path that may have changed can be mapped correctly every time
@@ -150,7 +154,10 @@ def activate_bluestore(lvs, no_systemd=False):
     db_device_path = get_osd_device_path(osd_lv, lvs, 'db', dmcrypt_secret=dmcrypt_secret)
     wal_device_path = get_osd_device_path(osd_lv, lvs, 'wal', dmcrypt_secret=dmcrypt_secret)
 
-    # Once symlinks are removed, the osd dir can be 'primed again.
+    # Once symlinks are removed, the osd dir can be 'primed again. chown first,
+    # regardless of what currently exists so that ``prime-osd-dir`` can succeed
+    # even if permissions are somehow messed up
+    system.chown(osd_path)
     prime_command = [
         'ceph-bluestore-tool', '--cluster=%s' % conf.cluster,
         'prime-osd-dir', '--dev', osd_lv_path,
@@ -249,9 +256,9 @@ class Activate(object):
                 has_journal = lv.tags.get('ceph.journal_uuid')
                 if has_journal:
                     logger.info('found a journal associated with the OSD, assuming filestore')
-                    return activate_filestore(lvs)
+                    return activate_filestore(lvs, no_systemd=args.no_systemd)
             logger.info('unable to find a journal associated with the OSD, assuming bluestore')
-            return activate_bluestore(lvs)
+            return activate_bluestore(lvs, no_systemd=args.no_systemd)
         if args.bluestore:
             activate_bluestore(lvs, no_systemd=args.no_systemd)
         elif args.filestore:

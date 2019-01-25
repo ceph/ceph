@@ -393,7 +393,7 @@ bool ARN::match(const ARN& candidate) const {
     return false;
   }
 
-  if (!match_policy(resource, candidate.resource, MATCH_POLICY_ARN)) {
+  if (!match_policy(resource, candidate.resource, MATCH_POLICY_RESOURCE)) {
     return false;
   }
 
@@ -468,6 +468,7 @@ static const actpair actpairs[] =
  { "iam:GetRolePolicy", iamGetRolePolicy},
  { "iam:ListRolePolicies", iamListRolePolicies},
  { "iam:DeleteRolePolicy", iamDeleteRolePolicy},
+ { "sts:AssumeRole", stsAssumeRole},
 };
 
 struct PolicyParser;
@@ -845,6 +846,12 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
         }
         if ((t->notaction & iamAllValue) == iamAllValue) {
           t->notaction[iamAll] = 1;
+        }
+        if ((t->action & stsAllValue) == stsAllValue) {
+          t->action[stsAll] = 1;
+        }
+        if ((t->notaction & stsAllValue) == stsAllValue) {
+          t->notaction[stsAll] = 1;
         }
       }
     }
@@ -1280,20 +1287,28 @@ ostream& operator <<(ostream& m, const Condition& c) {
 Effect Statement::eval(const Environment& e,
 		       boost::optional<const rgw::auth::Identity&> ida,
 		       uint64_t act, const ARN& res) const {
-  if (ida && (!ida->is_identity(princ) || ida->is_identity(noprinc))) {
-    return Effect::Pass;
+  if (ida) {
+    if (!princ.empty() && !ida->is_identity(princ)) {
+      return Effect::Pass;
+    } else if (!noprinc.empty() && ida->is_identity(noprinc)) {
+      return Effect::Pass;
+    }
   }
 
-
-  if (!std::any_of(resource.begin(), resource.end(),
-		   [&res](const ARN& pattern) {
-		     return pattern.match(res);
-		   }) ||
-      (std::any_of(notresource.begin(), notresource.end(),
-		   [&res](const ARN& pattern) {
-		     return pattern.match(res);
-		   }))) {
-    return Effect::Pass;
+  if (!resource.empty()) {
+    if (!std::any_of(resource.begin(), resource.end(),
+          [&res](const ARN& pattern) {
+            return pattern.match(res);
+          })) {
+      return Effect::Pass;
+    }
+  } else if (!notresource.empty()) {
+    if (std::any_of(notresource.begin(), notresource.end(),
+          [&res](const ARN& pattern) {
+            return pattern.match(res);
+          })) {
+      return Effect::Pass;
+    }
   }
 
   if (!(action[act] == 1) || (notaction[act] == 1)) {
@@ -1307,6 +1322,14 @@ Effect Statement::eval(const Environment& e,
   }
 
   return Effect::Pass;
+}
+
+Effect Statement::eval_principal(const Environment& e,
+		       boost::optional<const rgw::auth::Identity&> ida) const {
+  if (ida && (!ida->is_identity(princ) || ida->is_identity(noprinc))) {
+    return Effect::Deny;
+  }
+  return Effect::Allow;
 }
 
 namespace {
@@ -1511,6 +1534,9 @@ const char* action_bit_string(uint64_t action) {
 
   case iamDeleteRolePolicy:
     return "iam:DeleteRolePolicy";
+
+  case stsAssumeRole:
+    return "sts:AssumeRole";
   }
   return "s3Invalid";
 }
@@ -1634,6 +1660,20 @@ Effect Policy::eval(const Environment& e,
     }
   }
   return allowed ? Effect::Allow : Effect::Pass;
+}
+
+Effect Policy::eval_principal(const Environment& e,
+		    boost::optional<const rgw::auth::Identity&> ida) const {
+  auto allowed = false;
+  for (auto& s : statements) {
+    auto g = s.eval_principal(e, ida);
+    if (g == Effect::Deny) {
+      return g;
+    } else if (g == Effect::Allow) {
+      allowed = true;
+    }
+  }
+  return allowed ? Effect::Allow : Effect::Deny;
 }
 
 ostream& operator <<(ostream& m, const Policy& p) {

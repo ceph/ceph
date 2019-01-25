@@ -77,8 +77,8 @@ and enters the MDS cluster.
 
     up:stopping
 
-When a rank is deactivated (stopped), the monitors command an active MDS to
-enter the ``up:stopping`` state. In this state, the MDS accepts no new client
+When a rank is stopped, the monitors command an active MDS to enter the
+``up:stopping`` state. In this state, the MDS accepts no new client
 connections, migrates all subtrees to other ranks in the file system, flush its
 metadata journal, and, if the last rank (0), evict all clients and shutdown
 (see also :ref:`cephfs-administration`).

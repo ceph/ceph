@@ -50,7 +50,7 @@ public:
       ceph_assert(m_image_ctx.exclusive_lock->is_lock_owner());
       ceph_assert(m_image_ctx.object_map != nullptr);
       bool sent = m_image_ctx.object_map->aio_update<Context>(
-        CEPH_NOSNAP, m_object_no, OBJECT_EXISTS, {}, m_trace, this);
+        CEPH_NOSNAP, m_object_no, OBJECT_EXISTS, {}, m_trace, false, this);
       return (sent ? 0 : 1);
     }
 
@@ -67,7 +67,7 @@ public:
     }
 
     bool sent = m_image_ctx.object_map->aio_update<Context>(
-      snap_id, m_object_no, state, {}, m_trace, this);
+      snap_id, m_object_no, state, {}, m_trace, true, this);
     ceph_assert(sent);
     return 0;
   }
@@ -302,12 +302,22 @@ bool CopyupRequest<I>::should_complete(int *r) {
 
   case STATE_OBJECT_MAP_HEAD:
     ldout(cct, 20) << "OBJECT_MAP_HEAD" << dendl;
-    ceph_assert(*r == 0);
+    if (*r < 0) {
+      lderr(cct) << "failed to update head object map: " << cpp_strerror(*r)
+                 << dendl;
+      break;
+    }
+
     return send_object_map();
 
   case STATE_OBJECT_MAP:
     ldout(cct, 20) << "OBJECT_MAP" << dendl;
-    ceph_assert(*r == 0);
+    if (*r < 0) {
+      lderr(cct) << "failed to update object map: " << cpp_strerror(*r)
+                 << dendl;
+      break;
+    }
+
     if (!is_copyup_required()) {
       ldout(cct, 20) << "skipping copyup" << dendl;
       return true;
@@ -444,7 +454,7 @@ bool CopyupRequest<I>::send_object_map_head() {
       if (may_update && (new_state != current_state) &&
           m_ictx->object_map->aio_update<CopyupRequest>(
             CEPH_NOSNAP, m_object_no, new_state, current_state, m_trace,
-            this)) {
+            false, this)) {
         return false;
       }
     }
@@ -472,7 +482,8 @@ bool CopyupRequest<I>::send_object_map() {
     AsyncObjectThrottle<> *throttle = new AsyncObjectThrottle<>(
       NULL, *m_ictx, context_factory, util::create_context_callback(this),
       NULL, 0, m_snap_ids.size());
-    throttle->start_ops(m_ictx->concurrent_management_ops);
+    throttle->start_ops(
+      m_ictx->config.template get_val<uint64_t>("rbd_concurrent_management_ops"));
   }
   return false;
 }

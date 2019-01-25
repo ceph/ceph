@@ -226,7 +226,8 @@ int SnapMapper::update_snaps(
 
   object_snaps out;
   int r = get_snaps(oid, &out);
-  if (r < 0)
+  // Tolerate missing keys but not disk errors
+  if (r < 0 && r != -ENOENT)
     return r;
   if (old_snaps_check)
     ceph_assert(out.snaps == *old_snaps_check);

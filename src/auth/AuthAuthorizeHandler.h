@@ -18,7 +18,7 @@
 #include "Auth.h"
 #include "AuthMethodList.h"
 #include "include/types.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 // Different classes of session crypto handling
 
 #define SESSION_CRYPTO_NONE 0
@@ -39,13 +39,14 @@ struct AuthAuthorizeHandler {
 };
 
 class AuthAuthorizeHandlerRegistry {
-  Mutex m_lock;
+  ceph::mutex m_lock;
   map<int,AuthAuthorizeHandler*> m_authorizers;
   AuthMethodList supported;
 
 public:
   AuthAuthorizeHandlerRegistry(CephContext *cct_, const std::string &methods)
-    : m_lock("AuthAuthorizeHandlerRegistry::m_lock"), supported(cct_, methods)
+    : m_lock{ceph::make_mutex("AuthAuthorizeHandlerRegistry::m_lock")},
+      supported{cct_, methods}
   {}
   ~AuthAuthorizeHandlerRegistry();
   

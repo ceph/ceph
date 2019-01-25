@@ -451,8 +451,11 @@ public:
 				  const map<string,string>& profile) {
       new_erasure_code_profiles[name] = profile;
     }
+    mempool::osdmap::map<string,map<string,string>> get_erasure_code_profiles() const {
+      return new_erasure_code_profiles;
+    }
 
-    /// propage update pools' snap metadata to any of their tiers
+    /// propagate update pools' snap metadata to any of their tiers
     int propagate_snaps_to_tiers(CephContext *cct, const OSDMap &base);
 
     /// filter out osds with any pending state changing
@@ -1361,7 +1364,7 @@ public:
 
   int clean_pg_upmaps(
     CephContext *cct,
-    Incremental *pending_inc);
+    Incremental *pending_inc) const;
 
   bool try_pg_upmap(
     CephContext *cct,
@@ -1380,6 +1383,11 @@ public:
     );
 
   int get_osds_by_bucket_name(const string &name, set<int> *osds) const;
+
+  bool have_pg_upmaps(pg_t pg) const {
+    return pg_upmap.count(pg) ||
+      pg_upmap_items.count(pg);
+  }
 
   /*
    * handy helpers to build simple maps...
@@ -1467,6 +1475,9 @@ public:
   int parse_osd_id_list(const vector<string>& ls,
 			set<int> *out,
 			ostream *ss) const;
+
+  float pool_raw_used_rate(int64_t poolid) const;
+
 };
 WRITE_CLASS_ENCODER_FEATURES(OSDMap)
 WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)

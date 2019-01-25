@@ -20,12 +20,15 @@
 
 #include <boost/intrusive_ptr.hpp>
 
+#include "auth/Auth.h"
 #include "common/RefCountedObj.h"
 #include "common/config.h"
 #include "common/debug.h"
+#include "common/Mutex.h"
 #include "include/ceph_assert.h" // Because intusive_ptr clobbers our assert...
 #include "include/buffer.h"
 #include "include/types.h"
+#include "common/item_history.h"
 #include "msg/MessageRef.h"
 
 
@@ -40,7 +43,7 @@ struct Connection : public RefCountedObject {
   Messenger *msgr;
   RefCountedPtr priv;
   int peer_type;
-  entity_addrvec_t peer_addrs;
+  safe_item_history<entity_addrvec_t> peer_addrs;
   utime_t last_keepalive, last_keepalive_ack;
 private:
   uint64_t features;
@@ -50,12 +53,19 @@ public:
   int rx_buffers_version;
   map<ceph_tid_t,pair<bufferlist,int> > rx_buffers;
 
+  // authentication state
+  // FIXME make these private after ms_handle_authorizer is removed
+public:
+  AuthCapsInfo peer_caps_info;
+  EntityName peer_name;
+  uint64_t peer_global_id = 0;
+
   friend class boost::intrusive_ptr<Connection>;
   friend class PipeConnection;
 
 public:
   Connection(CephContext *cct, Messenger *m)
-    // we are managed exlusively by ConnectionRef; make it so you can
+    // we are managed exclusively by ConnectionRef; make it so you can
     //   ConnectionRef foo = new Connection;
     : RefCountedObject(cct, 0),
       lock("Connection::lock"),
@@ -144,6 +154,16 @@ public:
    */
   virtual void mark_disposable() = 0;
 
+  // WARNING / FIXME: this is not populated for loopback connections
+  AuthCapsInfo& get_peer_caps_info() {
+    return peer_caps_info;
+  }
+  const EntityName& get_peer_entity_name() {
+    return peer_name;
+  }
+  uint64_t get_peer_global_id() {
+    return peer_global_id;
+  }
 
   int get_peer_type() const { return peer_type; }
   void set_peer_type(int t) { peer_type = t; }
@@ -158,10 +178,10 @@ public:
   virtual entity_addr_t get_peer_socket_addr() const = 0;
 
   entity_addr_t get_peer_addr() const {
-    return peer_addrs.front();
+    return peer_addrs->front();
   }
   const entity_addrvec_t& get_peer_addrs() const {
-    return peer_addrs;
+    return *peer_addrs;
   }
   void set_peer_addr(const entity_addr_t& a) {
     peer_addrs = entity_addrvec_t(a);

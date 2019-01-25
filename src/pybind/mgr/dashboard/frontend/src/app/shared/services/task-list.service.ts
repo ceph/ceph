@@ -54,7 +54,7 @@ export class TaskListService implements OnDestroy {
     this.onFetchError = onFetchError;
     this.taskFilter = taskFilter;
     this.itemFilter = itemFilter;
-    this.builders = builders;
+    this.builders = builders || {};
 
     this.summaryDataSubscription = this.summaryService.subscribe((tasks: any) => {
       if (tasks) {
@@ -76,7 +76,7 @@ export class TaskListService implements OnDestroy {
   }
 
   private addMissing(data: any[], tasks: ExecutingTask[]) {
-    const defaultBuilder = this.builders['default'];
+    const defaultBuilder = this.builders['default'] || {};
     tasks.forEach((task) => {
       const existing = data.find((item) => this.itemFilter(item, task));
       const builder = this.builders[task.name];

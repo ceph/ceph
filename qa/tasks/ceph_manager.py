@@ -998,7 +998,8 @@ class Thrasher:
                     self.ceph_manager.raw_cluster_cmd('osd', 'reweight',
                                                       str(osd), str(1))
                 if random.uniform(0, 1) < float(
-                        self.config.get('chance_test_map_discontinuity', 0)):
+                        self.config.get('chance_test_map_discontinuity', 0)) \
+                        and len(self.live_osds) > 5: # avoid m=2,k=2 stall, w/ some buffer for crush being picky
                     self.test_map_discontinuity()
                 else:
                     self.ceph_manager.wait_for_recovery(
@@ -1179,20 +1180,26 @@ class CephManager:
         proc = self.controller.run(**kwargs)
         return proc.exitstatus
 
-    def run_ceph_w(self):
+    def run_ceph_w(self, watch_channel=None):
         """
         Execute "ceph -w" in the background with stdout connected to a StringIO,
         and return the RemoteProcess.
+
+        :param watch_channel: Specifies the channel to be watched. This can be
+                              'cluster', 'audit', ...
+        :type watch_channel: str
         """
-        return self.controller.run(
-            args=["sudo",
-                  "daemon-helper",
-                  "kill",
-                  "ceph",
-                  '--cluster',
-                  self.cluster,
-                  "-w"],
-            wait=False, stdout=StringIO(), stdin=run.PIPE)
+        args = ["sudo",
+                "daemon-helper",
+                "kill",
+                "ceph",
+                '--cluster',
+                self.cluster,
+                "-w"]
+        if watch_channel is not None:
+            args.append("--watch-channel")
+            args.append(watch_channel)
+        return self.controller.run(args=args, wait=False, stdout=StringIO(), stdin=run.PIPE)
 
     def flush_pg_stats(self, osds, no_wait=None, wait_for_mon=300):
         """
@@ -1208,7 +1215,7 @@ class CephManager:
         :param wait_for_mon: wait for mon to be synced with mgr. 0 to disable
                              it. (5 min by default)
         """
-        seq = {osd: self.raw_cluster_cmd('tell', 'osd.%d' % osd, 'flush_pg_stats')
+        seq = {osd: int(self.raw_cluster_cmd('tell', 'osd.%d' % osd, 'flush_pg_stats'))
                for osd in osds}
         if not wait_for_mon:
             return
@@ -1219,7 +1226,7 @@ class CephManager:
                 continue
             got = 0
             while wait_for_mon > 0:
-                got = self.raw_cluster_cmd('osd', 'last-stat-seq', 'osd.%d' % osd)
+                got = int(self.raw_cluster_cmd('osd', 'last-stat-seq', 'osd.%d' % osd))
                 self.log('need seq {need} got {got} for osd.{osd}'.format(
                     need=need, got=got, osd=osd))
                 if got >= need:
@@ -1464,7 +1471,7 @@ class CephManager:
     def wait_run_admin_socket(self, service_type,
                               service_id, args=['version'], timeout=75, stdout=None):
         """
-        If osd_admin_socket call suceeds, return.  Otherwise wait
+        If osd_admin_socket call succeeds, return.  Otherwise wait
         five seconds and try again.
         """
         if stdout is None:
@@ -1789,6 +1796,21 @@ class CephManager:
             self.pools[pool_name] = new_pg_num
             return True
 
+    def stop_pg_num_changes(self):
+        """
+        Reset all pg_num_targets back to pg_num, canceling splits and merges
+        """
+        self.log('Canceling any pending splits or merges...')
+        osd_dump = self.get_osd_dump_json()
+        for pool in osd_dump['pools']:
+            if pool['pg_num'] != pool['pg_num_target']:
+                self.log('Setting pool %s (%d) pg_num %d -> %d' %
+                         (pool['pool_name'], pool['pool'],
+                          pool['pg_num_target'],
+                          pool['pg_num']))
+                self.raw_cluster_cmd('osd', 'pool', 'set', pool['pool_name'],
+                                     'pg_num', str(pool['pg_num']))
+
     def set_pool_pgpnum(self, pool_name, force):
         """
         Set pgpnum property of pool_name pool.
@@ -1830,7 +1852,10 @@ class CephManager:
         """
         out = self.raw_cluster_cmd('pg', 'dump', '--format=json')
         j = json.loads('\n'.join(out.split('\n')[1:]))
-        return j['pg_stats']
+        try:
+            return j['pg_map']['pg_stats']
+        except KeyError:
+            return j['pg_stats']
 
     def get_pgids_to_force(self, backfill):
         """
@@ -2016,7 +2041,7 @@ class CephManager:
         """
         out = self.raw_cluster_cmd('pg', 'dump_stuck', type_, str(threshold),
                                    '--format=json')
-        return json.loads(out)
+        return json.loads(out).get('stuck_pg_stats',[])
 
     def get_num_unfound_objects(self):
         """
@@ -2510,7 +2535,7 @@ class CephManager:
         """
         Extract all the monitor status information from the cluster
         """
-        addr = self.ctx.ceph[self.cluster].conf['mon.%s' % mon]['mon addr']
+        addr = self.ctx.ceph[self.cluster].mons['mon.%s' % mon]
         out = self.raw_cluster_cmd('-m', addr, 'mon_status')
         return json.loads(out)
 

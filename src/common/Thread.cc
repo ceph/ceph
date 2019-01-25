@@ -13,16 +13,29 @@
  */
 
 #include <signal.h>
+#include <unistd.h>
+#ifdef __linux__
+#include <sys/syscall.h>   /* For SYS_xxx definitions */
+#endif
 
 #include "common/Thread.h"
 #include "common/code_environment.h"
 #include "common/debug.h"
 #include "common/signal.h"
-#include "common/io_priority.h"
 
 #ifdef HAVE_SCHED
 #include <sched.h>
 #endif
+
+
+pid_t ceph_gettid(void)
+{
+#ifdef __linux__
+  return syscall(SYS_gettid);
+#else
+  return -ENOSYS;
+#endif
+}
 
 static int _set_affinity(int id)
 {
@@ -45,8 +58,6 @@ static int _set_affinity(int id)
 Thread::Thread()
   : thread_id(0),
     pid(0),
-    ioprio_class(-1),
-    ioprio_priority(-1),
     cpuid(-1),
     thread_name(NULL)
 {
@@ -66,13 +77,6 @@ void *Thread::entry_wrapper()
   int p = ceph_gettid(); // may return -ENOSYS on other platforms
   if (p > 0)
     pid = p;
-  if (pid &&
-      ioprio_class >= 0 &&
-      ioprio_priority >= 0) {
-    ceph_ioprio_set(IOPRIO_WHO_PROCESS,
-		    pid,
-		    IOPRIO_PRIO_VALUE(ioprio_class, ioprio_priority));
-  }
   if (pid && cpuid >= 0)
     _set_affinity(cpuid);
 
@@ -177,18 +181,6 @@ int Thread::join(void **prval)
 int Thread::detach()
 {
   return pthread_detach(thread_id);
-}
-
-int Thread::set_ioprio(int cls, int prio)
-{
-  // fixme, maybe: this can race with create()
-  ioprio_class = cls;
-  ioprio_priority = prio;
-  if (pid && cls >= 0 && prio >= 0)
-    return ceph_ioprio_set(IOPRIO_WHO_PROCESS,
-			   pid,
-			   IOPRIO_PRIO_VALUE(cls, prio));
-  return 0;
 }
 
 int Thread::set_affinity(int id)

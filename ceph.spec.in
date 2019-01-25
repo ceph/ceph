@@ -14,6 +14,13 @@
 #
 # Please submit bugfixes or comments via http://tracker.ceph.com/
 #
+
+#################################################################################
+# conditional build section
+#
+# please read http://rpm.org/user_doc/conditional_builds.html for explanation of
+# bcond syntax!
+#################################################################################
 %bcond_without ocf
 %bcond_with make_check
 %ifarch s390 s390x
@@ -50,11 +57,11 @@
 %endif
 %endif
 %bcond_with seastar
-%if 0%{?fedora} || 0%{?suse_version} >= 1500
-# distros where py2 is _optional_
+%if 0%{?fedora} >= 29 || 0%{?suse_version} >= 1500 || 0%{?rhel} >= 8
+# distros that need a py3 Ceph build
 %bcond_with python2
 %else
-# distros where py2 is _mandatory_
+# distros that need a py2 Ceph build
 %bcond_without python2
 %endif
 %if 0%{?fedora} || 0%{?suse_version} >= 1500
@@ -143,7 +150,7 @@ BuildRequires:	fuse-devel
 %if 0%{?rhel} == 7
 # devtoolset offers newer make and valgrind-devel, but the old ones are good
 # enough.
-BuildRequires:	devtoolset-7-gcc-c++
+BuildRequires:	devtoolset-7-gcc-c++ >= 7.3.1
 %else
 BuildRequires:	gcc-c++
 %endif
@@ -221,6 +228,8 @@ BuildRequires:	keyutils-devel
 BuildRequires:  libopenssl-devel
 BuildRequires:  lsb-release
 BuildRequires:  openldap2-devel
+BuildRequires:  krb5
+BuildRequires:  krb5-devel
 BuildRequires:  cunit-devel
 BuildRequires:	python%{_python_buildid}-base
 BuildRequires:	python%{_python_buildid}-Cython
@@ -238,6 +247,7 @@ BuildRequires:	keyutils-libs-devel
 BuildRequires:	libibverbs-devel
 BuildRequires:  librdmacm-devel
 BuildRequires:  openldap-devel
+BuildRequires:  krb5-devel
 BuildRequires:  openssl-devel
 BuildRequires:  CUnit-devel
 BuildRequires:  redhat-lsb-core
@@ -260,16 +270,20 @@ BuildRequires:	python3-Cython
 %if 0%{with make_check}
 %if 0%{?fedora} || 0%{?rhel}
 BuildRequires:	python%{_python_buildid}-cherrypy
+BuildRequires:	python%{_python_buildid}-jwt
 BuildRequires:	python%{_python_buildid}-routes
 BuildRequires:	python%{_python_buildid}-werkzeug
 BuildRequires:	python%{_python_buildid}-bcrypt
+BuildRequires:  xmlsec1
 %endif
 %if 0%{?suse_version}
 BuildRequires:	python%{_python_buildid}-CherryPy
+BuildRequires:	python%{_python_buildid}-PyJWT
 BuildRequires:	python%{_python_buildid}-Routes
 BuildRequires:	python%{_python_buildid}-Werkzeug
 BuildRequires:	python%{_python_buildid}-numpy-devel
 BuildRequires:	python%{_python_buildid}-bcrypt
+BuildRequires:  xmlsec1-devel
 %endif
 %endif
 # lttng and babeltrace for rbd-replay-prep
@@ -321,7 +335,8 @@ Group:         System/Filesystems
 Provides:      ceph-test:/usr/bin/ceph-kvstore-tool
 Requires:      ceph-common = %{_epoch_prefix}%{version}-%{release}
 Requires:      librbd1 = %{_epoch_prefix}%{version}-%{release}
-Requires:      librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:      librados3 = %{_epoch_prefix}%{version}-%{release}
+Requires:      libradospp1 = %{_epoch_prefix}%{version}-%{release}
 Requires:      libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Requires:      librgw2 = %{_epoch_prefix}%{version}-%{release}
 %if 0%{with selinux}
@@ -340,11 +355,14 @@ Requires:      util-linux
 Requires:      xfsprogs
 Requires:      which
 %if 0%{?fedora} || 0%{?rhel}
-Requires:      gdisk
+# The following is necessary due to tracker 36508 and can be removed once the
+# associated upstream bugs are resolved.
+%if 0%{with tcmalloc}
+Requires:      gperftools-libs >= 2.6.1
+%endif
 %endif
 %if 0%{?suse_version}
 Recommends:    chrony
-Requires:      gptfdisk
 %endif
 %description base
 Base is the package that includes all the files shared amongst ceph servers
@@ -355,7 +373,8 @@ Summary:	Ceph Common
 Group:		System/Filesystems
 %endif
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{_python_buildid}-rados = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{_python_buildid}-rbd = %{_epoch_prefix}%{version}-%{release}
@@ -415,6 +434,7 @@ Requires:       python%{_python_buildid}-pecan
 Requires:       python%{_python_buildid}-six
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python%{_python_buildid}-cherrypy
+Requires:       python%{_python_buildid}-jwt
 Requires:       python%{_python_buildid}-jinja2
 Requires:       python%{_python_buildid}-routes
 Requires:       python%{_python_buildid}-werkzeug
@@ -423,6 +443,7 @@ Requires:	python%{_python_buildid}-bcrypt
 %endif
 %if 0%{?suse_version}
 Requires:       python%{_python_buildid}-CherryPy
+Requires:       python%{_python_buildid}-PyJWT
 Requires:       python%{_python_buildid}-Routes
 Requires:       python%{_python_buildid}-Jinja2
 Requires:       python%{_python_buildid}-Werkzeug
@@ -442,6 +463,7 @@ Summary:	Ceph fuse-based client
 Group:		System/Filesystems
 %endif
 Requires:       fuse
+Requires:	python%{python3_pkgversion}
 %description fuse
 FUSE based client for Ceph distributed network file system
 
@@ -450,7 +472,7 @@ Summary:	Ceph fuse-based client
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 %description -n rbd-fuse
 FUSE based client to map Ceph rbd images to files
@@ -460,8 +482,8 @@ Summary:	Ceph daemon for mirroring RBD images
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
-Requires:	ceph-common = %{_epoch_prefix}%{version}-%{release}
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 %description -n rbd-mirror
 Daemon for mirroring RBD images between Ceph clusters, streaming
 changes asynchronously.
@@ -471,7 +493,7 @@ Summary:	Ceph RBD client base on NBD
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 %description -n rbd-nbd
 NBD based client to map Ceph rbd images to local device
@@ -481,11 +503,12 @@ Summary:	Rados REST gateway
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
-Requires:	ceph-common = %{_epoch_prefix}%{version}-%{release}
+Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 %if 0%{with selinux}
 Requires:	ceph-selinux = %{_epoch_prefix}%{version}-%{release}
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librgw2 = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?rhel} || 0%{?fedora}
 Requires:	mailcap
@@ -524,7 +547,7 @@ ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
 and providing access to them over the network.
 
-%package -n librados2
+%package -n librados3
 Summary:	RADOS distributed object store client library
 %if 0%{?suse_version}
 Group:		System/Libraries
@@ -532,7 +555,7 @@ Group:		System/Libraries
 %if 0%{?rhel} || 0%{?fedora}
 Obsoletes:	ceph-libs < %{_epoch_prefix}%{version}-%{release}
 %endif
-%description -n librados2
+%description -n librados3
 RADOS is a reliable, autonomic distributed object storage cluster
 developed as part of the Ceph distributed storage system. This is a
 shared library allowing applications to access the distributed object
@@ -543,12 +566,34 @@ Summary:	RADOS headers
 %if 0%{?suse_version}
 Group:		Development/Libraries/C and C++
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
-Provides:	librados2-devel = %{_epoch_prefix}%{version}-%{release}
-Obsoletes:	librados2-devel < %{_epoch_prefix}%{version}-%{release}
+Provides:	librados3-devel = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	librados3-devel < %{_epoch_prefix}%{version}-%{release}
 %description -n librados-devel
-This package contains libraries and headers needed to develop programs
+This package contains C libraries and headers needed to develop programs
+that use RADOS object store.
+
+%package -n libradospp1
+Summary:	RADOS distributed object store client C++ library
+%if 0%{?suse_version}
+Group:		System/Libraries
+%endif
+%description -n libradospp1
+RADOS is a reliable, autonomic distributed object storage cluster
+developed as part of the Ceph distributed storage system. This is a
+shared library allowing C++ applications to access the distributed object
+store using a simple file-like interface.
+
+%package -n libradospp-devel
+Summary:	RADOS headers
+%if 0%{?suse_version}
+Group:		Development/Libraries/C and C++
+%endif
+Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados-devel = %{_epoch_prefix}%{version}-%{release}
+%description -n libradospp-devel
+This package contains C++ libraries and headers needed to develop programs
 that use RADOS object store.
 
 %package -n librgw2
@@ -556,7 +601,7 @@ Summary:	RADOS gateway client library
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
 %description -n librgw2
 This package provides a library implementation of the RADOS gateway
 (distributed object store with S3 and Swift personalities).
@@ -605,7 +650,7 @@ Summary:	Python 2 libraries for the RADOS object store
 %if 0%{?suse_version}
 Group:		Development/Libraries/Python
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-ceph < %{_epoch_prefix}%{version}-%{release}
 %description -n python-rados
 This package contains Python 2 libraries for interacting with Cephs RADOS
@@ -618,7 +663,7 @@ Summary:	Python 3 libraries for the RADOS object store
 Group:		Development/Libraries/Python
 %endif
 Requires:	python%{python3_pkgversion}
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
 %description -n python%{python3_pkgversion}-rados
 This package contains Python 3 libraries for interacting with Cephs RADOS
 object store.
@@ -629,7 +674,8 @@ Summary:	RADOS striping interface
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 %description -n libradosstriper1
 Striping interface built on top of the rados library, allowing
 to stripe bigger objects onto several standard rados objects using
@@ -642,6 +688,7 @@ Group:		Development/Libraries/C and C++
 %endif
 Requires:	libradosstriper1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librados-devel = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp-devel = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
 Provides:	libradosstriper1-devel = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	libradosstriper1-devel < %{_epoch_prefix}%{version}-%{release}
@@ -655,7 +702,8 @@ Summary:	RADOS block device client library
 %if 0%{?suse_version}
 Group:		System/Libraries
 %endif
-Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados3 = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp1 = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?suse_version}
 Requires(post): coreutils
 %endif
@@ -675,6 +723,7 @@ Group:		Development/Libraries/C and C++
 %endif
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	librados-devel = %{_epoch_prefix}%{version}-%{release}
+Requires:	libradospp-devel = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	ceph-devel < %{_epoch_prefix}%{version}-%{release}
 Provides:	librbd1-devel = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	librbd1-devel < %{_epoch_prefix}%{version}-%{release}
@@ -860,7 +909,7 @@ Summary:        RADOS object class development kit
 %if 0%{?suse_version}
 Group:		Development/Libraries/C and C++
 %endif
-Requires:       librados2-devel = %{_epoch_prefix}%{version}-%{release}
+Requires:       libradospp-devel = %{_epoch_prefix}%{version}-%{release}
 %description -n rados-objclass-devel
 This package contains libraries and headers needed to develop RADOS object
 class plugins.
@@ -903,6 +952,19 @@ depending on python-ceph should be fixed to depend on python-rados,
 python-rbd, python-rgw or python-cephfs instead.
 %endif
 
+%package grafana-dashboards
+Summary:	The set of Grafana dashboards for monitoring purposes
+BuildArch:	noarch
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%endif
+%description grafana-dashboards
+This package provides a set of Grafana dashboards for monitoring of
+Ceph clusters. The dashboards require a Prometheus server setup
+collecting data from Ceph Manager "prometheus" module and Prometheus
+project "node_exporter" module. The dashboards are designed to be
+integrated with the Ceph Manager Dashboard web UI.
+
 #################################################################################
 # common
 #################################################################################
@@ -930,6 +992,7 @@ RPM_OPT_FLAGS="$RPM_OPT_FLAGS --param ggc-min-expand=20 --param ggc-min-heapsize
 export CPPFLAGS="$java_inc"
 export CFLAGS="$RPM_OPT_FLAGS"
 export CXXFLAGS="$RPM_OPT_FLAGS"
+export LDFLAGS="$RPM_LD_FLAGS"
 
 # Parallel build settings ...
 CEPH_MFLAGS_JOBS="%{?_smp_mflags}"
@@ -1016,7 +1079,8 @@ ${CMAKE} .. \
 %else
     -DWITH_LIBRADOSSTRIPER=OFF \
 %endif
-    -DBOOST_J=$CEPH_SMP_NCPUS
+    -DBOOST_J=$CEPH_SMP_NCPUS \
+    -DWITH_GRAFANA=ON
 
 make "$CEPH_MFLAGS_JOBS"
 
@@ -1081,6 +1145,7 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mds
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rgw
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mgr
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd
+mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd-mirror
 
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
@@ -1157,6 +1222,7 @@ rm -rf %{buildroot}
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-rgw
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-mgr
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-rbd
+%attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/bootstrap-rbd-mirror
 
 %post base
 /sbin/ldconfig
@@ -1203,7 +1269,7 @@ fi
 %files common
 %dir %{_docdir}/ceph
 %doc %{_docdir}/ceph/sample.ceph.conf
-%doc %{_docdir}/ceph/COPYING
+%license %{_docdir}/ceph/COPYING
 %{_bindir}/ceph
 %{_bindir}/ceph-authtool
 %{_bindir}/ceph-conf
@@ -1639,35 +1705,46 @@ fi
 
 %endif
 
-%files -n librados2
+%files -n librados3
 %{_libdir}/librados.so.*
 %dir %{_libdir}/ceph
-%{_libdir}/ceph/libceph-common.so*
+%{_libdir}/ceph/libceph-common.so.*
 %if %{with lttng}
 %{_libdir}/librados_tp.so.*
 %endif
 
-%post -n librados2 -p /sbin/ldconfig
+%post -n librados3 -p /sbin/ldconfig
 
-%postun -n librados2 -p /sbin/ldconfig
+%postun -n librados3 -p /sbin/ldconfig
 
 %files -n librados-devel
 %dir %{_includedir}/rados
 %{_includedir}/rados/librados.h
-%{_includedir}/rados/librados.hpp
-%{_includedir}/rados/buffer.h
-%{_includedir}/rados/buffer_fwd.h
-%{_includedir}/rados/inline_memory.h
-%{_includedir}/rados/page.h
-%{_includedir}/rados/crc32c.h
 %{_includedir}/rados/rados_types.h
-%{_includedir}/rados/rados_types.hpp
 %{_libdir}/librados.so
 %if %{with lttng}
 %{_libdir}/librados_tp.so
 %endif
 %{_bindir}/librados-config
 %{_mandir}/man8/librados-config.8*
+
+%files -n libradospp1
+%{_libdir}/libradospp.so.*
+
+%post -n libradospp1 -p /sbin/ldconfig
+
+%postun -n libradospp1 -p /sbin/ldconfig
+
+%files -n libradospp-devel
+%dir %{_includedir}/rados
+%{_includedir}/rados/buffer.h
+%{_includedir}/rados/buffer_fwd.h
+%{_includedir}/rados/crc32c.h
+%{_includedir}/rados/inline_memory.h
+%{_includedir}/rados/librados.hpp
+%{_includedir}/rados/page.h
+%{_includedir}/rados/rados_types.hpp
+%{_libdir}/libradospp.so
 
 %if 0%{with python2}
 %files -n python-rados
@@ -1938,6 +2015,18 @@ exit 0
 # We need an empty %%files list for python-ceph-compat, to tell rpmbuild to
 # actually build this meta package.
 %endif
+
+%files grafana-dashboards
+%if 0%{?suse_version}
+%attr(0750,root,grafana) %dir %{_sysconfdir}/grafana
+%attr(0750,root,grafana) %dir %{_sysconfdir}/grafana/dashboards
+%attr(0750,root,grafana) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
+%else
+%attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
+%endif
+%config %{_sysconfdir}/grafana/dashboards/ceph-dashboard/*
+%doc monitoring/grafana/dashboards/README
+%doc monitoring/grafana/README.md
 
 
 %changelog

@@ -14,12 +14,6 @@ else
     ETIMEDOUT=110
 fi
 
-# monitor drops the subscribe message from client if it does not have enough caps
-# for read from mon. in that case, the client will be waiting for mgrmap in vain,
-# if it is instructed to send a command to mgr. "pg dump" is served by mgr. so,
-# we need to set a timeout for testing this scenario.
-export CEPH_ARGS='--rados-mon-op-timeout=5'
-
 expect()
 {
   cmd=$1
@@ -49,7 +43,17 @@ expect "ceph -k $tmp.foo.keyring --user foo auth ls" 0
 expect "ceph -k $tmp.foo.keyring --user foo auth export" 13
 expect "ceph -k $tmp.foo.keyring --user foo auth del client.bazar" 13
 expect "ceph -k $tmp.foo.keyring --user foo osd dump" 13
+
+# monitor drops the subscribe message from client if it does not have enough caps
+# for read from mon. in that case, the client will be waiting for mgrmap in vain,
+# if it is instructed to send a command to mgr. "pg dump" is served by mgr. so,
+# we need to set a timeout for testing this scenario.
+#
+# leave plenty of time here because the mons might be thrashing.
+export CEPH_ARGS='--rados-mon-op-timeout=300'
 expect "ceph -k $tmp.foo.keyring --user foo pg dump" $ETIMEDOUT
+export CEPH_ARGS=''
+
 expect "ceph -k $tmp.foo.keyring --user foo quorum_status" 13
 ceph auth del client.foo
 
@@ -60,7 +64,12 @@ expect "ceph -k $tmp.bar.keyring --user bar auth ls" 13
 expect "ceph -k $tmp.bar.keyring --user bar auth export" 13
 expect "ceph -k $tmp.bar.keyring --user bar auth del client.foo" 13
 expect "ceph -k $tmp.bar.keyring --user bar osd dump" 13
+
+# again, we'll need to timeout.
+export CEPH_ARGS='--rados-mon-op-timeout=300'
 expect "ceph -k $tmp.bar.keyring --user bar pg dump" $ETIMEDOUT
+export CEPH_ARGS=''
+
 expect "ceph -k $tmp.bar.keyring --user bar quorum_status" 13
 ceph auth del client.bar
 

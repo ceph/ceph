@@ -6,8 +6,11 @@ from __future__ import absolute_import
 import errno
 import json
 import threading
+import time
 
 import bcrypt
+
+from mgr_module import CLIReadCommand, CLIWriteCommand
 
 from .. import mgr, logger
 from ..security import Scope, Permission
@@ -19,6 +22,8 @@ from ..exceptions import RoleAlreadyExists, RoleDoesNotExist, ScopeNotValid, \
 
 # password hashing algorithm
 def password_hash(password, salt_password=None):
+    if not password:
+        return None
     if not salt_password:
         salt_password = bcrypt.gensalt()
     else:
@@ -88,22 +93,23 @@ class Role(object):
 # this roles cannot be deleted nor updated
 
 # admin role provides all permissions for all scopes
-ADMIN_ROLE = Role('administrator', 'Administrator', dict([
-    (scope_name, Permission.all_permissions())
+ADMIN_ROLE = Role('administrator', 'Administrator', {
+    scope_name: Permission.all_permissions()
     for scope_name in Scope.all_scopes()
-]))
+})
 
 
 # read-only role provides read-only permission for all scopes
-READ_ONLY_ROLE = Role('read-only', 'Read-Only', dict([
-    (scope_name, [_P.READ]) for scope_name in Scope.all_scopes()
+READ_ONLY_ROLE = Role('read-only', 'Read-Only', {
+    scope_name: [_P.READ] for scope_name in Scope.all_scopes()
     if scope_name != Scope.DASHBOARD_SETTINGS
-]))
+})
 
 
 # block manager role provides all permission for block related scopes
 BLOCK_MGR_ROLE = Role('block-manager', 'Block Manager', {
     Scope.RBD_IMAGE: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.POOL: [_P.READ],
     Scope.ISCSI: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.RBD_MIRRORING: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
 })
@@ -112,6 +118,7 @@ BLOCK_MGR_ROLE = Role('block-manager', 'Block Manager', {
 # RadosGW manager role provides all permissions for block related scopes
 RGW_MGR_ROLE = Role('rgw-manager', 'RGW Manager', {
     Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.CONFIG_OPT: [_P.READ],
 })
 
 
@@ -130,11 +137,13 @@ CLUSTER_MGR_ROLE = Role('cluster-manager', 'Cluster Manager', {
 # Pool manager role provides all permissions for pool related scopes
 POOL_MGR_ROLE = Role('pool-manager', 'Pool Manager', {
     Scope.POOL: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.CONFIG_OPT: [_P.READ],
 })
 
 # Pool manager role provides all permissions for CephFS related scopes
 CEPHFS_MGR_ROLE = Role('cephfs-manager', 'CephFS Manager', {
     Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.CONFIG_OPT: [_P.READ],
 })
 
 
@@ -150,7 +159,8 @@ SYSTEM_ROLES = {
 
 
 class User(object):
-    def __init__(self, username, password, name=None, email=None, roles=None):
+    def __init__(self, username, password, name=None, email=None, roles=None,
+                 lastUpdate=None):
         self.username = username
         self.password = password
         self.name = name
@@ -159,21 +169,32 @@ class User(object):
             self.roles = set()
         else:
             self.roles = roles
+        if lastUpdate is None:
+            self.refreshLastUpdate()
+        else:
+            self.lastUpdate = lastUpdate
+
+    def refreshLastUpdate(self):
+        self.lastUpdate = int(time.mktime(time.gmtime()))
 
     def set_password(self, password):
         self.password = password_hash(password)
+        self.refreshLastUpdate()
 
     def set_roles(self, roles):
         self.roles = set(roles)
+        self.refreshLastUpdate()
 
     def add_roles(self, roles):
         self.roles = self.roles.union(set(roles))
+        self.refreshLastUpdate()
 
     def del_roles(self, roles):
         for role in roles:
             if role not in self.roles:
                 raise RoleNotInUser(role.name, self.username)
         self.roles.difference_update(set(roles))
+        self.refreshLastUpdate()
 
     def authorize(self, scope, permissions):
         for role in self.roles:
@@ -199,13 +220,15 @@ class User(object):
             'password': self.password,
             'roles': sorted([r.name for r in self.roles]),
             'name': self.name,
-            'email': self.email
+            'email': self.email,
+            'lastUpdate': self.lastUpdate
         }
 
     @classmethod
     def from_dict(cls, u_dict, roles):
         return User(u_dict['username'], u_dict['password'], u_dict['name'],
-                    u_dict['email'], set([roles[r] for r in u_dict['roles']]))
+                    u_dict['email'], {roles[r] for r in u_dict['roles']},
+                    u_dict['lastUpdate'])
 
 
 class AccessControlDB(object):
@@ -266,11 +289,19 @@ class AccessControlDB(object):
                 raise UserDoesNotExist(username)
             del self.users[username]
 
+    def update_users_with_roles(self, role):
+        with self.lock:
+            if not role:
+                return
+            for _, user in self.users.items():
+                if role in user.roles:
+                    user.refreshLastUpdate()
+
     def save(self):
         with self.lock:
             db = {
-                'users': dict([(un, u.to_dict()) for un, u in self.users.items()]),
-                'roles': dict([(rn, r.to_dict()) for rn, r in self.roles.items()]),
+                'users': {un: u.to_dict() for un, u in self.users.items()},
+                'roles': {rn: r.to_dict() for rn, r in self.roles.items()},
                 'version': self.version
             }
             mgr.set_store(self.accessdb_config_key(), json.dumps(db))
@@ -285,8 +316,8 @@ class AccessControlDB(object):
         logger.debug("AC: Checking for previews DB versions")
         if self.VERSION == 1:  # current version
             # check if there is username/password from previous version
-            username = mgr.get_config('username', None)
-            password = mgr.get_config('password', None)
+            username = mgr.get_module_option('username', None)
+            password = mgr.get_module_option('password', None)
             if username and password:
                 logger.debug("AC: Found single user credentials: user=%s",
                              username)
@@ -303,7 +334,7 @@ class AccessControlDB(object):
     def load(cls):
         logger.info("AC: Loading user roles DB version=%s", cls.VERSION)
 
-        json_db = mgr.get_store(cls.accessdb_config_key(), None)
+        json_db = mgr.get_store(cls.accessdb_config_key())
         if json_db is None:
             logger.debug("AC: No DB v%s found, creating new...", cls.VERSION)
             db = cls(cls.VERSION, {}, {})
@@ -312,10 +343,10 @@ class AccessControlDB(object):
             return db
 
         db = json.loads(json_db)
-        roles = dict([(rn, Role.from_dict(r))
-                      for rn, r in db.get('roles', {}).items()])
-        users = dict([(un, User.from_dict(u, dict(roles, **SYSTEM_ROLES)))
-                      for un, u in db.get('users', {}).items()])
+        roles = {rn: Role.from_dict(r)
+                 for rn, r in db.get('roles', {}).items()}
+        users = {un: User.from_dict(u, dict(roles, **SYSTEM_ROLES))
+                 for un, u in db.get('users', {}).items()}
         return cls(db['version'], users, roles)
 
 
@@ -328,350 +359,297 @@ def load_access_control_db():
     ACCESS_CTRL_DB = AccessControlDB.load()
 
 
-# CLI dashboard access controll scope commands
-ACCESS_CONTROL_COMMANDS = [
-    # for backwards compatibility
-    {
-        'cmd': 'dashboard set-login-credentials '
-               'name=username,type=CephString '
-               'name=password,type=CephString',
-        'desc': 'Set the login credentials',
-        'perm': 'w'
-    },
-    {
-        'cmd': 'dashboard ac-role-show '
-               'name=rolename,type=CephString,req=false',
-        'desc': 'Show role info',
-        'perm': 'r'
-    },
-    {
-        'cmd': 'dashboard ac-role-create '
-               'name=rolename,type=CephString '
-               'name=description,type=CephString,req=false',
-        'desc': 'Create a new access control role',
-        'perm': 'w'
-    },
-    {
-        'cmd': 'dashboard ac-role-delete '
-               'name=rolename,type=CephString',
-        'desc': 'Delete an access control role',
-        'perm': 'w'
-    },
-    {
-        'cmd': 'dashboard ac-role-add-scope-perms '
-               'name=rolename,type=CephString '
-               'name=scopename,type=CephString '
-               'name=permissions,type=CephString,n=N',
-        'desc': 'Add the scope permissions for a role',
-        'perm': 'w'
-    },
-    {
-        'cmd': 'dashboard ac-role-del-scope-perms '
-               'name=rolename,type=CephString '
-               'name=scopename,type=CephString',
-        'desc': 'Delete the scope permissions for a role',
-        'perm': 'w'
-    },
-    {
-        'cmd': 'dashboard ac-user-show '
-               'name=username,type=CephString,req=false',
-        'desc': 'Show user info',
-        'perm': 'r'
-    },
-    {
-        'cmd': 'dashboard ac-user-create '
-               'name=username,type=CephString '
-               'name=password,type=CephString '
-               'name=rolename,type=CephString,req=false '
-               'name=name,type=CephString,req=false '
-               'name=email,type=CephString,req=false',
-        'desc': 'Create a user',
-        'perm': 'w'
-    },
-    {
-        'cmd': 'dashboard ac-user-delete '
-               'name=username,type=CephString',
-        'desc': 'Delete user',
-        'perm': 'w'
-    },
-    {
-        'cmd': 'dashboard ac-user-set-roles '
-               'name=username,type=CephString '
-               'name=roles,type=CephString,n=N',
-        'desc': 'Set user roles',
-        'perm': 'w'
-    },
-    {
-        'cmd': 'dashboard ac-user-add-roles '
-               'name=username,type=CephString '
-               'name=roles,type=CephString,n=N',
-        'desc': 'Add roles to user',
-        'perm': 'w'
-    },
-    {
-        'cmd': 'dashboard ac-user-del-roles '
-               'name=username,type=CephString '
-               'name=roles,type=CephString,n=N',
-        'desc': 'Delete roles from user',
-        'perm': 'w'
-    },
-    {
-        'cmd': 'dashboard ac-user-set-password '
-               'name=username,type=CephString '
-               'name=password,type=CephString',
-        'desc': 'Set user password',
-        'perm': 'w'
-    },
-    {
-        'cmd': 'dashboard ac-user-set-info '
-               'name=username,type=CephString '
-               'name=name,type=CephString '
-               'name=email,type=CephString',
-        'desc': 'Set user info',
-        'perm': 'w'
-    }
-]
+# CLI dashboard access control scope commands
 
+@CLIWriteCommand('dashboard set-login-credentials',
+                 'name=username,type=CephString '
+                 'name=password,type=CephString',
+                 'Set the login credentials')
+def set_login_credentials_cmd(_, username, password):
+    try:
+        user = ACCESS_CTRL_DB.get_user(username)
+        user.set_password(password)
+    except UserDoesNotExist:
+        user = ACCESS_CTRL_DB.create_user(username, password, None, None)
+        user.set_roles([ADMIN_ROLE])
 
-def handle_access_control_command(cmd):
-    if cmd['prefix'] == 'dashboard set-login-credentials':
-        username = cmd['username']
-        password = cmd['password']
-        try:
-            user = ACCESS_CTRL_DB.get_user(username)
-            user.set_password(password)
-        except UserDoesNotExist:
-            user = ACCESS_CTRL_DB.create_user(username, password, None, None)
-            user.set_roles([ADMIN_ROLE])
+    ACCESS_CTRL_DB.save()
 
-        ACCESS_CTRL_DB.save()
-
-        return 0, '''\
+    return 0, '''\
 ******************************************************************
 ***          WARNING: this command is deprecated.              ***
 *** Please use the ac-user-* related commands to manage users. ***
 ******************************************************************
 Username and password updated''', ''
 
-    if cmd['prefix'] == 'dashboard ac-role-show':
-        rolename = cmd['rolename'] if 'rolename' in cmd else None
-        if not rolename:
-            roles = dict(ACCESS_CTRL_DB.roles)
-            roles.update(SYSTEM_ROLES)
-            roles_list = [name for name, _ in roles.items()]
-            return 0, json.dumps(roles_list), ''
-        try:
-            role = ACCESS_CTRL_DB.get_role(rolename)
-        except RoleDoesNotExist as ex:
-            if rolename not in SYSTEM_ROLES:
-                return -errno.ENOENT, '', str(ex)
-            role = SYSTEM_ROLES[rolename]
+
+@CLIReadCommand('dashboard ac-role-show',
+                'name=rolename,type=CephString,req=false',
+                'Show role info')
+def ac_role_show_cmd(_, rolename=None):
+    if not rolename:
+        roles = dict(ACCESS_CTRL_DB.roles)
+        roles.update(SYSTEM_ROLES)
+        roles_list = [name for name, _ in roles.items()]
+        return 0, json.dumps(roles_list), ''
+    try:
+        role = ACCESS_CTRL_DB.get_role(rolename)
+    except RoleDoesNotExist as ex:
+        if rolename not in SYSTEM_ROLES:
+            return -errno.ENOENT, '', str(ex)
+        role = SYSTEM_ROLES[rolename]
+    return 0, json.dumps(role.to_dict()), ''
+
+
+@CLIWriteCommand('dashboard ac-role-create',
+                 'name=rolename,type=CephString '
+                 'name=description,type=CephString,req=false',
+                 'Create a new access control role')
+def ac_role_create_cmd(_, rolename, description=None):
+    try:
+        role = ACCESS_CTRL_DB.create_role(rolename, description)
+        ACCESS_CTRL_DB.save()
         return 0, json.dumps(role.to_dict()), ''
+    except RoleAlreadyExists as ex:
+        return -errno.EEXIST, '', str(ex)
 
-    elif cmd['prefix'] == 'dashboard ac-role-create':
-        rolename = cmd['rolename']
-        description = cmd['description'] if 'description' in cmd else None
-        try:
-            role = ACCESS_CTRL_DB.create_role(rolename, description)
-            ACCESS_CTRL_DB.save()
-            return 0, json.dumps(role.to_dict()), ''
-        except RoleAlreadyExists as ex:
-            return -errno.EEXIST, '', str(ex)
 
-    elif cmd['prefix'] == 'dashboard ac-role-delete':
-        rolename = cmd['rolename']
-        try:
-            ACCESS_CTRL_DB.delete_role(rolename)
-            ACCESS_CTRL_DB.save()
-            return 0, "Role '{}' deleted".format(rolename), ""
-        except RoleDoesNotExist as ex:
-            if rolename in SYSTEM_ROLES:
-                return -errno.EPERM, '', "Cannot delete system role '{}'" \
-                                         .format(rolename)
+@CLIWriteCommand('dashboard ac-role-delete',
+                 'name=rolename,type=CephString',
+                 'Delete an access control role')
+def ac_role_delete_cmd(_, rolename):
+    try:
+        ACCESS_CTRL_DB.delete_role(rolename)
+        ACCESS_CTRL_DB.save()
+        return 0, "Role '{}' deleted".format(rolename), ""
+    except RoleDoesNotExist as ex:
+        if rolename in SYSTEM_ROLES:
+            return -errno.EPERM, '', "Cannot delete system role '{}'" \
+                                        .format(rolename)
+        return -errno.ENOENT, '', str(ex)
+    except RoleIsAssociatedWithUser as ex:
+        return -errno.EPERM, '', str(ex)
+
+
+@CLIWriteCommand('dashboard ac-role-add-scope-perms',
+                 'name=rolename,type=CephString '
+                 'name=scopename,type=CephString '
+                 'name=permissions,type=CephString,n=N',
+                 'Add the scope permissions for a role')
+def ac_role_add_scope_perms_cmd(_, rolename, scopename, permissions):
+    try:
+        role = ACCESS_CTRL_DB.get_role(rolename)
+        perms_array = [perm.strip() for perm in permissions]
+        role.set_scope_permissions(scopename, perms_array)
+        ACCESS_CTRL_DB.update_users_with_roles(role)
+        ACCESS_CTRL_DB.save()
+        return 0, json.dumps(role.to_dict()), ''
+    except RoleDoesNotExist as ex:
+        if rolename in SYSTEM_ROLES:
+            return -errno.EPERM, '', "Cannot update system role '{}'" \
+                                        .format(rolename)
+        return -errno.ENOENT, '', str(ex)
+    except ScopeNotValid as ex:
+        return -errno.EINVAL, '', str(ex) + "\n Possible values: {}" \
+                                            .format(Scope.all_scopes())
+    except PermissionNotValid as ex:
+        return -errno.EINVAL, '', str(ex) + \
+                                    "\n Possible values: {}" \
+                                    .format(Permission.all_permissions())
+
+
+@CLIWriteCommand('dashboard ac-role-del-scope-perms',
+                 'name=rolename,type=CephString '
+                 'name=scopename,type=CephString',
+                 'Delete the scope permissions for a role')
+def ac_role_del_scope_perms_cmd(_, rolename, scopename):
+    try:
+        role = ACCESS_CTRL_DB.get_role(rolename)
+        role.del_scope_permissions(scopename)
+        ACCESS_CTRL_DB.update_users_with_roles(role)
+        ACCESS_CTRL_DB.save()
+        return 0, json.dumps(role.to_dict()), ''
+    except RoleDoesNotExist as ex:
+        if rolename in SYSTEM_ROLES:
+            return -errno.EPERM, '', "Cannot update system role '{}'" \
+                                        .format(rolename)
+        return -errno.ENOENT, '', str(ex)
+    except ScopeNotInRole as ex:
+        return -errno.ENOENT, '', str(ex)
+
+
+@CLIReadCommand('dashboard ac-user-show',
+                'name=username,type=CephString,req=false',
+                'Show user info')
+def ac_user_show_cmd(_, username=None):
+    if not username:
+        users = ACCESS_CTRL_DB.users
+        users_list = [name for name, _ in users.items()]
+        return 0, json.dumps(users_list), ''
+    try:
+        user = ACCESS_CTRL_DB.get_user(username)
+        return 0, json.dumps(user.to_dict()), ''
+    except UserDoesNotExist as ex:
+        return -errno.ENOENT, '', str(ex)
+
+
+@CLIWriteCommand('dashboard ac-user-create',
+                 'name=username,type=CephString '
+                 'name=password,type=CephString,req=false '
+                 'name=rolename,type=CephString,req=false '
+                 'name=name,type=CephString,req=false '
+                 'name=email,type=CephString,req=false',
+                 'Create a user')
+def ac_user_create_cmd(_, username, password=None, rolename=None, name=None,
+                       email=None):
+    try:
+        role = ACCESS_CTRL_DB.get_role(rolename) if rolename else None
+    except RoleDoesNotExist as ex:
+        if rolename not in SYSTEM_ROLES:
             return -errno.ENOENT, '', str(ex)
-        except RoleIsAssociatedWithUser as ex:
-            return -errno.EPERM, '', str(ex)
+        role = SYSTEM_ROLES[rolename]
 
-    elif cmd['prefix'] == 'dashboard ac-role-add-scope-perms':
-        rolename = cmd['rolename']
-        scopename = cmd['scopename']
-        permissions = cmd['permissions']
-        try:
-            role = ACCESS_CTRL_DB.get_role(rolename)
-            perms_array = [perm.strip() for perm in permissions]
-            role.set_scope_permissions(scopename, perms_array)
-            ACCESS_CTRL_DB.save()
-            return 0, json.dumps(role.to_dict()), ''
-        except RoleDoesNotExist as ex:
-            if rolename in SYSTEM_ROLES:
-                return -errno.EPERM, '', "Cannot update system role '{}'" \
-                                         .format(rolename)
-            return -errno.ENOENT, '', str(ex)
-        except ScopeNotValid as ex:
-            return -errno.EINVAL, '', str(ex) + "\n Possible values: {}" \
-                                                .format(Scope.all_scopes())
-        except PermissionNotValid as ex:
-            return -errno.EINVAL, '', str(ex) + \
-                                      "\n Possible values: {}" \
-                                      .format(Permission.all_permissions())
+    try:
+        user = ACCESS_CTRL_DB.create_user(username, password, name, email)
+    except UserAlreadyExists as ex:
+        return -errno.EEXIST, '', str(ex)
 
-    elif cmd['prefix'] == 'dashboard ac-role-del-scope-perms':
-        rolename = cmd['rolename']
-        scopename = cmd['scopename']
-        try:
-            role = ACCESS_CTRL_DB.get_role(rolename)
-            role.del_scope_permissions(scopename)
-            ACCESS_CTRL_DB.save()
-            return 0, json.dumps(role.to_dict()), ''
-        except RoleDoesNotExist as ex:
-            if rolename in SYSTEM_ROLES:
-                return -errno.EPERM, '', "Cannot update system role '{}'" \
-                                         .format(rolename)
-            return -errno.ENOENT, '', str(ex)
-        except ScopeNotInRole as ex:
-            return -errno.ENOENT, '', str(ex)
+    if role:
+        user.set_roles([role])
+    ACCESS_CTRL_DB.save()
+    return 0, json.dumps(user.to_dict()), ''
 
-    elif cmd['prefix'] == 'dashboard ac-user-show':
-        username = cmd['username'] if 'username' in cmd else None
-        if not username:
-            users = ACCESS_CTRL_DB.users
-            users_list = [name for name, _ in users.items()]
-            return 0, json.dumps(users_list), ''
-        try:
-            user = ACCESS_CTRL_DB.get_user(username)
-            return 0, json.dumps(user.to_dict()), ''
-        except UserDoesNotExist as ex:
-            return -errno.ENOENT, '', str(ex)
 
-    elif cmd['prefix'] == 'dashboard ac-user-create':
-        username = cmd['username']
-        password = cmd['password']
-        rolename = cmd['rolename'] if 'rolename' in cmd else None
-        name = cmd['name'] if 'name' in cmd else None
-        email = cmd['email'] if 'email' in cmd else None
+@CLIWriteCommand('dashboard ac-user-delete',
+                 'name=username,type=CephString',
+                 'Delete user')
+def ac_user_delete_cmd(_, username):
+    try:
+        ACCESS_CTRL_DB.delete_user(username)
+        ACCESS_CTRL_DB.save()
+        return 0, "User '{}' deleted".format(username), ""
+    except UserDoesNotExist as ex:
+        return -errno.ENOENT, '', str(ex)
+
+
+@CLIWriteCommand('dashboard ac-user-set-roles',
+                 'name=username,type=CephString '
+                 'name=roles,type=CephString,n=N',
+                 'Set user roles')
+def ac_user_set_roles_cmd(_, username, roles):
+    rolesname = roles
+    roles = []
+    for rolename in rolesname:
         try:
-            user = ACCESS_CTRL_DB.create_user(username, password, name, email)
-            role = ACCESS_CTRL_DB.get_role(rolename) if rolename else None
-        except UserAlreadyExists as ex:
-            return -errno.EEXIST, '', str(ex)
+            roles.append(ACCESS_CTRL_DB.get_role(rolename))
         except RoleDoesNotExist as ex:
             if rolename not in SYSTEM_ROLES:
                 return -errno.ENOENT, '', str(ex)
-            role = SYSTEM_ROLES[rolename]
-
-        if role:
-            user.set_roles([role])
+            roles.append(SYSTEM_ROLES[rolename])
+    try:
+        user = ACCESS_CTRL_DB.get_user(username)
+        user.set_roles(roles)
         ACCESS_CTRL_DB.save()
         return 0, json.dumps(user.to_dict()), ''
+    except UserDoesNotExist as ex:
+        return -errno.ENOENT, '', str(ex)
 
-    elif cmd['prefix'] == 'dashboard ac-user-delete':
-        username = cmd['username']
+
+@CLIWriteCommand('dashboard ac-user-add-roles',
+                 'name=username,type=CephString '
+                 'name=roles,type=CephString,n=N',
+                 'Add roles to user')
+def ac_user_add_roles_cmd(_, username, roles):
+    rolesname = roles
+    roles = []
+    for rolename in rolesname:
         try:
-            ACCESS_CTRL_DB.delete_user(username)
-            ACCESS_CTRL_DB.save()
-            return 0, "User '{}' deleted".format(username), ""
-        except UserDoesNotExist as ex:
-            return -errno.ENOENT, '', str(ex)
+            roles.append(ACCESS_CTRL_DB.get_role(rolename))
+        except RoleDoesNotExist as ex:
+            if rolename not in SYSTEM_ROLES:
+                return -errno.ENOENT, '', str(ex)
+            roles.append(SYSTEM_ROLES[rolename])
+    try:
+        user = ACCESS_CTRL_DB.get_user(username)
+        user.add_roles(roles)
+        ACCESS_CTRL_DB.save()
+        return 0, json.dumps(user.to_dict()), ''
+    except UserDoesNotExist as ex:
+        return -errno.ENOENT, '', str(ex)
 
-    elif cmd['prefix'] == 'dashboard ac-user-set-roles':
-        username = cmd['username']
-        rolesname = cmd['roles']
-        roles = []
-        for rolename in rolesname:
-            try:
-                roles.append(ACCESS_CTRL_DB.get_role(rolename))
-            except RoleDoesNotExist as ex:
-                if rolename not in SYSTEM_ROLES:
-                    return -errno.ENOENT, '', str(ex)
-                roles.append(SYSTEM_ROLES[rolename])
+
+@CLIWriteCommand('dashboard ac-user-del-roles',
+                 'name=username,type=CephString '
+                 'name=roles,type=CephString,n=N',
+                 'Delete roles from user')
+def ac_user_del_roles_cmd(_, username, roles):
+    rolesname = roles
+    roles = []
+    for rolename in rolesname:
         try:
-            user = ACCESS_CTRL_DB.get_user(username)
-            user.set_roles(roles)
-            ACCESS_CTRL_DB.save()
-            return 0, json.dumps(user.to_dict()), ''
-        except UserDoesNotExist as ex:
-            return -errno.ENOENT, '', str(ex)
+            roles.append(ACCESS_CTRL_DB.get_role(rolename))
+        except RoleDoesNotExist as ex:
+            if rolename not in SYSTEM_ROLES:
+                return -errno.ENOENT, '', str(ex)
+            roles.append(SYSTEM_ROLES[rolename])
+    try:
+        user = ACCESS_CTRL_DB.get_user(username)
+        user.del_roles(roles)
+        ACCESS_CTRL_DB.save()
+        return 0, json.dumps(user.to_dict()), ''
+    except UserDoesNotExist as ex:
+        return -errno.ENOENT, '', str(ex)
+    except RoleNotInUser as ex:
+        return -errno.ENOENT, '', str(ex)
 
-    elif cmd['prefix'] == 'dashboard ac-user-add-roles':
-        username = cmd['username']
-        rolesname = cmd['roles']
-        roles = []
-        for rolename in rolesname:
-            try:
-                roles.append(ACCESS_CTRL_DB.get_role(rolename))
-            except RoleDoesNotExist as ex:
-                if rolename not in SYSTEM_ROLES:
-                    return -errno.ENOENT, '', str(ex)
-                roles.append(SYSTEM_ROLES[rolename])
-        try:
-            user = ACCESS_CTRL_DB.get_user(username)
-            user.add_roles(roles)
-            ACCESS_CTRL_DB.save()
-            return 0, json.dumps(user.to_dict()), ''
-        except UserDoesNotExist as ex:
-            return -errno.ENOENT, '', str(ex)
 
-    elif cmd['prefix'] == 'dashboard ac-user-del-roles':
-        username = cmd['username']
-        rolesname = cmd['roles']
-        roles = []
-        for rolename in rolesname:
-            try:
-                roles.append(ACCESS_CTRL_DB.get_role(rolename))
-            except RoleDoesNotExist as ex:
-                if rolename not in SYSTEM_ROLES:
-                    return -errno.ENOENT, '', str(ex)
-                roles.append(SYSTEM_ROLES[rolename])
-        try:
-            user = ACCESS_CTRL_DB.get_user(username)
-            user.del_roles(roles)
-            ACCESS_CTRL_DB.save()
-            return 0, json.dumps(user.to_dict()), ''
-        except UserDoesNotExist as ex:
-            return -errno.ENOENT, '', str(ex)
-        except RoleNotInUser as ex:
-            return -errno.ENOENT, '', str(ex)
+@CLIWriteCommand('dashboard ac-user-set-password',
+                 'name=username,type=CephString '
+                 'name=password,type=CephString',
+                 'Set user password')
+def ac_user_set_password(_, username, password):
+    try:
+        user = ACCESS_CTRL_DB.get_user(username)
+        user.set_password(password)
 
-    elif cmd['prefix'] == 'dashboard ac-user-set-password':
-        username = cmd['username']
-        password = cmd['password']
-        try:
-            user = ACCESS_CTRL_DB.get_user(username)
-            user.set_password(password)
+        ACCESS_CTRL_DB.save()
+        return 0, json.dumps(user.to_dict()), ''
+    except UserDoesNotExist as ex:
+        return -errno.ENOENT, '', str(ex)
 
-            ACCESS_CTRL_DB.save()
-            return 0, json.dumps(user.to_dict()), ''
-        except UserDoesNotExist as ex:
-            return -errno.ENOENT, '', str(ex)
 
-    elif cmd['prefix'] == 'dashboard ac-user-set-info':
-        username = cmd['username']
-        name = cmd['name']
-        email = cmd['email']
-        try:
-            user = ACCESS_CTRL_DB.get_user(username)
-            if name:
-                user.name = name
-            if email:
-                user.email = email
-            ACCESS_CTRL_DB.save()
-            return 0, json.dumps(user.to_dict()), ''
-        except UserDoesNotExist as ex:
-            return -errno.ENOENT, '', str(ex)
-
-    return -errno.ENOSYS, '', ''
+@CLIWriteCommand('dashboard ac-user-set-info',
+                 'name=username,type=CephString '
+                 'name=name,type=CephString '
+                 'name=email,type=CephString',
+                 'Set user info')
+def ac_user_set_info(_, username, name, email):
+    try:
+        user = ACCESS_CTRL_DB.get_user(username)
+        if name:
+            user.name = name
+        if email:
+            user.email = email
+        ACCESS_CTRL_DB.save()
+        return 0, json.dumps(user.to_dict()), ''
+    except UserDoesNotExist as ex:
+        return -errno.ENOENT, '', str(ex)
 
 
 class LocalAuthenticator(object):
     def __init__(self):
         load_access_control_db()
 
+    def get_user(self, username):
+        return ACCESS_CTRL_DB.get_user(username)
+
     def authenticate(self, username, password):
         try:
             user = ACCESS_CTRL_DB.get_user(username)
-            pass_hash = password_hash(password, user.password)
-            if pass_hash == user.password:
-                return user.permissions_dict()
+            if user.password:
+                pass_hash = password_hash(password, user.password)
+                if pass_hash == user.password:
+                    return user.permissions_dict()
         except UserDoesNotExist:
             logger.debug("User '%s' does not exist", username)
         return None

@@ -40,6 +40,14 @@
                        *ngIf="clientsSelect">
     </cd-cephfs-clients>
   </tab>
+  <tab i18n-heading
+       *ngIf="grafanaPermission.read"
+       heading="Performance Details">
+    <cd-grafana [grafanaPath]="'mds-performance?var-mds_servers=mds.' + grafanaId"
+                uid="rRfFzWtik"
+                grafanaStyle="one">
+    </cd-grafana>
+  </tab>
 </tabset>
 
 <!-- templates -->

@@ -28,10 +28,17 @@ class Module(MgrModule):
 
     # The test code in qa/ relies on these options existing -- they
     # are of course not really used for anything in the module
-    OPTIONS = [
-            {'name': 'testkey'},
-            {'name': 'testlkey'},
-            {'name': 'testnewline'}
+    MODULE_OPTIONS = [
+        {'name': 'testkey'},
+        {'name': 'testlkey'},
+        {'name': 'testnewline'},
+        {'name': 'roption1'},
+        {'name': 'roption2', 'type': 'str', 'default': 'xyz'},
+        {'name': 'rwoption1'},
+        {'name': 'rwoption2', 'type': 'int'},
+        {'name': 'rwoption3', 'type': 'float'},
+        {'name': 'rwoption4', 'type': 'str'},
+        {'name': 'rwoption5', 'type': 'bool'}
     ]
 
     COMMANDS = [
@@ -86,6 +93,13 @@ class Module(MgrModule):
                 "desc": "Set the now time for the insights module.",
                 "perm": "rw"
             },
+            {
+                "cmd": "mgr self-test cluster-log name=channel,type=CephString "
+                       "name=priority,type=CephString "
+                       "name=message,type=CephString",
+                "desc": "Create an audit log record.",
+                "perm": "rw"
+            },
             ]
 
     def __init__(self, *args, **kwargs):
@@ -117,9 +131,9 @@ class Module(MgrModule):
             else:
                 return 0, '', 'No background workload was running'
         elif command['prefix'] == 'mgr self-test config get':
-            return 0, str(self.get_config(command['key'])), ''
+            return 0, str(self.get_module_option(command['key'])), ''
         elif command['prefix'] == 'mgr self-test config get_localized':
-            return 0, str(self.get_localized_config(command['key'])), ''
+            return 0, str(self.get_localized_module_option(command['key'])), ''
         elif command['prefix'] == 'mgr self-test remote':
             self._test_remote_calls()
             return 0, '', 'Successfully called'
@@ -136,6 +150,17 @@ class Module(MgrModule):
             return self._health_clear(inbuf, command)
         elif command['prefix'] == 'mgr self-test insights_set_now_offset':
             return self._insights_set_now_offset(inbuf, command)
+        elif command['prefix'] == 'mgr self-test cluster-log':
+            priority_map = {
+                'info': self.CLUSTER_LOG_PRIO_INFO,
+                'security': self.CLUSTER_LOG_PRIO_SEC,
+                'warning': self.CLUSTER_LOG_PRIO_WARN,
+                'error': self.CLUSTER_LOG_PRIO_ERROR
+            }
+            self.cluster_log(command['channel'],
+                             priority_map[command['priority']],
+                             command['message'])
+            return 0, '', 'Successfully called'
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
@@ -236,11 +261,78 @@ class Module(MgrModule):
         # This is not a strong test (can't tell if values really
         # persisted), it's just for the python interface bit.
 
-        self.set_config("testkey", "testvalue")
-        assert self.get_config("testkey") == "testvalue"
+        self.set_module_option("testkey", "testvalue")
+        assert self.get_module_option("testkey") == "testvalue"
 
-        self.set_localized_config("testkey", "testvalue")
-        assert self.get_localized_config("testkey") == "testvalue"
+        self.set_localized_module_option("testkey", "testvalue")
+        assert self.get_localized_module_option("testkey") == "testvalue"
+
+        # Use default value.
+        assert self.get_module_option("roption1") is None
+        assert self.get_module_option("roption1", "foobar") == "foobar"
+        assert self.get_module_option("roption2") == "xyz"
+        assert self.get_module_option("roption2", "foobar") == "xyz"
+
+        # Option type is not defined => return as string.
+        self.set_module_option("rwoption1", 8080)
+        value = self.get_module_option("rwoption1")
+        assert isinstance(value, str)
+        assert value == "8080"
+
+        # Option type is defined => return as integer.
+        self.set_module_option("rwoption2", 10)
+        value = self.get_module_option("rwoption2")
+        assert isinstance(value, int)
+        assert value == 10
+
+        # Option type is defined => return as float.
+        self.set_module_option("rwoption3", 1.5)
+        value = self.get_module_option("rwoption3")
+        assert isinstance(value, float)
+        assert value == 1.5
+
+        # Option type is defined => return as string.
+        self.set_module_option("rwoption4", "foo")
+        value = self.get_module_option("rwoption4")
+        assert isinstance(value, str)
+        assert value == "foo"
+
+        # Option type is defined => return as bool.
+        self.set_module_option("rwoption5", False)
+        value = self.get_module_option("rwoption5")
+        assert isinstance(value, bool)
+        assert value is False
+
+        # Specified module does not exist => return None.
+        assert self.get_module_option_ex("foo", "bar") is None
+
+        # Specified key does not exist => return None.
+        assert self.get_module_option_ex("dashboard", "bar") is None
+
+        self.set_module_option_ex("telemetry", "contact", "test@test.com")
+        assert self.get_module_option_ex("telemetry", "contact") == "test@test.com"
+
+        # No option default value, so use the specified one.
+        assert self.get_module_option_ex("dashboard", "password") is None
+        assert self.get_module_option_ex("dashboard", "password", "foobar") == "foobar"
+
+        # Option type is not defined => return as string.
+        self.set_module_option_ex("dashboard", "server_port", 8080)
+        value = self.get_module_option_ex("dashboard", "server_port")
+        assert isinstance(value, str)
+        assert value == "8080"
+
+        # Option type is defined => return as integer.
+        self.set_module_option_ex("telemetry", "interval", 60)
+        value = self.get_module_option_ex("telemetry", "interval")
+        assert isinstance(value, int)
+        assert value == 60
+
+        # Option type is defined => return as bool.
+        self.set_module_option_ex("telemetry", "leaderboard", True)
+        value = self.get_module_option_ex("telemetry", "leaderboard")
+        assert isinstance(value, bool)
+        assert value is True
 
     def _self_test_store(self):
         existing_keys = set(self.get_store_prefix("test").keys())
@@ -293,10 +385,15 @@ class Module(MgrModule):
         self.remote("influx", "handle_command", "", {"prefix": "influx self-test"})
 
         # Test calling module that exists but isn't enabled
+        # (arbitrarily pick a non-always-on module to use)
+        disabled_module = "telegraf"
         mgr_map = self.get("mgr_map")
-        all_modules = [m['name'] for m in mgr_map['available_modules']]
-        disabled_modules = set(all_modules) - set(mgr_map['modules'])
-        disabled_module = list(disabled_modules)[0]
+        assert disabled_module not in mgr_map['modules']
+
+        # (This works until the Z release in about 2027)
+        latest_release = sorted(mgr_map['always_on_modules'].keys())[-1]
+        assert disabled_module not in mgr_map['always_on_modules'][latest_release]
+
         try:
             self.remote(disabled_module, "handle_command", {"prefix": "influx self-test"})
         except ImportError:

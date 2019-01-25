@@ -70,7 +70,7 @@ public:
     encode(send_osdmap_first, payload);
   }
 
-  const char *get_type_name() const override { return "route"; }
+  std::string_view get_type_name() const override { return "route"; }
   void print(ostream& o) const override {
     if (msg)
       o << "route(" << *msg;

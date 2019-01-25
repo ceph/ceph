@@ -1,8 +1,10 @@
 // -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /**
  * Crypto filters for Put/Post/Get operations.
  */
+
 #include <rgw/rgw_op.h>
 #include <rgw/rgw_crypt.h>
 #include <auth/Crypto.h>
@@ -661,69 +663,49 @@ int RGWGetObj_BlockDecrypt::flush() {
 }
 
 RGWPutObj_BlockEncrypt::RGWPutObj_BlockEncrypt(CephContext* cct,
-                                               RGWPutObjDataProcessor* next,
-                                               std::unique_ptr<BlockCrypt> crypt):
-    RGWPutObj_Filter(next),
+                                               rgw::putobj::DataProcessor *next,
+                                               std::unique_ptr<BlockCrypt> crypt)
+  : Pipe(next),
     cct(cct),
     crypt(std::move(crypt)),
-    ofs(0),
-    cache()
+    block_size(this->crypt->get_block_size())
 {
-  block_size = this->crypt->get_block_size();
 }
 
-RGWPutObj_BlockEncrypt::~RGWPutObj_BlockEncrypt() {
-}
+int RGWPutObj_BlockEncrypt::process(bufferlist&& data, uint64_t logical_offset)
+{
+  ldout(cct, 25) << "Encrypt " << data.length() << " bytes" << dendl;
 
-int RGWPutObj_BlockEncrypt::handle_data(bufferlist& bl,
-                                        off_t in_ofs,
-                                        void **phandle,
-                                        rgw_raw_obj *pobj,
-                                        bool *again) {
-  int res = 0;
-  ldout(cct, 25) << "Encrypt " << bl.length() << " bytes" << dendl;
+  // adjust logical offset to beginning of cached data
+  ceph_assert(logical_offset >= cache.length());
+  logical_offset -= cache.length();
 
-  if (*again) {
-    bufferlist no_data;
-    res = next->handle_data(no_data, in_ofs, phandle, pobj, again);
-    //if *again is not set to false, we will have endless loop
-    //drop info on log
-    if (*again) {
-      ldout(cct, 20) << "*again==true" << dendl;
-    }
-    return res;
-  }
+  const bool flush = (data.length() == 0);
+  cache.claim_append(data);
 
-  cache.append(bl);
-  off_t proc_size = cache.length() & ~(block_size - 1);
-  if (bl.length() == 0) {
+  uint64_t proc_size = cache.length() & ~(block_size - 1);
+  if (flush) {
     proc_size = cache.length();
   }
   if (proc_size > 0) {
-    bufferlist data;
-    if (! crypt->encrypt(cache, 0, proc_size, data, ofs) ) {
+    bufferlist in, out;
+    cache.splice(0, proc_size, &in);
+    if (!crypt->encrypt(in, 0, proc_size, out, logical_offset)) {
       return -ERR_INTERNAL_ERROR;
     }
-    res = next->handle_data(data, ofs, phandle, pobj, again);
-    ofs += proc_size;
-    cache.splice(0, proc_size);
-    if (res < 0)
-      return res;
+    int r = Pipe::process(std::move(out), logical_offset);
+    logical_offset += proc_size;
+    if (r < 0)
+      return r;
   }
 
-  if (bl.length() == 0) {
+  if (flush) {
     /*replicate 0-sized handle_data*/
-    res = next->handle_data(bl, ofs, phandle, pobj, again);
+    return Pipe::process({}, logical_offset);
   }
-  return res;
+  return 0;
 }
 
-int RGWPutObj_BlockEncrypt::throttle_data(void *handle,
-                                          const rgw_raw_obj& obj,
-                                          uint64_t size,
-                                          bool need_to_wait) {
-  return next->throttle_data(handle, obj, size, need_to_wait);
-}
 
 std::string create_random_key_selector(CephContext * const cct) {
   char random[AES_256_KEYSIZE];
@@ -936,7 +918,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         return -ERR_INVALID_ENCRYPTION_ALGORITHM;
       }
       if (s->cct->_conf->rgw_crypt_require_ssl &&
-          !s->info.env->exists("SERVER_PORT_SECURE")) {
+          !rgw_transport_is_secure(s->cct, *s->info.env)) {
         ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
         return -ERR_INVALID_REQUEST;
       }
@@ -1042,7 +1024,7 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
         return -EINVAL;
       }
       if (s->cct->_conf->rgw_crypt_require_ssl &&
-          !s->info.env->exists("SERVER_PORT_SECURE")) {
+          !rgw_transport_is_secure(s->cct, *s->info.env)) {
         ldout(s->cct, 5) << "ERROR: insecure request, rgw_crypt_require_ssl is set" << dendl;
         return -ERR_INVALID_REQUEST;
       }
@@ -1158,7 +1140,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
 
   if (stored_mode == "SSE-C-AES256") {
     if (s->cct->_conf->rgw_crypt_require_ssl &&
-        !s->info.env->exists("SERVER_PORT_SECURE")) {
+        !rgw_transport_is_secure(s->cct, *s->info.env)) {
       ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }
@@ -1240,7 +1222,7 @@ int rgw_s3_prepare_decrypt(struct req_state* s,
 
   if (stored_mode == "SSE-KMS") {
     if (s->cct->_conf->rgw_crypt_require_ssl &&
-        !s->info.env->exists("SERVER_PORT_SECURE")) {
+        !rgw_transport_is_secure(s->cct, *s->info.env)) {
       ldout(s->cct, 5) << "ERROR: Insecure request, rgw_crypt_require_ssl is set" << dendl;
       return -ERR_INVALID_REQUEST;
     }

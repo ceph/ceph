@@ -55,7 +55,7 @@ mocked_get_counter2 = {
 def _get_counter(_daemon_type, daemon_name, _stat):
     if daemon_name == 'ceph-dev1:pool1/image1':
         return mocked_get_counter1
-    elif daemon_name == 'ceph-dev2:pool1/image1':
+    if daemon_name == 'ceph-dev2:pool1/image1':
         return mocked_get_counter2
     return Exception('invalid daemon name')
 

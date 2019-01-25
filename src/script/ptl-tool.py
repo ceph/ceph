@@ -3,7 +3,8 @@
 # README:
 #
 # This tool's purpose is to make it easier to merge PRs into test branches and
-# into master.
+# into master. Make sure you generate a Personal access token in GitHub and
+# add it your ~/.github.key.
 #
 # Because developers often have custom names for the ceph upstream remote
 # (https://github.com/ceph/ceph.git), You will probably want to export the
@@ -123,7 +124,7 @@ log.setLevel(logging.INFO)
 BASE_PROJECT = os.getenv("PTL_TOOL_BASE_PROJECT", "ceph")
 BASE_REPO = os.getenv("PTL_TOOL_BASE_REPO", "ceph")
 BASE_REMOTE = os.getenv("PTL_TOOL_BASE_REMOTE", "upstream")
-BASE_PATH = os.getenv("PTL_TOOL_BASE_PATH", "refs/remotes/upstream/heads/")
+BASE_PATH = os.getenv("PTL_TOOL_BASE_PATH", "refs/remotes/upstream/")
 GITDIR = os.getenv("PTL_TOOL_GITDIR", ".")
 USER = os.getenv("PTL_TOOL_USER", getpass.getuser())
 with open(expanduser("~/.github.key")) as f:
@@ -294,22 +295,16 @@ def build_branch(args):
         for indication in indications:
             message = message + indication + "\n"
 
+        G.git.merge(tip.hexsha, '--no-ff', m=message)
+
         if new_new_contributors:
             # Check out the PR, add a commit adding to .githubmap
-            HEAD = G.head.commit
-            log.info("adding new contributors to githubmap on top of PR #%s" % pr)
-            G.head.reset(commit=tip, index=True, working_tree=True)
+            log.info("adding new contributors to githubmap in merge commit")
             with open(".githubmap", "a") as f:
                 for c in new_new_contributors:
                     f.write("%s %s\n" % (c, new_new_contributors[c]))
             G.index.add([".githubmap"])
-            G.git.commit("-s", "-m", "githubmap: update contributors")
-            c = G.head.commit
-            G.head.reset(HEAD, index=True, working_tree=True)
-        else:
-            c = tip
-
-        G.git.merge(c.hexsha, '--no-ff', m=message)
+            G.git.commit("--amend", "--no-edit")
 
         if label:
             req = requests.post("https://api.github.com/repos/{project}/{repo}/issues/{pr}/labels".format(pr=pr, project=BASE_PROJECT, repo=BASE_REPO), data=json.dumps([label]), auth=(USER, PASSWORD))
@@ -344,7 +339,7 @@ def main():
     default_label = ''
     if len(sys.argv) > 1 and sys.argv[1] in SPECIAL_BRANCHES:
         argv = sys.argv[2:]
-        default_branch = 'HEAD' # Leave HEAD deatched
+        default_branch = 'HEAD' # Leave HEAD detached
         default_base = default_branch
         default_label = False
     else:

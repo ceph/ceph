@@ -1,6 +1,8 @@
 Dashboard Developer Documentation
 ====================================
 
+.. contents:: Table of Contents
+
 Frontend Development
 --------------------
 
@@ -63,18 +65,49 @@ Run ``npm run build`` to build the project. The build artifacts will be
 stored in the ``dist/`` directory. Use the ``-prod`` flag for a
 production build. Navigate to ``https://localhost:8443``.
 
-Formating TS and SCSS files
-~~~~~~~~~~~~~~~~~~~~~~~~~~~
+Code linting and formatting
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-We use `Prettier <https://prettier.io/>`_ to automatically format TS and SCSS
-files.
-To use this plugin you can either install it in your IDE, if supported, or use
-it via the cli.
+We use the following tools to lint and format the code in all our TS, SCSS and
+HTML files:
 
-We added 2 npm scripts to help running prettier commands:
+- `codelyzer <http://codelyzer.com/>`_
+- `html-linter <https://github.com/chinchiheather/html-linter>`_
+- `Prettier <https://prettier.io/>`_
+- `TSLint <https://palantir.github.io/tslint/>`_
 
-- ``npm run prettier``, will run prettier formatter on all frontend files
-- ``npm run prettier:lint``, will check all frontend files against prettier linter
+We added 2 npm scripts to help run these tools:
+
+- ``npm run lint``, will check frontend files against all linters
+- ``npm run fix``, will try to fix all the detected linting errors
+
+Writing Unit Tests
+~~~~~~~~~~~~~~~~~~
+
+To write unit tests most efficient we have a small collection of tools,
+we use within test suites.
+
+Those tools can be found under
+``src/pybind/mgr/dashboard/frontend/src/testing/``, especially take
+a look at ``unit-test-helper.ts``.
+
+There you will be able to find:
+
+``configureTestBed`` that replaces the initial ``TestBed``
+methods. It takes the same arguments as ``TestBed.configureTestingModule``.
+Using it will run your tests a lot faster in development, as it doesn't
+recreate everything from scratch on every test. To use the default behaviour
+pass ``true`` as the second argument.
+
+``PermissionHelper`` to help determine if
+the correct actions are shown based on the current permissions and selection
+in a list.
+
+``FormHelper`` which makes testing a form a lot easier
+with a few simple methods. It allows you to set a control or multiple
+controls, expect if a control is valid or has an error or just do both with
+one method. Additional you can expect a template element or multiple elements
+to be visible in the rendered template.
 
 Running Unit Tests
 ~~~~~~~~~~~~~~~~~~
@@ -121,6 +154,16 @@ Remote:
 Note:
   When using docker, as your device, you might need to run the script with sudo
   permissions.
+
+Writing End-to-End Tests
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+When writing e2e tests you don't want to recompile every time from scratch to
+try out if your test has succeeded. As usual you have your development server
+open (``npm start``) which already has compiled all files. To attach
+`Protractor <http://www.protractortest.org/>`__ to this process, instead of
+spinning up it's own server, you can use ``npm run e2e -- --dev-server-target``
+or just ``npm run e2e:dev`` which is equivalent.
 
 Further Help
 ~~~~~~~~~~~~
@@ -187,6 +230,180 @@ Example:
       Some <strong>helper</strong> html text
     </cd-helper>
 
+Frontend branding
+~~~~~~~~~~~~~~~~~
+
+Every vendor can customize the 'Ceph dashboard' to his needs. No matter if
+logo, HTML-Template or TypeScript, every file inside the frontend folder can be
+replaced.
+
+To replace files, open ``./frontend/angular.json`` and scroll to the section
+``fileReplacements`` inside the production configuration. Here you can add the
+files you wish to brand. We recommend to place the branded version of a file in
+the same directory as the original one and to add a ``.brand`` to the file
+name, right in front of the file extension. A ``fileReplacement`` could for
+example look like this:
+
+.. code:: javascript
+
+    {
+      "replace": "src/app/core/auth/login/login.component.html",
+      "with": "src/app/core/auth/login/login.component.brand.html"
+    }
+
+To serve or build the branded user interface run:
+
+    $ npm run start -- --prod
+
+or
+
+    $ npm run build -- --prod
+
+Unfortunately it's currently not possible to use multiple configurations when
+serving or building the UI at the same time. That means a configuration just
+for the branding ``fileReplacements`` is not an option, because you want to use
+the production configuration anyway
+(https://github.com/angular/angular-cli/issues/10612).
+Furthermore it's also not possible to use glob expressions for
+``fileReplacements``. As long as the feature hasn't been implemented, you have
+to add the file replacements manually to the angular.json file
+(https://github.com/angular/angular-cli/issues/12354).
+
+Nevertheless you should stick to the suggested naming scheme because it makes
+it easier for you to use glob expressions once it's supported in the future.
+
+To change the variable defaults you can overwrite them in the file
+``./frontend/src/vendor.variables.scss``. Just reassign the variable you want
+to change, for example ``$color-primary: teal;``
+To overwrite or extend the default CSS, you can add your own styles in
+``./frontend/src/vendor.overrides.scss``.
+
+I18N
+----
+
+How to extract messages from source code?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To extract the I18N messages from the templates and the TypeScript files just
+run the following command in ``src/pybind/mgr/dashboard/frontend``::
+
+  $ npm run i18n
+
+This will extract all marked messages from the HTML templates first and then
+add all marked strings from the TypeScript files to the translation template.
+Since the extraction from TypeScript files is still not supported by Angular
+itself, we are using the
+`ngx-translator <https://github.com/ngx-translate/i18n-polyfill>`_ extractor to
+parse the TypeScript files.
+
+When the command ran successfully, it should have created or updated the file
+``src/locale/messages.xlf``.
+
+To make sure this file is always up to date in master branch, we added a
+validation in ``run-frontend-unittests.sh`` that will fail if it finds
+uncommitted translations.
+
+Supported languages
+~~~~~~~~~~~~~~~~~~~
+
+All our supported languages should be registeredd in
+``supported-languages.enum.ts``, this will then provide that list to both the
+language selectors in the frontend.
+
+Translating process
+~~~~~~~~~~~~~~~~~~~
+
+To facilitate the translation process of the dashboard we are using a web tool
+called `transifex <https://www.transifex.com/>`_.
+
+If you wish to help translating to any language just go to our `transifex
+project page <https://www.transifex.com/ceph/ceph-dashboard/>`_, join the
+project and you can start translating immediately.
+
+All translations will then be reviewed and later pushed upstream.
+
+Updating translated messages
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Any time there are new messages translated and reviewed in a specific language
+we should update the translation file upstream.
+
+To do that, we need to download the language xlf file from transifex and replace
+the current one in the repository. Since Angular doesn't support missing
+translations, we need to do an extra step and fill all the untranslated strings
+with the source string.
+
+Each language file should be placed in ``src/locale/messages.<locale-id>.xlf``.
+For example, the path for german would be ``src/locale/messages.de-DE.xlf``.
+``<locale-id>`` should match the id previouisly inserted in
+``supported-languages.enum.ts``.
+
+Suggestions
+~~~~~~~~~~~
+
+Strings need to start and end in the same line as the element:
+
+.. code-block:: xml
+
+  <!-- avoid -->
+  <span i18n>
+    Foo
+  </span>
+
+  <!-- recommended -->
+  <span i18n>Foo</span>
+
+
+  <!-- avoid -->
+  <span i18n>
+    Foo bar baz.
+    Foo bar baz.
+  </span>
+
+  <!-- recommended -->
+  <span i18n>Foo bar baz.
+    Foo bar baz.</span>
+
+Isolated interpolations should not be translated:
+
+.. code-block:: xml
+
+  <!-- avoid -->
+  <span i18n>{{ foo }}</span>
+
+  <!-- recommended -->
+  <span>{{ foo }}</span>
+
+Interpolations used in a sentence should be kept in the translation:
+
+.. code-block:: xml
+
+  <!-- recommended -->
+  <span i18n>There are {{ x }} OSDs.</span>
+
+Remove elements that are outside the context of the translation:
+
+.. code-block:: xml
+
+  <!-- avoid -->
+  <label i18n>
+    Profile
+    <span class="required"></span>
+  </label>
+
+  <!-- recommended -->
+  <label>
+    <ng-container i18n>Profile<ng-container>
+    <span class="required"></span>
+  </label>
+
+Keep elements that affect the sentence:
+
+.. code-block:: xml
+
+  <!-- recommended -->
+  <span i18n>Profile <b>foo</b> will be removed.</span>
+
 Backend Development
 -------------------
 
@@ -224,10 +441,27 @@ Alternatively, you can use Python's native package installation method::
   $ pip install tox
   $ pip install coverage
 
-To run the tests, run ``tox`` in the dashboard directory (where ``tox.ini``
-is located).
+To run the tests, run ``run-tox.sh`` in the dashboard directory (where
+``tox.ini`` is located)::
 
-We also collect coverage information from the backend code. You can check the
+  ## Run Python 2+3 tests+lint commands:
+  $ ./run-tox.sh
+
+  ## Run Python 3 tests+lint commands:
+  $ WITH_PYTHON2=OFF ./run-tox.sh
+
+  ## Run Python 3 arbitrary command (e.g. 1 single test):
+  $ WITH_PYTHON2=OFF ./run-tox.sh pytest tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
+
+You can also run tox instead of ``run-tox.sh``::
+
+  ## Run Python 3 tests command:
+  $ CEPH_BUILD_DIR=.tox tox -e py3-cov
+
+  ## Run Python 3 arbitrary command (e.g. 1 single test):
+  $ CEPH_BUILD_DIR=.tox tox -e py3-run pytest tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
+
+We also collect coverage information from the backend code when you run tests. You can check the
 coverage information provided by the tox output, or by running the following
 command after tox has finished successfully::
 
@@ -236,36 +470,66 @@ command after tox has finished successfully::
 This command will create a directory ``htmlcov`` with an HTML representation of
 the code coverage of the backend.
 
-You can also run a single step of the tox script (aka tox environment), for
-instance if you only want to run the linting tools, do::
-
-  $ tox -e lint
-
 API tests based on Teuthology
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To run our API tests against a real Ceph cluster, we leverage the Teuthology framework. This
-has the advantage of catching bugs originated from changes in the internal Ceph
-code.
+How to run existing API tests:
+  To run the API tests against a real Ceph cluster, we leverage the Teuthology
+  framework. This has the advantage of catching bugs originated from changes in
+  the internal Ceph code.
 
+  Our ``run-backend-api-tests.sh`` script will start a ``vstart`` Ceph cluster
+  before running the Teuthology tests, and then it stops the cluster after the
+  tests are run. Of course this implies that you have built/compiled Ceph
+  previously.
 
-Our ``run-backend-api-tests.sh`` script will start a ``vstart`` Ceph cluster before running the
-Teuthology tests, and then it stops the cluster after the tests are run. Of
-course this implies that you have built/compiled Ceph previously.
+  Start all dashboard tests by running::
 
-Start all dashboard tests by running::
+    $ ./run-backend-api-tests.sh
 
-  $ ./run-backend-api-tests.sh
+  Or, start one or multiple specific tests by specifying the test name::
 
-Or, start one or multiple specific tests by specifying the test name::
+    $ ./run-backend-api-tests.sh tasks.mgr.dashboard.test_pool.PoolTest
 
-  $ ./run-backend-api-tests.sh tasks.mgr.dashboard.test_pool.PoolTest
+  Or, ``source`` the script and run the tests manually::
 
-Or, ``source`` the script and run the tests manually::
+    $ source run-backend-api-tests.sh
+    $ run_teuthology_tests [tests]...
+    $ cleanup_teuthology
 
-  $ source run-backend-api-tests.sh
-  $ run_teuthology_tests [tests]...
-  $ cleanup_teuthology
+How to write your own tests:
+  There are two possible ways to write your own API tests:
+
+  The first is by extending one of the existing test classes in the
+  ``qa/tasks/mgr/dashboard`` directory.
+
+  The second way is by adding your own API test module if you're creating a new
+  controller for example. To do so you'll just need to add the file containing
+  your new test class to the ``qa/tasks/mgr/dashboard`` directory and implement
+  all your tests here.
+
+  .. note:: Don't forget to add the path of the newly created module to
+    ``modules`` section in ``qa/suites/rados/mgr/tasks/dashboard.yaml``.
+
+  Short example: Let's assume you created a new controller called
+  ``my_new_controller.py`` and the related test module
+  ``test_my_new_controller.py``. You'll need to add
+  ``tasks.mgr.dashboard.test_my_new_controller`` to the ``modules`` section in
+  the ``dashboard.yaml`` file.
+
+  Also, if you're removing test modules please keep in mind to remove the
+  related section. Otherwise the Teuthology test run will fail.
+
+  Please run your API tests on your dev environment (as explained above)
+  before submitting a pull request. Also make sure that a full QA run in
+  Teuthology/sepia lab (based on your changes) has completed successfully
+  before it gets merged. You don't need to schedule the QA run yourself, just
+  add the 'needs-qa' label to your pull request as soon as you think it's ready
+  for merging (e.g. make check was successful, the pull request is approved and
+  all comments have been addressed). One of the developers who has access to
+  Teuthology/the sepia lab will take care of it and report the result back to
+  you.
+
 
 How to add a new controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -357,7 +621,7 @@ path parameters, query parameters, or body parameters.
 
 For ``GET`` and ``DELETE`` methods, the method's non-optional parameters are
 considered path parameters by default. Optional parameters are considered
-query parameters. By specifing the ``query_parameters`` in the endpoint
+query parameters. By specifying the ``query_parameters`` in the endpoint
 decorator it is possible to make a non-optional parameter to be a query
 parameter.
 
@@ -411,7 +675,7 @@ the ``post`` method case.
 Defining path parameters in endpoints's URLs using python methods's parameters
 is very easy but it is still a bit strict with respect to the position of these
 parameters in the URL structure.
-Sometimes we may want to explictly define a URL scheme that
+Sometimes we may want to explicitly define a URL scheme that
 contains path parameters mixed with static parts of the URL.
 Our controller infrastructure also supports the declaration of URL paths with
 explicit path parameters at both the controller level and method level.
@@ -523,6 +787,44 @@ same applies to other request types:
 | DELETE       | Yes        | delete         | 204         |
 +--------------+------------+----------------+-------------+
 
+How to use a custom API endpoint in a RESTController?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+If you don't have any access restriction you can use ``@Endpoint``. If you
+have set a permission scope to restrict access to your endpoints,
+``@Endpoint`` will fail, as it doesn't know which permission property should be
+used. To use a custom endpoint inside a restricted ``RESTController`` use
+``@RESTController.Collection`` instead. You can also choose
+``@RESTController.Resource`` if you have set a ``RESOURCE_ID`` in your
+``RESTController`` class.
+
+.. code-block:: python
+
+  import cherrypy
+  from ..tools import ApiController, RESTController
+
+  @ApiController('ping', Scope.Ping)
+  class Ping(RESTController):
+    RESOURCE_ID = 'ping'
+
+    @RESTController.Resource('GET')
+    def some_get_endpoint(self):
+      return {"msg": "Hello"}
+
+    @RESTController.Collection('POST')
+    def some_post_endpoint(self, **data):
+      return {"msg": data}
+
+Both decorators also support four parameters to customize the
+endpoint:
+
+* ``method="GET"``: the HTTP method allowed to access this endpoint.
+* ``path="/<method_name>"``: the URL path of the endpoint, excluding the
+  controller URL path prefix.
+* ``status=200``: set the HTTP status response code
+* ``query_params=[]``: list of method parameter names that correspond to URL
+  query parameters.
+
 How to restrict access to a controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -584,7 +886,7 @@ If we want to write a unit test for the above ``Ping`` controller, create a
   class PingTest(ControllerTestCase):
       @classmethod
       def setup_test(cls):
-          Ping._cp_config['tools.authentication.on'] = False
+          Ping._cp_config['tools.authenticate.on'] = False
           cls.setup_controllers([Ping])
 
       def test_ping(self):
@@ -728,7 +1030,7 @@ The value of the class attribute is a pair composed by the default value for tha
 setting, and the python type of the value.
 
 By declaring the ``ADMIN_EMAIL_ADDRESS`` class attribute, when you restart the
-dashboard plugin, you will atomatically gain two additional CLI commands to
+dashboard plugin, you will automatically gain two additional CLI commands to
 get and set that setting::
 
   $ ceph dashboard get-admin-email-address
@@ -886,7 +1188,7 @@ additional parameter called ``executor``. The full method signature of
 
 
 The ``TaskExecutor`` class is responsible for code that executes a given task
-function, and defines three methods that can be overriden by
+function, and defines three methods that can be overridden by
 subclasses::
 
   def init(self, task)

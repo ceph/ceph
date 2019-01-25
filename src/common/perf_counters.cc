@@ -19,21 +19,17 @@
 
 using std::ostringstream;
 
-PerfCountersCollection::PerfCountersCollection(CephContext *cct)
-  : m_cct(cct),
-    m_lock("PerfCountersCollection")
+PerfCountersCollectionImpl::PerfCountersCollectionImpl()
 {
 }
 
-PerfCountersCollection::~PerfCountersCollection()
+PerfCountersCollectionImpl::~PerfCountersCollectionImpl()
 {
   clear();
 }
 
-void PerfCountersCollection::add(class PerfCounters *l)
+void PerfCountersCollectionImpl::add(PerfCounters *l)
 {
-  Mutex::Locker lck(m_lock);
-
   // make sure the name is unique
   perf_counters_set_t::iterator i;
   i = m_loggers.find(l);
@@ -57,10 +53,8 @@ void PerfCountersCollection::add(class PerfCounters *l)
   }
 }
 
-void PerfCountersCollection::remove(class PerfCounters *l)
+void PerfCountersCollectionImpl::remove(PerfCounters *l)
 {
-  Mutex::Locker lck(m_lock);
-
   for (unsigned int i = 0; i < l->m_data.size(); ++i) {
     PerfCounters::perf_counter_data_any_d &data = l->m_data[i];
 
@@ -76,22 +70,21 @@ void PerfCountersCollection::remove(class PerfCounters *l)
   m_loggers.erase(i);
 }
 
-void PerfCountersCollection::clear()
+void PerfCountersCollectionImpl::clear()
 {
-  Mutex::Locker lck(m_lock);
   perf_counters_set_t::iterator i = m_loggers.begin();
   perf_counters_set_t::iterator i_end = m_loggers.end();
   for (; i != i_end; ) {
+    delete *i;
     m_loggers.erase(i++);
   }
 
   by_path.clear();
 }
 
-bool PerfCountersCollection::reset(const std::string &name)
+bool PerfCountersCollectionImpl::reset(const std::string &name)
 {
   bool result = false;
-  Mutex::Locker lck(m_lock);
   perf_counters_set_t::iterator i = m_loggers.begin();
   perf_counters_set_t::iterator i_end = m_loggers.end();
 
@@ -128,14 +121,13 @@ bool PerfCountersCollection::reset(const std::string &name)
  * @param histograms if true, dump histogram values,
  *                   if false dump all non-histogram counters
  */
-void PerfCountersCollection::dump_formatted_generic(
+void PerfCountersCollectionImpl::dump_formatted_generic(
     Formatter *f,
     bool schema,
     bool histograms,
     const std::string &logger,
     const std::string &counter)
 {
-  Mutex::Locker lck(m_lock);
   f->open_object_section("perfcounter_collection");
   
   for (perf_counters_set_t::iterator l = m_loggers.begin();
@@ -148,11 +140,9 @@ void PerfCountersCollection::dump_formatted_generic(
   f->close_section();
 }
 
-void PerfCountersCollection::with_counters(std::function<void(
-      const PerfCountersCollection::CounterMap &)> fn) const
+void PerfCountersCollectionImpl::with_counters(std::function<void(
+      const PerfCountersCollectionImpl::CounterMap &)> fn) const
 {
-  Mutex::Locker lck(m_lock);
-
   fn(by_path);
 }
 
@@ -164,8 +154,10 @@ PerfCounters::~PerfCounters()
 
 void PerfCounters::inc(int idx, uint64_t amt)
 {
+#ifndef WITH_SEASTAR
   if (!m_cct->_conf->perf)
     return;
+#endif
 
   ceph_assert(idx > m_lower_bound);
   ceph_assert(idx < m_upper_bound);
@@ -183,8 +175,10 @@ void PerfCounters::inc(int idx, uint64_t amt)
 
 void PerfCounters::dec(int idx, uint64_t amt)
 {
+#ifndef WITH_SEASTAR
   if (!m_cct->_conf->perf)
     return;
+#endif
 
   ceph_assert(idx > m_lower_bound);
   ceph_assert(idx < m_upper_bound);
@@ -197,8 +191,10 @@ void PerfCounters::dec(int idx, uint64_t amt)
 
 void PerfCounters::set(int idx, uint64_t amt)
 {
+#ifndef WITH_SEASTAR
   if (!m_cct->_conf->perf)
     return;
+#endif
 
   ceph_assert(idx > m_lower_bound);
   ceph_assert(idx < m_upper_bound);
@@ -219,8 +215,10 @@ void PerfCounters::set(int idx, uint64_t amt)
 
 uint64_t PerfCounters::get(int idx) const
 {
+#ifndef WITH_SEASTAR
   if (!m_cct->_conf->perf)
     return 0;
+#endif
 
   ceph_assert(idx > m_lower_bound);
   ceph_assert(idx < m_upper_bound);
@@ -232,8 +230,10 @@ uint64_t PerfCounters::get(int idx) const
 
 void PerfCounters::tinc(int idx, utime_t amt)
 {
+#ifndef WITH_SEASTAR
   if (!m_cct->_conf->perf)
     return;
+#endif
 
   ceph_assert(idx > m_lower_bound);
   ceph_assert(idx < m_upper_bound);
@@ -251,8 +251,10 @@ void PerfCounters::tinc(int idx, utime_t amt)
 
 void PerfCounters::tinc(int idx, ceph::timespan amt)
 {
+#ifndef WITH_SEASTAR
   if (!m_cct->_conf->perf)
     return;
+#endif
 
   ceph_assert(idx > m_lower_bound);
   ceph_assert(idx < m_upper_bound);
@@ -270,8 +272,10 @@ void PerfCounters::tinc(int idx, ceph::timespan amt)
 
 void PerfCounters::tset(int idx, utime_t amt)
 {
+#ifndef WITH_SEASTAR
   if (!m_cct->_conf->perf)
     return;
+#endif
 
   ceph_assert(idx > m_lower_bound);
   ceph_assert(idx < m_upper_bound);
@@ -285,8 +289,10 @@ void PerfCounters::tset(int idx, utime_t amt)
 
 utime_t PerfCounters::tget(int idx) const
 {
+#ifndef WITH_SEASTAR
   if (!m_cct->_conf->perf)
     return utime_t();
+#endif
 
   ceph_assert(idx > m_lower_bound);
   ceph_assert(idx < m_upper_bound);
@@ -299,8 +305,10 @@ utime_t PerfCounters::tget(int idx) const
 
 void PerfCounters::hinc(int idx, int64_t x, int64_t y)
 {
+#ifndef WITH_SEASTAR
   if (!m_cct->_conf->perf)
     return;
+#endif
 
   ceph_assert(idx > m_lower_bound);
   ceph_assert(idx < m_upper_bound);
@@ -314,8 +322,10 @@ void PerfCounters::hinc(int idx, int64_t x, int64_t y)
 
 pair<uint64_t, uint64_t> PerfCounters::get_tavg_ns(int idx) const
 {
+#ifndef WITH_SEASTAR
   if (!m_cct->_conf->perf)
     return make_pair(0, 0);
+#endif
 
   ceph_assert(idx > m_lower_bound);
   ceph_assert(idx < m_upper_bound);
@@ -463,9 +473,12 @@ PerfCounters::PerfCounters(CephContext *cct, const std::string &name,
   : m_cct(cct),
     m_lower_bound(lower_bound),
     m_upper_bound(upper_bound),
-    m_name(name.c_str()),
+    m_name(name)
+#ifndef WITH_SEASTAR
+    ,
     m_lock_name(std::string("PerfCounters::") + name.c_str()),
-    m_lock(m_lock_name.c_str())
+    m_lock(ceph::make_mutex(m_lock_name))
+#endif
 {
   m_data.resize(upper_bound - lower_bound - 1);
 }

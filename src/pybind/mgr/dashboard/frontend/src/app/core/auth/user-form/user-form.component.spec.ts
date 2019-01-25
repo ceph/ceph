@@ -6,10 +6,10 @@ import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import { BsModalService } from 'ngx-bootstrap';
+import { BsModalService } from 'ngx-bootstrap/modal';
 import { of } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
 import { RoleService } from '../../../shared/api/role.service';
 import { UserService } from '../../../shared/api/user.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
@@ -28,6 +28,8 @@ describe('UserFormComponent', () => {
   let userService: UserService;
   let modalService: BsModalService;
   let router: Router;
+  let formHelper: FormHelper;
+
   const setUrl = (url) => Object.defineProperty(router, 'url', { value: url });
 
   @Component({ selector: 'cd-fake', template: '' })
@@ -41,15 +43,15 @@ describe('UserFormComponent', () => {
   configureTestBed(
     {
       imports: [
-        [RouterTestingModule.withRoutes(routes)],
+        RouterTestingModule.withRoutes(routes),
         HttpClientTestingModule,
         ReactiveFormsModule,
-        RouterTestingModule,
         ComponentsModule,
         ToastModule.forRoot(),
         SharedModule
       ],
-      declarations: [UserFormComponent, FakeComponent]
+      declarations: [UserFormComponent, FakeComponent],
+      providers: i18nProviders
     },
     true
   );
@@ -66,6 +68,7 @@ describe('UserFormComponent', () => {
     fixture.detectChanges();
     const notify = TestBed.get(NotificationService);
     spyOn(notify, 'show');
+    formHelper = new FormHelper(form);
   });
 
   it('should create', () => {
@@ -86,27 +89,18 @@ describe('UserFormComponent', () => {
     });
 
     it('should validate username required', () => {
-      form.get('username').setValue('');
-      expect(form.get('username').hasError('required')).toBeTruthy();
-    });
-
-    it('should validate password required', () => {
-      ['password', 'confirmpassword'].forEach((key) =>
-        expect(form.get(key).hasError('required')).toBeTruthy()
-      );
+      formHelper.expectErrorChange('username', '', 'required');
+      formHelper.expectValidChange('username', 'user1');
     });
 
     it('should validate password match', () => {
-      form.get('password').setValue('aaa');
-      form.get('confirmpassword').setValue('bbb');
-      expect(form.get('confirmpassword').hasError('match')).toBeTruthy();
-      form.get('confirmpassword').setValue('aaa');
-      expect(form.get('confirmpassword').valid).toBeTruthy();
+      formHelper.setValue('password', 'aaa');
+      formHelper.expectErrorChange('confirmpassword', 'bbb', 'match');
+      formHelper.expectValidChange('confirmpassword', 'aaa');
     });
 
     it('should validate email', () => {
-      form.get('email').setValue('aaa');
-      expect(form.get('email').hasError('email')).toBeTruthy();
+      formHelper.expectErrorChange('email', 'aaa', 'email');
     });
 
     it('should set mode', () => {
@@ -121,8 +115,8 @@ describe('UserFormComponent', () => {
         email: 'user0@email.com',
         roles: ['administrator']
       };
-      Object.keys(user).forEach((k) => form.get(k).setValue(user[k]));
-      form.get('confirmpassword').setValue(user.password);
+      formHelper.setMultipleValues(user);
+      formHelper.setValue('confirmpassword', user.password);
       component.submit();
       const userReq = httpTesting.expectOne('api/user');
       expect(userReq.request.method).toBe('POST');
@@ -196,35 +190,26 @@ describe('UserFormComponent', () => {
       expect(component.mode).toBe('editing');
     });
 
-    it('should validate password not required', () => {
-      ['password', 'confirmpassword'].forEach((key) => {
-        form.get(key).setValue('');
-        expect(form.get(key).hasError('required')).toBeFalsy();
-      });
-    });
-
     it('should alert if user is removing needed role permission', () => {
       spyOn(TestBed.get(AuthStorageService), 'getUsername').and.callFake(() => user.username);
       let modalBodyTpl = null;
       spyOn(modalService, 'show').and.callFake((content, config) => {
         modalBodyTpl = config.initialState.bodyTpl;
       });
-      form.get('roles').setValue(['read-only']);
+      formHelper.setValue('roles', ['read-only']);
       component.submit();
       expect(modalBodyTpl).toEqual(component.removeSelfUserReadUpdatePermissionTpl);
     });
 
     it('should logout if current user roles have been changed', () => {
       spyOn(TestBed.get(AuthStorageService), 'getUsername').and.callFake(() => user.username);
-      form.get('roles').setValue(['user-manager']);
+      formHelper.setValue('roles', ['user-manager']);
       component.submit();
       const userReq = httpTesting.expectOne(`api/user/${user.username}`);
       expect(userReq.request.method).toBe('PUT');
       userReq.flush({});
-      const authReq = httpTesting.expectOne('api/auth');
-      expect(authReq.request.method).toBe('DELETE');
-      authReq.flush(null);
-      expect(router.navigate).toHaveBeenCalledWith(['/login']);
+      const authReq = httpTesting.expectOne('api/auth/logout');
+      expect(authReq.request.method).toBe('POST');
     });
 
     it('should submit', () => {

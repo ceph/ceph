@@ -1,12 +1,14 @@
 import { Component, ViewChild } from '@angular/core';
 
-import { BsModalService } from 'ngx-bootstrap';
+import { I18n } from '@ngx-translate/i18n-polyfill';
+import { BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
-import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
+import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
+import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
@@ -23,6 +25,7 @@ export class RgwUserListComponent {
   table: TableComponent;
 
   permission: Permission;
+  tableActions: CdTableAction[];
   columns: CdTableColumn[] = [];
   users: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
@@ -30,37 +33,59 @@ export class RgwUserListComponent {
   constructor(
     private authStorageService: AuthStorageService,
     private rgwUserService: RgwUserService,
-    private bsModalService: BsModalService
+    private bsModalService: BsModalService,
+    private i18n: I18n
   ) {
     this.permission = this.authStorageService.getPermissions().rgw;
     this.columns = [
       {
-        name: 'Username',
-        prop: 'user_id',
+        name: this.i18n('Username'),
+        prop: 'uid',
         flexGrow: 1
       },
       {
-        name: 'Full name',
+        name: this.i18n('Full name'),
         prop: 'display_name',
         flexGrow: 1
       },
       {
-        name: 'Email address',
+        name: this.i18n('Email address'),
         prop: 'email',
         flexGrow: 1
       },
       {
-        name: 'Suspended',
+        name: this.i18n('Suspended'),
         prop: 'suspended',
         flexGrow: 1,
         cellTransformation: CellTemplate.checkIcon
       },
       {
-        name: 'Max. buckets',
+        name: this.i18n('Max. buckets'),
         prop: 'max_buckets',
         flexGrow: 1
       }
     ];
+    const getUserUri = () =>
+      this.selection.first() && `${encodeURIComponent(this.selection.first().uid)}`;
+    const addAction: CdTableAction = {
+      permission: 'create',
+      icon: 'fa-plus',
+      routerLink: () => '/rgw/user/add',
+      name: this.i18n('Add')
+    };
+    const editAction: CdTableAction = {
+      permission: 'update',
+      icon: 'fa-pencil',
+      routerLink: () => `/rgw/user/edit/${getUserUri()}`,
+      name: this.i18n('Edit')
+    };
+    const deleteAction: CdTableAction = {
+      permission: 'delete',
+      icon: 'fa-times',
+      click: () => this.deleteAction(),
+      name: this.i18n('Delete')
+    };
+    this.tableActions = [addAction, editAction, deleteAction];
   }
 
   getUserList(context: CdTableFetchDataContext) {
@@ -79,35 +104,35 @@ export class RgwUserListComponent {
   }
 
   deleteAction() {
-    const modalRef = this.bsModalService.show(DeletionModalComponent);
-    modalRef.content.setUp({
-      metaType: this.selection.hasSingleSelection ? 'user' : 'users',
-      deletionObserver: (): Observable<any> => {
-        return new Observable((observer: Subscriber<any>) => {
-          // Delete all selected data table rows.
-          observableForkJoin(
-            this.selection.selected.map((user: any) => {
-              return this.rgwUserService.delete(user.user_id);
-            })
-          ).subscribe(
-            null,
-            (error) => {
-              // Forward the error to the observer.
-              observer.error(error);
-              // Reload the data table content because some deletions might
-              // have been executed successfully in the meanwhile.
-              this.table.refreshBtn();
-            },
-            () => {
-              // Notify the observer that we are done.
-              observer.complete();
-              // Reload the data table content.
-              this.table.refreshBtn();
-            }
-          );
-        });
-      },
-      modalRef: modalRef
+    this.bsModalService.show(CriticalConfirmationModalComponent, {
+      initialState: {
+        itemDescription: this.selection.hasSingleSelection ? this.i18n('user') : this.i18n('users'),
+        submitActionObservable: (): Observable<any> => {
+          return new Observable((observer: Subscriber<any>) => {
+            // Delete all selected data table rows.
+            observableForkJoin(
+              this.selection.selected.map((user: any) => {
+                return this.rgwUserService.delete(user.uid);
+              })
+            ).subscribe(
+              null,
+              (error) => {
+                // Forward the error to the observer.
+                observer.error(error);
+                // Reload the data table content because some deletions might
+                // have been executed successfully in the meanwhile.
+                this.table.refreshBtn();
+              },
+              () => {
+                // Notify the observer that we are done.
+                observer.complete();
+                // Reload the data table content.
+                this.table.refreshBtn();
+              }
+            );
+          });
+        }
+      }
     });
   }
 }

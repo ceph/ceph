@@ -151,6 +151,8 @@ int get_formatter(const boost::program_options::variables_map &vm,
 
 void init_context();
 
+int init_rados(librados::Rados *rados);
+
 int init(const std::string &pool_name, const std::string& namespace_name,
          librados::Rados *rados, librados::IoCtx *io_ctx);
 int init_io_ctx(librados::Rados &rados, const std::string &pool_name,

@@ -66,7 +66,7 @@ TEST(mClockPriorityQueue, Sizes)
   ceph::mClockQueue<Request,Client> q(&client_info_func);
 
   ASSERT_TRUE(q.empty());
-  ASSERT_EQ(0u, q.length());
+  ASSERT_EQ(0u, q.get_size_slow());
 
   Client c1(1);
   Client c2(2);
@@ -79,7 +79,7 @@ TEST(mClockPriorityQueue, Sizes)
   q.enqueue_strict(c2, 1, Request(6));
 
   ASSERT_FALSE(q.empty());
-  ASSERT_EQ(6u, q.length());
+  ASSERT_EQ(6u, q.get_size_slow());
 
 
   for (int i = 0; i < 6; ++i) {
@@ -87,7 +87,7 @@ TEST(mClockPriorityQueue, Sizes)
   }
 
   ASSERT_TRUE(q.empty());
-  ASSERT_EQ(0u, q.length());
+  ASSERT_EQ(0u, q.get_size_slow());
 }
 
 
@@ -260,11 +260,11 @@ TEST(mClockPriorityQueue, RemoveByClass)
     out.pop_front();
   }
 
-  ASSERT_EQ(6u, q.length()) << "after removal of three from client c2";
+  ASSERT_EQ(6u, q.get_size_slow()) << "after removal of three from client c2";
 
   q.remove_by_class(c3);
 
-  ASSERT_EQ(3u, q.length()) << "after removal of three from client c3";
+  ASSERT_EQ(3u, q.get_size_slow()) << "after removal of three from client c3";
   while (!q.empty()) {
     Request r = q.dequeue();
     ASSERT_TRUE((r.value & in_mask) > 0) <<
@@ -310,7 +310,7 @@ TEST(mClockPriorityQueue, RemoveByFilter)
     filtered.pop_front();
   }
 
-  ASSERT_EQ(5u, q.length()) <<
+  ASSERT_EQ(5u, q.get_size_slow()) <<
     "filter should have left five remaining elements";
   while (!q.empty()) {
     Request r = q.dequeue();

@@ -154,7 +154,7 @@ private:
 
     // should have been canceled prior to releasing lock
     ceph_assert(image_ctx.exclusive_lock == nullptr ||
-           image_ctx.exclusive_lock->is_lock_owner());
+                image_ctx.exclusive_lock->is_lock_owner());
 
     RWLock::RLocker snap_locker(image_ctx.snap_lock);
     ceph_assert(image_ctx.object_map != nullptr);
@@ -259,7 +259,8 @@ void ObjectMapIterateRequest<I>::send_verify_objects() {
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
     this, m_image_ctx, context_factory, this->create_callback_context(),
     &m_prog_ctx, 0, num_objects);
-  throttle->start_ops(m_image_ctx.concurrent_management_ops);
+  throttle->start_ops(
+    m_image_ctx.config.template get_val<uint64_t>("rbd_concurrent_management_ops"));
 }
 
 template <typename I>

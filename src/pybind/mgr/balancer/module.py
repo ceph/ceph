@@ -14,11 +14,6 @@ from mgr_module import MgrModule, CommandResult
 from threading import Event
 from mgr_module import CRUSHMap
 
-# available modes: 'none', 'crush', 'crush-compat', 'upmap', 'osd_weight'
-default_mode = 'none'
-default_sleep_interval = 60   # seconds
-default_max_misplaced = .05    # max ratio of pgs replaced at a time
-
 TIME_FORMAT = '%Y-%m-%d_%H:%M:%S'
 
 class MappingState:
@@ -202,18 +197,102 @@ class Eval:
         return r
 
 class Module(MgrModule):
-    OPTIONS = [
-            {'name': 'active'},
-            {'name': 'begin_time'},
-            {'name': 'crush_compat_max_iterations'},
-            {'name': 'crush_compat_step'},
-            {'name': 'end_time'},
-            {'name': 'max_misplaced'},
-            {'name': 'min_score'},
-            {'name': 'mode'},
-            {'name': 'sleep_interval'},
-            {'name': 'upmap_max_iterations'},
-            {'name': 'upmap_max_deviation'},
+    MODULE_OPTIONS = [
+        {
+            'name': 'active',
+            'type': 'bool',
+            'default': False,
+            'desc': 'automatically balance PGs across cluster',
+            'runtime': True,
+        },
+        {
+            'name': 'begin_time',
+            'type': 'str',
+            'default': '0000',
+            'desc': 'beginning time of day to automatically balance',
+            'long_desc': 'This is a time of day in the format HHMM.',
+            'runtime': True,
+        },
+        {
+            'name': 'end_time',
+            'type': 'str',
+            'default': '2400',
+            'desc': 'ending time of day to automatically balance',
+            'long_desc': 'This is a time of day in the format HHMM.',
+            'runtime': True,
+        },
+        {
+            'name': 'crush_compat_max_iterations',
+            'type': 'uint',
+            'default': 25,
+            'min': '1',
+            'max': '250',
+            'desc': 'maximum number of iterations to attempt optimization',
+            'runtime': True,
+        },
+        {
+            'name': 'crush_compat_metrics',
+            'type': 'str',
+            'default': 'pgs,objects,bytes',
+            'desc': 'metrics with which to calculate OSD utilization',
+            'long_desc': 'Value is a list of one or more of "pgs", "objects", or "bytes", and indicates which metrics to use to balance utilization.',
+            'runtime': True,
+        },
+        {
+            'name': 'crush_compat_step',
+            'type': 'float',
+            'default': .5,
+            'min': '.001',
+            'max': '.999',
+            'desc': 'aggressiveness of optimization',
+            'long_desc': '.99 is very aggressive, .01 is less aggressive',
+            'runtime': True,
+        },
+        {
+            'name': 'min_score',
+            'type': 'float',
+            'default': 0,
+            'desc': 'minimum score, below which no optimization is attempted',
+            'runtime': True,
+        },
+        {
+            'name': 'mode',
+            'desc': 'Balancer mode',
+            'default': 'none',
+            'enum_allowed': ['none', 'crush-compat', 'upmap'],
+            'runtime': True,
+        },
+        {
+            'name': 'sleep_interval',
+            'type': 'secs',
+            'default': 60,
+            'desc': 'how frequently to wake up and attempt optimization',
+            'runtime': True,
+        },
+        {
+            'name': 'upmap_max_iterations',
+            'type': 'uint',
+            'default': 10,
+            'desc': 'maximum upmap optimization iterations',
+            'runtime': True,
+        },
+        {
+            'name': 'upmap_max_deviation',
+            'type': 'float',
+            'default': .01,
+            'min': 0,
+            'max': 1,
+            'desc': 'deviation below which no optimization is attempted',
+            'long_desc': 'If the ratio between the fullest and least-full OSD is below this value then we stop trying to optimize placement.',
+            'runtime': True,
+        },
+        {
+            'name': 'pool_ids',
+            'type': 'str',
+            'default': '',
+            'desc': 'pools which the automatic balancing will be limited to',
+            'runtime': True,
+        },
     ]
 
     COMMANDS = [
@@ -235,6 +314,23 @@ class Module(MgrModule):
         {
             "cmd": "balancer off",
             "desc": "Disable automatic balancing",
+            "perm": "rw",
+        },
+        {
+            "cmd": "balancer pool ls",
+            "desc": "List automatic balancing pools. "
+                    "Note that empty list means all existing pools will be automatic balancing targets, "
+                    "which is the default behaviour of balancer.",
+            "perm": "r",
+        },
+        {
+            "cmd": "balancer pool add name=pools,type=CephString,n=N",
+            "desc": "Enable automatic balancing for specific pools",
+            "perm": "rw",
+        },
+        {
+            "cmd": "balancer pool rm name=pools,type=CephString,n=N",
+            "desc": "Disable automatic balancing for specific pools",
             "perm": "rw",
         },
         {
@@ -296,25 +392,80 @@ class Module(MgrModule):
         self.log.warn("Handling command: '%s'" % str(command))
         if command['prefix'] == 'balancer status':
             s = {
-                'plans': self.plans.keys(),
+                'plans': list(self.plans.keys()),
                 'active': self.active,
-                'mode': self.get_config('mode', default_mode),
+                'mode': self.get_module_option('mode'),
             }
             return (0, json.dumps(s, indent=4), '')
         elif command['prefix'] == 'balancer mode':
-            self.set_config('mode', command['mode'])
+            if command['mode'] == 'upmap':
+                min_compat_client = self.get_osdmap().dump().get('require_min_compat_client', '')
+                if min_compat_client < 'luminous': # works well because version is alphabetized..
+                    warn = 'min_compat_client "%s" ' \
+                           '< "luminous", which is required for pg-upmap. ' \
+                           'Try "ceph osd set-require-min-compat-client luminous" ' \
+                           'before enabling this mode' % min_compat_client
+                    return (-errno.EPERM, '', warn)
+            self.set_module_option('mode', command['mode'])
             return (0, '', '')
         elif command['prefix'] == 'balancer on':
             if not self.active:
-                self.set_config('active', '1')
+                self.set_module_option('active', 'true')
                 self.active = True
             self.event.set()
             return (0, '', '')
         elif command['prefix'] == 'balancer off':
             if self.active:
-                self.set_config('active', '')
+                self.set_module_option('active', 'false')
                 self.active = False
             self.event.set()
+            return (0, '', '')
+        elif command['prefix'] == 'balancer pool ls':
+            pool_ids = self.get_module_option('pool_ids')
+            if pool_ids is '':
+                return (0, '', '')
+            pool_ids = pool_ids.split(',')
+            pool_ids = [int(p) for p in pool_ids]
+            pool_name_by_id = dict((p['pool'], p['pool_name']) for p in self.get_osdmap().dump().get('pools', []))
+            should_prune = False
+            final_ids = []
+            final_names = []
+            for p in pool_ids:
+                if p in pool_name_by_id:
+                    final_ids.append(p)
+                    final_names.append(pool_name_by_id[p])
+                else:
+                    should_prune = True
+            if should_prune: # some pools were gone, prune
+                self.set_module_option('pool_ids', ','.join(final_ids))
+            return (0, json.dumps(final_names, indent=4), '')
+        elif command['prefix'] == 'balancer pool add':
+            raw_names = command['pools']
+            pool_id_by_name = dict((p['pool_name'], p['pool']) for p in self.get_osdmap().dump().get('pools', []))
+            invalid_names = [p for p in raw_names if p not in pool_id_by_name]
+            if invalid_names:
+                return (-errno.EINVAL, '', 'pool(s) %s not found' % invalid_names)
+            to_add = [str(pool_id_by_name[p]) for p in raw_names if p in pool_id_by_name]
+            existing = self.get_module_option('pool_ids')
+            final = to_add
+            if existing is not '':
+                existing = existing.split(',')
+                final = set(to_add) | set(existing)
+            self.set_module_option('pool_ids', ','.join(final))
+            return (0, '', '')
+        elif command['prefix'] == 'balancer pool rm':
+            raw_names = command['pools']
+            existing = self.get_module_option('pool_ids')
+            if existing is '': # for idempotence
+                return (0, '', '')
+            existing = existing.split(',')
+            osdmap = self.get_osdmap()
+            pool_ids = [str(p['pool']) for p in osdmap.dump().get('pools', [])]
+            pool_id_by_name = dict((p['pool_name'], p['pool']) for p in osdmap.dump().get('pools', []))
+            final = [p for p in existing if p in pool_ids]
+            to_delete = [str(pool_id_by_name[p]) for p in raw_names if p in pool_id_by_name]
+            final = set(final) - set(to_delete)
+            self.set_module_option('pool_ids', ','.join(final))
             return (0, '', '')
         elif command['prefix'] == 'balancer eval' or command['prefix'] == 'balancer eval-verbose':
             verbose = command['prefix'] == 'balancer eval-verbose'
@@ -400,19 +551,30 @@ class Module(MgrModule):
     def serve(self):
         self.log.info('Starting')
         while self.run:
-            self.active = self.get_config('active', '') is not ''
-            begin_time = self.get_config('begin_time') or '0000'
-            end_time = self.get_config('end_time') or '2400'
+            self.active = self.get_module_option('active')
+            begin_time = self.get_module_option('begin_time')
+            end_time = self.get_module_option('end_time')
             timeofday = time.strftime('%H%M', time.localtime())
             self.log.debug('Waking up [%s, scheduled for %s-%s, now %s]',
                            "active" if self.active else "inactive",
                            begin_time, end_time, timeofday)
-            sleep_interval = float(self.get_config('sleep_interval',
-                                                   default_sleep_interval))
+            sleep_interval = self.get_module_option('sleep_interval')
             if self.active and self.time_in_interval(timeofday, begin_time, end_time):
                 self.log.debug('Running')
                 name = 'auto_%s' % time.strftime(TIME_FORMAT, time.gmtime())
-                plan = self.plan_create(name, self.get_osdmap(), [])
+                osdmap = self.get_osdmap()
+                allow = self.get_module_option('pool_ids')
+                final = []
+                if allow is not '':
+                    allow = allow.split(',')
+                    valid = [str(p['pool']) for p in osdmap.dump().get('pools', [])]
+                    final = set(allow) & set(valid)
+                    if set(allow) - set(valid): # some pools were gone, prune
+                        self.set_module_option('pool_ids', ','.join(final))
+                    pool_name_by_id = dict((p['pool'], p['pool_name']) for p in osdmap.dump().get('pools', []))
+                    final = [int(p) for p in final]
+                    final = [pool_name_by_id[p] for p in final if p in pool_name_by_id]
+                plan = self.plan_create(name, osdmap, final)
                 r, detail = self.optimize(plan)
                 if r == 0:
                     self.execute(plan)
@@ -493,7 +655,7 @@ class Module(MgrModule):
                 'objects': {},
                 'bytes': {},
             }
-            for osd in pe.target_by_root[root].iterkeys():
+            for osd in pe.target_by_root[root]:
                 actual_by_root[root]['pgs'][osd] = 0
                 actual_by_root[root]['objects'][osd] = 0
                 actual_by_root[root]['bytes'][osd] = 0
@@ -517,7 +679,7 @@ class Module(MgrModule):
             objects_by_osd = {}
             bytes_by_osd = {}
             for root in pe.pool_roots[pool]:
-                for osd in pe.target_by_root[root].iterkeys():
+                for osd in pe.target_by_root[root]:
                     pgs_by_osd[osd] = 0
                     objects_by_osd[osd] = 0
                     bytes_by_osd[osd] = 0
@@ -577,7 +739,7 @@ class Module(MgrModule):
                 'objects': objects,
                 'bytes': bytes,
             }
-        for root in pe.total_by_root.iterkeys():
+        for root in pe.total_by_root:
             pe.count_by_root[root] = {
                 'pgs': {
                     k: float(v)
@@ -629,12 +791,16 @@ class Module(MgrModule):
         }
         self.log.debug('score_by_root %s' % pe.score_by_root)
 
+        # get the list of score metrics, comma separated
+        metrics = self.get_module_option('crush_compat_metrics').split(',')
+
         # total score is just average of normalized stddevs
         pe.score = 0.0
         for r, vs in six.iteritems(pe.score_by_root):
             for k, v in six.iteritems(vs):
-                pe.score += v
-        pe.score /= 3 * len(roots)
+                if k in metrics:
+                    pe.score += v
+        pe.score /= len(metrics) * len(roots)
         return pe
 
     def evaluate(self, ms, pools, verbose=False):
@@ -643,9 +809,8 @@ class Module(MgrModule):
 
     def optimize(self, plan):
         self.log.info('Optimize plan %s' % plan.name)
-        plan.mode = self.get_config('mode', default_mode)
-        max_misplaced = float(self.get_config('max_misplaced',
-                                              default_max_misplaced))
+        plan.mode = self.get_module_option('mode')
+        max_misplaced = float(self.get_ceph_option('target_max_misplaced_ratio'))
         self.log.info('Mode %s, max misplaced %f' %
                       (plan.mode, max_misplaced))
 
@@ -690,8 +855,8 @@ class Module(MgrModule):
 
     def do_upmap(self, plan):
         self.log.info('do_upmap')
-        max_iterations = int(self.get_config('upmap_max_iterations', 10))
-        max_deviation = float(self.get_config('upmap_max_deviation', .01))
+        max_iterations = self.get_module_option('upmap_max_iterations')
+        max_deviation = self.get_module_option('upmap_max_deviation')
 
         ms = plan.initial
         if len(plan.pools):
@@ -709,7 +874,12 @@ class Module(MgrModule):
         inc = plan.inc
         total_did = 0
         left = max_iterations
+        pools_with_pg_merge = [p['pool_name'] for p in self.get_osdmap().dump().get('pools', [])
+                               if p['pg_num'] > p['pg_num_target']]
         for pool in pools:
+            if pool in pools_with_pg_merge:
+                self.log.info('pool %s has pending PG(s) for merging, skipping for now' % pool)
+                continue
             did = ms.osdmap.calc_pg_upmaps(inc, max_deviation, left, [pool])
             total_did += did
             left -= did
@@ -717,27 +887,27 @@ class Module(MgrModule):
                 break
         self.log.info('prepared %d/%d changes' % (total_did, max_iterations))
         if total_did == 0:
-            return -errno.EALREADY, 'Unable to find further optimization,' \
+            return -errno.EALREADY, 'Unable to find further optimization, ' \
+                                    'or pool(s)\' pg_num is decreasing, ' \
                                     'or distribution is already perfect'
         return 0, ''
 
     def do_crush_compat(self, plan):
         self.log.info('do_crush_compat')
-        max_iterations = int(self.get_config('crush_compat_max_iterations', 25))
+        max_iterations = self.get_module_option('crush_compat_max_iterations')
         if max_iterations < 1:
             return -errno.EINVAL, '"crush_compat_max_iterations" must be >= 1'
-        step = float(self.get_config('crush_compat_step', .5))
+        step = self.get_module_option('crush_compat_step')
         if step <= 0 or step >= 1.0:
             return -errno.EINVAL, '"crush_compat_step" must be in (0, 1)'
-        max_misplaced = float(self.get_config('max_misplaced',
-                                              default_max_misplaced))
+        max_misplaced = float(self.get_ceph_option('target_max_misplaced_ratio'))
         min_pg_per_osd = 2
 
         ms = plan.initial
         osdmap = ms.osdmap
         crush = osdmap.get_crush()
         pe = self.calc_eval(ms, plan.pools)
-        min_score_to_optimize = float(self.get_config('min_score', 0))
+        min_score_to_optimize = self.get_module_option('min_score')
         if pe.score <= min_score_to_optimize:
             if pe.score == 0:
                 detail = 'Distribution is already perfect'
@@ -767,7 +937,7 @@ class Module(MgrModule):
         overlap = {}
         root_ids = {}
         for root, wm in six.iteritems(pe.target_by_root):
-            for osd in wm.iterkeys():
+            for osd in wm:
                 if osd in visited:
                     if osd not in overlap:
                         overlap[osd] = [ visited[osd] ]
@@ -779,7 +949,12 @@ class Module(MgrModule):
             self.log.error(detail)
             return -errno.EOPNOTSUPP, detail
 
-        key = 'pgs'  # pgs objects or bytes
+        # rebalance by pgs, objects, or bytes
+        metrics = self.get_module_option('crush_compat_metrics').split(',')
+        key = metrics[0] # balancing using the first score metric
+        if key not in ['pgs', 'bytes', 'objects']:
+            self.log.warn("Invalid crush_compat balancing key %s. Using 'pgs'." % key)
+            key = 'pgs'
 
         # go
         best_ws = copy.deepcopy(orig_ws)

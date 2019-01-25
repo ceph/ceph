@@ -17,7 +17,7 @@
 
 extern std::map<std::string, std::string> rgw_to_http_attrs;
 
-extern void rgw_rest_init(CephContext *cct, RGWRados *store, RGWZoneGroup& zone_group);
+extern void rgw_rest_init(CephContext *cct, RGWRados *store, const RGWZoneGroup& zone_group);
 
 extern void rgw_flush_formatter_and_reset(struct req_state *s,
 					 ceph::Formatter *formatter);
@@ -25,24 +25,45 @@ extern void rgw_flush_formatter_and_reset(struct req_state *s,
 extern void rgw_flush_formatter(struct req_state *s,
 				ceph::Formatter *formatter);
 
-extern int rgw_rest_read_all_input(struct req_state *s, char **data, int *plen,
-				   uint64_t max_len, bool allow_chunked=true);
+std::tuple<int, bufferlist > rgw_rest_read_all_input(struct req_state *s,
+                                        const uint64_t max_len,
+                                        const bool allow_chunked=true);
+
+static inline boost::string_ref rgw_sanitized_hdrval(ceph::buffer::list& raw)
+{
+  /* std::string and thus boost::string_ref ARE OBLIGED to carry multiple
+   * 0x00 and count them to the length of a string. We need to take that
+   * into consideration and sanitize the size of a ceph::buffer::list used
+   * to store metadata values (x-amz-meta-*, X-Container-Meta-*, etags).
+   * Otherwise we might send 0x00 to clients. */
+  const char* const data = raw.c_str();
+  size_t len = raw.length();
+
+  if (len && data[len - 1] == '\0') {
+    /* That's the case - the null byte has been included at the last position
+     * of the bufferlist. We need to restore the proper string length we'll
+     * pass to string_ref. */
+    len--;
+  }
+
+  return boost::string_ref(data, len);
+}
 
 template <class T>
 int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
 			    uint64_t max_len, bool *empty)
 {
-  int rv, data_len;
-  char *data;
-
   if (empty)
     *empty = false;
 
-  if ((rv = rgw_rest_read_all_input(s, &data, &data_len, max_len)) < 0) {
+  int rv = 0;
+  bufferlist data;
+  std::tie(rv, data) = rgw_rest_read_all_input(s, max_len);
+  if (rv < 0) {
     return rv;
   }
 
-  if (!data_len) {
+  if (!data.length()) {
     if (empty) {
       *empty = true;
     }
@@ -52,12 +73,9 @@ int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
 
   JSONParser parser;
 
-  if (!parser.parse(data, data_len)) {
-    free(data);
+  if (!parser.parse(data.c_str(), data.length())) {
     return -EINVAL;
   }
-
-  free(data);
 
   try {
       decode_json_obj(out, &parser);
@@ -69,37 +87,32 @@ int rgw_rest_get_json_input(CephContext *cct, req_state *s, T& out,
 }
 
 template <class T>
-int rgw_rest_get_json_input_keep_data(CephContext *cct, req_state *s, T& out, uint64_t max_len, char **pdata, int *len)
+std::tuple<int, bufferlist > rgw_rest_get_json_input_keep_data(CephContext *cct, req_state *s, T& out, uint64_t max_len)
 {
-  int rv, data_len;
-  char *data;
-
-  if ((rv = rgw_rest_read_all_input(s, &data, &data_len, max_len)) < 0) {
-    return rv;
+  int rv = 0;
+  bufferlist data;
+  std::tie(rv, data) = rgw_rest_read_all_input(s, max_len);
+  if (rv < 0) {
+    return std::make_tuple(rv, std::move(data));
   }
 
-  if (!data_len) {
-    return -EINVAL;
+  if (!data.length()) {
+    return std::make_tuple(-EINVAL, std::move(data));
   }
-
-  *len = data_len;
 
   JSONParser parser;
 
-  if (!parser.parse(data, data_len)) {
-    free(data);
-    return -EINVAL;
+  if (!parser.parse(data.c_str(), data.length())) {
+    return std::make_tuple(-EINVAL, std::move(data));
   }
 
   try {
     decode_json_obj(out, &parser);
   } catch (JSONDecoder::err& e) {
-    free(data);
-    return -EINVAL;
+    return std::make_tuple(-EINVAL, std::move(data));
   }
 
-  *pdata = data;
-  return 0;
+  return std::make_tuple(0, std::move(data));
 }
 
 class RESTArgs {

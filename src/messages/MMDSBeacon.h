@@ -231,7 +231,7 @@ public:
   epoch_t get_last_epoch_seen() const { return version; }
   MDSMap::DaemonState get_state() const { return state; }
   version_t get_seq() const { return seq; }
-  const char *get_type_name() const override { return "mdsbeacon"; }
+  std::string_view get_type_name() const override { return "mdsbeacon"; }
   mds_rank_t get_standby_for_rank() const { return standby_for_rank; }
   const string& get_standby_for_name() const { return standby_for_name; }
   const fs_cluster_id_t& get_standby_for_fscid() const { return standby_for_fscid; }

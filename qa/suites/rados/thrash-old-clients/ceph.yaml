@@ -1,2 +1,7 @@
 tasks:
 - ceph:
+    mon_bind_addrvec: false
+    mon_bind_msgr2: false
+    conf:
+      global:
+        ms bind msgr2: false

@@ -324,7 +324,7 @@ int ErasureCodeLrc::parse_kml(ErasureCodeProfile &profile,
     }
   }
 
-  if ((k + m) % l) {
+  if (l == 0 || (k + m) % l) {
     *ss << "k + m must be a multiple of l in "
 	<< profile << std::endl;
     return ERROR_LRC_K_M_MODULO;
@@ -754,16 +754,18 @@ int ErasureCodeLrc::encode_chunks(const set<int> &want_to_encode,
     set<int> layer_want_to_encode;
     map<int, bufferlist> layer_encoded;
     int j = 0;
-    for (vector<int>::const_iterator c = layer.chunks.begin();
-	 c != layer.chunks.end();
-	 ++c) {
-      layer_encoded[j] = (*encoded)[*c];
-      if (want_to_encode.find(*c) != want_to_encode.end())
+    for (const auto& c : layer.chunks) {
+      std::swap(layer_encoded[j], (*encoded)[c]);
+      if (want_to_encode.find(c) != want_to_encode.end())
 	layer_want_to_encode.insert(j);
       j++;
     }
     int err = layer.erasure_code->encode_chunks(layer_want_to_encode,
 						&layer_encoded);
+    j = 0;
+    for (const auto& c : layer.chunks) {
+      std::swap(layer_encoded[j++], (*encoded)[c]);
+    }
     if (err) {
       derr << __func__ << " layer " << layer.chunks_map
 	   << " failed with " << err << " trying to encode "

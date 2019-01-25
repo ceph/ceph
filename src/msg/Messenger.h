@@ -20,6 +20,10 @@
 #include <map>
 #include <deque>
 
+#include <errno.h>
+#include <sstream>
+#include <memory>
+
 #include "Message.h"
 #include "Dispatcher.h"
 #include "Policy.h"
@@ -31,6 +35,8 @@
 #include "include/ceph_features.h"
 #include "auth/Crypto.h"
 #include "common/item_history.h"
+#include "auth/AuthAuthorizeHandler.h"
+#include "include/ceph_assert.h"
 
 #include <errno.h>
 #include <sstream>
@@ -39,6 +45,8 @@
 #define SOCKET_PRIORITY_MIN_DELAY 6
 
 class Timer;
+
+class AuthAuthorizerHandlerRegistry;
 
 class Messenger {
 private:
@@ -80,6 +88,13 @@ public:
   int crcflags;
 
   using Policy = ceph::net::Policy<Throttle>;
+
+protected:
+  // for authentication
+  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_service_registry;
+  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_cluster_registry;
+
+public:
   /**
    * Messenger constructor. Call this from your implementation.
    * Messenger users should construct full implementations directly,
@@ -430,10 +445,6 @@ public:
    *
    * @return 0 on success, or -errno on failure.
    */
-  virtual int send_message(Message *m, const entity_inst_t& dest) {
-    return send_to(m, dest.name.type(), entity_addrvec_t(dest.addr));
-  }
-
   virtual int send_to(
     Message *m,
     int type,
@@ -470,12 +481,6 @@ public:
    *
    * @param dest The entity to get a connection for.
    */
-  virtual ConnectionRef get_connection(const entity_inst_t& dest) {
-    // temporary
-    return connect_to(dest.name.type(),
-		      entity_addrvec_t(dest.addr));
-  }
-
   virtual ConnectionRef connect_to(
     int type, const entity_addrvec_t& dest) = 0;
   ConnectionRef connect_to_mon(const entity_addrvec_t& dest) {
@@ -676,7 +681,7 @@ public:
   }
 
   /**
-   * Notify each Dispatcher of a new incomming Connection. Call
+   * Notify each Dispatcher of a new incoming Connection. Call
    * this function whenever a new Connection is accepted.
    *
    * @param con Pointer to the new Connection.
@@ -747,10 +752,10 @@ public:
    * @param force_new True if we want to wait for new keys, false otherwise.
    * @return A pointer to the AuthAuthorizer, if we have one; NULL otherwise
    */
-  AuthAuthorizer *ms_deliver_get_authorizer(int peer_type, bool force_new) {
+  AuthAuthorizer *ms_deliver_get_authorizer(int peer_type) {
     AuthAuthorizer *a = 0;
     for (const auto& dispatcher : dispatchers) {
-      if (dispatcher->ms_get_authorizer(peer_type, &a, force_new))
+      if (dispatcher->ms_get_authorizer(peer_type, &a))
 	return a;
     }
     return NULL;
@@ -769,17 +774,11 @@ public:
    * @return True if we were able to prove or disprove correctness of
    * authorizer, false otherwise.
    */
-  bool ms_deliver_verify_authorizer(Connection *con, int peer_type,
-				    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-				    bool& isvalid, CryptoKey& session_key,
-				    std::unique_ptr<AuthAuthorizerChallenge> *challenge) {
-    for (const auto& dispatcher : dispatchers) {
-      if (dispatcher->ms_verify_authorizer(con, peer_type, protocol, authorizer, authorizer_reply,
-                                           isvalid, session_key, challenge))
-	return true;
-    }
-    return false;
-  }
+  bool ms_deliver_verify_authorizer(
+    Connection *con, int peer_type,
+    int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
+    bool& isvalid, CryptoKey& session_key,
+    std::unique_ptr<AuthAuthorizerChallenge> *challenge);
 
   /**
    * @} // Dispatcher Interfacing

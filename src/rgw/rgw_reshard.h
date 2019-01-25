@@ -5,31 +5,74 @@
 #define RGW_RESHARD_H
 
 #include <vector>
+#include <functional>
+
+#include <boost/intrusive/list.hpp>
+
 #include "include/rados/librados.hpp"
+#include "common/ceph_time.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/lock/cls_lock_client.h"
 #include "rgw_bucket.h"
 
+
 class CephContext;
 class RGWRados;
 
+class RGWBucketReshardLock {
+  using Clock = ceph::coarse_mono_clock;
+
+  RGWRados* store;
+  const std::string lock_oid;
+  const bool ephemeral;
+  rados::cls::lock::Lock internal_lock;
+  std::chrono::seconds duration;
+
+  Clock::time_point start_time;
+  Clock::time_point renew_thresh;
+
+  void reset_time(const Clock::time_point& now) {
+    start_time = now;
+    renew_thresh = start_time + duration / 2;
+  }
+
+public:
+  RGWBucketReshardLock(RGWRados* _store,
+		       const std::string& reshard_lock_oid,
+		       bool _ephemeral);
+  RGWBucketReshardLock(RGWRados* _store,
+		       const RGWBucketInfo& bucket_info,
+		       bool _ephemeral) :
+    RGWBucketReshardLock(_store, bucket_info.bucket.get_key(':'), _ephemeral)
+  {}
+
+  int lock();
+  void unlock();
+  int renew(const Clock::time_point&);
+
+  bool should_renew(const Clock::time_point& now) const {
+    return now >= renew_thresh;
+  }
+}; // class RGWBucketReshardLock
 
 class RGWBucketReshard {
+public:
+
   friend class RGWReshard;
+
+  using Clock = ceph::coarse_mono_clock;
+
+private:
 
   RGWRados *store;
   RGWBucketInfo bucket_info;
   std::map<string, bufferlist> bucket_attrs;
 
-  string reshard_oid;
-  rados::cls::lock::Lock reshard_lock;
+  RGWBucketReshardLock reshard_lock;
+  RGWBucketReshardLock* outer_reshard_lock;
 
-  int lock_bucket();
-  void unlock_bucket();
-  int set_resharding_status(const string& new_instance_id, int32_t num_shards, cls_rgw_reshard_status status);
-  int clear_resharding();
-
-  int create_new_bucket_instance(int new_num_shards, RGWBucketInfo& new_bucket_info);
+  int create_new_bucket_instance(int new_num_shards,
+				 RGWBucketInfo& new_bucket_info);
   int do_reshard(int num_shards,
 		 RGWBucketInfo& new_bucket_info,
 		 int max_entries,
@@ -37,19 +80,46 @@ class RGWBucketReshard {
                  ostream *os,
 		 Formatter *formatter);
 public:
-  RGWBucketReshard(RGWRados *_store, const RGWBucketInfo& _bucket_info,
-                   const std::map<string, bufferlist>& _bucket_attrs);
 
+  // pass nullptr for the final parameter if no outer reshard lock to
+  // manage
+  RGWBucketReshard(RGWRados *_store, const RGWBucketInfo& _bucket_info,
+                   const std::map<string, bufferlist>& _bucket_attrs,
+		   RGWBucketReshardLock* _outer_reshard_lock);
   int execute(int num_shards, int max_op_entries,
               bool verbose = false, ostream *out = nullptr,
               Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
-  int abort();
   int get_status(std::list<cls_rgw_bucket_instance_entry> *status);
   int cancel();
-};
+  static int clear_resharding(RGWRados* store,
+			      const RGWBucketInfo& bucket_info);
+  int clear_resharding() {
+    return clear_resharding(store, bucket_info);
+  }
+  static int clear_index_shard_reshard_status(RGWRados* store,
+					      const RGWBucketInfo& bucket_info);
+  int clear_index_shard_reshard_status() {
+    return clear_index_shard_reshard_status(store, bucket_info);
+  }
+  static int set_resharding_status(RGWRados* store,
+				   const RGWBucketInfo& bucket_info,
+				   const string& new_instance_id,
+				   int32_t num_shards,
+				   cls_rgw_reshard_status status);
+  int set_resharding_status(const string& new_instance_id,
+			    int32_t num_shards,
+			    cls_rgw_reshard_status status) {
+    return set_resharding_status(store, bucket_info,
+				 new_instance_id, num_shards, status);
+  }
+}; // RGWBucketReshard
 
 class RGWReshard {
+public:
+    using Clock = ceph::coarse_mono_clock;
+
+private:
     RGWRados *store;
     string lock_name;
     rados::cls::lock::Lock instance_lock;
@@ -102,27 +172,29 @@ public:
   void stop_processor();
 };
 
-
 class RGWReshardWait {
-  RGWRados *store;
-  Mutex lock{"RGWReshardWait::lock"};
-  Cond cond;
+  const ceph::timespan duration;
+  ceph::mutex mutex = ceph::make_mutex("RGWReshardWait::lock");
+  ceph::condition_variable cond;
+
+  using Clock = ceph::coarse_real_clock;
+  struct Waiter : boost::intrusive::list_base_hook<> {
+    boost::asio::basic_waitable_timer<Clock> timer;
+    explicit Waiter(boost::asio::io_context& ioc) : timer(ioc) {}
+  };
+  boost::intrusive::list<Waiter> waiters;
 
   bool going_down{false};
 
-  int do_wait();
 public:
-  explicit RGWReshardWait(RGWRados *_store) : store(_store) {}
+  RGWReshardWait(ceph::timespan duration = std::chrono::seconds(5))
+    : duration(duration) {}
   ~RGWReshardWait() {
     ceph_assert(going_down);
   }
-  int block_while_resharding(RGWRados::BucketShard *bs, string *new_bucket_id);
-
-  void stop() {
-    Mutex::Locker l(lock);
-    going_down = true;
-    cond.SignalAll();
-  }
+  int wait(optional_yield y);
+  // unblock any threads waiting on reshard
+  void stop();
 };
 
 #endif

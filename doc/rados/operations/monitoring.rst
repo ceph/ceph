@@ -179,13 +179,15 @@ the following::
 
 	ceph df
 
-The **GLOBAL** section of the output provides an overview of the amount of 
-storage your cluster uses for your data.
+The **RAW STORAGE** section of the output provides an overview of the
+amount of storage that is managed by your cluster.
 
-- **SIZE:** The overall storage capacity of the cluster.
+- **CLASS:** The class of OSD device (or the total for the cluster)
+- **SIZE:** The amount of storage capacity managed by the cluster.
 - **AVAIL:** The amount of free space available in the cluster.
-- **RAW USED:** The amount of raw storage used.
-- **% RAW USED:** The percentage of raw storage used. Use this number in 
+- **USED:** The amount of raw storage consumed by user data.
+- **RAW USED:** The amount of raw storage consumed by user data, internal overhead, or reserved capacity.
+- **%RAW USED:** The percentage of raw storage used. Use this number in
   conjunction with the ``full ratio`` and ``near full ratio`` to ensure that 
   you are not reaching your cluster's capacity. See `Storage Capacity`_ for 
   additional details.
@@ -208,7 +210,7 @@ on the number of replicas, clones and snapshots.
 .. note:: The numbers in the **POOLS** section are notional. They are not 
    inclusive of the number of replicas, snapshots or clones. As a result, 
    the sum of the **USED** and **%USED** amounts will not add up to the 
-   **RAW USED** and **%RAW USED** amounts in the **GLOBAL** section of the 
+   **USED** and **%USED** amounts in the **RAW** section of the
    output.
 
 .. note:: The **MAX AVAIL** value is a complicated function of the

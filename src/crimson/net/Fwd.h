@@ -16,15 +16,11 @@
 
 #include <boost/intrusive_ptr.hpp>
 
-#include "Errors.h"
 #include "msg/msg_types.h"
 #include "msg/Message.h"
 
 using peer_type_t = int;
 using auth_proto_t = int;
-
-class Message;
-using MessageRef = boost::intrusive_ptr<Message>;
 
 namespace ceph::net {
 
@@ -38,4 +34,3 @@ class Dispatcher;
 class Messenger;
 
 } // namespace ceph::net
-

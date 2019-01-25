@@ -85,7 +85,7 @@ struct rgw_cls_obj_complete_op
   cls_rgw_obj_key key;
   string locator;
   rgw_bucket_entry_ver ver;
-  struct rgw_bucket_dir_entry_meta meta;
+  rgw_bucket_dir_entry_meta meta;
   string tag;
   bool log_op;
   uint16_t bilog_flags;
@@ -167,7 +167,7 @@ struct rgw_cls_link_olh_op {
   string olh_tag;
   bool delete_marker;
   string op_tag;
-  struct rgw_bucket_dir_entry_meta meta;
+  rgw_bucket_dir_entry_meta meta;
   uint64_t olh_epoch;
   bool log_op;
   uint16_t bilog_flags;
@@ -303,7 +303,7 @@ WRITE_CLASS_ENCODER(rgw_cls_read_olh_log_op)
 
 struct rgw_cls_read_olh_log_ret
 {
-  map<uint64_t, vector<struct rgw_bucket_olh_log_entry> > log;
+  map<uint64_t, vector<rgw_bucket_olh_log_entry> > log;
   bool is_truncated;
 
   rgw_cls_read_olh_log_ret() : is_truncated(false) {}
@@ -463,7 +463,7 @@ WRITE_CLASS_ENCODER(rgw_cls_check_index_ret)
 struct rgw_cls_bucket_update_stats_op
 {
   bool absolute{false};
-  map<uint8_t, rgw_bucket_category_stats> stats;
+  map<RGWObjCategory, rgw_bucket_category_stats> stats;
 
   rgw_cls_bucket_update_stats_op() {}
 
@@ -597,7 +597,7 @@ struct rgw_cls_bi_get_op {
   cls_rgw_obj_key key;
   BIIndexType type; /* namespace: plain, instance, olh */
 
-  rgw_cls_bi_get_op() : type(PlainIdx) {}
+  rgw_cls_bi_get_op() : type(BIIndexType::Plain) {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -706,27 +706,32 @@ struct rgw_cls_usage_log_read_op {
   uint64_t start_epoch;
   uint64_t end_epoch;
   string owner;
+  string bucket;
 
   string iter;  // should be empty for the first call, non empty for subsequent calls
   uint32_t max_entries;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(start_epoch, bl);
     encode(end_epoch, bl);
     encode(owner, bl);
     encode(iter, bl);
     encode(max_entries, bl);
+    encode(bucket, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(start_epoch, bl);
     decode(end_epoch, bl);
     decode(owner, bl);
     decode(iter, bl);
     decode(max_entries, bl);
+    if (struct_v >= 2) {
+      decode(bucket, bl);
+    }
     DECODE_FINISH(bl);
   }
 };
@@ -759,20 +764,25 @@ struct rgw_cls_usage_log_trim_op {
   uint64_t start_epoch;
   uint64_t end_epoch;
   string user;
+  string bucket;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 2, bl);
+    ENCODE_START(3, 2, bl);
     encode(start_epoch, bl);
     encode(end_epoch, bl);
     encode(user, bl);
+    encode(bucket, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(start_epoch, bl);
     decode(end_epoch, bl);
     decode(user, bl);
+    if (struct_v >= 3) {
+      decode(bucket, bl);
+    }
     DECODE_FINISH(bl);
   }
 };

@@ -356,7 +356,8 @@ template <typename I>
 void ImageDeleter<I>::remove_images() {
   dout(10) << dendl;
 
-  uint64_t max_concurrent_deletions = g_ceph_context->_conf.get_val<uint64_t>(
+  auto cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
+  uint64_t max_concurrent_deletions = cct->_conf.get_val<uint64_t>(
     "rbd_mirror_concurrent_image_deletions");
 
   Mutex::Locker locker(m_lock);
@@ -414,7 +415,8 @@ void ImageDeleter<I>::handle_remove_image(DeleteInfoRef delete_info,
                  image_deleter::ERROR_RESULT_RETRY_IMMEDIATELY) {
       enqueue_failed_delete(&delete_info, r, m_busy_interval);
     } else {
-      double failed_interval = g_ceph_context->_conf.get_val<double>(
+      auto cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
+      double failed_interval = cct->_conf.get_val<double>(
         "rbd_mirror_delete_retry_interval");
       enqueue_failed_delete(&delete_info, r, failed_interval);
     }

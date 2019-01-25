@@ -33,6 +33,7 @@ struct MockManagedLock {
   }
 
   bool m_release_lock_on_shutdown = false;
+  Context *m_on_released = nullptr;
 
   MOCK_METHOD0(construct, void());
   MOCK_METHOD0(destroy, void());
@@ -103,15 +104,21 @@ struct ManagedLock<MockTestImageCtx> {
   }
 
   void release_lock(Context *on_released) {
+    ceph_assert(MockManagedLock::get_instance().m_on_released == nullptr);
+    MockManagedLock::get_instance().m_on_released = on_released;
+
     Context *post_release_ctx = new FunctionContext(
-      [this, on_released](int r) {
-        post_release_lock_handler(false, r, on_released);
+      [this](int r) {
+        ceph_assert(MockManagedLock::get_instance().m_on_released != nullptr);
+        post_release_lock_handler(false, r,
+                                  MockManagedLock::get_instance().m_on_released);
+        MockManagedLock::get_instance().m_on_released = nullptr;
       });
 
     Context *release_ctx = new FunctionContext(
-      [on_released, post_release_ctx](int r) {
+      [this, post_release_ctx](int r) {
         if (r < 0) {
-          on_released->complete(r);
+          MockManagedLock::get_instance().m_on_released->complete(r);
         } else {
           MockManagedLock::get_instance().release_lock(post_release_ctx);
         }
@@ -127,7 +134,7 @@ struct ManagedLock<MockTestImageCtx> {
     m_work_queue->queue(pre_release_ctx, 0);
   }
 
-  void reacquire_lock() {
+  void reacquire_lock(Context* on_finish) {
     MockManagedLock::get_instance().reacquire_lock();
   }
 
@@ -333,11 +340,17 @@ public:
   void expect_release_lock(MockManagedLock &mock_managed_lock, int r,
                            Context *on_finish = nullptr) {
     EXPECT_CALL(mock_managed_lock, release_lock(_))
-      .WillOnce(Invoke([on_finish, r](Context *ctx) {
-                         ctx->complete(r);
+      .WillOnce(Invoke([on_finish, &mock_managed_lock, r](Context *ctx) {
                          if (on_finish != nullptr) {
-                           on_finish->complete(0);
+                           auto on_released = mock_managed_lock.m_on_released;
+                           ceph_assert(on_released != nullptr);
+                           mock_managed_lock.m_on_released = new FunctionContext(
+                             [on_released, on_finish](int r) {
+                               on_released->complete(r);
+                               on_finish->complete(r);
+                             });
                          }
+                         ctx->complete(r);
                        }));
   }
 
@@ -626,7 +639,7 @@ TEST_F(TestMockLeaderWatcher, Break) {
   EXPECT_EQ(0, _rados->conf_set("rbd_mirror_leader_max_missed_heartbeats",
                                 "1"));
   CephContext *cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
-  int max_acquire_attempts = cct->_conf.get_val<int64_t>(
+  int max_acquire_attempts = cct->_conf.get_val<uint64_t>(
     "rbd_mirror_leader_max_acquire_attempts_before_break");
 
   MockManagedLock mock_managed_lock;

@@ -53,7 +53,7 @@ Options
 
       #. ``--monmap filename`` to specify a monmap to load
       #. ``--mon-host 'host1,ip2'`` to specify a list of hosts or ip addresses
-      #. ``[mon.foo]`` sections containing ``mon addr`` settings in the config
+      #. ``[mon.foo]`` sections containing ``mon addr`` settings in the config. Note that this method is not recommended and support will be removed in a future release.
 
 .. option:: --filter-initial-members
 

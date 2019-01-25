@@ -45,7 +45,7 @@ private:
   ~MOSDPGRemove() override {}
 
 public:  
-  const char *get_type_name() const override { return "PGrm"; }
+  std::string_view get_type_name() const override { return "PGrm"; }
 
   void encode_payload(uint64_t features) override {
     using ceph::encode;

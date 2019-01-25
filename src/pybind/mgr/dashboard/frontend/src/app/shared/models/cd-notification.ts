@@ -1,16 +1,23 @@
+import { ToastOptions } from 'ng2-toastr';
 import { NotificationType } from '../enum/notification-type.enum';
 
+export class CdNotificationConfig {
+  constructor(
+    public type: NotificationType,
+    public title: string,
+    public message?: string, // Use this for error notifications only
+    public options?: any | ToastOptions
+  ) {}
+}
+
 export class CdNotification {
-  message: string;
   timestamp: string;
-  title: string;
-  type: NotificationType;
 
-  constructor(type: NotificationType = NotificationType.info, title?: string, message?: string) {
-    this.type = type;
-    this.title = title;
-    this.message = message;
-
+  constructor(
+    public type: NotificationType = NotificationType.info,
+    public title?: string,
+    public message?: string
+  ) {
     /* string representation of the Date object so it can be directly compared
     with the timestamps parsed from localStorage */
     this.timestamp = new Date().toJSON();

@@ -2,13 +2,6 @@
 # This overrides the random distribution that's chosen in the other yaml fragments.
 os_type: ubuntu
 os_version: "18.04"
-
-overrides:
-  ceph:
-    conf:
-      global:
-        ms type: simple
-
 tasks:
   - cephfs_test_runner:
       modules:

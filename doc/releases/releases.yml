@@ -1,0 +1,333 @@
+#
+# there are two sections
+#
+# releases: ... for named releases
+# developement: ... for dev releases
+#
+# by default a `version` is interpreted as a sphinx reference when rendered (see
+# schedule.rst for the existing tags such as `_13.2.2`). If a version should not
+# be treated as a reference, add `skip_ref: True` as a key/value pair sibling to
+# the `version` key.
+#
+# If a version might represent an actual number (e.g. 0.80) quote it.
+#
+releases:
+  mimic:
+    releases:
+      - version: 13.2.4
+        released: 2019-01-07
+      - version: 13.2.3
+        released: 2019-01-07
+      - version: 13.2.2
+        released: 2018-09-01
+      - version: 13.2.1
+        released: 2018-07-01
+      - version: 13.2.0
+        released: 2018-06-01
+  
+  luminous:
+    releases:
+      - version: 12.2.10
+        released: 2018-11-27
+      - version: 12.2.9
+        released: 2018-11-01
+      - version: 12.2.8
+        released: 2018-09-01
+      - version: 12.2.7
+        released: 2018-07-01
+      - version: 12.2.6
+        released: 2018-07-01
+      - version: 12.2.5
+        released: 2018-04-01
+      - version: 12.2.4
+        released: 2018-02-01
+      - version: 12.2.3
+        released: 2018-02-01
+      - version: 12.2.2
+        released: 2017-12-01
+      - version: 12.2.1
+        released: 2017-09-01
+      - version: 12.2.0
+        released: 2017-08-01
+  
+  kraken:
+    target_eol: 2017-08-01
+    actual_eol: 2017-08-01
+    releases:
+      - version: 11.2.1
+        released: 2017-08-01
+      - version: 11.2.0
+        released: 2017-01-01
+
+  jewel:
+    target_eol: 2018-06-01
+    actual_eol: 2018-07-01
+    releases:
+      - version: 10.2.11
+        released: 2018-07-11
+      - version: 10.2.10
+        released: 2017-10-01
+      - version: 10.2.9
+        released: 2017-07-01
+      - version: 10.2.8
+        released: 2017-07-01
+      - version: 10.2.7
+        released: 2017-04-01
+      - version: 10.2.6
+        released: 2017-03-01
+      - version: 10.2.5
+        released: 2016-12-01
+      - version: 10.2.4
+        released: 2016-12-01
+      - version: 10.2.3
+        released: 2016-09-01
+      - version: 10.2.2
+        released: 2016-06-01
+      - version: 10.2.1
+        released: 2016-05-01
+      - version: 10.2.0
+        released: 2016-04-01
+
+  infernalis:
+    actual_eol: 2016-04-01
+    releases:
+      - version: 9.2.1
+        released: 2016-02-01
+      - version: 9.2.0
+        released: 2015-11-01
+
+  hammer:
+    target_eol: 2017-05-01
+    actual_eol: 2017-08-01
+    releases:
+      - version: 0.94.10
+        released: 2017-02-01
+      - version: 0.94.9
+        released: 2016-08-01
+      - version: 0.94.8
+        released: 2016-08-01
+      - version: 0.94.7
+        released: 2016-05-01
+      - version: 0.94.6
+        released: 2016-02-01
+      - version: 0.94.5
+        released: 2015-10-01
+      - version: 0.94.4
+        released: 2015-10-01
+      - version: 0.94.3
+        released: 2015-08-01
+      - version: 0.94.2
+        released: 2015-06-01
+      - version: 0.94.1
+        released: 2015-04-01
+      - version: '0.94'
+        released: 2015-04-01
+
+  giant:
+    actual_eol: 2015-04-01
+    releases:
+      - version: 0.87.2
+        released: 2015-04-01
+      - version: 0.87.1
+        released: 2015-02-01
+      - version: '0.87'
+        released: 2014-10-01
+
+  firefly:
+    target_eol: 2016-01-01
+    actual_eol: 2016-04-01
+    releases:
+      - version: 0.80.11
+        released: 2015-11-01
+      - version: 0.80.10
+        released: 2015-07-01
+      - version: 0.80.9
+        released: 2015-03-01
+      - version: 0.80.8
+        released: 2015-01-01
+      - version: 0.80.7
+        released: 2014-10-01
+      - version: 0.80.6
+        released: 2014-10-01
+      - version: 0.80.5
+        released: 2014-07-01
+      - version: 0.80.4
+        released: 2014-07-01
+      - version: 0.80.3
+        released: 2014-07-01
+      - version: 0.80.2
+        released: 2014-07-01
+      - version: 0.80.1
+        released: 2014-05-01
+      - version: '0.80'
+        released: 2014-05-01
+
+  emperor:
+    actual_eol: 2014-05-01
+    releases:
+      - version: 0.72.2
+        released: 2013-12-01
+      - version: 0.72.1
+        released: 2013-11-01
+      - version: '0.72'
+        released: 2013-11-01
+
+  dumpling:
+    target_eol: 2015-03-01
+    actual_eol: 2015-05-01
+    releases:
+      - version: 0.67.11
+        released: 2014-09-01
+      - version: 0.67.10
+        released: 2014-08-01
+      - version: 0.67.9
+        released: 2014-05-01
+      - version: 0.67.8
+        released: 2014-05-01
+      - version: 0.67.7
+        released: 2014-02-01
+      - version: 0.67.6
+        released: 2014-02-01
+      - version: 0.67.5
+        released: 2013-12-01
+      - version: 0.67.4
+        released: 2013-10-01
+      - version: 0.67.3
+        released: 2013-09-01
+      - version: 0.67.2
+        released: 2013-08-01
+      - version: 0.67.1
+        released: 2013-08-01
+      - version: '0.67'
+        released: 2013-08-01
+
+development:
+  releases:
+    - version: 13.1.0
+      released: 2018-05-01
+      skip_ref: true
+    - version: 13.0.2
+      released: 2018-04-01
+      skip_ref: true
+    - version: 13.0.1
+      released: 2018-02-01
+      skip_ref: true
+    - version: 13.0.0
+      released: 2017-08-01
+      skip_ref: true
+    - version: 12.1.4
+      released: 2017-08-01
+      skip_ref: true
+    - version: 12.1.3
+      released: 2017-08-01
+      skip_ref: true
+    - version: 12.1.2
+      released: 2017-08-01
+      skip_ref: true
+    - version: 12.1.1
+      released: 2017-07-01
+      skip_ref: true
+    - version: 12.1.0
+      released: 2017-06-01
+      skip_ref: true
+    - version: 12.0.3
+      released: 2017-05-01
+      skip_ref: true
+    - version: 12.0.2
+      released: 2017-04-01
+      skip_ref: true
+    - version: 12.0.1
+      released: 2017-03-01
+      skip_ref: true
+    - version: 12.0.0
+      released: 2017-02-01
+      skip_ref: true
+    - version: 11.1.1
+      released: 2017-01-01
+      skip_ref: true
+    - version: 11.1.0
+      released: 2016-12-01
+      skip_ref: true
+    - version: 11.0.2
+      released: 2016-10-01
+    - version: 11.0.1
+      released: 2016-10-01
+      skip_ref: true
+    - version: 11.0.0
+      released: 2016-06-01
+      skip_ref: true
+    - version: 10.1.2
+      released: 2016-04-01
+    - version: 10.1.1
+      released: 2016-04-01
+    - version: 10.1.0
+      released: 2016-03-01
+    - version: 10.0.5
+      released: 2016-03-01
+    - version: 10.0.4
+      released: 2016-03-01
+      skip_ref: true
+    - version: 10.0.3
+      released: 2016-02-01
+    - version: 10.0.2
+      released: 2016-01-01
+    - version: 10.0.1
+      released: 2015-12-01
+    - version: 10.0.0
+      released: 2015-11-01
+    - version: 9.1.0
+      released: 2015-10-01
+    - version: 9.0.3
+      released: 2015-08-01
+    - version: 9.0.2
+      released: 2015-07-01
+    - version: 9.0.1
+      released: 2015-06-01
+    - version: 9.0.0
+      released: 2015-05-01
+    - version: '0.93'
+      released: 2015-02-01
+    - version: '0.92'
+      released: 2015-02-01
+    - version: '0.91'
+      released: 2015-01-01
+    - version: '0.90'
+      released: 2014-12-01
+    - version: '0.89'
+      released: 2014-12-01
+    - version: '0.88'
+      released: 2014-11-01
+    - version: '0.86'
+      released: 2014-10-01
+    - version: '0.85'
+      released: 2014-09-01
+    - version: '0.84'
+      released: 2014-08-01
+    - version: '0.83'
+      released: 2014-07-01
+    - version: '0.82'
+      released: 2014-06-01
+    - version: '0.81'
+      released: 2014-06-01
+    - version: '0.79'
+      released: 2014-04-01
+    - version: '0.78'
+      released: 2014-03-01
+    - version: '0.77'
+      released: 2014-02-01
+    - version: '0.76'
+      released: 2014-01-01
+    - version: '0.75'
+      released: 2014-01-01
+    - version: '0.74'
+      released: 2013-12-01
+    - version: '0.73'
+      released: 2013-12-01
+    - version: '0.71'
+      released: 2013-10-01
+    - version: '0.70'
+      released: 2013-10-01
+    - version: '0.69'
+      released: 2013-09-01
+    - version: '0.68'
+      released: 2013-09-01

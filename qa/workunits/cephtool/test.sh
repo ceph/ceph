@@ -275,7 +275,7 @@ function test_mon_injectargs_IEC()
   # actually expect IEC units to be passed.
   # Keep in mind that all integer based options that are based on bytes
   # (i.e., INT, LONG, U32, U64) will accept IEC unit modifiers, as well as SI
-  # unit modifiers (for backwards compatibility and convinience) and be parsed
+  # unit modifiers (for backwards compatibility and convenience) and be parsed
   # to base 2.
   initial_value=$(get_config_value_or_die "mon.a" "mon_data_size_warn")
   $SUDO ceph daemon mon.a config set mon_data_size_warn 15000000000
@@ -721,7 +721,7 @@ function test_mon_misc()
 
   # df
   ceph df > $TMPFILE
-  grep GLOBAL $TMPFILE
+  grep RAW $TMPFILE
   grep -v DIRTY $TMPFILE
   ceph df detail > $TMPFILE
   grep DIRTY $TMPFILE
@@ -917,7 +917,6 @@ function test_mon_mds()
   fail_all_mds $FS_NAME
 
   ceph mds compat show
-  expect_false ceph mds deactivate 2
   ceph fs dump
   ceph fs get $FS_NAME
   for mds_gid in $(get_mds_gids $FS_NAME) ; do
@@ -1382,7 +1381,7 @@ function test_mon_osd()
   ceph osd blacklist ls | grep $bl
   ceph osd blacklist ls --format=json-pretty  | sed 's/\\\//\//' | grep $bl
   ceph osd dump --format=json-pretty | grep $bl
-  ceph osd dump | grep "^blacklist $bl"
+  ceph osd dump | grep $bl
   ceph osd blacklist rm $bl
   ceph osd blacklist ls | expect_false grep $bl
 
@@ -1391,7 +1390,7 @@ function test_mon_osd()
   ceph osd blacklist add $bl
   ceph osd blacklist ls | grep $bl
   ceph osd blacklist rm $bl
-  ceph osd blacklist ls | expect_false grep $expect_false bl
+  ceph osd blacklist ls | expect_false grep $bl
   expect_false "ceph osd blacklist $bl/-1"
   expect_false "ceph osd blacklist $bl/foo"
 
@@ -1941,6 +1940,7 @@ function test_mon_osd_pool_set()
   TEST_POOL_GETSET=pool_getset
   ceph osd pool create $TEST_POOL_GETSET 1
   ceph osd pool application enable $TEST_POOL_GETSET rados
+  ceph osd pool set $TEST_POOL_GETSET pg_autoscale_mode off
   wait_for_clean
   ceph osd pool get $TEST_POOL_GETSET all
 
@@ -2027,9 +2027,6 @@ function test_mon_osd_pool_set()
   ceph osd pool set $TEST_POOL_GETSET pg_num $new_pgs
   ceph osd pool set $TEST_POOL_GETSET pgp_num $new_pgs
   wait_for_clean
-  old_pgs=$(ceph osd pool get $TEST_POOL_GETSET pg_num | sed -e 's/pg_num: //')
-  new_pgs=$(($old_pgs + $(ceph osd stat --format json | jq '.num_osds') * 32 + 1))
-  expect_false ceph osd pool set $TEST_POOL_GETSET pg_num $new_pgs
 
   ceph osd pool set $TEST_POOL_GETSET nosizechange 1
   expect_false ceph osd pool set $TEST_POOL_GETSET size 2
@@ -2093,6 +2090,14 @@ function test_mon_osd_tiered_pool_set()
   # this is really a tier pool
   ceph osd pool create real-tier 2
   ceph osd tier add rbd real-tier
+
+  # expect us to be unable to set negative values for hit_set_*
+  for o in hit_set_period hit_set_count hit_set_fpp; do
+    expect_false ceph osd pool set real_tier $o -1
+  done
+
+  # and hit_set_fpp should be in range 0..1
+  expect_false ceph osd pool set real_tier hit_set_fpp 2
 
   ceph osd pool set real-tier hit_set_type explicit_hash
   ceph osd pool get real-tier hit_set_type | grep "hit_set_type: explicit_hash"
@@ -2393,13 +2398,13 @@ function test_mon_cephdf_commands()
   # to sync mon with osd
   flush_pg_stats
   local jq_filter='.pools | .[] | select(.name == "cephdf_for_test") | .stats'
-  cal_raw_used_size=`ceph df detail --format=json | jq "$jq_filter.raw_bytes_used"`
-  raw_used_size=`ceph df detail --format=json | jq "$jq_filter.bytes_used * 2"`
+  stored=`ceph df detail --format=json | jq "$jq_filter.stored * 2"`
+  stored_raw=`ceph df detail --format=json | jq "$jq_filter.stored_raw"`
 
   ceph osd pool delete cephdf_for_test cephdf_for_test --yes-i-really-really-mean-it
   rm ./cephdf_for_test
 
-  expect_false test $cal_raw_used_size != $raw_used_size
+  expect_false test $stored != $stored_raw
 }
 
 function test_mon_pool_application()

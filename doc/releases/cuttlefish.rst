@@ -103,7 +103,7 @@ v0.61.5 "Cuttlefish"
 ====================
 
 This release most improves stability of the monitor and fixes a few
-bugs with the ceph-disk utility (used by ceph-deploy).  We recommand
+bugs with the ceph-disk utility (used by ceph-deploy).  We recommend
 that all v0.61.x users upgrade.
 
 Upgrading
@@ -337,7 +337,7 @@ Please see `Upgrading from Bobtail to Cuttlefish`_ for details.
 * radosgw-admin now uses the term zone instead of cluster to describe
   each instance of the radosgw data store (and corresponding
   collection of radosgw daemons).  The usage for the radosgw-admin
-  command and the 'rgw zone root pool' config optoins have changed
+  command and the 'rgw zone root pool' config options have changed
   accordingly.
 
 * rbd progress indicators now go to standard error instead of standard
@@ -354,7 +354,7 @@ Please see `Upgrading from Bobtail to Cuttlefish`_ for details.
 
 * The sysvinit script now uses the ceph.conf file on the remote host
   when starting remote daemons via the '-a' option.  Note that if '-a'
-  is used in conjuction with '-c path', the path must also be present
+  is used in conjunction with '-c path', the path must also be present
   on the remote host (it is not copied to a temporary file, as it was
   previously).
 
@@ -382,7 +382,7 @@ Please see `Upgrading from Bobtail to Cuttlefish`_ for details.
 
 * The 'ceph osd pool delete <poolname>' and 'rados rmpool <poolname>'
   now have safety interlocks with loud warnings that make you confirm
-  pool removal.  Any scripts curenty rely on these functions zapping
+  pool removal.  Any scripts currently rely on these functions zapping
   data without confirmation need to be adjusted accordingly.
 
 
@@ -472,7 +472,7 @@ Notable changes from v0.56 "Bobtail"
 * mds: many fixes (Yan Zheng)
 * mds: misc bug fixes with clustered MDSs and failure recovery
 * mds: misc bug fixes with readdir
-* mds: new encoding for all data types (to allow forward/backward compatbility) (Greg Farnum)
+* mds: new encoding for all data types (to allow forward/backward compatibility) (Greg Farnum)
 * mds: store and update backpointers/traces on directory, file objects (Sam Lang)
 * mon: 'osd crush add|link|unlink|add-bucket ...' commands
 * mon: ability to tune leveldb
@@ -665,7 +665,7 @@ Notable Changes
  * radosgw: fix object copy onto self (Yehuda Sadeh)
  * radosgw: ACL grants in headers (Caleb Miles)
  * radosgw: ability to listen to fastcgi via a port (Guilhem Lettron)
- * mds: new encoding for all data types (to allow forward/backward compatbility) (Greg Farnum)
+ * mds: new encoding for all data types (to allow forward/backward compatibility) (Greg Farnum)
  * mds: fast failover between MDSs (enforce unique mds names)
  * crush: ability to create, remove rules via CLI
  * many many cleanups (Danny Al-Gaaf)
@@ -685,7 +685,7 @@ Upgrading
 
 * The 'ceph osd pool delete <poolname>' and 'rados rmpool <poolname>'
   now have safety interlocks with loud warnings that make you confirm
-  pool removal.  Any scripts curenty rely on these functions zapping
+  pool removal.  Any scripts currently rely on these functions zapping
   data without confirmation need to be adjusted accordingly.
 
 Notable Changes

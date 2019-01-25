@@ -1063,7 +1063,7 @@ Packet tcp<InetTraits>::tcb::get_transmit_packet() {
   // Max number of TCP payloads we can pass to NIC
   uint32_t len;
   if (_tcp.get_hw_features().tx_tso) {
-    // FIXME: Info tap device the size of the splitted packet
+    // FIXME: Info tap device the size of the split packet
     len = _tcp.get_hw_features().max_packet_len - tcp_hdr_len_min - InetTraits::ip_hdr_len_min;
   } else {
     len = std::min(uint16_t(_tcp.get_hw_features().mtu - tcp_hdr_len_min - InetTraits::ip_hdr_len_min), _snd.mss);

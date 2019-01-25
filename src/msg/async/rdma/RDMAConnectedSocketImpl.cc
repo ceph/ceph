@@ -178,7 +178,6 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
   if (tcp_fd < 0) {
     return -errno;
   }
-  net.set_close_on_exec(tcp_fd);
 
   int r = net.set_socket_options(tcp_fd, opts.nodelay, opts.rcbuf_size);
   if (r < 0) {
@@ -447,9 +446,10 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   if (!bytes)
     return 0;
 
-  auto fill_tx_via_copy = [this](std::vector<Chunk*> &tx_buffers, unsigned bytes,
-                                 std::list<bufferptr>::const_iterator &start,
-                                 std::list<bufferptr>::const_iterator &end) -> unsigned {
+  auto fill_tx_via_copy = [this](std::vector<Chunk*> &tx_buffers,
+                                 unsigned bytes,
+                                 auto& start,
+                                 const auto& end) -> unsigned {
     ceph_assert(start != end);
     auto chunk_idx = tx_buffers.size();
     int ret = worker->get_reged_mem(this, tx_buffers, bytes);
@@ -482,8 +482,8 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   };
 
   std::vector<Chunk*> tx_buffers;
-  std::list<bufferptr>::const_iterator it = pending_bl.buffers().begin();
-  std::list<bufferptr>::const_iterator copy_it = it;
+  auto it = std::cbegin(pending_bl.buffers());
+  auto copy_it = it;
   unsigned total = 0;
   unsigned need_reserve_bytes = 0;
   while (it != pending_bl.buffers().end()) {

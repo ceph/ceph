@@ -71,7 +71,7 @@ various aspects of your Ceph cluster:
 * **Object Gateway**: Lists all active object gateways and their performance
   counters. Display and manage (add/edit/delete) object gateway users and their
   details (e.g. quotas) as well as the users' buckets and their details (e.g.
-  owner, quotas). 
+  owner, quotas).
 
 Enabling
 --------
@@ -111,8 +111,8 @@ For example, a key pair can be generated with a command similar to::
 The ``dashboard.crt`` file should then be signed by a CA. Once that is done, you
 can enable it for all Ceph manager instances by running the following commands::
 
-  $ ceph config-key set mgr mgr/dashboard/crt -i dashboard.crt
-  $ ceph config-key set mgr mgr/dashboard/key -i dashboard.key
+  $ ceph config-key set mgr/dashboard/crt -i dashboard.crt
+  $ ceph config-key set mgr/dashboard/key -i dashboard.key
 
 If different certificates are desired for each manager instance for some reason,
 the name of the instance can be included as follows (where ``$name`` is the name
@@ -252,13 +252,6 @@ The default value is 45 seconds.
 Enabling the Embedding of Grafana Dashboards
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-.. note:: 
-  The embedding of Grafana dashboards into the Ceph Manager Dashboard is
-  currently work in progress. This section documents the backend configuration.
-  The corresponding changes to the WebUI have not been merged yet. You can
-  follow the development process in `PR#23666
-  <https://github.com/ceph/ceph/pull/23666>`_.
-
 Grafana and Prometheus are likely going to be bundled and installed by some
 orchestration tools along Ceph in the near future, but currently, you will have
 to install and configure both manually. After you have installed Prometheus and
@@ -268,9 +261,8 @@ Grafana on your preferred hosts, proceed with the following steps.
 
     $ ceph mgr module enable prometheus
 
-    More details can be found on the `documentation
-    <http://docs.ceph.com/docs/master/mgr/prometheus/>`_ of the prometheus
-    module.
+More details can be found on the `documentation <http://docs.ceph.com/docs/master/
+mgr/prometheus/>`_ of the prometheus module.
 
 #. Add the corresponding scrape configuration to Prometheus. This may look
    like::
@@ -291,42 +283,90 @@ Grafana on your preferred hosts, proceed with the following steps.
 
 #. Add Prometheus as data source to Grafana
 
-#. Install the `vonage-status-panel` plugin using::
+#. Install the `vonage-status-panel and grafana-piechart-panel` plugins using::
 
         grafana-cli plugins install vonage-status-panel
+        grafana-cli plugins install grafana-piechart-panel
 
-#. Add the Dashboards to Grafana by importing them
+#. Add the Dashboards to Grafana:
 
-#. Configure Grafana in `/etc/grafana/grafana.ini` to adapt the URLs to the
-   Ceph Dashboard properly::
+   Dashboards can be added to Grafana by importing dashboard jsons. 
+   Following command can be used for downloading json files::
+	
+	wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/<Dashboard-name>.json
 
-        root_url = http://localhost:3000/api/grafana/proxy
+   You can find all the dashboard jsons `here <https://github.com/ceph/ceph/tree/
+   master/monitoring/grafana/dashboards>`_ .
+
+   For Example, for ceph-cluster overview you can use::
+	
+        wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/ceph-cluster.json
+
+#. Configure Grafana in `/etc/grafana/grafana.ini` to adapt anonymous mode::
+
+        [auth.anonymous]
+        enabled = true
+        org_name = Main Org.
+        org_role = Viewer
 
 After you have set up Grafana and Prometheus, you will need to configure the
 connection information that the Ceph Manager Dashboard will use to access Grafana.
-This includes setting the authentication method to be used, the corresponding login
-credentials as well as the URL at which the Grafana instance can be reached.
 
-The URL and TCP port can be set by using the following command::
+You need to tell the dashboard on which url Grafana instance is running/deployed::
 
-  $ ceph dashboard set-grafana-api-url <url>  # default: 'http://localhost:3000'
+  $ ceph dashboard set-grafana-api-url <grafana-server-url>  # default: ''
 
-You need to tell the dashboard which authentication method should be
-used::
+The format of url is : `<protocol>:<IP-address>:<port>`
+You can directly access Grafana Instance as well to monitor your cluster.
 
-  $ ceph dashboard set-grafana-api-auth-method <method>  # default: ''
+Enabling Single Sign-On (SSO)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Possible values are either 'password' or 'token'.
+The Ceph Manager Dashboard supports external authentication of users via the
+`SAML 2.0 <https://en.wikipedia.org/wiki/SAML_2.0>`_ protocol. You need to create
+the user accounts and associate them with the desired roles first, as authorization
+is still performed by the Dashboard. However, the authentication process can be
+performed by an existing Identity Provider (IdP).
 
-To authenticate via username and password, you will need to set the following
-values::
+.. note::
+  Ceph Dashboard SSO support relies on onelogin's
+  `python-saml <https://pypi.org/project/python-saml/>`_ library.
+  Please ensure that this library is installed on your system, either by using
+  your distribution's package management or via Python's `pip` installer.
 
-  $ ceph dashboard set-grafana-api-username <username>  # default: 'admin'
-  $ ceph dashboard set-grafana-api-password <password>  # default: 'admin'
+To configure SSO on Ceph Dashboard, you should use the following command::
 
-To use token based authentication, you will ned to set the token by issuing::
+  $ ceph dashboard sso setup saml2 <ceph_dashboard_base_url> <idp_metadata> {<idp_username_attribute>} {<idp_entity_id>} {<sp_x_509_cert>} {<sp_private_key>}
 
-  $ ceph dashboard set-grafana-api-token <token>  # default: ''
+Parameters:
+
+* **<ceph_dashboard_base_url>**: Base URL where Ceph Dashboard is accessible (e.g., `https://cephdashboard.local`)
+* **<idp_metadata>**: URL, file path or content of the IdP metadata XML (e.g., `https://myidp/metadata`)
+* **<idp_username_attribute>** *(optional)*: Attribute that should be used to get the username from the authentication response. Defaults to `uid`.
+* **<idp_entity_id>** *(optional)*: Use this when more than one entity id exists on the IdP metadata.
+* **<sp_x_509_cert> / <sp_private_key>** *(optional)*: File path or content of the certificate that should be used by Ceph Dashboard (Service Provider) for signing and encryption.
+
+.. note::
+  The issuer value of SAML requests will follow this pattern:  **<ceph_dashboard_base_url>**/auth/saml2/metadata
+
+To display the current SAML 2.0 configuration, use the following command::
+
+  $ ceph dashboard sso show saml2
+
+.. note::
+  For more information about `onelogin_settings`, please check the `onelogin documentation <https://github.com/onelogin/python-saml>`_.
+
+To disable SSO::
+
+  $ ceph dashboard sso disable
+
+To check if SSO is enabled::
+
+  $ ceph dashboard sso status
+
+To enable SSO::
+
+  $ ceph dashboard sso enable saml2
 
 Accessing the dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^
@@ -363,7 +403,7 @@ We provide a set of CLI commands to manage user accounts:
 
 - *Create User*::
 
-  $ ceph dashboard ac-user-create <username> <password> [<rolename>] [<name>] [<email>]
+  $ ceph dashboard ac-user-create <username> [<password>] [<rolename>] [<name>] [<email>]
 
 - *Delete User*::
 
@@ -385,7 +425,7 @@ User accounts are also associated with a set of roles that define which
 dashboard functionality can be accessed by the user.
 
 The Dashboard functionality/modules are grouped within a *security scope*.
-Security scopes are predefined and static. The current avaliable security
+Security scopes are predefined and static. The current available security
 scopes are:
 
 - **hosts**: includes all features related to the ``Hosts`` menu
@@ -524,3 +564,28 @@ to use hyperlinks that include your prefix, you can set the
 
 so you can access the dashboard at ``http://$IP:$PORT/$PREFIX/``.
 
+
+Auditing
+--------
+
+The REST API is capable of logging PUT, POST and DELETE requests to the Ceph
+audit log. This feature is disabled by default, but can be enabled with the
+following command::
+
+  $ ceph dashboard set-audit-api-enabled <true|false>
+
+If enabled, the following parameters are logged per each request:
+
+* from - The origin of the request, e.g. https://[::1]:44410
+* path - The REST API path, e.g. /api/auth
+* method - e.g. PUT, POST or DELETE
+* user - The name of the user, otherwise 'None'
+
+The logging of the request payload (the arguments and their values) is enabled
+by default. Execute the following command to disable this behaviour::
+
+  $ ceph dashboard set-audit-api-log-payload <true|false>
+
+A log entry may look like this::
+
+  2018-10-22 15:27:01.302514 mgr.x [INF] [DASHBOARD] from='https://[::ffff:127.0.0.1]:37022' path='/api/rgw/user/klaus' method='PUT' user='admin' params='{"max_buckets": "1000", "display_name": "Klaus Mustermann", "uid": "klaus", "suspended": "0", "email": "klaus.mustermann@ceph.com"}'

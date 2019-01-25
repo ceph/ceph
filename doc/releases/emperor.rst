@@ -22,7 +22,7 @@ v0.72.2 Emperor
 
 This is the second bugfix release for the v0.72.x Emperor series.  We
 have fixed a hang in radosgw, and fixed (again) a problem with monitor
-CLI compatiblity with mixed version monitors.  (In the future this
+CLI compatibility with mixed version monitors.  (In the future this
 will no longer be a problem.)
 
 Upgrading

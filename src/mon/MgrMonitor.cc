@@ -21,6 +21,7 @@
 #include "mgr/MgrContext.h"
 #include "mgr/mgr_commands.h"
 #include "OSDMonitor.h"
+#include "ConfigMonitor.h"
 
 #include "MgrMonitor.h"
 
@@ -36,9 +37,50 @@ static ostream& _prefix(std::ostream *_dout, Monitor *mon,
 		<< ").mgr e" << mgrmap.get_epoch() << " ";
 }
 
+// the system treats always_on_modules as if they provide built-in functionality
+// by ensuring that they are always enabled.
+const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
+  {
+    CEPH_RELEASE_NAUTILUS, {
+      "crash",
+      "status",
+      "progress",
+      "balancer",
+      "devicehealth",
+      "volumes",
+    }
+  }
+};
+
 // Prefix for mon store of active mgr's command descriptions
 const static std::string command_descs_prefix = "mgr_command_descs";
 
+const Option *MgrMonitor::find_module_option(const string& name)
+{
+  // we have two forms of names: "mgr/$module/$option" and
+  // localized "mgr/$module/$instance/$option".  normalize to the
+  // former by stripping out $instance.
+  string real_name;
+  if (name.substr(0, 4) != "mgr/") {
+    return nullptr;
+  }
+  auto second_slash = name.find('/', 5);
+  if (second_slash == std::string::npos) {
+    return nullptr;
+  }
+  auto third_slash = name.find('/', second_slash + 1);
+  if (third_slash != std::string::npos) {
+    // drop the $instance part between the second and third slash
+    real_name = name.substr(0, second_slash) + name.substr(third_slash);
+  } else {
+    real_name = name;
+  }
+  auto p = mgr_module_options.find(real_name);
+  if (p != mgr_module_options.end()) {
+    return &p->second;
+  }
+  return nullptr;
+}
 
 version_t MgrMonitor::get_trim_to() const
 {
@@ -57,9 +99,11 @@ void MgrMonitor::create_initial()
   for (auto& m : tok) {
     pending_map.modules.insert(m);
   }
+  pending_map.always_on_modules = always_on_modules;
   pending_command_descs = mgr_commands;
   dout(10) << __func__ << " initial modules " << pending_map.modules
-	   << ", " << pending_command_descs.size() << " commands"
+	   << ", always on modules " << pending_map.get_always_on_modules()
+           << ", " << pending_command_descs.size() << " commands"
 	   << dendl;
 }
 
@@ -117,6 +161,57 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
       }
     }
   }
+
+  // populate module options
+  mgr_module_options.clear();
+  misc_option_strings.clear();
+  for (auto& i : map.available_modules) {
+    for (auto& j : i.module_options) {
+      string name = string("mgr/") + i.name + "/" + j.second.name;
+      auto p = mgr_module_options.emplace(
+	name,
+	Option(name, static_cast<Option::type_t>(j.second.type),
+	       static_cast<Option::level_t>(j.second.level)));
+      Option& opt = p.first->second;
+      opt.set_flags(static_cast<Option::flag_t>(j.second.flags));
+      opt.set_flag(Option::FLAG_MGR);
+      opt.set_description(j.second.desc.c_str());
+      opt.set_long_description(j.second.long_desc.c_str());
+      for (auto& k : j.second.tags) {
+	opt.add_tag(k.c_str());
+      }
+      for (auto& k : j.second.see_also) {
+	if (i.module_options.count(k)) {
+	  // it's another module option
+	  misc_option_strings.push_back(string("mgr/") + i.name + "/" + k);
+	  opt.add_see_also(misc_option_strings.back().c_str());
+	} else {
+	  // it's a native option
+	  opt.add_see_also(k.c_str());
+	}
+      }
+      Option::value_t v, v2;
+      std::string err;
+      if (j.second.default_value.size() &&
+	  !opt.parse_value(j.second.default_value, &v, &err)) {
+	opt.set_default(v);
+      }
+      if (j.second.min.size() &&
+	  j.second.max.size() &&
+	  !opt.parse_value(j.second.min, &v, &err) &&
+	  !opt.parse_value(j.second.max, &v2, &err)) {
+	opt.set_min_max(v, v2);
+      }
+      std::vector<const char *> enum_allowed;
+      for (auto& k : j.second.enum_allowed) {
+	enum_allowed.push_back(k.c_str());
+      }
+      opt.set_enum_allowed(enum_allowed);
+    }
+  }
+  // force ConfigMonitor to refresh, since it uses const Option *
+  // pointers into our mgr_module_options (which we just rebuilt).
+  mon->configmon()->load_config();
 
   // feed our pet MgrClient
   mon->mgr_client.ms_dispatch(new MMgrMap(map));
@@ -546,6 +641,13 @@ void MgrMonitor::on_active()
 {
   if (mon->is_leader()) {
     mon->clog->debug() << "mgrmap e" << map.epoch << ": " << map;
+
+    if (pending_map.always_on_modules != always_on_modules) {
+      pending_map.always_on_modules = always_on_modules;
+      dout(4) << "always on modules changed "
+        << pending_map.get_always_on_modules() << dendl;
+      propose_pending();
+    }
   }
 }
 
@@ -722,7 +824,7 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     return true;
   }
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", rdata,
 		       get_last_committed());
@@ -761,6 +863,8 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     {
       f->open_array_section("enabled_modules");
       for (auto& p : map.modules) {
+        if (map.get_always_on_modules().count(p) > 0)
+          continue;
         // We only show the name for enabled modules.  The any errors
         // etc will show up as a health checks.
         f->dump_string("module", p);
@@ -768,7 +872,8 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
       f->close_section();
       f->open_array_section("disabled_modules");
       for (auto& p : map.available_modules) {
-        if (map.modules.count(p.name) == 0) {
+        if (map.modules.count(p.name) == 0 &&
+            map.get_always_on_modules().count(p.name) == 0) {
           // For disabled modules, we show the full info, to
           // give a hint about whether enabling it will work
           p.dump(f.get());
@@ -862,7 +967,7 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     return true;
   }
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
@@ -926,6 +1031,10 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
       r = -EINVAL;
       goto out;
     }
+    if (pending_map.get_always_on_modules().count(module) > 0) {
+      ss << "module '" << module << "' is already enabled (always-on)";
+      goto out;
+    }
     string force;
     cmd_getval(g_ceph_context, cmdmap, "force", force);
     if (!pending_map.all_support_module(module) &&
@@ -955,6 +1064,11 @@ bool MgrMonitor::prepare_command(MonOpRequestRef op)
     string module;
     cmd_getval(g_ceph_context, cmdmap, "module", module);
     if (module.empty()) {
+      r = -EINVAL;
+      goto out;
+    }
+    if (pending_map.get_always_on_modules().count(module) > 0) {
+      ss << "module '" << module << "' cannot be disabled (always-on)";
       r = -EINVAL;
       goto out;
     }

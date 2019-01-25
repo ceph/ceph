@@ -1,9 +1,8 @@
-#include "include/rados/librados.h"
-#include "test/librados/test.h"
-
-#include "gtest/gtest.h"
 #include <errno.h>
 #include <vector>
+#include "gtest/gtest.h"
+#include "include/rados/librados.h"
+#include "test/librados/test.h"
 
 #define POOL_LIST_BUF_SZ 32768
 
@@ -126,8 +125,8 @@ TEST(LibRadosPools, PoolGetBaseTier) {
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
 
   cmdstr = "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" +
-     tier_pool_name + "\", \"mode\":\"readonly\", \"sure\": " +
-    "\"--yes-i-really-mean-it\"}";
+     tier_pool_name + "\", \"mode\":\"readonly\"," +
+    " \"yes_i_really_mean_it\": true}";
   cmd[0] = (char *)cmdstr.c_str();
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
 

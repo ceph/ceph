@@ -326,7 +326,7 @@ bool HealthMonitor::check_leader_health()
 	if (q.count(i) == 0) {
 	  ostringstream ss;
 	  ss << "mon." << mon->monmap->get_name(i) << " (rank " << i
-	     << ") addr " << mon->monmap->get_addr(i)
+	     << ") addr " << mon->monmap->get_addrs(i)
 	     << " is down (out of quorum)";
 	  d.detail.push_back(ss.str());
 	}
@@ -362,6 +362,27 @@ bool HealthMonitor::check_leader_health()
 	  ss << ",";
       }
       auto& d = next.add("MON_CLOCK_SKEW", HEALTH_WARN, ss.str());
+      d.detail.swap(details);
+    }
+  }
+
+  // MON_MSGR2_NOT_ENABLED
+  if (g_conf().get_val<bool>("ms_bind_msgr2") &&
+      mon->monmap->get_required_features().contains_all(
+	ceph::features::mon::FEATURE_NAUTILUS)) {
+    list<string> details;
+    for (auto& i : mon->monmap->mon_info) {
+      if (!i.second.public_addrs.has_msgr2()) {
+	ostringstream ds;
+	ds << "mon." << i.first << " is not bound to a msgr2 port, only "
+	   << i.second.public_addrs;
+	details.push_back(ds.str());
+      }
+    }
+    if (!details.empty()) {
+      ostringstream ss;
+      ss << details.size() << " monitors have not enabled msgr2";
+      auto& d = next.add("MON_MSGR2_NOT_ENABLED", HEALTH_WARN, ss.str());
       d.detail.swap(details);
     }
   }

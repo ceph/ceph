@@ -327,7 +327,7 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   const auto &fsmap = get_fsmap();
 
   // check privileges, ignore if fails
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session)
     goto ignore;
   if (!session->is_capable("mds", MON_CAP_X)) {
@@ -473,7 +473,7 @@ bool MDSMonitor::preprocess_offload_targets(MonOpRequestRef op)
   const auto &fsmap = get_fsmap();
   
   // check privileges, ignore message if fails
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session)
     goto ignore;
   if (!session->is_capable("mds", MON_CAP_X)) {
@@ -680,7 +680,9 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
         });
     }
 
-    if (info.state == MDSMap::STATE_STOPPING && state != MDSMap::STATE_STOPPED ) {
+    if (info.state == MDSMap::STATE_STOPPING &&
+        state != MDSMap::STATE_STOPPING &&
+        state != MDSMap::STATE_STOPPED) {
       // we can't transition to any other states from STOPPING
       dout(0) << "got beacon for MDS in STATE_STOPPING, ignoring requested state change"
 	       << dendl;
@@ -707,7 +709,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
       const auto &fs = pending.get_filesystem(fscid);
 
       mon->clog->info() << info.human_name() << " finished "
-                        << "deactivating rank " << info.rank << " in filesystem "
+                        << "stopping rank " << info.rank << " in filesystem "
                         << fs->mds_map.fs_name << " (now has "
                         << fs->mds_map.get_num_in_mds() - 1 << " ranks)";
 
@@ -904,7 +906,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
   std::unique_ptr<Formatter> f(Formatter::create(format));
 
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
@@ -1109,6 +1111,8 @@ bool MDSMonitor::fail_mds_gid(FSMap &fsmap, mds_gid_t gid)
   const MDSMap::mds_info_t &info = fsmap.get_info_gid(gid);
   dout(1) << "fail_mds_gid " << gid << " mds." << info.name << " role " << info.rank << dendl;
 
+  ceph_assert(mon->osdmon()->is_writeable());
+
   epoch_t blacklist_epoch = 0;
   if (info.rank >= 0 && info.state != MDSMap::STATE_STANDBY_REPLAY) {
     utime_t until = ceph_clock_now();
@@ -1215,7 +1219,7 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
 
   /* Refuse access if message not associated with a valid session */
-  MonSession *session = m->get_session();
+  MonSession *session = op->get_session();
   if (!session) {
     mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
@@ -1299,11 +1303,7 @@ int MDSMonitor::filesystem_command(
   string whostr;
   cmd_getval(g_ceph_context, cmdmap, "role", whostr);
 
-  if (prefix == "mds deactivate") {
-    ss << "This command is deprecated because it is obsolete;"
-       << " to deactivate one or more MDS, decrease max_mds appropriately"
-       << " (ceph fs set <fsname> max_mds)";
-  } else if (prefix == "mds set_state") {
+  if (prefix == "mds set_state") {
     mds_gid_t gid;
     if (!cmd_getval(g_ceph_context, cmdmap, "gid", gid)) {
       ss << "error parsing 'gid' value '"
@@ -1348,7 +1348,7 @@ int MDSMonitor::filesystem_command(
       return -EINVAL;
     }
     if (!fsmap.gid_exists(gid)) {
-      ss << "mds gid " << gid << " dne";
+      ss << "mds gid " << gid << " does not exist";
       r = 0;
     } else {
       const auto &info = fsmap.get_info_gid(gid);
@@ -1364,9 +1364,9 @@ int MDSMonitor::filesystem_command(
       }
     }
   } else if (prefix == "mds rmfailed") {
-    string confirm;
-    if (!cmd_getval(g_ceph_context, cmdmap, "confirm", confirm) ||
-       confirm != "--yes-i-really-mean-it") {
+    bool confirm = false;
+    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", confirm);
+    if (!confirm) {
          ss << "WARNING: this can make your filesystem inaccessible! "
                "Add --yes-i-really-mean-it if you are sure you wish to continue.";
          return -EPERM;
@@ -1643,7 +1643,7 @@ int MDSMonitor::load_metadata(map<mds_gid_t, Metadata>& m)
   bufferlist bl;
   int r = mon->store->get(MDS_METADATA_PREFIX, "last_metadata", bl);
   if (r) {
-    dout(1) << "Unable to load 'last_metadata'" << dendl;
+    dout(5) << "Unable to load 'last_metadata'" << dendl;
     return r;
   }
 
@@ -1787,15 +1787,15 @@ bool MDSMonitor::maybe_resize_cluster(FSMap &fsmap, fs_cluster_id_t fscid)
     mds_rank_t target = in - 1;
     const auto &info = mds_map.get_info(target);
     if (mds_map.is_active(target)) {
-      dout(1) << "deactivating " << target << dendl;
-      mon->clog->info() << "deactivating " << info.human_name();
+      dout(1) << "stopping " << target << dendl;
+      mon->clog->info() << "stopping " << info.human_name();
       fsmap.modify_daemon(info.global_id,
                             [] (MDSMap::mds_info_t *info) {
                                 info->state = MDSMap::STATE_STOPPING;
                             });
       return true;
     } else {
-      dout(20) << "skipping deactivate on " << target << dendl;
+      dout(20) << "skipping stop of " << target << dendl;
       return false;
     }
   }

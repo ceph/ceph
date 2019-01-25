@@ -19,7 +19,7 @@
 
 #include "BlockDevice.h"
 
-#if defined(HAVE_LIBAIO)
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
 #include "KernelDevice.h"
 #endif
 
@@ -44,7 +44,7 @@
 
 void IOContext::aio_wait()
 {
-  std::unique_lock<std::mutex> l(lock);
+  std::unique_lock l(lock);
   // see _aio_thread for waker logic
   while (num_running.load() > 0) {
     dout(10) << __func__ << " " << this
@@ -63,7 +63,7 @@ uint64_t IOContext::get_num_ios() const
   // a configurable (with different hdd and ssd defaults), and add
   // that to the bytes value.
   uint64_t ios = 0;
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   for (auto& p : pending_aios) {
     ios += p.iov.size();
   }
@@ -77,7 +77,7 @@ uint64_t IOContext::get_num_ios() const
 void IOContext::release_running_aios()
 {
   ceph_assert(!num_running);
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   // release aio contexts (including pinned buffers).
   running_aios.clear();
 #endif
@@ -120,7 +120,7 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
     return new PMEMDevice(cct, cb, cbpriv);
   }
 #endif
-#if defined(HAVE_LIBAIO)
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   if (type == "kernel") {
     return new KernelDevice(cct, cb, cbpriv, d_cb, d_cbpriv);
   }
@@ -139,7 +139,7 @@ BlockDevice *BlockDevice::create(CephContext* cct, const string& path,
 
 void BlockDevice::queue_reap_ioc(IOContext *ioc)
 {
-  std::lock_guard<std::mutex> l(ioc_reap_lock);
+  std::lock_guard l(ioc_reap_lock);
   if (ioc_reap_count.load() == 0)
     ++ioc_reap_count;
   ioc_reap_queue.push_back(ioc);
@@ -148,7 +148,7 @@ void BlockDevice::queue_reap_ioc(IOContext *ioc)
 void BlockDevice::reap_ioc()
 {
   if (ioc_reap_count.load()) {
-    std::lock_guard<std::mutex> l(ioc_reap_lock);
+    std::lock_guard l(ioc_reap_lock);
     for (auto p : ioc_reap_queue) {
       dout(20) << __func__ << " reap ioc " << p << dendl;
       delete p;

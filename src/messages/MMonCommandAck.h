@@ -33,7 +33,7 @@ private:
   ~MMonCommandAck() override {}
 
 public:
-  const char *get_type_name() const override { return "mon_command"; }
+  std::string_view get_type_name() const override { return "mon_command"; }
   void print(ostream& o) const override {
     o << "mon_command_ack(" << cmd << "=" << r << " " << rs << " v" << version << ")";
   }

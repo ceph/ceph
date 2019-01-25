@@ -34,6 +34,7 @@
 #include "auth/cephx/CephxProtocol.h"
 #include "auth/AuthSessionHandler.h"
 
+#include "include/compat.h"
 #include "include/sock_compat.h"
 #include "include/random.h"
 
@@ -522,7 +523,7 @@ int Pipe::accept()
     need_challenge = HAVE_FEATURE(connect.features, CEPHX_V2);
     had_challenge = (bool)authorizer_challenge;
     authorizer_reply.clear();
-    if (!msgr->verify_authorizer(
+    if (!msgr->ms_deliver_verify_authorizer(
 	  connection_state.get(), peer_type, connect.authorizer_protocol, authorizer,
 	  authorizer_reply, authorizer_valid, session_key,
 	  need_challenge ? &authorizer_challenge : nullptr) ||
@@ -992,8 +993,6 @@ void Pipe::set_socket_options()
 
 int Pipe::connect()
 {
-  bool got_bad_auth = false;
-
   ldout(msgr->cct,10) << "connect " << connect_seq << dendl;
   ceph_assert(pipe_lock.is_locked());
 
@@ -1022,10 +1021,11 @@ int Pipe::connect()
     ::close(sd);
 
   // create socket?
-  sd = ::socket(peer_addr.get_family(), SOCK_STREAM, 0);
+  sd = socket_cloexec(peer_addr.get_family(), SOCK_STREAM, 0);
   if (sd < 0) {
-    rc = -errno;
-    lderr(msgr->cct) << "connect couldn't create socket " << cpp_strerror(rc) << dendl;
+    int e = errno;
+    lderr(msgr->cct) << "connect couldn't create socket " << cpp_strerror(e) << dendl;
+    rc = -e;
     goto fail;
   }
 
@@ -1146,7 +1146,7 @@ int Pipe::connect()
 
   while (1) {
     if (!authorizer) {
-      authorizer = msgr->get_authorizer(peer_type, false);
+      authorizer = msgr->ms_deliver_get_authorizer(peer_type);
     }
     bufferlist authorizer_reply;
 
@@ -1258,13 +1258,7 @@ int Pipe::connect()
 
     if (reply.tag == CEPH_MSGR_TAG_BADAUTHORIZER) {
       ldout(msgr->cct,0) << "connect got BADAUTHORIZER" << dendl;
-      if (got_bad_auth)
-        goto stop_locked;
-      got_bad_auth = true;
-      pipe_lock.Unlock();
-      delete authorizer;
-      authorizer = msgr->get_authorizer(peer_type, true);  // try harder
-      continue;
+      goto fail_locked;
     }
     if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
       ldout(msgr->cct,0) << "connect got RESETSESSION" << dendl;
@@ -2185,7 +2179,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       if (got < 0)
 	goto out_dethrottle;
       if (got > 0) {
-	blp.advance(got);
+	blp.advance(static_cast<size_t>(got));
 	data.append(bp, 0, got);
 	offset += got;
 	left -= got;
@@ -2406,7 +2400,7 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
   msg.msg_iovlen++;
 
   // payload (front+data)
-  list<bufferptr>::const_iterator pb = blist.buffers().begin();
+  auto pb = std::cbegin(blist.buffers());
   unsigned b_off = 0;  // carry-over buffer offset, if any
   unsigned bl_pos = 0; // blist pos
   unsigned left = blist.length();

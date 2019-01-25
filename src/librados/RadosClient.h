@@ -19,6 +19,7 @@
 #include "common/Mutex.h"
 #include "common/RWLock.h"
 #include "common/Timer.h"
+#include "common/ceph_time.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 #include "mon/MonClient.h"
@@ -60,7 +61,7 @@ private:
   bool _dispatch(Message *m);
   bool ms_dispatch(Message *m) override;
 
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer, bool force_new) override;
+  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer) override;
   void ms_handle_connect(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override;
@@ -99,6 +100,7 @@ public:
 
   uint64_t get_instance_id();
 
+  int get_min_compatible_osd(int8_t* require_osd_release);
   int get_min_compatible_client(int8_t* min_compat_client,
                                 int8_t* require_min_compat_client);
 
@@ -170,6 +172,8 @@ public:
     std::map<std::string,std::string>&& status);
 
   mon_feature_t get_required_monitor_features() const;
+
+  int get_inconsistent_pgs(int64_t pool_id, std::vector<std::string>* pgs);
 };
 
 #endif

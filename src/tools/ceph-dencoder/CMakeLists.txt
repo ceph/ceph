@@ -36,18 +36,21 @@ if(WITH_RBD)
   endif()
 endif()
 
+if(WITH_CEPHFS)
+  list(APPEND DENCODER_EXTRALIBS
+    mds)
+endif()
+
 target_link_libraries(ceph-dencoder
   global
   os
   osd
-  mds
   mon
   journal
   ${DENCODER_EXTRALIBS}
   cls_lock_client
   cls_refcount_client
   cls_log_client
-  cls_statelog_client
   cls_version_client
   cls_user_client
   cls_journal_client

@@ -22,7 +22,6 @@
 class CephContext;
 class KeyRing;
 
-template<LockPolicy lock_policy>
 class CephxClientHandler : public AuthClientHandler {
   bool starting;
 
@@ -32,12 +31,12 @@ class CephxClientHandler : public AuthClientHandler {
   CephXTicketManager tickets;
   CephXTicketHandler* ticket_handler;
 
-  RotatingKeyRing<lock_policy> *rotating_secrets;
+  RotatingKeyRing* rotating_secrets;
   KeyRing *keyring;
 
 public:
   CephxClientHandler(CephContext *cct_,
-		     RotatingKeyRing<lock_policy> *rsecrets)
+		     RotatingKeyRing *rsecrets)
     : AuthClientHandler(cct_),
       starting(false),
       server_challenge(0),

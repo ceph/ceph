@@ -693,7 +693,7 @@ void KStore::_shutdown_logger()
 int KStore::_open_path()
 {
   ceph_assert(path_fd < 0);
-  path_fd = ::open(path.c_str(), O_DIRECTORY);
+  path_fd = ::open(path.c_str(), O_DIRECTORY|O_CLOEXEC);
   if (path_fd < 0) {
     int r = -errno;
     derr << __func__ << " unable to open " << path << ": " << cpp_strerror(r)
@@ -1099,7 +1099,6 @@ int KStore::statfs(struct store_statfs_t* buf0)
   return 0;
 }
 
-
 ObjectStore::CollectionHandle KStore::open_collection(const coll_t& cid)
 {
   return _get_collection(cid);
@@ -1111,6 +1110,11 @@ ObjectStore::CollectionHandle KStore::create_new_collection(const coll_t& cid)
   RWLock::WLocker l(coll_lock);
   new_coll_map[cid] = c;
   return c;
+}
+
+int KStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
+{
+  return -ENOTSUP;
 }
 
 // ---------------
@@ -1636,7 +1640,7 @@ bool KStore::OmapIteratorImpl::valid()
   }
 }
 
-int KStore::OmapIteratorImpl::next(bool validate)
+int KStore::OmapIteratorImpl::next()
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.omap_head) {

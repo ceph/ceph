@@ -42,7 +42,7 @@ private:
   ~MStatfs() override {}
 
 public:
-  const char *get_type_name() const override { return "statfs"; }
+  std::string_view get_type_name() const override { return "statfs"; }
   void print(ostream& out) const override {
     out << "statfs(" << get_tid() << " pool "
         << (data_pool ? *data_pool : -1) << " v" << version << ")";

@@ -33,18 +33,6 @@
 namespace librbd {
 
   /**
-   * callback to finish a rados completion as a Context
-   *
-   * @param c completion
-   * @param arg Context* recast as void*
-   */
-  void context_cb(rados_completion_t c, void *arg)
-  {
-    Context *con = reinterpret_cast<Context *>(arg);
-    con->complete(rados_aio_get_return_value(c));
-  }
-
-  /**
    * context to wrap another context in a Mutex
    *
    * @param cct cct

@@ -626,8 +626,7 @@ void init_context() {
   common_init_finish(g_ceph_context);
 }
 
-int init(const std::string &pool_name, const std::string& namespace_name,
-         librados::Rados *rados, librados::IoCtx *io_ctx) {
+int init_rados(librados::Rados *rados) {
   init_context();
 
   int r = rados->init_with_context(g_ceph_context);
@@ -639,6 +638,18 @@ int init(const std::string &pool_name, const std::string& namespace_name,
   r = rados->connect();
   if (r < 0) {
     std::cerr << "rbd: couldn't connect to the cluster!" << std::endl;
+    return r;
+  }
+
+  return 0;
+}
+
+int init(const std::string &pool_name, const std::string& namespace_name,
+         librados::Rados *rados, librados::IoCtx *io_ctx) {
+  init_context();
+
+  int r = init_rados(rados);
+  if (r < 0) {
     return r;
   }
 

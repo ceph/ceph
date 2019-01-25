@@ -312,34 +312,32 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
   }
 
   // parent info, if present
-  std::string parent_pool, parent_name, parent_id, parent_snapname;
-  if ((image.parent_info2(&parent_pool, &parent_name, &parent_id,
-                          &parent_snapname) == 0) &&
-      parent_name.length() > 0) {
-
-    librbd::trash_image_info_t trash_image_info;
-    librbd::RBD rbd;
-    r = rbd.trash_get(io_ctx, parent_id.c_str(), &trash_image_info);
-    bool trash_image_info_valid = (r == 0);
-
+  librbd::linked_image_spec_t parent_image_spec;
+  librbd::snap_spec_t parent_snap_spec;
+  if ((image.get_parent(&parent_image_spec, &parent_snap_spec) == 0) &&
+      (parent_image_spec.image_name.length() > 0)) {
     if (f) {
       f->open_object_section("parent");
-      f->dump_string("pool", parent_pool);
-      f->dump_string("image", parent_name);
-      f->dump_string("snapshot", parent_snapname);
-      if (trash_image_info_valid) {
-        f->dump_string("trash", parent_id);
-      }
+      f->dump_string("pool", parent_image_spec.pool_name);
+      f->dump_string("pool_namespace", parent_image_spec.pool_namespace);
+      f->dump_string("image", parent_image_spec.image_name);
+      f->dump_string("id", parent_image_spec.image_id);
+      f->dump_string("snapshot", parent_snap_spec.name);
+      f->dump_bool("trash", parent_image_spec.trash);
       if ((features & RBD_FEATURE_MIGRATING) != 0) {
         f->dump_bool("migration_source", true);
       }
       f->dump_unsigned("overlap", overlap);
       f->close_section();
     } else {
-      std::cout << "\tparent: " << parent_pool << "/" << parent_name
-                << (parent_snapname.empty() ? "" : "@") << parent_snapname;
-      if (trash_image_info_valid) {
-        std::cout << " (trash " << parent_id << ")";
+      std::cout << "\tparent: " << parent_image_spec.pool_name << "/";
+      if (!parent_image_spec.pool_namespace.empty()) {
+        std::cout << parent_image_spec.pool_namespace << "/";
+      }
+      std::cout << parent_image_spec.image_name << "@"
+                << parent_snap_spec.name;
+      if (parent_image_spec.trash) {
+        std::cout << " (trash " << parent_image_spec.image_id << ")";
       }
       if ((features & RBD_FEATURE_MIGRATING) != 0) {
         std::cout << " (migration source)";

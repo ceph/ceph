@@ -109,9 +109,11 @@ TEST_F(SharedLRU_all, add) {
   }
   {
     int value2 = 3;
-    std::shared_ptr<int> ptr = cache.add(key, new int(value2), &existed);
+    auto p = new int(value2);
+    std::shared_ptr<int> ptr = cache.add(key, p, &existed);
     ASSERT_EQ(value1, *ptr);
     ASSERT_TRUE(existed);
+    delete p;
   }
 }
 TEST_F(SharedLRU_all, empty) {

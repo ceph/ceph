@@ -72,7 +72,7 @@ The monitor peers are provided in several ways:
 
 #. via the initial monmap, provided via ``--monmap <filename>``
 #. via the bootstrap monmap generated from ``--mon-host <list>``
-#. via the bootstrap monmap generated from ``[mon.*]`` sections with ``mon addr`` in the config file
+#. via the bootstrap monmap generated from ``[mon.*]`` sections with the deprecated ``mon addr`` options in the config file (note that this method is *not* recommended and does not support binding to both v1 and v2 protocol addresses)
 #. dynamically via the admin socket
 
 However, these methods are not completely interchangeable because of
@@ -172,12 +172,25 @@ example::
 
      ceph-mon --mkfs -i <myid> --fsid <fsid> --keyring <mon secret key> --public-addr <ip>
 
-Once the daemon starts, you can give it one or more peer addresses to join with::
+Once the daemon starts, you can give it one or more peer addresses (preferably a bare IP address with no port; the mon will set the addr types and ports for you) to join with::
 
      ceph daemon mon.<id> add_bootstrap_peer_hint <peer ip>
 
-This monitor will never participate in cluster creation; it can only join an existing
-cluster.
+Alternatively, you can explicitly specify the addrvec_t with::
+
+     ceph daemon mon.<id> add_bootstrap_peer_hintv <peer addrvec>
+
+For example,::
+
+     ceph daemon mon.new add_bootstrap_peer_hintv v2:1.2.3.4:3300,v1:1.2.3.4:6789
+
+This monitor will never participate in cluster creation; it can only
+join an existing cluster.
+
+Note that the address(es) specified should match exactly the addresses
+the new monitor is binding too.  If, for example, the new mon binds to
+only a v2 address but a v2 and v1 address are provided, there is some
+possibility of confusion in the mons.
 
 Expanding with initial members
 ------------------------------

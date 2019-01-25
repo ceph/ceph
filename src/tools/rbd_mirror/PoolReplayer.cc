@@ -16,6 +16,7 @@
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
 #include "librbd/Watcher.h"
+#include "librbd/api/Config.h"
 #include "librbd/api/Mirror.h"
 #include "ImageMap.h"
 #include "InstanceReplayer.h"
@@ -46,6 +47,7 @@ using ::operator<<;
 
 namespace {
 
+const std::string SERVICE_DAEMON_INSTANCE_ID_KEY("instance_id");
 const std::string SERVICE_DAEMON_LEADER_KEY("leader");
 const std::string SERVICE_DAEMON_LOCAL_COUNT_KEY("image_local_count");
 const std::string SERVICE_DAEMON_REMOTE_COUNT_KEY("image_remote_count");
@@ -305,6 +307,9 @@ void PoolReplayer<I>::init()
     return;
   }
 
+  auto cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
+  librbd::api::Config<I>::apply_pool_overrides(m_local_io_ctx, &cct->_conf);
+
   std::string local_mirror_uuid;
   r = librbd::cls_client::mirror_uuid_get(&m_local_io_ctx,
                                           &local_mirror_uuid);
@@ -346,6 +351,9 @@ void PoolReplayer<I>::init()
       "unable to initialize instance messenger object");
     return;
   }
+  m_service_daemon->add_or_update_attribute(
+      m_local_pool_id, SERVICE_DAEMON_INSTANCE_ID_KEY,
+      m_instance_watcher->get_instance_id());
 
   m_leader_watcher.reset(LeaderWatcher<I>::create(m_threads, m_local_io_ctx,
                                                   &m_leader_listener));

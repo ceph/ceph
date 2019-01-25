@@ -14,15 +14,16 @@ command and many higher level interfaces, including `QEMU`_, `libvirt`_,
 
 .. important:: To use use RBD snapshots, you must have a running Ceph cluster.
 
-.. note:: If a snapshot is taken while `I/O` is still in progress in a image, the
-   snapshot might not get the exact or latest data of the image and the snapshot
-   may have to be cloned to a new image to be mountable. So, we recommend to stop
-   `I/O` before taking a snapshot of an image. If the image contains a filesystem,
-   the filesystem must be in a consistent state before taking a snapshot. To stop
-   `I/O` you can use `fsfreeze` command. See `fsfreeze(8)` man page for more details.
-   For virtual machines, `qemu-guest-agent` can be used to automatically freeze
-   filesystems when creating a snapshot.
-   
+.. note:: Because RBD does not know about the filesystem, snapshots are
+	  `crash-consistent` if they are not coordinated with the mounting
+	  computer. So, we recommend you stop `I/O` before taking a snapshot of
+	  an image. If the image contains a filesystem, the filesystem must be
+	  in a consistent state before taking a snapshot or you may have to run
+	  `fsck`. To stop `I/O` you can use `fsfreeze` command. See
+	  `fsfreeze(8)` man page for more details.
+	  For virtual machines, `qemu-guest-agent` can be used to automatically
+	  freeze filesystems when creating a snapshot.
+
 .. ditaa:: +------------+         +-------------+
            | {s}        |         | {s} c999    |
            |   Active   |<-------*|   Snapshot  |
@@ -36,7 +37,7 @@ Cephx Notes
 
 When `cephx`_ is enabled (it is by default), you must specify a user name or ID
 and a path to the keyring containing the corresponding key for the user. See
-`User Management`_ for details. You may also add the ``CEPH_ARGS`` environment
+:ref:`User Management <user-management>` for details. You may also add the ``CEPH_ARGS`` environment
 variable to avoid re-entry of the following parameters. ::
 
 	rbd --id {user-ID} --keyring=/path/to/secret [commands]
@@ -301,7 +302,6 @@ For example::
 
 
 .. _cephx: ../../rados/configuration/auth-config-ref/
-.. _User Management: ../../operations/user-management
 .. _QEMU: ../qemu-rbd/
 .. _OpenStack: ../rbd-openstack/
 .. _CloudStack: ../rbd-cloudstack/

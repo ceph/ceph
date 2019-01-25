@@ -5,7 +5,7 @@ import mock
 
 from .. import mgr
 from ..controllers.summary import Summary
-from ..controllers.rbd_mirroring import RbdMirror
+from ..controllers.rbd_mirroring import RbdMirroringSummary
 from .helper import ControllerTestCase
 
 
@@ -43,7 +43,7 @@ mock_osd_map = {
 }
 
 
-class RbdMirroringControllerTest(ControllerTestCase):
+class RbdMirroringSummaryControllerTest(ControllerTestCase):
 
     @classmethod
     def setup_server(cls):
@@ -54,7 +54,11 @@ class RbdMirroringControllerTest(ControllerTestCase):
             'osd_map': mock_osd_map,
             'health': {'json': '{"status": 1}'},
             'fs_map': {'filesystems': []},
-
+            'mgr_map': {
+                'services': {
+                    'dashboard': 'https://ceph.dev:11000/'
+                    },
+            }
         }[key]
         mgr.url_prefix = ''
         mgr.get_mgr_id.return_value = 0
@@ -63,15 +67,16 @@ class RbdMirroringControllerTest(ControllerTestCase):
                       '(23d3751b897b31d2bda57aeaf01acb5ff3c4a9cd) ' \
                       'nautilus (dev)'
 
-        RbdMirror._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
+        # pylint: disable=protected-access
+        RbdMirroringSummary._cp_config['tools.authenticate.on'] = False
+        Summary._cp_config['tools.authenticate.on'] = False
+        # pylint: enable=protected-access
 
-        Summary._cp_config['tools.authenticate.on'] = False  # pylint: disable=protected-access
-
-        cls.setup_controllers([RbdMirror, Summary], '/test')
+        cls.setup_controllers([RbdMirroringSummary, Summary], '/test')
 
     @mock.patch('dashboard.controllers.rbd_mirroring.rbd')
     def test_default(self, rbd_mock):  # pylint: disable=W0613
-        self._get('/test/api/rbdmirror')
+        self._get('/test/api/block/mirroring/summary')
         result = self.jsonBody()
         self.assertStatus(200)
         self.assertEqual(result['status'], 0)

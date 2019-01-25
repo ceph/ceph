@@ -92,25 +92,7 @@ struct MockImageCtx {
       image_watcher(NULL), object_map(NULL),
       exclusive_lock(NULL), journal(NULL),
       trace_endpoint(image_ctx.trace_endpoint),
-      concurrent_management_ops(image_ctx.concurrent_management_ops),
-      blacklist_on_break_lock(image_ctx.blacklist_on_break_lock),
-      blacklist_expire_seconds(image_ctx.blacklist_expire_seconds),
       sparse_read_threshold_bytes(image_ctx.sparse_read_threshold_bytes),
-      journal_order(image_ctx.journal_order),
-      journal_splay_width(image_ctx.journal_splay_width),
-      journal_commit_age(image_ctx.journal_commit_age),
-      journal_object_flush_interval(image_ctx.journal_object_flush_interval),
-      journal_object_flush_bytes(image_ctx.journal_object_flush_bytes),
-      journal_object_flush_age(image_ctx.journal_object_flush_age),
-      journal_object_max_in_flight_appends(
-          image_ctx.journal_object_max_in_flight_appends),
-      journal_pool(image_ctx.journal_pool),
-      journal_max_payload_bytes(image_ctx.journal_max_payload_bytes),
-      journal_max_concurrent_object_sets(
-          image_ctx.journal_max_concurrent_object_sets),
-      mirroring_resync_after_disconnect(
-          image_ctx.mirroring_resync_after_disconnect),
-      mirroring_delete_delay(image_ctx.mirroring_delete_delay),
       mirroring_replay_delay(image_ctx.mirroring_replay_delay),
       non_blocking_aio(image_ctx.non_blocking_aio),
       blkin_trace_all(image_ctx.blkin_trace_all),
@@ -118,7 +100,8 @@ struct MockImageCtx {
       ignore_migrating(image_ctx.ignore_migrating),
       mtime_update_interval(image_ctx.mtime_update_interval),
       atime_update_interval(image_ctx.atime_update_interval),
-      cache(image_ctx.cache)
+      cache(image_ctx.cache),
+      config(image_ctx.config)
   {
     md_ctx.dup(image_ctx.md_ctx);
     data_ctx.dup(image_ctx.data_ctx);
@@ -173,8 +156,8 @@ struct MockImageCtx {
   MOCK_CONST_METHOD2(get_snap_namespace, int(librados::snap_t,
 					     cls::rbd::SnapshotNamespace *out_snap_namespace));
   MOCK_CONST_METHOD2(get_parent_spec, int(librados::snap_t in_snap_id,
-                                          ParentSpec *pspec));
-  MOCK_CONST_METHOD1(get_parent_info, const ParentInfo*(librados::snap_t));
+                                          cls::rbd::ParentImageSpec *pspec));
+  MOCK_CONST_METHOD1(get_parent_info, const ParentImageInfo*(librados::snap_t));
   MOCK_CONST_METHOD2(get_parent_overlap, int(librados::snap_t in_snap_id,
                                              uint64_t *overlap));
   MOCK_CONST_METHOD2(prune_parent_extents, uint64_t(vector<pair<uint64_t,uint64_t> >& ,
@@ -195,7 +178,7 @@ struct MockImageCtx {
   MOCK_METHOD8(add_snap, void(cls::rbd::SnapshotNamespace in_snap_namespace,
 			      std::string in_snap_name,
 			      librados::snap_t id,
-			      uint64_t in_size, const ParentInfo &parent,
+			      uint64_t in_size, const ParentImageInfo &parent,
 			      uint8_t protection_status, uint64_t flags, utime_t timestamp));
   MOCK_METHOD3(rm_snap, void(cls::rbd::SnapshotNamespace in_snap_namespace,
 			     std::string in_snap_name,
@@ -280,7 +263,7 @@ struct MockImageCtx {
   std::string header_oid;
   std::string id;
   std::string name;
-  ParentInfo parent_md;
+  ParentImageInfo parent_md;
   MigrationInfo migration_info;
   char *format_string;
   cls::rbd::GroupSpec group_spec;
@@ -315,22 +298,7 @@ struct MockImageCtx {
 
   ZTracer::Endpoint trace_endpoint;
 
-  int concurrent_management_ops;
-  bool blacklist_on_break_lock;
-  uint32_t blacklist_expire_seconds;
   uint64_t sparse_read_threshold_bytes;
-  uint8_t journal_order;
-  uint8_t journal_splay_width;
-  double journal_commit_age;
-  int journal_object_flush_interval;
-  uint64_t journal_object_flush_bytes;
-  double journal_object_flush_age;
-  uint64_t journal_object_max_in_flight_appends;
-  std::string journal_pool;
-  uint32_t journal_max_payload_bytes;
-  int journal_max_concurrent_object_sets;
-  bool mirroring_resync_after_disconnect;
-  uint64_t mirroring_delete_delay;
   int mirroring_replay_delay;
   bool non_blocking_aio;
   bool blkin_trace_all;
@@ -339,6 +307,8 @@ struct MockImageCtx {
   uint64_t mtime_update_interval;
   uint64_t atime_update_interval;
   bool cache;
+
+  ConfigProxy config;
 };
 
 } // namespace librbd

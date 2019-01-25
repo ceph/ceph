@@ -10,14 +10,21 @@ overrides:
       - \(MDS_
 tasks:
 - install.upgrade:
-    osd.3:
+    mon.c:
 - ceph.restart:
-    daemons: [osd.3, osd.4, osd.5]
+    daemons: [mon.c, mgr.x, mgr.y]
+    wait-for-up: true
+    wait-for-healthy: false
+- ceph.restart:
+    daemons: [osd.8, osd.9, osd.10, osd.11]
     wait-for-up: true
     wait-for-healthy: false
 - ceph.restart:
     daemons: [mds.a]
     wait-for-up: true
     wait-for-healthy: false
+- exec:
+    mon.a:
+      - ceph mon enable-msgr2
 - install.upgrade:
     client.0:

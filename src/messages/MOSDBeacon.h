@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include "PaxosServiceMessage.h"
+
 class MOSDBeacon : public MessageInstance<MOSDBeacon, PaxosServiceMessage> {
 public:
   friend factory;
@@ -29,7 +31,7 @@ public:
     decode(pgs, p);
     decode(min_last_epoch_clean, p);
   }
-  const char *get_type_name() const override { return "osd_beacon"; }
+  std::string_view get_type_name() const override { return "osd_beacon"; }
   void print(ostream &out) const {
     out << get_type_name()
         << "(pgs " << pgs

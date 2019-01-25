@@ -7,13 +7,11 @@ import { Component, Input } from '@angular/core';
 })
 export class InfoCardComponent {
   @Input()
-  title: string;
+  cardTitle: string;
   @Input()
   link: string;
   @Input()
-  cardClass = 'col-md-6';
-  @Input()
-  imageClass: string;
+  cardClass = '';
   @Input()
   contentClass: string;
 }

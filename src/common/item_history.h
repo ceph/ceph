@@ -49,7 +49,7 @@ public:
 
   // writes are serialized
   const T& operator=(const T& other) {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     history.push_back(other);
     current = &history.back();
     return *current;
@@ -57,7 +57,7 @@ public:
 
   void prune() {
     // note: this is not necessarily thread-safe wrt readers
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     while (history.size() > 1) {
       history.pop_front();
     }
@@ -87,7 +87,7 @@ public:
 
   // writes are serialized
   const T& operator=(const T& other) {
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     history.push_back(other);
     current = &history.back();
     return *current;
@@ -95,7 +95,7 @@ public:
 
   void prune() {
     // note: this is not necessarily thread-safe wrt readers
-    std::lock_guard<std::mutex> l(lock);
+    std::lock_guard l(lock);
     while (history.size() > 1) {
       history.pop_front();
     }

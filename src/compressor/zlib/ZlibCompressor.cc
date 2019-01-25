@@ -66,7 +66,7 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
     return -1;
   }
 
-  for (std::list<buffer::ptr>::const_iterator i = in.buffers().begin();
+  for (ceph::bufferlist::buffers_t::const_iterator i = in.buffers().begin();
       i != in.buffers().end();) {
 
     c_in = (unsigned char*) (*i).c_str();
@@ -120,7 +120,7 @@ int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out)
   isal_deflate_init(&strm);
   strm.end_of_stream = 0;
 
-  for (std::list<buffer::ptr>::const_iterator i = in.buffers().begin();
+  for (ceph::bufferlist::buffers_t::const_iterator i = in.buffers().begin();
       i != in.buffers().end();) {
 
     c_in = (unsigned char*) (*i).c_str();

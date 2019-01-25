@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_EUPDATE_H
 #define CEPH_MDS_EUPDATE_H
 
+#include <string_view>
+
 #include "../LogEvent.h"
 #include "EMetaBlob.h"
 
@@ -28,7 +30,7 @@ public:
   bool had_slaves;
 
   EUpdate() : LogEvent(EVENT_UPDATE), cmapv(0), had_slaves(false) { }
-  EUpdate(MDLog *mdlog, const char *s) : 
+  EUpdate(MDLog *mdlog, std::string_view s) :
     LogEvent(EVENT_UPDATE),
     type(s), cmapv(0), had_slaves(false) { }
   

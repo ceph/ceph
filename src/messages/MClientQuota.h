@@ -19,7 +19,7 @@ protected:
   ~MClientQuota() override {}
 
 public:
-  const char *get_type_name() const override { return "client_quota"; }
+  std::string_view get_type_name() const override { return "client_quota"; }
   void print(ostream& out) const override {
     out << "client_quota(";
     out << " [" << ino << "] ";

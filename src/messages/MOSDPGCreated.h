@@ -18,7 +18,7 @@ public:
     : MessageInstance(MSG_OSD_PG_CREATED, 0),
       pgid(pgid)
   {}
-  const char *get_type_name() const override { return "pg_created"; }
+  std::string_view get_type_name() const override { return "pg_created"; }
   void print(ostream& out) const override {
     out << "osd_pg_created(" << pgid << ")";
   }

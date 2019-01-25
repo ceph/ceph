@@ -41,15 +41,46 @@ class Summary(BaseController):
                 warnings += 1
         return {'warnings': warnings, 'errors': errors}
 
+    def _task_permissions(self, name):
+        result = True
+        if name == 'pool/create':
+            result = self._has_permissions(Permission.CREATE, Scope.POOL)
+        elif name == 'pool/edit':
+            result = self._has_permissions(Permission.UPDATE, Scope.POOL)
+        elif name == 'pool/delete':
+            result = self._has_permissions(Permission.DELETE, Scope.POOL)
+        elif name in [
+                'rbd/create', 'rbd/copy', 'rbd/snap/create',
+                'rbd/clone', 'rbd/trash/restore']:
+            result = self._has_permissions(Permission.CREATE, Scope.RBD_IMAGE)
+        elif name in [
+                'rbd/edit', 'rbd/snap/edit', 'rbd/flatten',
+                'rbd/snap/rollback']:
+            result = self._has_permissions(Permission.UPDATE, Scope.RBD_IMAGE)
+        elif name in [
+                'rbd/delete', 'rbd/snap/delete', 'rbd/trash/move',
+                'rbd/trash/remove', 'rbd/trash/purge']:
+            result = self._has_permissions(Permission.DELETE, Scope.RBD_IMAGE)
+        return result
+
+    def _get_host(self):
+        mgr_map = mgr.get('mgr_map')
+        services = mgr_map['services']
+        return services['dashboard']
+
     @Endpoint()
     def __call__(self):
-        executing_t, finished_t = TaskManager.list_serializable()
+        exe_t, fin_t = TaskManager.list_serializable()
+        executing_tasks = [task for task in exe_t if self._task_permissions(task['name'])]
+        finished_tasks = [task for task in fin_t if self._task_permissions(task['name'])]
+
         result = {
             'health_status': self._health_status(),
             'mgr_id': mgr.get_mgr_id(),
+            'mgr_host': self._get_host(),
             'have_mon_connection': mgr.have_mon_connection(),
-            'executing_tasks': executing_t,
-            'finished_tasks': finished_t,
+            'executing_tasks': executing_tasks,
+            'finished_tasks': finished_tasks,
             'version': mgr.version
         }
         if self._has_permissions(Permission.READ, Scope.RBD_MIRRORING):

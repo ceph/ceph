@@ -504,6 +504,7 @@ public:
     f->close_section();
   }
 
+  int flush_cache(ostream *os = NULL) override;
   int write_version_stamp();
   int version_stamp_is_valid(uint32_t *version);
   int update_version_stamp();
@@ -517,6 +518,7 @@ public:
   int get_devices(set<string> *ls) override;
 
   int statfs(struct store_statfs_t *buf) override;
+  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
 
   int _do_transactions(
     vector<Transaction> &tls, uint64_t op_seq,
@@ -531,6 +533,9 @@ public:
 
   CollectionHandle open_collection(const coll_t& c) override;
   CollectionHandle create_new_collection(const coll_t& c) override;
+  void set_collection_commit_queue(const coll_t& cid,
+				   ContextQueue *commit_queue) override {
+  }
 
   int queue_transactions(CollectionHandle& ch, vector<Transaction>& tls,
 			 TrackedOpRef op = TrackedOpRef(),
@@ -766,6 +771,8 @@ public:
   void dump_transactions(vector<Transaction>& ls, uint64_t seq, OpSequencer *osr);
 
   virtual int apply_layout_settings(const coll_t &cid, int target_level);
+
+  void get_db_statistics(Formatter* f) override;
 
 private:
   void _inject_failure();

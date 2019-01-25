@@ -2,16 +2,20 @@ import { NgModule } from '@angular/core';
 import { ActivatedRouteSnapshot, RouterModule, Routes } from '@angular/router';
 
 import { IscsiComponent } from './ceph/block/iscsi/iscsi.component';
-import { MirroringComponent } from './ceph/block/mirroring/mirroring.component';
+import { OverviewComponent as RbdMirroringComponent } from './ceph/block/mirroring/overview/overview.component';
 import { RbdFormComponent } from './ceph/block/rbd-form/rbd-form.component';
-import { RbdListComponent } from './ceph/block/rbd-list/rbd-list.component';
+import { RbdImagesComponent } from './ceph/block/rbd-images/rbd-images.component';
 import { CephfsListComponent } from './ceph/cephfs/cephfs-list/cephfs-list.component';
+import { ConfigurationFormComponent } from './ceph/cluster/configuration/configuration-form/configuration-form.component';
 import { ConfigurationComponent } from './ceph/cluster/configuration/configuration.component';
+import { CrushmapComponent } from './ceph/cluster/crushmap/crushmap.component';
 import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
+import { LogsComponent } from './ceph/cluster/logs/logs.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
+import { PoolFormComponent } from './ceph/pool/pool-form/pool-form.component';
 import { PoolListComponent } from './ceph/pool/pool-list/pool-list.component';
 import { Rgw501Component } from './ceph/rgw/rgw-501/rgw-501.component';
 import { RgwBucketFormComponent } from './ceph/rgw/rgw-bucket-form/rgw-bucket-form.component';
@@ -71,15 +75,39 @@ const routes: Routes = [
   },
   {
     path: 'osd',
-    component: OsdListComponent,
     canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/OSDs' }
+    canActivateChild: [AuthGuardService],
+    data: { breadcrumbs: 'Cluster/OSDs' },
+    children: [
+      {
+        path: '',
+        component: OsdListComponent
+      }
+    ]
   },
   {
     path: 'configuration',
-    component: ConfigurationComponent,
+    data: { breadcrumbs: 'Cluster/Configuration' },
+    children: [
+      { path: '', component: ConfigurationComponent },
+      {
+        path: 'edit/:name',
+        component: ConfigurationFormComponent,
+        data: { breadcrumbs: 'Edit' }
+      }
+    ]
+  },
+  {
+    path: 'crush-map',
+    component: CrushmapComponent,
     canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Cluster/Configuration Documentation' }
+    data: { breadcrumbs: 'Cluster/CRUSH map' }
+  },
+  {
+    path: 'logs',
+    component: LogsComponent,
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'Cluster/Logs' }
   },
   {
     path: 'perf_counters/:type/:id',
@@ -92,9 +120,14 @@ const routes: Routes = [
   // Pools
   {
     path: 'pool',
-    component: PoolListComponent,
     canActivate: [AuthGuardService],
-    data: { breadcrumbs: 'Pools' }
+    canActivateChild: [AuthGuardService],
+    data: { breadcrumbs: 'Pools' },
+    children: [
+      { path: '', component: PoolListComponent },
+      { path: 'add', component: PoolFormComponent, data: { breadcrumbs: 'Add' } },
+      { path: 'edit/:name', component: PoolFormComponent, data: { breadcrumbs: 'Edit' } }
+    ]
   },
   // Block
   {
@@ -104,10 +137,15 @@ const routes: Routes = [
     data: { breadcrumbs: true, text: 'Block', path: null },
     children: [
       {
+        path: '',
+        redirectTo: 'rbd',
+        pathMatch: 'full'
+      },
+      {
         path: 'rbd',
         data: { breadcrumbs: 'Images' },
         children: [
-          { path: '', component: RbdListComponent },
+          { path: '', component: RbdImagesComponent },
           { path: 'add', component: RbdFormComponent, data: { breadcrumbs: 'Add' } },
           { path: 'edit/:pool/:name', component: RbdFormComponent, data: { breadcrumbs: 'Edit' } },
           {
@@ -125,7 +163,7 @@ const routes: Routes = [
       },
       {
         path: 'mirroring',
-        component: MirroringComponent,
+        component: RbdMirroringComponent,
         data: { breadcrumbs: 'Mirroring' }
       },
       { path: 'iscsi', component: IscsiComponent, data: { breadcrumbs: 'iSCSI' } }
@@ -174,7 +212,7 @@ const routes: Routes = [
         children: [
           { path: '', component: RgwBucketListComponent },
           { path: 'add', component: RgwBucketFormComponent, data: { breadcrumbs: 'Add' } },
-          { path: 'edit/:bucket', component: RgwBucketFormComponent, data: { breadcrumbs: 'Edit' } }
+          { path: 'edit/:bid', component: RgwBucketFormComponent, data: { breadcrumbs: 'Edit' } }
         ]
       }
     ]
@@ -213,6 +251,7 @@ const routes: Routes = [
   },
   // System
   { path: 'login', component: LoginComponent },
+  { path: 'logout', children: [] },
   { path: '403', component: ForbiddenComponent },
   { path: '404', component: NotFoundComponent },
   { path: '**', redirectTo: '/404' }

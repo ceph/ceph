@@ -83,7 +83,12 @@ def get_block_db_size(lv_format=True):
     .. note: Configuration values are in bytes, unlike journals which
              are defined in gigabytes
     """
-    conf_db_size = conf.ceph.get_safe('osd', 'bluestore_block_db_size', None)
+    conf_db_size = None
+    try:
+        conf_db_size = conf.ceph.get_safe('osd', 'bluestore_block_db_size', None)
+    except RuntimeError:
+        logger.exception("failed to load ceph configuration, will use defaults")
+
     if not conf_db_size:
         logger.debug(
             'block.db has no size configuration, will fallback to using as much as possible'
@@ -346,7 +351,7 @@ def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):
                    --setuser ceph --setgroup ceph
 
     In some cases it is required to use the keyring, when it is passed in as
-    a keywork argument it is used as part of the ceph-osd command
+    a keyword argument it is used as part of the ceph-osd command
     """
     path = '/var/lib/ceph/osd/%s-%s/' % (conf.cluster, osd_id)
     monmap = os.path.join(path, 'activate.monmap')

@@ -530,9 +530,8 @@ struct ObjectOperation {
 	    for (list<watch_item_t>::iterator i = resp.entries.begin() ;
 		 i != resp.entries.end() ; ++i) {
 	      obj_watch_t ow;
-	      ostringstream sa;
-	      sa << i->addr;
-	      strncpy(ow.addr, sa.str().c_str(), 256);
+	      string sa = i->addr.get_legacy_str();
+	      strncpy(ow.addr, sa.c_str(), 256);
 	      ow.watcher_id = i->name.num();
 	      ow.cookie = i->cookie;
 	      ow.timeout_seconds = i->timeout_seconds;
@@ -625,23 +624,6 @@ struct ObjectOperation {
   // trivialmap
   void tmap_update(bufferlist& bl) {
     add_data(CEPH_OSD_OP_TMAPUP, 0, 0, bl);
-  }
-  void tmap_put(bufferlist& bl) {
-    add_data(CEPH_OSD_OP_TMAPPUT, 0, bl.length(), bl);
-  }
-  void tmap_get(bufferlist *pbl, int *prval) {
-    add_op(CEPH_OSD_OP_TMAPGET);
-    unsigned p = ops.size() - 1;
-    out_bl[p] = pbl;
-    out_rval[p] = prval;
-  }
-  void tmap_get() {
-    add_op(CEPH_OSD_OP_TMAPGET);
-  }
-  void tmap_to_omap(bool nullok=false) {
-     OSDOp& osd_op = add_op(CEPH_OSD_OP_TMAP2OMAP);
-     if (nullok)
-       osd_op.op.tmap2omap.flags = CEPH_OSD_TMAP2OMAP_NULLOK;
   }
 
   // objectmap
@@ -737,6 +719,7 @@ struct ObjectOperation {
     uint32_t *out_data_digest;
     uint32_t *out_omap_digest;
     mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *out_reqids;
+    mempool::osd_pglog::map<uint32_t, int> *out_reqid_return_codes;
     uint64_t *out_truncate_seq;
     uint64_t *out_truncate_size;
     int *prval;
@@ -752,6 +735,7 @@ struct ObjectOperation {
 			      uint32_t *dd,
 			      uint32_t *od,
 			      mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *oreqids,
+			      mempool::osd_pglog::map<uint32_t, int> *oreqid_return_codes,
 			      uint64_t *otseq,
 			      uint64_t *otsize,
 			      int *r)
@@ -761,6 +745,7 @@ struct ObjectOperation {
 	out_omap_data(o), out_snaps(osnaps), out_snap_seq(osnap_seq),
 	out_flags(flags), out_data_digest(dd), out_omap_digest(od),
 	out_reqids(oreqids),
+	out_reqid_return_codes(oreqid_return_codes),
 	out_truncate_seq(otseq),
 	out_truncate_size(otsize),
 	prval(r) {}
@@ -801,6 +786,8 @@ struct ObjectOperation {
 	  *out_omap_digest = copy_reply.omap_digest;
 	if (out_reqids)
 	  *out_reqids = copy_reply.reqids;
+	if (out_reqid_return_codes)
+	  *out_reqid_return_codes = copy_reply.reqid_return_codes;
 	if (out_truncate_seq)
 	  *out_truncate_seq = copy_reply.truncate_seq;
 	if (out_truncate_size)
@@ -827,6 +814,7 @@ struct ObjectOperation {
 		uint32_t *out_data_digest,
 		uint32_t *out_omap_digest,
 		mempool::osd_pglog::vector<pair<osd_reqid_t, version_t> > *out_reqids,
+		mempool::osd_pglog::map<uint32_t, int> *out_reqid_return_codes,
 		uint64_t *truncate_seq,
 		uint64_t *truncate_size,
 		int *prval) {
@@ -841,7 +829,8 @@ struct ObjectOperation {
 				    out_attrs, out_data, out_omap_header,
 				    out_omap_data, out_snaps, out_snap_seq,
 				    out_flags, out_data_digest,
-				    out_omap_digest, out_reqids, truncate_seq,
+				    out_omap_digest, out_reqids,
+				    out_reqid_return_codes, truncate_seq,
 				    truncate_size, prval);
     out_bl[p] = &h->bl;
     out_handler[p] = h;
@@ -2190,7 +2179,6 @@ public:
   void _wait_for_new_map(Context *c, epoch_t epoch, int err=0);
   void wait_for_latest_osdmap(Context *fin);
   void get_latest_version(epoch_t oldest, epoch_t neweset, Context *fin);
-  void _get_latest_version(epoch_t oldest, epoch_t neweset, Context *fin);
 
   /** Get the current set of global op flags */
   int get_global_op_flags() const { return global_op_flags; }
@@ -3060,8 +3048,7 @@ public:
   void ms_handle_remote_reset(Connection *con) override;
   bool ms_handle_refused(Connection *con) override;
   bool ms_get_authorizer(int dest_type,
-			 AuthAuthorizer **authorizer,
-			 bool force_new) override;
+			 AuthAuthorizer **authorizer) override;
 
   void blacklist_self(bool set);
 

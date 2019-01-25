@@ -4,9 +4,9 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import { BsModalRef, BsModalService } from 'ngx-bootstrap';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { ApiModule } from '../../../shared/api/api.module';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -28,7 +28,7 @@ describe('RbdSnapshotFormComponent', () => {
       RouterTestingModule
     ],
     declarations: [RbdSnapshotFormComponent],
-    providers: [BsModalRef, BsModalService, AuthStorageService]
+    providers: [BsModalRef, BsModalService, AuthStorageService, i18nProviders]
   });
 
   beforeEach(() => {

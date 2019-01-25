@@ -98,9 +98,6 @@ enum {
   l_osdc_osdop_cmpxattr,
   l_osdc_osdop_rmxattr,
   l_osdc_osdop_resetxattrs,
-  l_osdc_osdop_tmap_up,
-  l_osdc_osdop_tmap_put,
-  l_osdc_osdop_tmap_get,
   l_osdc_osdop_call,
   l_osdc_osdop_watch,
   l_osdc_osdop_notify,
@@ -292,12 +289,6 @@ void Objecter::init()
 			"Remove xattr operations");
     pcb.add_u64_counter(l_osdc_osdop_resetxattrs, "osdop_resetxattrs",
 			"Reset xattr operations");
-    pcb.add_u64_counter(l_osdc_osdop_tmap_up, "osdop_tmap_up",
-			"TMAP update operations");
-    pcb.add_u64_counter(l_osdc_osdop_tmap_put, "osdop_tmap_put",
-			"TMAP put operations");
-    pcb.add_u64_counter(l_osdc_osdop_tmap_get, "osdop_tmap_get",
-			"TMAP get operations");
     pcb.add_u64_counter(l_osdc_osdop_call, "osdop_call",
 			"Call (execute) operations");
     pcb.add_u64_counter(l_osdc_osdop_watch, "osdop_watch",
@@ -413,7 +404,9 @@ void Objecter::shutdown()
 
   initialized = false;
 
+  wl.unlock();
   cct->_conf.remove_observer(this);
+  wl.lock();
 
   map<int,OSDSession*>::iterator p;
   while (!osd_sessions.empty()) {
@@ -1337,15 +1330,7 @@ void Objecter::handle_osd_map(MOSDMap *m)
   for (list<LingerOp*>::iterator p = need_resend_linger.begin();
        p != need_resend_linger.end(); ++p) {
     LingerOp *op = *p;
-    if (!op->session) {
-      _calc_target(&op->target, nullptr);
-      OSDSession *s = NULL;
-      const int r = _get_session(op->target.osd, &s, sul);
-      ceph_assert(r == 0);
-      ceph_assert(s != NULL);
-      op->session = s;
-      put_session(s);
-    }
+    ceph_assert(op->session);
     if (!op->session->is_homeless()) {
       logger->inc(l_osdc_linger_resend);
       _send_linger(op, sul);
@@ -1834,6 +1819,7 @@ void Objecter::get_session(Objecter::OSDSession *s)
 
 void Objecter::_reopen_session(OSDSession *s)
 {
+  // rwlock is locked unique
   // s->lock is locked
 
   auto addrs = osdmap->get_addrs(s->osd);
@@ -1960,15 +1946,9 @@ void Objecter::wait_for_latest_osdmap(Context *fin)
 void Objecter::get_latest_version(epoch_t oldest, epoch_t newest, Context *fin)
 {
   unique_lock wl(rwlock);
-  _get_latest_version(oldest, newest, fin);
-}
-
-void Objecter::_get_latest_version(epoch_t oldest, epoch_t newest,
-				   Context *fin)
-{
-  // rwlock is locked unique
   if (osdmap->get_epoch() >= newest) {
-  ldout(cct, 10) << __func__ << " latest " << newest << ", have it" << dendl;
+    ldout(cct, 10) << __func__ << " latest " << newest << ", have it" << dendl;
+    wl.unlock();
     if (fin)
       fin->complete(0);
     return;
@@ -2349,9 +2329,6 @@ void Objecter::_send_op_account(Op *op)
     case CEPH_OSD_OP_CMPXATTR: code = l_osdc_osdop_cmpxattr; break;
     case CEPH_OSD_OP_RMXATTR: code = l_osdc_osdop_rmxattr; break;
     case CEPH_OSD_OP_RESETXATTRS: code = l_osdc_osdop_resetxattrs; break;
-    case CEPH_OSD_OP_TMAPUP: code = l_osdc_osdop_tmap_up; break;
-    case CEPH_OSD_OP_TMAPPUT: code = l_osdc_osdop_tmap_put; break;
-    case CEPH_OSD_OP_TMAPGET: code = l_osdc_osdop_tmap_get; break;
 
     // OMAP read operations
     case CEPH_OSD_OP_OMAPGETVALS:
@@ -2896,10 +2873,11 @@ int Objecter::_calc_target(op_target_t *t, Connection *con, bool any_change)
   }
 
   bool unpaused = false;
-  if (t->paused && !target_should_be_paused(t)) {
-    t->paused = false;
+  bool should_be_paused = target_should_be_paused(t);
+  if (t->paused && !should_be_paused) {
     unpaused = true;
   }
+  t->paused = should_be_paused;
 
   bool legacy_change =
     t->pgid != pgid ||
@@ -3300,11 +3278,11 @@ int Objecter::calc_op_budget(const vector<OSDOp>& ops)
     if (i->op.op & CEPH_OSD_OP_MODE_WR) {
       op_budget += i->indata.length();
     } else if (ceph_osd_op_mode_read(i->op.op)) {
-      if (ceph_osd_op_type_data(i->op.op)) {
-	if ((int64_t)i->op.extent.length > 0)
-	  op_budget += (int64_t)i->op.extent.length;
+      if (ceph_osd_op_uses_extent(i->op.op)) {
+        if ((int64_t)i->op.extent.length > 0)
+          op_budget += (int64_t)i->op.extent.length;
       } else if (ceph_osd_op_type_attr(i->op.op)) {
-	op_budget += i->op.xattr.name_len + i->op.xattr.value_len;
+        op_budget += i->op.xattr.name_len + i->op.xattr.value_len;
       }
     }
   }
@@ -3436,7 +3414,9 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     op->tid = 0;
     m->get_redirect().combine_with_locator(op->target.target_oloc,
 					   op->target.target_oid.name);
-    op->target.flags |= (CEPH_OSD_FLAG_REDIRECTED | CEPH_OSD_FLAG_IGNORE_OVERLAY);
+    op->target.flags |= (CEPH_OSD_FLAG_REDIRECTED |
+			 CEPH_OSD_FLAG_IGNORE_CACHE |
+			 CEPH_OSD_FLAG_IGNORE_OVERLAY);
     _op_submit(op, sul, NULL);
     m->put();
     return;
@@ -4386,13 +4366,17 @@ bool Objecter::ms_handle_reset(Connection *con)
   if (!initialized)
     return false;
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
+    unique_lock wl(rwlock);
+
     auto priv = con->get_priv();
     auto session = static_cast<OSDSession*>(priv.get());
     if (session) {
       ldout(cct, 1) << "ms_handle_reset " << con << " session " << session
 		    << " osd." << session->osd << dendl;
-      unique_lock wl(rwlock);
-      if (!initialized) {
+      // the session maybe had been closed if new osdmap just handled
+      // says the osd down
+      if (!(initialized && osdmap->is_up(session->osd))) {
+	ldout(cct, 1) << "ms_handle_reset aborted,initialized=" << initialized << dendl;
 	wl.unlock();
 	return false;
       }
@@ -4431,8 +4415,7 @@ bool Objecter::ms_handle_refused(Connection *con)
 }
 
 bool Objecter::ms_get_authorizer(int dest_type,
-				 AuthAuthorizer **authorizer,
-				 bool force_new)
+				 AuthAuthorizer **authorizer)
 {
   if (!initialized)
     return false;

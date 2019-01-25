@@ -19,6 +19,9 @@
 #include "mon/MgrMap.h"
 #include "mgr/DaemonHealthMetric.h"
 
+#include "messages/MMgrReport.h"
+#include "mgr/OSDPerfMetricTypes.h"
+
 #include "common/perf_counters.h"
 #include "common/Timer.h"
 #include "common/CommandTable.h"
@@ -76,6 +79,10 @@ protected:
   // If provided, use this to compose an MPGStats to send with
   // our reports (hook for use by OSD)
   std::function<MPGStats*()> pgstats_cb;
+  std::function<void(const std::map<OSDPerfMetricQuery,
+                                    OSDPerfMetricLimits> &)> set_perf_queries_cb;
+  std::function<void(std::map<OSDPerfMetricQuery,
+                              OSDPerfMetricReport> *)> get_perf_report_cb;
 
   // for service registration and beacon
   bool service_daemon = false;
@@ -112,10 +119,21 @@ public:
   bool handle_mgr_close(MMgrClose *m);
   bool handle_command_reply(MCommandReply *m);
 
+  void set_perf_metric_query_cb(
+    std::function<void(const std::map<OSDPerfMetricQuery,
+                                      OSDPerfMetricLimits> &)> cb_set,
+          std::function<void(std::map<OSDPerfMetricQuery,
+                                      OSDPerfMetricReport> *)> cb_get)
+  {
+      std::lock_guard l(lock);
+      set_perf_queries_cb = cb_set;
+      get_perf_report_cb = cb_get;
+  }
+
   void send_pgstats();
   void set_pgstats_cb(std::function<MPGStats*()>&& cb_)
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     pgstats_cb = std::move(cb_);
   }
 

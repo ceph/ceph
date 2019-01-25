@@ -78,10 +78,20 @@ void PGLog::IndexedLog::trim(
       }
       dups.push_back(pg_log_dup_t(e));
       index(dups.back());
+      uint32_t idx = 0;
       for (const auto& extra : e.extra_reqids) {
+	int return_code = e.return_code;
+	if (return_code >= 0) {
+	  auto it = e.extra_reqid_return_codes.find(idx);
+	  if (it != e.extra_reqid_return_codes.end()) {
+	    return_code = it->second;
+	  }
+	}
+	++idx;
+
 	// note: extras have the same version as outer op
 	dups.push_back(pg_log_dup_t(e.version, extra.second,
-				    extra.first, e.return_code));
+				    extra.first, return_code));
 	index(dups.back());
       }
     }
@@ -595,7 +605,7 @@ void PGLog::write_log_and_missing(
   bool require_rollback)
 {
   if (is_dirty()) {
-    dout(5) << "write_log_and_missing with: "
+    dout(6) << "write_log_and_missing with: "
 	     << "dirty_to: " << dirty_to
 	     << ", dirty_from: " << dirty_from
 	     << ", writeout_from: " << writeout_from

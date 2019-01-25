@@ -28,8 +28,6 @@
 #include <string>
 #include <vector>
 
-#include <infiniband/verbs.h>
-
 #include "include/int_types.h"
 #include "include/page.h"
 #include "common/debug.h"

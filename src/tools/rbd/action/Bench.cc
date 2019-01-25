@@ -462,8 +462,8 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
   librados::Rados rados;
   librados::IoCtx io_ctx;
   librbd::Image image;
-  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "", "",
-                                 false, &rados, &io_ctx, &image);
+  r = utils::init_and_open_image(pool_name, namespace_name, image_name, "",
+                                 snap_name, false, &rados, &io_ctx, &image);
   if (r < 0) {
     return r;
   }

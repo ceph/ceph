@@ -3,6 +3,7 @@
 
 #include "test/librados_test_stub/TestWatchNotify.h"
 #include "include/Context.h"
+#include "common/Cond.h"
 #include "include/stringify.h"
 #include "common/Finisher.h"
 #include "test/librados_test_stub/TestCluster.h"
@@ -359,7 +360,10 @@ void TestWatchNotify::finish_notify(TestRadosClient *rados_client,
 
   ceph_assert(m_lock.is_locked());
   SharedWatcher watcher = get_watcher(pool_id, nspace, oid);
-  ceph_assert(watcher);
+  if (!watcher) {
+    ldout(cct, 1) << "oid=" << oid << ": not found" << dendl;
+    return;
+  }
 
   NotifyHandles::iterator it = watcher->notify_handles.find(notify_id);
   if (it == watcher->notify_handles.end()) {

@@ -7,6 +7,7 @@ import errno
 import time
 import json
 import logging
+import time
 
 log = logging.getLogger(__name__)
 
@@ -16,7 +17,7 @@ class TestMisc(CephFSTestCase):
     def test_getattr_caps(self):
         """
         Check if MDS recognizes the 'mask' parameter of open request.
-        The paramter allows client to request caps when opening file
+        The parameter allows client to request caps when opening file
         """
 
         if not isinstance(self.mount_a, FuseMount):
@@ -34,11 +35,21 @@ class TestMisc(CephFSTestCase):
         p = self.mount_a.open_background("testfile")
         self.mount_b.wait_for_visible("testfile")
 
-        # this tiggers a lookup request and an open request. The debug
+        # this triggers a lookup request and an open request. The debug
         # code will check if lookup/open reply contains xattrs
         self.mount_b.run_shell(["cat", "testfile"])
 
         self.mount_a.kill_background(p)
+
+    def test_root_rctime(self):
+        """
+        Check that the root inode has a non-default rctime on startup.
+        """
+
+        t = time.time()
+        rctime = self.mount_a.getfattr(".", "ceph.dir.rctime")
+        log.info("rctime = {}".format(rctime))
+        self.assertGreaterEqual(rctime, t-10)
 
     def test_fs_new(self):
         data_pool_name = self.fs.get_data_pool_name()
@@ -207,3 +218,81 @@ class TestMisc(CephFSTestCase):
         info = self.fs.mds_asok(['dump', 'inode', '1'])
         assert(info['path'] == "/")
 
+    def test_dump_inode_hexademical(self):
+        self.mount_a.run_shell(["mkdir", "-p", "foo"])
+        ino = self.mount_a.path_to_ino("foo")
+        assert type(ino) is int
+        info = self.fs.mds_asok(['dump', 'inode', hex(ino)])
+        assert info['path'] == "/foo"
+
+    def _run_drop_cache_cmd(self, timeout, use_tell):
+        drop_res = None
+        if use_tell:
+            mds_id = self.fs.get_lone_mds_id()
+            drop_res = json.loads(
+                self.fs.mon_manager.raw_cluster_cmd("tell", "mds.{0}".format(mds_id),
+                                                    "cache", "drop", str(timeout)))
+        else:
+            drop_res = self.fs.mds_asok(["cache", "drop", str(timeout)])
+        return drop_res
+
+    def _drop_cache_command(self, timeout, use_tell=True):
+        self.mount_b.umount_wait()
+        ls_data = self.fs.mds_asok(['session', 'ls'])
+        self.assert_session_count(1, ls_data)
+
+        # create some files
+        self.mount_a.create_n_files("dc-dir/dc-file", 1000)
+        # drop cache
+        drop_res = self._run_drop_cache_cmd(timeout, use_tell)
+
+        self.assertTrue(drop_res['client_recall']['return_code'] == 0)
+        self.assertTrue(drop_res['flush_journal']['return_code'] == 0)
+
+    def _drop_cache_command_timeout(self, timeout, use_tell=True):
+        self.mount_b.umount_wait()
+        ls_data = self.fs.mds_asok(['session', 'ls'])
+        self.assert_session_count(1, ls_data)
+
+        # create some files
+        self.mount_a.create_n_files("dc-dir/dc-file-t", 1000)
+
+        # simulate client death and try drop cache
+        self.mount_a.kill()
+        drop_res = self._run_drop_cache_cmd(timeout, use_tell)
+
+        self.assertTrue(drop_res['client_recall']['return_code'] == -errno.ETIMEDOUT)
+        self.assertTrue(drop_res['flush_journal']['return_code'] == 0)
+
+        self.mount_a.kill_cleanup()
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()
+
+    def test_drop_cache_command_asok(self):
+        """
+        Basic test for checking drop cache command using admin socket.
+        Note that the cache size post trimming is not checked here.
+        """
+        self._drop_cache_command(10, use_tell=False)
+
+    def test_drop_cache_command_tell(self):
+        """
+        Basic test for checking drop cache command using tell interface.
+        Note that the cache size post trimming is not checked here.
+        """
+        self._drop_cache_command(10)
+
+    def test_drop_cache_command_timeout_asok(self):
+        """
+        Check drop cache command with non-responding client using admin
+        socket. Note that the cache size post trimming is not checked here.
+        """
+        self._drop_cache_command_timeout(5, use_tell=False)
+
+    def test_drop_cache_command_timeout_tell(self):
+        """
+        Check drop cache command with non-responding client using tell
+        interface. Note that the cache size post trimming is not checked
+        here.
+        """
+        self._drop_cache_command_timeout(5)

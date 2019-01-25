@@ -55,21 +55,27 @@ export class ApiInterceptorService implements HttpInterceptor {
             case 401:
               this.authStorageService.remove();
               this.router.navigate(['/login']);
+              showNotification = false;
               break;
             case 403:
               this.router.navigate(['/403']);
-              break;
-            case 404:
-              this.router.navigate(['/404']);
               break;
           }
 
           let timeoutId;
           if (showNotification) {
+            let message = '';
+            if (_.isPlainObject(resp.error) && _.isString(resp.error.detail)) {
+              message = resp.error.detail; // Error was triggered by the backend.
+            } else if (_.isString(resp.error)) {
+              message = resp.error;
+            } else if (_.isString(resp.message)) {
+              message = resp.message;
+            }
             timeoutId = this.notificationService.show(
               NotificationType.error,
-              resp.error.detail || '',
-              `${resp.status} - ${resp.statusText}`
+              `${resp.status} - ${resp.statusText}`,
+              message
             );
           }
 

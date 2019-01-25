@@ -3,7 +3,7 @@ import { AbstractControl, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import * as _ from 'lodash';
-import { BsModalService } from 'ngx-bootstrap';
+import { BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
@@ -51,13 +51,17 @@ export class RgwUserFormComponent implements OnInit {
   createForm() {
     this.userForm = this.formBuilder.group({
       // General
-      user_id: [
+      uid: [
         null,
         [Validators.required],
         [CdValidators.unique(this.rgwUserService.exists, this.rgwUserService)]
       ],
       display_name: [null, [Validators.required]],
-      email: [null, [CdValidators.email]],
+      email: [
+        null,
+        [CdValidators.email],
+        [CdValidators.unique(this.rgwUserService.emailExists, this.rgwUserService)]
+      ],
       max_buckets: [1000, [Validators.required, Validators.min(0)]],
       suspended: [false],
       // S3 key
@@ -154,13 +158,14 @@ export class RgwUserFormComponent implements OnInit {
       if (!params.hasOwnProperty('uid')) {
         return;
       }
+      const uid = decodeURIComponent(params.uid);
       this.loading = true;
       // Load the user data in 'edit' mode.
       this.editing = true;
       // Load the user and quota information.
       const observables = [];
-      observables.push(this.rgwUserService.get(params.uid));
-      observables.push(this.rgwUserService.getQuota(params.uid));
+      observables.push(this.rgwUserService.get(uid));
+      observables.push(this.rgwUserService.getQuota(uid));
       observableForkJoin(observables).subscribe(
         (resp: any[]) => {
           this.loading = false;
@@ -224,7 +229,7 @@ export class RgwUserFormComponent implements OnInit {
     if (this.userForm.pristine) {
       this.goToListView();
     }
-    const uid = this.userForm.getValue('user_id');
+    const uid = this.userForm.getValue('uid');
     if (this.editing) {
       // Edit
       if (this._isGeneralDirty()) {
@@ -284,7 +289,7 @@ export class RgwUserFormComponent implements OnInit {
       'full-control': 'full',
       'read-write': 'readwrite'
     };
-    const uid = this.userForm.getValue('user_id');
+    const uid = this.userForm.getValue('uid');
     const args = {
       subuser: subuser.id,
       access:
@@ -323,7 +328,7 @@ export class RgwUserFormComponent implements OnInit {
     const subuser = this.subusers[index];
     // Create an observable to delete the subuser when the form is submitted.
     this.submitObservables.push(
-      this.rgwUserService.deleteSubuser(this.userForm.getValue('user_id'), subuser.id)
+      this.rgwUserService.deleteSubuser(this.userForm.getValue('uid'), subuser.id)
     );
     // Remove the associated S3 keys.
     this.s3Keys = this.s3Keys.filter((key) => {
@@ -343,7 +348,7 @@ export class RgwUserFormComponent implements OnInit {
    * Add/Update a capability.
    */
   setCapability(cap: RgwUserCapability, index?: number) {
-    const uid = this.userForm.getValue('user_id');
+    const uid = this.userForm.getValue('uid');
     if (_.isNumber(index)) {
       // Modify
       const oldCap = this.capabilities[index];
@@ -375,7 +380,7 @@ export class RgwUserFormComponent implements OnInit {
     const cap = this.capabilities[index];
     // Create an observable to delete the capability when the form is submitted.
     this.submitObservables.push(
-      this.rgwUserService.deleteCapability(this.userForm.getValue('user_id'), cap.type, cap.perm)
+      this.rgwUserService.deleteCapability(this.userForm.getValue('uid'), cap.type, cap.perm)
     );
     // Remove the capability to update the UI.
     this.capabilities.splice(index, 1);
@@ -423,7 +428,7 @@ export class RgwUserFormComponent implements OnInit {
     const key = this.s3Keys[index];
     // Create an observable to delete the S3 key when the form is submitted.
     this.submitObservables.push(
-      this.rgwUserService.deleteS3Key(this.userForm.getValue('user_id'), key.access_key)
+      this.rgwUserService.deleteS3Key(this.userForm.getValue('uid'), key.access_key)
     );
     // Remove the S3 key to update the UI.
     this.s3Keys.splice(index, 1);
@@ -436,7 +441,7 @@ export class RgwUserFormComponent implements OnInit {
    * @param {number | undefined} index The subuser to show.
    */
   showSubuserModal(index?: number) {
-    const uid = this.userForm.getValue('user_id');
+    const uid = this.userForm.getValue('uid');
     const modalRef = this.bsModalService.show(RgwUserSubuserModalComponent);
     if (_.isNumber(index)) {
       // Edit
@@ -555,7 +560,7 @@ export class RgwUserFormComponent implements OnInit {
    */
   private _getCreateArgs() {
     const result = {
-      uid: this.userForm.getValue('user_id'),
+      uid: this.userForm.getValue('uid'),
       display_name: this.userForm.getValue('display_name'),
       suspended: this.userForm.getValue('suspended'),
       email: '',
@@ -645,9 +650,9 @@ export class RgwUserFormComponent implements OnInit {
   private _getS3KeyUserCandidates() {
     let result = [];
     // Add the current user id.
-    const user_id = this.userForm.getValue('user_id');
-    if (_.isString(user_id) && !_.isEmpty(user_id)) {
-      result.push(user_id);
+    const uid = this.userForm.getValue('uid');
+    if (_.isString(uid) && !_.isEmpty(uid)) {
+      result.push(uid);
     }
     // Append the subusers.
     this.subusers.forEach((subUser) => {

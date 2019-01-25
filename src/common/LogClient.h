@@ -17,7 +17,7 @@
 
 #include <atomic>
 #include "common/LogEntry.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "include/health.h"
 
 class LogClient;
@@ -192,7 +192,7 @@ public:
 private:
   CephContext *cct;
   LogClient *parent;
-  Mutex channel_lock;
+  ceph::mutex channel_lock = ceph::make_mutex("LogChannel::channel_lock");
   std::string log_channel;
   std::string log_prio;
   std::string syslog_facility;
@@ -262,7 +262,7 @@ private:
   Messenger *messenger;
   MonMap *monmap;
   bool is_mon;
-  Mutex log_lock;
+  ceph::mutex log_lock = ceph::make_mutex("LogClient::log_lock");
   version_t last_log_sent;
   version_t last_log;
   std::deque<LogEntry> log_queue;
