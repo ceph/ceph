@@ -8695,6 +8695,28 @@ int RGWRados::bi_get_instance(const RGWBucketInfo& bucket_info, const rgw_obj& o
   return 0;
 }
 
+int RGWRados::bi_get_olh(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                         rgw_bucket_olh_entry *olh)
+{
+  rgw_cls_bi_entry bi_entry;
+  int r = bi_get(bucket_info, obj, BIIndexType::OLH, &bi_entry);
+  if (r < 0 && r != -ENOENT) {
+    ldout(cct, 0) << "ERROR: bi_get() returned r=" << r << dendl;
+  }
+  if (r < 0) {
+    return r;
+  }
+  auto iter = bi_entry.data.cbegin();
+  try {
+    decode(*olh, iter);
+  } catch (buffer::error& err) {
+    ldout(cct, 0) << "ERROR: failed to decode bi_entry()" << dendl;
+    return -EIO;
+  }
+
+  return 0;
+}
+
 int RGWRados::bi_get(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
                      BIIndexType index_type, rgw_cls_bi_entry *entry)
 {
