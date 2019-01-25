@@ -432,14 +432,16 @@ Group:          System/Filesystems
 Requires:       ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:       python%{_python_buildid}-pecan
 Requires:       python%{_python_buildid}-six
+Requires:       python%{_python_buildid}-requests
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python%{_python_buildid}-cherrypy
 Requires:       python%{_python_buildid}-jwt
 Requires:       python%{_python_buildid}-jinja2
 Requires:       python%{_python_buildid}-routes
 Requires:       python%{_python_buildid}-werkzeug
-Requires:       pyOpenSSL%{_python_buildid}
-Requires:	python%{_python_buildid}-bcrypt
+Requires:       python%{_python_buildid}-pyopenssl
+Requires:       python%{_python_buildid}-bcrypt
+
 %endif
 %if 0%{?suse_version}
 Requires:       python%{_python_buildid}-CherryPy
