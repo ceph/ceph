@@ -319,7 +319,7 @@ private:
   void recall_client_state() {
     dout(20) << __func__ << dendl;
     auto now = mono_clock::now();
-    auto duration = std::chrono::duration<double>(recall_start-now).count();
+    auto duration = std::chrono::duration<double>(now-recall_start).count();
 
     MDSGatherBuilder *gather = new MDSGatherBuilder(g_ceph_context);
     auto [throttled, count] = server->recall_client_state(gather, Server::RecallFlags::STEADY);
@@ -327,6 +327,7 @@ private:
              << (throttled ? " (throttled)" : "")
              << " recalled " << count << " caps" << dendl;
 
+    caps_recalled += count;
     if ((throttled || count > 0) && (recall_timeout == 0 || duration < recall_timeout)) {
       auto timer = new FunctionContext([this](int _) {
         recall_client_state();
@@ -360,6 +361,7 @@ private:
     f->open_object_section("client_recall");
     f->dump_int("return_code", r);
     f->dump_string("message", cpp_strerror(r));
+    f->dump_int("recalled", caps_recalled);
     f->close_section();
 
     // we can still continue after recall timeout
@@ -402,6 +404,7 @@ private:
     dout(10) << __func__
              << (throttled ? " (throttled)" : "")
              << " trimmed " << count << " caps" << dendl;
+    dentries_trimmed += count;
     if (throttled && count > 0) {
       auto timer = new FunctionContext([this](int _) {
         trim_cache();
@@ -415,9 +418,12 @@ private:
   void cache_status() {
     dout(20) << __func__ << dendl;
 
+    f->open_object_section("trim_cache");
+    f->dump_int("trimmed", dentries_trimmed);
+    f->close_section();
+
     // cache status section
     mdcache->cache_status(f);
-    f->close_section();
 
     complete(0);
   }
@@ -425,6 +431,10 @@ private:
   void finish(int r) override {
     dout(20) << __func__ << ": r=" << r << dendl;
 
+    auto d = std::chrono::duration<double>(mono_clock::now()-recall_start);
+    f->dump_float("duration", d.count());
+
+    f->close_section();
     on_finish->complete(r);
   }
 
@@ -438,6 +448,8 @@ private:
 
   int retval = 0;
   std::stringstream ss;
+  uint64_t caps_recalled = 0;
+  uint64_t dentries_trimmed = 0;
 
   // so as to use dout
   mds_rank_t whoami;

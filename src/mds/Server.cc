@@ -1402,9 +1402,8 @@ std::pair<bool, uint64_t> Server::recall_client_state(MDSGatherBuilder* gather, 
       if (gather) {
         flush_session(session, gather);
       }
-      session->notify_recall_sent(newlim);
+      caps_recalled += session->notify_recall_sent(newlim);
       recall_counter.hit(ceph_clock_now(), recall);
-      caps_recalled += recall;
     }
   }
 
