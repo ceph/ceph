@@ -61,6 +61,18 @@ class SocketConnection : public Connection {
     closing
   };
   state_t state = state_t::none;
+  // wait until current state changed
+  seastar::shared_promise<> state_changed;
+
+  // write_state is changed with state atomically, indicating the write
+  // behavior of the according state.
+  enum class write_state_t {
+    none,
+    delay,
+    open,
+    drop
+  };
+  write_state_t write_state = write_state_t::none;
 
   /// become valid only when state is state_t::closing
   seastar::shared_future<> close_ready;
@@ -74,7 +86,6 @@ class SocketConnection : public Connection {
     uint32_t connect_seq = 0;
     uint32_t peer_global_seq = 0;
     uint32_t global_seq;
-    seastar::promise<> promise;
   } h;
 
   /// server side of handshake negotiation
@@ -112,10 +123,12 @@ class SocketConnection : public Connection {
   seastar::future<> handle_tags();
   seastar::future<> handle_ack();
 
+  seastar::future<> write_event(MessageRef msg=nullptr);
+
   /// becomes available when handshake completes, and when all previous messages
   /// have been sent to the output stream. send() chains new messages as
   /// continuations to this future to act as a queue
-  seastar::future<> send_ready;
+  seastar::future<> send_ready = seastar::now();
 
   /// encode/write a message
   seastar::future<> write_message(MessageRef msg);
@@ -156,13 +169,15 @@ class SocketConnection : public Connection {
     } __attribute__((packed)) ack;
     ceph_timespec ack_stamp;
   } k;
+  bool m_keepalive = false;
+  bool m_keepalive_ack = false;
 
   seastar::future<> fault();
 
   void execute_open();
 
-  seastar::future<> do_send(MessageRef msg);
   seastar::future<> do_keepalive();
+  seastar::future<> do_keepalive_ack();
   seastar::future<> do_close();
 
  public:
