@@ -4600,6 +4600,10 @@ std::vector<Option> get_global_options() {
       "'until_fsck' will tolerate the case for regular ops and fail on fsck or repair, the latter will fix the issue, "
       "'until_repair' will tolerate for regular ops and fsck. Repair indicates and fixes the issue, "
       "'enforce' will unconditionally use global stats mode."),
+
+    Option("bluestore_warn_on_bluefs_spillover", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Enable health indication on bluefs slow device usage"),
     // -----------------------------------------
     // kstore
 
