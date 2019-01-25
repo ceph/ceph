@@ -45,7 +45,8 @@ using namespace ceph;
 #define CEPH_BUFFER_APPEND_SIZE (CEPH_BUFFER_ALLOC_UNIT - sizeof(raw_combined))
 
 #ifdef BUFFER_DEBUG
-# define bdout { std::lock_guard lg(ceph::spinlock()); std::cout
+static ceph::spinlock debug_lock;
+# define bdout { std::lock_guard<ceph::spinlock> lg(debug_lock); std::cout
 # define bendl std::endl; }
 #else
 # define bdout if (0) { std::cout
