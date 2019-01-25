@@ -13612,7 +13612,8 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
 {
   std::lock_guard l(qlock);
 
-  if (!spillover_alert.empty()) {
+  if (!spillover_alert.empty() &&
+      cct->_conf->bluestore_warn_on_bluefs_spillover) {
     alerts.emplace(
       "BLUEFS_SPILLOVER",
       spillover_alert);
