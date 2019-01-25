@@ -983,7 +983,7 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
                 << message->get_seq() << " " << message << " " << *message
                 << dendl;
 
-  bool need_dispatch_writer = true;
+  bool need_dispatch_writer = false;
   if (!connection->policy.lossy) {
     ack_left++;
     need_dispatch_writer = true;
