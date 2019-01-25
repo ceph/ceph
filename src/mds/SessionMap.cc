@@ -911,9 +911,10 @@ void Session::notify_cap_release(size_t n_caps)
  * in order to generate health metrics if the session doesn't see
  * a commensurate number of calls to ::notify_cap_release
  */
-void Session::notify_recall_sent(const size_t new_limit)
+uint64_t Session::notify_recall_sent(const size_t new_limit)
 {
   const auto num_caps = caps.size();
+  ceph_assert(new_limit < num_caps);
   const auto count = num_caps-new_limit;
 
   /* Entering recall phase, set up counters so we can later judge whether the
@@ -921,6 +922,7 @@ void Session::notify_recall_sent(const size_t new_limit)
    * released caps from a previous recall.
    */
 
+  uint64_t new_change;
   if (recall_limit != new_limit) {
     const auto now = clock::now();
     recalled_at = now;
@@ -928,6 +930,9 @@ void Session::notify_recall_sent(const size_t new_limit)
     recall_count = count;
     recall_release_count = 0;
     recall_limit = new_limit;
+    new_change = count;
+  } else {
+    new_change = 0; /* no change! */
   }
 
   /* Always hit the session counter as a RECALL message is still sent to the
@@ -936,6 +941,7 @@ void Session::notify_recall_sent(const size_t new_limit)
    * throttle future RECALL messages).
    */
   cap_recalled.hit(count);
+  return new_change;
 }
 
 void Session::clear_recalled()

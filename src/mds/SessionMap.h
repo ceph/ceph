@@ -171,7 +171,7 @@ public:
   interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
 
   void notify_cap_release(size_t n_caps);
-  void notify_recall_sent(const size_t new_limit);
+  uint64_t notify_recall_sent(const size_t new_limit);
   auto cap_recalled_counter() const {
     return cap_recalled.get(ceph_clock_now());
   }
