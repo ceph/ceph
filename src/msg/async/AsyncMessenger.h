@@ -357,6 +357,10 @@ public:
     return stack;
   }
 
+  uint64_t get_nonce() const {
+    return nonce;
+  }
+
   /**
    * Increment the global sequence for this AsyncMessenger and return it.
    * This is for the connect protocol, although it doesn't hurt if somebody
