@@ -216,7 +216,7 @@ ostream& operator<<(ostream& out, const CInode& in)
       if (p.second.issued() != p.second.pending())
 	out << "/" << ccap_string(p.second.issued());
       out << "/" << ccap_string(p.second.wanted())
-	  << "@" << p.second.get_last_sent();
+	  << "@" << p.second.get_last_seq();
       first = false;
     }
     out << "}";
@@ -3011,13 +3011,10 @@ Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm 
 
   uint64_t cap_id = ++mdcache->last_cap_id;
   auto ret = client_caps.emplace(std::piecewise_construct, std::forward_as_tuple(client),
-                                 std::forward_as_tuple(this, cap_id, client));
+                                 std::forward_as_tuple(this, session, cap_id));
   ceph_assert(ret.second == true);
   Capability *cap = &ret.first->second;
 
-  session->add_cap(cap);
-  if (session->is_stale())
-    cap->mark_stale();
   cap->client_follows = first-1;
   containing_realm->add_cap(client, cap);
 
@@ -4606,7 +4603,7 @@ void CInode::dump(Formatter *f, int flags) const
       f->dump_string("pending", ccap_string(cap->pending()));
       f->dump_string("issued", ccap_string(cap->issued()));
       f->dump_string("wanted", ccap_string(cap->wanted()));
-      f->dump_int("last_sent", cap->get_last_sent());
+      f->dump_int("last_sent", cap->get_last_seq());
       f->close_section();
     }
     f->close_section();

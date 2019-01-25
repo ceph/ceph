@@ -14,6 +14,7 @@
 
 #include "Capability.h"
 #include "CInode.h"
+#include "SessionMap.h"
 
 #include "common/Formatter.h"
 
@@ -141,14 +142,87 @@ void Capability::revoke_info::generate_test_instances(list<Capability::revoke_in
 /*
  * Capability
  */
+Capability::Capability(CInode *i, Session *s, uint64_t id) :
+  client_follows(0),
+  client_xattr_version(0), client_inline_version(0),
+  last_rbytes(0), last_rsize(0),
+  item_session_caps(this), item_snaprealm_caps(this),
+  item_revoking_caps(this), item_client_revoking_caps(this),
+  inode(i), session(s),
+  cap_id(id), _wanted(0), num_revoke_warnings(0),
+  _pending(0), _issued(0), last_sent(0), last_issue(0), mseq(0),
+  suppress(0), state(0)
+{
+  if (session) {
+    session->touch_cap_bottom(this);
+    cap_gen = session->get_cap_gen();
+  }
+}
+
+client_t Capability::get_client() const
+{
+  return session ? session->get_client() : client_t(-1);
+}
+
+bool Capability::is_stale() const
+{
+  return session ? session->is_stale() : false;
+}
+
+bool Capability::is_valid() const
+{
+  return !session || session->get_cap_gen() == cap_gen;
+}
+
+void Capability::revalidate()
+{
+  if (is_valid())
+    return;
+
+  if (_pending & ~CEPH_CAP_PIN)
+    inc_last_seq();
+
+  bool was_revoking = _issued & ~_pending;
+  _pending = _issued = CEPH_CAP_PIN;
+  _revokes.clear();
+
+  cap_gen = session->get_cap_gen();
+
+  if (was_revoking)
+    maybe_clear_notable();
+}
+
+void Capability::mark_notable()
+{
+  state |= STATE_NOTABLE;
+  session->touch_cap(this);
+}
+
+void Capability::maybe_clear_notable()
+{
+  if ((_issued == _pending) &&
+      !is_clientwriteable() &&
+      !is_wanted_notable(_wanted)) {
+    ceph_assert(is_notable());
+    state &= ~STATE_NOTABLE;
+    session->touch_cap_bottom(this);
+  }
+}
 
 void Capability::set_wanted(int w) {
   CInode *in = get_inode();
   if (in) {
-    if (!_wanted && w)
+    if (!_wanted && w) {
       in->adjust_num_caps_wanted(1);
-    else if (_wanted && !w)
+    } else if (_wanted && !w) {
       in->adjust_num_caps_wanted(-1);
+    }
+    if (!is_wanted_notable(_wanted) && is_wanted_notable(w)) {
+      if (!is_notable())
+	mark_notable();
+    } else if (is_wanted_notable(_wanted) && !is_wanted_notable(w)) {
+      maybe_clear_notable();
+    }
   }
   _wanted = w;
 }
@@ -178,7 +252,7 @@ void Capability::decode(bufferlist::const_iterator &bl)
   decode(_revokes, bl);
   DECODE_FINISH(bl);
   
-  _calc_issued();
+  calc_issued();
 }
 
 void Capability::dump(Formatter *f) const
