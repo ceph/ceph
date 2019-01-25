@@ -4,7 +4,7 @@ overrides:
       - reached quota
       - \(POOL_APP_NOT_ENABLED\)
       - \(PG_AVAILABILITY\)
-    crush_tunables: hammer
+    crush_tunables: jewel
     conf:
       client:
         debug ms: 1
