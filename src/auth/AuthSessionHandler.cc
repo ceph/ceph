@@ -30,6 +30,10 @@ AuthSessionHandler *get_auth_session_handler(CephContext *cct, int protocol, Cry
  
   switch (protocol) {
   case CEPH_AUTH_CEPHX:
+    // if there is no session key, there is no session handler.
+    if (key.get_type() == CEPH_CRYPTO_NONE) {
+      return nullptr;
+    }
     return new CephxSessionHandler(cct, key, features);
   case CEPH_AUTH_NONE:
     return new AuthNoneSessionHandler(cct, key);
