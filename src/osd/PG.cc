@@ -4114,8 +4114,11 @@ void PG::reg_next_scrub()
 
   utime_t reg_stamp;
   bool must = false;
-  if (scrubber.must_scrub ||
-      (info.stats.stats_invalid && cct->_conf->osd_scrub_invalid_stats)) {
+  if (scrubber.must_scrub) {
+    // Set the smallest time that isn't utime_t()
+    reg_stamp = utime_t(0,1);
+    must = true;
+  } else if (info.stats.stats_invalid && cct->_conf->osd_scrub_invalid_stats) {
     reg_stamp = ceph_clock_now();
     must = true;
   } else {
