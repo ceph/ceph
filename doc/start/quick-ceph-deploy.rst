@@ -10,7 +10,7 @@ explore Ceph functionality.
 .. include:: quick-common.rst
 
 As a first exercise, create a Ceph Storage Cluster with one Ceph Monitor and three
-Ceph OSD Daemons. Once the cluster reaches a ``active + clean`` s`tate, expand it
+Ceph OSD Daemons. Once the cluster reaches a ``active + clean`` state, expand it
 by adding a fourth Ceph OSD Daemon, a Metadata Server and two more Ceph Monitors.
 For best results, create a directory on your admin node for maintaining the
 configuration files and keys that ``ceph-deploy`` generates for your cluster. ::
