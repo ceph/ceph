@@ -2082,6 +2082,7 @@ bool DaemonServer::_handle_command(
 
     // Validate that the module is enabled
     PyModuleRef module = py_modules.get_module(handler_name);
+    ceph_assert(module);
     if (!module->is_enabled()) {
       ss << "Module '" << handler_name << "' is not enabled (required by "
             "command '" << prefix << "'): use `ceph mgr module enable "
