@@ -67,6 +67,7 @@ from .settings import options_command_list, options_schema_list, \
                       handle_option_command
 
 from .plugins import PLUGIN_MANAGER
+from .plugins import feature_toggles  # noqa # pylint: disable=unused-import
 
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
