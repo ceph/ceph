@@ -1944,7 +1944,7 @@ CtPtr ProtocolV2::handle_message_complete() {
                 << " from=" << message->get_source() << " type=" << header.type
                 << " " << *message << dendl;
 
-  bool need_dispatch_writer = true;
+  bool need_dispatch_writer = false;
   if (!connection->policy.lossy) {
     ack_left++;
     need_dispatch_writer = true;
