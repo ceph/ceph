@@ -2197,13 +2197,24 @@ CtPtr ProtocolV2::send_client_ident() {
     flags |= CEPH_MSG_CONNECT_LOSSY;
   }
 
-  ClientIdentFrame client_ident(this, messenger->get_myaddrs(),
+  entity_addrvec_t ma = messenger->get_myaddrs();
+  if (ma.empty()) {
+    entity_addr_t a;
+    if (connection->target_addr.is_ipv6()) {
+      a.parse("[::]:0");
+    } else {
+      a.parse("0.0.0.0:0");
+    }
+    a.set_nonce(messenger->get_nonce());
+    ma.v.push_back(a);
+  }
+  ClientIdentFrame client_ident(this, ma,
                                 messenger->get_myname().num(), global_seq,
                                 connection->policy.features_supported,
                                 connection->policy.features_required, flags);
 
   ldout(cct, 5) << __func__ << " sending identification: "
-                << "addrs=" << messenger->get_myaddrs()
+                << "addrs=" << ma
                 << " gid=" << messenger->get_myname().num()
                 << " global_seq=" << global_seq
                 << " features_supported=" << std::hex
@@ -2554,7 +2565,7 @@ CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {
   connection->target_addr.set_type(entity_addr_t::TYPE_MSGR2);
 
   if (client_ident.addrs().empty()) {
-    connection->set_peer_addr(connection->target_addr);
+    return _fault();  // a v2 peer should never do this
   } else {
     for (auto &peer_addr : client_ident.addrs().v) {
       if (peer_addr.is_blank_ip()) {
