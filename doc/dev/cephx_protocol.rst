@@ -1,6 +1,9 @@
+.. _cephx_2012_peter:
+
 ============================================================
 A Detailed Description of the Cephx Authentication Protocol
 ============================================================
+
 Peter Reiher
 7/13/12
 
