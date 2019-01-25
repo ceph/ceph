@@ -2197,24 +2197,45 @@ CtPtr ProtocolV2::send_client_ident() {
     flags |= CEPH_MSG_CONNECT_LOSSY;
   }
 
-  entity_addrvec_t ma = messenger->get_myaddrs();
-  if (ma.empty()) {
+  if (messenger->get_myaddrs().empty() ||
+      messenger->get_myaddrs().front().is_blank_ip()) {
+    sockaddr_storage ss;
+    socklen_t len = sizeof(ss);
+    getsockname(connection->cs.fd(), (sockaddr*)&ss, &len);
+    ldout(cct,1) << __func__ << " getsockname reveals I am " << (sockaddr*)&ss
+		 << " when talking to " << connection->target_addr << dendl;
     entity_addr_t a;
-    if (connection->target_addr.is_ipv6()) {
-      a.parse("[::]:0");
-    } else {
-      a.parse("0.0.0.0:0");
+    a.set_type(connection->target_addr.get_type());
+    a.set_sockaddr((sockaddr*)&ss);
+    a.set_port(0);
+    connection->lock.unlock();
+    messenger->learned_addr(a);
+    if (cct->_conf->ms_inject_internal_delays &&
+	cct->_conf->ms_inject_socket_failures) {
+      if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
+	ldout(cct, 10) << __func__ << " sleep for "
+		       << cct->_conf->ms_inject_internal_delays << dendl;
+      utime_t t;
+      t.set_from_double(cct->_conf->ms_inject_internal_delays);
+      t.sleep();
+      }
     }
-    a.set_nonce(messenger->get_nonce());
-    ma.v.push_back(a);
+    connection->lock.lock();
+    if (state != CONNECTING) {
+      ldout(cct, 1) << __func__
+		    << " state changed while learned_addr, mark_down or "
+		    << " replacing must be happened just now" << dendl;
+      return nullptr;
+    }
   }
-  ClientIdentFrame client_ident(this, ma,
+
+  ClientIdentFrame client_ident(this, messenger->get_myaddrs(),
                                 messenger->get_myname().num(), global_seq,
                                 connection->policy.features_supported,
                                 connection->policy.features_required, flags);
 
   ldout(cct, 5) << __func__ << " sending identification: "
-                << "addrs=" << ma
+                << "addrs=" << messenger->get_myaddrs()
                 << " gid=" << messenger->get_myname().num()
                 << " global_seq=" << global_seq
                 << " features_supported=" << std::hex
@@ -2340,26 +2361,6 @@ CtPtr ProtocolV2::handle_server_ident(char *payload, uint32_t length) {
     ldout(cct,1) << __func__ << " peer identifies as " << server_ident.addrs()
 		 << ", does not include " << connection->target_addr << dendl;
     return _fault();
-  }
-
-  connection->lock.unlock();
-  messenger->learned_addr(server_ident.peer_addr());
-  if (cct->_conf->ms_inject_internal_delays &&
-      cct->_conf->ms_inject_socket_failures) {
-    if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
-      ldout(cct, 10) << __func__ << " sleep for "
-                     << cct->_conf->ms_inject_internal_delays << dendl;
-      utime_t t;
-      t.set_from_double(cct->_conf->ms_inject_internal_delays);
-      t.sleep();
-    }
-  }
-  connection->lock.lock();
-  if (state != CONNECTING) {
-    ldout(cct, 1) << __func__
-                  << " state changed while learned_addr, mark_down or "
-                  << " replacing must be happened just now" << dendl;
-    return nullptr;
   }
 
   cookie = server_ident.cookie();
@@ -2561,41 +2562,13 @@ CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {
                 << client_ident.supported_features()
                 << " features_required=" << client_ident.required_features()
                 << " flags=" << client_ident.flags() << std::dec << dendl;
-
-  connection->target_addr.set_type(entity_addr_t::TYPE_MSGR2);
-
-  if (client_ident.addrs().empty()) {
+  if (client_ident.addrs().empty() ||
+      !client_ident.addrs().has_msgr2()) {
     return _fault();  // a v2 peer should never do this
-  } else {
-    for (auto &peer_addr : client_ident.addrs().v) {
-      if (peer_addr.is_blank_ip()) {
-        // peer apparently doesn't know what ip they have; figure it out for
-        // them.
-        int port = peer_addr.get_port();
-        peer_addr.u = connection->target_addr.u;
-        peer_addr.set_port(port);
-        ldout(cct, 0) << __func__ << " peer addr is really " << peer_addr
-                      << " (socket is " << connection->target_addr << ")"
-                      << dendl;
-      }
-    }
-
-    entity_addr_t peer_addr = client_ident.addrs().msgr2_addr();
-    if (peer_addr.type == entity_addr_t::TYPE_NONE) {
-      // no v2 address is known
-      peer_addr = client_ident.addrs().legacy_addr();
-      peer_addr.set_type(entity_addr_t::TYPE_MSGR2);
-      entity_addrvec_t addrs;
-      addrs.v.push_back(peer_addr);
-      for (const auto &addr : client_ident.addrs().v) {
-        addrs.v.push_back(addr);
-      }
-      connection->set_peer_addrs(addrs);
-    } else {
-      connection->set_peer_addrs(client_ident.addrs());
-    }
-    connection->target_addr = peer_addr;
   }
+  connection->set_peer_addrs(client_ident.addrs());
+  connection->target_addr = client_ident.addrs().msgr2_addr();
+
   peer_name = entity_name_t(connection->get_peer_type(), client_ident.gid());
 
   uint64_t feat_missing = connection->policy.features_required &
