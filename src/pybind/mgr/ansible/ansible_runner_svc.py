@@ -26,7 +26,9 @@ class PlayBookExecution(object):
     """Object to provide all the results of a Playbook execution
     """
 
-    def __init__(self, rest_client, playbook, logger, result_pattern="", the_params={}):
+    def __init__(self, rest_client, playbook, logger, result_pattern="",
+                 the_params={},
+                 querystr_dict={}):
 
         self.rest_client = rest_client
 
@@ -39,9 +41,13 @@ class PlayBookExecution(object):
         # Playbook name
         self.playbook = playbook
 
-        # Params used in the playbook
+        # Parameters used in the playbook
         self.params = the_params
 
+        # Query string used in the "launch" request
+        self.querystr_dict = querystr_dict
+
+        # Logger
         self.log = logger
 
     def launch(self):
@@ -50,7 +56,9 @@ class PlayBookExecution(object):
 
         endpoint = "%s/%s" % (PLAYBOOK_EXEC_URL, self.playbook)
 
-        response = self.rest_client.http_post(endpoint, self.params)
+        response = self.rest_client.http_post(endpoint,
+                                              self.params,
+                                              self.querystr_dict)
 
         if response:
             self.play_uuid = json.loads(response.text)["data"]["play_uuid"]
@@ -101,8 +109,8 @@ class PlayBookExecution(object):
         @returns: the events that matches with the patterns provided
         """
 
-        if not self.result_task_pattern or not self.play_uuid:
-            result_events = {}
+        if not self.play_uuid:
+            return {}
 
         response = self.rest_client.http_get(PLAYBOOK_EVENTS % self.play_uuid)
 
@@ -110,9 +118,14 @@ class PlayBookExecution(object):
             result_events = {}
         else:
             events = json.loads(response.text)["data"]["events"]
-            result_events = {event:data for event,data in events.items()
-                            if "task" in data and
-                            re.match(self.result_task_pattern, data["task"])}
+
+            if self.result_task_pattern:
+                result_events = {event:data for event,data in events.items()
+                                if "task" in data and
+                                re.match(self.result_task_pattern, data["task"])}
+            else:
+                result_events = events
+
             if event_filter:
                 result_events = {event:data for event,data in result_events.items()
                                 if re.match(event_filter, data['event'])}
@@ -129,13 +142,13 @@ class Client(object):
         """Provide an https client to make easy interact with the Ansible
         Runner Service"
 
-        @param servers_url: The base URL >server>:<port> of the Ansible Runner Service
-        @param user: User name of the authorized user
-        @param password: Password of the authotized user
-        @param verify_server: Either a boolean, in which case it controls whether we verify
+        :param servers_url: The base URL >server>:<port> of the Ansible Runner Service
+        :param user: Username of the authorized user
+        :param password: Password of the authorized user
+        :param verify_server: Either a boolean, in which case it controls whether we verify
             the server's TLS certificate, or a string, in which case it must be a path
             to a CA bundle to use. Defaults to ``True``.
-        @param logger: Log file
+        :param logger: Log file
         """
         self.server_url = server_url
         self.user = user
@@ -197,9 +210,9 @@ class Client(object):
     def http_get(self, endpoint):
         """Execute an http get request
 
-        @param endpoint: Ansible Runner service RESTful API endpoint
+        :param endpoint: Ansible Runner service RESTful API endpoint
 
-        @returns: A requests object
+        :returns: A requests object
         """
 
         response = None
@@ -224,13 +237,14 @@ class Client(object):
 
         return response
 
-    def http_post(self, endpoint, payload):
+    def http_post(self, endpoint, payload, params_dict = {}):
         """Execute an http post request
 
-        @param endpoint: Ansible Runner service RESTful API endpoint
-        @param payload: Dictionary with the data used in the post request
+        :param endpoint: Ansible Runner service RESTful API endpoint
+        :param payload: Dictionary with the data used in the post request
+        :param params_dict: A dict used to build a query string
 
-        @returns: A requests object
+        :returns: A requests object
         """
 
         response = None
@@ -241,10 +255,11 @@ class Client(object):
                               verify = self.verify_server,
                               headers = {"Authorization": self.token,
                                          "Content-type": "application/json"},
-                              data = payload)
+                              json = payload,
+                              params = params_dict)
 
             if r.status_code != requests.codes.ok:
-                self.log.error("http POST %s [%s] <--> (%s - %s)\n%s",
+                self.log.error("http POST %s [%s] <--> (%s - %s:%s)\n",
                               the_url, payload, r.status_code, r.reason, r.text)
             else:
                 self.log.info("http POST %s <--> (%s - %s)",
@@ -259,10 +274,10 @@ class Client(object):
     def http_put(self, endpoint, payload):
         """Execute an http put request
 
-        @param endpoint: Ansible Runner service RESTful API endpoint
-        @param payload: Dictionary with the data used in the put request
+        :param endpoint: Ansible Runner service RESTful API endpoint
+        :param payload: Dictionary with the data used in the put request
 
-        @returns: A requests object
+        :returns: A requests object
         """
         # TODO
         raise NotImplementedError("TODO")
