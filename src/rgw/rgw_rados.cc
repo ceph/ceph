@@ -7262,6 +7262,61 @@ int RGWRados::bucket_index_read_olh_log(const RGWBucketInfo& bucket_info, RGWObj
   return 0;
 }
 
+// a multisite sync bug resulted in the OLH head attributes being overwritten by
+// the attributes from another zone, causing link_olh() to fail endlessly due to
+// olh_tag mismatch. this attempts to detect this case and reconstruct the OLH
+// attributes from the bucket index. see http://tracker.ceph.com/issues/37792
+int RGWRados::repair_olh(RGWObjState* state, const RGWBucketInfo& bucket_info,
+                         const rgw_obj& obj)
+{
+  // fetch the current olh entry from the bucket index
+  rgw_bucket_olh_entry olh;
+  int r = bi_get_olh(bucket_info, obj, &olh);
+  if (r < 0) {
+    ldout(cct, 0) << "repair_olh failed to read olh entry for " << obj << dendl;
+    return r;
+  }
+  if (olh.tag == rgw_bl_str(state->olh_tag)) { // mismatch already resolved?
+    return 0;
+  }
+
+  ldout(cct, 4) << "repair_olh setting olh_tag=" << olh.tag
+      << " key=" << olh.key << " delete_marker=" << olh.delete_marker << dendl;
+
+  // rewrite OLH_ID_TAG and OLH_INFO from current olh
+  ObjectWriteOperation op;
+  // assert this is the same olh tag we think we're fixing
+  bucket_index_guard_olh_op(*state, op);
+  // preserve existing mtime
+  struct timespec mtime_ts = ceph::real_clock::to_timespec(state->mtime);
+  op.mtime2(&mtime_ts);
+  {
+    bufferlist bl;
+    bl.append(olh.tag.c_str(), olh.tag.size());
+    op.setxattr(RGW_ATTR_OLH_ID_TAG, bl);
+  }
+  {
+    RGWOLHInfo info;
+    info.target = rgw_obj(bucket_info.bucket, olh.key);
+    info.removed = olh.delete_marker;
+    bufferlist bl;
+    encode(info, bl);
+    op.setxattr(RGW_ATTR_OLH_INFO, bl);
+  }
+  rgw_rados_ref ref;
+  r = get_obj_head_ref(bucket_info, obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+  r = ref.ioctx.operate(ref.obj.oid, &op);
+  if (r < 0) {
+    ldout(cct, 0) << "repair_olh failed to write olh attributes with "
+        << cpp_strerror(r) << dendl;
+    return r;
+  }
+  return 0;
+}
+
 int RGWRados::bucket_index_trim_olh_log(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& obj_instance, uint64_t ver)
 {
   rgw_rados_ref ref;
@@ -7518,6 +7573,12 @@ int RGWRados::set_olh(RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const r
     if (ret < 0) {
       ldout(cct, 20) << "bucket_index_link_olh() target_obj=" << target_obj << " delete_marker=" << (int)delete_marker << " returned " << ret << dendl;
       if (ret == -ECANCELED) {
+        // the bucket index rejected the link_olh() due to olh tag mismatch;
+        // attempt to reconstruct olh head attributes based on the bucket index
+        int r2 = repair_olh(state, bucket_info, olh_obj);
+        if (r2 < 0 && r2 != -ECANCELED) {
+          return r2;
+        }
         continue;
       }
       return ret;
