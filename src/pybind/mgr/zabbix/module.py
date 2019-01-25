@@ -79,6 +79,11 @@ class Module(MgrModule):
                 'name': 'interval',
                 'type': 'secs',
                 'default': 60
+            },
+            {
+                'name': 'discovery_interval',
+                'type': 'count',
+                'default': 100
             }
     ]
 
@@ -99,6 +104,11 @@ class Module(MgrModule):
             "desc": "Force sending data to Zabbix",
             "perm": "rw"
         },
+        {
+            "cmd": "zabbix discovery",
+            "desc": "Discovering Zabbix data",
+            "perm": "r"
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -117,7 +127,7 @@ class Module(MgrModule):
             raise RuntimeError('{0} is a unknown configuration '
                                'option'.format(option))
 
-        if option in ['zabbix_port', 'interval']:
+        if option in ['zabbix_port', 'interval', 'discovery_interval']:
             try:
                 value = int(value)
             except (ValueError, TypeError):
@@ -126,6 +136,12 @@ class Module(MgrModule):
 
         if option == 'interval' and value < 10:
             raise RuntimeError('interval should be set to at least 10 seconds')
+
+        if option == 'discovery_interval' and value < 10:
+            raise RuntimeError(
+                "discovery_interval should not be more frequent"
+                "than once in 10 regular data collection"
+            )
 
         self.log.debug('Setting in-memory config option %s to: %s', option,
                        value)
@@ -185,6 +201,12 @@ class Module(MgrModule):
             rd_ops += pool['stats']['rd']
             wr_bytes += pool['stats']['wr_bytes']
             rd_bytes += pool['stats']['rd_bytes']
+            data['[{0},rd_bytes]'.format(pool['name'])] = pool['stats']['rd_bytes']
+            data['[{0},wr_bytes]'.format(pool['name'])] = pool['stats']['wr_bytes']
+            data['[{0},rd_ops]'.format(pool['name'])] = pool['stats']['rd']
+            data['[{0},wr_ops]'.format(pool['name'])] = pool['stats']['wr']
+            data['[{0},bytes_used]'.format(pool['name'])] = pool['stats']['bytes_used']
+            data['[{0},raw_bytes_used]'.format(pool['name'])] = pool['stats']['raw_bytes_used']
 
         data['wr_ops'] = wr_ops
         data['rd_ops'] = rd_ops
@@ -250,9 +272,7 @@ class Module(MgrModule):
 
         return data
 
-    def send(self):
-        data = self.get_data()
-
+    def send(self, data):
         identifier = self.config['identifier']
         if identifier is None or len(identifier) == 0:
             identifier = 'ceph-{0}'.format(self.fsid)
@@ -294,6 +314,27 @@ class Module(MgrModule):
 
         return False
 
+    def discovery(self):
+        pools = self.get('osd_map')['pools']
+        crush_rules = self.get('osd_map_crush')['rules']
+
+        pool_discovery = {
+            pool['pool_name']: step['item_name']
+            for pool in pools
+            for rule in crush_rules if rule['rule_id'] == pool['crush_rule']
+            for step in rule['steps'] if step['op'] == "take"
+        }
+
+        discovery_data = {"data": []}
+        for pool, rule in pool_discovery.items():
+            discovery_data["data"].append({
+                "{#POOL}": pool,
+                "{#CRUSH_RULE}": rule
+            })
+
+        data = {"zabbix.discovery": json.dumps(discovery_data)}
+        return bool(self.send(data))
+
     def handle_command(self, inbuf, command):
         if command['prefix'] == 'zabbix config-show':
             return 0, json.dumps(self.config), ''
@@ -312,10 +353,16 @@ class Module(MgrModule):
                 'Failed to update configuration option {0}'.format(key), ''
 
         elif command['prefix'] == 'zabbix send':
-            if self.send():
+            data = self.get_data()
+            if self.send(data):
                 return 0, 'Sending data to Zabbix', ''
 
             return 1, 'Failed to send data to Zabbix', ''
+
+        elif command['prefix'] == 'zabbix discovery':
+            if self.discovery():
+                return 0, 'Sending discovery data to Zabbix', ''
+
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
@@ -331,11 +378,25 @@ class Module(MgrModule):
 
         self.init_module_config()
 
+        discovery_interval = self.config['discovery_interval']
+        # We are sending discovery once plugin is loaded
+        discovery_counter = discovery_interval
         while self.run:
             self.log.debug('Waking up for new iteration')
 
+            if discovery_counter == discovery_interval:
+                try:
+                    self.discovery()
+                except Exception as exc:
+                    # Shouldn't happen, but let's log it and retry next interval,
+                    # rather than dying completely.
+                    self.log.exception("Unexpected error during discovery():")
+                finally:
+                    discovery_counter = 0
+
             try:
-                self.send()
+                data = self.get_data()
+                self.send(data)
             except Exception as exc:
                 # Shouldn't happen, but let's log it and retry next interval,
                 # rather than dying completely.
@@ -343,6 +404,7 @@ class Module(MgrModule):
 
             interval = self.config['interval']
             self.log.debug('Sleeping for %d seconds', interval)
+            discovery_counter += 1
             self.event.wait(interval)
 
     def self_test(self):
