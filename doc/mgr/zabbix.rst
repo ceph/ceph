@@ -68,6 +68,7 @@ Additional configuration keys which can be configured and their default values:
 - zabbix_port: 10051
 - zabbix_sender: /usr/bin/zabbix_sender
 - interval: 60
+- discovery_interval: 100
 
 Configuration keys
 ^^^^^^^^^^^^^^^^^^^
@@ -112,6 +113,14 @@ This can be done with this command:
     ceph zabbix send
 
 The module will now send its latest data to the Zabbix server.
+
+Items discovery is accomplished also via sabbix_sender, and runs every `discovery_interval * interval` seconds. If you wish to launch discovery 
+manually, this can be done with this command:
+
+::
+
+    ceph zabbix discovery
+
 
 Debugging
 ---------
