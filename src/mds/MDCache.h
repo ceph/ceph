@@ -680,7 +680,7 @@ public:
   Capability* rejoin_import_cap(CInode *in, client_t client, const cap_reconnect_t& icr, mds_rank_t frommds);
   void finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq,
 				  map<client_t,MClientSnap::ref>& updates);
-  void try_reconnect_cap(CInode *in, Session *session);
+  Capability* try_reconnect_cap(CInode *in, Session *session);
   void export_remaining_imported_caps();
 
   //  realm inodes

@@ -179,7 +179,7 @@ public:
   void kick_cap_releases(MDRequestRef& mdr);
   void kick_issue_caps(CInode *in, client_t client, ceph_seq_t seq);
 
-  void remove_client_cap(CInode *in, client_t client);
+  void remove_client_cap(CInode *in, Capability *cap);
 
   void get_late_revoking_clients(std::list<client_t> *result, double timeout) const;
 
@@ -244,7 +244,6 @@ public:
   void issue_caps_set(std::set<CInode*>& inset);
   void issue_truncate(CInode *in);
   void revoke_stale_caps(Session *session);
-  void revoke_stale_caps(Capability *cap);
   void resume_stale_caps(Session *session);
   void remove_stale_leases(Session *session);
 
@@ -258,7 +257,7 @@ protected:
 private:
   uint64_t calc_new_max_size(CInode::mempool_inode *pi, uint64_t size);
 public:
-  void calc_new_client_ranges(CInode *in, uint64_t size,
+  void calc_new_client_ranges(CInode *in, uint64_t size, bool update,
 			      CInode::mempool_inode::client_range_map* new_ranges,
 			      bool *max_increased);
   bool check_inode_max_size(CInode *in, bool force_wrlock=false,

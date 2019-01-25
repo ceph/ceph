@@ -243,6 +243,7 @@ public:
 
   // -- caps --
 private:
+  uint32_t cap_gen;
   version_t cap_push_seq;        // cap push seq #
   map<version_t, MDSInternalContextBase::vec > waitfor_flush; // flush session messages
 
@@ -252,7 +253,9 @@ public:
   time last_cap_renew = clock::zero();
   time last_seen = clock::zero();
 
-public:
+  void inc_cap_gen() { ++cap_gen; }
+  uint32_t get_cap_gen() const { return cap_gen; }
+
   version_t inc_push_seq() { return ++cap_push_seq; }
   version_t get_push_seq() const { return cap_push_seq; }
 
@@ -271,7 +274,10 @@ public:
     }
   }
 
-  void add_cap(Capability *cap) {
+  void touch_cap(Capability *cap) {
+    caps.push_front(&cap->item_session_caps);
+  }
+  void touch_cap_bottom(Capability *cap) {
     caps.push_back(&cap->item_session_caps);
   }
   void touch_lease(ClientLease *r) {
@@ -370,7 +376,7 @@ public:
     recall_release_count(0), auth_caps(g_ceph_context),
     connection(NULL), item_session_list(this),
     requests(0),  // member_offset passed to front() manually
-    cap_push_seq(0),
+    cap_gen(0), cap_push_seq(0),
     lease_seq(0),
     completed_requests_dirty(false),
     num_trim_flushes_warnings(0),
