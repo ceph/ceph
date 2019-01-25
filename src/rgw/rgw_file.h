@@ -920,9 +920,8 @@ namespace rgw {
     int authorize(RGWRados* store) {
       int ret = rgw_get_user_info_by_access_key(store, key.id, user);
       if (ret == 0) {
-	RGWAccessKey* key0 = user.get_key0();
-	if (!key0 ||
-	    (key0->key != key.key))
+	RGWAccessKey* k = user.get_key(key.id);
+	if (!k || (k->key != key.key))
 	  return -EINVAL;
 	if (user.suspended)
 	  return -ERR_USER_SUSPENDED;
