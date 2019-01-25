@@ -661,6 +661,12 @@ CtPtr ProtocolV2::_fault() {
     connection->write_lock.unlock();
     return nullptr;
   }
+  if (connection->policy.server) {
+    ldout(cct, 1) << __func__ << " server, going to standby, even though i have stuff queued" << dendl;
+    state = STANDBY;
+    connection->write_lock.unlock();
+    return nullptr;
+  }
 
   connection->write_lock.unlock();
 
