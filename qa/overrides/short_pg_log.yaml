@@ -2,5 +2,5 @@ overrides:
   ceph:
     conf:
       global:
-        osd_min_pg_log_entries: 300
-        osd_max_pg_log_entries: 600
+        osd_min_pg_log_entries: 1
+        osd_max_pg_log_entries: 2
