@@ -3664,6 +3664,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_memory_expected_fragmentation", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0.15)
+    .set_min_max(0.0, 1.0)
     .add_see_also("bluestore_cache_autotune")
     .set_description("When tcmalloc and cache autotuning is enabled, estimate the percent of memory fragmentation."),
 
