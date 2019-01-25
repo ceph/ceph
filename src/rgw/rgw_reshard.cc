@@ -699,6 +699,11 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
     return ret;
   }
 
+  ldout(store->ctx(), 1) << __func__ <<
+    " INFO: reshard of bucket \"" << bucket_info.bucket.name << "\" from \"" <<
+    bucket_info.bucket.get_key() << "\" to \"" <<
+    new_bucket_info.bucket.get_key() << "\" completed successfully" << dendl;
+  
   reshard_lock.unlock();
 
   return 0;
