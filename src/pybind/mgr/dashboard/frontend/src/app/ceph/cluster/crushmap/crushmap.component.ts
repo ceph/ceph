@@ -12,6 +12,7 @@ import { HealthService } from '../../../shared/api/health.service';
 export class CrushmapComponent implements OnInit {
   tree: TreeModel;
   metadata: any;
+  metadataTitle: string;
   metadataKeyMap: { [key: number]: number } = {};
 
   constructor(private healthService: HealthService) {}
@@ -62,6 +63,8 @@ export class CrushmapComponent implements OnInit {
   }
 
   onNodeSelected(e: NodeEvent) {
-    this.metadata = this.metadataKeyMap[e.node.id];
+    const { name, type, status, ...remain } = this.metadataKeyMap[e.node.id];
+    this.metadata = remain;
+    this.metadataTitle = name + ' (' + type + ')';
   }
 }
