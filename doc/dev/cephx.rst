@@ -82,12 +82,21 @@ from both challenges and its shared key principal_secret.::
       u16 CEPHX_GET_AUTH_SESSION_KEY
     }
     CephXAuthenticate {
-      u8 1
+      u8 2                     # 2 means nautilus+
+      u64 client_challenge     # random (by client)
+      u64 key = {client_challenge ^ server_challenge}^principal_secret   # (roughly)
+      blob old_ticket          # old ticket, if we are reconnecting or renewing
+      u32 other_keys           # bit mask of service keys we want
+    }
+
+Prior to nautilus,::
+
+    CephXAuthenticate {
+      u8 1                     # 2 means nautilus+
       u64 client_challenge     # random (by client)
       u64 key = {client_challenge + server_challenge}^principal_secret   # (roughly)
       blob old_ticket          # old ticket, if we are reconnecting or renewing
     }
-   
 
 The monitor looks up principal_secret in database, and verifies the key is correct.
 If old_ticket is present, verify it is valid, and we can reuse the same global_id.
@@ -102,6 +111,17 @@ If old_ticket is present, verify it is valid, and we can reuse the same global_i
     u32 num_tickets ( = 1)
     ticket_info           # (N = 1)
 
+plus (for Nautilus and later)::
+
+    u32 connection_secret_len      # in bytes
+    connection_secret^session_key
+    u32 other_keys_len             # bytes of other keys (encoded)
+    other_keys {
+      u8 encoding_version = 1
+      u32 num_tickets
+      service_ticket_info * N      # for each service ticket
+    }
+
 where::
 
     ticket_info {
@@ -112,13 +132,20 @@ where::
       CephxTicketBlob ticket_blob                          # otherwise
     }
 
+    service_ticket_info {
+      u32 service_id       # CEPH_ENTITY_TYPE_{OSD,MDS,MGR}
+      u8 msg_version (1)
+      {CephXServiceTicket service_ticket}^principal_secret
+      CephxTicketBlob ticket_blob
+    }
+
     CephxServiceTicket {
       CryptoKey session_key      # freshly generated (even if old_ticket is present)
       utime_t expiration         # now + auth_mon_ticket_ttl
     }
 
     CephxTicketBlob {
-      u64 secret_id             # which service ticket encrypted this; -1 == mon_secret
+      u64 secret_id             # which service ticket encrypted this; -1 == monsecret, otherwise service's rotating key id
       {CephXServiceTicketInfo ticket}^mon_secret
     }
 
@@ -140,12 +167,14 @@ secret to get the session_key (CephxServiceTicket).  And the
 CephxTicketBlob is opaque (secured by the mon secret) but can be used
 later to prove who we are and what we can do (see CephxAuthorizer below).
 
+For Nautilus+, we also include the service tickets.
+
 The client can infer that the monitor is authentic because it can decrypt the
 service_ticket with its secret (i.e., the server has its secret key).
 
 
-Phase II: Obtaining service tickets
------------------------------------
+Phase II: Obtaining service tickets (pre-nautilus)
+--------------------------------------------------
 
 Now the client needs the keys used to talk to non-monitors (osd, mds, mgr).::
 
@@ -308,7 +337,9 @@ where::
 The server validates the ticket as before, and then also verifies the msg nonce
 has it's challenge + 1, confirming this is a live authentication attempt (not a replay).
 
-Finally, the server responds with a reply that proves its authenticity to the client::
+Finally, the server responds with a reply that proves its authenticity
+to the client.  It also includes some entropy to use for encryption of
+the session, if it is needed for the mode.::
 
   s->p :
     {CephxAuthorizeReply reply}^session_key
@@ -317,10 +348,19 @@ where::
 
     CephxAuthorizeReply {
       u64 nonce_plus_one
+      u32 connection_secret_length
+      connection secret
     }
 
-The client decrypts and confirms that the server incremented nonce properly and that this
-is thus a live authentication request and not a replay.
+Prior to nautilus, there is no connection secret::
+
+    CephxAuthorizeReply {
+      u64 nonce_plus_one
+    }
+
+The client decrypts and confirms that the server incremented nonce
+properly and that this is thus a live authentication request and not a
+replay.
 
 
 Rotating service secrets
