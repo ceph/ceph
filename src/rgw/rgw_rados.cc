@@ -6796,6 +6796,23 @@ int RGWRados::BucketShard::init(const rgw_bucket& _bucket,
   return 0;
 }
 
+int RGWRados::BucketShard::init(const RGWBucketInfo& bucket_info,
+                                const rgw_obj& obj)
+{
+  bucket = bucket_info.bucket;
+
+  int ret = store->open_bucket_index_shard(bucket_info, index_ctx,
+                                           obj.get_hash_object(), &bucket_obj,
+                                           &shard_id);
+  if (ret < 0) {
+    ldout(store->ctx(), 0) << "ERROR: open_bucket_index_shard() returned ret=" << ret << dendl;
+    return ret;
+  }
+  ldout(store->ctx(), 20) << " bucket index object: " << bucket_obj << dendl;
+
+  return 0;
+}
+
 int RGWRados::BucketShard::init(const RGWBucketInfo& bucket_info, int sid)
 {
   bucket = bucket_info.bucket;
