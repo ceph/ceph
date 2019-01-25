@@ -8673,16 +8673,11 @@ int RGWRados::stop_bi_log_entries(RGWBucketInfo& bucket_info, int shard_id)
   return CLSRGWIssueBucketBILogStop(index_ctx, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
-int RGWRados::bi_get_instance(const RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_bucket_dir_entry *dirent)
+int RGWRados::bi_get_instance(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                              rgw_bucket_dir_entry *dirent)
 {
-  rgw_rados_ref ref;
-  int r = get_obj_head_ref(bucket_info, obj, &ref);
-  if (r < 0) {
-    return r;
-  }
-
   rgw_cls_bi_entry bi_entry;
-  r = bi_get(obj.bucket, obj, BIIndexType::Instance, &bi_entry);
+  int r = bi_get(bucket_info, obj, BIIndexType::Instance, &bi_entry);
   if (r < 0 && r != -ENOENT) {
     ldout(cct, 0) << "ERROR: bi_get() returned r=" << r << dendl;
   }
@@ -8700,10 +8695,11 @@ int RGWRados::bi_get_instance(const RGWBucketInfo& bucket_info, rgw_obj& obj, rg
   return 0;
 }
 
-int RGWRados::bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, rgw_cls_bi_entry *entry)
+int RGWRados::bi_get(const RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                     BIIndexType index_type, rgw_cls_bi_entry *entry)
 {
   BucketShard bs(this);
-  int ret = bs.init(bucket, obj, nullptr /* no RGWBucketInfo */);
+  int ret = bs.init(bucket_info, obj);
   if (ret < 0) {
     ldout(cct, 5) << "bs.init() returned ret=" << ret << dendl;
     return ret;
@@ -8711,11 +8707,7 @@ int RGWRados::bi_get(rgw_bucket& bucket, rgw_obj& obj, BIIndexType index_type, r
 
   cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance);
   
-  ret = cls_rgw_bi_get(bs.index_ctx, bs.bucket_obj, index_type, key, entry);
-  if (ret < 0)
-    return ret;
-
-  return 0;
+  return cls_rgw_bi_get(bs.index_ctx, bs.bucket_obj, index_type, key, entry);
 }
 
 void RGWRados::bi_put(ObjectWriteOperation& op, BucketShard& bs, rgw_cls_bi_entry& entry)
