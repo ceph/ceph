@@ -436,7 +436,7 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
     auto m = op.get_message({});
     session->con->send_message2(std::move(m));
   } else {
-    ldout(cct, 0) << "no mgr session (no running mgr daemon?), waiting" << dendl;
+    ldout(cct, 5) << "no mgr session (no running mgr daemon?), waiting" << dendl;
   }
   return 0;
 }
