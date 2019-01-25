@@ -233,3 +233,28 @@ class TestClientLimits(CephFSTestCase):
     def test_client_cache_size(self):
         self._test_client_cache_size(False)
         self._test_client_cache_size(True)
+
+    def test_client_max_caps(self):
+        """
+        That the MDS will not let a client sit above mds_max_caps_per_client caps.
+        """
+
+        mds_min_caps_per_client = int(self.fs.get_config("mds_min_caps_per_client"))
+        mds_max_caps_per_client = 2*mds_min_caps_per_client
+        self.set_conf('mds', 'mds_max_caps_per_client', mds_max_caps_per_client)
+        self.fs.mds_fail_restart()
+        self.fs.wait_for_daemons()
+
+        self.mount_a.create_n_files("foo/", 3*mds_max_caps_per_client, sync=True)
+
+        mount_a_client_id = self.mount_a.get_global_id()
+        def expected_caps():
+            num_caps = self.get_session(mount_a_client_id)['num_caps']
+            if num_caps < mds_min_caps_per_client:
+                raise RuntimeError("client caps fell below min!")
+            elif num_caps <= mds_max_caps_per_client:
+                return True
+            else:
+                return False
+
+        self.wait_until_true(expected_caps, timeout=60)
