@@ -33,3 +33,21 @@ class TestDmcryptClose(object):
         file_name = '/path/does/not/exist'
         encryption.dmcrypt_close(file_name)
         assert fake_run.calls == []
+
+
+class TestDmcryptKey(object):
+
+    def test_dmcrypt_with_default_size(self, conf_ceph_stub):
+        conf_ceph_stub('[global]\nfsid=asdf-lkjh')
+        result = encryption.create_dmcrypt_key()
+        assert len(result) == 172
+
+    def test_dmcrypt_with_custom_size(self, conf_ceph_stub):
+        conf_ceph_stub('''
+        [global]
+        fsid=asdf
+        [osd]
+        osd_dmcrypt_size=8
+        ''')
+        result = encryption.create_dmcrypt_key()
+        assert len(result) == 172
