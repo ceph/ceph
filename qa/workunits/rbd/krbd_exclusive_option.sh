@@ -31,7 +31,7 @@ function assert_locked() {
 {
     "lockers": [
         {
-            "addr": "$client_addr",
+            "addr": "v1:$client_addr",
             "cookie": "auto $watch_cookie",
             "description": "",
             "expiration": "0.000000",
