@@ -220,7 +220,7 @@ struct ElasticConfig {
 
 using ElasticConfigRef = std::shared_ptr<ElasticConfig>;
 
-std::optional<const char*> es_type_to_str(const ESType& t) {
+static const char *es_type_to_str(const ESType& t) {
   switch (t) {
   case ESType::String: return "string";
   case ESType::Text: return "text";
@@ -242,79 +242,124 @@ std::optional<const char*> es_type_to_str(const ESType& t) {
   case ESType::Geo_Point: return "geo_point";
   case ESType::Ip: return "ip";
   default:
-    return std::nullopt;
+    return "<unknown>";
   }
-
 }
 
-struct es_dump_type {
-  const char *type;
-  const char *format;
-  bool analyzed;
-  std::string default_type;
+struct es_type_v2 {
+  ESType estype;
+  const char *format{nullptr};
+  boost::optional<bool> analyzed;
 
-  es_dump_type(const char *t, const char *f = nullptr, bool a = false) : type(t), format(f), analyzed(a) {}
-
-  es_dump_type(ESType t, const char *f = nullptr, bool a = false,
-               std::string default_type="text"): format(f), analyzed(a),
-                                                 default_type(default_type) {
-    type = es_type_to_str(t).value_or(default_type.c_str());
-  }
+  es_type_v2(ESType et) : estype(et) {}
 
   void dump(Formatter *f) const {
-    encode_json("type", type, f);
+    const char *type_str = es_type_to_str(estype);
+    encode_json("type", type_str, f);
     if (format) {
       encode_json("format", format, f);
     }
-    if (!analyzed && strcmp(type, "string") == 0) {
-      encode_json("index", "not_analyzed", f);
+
+    auto is_analyzed = analyzed;
+
+    if (estype == ESType::String &&
+        !is_analyzed) {
+      is_analyzed = false;
+    }
+
+    if (is_analyzed) {
+      encode_json("index", (is_analyzed.value() ? "analyzed" : "not_analyzed"), f);
     }
   }
 };
 
+struct es_type_v5 {
+  ESType estype;
+  const char *format{nullptr};
+  boost::optional<bool> analyzed;
+  boost::optional<bool> index;
+
+  es_type_v5(ESType et) : estype(et) {}
+
+  void dump(Formatter *f) const {
+    ESType new_estype;
+    if (estype != ESType::String) {
+      new_estype = estype;
+    } else {
+      bool is_analyzed = analyzed.value_or(false);
+      new_estype = (is_analyzed ? ESType::Text : ESType::Keyword);
+      /* index = true; ... Not setting index=true, because that's the default,
+       * and dumping a boolean value *might* be a problem when backporting this
+       * because value might get quoted
+       */
+    }
+
+    const char *type_str = es_type_to_str(new_estype);
+    encode_json("type", type_str, f);
+    if (format) {
+      encode_json("format", format, f);
+    }
+    if (index) {
+      encode_json("index", index.value(), f);
+    }
+  }
+};
+
+template <class T>
+struct es_type : public T {
+  es_type(T t) : T(t) {}
+  es_type& set_format(const char *f) {
+    T::format = f;
+    return *this;
+  }
+
+  es_type& set_analyzed(bool a) {
+    T::analyzed = a;
+    return *this;
+  }
+};
+
+template <class T>
 struct es_index_mappings {
   ESType string_type {ESType::String};
 
-  void dump_custom(Formatter *f, const char *section, const char *type, const char *format) const {
+  es_type<T> est(ESType t) const {
+    return es_type<T>(t);
+  }
+
+  void dump_custom(const char *section, ESType type, const char *format, Formatter *f) const {
     f->open_object_section(section);
     ::encode_json("type", "nested", f);
     f->open_object_section("properties");
-    encode_json("name", es_dump_type(string_type), f);
-    encode_json("value", es_dump_type(type, format), f);
+    encode_json("name", est(string_type), f);
+    encode_json("value", est(type).set_format(format), f);
     f->close_section(); // entry
     f->close_section(); // custom-string
-  }
-
-  void dump_custom(Formatter *f, const char* section, ESType t, const char *format) const {
-    const auto s = es_type_to_str(t).value_or("text");
-    dump_custom(f,section,s,format);
   }
 
   void dump(Formatter *f) const {
     f->open_object_section("object");
     f->open_object_section("properties");
-    encode_json("bucket", es_dump_type(string_type), f);
-    encode_json("name", es_dump_type(string_type), f);
-    encode_json("instance", es_dump_type(string_type), f);
-    encode_json("versioned_epoch", es_dump_type(ESType::Date), f);
+    encode_json("bucket", est(string_type), f);
+    encode_json("name", est(string_type), f);
+    encode_json("instance", est(string_type), f);
+    encode_json("versioned_epoch", est(ESType::Long), f);
     f->open_object_section("meta");
     f->open_object_section("properties");
-    encode_json("cache_control", es_dump_type(string_type), f);
-    encode_json("content_disposition", es_dump_type(string_type), f);
-    encode_json("content_encoding", es_dump_type(string_type), f);
-    encode_json("content_language", es_dump_type(string_type), f);
-    encode_json("content_type", es_dump_type(string_type), f);
-    encode_json("storage_class", es_dump_type(string_type), f);
-    encode_json("etag", es_dump_type(string_type), f);
-    encode_json("expires", es_dump_type(string_type), f);
-    f->open_object_section("mtime");
-    ::encode_json("type", "date", f);
-    ::encode_json("format", "strict_date_optional_time||epoch_millis", f);
-    f->close_section(); // mtime
-    encode_json("size", es_dump_type(ESType::Long), f);
-    dump_custom(f, "custom-string", string_type, nullptr);
-    dump_custom(f, "custom-int", "long", nullptr);
-    dump_custom(f, "custom-date", "date", "strict_date_optional_time||epoch_millis");
+    encode_json("cache_control", est(string_type), f);
+    encode_json("content_disposition", est(string_type), f);
+    encode_json("content_encoding", est(string_type), f);
+    encode_json("content_language", est(string_type), f);
+    encode_json("content_type", est(string_type), f);
+    encode_json("storage_class", est(string_type), f);
+    encode_json("etag", est(string_type), f);
+    encode_json("expires", est(string_type), f);
+    encode_json("mtime", est(ESType::Date)
+                         .set_format("strict_date_optional_time||epoch_millis"), f);
+    encode_json("size", est(ESType::Long), f);
+    dump_custom("custom-string", string_type, nullptr, f);
+    dump_custom("custom-int", ESType::Long, nullptr, f);
+    dump_custom("custom-date", ESType::Date, "strict_date_optional_time||epoch_millis", f);
     f->close_section(); // properties
     f->close_section(); // meta
     f->close_section(); // properties
@@ -334,11 +379,17 @@ struct es_index_settings {
   }
 };
 
-struct es_index_config {
-  es_index_settings settings;
-  es_index_mappings mappings;
+struct es_index_config_base {
+  virtual ~es_index_config_base() {}
+  virtual void dump(Formatter *f) const = 0;
+};
 
-  es_index_config(es_index_settings& _s, es_index_mappings& _m) : settings(_s), mappings(_m) {}
+template <class T>
+struct es_index_config : public es_index_config_base {
+  es_index_settings settings;
+  es_index_mappings<T> mappings;
+
+  es_index_config(es_index_settings& _s) : settings(_s) {}
 
   void dump(Formatter *f) const {
     encode_json("settings", settings, f);
@@ -586,19 +637,22 @@ public:
         ldout(sync_env->cct, 5) << "got elastic version=" << es_info.get_version_str() << dendl;
 
         es_index_settings settings(conf->num_replicas, conf->num_shards);
-        es_index_mappings mappings;
-        if (es_info.version >= ES_V5) {
-          ldout(sync_env->cct, 0) << "elasticsearch: using text type for string index mappings " << dendl;
-          mappings.string_type = ESType::Text;
-        }
 
-        es_index_config index_conf(settings, mappings);
-        call(new RGWPutRESTResourceCR<es_index_config, int> (sync_env->cct,
+        std::unique_ptr<es_index_config_base> index_conf;
+
+        if (es_info.version >= ES_V5) {
+          ldout(sync_env->cct, 0) << "elasticsearch: index mapping: version >= 5" << dendl;
+          index_conf.reset(new es_index_config<es_type_v5>(settings));
+        } else {
+          ldout(sync_env->cct, 0) << "elasticsearch: index mapping: version < 5" << dendl;
+          index_conf.reset(new es_index_config<es_type_v2>(settings));
+        }
+        call(new RGWPutRESTResourceCR<es_index_config_base, int> (sync_env->cct,
                                                              conf->conn.get(),
                                                              sync_env->http_manager,
                                                              path, nullptr /*params*/,
                                                              &(conf->default_headers),
-                                                             index_conf, nullptr));
+                                                             *index_conf, nullptr));
       }
       if (retcode < 0) {
         return set_cr_error(retcode);
