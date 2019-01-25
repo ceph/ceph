@@ -1,3 +1,21 @@
 ::ng-deep tree-internal .tree li {
   cursor: pointer;
 }
+
+::ng-deep tree-internal .tree .node-value {
+  color: #2b99a8;
+  border-radius: 5px;
+}
+
+::ng-deep tree-internal .tree .node-selected {
+  background-color: #d9edf7;
+  color: #212121;
+}
+
+::ng-deep tree-internal .tree .node-value:hover {
+  color: #212121;
+}
+
+::ng-deep tree-internal .tree .node-value:after {
+  height: 0;
+}
