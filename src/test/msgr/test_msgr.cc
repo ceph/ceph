@@ -216,7 +216,10 @@ typedef FakeDispatcher::Session Session;
 TEST_P(MessengerTest, SimpleTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  bind_addr.parse("127.0.0.1");
+  if (string(GetParam()) == "simple")
+    bind_addr.parse("v1:127.0.0.1");
+  else
+    bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -387,7 +390,10 @@ TEST_P(MessengerTest, SimpleMsgr2Test) {
 TEST_P(MessengerTest, NameAddrTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  bind_addr.parse("127.0.0.1");
+  if (string(GetParam()) == "simple")
+    bind_addr.parse("v1:127.0.0.1");
+  else
+    bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -421,7 +427,10 @@ TEST_P(MessengerTest, NameAddrTest) {
 TEST_P(MessengerTest, FeatureTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  bind_addr.parse("127.0.0.1");
+  if (string(GetParam()) == "simple")
+    bind_addr.parse("v1:127.0.0.1");
+  else
+    bind_addr.parse("v2:127.0.0.1");
   uint64_t all_feature_supported, feature_required, feature_supported = 0;
   for (int i = 0; i < 10; i++)
     feature_supported |= 1ULL << i;
@@ -481,7 +490,10 @@ TEST_P(MessengerTest, TimeoutTest) {
   g_ceph_context->_conf.set_val("ms_tcp_read_timeout", "1");
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  bind_addr.parse("127.0.0.1");
+  if (string(GetParam()) == "simple")
+    bind_addr.parse("v1:127.0.0.1");
+  else
+    bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -520,7 +532,10 @@ TEST_P(MessengerTest, StatefulTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  bind_addr.parse("127.0.0.1");
+  if (string(GetParam()) == "simple")
+    bind_addr.parse("v1:127.0.0.1");
+  else
+    bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateful_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossless_client(0);
@@ -620,7 +635,10 @@ TEST_P(MessengerTest, StatelessTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  bind_addr.parse("127.0.0.1");
+  if (string(GetParam()) == "simple")
+    bind_addr.parse("v1:127.0.0.1");
+  else
+    bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateless_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossy_client(0);
@@ -697,7 +715,10 @@ TEST_P(MessengerTest, ClientStandbyTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  bind_addr.parse("127.0.0.1");
+  if (string(GetParam()) == "simple")
+    bind_addr.parse("v1:127.0.0.1");
+  else
+    bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateful_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossless_peer(0);
@@ -770,7 +791,10 @@ TEST_P(MessengerTest, AuthTest) {
   g_ceph_context->_conf.set_val("auth_client_required", "cephx");
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  bind_addr.parse("127.0.0.1");
+  if (string(GetParam()) == "simple")
+    bind_addr.parse("v1:127.0.0.1");
+  else
+    bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -819,7 +843,10 @@ TEST_P(MessengerTest, AuthTest) {
 TEST_P(MessengerTest, MessageTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  bind_addr.parse("127.0.0.1");
+  if (string(GetParam()) == "simple")
+    bind_addr.parse("v1:127.0.0.1");
+  else
+    bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateful_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossless_peer(0);
@@ -1085,7 +1112,9 @@ class SyntheticWorkload {
     for (int i = 0; i < servers; ++i) {
       msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0),
                                "server", getpid()+i, 0);
-      snprintf(addr, sizeof(addr), "127.0.0.1:%d", base_port+i);
+      snprintf(addr, sizeof(addr), "%s127.0.0.1:%d",
+	       (type == "simple") ? "v1:":"v2:",
+	       base_port+i);
       bind_addr.parse(addr);
       msgr->bind(bind_addr);
       msgr->add_dispatcher_head(&dispatcher);
@@ -1100,7 +1129,9 @@ class SyntheticWorkload {
       msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(-1),
                                "client", getpid()+i+servers, 0);
       if (cli_policy.standby) {
-        snprintf(addr, sizeof(addr), "127.0.0.1:%d", base_port+i+servers);
+        snprintf(addr, sizeof(addr), "%s127.0.0.1:%d",
+		 (type == "simple") ? "v1:":"v2:",
+		 base_port+i+servers);
         bind_addr.parse(addr);
         msgr->bind(bind_addr);
       }
@@ -1564,11 +1595,17 @@ TEST_P(MessengerTest, MarkdownTest) {
   Messenger *server_msgr2 = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid(), 0);
   MarkdownDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  bind_addr.parse("127.0.0.1:16800");
+  if (string(GetParam()) == "simple")
+    bind_addr.parse("v1:127.0.0.1:16800");
+  else
+    bind_addr.parse("v2:127.0.0.1:16800");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
-  bind_addr.parse("127.0.0.1:16801");
+  if (string(GetParam()) == "simple")
+    bind_addr.parse("v1:127.0.0.1:16801");
+  else
+    bind_addr.parse("v2:127.0.0.1:16801");
   server_msgr2->bind(bind_addr);
   server_msgr2->add_dispatcher_head(&srv_dispatcher);
   server_msgr2->start();
