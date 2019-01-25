@@ -68,11 +68,17 @@
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">91</context>
         </context-group>
+      </trans-unit><trans-unit id="9fe218829514884cdd0ca2300573a4e0428c324f" datatype="html">
+        <source>Alerts</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
+          <context context-type="linenumber">97</context>
+        </context-group>
       </trans-unit><trans-unit id="92899fa68e8ca108912163ff58edc8540e453787" datatype="html">
         <source>Pools</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
-          <context context-type="linenumber">101</context>
+          <context context-type="linenumber">107</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/mirroring/overview/overview.component.html</context>
@@ -90,13 +96,13 @@
         <source>Block</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
-          <context context-type="linenumber">113</context>
+          <context context-type="linenumber">119</context>
         </context-group>
       </trans-unit><trans-unit id="b73f7f5060fb22a1e9ec462b1bb02493fa3ab866" datatype="html">
         <source>Images</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
-          <context context-type="linenumber">122</context>
+          <context context-type="linenumber">128</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi/iscsi.component.html</context>
@@ -114,31 +120,31 @@
         <source>Mirroring</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
-          <context context-type="linenumber">130</context>
+          <context context-type="linenumber">136</context>
         </context-group>
       </trans-unit><trans-unit id="811c241d56601b91ef26735b770e64428089b950" datatype="html">
         <source>iSCSI</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
-          <context context-type="linenumber">142</context>
+          <context context-type="linenumber">148</context>
         </context-group>
       </trans-unit><trans-unit id="a4eff72d97b7ced051398d581f10968218057ddc" datatype="html">
         <source>Filesystems</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
-          <context context-type="linenumber">153</context>
+          <context context-type="linenumber">159</context>
         </context-group>
       </trans-unit><trans-unit id="2190548d236ca5f7bc7ab2bca334b860c5ff2ad4" datatype="html">
         <source>Object Gateway</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
-          <context context-type="linenumber">164</context>
+          <context context-type="linenumber">170</context>
         </context-group>
       </trans-unit><trans-unit id="9e24f9e2d42104ffc01599db4d566d1cc518f9e6" datatype="html">
         <source>Daemons</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
-          <context context-type="linenumber">173</context>
+          <context context-type="linenumber">179</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi/iscsi.component.html</context>
@@ -152,7 +158,7 @@
         <source>Users</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
-          <context context-type="linenumber">179</context>
+          <context context-type="linenumber">185</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/auth/user-tabs/user-tabs.component.html</context>
@@ -162,7 +168,7 @@
         <source>Buckets</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
-          <context context-type="linenumber">185</context>
+          <context context-type="linenumber">191</context>
         </context-group>
       </trans-unit><trans-unit id="797f8214e8148f4bf0d244baaa7341706b419549" datatype="html">
         <source>Retrieving data<x id="START_TAG_SPAN_1" ctype="x-span" equiv-text="&lt;span&gt;"/> for
@@ -1105,6 +1111,44 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-list/osd-list.component.html</context>
           <context context-type="linenumber">80</context>
+        </context-group>
+      </trans-unit><trans-unit id="4f8b2bb476981727ab34ed40fde1218361f92c45" datatype="html">
+        <source>Details</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/prometheus/prometheus-list/prometheus-list.component.html</context>
+          <context context-type="linenumber">10</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/core/auth/role-details/role-details.component.html</context>
+          <context context-type="linenumber">2</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/rgw/rgw-daemon-details/rgw-daemon-details.component.html</context>
+          <context context-type="linenumber">3</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-details/rgw-bucket-details.component.html</context>
+          <context context-type="linenumber">2</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
+          <context context-type="linenumber">3</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/configuration/configuration-details/configuration-details.component.html</context>
+          <context context-type="linenumber">3</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
+          <context context-type="linenumber">8</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/pool/pool-details/pool-details.component.html</context>
+          <context context-type="linenumber">5</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cephfs/cephfs-detail/cephfs-detail.component.html</context>
+          <context context-type="linenumber">3</context>
         </context-group>
       </trans-unit><trans-unit id="d2bcd3296d2850de762fb943060b7e086a893181" datatype="html">
         <source>Health</source>
@@ -2274,21 +2318,17 @@
           <context context-type="sourcefile">app/core/not-found/not-found.component.html</context>
           <context context-type="linenumber">3</context>
         </context-group>
-      </trans-unit><trans-unit id="1d65cc22d5842c06d33b244fc67de9db4003537e" datatype="html">
-        <source>Recent Notifications</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/navigation/notifications/notifications.component.html</context>
-          <context context-type="linenumber">4</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/navigation/notifications/notifications.component.html</context>
-          <context context-type="linenumber">51</context>
-        </context-group>
       </trans-unit><trans-unit id="16568619015cfb2352e3b2596ba04fc1c82e44ef" datatype="html">
         <source>Remove all</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/notifications/notifications.component.html</context>
-          <context context-type="linenumber">8</context>
+          <context context-type="linenumber">6</context>
+        </context-group>
+      </trans-unit><trans-unit id="1d65cc22d5842c06d33b244fc67de9db4003537e" datatype="html">
+        <source>Recent Notifications</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/core/navigation/notifications/notifications.component.html</context>
+          <context context-type="linenumber">53</context>
         </context-group>
       </trans-unit><trans-unit id="495ab70870b5b4a30f2bc5f55052fdc518d954a9" datatype="html">
         <source>There are no background tasks.</source>
@@ -2356,40 +2396,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/identity/identity.component.html</context>
           <context context-type="linenumber">25</context>
-        </context-group>
-      </trans-unit><trans-unit id="4f8b2bb476981727ab34ed40fde1218361f92c45" datatype="html">
-        <source>Details</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/auth/role-details/role-details.component.html</context>
-          <context context-type="linenumber">2</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/rgw/rgw-daemon-details/rgw-daemon-details.component.html</context>
-          <context context-type="linenumber">3</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-details/rgw-bucket-details.component.html</context>
-          <context context-type="linenumber">2</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/rgw/rgw-user-details/rgw-user-details.component.html</context>
-          <context context-type="linenumber">3</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/cluster/configuration/configuration-details/configuration-details.component.html</context>
-          <context context-type="linenumber">3</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
-          <context context-type="linenumber">8</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/pool/pool-details/pool-details.component.html</context>
-          <context context-type="linenumber">5</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/cephfs/cephfs-detail/cephfs-detail.component.html</context>
-          <context context-type="linenumber">3</context>
         </context-group>
       </trans-unit><trans-unit id="eeba399c4dae8d4890c27b7a2cd2dc28fcf8b5f9" datatype="html">
         <source>Performance Counters</source>
@@ -3315,6 +3321,10 @@
           <context context-type="sourcefile">src/app/ceph/cephfs/cephfs-detail/cephfs-detail.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/cluster/prometheus/prometheus-list/prometheus-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
       </trans-unit>
       <trans-unit id="15793f4cbc261bedbc60f7105533dde536a3f42b" datatype="html">
         <source>Progress</source>
@@ -4183,6 +4193,34 @@
         <source><x id="INTERPOLATION" equiv-text="{{operation}}"/> was initialized in the following OSD: <x id="INTERPOLATION_1" equiv-text="{{id}}"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-scrub-modal/osd-scrub-modal.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="78917e8031aaf913ac3fa63295325ce8879703ce" datatype="html">
+        <source>Job</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/cluster/prometheus/prometheus-list/prometheus-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="94287619205068b591c18493c64781424864c259" datatype="html">
+        <source>Severity</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/cluster/prometheus/prometheus-list/prometheus-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="e6cfbe0c5e0302ba2cec22315f6a28f8ac46b651" datatype="html">
+        <source>Started</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/cluster/prometheus/prometheus-list/prometheus-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="801b98c6f02fe3b32f6afa3ee854c99ed83474e6" datatype="html">
+        <source>URL</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/cluster/prometheus/prometheus-list/prometheus-list.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
