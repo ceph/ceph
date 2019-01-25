@@ -60,19 +60,6 @@ struct PGLog : DoutPrefixProvider {
     virtual ~LogEntryHandler() {}
   };
 
-  /* Exceptions */
-  class read_log_and_missing_error : public buffer::error {
-  public:
-    explicit read_log_and_missing_error(const char *what) {
-      snprintf(buf, sizeof(buf), "read_log_and_missing_error: %s", what);
-    }
-    const char *what() const throw () override {
-      return buf;
-    }
-  private:
-    char buf[512];
-  };
-
 public:
   /**
    * IndexLog - adds in-memory index of the log, by oid.
