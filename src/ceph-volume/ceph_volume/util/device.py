@@ -209,9 +209,6 @@ class Device(object):
         dev_id.replace(' ', '_')
         return dev_id
 
-
-
-
     def _set_lvm_membership(self):
         if self._is_lvm_member is None:
             # this is contentious, if a PV is recognized by LVM but has no
@@ -282,7 +279,14 @@ class Device(object):
 
     @property
     def is_ceph_disk_member(self):
-        return self.ceph_disk.is_member
+        is_member = self.ceph_disk.is_member
+        if self.sys_api.get("partitions"):
+            for part in self.sys_api.get("partitions").keys():
+                part = Device("/dev/%s" % part)
+                if part.is_ceph_disk_member:
+                    is_member = True
+                    break
+        return is_member
 
     @property
     def is_mapper(self):
@@ -356,6 +360,9 @@ class Device(object):
         ]
         rejected = [reason for (k, v, reason) in reasons if
                     self.sys_api.get(k, '') == v]
+        if self.is_ceph_disk_member:
+            rejected.append("Used by ceph-disk")
+
         return len(rejected) == 0, rejected
 
 
