@@ -71,9 +71,6 @@ fi
 # when using wheel packages
 pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install --upgrade 'pip >= 6.1'
 
-# workaround of https://github.com/pypa/setuptools/issues/1042
-pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install --upgrade "setuptools < 36"
-
 if pip --help | grep -q disable-pip-version-check; then
     DISABLE_PIP_VERSION_CHECK=--disable-pip-version-check
 else
