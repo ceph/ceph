@@ -1484,16 +1484,16 @@ def main(argv):
             JSON = db[nspace][basename]['json']
             jsondict = json.loads(JSON)
 
-            if 'shard_id' in jsondict:
+            if 'shard_id' in jsondict[1]:
                 logging.debug("ECobject " + JSON)
                 found = 0
                 for pg in OBJECPGS:
                     OSDS = get_osds(pg, OSDDIR)
                     # Fix shard_id since we only have one json instance for each object
-                    jsondict['shard_id'] = int(pg.split('s')[1])
-                    JSON = json.dumps(jsondict)
+                    jsondict[1]['shard_id'] = int(pg.split('s')[1])
+                    JSON = json.dumps((pg, jsondict[1]))
                     for osd in OSDS:
-                        cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' get-attr hinfo_key").format(osd=osd, pg=pg, json=JSON)
+                        cmd = (CFSD_PREFIX + " '{json}' get-attr hinfo_key").format(osd=osd, json=JSON)
                         logging.debug("TRY: " + cmd)
                         try:
                             out = check_output(cmd, shell=True, stderr=subprocess.STDOUT)
@@ -1509,12 +1509,12 @@ def main(argv):
 
             for pg in ALLPGS:
                 # Make sure rep obj with rep pg or ec obj with ec pg
-                if ('shard_id' in jsondict) != (pg.find('s') > 0):
+                if ('shard_id' in jsondict[1]) != (pg.find('s') > 0):
                     continue
-                if 'shard_id' in jsondict:
+                if 'shard_id' in jsondict[1]:
                     # Fix shard_id since we only have one json instance for each object
-                    jsondict['shard_id'] = int(pg.split('s')[1])
-                    JSON = json.dumps(jsondict)
+                    jsondict[1]['shard_id'] = int(pg.split('s')[1])
+                    JSON = json.dumps((pg, jsondict[1]))
                 OSDS = get_osds(pg, OSDDIR)
                 for osd in OSDS:
                     DIR = os.path.join(OSDDIR, os.path.join(osd, os.path.join("current", "{pg}_head".format(pg=pg))))
@@ -1523,7 +1523,7 @@ def main(argv):
                     if not fnames:
                         continue
                     afd = open(ATTRFILE, "wb")
-                    cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' list-attrs").format(osd=osd, pg=pg, json=JSON)
+                    cmd = (CFSD_PREFIX + " '{json}' list-attrs").format(osd=osd, json=JSON)
                     logging.debug(cmd)
                     ret = call(cmd, shell=True, stdout=afd)
                     afd.close()
@@ -1543,7 +1543,7 @@ def main(argv):
                             continue
                         exp = values.pop(key)
                         vfd = open(VALFILE, "wb")
-                        cmd = (CFSD_PREFIX + "--pgid {pg} '{json}' get-attr {key}").format(osd=osd, pg=pg, json=JSON, key="_" + key)
+                        cmd = (CFSD_PREFIX + " '{json}' get-attr {key}").format(osd=osd, json=JSON, key="_" + key)
                         logging.debug(cmd)
                         ret = call(cmd, shell=True, stdout=vfd)
                         vfd.close()
