@@ -1457,7 +1457,7 @@ def main(argv):
         for basename in db[nspace].keys():
             file = os.path.join(DATADIR, nspace + "-" + basename + "__head")
             JSON = db[nspace][basename]['json']
-            GETNAME = "/tmp/getbytes.{pid}".format(pid=pid)
+            jsondict = json.loads(JSON)
             for pg in OBJREPPGS:
                 OSDS = get_osds(pg, OSDDIR)
                 for osd in OSDS:
@@ -1468,12 +1468,33 @@ def main(argv):
                         continue
                     if int(basename.split(REP_NAME)[1]) > int(NUM_CLONED_REP_OBJECTS):
                         continue
+                    logging.debug("REPobject " + JSON)
                     cmd = (CFSD_PREFIX + " '{json}' dump | grep '\"snap\": 1,' > /dev/null").format(osd=osd, json=JSON)
                     logging.debug(cmd)
                     ret = call(cmd, shell=True)
                     if ret != 0:
                         logging.error("Invalid dump for {json}".format(json=JSON))
                         ERRORS += 1
+            if 'shard_id' in jsondict[1]:
+                logging.debug("ECobject " + JSON)
+                for pg in OBJECPGS:
+                    OSDS = get_osds(pg, OSDDIR)
+                    jsondict = json.loads(JSON)
+                    for osd in OSDS:
+                        DIR = os.path.join(OSDDIR, os.path.join(osd, os.path.join("current", "{pg}_head".format(pg=pg))))
+                        fnames = [f for f in os.listdir(DIR) if os.path.isfile(os.path.join(DIR, f))
+                                  and f.split("_")[0] == basename and f.split("_")[4] == nspace]
+                        if not fnames:
+                            continue
+                        if int(basename.split(EC_NAME)[1]) > int(NUM_EC_OBJECTS):
+                            continue
+                        # Fix shard_id since we only have one json instance for each object
+                        jsondict[1]['shard_id'] = int(pg.split('s')[1])
+                        cmd = (CFSD_PREFIX + " '{json}' dump | grep '\"hinfo\": [{{]' > /dev/null").format(osd=osd, json=json.dumps((pg, jsondict[1])))
+                        logging.debug(cmd)
+                        ret = call(cmd, shell=True)
+                        if ret != 0:
+                            logging.error("Invalid dump for {json}".format(json=JSON))
 
     print("Test list-attrs get-attr")
     ATTRFILE = r"/tmp/attrs.{pid}".format(pid=pid)
