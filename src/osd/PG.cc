@@ -2399,6 +2399,10 @@ bool PG::set_force_recovery(bool b)
     publish_stats_to_osd();
     did = true;
   }
+  if (did) {
+    dout(20) << __func__ << " state " << pgstate_history.get_current_state() << dendl;
+    osd->local_reserver.update_priority(info.pgid, get_recovery_priority());
+  }
   return did;
 }
 
@@ -2420,6 +2424,10 @@ bool PG::set_force_backfill(bool b)
     state_clear(PG_STATE_FORCED_BACKFILL);
     publish_stats_to_osd();
     did = true;
+  }
+  if (did) {
+    dout(20) << __func__ << " state " << pgstate_history.get_current_state() << dendl;
+    osd->local_reserver.update_priority(info.pgid, get_backfill_priority());
   }
   return did;
 }
