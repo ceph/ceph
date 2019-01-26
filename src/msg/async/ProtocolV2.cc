@@ -2568,12 +2568,25 @@ CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {
                 << client_ident.supported_features()
                 << " features_required=" << client_ident.required_features()
                 << " flags=" << client_ident.flags() << std::dec << dendl;
-  if (client_ident.addrs().empty() ||
-      !client_ident.addrs().has_msgr2()) {
+  if (client_ident.addrs().empty()) {
     return _fault();  // a v2 peer should never do this
   }
-  connection->set_peer_addrs(client_ident.addrs());
-  connection->target_addr = client_ident.addrs().msgr2_addr();
+  entity_addr_t peer_addr = client_ident.addrs().msgr2_addr();
+  if (peer_addr.type == entity_addr_t::TYPE_NONE) {
+    // no v2 addr!  they must be a client
+    if (client_ident.addrs().v.size() > 1) {
+      lderr(cct) << __func__ << " rejecting addrvec with >1 addr but no msgr2: " << client_ident.addrs() << dendl;
+      return _fault();
+    }
+    peer_addr = client_ident.addrs().legacy_addr();
+    peer_addr.set_type(entity_addr_t::TYPE_MSGR2);
+    entity_addrvec_t addrs;
+    addrs.v.push_back(peer_addr);
+    connection->set_peer_addrs(addrs);
+  } else {
+    connection->set_peer_addrs(client_ident.addrs());
+  }
+  connection->target_addr = peer_addr;
 
   peer_name = entity_name_t(connection->get_peer_type(), client_ident.gid());
 
