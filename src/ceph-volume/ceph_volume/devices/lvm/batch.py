@@ -253,6 +253,8 @@ class Batch(object):
         )
         self.args = parser.parse_args(argv)
         self.parser = parser
+        for dev_list in ['', 'db_', 'wal_', 'journal_']:
+            setattr(self, '{}usable'.format(dev_list), [])
 
     def get_devices(self):
         # remove devices with partitions
