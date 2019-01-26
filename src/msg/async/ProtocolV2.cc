@@ -2033,6 +2033,7 @@ CtPtr ProtocolV2::handle_auth_done(char *payload, uint32_t length) {
   if (r < 0) {
     return _fault();
   }
+  auth_meta.con_mode = auth_done.con_mode();
   session_security =
     AuthStreamHandler::create_stream_handler_pair(cct, auth_meta);
 
@@ -2324,6 +2325,9 @@ CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
     return _fault();
   }
   if (r == 1) {
+    session_security =
+      AuthStreamHandler::create_stream_handler_pair(cct, auth_meta);
+    std::swap(session_security.rx, session_security.tx);
     AuthDoneFrame auth_done(connection->peer_global_id, auth_meta.con_mode,
 			    reply);
     return WRITE(auth_done.get_buffer(), "auth done", read_frame);
