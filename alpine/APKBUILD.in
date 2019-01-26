@@ -435,7 +435,8 @@ ceph_test() {
 		ceph-monstore-tool \
 		ceph-osdomap-tool \
 		ceph-kvstore-tool \
-		ceph-debugpack
+		ceph-debugpack \
+		cephdeduptool
 
 	_pkg $_libdir ceph/ceph-monstore-update-crush.sh
 }

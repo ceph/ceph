@@ -102,7 +102,7 @@ install(TARGETS ceph-authtool DESTINATION bin)
 
 set(cephdeduptool_srcs ceph_dedup_tool.cc)
 add_executable(cephdeduptool ${cephdeduptool_srcs})
-target_link_libraries(cephdeduptool librados global cls_cas_client)
+target_link_libraries(cephdeduptool librados-cxx global cls_cas_client)
 install(TARGETS cephdeduptool DESTINATION bin)
 
 if(WITH_CEPHFS)
