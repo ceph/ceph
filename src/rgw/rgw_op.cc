@@ -590,6 +590,65 @@ int rgw_build_object_policies(RGWRados *store, struct req_state *s,
   return ret;
 }
 
+void rgw_add_to_iam_environment(rgw::IAM::Environment& e,
+				boost::string_view key, boost::string_view val){
+  // This variant just adds non empty key pairs to IAM env., values can be empty
+  // in certain cases like tagging
+  if (!key.empty())
+    e.emplace(key,val);
+}
+
+static int rgw_iam_add_tags_from_bl(struct req_state* s, bufferlist& bl){
+  RGWObjTags& tagset = s->tagset;
+  try {
+    auto bliter = bl.begin();
+    tagset.decode(bliter);
+  } catch (buffer::error& err) {
+    ldout(s->cct, 0) << "ERROR: caught buffer::error, couldn't decode TagSet"
+		     << dendl;
+    return -EIO;
+  }
+
+  for (const auto& tag: tagset.get_tags()){
+    rgw_add_to_iam_environment(s->env, "s3:ExistingObjectTag/" + tag.first, tag.second);
+  }
+  return 0;
+}
+
+static int rgw_iam_add_existing_objtags(RGWRados* store, struct req_state* s, rgw_obj& obj, std::uint64_t action){
+  map <string, bufferlist> attrs;
+  store->set_atomic(s->obj_ctx, obj);
+  int op_ret = get_obj_attrs(store, s, obj, attrs);
+  if (op_ret < 0)
+    return op_ret;
+  auto tags = attrs.find(RGW_ATTR_TAGS);
+  if (tags != attrs.end()){
+    return rgw_iam_add_tags_from_bl(s, tags->second);
+  }
+  return 0;
+}
+
+static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, struct req_state *s){
+
+  using header_pair_t = std::pair <const char*, const char*>;
+  static const std::initializer_list <header_pair_t> acl_header_conditionals {
+    {"HTTP_X_AMZ_GRANT_READ", "s3:x-amz-grant-read"},
+    {"HTTP_X_AMZ_GRANT_WRITE", "s3:x-amz-grant-write"},
+    {"HTTP_X_AMZ_GRANT_READ_ACP", "s3:x-amz-grant-read-acp"},
+    {"HTTP_X_AMZ_GRANT_WRITE_ACP", "s3:x-amz-grant-write-acp"},
+    {"HTTP_X_AMZ_GRANT_FULL_CONTROL", "s3:x-amz-grant-full-control"}
+  };
+
+  if (s->has_acl_header){
+    for (const auto& c: acl_header_conditionals){
+      auto hdr = s->info.env->get(c.first);
+      if(hdr) {
+	e[c.second] = hdr;
+      }
+    }
+  }
+}
+
 rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
 						struct req_state* s)
 {

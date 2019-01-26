@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 #ifndef CEPH_RGW_LC_H
 #define CEPH_RGW_LC_H
 
@@ -21,6 +23,7 @@
 #include "rgw_tag.h"
 
 #include <atomic>
+#include <tuple>
 
 #define HASH_PRIME 7877
 #define MAX_ID_LEN 255
@@ -147,8 +150,6 @@ class LCFilter
 };
 WRITE_CLASS_ENCODER(LCFilter);
 
-
-
 class LCRule
 {
 protected:
@@ -171,56 +172,68 @@ public:
       return true;
   }
 
-  string& get_status() {
+  const string& get_id() const {
+    return id;
+  }	
+
+  const string& get_status() const {
       return status;
   }
 
-  string& get_prefix() {
+  bool is_enabled() const {
+    return status == "Enabled";
+  }
+
+  void set_enabled(bool flag) {
+    status = (flag ? "Enabled" : "Disabled");
+  }
+
+  const string& get_prefix() const {
       return prefix;
   }
 
-  LCFilter& get_filter() {
+  const LCFilter& get_filter() const {
     return filter;
   }
 
-  LCExpiration& get_expiration() {
+  const LCExpiration& get_expiration() const {
     return expiration;
   }
 
-  LCExpiration& get_noncur_expiration() {
+  const LCExpiration& get_noncur_expiration() const {
     return noncur_expiration;
   }
 
-  LCExpiration& get_mp_expiration() {
+  const LCExpiration& get_mp_expiration() const {
     return mp_expiration;
   }
 
-  bool get_dm_expiration() {
+  bool get_dm_expiration() const {
     return dm_expiration;
   }
 
-  void set_id(string*_id) {
-    id = *_id;
+  void set_id(const string& _id) {
+    id = _id;
   }
 
-  void set_prefix(string*_prefix) {
-    prefix = *_prefix;
+  void set_prefix(const string& _prefix) {
+    prefix = _prefix;
   }
 
-  void set_status(string*_status) {
-    status = *_status;
+  void set_status(const string& _status) {
+    status = _status;
   }
 
-  void set_expiration(LCExpiration*_expiration) {
-    expiration = *_expiration;
+  void set_expiration(const LCExpiration& _expiration) {
+    expiration = _expiration;
   }
 
-  void set_noncur_expiration(LCExpiration*_noncur_expiration) {
-    noncur_expiration = *_noncur_expiration;
+  void set_noncur_expiration(const LCExpiration& _noncur_expiration) {
+    noncur_expiration = _noncur_expiration;
   }
 
-  void set_mp_expiration(LCExpiration* _mp_expiration) {
-    mp_expiration = *_mp_expiration;
+  void set_mp_expiration(const LCExpiration& _mp_expiration) {
+    mp_expiration = _mp_expiration;
   }
 
   void set_dm_expiration(bool _dm_expiration) {
@@ -261,20 +274,18 @@ public:
      }
      DECODE_FINISH(bl);
    }
-
 };
 WRITE_CLASS_ENCODER(LCRule)
 
 struct lc_op
 {
-  bool status;
-  bool dm_expiration;
-  int expiration;
-  int noncur_expiration;
-  int mp_expiration;
+  bool status{false};
+  bool dm_expiration{false};
+  int expiration{0};
+  int noncur_expiration{0};
+  int mp_expiration{0};
   boost::optional<ceph::real_time> expiration_date;
   boost::optional<RGWObjTags> obj_tags;
-  lc_op() : status(false), dm_expiration(false), expiration(0), noncur_expiration(0), mp_expiration(0) {}
   
 };
 
@@ -282,7 +293,7 @@ class RGWLifecycleConfiguration
 {
 protected:
   CephContext *cct;
-  map<string, lc_op> prefix_map;
+  multimap<string, lc_op> prefix_map;
   multimap<string, LCRule> rule_map;
   bool _add_rule(LCRule *rule);
   bool has_same_action(const lc_op& first, const lc_op& second);
@@ -323,7 +334,7 @@ public:
   bool valid();
 
   multimap<string, LCRule>& get_rule_map() { return rule_map; }
-  map<string, lc_op>& get_prefix_map() { return prefix_map; }
+  multimap<string, lc_op>& get_prefix_map() { return prefix_map; }
 /*
   void create_default(string id, string name) {
     ACLGrant grant;
@@ -381,9 +392,17 @@ class RGWLC {
   private:
   int remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, const string& owner, const string& owner_display_name, bool remove_indeed = true);
   bool obj_has_expired(double timediff, int days);
-  int handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map);
+  int handle_multipart_expiration(RGWRados::Bucket *target,
+				  const multimap<string, lc_op>& prefix_map);
 };
 
+using LCCheckExpiresResult = std::tuple<bool, std::string, std::string>;
 
+std::string rgwlc_s3_expiration_header(
+  CephContext* cct,
+  const rgw_obj_key& obj_key,
+  const RGWObjTags& obj_tagset,
+  const ceph::real_time& mtime,
+  /* const */ std::map<std::string, buffer::list>& bucket_attrs);
 
 #endif

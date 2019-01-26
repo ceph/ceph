@@ -30,6 +30,7 @@
 #include "rgw_quota.h"
 #include "rgw_string.h"
 #include "rgw_website.h"
+#include "rgw_tag.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/user/cls_user_types.h"
 #include "cls/rgw/cls_rgw_types.h"
@@ -1871,6 +1872,8 @@ struct req_state {
   string dialect;
   string req_id;
   string trans_id;
+
+  RGWObjTags tagset;
 
   req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u);
   ~req_state();

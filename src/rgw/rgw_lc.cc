@@ -17,6 +17,14 @@
 #include "rgw_bucket.h"
 #include "rgw_lc.h"
 
+// this seems safe to use, at least for now--arguably, we should
+// prefer header-only fmt, in general
+#undef FMT_HEADER_ONLY
+#define FMT_HEADER_ONLY 1
+#include "fmt/format.h"
+
+#include "include/assert.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -54,9 +62,7 @@ void RGWLifecycleConfiguration::add_rule(LCRule *rule)
 bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
 {
   lc_op op;
-  if (rule->get_status().compare("Enabled") == 0) {
-    op.status = true;
-  }
+  op.status = rule->is_enabled();
   if (rule->get_expiration().has_days()) {
     op.expiration = rule->get_expiration().get_days();
   }
@@ -82,12 +88,7 @@ bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
     op.obj_tags = rule->get_filter().get_tags();
   }
 
-  /* prefix is optional, update prefix map only if prefix...exists */
-  if (!prefix.empty()) {
-    auto ret = prefix_map.emplace(std::move(prefix), std::move(op));
-    return ret.second;
-  }
-
+  prefix_map.emplace(std::move(prefix), std::move(op));
   return true;
 }
 
@@ -294,7 +295,8 @@ int RGWLC::remove_expired_obj(RGWBucketInfo& bucket_info, rgw_obj_key obj_key, c
   }
 }
 
-int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map)
+int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target,
+				       const multimap<string, lc_op>& prefix_map)
 {
   MultipartMetaFilter mp_filter;
   vector<rgw_bucket_dir_entry> objs;
@@ -394,7 +396,12 @@ int RGWLC::bucket_lc_process(string& shard_id)
       return -1;
     }
 
-  map<string, lc_op>& prefix_map = config.get_prefix_map();
+  multimap<string, lc_op>& prefix_map = config.get_prefix_map();
+
+  ldout(cct, 10) << __func__ <<  "() scanning prefix_map size="
+		 << prefix_map.size()
+		 << dendl;
+
   list_op.params.list_versions = bucket_info.versioned();
   if (!bucket_info.versioned()) {
     for(auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
@@ -831,3 +838,131 @@ int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
   return (nt+24*60*60 - tt);
 }
 
+std::string rgwlc_s3_expiration_header(
+  CephContext* cct,
+  const rgw_obj_key& obj_key,
+  const RGWObjTags& obj_tagset,
+  const ceph::real_time& mtime,
+  /* const */ std::map<std::string, buffer::list>& bucket_attrs)
+{
+  RGWLifecycleConfiguration config(cct); // TODO: save in bucket info
+  std::string hdr{""};
+
+  map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_LC);
+  if (aiter == bucket_attrs.end())
+    return hdr;
+
+  bufferlist::iterator iter{&aiter->second};
+  try {
+      config.decode(iter);
+  } catch (const buffer::error& e) {
+    ldout(cct, 0) << __func__
+		  <<  "() decode life cycle config failed"
+		  << dendl;
+      return hdr;
+  } /* catch */
+
+  boost::optional<ceph::real_time> expiration_date;
+  boost::optional<std::string> rule_id;
+
+  const auto& rule_map = config.get_rule_map();
+  for (const auto& ri : rule_map) {
+    const auto& rule = ri.second;
+    auto& id = rule.get_id();
+    auto& prefix = rule.get_prefix();
+    auto& filter = rule.get_filter();
+    auto& expiration = rule.get_expiration();
+    auto& noncur_expiration = rule.get_noncur_expiration();
+
+    ldout(cct, 10) << "rule: " << ri.first
+		   << " prefix: " << prefix
+		   << " expiration: "
+		   << " date: " << expiration.get_date()
+		   << " days: " << expiration.get_days()
+		   << " noncur_expiration: "
+		   << " date: " << noncur_expiration.get_date()
+		   << " days: " << noncur_expiration.get_days()
+		   << dendl;
+
+    /* skip if rule !enabled
+     * if rule has prefix, skip iff object !match prefix
+     * if rule has tags, skip iff object !match tags
+     * note if object is current or non-current, compare accordingly
+     * if rule has days, construct date expression and save iff older
+     * than last saved
+     * if rule has date, convert date expression and save iff older
+     * than last saved
+     * if the date accum has a value, format it into hdr
+     */
+
+    if (! rule.is_enabled())
+      continue;
+
+    if(! prefix.empty()) {
+      if (boost::starts_with(obj_key.name, prefix))
+	continue;
+    }
+
+    if (filter.has_tags()) {
+      bool tag_match = true;
+      const RGWObjTags& rule_tagset = filter.get_tags();
+      RGWObjTags::tag_map_t obj_tag_map = obj_tagset.get_tags();
+      for (auto& tag : rule_tagset.get_tags()) {
+	if (obj_tag_map.find(tag.first) == obj_tag_map.end()) {
+	  tag_match = false;
+	  break;
+	}
+      }
+      if (! tag_match)
+	continue;
+    }
+
+    // compute a uniform expiration date
+    boost::optional<ceph::real_time> rule_expiration_date;
+    const LCExpiration& rule_expiration =
+      (obj_key.instance.empty()) ? expiration : noncur_expiration;
+
+    if (rule_expiration.has_date()) {
+      rule_expiration_date =
+	boost::optional<ceph::real_time>(
+	  ceph::from_iso_8601(rule.get_expiration().get_date()));
+      rule_id = boost::optional<std::string>(id);
+    } else {
+      if (rule_expiration.has_days()) {
+	rule_expiration_date =
+	  boost::optional<ceph::real_time>(
+	    mtime + make_timespan(rule_expiration.get_days()*24*60*60));
+	rule_id = boost::optional<std::string>(id);
+      }
+    }
+
+    // update earliest expiration
+    if (rule_expiration_date) {
+      if ((! expiration_date) ||
+	  ((expiration_date &&
+	    (*expiration_date < *rule_expiration_date)))) {
+      expiration_date =
+	boost::optional<ceph::real_time>(rule_expiration_date);
+      }
+    }
+  }
+
+  // cond format header
+  if (expiration_date && rule_id) {
+    // Fri, 23 Dec 2012 00:00:00 GMT
+    char exp_buf[100];
+    time_t exp = ceph::real_clock::to_time_t(*expiration_date);
+    if (std::strftime(exp_buf, sizeof(exp_buf),
+		      "%c", std::gmtime(&exp))) {
+      hdr = fmt::format("expiry-date=\"{0}\", rule-id=\"{1}\"", exp_buf,
+			*rule_id);
+    } else {
+      ldout(cct, 0) << __func__ <<
+	"() strftime of life cycle expiration header failed"
+		    << dendl;
+    }
+  }
+
+  return hdr;
+
+} /* rgwlc_s3_expiration_header */
