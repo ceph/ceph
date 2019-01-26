@@ -120,34 +120,34 @@ public:
         usleep(1);
       }
 
-      m_cache_client->lookup_object("test_pool", 1, 2, "123456", ctx);
+      m_cache_client->lookup_object("pool_nspace", 1, 2, "object_name", ctx);
       m_send_request_index++;
     }
     m_wait_event.wait();
   }
 
-  bool startup_lookupobject_testing(std::string pool_name, std::string object_id) {
+  bool startup_lookupobject_testing(std::string pool_nspace, std::string object_id) {
     bool hit;
     auto ctx = new LambdaGenContext<std::function<void(ObjectCacheRequest*)>,
         ObjectCacheRequest*>([this, &hit](ObjectCacheRequest* ack){
        hit = ack->m_head.type == RBDSC_READ_REPLY;
        m_wait_event.signal();
     });
-    m_cache_client->lookup_object(pool_name, 1, 2, object_id, ctx);
+    m_cache_client->lookup_object(pool_nspace, 1, 2, object_id, ctx);
     m_wait_event.wait();
     return hit;
   }
 
-  void set_hit_entry_in_fake_lru(std::string oid) {
-    if (m_hit_entry_set.find(oid) == m_hit_entry_set.end()) {
-      m_hit_entry_set.insert(oid);
+  void set_hit_entry_in_fake_lru(std::string cache_file_name) {
+    if (m_hit_entry_set.find(cache_file_name) == m_hit_entry_set.end()) {
+      m_hit_entry_set.insert(cache_file_name);
     }
   }
 };
 
 TEST_F(TestCommunication, test_pingpong) {
 
-  startup_pingpong_testing(10, 16, 0);
+  startup_pingpong_testing(64, 16, 0);
   ASSERT_TRUE(m_send_request_index == m_recv_ack_index);
   startup_pingpong_testing(200, 128, 0);
   ASSERT_TRUE(m_send_request_index == m_recv_ack_index);
@@ -167,9 +167,9 @@ TEST_F(TestCommunication, test_lookup_object) {
   }
   for (uint64_t i = 50; i < 100; i++) {
     if ((random_hit % i) != 0) {
-      ASSERT_FALSE(startup_lookupobject_testing("test_pool", std::to_string(i)));
+      ASSERT_FALSE(startup_lookupobject_testing("test_nspace", std::to_string(i)));
     } else {
-      ASSERT_TRUE(startup_lookupobject_testing("test_pool", std::to_string(i)));
+      ASSERT_TRUE(startup_lookupobject_testing("test_nspace", std::to_string(i)));
     }
   }
 }
