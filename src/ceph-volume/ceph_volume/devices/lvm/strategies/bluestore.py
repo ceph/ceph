@@ -7,7 +7,6 @@ from .strategies import MixedStrategy
 from ceph_volume.devices.lvm.create import Create
 from ceph_volume.devices.lvm.prepare import Prepare
 from ceph_volume.util import templates
-from ceph_volume.util.prepare import osd_id_available
 from ceph_volume.exceptions import SizeAllocationError
 
 
@@ -132,6 +131,8 @@ class MixedType(MixedStrategy):
         self.block_db_size = self.get_block_db_size()
         self.block_wal_size = self.get_block_wal_size()
         self.system_vgs = lvm.VolumeGroups()
+        self.common_vg = None
+        self.common_wal_vg = None
         self.dbs_needed = len(self.data_devs) * self.osds_per_device
         self.wals_needed = self.dbs_needed
         self.use_large_block_db = self.use_large_block_wal = False
@@ -227,7 +228,7 @@ class MixedType(MixedStrategy):
     def compute(self):
         osds = self.computed['osds']
 
-        if self.db_or_journal_devs:
+        if self.data_devs and self.db_or_journal_devs:
             if not self.common_vg:
                 # there isn't a common vg, so a new one must be created with all
                 # the blank db devs
@@ -244,7 +245,7 @@ class MixedType(MixedStrategy):
             else:
                 vg_name = self.common_vg.name
 
-        if self.wal_devs:
+        if self.data_devs and self.wal_devs:
             if not self.common_wal_vg:
                 # there isn't a common vg, so a new one must be created with all
                 # the blank wal devs
@@ -308,7 +309,7 @@ class MixedType(MixedStrategy):
                 vg = lvm.create_vg(osd['data']['path'], name_prefix='ceph-block')
                 data_vgs[osd['data']['path']] = vg
 
-        if self.db_or_journal_devs:
+        if self.data_devs and self.db_or_journal_devs:
             blank_db_dev_paths = [d.abspath for d in self.blank_db_devs]
 
             # no common vg is found, create one with all the blank SSDs
@@ -330,7 +331,7 @@ class MixedType(MixedStrategy):
             else:
                 db_lv_extents = db_vg.sizing(size=self.block_db_size.gb.as_int())['extents']
 
-        if self.wal_devs:
+        if self.data_devs and self.wal_devs:
             blank_wal_dev_paths = [d.abspath for d in self.blank_wal_devs]
 
             if not self.common_wal_vg:
@@ -405,10 +406,10 @@ class MixedType(MixedStrategy):
         # make sure that data devices do not have any LVs
         validators.no_lvm_membership(self.data_devs)
 
-        if self.db_or_journal_devs:
+        if self.data_devs and self.db_or_journal_devs:
             self._validate_db_devs()
 
-        if self.wal_devs:
+        if self.data_devs and self.wal_devs:
             self._validate_wal_devs()
 
         if self.osd_ids:
