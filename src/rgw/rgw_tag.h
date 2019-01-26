@@ -8,12 +8,12 @@
 #include <include/types.h>
 #include <boost/container/flat_map.hpp>
 
-#include "rgw_common.h"
-
 class RGWObjTags
 {
- protected:
+public:
   using tag_map_t = boost::container::flat_map <std::string, std::string>;
+
+protected:
   tag_map_t tag_map;
  public:
   RGWObjTags() {}

@@ -8,6 +8,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "rgw_tag.h"
+#include "rgw_common.h"
 
 static constexpr uint32_t MAX_OBJ_TAGS=10;
 static constexpr uint32_t MAX_TAG_KEY_SIZE=128;

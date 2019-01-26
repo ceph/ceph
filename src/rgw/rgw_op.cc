@@ -798,7 +798,7 @@ void rgw_add_to_iam_environment(rgw::IAM::Environment& e, std::string_view key, 
 }
 
 static int rgw_iam_add_tags_from_bl(struct req_state* s, bufferlist& bl){
-  RGWObjTags tagset;
+  RGWObjTags& tagset = s->tagset;
   try {
     auto bliter = bl.cbegin();
     tagset.decode(bliter);
