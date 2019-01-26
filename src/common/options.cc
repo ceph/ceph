@@ -1952,6 +1952,22 @@ std::vector<Option> get_global_options() {
     .set_min(2)
     .set_description("Number of striping periods to zero head of MDS journal write position"),
 
+    Option("osd_calc_pg_upmaps_aggressively", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("try to calculate PG upmaps more aggressively, e.g., "
+                     "by doing a fairly exhaustive search of existing PGs "
+                     "that can be unmapped or upmapped"),
+
+    Option("osd_calc_pg_upmaps_max_stddev", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(1.0)
+    .set_description("standard deviation below which there is no attempt made "
+                     "while trying to calculate PG upmaps"),
+
+    Option("osd_calc_pg_upmaps_local_fallback_retries", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(100)
+    .set_description("Maximum number of PGs we can attempt to unmap or upmap "
+                     "for a specific overfull or underfull osd per iteration "),
+
      Option("osd_smart_report_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_description("Timeout (in seconds) for smarctl to run, default is set to 5"),
