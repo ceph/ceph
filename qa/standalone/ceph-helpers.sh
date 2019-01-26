@@ -1422,6 +1422,7 @@ function test_get_timeout_delays() {
 # @return 0 if the cluster is clean, 1 otherwise
 #
 function wait_for_clean() {
+    local cmd=$1
     local num_active_clean=-1
     local cur_active_clean
     local -a delays=($(get_timeout_delays $TIMEOUT .1))
@@ -1447,6 +1448,8 @@ function wait_for_clean() {
             ceph report
             return 1
         fi
+	# eval is a no-op if cmd is empty
+        eval $cmd
         sleep ${delays[$loop]}
         loop+=1
     done
