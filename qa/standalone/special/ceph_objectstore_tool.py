@@ -72,7 +72,6 @@ def get_pool_id(name, nullfd):
 
 # return a list of unique PGS given an osd subdirectory
 def get_osd_pgs(SUBDIR, ID):
-    export CEPH_ARGS="--osd-objectstore=filestore"
     PGS = []
     if ID:
         endhead = re.compile("{id}.*_head$".format(id=ID))
@@ -84,7 +83,6 @@ def get_osd_pgs(SUBDIR, ID):
 
 # return a sorted list of unique PGs given a directory
 def get_pgs(DIR, ID):
-    export CEPH_ARGS="--osd-objectstore=filestore"
     OSDS = [f for f in os.listdir(DIR) if os.path.isdir(os.path.join(DIR, f)) and f.find("osd") == 0]
     PGS = []
     for d in OSDS:
@@ -95,7 +93,6 @@ def get_pgs(DIR, ID):
 
 # return a sorted list of PGS a subset of ALLPGS that contain objects with prefix specified
 def get_objs(ALLPGS, prefix, DIR, ID):
-    export CEPH_ARGS="--osd-objectstore=filestore"
     OSDS = [f for f in os.listdir(DIR) if os.path.isdir(os.path.join(DIR, f)) and f.find("osd") == 0]
     PGS = []
     for d in OSDS:
@@ -114,7 +111,6 @@ def get_objs(ALLPGS, prefix, DIR, ID):
 
 # return a sorted list of OSDS which have data from a given PG
 def get_osds(PG, DIR):
-    export CEPH_ARGS="--osd-objectstore=filestore"
     ALLOSDS = [f for f in os.listdir(DIR) if os.path.isdir(os.path.join(DIR, f)) and f.find("osd") == 0]
     OSDS = []
     for d in ALLOSDS:
@@ -411,7 +407,6 @@ def kill_daemons():
 
 
 def check_data(DATADIR, TMPFILE, OSDDIR, SPLIT_NAME):
-    export CEPH_ARGS="--osd-objectstore=filestore"
     repcount = 0
     ERRORS = 0
     for rawnsfile in [f for f in os.listdir(DATADIR) if f.split('-')[1].find(SPLIT_NAME) == 0]:
@@ -603,7 +598,6 @@ def test_get_set_inc_osdmap(CFSD_PREFIX, osd_path):
 
 
 def test_removeall(CFSD_PREFIX, db, OBJREPPGS, REP_POOL, CEPH_BIN, OSDDIR, REP_NAME, NUM_CLONED_REP_OBJECTS):
-    export CEPH_ARGS="--osd-objectstore=filestore"
     # Test removeall
     TMPFILE = r"/tmp/tmp.{pid}".format(pid=os.getpid())
     nullfd = open(os.devnull, "w")
@@ -673,7 +667,6 @@ def test_removeall(CFSD_PREFIX, db, OBJREPPGS, REP_POOL, CEPH_BIN, OSDDIR, REP_N
 
 
 def main(argv):
-    export CEPH_ARGS="--osd-objectstore=filestore"
     if sys.version_info[0] < 3:
         sys.stdout = stdout = os.fdopen(sys.stdout.fileno(), 'wb', 0)
     else:
