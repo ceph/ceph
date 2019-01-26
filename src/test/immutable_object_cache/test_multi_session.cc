@@ -114,7 +114,8 @@ public:
     ASSERT_TRUE(session->is_session_work());
   }
 
-  void test_lookup_object(std::string pool, uint64_t index, uint64_t request_num, bool is_last) {
+  void test_lookup_object(std::string pool_nspace, uint64_t index,
+                          uint64_t request_num, bool is_last) {
 
     for (uint64_t i = 0; i < request_num; i++) {
       auto ctx = new LambdaGenContext<std::function<void(ObjectCacheRequest*)>,
@@ -123,7 +124,7 @@ public:
       });
       m_send_request_index++;
       // here just for concurrently testing register + lookup, so fix object id.
-      m_cache_client_vec[index]->lookup_object(pool, 1, 2, "1234", ctx);
+      m_cache_client_vec[index]->lookup_object(pool_nspace, 1, 2, "1234", ctx);
     }
 
     if (is_last) {
@@ -146,7 +147,8 @@ TEST_F(TestMultiSession, test_multi_session) {
     if (m_cache_client_vec[random_index] == nullptr) {
       test_register_client(random_index);
     } else {
-      test_lookup_object(string("test_pool") + std::to_string(random_index), random_index, 32, i == test_times ? true : false);
+      test_lookup_object(string("test_nspace") + std::to_string(random_index),
+                         random_index, 32, i == test_times ? true : false);
     }
   }
 
