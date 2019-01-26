@@ -14011,16 +14011,16 @@ bool Client::is_quota_bytes_exceeded(Inode *in, int64_t new_bytes,
 
 bool Client::is_quota_bytes_approaching(Inode *in, const UserPerm& perms)
 {
+  ceph_assert(in->size >= in->reported_size);
+  const uint64_t size = in->size - in->reported_size;
   return check_quota_condition(in, perms,
-      [](const Inode &in) {
+      [&size](const Inode &in) {
         if (in.quota.max_bytes) {
           if (in.rstat.rbytes >= in.quota.max_bytes) {
             return true;
           }
 
-          ceph_assert(in.size >= in.reported_size);
           const uint64_t space = in.quota.max_bytes - in.rstat.rbytes;
-          const uint64_t size = in.size - in.reported_size;
           return (space >> 4) < size;
         } else {
           return false;
