@@ -116,11 +116,12 @@ protected:
 public:
   Frame() {}
 
-  bufferlist &get_buffer() {
+  bufferlist &get_buffer(const uint32_t extra_payload_len = 0) {
     if (frame_buffer.length()) {
       return frame_buffer;
     }
-    encode((uint32_t)(payload.length() + sizeof(uint32_t)), frame_buffer, -1ll);
+    encode(static_cast<uint32_t>(payload.length() + extra_payload_len + sizeof(uint32_t)),
+	   frame_buffer, -1ll);
     uint32_t tag = static_cast<uint32_t>(static_cast<T *>(this)->tag);
     ceph_assert(tag != 0);
     encode(tag, frame_buffer, -1ll);
@@ -434,20 +435,12 @@ struct AckFrame : public SignedEncryptedFrame<AckFrame, uint64_t> {
   inline uint64_t &seq() { return get_val<0>(); }
 };
 
-// This class is only used for encoding the message frame.
-struct MessageFrame : public PayloadFrame<MessageFrame, ceph_msg_header2,
-                                          signature_t, bufferlist> {
-  const ProtocolV2::Tag tag = ProtocolV2::Tag::MESSAGE;
-
-  MessageFrame(ProtocolV2 *protocol, ceph_msg_header2 &header2,
-               bufferlist &data)
-      : PayloadFrame<MessageFrame, ceph_msg_header2, signature_t, bufferlist>(
-            protocol, header2, signature_t(), data) {}
-};
-
-// This class is only used for decoding the message header
+// This class is used for encoding/decoding header of the message frame.
+// Body is processed almost independently with the sole junction point
+// being the `extra_payload_len` passed to get_buffer().
 struct MessageHeaderFrame
     : public SignedEncryptedFrame<MessageHeaderFrame, ceph_msg_header2> {
+  const ProtocolV2::Tag tag = ProtocolV2::Tag::MESSAGE;
   using SignedEncryptedFrame::SignedEncryptedFrame;
 
   inline ceph_msg_header2 &header() { return get_val<0>(); }
@@ -888,14 +881,15 @@ ssize_t ProtocolV2::write_message(Message *m, bufferlist &bl, bool more) {
     flat_bl.claim_append(bl);
   }
 
+  MessageHeaderFrame message(this, header2);
   authencrypt_payload(flat_bl);
-  MessageFrame message(this, header2, flat_bl);
 
   ldout(cct, 5) << __func__ << " sending message m=" << m
                 << " seq=" << m->get_seq() << " " << *m << dendl;
 
-  bufferlist &msg_bl = message.get_buffer();
+  bufferlist &msg_bl = message.get_buffer(flat_bl.length());
   connection->outcoming_bl.claim_append(msg_bl);
+  connection->outcoming_bl.claim_append(flat_bl);
 
   m->trace.event("async writing message");
   ldout(cct, 20) << __func__ << " sending m=" << m << " seq=" << m->get_seq()
