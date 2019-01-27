@@ -84,23 +84,11 @@ export class OsdRecvSpeedModalComponent implements OnInit {
     observableForkJoin(observables)
       .pipe(
         mergeMap((configOptions) => {
-          const result = { values: {}, configOptions: [] };
-          configOptions.forEach((configOption) => {
-            result.configOptions.push(configOption);
-
-            if (configOption && 'value' in configOption) {
-              configOption.value.forEach((value) => {
-                if (value['section'] === 'osd') {
-                  result.values[configOption.name] = Number(value.value);
-                }
-              });
-            }
-          });
-          return of(result);
+          return of(this.getCurrentValues(configOptions));
         })
       )
       .subscribe((resp) => {
-        this.getStoredPriority(resp.values, (priority) => {
+        this.detectPriority(resp.values, (priority) => {
           this.setPriority(priority);
         });
         this.setDescription(resp.configOptions);
@@ -108,7 +96,7 @@ export class OsdRecvSpeedModalComponent implements OnInit {
       });
   }
 
-  getStoredPriority(configOptionValues: any, callbackFn: Function) {
+  detectPriority(configOptionValues: any, callbackFn: Function) {
     const priority = _.find(this.priorities, (p) => {
       return _.isEqual(p.values, configOptionValues);
     });
@@ -127,6 +115,24 @@ export class OsdRecvSpeedModalComponent implements OnInit {
     }
 
     return callbackFn(this.priorities[0]);
+  }
+
+  getCurrentValues(configOptions: any) {
+    const currentValues = { values: {}, configOptions: [] };
+    configOptions.forEach((configOption) => {
+      currentValues.configOptions.push(configOption);
+
+      if ('value' in configOption) {
+        configOption.value.forEach((value) => {
+          if (value.section === 'osd') {
+            currentValues.values[configOption.name] = Number(value.value);
+          }
+        });
+      } else if ('default' in configOption && configOption.default !== null) {
+        currentValues.values[configOption.name] = Number(configOption.default);
+      }
+    });
+    return currentValues;
   }
 
   setDescription(configOptions: Array<any>) {
@@ -181,11 +187,12 @@ export class OsdRecvSpeedModalComponent implements OnInit {
   }
 
   onCustomizePriorityChange() {
+    const values = {};
+    Object.keys(this.priorityAttrs).forEach((configOptionName) => {
+      values[configOptionName] = this.osdRecvSpeedForm.getValue(configOptionName);
+    });
+
     if (this.osdRecvSpeedForm.getValue('customizePriority')) {
-      const values = {};
-      Object.keys(this.priorityAttrs).forEach((configOptionName) => {
-        values[configOptionName] = this.osdRecvSpeedForm.getValue(configOptionName);
-      });
       const customPriority = {
         name: 'custom',
         text: this.i18n('Custom'),
@@ -193,10 +200,9 @@ export class OsdRecvSpeedModalComponent implements OnInit {
       };
       this.setPriority(customPriority);
     } else {
-      Object.keys(this.priorityAttrs).forEach((configOptionName) => {
-        this.osdRecvSpeedForm.get(configOptionName).reset();
+      this.detectPriority(values, (priority) => {
+        this.setPriority(priority);
       });
-      this.setPriority(this.priorities[0]);
     }
   }
 
