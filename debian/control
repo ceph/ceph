@@ -495,9 +495,9 @@ Depends: librados3 (= ${binary:Version}),
          ${misc:Depends},
          ${shlibs:Depends},
 Conflicts: librados1-dev,
-           librados3-dev,
+           librados2-dev,
 Replaces: librados1-dev,
-          librados3-dev,
+          librados2-dev,
 Description: RADOS distributed object store client library (development files)
  RADOS is a reliable, autonomic distributed object storage cluster
  developed as part of the Ceph distributed storage system.  This is a
