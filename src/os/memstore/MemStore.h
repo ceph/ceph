@@ -30,8 +30,8 @@
 class MemStore : public ObjectStore {
 public:
   struct Object : public RefCountedObject {
-    std::mutex xattr_mutex;
-    std::mutex omap_mutex;
+    ceph::mutex xattr_mutex{ceph::make_mutex("MemStore::Object::xattr_mutex")};
+    ceph::mutex omap_mutex{ceph::make_mutex("MemStore::Object::omap_mutex")};
     map<string,bufferptr> xattr;
     bufferlist omap_header;
     map<string,bufferlist> omap;
@@ -101,9 +101,13 @@ public:
     ceph::unordered_map<ghobject_t, ObjectRef> object_hash;  ///< for lookup
     map<ghobject_t, ObjectRef> object_map;        ///< for iteration
     map<string,bufferptr> xattr;
-    RWLock lock;   ///< for object_{map,hash}
-    bool exists;
-    std::mutex sequencer_mutex;
+    /// for object_{map,hash}
+    ceph::shared_mutex lock{
+      ceph::make_shared_mutex("MemStore::Collection::lock", true, false)};
+
+    bool exists = true;
+    ceph::mutex sequencer_mutex{
+      ceph::make_mutex("MemStore::Collection::sequencer_mutex")};
 
     typedef boost::intrusive_ptr<Collection> Ref;
     friend void intrusive_ptr_add_ref(Collection *c) { c->get(); }
@@ -117,7 +121,7 @@ public:
     // level.
 
     ObjectRef get_object(ghobject_t oid) {
-      RWLock::RLocker l(lock);
+      std::shared_lock l{lock};
       auto o = object_hash.find(oid);
       if (o == object_hash.end())
 	return ObjectRef();
@@ -125,7 +129,7 @@ public:
     }
 
     ObjectRef get_or_create_object(ghobject_t oid) {
-      RWLock::WLocker l(lock);
+      std::lock_guard l{lock};
       auto result = object_hash.emplace(oid, ObjectRef());
       if (result.second)
         object_map[oid] = result.first->second = create_object();
@@ -183,9 +187,7 @@ public:
     explicit Collection(CephContext *cct, coll_t c)
       : CollectionImpl(c),
 	cct(cct),
-	use_page_set(cct->_conf->memstore_page_set),
-        lock("MemStore::Collection::lock", true, false),
-	exists(true) {}
+	use_page_set(cct->_conf->memstore_page_set) {}
   };
   typedef Collection::Ref CollectionRef;
 
@@ -194,7 +196,9 @@ private:
 
 
   ceph::unordered_map<coll_t, CollectionRef> coll_map;
-  RWLock coll_lock;    ///< rwlock to protect coll_map
+  /// rwlock to protect coll_map
+  ceph::shared_mutex coll_lock{
+    ceph::make_shared_mutex("MemStore::coll_lock")};
   map<coll_t,CollectionRef> new_coll_map;
 
   CollectionRef get_collection(const coll_t& cid);
@@ -244,7 +248,6 @@ private:
 public:
   MemStore(CephContext *cct, const string& path)
     : ObjectStore(cct, path),
-      coll_lock("MemStore::coll_lock"),
       finisher(cct),
       used_bytes(0) {}
   ~MemStore() override { }
