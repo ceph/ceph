@@ -264,6 +264,8 @@
   system. This is a single command that unsets the joinable flag on the file
   system and brings down all of its ranks.
 
+* The `cache drop` admin socket command has been removed. The `ceph tell mds.X
+  cache drop` remains.
 
 Upgrading from Luminous
 -----------------------
