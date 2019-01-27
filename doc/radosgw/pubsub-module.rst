@@ -202,12 +202,15 @@ Creates a new subscription.
    PUT /subscriptions/<sub-name>?topic=<topic-name>[&push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=<level>]]
 
 Request Params:
+
  - topic-name: name of topic
  - push-endpoint: URI of endpoint to send push notification to
+
   - URI schema is: ``http|amqp://[<user>:<password>@]<fqdn>[:<port>][/<amqp-vhost>]``
   - Same schema is used for HTTP and AMQP endpoints (except amqp-vhost which is specific to AMQP)
   - Default values for HTTP: no user/password, port 80
   - Default values for AMQP: user/password=guest/guest, port 5672, amqp-vhost is "/"
+
  - amqp-exchange: mandatory parameter for AMQP endpoint. The exchanges must exist and be able to route messages based on topics
  - amqp-ack-level: 2 ack levels exist: "none" - message is considered "delivered" if sent to broker; 
    "broker" message is considered "delivered" if acked by broker. 
