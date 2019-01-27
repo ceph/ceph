@@ -390,6 +390,11 @@ public:
 
   virtual int bindv(const entity_addrvec_t& addrs);
 
+
+  virtual bool should_use_msgr2() {
+    return false;
+  }
+
   /**
    * @} // Configuration
    */

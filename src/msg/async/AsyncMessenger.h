@@ -121,6 +121,8 @@ public:
 
   int bindv(const entity_addrvec_t& bind_addrs) override;
 
+  bool should_use_msgr2() override;
+
   /** @} Configuration functions */
 
   /**

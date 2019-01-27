@@ -382,12 +382,12 @@ void MonClient::handle_monmap(MMonMap *m)
 		     << " went away" << dendl;
       // can't find the mon we were talking to (above)
       _reopen_session();
-    } else if (monmap.get_addrs(new_rank) != con_addrs) {
-      // FIXME: we might make this a more sophisticated check later if we do
-      // multiprotocol IPV4/IPV6 and have a strict preference
-      ldout(cct,10) << " mon." << new_rank << " has addrs "
-		    << monmap.get_addrs(new_rank) << " but i'm connected to "
-		    << con_addrs << dendl;
+    } else if (messenger->should_use_msgr2() &&
+	       monmap.get_addrs(new_rank).has_msgr2() &&
+	       !con_addrs.has_msgr2()) {
+      ldout(cct,1) << " mon." << new_rank << " has (v2) addrs "
+		   << monmap.get_addrs(new_rank) << " but i'm connected to "
+		   << con_addrs << ", reconnecting" << dendl;
       _reopen_session();
     }
   }
