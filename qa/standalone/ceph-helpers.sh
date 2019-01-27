@@ -392,6 +392,17 @@ function test_kill_daemons() {
     teardown $dir || return 1
 }
 
+#
+# return a random TCP port which is not used yet
+#
+# please note, there could be racing if we use this function for
+# a free port, and then try to bind on this port.
+#
+function get_unused_port() {
+    local ip=127.0.0.1
+    python3 -c "import socket; s=socket.socket(); s.bind(('$ip', 0)); print(s.getsockname()[1]); s.close()"
+}
+
 #######################################################################
 
 ##
