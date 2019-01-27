@@ -686,8 +686,8 @@ def main(argv):
     EC_NAME = "ECobject"
     if len(argv) > 0 and argv[0] == 'large':
         PG_COUNT = 12
-        NUM_REP_OBJECTS = 800
-        NUM_CLONED_REP_OBJECTS = 100
+        NUM_REP_OBJECTS = 200
+        NUM_CLONED_REP_OBJECTS = 50
         NUM_EC_OBJECTS = 12
         NUM_NSPACES = 4
         # Larger data sets for first object per namespace
