@@ -2,11 +2,13 @@
 
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
+mon_port=$(get_unused_port)
+
 function run() {
     local dir=$1
     shift
 
-    export CEPH_MON="127.0.0.1:7224" # git grep '\<7224\>' : there must be only one
+    export CEPH_MON="127.0.0.1:$mon_port"
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
     CEPH_ARGS+="--mon-host=$CEPH_MON "
@@ -34,10 +36,9 @@ function TEST_minimal() {
 
 function TEST_multimon() {
     local dir=$1
-
-    MONA="127.0.0.1:7224" # git grep '\<7224\>' : there must be only one
-    MONB="127.0.0.1:7225" # git grep '\<7225\>' : there must be only one
-    MONC="127.0.0.1:7226" # git grep '\<7226\>' : there must be only one
+    MONA="127.0.0.1:$((mon_port++))"
+    MONB="127.0.0.1:$((mon_port++))"
+    MONC="127.0.0.1:$((mon_port++))"
 
     run_mon $dir a --public-addr $MONA
     run_mon $dir b --public-addr $MONB
