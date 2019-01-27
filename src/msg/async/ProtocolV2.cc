@@ -515,6 +515,7 @@ void ProtocolV2::stop() {
 
   std::lock_guard<std::mutex> l(connection->write_lock);
 
+  reset_recv_state();
   discard_out_queue();
 
   connection->_stop();
