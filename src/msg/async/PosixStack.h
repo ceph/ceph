@@ -38,17 +38,11 @@ class PosixWorker : public Worker {
 };
 
 class PosixNetworkStack : public NetworkStack {
-  vector<int> coreids;
   vector<std::thread> threads;
 
  public:
   explicit PosixNetworkStack(CephContext *c, const string &t);
 
-  int get_cpuid(int id) const {
-    if (coreids.empty())
-      return -1;
-    return coreids[id % coreids.size()];
-  }
   void spawn_worker(unsigned i, std::function<void ()> &&func) override {
     threads.resize(i+1);
     threads[i] = std::thread(func);
