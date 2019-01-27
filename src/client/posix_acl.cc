@@ -1,11 +1,8 @@
+#include "include/compat.h"
 #include "include/types.h"
 #include <sys/stat.h>
 #include "posix_acl.h"
 #include "UserPerm.h"
-
-#ifndef ACCESSPERMS
-#define ACCESSPERMS (S_IRWXU|S_IRWXG|S_IRWXO)
-#endif
 
 int posix_acl_check(const void *xattr, size_t size)
 {

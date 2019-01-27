@@ -12,6 +12,7 @@
  *
  */
 
+#include "include/compat.h"
 #include "common/common_init.h"
 #include "common/admin_socket.h"
 #include "common/ceph_argparse.h"
