@@ -1017,7 +1017,8 @@ uint32_t ProtocolV2::calculate_payload_size(
   AuthStreamHandler *stream_handler,
   uint32_t length)
 {
-  if (stream_handler) {
+  if (auth_meta.is_mode_secure()) {
+    ceph_assert(stream_handler != nullptr);
     return stream_handler->calculate_payload_size(length);
   } else {
     return length;
@@ -1025,17 +1026,19 @@ uint32_t ProtocolV2::calculate_payload_size(
 }
 
 void ProtocolV2::authencrypt_payload(bufferlist &payload) {
-  // using tx
-  if (session_security.tx) {
+  if (auth_meta.is_mode_secure()) {
+    // using tx
+    ceph_assert(session_security.tx);
     session_security.tx->authenticated_encrypt(payload);
-    // padding will be always present
-    ceph_assert_always(payload.length() > 0);
+    ceph_assert(payload.length() > 0);
   }
 }
 
 void ProtocolV2::authdecrypt_payload(char *payload, uint32_t &length) {
-  // using rx
-  if (session_security.rx) {
+  if (auth_meta.is_mode_secure()) {
+    ceph_assert(session_security.rx);
+    // using rx
+    ceph_assert(length > 0);
     session_security.rx->authenticated_decrypt(payload, length);
   }
 }
