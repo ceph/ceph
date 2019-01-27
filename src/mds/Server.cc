@@ -473,8 +473,7 @@ void Server::handle_client_session(const MClientSession::const_ref &m)
       dout(10) << "currently open|opening|stale|killing, dropping this req" << dendl;
       return;
     }
-    ceph_assert(session->is_closed() ||
-	   session->is_closing());
+    ceph_assert(session->is_closed() || session->is_closing());
 
     if (mds->is_stopping()) {
       dout(10) << "mds is stopping, dropping open req" << dendl;
@@ -482,32 +481,56 @@ void Server::handle_client_session(const MClientSession::const_ref &m)
     }
 
     {
-      auto send_reject_message = [this, session](std::string_view err_str) {
+      auto& addr = session->info.inst.addr;
+      session->set_client_metadata(client_metadata_t(m->metadata, m->supported_features));
+      auto& client_metadata = session->info.client_metadata;
+
+      auto log_session_status = [this, m, session](std::string_view status, std::string_view err) {
+        auto now = ceph_clock_now();
+        auto throttle_elapsed = m->get_recv_complete_stamp() - m->get_throttle_stamp();
+        auto elapsed = now - m->get_recv_stamp();
+        CachedStackStringStream css;
+        *css << "New client session:"
+             << " addr=\"" <<  session->info.inst.addr << "\""
+             << ",elapsed=" << elapsed
+             << ",throttled=" << throttle_elapsed
+             << ",status=\"" << status << "\"";
+        if (!err.empty()) {
+          *css << ",error=\"" << err << "\"";
+        }
+        const auto& metadata = session->info.client_metadata;
+        if (auto it = metadata.find("root"); it != metadata.end()) {
+          *css << ",root=\"" << it->second << "\"";
+        }
+        dout(2) << css->strv() << dendl;
+      };
+
+      auto send_reject_message = [this, &session, &log_session_status](std::string_view err_str) {
 	auto m = MClientSession::create(CEPH_SESSION_REJECT);
 	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
 	  m->metadata["error_string"] = err_str;
 	mds->send_message_client(m, session);
+        log_session_status("REJECTED", err_str);
       };
 
       bool blacklisted = mds->objecter->with_osdmap(
-	  [session](const OSDMap &osd_map) -> bool {
-	    return osd_map.is_blacklisted(session->info.inst.addr);
+	  [&addr](const OSDMap &osd_map) -> bool {
+	    return osd_map.is_blacklisted(addr);
 	  });
 
       if (blacklisted) {
-	dout(10) << "rejecting blacklisted client " << session->info.inst.addr << dendl;
+	dout(10) << "rejecting blacklisted client " << addr << dendl;
 	send_reject_message("blacklisted");
 	session->clear();
 	break;
       }
 
-      client_metadata_t client_metadata(m->metadata, m->supported_features);
       if (client_metadata.features.empty())
 	infer_supported_features(session, client_metadata);
 
       dout(20) << __func__ << " CEPH_SESSION_REQUEST_OPEN metadata entries:" << dendl;
       dout(20) << "  features: '" << client_metadata.features << dendl;
-      for (auto& p : client_metadata) {
+      for (const auto& p : client_metadata) {
 	dout(20) << "  " << p.first << ": " << p.second << dendl;
       }
 
@@ -523,11 +546,9 @@ void Server::handle_client_session(const MClientSession::const_ref &m)
 	break;
       }
 
-      client_metadata_t::iterator it;
       // Special case for the 'root' metadata path; validate that the claimed
       // root is actually within the caps of the session
-      it = client_metadata.find("root");
-      if (it != client_metadata.end()) {
+      if (auto it = client_metadata.find("root"); it != client_metadata.end()) {
 	auto claimed_root = it->second;
 	stringstream ss;
 	bool denied = false;
@@ -551,8 +572,7 @@ void Server::handle_client_session(const MClientSession::const_ref &m)
 	}
       }
 
-      it = client_metadata.find("uuid");
-      if (it != client_metadata.end()) {
+      if (auto it = client_metadata.find("uuid"); it != client_metadata.end()) {
 	if (find_session_by_uuid(it->second)) {
 	  send_reject_message("duplicated session uuid");
 	  mds->clog->warn() << "client session with duplicated session uuid '"
@@ -562,17 +582,18 @@ void Server::handle_client_session(const MClientSession::const_ref &m)
 	}
       }
 
-      session->set_client_metadata(client_metadata);
-
       if (session->is_closed())
 	mds->sessionmap.add_session(session);
 
       pv = mds->sessionmap.mark_projected(session);
       sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
       mds->sessionmap.touch_session(session);
-      mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv,
-					     std::move(client_metadata)),
-				new C_MDS_session_finish(this, session, sseq, true, pv));
+      auto fin = new FunctionContext([log_session_status = std::move(log_session_status)](int r){
+        ceph_assert(r == 0);
+        log_session_status("ACCEPTED", "");
+      });
+      mdlog->start_submit_entry(new ESession(m->get_source_inst(), true, pv, client_metadata),
+				new C_MDS_session_finish(this, session, sseq, true, pv, fin));
       mdlog->flush();
     }
     break;
@@ -877,7 +898,7 @@ class C_MDS_TerminatedSessions : public ServerContext {
 
 void Server::terminate_sessions()
 {
-  dout(2) << "terminate_sessions" << dendl;
+  dout(5) << "terminating all sessions..." << dendl;
 
   terminating_sessions = true;
 

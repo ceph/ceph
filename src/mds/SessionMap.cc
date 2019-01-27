@@ -889,13 +889,6 @@ void Session::clear_recalled_at()
   recall_release_count = 0;
 }
 
-void Session::set_client_metadata(const client_metadata_t& meta)
-{
-  info.client_metadata = meta;
-
-  _update_human_name();
-}
-
 /**
  * Use client metadata to generate a somewhat-friendlier
  * name for the client than its session ID.
