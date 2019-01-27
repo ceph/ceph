@@ -210,7 +210,7 @@ int amqp_basic_publish(
     }
     return AMQP_STATUS_OK;
   }
-  return AMQP_STATUS_UNSUPPORTED;
+  return AMQP_STATUS_CONNECTION_CLOSED;
 }
 
 const amqp_table_t amqp_empty_table = {0, NULL};
@@ -274,7 +274,7 @@ int amqp_simple_wait_frame_noblock(amqp_connection_state_t state, amqp_frame_t *
       }
     }
   }
-  return AMQP_STATUS_UNSUPPORTED;
+  return AMQP_STATUS_CONNECTION_CLOSED;
 }
 
 amqp_basic_consume_ok_t* amqp_basic_consume(
