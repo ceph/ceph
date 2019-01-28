@@ -83,6 +83,7 @@ class GaneshaTest(DashboardTestCase):
             "tag": None,
             "access_type": "RW",
             "squash": "no_root_squash",
+            "security_label": False,
             "protocols": [4],
             "transports": ["TCP"],
             "clients": [{
@@ -118,6 +119,7 @@ class GaneshaTest(DashboardTestCase):
         export = self.test_create_export()
         export['access_type'] = 'RO'
         export['daemons'] = ['node1', 'node3']
+        export['security_label'] = True
         data = self._task_put('/api/nfs-ganesha/export/{}/{}'
                               .format(export['cluster_id'], export['export_id']),
                               export)
@@ -125,6 +127,7 @@ class GaneshaTest(DashboardTestCase):
         self.assertEqual(len(exports), 1)
         self.assertDictEqual(exports[0], data)
         self.assertEqual(exports[0]['daemons'], ['node1', 'node3'])
+        self.assertEqual(exports[0]['security_label'], True)
 
     def test_delete_export(self):
         export = self.test_create_export()
