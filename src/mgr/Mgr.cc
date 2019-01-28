@@ -70,7 +70,8 @@ void MetadataUpdate::finish(int r)
 {
   daemon_state.clear_updating(key);
   if (r == 0) {
-    if (key.first == "mds" || key.first == "osd" || key.first == "mgr") {
+    if (key.first == "mds" || key.first == "osd" || 
+        key.first == "mgr" || key.first == "mon") {
       json_spirit::mValue json_result;
       bool read_ok = json_spirit::read(
           outbl.to_str(), json_result);
@@ -84,6 +85,13 @@ void MetadataUpdate::finish(int r)
 
       json_spirit::mObject daemon_meta = json_result.get_obj();
 
+      // Skip daemon who doesn't have hostname yet
+      if (daemon_meta.count("hostname") == 0) {
+        dout(1) << "Skipping incomplete metadata entry for "
+                << key.first << "." << key.second << dendl;
+        return;
+      }
+
       // Apply any defaults
       for (const auto &i : defaults) {
         if (daemon_meta.find(i.first) == daemon_meta.end()) {
@@ -94,7 +102,7 @@ void MetadataUpdate::finish(int r)
       DaemonStatePtr state;
       if (daemon_state.exists(key)) {
         state = daemon_state.get(key);
-        if (key.first == "mds" || key.first == "mgr") {
+        if (key.first == "mds" || key.first == "mgr" || key.first == "mon") {
           daemon_meta.erase("name");
         } else if (key.first == "osd") {
           daemon_meta.erase("id");
@@ -111,7 +119,7 @@ void MetadataUpdate::finish(int r)
         state->key = key;
         state->hostname = daemon_meta.at("hostname").get_str();
 
-        if (key.first == "mds" || key.first == "mgr") {
+        if (key.first == "mds" || key.first == "mgr" || key.first == "mon") {
           daemon_meta.erase("name");
         } else if (key.first == "osd") {
           daemon_meta.erase("id");
@@ -496,6 +504,19 @@ void Mgr::handle_service_map(MServiceMap *m)
   server.got_service_map();
 }
 
+void Mgr::handle_mon_map()
+{
+  dout(20) << __func__ << dendl;
+  assert(lock.is_locked_by_me());
+  std::set<std::string> names_exist;
+  cluster_state.with_monmap([&] (auto &monmap) {
+    for (unsigned int i = 0; i < monmap.size(); i++) {
+      names_exist.insert(monmap.get_name(i));
+    }
+  });
+  daemon_state.cull("mon", names_exist);
+}
+
 bool Mgr::ms_dispatch(Message *m)
 {
   dout(4) << *m << dendl;
@@ -507,6 +528,7 @@ bool Mgr::ms_dispatch(Message *m)
       break;
     case CEPH_MSG_MON_MAP:
       py_module_registry->notify_all("mon_map", "");
+      handle_mon_map();
       m->put();
       break;
     case CEPH_MSG_FS_MAP:
