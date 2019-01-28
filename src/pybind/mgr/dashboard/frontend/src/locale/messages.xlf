@@ -248,6 +248,18 @@
           <context context-type="sourcefile">app/shared/components/grafana/grafana.component.html</context>
           <context context-type="linenumber">11</context>
         </context-group>
+      </trans-unit><trans-unit id="4e11830040bd64804a0555de76f291d5832772d4" datatype="html">
+        <source>Grafana Time Picker</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/shared/components/grafana/grafana.component.html</context>
+          <context context-type="linenumber">20</context>
+        </context-group>
+      </trans-unit><trans-unit id="238c1ba845dd7330e8088165275919a1debf1ca3" datatype="html">
+        <source>Reset Settings</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/shared/components/grafana/grafana.component.html</context>
+          <context context-type="linenumber">35</context>
+        </context-group>
       </trans-unit><trans-unit id="012741ee52b3c050e4a977c37cc2334f7974f141" datatype="html">
         <source>Failed to load data.</source>
         <context-group purpose="location">
@@ -4692,6 +4704,216 @@
         <source>High</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/shared/api/osd.service.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="e6ca3c0efaf51e6d45a7f92f58bac37140c3fda4" datatype="html">
+        <source>Last 5 minutes</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="b0ecb2bbc548cc9bd95050fd8f0c84586d083fe2" datatype="html">
+        <source>Last 15 minutes</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="857ae67deb51353120b203b0f2a06b0c48ef49fa" datatype="html">
+        <source>Last 30 minutes</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7b1738fad314e936dc14b94db8f43da736942308" datatype="html">
+        <source>Last 1 hour (Default)</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="a428288224389726cef9d9bd8d1d7808cccd7ffd" datatype="html">
+        <source>Last 3 hours</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7cbabecc8d80cf183ac199cfaeb7619d56e5d43f" datatype="html">
+        <source>Last 6 hours</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1a389cdf64187d34cf99eec30a290e3fa7d4744f" datatype="html">
+        <source>Last 12 hours</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="9e0ba5f591380a94d594a76288f0c41aa97eb9c2" datatype="html">
+        <source>Last 24 hours</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="e430eda9c785cd43465b7cbb400ee914f1057247" datatype="html">
+        <source>Yesterday</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7fb1099e29660162f9154d5b2feee7743a423df6" datatype="html">
+        <source>Today</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="33904058a97a64bd189bed84038b1ffe719769c7" datatype="html">
+        <source>Today so far</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="3b0b849be007510021d3d383df75bec95ef9c97b" datatype="html">
+        <source>Day before yesterday</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6b430c2c394c4d32ebd7d46c8c46ab60e1b29ccb" datatype="html">
+        <source>Last 2 days</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="d5e812a87a5d57a94200a2013027cab76a7c4863" datatype="html">
+        <source>This day last week</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="d00edc936eeab6b5577401f115ca86ca2c87dc9a" datatype="html">
+        <source>Previous week</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="b036e40577baa6b918b2267d319d4b3aeaa88a5a" datatype="html">
+        <source>This week</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="99ad5a6096b3fcb3f021f3779bae710cdfeb8934" datatype="html">
+        <source>This week so far</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="02e0243b60007368f87dc01e083f232dd025096d" datatype="html">
+        <source>Last 7 days</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="c3b08b07b5ab98e7cdcf18df39355690ab7d3884" datatype="html">
+        <source>Previous month</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1b2562c6d5aa90644e7dc91feee82e2005fceb33" datatype="html">
+        <source>This month</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="26b4b18c5917934abb169ba9aa490e57f7bf10b8" datatype="html">
+        <source>This month so far</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7668986b9f753fcd72ad4a00b1a0c4861d1f7fb8" datatype="html">
+        <source>Last 30 days</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="ba1e822408d90c6fbd2989100fa648bfd5e8ee84" datatype="html">
+        <source>Last 90 days</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="c3df03f899a914c4181adcdc8a3f077424f7b6e8" datatype="html">
+        <source>Last 6 months</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="7f9a92757580c9f31c309c0a3812ea429274eadf" datatype="html">
+        <source>Last 1 year</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="5a9fede30ff65cb4b4426f6b1ed31afb67ecd7b0" datatype="html">
+        <source>Previous year</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="65cefcc53d1f6445df7568e8a40c49165f1090ee" datatype="html">
+        <source>This year</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="1f68b766944dc3865bddab765fe952b0c1c43f92" datatype="html">
+        <source>This year so far</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4d4b77e614f8043fdadef5d6d235655bb48eb311" datatype="html">
+        <source>Last 2 years</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="138afa339ea6e75d25a474affe1edbcb90e00ec0" datatype="html">
+        <source>Last 5 years</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/shared/components/grafana/grafana.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>

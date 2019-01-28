@@ -16,6 +16,17 @@
   height: 900px;
 }
 
+.timepicker {
+  select {
+    display: inline-block;
+  }
+
+  label {
+    font-size: 1.05em;
+    padding: 5px !important;
+  }
+}
+
 button {
   margin-bottom: 10px;
   margin-left: 10px;

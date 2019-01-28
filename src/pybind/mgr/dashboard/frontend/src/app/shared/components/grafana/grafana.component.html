@@ -14,24 +14,31 @@
 
 <div class="row"
      *ngIf="grafanaExist && dashboardExist">
-  <div class="col-md-12">
-    <div dropdown>
-      <button dropdownToggle
-              class="btn btn-sm dropdown-toggle"
-              data-toggle="dropdown"
-              title="Advanced Settings">
-        <i class="fa fa-cog"></i>
-        <span class="caret"></span>
-      </button>
-      <ul *dropdownMenu
-          class="dropdown-menu">
-        <li>
-          <a class="dropdown-item"
-             (click)="timePickerToggle()">{{ modeText }}
-          </a>
-        </li>
-      </ul>
+  <div class="col-md-12 timepicker">
+    <label class="control-label col-sm-1"
+           for="timepicker-control">
+      <ng-container i18n>Grafana Time Picker</ng-container>
+    </label>
+    <div class="col-sm-9">
+      <select id="timepicker"
+              name="timepicker-control"
+              class="form-control "
+              [(ngModel)]="time"
+              (ngModelChange)="onTimepickerChange($event)">
+        <option *ngFor="let key of grafanaTimes"
+                [ngValue]="key.value">{{ key.name }}
+        </option>
+      </select>
     </div>
+    <button class="btn btn-sm"
+            i18n-title
+            title="Reset Settings"
+            (click)="reset()">
+      <i class="fa fa-undo"></i>
+    </button>
+    <br>
+  </div>
+  <div class="col-md-12">
     <div class="grafana-container">
       <iframe #iframe
               id="iframe"
