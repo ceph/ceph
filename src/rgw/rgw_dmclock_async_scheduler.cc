@@ -2,7 +2,6 @@
 #include "common/async/completion.h"
 #include "rgw_dmclock_async_scheduler.h"
 #include "rgw_dmclock_scheduler.h"
-#include "rgw_common.h"
 
 namespace rgw::dmclock {
 
@@ -162,7 +161,7 @@ void AsyncScheduler::process(const Time& now)
 
   if (outstanding_requests >= max_requests) {
     if(auto c = counters(client_id::count)){
-      c->inc(l_rgw_throttle);
+      c->inc(throttle_counters::l_throttle);
     }
   }
 
