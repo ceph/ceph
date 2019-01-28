@@ -70,7 +70,7 @@ test_rbd_journal()
 
     local count=10
     save_commit_position ${journal}
-    rbd bench-write ${image} --io-size 4096 --io-threads 1 \
+    rbd bench --io-type write ${image} --io-size 4096 --io-threads 1 \
 	--io-total $((4096 * count)) --io-pattern seq
     rbd journal status --image ${image} | fgrep "tid=$((count - 1))"
     restore_commit_position ${journal}
