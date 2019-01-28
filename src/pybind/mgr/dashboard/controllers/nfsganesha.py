@@ -41,7 +41,7 @@ class NFSGaneshaExports(RESTController):
     @NfsTask('create', {'path': '{path}', 'fsal': '{fsal.name}',
                         'cluster_id': '{cluster_id}'}, 2.0)
     def create(self, path, cluster_id, daemons, pseudo, tag, access_type,
-               squash, protocols, transports, fsal, clients):
+               squash, security_label, protocols, transports, fsal, clients):
         if fsal['name'] not in Ganesha.fsals_available():
             raise NFSException("Cannot create this export. "
                                "FSAL '{}' cannot be managed by the dashboard."
@@ -56,6 +56,7 @@ class NFSGaneshaExports(RESTController):
             'tag': tag,
             'access_type': access_type,
             'squash': squash,
+            'security_label': security_label,
             'protocols': protocols,
             'transports': transports,
             'fsal': fsal,
@@ -74,7 +75,7 @@ class NFSGaneshaExports(RESTController):
     @NfsTask('edit', {'cluster_id': '{cluster_id}', 'export_id': '{export_id}'},
              2.0)
     def set(self, cluster_id, export_id, path, daemons, pseudo, tag, access_type,
-            squash, protocols, transports, fsal, clients):
+            squash, security_label, protocols, transports, fsal, clients):
         export_id = int(export_id)
         ganesha_conf = GaneshaConf.instance(cluster_id)
 
@@ -95,6 +96,7 @@ class NFSGaneshaExports(RESTController):
             'tag': tag,
             'access_type': access_type,
             'squash': squash,
+            'security_label': security_label,
             'protocols': protocols,
             'transports': transports,
             'fsal': fsal,
