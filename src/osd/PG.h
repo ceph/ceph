@@ -610,15 +610,6 @@ protected:
 
 protected:
   PGLog  pg_log;
-  static string get_info_key(spg_t pgid) {
-    return stringify(pgid) + "_info";
-  }
-  static string get_biginfo_key(spg_t pgid) {
-    return stringify(pgid) + "_biginfo";
-  }
-  static string get_epoch_key(spg_t pgid) {
-    return stringify(pgid) + "_epoch";
-  }
   ghobject_t    pgmeta_oid;
 
   // ------------------
