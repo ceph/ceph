@@ -10,10 +10,18 @@ roles:
   - mds.a
   - osd.0
   - osd.1
-- - mon.b
-  - mon.c
   - osd.2
   - osd.3
+- - mon.b
+  - osd.4
+  - osd.5
+  - osd.6
+  - osd.7
+- - mon.c
+  - osd.8
+  - osd.9
+  - osd.10
+  - osd.11
 - - client.0
   - client.1
   - client.2
@@ -30,6 +38,7 @@ overrides:
     - \(SLOW_OPS\)
     - overall HEALTH_
     - slow request
+    - \(MON_MSGR2_NOT_ENABLED\)
     conf:
       global:
         enable experimental unrecoverable data corrupting features: "*"
