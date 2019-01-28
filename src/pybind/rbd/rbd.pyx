@@ -4225,7 +4225,7 @@ written." % (self.name, ret, length))
 
         :param key: metadata key
         :type key: str
-        :returns: str - image id
+        :returns: str - metadata value
         """
         key = cstr(key, 'key')
         cdef:
