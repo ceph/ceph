@@ -1576,7 +1576,7 @@ public:
       int prepare();
       static int range_to_ofs(uint64_t obj_size, int64_t &ofs, int64_t &end);
       int read(int64_t ofs, int64_t end, bufferlist& bl);
-      int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb);
+      int iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb, optional_yield y);
       int get_attr(const char *name, bufferlist& dest);
     };
 
