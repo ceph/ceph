@@ -4519,7 +4519,7 @@ int RGWRados::copy_obj_to_remote_dest(RGWObjState *astate,
     return ret;
   }
 
-  ret = read_op.iterate(0, astate->size - 1, out_stream_req->get_out_cb());
+  ret = read_op.iterate(0, astate->size - 1, out_stream_req->get_out_cb(), null_yield);
   if (ret < 0) {
     delete out_stream_req;
     return ret;
@@ -6818,7 +6818,8 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
   return d->flush(std::move(completed));
 }
 
-int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb)
+int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
+                                    optional_yield y)
 {
   RGWRados *store = source->get_store();
   CephContext *cct = store->ctx();
@@ -6826,8 +6827,8 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb)
   const uint64_t chunk_size = cct->_conf->rgw_get_obj_max_req_size;
   const uint64_t window_size = cct->_conf->rgw_get_obj_window_size;
 
-  rgw::BlockingAioThrottle aio(window_size);
-  get_obj_data data(store, cb, &aio, ofs);
+  auto aio = rgw::make_throttle(window_size, y);
+  get_obj_data data(store, cb, &*aio, ofs);
 
   int r = store->iterate_obj(obj_ctx, source->get_bucket_info(), state.obj,
                              ofs, end, chunk_size, _get_obj_iterate_cb, &data);

@@ -1458,7 +1458,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
 
   perfcounter->inc(l_rgw_get_b, cur_end - cur_ofs);
   filter->fixup_range(cur_ofs, cur_end);
-  op_ret = read_op.iterate(cur_ofs, cur_end, filter);
+  op_ret = read_op.iterate(cur_ofs, cur_end, filter, s->yield);
   if (op_ret >= 0)
 	  op_ret = filter->flush();
   return op_ret;
@@ -2106,7 +2106,7 @@ void RGWGetObj::execute()
   ofs_x = ofs;
   end_x = end;
   filter->fixup_range(ofs_x, end_x);
-  op_ret = read_op.iterate(ofs_x, end_x, filter);
+  op_ret = read_op.iterate(ofs_x, end_x, filter, s->yield);
 
   if (op_ret >= 0)
     op_ret = filter->flush();
@@ -3512,7 +3512,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
     return ret;
 
   filter->fixup_range(new_ofs, new_end);
-  ret = read_op.iterate(new_ofs, new_end, filter);
+  ret = read_op.iterate(new_ofs, new_end, filter, s->yield);
 
   if (ret >= 0)
     ret = filter->flush();
