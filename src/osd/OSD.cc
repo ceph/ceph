@@ -3014,7 +3014,8 @@ int OSD::init()
 	hb_back_server_messenger } ) {
     m->set_auth_client(monc);
   }
-  for (auto m : { cluster_messenger,
+  for (auto m : { client_messenger,
+	cluster_messenger,
 	hb_front_server_messenger,
 	hb_back_server_messenger }) {
     m->set_auth_server(monc);
