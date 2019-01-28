@@ -19,6 +19,7 @@
 #include <memory>
 #include "common/ceph_mutex.h"
 #include "common/async/completion.h"
+#include "common/async/yield_context.h"
 #include "services/svc_rados.h"
 #include "rgw_aio.h"
 
@@ -112,5 +113,23 @@ class YieldingAioThrottle final : public Aio, private Throttle {
   AioResultList drain() override final;
 };
 #endif // HAVE_BOOST_CONTEXT
+
+// return a smart pointer to Aio
+inline auto make_throttle(uint64_t window_size, optional_yield y)
+{
+#ifdef HAVE_BOOST_CONTEXT
+  std::unique_ptr<Aio> aio;
+  if (y) {
+    aio = std::make_unique<YieldingAioThrottle>(window_size,
+                                                y.get_io_context(),
+                                                y.get_yield_context());
+  } else {
+    aio = std::make_unique<BlockingAioThrottle>(window_size);
+  }
+  return aio;
+#else
+  return std::make_optional<BlockingAioThrottle>(window_size);
+#endif
+}
 
 } // namespace rgw
