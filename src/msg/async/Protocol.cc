@@ -338,7 +338,6 @@ void ProtocolV1::write_event() {
         m->get();
       }
       more = !out_q.empty();
-      connection->send_lock.lock();
       connection->write_lock.unlock();
 
       // send_message or requeue messages may not encode message
@@ -348,7 +347,9 @@ void ProtocolV1::write_event() {
 
       r = write_message(m, data, more);
 
+      connection->send_lock.unlock();
       connection->write_lock.lock();
+      connection->send_lock.lock();
       if (r == 0) {
         ;
       } else if (r < 0) {
