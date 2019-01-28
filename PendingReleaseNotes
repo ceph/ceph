@@ -160,6 +160,11 @@
 * The 'cephfs-data-scan scan_links' now automatically repair inotables and
   snaptable.
 
+* Configuration values mon_warn_not_scrubbed/mon_warn_not_deep_scrubbed have been
+  renamed.  They are now mon_warn_pg_not_scrubbed_ratio/mon_warn_pg_not_deep_scrubbed_ratio
+  respectively.  This is to clarify that these warnings are related to pg scrubbing
+  and are a ratio of the related interval.  These options are now enabled by default.
+
 >=13.1.0
 --------
 
