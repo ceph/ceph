@@ -2212,7 +2212,7 @@ CtPtr ProtocolV2::send_client_ident() {
     ldout(cct,1) << __func__ << " getsockname reveals I am " << (sockaddr*)&ss
 		 << " when talking to " << connection->target_addr << dendl;
     entity_addr_t a;
-    a.set_type(connection->target_addr.get_type());
+    a.set_type(entity_addr_t::TYPE_MSGR2); // anything but NONE; learned_addr ignores this
     a.set_sockaddr((sockaddr*)&ss);
     a.set_port(0);
     connection->lock.unlock();
@@ -2572,22 +2572,8 @@ CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {
   if (client_ident.addrs().empty()) {
     return _fault();  // a v2 peer should never do this
   }
-  entity_addr_t peer_addr = client_ident.addrs().msgr2_addr();
-  if (peer_addr.type == entity_addr_t::TYPE_NONE) {
-    // no v2 addr!  they must be a client
-    if (client_ident.addrs().v.size() > 1) {
-      lderr(cct) << __func__ << " rejecting addrvec with >1 addr but no msgr2: " << client_ident.addrs() << dendl;
-      return _fault();
-    }
-    peer_addr = client_ident.addrs().legacy_addr();
-    peer_addr.set_type(entity_addr_t::TYPE_MSGR2);
-    entity_addrvec_t addrs;
-    addrs.v.push_back(peer_addr);
-    connection->set_peer_addrs(addrs);
-  } else {
-    connection->set_peer_addrs(client_ident.addrs());
-  }
-  connection->target_addr = peer_addr;
+  connection->set_peer_addrs(client_ident.addrs());
+  connection->target_addr = connection->_infer_target_addr(client_ident.addrs());
 
   peer_name = entity_name_t(connection->get_peer_type(), client_ident.gid());
 
@@ -2644,14 +2630,10 @@ CtPtr ProtocolV2::handle_reconnect(char *payload, uint32_t length) {
                 << " cs=" << reconnect.connect_seq()
                 << " ms=" << reconnect.msg_seq() << dendl;
 
-  if (reconnect.addrs().empty()) {
-    connection->set_peer_addr(connection->target_addr);
-  } else {
-    // Should we check if one of the ident.addrs match connection->target_addr
-    // as we do in ProtocolV1?
-    connection->set_peer_addrs(reconnect.addrs());
-    connection->target_addr = reconnect.addrs().msgr2_addr();
-  }
+  // Should we check if one of the ident.addrs match connection->target_addr
+  // as we do in ProtocolV1?
+  connection->set_peer_addrs(reconnect.addrs());
+  connection->target_addr = connection->_infer_target_addr(reconnect.addrs());
 
   connection->lock.unlock();
   AsyncConnectionRef existing = messenger->lookup_conn(*connection->peer_addrs);
@@ -2977,7 +2959,7 @@ CtPtr ProtocolV2::send_server_ident() {
 
   ldout(cct, 5) << __func__ << " sending identification:"
                 << " addrs=" << messenger->get_myaddrs()
-                << " peer_addr=" << connection->target_addr
+                << " target_addr=" << connection->target_addr
                 << " gid=" << messenger->get_myname().num()
                 << " global_seq=" << gs << " features_supported=" << std::hex
                 << connection->policy.features_supported
