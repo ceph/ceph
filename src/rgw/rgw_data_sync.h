@@ -597,6 +597,14 @@ public:
   int create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
 };
 
+class RGWArchiveSyncModule : public RGWDefaultSyncModule {
+public:
+  RGWArchiveSyncModule() {}
+  bool supports_writes() override { return true; }
+  bool supports_data_export() override { return false; }
+  int create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) override;
+};
+
 // DataLogTrimCR factory function
 extern RGWCoroutine* create_data_log_trim_cr(RGWRados *store,
                                              RGWHTTPManager *http,

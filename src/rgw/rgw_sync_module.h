@@ -36,6 +36,7 @@ public:
 };
 
 class RGWRESTMgr;
+class RGWMetadataHandler;
 
 class RGWSyncModuleInstance {
 public:
@@ -48,6 +49,8 @@ public:
   virtual bool supports_user_writes() {
     return false;
   }
+  virtual RGWMetadataHandler *alloc_bucket_meta_handler();
+  virtual RGWMetadataHandler *alloc_bucket_instance_meta_handler();
 };
 
 typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;

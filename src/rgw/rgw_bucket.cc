@@ -2481,6 +2481,204 @@ public:
   }
 };
 
+void get_md5_digest(const RGWBucketEntryPoint *be, string& md5_digest) {
+
+   char md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
+   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
+   bufferlist bl;
+
+   Formatter *f = new JSONFormatter(false);
+   be->dump(f);
+   f->flush(bl);
+
+   MD5 hash;
+   hash.Update((const unsigned char *)bl.c_str(), bl.length());
+   hash.Final(m);
+
+   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, md5);
+
+   delete f;
+
+   md5_digest = md5;
+}
+
+#define ARCHIVE_META_ATTR RGW_ATTR_PREFIX "zone.archive.info" 
+
+struct archive_meta_info {
+  rgw_bucket orig_bucket;
+
+  bool from_attrs(CephContext *cct, map<string, bufferlist>& attrs) {
+    auto iter = attrs.find(ARCHIVE_META_ATTR);
+    if (iter == attrs.end()) {
+      return false;
+    }
+
+    auto bliter = iter->second.cbegin();
+    try {
+      decode(bliter);
+    } catch (buffer::error& err) {
+      ldout(cct, 0) << "ERROR: failed to decode archive meta info" << dendl;
+      return false;
+    }
+
+    return true;
+  }
+
+  void store_in_attrs(map<string, bufferlist>& attrs) const {
+    encode(attrs[ARCHIVE_META_ATTR]);
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(orig_bucket, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+     DECODE_START(1, bl);
+     decode(orig_bucket, bl);
+     DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(archive_meta_info)
+
+class RGWArchiveBucketMetadataHandler : public RGWBucketMetadataHandler {
+public:
+  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
+    ldout(store->ctx(), 5) << "SKIP: bucket removal is not allowed on archive zone: bucket:" << entry << " ... proceeding to rename" << dendl;
+
+    string tenant_name, bucket_name;
+    parse_bucket(entry, &tenant_name, &bucket_name);
+
+    real_time mtime;
+
+    /* read original entrypoint */
+
+    RGWBucketEntryPoint be;
+    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+    map<string, bufferlist> attrs;
+    int ret = store->get_bucket_entrypoint_info(obj_ctx, tenant_name, bucket_name, be, &objv_tracker, &mtime, &attrs);
+    if (ret < 0) {
+        return ret;
+    }
+
+    string meta_name = bucket_name + ":" + be.bucket.bucket_id;
+
+    /* read original bucket instance info */
+
+    map<string, bufferlist> attrs_m;
+    ceph::real_time orig_mtime;
+    RGWBucketInfo old_bi;
+
+    ret = store->get_bucket_instance_info(obj_ctx, be.bucket, old_bi, &orig_mtime, &attrs_m);
+    if (ret < 0) {
+        return ret;
+    }
+
+    archive_meta_info ami;
+
+    if (!ami.from_attrs(store->ctx(), attrs_m)) {
+      ami.orig_bucket = old_bi.bucket;
+      ami.store_in_attrs(attrs_m);
+    }
+
+    /* generate a new bucket instance. We could have avoided this if we could just point a new
+     * bucket entry point to the old bucket instance, however, due to limitation in the way
+     * we index buckets under the user, bucket entrypoint and bucket instance of the same
+     * bucket need to have the same name, so we need to copy the old bucket instance into
+     * to a new entry with the new name
+     */
+
+    string new_bucket_name;
+
+    RGWBucketInfo new_bi = old_bi;
+    RGWBucketEntryPoint new_be = be;
+
+    string md5_digest;
+
+    get_md5_digest(&new_be, md5_digest);
+    new_bucket_name = ami.orig_bucket.name + "-deleted-" + md5_digest;
+
+    new_bi.bucket.name = new_bucket_name;
+    new_bi.objv_tracker.clear();
+
+    new_be.bucket.name = new_bucket_name;
+
+    ret = store->put_bucket_instance_info(new_bi, false, orig_mtime, &attrs_m);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to put new bucket instance info for bucket=" << new_bi.bucket << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    /* store a new entrypoint */
+
+    RGWObjVersionTracker ot;
+    ot.generate_new_write_ver(store->ctx());
+
+    ret = store->put_bucket_entrypoint_info(tenant_name, new_bucket_name, new_be, true, ot, mtime, &attrs);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to put new bucket entrypoint for bucket=" << new_be.bucket << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    /* link new bucket */
+
+    ret = rgw_link_bucket(store, new_be.owner, new_be.bucket, new_be.creation_time, false);
+    if (ret < 0) {
+      ldout(store->ctx(), 0) << "ERROR: failed to link new bucket for bucket=" << new_be.bucket << " ret=" << ret << dendl;
+      return ret;
+    }
+
+    /* clean up old stuff */
+
+    ret = rgw_unlink_bucket(store, be.owner, tenant_name, bucket_name, false);
+    if (ret < 0) {
+        lderr(store->ctx()) << "could not unlink bucket=" << entry << " owner=" << be.owner << dendl;
+    }
+
+    // if (ret == -ECANCELED) it means that there was a race here, and someone
+    // wrote to the bucket entrypoint just before we removed it. The question is
+    // whether it was a newly created bucket entrypoint ...  in which case we
+    // should ignore the error and move forward, or whether it is a higher version
+    // of the same bucket instance ... in which we should retry
+    ret = rgw_bucket_delete_bucket_obj(store, tenant_name, bucket_name, objv_tracker);
+    if (ret < 0) {
+        lderr(store->ctx()) << "could not delete bucket=" << entry << dendl;
+    }
+
+    ret = rgw_delete_system_obj(store, store->svc.zone->get_zone_params().domain_root, RGW_BUCKET_INSTANCE_MD_PREFIX + meta_name, NULL);
+
+    /* idempotent */
+
+    return 0;
+  }
+
+  int put(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker,
+          real_time mtime, JSONObj *obj, sync_type_t sync_type) override {
+    if (entry.find("-deleted-") != string::npos) {
+      RGWObjVersionTracker ot;
+      RGWMetadataObject *robj;
+      int ret = get(store, entry, &robj);
+      if (ret != -ENOENT) {
+        if (ret < 0) {
+          return ret;
+        }
+        ot.read_version = robj->get_version();
+        delete robj;
+
+        ret = remove(store, entry, ot);
+        if (ret < 0) {
+          return ret;
+        }
+      }
+    }
+
+    return RGWBucketMetadataHandler::put(store, entry, objv_tracker,
+                                         mtime, obj, sync_type);
+  }
+
+};
+
 class RGWBucketInstanceMetadataHandler : public RGWMetadataHandler {
 
 public:
@@ -2700,10 +2898,41 @@ public:
   }
 };
 
+class RGWArchiveBucketInstanceMetadataHandler : public RGWBucketInstanceMetadataHandler {
+public:
+
+  int remove(RGWRados *store, string& entry, RGWObjVersionTracker& objv_tracker) override {
+    ldout(store->ctx(), 0) << "SKIP: bucket instance removal is not allowed on archive zone: bucket.instance:" << entry << dendl;
+    return 0;
+  }
+};
+
+RGWMetadataHandler *RGWBucketMetaHandlerAllocator::alloc() {
+  return new RGWBucketMetadataHandler;
+}
+
+RGWMetadataHandler *RGWBucketInstanceMetaHandlerAllocator::alloc() {
+  return new RGWBucketInstanceMetadataHandler;
+}
+
+RGWMetadataHandler *RGWArchiveBucketMetaHandlerAllocator::alloc() {
+  return new RGWArchiveBucketMetadataHandler;
+}
+
+RGWMetadataHandler *RGWArchiveBucketInstanceMetaHandlerAllocator::alloc() {
+  return new RGWArchiveBucketInstanceMetadataHandler;
+}
+
 void rgw_bucket_init(RGWMetadataManager *mm)
 {
-  bucket_meta_handler = new RGWBucketMetadataHandler;
+  auto sync_module = mm->get_store()->get_sync_module();
+  if (sync_module) {
+    bucket_meta_handler = sync_module->alloc_bucket_meta_handler();
+    bucket_instance_meta_handler = sync_module->alloc_bucket_instance_meta_handler();
+  } else {
+    bucket_meta_handler = RGWBucketMetaHandlerAllocator::alloc();
+    bucket_instance_meta_handler = RGWBucketInstanceMetaHandlerAllocator::alloc();
+  }
   mm->register_handler(bucket_meta_handler);
-  bucket_instance_meta_handler = new RGWBucketInstanceMetadataHandler;
   mm->register_handler(bucket_instance_meta_handler);
 }
