@@ -123,7 +123,7 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
     Messenger::Policy policy;
     
     Mutex pipe_lock;
-    std::mutex send_lock;
+    Mutex send_lock;
 
     int state;
     std::atomic<bool> state_closed = { false }; // true iff state = STATE_CLOSED
