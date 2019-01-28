@@ -414,7 +414,6 @@ class LCObjsLister {
   RGWRados::Bucket target;
   RGWRados::Bucket::List list_op;
   bool is_truncated{false};
-  rgw_obj_key next_marker;
   string prefix;
   vector<rgw_bucket_dir_entry> objs;
   vector<rgw_bucket_dir_entry>::iterator obj_iter;
@@ -981,20 +980,12 @@ int RGWLC::bucket_lc_process(string& shard_id)
     }
 
   map<string, lc_op>& prefix_map = config.get_prefix_map();
-  rgw_obj_key pre_marker;
-  rgw_obj_key next_marker;
   for(auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
     auto& op = prefix_iter->second;
     if (!is_valid_op(op)) {
       continue;
     }
     ldpp_dout(this, 20) << __func__ << "(): prefix=" << prefix_iter->first << dendl;
-    if (prefix_iter != prefix_map.begin() && 
-        (prefix_iter->first.compare(0, prev(prefix_iter)->first.length(), prev(prefix_iter)->first) == 0)) {
-      next_marker = pre_marker;
-    } else {
-      pre_marker = next_marker;
-    }
     ol.set_prefix(prefix_iter->first);
 
     ret = ol.init();
