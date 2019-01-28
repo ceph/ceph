@@ -466,8 +466,10 @@ public:
       if (ret < 0) {
         ldout(store->ctx(), 0) << "ERROR: list_op returned ret=" << ret << dendl;
         return ret;
-      } else {
-        obj_iter = objs.begin();
+      } 
+      obj_iter = objs.begin();
+      if (obj_iter == objs.end()) {
+        return false;
       }
       delay();
     }
