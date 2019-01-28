@@ -760,8 +760,9 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
   string entry;
 
   int ret = find_handler(metadata_key, &handler, entry);
-  if (ret < 0)
+  if (ret < 0) {
     return ret;
+  }
 
   JSONParser parser;
   if (!parser.parse(bl.c_str(), bl.length())) {
@@ -832,20 +833,17 @@ int RGWMetadataManager::remove(string& metadata_key)
   string entry;
 
   int ret = find_handler(metadata_key, &handler, entry);
-  if (ret < 0)
-    return ret;
-
-  RGWMetadataObject *obj;
-
-  ret = handler->get(store, entry, &obj);
   if (ret < 0) {
     return ret;
   }
 
+  RGWMetadataObject *obj;
+  ret = handler->get(store, entry, &obj);
+  if (ret < 0) {
+    return ret;
+  }
   RGWObjVersionTracker objv_tracker;
-
   objv_tracker.read_version = obj->get_version();
-
   delete obj;
 
   return handler->remove(store, entry, objv_tracker);
@@ -1133,8 +1131,9 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler,
   string section;
   RGWMetadataLogData log_data;
   int ret = pre_modify(handler, section, key, log_data, objv_tracker, MDLOG_STATUS_REMOVE);
-  if (ret < 0)
-    return ret;
+  if (ret < 0) {
+      return ret;
+  }
 
   string oid;
   rgw_pool pool;
@@ -1151,8 +1150,9 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler,
   /* cascading ret into post_modify() */
 
   ret = post_modify(handler, section, key, log_data, objv_tracker, ret);
-  if (ret < 0)
-    return ret;
+  if (ret < 0) {
+      return ret;
+  }
 
   return 0;
 }
