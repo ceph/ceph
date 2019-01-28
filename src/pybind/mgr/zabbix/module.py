@@ -224,9 +224,11 @@ class Module(MgrModule):
         num_up = 0
         num_in = 0
         for osd in osd_map['osds']:
+            data['[osd.{0},up]'.format(int(osd['osd']))] = osd['up']
             if osd['up'] == 1:
                 num_up += 1
 
+            data['[osd.{0},in]'.format(int(osd['osd']))] = osd['in']
             if osd['in'] == 1:
                 num_in += 1
 
@@ -240,12 +242,22 @@ class Module(MgrModule):
 
         osd_stats = self.get('osd_stats')
         for osd in osd_stats['osd_stats']:
-            if osd['kb'] == 0:
+            try:
+                osd_fill.append((float(osd['kb_used']) / float(osd['kb'])) * 100)
+                data['[osd.{0},osd_fill]'.format(osd['osd'])] = (
+                    float(osd['kb_used']) / float(osd['kb'])) * 100
+            except ZeroDivisionError:
                 continue
-            osd_fill.append((float(osd['kb_used']) / float(osd['kb'])) * 100)
             osd_pgs.append(osd['num_pgs'])
             osd_apply_latency_ns.append(osd['perf_stat']['apply_latency_ns'])
             osd_commit_latency_ns.append(osd['perf_stat']['commit_latency_ns'])
+            data['[osd.{0},num_pgs]'.format(osd['osd'])] = osd['num_pgs']
+            data[
+                '[osd.{0},osd_latency_apply]'.format(osd['osd'])
+            ] = osd['perf_stat']['apply_latency_ns']  / 1000000.0 # ns -> ms
+            data[
+                '[osd.{0},osd_latency_commit]'.format(osd['osd'])
+            ] = osd['perf_stat']['commit_latency_ns']  / 1000000.0 # ns -> ms
 
         try:
             data['osd_max_fill'] = max(osd_fill)
@@ -315,24 +327,57 @@ class Module(MgrModule):
         return False
 
     def discovery(self):
-        pools = self.get('osd_map')['pools']
-        crush_rules = self.get('osd_map_crush')['rules']
+        osd_map = self.get('osd_map')
+        osd_map_crush = self.get('osd_map_crush')
 
+        # Discovering ceph pools
         pool_discovery = {
             pool['pool_name']: step['item_name']
-            for pool in pools
-            for rule in crush_rules if rule['rule_id'] == pool['crush_rule']
+            for pool in osd_map['pools']
+            for rule in osd_map_crush['rules'] if rule['rule_id'] == pool['crush_rule']
             for step in rule['steps'] if step['op'] == "take"
         }
-
-        discovery_data = {"data": []}
-        for pool, rule in pool_discovery.items():
-            discovery_data["data"].append({
+        pools_discovery_data = {"data": [
+            {
                 "{#POOL}": pool,
                 "{#CRUSH_RULE}": rule
-            })
+            }
+            for pool, rule in pool_discovery.items()
+        ]}
 
-        data = {"zabbix.discovery": json.dumps(discovery_data)}
+        # Discovering OSDs
+        # Getting hosts for found crush rules
+        osd_roots = {
+            step['item_name']: [
+                item['id']
+                for item in root_bucket['items']
+            ]
+            for rule in osd_map_crush['rules']
+            for step in rule['steps'] if step['op'] == "take"
+            for root_bucket in osd_map_crush['buckets']
+            if root_bucket['id'] == step['item']
+        }
+        # Getting osds for hosts with map to crush_rule
+        osd_discovery = {
+            item['id']: crush_rule
+            for crush_rule, roots in osd_roots.items()
+            for root in roots
+            for bucket in osd_map_crush['buckets']
+            if bucket['id'] == root
+            for item in bucket['items']
+        }
+        osd_discovery_data = {"data": [
+            {
+                "{#OSD}": osd,
+                "{#CRUSH_RULE}": rule
+            }
+            for osd, rule in osd_discovery.items()
+        ]}
+        # Preparing recieved data for sending
+        data = {
+            "zabbix.pool.discovery": json.dumps(pools_discovery_data),
+            "zabbix.osd.discovery": json.dumps(osd_discovery_data)
+        }
         return bool(self.send(data))
 
     def handle_command(self, inbuf, command):
@@ -362,6 +407,8 @@ class Module(MgrModule):
         elif command['prefix'] == 'zabbix discovery':
             if self.discovery():
                 return 0, 'Sending discovery data to Zabbix', ''
+
+            return 1, 'Failed to send discovery data to Zabbix', ''
 
         else:
             return (-errno.EINVAL, '',
