@@ -2673,7 +2673,6 @@ void PGMap::get_health_checks(
     // Immediate reports
     { PG_STATE_INCONSISTENT,     {DAMAGED,     {}} },
     { PG_STATE_INCOMPLETE,       {UNAVAILABLE, {}} },
-    { PG_STATE_REPAIR,           {DAMAGED,     {}} },
     { PG_STATE_SNAPTRIM_ERROR,   {DAMAGED,     {}} },
     { PG_STATE_RECOVERY_UNFOUND, {DAMAGED,     {}} },
     { PG_STATE_BACKFILL_UNFOUND, {DAMAGED,     {}} },
