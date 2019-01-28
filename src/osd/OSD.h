@@ -1261,6 +1261,8 @@ protected:
   int whoami;
   std::string dev_path, journal_path;
 
+  int last_require_osd_release = 0;
+
   bool store_is_rotational = true;
   bool journal_is_rotational = true;
 

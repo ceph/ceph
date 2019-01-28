@@ -2385,6 +2385,12 @@ int OSD::init()
   service.recovery_request_timer.init();
   service.sleep_timer.init();
 
+  {
+    string val;
+    store->read_meta("require_osd_release", &val);
+    last_require_osd_release = atoi(val.c_str());
+  }
+
   // mount.
   dout(2) << "init " << dev_path
 	  << " (looks like " << (store_is_rotational ? "hdd" : "ssd") << ")"
@@ -7771,6 +7777,13 @@ void OSD::check_osdmap_features()
       int err = store->queue_transaction(service.meta_ch, std::move(t), NULL);
       assert(err == 0);
     }
+  }
+
+  if (osdmap->require_osd_release != last_require_osd_release) {
+    dout(1) << __func__ << " require_osd_release " << last_require_osd_release
+	    << " -> " << osdmap->require_osd_release << dendl;
+    store->write_meta("require_osd_release", stringify(osdmap->require_osd_release));
+    last_require_osd_release = osdmap->require_osd_release;
   }
 }
 
