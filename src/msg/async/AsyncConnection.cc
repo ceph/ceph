@@ -385,7 +385,8 @@ void AsyncConnection::process() {
     case STATE_CONNECTING_RE: {
       ssize_t r = cs.is_connected();
       if (r < 0) {
-        ldout(async_msgr->cct, 1) << __func__ << " reconnect failed " << dendl;
+        ldout(async_msgr->cct, 1) << __func__ << " reconnect failed to "
+				  << target_addr << dendl;
         if (r == -ECONNREFUSED) {
           ldout(async_msgr->cct, 2)
               << __func__ << " connection refused!" << dendl;
@@ -478,7 +479,6 @@ void AsyncConnection::accept(ConnectedSocket socket,
   std::lock_guard<std::mutex> l(lock);
   cs = std::move(socket);
   socket_addr = listen_addr;
-  target_addr = peer_addr; // until we know better
   state = STATE_ACCEPTING;
   protocol->accept();
   // rescheduler connection in order to avoid lock dep
@@ -528,6 +528,23 @@ int AsyncConnection::send_message(Message *m)
   return 0;
 }
 
+entity_addr_t AsyncConnection::_infer_target_addr(const entity_addrvec_t& av)
+{
+  // pick the first addr of the same address family as socket_addr.  it could be
+  // an any: or v2: addr, we don't care.  it should not be a v1 addr.
+  for (auto& i : av.v) {
+    if (i.is_legacy()) {
+      continue;
+    }
+    if (i.get_family() == socket_addr.get_family()) {
+      ldout(async_msgr->cct,10) << __func__ << " " << av << " -> " << i << dendl;
+      return i;
+    }
+  }
+  ldout(async_msgr->cct,10) << __func__ << " " << av << " -> nothing to match "
+			    << socket_addr << dendl;
+  return {};
+}
 
 void AsyncConnection::fault()
 {
