@@ -1,0 +1,106 @@
+<div class="login-suse"
+     *ngIf="isLoginActive">
+  <header>
+    <nav class="navbar">
+      <div class="container">
+        <div class="row">
+          <div class="navbar-header">
+            <a class="navbar-brand">
+              <img alt="Brand" src="assets/suse_brand_bright.png">
+            </a>
+          </div>
+
+          <ul class="nav navbar-nav navbar-right">
+            <li class="dropdown">
+              <cd-language-selector class="oa-navbar"></cd-language-selector>
+            </li>
+          </ul>
+
+        </div>
+      </div>
+    </nav>
+  </header>
+
+  <section>
+    <div class="container">
+      <div class="row full-height vertical-align">
+        <div class="col-sm-6 hidden-xs">
+          <h1 i18n>SUSE Enterprise Storage</h1>
+          <p i18n>
+            <span i18n
+                  class="subheader">
+              AN INTELLIGENT SOFTWARE-DEFINED STORAGE SOLUTION, POWERED BY CEPH TECHNOLOGY,
+              WHICH ENABLES YOU TO TRANSFORM YOUR ENTERPRISE STORAGE INFRASTRUCTURE.
+            </span>
+            <ng-container i18n>
+              Providing IT organizations with a simple to manage, agile infrastructure with increased speed of delivery,
+              durability and reliability. Accelerate innovation, reduce costs and alleviate proprietary hardware lock-in
+              by transforming your enterprise storage infrastructure with a truly open, and unified intelligent
+              software-defined storage solution.
+            </ng-container>
+          </p>
+        </div>
+
+        <div class="col-xs-12 col-sm-5 col-sm-offset-1">
+          <h2 i18n>Login</h2>
+          <form name="loginForm"
+                (ngSubmit)="login()"
+                #loginForm="ngForm"
+                novalidate>
+
+            <!-- Username -->
+            <div class="form-group has-feedback"
+                 [ngClass]="{'has-error': (loginForm.submitted || username.dirty) && username.invalid}">
+              <input name="username"
+                     [(ngModel)]="model.username"
+                     #username="ngModel"
+                     type="text"
+                     placeholder="Enter your username..."
+                     class="form-control"
+                     required
+                     autofocus>
+              <div class="help-block"
+                   *ngIf="(loginForm.submitted || username.dirty) && username.invalid"
+                   i18n>Username is required</div>
+            </div>
+
+            <!-- Password -->
+            <div class="form-group has-feedback"
+                 [ngClass]="{'has-error': (loginForm.submitted || password.dirty) && password.invalid}">
+              <input id="password"
+                     name="password"
+                     [(ngModel)]="model.password"
+                     #password="ngModel"
+                     type="password"
+                     placeholder="Enter your password..."
+                     class="form-control"
+                     required>
+              <div class="help-block"
+                   *ngIf="(loginForm.submitted || password.dirty) && password.invalid"
+                   i18n>Password is required</div>
+            </div>
+
+            <input type="submit"
+                   class="btn btn-primary btn-block"
+                   [disabled]="loginForm.invalid"
+                   value="Login"
+                   i18n-value>
+          </form>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="container">
+      <div class="row">
+        <div class="col-xs-9">
+          <span>© 2019 Ceph contributors. Free software (LGPL 2.1)</span>
+        </div>
+        <div class="col-xs-3 text-right">
+          <img src="assets/suse_logo_footer.png">
+        </div>
+      </div>
+    </div>
+  </footer>
+</div>

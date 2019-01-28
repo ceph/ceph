@@ -1,0 +1,215 @@
+<nav class="navbar navbar-default navbar-main">
+  <!-- Brand and toggle get grouped for better mobile display -->
+
+  <div class="navbar-header tc_logo_component">
+    <a class="navbar-brand"
+       href="#">
+      <img src="assets/suse_brand_bright.png"
+           alt="Ceph">
+    </a>
+
+    <button type="button"
+            class="navbar-toggle collapsed"
+            (click)="isCollapsed = !isCollapsed">
+      <span i18n
+            class="sr-only">Toggle navigation</span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+      <span class="icon-bar"></span>
+    </button>
+  </div>
+
+  <!-- Collect the nav links, forms, and other content for toggling -->
+  <div class="collapse navbar-collapse"
+       id="bs-example-navbar-collapse-1"
+       [collapse]="isCollapsed">
+    <ul class="nav navbar-nav navbar-primary">
+
+      <!-- Dashboard -->
+      <li routerLinkActive="active"
+          class="tc_menuitem tc_menuitem_dashboard">
+        <a routerLink="/dashboard">
+          <i class="fa fa-heartbeat fa-fw"
+             [ngStyle]="summaryData?.health_status | healthColor"></i>
+          <span i18n>Dashboard</span>
+        </a>
+      </li>
+
+      <!-- Cluster -->
+      <li dropdown
+          routerLinkActive="active"
+          class="dropdown tc_menuitem tc_menuitem_cluster"
+          *ngIf="permissions.hosts.read || permissions.monitor.read || permissions.osd.read || permissions.configOpt.read">
+        <a dropdownToggle
+           class="dropdown-toggle"
+           data-toggle="dropdown">
+          <ng-container i18n>Cluster</ng-container>
+          <span class="caret"></span>
+        </a>
+        <ul *dropdownMenu
+            class="dropdown-menu">
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_hosts"
+              *ngIf="permissions.hosts.read">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/hosts">Hosts</a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_cluster_monitor"
+              *ngIf="permissions.monitor.read">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/monitor/">Monitors</a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_hosts"
+              *ngIf="permissions.osd.read">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/osd">OSDs</a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_configuration"
+              *ngIf="permissions.configOpt.read">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/configuration">Configuration</a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_crush"
+              *ngIf="permissions.hosts.read && permissions.osd.read">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/crush-map">CRUSH map</a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_log"
+              *ngIf="permissions.log.read">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/logs">Logs</a>
+          </li>
+        </ul>
+      </li>
+
+      <!-- Pools -->
+      <li routerLinkActive="active"
+          class="tc_menuitem tc_menuitem_pool"
+          *ngIf="permissions.pool.read">
+        <a i18n
+           routerLink="/pool">Pools</a>
+      </li>
+
+      <!-- Block -->
+      <li dropdown
+          routerLinkActive="active"
+          class="dropdown tc_menuitem tc_menuitem_block"
+          *ngIf="permissions.rbdImage.read || permissions.rbdMirroring.read || permissions.iscsi.read">
+        <a dropdownToggle
+           class="dropdown-toggle"
+           data-toggle="dropdown"
+           [ngStyle]="blockHealthColor()">
+          <ng-container i18n>Block</ng-container>
+          <span class="caret"></span>
+        </a>
+
+        <ul class="dropdown-menu">
+          <li routerLinkActive="active"
+              *ngIf="permissions.rbdImage.read">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/block/rbd">Images</a>
+          </li>
+
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_block_mirroring"
+              *ngIf="permissions.rbdMirroring.read">
+            <a class="dropdown-item"
+               routerLink="/block/mirroring">
+              <ng-container i18n>Mirroring</ng-container>
+              <small *ngIf="summaryData?.rbd_mirroring?.warnings !== 0"
+                     class="label label-warning">{{ summaryData?.rbd_mirroring?.warnings }}</small>
+              <small *ngIf="summaryData?.rbd_mirroring?.errors !== 0"
+                     class="label label-danger">{{ summaryData?.rbd_mirroring?.errors }}</small>
+            </a>
+          </li>
+
+          <li routerLinkActive="active"
+              *ngIf="permissions.iscsi.read">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/block/iscsi">iSCSI</a>
+          </li>
+
+        </ul>
+      </li>
+
+      <!-- Filesystem -->
+      <li routerLinkActive="active"
+          class="tc_menuitem tc_menuitem_cephs"
+          *ngIf="permissions.cephfs.read">
+        <a i18n
+           routerLink="/cephfs">Filesystems</a>
+      </li>
+
+      <!-- Object Gateway -->
+      <li dropdown
+          routerLinkActive="active"
+          class="dropdown tc_menuitem tc_menuitem_rgw"
+          *ngIf="permissions.rgw.read">
+        <a dropdownToggle
+           class="dropdown-toggle"
+           data-toggle="dropdown">
+          <ng-container i18n>Object Gateway</ng-container>
+          <span class="caret"></span>
+        </a>
+        <ul *dropdownMenu
+            class="dropdown-menu">
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_rgw_daemons">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/rgw/daemon">Daemons</a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_rgw_users">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/rgw/user">Users</a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_rgw_buckets">
+            <a i18n
+               class="dropdown-item"
+               routerLink="/rgw/bucket">Buckets</a>
+          </li>
+        </ul>
+      </li>
+    </ul>
+    <!-- /.navbar-primary -->
+
+    <ul class="nav navbar-nav navbar-utility">
+      <li>
+        <cd-language-selector class="oa-navbar"></cd-language-selector>
+      </li>
+      <li>
+        <cd-task-manager class="oa-navbar"></cd-task-manager>
+      </li>
+      <li>
+        <cd-notifications class="oa-navbar"></cd-notifications>
+      </li>
+      <li>
+        <cd-dashboard-help class="oa-navbar"></cd-dashboard-help>
+      </li>
+      <li>
+        <cd-administration class="oa-navbar"></cd-administration>
+      </li>
+      <li>
+        <cd-identity class="oa-navbar"></cd-identity>
+      </li>
+    </ul>
+    <!-- /.navbar-utility -->
+  </div>
+  <!-- /.navbar-collapse -->
+</nav>
