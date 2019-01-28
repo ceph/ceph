@@ -2,7 +2,7 @@ from __future__ import absolute_import
 import pytest
 
 
-from orchestrator import DriveGroupSpec, DeviceSelection
+from orchestrator import DriveGroupSpec, DeviceSelection, DriveGroupValidationError
 
 
 def test_DriveGroup():
@@ -31,6 +31,6 @@ def test_drive_selection():
     spec = DriveGroupSpec('node_name', data_devices=devs)
     assert spec.data_devices.paths == ['/dev/sda']
 
-    with pytest.raises(TypeError, match='exclusive'):
+    with pytest.raises(DriveGroupValidationError, match='exclusive'):
         DeviceSelection(paths=['/dev/sda'], rotates=False)
 
