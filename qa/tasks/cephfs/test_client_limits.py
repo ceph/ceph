@@ -42,10 +42,13 @@ class TestClientLimits(CephFSTestCase):
         cache_size = open_files/2
 
         self.set_conf('mds', 'mds cache size', cache_size)
+        self.set_conf('mds', 'mds_recall_max_caps', open_files/2)
+        self.set_conf('mds', 'mds_recall_warning_threshold', open_files)
         self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
 
         mds_min_caps_per_client = int(self.fs.get_config("mds_min_caps_per_client"))
+        mds_recall_warning_decay_rate = self.fs.get_config("mds_recall_warning_decay_rate")
         self.assertTrue(open_files >= mds_min_caps_per_client)
 
         mount_a_client_id = self.mount_a.get_global_id()
@@ -63,13 +66,11 @@ class TestClientLimits(CephFSTestCase):
 
         # MDS should not be happy about that, as the client is failing to comply
         # with the SESSION_RECALL messages it is being sent
-        mds_recall_state_timeout = float(self.fs.get_config("mds_recall_state_timeout"))
-        self.wait_for_health("MDS_CLIENT_RECALL", mds_recall_state_timeout+10)
+        self.wait_for_health("MDS_CLIENT_RECALL", mds_recall_warning_decay_rate*2)
 
         # We can also test that the MDS health warning for oversized
         # cache is functioning as intended.
-        self.wait_for_health("MDS_CACHE_OVERSIZED",
-                mds_recall_state_timeout + 10)
+        self.wait_for_health("MDS_CACHE_OVERSIZED", mds_recall_warning_decay_rate*2)
 
         # When the client closes the files, it should retain only as many caps as allowed
         # under the SESSION_RECALL policy
