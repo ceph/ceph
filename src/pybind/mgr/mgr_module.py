@@ -1158,6 +1158,13 @@ class MgrModule(ceph_module.BaseMgrModule):
         Invoke a method on another module.  All arguments, and the return
         value from the other module must be serializable.
 
+        Limitation: Do not import any modules within the called method.
+        Otherwise you will get an error in Python 2::
+
+            RuntimeError('cannot unmarshal code objects in restricted execution mode',)
+
+
+
         :param module_name: Name of other module.  If module isn't loaded,
                             an ImportError exception is raised.
         :param method_name: Method name.  If it does not exist, a NameError

@@ -1,5 +1,11 @@
 import errno
 import json
+
+try:
+    from typing import Dict
+except ImportError:
+    pass  # just for type checking.
+
 from mgr_module import MgrModule, HandleCommandResult
 
 import orchestrator
@@ -40,14 +46,14 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             "perm": "r"
         },
         {
-            'cmd': "orchestrator osd add "
-                   "name=svc_arg,type=CephString ",
-            "desc": "Create an OSD service",
+            'cmd': "orchestrator osd create "
+                   "name=svc_arg,type=CephString,req=false ",
+            "desc": "Create an OSD service. Either --svc_arg=host:drives or -i <drive_group>",
             "perm": "rw"
         },
         {
             'cmd': "orchestrator osd rm "
-                   "name=svc_id,type=CephString ",
+                   "name=svc_id,type=CephString,n=N ",
             "desc": "Remove an OSD service",
             "perm": "rw"
         },
@@ -117,17 +123,6 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             "cmd": "orchestrator status",
             "desc": "Report configured backend and its status",
             "perm": "r"
-        },
-        {   'cmd': "orchestrator osd create "
-                   "name=drive_group,type=CephString,req=false ",
-            "desc": "OSD's creation following specification \
-                     in <drive_group> parameter or readed from -i <file> input.",
-            "perm": "rw"
-        },
-        {   'cmd': "orchestrator osd remove "
-                   "name=osd_ids,type=CephInt,n=N ",
-            "desc": "Remove Osd's",
-            "perm": "rw"
         }
     ]
 
@@ -227,80 +222,58 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
 
             return HandleCommandResult(stdout="\n".join(lines))
 
-    def _osd_add(self, cmd):
-        device_spec = cmd['svc_arg']
-        try:
-            node_name, block_device = device_spec.split(":")
-        except TypeError:
-            return HandleCommandResult(-errno.EINVAL,
-                                       stderr="Invalid device spec, should be <node>:<device>")
+    def _create_osd(self, inbuf, cmd):
+        # type: (str, Dict[str, str]) -> HandleCommandResult
+        """Create one or more OSDs"""
 
-        devs = orchestrator.DeviceSelection(paths=block_device)
-        spec = orchestrator.DriveGroupSpec(node_name, data_devices=devs)
+        usage = """
+Usage:
+  ceph orchestrator osd create -i <json_file>
+  ceph orchestrator osd create host:device1,device2,...
+"""
+
+        if inbuf:
+            try:
+                drive_group = orchestrator.DriveGroupSpec.from_json(json.loads(inbuf))
+            except ValueError as e:
+                msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
+                return HandleCommandResult(-errno.EINVAL, stderr=msg)
+
+        else:
+            try:
+                node_name, block_device = cmd['svc_arg'].split(":")
+                block_devices = block_device.split(',')
+            except (TypeError, KeyError, ValueError):
+                msg = "Invalid host:device spec: '{}'".format(cmd['svc_arg']) + usage
+                return HandleCommandResult(-errno.EINVAL, stderr=msg)
+
+            devs = orchestrator.DeviceSelection(paths=block_devices)
+            drive_group = orchestrator.DriveGroupSpec(node_name, data_devices=devs)
 
         # TODO: Remove this and make the orchestrator composable
-        # or
-        # Probably this should be moved to each of the orchestrators,
-        # then we wouldn't need the "all_hosts" parameter at all.
+        #   Like a future or so.
         host_completion = self.get_hosts()
-        self.wait([host_completion])
+        self._orchestrator_wait([host_completion])
         all_hosts = [h.name for h in host_completion.result]
 
-        completion = self.create_osds(spec, all_hosts=all_hosts)
-        self._orchestrator_wait([completion])
-
-        return HandleCommandResult()
-
-    def _create_osd(self, inbuf, cmd):
-        """Create one or more OSDs
-
-        :cmd : Arguments for the create osd
-        """
-        #Obtain/validate parameters for the operation
-        cmdline_error = ""
-        if "drive_group" in cmd.keys():
-            params = cmd["drive_group"]
-        elif inbuf:
-            params = inbuf
-        else:
-            cmdline_error = "Please, use 'drive_group' parameter \
-                             or specify -i <input file>"
-
-        if cmdline_error:
-            return HandleCommandResult(-errno.EINVAL, stderr=cmdline_error)
-
         try:
-            json_dg = json.loads(params)
-        except ValueError as msg:
-            return HandleCommandResult(-errno.EINVAL, stderr=msg)
+            drive_group.validate(all_hosts)
+        except orchestrator.DriveGroupValidationError as e:
+                return HandleCommandResult(-errno.EINVAL, stderr=str(e))
 
-        # Create the drive group
-        drive_group = orchestrator.DriveGroupSpec.from_json(json_dg)
-        #Read other Drive_group
-
-        #Launch the operation in the orchestrator module
-        completion = self.create_osds(drive_group)
-
-        #Wait until the operation finishes
+        completion = self.create_osds(drive_group, all_hosts)
         self._orchestrator_wait([completion])
+        self.log.warning(str(completion.result))
+        return HandleCommandResult(stdout=str(completion.result))
 
-        #return result
-        return HandleCommandResult(stdout=completion.result)
-
-    def _remove_osd(self, cmd):
+    def _osd_rm(self, cmd):
         """
         Remove OSD's
         :cmd : Arguments for remove the osd
         """
-
-        #Launch the operation in the orchestrator module
-        completion = self.remove_osds(cmd["osd_ids"])
-
-        #Wait until the operation finishes
+        completion = self.remove_osds(cmd["svc_id"])
         self._orchestrator_wait([completion])
-
-        #return result
-        return HandleCommandResult(stdout=completion.result)
+        return HandleCommandResult(stdout=str(completion.result))
 
     def _add_stateless_svc(self, svc_type, spec):
         completion = self.add_stateless_service(svc_type, spec)
@@ -333,9 +306,6 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         completion = self.remove_stateless_service(svc_type, svc_id)
         self._orchestrator_wait([completion])
         return HandleCommandResult()
-
-    def _osd_rm(self, cmd):
-        return self._rm_stateless_svc("osd", cmd['svc_id'])
 
     def _mds_rm(self, cmd):
         return self._rm_stateless_svc("mds", cmd['svc_id'])
@@ -441,15 +411,13 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         except NotImplementedError:
             return HandleCommandResult(-errno.EINVAL, stderr="Command not found")
 
-    def _handle_command(self, _, cmd):
+    def _handle_command(self, inbuf, cmd):
         if cmd['prefix'] == "orchestrator device ls":
             return self._list_devices(cmd)
         elif cmd['prefix'] == "orchestrator service ls":
             return self._list_services(cmd)
         elif cmd['prefix'] == "orchestrator service status":
             return self._list_services(cmd)  # TODO: create more detailed output
-        elif cmd['prefix'] == "orchestrator osd add":
-            return self._osd_add(cmd)
         elif cmd['prefix'] == "orchestrator osd rm":
             return self._osd_rm(cmd)
         elif cmd['prefix'] == "orchestrator mds add":
@@ -473,7 +441,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         elif cmd['prefix'] == "orchestrator status":
             return self._status()
         elif cmd['prefix'] == "orchestrator osd create":
-            return self._create_osd(_, cmd)
+            return self._create_osd(inbuf, cmd)
         elif cmd['prefix'] == "orchestrator osd remove":
             return self._remove_osd(cmd)
         else:
