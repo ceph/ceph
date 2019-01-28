@@ -3873,6 +3873,15 @@ public:
 
       src_attrs.erase(RGW_ATTR_COMPRESSION);
       src_attrs.erase(RGW_ATTR_MANIFEST); // not interested in original object layout
+
+      // filter out olh attributes
+      auto iter = src_attrs.lower_bound(RGW_ATTR_OLH_PREFIX);
+      while (iter != src_attrs.end()) {
+        if (!boost::algorithm::starts_with(iter->first, RGW_ATTR_OLH_PREFIX)) {
+          break;
+        }
+        iter = src_attrs.erase(iter);
+      }
     }
 
     int ret = attrs_handler(src_attrs);
