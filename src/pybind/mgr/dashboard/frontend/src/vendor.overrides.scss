@@ -1,3 +1,228 @@
 /* Vendor specific scss */
 
 @import 'defaults';
+
+@font-face {
+  font-family: 'Raleway';
+  src: url('assets/Raleway-Regular.ttf') format('truetype');
+}
+
+/* Button */
+.btn-primary {
+  background-color: $color-primary;
+  border-color: $color-primary;
+}
+.btn-primary:hover,
+.btn-primary:focus,
+.btn-primary:active,
+.btn-primary.active,
+.open .dropdown-toggle.btn-primary {
+  background-color: lighten($color-primary, 10);
+  border-color: lighten($color-primary, 10);
+}
+.btn-primary:active,
+.btn-primary.active,
+.open .dropdown-toggle.btn-primary {
+  &:hover,
+  &:focus {
+    background-color: lighten($color-primary, 10);
+    border-color: lighten($color-primary, 10);
+  }
+}
+.btn-primary.disabled,
+.btn-primary[disabled],
+fieldset[disabled] .btn-primary,
+.btn-primary.disabled:hover,
+.btn-primary[disabled]:hover,
+fieldset[disabled] .btn-primary:hover,
+.btn-primary.disabled:focus,
+.btn-primary[disabled]:focus,
+fieldset[disabled] .btn-primary:focus,
+.btn-primary.disabled:active,
+.btn-primary[disabled]:active,
+fieldset[disabled] .btn-primary:active,
+.btn-primary.disabled.active,
+.btn-primary[disabled].active,
+fieldset[disabled] .btn-primary.active {
+  background-color: $color-primary;
+  border-color: $color-primary;
+}
+
+/* Login */
+.login-suse {
+  font-family: 'Raleway', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+  color: $color-soft-gray;
+  background-color: $color-login-background;
+  margin: 0 -30px;
+
+  header {
+    background-color: $color-secondary;
+
+    .row {
+      margin: 0;
+
+      @media screen and (max-width: $screen-xs-max) {
+        margin-left: -15px;
+      }
+    }
+
+    .navbar {
+      border: 0;
+      margin: 0;
+
+      .navbar-brand {
+        height: 60px;
+        padding: 20px 15px;
+      }
+
+      .navbar-nav.navbar-right {
+        .dropdown-toggle {
+          display: block;
+          border: 0;
+          padding: 22px 15px 21px;
+
+          &:hover,
+          &:focus {
+            color: $color-black;
+            background-color: $color-primary;
+            text-decoration: none;
+          }
+
+          @media screen and (max-width: $screen-xs-max) {
+            margin-left: 15px;
+          }
+        }
+
+        .dropdown-menu {
+          @media screen and (max-width: $screen-xs-max) {
+            background-color: $color-white;
+          }
+        }
+      }
+    }
+
+    .nav .open > a {
+      color: $color-black;
+      background-color: $color-primary;
+      border: 0;
+    }
+
+    cd-language-selector .form-control {
+      background-color: transparent;
+      border: 0;
+      padding: 10px 0;
+    }
+  }
+
+  section {
+    display: inline-flex;
+    width: 100%;
+    min-height: 100vh;
+    margin: -60px auto -67px;
+    padding: 100px 0;
+
+    h1 {
+      margin-bottom: 3rem;
+      font-size: 4rem;
+      color: $color-primary;
+    }
+
+    p {
+      font-size: 1.2rem;
+    }
+
+    .subheader {
+      display: block;
+      margin-bottom: 1rem;
+      font-size: 1.4rem;
+      font-weight: bold;
+    }
+
+    h2 {
+      margin: 2.5rem 0;
+      font-size: 2.5rem;
+    }
+
+    .has-error .help-block {
+      color: #d32836;
+    }
+
+    .form-group {
+      input {
+        background-color: #2a4150;
+        border: 0;
+        box-shadow: 0 1px 0 0 #3f6278, 0 1px 0 0 #233642 inset;
+        color: $color-white;
+        font-size: 13px;
+        height: 2.5rem;
+
+        &:focus {
+          border-color: rgba($color-primary, 0.8);
+          box-shadow: 0 1px 1px rgba(0, 0, 0, 0.075) inset, 0 0 8px 2px rgba($color-primary, 0.5);
+          outline: 0;
+        }
+      }
+    }
+
+    @media screen and (max-width: $screen-xs-max) {
+      display: block;
+      margin-top: -114px;
+      padding-top: 114px;
+      padding-bottom: 100px;
+    }
+  }
+
+  footer {
+    height: 67px;
+    padding-top: 23px;
+    border-bottom: 16px solid $color-primary;
+
+    img {
+      margin-top: -16px;
+    }
+
+    .container {
+      padding-bottom: 10px;
+    }
+  }
+}
+
+/* About */
+.suse-logo {
+  width: 140px;
+  margin-bottom: 1.5rem;
+}
+
+.modal-content {
+  overflow: hidden;
+}
+
+.modal-header,
+.modal-body,
+.modal-footer {
+  z-index: 1;
+}
+
+.modal-footer {
+  position: relative;
+}
+
+.green-background-1,
+.green-background-2 {
+  width: 140%;
+  height: 400px;
+  left: -20%;
+  position: absolute;
+}
+
+.green-background-1 {
+  background-color: $color-green-contrast-1;
+  bottom: -240px;
+  transform: rotate(-11deg);
+}
+
+.green-background-2 {
+  background-color: $color-green-contrast-2;
+  bottom: -310px;
+  transform: rotate(-6deg);
+}
