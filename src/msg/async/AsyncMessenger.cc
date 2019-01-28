@@ -889,6 +889,7 @@ bool AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   if (need_addr) {
     if (my_addrs->empty()) {
       auto a = peer_addr_for_me;
+      a.set_type(entity_addr_t::TYPE_ANY);
       a.set_nonce(nonce);
       if (!did_bind) {
 	a.set_port(0);
