@@ -39,7 +39,8 @@ tasks:
 - install.upgrade:
     mon.a:
     mon.b:
-- print: "**** done install.upgrade both hosts"
+    mon.c:
+- print: "**** done install.upgrade non-client hosts"
 - parallel:
     - workload
     - upgrade-sequence

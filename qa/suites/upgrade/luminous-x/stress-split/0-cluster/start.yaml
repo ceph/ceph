@@ -16,6 +16,7 @@ overrides:
     conf:
       global:
         enable experimental unrecoverable data corrupting features: "*"
+	mon warn on msgr2 not enabled: false
       mon:
         mon warn on osd down out interval zero: false
 roles:
