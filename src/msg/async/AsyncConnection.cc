@@ -299,7 +299,6 @@ ssize_t AsyncConnection::write(bufferlist &bl,
 // else return < 0 means error
 ssize_t AsyncConnection::_try_send(bool more)
 {
-  ssize_t remaining;
   if (async_msgr->cct->_conf->ms_inject_socket_failures && cs) {
     if (rand() % async_msgr->cct->_conf->ms_inject_socket_failures == 0) {
       ldout(async_msgr->cct, 0) << __func__ << " injecting socket failure" << dendl;

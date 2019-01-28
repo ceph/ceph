@@ -1269,7 +1269,7 @@ using namespace ceph;
     }
   }
 
-  void buffer::list::clone_replace(const unsigned o, const unsigned l)
+  void buffer::list::clone_replace(unsigned o, unsigned l)
   {
     ceph_assert(o+l <= _len);
     unsigned p = 0;

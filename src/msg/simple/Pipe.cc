@@ -1986,14 +1986,15 @@ void Pipe::writer()
 	bufferlist blist = m->get_payload();
 	blist.append(m->get_middle());
 	blist.append(m->get_data());
-
+        send_lock.Lock();
         pipe_lock.Unlock();
 
         m->trace.event("pipe writing message");
 
         ldout(msgr->cct,20) << "writer sending " << m->get_seq() << " " << m << dendl;
 	int rc = write_message(header, footer, blist);
-
+        
+        send_lock.Unlock();
 	pipe_lock.Lock();
 	if (rc < 0) {
           ldout(msgr->cct,1) << "writer error sending " << m << ", "
@@ -2386,7 +2387,6 @@ int Pipe::write_keepalive2(char tag, const utime_t& t)
 
 int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& footer, bufferlist& blist)
 {
-  Mutex::Locker l(send_lock);
   int ret;
 
   // set up msghdr and iovecs
@@ -2681,8 +2681,8 @@ int Pipe::tcp_write(const char *buf, unsigned len)
 }
 
 void Pipe::cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops) {
-  send_lock.Lock();
   pipe_lock.Lock();
+  send_lock.Lock();
   auto it = out_q.begin();
   while (it != out_q.end()) {
     auto lit = it->second.begin();
@@ -2711,6 +2711,6 @@ void Pipe::cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops) {
       sit++;
     }
   }
-  pipe_lock.Unlock();
   send_lock.Unlock();
+  pipe_lock.Unlock();
 }

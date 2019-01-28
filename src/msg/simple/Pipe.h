@@ -15,6 +15,7 @@
 #ifndef CEPH_MSGR_PIPE_H
 #define CEPH_MSGR_PIPE_H
 
+#include "include/memory.h"
 #include "auth/AuthSessionHandler.h"
 
 #include "msg/msg_types.h"
@@ -79,6 +80,7 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
       Mutex::Locker l(pipe_lock);
       return state == STATE_OPEN;
     }
+    void cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops);
 
     char *recv_buf;
     size_t recv_max_prefetch;
@@ -122,13 +124,14 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
     Messenger::Policy policy;
     
     Mutex pipe_lock;
-    Mutex send_lock;
+    std::mutex send_lock;
+
     int state;
     std::atomic<bool> state_closed = { false }; // true iff state = STATE_CLOSED
 
     // session_security handles any signatures or encryptions required for this pipe's msgs. PLR
 
-    std::shared_ptr<AuthSessionHandler> session_security;
+    ceph::shared_ptr<AuthSessionHandler> session_security;
 
   protected:
     friend class SimpleMessenger;
@@ -162,7 +165,7 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
     void writer();
     void unlock_maybe_reap();
 
-    void randomize_out_seq();
+    int randomize_out_seq();
 
     int read_message(Message **pm,
 		     AuthSessionHandler *session_security_copy);
@@ -229,17 +232,17 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
     void stop_and_wait();
 
     void _send(Message *m) {
-      ceph_assert(pipe_lock.is_locked());
+      assert(pipe_lock.is_locked());
       out_q[m->get_priority()].push_back(m);
       cond.Signal();
     }
     void _send_keepalive() {
-      ceph_assert(pipe_lock.is_locked());
+      assert(pipe_lock.is_locked());
       send_keepalive = true;
       cond.Signal();
     }
     Message *_get_next_outgoing() {
-      ceph_assert(pipe_lock.is_locked());
+      assert(pipe_lock.is_locked());
       Message *m = 0;
       while (!m && !out_q.empty()) {
         map<int, list<Message*> >::reverse_iterator p = out_q.rbegin();
@@ -309,7 +312,6 @@ static const int SM_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
      * @return 0 for success, or -1 on error
      */
     int tcp_write(const char *buf, unsigned len);
-    void cancel_ops(const boost::container::flat_set<ceph_tid_t> &ops);
   };
 
 

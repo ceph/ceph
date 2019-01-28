@@ -317,6 +317,7 @@ void ProtocolV1::write_event() {
 
   connection->write_lock.lock();
   if (can_write == WriteStatus::CANWRITE) {
+    connection->send_lock.lock();
     if (keepalive) {
       append_keepalive_or_ack();
       keepalive = false;
@@ -360,7 +361,6 @@ void ProtocolV1::write_event() {
 
     // if r > 0 mean data still lefted, so no need _try_send.
     if (r == 0) {
-      connection->send_lock.lock();
       uint64_t left = ack_left;
       if (left) {
         ceph_le64 s;
@@ -375,9 +375,8 @@ void ProtocolV1::write_event() {
       } else if (is_queued()) {
         r = connection->_try_send();
       }
-      connection->send_lock.unlock();
     }
-
+    connection->send_lock.unlock();
     connection->logger->tinc(l_msgr_running_send_time,
                              ceph::mono_clock::now() - start);
     if (r < 0) {
@@ -390,7 +389,7 @@ void ProtocolV1::write_event() {
   } else {
     connection->write_lock.unlock();
     connection->lock.lock();
-    connection->write_lock.lock()
+    connection->write_lock.lock();
     connection->send_lock.lock();
     bool queued = is_queued();
     connection->send_lock.unlock();
@@ -605,9 +604,9 @@ CtPtr ProtocolV1::handle_keepalive2(char *buffer, int r) {
   ceph_timespec *t;
   t = (ceph_timespec *)buffer;
   utime_t kp_t = utime_t(*t);
-  connection->write_lock.lock();
+  connection->send_lock.lock();
   append_keepalive_or_ack(true, &kp_t);
-  connection->write_lock.unlock();
+  connection->send_lock.unlock();
 
   ldout(cct, 20) << __func__ << " got KEEPALIVE2 " << kp_t << dendl;
   connection->set_last_keepalive(ceph_clock_now());
@@ -621,7 +620,6 @@ CtPtr ProtocolV1::handle_keepalive2(char *buffer, int r) {
 
 void ProtocolV1::append_keepalive_or_ack(bool ack, utime_t *tp) {
   ldout(cct, 10) << __func__ << dendl;
-  std::lock_guard<std::mutex> l(connection->send_lock);
   if (ack) {
     ceph_assert(tp);
     struct ceph_timespec ts;
@@ -1231,7 +1229,6 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
                  << dendl;
   ssize_t total_send_size = connection->outcoming_bl.length();
   ssize_t rc = connection->_try_send(more);
-  connection->send_lock.unlock();
   if (rc < 0) {
     ldout(cct, 1) << __func__ << " error sending " << m << ", "
                   << cpp_strerror(rc) << dendl;
