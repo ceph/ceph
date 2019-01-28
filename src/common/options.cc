@@ -6797,9 +6797,13 @@ std::vector<Option> get_mds_options() {
     .set_default(64_K)
     .set_description("decay threshold for throttle on recalled caps globally"),
 
-    Option("mds_recall_state_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(60)
-    .set_description("timeout for clients late on cap recall to create health warnings"),
+    Option("mds_recall_warning_threshold", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(32_K)
+    .set_description("decay threshold for warning on slow session cap recall"),
+
+    Option("mds_recall_warning_decay_rate", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(60.0)
+    .set_description("decay rate for warning on slow session cap recall"),
 
     Option("mds_freeze_tree_timeout", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(30)

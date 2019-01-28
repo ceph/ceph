@@ -15,6 +15,12 @@
   MDS when all of these caps need to be processed during certain session
   events. It is recommended to not unnecessarily increase this value.
 
+* The MDS config mds_recall_state_timeout has been removed. Late client recall
+  warnings are now generated based on the number of caps the MDS has recalled
+  which have not been released. The new configs mds_recall_warning_threshold
+  (default: 32K) and mds_recall_warning_decay_rate (default: 60s) sets the
+  threshold for this warning.
+
 * The `cache drop` admin socket command has been removed. The `ceph tell mds.X
   cache drop` remains.
 
