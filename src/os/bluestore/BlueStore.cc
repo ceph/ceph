@@ -7182,7 +7182,8 @@ int BlueStore::_fsck(bool deep, bool repair)
       }
       if (deep) {
 	bufferlist bl;
-	int r = _do_read(c.get(), o, 0, o->onode.size, bl, 0);
+	int r = _do_read(c.get(), o, 0, o->onode.size, bl,
+	  CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
 	if (r < 0) {
 	  ++errors;
 	  derr << "fsck error: " << oid << " error during read: "
