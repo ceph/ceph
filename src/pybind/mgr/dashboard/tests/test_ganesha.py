@@ -172,6 +172,7 @@ EXPORT
         self.assertEqual(export.clients[1].squash, "all_squash")
         self.assertEqual(export.clients[1].access_type, "RO")
         self.assertEqual(export.cluster_id, '_default_')
+        self.assertEqual(export.attr_expiration_time, 0)
 
     def test_export_parser_2(self):
         blocks = GaneshaConfParser(self.export_2).parse()
@@ -240,6 +241,7 @@ EXPORT
         self.assertEqual(export.clients[1].addresses, ["192.168.0.0/16"])
         self.assertEqual(export.clients[1].squash, "all_squash")
         self.assertEqual(export.clients[1].access_type, "RO")
+        self.assertEqual(export.attr_expiration_time, 0)
 
         # export_id = 2 asserts
         export = exports[2]
@@ -357,6 +359,7 @@ EXPORT
         self.assertEqual(export.clients[1].access_type, "RO")
         self.assertEqual(export.daemons, {"nodeb", "nodea"})
         self.assertEqual(export.cluster_id, '_default_')
+        self.assertEqual(export.attr_expiration_time, 0)
 
         export = Export.from_dict(2, {
             'daemons': ['nodea'],
@@ -427,6 +430,7 @@ EXPORT
         self.assertEqual(export.clients[1].access_type, "RO")
         self.assertEqual(export.daemons, {"nodeb", "nodea"})
         self.assertEqual(export.cluster_id, '_default_')
+        self.assertEqual(export.attr_expiration_time, 0)
 
         # export_id = 2 asserts
         export = exports[2]
@@ -622,3 +626,4 @@ EXPORT
         self.assertEqual(len(export.clients), 0)
         self.assertEqual(export.daemons, {"nodeb", "nodea"})
         self.assertEqual(export.cluster_id, '_default_')
+        self.assertEqual(export.attr_expiration_time, 0)

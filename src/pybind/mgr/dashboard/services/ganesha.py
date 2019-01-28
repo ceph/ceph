@@ -548,8 +548,9 @@ class Client(object):
 class Export(object):
     # pylint: disable=R0902
     def __init__(self, export_id, path, fsal, cluster_id, daemons, pseudo=None,
-                 tag=None, access_type=None, squash=None, protocols=None,
-                 transports=None, clients=None):
+                 tag=None, access_type=None, squash=None,
+                 attr_expiration_time=None,
+                 protocols=None, transports=None, clients=None):
         self.export_id = export_id
         self.path = GaneshaConf.format_path(path)
         self.fsal = fsal
@@ -559,6 +560,10 @@ class Export(object):
         self.tag = tag
         self.access_type = access_type
         self.squash = GaneshaConf.format_squash(squash)
+        if attr_expiration_time is None:
+            self.attr_expiration_time = 0
+        else:
+            self.attr_expiration_time = attr_expiration_time
         self.protocols = set([GaneshaConf.format_protocol(p) for p in protocols])
         self.transports = set(transports)
         self.clients = clients
@@ -636,12 +641,15 @@ class Export(object):
                    export_block.get('tag', None),
                    export_block.get('access_type', defaults['access_type']),
                    export_block.get('squash', defaults['squash']),
+                   export_block.get('attr_expiration_time', None),
+                   export_block.get('security_label', False),
                    protocols,
                    transports,
                    [Client.from_client_block(client)
                     for client in client_blocks])
 
     def to_export_block(self, defaults):
+        # pylint: disable=too-many-branches
         result = {
             'block_name': 'EXPORT',
             'export_id': self.export_id,
@@ -656,6 +664,8 @@ class Export(object):
             result['access_type'] = self.access_type
         if 'squash' not in defaults or self.squash != defaults['squash']:
             result['squash'] = self.squash
+        if self.fsal.name == 'CEPH':
+            result['attr_expiration_time'] = self.attr_expiration_time
         if 'protocols' not in defaults:
             result['protocols'] = [p for p in self.protocols]
         else:
@@ -679,7 +689,7 @@ class Export(object):
         return result
 
     @classmethod
-    def from_dict(cls, export_id, ex_dict):
+    def from_dict(cls, export_id, ex_dict, old_export=None):
         return cls(export_id,
                    ex_dict['path'],
                    FSal.from_dict(ex_dict['fsal']),
@@ -689,6 +699,7 @@ class Export(object):
                    ex_dict['tag'],
                    ex_dict['access_type'],
                    ex_dict['squash'],
+                   old_export.attr_expiration_time if old_export else None,
                    ex_dict['protocols'],
                    ex_dict['transports'],
                    [Client.from_dict(client) for client in ex_dict['clients']])
@@ -929,7 +940,7 @@ class GaneshaConf(object):
             return None
         old_export = self.exports[ex_dict['export_id']]
         del self.exports[ex_dict['export_id']]
-        export = Export.from_dict(ex_dict['export_id'], ex_dict)
+        export = Export.from_dict(ex_dict['export_id'], ex_dict, old_export)
         self._save_export(export)
         self.exports[export.export_id] = export
         return old_export
