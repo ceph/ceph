@@ -79,7 +79,6 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
 
 };
 
-
 class FakeDispatcher : public Dispatcher {
  public:
   struct Session : public RefCountedObject {
@@ -216,10 +215,7 @@ typedef FakeDispatcher::Session Session;
 TEST_P(MessengerTest, SimpleTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -298,102 +294,10 @@ TEST_P(MessengerTest, SimpleTest) {
   server_msgr->wait();
 }
 
-TEST_P(MessengerTest, SimpleMsgr2Test) {
-  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
-  entity_addr_t legacy_addr;
-  legacy_addr.parse("v1:127.0.0.1");
-  entity_addr_t msgr2_addr;
-  msgr2_addr.parse("v2:127.0.0.1");
-  entity_addrvec_t bind_addrs;
-  bind_addrs.v.push_back(legacy_addr);
-  bind_addrs.v.push_back(msgr2_addr);
-  server_msgr->bindv(bind_addrs);
-  server_msgr->add_dispatcher_head(&srv_dispatcher);
-  server_msgr->start();
-
-  client_msgr->add_dispatcher_head(&cli_dispatcher);
-  client_msgr->start();
-
-  // 1. simple round trip
-  MPing *m = new MPing();
-  ConnectionRef conn = client_msgr->connect_to(
-    server_msgr->get_mytype(),
-    server_msgr->get_myaddrs());
-  {
-    ASSERT_EQ(conn->send_message(m), 0);
-    Mutex::Locker l(cli_dispatcher.lock);
-    while (!cli_dispatcher.got_new)
-      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
-    cli_dispatcher.got_new = false;
-  }
-  ASSERT_TRUE(conn->is_connected());
-  ASSERT_EQ(1u, static_cast<Session*>(conn->get_priv().get())->get_count());
-  ASSERT_TRUE(conn->peer_is_osd());
-
-  // 2. test rebind port
-  set<int> avoid_ports;
-  for (int i = 0; i < 10 ; i++) {
-    for (auto a : server_msgr->get_myaddrs().v) {
-      avoid_ports.insert(a.get_port() + i);
-    }
-  }
-  server_msgr->rebind(avoid_ports);
-  for (auto a : server_msgr->get_myaddrs().v) {
-    ASSERT_TRUE(avoid_ports.count(a.get_port()) == 0);
-  }
-
-  conn = client_msgr->connect_to(
-       server_msgr->get_mytype(),
-       server_msgr->get_myaddrs());
-  {
-    m = new MPing();
-    ASSERT_EQ(conn->send_message(m), 0);
-    Mutex::Locker l(cli_dispatcher.lock);
-    while (!cli_dispatcher.got_new)
-      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
-    cli_dispatcher.got_new = false;
-  }
-  ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
-
-  // 3. test markdown connection
-  conn->mark_down();
-  ASSERT_FALSE(conn->is_connected());
-
-  // 4. test failed connection
-  server_msgr->shutdown();
-  server_msgr->wait();
-
-  m = new MPing();
-  conn->send_message(m);
-  CHECK_AND_WAIT_TRUE(!conn->is_connected());
-  ASSERT_FALSE(conn->is_connected());
-
-  // 5. loopback connection
-  srv_dispatcher.loopback = true;
-  conn = client_msgr->get_loopback_connection();
-  {
-    m = new MPing();
-    ASSERT_EQ(conn->send_message(m), 0);
-    Mutex::Locker l(cli_dispatcher.lock);
-    while (!cli_dispatcher.got_new)
-      cli_dispatcher.cond.Wait(cli_dispatcher.lock);
-    cli_dispatcher.got_new = false;
-  }
-  srv_dispatcher.loopback = false;
-  ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
-  client_msgr->shutdown();
-  client_msgr->wait();
-  server_msgr->shutdown();
-  server_msgr->wait();
-}
-
 TEST_P(MessengerTest, NameAddrTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -427,10 +331,7 @@ TEST_P(MessengerTest, NameAddrTest) {
 TEST_P(MessengerTest, FeatureTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   uint64_t all_feature_supported, feature_required, feature_supported = 0;
   for (int i = 0; i < 10; i++)
     feature_supported |= 1ULL << i;
@@ -490,10 +391,7 @@ TEST_P(MessengerTest, TimeoutTest) {
   g_ceph_context->_conf.set_val("ms_tcp_read_timeout", "1");
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -532,10 +430,7 @@ TEST_P(MessengerTest, StatefulTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateful_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossless_client(0);
@@ -635,10 +530,7 @@ TEST_P(MessengerTest, StatelessTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateless_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossy_client(0);
@@ -715,10 +607,7 @@ TEST_P(MessengerTest, ClientStandbyTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateful_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossless_peer(0);
@@ -791,10 +680,7 @@ TEST_P(MessengerTest, AuthTest) {
   g_ceph_context->_conf.set_val("auth_client_required", "cephx");
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -834,6 +720,7 @@ TEST_P(MessengerTest, AuthTest) {
   }
   ASSERT_TRUE(conn->is_connected());
   ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
+
   server_msgr->shutdown();
   client_msgr->shutdown();
   server_msgr->wait();
@@ -843,10 +730,7 @@ TEST_P(MessengerTest, AuthTest) {
 TEST_P(MessengerTest, MessageTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateful_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossless_peer(0);
@@ -1092,7 +976,6 @@ class SyntheticWorkload {
   Cond cond;
   set<Messenger*> available_servers;
   set<Messenger*> available_clients;
-  Messenger::Policy client_policy;
   map<ConnectionRef, pair<Messenger*, Messenger*> > available_connections;
   SyntheticDispatcher dispatcher;
   gen_type rng;
@@ -1104,11 +987,8 @@ class SyntheticWorkload {
   static const unsigned max_message_len = 1024 * 1024 * 4;
 
   SyntheticWorkload(int servers, int clients, string type, int random_num,
-                    Messenger::Policy srv_policy, Messenger::Policy cli_policy)
-    : lock("SyntheticWorkload::lock"),
-      client_policy(cli_policy),
-      dispatcher(false, this),
-      rng(time(NULL)) {
+                    Messenger::Policy srv_policy, Messenger::Policy cli_policy):
+      lock("SyntheticWorkload::lock"), dispatcher(false, this), rng(time(NULL)) {
     Messenger *msgr;
     int base_port = 16800;
     entity_addr_t bind_addr;
@@ -1116,9 +996,7 @@ class SyntheticWorkload {
     for (int i = 0; i < servers; ++i) {
       msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0),
                                "server", getpid()+i, 0);
-      snprintf(addr, sizeof(addr), "%s127.0.0.1:%d",
-	       (type == "simple") ? "v1:":"v2:",
-	       base_port+i);
+      snprintf(addr, sizeof(addr), "v2:127.0.0.1:%d", base_port+i);
       bind_addr.parse(addr);
       msgr->bind(bind_addr);
       msgr->add_dispatcher_head(&dispatcher);
@@ -1133,9 +1011,7 @@ class SyntheticWorkload {
       msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(-1),
                                "client", getpid()+i+servers, 0);
       if (cli_policy.standby) {
-        snprintf(addr, sizeof(addr), "%s127.0.0.1:%d",
-		 (type == "simple") ? "v1:":"v2:",
-		 base_port+i+servers);
+        snprintf(addr, sizeof(addr), "v2:127.0.0.1:%d", base_port+i+servers);
         bind_addr.parse(addr);
         msgr->bind(bind_addr);
       }
@@ -1207,16 +1083,18 @@ class SyntheticWorkload {
       boost::uniform_int<> choose(0, available_servers.size() - 1);
       if (server->get_default_policy().server) {
         p = make_pair(client, server);
-	ConnectionRef conn = client->connect_to(server->get_mytype(),
-						server->get_myaddrs());
-	available_connections[conn] = p;
       } else {
         ConnectionRef conn = client->connect_to(server->get_mytype(),
-						server->get_myaddrs());
-	p = make_pair(client, server);
-	available_connections[conn] = p;
+						     server->get_myaddrs());
+        if (available_connections.count(conn) || choose(rng) % 2)
+          p = make_pair(client, server);
+        else
+          p = make_pair(server, client);
       }
     }
+    ConnectionRef conn = p.first->connect_to(p.second->get_mytype(),
+						  p.second->get_myaddrs());
+    available_connections[conn] = p;
   }
 
   void send_message() {
@@ -1246,19 +1124,15 @@ class SyntheticWorkload {
     ConnectionRef conn = _get_random_connection();
     dispatcher.clear_pending(conn);
     conn->mark_down();
-    if (!client_policy.server &&
-	!client_policy.lossy &&
-	client_policy.standby) {
-      // it's a lossless policy, so we need to mark down each side
-      pair<Messenger*, Messenger*> &p = available_connections[conn];
-      if (!p.first->get_default_policy().server && !p.second->get_default_policy().server) {
-	ASSERT_EQ(conn->get_messenger(), p.first);
-	ConnectionRef peer = p.second->connect_to(p.first->get_mytype(),
-						  p.first->get_myaddrs());
-	peer->mark_down();
-	dispatcher.clear_pending(peer);
-	available_connections.erase(peer);
-      }
+    pair<Messenger*, Messenger*> &p = available_connections[conn];
+    // it's a lossless policy, so we need to mark down each side
+    if (!p.first->get_default_policy().server && !p.second->get_default_policy().server) {
+      ASSERT_EQ(conn->get_messenger(), p.first);
+      ConnectionRef peer = p.second->connect_to(p.first->get_mytype(),
+						     p.first->get_myaddrs());
+      peer->mark_down();
+      dispatcher.clear_pending(peer);
+      available_connections.erase(peer);
     }
     ASSERT_EQ(available_connections.erase(conn), 1U);
   }
@@ -1598,23 +1472,17 @@ class MarkdownDispatcher : public Dispatcher {
 
 // Markdown with external lock
 TEST_P(MessengerTest, MarkdownTest) {
-  Messenger *server_msgr2 = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid(), 0);
+  Messenger *server_v2 = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid(), 0);
   MarkdownDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1:16800");
-  else
-    bind_addr.parse("v2:127.0.0.1:16800");
+  bind_addr.parse("v2:127.0.0.1:16800");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1:16801");
-  else
-    bind_addr.parse("v2:127.0.0.1:16801");
-  server_msgr2->bind(bind_addr);
-  server_msgr2->add_dispatcher_head(&srv_dispatcher);
-  server_msgr2->start();
+  bind_addr.parse("v2:127.0.0.1:16801");
+  server_v2->bind(bind_addr);
+  server_v2->add_dispatcher_head(&srv_dispatcher);
+  server_v2->start();
 
   client_msgr->add_dispatcher_head(&cli_dispatcher);
   client_msgr->start();
@@ -1626,8 +1494,8 @@ TEST_P(MessengerTest, MarkdownTest) {
   while (i--) {
     ConnectionRef conn1 = client_msgr->connect_to(server_msgr->get_mytype(),
 						       server_msgr->get_myaddrs());
-    ConnectionRef conn2 = client_msgr->connect_to(server_msgr2->get_mytype(),
-						       server_msgr2->get_myaddrs());
+    ConnectionRef conn2 = client_msgr->connect_to(server_v2->get_mytype(),
+						       server_v2->get_myaddrs());
     MPing *m = new MPing();
     ASSERT_EQ(conn1->send_message(m), 0);
     m = new MPing();
@@ -1648,19 +1516,18 @@ TEST_P(MessengerTest, MarkdownTest) {
   }
   server_msgr->shutdown();
   client_msgr->shutdown();
-  server_msgr2->shutdown();
+  server_v2->shutdown();
   server_msgr->wait();
   client_msgr->wait();
-  server_msgr2->wait();
-  delete server_msgr2;
+  server_v2->wait();
+  delete server_v2;
 }
 
 INSTANTIATE_TEST_CASE_P(
   Messenger,
   MessengerTest,
   ::testing::Values(
-    "async+posix",
-    "simple"
+    "async+posix"
   )
 );
 

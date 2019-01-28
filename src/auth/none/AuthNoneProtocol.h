@@ -28,7 +28,8 @@ struct AuthNoneAuthorizer : public AuthAuthorizer {
     encode(global_id, bl);
     return 0;
   }
-  bool verify_reply(bufferlist::const_iterator& reply) override { return true; }
+  bool verify_reply(bufferlist::const_iterator& reply,
+		    CryptoKey *connection_secret) override { return true; }
   bool add_challenge(CephContext *cct, bufferlist& ch) override { return true; }
 };
 

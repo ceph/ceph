@@ -121,6 +121,8 @@ public:
 
   int bindv(const entity_addrvec_t& bind_addrs) override;
 
+  bool should_use_msgr2() override;
+
   /** @} Configuration functions */
 
   /**
@@ -355,6 +357,10 @@ public:
 		  const entity_addr_t &peer_addr);
   NetworkStack *get_stack() {
     return stack;
+  }
+
+  uint64_t get_nonce() const {
+    return nonce;
   }
 
   /**

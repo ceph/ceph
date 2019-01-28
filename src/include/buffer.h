@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 #ifndef CEPH_BUFFER_H
 #define CEPH_BUFFER_H
@@ -81,7 +81,9 @@ class packet;
 }
 #endif // HAVE_SEASTAR
 class deleter;
-struct sha1_digest_t;
+template<uint8_t S>
+struct sha_digest_t;
+using sha1_digest_t = sha_digest_t<20>;
 
 namespace ceph {
 
@@ -141,7 +143,7 @@ namespace buffer CEPH_BUFFER_API {
   class xio_msg_buffer;
 
   /*
-   * named constructors 
+   * named constructors
    */
   raw* copy(const char *c, unsigned len);
   raw* create(unsigned len);
@@ -691,7 +693,7 @@ namespace buffer CEPH_BUFFER_API {
 
       /// get current iterator offset in buffer::list
       unsigned get_off() const { return off; }
-      
+
       /// get number of bytes remaining from iterator position to the end of the buffer::list
       unsigned get_remaining() const { return bl->length() - off; }
 
@@ -1174,7 +1176,7 @@ namespace buffer CEPH_BUFFER_API {
     contiguous_filler append_hole(unsigned len);
     void append_zero(unsigned len);
     void prepend_zero(unsigned len);
-    
+
     /*
      * get a char
      */
@@ -1215,7 +1217,7 @@ namespace buffer CEPH_BUFFER_API {
     }
     uint32_t crc32c(uint32_t crc) const;
     void invalidate_crc();
-    sha1_digest_t sha1(); 
+    sha1_digest_t sha1();
 
     // These functions return a bufferlist with a pointer to a single
     // static buffer. They /must/ not outlive the memory they
