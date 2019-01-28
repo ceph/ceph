@@ -2300,8 +2300,12 @@ private:
   void probe_smart(const string& devid, ostream& ss);
 
 public:
-  static int peek_meta(ObjectStore *store, string& magic,
-		       uuid_d& cluster_fsid, uuid_d& osd_fsid, int& whoami);
+  static int peek_meta(ObjectStore *store,
+		       string *magic,
+		       uuid_d *cluster_fsid,
+		       uuid_d *osd_fsid,
+		       int *whoami,
+		       int *min_osd_release);
   
 
   // startup/shutdown
