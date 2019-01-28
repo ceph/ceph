@@ -14,14 +14,14 @@ function cleanup() {
 cleanup
 
 rbd create foo --size 1000
-rbd bench-write foo --io-size 4096 --io-threads 5 --io-total 4096000 --io-pattern rand
+rbd bench --io-type write foo --io-size 4096 --io-threads 5 --io-total 4096000 --io-pattern rand
 
 #rbd cp foo foo.copy
 rbd create foo.copy --size 1000
 rbd export-diff foo - | rbd import-diff - foo.copy
 
 rbd snap create foo --snap=two
-rbd bench-write foo --io-size 4096 --io-threads 5 --io-total 4096000 --io-pattern rand
+rbd bench --io-type write foo --io-size 4096 --io-threads 5 --io-total 4096000 --io-pattern rand
 rbd snap create foo --snap=three
 rbd snap create foo.copy --snap=two
 
