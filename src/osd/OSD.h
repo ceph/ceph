@@ -1298,6 +1298,8 @@ protected:
   int whoami;
   std::string dev_path, journal_path;
 
+  int last_require_osd_release = 0;
+
   int numa_node = -1;
   size_t numa_cpu_set_size = 0;
   cpu_set_t numa_cpu_set;
