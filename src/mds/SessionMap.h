@@ -113,8 +113,15 @@ private:
   mutable DecayCounter load_avg;
   DecayRate    load_avg_rate;
 
-  // caps being recalled recently by this session
-  DecayCounter cap_recalled;
+  // Ephemeral state for tracking progress of capability recalls
+  // caps being recalled recently by this session; used for Beacon warnings
+  mutable DecayCounter recall_caps;
+  // caps that have been released
+  mutable DecayCounter release_caps;
+  // throttle on caps recalled
+  mutable DecayCounter recall_caps_throttle;
+  // New limit in SESSION_RECALL
+  uint32_t recall_limit = 0;
 
   // session start time -- used to track average session time
   // note that this is initialized in the constructor rather
@@ -154,13 +161,6 @@ public:
   }
   std::string get_human_name() const {return human_name;}
 
-  // Ephemeral state for tracking progress of capability recalls
-  time recalled_at = time::min();  // When was I first asked to SESSION_RECALL?
-  time released_at = time::min();  // When did the session last release caps?
-  uint32_t recall_count = 0;  // How many caps was I asked to SESSION_RECALL?
-  uint32_t recall_release_count = 0;  // How many caps have I actually revoked?
-  uint32_t recall_limit = 0;  // New limit in SESSION_RECALL
-
   session_info_t info;                         ///< durable bits
 
   MDSAuthCaps auth_caps;
@@ -176,11 +176,16 @@ public:
   interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
 
   void notify_cap_release(size_t n_caps);
-  uint64_t notify_recall_sent(const size_t new_limit);
-  auto cap_recalled_counter() const {
-    return cap_recalled.get(ceph_clock_now());
+  uint64_t notify_recall_sent(size_t new_limit);
+  double get_recall_caps_throttle() const {
+    return recall_caps_throttle.get(ceph_clock_now());
   }
-  void clear_recalled();
+  double get_recall_caps() const {
+    return recall_caps.get(ceph_clock_now());
+  }
+  double get_release_caps() const {
+    return release_caps.get(ceph_clock_now());
+  }
 
   inodeno_t next_ino() const {
     if (info.prealloc_inos.empty())
@@ -377,7 +382,9 @@ public:
 
   Session() = delete;
   Session(ConnectionRef con) :
-    cap_recalled(g_conf->get_val<double>("mds_recall_max_decay_rate")),
+    recall_caps(ceph_clock_now(), g_conf->get_val<double>("mds_recall_warning_decay_rate")),
+    release_caps(ceph_clock_now(), g_conf->get_val<double>("mds_recall_warning_decay_rate")),
+    recall_caps_throttle(ceph_clock_now(), g_conf->get_val<double>("mds_recall_max_decay_rate")),
     birth_time(clock::now()),
     auth_caps(g_ceph_context),
     item_session_list(this),
