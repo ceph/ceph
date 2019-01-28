@@ -1587,6 +1587,12 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("allow use of MDS daemons in standby-replay as replacements"),
 
+    Option("mon_warn_on_msgr2_not_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .add_service("mon")
+    .set_description("issue MON_MSGR2_NOT_ENABLED health warning if monitors are all running Nautilus but not all binding to a msgr2 port")
+    .add_see_also("ms_bind_msgr2"),
+
     Option("mon_warn_on_legacy_crush_tunables", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .add_service("mgr")
