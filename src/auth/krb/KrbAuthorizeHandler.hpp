@@ -22,7 +22,8 @@ class KrbAuthorizeHandler : public AuthAuthorizeHandler {
   bool verify_authorizer(CephContext*, KeyStore*, 
                          bufferlist&, bufferlist&,
                          EntityName&, uint64_t&, 
-                         AuthCapsInfo&, CryptoKey&, 
+                         AuthCapsInfo&, CryptoKey&,
+			 CryptoKey *connection_secret,
                          std::unique_ptr<
                           AuthAuthorizerChallenge>* = nullptr) override;
 

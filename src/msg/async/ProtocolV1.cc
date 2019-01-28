@@ -54,14 +54,6 @@ static void alloc_aligned_buffer(bufferlist &data, unsigned len, unsigned off) {
   data.push_back(std::move(ptr));
 }
 
-Protocol::Protocol(int type, AsyncConnection *connection)
-  : proto_type(type),
-    connection(connection),
-    messenger(connection->async_msgr),
-    cct(connection->async_msgr->cct) {}
-
-Protocol::~Protocol() {}
-
 /**
  * Protocol V1
  **/
@@ -991,7 +983,7 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
                 << message->get_seq() << " " << message << " " << *message
                 << dendl;
 
-  bool need_dispatch_writer = true;
+  bool need_dispatch_writer = false;
   if (!connection->policy.lossy) {
     ack_left++;
     need_dispatch_writer = true;
@@ -1533,7 +1525,8 @@ CtPtr ProtocolV1::handle_connect_reply_auth(char *buffer, int r) {
   }
 
   auto iter = authorizer_reply.cbegin();
-  if (authorizer && !authorizer->verify_reply(iter)) {
+  if (authorizer && !authorizer->verify_reply(iter,
+					      nullptr /* connection_secret */)) {
     ldout(cct, 0) << __func__ << " failed verifying authorize reply" << dendl;
     return _fault();
   }
@@ -1689,6 +1682,7 @@ CtPtr ProtocolV1::client_ready() {
 		   << authorizer << dendl;
     session_security.reset(get_auth_session_handler(
         cct, authorizer->protocol, authorizer->session_key,
+	authorizer->session_key /* connection_secret */,
         connection->get_features()));
   } else {
     // We have no authorizer, so we shouldn't be applying security to messages
@@ -1787,7 +1781,7 @@ CtPtr ProtocolV1::handle_client_banner(char *buffer, int r) {
     peer_addr.set_port(port);
 
     ldout(cct, 0) << __func__ << " accept peer addr is really " << peer_addr
-                  << " (socket is " << connection->socket_addr << ")" << dendl;
+                  << " (socket is " << connection->target_addr << ")" << dendl;
   }
   connection->set_peer_addr(peer_addr);  // so that connection_state gets set up
   connection->target_addr = peer_addr;
@@ -1921,6 +1915,7 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   if (!messenger->ms_deliver_verify_authorizer(
           connection, connection->peer_type, connect_msg.authorizer_protocol,
           authorizer_buf, authorizer_reply, authorizer_valid, session_key,
+	  nullptr /* connection_secret */,
           need_challenge ? &authorizer_challenge : nullptr) ||
       !authorizer_valid) {
     connection->lock.lock();
@@ -2354,7 +2349,9 @@ CtPtr ProtocolV1::open(ceph_msg_connect_reply &reply,
 
   session_security.reset(
       get_auth_session_handler(cct, connect_msg.authorizer_protocol,
-                               session_key, connection->get_features()));
+                               session_key,
+			       session_key /* connection secret */,
+			       connection->get_features()));
 
   bufferlist reply_bl;
   reply_bl.append((char *)&reply, sizeof(reply));

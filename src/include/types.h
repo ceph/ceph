@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -7,9 +7,9 @@
  *
  * This is free software; you can redistribute it and/or
  * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software 
+ * License version 2.1, as published by the Free Software
  * Foundation.  See file COPYING.
- * 
+ *
  */
 #ifndef CEPH_TYPES_H
 #define CEPH_TYPES_H
@@ -359,7 +359,7 @@ struct client_t {
 
   // cppcheck-suppress noExplicitConstructor
   client_t(int64_t _v = -2) : v(_v) {}
-  
+
   void encode(bufferlist& bl) const {
     using ceph::encode;
     encode(v, bl);
@@ -558,28 +558,30 @@ WRITE_CLASS_ENCODER(errorcode32_t)
 WRITE_EQ_OPERATORS_1(errorcode32_t, code)
 WRITE_CMP_OPERATORS_1(errorcode32_t, code)
 
-struct sha1_digest_t {
-#define SHA1_DIGEST_SIZE 20
-  unsigned char v[SHA1_DIGEST_SIZE] = {0};
+template <uint8_t S>
+struct sha_digest_t {
+  constexpr static uint32_t SIZE = S;
+  unsigned char v[S] = {0};
 
   string to_str() const {
-    char str[SHA1_DIGEST_SIZE*2+1] = {0};
+    char str[S * 2 + 1] = {0};
     str[0] = '\0';
-    for (size_t i = 0; i < 20; i++) {
-      ::sprintf(&str[i*2], "%02x", static_cast<int>(v[i]));
+    for (size_t i = 0; i < S; i++) {
+      ::sprintf(&str[i * 2], "%02x", static_cast<int>(v[i]));
     }
     return string(str);
   }
-  sha1_digest_t(unsigned char *_v) {
-    memcpy(v, _v, 20);
-  };
-  sha1_digest_t() {}
+  sha_digest_t(const unsigned char *_v) { memcpy(v, _v, S); };
+  sha_digest_t() {}
 };
 
-inline ostream& operator<<(ostream& out, const sha1_digest_t& b)
-{
+template <uint8_t S>
+inline ostream &operator<<(ostream &out, const sha_digest_t<S> &b) {
   string str = b.to_str();
   return out << str;
 }
+
+using sha1_digest_t = sha_digest_t<20>;
+using sha256_digest_t = sha_digest_t<32>;
 
 #endif
