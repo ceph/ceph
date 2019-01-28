@@ -173,6 +173,7 @@ EXPORT
         self.assertEqual(export.clients[1].access_type, "RO")
         self.assertEqual(export.cluster_id, '_default_')
         self.assertEqual(export.attr_expiration_time, 0)
+        self.assertEqual(export.security_label, False)
 
     def test_export_parser_2(self):
         blocks = GaneshaConfParser(self.export_2).parse()
@@ -242,6 +243,7 @@ EXPORT
         self.assertEqual(export.clients[1].squash, "all_squash")
         self.assertEqual(export.clients[1].access_type, "RO")
         self.assertEqual(export.attr_expiration_time, 0)
+        self.assertEqual(export.security_label, False)
 
         # export_id = 2 asserts
         export = exports[2]
@@ -272,6 +274,7 @@ EXPORT
             'tag': None,
             'access_type': 'RW',
             'squash': 'root_squash',
+            'security_label': False,
             'protocols': [4],
             'transports': ['TCP', 'UDP'],
             'clients': [{
@@ -301,6 +304,7 @@ EXPORT
             'tag': None,
             'access_type': 'RW',
             'squash': 'all_squash',
+            'security_label': False,
             'protocols': [3, 4],
             'transports': ['TCP', 'UDP'],
             'clients': [],
@@ -320,6 +324,7 @@ EXPORT
             'tag': None,
             'access_type': 'RW',
             'squash': 'root_squash',
+            'security_label': True,
             'protocols': [4],
             'transports': ['TCP', 'UDP'],
             'clients': [{
@@ -360,6 +365,7 @@ EXPORT
         self.assertEqual(export.daemons, {"nodeb", "nodea"})
         self.assertEqual(export.cluster_id, '_default_')
         self.assertEqual(export.attr_expiration_time, 0)
+        self.assertEqual(export.security_label, True)
 
         export = Export.from_dict(2, {
             'daemons': ['nodea'],
@@ -370,6 +376,7 @@ EXPORT
             'tag': None,
             'access_type': 'RW',
             'squash': 'all_squash',
+            'security_label': False,
             'protocols': [4, 3],
             'transports': ['TCP', 'UDP'],
             'clients': [],
@@ -431,6 +438,7 @@ EXPORT
         self.assertEqual(export.daemons, {"nodeb", "nodea"})
         self.assertEqual(export.cluster_id, '_default_')
         self.assertEqual(export.attr_expiration_time, 0)
+        self.assertEqual(export.security_label, False)
 
         # export_id = 2 asserts
         export = exports[2]
@@ -461,7 +469,7 @@ EXPORT
 
         conf = GaneshaConf.instance('_default_')
         conf.update_export({
-            'export_id': 1,
+            'export_id': 2,
             'daemons': ["nodeb"],
             'path': 'bucket',
             'pseudo': '/rgw/bucket',
@@ -469,6 +477,7 @@ EXPORT
             'tag': 'bucket_tag',
             'access_type': 'RW',
             'squash': 'all_squash',
+            'security_label': False,
             'protocols': [4, 3],
             'transports': ['TCP', 'UDP'],
             'clients': [{
@@ -483,8 +492,8 @@ EXPORT
         })
 
         conf = GaneshaConf.instance('_default_')
-        export = conf.get_export(1)
-        self.assertEqual(export.export_id, 1)
+        export = conf.get_export(2)
+        self.assertEqual(export.export_id, 2)
         self.assertEqual(export.path, "bucket")
         self.assertEqual(export.pseudo, "/rgw/bucket")
         self.assertEqual(export.tag, "bucket_tag")
@@ -544,6 +553,7 @@ EXPORT
             'cluster_id': '_default_',
             'access_type': 'RW',
             'squash': 'all_squash',
+            'security_label': False,
             'protocols': [4, 3],
             'transports': ['TCP', 'UDP'],
             'clients': [{
@@ -597,6 +607,7 @@ EXPORT
             'tag': None,
             'access_type': 'RW',
             'squash': 'all_squash',
+            'security_label': True,
             'protocols': [4],
             'transports': ['TCP'],
             'clients': [],
@@ -627,3 +638,4 @@ EXPORT
         self.assertEqual(export.daemons, {"nodeb", "nodea"})
         self.assertEqual(export.cluster_id, '_default_')
         self.assertEqual(export.attr_expiration_time, 0)
+        self.assertEqual(export.security_label, True)
