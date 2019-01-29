@@ -25,7 +25,6 @@ def os_exit_noop(*args, **kwargs):
 
 os._exit = os_exit_noop
 
-
 # to access things in class Module from subclass Root.  Because
 # it's a dict, the writer doesn't need to declare 'global' for access
 
@@ -38,13 +37,13 @@ def global_instance():
 
 
 def health_status_to_number(status):
-
     if status == 'HEALTH_OK':
         return 0
     elif status == 'HEALTH_WARN':
         return 1
     elif status == 'HEALTH_ERR':
         return 2
+
 
 DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_used_raw_bytes']
 
@@ -59,7 +58,8 @@ FS_METADATA = ('data_pools', 'fs_id', 'metadata_pool', 'name')
 MDS_METADATA = ('ceph_daemon', 'fs_id', 'hostname', 'public_addr', 'rank',
                 'ceph_version')
 
-MON_METADATA = ('ceph_daemon', 'hostname', 'public_addr', 'rank', 'ceph_version')
+MON_METADATA = ('ceph_daemon', 'hostname',
+                'public_addr', 'rank', 'ceph_version')
 
 OSD_METADATA = ('back_iface', 'ceph_daemon', 'cluster_addr', 'device_class',
                 'front_iface', 'hostname', 'objectstore', 'public_addr',
@@ -76,7 +76,8 @@ RGW_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
 RBD_MIRROR_METADATA = ('ceph_daemon', 'id', 'instance_id', 'hostname',
                        'ceph_version')
 
-DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device', 'wal_device', 'instance')
+DISK_OCCUPATION = ('ceph_daemon', 'device', 'db_device',
+                   'wal_device', 'instance')
 
 NUM_OBJECTS = ['degraded', 'misplaced', 'unfound']
 
@@ -101,7 +102,8 @@ class Metric(object):
 
         def promethize(path):
             ''' replace illegal metric name characters '''
-            result = path.replace('.', '_').replace('+', '_plus').replace('::', '_')
+            result = path.replace('.', '_').replace(
+                '+', '_plus').replace('::', '_')
 
             # Hyphens usually turn into underscores, unless they are
             # trailing
@@ -159,11 +161,11 @@ class Module(MgrModule):
     ]
 
     MODULE_OPTIONS = [
-            {'name': 'server_addr'},
-            {'name': 'server_port'},
-            {'name': 'scrape_interval'},
-            {'name': 'rbd_stats_pools'},
-            {'name': 'rbd_stats_pools_refresh_interval'},
+        {'name': 'server_addr'},
+        {'name': 'server_port'},
+        {'name': 'scrape_interval'},
+        {'name': 'rbd_stats_pools'},
+        {'name': 'rbd_stats_pools_refresh_interval'},
     ]
 
     def __init__(self, *args, **kwargs):
@@ -175,21 +177,21 @@ class Module(MgrModule):
         self.collect_timeout = 5.0
         self.collect_cache = None
         self.rbd_stats = {
-            'pools' : {},
-            'pools_refresh_time' : 0,
-            'counters_info' : {
-                'write_ops' : {'type' : self.PERFCOUNTER_COUNTER,
-                               'desc' : 'RBD image writes count'},
-                'read_ops' : {'type' : self.PERFCOUNTER_COUNTER,
-                              'desc' : 'RBD image reads count'},
-                'write_bytes' : {'type' : self.PERFCOUNTER_COUNTER,
-                                 'desc' : 'RBD image bytes written'},
-                'read_bytes' : {'type' : self.PERFCOUNTER_COUNTER,
-                                'desc' : 'RBD image bytes read'},
-                'write_latency' : {'type' : self.PERFCOUNTER_LONGRUNAVG,
-                                   'desc' : 'RBD image writes latency (msec)'},
-                'read_latency' : {'type' : self.PERFCOUNTER_LONGRUNAVG,
-                                  'desc' : 'RBD image reads latency (msec)'},
+            'pools': {},
+            'pools_refresh_time': 0,
+            'counters_info': {
+                'write_ops': {'type': self.PERFCOUNTER_COUNTER,
+                              'desc': 'RBD image writes count'},
+                'read_ops': {'type': self.PERFCOUNTER_COUNTER,
+                             'desc': 'RBD image reads count'},
+                'write_bytes': {'type': self.PERFCOUNTER_COUNTER,
+                                'desc': 'RBD image bytes written'},
+                'read_bytes': {'type': self.PERFCOUNTER_COUNTER,
+                               'desc': 'RBD image bytes read'},
+                'write_latency': {'type': self.PERFCOUNTER_LONGRUNAVG,
+                                  'desc': 'RBD image writes latency (msec)'},
+                'read_latency': {'type': self.PERFCOUNTER_LONGRUNAVG,
+                                 'desc': 'RBD image reads latency (msec)'},
             },
         }
         _global_instance['plugin'] = self
@@ -349,7 +351,8 @@ class Module(MgrModule):
         active_daemons = []
         for fs in fs_map['filesystems']:
             # collect fs metadata
-            data_pools = ",".join([str(pool) for pool in fs['mdsmap']['data_pools']])
+            data_pools = ",".join([str(pool)
+                                   for pool in fs['mdsmap']['data_pools']])
             self.metrics['fs_metadata'].set(1, (
                 data_pools,
                 fs['id'],
@@ -359,7 +362,7 @@ class Module(MgrModule):
             self.log.debug('mdsmap: {}'.format(fs['mdsmap']))
             for gid, daemon in fs['mdsmap']['info'].items():
                 id_ = daemon['name']
-                host_version = servers.get((id_, 'mds'), ('',''))
+                host_version = servers.get((id_, 'mds'), ('', ''))
                 self.metrics['mds_metadata'].set(1, (
                     'mds.{}'.format(id_), fs['id'],
                     host_version[0], daemon['addr'],
@@ -372,7 +375,7 @@ class Module(MgrModule):
         for mon in mon_status['monmap']['mons']:
             rank = mon['rank']
             id_ = mon['name']
-            host_version = servers.get((id_, 'mon'), ('',''))
+            host_version = servers.get((id_, 'mon'), ('', ''))
             self.metrics['mon_metadata'].set(1, (
                 'mon.{}'.format(id_), host_version[0],
                 mon['public_addr'].split(':')[0], rank,
@@ -393,7 +396,8 @@ class Module(MgrModule):
         reported_states = {}
         for pg in pg_status['pgs_by_state']:
             for state in pg['state_name'].split('+'):
-                reported_states[state] =  reported_states.get(state, 0) + pg['count']
+                reported_states[state] = reported_states.get(
+                    state, 0) + pg['count']
 
         for state in reported_states:
             path = 'pg_{}'.format(state)
@@ -407,7 +411,8 @@ class Module(MgrModule):
                 try:
                     self.metrics['pg_{}'.format(state)].set(0)
                 except KeyError:
-                    self.log.warn("skipping pg in unknown state {}".format(state))
+                    self.log.warn(
+                        "skipping pg in unknown state {}".format(state))
 
     def get_osd_stats(self):
         osd_stats = self.get('osd_stats')
@@ -463,7 +468,7 @@ class Module(MgrModule):
                         id_))
                 continue
 
-            host_version = servers.get((str(id_), 'osd'), ('',''))
+            host_version = servers.get((str(id_), 'osd'), ('', ''))
 
             # collect disk occupation metadata
             osd_metadata = self.get_metadata("osd", str(id_))
@@ -495,17 +500,19 @@ class Module(MgrModule):
 
             osd_objectstore = osd_metadata.get('osd_objectstore', None)
             if osd_objectstore == "filestore":
-            # collect filestore backend device
-                osd_dev_node = osd_metadata.get('backend_filestore_dev_node', None)
-            # collect filestore journal device
+                # collect filestore backend device
+                osd_dev_node = osd_metadata.get(
+                    'backend_filestore_dev_node', None)
+                # collect filestore journal device
                 osd_wal_dev_node = osd_metadata.get('osd_journal', '')
                 osd_db_dev_node = ''
             elif osd_objectstore == "bluestore":
-            # collect bluestore backend device
-                osd_dev_node = osd_metadata.get('bluestore_bdev_dev_node', None)
-            # collect bluestore wal backend
+                # collect bluestore backend device
+                osd_dev_node = osd_metadata.get(
+                    'bluestore_bdev_dev_node', None)
+                # collect bluestore wal backend
                 osd_wal_dev_node = osd_metadata.get('bluefs_wal_dev_node', '')
-            # collect bluestore db backend
+                # collect bluestore db backend
                 osd_db_dev_node = osd_metadata.get('bluefs_db_dev_node', '')
             if osd_dev_node and osd_dev_node == "unknown":
                 osd_dev_node = None
@@ -523,11 +530,12 @@ class Module(MgrModule):
                 ))
             else:
                 self.log.info("Missing dev node metadata for osd {0}, skipping "
-                               "occupation record for this osd".format(id_))
+                              "occupation record for this osd".format(id_))
 
         pool_meta = []
         for pool in osd_map['pools']:
-            self.metrics['pool_metadata'].set(1, (pool['pool'], pool['pool_name']))
+            self.metrics['pool_metadata'].set(
+                1, (pool['pool'], pool['pool_name']))
 
         # Populate other servers metadata
         for key, value in servers.items():
@@ -545,7 +553,8 @@ class Module(MgrModule):
                 mirror_metadata['ceph_daemon'] = '{}.{}'.format(service_type,
                                                                 service_id)
                 self.metrics['rbd_mirror_metadata'].set(
-                    1, (mirror_metadata.get(k, '') for k in RBD_MIRROR_METADATA)
+                    1, (mirror_metadata.get(k, '')
+                        for k in RBD_MIRROR_METADATA)
                 )
 
     def get_num_objects(self):
@@ -599,7 +608,7 @@ class Module(MgrModule):
         if pools:
             next_refresh = self.rbd_stats['pools_refresh_time'] + \
                 self.get_localized_module_option(
-                    'rbd_stats_pools_refresh_interval', 300)
+                'rbd_stats_pools_refresh_interval', 300)
             if rbd_stats_pools != pools or time.time() >= next_refresh:
                 self.refresh_rbd_stats_pools(pools)
                 pools_refreshed = True
@@ -617,13 +626,14 @@ class Module(MgrModule):
                 break
         if nspace_names:
             namespace_regex = '^(' + \
-                '|'.join([re.escape(x) for x in set(nspace_names)]) + ')$'
+                              "|".join([re.escape(x)
+                                        for x in set(nspace_names)]) + ')$'
         else:
             namespace_regex = '^(.*)$'
 
         if 'query' in self.rbd_stats and \
            (pool_id_regex != self.rbd_stats['query']['key_descriptor'][0]['regex'] or
-            namespace_regex != self.rbd_stats['query']['key_descriptor'][1]['regex']):
+                namespace_regex != self.rbd_stats['query']['key_descriptor'][1]['regex']):
             self.remove_osd_perf_query(self.rbd_stats['query_id'])
             del self.rbd_stats['query_id']
             del self.rbd_stats['query']
@@ -721,7 +731,7 @@ class Module(MgrModule):
                                     label_names,
                                 )
                             self.metrics[path].set(counters[i][1], labels)
-                        i += 1;
+                        i += 1
 
     def refresh_rbd_stats_pools(self, pools):
         self.log.debug('refreshing rbd pools %s' % (pools))
@@ -733,7 +743,7 @@ class Module(MgrModule):
                 pool_id = self.rados.pool_lookup(pool_name)
                 with self.rados.open_ioctx(pool_name) as ioctx:
                     if pool_id not in self.rbd_stats['pools']:
-                        self.rbd_stats['pools'][pool_id] = {'images' : {}}
+                        self.rbd_stats['pools'][pool_id] = {'images': {}}
                     pool = self.rbd_stats['pools'][pool_id]
                     pool['name'] = pool_name
                     pool['ns_names'] = cfg_ns_names
@@ -746,7 +756,7 @@ class Module(MgrModule):
                             del pool['images'][nspace_name]
                     for nspace_name in nspace_names:
                         if (nspace_name and
-                            not rbd.namespace_exists(ioctx, nspace_name)):
+                                not rbd.namespace_exists(ioctx, nspace_name)):
                             self.log.debug('unknown namespace %s for pool %s' %
                                            (nspace_name, pool_name))
                             continue
@@ -756,7 +766,7 @@ class Module(MgrModule):
                         namespace = pool['images'][nspace_name]
                         images = {}
                         for image_meta in RBD().list2(ioctx):
-                            image = {'n' : image_meta['name']}
+                            image = {'n': image_meta['name']}
                             image_id = image_meta['id']
                             if image_id in namespace:
                                 image['c'] = namespace[image_id]['c']
@@ -798,7 +808,8 @@ class Module(MgrModule):
                     continue
 
                 # Get the value of the counter
-                value = self._perfvalue_to_value(counter_info['type'], counter_info['value'])
+                value = self._perfvalue_to_value(
+                    counter_info['type'], counter_info['value'])
 
                 # Represent the long running avgs as sum/count pairs
                 if counter_info['type'] & self.PERFCOUNTER_LONGRUNAVG:
@@ -831,7 +842,7 @@ class Module(MgrModule):
                         )
                     self.metrics[path].set(value, (daemon,))
 
-        self.get_rbd_stats();
+        self.get_rbd_stats()
 
         # Return formatted metrics and clear no longer used data
         _metrics = [m.str_expfmt() for m in self.metrics.values()]
@@ -859,7 +870,7 @@ class Module(MgrModule):
                         "prefix": "config-key get",
                         'key': "config/mgr/mgr/prometheus/{}/server_port".format(id_),
                     }),
-                                               "")
+                    "")
                 r, outb, outs = result.wait()
                 if r != 0:
                     global_instance().log.error("Failed to retrieve port for mgr {}: {}".format(id_, outs))
@@ -917,9 +928,10 @@ class Module(MgrModule):
                 finally:
                     instance.collect_lock.release()
 
-            def _metrics(self, instance):
+            @staticmethod
+            def _metrics(instance):
                 # Return cached data if available and collected before the cache times out
-                if instance.collect_cache and time.time() - instance.collect_time  < instance.collect_timeout:
+                if instance.collect_cache and time.time() - instance.collect_time < instance.collect_timeout:
                     cherrypy.response.headers['Content-Type'] = 'text/plain'
                     return instance.collect_cache
 
@@ -933,10 +945,13 @@ class Module(MgrModule):
                     raise cherrypy.HTTPError(503, 'No MON connection')
 
         # Make the cache timeout for collecting configurable
-        self.collect_timeout = self.get_localized_module_option('scrape_interval', 5.0)
+        self.collect_timeout = self.get_localized_module_option(
+            'scrape_interval', 5.0)
 
-        server_addr = self.get_localized_module_option('server_addr', DEFAULT_ADDR)
-        server_port = self.get_localized_module_option('server_port', DEFAULT_PORT)
+        server_addr = self.get_localized_module_option(
+            'server_addr', DEFAULT_ADDR)
+        server_port = self.get_localized_module_option(
+            'server_port', DEFAULT_PORT)
         self.log.info(
             "server_addr: %s server_port: %s" %
             (server_addr, server_port)
@@ -977,8 +992,10 @@ class StandbyModule(MgrStandbyModule):
 
     def serve(self):
         server_addr = self.get_localized_module_option('server_addr', '::')
-        server_port = self.get_localized_module_option('server_port', DEFAULT_PORT)
-        self.log.info("server_addr: %s server_port: %s" % (server_addr, server_port))
+        server_port = self.get_localized_module_option(
+            'server_port', DEFAULT_PORT)
+        self.log.info("server_addr: %s server_port: %s" %
+                      (server_addr, server_port))
         cherrypy.config.update({
             'server.socket_host': server_addr,
             'server.socket_port': int(server_port),
@@ -988,7 +1005,6 @@ class StandbyModule(MgrStandbyModule):
         module = self
 
         class Root(object):
-
             @cherrypy.expose
             def index(self):
                 active_uri = module.get_active_uri()
