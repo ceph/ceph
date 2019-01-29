@@ -614,6 +614,27 @@ class RGWElasticInitConfigCBCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   ElasticConfigRef conf;
   ESInfo es_info;
+
+  struct _err_response {
+    struct err_reason {
+      vector<err_reason> root_cause;
+      string type;
+      string reason;
+      string index;
+
+      void decode_json(JSONObj *obj) {
+        JSONDecoder::decode_json("root_cause", root_cause, obj);
+        JSONDecoder::decode_json("type", type, obj);
+        JSONDecoder::decode_json("reason", reason, obj);
+        JSONDecoder::decode_json("index", index, obj);
+      }
+    } error;
+
+    void decode_json(JSONObj *obj) {
+      JSONDecoder::decode_json("error", error, obj);
+    }
+  } err_response;
+
 public:
   RGWElasticInitConfigCBCR(RGWDataSyncEnv *_sync_env,
                           ElasticConfigRef _conf) : RGWCoroutine(_sync_env->cct),
@@ -647,15 +668,21 @@ public:
           ldout(sync_env->cct, 0) << "elasticsearch: index mapping: version < 5" << dendl;
           index_conf.reset(new es_index_config<es_type_v2>(settings));
         }
-        call(new RGWPutRESTResourceCR<es_index_config_base, int> (sync_env->cct,
+        call(new RGWPutRESTResourceCR<es_index_config_base, int, _err_response> (sync_env->cct,
                                                              conf->conn.get(),
                                                              sync_env->http_manager,
                                                              path, nullptr /*params*/,
                                                              &(conf->default_headers),
-                                                             *index_conf, nullptr));
+                                                             *index_conf, nullptr, &err_response));
       }
       if (retcode < 0) {
-        return set_cr_error(retcode);
+        ldout(sync_env->cct, 0) << "elasticsearch: failed to initialize index: response.type=" << err_response.error.type << " response.reason=" << err_response.error.reason << dendl;
+
+        if (err_response.error.type != "index_already_exists_exception") {
+          return set_cr_error(retcode);
+        }
+
+        ldout(sync_env->cct, 0) << "elasticsearch: index already exists, assuming external initialization" << dendl;
       }
       return set_cr_done();
     }
