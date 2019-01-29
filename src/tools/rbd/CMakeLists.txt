@@ -40,6 +40,7 @@ set(rbd_srcs
   action/Rename.cc
   action/Resize.cc
   action/Snap.cc
+  action/Sparsify.cc
   action/Status.cc
   action/Trash.cc
   action/Watch.cc)

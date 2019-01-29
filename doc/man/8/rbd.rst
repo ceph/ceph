@@ -607,6 +607,12 @@ Commands
 
   This requires image format 2.
 
+:command:`sparsify` [--sparse-size *sparse-size*] *image-spec*
+  Reclaim space for zeroed image extents. The default sparse size is
+  4096 bytes and can be changed via --sparse-size option with the
+  following restrictions: it should be power of two, not less than
+  4096, and not larger image object size.
+
 :command:`status` *image-spec*
   Show the status of the image, including which clients have it open.
 
