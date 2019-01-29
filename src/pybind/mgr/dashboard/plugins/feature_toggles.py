@@ -89,7 +89,7 @@ Feature2Endpoint = {
 @PM.add_plugin
 class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
                      I.HasCommands, I.FilterRequest.BeforeHandler,
-                     I.HasEndpoints):
+                     I.HasControllers):
     OPTION_FMT = 'FEATURE_TOGGLE_{}'
     CACHE_MAX_SIZE = 128  # Optimum performance with 2^N sizes
 
@@ -148,6 +148,10 @@ class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
                 return self.Endpoint2Feature[endpoint]
         return None
 
+    def _get_feature_status(self, feature):
+        return self.mgr.get_module_option(
+            self.OPTION_FMT.format(feature.value))
+
     @PM.add_hook
     def filter_request_before_handler(self, request):
         feature = self.__get_feature_from_path(request.path_info)
@@ -155,7 +159,7 @@ class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
         if feature is None:
             return
 
-        if self.mgr.get_module_option(self.OPTION_FMT.format(feature.value)) is False:
+        if self._get_feature_status(feature) is False:
             raise cherrypy.HTTPError(
                 501, "Feature='{}' (path='{}') disabled by option '{}'".format(
                     feature.value,
@@ -164,5 +168,20 @@ class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
                     ))
 
     @PM.add_hook
-    def register_endpoints(self):
-        pass
+    def get_controllers(self):
+        from ..controllers import ApiController,\
+            RESTController, Endpoint, ReadPermission
+        from ..security import Scope
+
+        @ApiController('/feature_toggles')
+        class FeatureTogglesEndpoint(RESTController):
+
+            def list(_):
+                return {
+                    feature.value: self._get_feature_status(feature)
+                    for feature in Features
+                }
+
+        return [
+            FeatureTogglesEndpoint,
+        ]

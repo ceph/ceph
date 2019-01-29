@@ -38,9 +38,9 @@ class HasCommands(Interface):
 
 
 @PM.add_interface
-class HasEndpoints(Interface):
+class HasControllers(Interface):
     @PM.add_abcspec
-    def register_endpoints(self): pass
+    def get_controllers(self): pass
 
 
 class FilterRequest:
