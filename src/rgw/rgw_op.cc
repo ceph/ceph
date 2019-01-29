@@ -836,26 +836,25 @@ static void rgw_add_grant_to_iam_environment(rgw::IAM::Environment& e, struct re
   }
 }
 
-rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
-						struct req_state* s)
+void rgw_build_iam_environment(RGWRados* store,
+	                              struct req_state* s)
 {
-  rgw::IAM::Environment e;
   const auto& m = s->info.env->get_map();
   auto t = ceph::real_clock::now();
-  e.emplace("aws:CurrentTime", std::to_string(ceph::real_clock::to_time_t(t)));
-  e.emplace("aws:EpochTime", ceph::to_iso_8601(t));
+  s->env.emplace("aws:CurrentTime", std::to_string(ceph::real_clock::to_time_t(t)));
+  s->env.emplace("aws:EpochTime", ceph::to_iso_8601(t));
   // TODO: This is fine for now, but once we have STS we'll need to
   // look and see. Also this won't work with the IdentityApplier
   // model, since we need to know the actual credential.
-  e.emplace("aws:PrincipalType", "User");
+  s->env.emplace("aws:PrincipalType", "User");
 
   auto i = m.find("HTTP_REFERER");
   if (i != m.end()) {
-    e.emplace("aws:Referer", i->second);
+    s->env.emplace("aws:Referer", i->second);
   }
 
   if (rgw_transport_is_secure(s->cct, *s->info.env)) {
-    e.emplace("aws:SecureTransport", "true");
+    s->env.emplace("aws:SecureTransport", "true");
   }
 
   const auto remote_addr_param = s->cct->_conf->rgw_remote_addr_param;
@@ -874,21 +873,20 @@ rgw::IAM::Environment rgw_build_iam_environment(RGWRados* store,
 	ip = &temp;
       }
     }
-    e.emplace("aws:SourceIp", *ip);
+    s->env.emplace("aws:SourceIp", *ip);
   }
 
   i = m.find("HTTP_USER_AGENT"); {
   if (i != m.end())
-    e.emplace("aws:UserAgent", i->second);
+    s->env.emplace("aws:UserAgent", i->second);
   }
 
   if (s->user) {
     // What to do about aws::userid? One can have multiple access
     // keys so that isn't really suitable. Do we have a durable
     // identifier that can persist through name changes?
-    e.emplace("aws:username", s->user->user_id.id);
+    s->env.emplace("aws:username", s->user->user_id.id);
   }
-  return e;
 }
 
 void rgw_bucket_object_pre_exec(struct req_state *s)
@@ -7100,7 +7098,7 @@ int RGWHandler::do_init_permissions()
     return ret==-ENODATA ? -EACCES : ret;
   }
 
-  s->env = rgw_build_iam_environment(store, s);
+  rgw_build_iam_environment(store, s);
   return ret;
 }
 

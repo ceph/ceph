@@ -15,8 +15,10 @@
 
 #include "rgw_rest.h"
 #include "rgw_auth.h"
-#include "rgw_auth_s3.h"
+#include "rgw_auth_registry.h"
 #include "rgw_rest_sts.h"
+#include "rgw_auth_s3.h"
+
 #include "rgw_formats.h"
 #include "rgw_client_io.h"
 
@@ -36,6 +38,91 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+namespace rgw {
+namespace auth {
+namespace sts {
+
+bool
+WebTokenEngine::is_applicable(const std::string& token) const noexcept
+{
+  return ! token.empty();
+}
+
+boost::optional<WebTokenEngine::token_t>
+WebTokenEngine::get_from_idp(const DoutPrefixProvider* dpp, const std::string& token) const
+{
+  //Access token conforming to OAuth2.0
+  if (! cct->_conf->rgw_sts_token_introspection_url.empty()) {
+    bufferlist introspect_resp;
+    RGWHTTPTransceiver introspect_req(cct, "POST", cct->_conf->rgw_sts_token_introspection_url, &introspect_resp);
+    //Headers
+    introspect_req.append_header("Content-Type", "application/x-www-form-urlencoded");
+    string base64_creds = "Basic " + rgw::to_base64(cct->_conf->rgw_sts_client_id + ":" + cct->_conf->rgw_sts_client_secret);
+    introspect_req.append_header("Authorization", base64_creds);
+    // POST data
+    string post_data = "token=" + token;
+    introspect_req.set_post_data(post_data);
+    introspect_req.set_send_length(post_data.length());
+
+    int res = introspect_req.process();
+    if (res < 0) {
+      ldpp_dout(dpp, 10) << "HTTP request res: " << res << dendl;
+      throw -EINVAL;
+    }
+    //Debug only
+    ldpp_dout(dpp, 20) << "HTTP status: " << introspect_req.get_http_status() << dendl;
+    ldpp_dout(dpp, 20) << "JSON Response is: " << introspect_resp.c_str() << dendl;
+
+    JSONParser parser;
+    WebTokenEngine::token_t token;
+    if (!parser.parse(introspect_resp.c_str(), introspect_resp.length())) {
+      ldpp_dout(dpp, 2) << "Malformed json" << dendl;
+      throw -EINVAL;
+    } else {
+      bool is_active;
+      JSONDecoder::decode_json("active", is_active, &parser);
+      if (! is_active) {
+        ldpp_dout(dpp, 0) << "Active state is false"  << dendl;
+        throw -ERR_INVALID_IDENTITY_TOKEN;
+      }
+      JSONDecoder::decode_json("iss", token.iss, &parser);
+      JSONDecoder::decode_json("aud", token.aud, &parser);
+      JSONDecoder::decode_json("sub", token.sub, &parser);
+      JSONDecoder::decode_json("user_name", token.user_name, &parser);
+    }
+    return token;
+  }
+  return boost::none;
+}
+
+WebTokenEngine::result_t
+WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
+                              const std::string& token,
+                              const req_state* const s) const
+{
+  boost::optional<WebTokenEngine::token_t> t;
+
+  if (! is_applicable(token)) {
+    return result_t::deny();
+  }
+
+  try {
+    t = get_from_idp(dpp, token);
+  } catch(...) {
+    return result_t::deny(-EACCES);
+  }
+
+  if (t) {
+    auto apl = apl_factory->create_apl_web_identity(cct, s, *t);
+    return result_t::grant(std::move(apl));
+  }
+  return result_t::deny(-EACCES);
+}
+
+}; /* namespace sts */
+}; /* namespace auth */
+}; /* namespace rgw */
+
 int RGWREST_STS::verify_permission()
 {
   STS::STSService _sts(s->cct, store, s->user->user_id, s->auth.identity.get());
@@ -54,9 +141,13 @@ int RGWREST_STS::verify_permission()
   try {
     const rgw::IAM::Policy p(s->cct, s->user->user_id.tenant, bl);
     //Check if the input role arn is there as one of the Principals in the policy,
-  // If yes, then return 0, else -EPERM
-    auto res = p.eval_principal(s->env, *s->auth.identity);
-    if (res == rgw::IAM::Effect::Deny) {
+    // If yes, then return 0, else -EPERM
+    auto p_res = p.eval_principal(s->env, *s->auth.identity);
+    if (p_res == rgw::IAM::Effect::Deny) {
+      return -EPERM;
+    }
+    auto c_res = p.eval_conditions(s->env);
+    if (c_res == rgw::IAM::Effect::Deny) {
       return -EPERM;
     }
   } catch (rgw::IAM::PolicyParseException& e) {
@@ -120,6 +211,66 @@ void RGWSTSGetSessionToken::execute()
   }
 }
 
+int RGWSTSAssumeRoleWithWebIdentity::get_params()
+{
+  duration = s->info.args.get("DurationSeconds");
+  providerId = s->info.args.get("ProviderId");
+  policy = s->info.args.get("Policy");
+  roleArn = s->info.args.get("RoleArn");
+  roleSessionName = s->info.args.get("RoleSessionName");
+  iss = s->info.args.get("provider_id");
+  sub = s->info.args.get("sub");
+  aud = s->info.args.get("aud");
+
+  if (roleArn.empty() || roleSessionName.empty() || sub.empty() || aud.empty()) {
+    ldout(s->cct, 20) << "ERROR: one of role arn or role session name or token is empty" << dendl;
+    return -EINVAL;
+  }
+
+  if (! policy.empty()) {
+    bufferlist bl = bufferlist::static_from_string(policy);
+    try {
+      const rgw::IAM::Policy p(s->cct, s->user->user_id.tenant, bl);
+    }
+    catch (rgw::IAM::PolicyParseException& e) {
+      ldout(s->cct, 20) << "failed to parse policy: " << e.what() << "policy" << policy << dendl;
+      return -ERR_MALFORMED_DOC;
+    }
+  }
+
+  return 0;
+}
+
+void RGWSTSAssumeRoleWithWebIdentity::execute()
+{
+  if (op_ret = get_params(); op_ret < 0) {
+    return;
+  }
+
+  STS::AssumeRoleWithWebIdentityRequest req(duration, providerId, policy, roleArn,
+                        roleSessionName, iss, sub, aud);
+  STS::AssumeRoleWithWebIdentityResponse response = sts.assumeRoleWithWebIdentity(req);
+  op_ret = std::move(response.assumeRoleResp.retCode);
+
+  //Dump the output
+  if (op_ret == 0) {
+    s->formatter->open_object_section("AssumeRoleWithWebIdentityResponse");
+    s->formatter->open_object_section("AssumeRoleWithWebIdentityResult");
+    encode_json("SubjectFromWebIdentityToken", response.sub , s->formatter);
+    encode_json("Audience", response.aud , s->formatter);
+    s->formatter->open_object_section("AssumedRoleUser");
+    response.assumeRoleResp.user.dump(s->formatter);
+    s->formatter->close_section();
+    s->formatter->open_object_section("Credentials");
+    response.assumeRoleResp.creds.dump(s->formatter);
+    s->formatter->close_section();
+    encode_json("Provider", response.providerId , s->formatter);
+    encode_json("PackedPolicySize", response.assumeRoleResp.packedPolicySize , s->formatter);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
+
 int RGWSTSAssumeRole::get_params()
 {
   duration = s->info.args.get("DurationSeconds");
@@ -157,25 +308,33 @@ void RGWSTSAssumeRole::execute()
 
   STS::AssumeRoleRequest req(duration, externalId, policy, roleArn,
                         roleSessionName, serialNumber, tokenCode);
-  const auto& [ret, assumedRoleUser, creds, packedPolicySize] = sts.assumeRole(req);
-  op_ret = std::move(ret);
+  STS::AssumeRoleResponse response = sts.assumeRole(req);
+  op_ret = std::move(response.retCode);
   //Dump the output
   if (op_ret == 0) {
     s->formatter->open_object_section("AssumeRoleResponse");
     s->formatter->open_object_section("AssumeRoleResult");
     s->formatter->open_object_section("Credentials");
-    creds.dump(s->formatter);
+    response.creds.dump(s->formatter);
     s->formatter->close_section();
     s->formatter->open_object_section("AssumedRoleUser");
-    assumedRoleUser.dump(s->formatter);
+    response.user.dump(s->formatter);
     s->formatter->close_section();
-    encode_json("PackedPolicySize", packedPolicySize , s->formatter);
+    encode_json("PackedPolicySize", response.packedPolicySize , s->formatter);
     s->formatter->close_section();
     s->formatter->close_section();
   }
 }
 
-RGWOp *RGWHandler_REST_STS::op_post()
+int RGW_Auth_STS::authorize(const DoutPrefixProvider *dpp,
+                            RGWRados *store,
+                            const rgw::auth::StrategyRegistry& auth_registry,
+                            struct req_state *s)
+{
+    return rgw::auth::Strategy::apply(dpp, auth_registry.get_sts(), s);
+}
+
+void RGWHandler_REST_STS::rgw_sts_parse_input()
 {
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
 
@@ -203,6 +362,11 @@ RGWOp *RGWHandler_REST_STS::op_post()
        }
     }
   }
+}
+
+RGWOp *RGWHandler_REST_STS::op_post()
+{
+  rgw_sts_parse_input();
 
   if (s->info.args.exists("Action"))    {
     string action = s->info.args.get("Action");
@@ -210,6 +374,8 @@ RGWOp *RGWHandler_REST_STS::op_post()
       return new RGWSTSAssumeRole;
     } else if (action == "GetSessionToken") {
       return new RGWSTSGetSessionToken;
+    } else if (action == "AssumeRoleWithWebIdentity") {
+      return new RGWSTSAssumeRoleWithWebIdentity;
     }
   }
 
@@ -228,6 +394,14 @@ int RGWHandler_REST_STS::init(RGWRados *store,
   }
 
   return RGWHandler_REST::init(store, s, cio);
+}
+
+int RGWHandler_REST_STS::authorize(const DoutPrefixProvider* dpp)
+{
+  if (s->info.args.exists("Action") && s->info.args.get("Action") == "AssumeRoleWithWebIdentity") {
+    return RGW_Auth_STS::authorize(dpp, store, auth_registry, s);
+  }
+  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s);
 }
 
 int RGWHandler_REST_STS::init_from_header(struct req_state* s,
