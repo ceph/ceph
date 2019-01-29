@@ -6722,7 +6722,7 @@ std::vector<Option> get_rgw_options() {
     .add_see_also("rgw_frontends"),
 
     Option("rgw_scheduler_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("none")
+    .set_default("throttler")
     .set_description("Set the type of dmclock scheduler, defaults to none "
 		     "Other valid values are dmclock and throttler (valid only for beast)"),
 
