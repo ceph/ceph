@@ -654,7 +654,7 @@ private:
 
 void get_peer_add_arguments(po::options_description *positional,
                             po::options_description *options) {
-  at::add_pool_options(positional, options);
+  at::add_pool_options(positional, options, false);
   positional->add_options()
     ("remote-cluster-spec", "remote cluster spec\n"
      "(example: [<client name>@]<cluster name>)");
@@ -668,13 +668,18 @@ void get_peer_add_arguments(po::options_description *positional,
 
 int execute_peer_add(const po::variables_map &vm,
                      const std::vector<std::string> &ceph_global_init_args) {
+  std::string pool_name;
   size_t arg_index = 0;
-  std::string pool_name = utils::get_pool_name(vm, &arg_index);
+  int r = utils::get_pool_and_namespace_names(vm, true, true, &pool_name,
+                                              nullptr, &arg_index);
+  if (r < 0) {
+    return r;
+  }
 
   std::string remote_client_name = g_ceph_context->_conf->name.to_str();
   std::string remote_cluster;
   std::map<std::string, std::string> attributes;
-  int r = get_remote_cluster_spec(
+  r = get_remote_cluster_spec(
     vm, utils::get_positional_argument(vm, arg_index),
     &remote_client_name, &remote_cluster, &attributes);
   if (r < 0) {
@@ -728,17 +733,22 @@ int execute_peer_add(const po::variables_map &vm,
 
 void get_peer_remove_arguments(po::options_description *positional,
                                po::options_description *options) {
-  at::add_pool_options(positional, options);
+  at::add_pool_options(positional, options, false);
   add_uuid_option(positional);
 }
 
 int execute_peer_remove(const po::variables_map &vm,
                         const std::vector<std::string> &ceph_global_init_args) {
+  std::string pool_name;
   size_t arg_index = 0;
-  std::string pool_name = utils::get_pool_name(vm, &arg_index);
+  int r = utils::get_pool_and_namespace_names(vm, true, true, &pool_name,
+                                              nullptr, &arg_index);
+  if (r < 0) {
+    return r;
+  }
 
   std::string uuid;
-  int r = get_uuid(vm, arg_index, &uuid);
+  r = get_uuid(vm, arg_index, &uuid);
   if (r < 0) {
     return r;
   }
@@ -767,7 +777,7 @@ int execute_peer_remove(const po::variables_map &vm,
 
 void get_peer_set_arguments(po::options_description *positional,
                             po::options_description *options) {
-  at::add_pool_options(positional, options);
+  at::add_pool_options(positional, options, false);
   add_uuid_option(positional);
   positional->add_options()
     ("key", "peer parameter [client, cluster, mon-host, key-file]")
@@ -776,11 +786,16 @@ void get_peer_set_arguments(po::options_description *positional,
 
 int execute_peer_set(const po::variables_map &vm,
                      const std::vector<std::string> &ceph_global_init_args) {
+  std::string pool_name;
   size_t arg_index = 0;
-  std::string pool_name = utils::get_pool_name(vm, &arg_index);
+  int r = utils::get_pool_and_namespace_names(vm, true, true, &pool_name,
+                                              nullptr, &arg_index);
+  if (r < 0) {
+    return r;
+  }
 
   std::string uuid;
-  int r = get_uuid(vm, arg_index++, &uuid);
+  r = get_uuid(vm, arg_index++, &uuid);
   if (r < 0) {
     return r;
   }
@@ -847,12 +862,12 @@ int execute_peer_set(const po::variables_map &vm,
 
 void get_disable_arguments(po::options_description *positional,
                            po::options_description *options) {
-  at::add_pool_options(positional, options);
+  at::add_pool_options(positional, options, false);
 }
 
 void get_enable_arguments(po::options_description *positional,
                           po::options_description *options) {
-  at::add_pool_options(positional, options);
+  at::add_pool_options(positional, options, false);
   positional->add_options()
     ("mode", "mirror mode [image or pool]");
 }
@@ -905,8 +920,13 @@ int execute_enable_disable(const std::string &pool_name,
 
 int execute_disable(const po::variables_map &vm,
                     const std::vector<std::string> &ceph_global_init_args) {
+  std::string pool_name;
   size_t arg_index = 0;
-  std::string pool_name = utils::get_pool_name(vm, &arg_index);
+  int r = utils::get_pool_and_namespace_names(vm, true, true, &pool_name,
+                                              nullptr, &arg_index);
+  if (r < 0) {
+    return r;
+  }
 
   return execute_enable_disable(pool_name, RBD_MIRROR_MODE_DISABLED,
                                 "disabled");
@@ -914,8 +934,13 @@ int execute_disable(const po::variables_map &vm,
 
 int execute_enable(const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
+  std::string pool_name;
   size_t arg_index = 0;
-  std::string pool_name = utils::get_pool_name(vm, &arg_index);
+  int r = utils::get_pool_and_namespace_names(vm, true, true, &pool_name,
+                                              nullptr, &arg_index);
+  if (r < 0) {
+    return r;
+  }
 
   rbd_mirror_mode_t mirror_mode;
   std::string mode = utils::get_positional_argument(vm, arg_index++);
@@ -933,7 +958,7 @@ int execute_enable(const po::variables_map &vm,
 
 void get_info_arguments(po::options_description *positional,
                         po::options_description *options) {
-  at::add_pool_options(positional, options);
+  at::add_pool_options(positional, options, false);
   at::add_format_options(options);
   options->add_options()
     (ALL_NAME.c_str(), po::bool_switch(), "list all attributes");
@@ -941,11 +966,16 @@ void get_info_arguments(po::options_description *positional,
 
 int execute_info(const po::variables_map &vm,
                  const std::vector<std::string> &ceph_global_init_args) {
+  std::string pool_name;
   size_t arg_index = 0;
-  std::string pool_name = utils::get_pool_name(vm, &arg_index);
+  int r = utils::get_pool_and_namespace_names(vm, true, false, &pool_name,
+                                              nullptr, &arg_index);
+  if (r < 0) {
+    return r;
+  }
 
   at::Format::Formatter formatter;
-  int r = utils::get_formatter(vm, &formatter);
+  r = utils::get_formatter(vm, &formatter);
   if (r < 0) {
     return r;
   }
@@ -1010,18 +1040,23 @@ int execute_info(const po::variables_map &vm,
 
 void get_status_arguments(po::options_description *positional,
 			  po::options_description *options) {
-  at::add_pool_options(positional, options);
+  at::add_pool_options(positional, options, false);
   at::add_format_options(options);
   at::add_verbose_option(options);
 }
 
 int execute_status(const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
+  std::string pool_name;
   size_t arg_index = 0;
-  std::string pool_name = utils::get_pool_name(vm, &arg_index);
+  int r = utils::get_pool_and_namespace_names(vm, true, false, &pool_name,
+                                              nullptr, &arg_index);
+  if (r < 0) {
+    return r;
+  }
 
   at::Format::Formatter formatter;
-  int r = utils::get_formatter(vm, &formatter);
+  r = utils::get_formatter(vm, &formatter);
   if (r < 0) {
     return r;
   }
@@ -1150,18 +1185,23 @@ void get_promote_arguments(po::options_description *positional,
   options->add_options()
     ("force", po::bool_switch(),
      "promote even if not cleanly demoted by remote cluster");
-  at::add_pool_options(positional, options);
+  at::add_pool_options(positional, options, false);
 }
 
 int execute_promote(const po::variables_map &vm,
                     const std::vector<std::string> &ceph_global_init_args) {
+  std::string pool_name;
   size_t arg_index = 0;
-  std::string pool_name = utils::get_pool_name(vm, &arg_index);
+  int r = utils::get_pool_and_namespace_names(vm, true, true, &pool_name,
+                                              nullptr, &arg_index);
+  if (r < 0) {
+    return r;
+  }
 
   // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  int r = utils::init(pool_name, "", &rados, &io_ctx);
+  r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -1184,18 +1224,23 @@ int execute_promote(const po::variables_map &vm,
 
 void get_demote_arguments(po::options_description *positional,
 			   po::options_description *options) {
-  at::add_pool_options(positional, options);
+  at::add_pool_options(positional, options, false);
 }
 
 int execute_demote(const po::variables_map &vm,
                    const std::vector<std::string> &ceph_global_init_args) {
+  std::string pool_name;
   size_t arg_index = 0;
-  std::string pool_name = utils::get_pool_name(vm, &arg_index);
+  int r = utils::get_pool_and_namespace_names(vm, true, true, &pool_name,
+                                              nullptr, &arg_index);
+  if (r < 0) {
+    return r;
+  }
 
   // TODO support namespaces
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  int r = utils::init(pool_name, "", &rados, &io_ctx);
+  r = utils::init(pool_name, "", &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
