@@ -123,12 +123,8 @@ class SocketConnection : public Connection {
   seastar::future<> handle_tags();
   seastar::future<> handle_ack();
 
-  seastar::future<> write_event(MessageRef msg=nullptr);
-
-  /// becomes available when handshake completes, and when all previous messages
-  /// have been sent to the output stream. send() chains new messages as
-  /// continuations to this future to act as a queue
-  seastar::future<> send_ready = seastar::now();
+  bool write_dispatching = false;
+  void write_event();
 
   /// encode/write a message
   seastar::future<> write_message(MessageRef msg);
