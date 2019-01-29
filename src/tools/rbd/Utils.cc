@@ -168,36 +168,50 @@ std::string get_default_pool_name() {
   return g_ceph_context->_conf.get_val<std::string>("rbd_default_pool");
 }
 
-std::string get_pool_name(const po::variables_map &vm, size_t *arg_index) {
-  std::string pool_name;
+int get_pool_and_namespace_names(
+    const boost::program_options::variables_map &vm,
+    bool default_empty_pool_name, bool validate_pool_name,
+    std::string* pool_name, std::string* namespace_name, size_t *arg_index) {
+  if (namespace_name != nullptr && vm.count(at::NAMESPACE_NAME)) {
+    *namespace_name = vm[at::NAMESPACE_NAME].as<std::string>();
+  }
+
   if (vm.count(at::POOL_NAME)) {
-    pool_name = vm[at::POOL_NAME].as<std::string>();
+    *pool_name = vm[at::POOL_NAME].as<std::string>();
   } else {
-    pool_name = get_positional_argument(vm, *arg_index);
-    if (!pool_name.empty()) {
-       ++(*arg_index);
+    *pool_name = get_positional_argument(vm, *arg_index);
+    if (!pool_name->empty()) {
+      if (namespace_name != nullptr) {
+        auto slash_pos = pool_name->find_last_of('/');
+        if (slash_pos != std::string::npos) {
+          *namespace_name = pool_name->substr(slash_pos + 1);
+        }
+        *pool_name = pool_name->substr(0, slash_pos);
+      }
+      ++(*arg_index);
     }
   }
 
-  if (pool_name.empty()) {
-    pool_name = get_default_pool_name();
-  }
-  return pool_name;
-}
-
-std::string get_namespace_name(const boost::program_options::variables_map &vm,
-                               size_t *arg_index) {
-  std::string namespace_name;
-  if (vm.count(at::NAMESPACE_NAME)) {
-    namespace_name = vm[at::NAMESPACE_NAME].as<std::string>();
-  } else if (arg_index != nullptr) {
-    namespace_name = get_positional_argument(vm, *arg_index);
-    if (!namespace_name.empty()) {
-       ++(*arg_index);
-    }
+  if (default_empty_pool_name && pool_name->empty()) {
+    *pool_name = get_default_pool_name();
   }
 
-  return namespace_name;
+  if (!g_ceph_context->_conf.get_val<bool>("rbd_validate_names")) {
+    validate_pool_name = false;
+  }
+
+  if (validate_pool_name &&
+      pool_name->find_first_of("/@") != std::string::npos) {
+    std::cerr << "rbd: invalid pool '" << *pool_name << "'" << std::endl;
+    return -EINVAL;
+  } else if (namespace_name != nullptr &&
+             namespace_name->find_first_of("/@") != std::string::npos) {
+    std::cerr << "rbd: invalid namespace '" << *namespace_name << "'"
+              << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
 }
 
 int get_pool_image_id(const po::variables_map &vm,

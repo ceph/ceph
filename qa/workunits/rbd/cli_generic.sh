@@ -631,10 +631,10 @@ test_namespace() {
     remove_images
 
     rbd namespace ls | wc -l | grep '^0$'
-    rbd namespace create rbd test1
-    rbd namespace create --pool rbd test2
+    rbd namespace create rbd/test1
+    rbd namespace create --pool rbd --namespace test2
     rbd namespace create --namespace test3
-    expect_fail rbd namespace create rbd test3
+    expect_fail rbd namespace create rbd/test3
 
     rbd namespace list | grep 'test' | wc -l | grep '^3$'
 
@@ -662,7 +662,7 @@ test_namespace() {
     rbd rm rbd/image2
 
     rbd create $RBD_CREATE_ARGS --size 1G --namespace test1 image2
-    expect_fail rbd namespace remove --pool rbd test1
+    expect_fail rbd namespace remove rbd/test1
 
     rbd group create rbd/test1/group1
     rbd group image add rbd/test1/group1 rbd/test1/image1
@@ -674,11 +674,11 @@ test_namespace() {
 
     rbd remove rbd/test1/image2
 
-    rbd namespace remove --pool rbd test1
+    rbd namespace remove --pool rbd --namespace test1
     rbd namespace remove --namespace test3
 
     rbd namespace list | grep 'test' | wc -l | grep '^1$'
-    rbd namespace remove rbd test2
+    rbd namespace remove rbd/test2
 }
 
 get_migration_state() {
@@ -725,8 +725,8 @@ test_migration() {
     rbd migration commit test1
 
     # Migration to other namespace
-    rbd namespace create rbd2 ns1
-    rbd namespace create rbd2 ns2
+    rbd namespace create rbd2/ns1
+    rbd namespace create rbd2/ns2
     rbd migration prepare rbd2/test1 rbd2/ns1/test1
     test "$(get_migration_state rbd2/ns1/test1)" = prepared
     rbd migration execute rbd2/test1

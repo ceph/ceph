@@ -79,7 +79,7 @@ setup()
     dd if=/dev/urandom of=${DATA} bs=1M count=${SIZE}
     ceph osd pool create ${POOL} 32
 
-    rbd namespace create ${POOL} ${NS}
+    rbd namespace create ${POOL}/${NS}
     for ns in '' ${NS}; do
         rbd --dest-pool ${POOL} --dest-namespace "${ns}" --no-progress import \
             ${DATA} ${IMAGE}
