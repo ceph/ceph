@@ -263,6 +263,8 @@ private:
    */
   mon_feature_t quorum_mon_features;
 
+  int quorum_min_mon_release = -1;
+
   set<string> outside_quorum;
 
   /**
@@ -614,10 +616,12 @@ public:
   void win_election(epoch_t epoch, set<int>& q,
 		    uint64_t features,
                     const mon_feature_t& mon_features,
+		    int min_mon_release,
 		    const map<int,Metadata>& metadata);
   void lose_election(epoch_t epoch, set<int>& q, int l,
 		     uint64_t features,
-                     const mon_feature_t& mon_features);
+                     const mon_feature_t& mon_features,
+		     int min_mon_release);
   // end election (called by Elector)
   void finish_election();
 
