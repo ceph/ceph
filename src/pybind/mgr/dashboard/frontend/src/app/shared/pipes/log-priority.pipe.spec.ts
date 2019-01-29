@@ -1,34 +1,32 @@
-import { LogColorPipe } from './log-color.pipe';
+import { LogPriorityPipe } from './log-priority.pipe';
 
-describe('LogColorPipe', () => {
-  const pipe = new LogColorPipe();
+describe('LogPriorityPipe', () => {
+  const pipe = new LogPriorityPipe();
 
   it('create an instance', () => {
     expect(pipe).toBeTruthy();
   });
 
   it('transforms "INF"', () => {
-    const value = { priority: '[INF]' };
-    expect(pipe.transform(value)).toBe('');
+    const value = '[INF]';
+    const result = 'info';
+    expect(pipe.transform(value)).toEqual(result);
   });
 
   it('transforms "WRN"', () => {
-    const value = { priority: '[WRN]' };
-    const result = {
-      color: '#ffa500',
-      'font-weight': 'bold'
-    };
+    const value = '[WRN]';
+    const result = 'warn';
     expect(pipe.transform(value)).toEqual(result);
   });
 
   it('transforms "ERR"', () => {
-    const value = { priority: '[ERR]' };
-    const result = { color: '#FF2222' };
+    const value = '[ERR]';
+    const result = 'err';
     expect(pipe.transform(value)).toEqual(result);
   });
 
   it('transforms others', () => {
-    const value = { priority: '[foo]' };
+    const value = '[foo]';
     expect(pipe.transform(value)).toBe('');
   });
 });
