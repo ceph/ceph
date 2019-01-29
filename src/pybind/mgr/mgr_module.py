@@ -10,36 +10,37 @@ import rados
 import time
 
 PG_STATES = [
-        "active",
-        "clean",
-        "down",
-        "recovery_unfound",
-        "backfill_unfound",
-        "scrubbing",
-        "degraded",
-        "inconsistent",
-        "peering",
-        "repair",
-        "recovering",
-        "forced_recovery",
-        "backfill_wait",
-        "incomplete",
-        "stale",
-        "remapped",
-        "deep",
-        "backfilling",
-        "forced_backfill",
-        "backfill_toofull",
-        "recovery_wait",
-        "recovery_toofull",
-        "undersized",
-        "activating",
-        "peered",
-        "snaptrim",
-        "snaptrim_wait",
-        "snaptrim_error",
-        "creating",
-        "unknown"]
+    "active",
+    "clean",
+    "down",
+    "recovery_unfound",
+    "backfill_unfound",
+    "scrubbing",
+    "degraded",
+    "inconsistent",
+    "peering",
+    "repair",
+    "recovering",
+    "forced_recovery",
+    "backfill_wait",
+    "incomplete",
+    "stale",
+    "remapped",
+    "deep",
+    "backfilling",
+    "forced_backfill",
+    "backfill_toofull",
+    "recovery_wait",
+    "recovery_toofull",
+    "undersized",
+    "activating",
+    "peered",
+    "snaptrim",
+    "snaptrim_wait",
+    "snaptrim_error",
+    "creating",
+    "unknown"]
+
 
 class CPlusPlusHandler(logging.Handler):
     def __init__(self, module_inst):
@@ -62,7 +63,6 @@ class CPlusPlusHandler(logging.Handler):
 def configure_logger(module_inst, name):
     logger = logging.getLogger(name)
 
-
     # Don't filter any logs at the python level, leave it to C++
     logger.setLevel(logging.DEBUG)
 
@@ -76,14 +76,17 @@ def configure_logger(module_inst, name):
 
 def unconfigure_logger(module_inst, name):
     logger = logging.getLogger(name)
-    rm_handlers = [h for h in logger.handlers if isinstance(h, CPlusPlusHandler)]
+    rm_handlers = [
+        h for h in logger.handlers if isinstance(h, CPlusPlusHandler)]
     for h in rm_handlers:
         logger.removeHandler(h)
+
 
 class CommandResult(object):
     """
     Use with MgrModule.send_command
     """
+
     def __init__(self, tag=None):
         self.ev = threading.Event()
         self.outs = ""
@@ -160,7 +163,9 @@ class OSDMap(ceph_module.BasePyOSDMap):
         return self._get_pools_by_take(take).get('pools', [])
 
     def calc_pg_upmaps(self, inc,
-                       max_deviation=.01, max_iterations=10, pools=[]):
+                       max_deviation=.01, max_iterations=10, pools=None):
+        if pools is None:
+            pools = []
         return self._calc_pg_upmaps(
             inc,
             max_deviation, max_iterations, pools)
@@ -219,7 +224,7 @@ class CRUSHMap(ceph_module.BasePyCRUSH):
 
     def get_take_weight_osd_map(self, root):
         uglymap = self._get_take_weight_osd_map(root)
-        return { int(k): v for k, v in six.iteritems(uglymap.get('weights', {})) }
+        return {int(k): v for k, v in six.iteritems(uglymap.get('weights', {}))}
 
     @staticmethod
     def have_default_choose_args(dump):
@@ -429,6 +434,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
             r = default
         return r
 
+
 class MgrModule(ceph_module.BaseMgrModule):
     COMMANDS = []
     MODULE_OPTIONS = []
@@ -613,14 +619,16 @@ class MgrModule(ceph_module.BaseMgrModule):
         elif unit == self.BYTES:
             return "B/s"
 
-    def to_pretty_iec(self, n):
+    @staticmethod
+    def to_pretty_iec(n):
         for bits, suffix in [(60, 'Ei'), (50, 'Pi'), (40, 'Ti'), (30, 'Gi'),
-                (20, 'Mi'), (10, 'Ki')]:
+                             (20, 'Mi'), (10, 'Ki')]:
             if n > 10 << bits:
                 return str(n >> bits) + ' ' + suffix
         return str(n) + ' '
 
-    def get_pretty_row(self, elems, width):
+    @staticmethod
+    def get_pretty_row(elems, width):
         """
         Takes an array of elements and returns a string with those elements
         formatted as a table row. Useful for polling modules.
@@ -673,7 +681,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         This is information that ceph-mgr has gleaned from the daemon metadata
         reported by daemons running on a particular server.
 
-        :param hostname: a hostame
+        :param hostname: a hostname
         """
         return self._ceph_get_server(hostname)
 
@@ -722,7 +730,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         Like ``get_server``, but gives information about all servers (i.e. all
         unique hostnames that have been mentioned in daemon metadata)
 
-        :return: a list of infomration about all servers
+        :return: a list of information about all servers
         :rtype: list
         """
         return self._ceph_get_server(None)
@@ -869,8 +877,8 @@ class MgrModule(ceph_module.BaseMgrModule):
         in their schema.
         """
         if key not in [o['name'] for o in self.MODULE_OPTIONS]:
-            raise RuntimeError("Config option '{0}' is not in {1}.MODULE_OPTIONS".\
-                    format(key, self.__class__.__name__))
+            raise RuntimeError("Config option '{0}' is not in {1}.MODULE_OPTIONS".
+                               format(key, self.__class__.__name__))
 
     def _get_module_option(self, key, default):
         r = self._ceph_get_module_option(key)
@@ -885,6 +893,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         Retrieve the value of a persistent configuration setting
 
         :param str key:
+        :param str default:
         :return: str
         """
         self._validate_module_option(key)
@@ -967,7 +976,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         Set localized configuration for this ceph-mgr instance
         :param str key:
-        :param str default:
+        :param str val:
         :return: str
         """
         self._validate_module_option(key)
@@ -999,7 +1008,6 @@ class MgrModule(ceph_module.BaseMgrModule):
     def set_localized_store(self, key, val):
         return self._set_localized(key, val, self.set_store)
 
-
     def self_test(self):
         """
         Run a self-test on the module. Override this function and implement
@@ -1023,18 +1031,20 @@ class MgrModule(ceph_module.BaseMgrModule):
         return self._ceph_get_osdmap()
 
     def get_latest(self, daemon_type, daemon_name, counter):
-        data = self.get_latest_counter(daemon_type, daemon_name, counter)[counter]
+        data = self.get_latest_counter(
+            daemon_type, daemon_name, counter)[counter]
         if data:
             return data[1]
         else:
             return 0
 
     def get_latest_avg(self, daemon_type, daemon_name, counter):
-        data = self.get_latest_counter(daemon_type, daemon_name, counter)[counter]
+        data = self.get_latest_counter(
+            daemon_type, daemon_name, counter)[counter]
         if data:
-            return (data[1], data[2])
+            return data[1], data[2]
         else:
-            return (0, 0)
+            return 0, 0
 
     def get_all_perf_counters(self, prio_limit=PRIO_USEFUL,
                               services=("mds", "mon", "osd",
@@ -1053,7 +1063,6 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         result = defaultdict(dict)
 
-
         for server in self.list_servers():
             for service in server['services']:
                 if service['type'] not in services:
@@ -1068,7 +1077,8 @@ class MgrModule(ceph_module.BaseMgrModule):
 
                 # Value is returned in a potentially-multi-service format,
                 # get just the service we're asking about
-                svc_full_name = "{0}.{1}".format(service['type'], service['id'])
+                svc_full_name = "{0}.{1}".format(
+                    service['type'], service['id'])
                 schema = schema[svc_full_name]
 
                 # Populate latest values
