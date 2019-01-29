@@ -37,6 +37,11 @@ public:
 				   uint64_t offset,
 				   size_t len,
 				   uint32_t op_flags = 0);
+  using omap_values_t = std::map<std::string,bufferlist, std::less<>>;
+  seastar::future<omap_values_t> omap_get_values(
+    CollectionRef c,
+    const ghobject_t& oid,
+    std::vector<std::string>&& keys);
   CollectionRef create_new_collection(const coll_t& cid);
   CollectionRef open_collection(const coll_t& cid);
   std::vector<coll_t> list_collections();

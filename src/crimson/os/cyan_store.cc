@@ -152,6 +152,26 @@ seastar::future<bufferlist> CyanStore::read(CollectionRef c,
   return seastar::make_ready_future<bufferlist>(std::move(bl));
 }
 
+seastar::future<CyanStore::omap_values_t>
+CyanStore::omap_get_values(CollectionRef c,
+                           const ghobject_t& oid,
+                           std::vector<std::string>&& keys)
+{
+  logger().info("{} {} {}",
+                __func__, c->cid, oid);
+  auto o = c->get_object(oid);
+  if (!o) {
+    throw std::runtime_error(fmt::format("object does not exist: {}", oid));
+  }
+  omap_values_t values;
+  for (auto& key : keys) {
+    if (auto found = o->omap.find(key); found != o->omap.end()) {
+      values.insert(*found);
+    }
+  }
+  return seastar::make_ready_future<omap_values_t>(std::move(values));
+}
+
 seastar::future<> CyanStore::do_transaction(CollectionRef ch,
                                             Transaction&& t)
 {
