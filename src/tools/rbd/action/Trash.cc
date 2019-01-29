@@ -84,7 +84,7 @@ int execute_move(const po::variables_map &vm,
     }
   }
 
-  time_t dt = exp_time.sec() - now.sec();
+  time_t dt = (exp_time - now).sec();
   if(dt < 0) {
     std::cerr << "rbd: cannot use a date in the past as an expiration date"
               << std::endl;
