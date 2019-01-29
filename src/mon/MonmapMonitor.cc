@@ -47,6 +47,7 @@ void MonmapMonitor::create_initial()
   } else {
     // initialize with default persistent features for new clusters
     pending_map.persistent_features = ceph::features::mon::get_persistent();
+    pending_map.min_mon_release = ceph_release();
   }
 }
 
