@@ -29,8 +29,9 @@ void usage()
        << "        [--add name 1.2.3.4:567] [--rm name]\n"
        << "        [--feature-list [plain|parseable]]\n"
        << "        [--feature-set <value> [--optional|--persistent]]\n"
-       << "        [--feature-unset <value> [--optional|--persistent]] "
-       << "<mapfilename>"
+       << "        [--feature-unset <value> [--optional|--persistent]]\n"
+       << "        [--set-min-mon-release <release-major-number>]\n"
+       << "        <mapfilename>"
        << std::endl;
 }
 
@@ -193,6 +194,7 @@ int main(int argc, const char **argv)
   bool show_features = false;
   bool generate = false;
   bool filter = false;
+  int min_mon_release = -1;
   map<string,entity_addr_t> add;
   map<string,entity_addrvec_t> addv;
   list<string> rm;
@@ -218,6 +220,9 @@ int main(int argc, const char **argv)
       generate = true;
     } else if (ceph_argparse_flag(args, i, "--set-initial-members", (char*)NULL)) {
       filter = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--set-min-mon-release",
+				     (char*)NULL)) {
+      min_mon_release = atoi(val.c_str());
     } else if (ceph_argparse_flag(args, i, "--add", (char*)NULL)) {
       string name = *i;
       i = args.erase(i);
@@ -352,6 +357,12 @@ int main(int argc, const char **argv)
     int r = monmap.build_initial(g_ceph_context, true, cerr);
     if (r < 0)
       return r;
+  }
+
+  if (min_mon_release >= 0) {
+    monmap.min_mon_release = min_mon_release;
+    cout << "setting min_mon_release = " << min_mon_release << std::endl;
+    modified = true;
   }
 
   if (filter) {
