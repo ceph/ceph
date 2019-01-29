@@ -144,8 +144,13 @@ OSD management
 .. automethod:: Orchestrator.create_osds
 .. automethod:: Orchestrator.replace_osds
 .. automethod:: Orchestrator.remove_osds
+
 .. autoclass:: DeviceSelection
+   :members:
+
 .. autoclass:: DriveGroupSpec
+   :members:
+   :exclude-members: from_json
 
 Upgrades
 --------
