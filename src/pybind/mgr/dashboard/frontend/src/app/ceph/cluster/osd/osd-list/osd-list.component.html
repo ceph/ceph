@@ -14,23 +14,35 @@
                           [tableActions]="tableActions">
         </cd-table-actions>
 
-        <button class="btn btn-sm btn-default btn-label tc_configureCluster"
-                type="button"
-                (click)="configureClusterAction()">
-          <i class="fa fa-fw fa-cog"
-             aria-hidden="true">
-          </i>
-          <ng-container i18n>Set Cluster-wide Flags</ng-container>
-        </button>
-
-        <button class="btn btn-sm btn-default btn-label tc_configureCluster"
-                type="button"
-                (click)="configureQosParamsAction()">
-          <i class="fa fa-fw fa-cog"
-             aria-hidden="true">
-          </i>
-          <ng-container i18n>Set Cluster-wide Recovery Priority</ng-container>
-        </button>
+        <div class="btn-group"
+             dropdown>
+          <button type="button"
+                  class="btn btn-sm btn-default btn-label tc_configureCluster"
+                  (click)="configureClusterAction()">
+            <i class="fa fa-fw fa-cog"
+               aria-hidden="true">
+            </i>
+            <ng-container i18n>Set Cluster-wide Flags</ng-container>
+          </button>
+          <button type="button"
+                  dropdownToggle
+                  class="btn btn-sm btn-default dropdown-toggle dropdown-toggle-split">
+            <span class="caret caret-black"></span>
+          </button>
+          <ul *dropdownMenu
+              class="dropdown-menu"
+              role="menu">
+            <li role="menuitem">
+              <a class="dropdown-item"
+                 (click)="configureQosParamsAction()">
+                <i class="fa fa-fw fa-cog"
+                   aria-hidden="true">
+                </i>
+                <ng-container i18n>Set Cluster-wide Recovery Priority</ng-container>
+              </a>
+            </li>
+          </ul>
+        </div>
       </div>
 
       <cd-osd-details cdTableDetail
