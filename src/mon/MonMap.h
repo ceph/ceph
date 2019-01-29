@@ -131,6 +131,9 @@ class MonMap {
     return (persistent_features | optional_features);
   }
 
+  // upgrade gate
+  uint8_t min_mon_release = 0;
+
   void _add_ambiguous_addr(const string& name,
 			   entity_addr_t addr,
 			   int priority,
