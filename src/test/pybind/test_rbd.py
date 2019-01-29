@@ -1117,6 +1117,10 @@ class TestImage(object):
             for option in image.config_list():
                 eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
 
+    def test_sparsify(self):
+        assert_raises(InvalidArgument, self.image.sparsify, 16)
+        self.image.sparsify(4096)
+
 class TestImageId(object):
 
     def setUp(self):
