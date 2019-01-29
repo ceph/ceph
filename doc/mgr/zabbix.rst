@@ -114,7 +114,7 @@ This can be done with this command:
 
 The module will now send its latest data to the Zabbix server.
 
-Items discovery is accomplished also via sabbix_sender, and runs every `discovery_interval * interval` seconds. If you wish to launch discovery 
+Items discovery is accomplished also via zabbix_sender, and runs every `discovery_interval * interval` seconds. If you wish to launch discovery 
 manually, this can be done with this command:
 
 ::

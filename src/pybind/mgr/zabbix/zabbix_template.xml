@@ -2025,18 +2025,14 @@
                             <port/>
                             <description/>
                             <inventory_link>0</inventory_link>
-                            <applications>
-                                <application>
-                                    <name>Ceph</name>
-                                </application>
-                            </applications>
+                            <applications/>
                             <valuemap/>
                             <logtimefmt/>
                             <preprocessing/>
                             <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
-                                    <name>Ceph {#CRUSH_RULE}</name>
+                                    <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
                             <master_item_prototype/>
@@ -2074,18 +2070,14 @@
                             <port/>
                             <description/>
                             <inventory_link>0</inventory_link>
-                            <applications>
-                                <application>
-                                    <name>Ceph</name>
-                                </application>
-                            </applications>
+                            <applications/>
                             <valuemap/>
                             <logtimefmt/>
                             <preprocessing/>
                             <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
-                                    <name>Ceph {#CRUSH_RULE}</name>
+                                    <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
                             <master_item_prototype/>
@@ -2123,18 +2115,14 @@
                             <port/>
                             <description/>
                             <inventory_link>0</inventory_link>
-                            <applications>
-                                <application>
-                                    <name>Ceph</name>
-                                </application>
-                            </applications>
+                            <applications/>
                             <valuemap/>
                             <logtimefmt/>
                             <preprocessing/>
                             <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
-                                    <name>Ceph {#CRUSH_RULE}</name>
+                                    <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
                             <master_item_prototype/>
@@ -2172,18 +2160,14 @@
                             <port/>
                             <description/>
                             <inventory_link>0</inventory_link>
-                            <applications>
-                                <application>
-                                    <name>Ceph</name>
-                                </application>
-                            </applications>
+                            <applications/>
                             <valuemap/>
                             <logtimefmt/>
                             <preprocessing/>
                             <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
-                                    <name>Ceph {#CRUSH_RULE}</name>
+                                    <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
                             <master_item_prototype/>
@@ -2221,18 +2205,14 @@
                             <port/>
                             <description/>
                             <inventory_link>0</inventory_link>
-                            <applications>
-                                <application>
-                                    <name>Ceph</name>
-                                </application>
-                            </applications>
+                            <applications/>
                             <valuemap/>
                             <logtimefmt/>
                             <preprocessing/>
                             <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
-                                    <name>Ceph {#CRUSH_RULE}</name>
+                                    <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
                             <master_item_prototype/>
@@ -2270,18 +2250,14 @@
                             <port/>
                             <description/>
                             <inventory_link>0</inventory_link>
-                            <applications>
-                                <application>
-                                    <name>Ceph</name>
-                                </application>
-                            </applications>
+                            <applications/>
                             <valuemap/>
                             <logtimefmt/>
                             <preprocessing/>
                             <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
-                                    <name>Ceph {#CRUSH_RULE}</name>
+                                    <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
                             <master_item_prototype/>
@@ -2406,18 +2382,14 @@
                             <port/>
                             <description/>
                             <inventory_link>0</inventory_link>
-                            <applications>
-                                <application>
-                                    <name>Ceph</name>
-                                </application>
-                            </applications>
+                            <applications/>
                             <valuemap/>
                             <logtimefmt/>
                             <preprocessing/>
                             <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
-                                    <name>Ceph {#CRUSH_RULE}</name>
+                                    <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
                             <master_item_prototype/>
@@ -2455,18 +2427,14 @@
                             <port/>
                             <description/>
                             <inventory_link>0</inventory_link>
-                            <applications>
-                                <application>
-                                    <name>Ceph</name>
-                                </application>
-                            </applications>
+                            <applications/>
                             <valuemap/>
                             <logtimefmt/>
                             <preprocessing/>
                             <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
-                                    <name>Ceph {#CRUSH_RULE}</name>
+                                    <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
                             <master_item_prototype/>
@@ -2504,11 +2472,7 @@
                             <port/>
                             <description/>
                             <inventory_link>0</inventory_link>
-                            <applications>
-                                <application>
-                                    <name>Ceph</name>
-                                </application>
-                            </applications>
+                            <applications/>
                             <valuemap/>
                             <logtimefmt/>
                             <preprocessing>
@@ -2520,7 +2484,7 @@
                             <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
-                                    <name>Ceph {#CRUSH_RULE}</name>
+                                    <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
                             <master_item_prototype/>
@@ -2558,11 +2522,7 @@
                             <port/>
                             <description/>
                             <inventory_link>0</inventory_link>
-                            <applications>
-                                <application>
-                                    <name>Ceph</name>
-                                </application>
-                            </applications>
+                            <applications/>
                             <valuemap/>
                             <logtimefmt/>
                             <preprocessing>
@@ -2574,7 +2534,7 @@
                             <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
-                                    <name>Ceph {#CRUSH_RULE}</name>
+                                    <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
                             <master_item_prototype/>
@@ -2612,11 +2572,7 @@
                             <port/>
                             <description/>
                             <inventory_link>0</inventory_link>
-                            <applications>
-                                <application>
-                                    <name>Ceph</name>
-                                </application>
-                            </applications>
+                            <applications/>
                             <valuemap/>
                             <logtimefmt/>
                             <preprocessing>
@@ -2628,7 +2584,7 @@
                             <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
-                                    <name>Ceph {#CRUSH_RULE}</name>
+                                    <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
                             <master_item_prototype/>
@@ -2666,11 +2622,7 @@
                             <port/>
                             <description/>
                             <inventory_link>0</inventory_link>
-                            <applications>
-                                <application>
-                                    <name>Ceph</name>
-                                </application>
-                            </applications>
+                            <applications/>
                             <valuemap/>
                             <logtimefmt/>
                             <preprocessing>
@@ -2682,7 +2634,7 @@
                             <jmx_endpoint/>
                             <application_prototypes>
                                 <application_prototype>
-                                    <name>Ceph {#CRUSH_RULE}</name>
+                                    <name>Ceph CRUSH [{#CRUSH_RULE}]</name>
                                 </application_prototype>
                             </application_prototypes>
                             <master_item_prototype/>
