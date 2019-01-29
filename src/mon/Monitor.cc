@@ -5867,6 +5867,7 @@ void Monitor::extract_save_mon_key(KeyRing& keyring)
 // AuthClient methods -- for mon <-> mon communication
 int Monitor::get_auth_request(
   Connection *con,
+  AuthConnectionMeta *auth_meta,
   uint32_t *method,
   vector<uint32_t> *preferred_modes,
   bufferlist *out)
@@ -5878,7 +5879,6 @@ int Monitor::get_auth_request(
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
     return -EACCES;
   }
-  auto auth_meta = con->get_auth_meta();
   auth_meta->authorizer.reset(auth);
   *method = auth->protocol;
   auth_registry.get_supported_modes(CEPH_ENTITY_TYPE_MON, auth->protocol,
@@ -5889,10 +5889,10 @@ int Monitor::get_auth_request(
 
 int Monitor::handle_auth_reply_more(
   Connection *con,
+  AuthConnectionMeta *auth_meta,
   const bufferlist& bl,
   bufferlist *reply)
 {
-  auto auth_meta = con->get_auth_meta();
   if (!auth_meta->authorizer) {
     derr << __func__ << " no authorizer?" << dendl;
     return -EACCES;
@@ -5904,6 +5904,7 @@ int Monitor::handle_auth_reply_more(
 
 int Monitor::handle_auth_done(
   Connection *con,
+  AuthConnectionMeta *auth_meta,
   uint64_t global_id,
   uint32_t con_mode,
   const bufferlist& bl,
@@ -5911,7 +5912,6 @@ int Monitor::handle_auth_done(
   std::string *connection_secret)
 {
   // verify authorizer reply
-  auto auth_meta = con->get_auth_meta();
   auto p = bl.begin();
   if (!auth_meta->authorizer->verify_reply(p, connection_secret)) {
     dout(0) << __func__ << " failed verifying authorizer reply" << dendl;
@@ -5923,6 +5923,7 @@ int Monitor::handle_auth_done(
 
 int Monitor::handle_auth_bad_method(
   Connection *con,
+  AuthConnectionMeta *auth_meta,
   uint32_t old_auth_method,
   int result,
   const std::vector<uint32_t>& allowed_methods,
@@ -6028,6 +6029,7 @@ KeyStore *Monitor::ms_get_auth1_authorizer_keystore()
 
 int Monitor::handle_auth_request(
   Connection *con,
+  AuthConnectionMeta *auth_meta,
   bool more,
   uint32_t auth_method,
   const bufferlist &payload,
@@ -6040,7 +6042,6 @@ int Monitor::handle_auth_request(
 	   << " method " << auth_method
 	   << " payload " << payload.length()
 	   << dendl;
-  auto auth_meta = con->get_auth_meta();
   if (!more) {
     auth_meta->auth_mode = payload[0];
   }

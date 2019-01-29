@@ -135,9 +135,11 @@ public:
     uint32_t want_keys,
     RotatingKeyRing* keyring);
   int handle_auth_reply_more(
+    AuthConnectionMeta *auth_meta,
     const bufferlist& bl,
     bufferlist *reply);
   int handle_auth_done(
+    AuthConnectionMeta *auth_meta,
     uint64_t global_id,
     const bufferlist& bl,
     CryptoKey *session_key,
@@ -271,15 +273,18 @@ public:
   // AuthClient
   int get_auth_request(
     Connection *con,
+    AuthConnectionMeta *auth_meta,
     uint32_t *method,
     std::vector<uint32_t> *preferred_modes,
     bufferlist *bl) override;
   int handle_auth_reply_more(
     Connection *con,
+    AuthConnectionMeta *auth_meta,
     const bufferlist& bl,
     bufferlist *reply) override;
   int handle_auth_done(
     Connection *con,
+    AuthConnectionMeta *auth_meta,
     uint64_t global_id,
     uint32_t con_mode,
     const bufferlist& bl,
@@ -287,6 +292,7 @@ public:
     std::string *connection_secret) override;
   int handle_auth_bad_method(
     Connection *con,
+    AuthConnectionMeta *auth_meta,
     uint32_t old_auth_method,
     int result,
     const std::vector<uint32_t>& allowed_methods,
@@ -294,6 +300,7 @@ public:
   // AuthServer
   int handle_auth_request(
     Connection *con,
+    AuthConnectionMeta *auth_meta,
     bool more,
     uint32_t auth_method,
     const bufferlist& bl,

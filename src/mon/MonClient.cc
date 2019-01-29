@@ -1212,6 +1212,7 @@ void MonClient::handle_get_version_reply(MMonGetVersionReply* m)
 
 int MonClient::get_auth_request(
   Connection *con,
+  AuthConnectionMeta *auth_meta,
   uint32_t *auth_method,
   std::vector<uint32_t> *preferred_modes,
   bufferlist *bl)
@@ -1222,7 +1223,7 @@ int MonClient::get_auth_request(
 
   // connection to mon?
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-    ceph_assert(!con->get_auth_meta()->authorizer);
+    ceph_assert(!auth_meta->authorizer);
     for (auto& i : pending_cons) {
       if (i.second.is_con(con)) {
 	return i.second.get_auth_request(
@@ -1234,7 +1235,6 @@ int MonClient::get_auth_request(
   }
 
   // generate authorizer
-  auto auth_meta = con->get_auth_meta();
   if (!auth) {
     lderr(cct) << __func__ << " but no auth handler is set up" << dendl;
     return -EACCES;
@@ -1255,6 +1255,7 @@ int MonClient::get_auth_request(
 
 int MonClient::handle_auth_reply_more(
   Connection *con,
+  AuthConnectionMeta *auth_meta,
   const bufferlist& bl,
   bufferlist *reply)
 {
@@ -1263,14 +1264,13 @@ int MonClient::handle_auth_reply_more(
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     for (auto& i : pending_cons) {
       if (i.second.is_con(con)) {
-	return i.second.handle_auth_reply_more(bl, reply);
+	return i.second.handle_auth_reply_more(auth_meta, bl, reply);
       }
     }
     return -ENOENT;
   }
 
   // authorizer challenges
-  auto auth_meta = con->get_auth_meta();
   if (!auth || !auth_meta->authorizer) {
     lderr(cct) << __func__ << " no authorizer?" << dendl;
     return -1;
@@ -1282,6 +1282,7 @@ int MonClient::handle_auth_reply_more(
 
 int MonClient::handle_auth_done(
   Connection *con,
+  AuthConnectionMeta *auth_meta,
   uint64_t global_id,
   uint32_t con_mode,
   const bufferlist& bl,
@@ -1293,7 +1294,7 @@ int MonClient::handle_auth_done(
     for (auto& i : pending_cons) {
       if (i.second.is_con(con)) {
 	int r = i.second.handle_auth_done(
-	  global_id, bl,
+	  auth_meta, global_id, bl,
 	  session_key, connection_secret);
 	if (r) {
 	  pending_cons.erase(i.first);
@@ -1313,7 +1314,6 @@ int MonClient::handle_auth_done(
     return -ENOENT;
   } else {
     // verify authorizer reply
-    auto auth_meta = con->get_auth_meta();
     auto p = bl.begin();
     if (!auth_meta->authorizer->verify_reply(p, &auth_meta->connection_secret)) {
       ldout(cct, 0) << __func__ << " failed verifying authorizer reply"
@@ -1327,12 +1327,13 @@ int MonClient::handle_auth_done(
 
 int MonClient::handle_auth_bad_method(
   Connection *con,
+  AuthConnectionMeta *auth_meta,
   uint32_t old_auth_method,
   int result,
   const std::vector<uint32_t>& allowed_methods,
   const std::vector<uint32_t>& allowed_modes)
 {
-  con->get_auth_meta()->allowed_methods = allowed_methods;
+  auth_meta->allowed_methods = allowed_methods;
 
   std::lock_guard l(monc_lock);
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
@@ -1367,12 +1368,12 @@ int MonClient::handle_auth_bad_method(
 
 int MonClient::handle_auth_request(
   Connection *con,
+  AuthConnectionMeta *auth_meta,
   bool more,
   uint32_t auth_method,
   const bufferlist& payload,
   bufferlist *reply)
 {
-  auto auth_meta = con->get_auth_meta();
   auth_meta->auth_mode = payload[0];
   if (auth_meta->auth_mode != AUTH_MODE_AUTHORIZER) {
     return -EACCES;
@@ -1512,6 +1513,7 @@ int MonConnection::get_auth_request(
 }
 
 int MonConnection::handle_auth_reply_more(
+  AuthConnectionMeta *auth_meta,
   const bufferlist& bl,
   bufferlist *reply)
 {
@@ -1522,7 +1524,6 @@ int MonConnection::handle_auth_reply_more(
 
   auto p = bl.cbegin();
   ldout(cct, 10) << __func__ << " payload_len " << bl.length() << dendl;
-  auto auth_meta = con->get_auth_meta();
   int r = auth->handle_response(0, p, &auth_meta->session_key,
 				&auth_meta->connection_secret);
   if (r == -EAGAIN) {
@@ -1542,6 +1543,7 @@ int MonConnection::handle_auth_reply_more(
 }
 
 int MonConnection::handle_auth_done(
+  AuthConnectionMeta *auth_meta,
   uint64_t new_global_id,
   const bufferlist& bl,
   CryptoKey *session_key,
@@ -1553,7 +1555,6 @@ int MonConnection::handle_auth_done(
   global_id = new_global_id;
   auth->set_global_id(global_id);
   auto p = bl.begin();
-  auto auth_meta = con->get_auth_meta();
   int auth_err = auth->handle_response(0, p, &auth_meta->session_key,
 				       &auth_meta->connection_secret);
   if (auth_err >= 0) {

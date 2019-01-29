@@ -38,6 +38,7 @@ public:
 
   virtual int handle_auth_request(
     Connection *con,
+    AuthConnectionMeta *auth_meta,
     bool more,
     uint32_t auth_method,
     const bufferlist& bl,

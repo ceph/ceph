@@ -104,10 +104,6 @@ public:
     return msgr;
   }
 
-  virtual AuthConnectionMeta *get_auth_meta() {
-    return nullptr;
-  }
-
   /**
    * Queue the given Message to send out on the given Connection.
    * Success in this function does not guarantee Message delivery, only
