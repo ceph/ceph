@@ -1237,9 +1237,14 @@ int MonClient::get_auth_request(
   auto auth_meta = con->get_auth_meta();
   if (!auth) {
     lderr(cct) << __func__ << " but no auth handler is set up" << dendl;
-    return -1;
+    return -EACCES;
   }
   auth_meta->authorizer.reset(auth->build_authorizer(con->get_peer_type()));
+  if (!auth_meta->authorizer) {
+    lderr(cct) << __func__ << " failed to build_authorizer for type "
+	       << ceph_entity_type_name(con->get_peer_type()) << dendl;
+    return -EACCES;
+  }
   auth_meta->auth_method = auth_meta->authorizer->protocol;
   auth_registry.get_supported_modes(con->get_peer_type(),
 				    auth_meta->auth_method,
