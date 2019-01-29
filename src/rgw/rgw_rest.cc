@@ -1817,7 +1817,7 @@ int RGWHandler_REST::init_permissions(RGWOp* op)
         lderr(s->cct) << "Error reading IAM User Policy: " << e.what() << dendl;
       }
     }
-    s->env = rgw_build_iam_environment(store, s);
+    rgw_build_iam_environment(store, s);
     return 0;
   }
 

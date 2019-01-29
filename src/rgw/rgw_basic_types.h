@@ -116,15 +116,19 @@ WRITE_CLASS_ENCODER(rgw_user)
 namespace rgw {
 namespace auth {
 class Principal {
-  enum types { User, Role, Tenant, Wildcard };
+  enum types { User, Role, Tenant, Wildcard, OidcProvider };
   types t;
   rgw_user u;
+  string idp_url;
 
   explicit Principal(types t)
     : t(t) {}
 
   Principal(types t, std::string&& n, std::string i)
     : t(t), u(std::move(n), std::move(i)) {}
+
+  Principal(string&& idp_url)
+    : t(OidcProvider), idp_url(std::move(idp_url)) {}
 
 public:
 
@@ -144,6 +148,10 @@ public:
     return Principal(Tenant, std::move(t), {});
   }
 
+  static Principal oidc_provider(string&& idp_url) {
+    return Principal(std::move(idp_url));
+  }
+
   bool is_wildcard() const {
     return t == Wildcard;
   }
@@ -160,12 +168,20 @@ public:
     return t == Tenant;
   }
 
+  bool is_oidc_provider() const {
+    return t == OidcProvider;
+  }
+
   const std::string& get_tenant() const {
     return u.tenant;
   }
 
   const std::string& get_id() const {
     return u.id;
+  }
+
+  const string& get_idp_url() const {
+    return idp_url;
   }
 
   bool operator ==(const Principal& o) const {

@@ -140,6 +140,7 @@ rgw_http_errors rgw_http_swift_errors({
 
 rgw_http_errors rgw_http_sts_errors({
     { ERR_PACKED_POLICY_TOO_LARGE, {400, "PackedPolicyTooLarge" }},
+    { ERR_INVALID_IDENTITY_TOKEN, {400, "InvalidIdentityToken" }},
 });
 
 int rgw_perf_start(CephContext *cct)

@@ -6695,6 +6695,21 @@ std::vector<Option> get_rgw_options() {
 			  "ListBucketVersions(max-keys), "
 			  "ListBucketMultiPartUploads(max-uploads), "
 			  "ListMultipartUploadParts(max-parts)"),
+
+    Option("rgw_sts_token_introspection_url", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("STS Web Token introspection URL")
+    .set_long_description("URL for introspecting an STS Web Token."),
+
+    Option("rgw_sts_client_id", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("Client Id")
+    .set_long_description("Client Id needed for introspecting a Web Token."),
+
+    Option("rgw_sts_client_secret", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_description("Client Secret")
+    .set_long_description("Client Secret needed for introspecting a Web Token."),
   });
 }
 
