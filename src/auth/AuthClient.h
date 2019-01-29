@@ -14,15 +14,18 @@ public:
 
   virtual int get_auth_request(
     Connection *con,
+    AuthConnectionMeta *auth_meta,
     uint32_t *method,
     std::vector<uint32_t> *preferred_modes,
     bufferlist *out) = 0;
   virtual int handle_auth_reply_more(
     Connection *con,
+    AuthConnectionMeta *auth_meta,
     const bufferlist& bl,
     bufferlist *reply) = 0;
   virtual int handle_auth_done(
     Connection *con,
+    AuthConnectionMeta *auth_meta,
     uint64_t global_id,
     uint32_t con_mode,
     const bufferlist& bl,
@@ -30,6 +33,7 @@ public:
     std::string *connection_secret) = 0;
   virtual int handle_auth_bad_method(
     Connection *con,
+    AuthConnectionMeta *auth_meta,
     uint32_t old_auth_method,
     int result,
     const std::vector<uint32_t>& allowed_methods,

@@ -445,11 +445,6 @@ bool AsyncConnection::is_connected() {
   return protocol->is_connected();
 }
 
-AuthConnectionMeta *AsyncConnection::get_auth_meta()
-{
-  return &protocol->auth_meta;
-}
-
 void AsyncConnection::connect(const entity_addrvec_t &addrs, int type,
                               entity_addr_t &target) {
 

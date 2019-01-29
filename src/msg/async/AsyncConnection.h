@@ -136,8 +136,6 @@ class AsyncConnection : public Connection {
     return target_addr;
   }
 
-  AuthConnectionMeta *get_auth_meta() override;
-
  private:
   enum {
     STATE_NONE,
