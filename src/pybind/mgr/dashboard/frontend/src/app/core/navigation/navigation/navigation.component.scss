@@ -131,7 +131,7 @@
     border-color: transparent;
     background-color: transparent;
   }
-  @media (min-width: 768px) {
+  @media (min-width: $screen-sm-min) {
     .navbar-primary > li > a {
       border-bottom: 4px solid transparent;
     }
@@ -151,9 +151,13 @@
       top: 0;
     }
   }
-  @media (max-width: 767px) {
+  @media (max-width: $screen-xs-max) {
     .navbar-nav {
       margin: 0;
+
+      .fa {
+        margin-right: 0.5em;
+      }
     }
 
     .navbar-collapse,
@@ -191,6 +195,10 @@
 
     .navbar-utility {
       border-top: 1px solid $color-nav-border-top-collapse;
+
+      a {
+        font-size: 1em;
+      }
     }
 
     .navbar-primary > .active > a,
