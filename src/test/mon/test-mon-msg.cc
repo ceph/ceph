@@ -21,6 +21,7 @@
 #include "global/global_init.h"
 #include "global/global_context.h"
 #include "common/ceph_argparse.h"
+#include "common/version.h"
 #include "common/dout.h"
 #include "common/debug.h"
 #include "common/Cond.h"
@@ -290,7 +291,8 @@ public:
 TEST_F(MonMsgTest, MMonProbeTest)
 {
   Message *m = new MMonProbe(get_monmap()->fsid,
-                        MMonProbe::OP_PROBE, "b", false);
+			     MMonProbe::OP_PROBE, "b", false,
+			     ceph_release());
   Message *r = send_wait_reply(m, MSG_MON_PROBE);
   ASSERT_NE(IS_ERR(r), 0);
   ASSERT_EQ(PTR_ERR(r), -ETIMEDOUT);
