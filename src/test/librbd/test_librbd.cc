@@ -4523,6 +4523,82 @@ TEST_F(TestLibRBD, Flatten)
   ASSERT_PASSED(validate_object_map, clone_image);
 }
 
+TEST_F(TestLibRBD, Sparsify)
+{
+  rados_ioctx_t ioctx;
+  ASSERT_EQ(0, rados_ioctx_create(_cluster, m_pool_name.c_str(), &ioctx));
+  BOOST_SCOPE_EXIT_ALL(&ioctx) {
+    rados_ioctx_destroy(ioctx);
+  };
+
+  const size_t CHUNK_SIZE = 4096 * 2;
+  rbd_image_t image;
+  int order = 0;
+  std::string name = get_temp_image_name();
+  uint64_t size = CHUNK_SIZE * 1024;
+
+  ASSERT_EQ(0, create_image(ioctx, name.c_str(), size, &order));
+  ASSERT_EQ(0, rbd_open(ioctx, name.c_str(), &image, NULL));
+  BOOST_SCOPE_EXIT_ALL(&image) {
+    rbd_close(image);
+  };
+
+  char test_data[4 * CHUNK_SIZE + 1];
+  for (size_t i = 0; i < 4 ; ++i) {
+    for (size_t j = 0; j < CHUNK_SIZE; j++) {
+      if (i % 2) {
+        test_data[i * CHUNK_SIZE + j] = (char)(rand() % (126 - 33) + 33);
+      } else {
+        test_data[i * CHUNK_SIZE + j] = '\0';
+      }
+    }
+  }
+  test_data[4 * CHUNK_SIZE] = '\0';
+
+  ASSERT_PASSED(write_test_data, image, test_data, 0, 4 * CHUNK_SIZE, 0);
+  ASSERT_EQ(0, rbd_flush(image));
+
+  ASSERT_EQ(-EINVAL, rbd_sparsify(image, 16));
+  ASSERT_EQ(-EINVAL, rbd_sparsify(image, 1 << (order + 1)));
+  ASSERT_EQ(-EINVAL, rbd_sparsify(image, 4096 + 1));
+  ASSERT_EQ(0, rbd_sparsify(image, 4096));
+
+  ASSERT_PASSED(read_test_data, image, test_data, 0, 4 * CHUNK_SIZE, 0);
+}
+
+TEST_F(TestLibRBD, SparsifyPP)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 12 * 1024 * 1024;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image;
+  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), nullptr));
+
+  bufferlist bl;
+  bl.append(std::string(4096, '\0'));
+  bl.append(std::string(4096, '1'));
+  bl.append(std::string(4096, '\0'));
+  ASSERT_EQ((ssize_t)bl.length(), image.write(0, bl.length(), bl));
+  ASSERT_EQ(0, image.flush());
+
+  ASSERT_EQ(-EINVAL, image.sparsify(16));
+  ASSERT_EQ(-EINVAL, image.sparsify(1 << (order + 1)));
+  ASSERT_EQ(-EINVAL, image.sparsify(4096 + 1));
+  ASSERT_EQ(0, image.sparsify(4096));
+
+  bufferlist read_bl;
+  ASSERT_EQ((ssize_t)bl.length(), image.read(0, bl.length(), read_bl));
+  ASSERT_TRUE(bl.contents_equal(read_bl));
+
+  ASSERT_PASSED(validate_object_map, image);
+}
+
 TEST_F(TestLibRBD, SnapshotLimit)
 {
   rados_ioctx_t ioctx;
@@ -5048,6 +5124,42 @@ TEST_F(TestLibRBD, ResizeViaLockOwner)
   ASSERT_FALSE(lock_owner);
 
   ASSERT_EQ(0, image2.resize(0));
+
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+  ASSERT_PASSED(validate_object_map, image1);
+}
+
+TEST_F(TestLibRBD, SparsifyViaLockOwner)
+{
+  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(m_pool_name.c_str(), ioctx));
+
+  librbd::RBD rbd;
+  std::string name = get_temp_image_name();
+  uint64_t size = 2 << 20;
+  int order = 0;
+  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
+
+  librbd::Image image1;
+  ASSERT_EQ(0, rbd.open(ioctx, image1, name.c_str(), NULL));
+
+  bufferlist bl;
+  ASSERT_EQ(0, image1.write(0, 0, bl));
+
+  bool lock_owner;
+  ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_TRUE(lock_owner);
+
+  librbd::Image image2;
+  ASSERT_EQ(0, rbd.open(ioctx, image2, name.c_str(), NULL));
+
+  ASSERT_EQ(0, image2.is_exclusive_lock_owner(&lock_owner));
+  ASSERT_FALSE(lock_owner);
+
+  ASSERT_EQ(0, image2.sparsify(4096));
 
   ASSERT_EQ(0, image1.is_exclusive_lock_owner(&lock_owner));
   ASSERT_TRUE(lock_owner);

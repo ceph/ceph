@@ -734,6 +734,13 @@ CEPH_RBD_API int rbd_flatten_with_progress(rbd_image_t image,
                                            librbd_progress_fn_t cb,
                                            void *cbdata);
 
+CEPH_RBD_API int rbd_sparsify(rbd_image_t image, size_t sparse_size);
+
+CEPH_RBD_API int rbd_sparsify_with_progress(rbd_image_t image,
+                                            size_t sparse_size,
+                                            librbd_progress_fn_t cb,
+                                            void *cbdata);
+
 /**
  * List all images that are cloned from the image at the
  * snapshot that is set via rbd_snap_set().

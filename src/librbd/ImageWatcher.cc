@@ -296,6 +296,21 @@ void ImageWatcher<I>::notify_migrate(uint64_t request_id,
 }
 
 template <typename I>
+void ImageWatcher<I>::notify_sparsify(uint64_t request_id, size_t sparse_size,
+                                      ProgressContext &prog_ctx,
+                                      Context *on_finish) {
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.exclusive_lock &&
+              !m_image_ctx.exclusive_lock->is_lock_owner());
+
+  AsyncRequestId async_request_id(get_client_id(), request_id);
+
+  notify_async_request(async_request_id,
+                       SparsifyPayload(async_request_id, sparse_size), prog_ctx,
+                       on_finish);
+}
+
+template <typename I>
 void ImageWatcher<I>::notify_header_update(Context *on_finish) {
   ldout(m_image_ctx.cct, 10) << this << ": " << __func__ << dendl;
 
@@ -944,6 +959,33 @@ bool ImageWatcher<I>::handle_payload(const MigratePayload &payload,
         ldout(m_image_ctx.cct, 10) << this << " remote migrate request: "
 				   << payload.async_request_id << dendl;
         m_image_ctx.operations->execute_migrate(*prog_ctx, ctx);
+      }
+
+      encode(ResponseMessage(r), ack_ctx->out);
+    } else if (r < 0) {
+      encode(ResponseMessage(r), ack_ctx->out);
+    }
+  }
+  return true;
+}
+
+template <typename I>
+bool ImageWatcher<I>::handle_payload(const SparsifyPayload &payload,
+				     C_NotifyAck *ack_ctx) {
+  RWLock::RLocker l(m_image_ctx.owner_lock);
+  if (m_image_ctx.exclusive_lock != nullptr) {
+    int r;
+    if (m_image_ctx.exclusive_lock->accept_requests(&r)) {
+      bool new_request;
+      Context *ctx;
+      ProgressContext *prog_ctx;
+      r = prepare_async_request(payload.async_request_id, &new_request,
+                                &ctx, &prog_ctx);
+      if (r == 0 && new_request) {
+        ldout(m_image_ctx.cct, 10) << this << " remote sparsify request: "
+				   << payload.async_request_id << dendl;
+        m_image_ctx.operations->execute_sparsify(payload.sparse_size, *prog_ctx,
+                                                 ctx);
       }
 
       encode(ResponseMessage(r), ack_ctx->out);

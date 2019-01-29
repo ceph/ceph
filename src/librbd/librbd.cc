@@ -1732,6 +1732,28 @@ namespace librbd {
     return r;
   }
 
+  int Image::sparsify(size_t sparse_size)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, sparsify_enter, ictx, ictx->name.c_str(), sparse_size,
+               ictx->id.c_str());
+    librbd::NoOpProgressContext prog_ctx;
+    int r = ictx->operations->sparsify(sparse_size, prog_ctx);
+    tracepoint(librbd, sparsify_exit, r);
+    return r;
+  }
+
+  int Image::sparsify_with_progress(size_t sparse_size,
+                                    librbd::ProgressContext& prog_ctx)
+  {
+    ImageCtx *ictx = (ImageCtx *)ctx;
+    tracepoint(librbd, sparsify_enter, ictx, ictx->name.c_str(), sparse_size,
+               ictx->id.c_str());
+    int r = ictx->operations->sparsify(sparse_size, prog_ctx);
+    tracepoint(librbd, sparsify_exit, r);
+    return r;
+  }
+
   int Image::list_children(set<pair<string, string> > *children)
   {
     std::vector<linked_image_spec_t> images;
@@ -3536,6 +3558,29 @@ extern "C" int rbd_flatten_with_progress(rbd_image_t image,
   librbd::CProgressContext prog_ctx(cb, cbdata);
   int r = ictx->operations->flatten(prog_ctx);
   tracepoint(librbd, flatten_exit, r);
+  return r;
+}
+
+extern "C" int rbd_sparsify(rbd_image_t image, size_t sparse_size)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, sparsify_enter, ictx, ictx->name.c_str(), sparse_size,
+             ictx->id.c_str());
+  librbd::NoOpProgressContext prog_ctx;
+  int r = ictx->operations->sparsify(sparse_size, prog_ctx);
+  tracepoint(librbd, sparsify_exit, r);
+  return r;
+}
+
+extern "C" int rbd_sparsify_with_progress(rbd_image_t image, size_t sparse_size,
+                                          librbd_progress_fn_t cb, void *cbdata)
+{
+  librbd::ImageCtx *ictx = (librbd::ImageCtx *)image;
+  tracepoint(librbd, sparsify_enter, ictx, ictx->name.c_str(), sparse_size,
+             ictx->id.c_str());
+  librbd::CProgressContext prog_ctx(cb, cbdata);
+  int r = ictx->operations->sparsify(sparse_size, prog_ctx);
+  tracepoint(librbd, sparsify_exit, r);
   return r;
 }
 
