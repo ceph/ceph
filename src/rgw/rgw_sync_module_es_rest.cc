@@ -245,7 +245,8 @@ void RGWMetadataSearchOp::execute()
     params.push_back(param_pair_t("from", marker_str.c_str()));
   }
   ldout(s->cct, 20) << "sending request to elasticsearch, payload=" << string(in.c_str(), in.length()) << dendl;
-  op_ret = conn->get_resource(resource, &params, nullptr, out, &in);
+  map<string, string> extra_headers = {{"Content-Type", "application/json"}};
+  op_ret = conn->get_resource(resource, &params, &extra_headers, out, &in);
   if (op_ret < 0) {
     ldout(s->cct, 0) << "ERROR: failed to fetch resource (r=" << resource << ", ret=" << op_ret << ")" << dendl;
     return;
