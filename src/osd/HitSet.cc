@@ -107,7 +107,7 @@ void HitSet::generate_test_instances(list<HitSet*>& o)
   o.back()->insert(hobject_t("qwer", "", CEPH_NOSNAP, 456, 1, ""));
 }
 
-HitSet::Params::Params(const Params& o)
+HitSet::Params::Params(const Params& o) noexcept
 {
   if (o.get_type() != TYPE_NONE) {
     create_impl(o.get_type());

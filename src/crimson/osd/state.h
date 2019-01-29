@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <string_view>
+#include <ostream>
+
 class OSDMap;
 
 class OSDState {
@@ -49,7 +52,7 @@ public:
   void set_stopping() {
     state = State::STOPPING;
   }
-  const char* print() {
+  std::string_view to_string() const {
     switch (state) {
     case State::INITIALIZING: return "initializing";
     case State::PREBOOT: return "preboot";
@@ -61,3 +64,8 @@ public:
     }
   }
 };
+
+inline std::ostream&
+operator<<(std::ostream& os, const OSDState& s) {
+  return os << s.to_string();
+}
