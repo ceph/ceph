@@ -19,11 +19,7 @@ Requirements
 
 - Running ceph-mon and ceph-mgr services that were set up with Rook in
   Kubernetes.
-- A sufficiently recent version of Rook. (**TODO: update once required Rook
-  tweaks are in a release**)
-
-If you are a developer, please see :ref:`kubernetes-dev` for instructions
-on setting up a development environment to work with this.
+- Rook 0.9 or newer.
 
 Configuration
 -------------
@@ -32,5 +28,10 @@ Because a Rook cluster's ceph-mgr daemon is running as a Kubernetes pod,
 the ``rook`` module can connect to the Kubernetes API without any explicit
 configuration.
 
+Development
+-----------
+
+If you are a developer, please see :ref:`kubernetes-dev` for instructions
+on setting up a development environment to work with this.
 
 
