@@ -125,6 +125,9 @@ test_others() {
     rbd info --snap=snap1 testimg1 2>&1 | grep 'error setting snapshot context: (2) No such file or directory'
     rbd info --snap=snap1 testimg-diff1 2>&1 | grep 'error setting snapshot context: (2) No such file or directory'
 
+    # sparsify
+    rbd sparsify testimg1
+
     remove_images
     rm -f $TMP_FILES
 }

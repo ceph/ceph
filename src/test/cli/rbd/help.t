@@ -123,6 +123,7 @@
       snap rename                       Rename a snapshot.
       snap rollback (snap revert)       Rollback image to snapshot.
       snap unprotect                    Allow a snapshot to be deleted.
+      sparsify                          Reclaim space for zeroed image extents.
       status                            Show the status of this image.
       trash list (trash ls)             List trash images.
       trash move (trash mv)             Move an image to the trash.
@@ -2164,6 +2165,25 @@
     --image arg          image name
     --snap arg           snapshot name
     --image-id arg       image id
+  
+  rbd help sparsify
+  usage: rbd sparsify [--pool <pool>] [--namespace <namespace>] 
+                      [--image <image>] [--no-progress] 
+                      [--sparse-size <sparse-size>] 
+                      <image-spec> 
+  
+  Reclaim space for zeroed image extents.
+  
+  Positional arguments
+    <image-spec>         image specification
+                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+  
+  Optional arguments
+    -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
+    --image arg          image name
+    --no-progress        disable progress output
+    --sparse-size arg    sparse size in B/K/M [default: 4K]
   
   rbd help status
   usage: rbd status [--pool <pool>] [--namespace <namespace>] [--image <image>] 
