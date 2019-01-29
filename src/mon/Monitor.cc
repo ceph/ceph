@@ -2071,6 +2071,7 @@ void Monitor::win_standalone_election()
   win_election(elector.get_epoch(), q,
                CEPH_FEATURES_ALL,
                ceph::features::mon::get_supported(),
+	       ceph_release(),
 	       metadata);
 }
 
@@ -2099,11 +2100,13 @@ void Monitor::_finish_svc_election()
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
                            const mon_feature_t& mon_features,
+			   int min_mon_release,
 			   const map<int,Metadata>& metadata)
 {
   dout(10) << __func__ << " epoch " << epoch << " quorum " << active
 	   << " features " << features
            << " mon_features " << mon_features
+	   << " min_mon_release " << min_mon_release
            << dendl;
   ceph_assert(is_electing());
   state = STATE_LEADER;
@@ -2113,6 +2116,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   quorum = active;
   quorum_con_features = features;
   quorum_mon_features = mon_features;
+  quorum_min_mon_release = min_mon_release;
   pending_metadata = metadata;
   outside_quorum.clear();
 
@@ -2183,7 +2187,8 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
                             uint64_t features,
-                            const mon_feature_t& mon_features)
+                            const mon_feature_t& mon_features,
+			    int min_mon_release)
 {
   state = STATE_PEON;
   leader_since = utime_t();
@@ -2193,9 +2198,11 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
   outside_quorum.clear();
   quorum_con_features = features;
   quorum_mon_features = mon_features;
+  quorum_min_mon_release = min_mon_release;
   dout(10) << "lose_election, epoch " << epoch << " leader is mon" << leader
 	   << " quorum is " << quorum << " features are " << quorum_con_features
            << " mon_features are " << quorum_mon_features
+	   << " min_mon_release " << min_mon_release
            << dendl;
 
   paxos->peon_init();

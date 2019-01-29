@@ -95,6 +95,7 @@ void Elector::start()
   }
   electing_me = true;
   acked_me[mon->rank].cluster_features = CEPH_FEATURES_ALL;
+  acked_me[mon->rank].mon_release = ceph_release();
   acked_me[mon->rank].mon_features = ceph::features::mon::get_supported();
   mon->collect_metadata(&acked_me[mon->rank].metadata);
   leader_acked = -1;
@@ -105,6 +106,7 @@ void Elector::start()
     MMonElection *m =
       new MMonElection(MMonElection::OP_PROPOSE, epoch, mon->monmap);
     m->mon_features = ceph::features::mon::get_supported();
+    m->mon_release = ceph_release();
     mon->send_mon_message(m, i);
   }
   
@@ -125,6 +127,7 @@ void Elector::defer(int who)
   leader_acked = who;
   MMonElection *m = new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap);
   m->mon_features = ceph::features::mon::get_supported();
+  m->mon_release = ceph_release();
   mon->collect_metadata(&m->metadata);
 
   mon->send_mon_message(m, who);
@@ -195,6 +198,7 @@ void Elector::victory()
   mon_feature_t mon_features = ceph::features::mon::get_supported();
   set<int> quorum;
   map<int,Metadata> metadata;
+  int min_mon_release = -1;
   for (map<int, elector_info_t>::iterator p = acked_me.begin();
        p != acked_me.end();
        ++p) {
@@ -202,6 +206,9 @@ void Elector::victory()
     cluster_features &= p->second.cluster_features;
     mon_features &= p->second.mon_features;
     metadata[p->first] = p->second.metadata;
+    if (min_mon_release < 0 || p->second.mon_release < min_mon_release) {
+      min_mon_release = p->second.mon_release;
+    }
   }
 
   cancel_timer();
@@ -220,12 +227,14 @@ void Elector::victory()
     m->quorum_features = cluster_features;
     m->mon_features = mon_features;
     m->sharing_bl = mon->get_local_commands_bl(mon_features);
+    m->mon_release = min_mon_release;
     mon->send_mon_message(m, *p);
   }
 
   // tell monitor
   mon->win_election(epoch, quorum,
-                    cluster_features, mon_features, metadata);
+                    cluster_features, mon_features, min_mon_release,
+		    metadata);
 }
 
 
@@ -336,6 +345,7 @@ void Elector::handle_ack(MonOpRequestRef op)
     // thanks
     acked_me[from].cluster_features = m->get_connection()->get_features();
     acked_me[from].mon_features = m->mon_features;
+    acked_me[from].mon_release = m->mon_release;
     acked_me[from].metadata = m->metadata;
     dout(5) << " so far i have {";
     for (map<int, elector_info_t>::const_iterator p = acked_me.begin();
@@ -388,7 +398,7 @@ void Elector::handle_victory(MonOpRequestRef op)
 
   // they win
   mon->lose_election(epoch, m->quorum, from,
-                     m->quorum_features, m->mon_features);
+                     m->quorum_features, m->mon_features, m->mon_release);
 
   // cancel my timer
   cancel_timer();
@@ -419,6 +429,7 @@ void Elector::nak_old_peer(MonOpRequestRef op)
                                          mon->monmap);
   reply->quorum_features = required_features;
   reply->mon_features = required_mon_features;
+  reply->mon_release = ceph_release();
   mon->features.encode(reply->sharing_bl);
   m->get_connection()->send_message(reply);
 }
