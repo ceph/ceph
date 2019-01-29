@@ -52,7 +52,8 @@ class MonmapMonitor : public PaxosService {
   void encode_full(MonitorDBStore::TransactionRef t) override { }
 
   void on_active() override;
-  void apply_mon_features(const mon_feature_t& features);
+  void apply_mon_features(const mon_feature_t& features,
+			  int min_mon_release);
 
   void dump_info(Formatter *f);
 

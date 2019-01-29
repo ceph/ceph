@@ -112,12 +112,13 @@ void MonmapMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 class C_ApplyFeatures : public Context {
   MonmapMonitor *svc;
   mon_feature_t features;
-  public:
-  C_ApplyFeatures(MonmapMonitor *s, const mon_feature_t& f) :
-    svc(s), features(f) { }
+  int min_mon_release;
+public:
+  C_ApplyFeatures(MonmapMonitor *s, const mon_feature_t& f, int mmr) :
+    svc(s), features(f), min_mon_release(mmr) { }
   void finish(int r) override {
     if (r >= 0) {
-      svc->apply_mon_features(features);
+      svc->apply_mon_features(features, min_mon_release);
     } else if (r == -EAGAIN || r == -ECANCELED) {
       // discard features if we're no longer on the quorum that
       // established them in the first place.
@@ -128,11 +129,17 @@ class C_ApplyFeatures : public Context {
   }
 };
 
-void MonmapMonitor::apply_mon_features(const mon_feature_t& features)
+void MonmapMonitor::apply_mon_features(const mon_feature_t& features,
+				       int min_mon_release)
 {
   if (!is_writeable()) {
     dout(5) << __func__ << " wait for service to be writeable" << dendl;
-    wait_for_writeable_ctx(new C_ApplyFeatures(this, features));
+    wait_for_writeable_ctx(new C_ApplyFeatures(this, features, min_mon_release));
+    return;
+  }
+
+  // do nothing here unless we have a full quorum
+  if (mon->get_quorum().size() < mon->monmap->size()) {
     return;
   }
 
@@ -146,28 +153,28 @@ void MonmapMonitor::apply_mon_features(const mon_feature_t& features)
     (pending_map.persistent_features ^
      (features & ceph::features::mon::get_persistent()));
 
-  if (new_features.empty()) {
-    dout(10) << __func__ << " features match current pending: "
-             << features << dendl;
+  if (new_features.empty() &&
+      pending_map.min_mon_release == min_mon_release) {
+    dout(10) << __func__ << " min_mon_release (" << min_mon_release
+	     << ") and features (" << features << ") match" << dendl;
     return;
   }
 
-  if (mon->get_quorum().size() < mon->monmap->size()) {
-    dout(1) << __func__ << " new features " << new_features
-      << " contains features that require a full quorum"
-      << " (quorum size is " << mon->get_quorum().size()
-      << ", requires " << mon->monmap->size() << "): "
-      << new_features
-      << " -- do not enable them!" << dendl;
-    return;
+  if (!new_features.empty()) {
+    dout(1) << __func__ << " applying new features "
+	    << new_features << ", had " << pending_map.persistent_features
+	    << ", will have "
+	    << (new_features | pending_map.persistent_features)
+	    << dendl;
+    pending_map.persistent_features |= new_features;
+  }
+  if (min_mon_release > pending_map.min_mon_release) {
+    dout(1) << __func__ << " increasing min_mon_release to "
+	    << min_mon_release << " (" << ceph_release_name(min_mon_release)
+	    << ")" << dendl;
+    pending_map.min_mon_release = min_mon_release;
   }
 
-  new_features |= pending_map.persistent_features;
-
-  dout(5) << __func__ << " applying new features to monmap;"
-          << " had " << pending_map.persistent_features
-          << ", will have " << new_features << dendl;
-  pending_map.persistent_features = new_features;
   propose_pending();
 }
 
@@ -193,7 +200,8 @@ void MonmapMonitor::on_active()
     mon->clog->debug() << "monmap " << *mon->monmap;
   }
 
-  apply_mon_features(mon->get_quorum_mon_features());
+  apply_mon_features(mon->get_quorum_mon_features(),
+		     mon->quorum_min_mon_release);
 }
 
 bool MonmapMonitor::preprocess_query(MonOpRequestRef op)
