@@ -80,7 +80,7 @@ protected:
   AsyncMessenger *messenger;
   CephContext *cct;
 public:
-  AuthConnectionMeta auth_meta;
+  std::shared_ptr<AuthConnectionMeta> auth_meta;
 
 public:
   Protocol(int type, AsyncConnection *connection);
