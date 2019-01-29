@@ -271,17 +271,26 @@ struct es_obj_metadata {
       string name;
       bufferlist& val = i.second;
 
-      if (attr_name.compare(0, sizeof(RGW_ATTR_PREFIX) - 1, RGW_ATTR_PREFIX) != 0) {
+      if (!boost::algorithm::starts_with(attr_name, RGW_ATTR_PREFIX)) {
         continue;
       }
 
-      if (attr_name.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1, RGW_ATTR_META_PREFIX) == 0) {
+      if (boost::algorithm::starts_with(attr_name, RGW_ATTR_META_PREFIX)) {
         name = attr_name.substr(sizeof(RGW_ATTR_META_PREFIX) - 1);
         custom_meta[name] = string(val.c_str(), (val.length() > 0 ? val.length() - 1 : 0));
         continue;
       }
 
       name = attr_name.substr(sizeof(RGW_ATTR_PREFIX) - 1);
+
+      if (boost::algorithm::starts_with(attr_name, RGW_ATTR_CRYPT_PREFIX)) {
+        continue;
+      }
+
+      if (boost::algorithm::starts_with(attr_name, RGW_ATTR_OLH_PREFIX)) {
+        // skip versioned object olh info
+        continue;
+      }
 
       if (name == "acl") {
         try {
@@ -322,7 +331,10 @@ struct es_obj_metadata {
     }
     ::encode_json("bucket", bucket_info.bucket.name, f);
     ::encode_json("name", key.name, f);
-    ::encode_json("instance", key.instance, f);
+    string instance = key.instance;
+    if (instance.empty())
+      instance = "null";
+    ::encode_json("instance", instance, f);
     ::encode_json("versioned_epoch", versioned_epoch, f);
     ::encode_json("owner", policy.get_owner(), f);
     ::encode_json("permissions", permissions, f);
