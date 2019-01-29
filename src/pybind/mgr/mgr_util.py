@@ -7,7 +7,7 @@
     BLUE,
     MAGENTA,
     CYAN,
-GRAY
+    GRAY
 ) = range(8)
 
 RESET_SEQ = "\033[0m"
@@ -16,6 +16,7 @@ COLOR_DARK_SEQ = "\033[0;%dm"
 BOLD_SEQ = "\033[1m"
 UNDERLINE_SEQ = "\033[4m"
 
+
 def colorize(msg, color, dark=False):
     """
     Decorate `msg` with escape sequences to give the requested color
@@ -23,11 +24,13 @@ def colorize(msg, color, dark=False):
     return (COLOR_DARK_SEQ if dark else COLOR_SEQ) % (30 + color) \
         + msg + RESET_SEQ
 
+
 def bold(msg):
     """
     Decorate `msg` with escape sequences to make it appear bold
     """
     return BOLD_SEQ + msg + RESET_SEQ
+
 
 def format_units(n, width, colored, decimal):
     """
@@ -48,7 +51,7 @@ def format_units(n, width, colored, decimal):
         if truncated_float[-1] == '.':
             truncated_float = " " + truncated_float[0:-1]
     else:
-        truncated_float = "%{wid}d".format(wid=width-1) % n
+        truncated_float = "%{wid}d".format(wid=width - 1) % n
     formatted = "%s%s" % (truncated_float, units[unit])
 
     if colored:
@@ -61,8 +64,10 @@ def format_units(n, width, colored, decimal):
     else:
         return formatted
 
+
 def format_dimless(n, width, colored=True):
     return format_units(n, width, colored, decimal=True)
+
 
 def format_bytes(n, width, colored=True):
     return format_units(n, width, colored, decimal=False)
