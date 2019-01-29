@@ -208,6 +208,7 @@ Package: ceph-mgr-dashboard
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
          python-cherrypy3,
+         python-ipaddress,
          python-jwt,
          python-openssl,
          python-bcrypt,
