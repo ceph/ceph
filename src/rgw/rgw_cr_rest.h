@@ -140,7 +140,7 @@ class RGWReadRESTResourceCR : public RGWReadRawRESTResourceCR {
 
 };
 
-template <class T>
+template <class T, class E = int>
 class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
  protected:
   RGWRESTConn *conn;
@@ -151,6 +151,7 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
   param_vec_t headers;
   map<string, string> *attrs;
   T *result;
+  E *err_result;
   bufferlist input_bl;
   bool send_content_length=false;
   boost::intrusive_ptr<RGWRESTSendResource> http_op;
@@ -161,18 +162,23 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
                           const string& _method, const string& _path,
                           rgw_http_param_pair *_params,
                           map<string, string> *_attrs,
-                          bufferlist& _input, T *_result, bool _send_content_length)
+                          bufferlist& _input, T *_result,
+                          bool _send_content_length,
+                          E *_err_result = nullptr)
    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-    method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_attrs)), attrs(_attrs), result(_result),
-    input_bl(_input), send_content_length(_send_content_length) {}
+     method(_method), path(_path), params(make_param_list(_params)),
+     headers(make_param_list(_attrs)), attrs(_attrs),
+     result(_result), err_result(_err_result),
+     input_bl(_input), send_content_length(_send_content_length) {}
 
   RGWSendRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                           RGWHTTPManager *_http_manager,
                           const string& _method, const string& _path,
                           rgw_http_param_pair *_params, map<string, string> *_attrs,
-                          T *_result)
+                          T *_result, E *_err_result = nullptr)
    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-    method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_attrs)), attrs(_attrs), result(_result) {}
+    method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_attrs)), attrs(_attrs), result(_result),
+    err_result(_err_result) {}
 
   ~RGWSendRawRESTResourceCR() override {
     request_cleanup();
@@ -196,8 +202,8 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
 
   int request_complete() override {
     int ret;
-    if (result) {
-      ret = http_op->wait(result);
+    if (result || err_result) {
+      ret = http_op->wait(result, err_result);
     } else {
       bufferlist bl;
       ret = http_op->wait(&bl);
@@ -223,15 +229,15 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
   }
 };
 
-template <class S, class T>
-class RGWSendRESTResourceCR : public RGWSendRawRESTResourceCR<T> {
+template <class S, class T, class E = int>
+class RGWSendRESTResourceCR : public RGWSendRawRESTResourceCR<T, E> {
  public:
   RGWSendRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                            RGWHTTPManager *_http_manager,
                            const string& _method, const string& _path,
                         rgw_http_param_pair *_params, map<string, string> *_attrs,
-                        S& _input, T *_result)
-    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, _method, _path, _params, _attrs, _result) {
+                        S& _input, T *_result, E *_err_result = nullptr)
+    : RGWSendRawRESTResourceCR<T, E>(_cct, _conn, _http_manager, _method, _path, _params, _attrs, _result, _err_result) {
 
     JSONFormatter jf;
     encode_json("data", _input, &jf);
@@ -243,63 +249,72 @@ class RGWSendRESTResourceCR : public RGWSendRawRESTResourceCR<T> {
 
 };
 
-template <class S, class T>
-class RGWPostRESTResourceCR : public RGWSendRESTResourceCR<S, T> {
+template <class S, class T, class E = int>
+class RGWPostRESTResourceCR : public RGWSendRESTResourceCR<S, T, E> {
 public:
   RGWPostRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                         RGWHTTPManager *_http_manager,
                         const string& _path,
-                        rgw_http_param_pair *_params, S& _input, T *_result)
-    : RGWSendRESTResourceCR<S, T>(_cct, _conn, _http_manager,
+                        rgw_http_param_pair *_params, S& _input,
+                        T *_result, E *_err_result = nullptr)
+    : RGWSendRESTResourceCR<S, T, E>(_cct, _conn, _http_manager,
                             "POST", _path,
-                            _params, nullptr, _input, _result) {}
+                            _params, nullptr, _input,
+                            _result, _err_result) {}
 };
 
-template <class T>
-class RGWPutRawRESTResourceCR: public RGWSendRawRESTResourceCR <T> {
+template <class T, class E = int>
+class RGWPutRawRESTResourceCR: public RGWSendRawRESTResourceCR <T, E> {
  public:
   RGWPutRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                           RGWHTTPManager *_http_manager,
                           const string& _path,
-                          rgw_http_param_pair *_params, bufferlist& _input, T *_result)
-    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, "PUT", _path, _params, nullptr, _input, _result, true){}
+                          rgw_http_param_pair *_params, bufferlist& _input,
+                          T *_result, E *_err_result = nullptr)
+    : RGWSendRawRESTResourceCR<T, E>(_cct, _conn, _http_manager, "PUT", _path,
+                                  _params, nullptr, _input, _result, true, _err_result) {}
 
 };
 
-template <class T>
-class RGWPostRawRESTResourceCR: public RGWSendRawRESTResourceCR <T> {
+template <class T, class E = int>
+class RGWPostRawRESTResourceCR: public RGWSendRawRESTResourceCR <T, E> {
  public:
   RGWPostRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                           RGWHTTPManager *_http_manager,
                           const string& _path,
                           rgw_http_param_pair *_params,
                           map<string, string> * _attrs,
-                          bufferlist& _input, T *_result)
-    : RGWSendRawRESTResourceCR<T>(_cct, _conn, _http_manager, "POST", _path, _params, _attrs, _input, _result, true){}
+                          bufferlist& _input,
+                          T *_result, E *_err_result = nullptr)
+    : RGWSendRawRESTResourceCR<T, E>(_cct, _conn, _http_manager, "POST", _path,
+                                  _params, _attrs, _input, _result, true, _err_result) {}
 
 };
 
 
-template <class S, class T>
-class RGWPutRESTResourceCR : public RGWSendRESTResourceCR<S, T> {
+template <class S, class T, class E = int>
+class RGWPutRESTResourceCR : public RGWSendRESTResourceCR<S, T, E> {
 public:
   RGWPutRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                         RGWHTTPManager *_http_manager,
                         const string& _path,
-                        rgw_http_param_pair *_params, S& _input, T *_result)
-    : RGWSendRESTResourceCR<S, T>(_cct, _conn, _http_manager,
+                        rgw_http_param_pair *_params, S& _input,
+                        T *_result, E *_err_result = nullptr)
+    : RGWSendRESTResourceCR<S, T, E>(_cct, _conn, _http_manager,
                                   "PUT", _path,
-                                  _params, nullptr, _input, _result) {}
+                                  _params, nullptr, _input,
+                                  _result, _err_result) {}
 
   RGWPutRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                        RGWHTTPManager *_http_manager,
                        const string& _path,
                        rgw_http_param_pair *_params,
                        map <string, string> *_attrs,
-                       S& _input, T *_result)
-    : RGWSendRESTResourceCR<S, T>(_cct, _conn, _http_manager,
+                       S& _input, T *_result, E *_err_result = nullptr)
+    : RGWSendRESTResourceCR<S, T, E>(_cct, _conn, _http_manager,
                                   "PUT", _path,
-                                  _params, _attrs, _input, _result) {}
+                                  _params, _attrs, _input,
+                                  _result, _err_result) {}
 
 };
 
