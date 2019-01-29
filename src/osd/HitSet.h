@@ -104,7 +104,7 @@ public:
       return TYPE_NONE;
     }
 
-    Params(const Params& o);
+    Params(const Params& o) noexcept;
     const Params& operator=(const Params& o);
 
     void encode(bufferlist &bl) const;
