@@ -1,21 +1,18 @@
 import { Pipe, PipeTransform } from '@angular/core';
 
 @Pipe({
-  name: 'logColor'
+  name: 'logPriority'
 })
-export class LogColorPipe implements PipeTransform {
+export class LogPriorityPipe implements PipeTransform {
   transform(value: any, args?: any): any {
-    if (value.priority === '[INF]') {
-      return ''; // Inherit
-    } else if (value.priority === '[WRN]') {
-      return {
-        color: '#ffa500',
-        'font-weight': 'bold'
-      };
-    } else if (value.priority === '[ERR]') {
-      return { color: '#FF2222' };
+    if (value === '[INF]') {
+      return 'info';
+    } else if (value === '[WRN]') {
+      return 'warn';
+    } else if (value === '[ERR]') {
+      return 'err';
     } else {
-      return '';
+      return ''; // Inherit
     }
   }
 }
