@@ -185,7 +185,7 @@ seastar::future<> OSD::_send_boot()
 
   entity_addrvec_t hb_back_addrs;
   entity_addrvec_t hb_front_addrs;
-  entity_addrvec_t cluster_addrs;
+  entity_addrvec_t cluster_addrs = cluster_msgr->get_myaddrs();
 
   auto m = make_message<MOSDBoot>(superblock,
                                   osdmap->get_epoch(),
@@ -450,6 +450,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
   return seastar::parallel_for_each(boost::irange(first, last + 1),
                                     [this](epoch_t cur) {
     return get_map(cur).then([this](seastar::lw_shared_ptr<OSDMap> o) {
+      osdmap = o;
       if (up_epoch != 0 &&
           osdmap->is_up(whoami) &&
           osdmap->get_addrs(whoami) == client_msgr->get_myaddrs()) {
