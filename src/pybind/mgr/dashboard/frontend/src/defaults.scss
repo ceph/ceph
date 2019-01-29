@@ -2,6 +2,14 @@
 
 @import 'vendor.variables';
 
+$screen-sm-min: 768px !default;
+$screen-md-min: 992px !default;
+$screen-lg-min: 1200px !default;
+
+$screen-xs-max: calc(#{$screen-sm-min} - 1px);
+$screen-sm-max: calc(#{$screen-md-min} - 1px);
+$screen-md-max: calc(#{$screen-lg-min} - 1px);
+
 $color-solid-red: #ff0000 !default;
 $color-pink: #a94442 !default;
 $color-light-red: #f2dede !default;
