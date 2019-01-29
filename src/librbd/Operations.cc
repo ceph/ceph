@@ -36,6 +36,7 @@
 #include "librbd/operation/SnapshotRollbackRequest.h"
 #include "librbd/operation/SnapshotUnprotectRequest.h"
 #include "librbd/operation/SnapshotLimitRequest.h"
+#include "librbd/operation/SparsifyRequest.h"
 #include <set>
 #include <boost/bind.hpp>
 #include <boost/scope_exit.hpp>
@@ -1634,6 +1635,56 @@ void Operations<I>::execute_migrate(ProgressContext &prog_ctx,
 
   operation::MigrateRequest<I> *req = new operation::MigrateRequest<I>(
     m_image_ctx, new C_NotifyUpdate<I>(m_image_ctx, on_finish), prog_ctx);
+  req->send();
+}
+
+template <typename I>
+int Operations<I>::sparsify(size_t sparse_size, ProgressContext &prog_ctx) {
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "sparsify" << dendl;
+  
+  if (sparse_size < 4096 || sparse_size > m_image_ctx.get_object_size() ||
+      (sparse_size & (sparse_size - 1)) != 0) {
+    lderr(cct) << "sparse size should be power of two not less than 4096"
+               << " and not larger image object size" << dendl;
+    return -EINVAL;
+  }
+
+  uint64_t request_id = ++m_async_request_seq;
+  int r = invoke_async_request("sparsify", false,
+                               boost::bind(&Operations<I>::execute_sparsify,
+                                           this, sparse_size,
+                                           boost::ref(prog_ctx), _1),
+                               boost::bind(&ImageWatcher<I>::notify_sparsify,
+                                           m_image_ctx.image_watcher,
+                                           request_id, sparse_size,
+                                           boost::ref(prog_ctx), _1));
+  if (r < 0 && r != -EINVAL) {
+    return r;
+  }
+  ldout(cct, 20) << "resparsify finished" << dendl;
+  return 0;
+}
+
+template <typename I>
+void Operations<I>::execute_sparsify(size_t sparse_size,
+                                     ProgressContext &prog_ctx,
+                                     Context *on_finish) {
+  ceph_assert(m_image_ctx.owner_lock.is_locked());
+  ceph_assert(m_image_ctx.exclusive_lock == nullptr ||
+              m_image_ctx.exclusive_lock->is_lock_owner());
+
+  CephContext *cct = m_image_ctx.cct;
+  ldout(cct, 20) << "sparsify" << dendl;
+
+  if (m_image_ctx.operations_disabled) {
+    on_finish->complete(-EROFS);
+    return;
+  }
+
+  auto req = new operation::SparsifyRequest<I>(
+    m_image_ctx, sparse_size, new C_NotifyUpdate<I>(m_image_ctx, on_finish),
+    prog_ctx);
   req->send();
 }
 
