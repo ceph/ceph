@@ -8,7 +8,7 @@
 #include <boost/smart_ptr/intrusive_ptr.hpp>
 
 namespace rgw::amqp {
-// farward declaration of conection object
+// forward declaration of connection object
 struct connection_t;
 
 typedef boost::intrusive_ptr<connection_t> connection_ptr_t;
@@ -41,7 +41,7 @@ int publish_with_confirm(connection_ptr_t& conn,
 std::string status_to_string(int s);
 
 // number of connections
-size_t get_connection_number();
+size_t get_connection_count();
   
 // return the number of messages that were sent
 // to broker, but were not yet acked/nacked/timedout

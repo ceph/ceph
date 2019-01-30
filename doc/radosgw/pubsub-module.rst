@@ -199,7 +199,7 @@ Creates a new subscription.
 
 ::
 
-   PUT /subscriptions/<sub-name>?topic=<topic-name>[&push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=<level>]]
+   PUT /subscriptions/<sub-name>?topic=<topic-name>[&push-endpoint=<endpoint>[&amqp-exchange=<exchange>][&amqp-ack-level=<level>][&verify-ssl=true|false]]
 
 Request Params:
 
@@ -211,6 +211,7 @@ Request Params:
   - Default values for HTTP: no user/password, port 80
   - Default values for AMQP: user/password=guest/guest, port 5672, amqp-vhost is "/"
 
+ - verify-ssl: can be used with https endpoints (ignored for other endpoints), indicate whether the server certificate is validated or not ("true" by default)
  - amqp-exchange: mandatory parameter for AMQP endpoint. The exchanges must exist and be able to route messages based on topics
  - amqp-ack-level: 2 ack levels exist: "none" - message is considered "delivered" if sent to broker; 
    "broker" message is considered "delivered" if acked by broker. 
