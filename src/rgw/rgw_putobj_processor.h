@@ -32,17 +32,36 @@ namespace putobj {
 class ObjectProcessor : public DataProcessor {
  public:
   // prepare to start processing object data
-  virtual int prepare(optional_yield y) = 0;
+  virtual boost::system::error_code prepare(optional_yield y) = 0;
 
   // complete the operation and make its result visible to clients
-  virtual int complete(size_t accounted_size, const std::string& etag,
+  virtual boost::system::error_code complete(size_t accounted_size, const std::string& etag,
                        ceph::real_time *mtime, ceph::real_time set_mtime,
-                       std::map<std::string, bufferlist>& attrs,
+		       boost::container::flat_map<std::string, bufferlist>& attrs,
                        ceph::real_time delete_at,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y) = 0;
+  int
+  complete(size_t accounted_size, const std::string& etag,
+	   ceph::real_time *mtime, ceph::real_time set_mtime,
+	   std::map<std::string, bufferlist>& attrs,
+	   ceph::real_time delete_at,
+	   const char *if_match, const char *if_nomatch,
+	   const std::string *user_data,
+	   rgw_zone_set *zones_trace, bool *canceled,
+	   optional_yield y) {
+    boost::container::flat_map<std::string, ceph::buffer::list> tm(
+      std::move_iterator(attrs.begin()),
+      std::move_iterator(attrs.end()));
+    auto r = ceph::from_error_code(complete(accounted_size, etag, mtime,
+					    set_mtime, tm, delete_at,
+					    if_match, if_nomatch, user_data,
+					    zones_trace, canceled, y));
+    std::move(tm.begin(), tm.end(), std::inserter(attrs, attrs.end()));
+    return r;
+  }
 };
 
 // an object processor with special handling for the first chunk of the head.
@@ -59,8 +78,8 @@ class HeadObjectProcessor : public ObjectProcessor {
   uint64_t get_actual_size() const { return data_offset; }
 
   // process the first chunk of data and return a processor for the rest
-  virtual int process_first_chunk(bufferlist&& data,
-                                  DataProcessor **processor) = 0;
+  virtual boost::system::error_code process_first_chunk(bufferlist&& data,
+							DataProcessor **processor) = 0;
  public:
   HeadObjectProcessor(uint64_t head_chunk_size)
     : head_chunk_size(head_chunk_size)
@@ -70,7 +89,7 @@ class HeadObjectProcessor : public ObjectProcessor {
 
   // cache first chunk for process_first_chunk(), then forward everything else
   // to the returned processor
-  int process(bufferlist&& data, uint64_t logical_offset) final override;
+  boost::system::error_code process(bufferlist&& data, uint64_t logical_offset) final override;
 };
 
 
@@ -83,7 +102,7 @@ class RadosWriter : public DataProcessor {
   const RGWBucketInfo& bucket_info;
   RGWObjectCtx& obj_ctx;
   const rgw_obj head_obj;
-  RGWSI_RADOS::Obj stripe_obj; // current stripe object
+  std::optional<RGWSI_RADOS::Obj> stripe_obj; // current stripe object
   RawObjSet written; // set of written objects for deletion
   const DoutPrefixProvider *dpp;
   optional_yield y;
@@ -99,20 +118,19 @@ class RadosWriter : public DataProcessor {
   ~RadosWriter();
 
   // change the current stripe object
-  int set_stripe_obj(const rgw_raw_obj& obj);
+  boost::system::error_code set_stripe_obj(const rgw_raw_obj& obj);
 
   // write the data at the given offset of the current stripe object
-  int process(bufferlist&& data, uint64_t stripe_offset) override;
+  boost::system::error_code process(bufferlist&& data, uint64_t stripe_offset) override;
 
   // write the data as an exclusive create and wait for it to complete
-  int write_exclusive(const bufferlist& data);
+  boost::system::error_code write_exclusive(const bufferlist& data);
 
-  int drain();
+  boost::system::error_code drain();
 
   // when the operation completes successfully, clear the set of written objects
   // so they aren't deleted on destruction
   void clear_written() { written.clear(); }
-
 };
 
 // a rados object processor that stripes according to RGWObjManifest
@@ -134,7 +152,7 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
   const DoutPrefixProvider *dpp;
 
   // implements StripeGenerator
-  int next(uint64_t offset, uint64_t *stripe_size) override;
+  boost::system::error_code next(uint64_t offset, uint64_t *stripe_size) override;
 
  public:
   ManifestObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
@@ -168,7 +186,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
   const std::string unique_tag;
   bufferlist first_chunk; // written with the head in complete()
 
-  int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
+  boost::system::error_code process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
  public:
   AtomicObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
                         const RGWBucketInfo& bucket_info,
@@ -184,17 +202,19 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
   {}
 
   // prepare a trivial manifest
-  int prepare(optional_yield y) override;
+  boost::system::error_code prepare(optional_yield y) override;
   // write the head object atomically in a bucket index transaction
-  int complete(size_t accounted_size, const std::string& etag,
-               ceph::real_time *mtime, ceph::real_time set_mtime,
-               std::map<std::string, bufferlist>& attrs,
-               ceph::real_time delete_at,
-               const char *if_match, const char *if_nomatch,
-               const std::string *user_data,
-               rgw_zone_set *zones_trace, bool *canceled,
-               optional_yield y) override;
+  boost::system::error_code
+  complete(size_t accounted_size, const std::string& etag,
+	   ceph::real_time *mtime, ceph::real_time set_mtime,
+	   boost::container::flat_map<std::string, bufferlist>& attrs,
+	   ceph::real_time delete_at,
+	   const char *if_match, const char *if_nomatch,
+	   const std::string *user_data,
+	   rgw_zone_set *zones_trace, bool *canceled,
+	   optional_yield y) override;
 
+  using ObjectProcessor::complete;
 };
 
 
@@ -210,9 +230,9 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
 
   // write the first chunk and wait on aio->drain() for its completion.
   // on EEXIST, retry with random prefix
-  int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
+  boost::system::error_code process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
   // prepare the head stripe and manifest
-  int prepare_head();
+  boost::system::error_code prepare_head();
  public:
   MultipartObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
                            const RGWBucketInfo& bucket_info,
@@ -226,22 +246,22 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                               owner, obj_ctx, head_obj, dpp, y),
       target_obj(head_obj), upload_id(upload_id),
       part_num(part_num), part_num_str(part_num_str),
-      mp(head_obj.key.name, upload_id) 
+      mp(head_obj.key.name, upload_id)
   {}
 
   // prepare a multipart manifest
-  int prepare(optional_yield y) override;
+  boost::system::error_code prepare(optional_yield y) override;
   // write the head object attributes in a bucket index transaction, then
   // register the completed part with the multipart meta object
-  int complete(size_t accounted_size, const std::string& etag,
-               ceph::real_time *mtime, ceph::real_time set_mtime,
-               std::map<std::string, bufferlist>& attrs,
-               ceph::real_time delete_at,
-               const char *if_match, const char *if_nomatch,
-               const std::string *user_data,
-               rgw_zone_set *zones_trace, bool *canceled,
-               optional_yield y) override;
-
+  boost::system::error_code
+  complete(size_t accounted_size, const std::string& etag,
+	   ceph::real_time *mtime, ceph::real_time set_mtime,
+	   boost::container::flat_map<std::string, bufferlist>& attrs,
+	   ceph::real_time delete_at,
+	   const char *if_match, const char *if_nomatch,
+	   const std::string *user_data,
+	   rgw_zone_set *zones_trace, bool *canceled,
+	   optional_yield y) override;
 };
 
   class AppendObjectProcessor : public ManifestObjectProcessor {
@@ -254,7 +274,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
 
     RGWObjManifest *cur_manifest;
 
-    int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
+    boost::system::error_code process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
 
   public:
     AppendObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info,
@@ -268,15 +288,15 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
               position(position), cur_size(0), cur_accounted_size(cur_accounted_size),
               unique_tag(unique_tag), cur_manifest(nullptr)
     {}
-    int prepare(optional_yield y) override;
-    int complete(size_t accounted_size, const string& etag,
-                 ceph::real_time *mtime, ceph::real_time set_mtime,
-                 map<string, bufferlist>& attrs, ceph::real_time delete_at,
-                 const char *if_match, const char *if_nomatch, const string *user_data,
-                 rgw_zone_set *zones_trace, bool *canceled,
-                 optional_yield y) override;
+    boost::system::error_code prepare(optional_yield y) override;
+    boost::system::error_code
+    complete(size_t accounted_size, const string& etag,
+	     ceph::real_time *mtime, ceph::real_time set_mtime,
+	     boost::container::flat_map<std::string, bufferlist>& attrs, ceph::real_time delete_at,
+	     const char *if_match, const char *if_nomatch, const string *user_data,
+	     rgw_zone_set *zones_trace, bool *canceled,
+	     optional_yield y) override;
   };
 
 } // namespace putobj
 } // namespace rgw
-

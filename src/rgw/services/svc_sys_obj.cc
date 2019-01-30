@@ -10,6 +10,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+namespace bs = boost::system;
+
 RGWSysObjectCtx RGWSI_SysObj::init_obj_ctx()
 {
   return RGWSysObjectCtx(this);
@@ -25,28 +27,26 @@ void RGWSI_SysObj::Obj::invalidate()
   ctx.invalidate(obj);
 }
 
-RGWSI_SysObj::Obj::ROp::ROp(Obj& _source) : source(_source) {
-  state.emplace<RGWSI_SysObj_Core::GetObjState>();
-}
+RGWSI_SysObj::Obj::ROp::ROp(Obj& _source) : source(_source) {}
 
-int RGWSI_SysObj::Obj::ROp::stat(optional_yield y)
+bs::error_code RGWSI_SysObj::Obj::ROp::stat(optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.obj;
 
-  return svc->stat(source.get_ctx(), *state, obj,
+  return svc->stat(source.get_ctx(), state, obj,
 		   attrs, raw_attrs,
                    lastmod, obj_size,
                    objv_tracker, y);
 }
 
-int RGWSI_SysObj::Obj::ROp::read(int64_t ofs, int64_t end, bufferlist *bl,
-                                 optional_yield y)
+bs::error_code RGWSI_SysObj::Obj::ROp::read(int64_t ofs, int64_t end, bufferlist *bl,
+                                                       optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
 
-  return svc->read(source.get_ctx(), *state,
+  return svc->read(source.get_ctx(), state,
                    objv_tracker,
                    obj, bl, ofs, end,
                    attrs,
@@ -55,8 +55,8 @@ int RGWSI_SysObj::Obj::ROp::read(int64_t ofs, int64_t end, bufferlist *bl,
                    refresh_version, y);
 }
 
-int RGWSI_SysObj::Obj::ROp::get_attr(const char *name, bufferlist *dest,
-                                     optional_yield y)
+bs::error_code RGWSI_SysObj::Obj::ROp::get_attr(const char *name, bufferlist *dest,
+                                                           optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
@@ -64,7 +64,7 @@ int RGWSI_SysObj::Obj::ROp::get_attr(const char *name, bufferlist *dest,
   return svc->get_attr(obj, name, dest, y);
 }
 
-int RGWSI_SysObj::Obj::WOp::remove(optional_yield y)
+bs::error_code RGWSI_SysObj::Obj::WOp::remove(optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
@@ -74,7 +74,7 @@ int RGWSI_SysObj::Obj::WOp::remove(optional_yield y)
                      obj, y);
 }
 
-int RGWSI_SysObj::Obj::WOp::write(bufferlist& bl, optional_yield y)
+bs::error_code RGWSI_SysObj::Obj::WOp::write(bufferlist& bl, optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
@@ -83,7 +83,7 @@ int RGWSI_SysObj::Obj::WOp::write(bufferlist& bl, optional_yield y)
                     bl, objv_tracker, mtime, y);
 }
 
-int RGWSI_SysObj::Obj::WOp::write_data(bufferlist& bl, optional_yield y)
+bs::error_code RGWSI_SysObj::Obj::WOp::write_data(bufferlist& bl, optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
@@ -91,7 +91,7 @@ int RGWSI_SysObj::Obj::WOp::write_data(bufferlist& bl, optional_yield y)
   return svc->write_data(obj, bl, exclusive, objv_tracker, y);
 }
 
-int RGWSI_SysObj::Obj::WOp::write_attrs(optional_yield y)
+bs::error_code RGWSI_SysObj::Obj::WOp::write_attrs(optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
@@ -99,40 +99,44 @@ int RGWSI_SysObj::Obj::WOp::write_attrs(optional_yield y)
   return svc->set_attrs(obj, attrs, nullptr, objv_tracker, y);
 }
 
-int RGWSI_SysObj::Obj::WOp::write_attr(const char *name, bufferlist& bl,
-                                       optional_yield y)
+bs::error_code RGWSI_SysObj::Obj::WOp::write_attr(const char *name, bufferlist& bl,
+                                                             optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
 
-  map<string, bufferlist> m;
+  boost::container::flat_map<string, bufferlist> m;
   m[name] = bl;
 
   return svc->set_attrs(obj, m, nullptr, objv_tracker, y);
 }
 
-int RGWSI_SysObj::Pool::list_prefixed_objs(const string& prefix, std::function<void(const string&)> cb)
-{
-  return core_svc->pool_list_prefixed_objs(pool, prefix, cb);
+bs::error_code RGWSI_SysObj::Pool::list_prefixed_objs(
+  const std::string& prefix, std::function<void(std::string_view)> cb) {
+  auto list = pool.list(RGWAccessListFilterPrefix(prefix));
+
+  return list.for_each(cb, null_yield);
 }
 
-int RGWSI_SysObj::Pool::Op::init(const string& marker, const string& prefix)
-{
-  return source.core_svc->pool_list_objects_init(source.pool, marker, prefix, &ctx);
+bs::error_code RGWSI_SysObj::Pool::list_prefixed_objs(const std::string& prefix,
+						      std::vector<std::string>* oids) {
+  auto list = pool.list(RGWAccessListFilterPrefix(prefix));
+
+  return list.get_all(oids, null_yield);
 }
 
-int RGWSI_SysObj::Pool::Op::get_next(int max, vector<string> *oids, bool *is_truncated)
+boost::system::error_code RGWSI_SysObj::Pool::Op::get_next(int max, vector<string> *oids, bool *is_truncated)
 {
-  return source.core_svc->pool_list_objects_next(ctx, max, oids, is_truncated);
+  return ctx.get_next(max, oids, is_truncated, null_yield);
 }
 
-int RGWSI_SysObj::Pool::Op::get_marker(string *marker)
+std::string RGWSI_SysObj::Pool::Op::get_marker()
 {
-  return source.core_svc->pool_list_objects_get_marker(ctx, marker);
+  return ctx.get_marker();
 }
 
-int RGWSI_SysObj::Obj::OmapOp::get_all(std::map<string, bufferlist> *m,
-                                       optional_yield y)
+bs::error_code RGWSI_SysObj::Obj::OmapOp::get_all(boost::container::flat_map<std::string, bufferlist> *m,
+                                                             optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.obj;
@@ -140,9 +144,9 @@ int RGWSI_SysObj::Obj::OmapOp::get_all(std::map<string, bufferlist> *m,
   return svc->omap_get_all(obj, m, y);
 }
 
-int RGWSI_SysObj::Obj::OmapOp::get_vals(const string& marker, uint64_t count,
-                                        std::map<string, bufferlist> *m,
-                                        bool *pmore, optional_yield y)
+bs::error_code RGWSI_SysObj::Obj::OmapOp::get_vals(const string& marker, uint64_t count,
+                                                              boost::container::flat_map<std::string, bufferlist> *m,
+                                                              bool *pmore, optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.obj;
@@ -150,8 +154,8 @@ int RGWSI_SysObj::Obj::OmapOp::get_vals(const string& marker, uint64_t count,
   return svc->omap_get_vals(obj, marker, count, m, pmore, y);
 }
 
-int RGWSI_SysObj::Obj::OmapOp::set(const std::string& key, bufferlist& bl,
-                                   optional_yield y)
+bs::error_code RGWSI_SysObj::Obj::OmapOp::set(const std::string& key, bufferlist& bl,
+                                                         optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.obj;
@@ -159,8 +163,8 @@ int RGWSI_SysObj::Obj::OmapOp::set(const std::string& key, bufferlist& bl,
   return svc->omap_set(obj, key, bl, must_exist, y);
 }
 
-int RGWSI_SysObj::Obj::OmapOp::set(const map<std::string, bufferlist>& m,
-                                   optional_yield y)
+bs::error_code RGWSI_SysObj::Obj::OmapOp::set(const boost::container::flat_map<std::string, bufferlist>& m,
+                                                         optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.obj;
@@ -168,7 +172,7 @@ int RGWSI_SysObj::Obj::OmapOp::set(const map<std::string, bufferlist>& m,
   return svc->omap_set(obj, m, must_exist, y);
 }
 
-int RGWSI_SysObj::Obj::OmapOp::del(const std::string& key, optional_yield y)
+bs::error_code RGWSI_SysObj::Obj::OmapOp::del(const std::string& key, optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.obj;
@@ -176,13 +180,15 @@ int RGWSI_SysObj::Obj::OmapOp::del(const std::string& key, optional_yield y)
   return svc->omap_del(obj, key, y);
 }
 
-int RGWSI_SysObj::Obj::WNOp::notify(bufferlist& bl, uint64_t timeout_ms,
-                                    bufferlist *pbl, optional_yield y)
+bs::error_code RGWSI_SysObj::Obj::WNOp::notify(
+  bufferlist& bl,
+  std::optional<std::chrono::milliseconds> timeout,
+  bufferlist *pbl, optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.obj;
 
-  return svc->notify(obj, bl, timeout_ms, pbl, y);
+  return svc->notify(obj, bl, timeout, pbl, y);
 }
 
 RGWSI_Zone *RGWSI_SysObj::get_zone_svc()

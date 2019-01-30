@@ -20,7 +20,6 @@
 #include <type_traits>
 
 #include <boost/intrusive/list.hpp>
-#include "include/rados/librados_fwd.hpp"
 #include "common/async/yield_context.h"
 
 #include "services/svc_rados.h" // cant forward declare RGWSI_RADOS::Obj
@@ -34,17 +33,18 @@ namespace rgw {
 struct AioResult {
   RGWSI_RADOS::Obj obj;
   uint64_t id = 0; // id allows caller to associate a result with its request
-  bufferlist data; // result buffer for reads
-  int result = 0;
+  boost::system::error_code result;
+  ceph::buffer::list data;
   std::aligned_storage_t<3 * sizeof(void*)> user_data;
 
-  AioResult() = default;
+  AioResult(const RGWSI_RADOS::Obj& obj) : obj(obj) {}
   AioResult(const AioResult&) = delete;
   AioResult& operator =(const AioResult&) = delete;
   AioResult(AioResult&&) = delete;
   AioResult& operator =(AioResult&&) = delete;
 };
 struct AioResultEntry : AioResult, boost::intrusive::list_base_hook<> {
+  AioResultEntry(const RGWSI_RADOS::Obj& obj) : AioResult(obj) {}
   virtual ~AioResultEntry() {}
 };
 // a list of polymorphic entries that frees them on destruction
@@ -60,16 +60,16 @@ struct OwningList : boost::intrusive::list<T, Args...> {
 using AioResultList = OwningList<AioResultEntry>;
 
 // returns the first error code or 0 if all succeeded
-inline int check_for_errors(const AioResultList& results) {
+inline boost::system::error_code check_for_errors(const AioResultList& results) {
   for (auto& e : results) {
-    if (e.result < 0) {
+    if (e.result) {
       return e.result;
     }
   }
-  return 0;
+  return {};
 }
 
-// interface to submit async librados operations and wait on their completions.
+// interface to submit async RADOS operations and wait on their completions.
 // each call returns a list of results from prior completions
 class Aio {
  public:
@@ -91,10 +91,8 @@ class Aio {
   // wait for all outstanding completions and return their results
   virtual AioResultList drain() = 0;
 
-  static OpFunc librados_op(librados::ObjectReadOperation&& op,
-                            optional_yield y);
-  static OpFunc librados_op(librados::ObjectWriteOperation&& op,
-                            optional_yield y);
+  static OpFunc rados_op(RADOS::ReadOp&& op, optional_yield y);
+  static OpFunc rados_op(RADOS::WriteOp&& op, optional_yield y);
 };
 
 } // namespace rgw

@@ -18,7 +18,8 @@ class RGWServiceInstance
   friend struct RGWServices_Def;
 
 protected:
-  CephContext *cct;
+  CephContext* cct;
+  boost::asio::io_context& ioc;
 
   enum StartState {
     StateInit = 0,
@@ -27,23 +28,30 @@ protected:
   } start_state{StateInit};
 
   virtual void shutdown() {}
-  virtual int do_start() {
-    return 0;
+  virtual boost::system::error_code do_start() {
+    return {};
   }
 public:
-  RGWServiceInstance(CephContext *_cct) : cct(_cct) {}
+  RGWServiceInstance(CephContext* cct, boost::asio::io_context& ioc)
+    : cct(cct), ioc(ioc) {}
   virtual ~RGWServiceInstance() {}
 
-  int start();
+  boost::system::error_code start();
   bool is_started() {
     return (start_state == StateStarted);
   }
 
-  CephContext *ctx() {
+  CephContext* ctx() {
     return cct;
+  }
+
+  boost::asio::io_context& ioctx() {
+    return ioc;
   }
 };
 
+class RGWAsyncRadosProcessor;
+class RGWDataChangesLog;
 class RGWSI_Finisher;
 class RGWSI_Bucket;
 class RGWSI_Bucket_SObj;
@@ -51,7 +59,6 @@ class RGWSI_BucketIndex;
 class RGWSI_BucketIndex_RADOS;
 class RGWSI_BILog_RADOS;
 class RGWSI_Cls;
-class RGWSI_DataLog_RADOS;
 class RGWSI_MDLog;
 class RGWSI_Meta;
 class RGWSI_MetaBackend;
@@ -69,18 +76,22 @@ class RGWSI_SysObj_Core;
 class RGWSI_SysObj_Cache;
 class RGWSI_User;
 class RGWSI_User_RADOS;
+class RGWRados;
 
 struct RGWServices_Def
 {
   bool can_shutdown{false};
   bool has_shutdown{false};
+  RGWRados* rr;
+
+  std::unique_ptr<RGWAsyncRadosProcessor> async_processor;
+  std::unique_ptr<RGWDataChangesLog> log;
 
   std::unique_ptr<RGWSI_Finisher> finisher;
   std::unique_ptr<RGWSI_Bucket_SObj> bucket_sobj;
   std::unique_ptr<RGWSI_BucketIndex_RADOS> bi_rados;
   std::unique_ptr<RGWSI_BILog_RADOS> bilog_rados;
   std::unique_ptr<RGWSI_Cls> cls;
-  std::unique_ptr<RGWSI_DataLog_RADOS> datalog_rados;
   std::unique_ptr<RGWSI_MDLog> mdlog;
   std::unique_ptr<RGWSI_Meta> meta;
   std::unique_ptr<RGWSI_MetaBackend_SObj> meta_be_sobj;
@@ -100,17 +111,23 @@ struct RGWServices_Def
   RGWServices_Def();
   ~RGWServices_Def();
 
-  int init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync);
+  boost::system::error_code init(CephContext *cct, boost::asio::io_context& ioc,
+				 RGWRados* _rr,
+				 bool have_cache, bool raw_storage,
+				 bool run_sync);
   void shutdown();
 };
 
 
 struct RGWServices
 {
-  RGWServices_Def _svc;
+  RGWServices_Def svc;
 
   CephContext *cct;
 
+  RGWRados* rr;
+  RGWAsyncRadosProcessor* async_processor;
+  RGWDataChangesLog* log{nullptr};
   RGWSI_Finisher *finisher{nullptr};
   RGWSI_Bucket *bucket{nullptr};
   RGWSI_Bucket_SObj *bucket_sobj{nullptr};
@@ -118,7 +135,6 @@ struct RGWServices
   RGWSI_BucketIndex_RADOS *bi_rados{nullptr};
   RGWSI_BILog_RADOS *bilog_rados{nullptr};
   RGWSI_Cls *cls{nullptr};
-  RGWSI_DataLog_RADOS *datalog_rados{nullptr};
   RGWSI_MDLog *mdlog{nullptr};
   RGWSI_Meta *meta{nullptr};
   RGWSI_MetaBackend *meta_be_sobj{nullptr};
@@ -135,17 +151,30 @@ struct RGWServices
   RGWSI_SysObj_Core *core{nullptr};
   RGWSI_User *user{nullptr};
 
-  int do_init(CephContext *cct, bool have_cache, bool raw_storage, bool run_sync);
+  boost::system::error_code do_init(CephContext* cct,
+				    boost::asio::io_context& ioc,
+				    RGWRados* rr,
+				    bool have_cache, bool raw_storage,
+				    bool run_sync);
 
-  int init(CephContext *cct, bool have_cache, bool run_sync) {
-    return do_init(cct, have_cache, false, run_sync);
+  boost::system::error_code init(CephContext *cct,
+				 boost::asio::io_context& ioc, bool have_cache,
+				 RGWRados* rr,
+				 bool run_sync) {
+    return do_init(cct, ioc, rr, have_cache, false, run_sync);
   }
 
-  int init_raw(CephContext *cct, bool have_cache) {
-    return do_init(cct, have_cache, true, false);
+  boost::system::error_code init_raw(CephContext *cct, boost::asio::io_context& ioc,
+				     RGWRados* rr,
+				     bool have_cache) {
+    return do_init(cct, ioc, rr, have_cache, true, false);
   }
   void shutdown() {
-    _svc.shutdown();
+    svc.shutdown();
+  }
+
+  RGWAsyncRadosProcessor* get_async_processor() {
+    return async_processor;
   }
 };
 

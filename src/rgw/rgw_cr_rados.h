@@ -241,7 +241,7 @@ public:
                        bool want_attrs, bool raw_attrs);
 
   bufferlist bl;
-  map<string, bufferlist> attrs;
+  boost::container::flat_map<string, bufferlist> attrs;
 };
 
 class RGWAsyncPutSystemObj : public RGWAsyncRadosRequest {
@@ -263,14 +263,14 @@ public:
 class RGWAsyncPutSystemObjAttrs : public RGWAsyncRadosRequest {
   RGWSI_SysObj *svc;
   rgw_raw_obj obj;
-  map<string, bufferlist> attrs;
+  boost::container::flat_map<string, bufferlist> attrs;
 
 protected:
   int _send_request() override;
 public:
   RGWAsyncPutSystemObjAttrs(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
                        RGWObjVersionTracker *_objv_tracker, const rgw_raw_obj& _obj,
-                       map<string, bufferlist> _attrs);
+			    boost::container::flat_map<string, bufferlist> _attrs);
 
   RGWObjVersionTracker objv_tracker;
 };
@@ -387,14 +387,14 @@ class RGWSimpleRadosReadAttrsCR : public RGWSimpleCoroutine {
   RGWSI_SysObj *svc;
 
   rgw_raw_obj obj;
-  map<string, bufferlist> *pattrs;
+  boost::container::flat_map<string, bufferlist> *pattrs;
   bool raw_attrs;
   RGWAsyncGetSystemObj *req;
 
 public:
   RGWSimpleRadosReadAttrsCR(RGWAsyncRadosProcessor *_async_rados, RGWSI_SysObj *_svc,
 		      const rgw_raw_obj& _obj,
-		      map<string, bufferlist> *_pattrs, bool _raw_attrs) : RGWSimpleCoroutine(_svc->ctx()),
+			    boost::container::flat_map<string, bufferlist> *_pattrs, bool _raw_attrs) : RGWSimpleCoroutine(_svc->ctx()),
                                                 async_rados(_async_rados), svc(_svc),
 						obj(_obj),
                                                 pattrs(_pattrs),
@@ -465,13 +465,13 @@ class RGWSimpleRadosWriteAttrsCR : public RGWSimpleCoroutine {
   RGWObjVersionTracker *objv_tracker;
 
   rgw_raw_obj obj;
-  map<string, bufferlist> attrs;
+  boost::container::flat_map<string, bufferlist> attrs;
   RGWAsyncPutSystemObjAttrs *req = nullptr;
 
 public:
   RGWSimpleRadosWriteAttrsCR(RGWAsyncRadosProcessor *_async_rados,
                              RGWSI_SysObj *_svc, const rgw_raw_obj& _obj,
-                             map<string, bufferlist> _attrs,
+                             boost::container::flat_map<string, bufferlist> _attrs,
                              RGWObjVersionTracker *objv_tracker = nullptr)
     : RGWSimpleCoroutine(_svc->ctx()), async_rados(_async_rados),
       svc(_svc), objv_tracker(objv_tracker), obj(_obj),
@@ -515,8 +515,8 @@ class RGWRadosSetOmapKeysCR : public RGWSimpleCoroutine {
 
 public:
   RGWRadosSetOmapKeysCR(rgw::sal::RGWRadosStore *_store,
-		      const rgw_raw_obj& _obj,
-		      map<string, bufferlist>& _entries);
+                        const rgw_raw_obj& _obj,
+                        map<string, bufferlist>& _entries);
 
   int send_request() override;
   int request_complete() override;
@@ -975,7 +975,7 @@ class RGWAsyncStatRemoteObj : public RGWAsyncRadosRequest {
   ceph::real_time *pmtime;
   uint64_t *psize;
   string *petag;
-  map<string, bufferlist> *pattrs;
+  boost::container::flat_map<string, bufferlist> *pattrs;
   map<string, string> *pheaders;
 
 protected:
@@ -988,8 +988,8 @@ public:
                          ceph::real_time *_pmtime,
                          uint64_t *_psize,
                          string *_petag,
-                         map<string, bufferlist> *_pattrs,
-                         map<string, string> *_pheaders) : RGWAsyncRadosRequest(caller, cn), store(_store),
+                         boost::container::flat_map<string, bufferlist> *_pattrs,
+			 map<string, string> *_pheaders) : RGWAsyncRadosRequest(caller, cn), store(_store),
                                                       source_zone(_source_zone),
                                                       bucket_info(_bucket_info),
                                                       key(_key),
@@ -1013,7 +1013,7 @@ class RGWStatRemoteObjCR : public RGWSimpleCoroutine {
   ceph::real_time *pmtime;
   uint64_t *psize;
   string *petag;
-  map<string, bufferlist> *pattrs;
+  boost::container::flat_map<string, bufferlist> *pattrs;
   map<string, string> *pheaders;
 
   RGWAsyncStatRemoteObj *req;
@@ -1026,8 +1026,8 @@ public:
                       ceph::real_time *_pmtime,
                       uint64_t *_psize,
                       string *_petag,
-                      map<string, bufferlist> *_pattrs,
-                      map<string, string> *_pheaders) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
+		     boost::container::flat_map<string, bufferlist> *_pattrs,
+		      map<string, string> *_pheaders) : RGWSimpleCoroutine(_store->ctx()), cct(_store->ctx()),
                                        async_rados(_async_rados), store(_store),
                                        source_zone(_source_zone),
                                        bucket_info(_bucket_info),

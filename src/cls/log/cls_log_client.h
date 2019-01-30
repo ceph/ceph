@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
 #ifndef CEPH_CLS_LOG_CLIENT_H
 #define CEPH_CLS_LOG_CLIENT_H
 
@@ -13,6 +15,7 @@ void cls_log_add_prepare_entry(cls_log_entry& entry, const utime_t& timestamp,
                  const string& section, const string& name, bufferlist& bl);
 
 void cls_log_add(librados::ObjectWriteOperation& op, list<cls_log_entry>& entries, bool monotonic_inc);
+void cls_log_add(librados::ObjectWriteOperation& op, vector<cls_log_entry>& entries, bool monotonic_inc);
 void cls_log_add(librados::ObjectWriteOperation& op, cls_log_entry& entry);
 void cls_log_add(librados::ObjectWriteOperation& op, const utime_t& timestamp,
                  const string& section, const string& name, bufferlist& bl);

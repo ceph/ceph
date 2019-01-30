@@ -76,7 +76,7 @@ class StrategyRegistry;
 int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
 				       rgw::sal::RGWRadosStore *store,
                                        RGWBucketInfo& bucket_info,
-                                       map<string, bufferlist>& bucket_attrs,
+                                       boost::container::flat_map<string, bufferlist>& bucket_attrs,
                                        RGWAccessControlPolicy *policy);
 
 class RGWHandler {
@@ -273,7 +273,7 @@ protected:
   ceph::real_time unmod_time;
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
-  map<string, bufferlist> attrs;
+  boost::container::flat_map<string, bufferlist> attrs;
   bool get_data;
   bool partial_content;
   bool ignore_invalid_range;
@@ -510,7 +510,7 @@ public:
     }
 
     bool verify_permission(RGWBucketInfo& binfo,
-                           map<string, bufferlist>& battrs,
+                           boost::container::flat_map<string, bufferlist>& battrs,
                            ACLOwner& bucket_owner /* out */);
     bool delete_single(const acct_path_t& path);
     bool delete_chunk(const std::list<acct_path_t>& paths);
@@ -584,7 +584,7 @@ protected:
 
   bool handle_file_verify_permission(RGWBucketInfo& binfo,
 				     const rgw_obj& obj,
-				     std::map<std::string, ceph::bufferlist>& battrs,
+				     boost::container::flat_map<std::string, ceph::bufferlist>& battrs,
                                      ACLOwner& bucket_owner /* out */);
   int handle_file(boost::string_ref path,
                   size_t size,
@@ -692,7 +692,7 @@ protected:
   std::string end_marker;
   int64_t limit;
   uint64_t limit_max;
-  std::map<std::string, ceph::bufferlist> attrs;
+  boost::container::flat_map<std::string, ceph::bufferlist> attrs;
   bool is_truncated;
 
   RGWUsageStats global_stats;
@@ -972,7 +972,7 @@ protected:
   bool obj_lock_enabled;
   RGWCORSConfiguration cors_config;
   boost::optional<std::string> swift_ver_location;
-  map<string, buffer::list> attrs;
+  boost::container::flat_map<string, buffer::list> attrs;
   set<string> rmattr_names;
 
   bufferlist in_data;
@@ -1095,7 +1095,7 @@ protected:
   std::unique_ptr <RGWObjTags> obj_tags;
   const char *dlo_manifest;
   RGWSLOInfo *slo_info;
-  map<string, bufferlist> attrs;
+  boost::container::flat_map<string, bufferlist> attrs;
   ceph::real_time mtime;
   uint64_t olh_epoch;
   string version_id;
@@ -1158,7 +1158,7 @@ public:
   /* this is for cases when copying data from other object */
   virtual int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
                                  RGWGetObj_Filter* cb,
-                                 map<string, bufferlist>& attrs,
+                                 boost::container::flat_map<string, bufferlist>& attrs,
                                  bufferlist* manifest_bl) {
     *filter = nullptr;
     return 0;
@@ -1190,7 +1190,7 @@ protected:
   const char *supplied_etag;
   string etag;
   RGWAccessControlPolicy policy;
-  map<string, bufferlist> attrs;
+  boost::container::flat_map<string, bufferlist> attrs;
   boost::optional<ceph::real_time> delete_at;
 
   /* Must be called after get_data() or the result is undefined. */
@@ -1237,7 +1237,7 @@ public:
 class RGWPutMetadataAccount : public RGWOp {
 protected:
   std::set<std::string> rmattr_names;
-  std::map<std::string, bufferlist> attrs, orig_attrs;
+  boost::container::flat_map<std::string, bufferlist> attrs, orig_attrs;
   std::map<int, std::string> temp_url_keys;
   RGWQuotaInfo new_quota;
   bool new_quota_extracted;
@@ -1264,7 +1264,7 @@ public:
 
   virtual int get_params() = 0;
   void send_response() override = 0;
-  virtual void filter_out_temp_url(map<string, bufferlist>& add_attrs,
+  virtual void filter_out_temp_url(boost::container::flat_map<string, bufferlist>& add_attrs,
                                    const set<string>& rmattr_names,
                                    map<int, string>& temp_url_keys);
   const char* name() const override { return "put_account_metadata"; }
@@ -1274,7 +1274,7 @@ public:
 
 class RGWPutMetadataBucket : public RGWOp {
 protected:
-  map<string, buffer::list> attrs;
+  boost::container::flat_map<string, buffer::list> attrs;
   set<string> rmattr_names;
   bool has_policy, has_cors;
   uint32_t policy_rw_mask;
@@ -1389,7 +1389,7 @@ protected:
   ceph::real_time unmod_time;
   ceph::real_time *mod_ptr;
   ceph::real_time *unmod_ptr;
-  map<string, buffer::list> attrs;
+  boost::container::flat_map<string, buffer::list> attrs;
   string src_tenant_name, src_bucket_name;
   rgw_bucket src_bucket;
   rgw_obj_key src_object;
@@ -1504,7 +1504,7 @@ public:
 
 class RGWGetLC : public RGWOp {
 protected:
-    
+
 public:
   RGWGetLC() { }
   ~RGWGetLC() override { }
@@ -1691,7 +1691,7 @@ public:
   const char* name() const override { return "init_multipart"; }
   RGWOpType get_type() override { return RGW_OP_INIT_MULTIPART; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
-  virtual int prepare_encryption(map<string, bufferlist>& attrs) { return 0; }
+  virtual int prepare_encryption(boost::container::flat_map<string, bufferlist>& attrs) { return 0; }
 };
 
 class RGWCompleteMultipart : public RGWOp {
@@ -1912,19 +1912,20 @@ public:
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
 };
 
-extern int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* s);
-extern int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *s,
-				     bool prefetch_data);
-extern void rgw_build_iam_environment(rgw::sal::RGWRadosStore* store,
+int rgw_build_bucket_policies(rgw::sal::RGWRadosStore* store, struct req_state* s);
+int rgw_build_object_policies(rgw::sal::RGWRadosStore *store, struct req_state *s,
+			      bool prefetch_data);
+void rgw_build_iam_environment(rgw::sal::RGWRadosStore* store,
 						                          struct req_state* s);
-extern vector<rgw::IAM::Policy> get_iam_user_policy_from_attr(CephContext* cct,
-                        rgw::sal::RGWRadosStore* store,
-                        map<string, bufferlist>& attrs,
-                        const string& tenant);
+vector<rgw::IAM::Policy>
+get_iam_user_policy_from_attr(CephContext* cct,
+			      rgw::sal::RGWRadosStore* store,
+			      boost::container::flat_map<string, bufferlist>& attrs,
+			      const string& tenant);
 
-static inline int get_system_versioning_params(req_state *s,
-					      uint64_t *olh_epoch,
-					      string *version_id)
+inline int get_system_versioning_params(req_state *s,
+					uint64_t *olh_epoch,
+					string *version_id)
 {
   if (!s->system_request) {
     return 0;
@@ -1980,10 +1981,10 @@ static inline void format_xattr(std::string &xattr)
  * On failure returns a negative error code.
  *
  */
-static inline int rgw_get_request_metadata(CephContext* const cct,
-                                           struct req_info& info,
-                                           std::map<std::string, ceph::bufferlist>& attrs,
-                                           const bool allow_empty_attrs = true)
+inline int rgw_get_request_metadata(CephContext* const cct,
+				    struct req_info& info,
+				    boost::container::flat_map<std::string, ceph::bufferlist>& attrs,
+				    const bool allow_empty_attrs = true)
 {
   static const std::set<std::string> blacklisted_headers = {
       "x-amz-server-side-encryption-customer-algorithm",
@@ -2043,19 +2044,20 @@ static inline int rgw_get_request_metadata(CephContext* const cct,
   return 0;
 } /* rgw_get_request_metadata */
 
-static inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete_at,
-					map<string, bufferlist>& attrs)
+inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete_at,
+				  boost::container::flat_map<string, bufferlist>& attrs)
 {
   if (delete_at == boost::none) {
     return;
-  } 
+  }
 
   bufferlist delatbl;
   encode(*delete_at, delatbl);
   attrs[RGW_ATTR_DELETE_AT] = delatbl;
 } /* encode_delete_at_attr */
 
-static inline void encode_obj_tags_attr(RGWObjTags* obj_tags, map<string, bufferlist>& attrs)
+inline void encode_obj_tags_attr(RGWObjTags* obj_tags,
+				 boost::container::flat_map<string, bufferlist>& attrs)
 {
   if (obj_tags == nullptr){
     // we assume the user submitted a tag format which we couldn't parse since
@@ -2069,8 +2071,8 @@ static inline void encode_obj_tags_attr(RGWObjTags* obj_tags, map<string, buffer
   attrs[RGW_ATTR_TAGS] = tagsbl;
 }
 
-static inline int encode_dlo_manifest_attr(const char * const dlo_manifest,
-					  map<string, bufferlist>& attrs)
+inline int encode_dlo_manifest_attr(const char * const dlo_manifest,
+				    boost::container::flat_map<string, bufferlist>& attrs)
 {
   string dm = dlo_manifest;
 
@@ -2085,7 +2087,7 @@ static inline int encode_dlo_manifest_attr(const char * const dlo_manifest,
   return 0;
 } /* encode_dlo_manifest_attr */
 
-static inline void complete_etag(MD5& hash, string *etag)
+inline void complete_etag(MD5& hash, string *etag)
 {
   char etag_buf[CEPH_CRYPTO_MD5_DIGESTSIZE];
   char etag_buf_str[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 16];
@@ -2099,7 +2101,7 @@ static inline void complete_etag(MD5& hash, string *etag)
 
 class RGWSetAttrs : public RGWOp {
 protected:
-  map<string, buffer::list> attrs;
+  boost::container::flat_map<string, buffer::list> attrs;
 
 public:
   RGWSetAttrs() {}
@@ -2205,7 +2207,7 @@ public:
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
-  virtual void send_response() = 0;
+  void send_response() override = 0;
   virtual int get_params() = 0;
   const char* name() const override { return "put_bucket_object_lock"; }
   RGWOpType get_type() override { return RGW_OP_PUT_BUCKET_OBJ_LOCK; }
@@ -2217,7 +2219,7 @@ public:
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
-  virtual void send_response() = 0;
+  void send_response() override = 0;
   const char* name() const override {return "get_bucket_object_lock"; }
   RGWOpType get_type() override { return RGW_OP_GET_BUCKET_OBJ_LOCK; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -2248,7 +2250,7 @@ public:
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
-  virtual void send_response() = 0;
+  void send_response() override = 0;
   const char* name() const override {return "get_obj_retention"; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_RETENTION; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -2276,7 +2278,7 @@ public:
   int verify_permission() override;
   void pre_exec() override;
   void execute() override;
-  virtual void send_response() = 0;
+  void send_response() override = 0;
   const char* name() const override {return "get_obj_legal_hold"; }
   RGWOpType get_type() override { return RGW_OP_GET_OBJ_LEGAL_HOLD; }
   uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
@@ -2342,12 +2344,11 @@ public:
   dmc::client_id dmclock_client() override { return dmc::client_id::admin; }
 };
 
-static inline int parse_value_and_bound(
-    const string &input,
-    int &output,
-    const long lower_bound,
-    const long upper_bound,
-    const long default_val)
+inline int parse_value_and_bound(const string &input,
+				 int &output,
+				 const long lower_bound,
+				 const long upper_bound,
+				 const long default_val)
 {
   if (!input.empty()) {
     char *endptr;

@@ -23,6 +23,9 @@
 
 #include "svc_rados.h"
 
+namespace rgw {
+inline auto log_lock_name = "rgw_log_lock"sv;
+}
 
 class RGWSI_Cls : public RGWServiceInstance
 {
@@ -43,105 +46,97 @@ class RGWSI_Cls : public RGWServiceInstance
     }
 
   public:
-    ClsSubService(CephContext *cct) : RGWServiceInstance(cct) {}
+    ClsSubService(CephContext *cct, boost::asio::io_context& ioc)
+      : RGWServiceInstance(cct, ioc) {}
   };
 
 public:
   class MFA : public ClsSubService {
-    int get_mfa_obj(const rgw_user& user, std::optional<RGWSI_RADOS::Obj> *obj);
-    int get_mfa_ref(const rgw_user& user, rgw_rados_ref *ref);
+    tl::expected<RGWSI_RADOS::Obj, boost::system::error_code>
+    get_mfa_obj(const rgw_user& user, optional_yield y);
 
-    void prepare_mfa_write(librados::ObjectWriteOperation *op,
+    void prepare_mfa_write(RADOS::WriteOp& op,
 			   RGWObjVersionTracker *objv_tracker,
-			   const ceph::real_time& mtime);
+			   ceph::real_time mtime);
+
 
   public:
-    MFA(CephContext *cct): ClsSubService(cct) {}
+    MFA(CephContext *cct, boost::asio::io_context& ioc)
+      : ClsSubService(cct, ioc) {}
 
-    string get_mfa_oid(const rgw_user& user) {
+    std::string get_mfa_oid(const rgw_user& user) {
       return string("user:") + user.to_str();
     }
 
-    int check_mfa(const rgw_user& user, const string& otp_id, const string& pin, optional_yield y);
-    int create_mfa(const rgw_user& user, const rados::cls::otp::otp_info_t& config,
-		   RGWObjVersionTracker *objv_tracker, const ceph::real_time& mtime, optional_yield y);
-    int remove_mfa(const rgw_user& user, const string& id,
-		   RGWObjVersionTracker *objv_tracker,
-		   const ceph::real_time& mtime,
-		   optional_yield y);
-    int get_mfa(const rgw_user& user, const string& id, rados::cls::otp::otp_info_t *result, optional_yield y);
-    int list_mfa(const rgw_user& user, list<rados::cls::otp::otp_info_t> *result, optional_yield y);
-    int otp_get_current_time(const rgw_user& user, ceph::real_time *result, optional_yield y);
-    int set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t>& entries,
-		bool reset_obj, RGWObjVersionTracker *objv_tracker,
-		const real_time& mtime, optional_yield y);
-    int list_mfa(const string& oid, list<rados::cls::otp::otp_info_t> *result,
-		 RGWObjVersionTracker *objv_tracker, ceph::real_time *pmtime, optional_yield y);
+    boost::system::error_code
+    check_mfa(const rgw_user& user, std::string_view otp_id,
+	      std::string_view pin, optional_yield y);
+    boost::system::error_code
+    create_mfa(const rgw_user& user, const rados::cls::otp::otp_info_t& config,
+	       RGWObjVersionTracker *objv_tracker, ceph::real_time mtime,
+	       optional_yield y);
+    boost::system::error_code
+    remove_mfa(const rgw_user& user, const string& id,
+	       RGWObjVersionTracker *objv_tracker,
+	       ceph::real_time mtime, optional_yield y);
+    tl::expected<rados::cls::otp::otp_info_t,
+		 boost::system::error_code>
+    get_mfa(const rgw_user& user, std::string_view id, optional_yield y);
+    tl::expected<std::vector<rados::cls::otp::otp_info_t>,
+		 boost::system::error_code>
+    list_mfa(const rgw_user& user, optional_yield y);
+    tl::expected<ceph::real_time, boost::system::error_code>
+    otp_get_current_time(const rgw_user& user, optional_yield y);
+
+    boost::system::error_code
+    set_mfa(string_view oid,
+	    const std::vector<rados::cls::otp::otp_info_t>& entries,
+	    bool reset_obj, RGWObjVersionTracker *objv_tracker,
+	    const real_time& mtime, optional_yield y);
+
+    tl::expected<std::pair<std::vector<rados::cls::otp::otp_info_t>,
+			   ceph::real_time>, boost::system::error_code>
+    list_mfa(std::string_view oid, RGWObjVersionTracker *objv_tracker,
+	     optional_yield y);
+
   } mfa;
 
   class TimeLog : public ClsSubService {
-    int init_obj(const string& oid, RGWSI_RADOS::Obj& obj);
-  public:
-    TimeLog(CephContext *cct): ClsSubService(cct) {}
+    tl::expected<RGWSI_RADOS::Obj, boost::system::error_code>
+    init_obj(std::string_view oid, optional_yield y);
 
-    void prepare_entry(cls_log_entry& entry,
-                       const real_time& ut,
-                       const string& section,
-                       const string& key,
-                       bufferlist& bl);
-    int add(const string& oid,
-            const real_time& ut,
-            const string& section,
-            const string& key,
-            bufferlist& bl,
-            optional_yield y);
-    int add(const string& oid,
-            std::list<cls_log_entry>& entries,
-            librados::AioCompletion *completion,
-            bool monotonic_inc,
-            optional_yield y);
-    int list(const string& oid,
-             const real_time& start_time,
-             const real_time& end_time,
-             int max_entries, list<cls_log_entry>& entries,
-             const string& marker,
-             string *out_marker,
-             bool *truncated,
-             optional_yield y);
-    int info(const string& oid,
-             cls_log_header *header,
-             optional_yield y);
-    int info_async(RGWSI_RADOS::Obj& obj,
-                   const string& oid,
-                   cls_log_header *header,
-                   librados::AioCompletion *completion);
-    int trim(const string& oid,
-             const real_time& start_time,
-             const real_time& end_time,
-             const string& from_marker,
-             const string& to_marker,
-             librados::AioCompletion *completion,
-             optional_yield y);
+  public:
+    TimeLog(CephContext *cct, boost::asio::io_context& ioc)
+      : ClsSubService(cct, ioc) {}
+
+    boost::system::error_code
+    add(std::string_view oid, real_time t,
+	std::string_view section,
+	std::string_view key, bufferlist&& bl,
+	optional_yield y);
+
+    boost::system::error_code
+    add(std::string_view oid,
+	std::vector<cls_log_entry>&& entries,
+	bool monotonic_inc, optional_yield y);
+
+    tl::expected<std::tuple<std::vector<cls_log_entry>, std::string, bool>,
+		 boost::system::error_code>
+    list(std::string_view oid, ceph::real_time start_time,
+	 ceph::real_time end_time, int max_entries,
+	 std::string_view marker, optional_yield y);
+
+    tl::expected<cls_log_header, boost::system::error_code>
+    info(std::string_view oid, optional_yield y);
+
+    boost::system::error_code
+    trim(std::string_view oid, ceph::real_time start_time,
+	 ceph::real_time end_time, std::string_view from_marker,
+	 std::string_view to_marker, optional_yield y);
   } timelog;
 
-  class Lock : public ClsSubService {
-    int init_obj(const string& oid, RGWSI_RADOS::Obj& obj);
-    public:
-    Lock(CephContext *cct): ClsSubService(cct) {}
-    int lock_exclusive(const rgw_pool& pool,
-                       const string& oid,
-                       timespan& duration,
-                       string& zone_id,
-                       string& owner_id,
-                       std::optional<string> lock_name = std::nullopt);
-    int unlock(const rgw_pool& pool,
-               const string& oid,
-               string& zone_id,
-               string& owner_id,
-               std::optional<string> lock_name = std::nullopt);
-  } lock;
-
-  RGWSI_Cls(CephContext *cct): RGWServiceInstance(cct), mfa(cct), timelog(cct), lock(cct) {}
+  RGWSI_Cls(CephContext *cct, boost::asio::io_context& ioc)
+    : RGWServiceInstance(cct, ioc), mfa(cct, ioc), timelog(cct, ioc) {}
 
   void init(RGWSI_Zone *_zone_svc, RGWSI_RADOS *_rados_svc) {
     rados_svc = _rados_svc;
@@ -149,9 +144,10 @@ public:
 
     mfa.init(this, zone_svc, rados_svc);
     timelog.init(this, zone_svc, rados_svc);
-    lock.init(this, zone_svc, rados_svc);
   }
 
-  int do_start() override;
+  boost::system::error_code do_start() override;
+  RGWSI_RADOS* rados() {
+    return rados_svc;
+  }
 };
-

@@ -763,11 +763,12 @@ template <class T>
 int RGWUserPubSub::read(const rgw_raw_obj& obj, T *result, RGWObjVersionTracker *objv_tracker)
 {
   bufferlist bl;
-  int ret = rgw_get_system_obj(obj_ctx,
-                               obj.pool, obj.oid,
-                               bl,
-                               objv_tracker,
-                               nullptr, null_yield, nullptr, nullptr);
+  int ret = ceph::from_error_code(
+    rgw_get_system_obj(obj_ctx,
+		       obj.pool, obj.oid,
+		       bl,
+		       objv_tracker,
+		       nullptr, null_yield, nullptr, nullptr));
   if (ret < 0) {
     return ret;
   }
@@ -775,7 +776,7 @@ int RGWUserPubSub::read(const rgw_raw_obj& obj, T *result, RGWObjVersionTracker 
   auto iter = bl.cbegin();
   try {
     decode(*result, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     return -EIO;
   }
 
@@ -788,9 +789,10 @@ int RGWUserPubSub::write(const rgw_raw_obj& obj, const T& info, RGWObjVersionTra
   bufferlist bl;
   encode(info, bl);
 
-  int ret = rgw_put_system_obj(obj_ctx, obj.pool, obj.oid,
-                           bl, false, objv_tracker,
-                           real_time());
+  int ret = ceph::from_error_code(
+    rgw_put_system_obj(obj_ctx, obj.pool, obj.oid,
+		       bl, false, objv_tracker,
+		       real_time()));
   if (ret < 0) {
     return ret;
   }

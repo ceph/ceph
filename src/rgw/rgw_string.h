@@ -189,7 +189,7 @@ void join(std::string& s, const boost::string_view& d,
 template <typename T>
 constexpr size_t string_size(const T& s)
 {
-  return detail::string_traits<T>::size(s);
+  return ::detail::string_traits<T>::size(s);
 }
 
 /// concatenates the given string arguments, returning as a std::string that
@@ -197,10 +197,10 @@ constexpr size_t string_size(const T& s)
 template <typename... Args>
 std::string string_cat_reserve(const Args&... args)
 {
-  size_t total_size = detail::sum(string_size(args)...);
+  size_t total_size = ::detail::sum(string_size(args)...);
   std::string result;
   result.reserve(total_size);
-  detail::append_to(result, args...);
+  ::detail::append_to(result, args...);
   return result;
 }
 
@@ -211,10 +211,10 @@ std::string string_join_reserve(const boost::string_view& delim,
                                 const Args&... args)
 {
   size_t delim_size = delim.size() * std::max<ssize_t>(0, sizeof...(args) - 1);
-  size_t total_size = detail::sum(string_size(args)...) + delim_size;
+  size_t total_size = ::detail::sum(string_size(args)...) + delim_size;
   std::string result;
   result.reserve(total_size);
-  detail::join(result, delim, args...);
+  ::detail::join(result, delim, args...);
   return result;
 }
 template <typename... Args>

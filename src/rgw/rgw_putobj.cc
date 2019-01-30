@@ -17,7 +17,7 @@
 
 namespace rgw::putobj {
 
-int ChunkProcessor::process(bufferlist&& data, uint64_t offset)
+boost::system::error_code ChunkProcessor::process(bufferlist&& data, uint64_t offset)
 {
   ceph_assert(offset >= chunk.length());
   uint64_t position = offset - chunk.length();
@@ -25,8 +25,8 @@ int ChunkProcessor::process(bufferlist&& data, uint64_t offset)
   const bool flush = (data.length() == 0);
   if (flush) {
     if (chunk.length() > 0) {
-      int r = Pipe::process(std::move(chunk), position);
-      if (r < 0) {
+      auto r = Pipe::process(std::move(chunk), position);
+      if (r) {
         return r;
       }
     }
@@ -39,17 +39,18 @@ int ChunkProcessor::process(bufferlist&& data, uint64_t offset)
     bufferlist bl;
     chunk.splice(0, chunk_size, &bl);
 
-    int r = Pipe::process(std::move(bl), position);
-    if (r < 0) {
+    auto r = Pipe::process(std::move(bl), position);
+    if (r) {
       return r;
     }
     position += chunk_size;
   }
-  return 0;
+  return {};
 }
 
 
-int StripeProcessor::process(bufferlist&& data, uint64_t offset)
+boost::system::error_code StripeProcessor::process(bufferlist&& data,
+						   uint64_t offset)
 {
   ceph_assert(offset >= bounds.first);
 
@@ -64,22 +65,22 @@ int StripeProcessor::process(bufferlist&& data, uint64_t offset)
       bufferlist bl;
       data.splice(0, max, &bl);
 
-      int r = Pipe::process(std::move(bl), offset - bounds.first);
-      if (r < 0) {
+      auto r = Pipe::process(std::move(bl), offset - bounds.first);
+      if (r) {
         return r;
       }
       offset += max;
     }
 
     // flush the current chunk
-    int r = Pipe::process({}, offset - bounds.first);
-    if (r < 0) {
+    auto r = Pipe::process({}, offset - bounds.first);
+    if (r) {
       return r;
     }
     // generate the next stripe
     uint64_t stripe_size;
     r = gen->next(offset, &stripe_size);
-    if (r < 0) {
+    if (r) {
       return r;
     }
     ceph_assert(stripe_size > 0);
@@ -91,7 +92,7 @@ int StripeProcessor::process(bufferlist&& data, uint64_t offset)
   }
 
   if (data.length() == 0) { // don't flush the chunk here
-    return 0;
+    return {};
   }
   return Pipe::process(std::move(data), offset - bounds.first);
 }

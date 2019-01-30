@@ -694,14 +694,14 @@ int RGWUserStatsCache::sync_all_users()
   int max = 1000;
 
   do {
-    list<string> keys;
+    std::vector<string> keys;
     ret = store->ctl()->meta.mgr->list_keys_next(handle, max, keys, &truncated);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: lists_keys_next(): ret=" << ret << dendl;
       goto done;
     }
-    for (list<string>::iterator iter = keys.begin();
-         iter != keys.end() && !going_down(); 
+    for (auto iter = keys.begin();
+         iter != keys.end() && !going_down();
          ++iter) {
       rgw_user user(*iter);
       ldout(store->ctx(), 20) << "RGWUserStatsCache: sync user=" << user << dendl;

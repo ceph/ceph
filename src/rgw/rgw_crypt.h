@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 /**
@@ -130,23 +130,21 @@ public:
                          rgw::putobj::DataProcessor *next,
                          std::unique_ptr<BlockCrypt> crypt);
 
-  int process(bufferlist&& data, uint64_t logical_offset) override;
+  boost::system::error_code process(bufferlist&& data, uint64_t logical_offset) override;
 }; /* RGWPutObj_BlockEncrypt */
 
 
 int rgw_s3_prepare_encrypt(struct req_state* s,
-                           std::map<std::string, ceph::bufferlist>& attrs,
+                           boost::container::flat_map<std::string, ceph::bufferlist>& attrs,
                            std::map<std::string,
                                     RGWPostObj_ObjStore::post_form_part,
                                     const ltstr_nocase>* parts,
                            std::unique_ptr<BlockCrypt>* block_crypt,
-                           std::map<std::string,
-                                    std::string>& crypt_http_responses);
+                           boost::container::flat_map<std::string, std::string>& crypt_http_responses);
 
 int rgw_s3_prepare_decrypt(struct req_state* s,
-                           std::map<std::string, ceph::bufferlist>& attrs,
+                           boost::container::flat_map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
-                           std::map<std::string,
-                                    std::string>& crypt_http_responses);
+                           boost::container::flat_map<std::string, std::string>& crypt_http_responses);
 
 #endif

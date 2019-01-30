@@ -390,12 +390,8 @@ RGWUserPubSub::RGWUserPubSub(rgw::sal::RGWRadosStore* _store, const rgw_user& _u
 
 int RGWUserPubSub::remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
-  int ret = rgw_delete_system_obj(store->svc()->sysobj, obj.pool, obj.oid, objv_tracker);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return 0;
+  return ceph::from_error_code(rgw_delete_system_obj(store->svc()->sysobj,
+						     obj.pool, obj.oid, objv_tracker));
 }
 
 int RGWUserPubSub::read_user_topics(rgw_pubsub_user_topics *result, RGWObjVersionTracker *objv_tracker)

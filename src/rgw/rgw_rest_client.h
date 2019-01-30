@@ -86,7 +86,7 @@ public:
   RGWRESTGenerateHTTPHeaders(CephContext *_cct, RGWEnv *_env, req_info *_info) : cct(_cct), new_env(_env), new_info(_info) {}
   void init(const string& method, const string& url, const string& resource, const param_vec_t& params);
   void set_extra_headers(const map<string, string>& extra_headers);
-  int set_obj_attrs(map<string, bufferlist>& rgw_attrs);
+  int set_obj_attrs(boost::container::flat_map<string, bufferlist>& rgw_attrs);
   void set_http_attrs(const map<string, string>& http_attrs);
   void set_policy(RGWAccessControlPolicy& policy);
   int sign(RGWAccessKey& key);
@@ -207,17 +207,18 @@ class RGWRESTStreamS3PutObj : public RGWRESTStreamRWRequest {
   RGWRESTGenerateHTTPHeaders headers_gen;
 public:
   RGWRESTStreamS3PutObj(CephContext *_cct, const string& _method, const string& _url, param_vec_t *_headers,
-		param_vec_t *_params, HostStyle _host_style) : RGWRESTStreamRWRequest(_cct, _method, _url, nullptr, _headers, _params, _host_style),
-                out_cb(NULL), new_info(cct, &new_env), headers_gen(_cct, &new_env, &new_info) {}
+			param_vec_t *_params, HostStyle _host_style) : RGWRESTStreamRWRequest(_cct, _method, _url, nullptr, _headers, _params, _host_style),
+								       out_cb(NULL), new_info(cct, &new_env), headers_gen(_cct, &new_env, &new_info) {}
   ~RGWRESTStreamS3PutObj() override;
 
   void send_init(rgw_obj& obj);
-  int send_ready(RGWAccessKey& key, map<string, bufferlist>& rgw_attrs, bool send);
+  int send_ready(RGWAccessKey& key, boost::container::flat_map<string, bufferlist>& rgw_attrs, bool send);
   int send_ready(RGWAccessKey& key, const map<string, string>& http_attrs,
                  RGWAccessControlPolicy& policy, bool send);
   int send_ready(RGWAccessKey& key, bool send);
 
-  int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send);
+  int put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size,
+		   boost::container::flat_map<string, bufferlist>& attrs, bool send);
 
   RGWGetDataCB *get_out_cb() { return out_cb; }
 };

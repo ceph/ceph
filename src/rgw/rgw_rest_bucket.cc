@@ -12,6 +12,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+namespace bc = boost::container;
+
 
 class RGWOp_Bucket_Info : public RGWRESTOp {
 
@@ -292,7 +294,7 @@ void RGWOp_Set_Bucket_Quota::execute()
   }
   if (use_http_params) {
     RGWBucketInfo bucket_info;
-    map<string, bufferlist> attrs;
+    bc::flat_map<string, bufferlist> attrs;
     http_ret = store->getRados()->get_bucket_info(store->svc(), uid.tenant, bucket, bucket_info, NULL, s->yield, &attrs);
     if (http_ret < 0) {
       return;

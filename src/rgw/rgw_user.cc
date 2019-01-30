@@ -30,9 +30,13 @@
 #include "services/svc_sys_obj_cache.h"
 #include "services/svc_user.h"
 #include "services/svc_meta.h"
+#include "cls/user/cls_user_ops.h"
+#include "services/svc_user_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 
+namespace bc = boost::container;
+namespace bs = boost::system;
 
 
 extern void op_type_to_str(uint32_t mask, char *buf, int len);
@@ -144,15 +148,15 @@ int rgw_store_user_info(RGWUserCtl *user_ctl,
                         RGWObjVersionTracker *objv_tracker,
                         real_time mtime,
                         bool exclusive,
-                        map<string, bufferlist> *pattrs)
+                        bc::flat_map<string, bufferlist> *pattrs)
 {
   return user_ctl->store_info(info, null_yield,
-                              RGWUserCtl::PutParams()
-                              .set_old_info(old_info)
-                              .set_objv_tracker(objv_tracker)
-                              .set_mtime(mtime)
-                              .set_exclusive(exclusive)
-                              .set_attrs(pattrs));
+			 RGWUserCtl::PutParams()
+			 .set_old_info(old_info)
+			 .set_objv_tracker(objv_tracker)
+			 .set_mtime(mtime)
+			 .set_exclusive(exclusive)
+			 .set_attrs(pattrs));
 }
 
 /**
@@ -165,7 +169,7 @@ int rgw_get_user_info_by_uid(RGWUserCtl *user_ctl,
                              RGWObjVersionTracker * const objv_tracker,
                              real_time * const pmtime,
                              rgw_cache_entry_info * const cache_info,
-                             map<string, bufferlist> * const pattrs)
+                             bc::flat_map<string, bufferlist> * const pattrs)
 {
   return user_ctl->get_info_by_uid(uid, &info, null_yield,
                                    RGWUserCtl::GetParams()
@@ -2150,13 +2154,13 @@ int RGWUser::list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher)
   // open the user id list array section
   formatter->open_array_section("keys");
   do {
-    std::list<std::string> keys;
+    std::vector<std::string> keys;
     left = op_state.max_entries - count;
     ret = meta_mgr->list_keys_next(handle, left, keys, &truncated);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     } if (ret != -ENOENT) {
-      for (std::list<std::string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+      for (auto iter = keys.begin(); iter != keys.end(); ++iter) {
       formatter->dump_string("key", *iter);
         ++count;
       }
@@ -2551,9 +2555,10 @@ public:
 
     rgw_user user = RGWSI_User::user_from_meta_key(entry);
 
-    int ret = svc.user->read_user_info(op->ctx(), user, &uci.info, &objv_tracker,
-                                       &mtime, nullptr, &uci.attrs,
-                                       y);
+    int ret = ceph::from_error_code(
+      svc.user->read_user_info(op->ctx(), user, &uci.info, &objv_tracker,
+			       &mtime, nullptr, &uci.attrs,
+			       y));
     if (ret < 0) {
       return ret;
     }
@@ -2583,20 +2588,21 @@ public:
              RGWMDLogSyncType type) override;
 
   int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker,
-                optional_yield y) {
+                optional_yield y) override {
     RGWUserInfo info;
 
     rgw_user user = RGWSI_User::user_from_meta_key(entry);
 
-    int ret = svc.user->read_user_info(op->ctx(), user, &info, nullptr,
-                                       nullptr, nullptr, nullptr,
-                                       y);
+    int ret = ceph::from_error_code(
+      svc.user->read_user_info(op->ctx(), user, &info, nullptr,
+			       nullptr, nullptr, nullptr,
+			       y));
     if (ret < 0) {
       return ret;
     }
 
-    return svc.user->remove_user_info(op->ctx(), info, &objv_tracker,
-                                      y);
+    return ceph::from_error_code(
+      svc.user->remove_user_info(op->ctx(), info, &objv_tracker, y));
   }
 };
 
@@ -2632,7 +2638,7 @@ int RGWMetadataHandlerPut_User::put_checked()
   RGWUserMetadataObject *orig_obj = static_cast<RGWUserMetadataObject *>(old_obj);
   RGWUserCompleteInfo& uci = uobj->get_uci();
 
-  map<string, bufferlist> *pattrs{nullptr};
+  bc::flat_map<string, bufferlist> *pattrs{nullptr};
   if (uci.has_attrs) {
     pattrs = &uci.attrs;
   }
@@ -2641,9 +2647,10 @@ int RGWMetadataHandlerPut_User::put_checked()
 
   auto mtime = obj->get_mtime();
 
-  int ret = uhandler->svc.user->store_user_info(op->ctx(), uci.info, pold_info,
-                                               &objv_tracker, mtime,
-                                               false, pattrs, y);
+  int ret = ceph::from_error_code(
+    uhandler->svc.user->store_user_info(op->ctx(), uci.info, pold_info,
+					&objv_tracker, mtime,
+					false, pattrs, y));
   if (ret < 0) {
     return ret;
   }
@@ -2654,9 +2661,11 @@ int RGWMetadataHandlerPut_User::put_checked()
 
 RGWUserCtl::RGWUserCtl(RGWSI_Zone *zone_svc,
                        RGWSI_User *user_svc,
+		       RGWSI_RADOS *rados_svc,
                        RGWUserMetadataHandler *_umhandler) : umhandler(_umhandler) {
   svc.zone = zone_svc;
   svc.user = user_svc;
+  svc.rados = rados_svc;
   be_handler = umhandler->get_be_handler();
 }
 
@@ -2691,7 +2700,8 @@ int RGWUserCtl::get_info_by_uid(const rgw_user& uid,
                                 const GetParams& params)
 
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+  return ceph::from_error_code(
+    be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->read_user_info(op->ctx(),
                                     uid,
                                     info,
@@ -2700,7 +2710,7 @@ int RGWUserCtl::get_info_by_uid(const rgw_user& uid,
                                     params.cache_info,
                                     params.attrs,
                                     y);
-  });
+		     }));
 }
 
 int RGWUserCtl::get_info_by_email(const string& email,
@@ -2708,13 +2718,13 @@ int RGWUserCtl::get_info_by_email(const string& email,
                                   optional_yield y,
                                   const GetParams& params)
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+  return ceph::from_error_code(be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->get_user_info_by_email(op->ctx(), email,
                                             info,
                                             params.objv_tracker,
                                             params.mtime,
                                             y);
-  });
+						}));
 }
 
 int RGWUserCtl::get_info_by_swift(const string& swift_name,
@@ -2722,13 +2732,13 @@ int RGWUserCtl::get_info_by_swift(const string& swift_name,
                                   optional_yield y,
                                   const GetParams& params)
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+  return ceph::from_error_code(be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->get_user_info_by_swift(op->ctx(), swift_name,
                                             info,
                                             params.objv_tracker,
                                             params.mtime,
                                             y);
-  });
+						}));
 }
 
 int RGWUserCtl::get_info_by_access_key(const string& access_key,
@@ -2736,17 +2746,17 @@ int RGWUserCtl::get_info_by_access_key(const string& access_key,
                                        optional_yield y,
                                        const GetParams& params)
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+  return ceph::from_error_code(be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->get_user_info_by_access_key(op->ctx(), access_key,
                                                  info,
                                                  params.objv_tracker,
                                                  params.mtime,
                                                  y);
-  });
+						}));
 }
 
 int RGWUserCtl::get_attrs_by_uid(const rgw_user& user_id,
-                                 map<string, bufferlist> *pattrs,
+                                 boost::container::flat_map<string, bufferlist> *pattrs,
                                  optional_yield y,
                                  RGWObjVersionTracker *objv_tracker)
 {
@@ -2762,7 +2772,7 @@ int RGWUserCtl::store_info(const RGWUserInfo& info, optional_yield y,
 {
   string key = RGWSI_User::get_meta_key(info.user_id);
 
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+  return ceph::from_error_code(be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->store_user_info(op->ctx(), info,
                                      params.old_info,
                                      params.objv_tracker,
@@ -2770,7 +2780,7 @@ int RGWUserCtl::store_info(const RGWUserInfo& info, optional_yield y,
                                      params.exclusive,
                                      params.attrs,
                                      y);
-  });
+						}));
 }
 
 int RGWUserCtl::remove_info(const RGWUserInfo& info, optional_yield y,
@@ -2779,11 +2789,11 @@ int RGWUserCtl::remove_info(const RGWUserInfo& info, optional_yield y,
 {
   string key = RGWSI_User::get_meta_key(info.user_id);
 
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+  return ceph::from_error_code(be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->remove_user_info(op->ctx(), info,
                                       params.objv_tracker,
                                       y);
-  });
+	}));
 }
 
 int RGWUserCtl::add_bucket(const rgw_user& user,
@@ -2791,18 +2801,22 @@ int RGWUserCtl::add_bucket(const rgw_user& user,
                            ceph::real_time creation_time)
 
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->add_bucket(op->ctx(), user, bucket, creation_time);
-  });
+  return ceph::from_error_code(be_handler->call(
+    [&](RGWSI_MetaBackend_Handler::Op *op) {
+      return svc.user->add_bucket(op->ctx(), user, bucket, creation_time,
+				  null_yield);
+    }));
 }
 
 int RGWUserCtl::remove_bucket(const rgw_user& user,
                               const rgw_bucket& bucket)
 
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->remove_bucket(op->ctx(), user, bucket);
-  });
+  return ceph::from_error_code(
+    be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+		       return svc.user->remove_bucket(op->ctx(), user, bucket,
+						      null_yield);
+		     }));
 }
 
 int RGWUserCtl::list_buckets(const rgw_user& user,
@@ -2818,64 +2832,105 @@ int RGWUserCtl::list_buckets(const rgw_user& user,
     max = default_max;
   }
 
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    int ret = svc.user->list_buckets(op->ctx(), user, marker, end_marker,
-                                     max, buckets, is_truncated);
-    if (ret < 0) {
-      return ret;
-    }
-    if (need_stats) {
-      map<string, RGWBucketEnt>& m = buckets->get_buckets();
-      ret = ctl.bucket->read_buckets_stats(m, null_yield);
-      if (ret < 0 && ret != -ENOENT) {
-        ldout(svc.user->ctx(), 0) << "ERROR: could not get stats for buckets" << dendl;
-        return ret;
-      }
-    }
-    return 0;
-  });
+  return ceph::from_error_code(
+    be_handler->call(
+      [&](RGWSI_MetaBackend_Handler::Op *op) {
+	auto ec = svc.user->list_buckets(op->ctx(), user, marker, end_marker,
+					 max, buckets, is_truncated, null_yield);
+	if (ec) {
+	  return ec;
+	}
+	if (need_stats) {
+	  bc::flat_map<string, RGWBucketEnt>& m = buckets->get_buckets();
+	  ec = ceph::to_error_code(ctl.bucket->read_buckets_stats(m, null_yield));
+	  if (ec && ec != bs::errc::no_such_file_or_directory) {
+	    ldout(svc.user->ctx(), 0)
+	      << "ERROR: could not get stats for buckets" << dendl;
+	    return ec;
+	  }
+	}
+	return bs::error_code();
+      }));
 }
 
 int RGWUserCtl::flush_bucket_stats(const rgw_user& user,
                                    const RGWBucketEnt& ent)
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->flush_bucket_stats(op->ctx(), user, ent);
-  });
+  return ceph::from_error_code(
+    be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+		       return svc.user->flush_bucket_stats(op->ctx(), user,
+							   ent,
+							   null_yield);
+		     }));
 }
 
 int RGWUserCtl::complete_flush_stats(const rgw_user& user)
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->complete_flush_stats(op->ctx(), user);
-  });
+  return ceph::from_error_code(
+    be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+		       return svc.user->complete_flush_stats(op->ctx(), user,
+							     null_yield);
+		     }));
 }
 
 int RGWUserCtl::reset_stats(const rgw_user& user)
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->reset_bucket_stats(op->ctx(), user);
-  });
+  return ceph::from_error_code(
+    be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+		       return svc.user->reset_bucket_stats(op->ctx(), user,
+							   null_yield);
+		     }));
 }
 
 int RGWUserCtl::read_stats(const rgw_user& user, RGWStorageStats *stats,
 			   ceph::real_time *last_stats_sync,
 			   ceph::real_time *last_stats_update)
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->read_stats(op->ctx(), user, stats,
-				last_stats_sync, last_stats_update);
-  });
+  return ceph::from_error_code(
+    be_handler->call(
+      [&](RGWSI_MetaBackend_Handler::Op *op) {
+	return svc.user->read_stats(op->ctx(), user, stats,
+				    last_stats_sync, last_stats_update,
+				    null_yield);
+      }));
 }
 
-int RGWUserCtl::read_stats_async(const rgw_user& user, RGWGetUserStats_CB *cb)
+int RGWUserCtl::read_stats_async(const rgw_user& user, RGWGetUserStats_CB* cb)
 {
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->read_stats_async(op->ctx(), user, cb);
-  });
+  auto oid = user.to_str();
+  oid.append(RGW_BUCKETS_OBJ_SUFFIX.data(), RGW_BUCKETS_OBJ_SUFFIX.size());
+  rgw_raw_obj poid(svc.zone->get_zone_params().user_uid_pool, oid);
+  auto obj = svc.rados->obj(poid, null_yield);
+  if (!obj)
+    return ceph::from_error_code(obj.error());
+
+
+  bufferlist in;
+  cls_user_get_header_op call;
+  encode(call, in);
+  RADOS::ReadOp op;
+  op.exec("user", "get_header", in,
+	  [cb](bs::error_code ec, ceph::buffer::list bl) {
+	    RGWStorageStats stats;
+	    if (!ec) try {
+		cls_user_get_header_ret ret;
+		auto iter = bl.cbegin();
+		decode(ret, iter);
+		stats.size = ret.header.stats.total_bytes;
+		stats.size_rounded = ret.header.stats.total_bytes_rounded;
+		stats.num_objects = ret.header.stats.total_entries;
+		cb->set_response(stats);
+	      } catch (const ceph::buffer::error& err) {
+		ec = err.code();
+	      }
+	    if (cb) {
+	      cb->handle_response(ceph::from_error_code(ec));
+	    }
+	  });
+  obj->aio_operate(std::move(op), nullptr, [](bs::error_code) {});
+  return 0;
 }
 
 RGWMetadataHandler *RGWUserMetaHandlerAllocator::alloc(RGWSI_User *user_svc) {
   return new RGWUserMetadataHandler(user_svc);
 }
-

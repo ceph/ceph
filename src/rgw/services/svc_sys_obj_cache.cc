@@ -1,4 +1,3 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
@@ -30,30 +29,25 @@ public:
   }
 };
 
-int RGWSI_SysObj_Cache::do_start()
+boost::system::error_code RGWSI_SysObj_Cache::do_start()
 {
-  int r = asocket.start();
-  if (r < 0) {
-    return r;
-  }
-
-  r = RGWSI_SysObj_Core::do_start();
-  if (r < 0) {
+  auto r = RGWSI_SysObj_Core::do_start();
+  if (r) {
     return r;
   }
 
   r = notify_svc->start();
-  if (r < 0) {
+  if (r) {
     return r;
   }
 
   assert(notify_svc->is_started());
 
-  cb.reset(new RGWSI_SysObj_Cache_CB(this));
+  cb = std::make_shared<RGWSI_SysObj_Cache_CB>(this);
 
   notify_svc->register_watch_cb(cb.get());
 
-  return 0;
+  return {};
 }
 
 void RGWSI_SysObj_Cache::shutdown()
@@ -62,7 +56,7 @@ void RGWSI_SysObj_Cache::shutdown()
   RGWSI_SysObj_Core::shutdown();
 }
 
-static string normal_name(rgw_pool& pool, const std::string& oid) {
+static std::string normal_name(rgw_pool& pool, const std::string& oid) {
   std::string buf;
   buf.reserve(pool.name.size() + pool.ns.size() + oid.size() + 2);
   buf.append(pool.name).append("+").append(pool.ns).append("+").append(oid);
@@ -81,10 +75,11 @@ void RGWSI_SysObj_Cache::normalize_pool_and_obj(const rgw_pool& src_pool, const 
 }
 
 
-int RGWSI_SysObj_Cache::remove(RGWSysObjectCtxBase& obj_ctx,
-                               RGWObjVersionTracker *objv_tracker,
-                               const rgw_raw_obj& obj,
-                               optional_yield y)
+boost::system::error_code
+RGWSI_SysObj_Cache::remove(RGWSysObjectCtxBase& obj_ctx,
+                           RGWObjVersionTracker *objv_tracker,
+                           const rgw_raw_obj& obj,
+                           optional_yield y)
 
 {
   rgw_pool pool;
@@ -95,24 +90,25 @@ int RGWSI_SysObj_Cache::remove(RGWSysObjectCtxBase& obj_ctx,
   cache.remove(name);
 
   ObjectCacheInfo info;
-  int r = distribute_cache(name, obj, info, REMOVE_OBJ, y);
-  if (r < 0) {
+  auto r = distribute_cache(name, obj, info, REMOVE_OBJ, y);
+  if (r) {
     ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to distribute cache: r=" << r << dendl;
   }
 
   return RGWSI_SysObj_Core::remove(obj_ctx, objv_tracker, obj, y);
 }
 
-int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
-                             RGWSI_SysObj_Obj_GetObjState& read_state,
-                             RGWObjVersionTracker *objv_tracker,
-                             const rgw_raw_obj& obj,
-                             bufferlist *obl, off_t ofs, off_t end,
-                             map<string, bufferlist> *attrs,
-			     bool raw_attrs,
-                             rgw_cache_entry_info *cache_info,
-                             boost::optional<obj_version> refresh_version,
-                             optional_yield y)
+boost::system::error_code
+RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
+                         GetObjState& read_state,
+                         RGWObjVersionTracker *objv_tracker,
+                         const rgw_raw_obj& obj,
+                         bufferlist *obl, off_t ofs, off_t end,
+                         boost::container::flat_map<std::string, ceph::buffer::list> *attrs,
+                         bool raw_attrs,
+                         rgw_cache_entry_info *cache_info,
+                         boost::optional<obj_version> refresh_version,
+                         optional_yield y)
 {
   rgw_pool pool;
   string oid;
@@ -136,7 +132,7 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
   if ((cache.get(name, info, flags, cache_info) == 0) &&
       (!refresh_version || !info.version.compare(&(*refresh_version)))) {
     if (info.status < 0)
-      return info.status;
+      return ceph::to_error_code(info.status);
 
     bufferlist& bl = info.data;
 
@@ -149,24 +145,26 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
       objv_tracker->read_version = info.version;
     if (attrs) {
       if (raw_attrs) {
-	*attrs = info.xattrs;
+        attrs->clear();
+        std::copy(info.xattrs.cbegin(), info.xattrs.cend(),
+                  std::inserter(*attrs, attrs->end()));
       } else {
 	rgw_filter_attrset(info.xattrs, RGW_ATTR_PREFIX, attrs);
       }
     }
-    return obl->length();
+    return {};
   }
 
-  map<string, bufferlist> unfiltered_attrset;
-  int r = RGWSI_SysObj_Core::read(obj_ctx, read_state, objv_tracker,
-                         obj, obl, ofs, end,
-			 (attrs ? &unfiltered_attrset : nullptr),
-			 true, /* cache unfiltered attrs */
-			 cache_info,
-                         refresh_version, y);
-  if (r < 0) {
-    if (r == -ENOENT) { // only update ENOENT, we'd rather retry other errors
-      info.status = r;
+  boost::container::flat_map<std::string, ceph::buffer::list> unfiltered_attrset;
+  auto r = RGWSI_SysObj_Core::read(obj_ctx, read_state, objv_tracker,
+                                   obj, obl, ofs, end,
+                                   (attrs ? &unfiltered_attrset : nullptr),
+                                   true, /* cache unfiltered attrs */
+                                   cache_info,
+                                   refresh_version, y);
+  if (r) {
+    if (r == boost::system::errc::no_such_file_or_directory) { // only update ENOENT, we'd rather retry other errors
+      info.status = ceph::from_error_code(r);
       cache.put(name, info, cache_info);
     }
     return r;
@@ -176,7 +174,7 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
     /* in this case, most likely object contains more data, we can't cache it */
     flags &= ~CACHE_FLAG_DATA;
   } else {
-    bufferptr p(r);
+    bufferptr p(obl->length());
     bufferlist& bl = info.data;
     bl.clear();
     bufferlist::iterator o = obl->begin();
@@ -189,9 +187,13 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
     info.version = objv_tracker->read_version;
   }
   if (attrs) {
-    info.xattrs = std::move(unfiltered_attrset);
+    info.xattrs.clear();
+    std::move(unfiltered_attrset.begin(), unfiltered_attrset.end(),
+              std::inserter(info.xattrs, info.xattrs.end()));
     if (raw_attrs) {
-      *attrs = info.xattrs;
+      attrs->clear();
+      std::copy(info.xattrs.begin(), info.xattrs.end(),
+                std::inserter(*attrs, attrs->end()));
     } else {
       rgw_filter_attrset(info.xattrs, RGW_ATTR_PREFIX, attrs);
     }
@@ -200,10 +202,11 @@ int RGWSI_SysObj_Cache::read(RGWSysObjectCtxBase& obj_ctx,
   return r;
 }
 
-int RGWSI_SysObj_Cache::get_attr(const rgw_raw_obj& obj,
-                                 const char *attr_name,
-                                 bufferlist *dest,
-                                 optional_yield y)
+boost::system::error_code
+RGWSI_SysObj_Cache::get_attr(const rgw_raw_obj& obj,
+                             const char *attr_name,
+                             bufferlist *dest,
+                             optional_yield y)
 {
   rgw_pool pool;
   string oid;
@@ -217,33 +220,38 @@ int RGWSI_SysObj_Cache::get_attr(const rgw_raw_obj& obj,
 
   if (cache.get(name, info, flags, nullptr) == 0) {
     if (info.status < 0)
-      return info.status;
+      return ceph::to_error_code(info.status);
 
     auto iter = info.xattrs.find(attr_name);
     if (iter == info.xattrs.end()) {
-      return -ENODATA;
+      return ceph::to_error_code(-ENODATA);
     }
 
     *dest = iter->second;
-    return dest->length();
+    return {};
   }
   /* don't try to cache this one */
   return RGWSI_SysObj_Core::get_attr(obj, attr_name, dest, y);
 }
 
-int RGWSI_SysObj_Cache::set_attrs(const rgw_raw_obj& obj, 
-                                  map<string, bufferlist>& attrs,
-                                  map<string, bufferlist> *rmattrs,
-                                  RGWObjVersionTracker *objv_tracker,
-                                  optional_yield y)
+boost::system::error_code
+RGWSI_SysObj_Cache::set_attrs(const rgw_raw_obj& obj,
+                              boost::container::flat_map<std::string, ceph::buffer::list>& attrs,
+                              boost::container::flat_map<std::string, ceph::buffer::list> *rmattrs,
+                              RGWObjVersionTracker *objv_tracker,
+                              optional_yield y)
 {
   rgw_pool pool;
   string oid;
   normalize_pool_and_obj(obj.pool, obj.oid, pool, oid);
   ObjectCacheInfo info;
-  info.xattrs = attrs;
+  info.xattrs.clear();
+  std::copy(attrs.begin(), attrs.end(),
+            std::inserter(info.xattrs, info.xattrs.end()));
   if (rmattrs) {
-    info.rm_xattrs = *rmattrs;
+    info.rm_xattrs.clear();
+    std::copy(rmattrs->begin(), rmattrs->end(),
+              std::inserter(info.rm_xattrs, info.rm_xattrs.end()));
   }
   info.status = 0;
   info.flags = CACHE_FLAG_MODIFY_XATTRS;
@@ -251,12 +259,12 @@ int RGWSI_SysObj_Cache::set_attrs(const rgw_raw_obj& obj,
     info.version = objv_tracker->write_version;
     info.flags |= CACHE_FLAG_OBJV;
   }
-  int ret = RGWSI_SysObj_Core::set_attrs(obj, attrs, rmattrs, objv_tracker, y);
+  auto ret = RGWSI_SysObj_Core::set_attrs(obj, attrs, rmattrs, objv_tracker, y);
   string name = normal_name(pool, oid);
-  if (ret >= 0) {
+  if (!ret) {
     cache.put(name, info, NULL);
-    int r = distribute_cache(name, obj, info, UPDATE_OBJ, y);
-    if (r < 0)
+    auto r = distribute_cache(name, obj, info, UPDATE_OBJ, y);
+    if (r)
       ldout(cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
   } else {
     cache.remove(name);
@@ -265,20 +273,23 @@ int RGWSI_SysObj_Cache::set_attrs(const rgw_raw_obj& obj,
   return ret;
 }
 
-int RGWSI_SysObj_Cache::write(const rgw_raw_obj& obj,
-                             real_time *pmtime,
-                             map<std::string, bufferlist>& attrs,
-                             bool exclusive,
-                             const bufferlist& data,
-                             RGWObjVersionTracker *objv_tracker,
-                             real_time set_mtime,
-                             optional_yield y)
+boost::system::error_code
+RGWSI_SysObj_Cache::write(const rgw_raw_obj& obj,
+                          real_time *pmtime,
+                          boost::container::flat_map<std::string, ceph::buffer::list>& attrs,
+                          bool exclusive,
+                          const bufferlist& data,
+                          RGWObjVersionTracker *objv_tracker,
+                          real_time set_mtime,
+                          optional_yield y)
 {
   rgw_pool pool;
   string oid;
   normalize_pool_and_obj(obj.pool, obj.oid, pool, oid);
   ObjectCacheInfo info;
-  info.xattrs = attrs;
+  info.xattrs.clear();
+  std::copy(attrs.begin(), attrs.end(),
+            std::inserter(info.xattrs, info.xattrs.end()));
   info.status = 0;
   info.data = data;
   info.flags = CACHE_FLAG_XATTRS | CACHE_FLAG_DATA | CACHE_FLAG_META;
@@ -287,16 +298,16 @@ int RGWSI_SysObj_Cache::write(const rgw_raw_obj& obj,
     info.flags |= CACHE_FLAG_OBJV;
   }
   ceph::real_time result_mtime;
-  int ret = RGWSI_SysObj_Core::write(obj, &result_mtime, attrs,
-                                     exclusive, data,
-                                     objv_tracker, set_mtime, y);
+  auto ret = RGWSI_SysObj_Core::write(obj, &result_mtime, attrs,
+                                      exclusive, data,
+                                      objv_tracker, set_mtime, y);
   if (pmtime) {
     *pmtime = result_mtime;
   }
   info.meta.mtime = result_mtime;
   info.meta.size = data.length();
   string name = normal_name(pool, oid);
-  if (ret >= 0) {
+  if (!ret) {
     cache.put(name, info, NULL);
     // Only distribute the cache information if we did not just create
     // the object with the exclusive flag. Note: PUT_OBJ_EXCL implies
@@ -306,8 +317,8 @@ int RGWSI_SysObj_Cache::write(const rgw_raw_obj& obj,
     // will need that system object in the near-term and b) it
     // generates additional network traffic.
     if (!exclusive) {
-      int r = distribute_cache(name, obj, info, UPDATE_OBJ, y);
-      if (r < 0)
+      auto r = distribute_cache(name, obj, info, UPDATE_OBJ, y);
+      if (r)
 	ldout(cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
     }
   } else {
@@ -317,11 +328,12 @@ int RGWSI_SysObj_Cache::write(const rgw_raw_obj& obj,
   return ret;
 }
 
-int RGWSI_SysObj_Cache::write_data(const rgw_raw_obj& obj,
-                                   const bufferlist& data,
-                                   bool exclusive,
-                                   RGWObjVersionTracker *objv_tracker,
-                                   optional_yield y)
+boost::system::error_code
+RGWSI_SysObj_Cache::write_data(const rgw_raw_obj& obj,
+                               const bufferlist& data,
+                               bool exclusive,
+                               RGWObjVersionTracker *objv_tracker,
+                               optional_yield y)
 {
   rgw_pool pool;
   string oid;
@@ -337,12 +349,12 @@ int RGWSI_SysObj_Cache::write_data(const rgw_raw_obj& obj,
     info.version = objv_tracker->write_version;
     info.flags |= CACHE_FLAG_OBJV;
   }
-  int ret = RGWSI_SysObj_Core::write_data(obj, data, exclusive, objv_tracker, y);
-  string name = normal_name(pool, oid);
-  if (ret >= 0) {
+  auto ret = RGWSI_SysObj_Core::write_data(obj, data, exclusive, objv_tracker, y);
+  std::string name = normal_name(pool, oid);
+  if (!ret) {
     cache.put(name, info, NULL);
-    int r = distribute_cache(name, obj, info, UPDATE_OBJ, y);
-    if (r < 0)
+    auto r = distribute_cache(name, obj, info, UPDATE_OBJ, y);
+    if (r)
       ldout(cct, 0) << "ERROR: failed to distribute cache for " << obj << dendl;
   } else {
     cache.remove(name);
@@ -351,10 +363,12 @@ int RGWSI_SysObj_Cache::write_data(const rgw_raw_obj& obj,
   return ret;
 }
 
-int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *pepoch,
-                                 map<string, bufferlist> *attrs, bufferlist *first_chunk,
-                                 RGWObjVersionTracker *objv_tracker,
-                                 optional_yield y)
+boost::system::error_code
+RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *pepoch,
+                             boost::container::flat_map<std::string, ceph::buffer::list> *attrs,
+                             bufferlist *first_chunk,
+                             RGWObjVersionTracker *objv_tracker,
+                             optional_yield y)
 {
   rgw_pool pool;
   string oid;
@@ -368,12 +382,15 @@ int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_t
 
   ObjectCacheInfo info;
   uint32_t flags = CACHE_FLAG_META | CACHE_FLAG_XATTRS;
+  // TODO (Moved up here so the goto could compile)
+  boost::container::flat_map<std::string, ceph::buffer::list> tmp;
+
   if (objv_tracker)
     flags |= CACHE_FLAG_OBJV;
-  int r = cache.get(name, info, flags, NULL);
-  if (r == 0) {
+  auto r = ceph::to_error_code(cache.get(name, info, flags, NULL));
+  if (!r) {
     if (info.status < 0)
-      return info.status;
+      return ceph::to_error_code(info.status);
 
     size = info.meta.size;
     mtime = info.meta.mtime;
@@ -382,11 +399,19 @@ int RGWSI_SysObj_Cache::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_t
       objv_tracker->read_version = info.version;
     goto done;
   }
-  r = RGWSI_SysObj_Core::raw_stat(obj, &size, &mtime, &epoch, &info.xattrs,
+  // TODO: This actually does cost us (the std::move and std::copies
+  // just do what move assignment and copy assignment would have done
+  // anyway), so come back and fix it when we update ObjCacheInfo to
+  // not use std::map
+  r = RGWSI_SysObj_Core::raw_stat(obj, &size, &mtime, &epoch, &tmp,
                                   first_chunk, objv_tracker, y);
-  if (r < 0) {
-    if (r == -ENOENT) {
-      info.status = r;
+  info.xattrs.clear();
+  std::copy(tmp.begin(), tmp.end(),
+            std::inserter(info.xattrs, info.xattrs.end()));
+
+  if (r) {
+    if (r == boost::system::errc::no_such_file_or_directory) {
+      info.status = ceph::from_error_code(r);
       cache.put(name, info, NULL);
     }
     return r;
@@ -408,15 +433,19 @@ done:
     *pmtime = mtime;
   if (pepoch)
     *pepoch = epoch;
-  if (attrs)
-    *attrs = info.xattrs;
-  return 0;
+  if (attrs) {
+    attrs->clear();
+    std::copy(info.xattrs.begin(), info.xattrs.end(),
+              std::inserter(*attrs, attrs->end()));
+  }
+  return {};
 }
 
-int RGWSI_SysObj_Cache::distribute_cache(const string& normal_name,
-                                         const rgw_raw_obj& obj,
-                                         ObjectCacheInfo& obj_info, int op,
-                                         optional_yield y)
+boost::system::error_code
+RGWSI_SysObj_Cache::distribute_cache(const string& normal_name,
+                                     const rgw_raw_obj& obj,
+                                     ObjectCacheInfo& obj_info, int op,
+                                     optional_yield y)
 {
   RGWCacheNotifyInfo info;
   info.op = op;

@@ -20,7 +20,8 @@ class RGWSI_SyncModules : public RGWServiceInstance
   } svc;
 
 public:
-  RGWSI_SyncModules(CephContext *cct): RGWServiceInstance(cct) {}
+  RGWSI_SyncModules(CephContext *cct, boost::asio::io_context& ioc)
+    : RGWServiceInstance(cct, ioc) {}
   ~RGWSI_SyncModules();
 
   RGWSyncModulesManager *get_manager() {
@@ -28,7 +29,7 @@ public:
   }
 
   void init(RGWSI_Zone *zone_svc);
-  int do_start() override;
+  boost::system::error_code do_start() override;
 
   RGWSyncModuleInstanceRef& get_sync_module() { return sync_module; }
 };

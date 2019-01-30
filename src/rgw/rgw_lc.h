@@ -495,14 +495,14 @@ class RGWLC : public DoutPrefixProvider {
   void start_processor();
   void stop_processor();
   int set_bucket_config(RGWBucketInfo& bucket_info,
-                        const map<string, bufferlist>& bucket_attrs,
+                        const boost::container::flat_map<string, bufferlist>& bucket_attrs,
                         RGWLifecycleConfiguration *config);
   int remove_bucket_config(RGWBucketInfo& bucket_info,
-                           const map<string, bufferlist>& bucket_attrs);
+                           const boost::container::flat_map<string, bufferlist>& bucket_attrs);
 
   CephContext *get_cct() const override { return store->ctx(); }
-  unsigned get_subsys() const;
-  std::ostream& gen_prefix(std::ostream& out) const;
+  unsigned get_subsys() const override;
+  std::ostream& gen_prefix(std::ostream& out) const override;
 
   private:
 
@@ -513,14 +513,14 @@ class RGWLC : public DoutPrefixProvider {
 namespace rgw::lc {
 
 int fix_lc_shard_entry(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info,
-		       const map<std::string,bufferlist>& battrs);
+		       const boost::container::flat_map<std::string,bufferlist>& battrs);
 
 std::string s3_expiration_header(
   DoutPrefixProvider* dpp,
   const rgw_obj_key& obj_key,
   const RGWObjTags& obj_tagset,
   const ceph::real_time& mtime,
-  const std::map<std::string, buffer::list>& bucket_attrs);
+  const boost::container::flat_map<std::string, buffer::list>& bucket_attrs);
 
 } // namespace rgw::lc
 

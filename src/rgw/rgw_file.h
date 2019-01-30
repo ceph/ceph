@@ -2161,7 +2161,7 @@ public:
   uint64_t get_size() { return _size; }
   real_time ctime() { return mod_time; } // XXX
   real_time mtime() { return mod_time; }
-  std::map<string, bufferlist>& get_attrs() { return attrs; }
+  boost::container::flat_map<string, bufferlist>& get_attrs() { return attrs; }
 
   buffer::list* get_attr(const std::string& k) {
     auto iter = attrs.find(k);
@@ -2229,7 +2229,7 @@ class RGWStatBucketRequest : public RGWLibRequest,
 {
 public:
   std::string uri;
-  std::map<std::string, buffer::list> attrs;
+  boost::container::flat_map<std::string, buffer::list> attrs;
   RGWLibFS::BucketStats& bs;
 
   RGWStatBucketRequest(CephContext* _cct, rgw::sal::RGWUser *_user,

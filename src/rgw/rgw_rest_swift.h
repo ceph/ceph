@@ -77,7 +77,7 @@ public:
 };
 
 class RGWStatAccount_ObjStore_SWIFT : public RGWStatAccount_ObjStore {
-  map<string, bufferlist> attrs;
+  boost::container::flat_map<string, bufferlist> attrs;
 public:
   RGWStatAccount_ObjStore_SWIFT() {
   }

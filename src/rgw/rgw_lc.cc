@@ -43,6 +43,8 @@ const char* LC_STATUS[] = {
 
 using namespace librados;
 
+namespace bc = boost::container;
+
 bool LCRule::valid() const
 {
   if (id.length() > MAX_ID_LEN) {
@@ -332,7 +334,7 @@ static bool pass_object_lock_check(RGWRados *store, RGWBucketInfo& bucket_info, 
   }
   RGWRados::Object op_target(store, bucket_info, ctx, obj);
   RGWRados::Object::Read read_op(&op_target);
-  map<string, bufferlist> attrs;
+  bc::flat_map<string, bufferlist> attrs;
   read_op.params.attrs = &attrs;
   int ret = read_op.prepare(null_yield);
   if (ret < 0) {
@@ -375,7 +377,6 @@ static bool pass_object_lock_check(RGWRados *store, RGWBucketInfo& bucket_info, 
 int RGWLC::handle_multipart_expiration(
   RGWRados::Bucket *target, const multimap<string, lc_op>& prefix_map)
 {
-  MultipartMetaFilter mp_filter;
   vector<rgw_bucket_dir_entry> objs;
   RGWMPObj mp_obj;
   bool is_truncated;
@@ -389,7 +390,8 @@ int RGWLC::handle_multipart_expiration(
    * operating on one shard at a time */
   list_op.params.allow_unordered = true;
   list_op.params.ns = RGW_OBJ_NS_MULTIPART;
-  list_op.params.filter = &mp_filter;
+ list_op.params.filter = &MultipartMetaFilter;
+
   for (auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
     if (!prefix_iter->second.status || prefix_iter->second.mp_expiration <= 0) {
       continue;
@@ -1023,7 +1025,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
 {
   RGWLifecycleConfiguration  config(cct);
   RGWBucketInfo bucket_info;
-  map<string, bufferlist> bucket_attrs;
+  bc::flat_map<string, bufferlist> bucket_attrs;
   string no_ns, list_versions;
   vector<rgw_bucket_dir_entry> objs;
   vector<std::string> result;
@@ -1046,7 +1048,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
 
   RGWRados::Bucket target(store->getRados(), bucket_info);
 
-  map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_LC);
+  auto aiter = bucket_attrs.find(RGW_ATTR_LC);
   if (aiter == bucket_attrs.end())
     return 0;
 
@@ -1437,18 +1439,17 @@ static int guard_lc_modify(rgw::sal::RGWRadosStore* store, const rgw_bucket& buc
 }
 
 int RGWLC::set_bucket_config(RGWBucketInfo& bucket_info,
-                         const map<string, bufferlist>& bucket_attrs,
-                         RGWLifecycleConfiguration *config)
+			     const bc::flat_map<string, bufferlist>& bucket_attrs,
+			     RGWLifecycleConfiguration *config)
 {
-  map<string, bufferlist> attrs = bucket_attrs;
+  bc::flat_map<string, bufferlist> attrs = bucket_attrs;
   bufferlist lc_bl;
   config->encode(lc_bl);
 
   attrs[RGW_ATTR_LC] = std::move(lc_bl);
 
-  int ret = store->ctl()->bucket->set_bucket_instance_attrs(bucket_info, attrs,
-							 &bucket_info.objv_tracker,
-							 null_yield);
+  int ret = store->ctl()->bucket->set_bucket_instance_attrs(
+    bucket_info, attrs, &bucket_info.objv_tracker, null_yield);
   if (ret < 0)
     return ret;
 
@@ -1464,13 +1465,13 @@ int RGWLC::set_bucket_config(RGWBucketInfo& bucket_info,
 }
 
 int RGWLC::remove_bucket_config(RGWBucketInfo& bucket_info,
-                                const map<string, bufferlist>& bucket_attrs)
+                                const bc::flat_map<string, bufferlist>& bucket_attrs)
 {
-  map<string, bufferlist> attrs = bucket_attrs;
+  bc::flat_map<string, bufferlist> attrs = bucket_attrs;
   attrs.erase(RGW_ATTR_LC);
   int ret = store->ctl()->bucket->set_bucket_instance_attrs(bucket_info, attrs,
-							 &bucket_info.objv_tracker,
-							 null_yield);
+							    &bucket_info.objv_tracker,
+							    null_yield);
 
   rgw_bucket& bucket = bucket_info.bucket;
 
@@ -1492,7 +1493,7 @@ int RGWLC::remove_bucket_config(RGWBucketInfo& bucket_info,
 namespace rgw::lc {
 
 int fix_lc_shard_entry(rgw::sal::RGWRadosStore* store, const RGWBucketInfo& bucket_info,
-		       const map<std::string,bufferlist>& battrs)
+		       const boost::container::flat_map<std::string,bufferlist>& battrs)
 {
   if (auto aiter = battrs.find(RGW_ATTR_LC);
       aiter == battrs.end()) {
@@ -1542,7 +1543,7 @@ std::string s3_expiration_header(
   const rgw_obj_key& obj_key,
   const RGWObjTags& obj_tagset,
   const ceph::real_time& mtime,
-  const std::map<std::string, buffer::list>& bucket_attrs)
+  const bc::flat_map<std::string, buffer::list>& bucket_attrs)
 {
   CephContext* cct = dpp->get_cct();
   RGWLifecycleConfiguration config(cct);

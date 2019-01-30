@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include "common/expected.h"
+
 #include "svc_zone.h"
 #include "svc_rados.h"
 #include "svc_sys_obj.h"
@@ -8,6 +10,7 @@
 
 #include "rgw/rgw_zone.h"
 #include "rgw/rgw_rest_conn.h"
+#include "rgw/rgw_error_code.h"
 
 #include "common/errno.h"
 #include "include/random.h"
@@ -16,9 +19,10 @@
 
 using namespace rgw_zone_defaults;
 
-RGWSI_Zone::RGWSI_Zone(CephContext *cct) : RGWServiceInstance(cct)
-{
-}
+namespace bs = boost::system;
+
+RGWSI_Zone::RGWSI_Zone(CephContext *cct, boost::asio::io_context& ioc)
+  : RGWServiceInstance(cct, ioc) {}
 
 void RGWSI_Zone::init(RGWSI_SysObj *_sysobj_svc,
                       RGWSI_RADOS * _rados_svc,
@@ -50,43 +54,43 @@ bool RGWSI_Zone::zone_syncs_from(const RGWZone& target_zone, const RGWZone& sour
          sync_modules_svc->get_manager()->supports_data_export(source_zone.tier_type);
 }
 
-int RGWSI_Zone::do_start()
+bs::error_code RGWSI_Zone::do_start()
 {
-  int ret = sysobj_svc->start();
-  if (ret < 0) {
+  auto ret = sysobj_svc->start();
+  if (ret) {
     return ret;
   }
 
   assert(sysobj_svc->is_started()); /* if not then there's ordering issue */
 
   ret = rados_svc->start();
-  if (ret < 0) {
+  if (ret) {
     return ret;
   }
 
-  ret = realm->init(cct, sysobj_svc);
-  if (ret < 0 && ret != -ENOENT) {
-    ldout(cct, 0) << "failed reading realm info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+  ret = ceph::to_error_code(realm->init(cct, sysobj_svc));
+  if (ret && ret != bs::errc::no_such_file_or_directory) {
+    ldout(cct, 0) << "failed reading realm info: ret "<< ret << " " << dendl;
     return ret;
-  } else if (ret != -ENOENT) {
+  } else if (ret != bs::errc::no_such_file_or_directory) {
     ldout(cct, 20) << "realm  " << realm->get_name() << " " << realm->get_id() << dendl;
-    ret = current_period->init(cct, sysobj_svc, realm->get_id(), realm->get_name());
-    if (ret < 0 && ret != -ENOENT) {
-      ldout(cct, 0) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
+    ret = ceph::to_error_code(current_period->init(cct, sysobj_svc, realm->get_id(), realm->get_name()));
+    if (ret && ret != bs::errc::no_such_file_or_directory) {
+      ldout(cct, 0) << "failed reading current period info: " << " " << dendl;
       return ret;
     }
     ldout(cct, 20) << "current period " << current_period->get_id() << dendl;  
   }
 
-  ret = replace_region_with_zonegroup();
-  if (ret < 0) {
-    lderr(cct) << "failed converting region to zonegroup : ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+  ret = replace_region_with_zonegroup(null_yield);
+  if (ret) {
+    lderr(cct) << "failed converting region to zonegroup : ret "<< ret << " " << dendl;
     return ret;
   }
 
   ret = convert_regionmap();
-  if (ret < 0) {
-    lderr(cct) << "failed converting regionmap: " << cpp_strerror(-ret) << dendl;
+  if (ret) {
+    lderr(cct) << "failed converting regionmap: " << ret << dendl;
     return ret;
   }
 
@@ -94,7 +98,7 @@ int RGWSI_Zone::do_start()
 
   if (!current_period->get_id().empty()) {
     ret = init_zg_from_period(&zg_initialized);
-    if (ret < 0) {
+    if (ret) {
       return ret;
     }
   }
@@ -104,15 +108,15 @@ int RGWSI_Zone::do_start()
   if (using_local) {
     ldout(cct, 10) << " cannot find current period zonegroup using local zonegroup" << dendl;
     ret = init_zg_from_local(&creating_defaults);
-    if (ret < 0) {
+    if (ret) {
       return ret;
     }
     // read period_config into current_period
     auto& period_config = current_period->get_config();
-    ret = period_config.read(sysobj_svc, zonegroup->realm_id);
-    if (ret < 0 && ret != -ENOENT) {
+    ret = ceph::to_error_code(period_config.read(sysobj_svc, zonegroup->realm_id));
+    if (ret && ret != bs::errc::no_such_file_or_directory) {
       ldout(cct, 0) << "ERROR: failed to read period config: "
-          << cpp_strerror(ret) << dendl;
+                    << ret << dendl;
       return ret;
     }
   }
@@ -123,20 +127,22 @@ int RGWSI_Zone::do_start()
     zone_params->set_name(default_zone_name);
   }
 
-  ret = zone_params->init(cct, sysobj_svc);
-  if (ret < 0 && ret != -ENOENT) {
-    lderr(cct) << "failed reading zone info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+  ret = ceph::to_error_code(zone_params->init(cct, sysobj_svc));
+  if (ret && ret != bs::errc::no_such_file_or_directory) {
+    lderr(cct) << "failed reading zone info: ret "<< ret << " " << dendl;
     return ret;
   }
   auto zone_iter = zonegroup->zones.find(zone_params->get_id());
   if (zone_iter == zonegroup->zones.end()) {
     if (using_local) {
       lderr(cct) << "Cannot find zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << ")" << dendl;
-      return -EINVAL;
+      return rgw_errc::cannot_find_zone;
     }
-    ldout(cct, 1) << "Cannot find zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << "), switching to local zonegroup configuration" << dendl;
+    ldout(cct, 1) << "Cannot find zone id=" << zone_params->get_id()
+                  << " (name=" << zone_params->get_name()
+                  << "), switching to local zonegroup configuration" << dendl;
     ret = init_zg_from_local(&creating_defaults);
-    if (ret < 0) {
+    if (ret) {
       return ret;
     }
     zone_iter = zonegroup->zones.find(zone_params->get_id());
@@ -145,21 +151,22 @@ int RGWSI_Zone::do_start()
     *zone_public_config = zone_iter->second;
     ldout(cct, 20) << "zone " << zone_params->get_name() << " found"  << dendl;
   } else {
-    lderr(cct) << "Cannot find zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << ")" << dendl;
-    return -EINVAL;
+    lderr(cct) << "Cannot find zone id=" << zone_params->get_id()
+               << " (name=" << zone_params->get_name() << ")" << dendl;
+    return rgw_errc::cannot_find_zone;
   }
 
   zone_short_id = current_period->get_map().get_zone_short_id(zone_params->get_id());
 
   ret = sync_modules_svc->start();
-  if (ret < 0) {
+  if (ret) {
     return ret;
   }
 
   RGWSyncModuleRef sm;
   if (!sync_modules_svc->get_manager()->get_module(zone_public_config->tier_type, &sm)) {
     lderr(cct) << "ERROR: tier type not found: " << zone_public_config->tier_type << dendl;
-    return -EINVAL;
+    return rgw_errc::tier_type_not_found;
   }
 
   writeable_zone = sm->supports_writes();
@@ -173,7 +180,9 @@ int RGWSI_Zone::do_start()
   }
 
   if (zone_by_id.find(zone_id()) == zone_by_id.end()) {
-    ldout(cct, 0) << "WARNING: could not find zone config in zonegroup for local zone (" << zone_id() << "), will use defaults" << dendl;
+    ldout(cct, 0)
+      << "WARNING: could not find zone config in zonegroup for local zone ("
+      << zone_id() << "), will use defaults" << dendl;
   }
 
   for (const auto& ziter : zonegroup->zones) {
@@ -205,7 +214,7 @@ int RGWSI_Zone::do_start()
   ldout(cct, 20) << "started zone id=" << zone_params->get_id() << " (name=" << zone_params->get_name() << 
         ") with tier type = " << zone_public_config->tier_type << dendl;
 
-  return 0;
+  return {};
 }
 
 void RGWSI_Zone::shutdown()
@@ -224,84 +233,90 @@ void RGWSI_Zone::shutdown()
   }
 }
 
-int RGWSI_Zone::list_regions(list<string>& regions)
+bs::error_code RGWSI_Zone::lister(string prefix,
+				  std::vector<std::string>& v,
+				  optional_yield y)
 {
   RGWZoneGroup zonegroup;
-  RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zonegroup.get_pool(cct));
-
-  return syspool.list_prefixed_objs(region_info_oid_prefix, &regions);
+  auto pool = TRYE(rados_svc->pool(zonegroup.get_pool(cct), y));
+  return pool
+    .list(RGWAccessListFilterPrefix(std::move(prefix)))
+    .get_all(&v, y);
 }
 
-int RGWSI_Zone::list_zonegroups(list<string>& zonegroups)
+bs::error_code RGWSI_Zone::list_regions(std::vector<std::string>& regions,
+					optional_yield y)
 {
-  RGWZoneGroup zonegroup;
-  RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zonegroup.get_pool(cct));
-
-  return syspool.list_prefixed_objs(zonegroup_names_oid_prefix, &zonegroups);
+  return lister(region_info_oid_prefix, regions, y);
 }
 
-int RGWSI_Zone::list_zones(list<string>& zones)
+bs::error_code RGWSI_Zone::list_zonegroups(std::vector<std::string>& zonegroups,
+					   optional_yield y)
 {
-  RGWZoneParams zoneparams;
-  RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zoneparams.get_pool(cct));
-
-  return syspool.list_prefixed_objs(zone_names_oid_prefix, &zones);
+  return lister(zonegroup_names_oid_prefix, zonegroups, y);
 }
 
-int RGWSI_Zone::list_realms(list<string>& realms)
+bs::error_code RGWSI_Zone::list_zones(vector<string>& zones,
+				      optional_yield y)
 {
-  RGWRealm realm(cct, sysobj_svc);
-  RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(realm.get_pool(cct));
-
-  return syspool.list_prefixed_objs(realm_names_oid_prefix, &realms);
+  return lister(zone_names_oid_prefix, zones, y);
 }
 
-int RGWSI_Zone::list_periods(list<string>& periods)
+bs::error_code RGWSI_Zone::list_realms(vector<string>& realms,
+				       optional_yield y)
+{
+  return lister(realm_names_oid_prefix, realms, y);
+}
+
+bs::error_code RGWSI_Zone::list_periods(vector<string>& periods,
+					optional_yield y)
 {
   RGWPeriod period;
-  list<string> raw_periods;
-  RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(period.get_pool(cct));
-  int ret = syspool.list_prefixed_objs(period.get_info_oid_prefix(), &raw_periods);
-  if (ret < 0) {
-    return ret;
-  }
-  for (const auto& oid : raw_periods) {
+  std::vector<string> raw_periods;
+  auto ec = lister(period.get_info_oid_prefix(), raw_periods, y);
+  if (ec)
+    return ec;
+
+  for (auto& oid : raw_periods) {
     size_t pos = oid.find(".");
     if (pos != std::string::npos) {
       periods.push_back(oid.substr(0, pos));
     } else {
-      periods.push_back(oid);
+      periods.push_back(std::move(oid));
     }
   }
-  periods.sort(); // unique() only detects duplicates if they're adjacent
-  periods.unique();
-  return 0;
+  // unique() only detects duplicates if they're adjacent
+  std::sort(periods.begin(), periods.end());
+  auto last = std::unique(periods.begin(), periods.end());
+  periods.erase(last, periods.end());
+  return {};
 }
 
 
-int RGWSI_Zone::list_periods(const string& current_period, list<string>& periods)
+bs::error_code RGWSI_Zone::list_periods(const string& current_period,
+					std::vector<string>& periods)
 {
   int ret = 0;
-  string period_id = current_period;
+  auto period_id = current_period;
   while(!period_id.empty()) {
     RGWPeriod period(period_id);
     ret = period.init(cct, sysobj_svc);
     if (ret < 0) {
-      return ret;
+      return ceph::to_error_code(ret);
     }
     periods.push_back(period.get_id());
     period_id = period.get_predecessor();
   }
-  
-  return ret;
+
+  return ceph::to_error_code(ret);
 }
 
-/** 
+/**
  * Replace all region configuration with zonegroup for
  * backward compatability
  * Returns 0 on success, -ERR# on failure.
  */
-int RGWSI_Zone::replace_region_with_zonegroup()
+bs::error_code RGWSI_Zone::replace_region_with_zonegroup(optional_yield y)
 {
   /* copy default region */
   /* convert default region to default zonegroup */
@@ -318,63 +333,64 @@ int RGWSI_Zone::replace_region_with_zonegroup()
   RGWSysObjectCtx obj_ctx = sysobj_svc->init_obj_ctx();
   RGWSysObj sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
 
-  int ret = sysobj.rop().read(&bl, null_yield);
-  if (ret < 0 && ret !=  -ENOENT) {
-    ldout(cct, 0) << __func__ << " failed to read converted: ret "<< ret << " " << cpp_strerror(-ret)
-		  << dendl;
+  auto ret = sysobj.rop().read(&bl, y);
+  if (ret && ret != bs::errc::no_such_file_or_directory) {
+    ldout(cct, 0) << __func__ << " failed to read converted: ret "<< ret << " "
+                  << dendl;
     return ret;
-  } else if (ret != -ENOENT) {
+  } else if (ret == bs::errc::no_such_file_or_directory) {
     ldout(cct, 20) << "System already converted " << dendl;
-    return 0;
+    return {};
   }
 
   string default_region;
-  ret = default_zonegroup.init(cct, sysobj_svc, false, true);
-  if (ret < 0) {
-    ldout(cct, 0) <<  __func__ << " failed init default region: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+  ret = ceph::to_error_code(default_zonegroup.init(cct, sysobj_svc, false, true));
+  if (ret) {
+    ldout(cct, 0) <<  __func__ << " failed init default region: ret "<< ret << dendl;
     return ret;
-  }    
-  ret  = default_zonegroup.read_default_id(default_region, true);
-  if (ret < 0 && ret != -ENOENT) {
-    ldout(cct, 0) <<  __func__ << " failed reading old default region: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+  }
+  ret  = ceph::to_error_code(default_zonegroup.read_default_id(default_region, true));
+  if (ret  && ret != bs::errc::no_such_file_or_directory) {
+    ldout(cct, 0) <<  __func__ << " failed reading old default region: ret " << ret << dendl;
     return ret;
   }
 
   /* convert regions to zonegroups */
-  list<string> regions;
-  ret = list_regions(regions);
-  if (ret < 0 && ret != -ENOENT) {
-    ldout(cct, 0) <<  __func__ << " failed to list regions: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
+  vector<string> regions;
+  ret = list_regions(regions, y);
+  if (ret && ret != bs::errc::no_such_file_or_directory) {
+    ldout(cct, 0) <<  __func__ << " failed to list regions: ret "<< ret << " " << dendl;
     return ret;
-  } else if (ret == -ENOENT || regions.empty()) {
+  } else if (ret == bs::errc::no_such_file_or_directory ||
+             regions.empty()) {
     RGWZoneParams zoneparams(default_zone_name);
     int ret = zoneparams.init(cct, sysobj_svc);
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << __func__ << ": error initializing default zone params: " << cpp_strerror(-ret) << dendl;
-      return ret;
+      return ceph::to_error_code(ret);
     }
     /* update master zone */
     RGWZoneGroup default_zg(default_zonegroup_name);
     ret = default_zg.init(cct, sysobj_svc);
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << __func__ << ": error in initializing default zonegroup: " << cpp_strerror(-ret) << dendl;
-      return ret;
+      return ceph::to_error_code(ret);
     }
     if (ret != -ENOENT && default_zg.master_zone.empty()) {
       default_zg.master_zone = zoneparams.get_id();
-      return default_zg.update();
+      return ceph::to_error_code(default_zg.update());
     }
-    return 0;
+    return {};
   }
 
   string master_region, master_zone;
-  for (list<string>::iterator iter = regions.begin(); iter != regions.end(); ++iter) {
+  for (auto iter = regions.begin(); iter != regions.end(); ++iter) {
     if (*iter != default_zonegroup_name){
       RGWZoneGroup region(*iter);
       int ret = region.init(cct, sysobj_svc, true, true);
       if (ret < 0) {
 	  ldout(cct, 0) <<  __func__ << " failed init region "<< *iter << ": " << cpp_strerror(-ret) << dendl;
-	  return ret;
+	  return ceph::to_error_code(ret);
       }
       if (region.is_master_zonegroup()) {
 	master_region = region.get_id();
@@ -396,41 +412,41 @@ int RGWSI_Zone::replace_region_with_zonegroup()
     buf_to_hex(md5, CEPH_CRYPTO_MD5_DIGESTSIZE, md5_str);
     string new_realm_id(md5_str);
     RGWRealm new_realm(new_realm_id,new_realm_name);
-    ret = new_realm.init(cct, sysobj_svc, false);
-    if (ret < 0) {
-      ldout(cct, 0) <<  __func__ << " Error initing new realm: " << cpp_strerror(-ret)  << dendl;
+    ret = ceph::to_error_code(new_realm.init(cct, sysobj_svc, false));
+    if (ret) {
+      ldout(cct, 0) <<  __func__ << " Error initing new realm: " << dendl;
       return ret;
     }
-    ret = new_realm.create();
-    if (ret < 0 && ret != -EEXIST) {
-      ldout(cct, 0) <<  __func__ << " Error creating new realm: " << cpp_strerror(-ret)  << dendl;
+    ret = ceph::to_error_code(new_realm.create());
+    if (ret && ret != bs::errc::file_exists) {
+      ldout(cct, 0) <<  __func__ << " Error creating new realm: " << dendl;
       return ret;
     }
-    ret = new_realm.set_as_default();
-    if (ret < 0) {
-      ldout(cct, 0) << __func__ << " Error setting realm as default: " << cpp_strerror(-ret)  << dendl;
+    ret = ceph::to_error_code(new_realm.set_as_default());
+    if (ret) {
+      ldout(cct, 0) << __func__ << " Error setting realm as default: " << dendl;
       return ret;
     }
-    ret = realm->init(cct, sysobj_svc);
-    if (ret < 0) {
-      ldout(cct, 0) << __func__ << " Error initing realm: " << cpp_strerror(-ret)  << dendl;
+    ret = ceph::to_error_code(realm->init(cct, sysobj_svc));
+    if (ret) {
+      ldout(cct, 0) << __func__ << " Error initing realm: " << ret << dendl;
       return ret;
     }
-    ret = current_period->init(cct, sysobj_svc, realm->get_id(), realm->get_name());
-    if (ret < 0) {
-      ldout(cct, 0) << __func__ << " Error initing current period: " << cpp_strerror(-ret)  << dendl;
+    ret = ceph::to_error_code(current_period->init(cct, sysobj_svc, realm->get_id(), realm->get_name()));
+    if (ret) {
+      ldout(cct, 0) << __func__ << " Error initing current period: " << ret  << dendl;
       return ret;
     }
   }
 
-  list<string>::iterator iter;
+  vector<string>::iterator iter;
   /* create zonegroups */
   for (iter = regions.begin(); iter != regions.end(); ++iter)
   {
     ldout(cct, 0) << __func__ << " Converting  " << *iter << dendl;
     /* check to see if we don't have already a zonegroup with this name */
     RGWZoneGroup new_zonegroup(*iter);
-    ret = new_zonegroup.init(cct , sysobj_svc);
+    int ret = new_zonegroup.init(cct , sysobj_svc);
     if (ret == 0 && new_zonegroup.get_id() != *iter) {
       ldout(cct, 0) << __func__ << " zonegroup  "<< *iter << " already exists id " << new_zonegroup.get_id () <<
 	" skipping conversion " << dendl;
@@ -438,10 +454,10 @@ int RGWSI_Zone::replace_region_with_zonegroup()
     }
     RGWZoneGroup zonegroup(*iter);
     zonegroup.set_id(*iter);
-    int ret = zonegroup.init(cct, sysobj_svc, true, true);
+    ret = zonegroup.init(cct, sysobj_svc, true, true);
     if (ret < 0) {
       ldout(cct, 0) << __func__ << " failed init zonegroup: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
-      return ret;
+      return ceph::to_error_code(ret);
     }
     zonegroup.realm_id = realm->get_id();
     /* fix default region master zone */
@@ -453,32 +469,31 @@ int RGWSI_Zone::replace_region_with_zonegroup()
     if (ret < 0 && ret != -EEXIST) {
       ldout(cct, 0) << __func__ << " failed to update zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
         << dendl;
-      return ret;
+      return ceph::to_error_code(ret);
     }
     ret = zonegroup.update_name();
     if (ret < 0 && ret != -EEXIST) {
       ldout(cct, 0) << __func__ << " failed to update_name for zonegroup " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
         << dendl;
-      return ret;
+      return ceph::to_error_code(ret);
     }
     if (zonegroup.get_name() == default_region) {
       ret = zonegroup.set_as_default();
       if (ret < 0) {
         ldout(cct, 0) << __func__ << " failed to set_as_default " << *iter << ": ret "<< ret << " " << cpp_strerror(-ret)
           << dendl;
-        return ret;
+        return ceph::to_error_code(ret);
       }
     }
-    for (map<string, RGWZone>::const_iterator iter = zonegroup.zones.begin(); iter != zonegroup.zones.end();
-         ++iter) {
+    for (auto iter = zonegroup.zones.begin(); iter != zonegroup.zones.end(); ++iter) {
       ldout(cct, 0) << __func__ << " Converting zone" << iter->first << dendl;
       RGWZoneParams zoneparams(iter->first, iter->first);
       zoneparams.set_id(iter->first);
       zoneparams.realm_id = realm->get_id();
-      ret = zoneparams.init(cct, sysobj_svc);
+      int ret = zoneparams.init(cct, sysobj_svc);
       if (ret < 0 && ret != -ENOENT) {
         ldout(cct, 0) << __func__ << " failed to init zoneparams  " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
-        return ret;
+        return ceph::to_error_code(ret);
       } else if (ret == -ENOENT) {
         ldout(cct, 0) << __func__ << " zone is part of another cluster " << iter->first <<  " skipping " << dendl;
         continue;
@@ -487,12 +502,12 @@ int RGWSI_Zone::replace_region_with_zonegroup()
       ret = zoneparams.update();
       if (ret < 0 && ret != -EEXIST) {
         ldout(cct, 0) << __func__ << " failed to update zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
-        return ret;
+        return ceph::to_error_code(ret);
       }
       ret = zoneparams.update_name();
       if (ret < 0 && ret != -EEXIST) {
         ldout(cct, 0) << __func__ << " failed to init zoneparams " << iter->first <<  ": " << cpp_strerror(-ret) << dendl;
-        return ret;
+        return ceph::to_error_code(ret);
       }
     }
 
@@ -500,26 +515,26 @@ int RGWSI_Zone::replace_region_with_zonegroup()
       ret = current_period->add_zonegroup(zonegroup);
       if (ret < 0) {
         ldout(cct, 0) << __func__ << " failed to add zonegroup to current_period: " << cpp_strerror(-ret) << dendl;
-        return ret;
+        return ceph::to_error_code(ret);
       }
     }
   }
 
   if (!current_period->get_id().empty()) {
-    ret = current_period->update();
+    int ret = current_period->update();
     if (ret < 0) {
       ldout(cct, 0) << __func__ << " failed to update new period: " << cpp_strerror(-ret) << dendl;
-      return ret;
+      return ceph::to_error_code(ret);
     }
     ret = current_period->store_info(false);
     if (ret < 0) {
       ldout(cct, 0) << __func__ << " failed to store new period: " << cpp_strerror(-ret) << dendl;
-      return ret;
+      return ceph::to_error_code(ret);
     }
     ret = current_period->reflect();
     if (ret < 0) {
       ldout(cct, 0) << __func__ << " failed to update local objects: " << cpp_strerror(-ret) << dendl;
-      return ret;
+      return ceph::to_error_code(ret);
     }
   }
 
@@ -528,27 +543,26 @@ int RGWSI_Zone::replace_region_with_zonegroup()
     int ret = zonegroup.init(cct, sysobj_svc, true, true);
     if (ret < 0) {
       ldout(cct, 0) << __func__ << " failed init zonegroup" << iter << ": ret "<< ret << " " << cpp_strerror(-ret) << dendl;
-      return ret;
+      return ceph::to_error_code(ret);
     }
     ret = zonegroup.delete_obj(true);
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << __func__ << " failed to delete region " << iter << ": ret "<< ret << " " << cpp_strerror(-ret)
         << dendl;
-      return ret;
+      return ceph::to_error_code(ret);
     }
   }
 
   /* mark as converted */
   ret = sysobj.wop()
               .set_exclusive(true)
-              .write(bl, null_yield);
-  if (ret < 0 ) {
-    ldout(cct, 0) << __func__ << " failed to mark cluster as converted: ret "<< ret << " " << cpp_strerror(-ret)
+              .write(bl, y);
+  if (ret) {
+    ldout(cct, 0) << __func__ << " failed to mark cluster as converted: ret "<< ret << " "
 		  << dendl;
-    return ret;
   }
 
-  return 0;
+  return ret;
 }
 
 /**
@@ -565,32 +579,31 @@ static void add_new_connection_to_map(map<string, RGWRESTConn *> &zonegroup_conn
   if (iterZoneGroup != zonegroup_conn_map.end()) {
     delete iterZoneGroup->second;
   }
-    
+
   // Add new connection to connections map
   zonegroup_conn_map[zonegroup.get_id()] = new_connection;
 }
 
-int RGWSI_Zone::init_zg_from_period(bool *initialized)
+bs::error_code RGWSI_Zone::init_zg_from_period(bool *initialized)
 {
   *initialized = false;
 
   if (current_period->get_id().empty()) {
-    return 0;
+    return {};
   }
 
   int ret = zonegroup->init(cct, sysobj_svc);
   ldout(cct, 20) << "period zonegroup init ret " << ret << dendl;
   if (ret == -ENOENT) {
-    return 0;
+    return {};
   }
   if (ret < 0) {
     ldout(cct, 0) << "failed reading zonegroup info: " << cpp_strerror(-ret) << dendl;
-    return ret;
+    return ceph::to_error_code(ret);
   }
   ldout(cct, 20) << "period zonegroup name " << zonegroup->get_name() << dendl;
 
-  map<string, RGWZoneGroup>::const_iterator iter =
-    current_period->get_map().zonegroups.find(zonegroup->get_id());
+  auto iter = current_period->get_map().zonegroups.find(zonegroup->get_id());
 
   if (iter != current_period->get_map().zonegroups.end()) {
     ldout(cct, 20) << "using current period zonegroup " << zonegroup->get_name() << dendl;
@@ -598,19 +611,19 @@ int RGWSI_Zone::init_zg_from_period(bool *initialized)
     ret = zonegroup->init(cct, sysobj_svc, false);
     if (ret < 0) {
       ldout(cct, 0) << "failed init zonegroup: " << " " << cpp_strerror(-ret) << dendl;
-      return ret;
+      return ceph::to_error_code(ret);
     }
     ret = zone_params->init(cct, sysobj_svc);
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << "failed reading zone params info: " << " " << cpp_strerror(-ret) << dendl;
-      return ret;
+      return ceph::to_error_code(ret);
     } if (ret ==-ENOENT && zonegroup->get_name() == default_zonegroup_name) {
       ldout(cct, 10) << " Using default name "<< default_zone_name << dendl;
       zone_params->set_name(default_zone_name);
       ret = zone_params->init(cct, sysobj_svc);
       if (ret < 0 && ret != -ENOENT) {
        ldout(cct, 0) << "failed reading zone params info: " << " " << cpp_strerror(-ret) << dendl;
-       return ret;
+       return ceph::to_error_code(ret);
       }
     }
   }
@@ -633,26 +646,26 @@ int RGWSI_Zone::init_zg_from_period(bool *initialized)
 	  ret = zonegroup->update();
 	  if (ret < 0) {
 	    ldout(cct, 0) << "error updating zonegroup : " << cpp_strerror(-ret) << dendl;
-	    return ret;
+	    return ceph::to_error_code(ret);
 	  }
 	} else {
 	  RGWZoneGroup fixed_zg(zg.get_id(),zg.get_name());
 	  ret = fixed_zg.init(cct, sysobj_svc);
 	  if (ret < 0) {
 	    ldout(cct, 0) << "error initializing zonegroup : " << cpp_strerror(-ret) << dendl;
-	    return ret;
+	    return ceph::to_error_code(ret);
 	  }
 	  fixed_zg.master_zone = master->second.id;
 	  ret = fixed_zg.update();
 	  if (ret < 0) {
 	    ldout(cct, 0) << "error initializing zonegroup : " << cpp_strerror(-ret) << dendl;
-	    return ret;
+	    return ceph::to_error_code(ret);
 	  }
 	}
       } else {
 	ldout(cct, 0) << "zonegroup " << zg.get_name() << " missing zone for master_zone=" <<
 	  zg.master_zone << dendl;
-	return -EINVAL;
+	return rgw_errc::zonegroup_missing_zone;
       }
     }
     const auto& endpoints = master->second.endpoints;
@@ -665,15 +678,15 @@ int RGWSI_Zone::init_zg_from_period(bool *initialized)
 
   *initialized = true;
 
-  return 0;
+  return {};
 }
 
-int RGWSI_Zone::init_zg_from_local(bool *creating_defaults)
+bs::error_code RGWSI_Zone::init_zg_from_local(bool *creating_defaults)
 {
   int ret = zonegroup->init(cct, sysobj_svc);
   if ( (ret < 0 && ret != -ENOENT) || (ret == -ENOENT && !cct->_conf->rgw_zonegroup.empty())) {
     ldout(cct, 0) << "failed reading zonegroup info: ret "<< ret << " " << cpp_strerror(-ret) << dendl;
-    return ret;
+    return ceph::to_error_code(ret);
   } else if (ret == -ENOENT) {
     *creating_defaults = true;
     ldout(cct, 10) << "Creating default zonegroup " << dendl;
@@ -681,13 +694,13 @@ int RGWSI_Zone::init_zg_from_local(bool *creating_defaults)
     if (ret < 0) {
       ldout(cct, 0) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
         << dendl;
-      return ret;
+      return ceph::to_error_code(ret);
     }
     ret = zonegroup->init(cct, sysobj_svc);
     if (ret < 0) {
       ldout(cct, 0) << "failure in zonegroup create_default: ret "<< ret << " " << cpp_strerror(-ret)
         << dendl;
-      return ret;
+      return ceph::to_error_code(ret);
     }
   }
   ldout(cct, 20) << "zonegroup " << zonegroup->get_name() << dendl;
@@ -704,22 +717,22 @@ int RGWSI_Zone::init_zg_from_local(bool *creating_defaults)
 	ret = zonegroup->update();
 	if (ret < 0) {
 	  ldout(cct, 0) << "error initializing zonegroup : " << cpp_strerror(-ret) << dendl;
-	  return ret;
+          return ceph::to_error_code(ret);
 	}
       } else {
 	ldout(cct, 0) << "zonegroup " << zonegroup->get_name() << " missing zone for "
           "master_zone=" << zonegroup->master_zone << dendl;
-	return -EINVAL;
+	return rgw_errc::zonegroup_missing_zone;
       }
     }
     const auto& endpoints = master->second.endpoints;
     rest_master_conn = new RGWRESTConn(cct, this, zonegroup->get_id(), endpoints);
   }
 
-  return 0;
+  return {};
 }
 
-int RGWSI_Zone::convert_regionmap()
+bs::error_code RGWSI_Zone::convert_regionmap()
 {
   RGWZoneGroupMap zonegroupmap;
 
@@ -727,7 +740,7 @@ int RGWSI_Zone::convert_regionmap()
   if (pool_name.empty()) {
     pool_name = RGW_DEFAULT_ZONE_ROOT_POOL;
   }
-  string oid = region_map_oid; 
+  string oid = region_map_oid;
 
   rgw_pool pool(pool_name);
   bufferlist bl;
@@ -735,36 +748,36 @@ int RGWSI_Zone::convert_regionmap()
   RGWSysObjectCtx obj_ctx = sysobj_svc->init_obj_ctx();
   RGWSysObj sysobj = sysobj_svc->get_obj(obj_ctx, rgw_raw_obj(pool, oid));
 
-  int ret = sysobj.rop().read(&bl, null_yield);
-  if (ret < 0 && ret != -ENOENT) {
+  auto ret = sysobj.rop().read(&bl, null_yield);
+  if (ret && ret != bs::errc::no_such_file_or_directory) {
     return ret;
-  } else if (ret == -ENOENT) {
-    return 0;
+  } else if (ret == bs::errc::no_such_file_or_directory) {
+    return {};
   }
 
   try {
     auto iter = bl.cbegin();
     decode(zonegroupmap, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     ldout(cct, 0) << "error decoding regionmap from " << pool << ":" << oid << dendl;
-    return -EIO;
+    return err.code();
   }
-  
-  for (map<string, RGWZoneGroup>::iterator iter = zonegroupmap.zonegroups.begin();
+
+  for (auto iter = zonegroupmap.zonegroups.begin();
        iter != zonegroupmap.zonegroups.end(); ++iter) {
     RGWZoneGroup& zonegroup = iter->second;
-    ret = zonegroup.init(cct, sysobj_svc, false);
+    int ret = zonegroup.init(cct, sysobj_svc, false);
     ret = zonegroup.update();
     if (ret < 0 && ret != -ENOENT) {
       ldout(cct, 0) << "Error could not update zonegroup " << zonegroup.get_name() << ": " <<
 	cpp_strerror(-ret) << dendl;
-      return ret;
+      return ceph::to_error_code(ret);
     } else if (ret == -ENOENT) {
       ret = zonegroup.create();
       if (ret < 0) {
 	ldout(cct, 0) << "Error could not create " << zonegroup.get_name() << ": " <<
 	  cpp_strerror(-ret) << dendl;
-	return ret;
+	return ceph::to_error_code(ret);
       }
     }
   }
@@ -774,13 +787,13 @@ int RGWSI_Zone::convert_regionmap()
 
   // remove the region_map so we don't try to convert again
   ret = sysobj.wop().remove(null_yield);
-  if (ret < 0) {
+  if (ret) {
     ldout(cct, 0) << "Error could not remove " << sysobj.get_obj()
-        << " after upgrading to zonegroup map: " << cpp_strerror(ret) << dendl;
+                  << " after upgrading to zonegroup map: " << dendl;
     return ret;
   }
 
-  return 0;
+  return {};
 }
 
 const RGWZoneParams& RGWSI_Zone::get_zone_params() const
@@ -798,7 +811,7 @@ const RGWZoneGroup& RGWSI_Zone::get_zonegroup() const
   return *zonegroup;
 }
 
-int RGWSI_Zone::get_zonegroup(const string& id, RGWZoneGroup& zg) const
+bs::error_code RGWSI_Zone::get_zonegroup(const string& id, RGWZoneGroup& zg) const
 {
   int ret = 0;
   if (id == zonegroup->get_id()) {
@@ -806,7 +819,7 @@ int RGWSI_Zone::get_zonegroup(const string& id, RGWZoneGroup& zg) const
   } else if (!current_period->get_id().empty()) {
     ret = current_period->get_zonegroup(zg, id);
   }
-  return ret;
+  return ceph::to_error_code(ret);
 }
 
 const RGWRealm& RGWSI_Zone::get_realm() const
@@ -962,14 +975,17 @@ bool RGWSI_Zone::is_syncing_bucket_meta(const rgw_bucket& bucket)
 }
 
 
-int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const string& zonegroup_id,
-                                         const rgw_placement_rule& request_rule,
-                                         rgw_placement_rule *pselected_rule_name, RGWZonePlacementInfo *rule_info)
+bs::error_code
+RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info,
+                                       const string& zonegroup_id,
+                                       const rgw_placement_rule& request_rule,
+                                       rgw_placement_rule *pselected_rule_name,
+                                       RGWZonePlacementInfo *rule_info)
 {
   /* first check that zonegroup exists within current period. */
   RGWZoneGroup zonegroup;
-  int ret = get_zonegroup(zonegroup_id, zonegroup);
-  if (ret < 0) {
+  auto ret = get_zonegroup(zonegroup_id, zonegroup);
+  if (ret) {
     ldout(cct, 0) << "could not find zonegroup " << zonegroup_id << " in current period" << dendl;
     return ret;
   }
@@ -983,9 +999,9 @@ int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const s
     used_rule = &request_rule;
     titer = zonegroup.placement_targets.find(request_rule.name);
     if (titer == zonegroup.placement_targets.end()) {
-      ldout(cct, 0) << "could not find requested placement id " << request_rule 
+      ldout(cct, 0) << "could not find requested placement id " << request_rule
                     << " within zonegroup " << dendl;
-      return -ERR_INVALID_LOCATION_CONSTRAINT;
+      return rgw_errc::invalid_location_constraint;
     }
   } else if (!user_info.default_placement.name.empty()) {
     used_rule = &user_info.default_placement;
@@ -993,19 +1009,19 @@ int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const s
     if (titer == zonegroup.placement_targets.end()) {
       ldout(cct, 0) << "could not find user default placement id " << user_info.default_placement
                     << " within zonegroup " << dendl;
-      return -ERR_INVALID_LOCATION_CONSTRAINT;
+      return rgw_errc::invalid_location_constraint;
     }
   } else {
     if (zonegroup.default_placement.name.empty()) { // zonegroup default rule as fallback, it should not be empty.
       ldout(cct, 0) << "misconfiguration, zonegroup default placement id should not be empty." << dendl;
-      return -ERR_ZONEGROUP_DEFAULT_PLACEMENT_MISCONFIGURATION;
+      return rgw_errc::zonegroup_default_placement_misconfiguration;
     } else {
       used_rule = &zonegroup.default_placement;
       titer = zonegroup.placement_targets.find(zonegroup.default_placement.name);
       if (titer == zonegroup.placement_targets.end()) {
         ldout(cct, 0) << "could not find zonegroup default placement id " << zonegroup.default_placement
                       << " within zonegroup " << dendl;
-        return -ERR_INVALID_LOCATION_CONSTRAINT;
+        return rgw_errc::invalid_location_constraint;
       }
     }
   }
@@ -1014,7 +1030,7 @@ int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const s
   const auto& target_rule = titer->second;
   if (!target_rule.user_permitted(user_info.placement_tags)) {
     ldout(cct, 0) << "user not permitted to use placement rule " << titer->first  << dendl;
-    return -EPERM;
+    return rgw_errc::user_not_permitted_to_use_placement_rule;
   }
 
   const string *storage_class = &request_rule.storage_class;
@@ -1032,7 +1048,9 @@ int RGWSI_Zone::select_new_bucket_location(const RGWUserInfo& user_info, const s
   return select_bucket_location_by_rule(rule, rule_info);
 }
 
-int RGWSI_Zone::select_bucket_location_by_rule(const rgw_placement_rule& location_rule, RGWZonePlacementInfo *rule_info)
+bs::error_code RGWSI_Zone::
+select_bucket_location_by_rule(const rgw_placement_rule& location_rule,
+                               RGWZonePlacementInfo *rule_info)
 {
   if (location_rule.name.empty()) {
     /* we can only reach here if we're trying to set a bucket location from a bucket
@@ -1042,7 +1060,7 @@ int RGWSI_Zone::select_bucket_location_by_rule(const rgw_placement_rule& locatio
       return select_legacy_bucket_placement(rule_info);
     }
 
-    return 0;
+    return {};
   }
 
   /*
@@ -1055,13 +1073,13 @@ int RGWSI_Zone::select_bucket_location_by_rule(const rgw_placement_rule& locatio
     /* couldn't find, means we cannot really place data for this bucket in this zone */
     ldout(cct, 0) << "ERROR: This zone does not contain placement rule "
                   << location_rule << " present in the zonegroup!" << dendl;
-    return -EINVAL;
+    return rgw_errc::zone_does_not_contain_placement_rule_present_in_zone_group;
   }
 
   auto storage_class = location_rule.get_storage_class();
   if (!piter->second.storage_class_exists(storage_class)) {
     ldout(cct, 5) << "requested storage class does not exist: " << storage_class << dendl;
-    return -EINVAL;
+    return rgw_errc::storage_class_dne;
   }
 
 
@@ -1071,12 +1089,13 @@ int RGWSI_Zone::select_bucket_location_by_rule(const rgw_placement_rule& locatio
     *rule_info = placement_info;
   }
 
-  return 0;
+  return {};
 }
 
-int RGWSI_Zone::select_bucket_placement(const RGWUserInfo& user_info, const string& zonegroup_id,
-                                        const rgw_placement_rule& placement_rule,
-                                        rgw_placement_rule *pselected_rule, RGWZonePlacementInfo *rule_info)
+bs::error_code
+RGWSI_Zone::select_bucket_placement(const RGWUserInfo& user_info, const string& zonegroup_id,
+                                    const rgw_placement_rule& placement_rule,
+                                    rgw_placement_rule *pselected_rule, RGWZonePlacementInfo *rule_info)
 {
   if (!zone_params->placement_pools.empty()) {
     return select_new_bucket_location(user_info, zonegroup_id, placement_rule,
@@ -1091,13 +1110,14 @@ int RGWSI_Zone::select_bucket_placement(const RGWUserInfo& user_info, const stri
     return select_legacy_bucket_placement(rule_info);
   }
 
-  return 0;
+  return {};
 }
 
-int RGWSI_Zone::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info)
+bs::error_code
+RGWSI_Zone::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info)
 {
   bufferlist map_bl;
-  map<string, bufferlist> m;
+  boost::container::flat_map<std::string, bufferlist> m;
   string pool_name;
   bool write_map = false;
 
@@ -1106,15 +1126,15 @@ int RGWSI_Zone::select_legacy_bucket_placement(RGWZonePlacementInfo *rule_info)
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
 
-  int ret = sysobj.rop().read(&map_bl, null_yield);
-  if (ret < 0) {
+  auto ret = sysobj.rop().read(&map_bl, null_yield);
+  if (ret) {
     goto read_omap;
   }
 
   try {
     auto iter = map_bl.cbegin();
     decode(m, iter);
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     ldout(cct, 0) << "ERROR: couldn't decode avail_pools" << dendl;
   }
 
@@ -1125,17 +1145,14 @@ read_omap:
     write_map = true;
   }
 
-  if (ret < 0 || m.empty()) {
-    vector<rgw_pool> pools;
+  if (ret || m.empty()) {
     string s = string("default.") + default_storage_pool_suffix;
-    pools.push_back(rgw_pool(s));
-    vector<int> retcodes;
     bufferlist bl;
-    ret = rados_svc->pool().create(pools, &retcodes);
-    if (ret < 0)
+    ret = rados_svc->create_pool(rgw_pool(s), null_yield);
+    if (ret)
       return ret;
     ret = sysobj.omap().set(s, bl, null_yield);
-    if (ret < 0)
+    if (ret)
       return ret;
     m[s] = bl;
   }
@@ -1144,7 +1161,7 @@ read_omap:
     bufferlist new_bl;
     encode(m, new_bl);
     ret = sysobj.wop().write(new_bl, null_yield);
-    if (ret < 0) {
+    if (ret) {
       ldout(cct, 0) << "WARNING: could not save avail pools map info ret=" << ret << dendl;
     }
   }
@@ -1164,37 +1181,39 @@ read_omap:
   rule_info->index_pool = pool_name;
   rule_info->index_type = RGWBIType_Normal;
 
-  return 0;
+  return {};
 }
 
-int RGWSI_Zone::update_placement_map()
+bs::error_code
+RGWSI_Zone::update_placement_map()
 {
   bufferlist header;
-  map<string, bufferlist> m;
+  boost::container::flat_map<std::string, bufferlist> m;
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
 
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
 
-  int ret = sysobj.omap().get_all(&m, null_yield);
-  if (ret < 0)
+  auto ret = sysobj.omap().get_all(&m, null_yield);
+  if (ret)
     return ret;
 
   bufferlist new_bl;
   encode(m, new_bl);
   ret = sysobj.wop().write(new_bl, null_yield);
-  if (ret < 0) {
+  if (ret) {
     ldout(cct, 0) << "WARNING: could not save avail pools map info ret=" << ret << dendl;
   }
 
   return ret;
 }
 
-int RGWSI_Zone::add_bucket_placement(const rgw_pool& new_pool)
+bs::error_code
+RGWSI_Zone::add_bucket_placement(const rgw_pool& new_pool)
 {
-  int ret = rados_svc->pool(new_pool).lookup();
-  if (ret < 0) { // DNE, or something
-    return ret;
+  auto pool = rados_svc->pool(new_pool, null_yield);
+  if (!pool) {
+    return pool.error();
   }
 
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
@@ -1202,7 +1221,7 @@ int RGWSI_Zone::add_bucket_placement(const rgw_pool& new_pool)
   auto sysobj = obj_ctx.get_obj(obj);
 
   bufferlist empty_bl;
-  ret = sysobj.omap().set(new_pool.to_str(), empty_bl, null_yield);
+  auto ret = sysobj.omap().set(new_pool.to_str(), empty_bl, null_yield);
 
   // don't care about return value
   update_placement_map();
@@ -1210,13 +1229,14 @@ int RGWSI_Zone::add_bucket_placement(const rgw_pool& new_pool)
   return ret;
 }
 
-int RGWSI_Zone::remove_bucket_placement(const rgw_pool& old_pool)
+bs::error_code
+RGWSI_Zone::remove_bucket_placement(const rgw_pool& old_pool)
 {
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
 
-  int ret = sysobj.omap().del(old_pool.to_str(), null_yield);
+  auto ret = sysobj.omap().del(old_pool.to_str(), null_yield);
 
   // don't care about return value
   update_placement_map();
@@ -1224,25 +1244,25 @@ int RGWSI_Zone::remove_bucket_placement(const rgw_pool& old_pool)
   return ret;
 }
 
-int RGWSI_Zone::list_placement_set(set<rgw_pool>& names)
+bs::error_code
+RGWSI_Zone::list_placement_set(boost::container::flat_set<rgw_pool>& names)
 {
   bufferlist header;
-  map<string, bufferlist> m;
+  boost::container::flat_map<string, bufferlist> m;
 
   rgw_raw_obj obj(zone_params->domain_root, avail_pools);
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
-  int ret = sysobj.omap().get_all(&m, null_yield);
-  if (ret < 0)
+  auto ret = sysobj.omap().get_all(&m, null_yield);
+  if (ret)
     return ret;
 
   names.clear();
-  map<string, bufferlist>::iterator miter;
-  for (miter = m.begin(); miter != m.end(); ++miter) {
+  for (auto miter = m.begin(); miter != m.end(); ++miter) {
     names.insert(rgw_pool(miter->first));
   }
 
-  return names.size();
+  return {};
 }
 
 bool RGWSI_Zone::get_redirect_zone_endpoint(string *endpoint)
@@ -1267,4 +1287,3 @@ bool RGWSI_Zone::get_redirect_zone_endpoint(string *endpoint)
 
   return true;
 }
-

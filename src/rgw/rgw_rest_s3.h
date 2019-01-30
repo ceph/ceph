@@ -41,7 +41,7 @@ protected:
   // Serving a custom error page from an object is really a 200 response with
   // just the status line altered.
   int custom_http_ret = 0;
-  std::map<std::string, std::string> crypt_http_responses;
+  boost::container::flat_map<std::string, std::string> crypt_http_responses;
 public:
   RGWGetObj_ObjStore_S3() {}
   ~RGWGetObj_ObjStore_S3() override {}
@@ -243,7 +243,7 @@ public:
 
 class RGWPutObj_ObjStore_S3 : public RGWPutObj_ObjStore {
 private:
-  std::map<std::string, std::string> crypt_http_responses;
+  boost::container::flat_map<std::string, std::string> crypt_http_responses;
 
 public:
   RGWPutObj_ObjStore_S3() {}
@@ -257,7 +257,7 @@ public:
                          rgw::putobj::DataProcessor *cb) override;
   int get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter>* filter,
                          RGWGetObj_Filter* cb,
-                         map<string, bufferlist>& attrs,
+                         boost::container::flat_map<string, bufferlist>& attrs,
                          bufferlist* manifest_bl) override;
 };
 
@@ -267,7 +267,7 @@ class RGWPostObj_ObjStore_S3 : public RGWPostObj_ObjStore {
   std::string content_type;
   RGWPolicyEnv env;
   RGWPolicy post_policy;
-  map<string, string> crypt_http_responses;
+  boost::container::flat_map<string, string> crypt_http_responses;
 
   const rgw::auth::StrategyRegistry* auth_registry_ptr = nullptr;
 
@@ -313,7 +313,7 @@ public:
 
   int init_dest_policy() override;
   int get_params() override;
-  int check_storage_class(const rgw_placement_rule& src_placement);
+  int check_storage_class(const rgw_placement_rule& src_placement) override;
   void send_partial_response(off_t ofs) override;
   void send_response() override;
 };
@@ -415,14 +415,14 @@ public:
 
 class RGWInitMultipart_ObjStore_S3 : public RGWInitMultipart_ObjStore {
 private:
-  std::map<std::string, std::string> crypt_http_responses;
+  boost::container::flat_map<std::string, std::string> crypt_http_responses;
 public:
   RGWInitMultipart_ObjStore_S3() {}
   ~RGWInitMultipart_ObjStore_S3() override {}
 
   int get_params() override;
   void send_response() override;
-  int prepare_encryption(map<string, bufferlist>& attrs) override;
+  int prepare_encryption(boost::container::flat_map<string, bufferlist>& attrs) override;
 };
 
 class RGWCompleteMultipart_ObjStore_S3 : public RGWCompleteMultipart_ObjStore {
@@ -744,7 +744,7 @@ static inline bool looks_like_ip_address(const char *bucket)
   return (num_periods == 3);
 }
 
-static inline int valid_s3_object_name(const string& name) {
+inline int valid_s3_object_name(const string& name) {
   if (name.size() > 1024) {
     return -ERR_INVALID_OBJECT_NAME;
   }
@@ -754,7 +754,7 @@ static inline int valid_s3_object_name(const string& name) {
   return 0;
 }
 
-static inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
+inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
 {
   // This function enforces Amazon's spec for bucket names.
   // (The requirements, not the recommendations.)

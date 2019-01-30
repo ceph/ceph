@@ -1,7 +1,5 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
-
 /*
  * Ceph - scalable distributed file system
  *
@@ -13,7 +11,6 @@
  * Foundation. See file COPYING.
  *
  */
-
 
 #pragma once
 
@@ -39,7 +36,7 @@ class RGWSI_Bucket_SObj : public RGWSI_Bucket
   struct bucket_info_cache_entry {
     RGWBucketInfo info;
     real_time mtime;
-    map<string, bufferlist> attrs;
+    boost::container::flat_map<string, bufferlist> attrs;
   };
 
   using RGWChainedCacheImpl_bucket_info_cache_entry = RGWChainedCacheImpl<bucket_info_cache_entry>;
@@ -50,20 +47,22 @@ class RGWSI_Bucket_SObj : public RGWSI_Bucket
   RGWSI_BucketInstance_BE_Handler bi_be_handler;
   std::unique_ptr<RGWSI_MetaBackend::Module> bi_be_module;
 
-  int do_start() override;
+  boost::system::error_code do_start() override;
 
-  int do_read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                   const string& key,
-                                   RGWBucketInfo *info,
-                                   real_time *pmtime,
-                                   map<string, bufferlist> *pattrs,
-                                   rgw_cache_entry_info *cache_info,
-                                   boost::optional<obj_version> refresh_version,
-                                   optional_yield y);
+  boost::system::error_code
+  do_read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
+                               const string& key,
+                               RGWBucketInfo *info,
+                               real_time *pmtime,
+                               boost::container::flat_map<string, bufferlist> *pattrs,
+                               rgw_cache_entry_info *cache_info,
+                               boost::optional<obj_version> refresh_version,
+                               optional_yield y);
 
-  int read_bucket_stats(const RGWBucketInfo& bucket_info,
-                        RGWBucketEnt *ent,
-                        optional_yield y);
+  boost::system::error_code
+  read_bucket_stats(const RGWBucketInfo& bucket_info,
+                    RGWBucketEnt *ent,
+                    optional_yield y);
 
 public:
   struct Svc {
@@ -77,7 +76,7 @@ public:
     RGWSI_SyncModules *sync_modules{nullptr};
   } svc;
 
-  RGWSI_Bucket_SObj(CephContext *cct);
+  RGWSI_Bucket_SObj(CephContext *cct, boost::asio::io_context& ioc);
   ~RGWSI_Bucket_SObj();
 
   RGWSI_Bucket_BE_Handler& get_ep_be_handler() override {
@@ -97,69 +96,77 @@ public:
 	    RGWSI_SyncModules *_sync_modules);
 
 
-  int read_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                  const string& key,
-                                  RGWBucketEntryPoint *entry_point,
-                                  RGWObjVersionTracker *objv_tracker,
-                                  real_time *pmtime,
-                                  map<string, bufferlist> *pattrs,
-                                  optional_yield y,
-                                  rgw_cache_entry_info *cache_info = nullptr,
-                                  boost::optional<obj_version> refresh_version = boost::none) override;
+  boost::system::error_code
+  read_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
+                              const string& key,
+                              RGWBucketEntryPoint *entry_point,
+                              RGWObjVersionTracker *objv_tracker,
+                              real_time *pmtime,
+                              boost::container::flat_map<string, bufferlist> *pattrs,
+                              optional_yield y,
+                              rgw_cache_entry_info *cache_info = nullptr,
+                              boost::optional<obj_version> refresh_version = boost::none) override;
 
-  int store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                   const string& key,
-                                   RGWBucketEntryPoint& info,
-                                   bool exclusive,
-                                   real_time mtime,
-                                   map<string, bufferlist> *pattrs,
-                                   RGWObjVersionTracker *objv_tracker,
-                                   optional_yield y) override;
+  boost::system::error_code
+  store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
+                               const string& key,
+                               RGWBucketEntryPoint& info,
+                               bool exclusive,
+                               real_time mtime,
+                               boost::container::flat_map<string, bufferlist> *pattrs,
+                               RGWObjVersionTracker *objv_tracker,
+                               optional_yield y) override;
 
-  int remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                    const string& key,
-                                    RGWObjVersionTracker *objv_tracker,
-                                    optional_yield y) override;
-
-  int read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
+  boost::system::error_code
+  remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                                 const string& key,
-                                RGWBucketInfo *info,
-                                real_time *pmtime,
-                                map<string, bufferlist> *pattrs,
-                                optional_yield y,
-                                rgw_cache_entry_info *cache_info = nullptr,
-                                boost::optional<obj_version> refresh_version = boost::none) override;
+                                RGWObjVersionTracker *objv_tracker,
+                                optional_yield y) override;
 
-  int read_bucket_info(RGWSI_Bucket_X_Ctx& ep_ctx,
-                       const rgw_bucket& bucket,
-                       RGWBucketInfo *info,
-                       real_time *pmtime,
-                       map<string, bufferlist> *pattrs,
-                       boost::optional<obj_version> refresh_version,
-                       optional_yield y) override;
+  boost::system::error_code
+  read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
+                            const string& key,
+                            RGWBucketInfo *info,
+                            real_time *pmtime,
+                            boost::container::flat_map<string, bufferlist> *pattrs,
+                            optional_yield y,
+                            rgw_cache_entry_info *cache_info = nullptr,
+                            boost::optional<obj_version> refresh_version = boost::none) override;
 
-  int store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                 const string& key,
-                                 RGWBucketInfo& info,
-                                 std::optional<RGWBucketInfo *> orig_info, /* nullopt: orig_info was not fetched,
-                                                                              nullptr: orig_info was not found (new bucket instance */
-                                 bool exclusive,
-                                 real_time mtime,
-                                 map<string, bufferlist> *pattrs,
-                                 optional_yield y) override;
+  boost::system::error_code
+  read_bucket_info(RGWSI_Bucket_X_Ctx& ep_ctx,
+                   const rgw_bucket& bucket,
+                   RGWBucketInfo *info,
+                   real_time *pmtime,
+                   boost::container::flat_map<string, bufferlist> *pattrs,
+                   boost::optional<obj_version> refresh_version,
+                   optional_yield y) override;
 
-  int remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                  const string& key,
-                                  RGWObjVersionTracker *objv_tracker,
-                                  optional_yield y) override;
+  boost::system::error_code
+  store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
+                             const string& key,
+                             RGWBucketInfo& info,
+                             std::optional<RGWBucketInfo *> orig_info, /* nullopt: orig_info was not fetched,
+                                                                          nullptr: orig_info was not found (new bucket instance */
+                             bool exclusive,
+                             real_time mtime,
+                             boost::container::flat_map<string, bufferlist> *pattrs,
+                             optional_yield y) override;
 
-  int read_bucket_stats(RGWSI_Bucket_X_Ctx& ctx,
-                        const rgw_bucket& bucket,
-                        RGWBucketEnt *ent,
-                        optional_yield y) override;
+  boost::system::error_code
+  remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
+                              const string& key,
+                              RGWObjVersionTracker *objv_tracker,
+                              optional_yield y) override;
 
-  int read_buckets_stats(RGWSI_Bucket_X_Ctx& ctx,
-                         map<string, RGWBucketEnt>& m,
-                         optional_yield y) override;
+  boost::system::error_code
+  read_bucket_stats(RGWSI_Bucket_X_Ctx& ctx,
+                    const rgw_bucket& bucket,
+                    RGWBucketEnt *ent,
+                    optional_yield y) override;
+
+  tl::expected<uint32_t, boost::system::error_code>
+  read_buckets_stats(RGWSI_Bucket_X_Ctx& ctx,
+                     boost::container::flat_map<string, RGWBucketEnt>& m,
+                     optional_yield y) override;
 };
-

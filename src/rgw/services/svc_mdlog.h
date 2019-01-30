@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include "rgw/rgw_rados.h"
 #include "rgw/rgw_service.h"
 #include "rgw/rgw_period_history.h"
 #include "rgw/rgw_period_puller.h"
@@ -55,10 +56,12 @@ class RGWSI_MDLog : public RGWServiceInstance
   std::unique_ptr<RGWPeriodHistory> period_history;
 
 public:
-  RGWSI_MDLog(CephContext *cct, bool run_sync);
+  RGWSI_MDLog(CephContext *cct, boost::asio::io_context& ioctx, bool run_sync);
   virtual ~RGWSI_MDLog();
 
+  RGWRados* rr;
   struct Svc {
+    RGWAsyncRadosProcessor *async{nullptr};
     RGWSI_RADOS *rados{nullptr};
     RGWSI_Zone *zone{nullptr};
     RGWSI_SysObj *sysobj{nullptr};
@@ -66,12 +69,15 @@ public:
     RGWSI_Cls *cls{nullptr};
   } svc;
 
-  int init(RGWSI_RADOS *_rados_svc,
-           RGWSI_Zone *_zone_svc,
-           RGWSI_SysObj *_sysobj_svc,
-           RGWSI_Cls *_cls_svc);
+  boost::system::error_code init(
+    RGWAsyncRadosProcessor *_async,
+    RGWRados* _rr,
+    RGWSI_RADOS *_rados_svc,
+    RGWSI_Zone *_zone_svc,
+    RGWSI_SysObj *_sysobj_svc,
+    RGWSI_Cls *_cls_svc);
 
-  int do_start() override;
+  boost::system::error_code do_start() override;
 
   // traverse all the way back to the beginning of the period history, and
   // return a cursor to the first period in a fully attached history
@@ -94,22 +100,23 @@ public:
   /// using a rados lock to provide atomicity
   RGWCoroutine* trim_log_period_cr(RGWPeriodHistory::Cursor period,
                                    RGWObjVersionTracker *objv) const;
-  int read_history(RGWMetadataLogHistory *state, RGWObjVersionTracker *objv_tracker) const;
-  int write_history(const RGWMetadataLogHistory& state,
+  boost::system::error_code read_history(RGWMetadataLogHistory *state,
+		   RGWObjVersionTracker *objv_tracker) const;
+
+  boost::system::error_code write_history(const RGWMetadataLogHistory& state,
                     RGWObjVersionTracker *objv_tracker,
                     bool exclusive = false);
 
-  int add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl);
+  boost::system::error_code add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl);
 
-  int get_shard_id(const string& hash_key, int *shard_id);
+  int get_shard_id(const string& hash_key);
 
   RGWPeriodHistory *get_period_history() {
     return period_history.get();
   }
 
-  int pull_period(const std::string& period_id, RGWPeriod& period);
+  boost::system::error_code pull_period(const std::string& period_id, RGWPeriod& period);
 
   /// find or create the metadata log for the given period
   RGWMetadataLog* get_log(const std::string& period);
 };
-

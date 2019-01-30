@@ -31,6 +31,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+namespace bc = boost::container;
+
 struct rgw_http_status_code {
   int code;
   const char *name;
@@ -799,7 +801,7 @@ int RGWGetObj_ObjStore::get_params()
     get_data &= (!rgwx_stat);
   }
 
-  if (s->info.args.exists(GET_TORRENT)) {
+  if (s->info.args.exists(GET_TORRENT.data())) {
     return torrent.get_params();
   }
   return 0;
@@ -1848,7 +1850,7 @@ int RGWHandler_REST::init_permissions(RGWOp* op)
     // We don't need user policies in case of STS token returned by AssumeRole, hence the check for user type
     if (! s->user->get_id().empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
       try {
-        map<string, bufferlist> uattrs;
+	bc::flat_map<string, bufferlist> uattrs;
         if (auto ret = store->ctl()->user->get_attrs_by_uid(s->user->get_id(), &uattrs, null_yield); ! ret) {
           if (s->iam_user_policies.empty()) {
             s->iam_user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->get_tenant());

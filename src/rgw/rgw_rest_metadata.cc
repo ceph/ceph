@@ -141,7 +141,7 @@ void RGWOp_Metadata_List::execute() {
 
   uint64_t left;
   do {
-    list<string> keys;
+    std::vector<string> keys;
     left = (max_entries_specified ? max_entries - count : max);
     http_ret = meta_mgr->list_keys_next(handle, left, keys, &truncated);
     if (http_ret < 0) {
@@ -150,8 +150,7 @@ void RGWOp_Metadata_List::execute() {
       return;
     }
 
-    for (list<string>::iterator iter = keys.begin(); iter != keys.end();
-	 ++iter) {
+    for (auto iter = keys.begin(); iter != keys.end(); ++iter) {
       s->formatter->dump_string("key", *iter);
       ++count;
     }

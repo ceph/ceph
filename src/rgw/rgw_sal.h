@@ -15,6 +15,8 @@
 
 #pragma once
 
+#include <boost/container/flat_map.hpp>
+
 #include "rgw_rados.h"
 #include "rgw_user.h"
 
@@ -27,7 +29,7 @@ class RGWBucket;
 class RGWObject;
 class RGWBucketList;
 
-typedef std::map<std::string, ceph::bufferlist> RGWAttrs;
+typedef boost::container::flat_map<std::string, ceph::bufferlist> RGWAttrs;
 
 class RGWStore {
   public:

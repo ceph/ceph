@@ -4,7 +4,8 @@
 
 #include "svc_user.h"
 
-RGWSI_User::RGWSI_User(CephContext *cct): RGWServiceInstance(cct) {
+RGWSI_User::RGWSI_User(CephContext *cct, boost::asio::io_context& ioc)
+  : RGWServiceInstance(cct, ioc) {
 }
 
 RGWSI_User::~RGWSI_User() {

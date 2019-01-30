@@ -5,6 +5,7 @@
 #define CEPH_RGW_TOOLS_H
 
 #include <string>
+#include <boost/algorithm/string/predicate.hpp>
 
 #include "include/types.h"
 #include "include/ceph_hash.h"
@@ -36,8 +37,6 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 #define RGW_SHARDS_PRIME_0 7877
 #define RGW_SHARDS_PRIME_1 65521
 
-extern const std::string MP_META_SUFFIX;
-
 static inline int rgw_shards_max()
 {
   return RGW_SHARDS_PRIME_1;
@@ -63,21 +62,40 @@ void rgw_shard_name(const string& prefix, unsigned max_shards, const string& key
 void rgw_shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name);
 void rgw_shard_name(const string& prefix, unsigned shard_id, string& name);
 
-int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs = NULL);
-int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs = NULL);
-int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs = NULL,
-                       rgw_cache_entry_info *cache_info = NULL,
-		       boost::optional<obj_version> refresh_version = boost::none);
-int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
+boost::system::error_code rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
+                       RGWObjVersionTracker *objv_tracker, real_time set_mtime,
+		       boost::container::flat_map<string, bufferlist> *pattrs = NULL);
+boost::system::error_code rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
+                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y,
+		       boost::container::flat_map<string, bufferlist> *pattrs = NULL);
+
+boost::system::error_code
+rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
+		   RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y,
+		   boost::container::flat_map<string, bufferlist> *pattrs = NULL,
+		   rgw_cache_entry_info *cache_info = NULL,
+		   boost::optional<obj_version> refresh_version = boost::none);
+boost::system::error_code rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker);
 
 const char *rgw_find_mime_by_ext(string& ext);
 
-void rgw_filter_attrset(map<string, bufferlist>& unfiltered_attrset, const string& check_prefix,
-                        map<string, bufferlist> *attrset);
+template<typename Source, typename Dest>
+void rgw_filter_attrset(Source& unfiltered_attrset, const std::string& check_prefix,
+                        Dest* attrset)
+{
+  attrset->clear();
+  for (auto iter = unfiltered_attrset.lower_bound(check_prefix);
+       iter != unfiltered_attrset.end(); ++iter) {
+    if (!boost::algorithm::starts_with(iter->first, check_prefix))
+      break;
+    attrset->emplace_hint(attrset->cend(),
+                          std::piecewise_construct,
+                          std::forward_as_tuple(iter->first),
+                          std::forward_as_tuple(iter->second));
+  }
+}
+
 
 /// indicates whether the current thread is in boost::asio::io_context::run(),
 /// used to log warnings if synchronous librados calls are made
@@ -157,7 +175,7 @@ public:
     string name;
     string bucket_id;
     ceph::real_time mtime;
-    map<std::string, bufferlist> attrs;
+    boost::container::flat_map<std::string, bufferlist> attrs;
 
     RGWAccessControlPolicy policy;
     int finish_init();
@@ -171,7 +189,7 @@ public:
 				       bucket_id(_bucket_id) {}
     Bucket(RGWDataAccess *_sd) : sd(_sd) {}
     int init();
-    int init(const RGWBucketInfo& _bucket_info, const map<string, bufferlist>& _attrs);
+    int init(const RGWBucketInfo& _bucket_info, const boost::container::flat_map<string, bufferlist>& _attrs);
   public:
     int get_object(const rgw_obj_key& key,
 		   ObjectRef *obj);
@@ -198,7 +216,7 @@ public:
                                       bucket(_bucket),
                                       key(_key) {}
   public:
-    int put(bufferlist& data, map<string, bufferlist>& attrs, const DoutPrefixProvider *dpp, optional_yield y); /* might modify attrs */
+    int put(bufferlist& data, boost::container::flat_map<string, bufferlist>& attrs, const DoutPrefixProvider *dpp, optional_yield y); /* might modify attrs */
 
     void set_mtime(const ceph::real_time& _mtime) {
       mtime = _mtime;
@@ -234,7 +252,7 @@ public:
   }
 
   int get_bucket(const RGWBucketInfo& bucket_info,
-		 const map<string, bufferlist>& attrs,
+		 const boost::container::flat_map<string, bufferlist>& attrs,
 		 BucketRef *bucket) {
     bucket->reset(new Bucket(this));
     return (*bucket)->init(bucket_info, attrs);

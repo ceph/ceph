@@ -1,7 +1,5 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
-
 /*
  * Ceph - scalable distributed file system
  *
@@ -22,35 +20,36 @@
 #include "svc_rados.h"
 
 
-
-
 class RGWSI_BILog_RADOS : public RGWServiceInstance
 {
 public:
   struct Svc {
+    RGWSI_RADOS *rados{nullptr};
     RGWSI_BucketIndex_RADOS *bi{nullptr};
   } svc;
 
-  RGWSI_BILog_RADOS(CephContext *cct);
+  RGWSI_BILog_RADOS(CephContext *cct, boost::asio::io_context& ioc);
 
-  void init(RGWSI_BucketIndex_RADOS *bi_rados_svc);
+  void init(RGWSI_RADOS *rados, RGWSI_BucketIndex_RADOS *bi_rados_svc);
 
-  int log_start(const RGWBucketInfo& bucket_info, int shard_id);
-  int log_stop(const RGWBucketInfo& bucket_info, int shard_id);
+  boost::system::error_code
+  log_start(const RGWBucketInfo& bucket_info, int shard_id, optional_yield y);
+  boost::system::error_code
+  log_stop(const RGWBucketInfo& bucket_info, int shard_id, optional_yield y);
 
-  int log_trim(const RGWBucketInfo& bucket_info,
-               int shard_id,
-               std::string& start_marker,
-               std::string& end_marker);
-  int log_list(const RGWBucketInfo& bucket_info,
-               int shard_id,
-               std::string& marker,
-               uint32_t max,
-               std::list<rgw_bi_log_entry>& result,
-               bool *truncated);
+  boost::system::error_code log_trim(const RGWBucketInfo& bucket_info,
+				     int shard_id,
+				     std::string_view start_marker,
+				     std::string_view end_marker,
+				     optional_yield y);
 
-  int get_log_status(const RGWBucketInfo& bucket_info,
-                     int shard_id,
-                     map<int, string> *markers);
+  tl::expected<std::pair<std::vector<rgw_bi_log_entry>, bool>,
+               boost::system::error_code>
+  log_list(const RGWBucketInfo& bucket_info, int shard_id,
+           std::string_view marker, uint32_t max, optional_yield y);
+
+  tl::expected<boost::container::flat_map<int, std::string>,
+               boost::system::error_code>
+  get_log_status(const RGWBucketInfo& bucket_info, int shard_id,
+                 optional_yield y);
 };
-

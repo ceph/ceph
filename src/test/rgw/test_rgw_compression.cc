@@ -52,10 +52,10 @@ class ut_put_sink: public rgw::putobj::DataProcessor
 {
   bufferlist sink;
 public:
-  int process(bufferlist&& bl, uint64_t ofs) override
+  boost::system::error_code process(bufferlist&& bl, uint64_t ofs) override
   {
     sink.claim_append(bl);
-    return 0;
+    return {};
   }
   bufferlist&  get_sink()
   {

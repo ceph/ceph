@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 /**
@@ -15,11 +15,14 @@
 #include "crypto/crypto_accel.h"
 #include "crypto/crypto_plugin.h"
 #include "rgw/rgw_kms.h"
+#include "rgw/rgw_error_code.h"
 
 #include <openssl/evp.h>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
+namespace bc = boost::container;
 
 using namespace rgw;
 
@@ -536,7 +539,7 @@ RGWPutObj_BlockEncrypt::RGWPutObj_BlockEncrypt(CephContext* cct,
 {
 }
 
-int RGWPutObj_BlockEncrypt::process(bufferlist&& data, uint64_t logical_offset)
+boost::system::error_code RGWPutObj_BlockEncrypt::process(bufferlist&& data, uint64_t logical_offset)
 {
   ldout(cct, 25) << "Encrypt " << data.length() << " bytes" << dendl;
 
@@ -555,19 +558,19 @@ int RGWPutObj_BlockEncrypt::process(bufferlist&& data, uint64_t logical_offset)
     bufferlist in, out;
     cache.splice(0, proc_size, &in);
     if (!crypt->encrypt(in, 0, proc_size, out, logical_offset)) {
-      return -ERR_INTERNAL_ERROR;
+      return rgw_errc::internal_error;
     }
-    int r = Pipe::process(std::move(out), logical_offset);
+    auto ec = Pipe::process(std::move(out), logical_offset);
     logical_offset += proc_size;
-    if (r < 0)
-      return r;
+    if (ec)
+      return ec;
   }
 
   if (flush) {
     /*replicate 0-sized handle_data*/
     return Pipe::process({}, logical_offset);
   }
-  return 0;
+  return {};
 }
 
 
@@ -577,17 +580,17 @@ std::string create_random_key_selector(CephContext * const cct) {
   return std::string(random, sizeof(random));
 }
 
-static inline void set_attr(map<string, bufferlist>& attrs,
-                            const char* key,
-                            boost::string_view value)
+inline void set_attr(bc::flat_map<string, bufferlist>& attrs,
+		     const char* key,
+		     boost::string_view value)
 {
   bufferlist bl;
   bl.append(value.data(), value.size());
   attrs[key] = std::move(bl);
 }
 
-static inline std::string get_str_attribute(map<string, bufferlist>& attrs,
-                                            const char *name)
+inline std::string get_str_attribute(bc::flat_map<string, bufferlist>& attrs,
+				     const char *name)
 {
   auto iter = attrs.find(name);
   if (iter == attrs.end()) {
@@ -648,12 +651,12 @@ static boost::string_view get_crypt_attribute(
 
 
 int rgw_s3_prepare_encrypt(struct req_state* s,
-                           std::map<std::string, ceph::bufferlist>& attrs,
+                           bc::flat_map<std::string, ceph::bufferlist>& attrs,
                            std::map<std::string,
                                     RGWPostObj_ObjStore::post_form_part,
                                     const ltstr_nocase>* parts,
                            std::unique_ptr<BlockCrypt>* block_crypt,
-                           std::map<std::string, std::string>& crypt_http_responses)
+                           bc::flat_map<std::string, std::string>& crypt_http_responses)
 {
   int res = 0;
   crypt_http_responses.clear();
@@ -883,9 +886,9 @@ int rgw_s3_prepare_encrypt(struct req_state* s,
 
 
 int rgw_s3_prepare_decrypt(struct req_state* s,
-                       map<string, bufferlist>& attrs,
-                       std::unique_ptr<BlockCrypt>* block_crypt,
-                       std::map<std::string, std::string>& crypt_http_responses)
+			   bc::flat_map<string, bufferlist>& attrs,
+			   std::unique_ptr<BlockCrypt>* block_crypt,
+			   bc::flat_map<std::string, std::string>& crypt_http_responses)
 {
   int res = 0;
   std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);

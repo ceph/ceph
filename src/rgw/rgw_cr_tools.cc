@@ -15,6 +15,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+namespace bc = boost::container;
+
 template<>
 int RGWUserCreateCR::Request::_send_request()
 {
@@ -124,7 +126,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
   /* we need to make sure we read bucket info, it's not read before for this
    * specific request */
   RGWBucketInfo bucket_info;
-  map<string, bufferlist> bucket_attrs;
+  bc::flat_map<string, bufferlist> bucket_attrs;
 
   int ret = store->getRados()->get_bucket_info(store->svc(), user.tenant, bucket_name,
 				  bucket_info, nullptr, null_yield, &bucket_attrs);
@@ -158,9 +160,10 @@ int RGWBucketCreateLocalCR::Request::_send_request()
     rgw_bucket bucket;
     bucket.tenant = user.tenant;
     bucket.name = bucket_name;
-    ret = zone_svc->select_bucket_placement(*user_info, zonegroup_id,
-                                         placement_rule,
-                                         &selected_placement_rule, nullptr);
+    ret = ceph::from_error_code(
+      zone_svc->select_bucket_placement(*user_info, zonegroup_id,
+                                        placement_rule,
+                                        &selected_placement_rule, nullptr));
     if (selected_placement_rule != bucket_info.placement_rule) {
       ldout(cct, 0) << "bucket already exists on a different placement rule: "
         << " selected_rule= " << selected_placement_rule
@@ -176,7 +179,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
   policy.create_canned(bucket_owner, bucket_owner, string()); /* default private policy */
   bufferlist aclbl;
   policy.encode(aclbl);
-  map<string, buffer::list> attrs;
+  bc::flat_map<string, buffer::list> attrs;
   attrs.emplace(std::move(RGW_ATTR_ACL), std::move(aclbl));
 
   RGWQuotaInfo quota_info;

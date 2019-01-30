@@ -7,11 +7,11 @@
 
 #include "rgw/rgw_zone.h"
 
-int RGWSI_ZoneUtils::do_start()
+boost::system::error_code RGWSI_ZoneUtils::do_start()
 {
   init_unique_trans_id_deps();
 
-  return 0;
+  return {};
 }
 
 string RGWSI_ZoneUtils::gen_host_id() {

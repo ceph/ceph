@@ -5,10 +5,12 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs,
+namespace bc = boost::container;
+
+int rgw_compression_info_from_attrset(bc::flat_map<string, bufferlist>& attrs,
                                       bool& need_decompress,
                                       RGWCompressionInfo& cs_info) {
-  map<string, bufferlist>::iterator value = attrs.find(RGW_ATTR_COMPRESSION);
+  auto value = attrs.find(RGW_ATTR_COMPRESSION);
   if (value != attrs.end()) {
     auto bliter = value->second.cbegin();
     try {
@@ -32,7 +34,8 @@ int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs,
 
 //------------RGWPutObj_Compress---------------
 
-int RGWPutObj_Compress::process(bufferlist&& in, uint64_t logical_offset)
+boost::system::error_code RGWPutObj_Compress::process(bufferlist&& in,
+						      uint64_t logical_offset)
 {
   bufferlist out;
   if (in.length() > 0) {
@@ -45,7 +48,7 @@ int RGWPutObj_Compress::process(bufferlist&& in, uint64_t logical_offset)
         if (logical_offset > 0) {
           lderr(cct) << "Compression failed with exit code " << cr
               << " for next part, compression process failed" << dendl;
-          return -EIO;
+          return ceph::to_error_code(-EIO);
         }
         compressed = false;
         ldout(cct, 5) << "Compression failed with exit code " << cr
@@ -53,7 +56,7 @@ int RGWPutObj_Compress::process(bufferlist&& in, uint64_t logical_offset)
         out.claim(in);
       } else {
         compressed = true;
-    
+
         compression_block newbl;
         size_t bs = blocks.size();
         newbl.old_ofs = logical_offset;

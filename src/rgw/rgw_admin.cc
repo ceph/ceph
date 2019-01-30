@@ -61,7 +61,6 @@ extern "C" {
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
-#include "services/svc_datalog_rados.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_meta_be_otp.h"
 #include "services/svc_zone.h"
@@ -71,6 +70,9 @@ extern "C" {
 
 #define SECRET_KEY_LEN 40
 #define PUBLIC_ID_LEN 20
+
+namespace bc = boost::container;
+namespace bs = boost::system;
 
 static rgw::sal::RGWRadosStore *store = NULL;
 
@@ -1176,7 +1178,7 @@ static void show_roles_info(vector<RGWRole>& roles, Formatter* formatter)
 }
 
 static void show_reshard_status(
-  const list<cls_rgw_bucket_instance_entry>& status, Formatter *formatter)
+  const std::vector<cls_rgw_bucket_instance_entry>& status, Formatter *formatter)
 {
   formatter->open_array_section("status");
   for (const auto& entry : status) {
@@ -1202,7 +1204,8 @@ public:
 };
 
 static int init_bucket(const string& tenant_name, const string& bucket_name, const string& bucket_id,
-                       RGWBucketInfo& bucket_info, rgw_bucket& bucket, map<string, bufferlist> *pattrs = nullptr)
+                       RGWBucketInfo& bucket_info, rgw_bucket& bucket,
+		       bc::flat_map<string, bufferlist> *pattrs = nullptr)
 {
   if (!bucket_name.empty()) {
     auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
@@ -1390,7 +1393,7 @@ int set_bucket_quota(rgw::sal::RGWRadosStore *store, int opt_cmd,
                      bool have_max_size, bool have_max_objects)
 {
   RGWBucketInfo bucket_info;
-  map<string, bufferlist> attrs;
+  bc::flat_map<string, bufferlist> attrs;
   int r = store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name, bucket_info, NULL, null_yield, &attrs);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
@@ -1399,7 +1402,7 @@ int set_bucket_quota(rgw::sal::RGWRadosStore *store, int opt_cmd,
 
   set_quota_info(bucket_info.quota, opt_cmd, max_size, max_objects, have_max_size, have_max_objects);
 
-   r = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &attrs);
+  r = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &attrs);
   if (r < 0) {
     cerr << "ERROR: failed writing bucket instance info: " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -1452,7 +1455,7 @@ static bool bucket_object_check_filter(const string& name)
 
 int check_min_obj_stripe_size(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info, rgw_obj& obj, uint64_t min_stripe_size, bool *need_rewrite)
 {
-  map<string, bufferlist> attrs;
+  bc::flat_map<string, bufferlist> attrs;
   uint64_t obj_size;
 
   RGWObjectCtx obj_ctx(store);
@@ -1468,8 +1471,7 @@ int check_min_obj_stripe_size(rgw::sal::RGWRadosStore *store, RGWBucketInfo& buc
     return ret;
   }
 
-  map<string, bufferlist>::iterator iter;
-  iter = attrs.find(RGW_ATTR_MANIFEST);
+  auto iter = attrs.find(RGW_ATTR_MANIFEST);
   if (iter == attrs.end()) {
     *need_rewrite = (obj_size >= min_stripe_size);
     return 0;
@@ -1994,7 +1996,7 @@ stringstream& push_ss(stringstream& ss, list<string>& l, int tab = 0)
 
 static void get_md_sync_status(list<string>& status)
 {
-  RGWMetaSyncStatusManager sync(store, store->svc()->rados->get_async_processor());
+  RGWMetaSyncStatusManager sync(store, store->svc()->get_async_processor());
 
   int ret = sync.init();
   if (ret < 0) {
@@ -2146,7 +2148,7 @@ static void get_data_sync_status(const string& source_zone, list<string>& status
     flush_ss(ss, status);
     return;
   }
-  RGWDataSyncStatusManager sync(store, store->svc()->rados->get_async_processor(), source_zone, nullptr);
+  RGWDataSyncStatusManager sync(store, store->svc()->get_async_processor(), source_zone, nullptr);
 
   int ret = sync.init();
   if (ret < 0) {
@@ -2551,7 +2553,7 @@ int check_reshard_bucket_params(rgw::sal::RGWRadosStore *store,
 				int yes_i_really_mean_it,
 				rgw_bucket& bucket,
 				RGWBucketInfo& bucket_info,
-				map<string, bufferlist>& attrs)
+				bc::flat_map<string, bufferlist>& attrs)
 {
   if (bucket_name.empty()) {
     cerr << "ERROR: bucket not specified" << std::endl;
@@ -2652,9 +2654,10 @@ static int trim_sync_error_log(int shard_id, const ceph::real_time& start_time,
                                                shard_id);
   // call cls_log_trim() until it returns -ENODATA
   for (;;) {
-    int ret = store->svc()->cls->timelog.trim(oid, start_time, end_time,
-                                           start_marker, end_marker, nullptr,
-                                           null_yield);
+    int ret = ceph::from_error_code(
+      store->svc()->cls->timelog.trim(oid, start_time, end_time,
+				      start_marker, end_marker,
+				      null_yield));
     if (ret == -ENODATA) {
       return 0;
     }
@@ -3487,11 +3490,11 @@ int main(int argc, const char **argv)
       break;
     case OPT_PERIOD_LIST:
       {
-	list<string> periods;
-	int ret = store->svc()->zone->list_periods(periods);
-	if (ret < 0) {
-	  cerr << "failed to list periods: " << cpp_strerror(-ret) << std::endl;
-	  return -ret;
+	std::vector<string> periods;
+	auto ret = store->svc()->zone->list_periods(periods, null_yield);
+	if (ret) {
+	  cerr << "failed to list periods: " << ret << std::endl;
+	  return -ceph::from_error_code(ret);
 	}
 	formatter->open_object_section("periods_list");
 	encode_json("periods", periods, formatter);
@@ -3714,8 +3717,8 @@ int main(int argc, const char **argv)
 	if (ret < 0 && ret != -ENOENT) {
 	  cerr << "could not determine default realm: " << cpp_strerror(-ret) << std::endl;
 	}
-	list<string> realms;
-	ret = store->svc()->zone->list_realms(realms);
+	std::vector<string> realms;
+        ret = ceph::from_error_code(store->svc()->zone->list_realms(realms, null_yield));
 	if (ret < 0) {
 	  cerr << "failed to list realms: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -3733,8 +3736,9 @@ int main(int argc, const char **argv)
 	if (ret < 0) {
 	  return -ret;
 	}
-	list<string> periods;
-	ret = store->svc()->zone->list_periods(period_id, periods);
+	std::vector<string> periods;
+	ret = ceph::from_error_code(
+	  store->svc()->zone->list_periods(period_id, periods));
 	if (ret < 0) {
 	  cerr << "list periods failed: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -4067,8 +4071,9 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-	list<string> zonegroups;
-	ret = store->svc()->zone->list_zonegroups(zonegroups);
+	std::vector<string> zonegroups;
+	ret = ceph::from_error_code(
+	  store->svc()->zone->list_zonegroups(zonegroups, null_yield));
 	if (ret < 0) {
 	  cerr << "failed to list zonegroups: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -4464,14 +4469,15 @@ int main(int argc, const char **argv)
 	  return -ret;
 	}
 
-        list<string> zonegroups;
-	ret = store->svc()->zone->list_zonegroups(zonegroups);
+	std::vector<string> zonegroups;
+	ret = ceph::from_error_code(
+	  store->svc()->zone->list_zonegroups(zonegroups, null_yield));
 	if (ret < 0) {
 	  cerr << "failed to list zonegroups: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
 	}
 
-        for (list<string>::iterator iter = zonegroups.begin(); iter != zonegroups.end(); ++iter) {
+        for (auto iter = zonegroups.begin(); iter != zonegroups.end(); ++iter) {
           RGWZoneGroup zonegroup(string(), *iter);
           int ret = zonegroup.init(g_ceph_context, store->svc()->sysobj);
           if (ret < 0) {
@@ -4589,8 +4595,9 @@ int main(int argc, const char **argv)
       break;
     case OPT_ZONE_LIST:
       {
-	list<string> zones;
-	int ret = store->svc()->zone->list_zones(zones);
+	std::vector<string> zones;
+	int ret = ceph::from_error_code(
+	  store->svc()->zone->list_zones(zones, null_yield));
 	if (ret < 0) {
 	  cerr << "failed to list zones: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -5420,7 +5427,7 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT_BUCKET_LIMIT_CHECK) {
     void *handle;
-    std::list<std::string> user_ids;
+    std::vector<std::string> user_ids;
     metadata_key = "user";
     int max = 1000;
 
@@ -5443,7 +5450,7 @@ int main(int argc, const char **argv)
 
       do {
 	ret = store->ctl()->meta.mgr->list_keys_next(handle, max, user_ids,
-					      &truncated);
+						     &truncated);
 	if (ret < 0 && ret != -ENOENT) {
 	  cerr << "ERROR: buckets limit check lists_keys_next(): "
 	       << cpp_strerror(-ret) << std::endl;
@@ -5706,7 +5713,8 @@ next:
       exit(1);
     }
 
-    int ret = store->svc()->zone->add_bucket_placement(pool);
+    int ret = ceph::from_error_code(
+      store->svc()->zone->add_bucket_placement(pool));
     if (ret < 0)
       cerr << "failed to add bucket placement: " << cpp_strerror(-ret) << std::endl;
   }
@@ -5717,17 +5725,17 @@ next:
       exit(1);
     }
 
-    int ret = store->svc()->zone->remove_bucket_placement(pool);
+    int ret = ceph::from_error_code(store->svc()->zone->remove_bucket_placement(pool));
     if (ret < 0)
       cerr << "failed to remove bucket placement: " << cpp_strerror(-ret) << std::endl;
   }
 
   if (opt_cmd == OPT_POOLS_LIST) {
-    set<rgw_pool> pools;
-    int ret = store->svc()->zone->list_placement_set(pools);
-    if (ret < 0) {
-      cerr << "could not list placement set: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+    boost::container::flat_set<rgw_pool> pools;
+    auto ret = store->svc()->zone->list_placement_set(pools);
+    if (ret) {
+      cerr << "could not list placement set: " << ret << std::endl;
+      return ceph::from_error_code(ret);
     }
     formatter->reset();
     formatter->open_array_section("pools");
@@ -6080,7 +6088,7 @@ next:
       cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
     }
 
-    map<string, bufferlist> attrs;
+    bc::flat_map<string, bufferlist> attrs;
     ret = obj->put(bl, attrs, dpp(), null_yield);
     if (ret < 0) {
       cerr << "ERROR: put object returned error: " << cpp_strerror(-ret) << std::endl;
@@ -6269,7 +6277,7 @@ next:
   if (opt_cmd == OPT_BUCKET_RESHARD) {
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
-    map<string, bufferlist> attrs;
+    bc::flat_map<string, bufferlist> attrs;
 
     int ret = check_reshard_bucket_params(store,
 					  bucket_name,
@@ -6299,7 +6307,7 @@ next:
   if (opt_cmd == OPT_RESHARD_ADD) {
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
-    map<string, bufferlist> attrs;
+    bc::flat_map<string, bufferlist> attrs;
 
     int ret = check_reshard_bucket_params(store,
 					  bucket_name,
@@ -6380,7 +6388,7 @@ next:
 
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
-    map<string, bufferlist> attrs;
+    bc::flat_map<string, bufferlist> attrs;
     ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
@@ -6388,7 +6396,7 @@ next:
     }
 
     RGWBucketReshard br(store, bucket_info, attrs, nullptr /* no callback */);
-    list<cls_rgw_bucket_instance_entry> status;
+    std::vector<cls_rgw_bucket_instance_entry> status;
     int r = br.get_status(&status);
     if (r < 0) {
       cerr << "ERROR: could not get resharding status for bucket " <<
@@ -6417,7 +6425,7 @@ next:
 
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
-    map<string, bufferlist> attrs;
+    bc::flat_map<string, bufferlist> attrs;
     bool bucket_initable = true;
     ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket,
                       &attrs);
@@ -6496,7 +6504,7 @@ next:
     obj.key.set_instance(object_version);
 
     uint64_t obj_size;
-    map<string, bufferlist> attrs;
+    bc::flat_map<string, bufferlist> attrs;
     RGWObjectCtx obj_ctx(store);
     RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, obj);
     RGWRados::Object::Read read_op(&op_target);
@@ -6513,8 +6521,8 @@ next:
     formatter->dump_string("name", object);
     formatter->dump_unsigned("size", obj_size);
 
-    map<string, bufferlist>::iterator iter;
-    map<string, bufferlist> other_attrs;
+    bc::flat_map<string, bufferlist>::iterator iter;
+    bc::flat_map<string, bufferlist> other_attrs;
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
       bufferlist& bl = iter->second;
       bool handled = false;
@@ -6651,7 +6659,7 @@ next:
 
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
-    map<string, bufferlist> attrs;
+    bc::flat_map<string, bufferlist> attrs;
     RGWLifecycleConfiguration config;
     ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
     if (ret < 0) {
@@ -6907,14 +6915,14 @@ next:
 
     uint64_t left;
     do {
-      list<string> keys;
+      std::vector<string> keys;
       left = (max_entries_specified ? max_entries - count : max);
       ret = store->ctl()->meta.mgr->list_keys_next(handle, left, keys, &truncated);
       if (ret < 0 && ret != -ENOENT) {
         cerr << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << std::endl;
         return -ret;
       } if (ret != -ENOENT) {
-	for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+	for (auto iter = keys.begin(); iter != keys.end(); ++iter) {
 	  formatter->dump_string("key", *iter);
           ++count;
 	}
@@ -6963,7 +6971,7 @@ next:
     formatter->open_array_section("entries");
     for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
       void *handle;
-      list<cls_log_entry> entries;
+      std::vector<cls_log_entry> entries;
 
 
       meta_log->init_list_entries(i, start_time.to_real_time(), end_time.to_real_time(), marker, &handle);
@@ -6975,7 +6983,7 @@ next:
           return -ret;
         }
 
-        for (list<cls_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+        for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
           cls_log_entry& entry = *iter;
           store->ctl()->meta.mgr->dump_log_entry(entry, formatter);
         }
@@ -7081,7 +7089,7 @@ next:
   }
 
   if (opt_cmd == OPT_METADATA_SYNC_STATUS) {
-    RGWMetaSyncStatusManager sync(store, store->svc()->rados->get_async_processor());
+    RGWMetaSyncStatusManager sync(store, store->svc()->get_async_processor());
 
     int ret = sync.init();
     if (ret < 0) {
@@ -7122,7 +7130,7 @@ next:
   }
 
   if (opt_cmd == OPT_METADATA_SYNC_INIT) {
-    RGWMetaSyncStatusManager sync(store, store->svc()->rados->get_async_processor());
+    RGWMetaSyncStatusManager sync(store, store->svc()->get_async_processor());
 
     int ret = sync.init();
     if (ret < 0) {
@@ -7138,7 +7146,7 @@ next:
 
 
   if (opt_cmd == OPT_METADATA_SYNC_RUN) {
-    RGWMetaSyncStatusManager sync(store, store->svc()->rados->get_async_processor());
+    RGWMetaSyncStatusManager sync(store, store->svc()->get_async_processor());
 
     int ret = sync.init();
     if (ret < 0) {
@@ -7158,7 +7166,7 @@ next:
       cerr << "ERROR: source zone not specified" << std::endl;
       return EINVAL;
     }
-    RGWDataSyncStatusManager sync(store, store->svc()->rados->get_async_processor(), source_zone, nullptr);
+    RGWDataSyncStatusManager sync(store, store->svc()->get_async_processor(), source_zone, nullptr);
 
     int ret = sync.init();
     if (ret < 0) {
@@ -7222,7 +7230,7 @@ next:
       return EINVAL;
     }
 
-    RGWDataSyncStatusManager sync(store, store->svc()->rados->get_async_processor(), source_zone, nullptr);
+    RGWDataSyncStatusManager sync(store, store->svc()->get_async_processor(), source_zone, nullptr);
 
     int ret = sync.init();
     if (ret < 0) {
@@ -7251,7 +7259,7 @@ next:
       return ret;
     }
 
-    RGWDataSyncStatusManager sync(store, store->svc()->rados->get_async_processor(), source_zone, nullptr, sync_module);
+    RGWDataSyncStatusManager sync(store, store->svc()->get_async_processor(), source_zone, nullptr, sync_module);
 
     ret = sync.init();
     if (ret < 0) {
@@ -7407,16 +7415,19 @@ next:
       max_entries = 1000;
 
     do {
-      list<rgw_bi_log_entry> entries;
-      ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id, marker, max_entries - count, entries, &truncated);
-      if (ret < 0) {
-        cerr << "ERROR: list_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
-        return -ret;
+      std::vector<rgw_bi_log_entry> entries;
+      auto llr = store->svc()->bilog_rados->log_list(bucket_info, shard_id, marker,
+						     max_entries - count,
+						     null_yield);
+      if (!llr) {
+        cerr << "ERROR: list_bi_log_entries(): " << llr.error() << std::endl;
+        return -ceph::from_error_code(llr.error());
       }
+      std::tie(entries, truncated) = std::move(*llr);
 
       count += entries.size();
 
-      for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+      for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
         rgw_bi_log_entry& entry = *iter;
         encode_json("entry", entry, formatter);
 
@@ -7460,17 +7471,19 @@ next:
       string oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX, shard_id);
 
       do {
-        list<cls_log_entry> entries;
-        ret = store->svc()->cls->timelog.list(oid, start_time.to_real_time(), end_time.to_real_time(),
-                                           max_entries - count, entries, marker, &marker, &truncated,
-                                           null_yield);
-        if (ret == -ENOENT) {
-          break;
+	std::vector<cls_log_entry> entries;
+	auto tll = store->svc()->cls->timelog.list(oid, start_time.to_real_time(), end_time.to_real_time(),
+						   max_entries - count, marker, null_yield);
+
+        if (!tll) {
+	  if (tll.error() == bs::errc::no_such_file_or_directory)
+	    break;
+
+	  cerr << "ERROR: svc.cls->timelog.list(): " << tll.error() << std::endl;
+          return -ceph::from_error_code(tll.error());
         }
-        if (ret < 0) {
-          cerr << "ERROR: svc.cls->timelog.list(): " << cpp_strerror(-ret) << std::endl;
-          return -ret;
-        }
+
+	std::tie(entries, marker, truncated) = std::move(*tll);
 
         count += entries.size();
 
@@ -7546,7 +7559,9 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, start_marker, end_marker);
+    ret = ceph::from_error_code(
+      store->svc()->bilog_rados->log_trim(bucket_info, shard_id, start_marker,
+					  end_marker, null_yield));
     if (ret < 0) {
       cerr << "ERROR: trim_bi_log_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7564,14 +7579,14 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    map<int, string> markers;
-    ret = store->svc()->bilog_rados->get_log_status(bucket_info, shard_id, &markers);
-    if (ret < 0) {
-      cerr << "ERROR: get_bi_log_status(): " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+    auto markers = store->svc()->bilog_rados->get_log_status(bucket_info, shard_id,
+							     null_yield);
+    if (!markers) {
+      cerr << "ERROR: get_bi_log_status(): " << markers.error() << std::endl;
+      return -ceph::from_error_code(markers.error());
     }
     formatter->open_object_section("entries");
-    encode_json("markers", markers, formatter);
+    encode_json("markers", *markers, formatter);
     formatter->close_section();
     formatter->flush(cout);
   }
@@ -7618,7 +7633,7 @@ next:
     if (ret < 0)
       return -ret;
 
-    auto datalog_svc = store->svc()->datalog_rados;
+    auto datalog_svc = store->svc()->log;
     RGWDataChangesLog::LogMarker log_marker;
 
     do {
@@ -7658,7 +7673,7 @@ next:
       list<cls_log_entry> entries;
 
       RGWDataChangesLogInfo info;
-      store->svc()->datalog_rados->get_info(i, &info);
+      store->svc()->log->get_info(i, &info);
 
       ::encode_json("info", info, formatter);
 
@@ -7706,7 +7721,7 @@ next:
 
     // loop until -ENODATA
     do {
-      auto datalog = store->svc()->datalog_rados;
+      auto datalog = store->svc()->log;
       ret = datalog->trim_entries(shard_id, start_time.to_real_time(),
                                   end_time.to_real_time(),
                                   start_marker, end_marker);
@@ -7859,18 +7874,19 @@ next:
       return EINVAL;
     }
 
-    rados::cls::otp::otp_info_t result;
-    int ret = store->svc()->cls->mfa.get_mfa(user_id, totp_serial, &result, null_yield);
-    if (ret < 0) {
-      if (ret == -ENOENT || ret == -ENODATA) {
+    auto result = store->svc()->cls->mfa.get_mfa(user_id, totp_serial,
+						 null_yield);
+    if (!result) {
+      if (result.error() == bs::errc::no_such_file_or_directory ||
+	  result.error() == bs::errc::no_message) {
         cerr << "MFA serial id not found" << std::endl;
       } else {
-        cerr << "MFA retrieval failed, error: " << cpp_strerror(-ret) << std::endl;
+        cerr << "MFA retrieval failed, error: " << result.error() << std::endl;
       }
-      return -ret;
+      return -ceph::from_error_code(result.error());
     }
     formatter->open_object_section("result");
-    encode_json("entry", result, formatter);
+    encode_json("entry", *result, formatter);
     formatter->close_section();
     formatter->flush(cout);
   }
@@ -7881,14 +7897,13 @@ next:
       return EINVAL;
     }
 
-    list<rados::cls::otp::otp_info_t> result;
-    int ret = store->svc()->cls->mfa.list_mfa(user_id, &result, null_yield);
-    if (ret < 0) {
-      cerr << "MFA listing failed, error: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+    auto result = store->svc()->cls->mfa.list_mfa(user_id, null_yield);
+    if (!result) {
+      cerr << "MFA listing failed, error: " << result.error() << std::endl;
+      return -ceph::from_error_code(result.error());
     }
     formatter->open_object_section("result");
-    encode_json("entries", result, formatter);
+    encode_json("entries", *result, formatter);
     formatter->close_section();
     formatter->flush(cout);
   }
@@ -7909,8 +7924,7 @@ next:
       return EINVAL;
     }
 
-    list<rados::cls::otp::otp_info_t> result;
-    int ret = store->svc()->cls->mfa.check_mfa(user_id, totp_serial, totp_pin.front(), null_yield);
+    int ret = ceph::from_error_code(store->svc()->cls->mfa.check_mfa(user_id, totp_serial, totp_pin.front(), null_yield));
     if (ret < 0) {
       cerr << "MFA check failed, error: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7934,27 +7948,26 @@ next:
       cerr << "ERROR: missing two --totp-pin params (--totp-pin=<first> --totp-pin=<second>)" << std::endl;
     }
 
-    rados::cls::otp::otp_info_t config;
-    int ret = store->svc()->cls->mfa.get_mfa(user_id, totp_serial, &config, null_yield);
-    if (ret < 0) {
-      if (ret == -ENOENT || ret == -ENODATA) {
+    auto config = store->svc()->cls->mfa.get_mfa(user_id, totp_serial, null_yield);
+    if (!config) {
+      if (config.error() == bs::errc::no_such_file_or_directory ||
+	  config.error() == bs::errc::no_message_available) {
         cerr << "MFA serial id not found" << std::endl;
       } else {
-        cerr << "MFA retrieval failed, error: " << cpp_strerror(-ret) << std::endl;
+        cerr << "MFA retrieval failed, error: " << config.error() << std::endl;
       }
-      return -ret;
+      return -ceph::from_error_code(config.error());
     }
 
-    ceph::real_time now;
-
-    ret = store->svc()->cls->mfa.otp_get_current_time(user_id, &now, null_yield);
-    if (ret < 0) {
-      cerr << "ERROR: failed to fetch current time from osd: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+    auto now = store->svc()->cls->mfa.otp_get_current_time(user_id, null_yield);
+    if (!now) {
+      cerr << "ERROR: failed to fetch current time from osd: " << now.error()
+	   << std::endl;
+      return -ceph::from_error_code(now.error());
     }
     time_t time_ofs;
 
-    ret = scan_totp(store->ctx(), now, config, totp_pin, &time_ofs);
+    ret = scan_totp(store->ctx(), *now, *config, totp_pin, &time_ofs);
     if (ret < 0) {
       if (ret == -ENOENT) {
         cerr << "failed to resync, TOTP values not found in range" << std::endl;
@@ -7964,7 +7977,7 @@ next:
       return -ret;
     }
 
-    config.time_ofs = time_ofs;
+    config->time_ofs = time_ofs;
 
     /* now update the backend */
     real_time mtime = real_clock::now();
@@ -7974,7 +7987,7 @@ next:
 				         null_yield,
 				         MDLOG_STATUS_WRITE,
 				         [&] {
-      return store->svc()->cls->mfa.create_mfa(user_id, config, &objv_tracker, mtime, null_yield);
+      return store->svc()->cls->mfa.create_mfa(user_id, *config, &objv_tracker, mtime, null_yield);
     });
     if (ret < 0) {
       cerr << "MFA update failed, error: " << cpp_strerror(-ret) << std::endl;

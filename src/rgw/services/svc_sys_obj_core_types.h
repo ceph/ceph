@@ -1,35 +1,37 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
+/*
+ * Ceph - scalable distributed file system
+ *
+ * Copyright (C) 2019 Red Hat, Inc.
+ *
+ * This is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License version 2.1, as published by the Free Software
+ * Foundation. See file COPYING.
+ *
+ */
 
 #pragma once
+
+#include "common/shunique_lock.h"
 
 
 #include "rgw/rgw_service.h"
 
 #include "svc_rados.h"
-#include "svc_sys_obj_types.h"
 
 
-
-struct RGWSI_SysObj_Core_GetObjState : public RGWSI_SysObj_Obj_GetObjState {
-  RGWSI_RADOS::Obj rados_obj;
-  bool has_rados_obj{false};
+struct RGWSI_SysObj_Obj_GetObjState {
+  boost::optional<RGWSI_RADOS::Obj> rados_obj;
   uint64_t last_ver{0};
 
-  RGWSI_SysObj_Core_GetObjState() {}
-
-  int get_rados_obj(RGWSI_RADOS *rados_svc,
-                    RGWSI_Zone *zone_svc,
-                    const rgw_raw_obj& obj,
-                    RGWSI_RADOS::Obj **pobj);
-};
-
-struct RGWSI_SysObj_Core_PoolListImplInfo : public RGWSI_SysObj_Pool_ListInfo {
-  RGWSI_RADOS::Pool pool;
-  RGWSI_RADOS::Pool::List op;
-  RGWAccessListFilterPrefix filter;
-
-  RGWSI_SysObj_Core_PoolListImplInfo(const string& prefix) : op(pool.op()), filter(prefix) {}
+  RGWSI_SysObj_Obj_GetObjState() {}
+  boost::system::error_code get_rados_obj(RGWSI_RADOS *rados_svc,
+                                          RGWSI_Zone *zone_svc,
+                                          const rgw_raw_obj& obj,
+                                          RGWSI_RADOS::Obj **pobj,
+                                          optional_yield y);
 };
 
 struct RGWSysObjState {
@@ -49,7 +51,7 @@ struct RGWSysObjState {
 
   RGWObjVersionTracker objv_tracker;
 
-  map<string, bufferlist> attrset;
+  boost::container::flat_map<std::string, ceph::buffer::list> attrset;
   RGWSysObjState() {}
   RGWSysObjState(const RGWSysObjState& rhs) : obj (rhs.obj) {
     has_attrs = rhs.has_attrs;
@@ -70,7 +72,6 @@ struct RGWSysObjState {
   }
 };
 
-
 class RGWSysObjectCtxBase {
   std::map<rgw_raw_obj, RGWSysObjState> objs_state;
   ceph::shared_mutex lock = ceph::make_shared_mutex("RGWSysObjectCtxBase");
@@ -84,24 +85,24 @@ public:
   RGWSysObjState *get_state(const rgw_raw_obj& obj) {
     RGWSysObjState *result;
     std::map<rgw_raw_obj, RGWSysObjState>::iterator iter;
-    lock.lock_shared();
-    assert (!obj.empty());
+    ceph::shunique_lock l(lock, ceph::acquire_shared);
+    assert(!obj.empty());
     iter = objs_state.find(obj);
     if (iter != objs_state.end()) {
       result = &iter->second;
-      lock.unlock_shared();
+      l.unlock();
     } else {
-      lock.unlock_shared();
-      lock.lock();
+      l.unlock();
+      l.lock();
       result = &objs_state[obj];
-      lock.unlock();
+      l.unlock();
     }
     return result;
   }
 
   void set_prefetch_data(rgw_raw_obj& obj) {
     std::unique_lock wl{lock};
-    assert (!obj.empty());
+    assert(!obj.empty());
     objs_state[obj].prefetch_data = true;
   }
   void invalidate(const rgw_raw_obj& obj) {
@@ -113,4 +114,3 @@ public:
     objs_state.erase(iter);
   }
 };
-

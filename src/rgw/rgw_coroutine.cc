@@ -196,11 +196,13 @@ int64_t RGWCoroutinesManager::get_next_io_id()
   return (int64_t)++max_io_id;
 }
 
-RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct, RGWCoroutinesManager *_ops_mgr, RGWCoroutine *start) : cct(_cct), ops_mgr(_ops_mgr),
-                                                                                                         done_flag(false), error_flag(false), blocked_flag(false),
-                                                                                                         sleep_flag(false), interval_wait_flag(false), is_scheduled(false), is_waiting_for_child(false),
-													 retcode(0), run_count(0),
-													 env(NULL), parent(NULL)
+RGWCoroutinesStack::RGWCoroutinesStack(CephContext *_cct,
+				       RGWCoroutinesManager *_ops_mgr,
+				       RGWCoroutine *start)
+  : cct(_cct), ops_mgr(_ops_mgr), done_flag(false), error_flag(false),
+    blocked_flag(false), sleep_flag(false), interval_wait_flag(false),
+    is_scheduled(false), is_waiting_for_child(false), retcode(0), run_count(0),
+    env(NULL), parent(NULL)
 {
   if (start) {
     ops.push_back(start);

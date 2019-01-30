@@ -1,4 +1,3 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
@@ -17,6 +16,8 @@
 
 #pragma once
 
+#include "include/expected.hpp"
+
 #include "rgw/rgw_service.h"
 
 class RGWBucketInfo;
@@ -26,17 +27,20 @@ struct RGWBucketEnt;
 class RGWSI_BucketIndex : public RGWServiceInstance
 {
 public:
-  RGWSI_BucketIndex(CephContext *cct) : RGWServiceInstance(cct) {}
+  RGWSI_BucketIndex(CephContext *cct, boost::asio::io_context& ioc) :
+    RGWServiceInstance(cct, ioc) {}
   virtual ~RGWSI_BucketIndex() {}
 
-  virtual int init_index(RGWBucketInfo& bucket_info) = 0;
-  virtual int clean_index(RGWBucketInfo& bucket_info) = 0;
+  virtual boost::system::error_code init_index(RGWBucketInfo& bucket_info,
+                                               optional_yield y) = 0;
+  virtual boost::system::error_code clean_index(RGWBucketInfo& bucket_info,
+                                                optional_yield y) = 0;
 
-  virtual int read_stats(const RGWBucketInfo& bucket_info,
-                         RGWBucketEnt *stats,
-                         optional_yield y) = 0;
+  virtual tl::expected<RGWBucketEnt, boost::system::error_code>
+  read_stats(const RGWBucketInfo& bucket_info, optional_yield y) = 0;
 
-  virtual int handle_overwrite(const RGWBucketInfo& info,
-                               const RGWBucketInfo& orig_info) = 0;
+  virtual boost::system::error_code
+  handle_overwrite(const RGWBucketInfo& info,
+                   const RGWBucketInfo& orig_info,
+                   optional_yield y) = 0;
 };
-

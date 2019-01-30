@@ -22,7 +22,7 @@
 
 #include "rgw_sal.h"
 
-#define dout_subsys ceph_subsys_rgw
+inline constexpr auto dout_subsys = ceph_subsys_rgw;
 
 #define RGW_ORPHAN_INDEX_OID "orphan.index"
 #define RGW_ORPHAN_INDEX_PREFIX "orphan.scan"

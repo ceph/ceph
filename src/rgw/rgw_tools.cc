@@ -26,6 +26,9 @@
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
 
+namespace bc = boost::container;
+namespace bs = boost::system;
+
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
 
@@ -134,10 +137,14 @@ void rgw_shard_name(const string& prefix, unsigned shard_id, string& name)
   name = prefix + buf;
 }
 
-int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs)
+bs::error_code rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool,
+				  const string& oid, bufferlist& data,
+				  bool exclusive,
+				  RGWObjVersionTracker *objv_tracker,
+				  real_time set_mtime, optional_yield y,
+				  bc::flat_map<string, bufferlist> *pattrs)
 {
-  map<string,bufferlist> no_attrs;
+  bc::flat_map<string,bufferlist> no_attrs;
   if (!pattrs) {
     pattrs = &no_attrs;
   }
@@ -145,27 +152,31 @@ int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
   rgw_raw_obj obj(pool, oid);
 
   auto sysobj = obj_ctx.get_obj(obj);
-  int ret = sysobj.wop()
-                  .set_objv_tracker(objv_tracker)
-                  .set_exclusive(exclusive)
-                  .set_mtime(set_mtime)
-                  .set_attrs(*pattrs)
-                  .write(data, y);
-
-  return ret;
+  return sysobj.wop()
+    .set_objv_tracker(objv_tracker)
+    .set_exclusive(exclusive)
+    .set_mtime(set_mtime)
+    .set_attrs(*pattrs)
+    .write(data, y);
 }
 
-int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
+bs::error_code rgw_put_system_obj(RGWSysObjectCtx& obj_ctx,
+				  const rgw_pool& pool, const string& oid,
+				  bufferlist& data, bool exclusive,
+				  RGWObjVersionTracker *objv_tracker,
+				  real_time set_mtime,
+				  bc::flat_map<string, bufferlist> *pattrs)
 {
   return rgw_put_system_obj(obj_ctx, pool, oid, data, exclusive,
                             objv_tracker, set_mtime, null_yield, pattrs);
 }
 
-int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs,
-                       rgw_cache_entry_info *cache_info,
-		       boost::optional<obj_version> refresh_version)
+bs::error_code
+rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool,const string& key, bufferlist& bl,
+		   RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y,
+		   boost::container::flat_map<string, bufferlist> *pattrs,
+		   rgw_cache_entry_info *cache_info,
+		   boost::optional<obj_version> refresh_version)
 {
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;
@@ -176,21 +187,22 @@ int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
     original_readv = objv_tracker->read_version;
   }
 
+  bc::flat_map<string, bufferlist> tm;
   do {
     auto sysobj = obj_ctx.get_obj(obj);
     auto rop = sysobj.rop();
 
-    int ret = rop.set_attrs(pattrs)
-                 .set_last_mod(pmtime)
-                 .set_objv_tracker(objv_tracker)
-                 .stat(y);
-    if (ret < 0)
+    auto ret = rop.set_attrs(&tm).set_last_mod(pmtime)
+      .set_objv_tracker(objv_tracker).stat(y);
+    if (pattrs)
+      std::move(tm.begin(), tm.end(),
+		std::inserter(*pattrs, pattrs->end()));
+    if (ret)
       return ret;
 
     ret = rop.set_cache_info(cache_info)
-             .set_refresh_version(refresh_version)
-             .read(&bl, y);
-    if (ret == -ECANCELED) {
+      .set_refresh_version(refresh_version).read(&bl, y);
+    if (ret == bs::errc::operation_canceled) {
       /* raced, restart */
       if (!original_readv.empty()) {
         /* we were asked to read a specific obj_version, failed */
@@ -202,27 +214,23 @@ int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
       sysobj.invalidate();
       continue;
     }
-    if (ret < 0)
+    if (ret)
       return ret;
 
-    if (ret < request_len)
-      break;
     bl.clear();
     request_len *= 2;
   } while (true);
 
-  return 0;
+  return {};
 }
 
-int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
-                          RGWObjVersionTracker *objv_tracker)
+bs::error_code rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
+						RGWObjVersionTracker *objv_tracker)
 {
   auto obj_ctx = sysobj_svc->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(rgw_raw_obj{pool, oid});
   rgw_raw_obj obj(pool, oid);
-  return sysobj.wop()
-               .set_objv_tracker(objv_tracker)
-               .remove(null_yield);
+  return sysobj.wop() .set_objv_tracker(objv_tracker).remove(null_yield);
 }
 
 thread_local bool is_asio_thread = false;
@@ -237,7 +245,7 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
   if (y) {
     auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
-    boost::system::error_code ec;
+    bs::error_code ec;
     auto bl = librados::async_operate(context, ioctx, oid, op, 0, yield[ec]);
     if (pbl) {
       *pbl = std::move(bl);
@@ -259,7 +267,7 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
   if (y) {
     auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
-    boost::system::error_code ec;
+    bs::error_code ec;
     librados::async_operate(context, ioctx, oid, op, 0, yield[ec]);
     return -ec.value();
   }
@@ -278,7 +286,7 @@ int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
   if (y) {
     auto& context = y.get_io_context();
     auto& yield = y.get_yield_context();
-    boost::system::error_code ec;
+    bs::error_code ec;
     auto reply = librados::async_notify(context, ioctx, oid,
                                         bl, timeout_ms, yield[ec]);
     if (pbl) {
@@ -438,7 +446,7 @@ int RGWDataAccess::Bucket::init()
 }
 
 int RGWDataAccess::Bucket::init(const RGWBucketInfo& _bucket_info,
-				const map<string, bufferlist>& _attrs)
+				const bc::flat_map<string, bufferlist>& _attrs)
 {
   bucket_info = _bucket_info;
   attrs = _attrs;
@@ -453,7 +461,7 @@ int RGWDataAccess::Bucket::get_object(const rgw_obj_key& key,
 }
 
 int RGWDataAccess::Object::put(bufferlist& data,
-			       map<string, bufferlist>& attrs,
+			       bc::flat_map<string, bufferlist>& attrs,
                                const DoutPrefixProvider *dpp,
                                optional_yield y)
 {
@@ -479,7 +487,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
                                   owner.get_id(), obj_ctx, obj, olh_epoch,
                                   req_id, dpp, y);
 
-  int ret = processor.prepare(y);
+  int ret = ceph::from_error_code(processor.prepare(y));
   if (ret < 0)
     return ret;
 
@@ -513,14 +521,14 @@ int RGWDataAccess::Object::put(bufferlist& data,
     data.splice(0, read_len, &bl);
     etag_calc.update(bl);
 
-    ret = filter->process(std::move(bl), ofs);
+    ret = ceph::from_error_code(filter->process(std::move(bl), ofs));
     if (ret < 0)
       return ret;
 
     ofs += read_len;
   } while (data.length() > 0);
 
-  ret = filter->process({}, ofs);
+  ret = ceph::from_error_code(filter->process({}, ofs));
   if (ret < 0) {
     return ret;
   }
@@ -556,12 +564,12 @@ int RGWDataAccess::Object::put(bufferlist& data,
     puser_data = &(*user_data);
   }
 
-  return processor.complete(obj_size, etag,
-			    &mtime, mtime,
-			    attrs, delete_at,
-                            nullptr, nullptr,
-                            puser_data,
-                            nullptr, nullptr, y);
+  return ceph::from_error_code(processor.complete(obj_size, etag,
+						  &mtime, mtime,
+						  attrs, delete_at,
+						  nullptr, nullptr,
+						  puser_data,
+						  nullptr, nullptr, y));
 }
 
 void RGWDataAccess::Object::set_policy(const RGWAccessControlPolicy& policy)

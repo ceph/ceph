@@ -31,6 +31,8 @@
 #include "services/svc_meta.h"
 #include "services/svc_cls.h"
 
+#include "RADOS/cls/log.h"
+
 #include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
@@ -59,7 +61,8 @@ RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const string& source_zone, const 
   rgw_sync_error_info info(source_zone, error_code, message);
   bufferlist bl;
   encode(info, bl);
-  store->svc()->cls->timelog.prepare_entry(entry, real_clock::now(), section, name, bl);
+  RADOS::CLS::log::add_prepare_entry(entry, real_clock::now(), section, name,
+				     std::move(bl));
 
   uint32_t shard_id = ++counter % num_shards;
 
@@ -398,7 +401,7 @@ class RGWAsyncReadMDLogEntries : public RGWAsyncRadosRequest {
   int shard_id;
   string *marker;
   int max_entries;
-  list<cls_log_entry> *entries;
+  vector<cls_log_entry> *entries;
   bool *truncated;
 
 protected:
@@ -420,7 +423,7 @@ public:
   RGWAsyncReadMDLogEntries(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RGWRadosStore *_store,
                            RGWMetadataLog* mdlog, int _shard_id,
                            string* _marker, int _max_entries,
-                           list<cls_log_entry> *_entries, bool *_truncated)
+                           vector<cls_log_entry> *_entries, bool *_truncated)
     : RGWAsyncRadosRequest(caller, cn), store(_store), mdlog(mdlog),
       shard_id(_shard_id), marker(_marker), max_entries(_max_entries),
       entries(_entries), truncated(_truncated) {}
@@ -433,7 +436,7 @@ class RGWReadMDLogEntriesCR : public RGWSimpleCoroutine {
   string marker;
   string *pmarker;
   int max_entries;
-  list<cls_log_entry> *entries;
+  vector<cls_log_entry> *entries;
   bool *truncated;
 
   RGWAsyncReadMDLogEntries *req{nullptr};
@@ -441,7 +444,7 @@ class RGWReadMDLogEntriesCR : public RGWSimpleCoroutine {
 public:
   RGWReadMDLogEntriesCR(RGWMetaSyncEnv *_sync_env, RGWMetadataLog* mdlog,
                         int _shard_id, string*_marker, int _max_entries,
-                        list<cls_log_entry> *_entries, bool *_truncated)
+                        vector<cls_log_entry> *_entries, bool *_truncated)
     : RGWSimpleCoroutine(_sync_env->cct), sync_env(_sync_env), mdlog(mdlog),
       shard_id(_shard_id), pmarker(_marker), max_entries(_max_entries),
       entries(_entries), truncated(_truncated) {}
@@ -1412,8 +1415,8 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
 
   RGWMetaSyncShardMarkerTrack *marker_tracker = nullptr;
 
-  list<cls_log_entry> log_entries;
-  list<cls_log_entry>::iterator log_iter;
+  vector<cls_log_entry> log_entries;
+  vector<cls_log_entry>::iterator log_iter;
   bool truncated = false;
 
   string mdlog_marker;
@@ -2112,7 +2115,7 @@ static RGWPeriodHistory::Cursor get_period_at(rgw::sal::RGWRadosStore* store,
 
   // read the period from rados or pull it from the master
   RGWPeriod period;
-  int r = store->svc()->mdlog->pull_period(info.period, period);
+  int r = ceph::from_error_code(store->svc()->mdlog->pull_period(info.period, period));
   if (r < 0) {
     lderr(store->ctx()) << "ERROR: failed to read period id "
         << info.period << ": " << cpp_strerror(r) << dendl;
@@ -2432,10 +2435,9 @@ int RGWCloneMetaLogCoroutine::state_receive_rest_response()
 
 int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
 {
-  list<cls_log_entry> dest_entries;
+  std::vector<cls_log_entry> dest_entries;
 
-  vector<rgw_mdlog_entry>::iterator iter;
-  for (iter = data.entries.begin(); iter != data.entries.end(); ++iter) {
+  for (auto iter = data.entries.begin(); iter != data.entries.end(); ++iter) {
     rgw_mdlog_entry& entry = *iter;
     ldpp_dout(sync_env->dpp, 20) << "entry: name=" << entry.name << dendl;
 
@@ -2444,7 +2446,7 @@ int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
     dest_entry.section = entry.section;
     dest_entry.name = entry.name;
     dest_entry.timestamp = entry.timestamp;
-  
+
     encode(entry.log_data, dest_entry.data);
 
     dest_entries.push_back(dest_entry);

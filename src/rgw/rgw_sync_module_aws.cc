@@ -682,7 +682,7 @@ struct AWSSyncInstanceEnv {
   }
 };
 
-static int do_decode_rest_obj(CephContext *cct, map<string, bufferlist>& attrs, map<string, string>& headers, rgw_rest_obj *info)
+static int do_decode_rest_obj(CephContext *cct, boost::container::flat_map<string, bufferlist>& attrs, map<string, string>& headers, rgw_rest_obj *info)
 {
   for (auto header : headers) {
     const string& val = header.second;
@@ -763,7 +763,7 @@ public:
   }
 
   int decode_rest_obj(map<string, string>& headers, bufferlist& extra_data) override {
-    map<string, bufferlist> src_attrs;
+    boost::container::flat_map<string, bufferlist> src_attrs;
 
     ldout(sync_env->cct, 20) << __func__ << ":" << " headers=" << headers << " extra_data.length()=" << extra_data.length() << dendl;
 
@@ -1525,9 +1525,9 @@ public:
   }
 };
 template <class T>
-int decode_attr(map<string, bufferlist>& attrs, const char *attr_name, T *result, T def_val)
+int decode_attr(boost::container::flat_map<string, bufferlist>& attrs, const char *attr_name, T *result, T def_val)
 {
-  map<string, bufferlist>::iterator iter = attrs.find(attr_name);
+  auto iter = attrs.find(attr_name);
   if (iter == attrs.end()) {
     *result = def_val;
     return 0;

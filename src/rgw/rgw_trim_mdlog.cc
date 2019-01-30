@@ -527,7 +527,7 @@ class MetaPeerTrimShardCollectCR : public RGWShardCollectCR {
       env(env), mdlog(mdlog), period_id(env.current.get_period().get_id())
   {
     meta_env.init(env.dpp, cct, env.store, env.store->svc()->zone->get_master_conn(),
-                  env.store->svc()->rados->get_async_processor(), env.http, nullptr,
+                  env.store->svc()->get_async_processor(), env.http, nullptr,
                   env.store->getRados()->get_sync_tracer());
   }
 
@@ -630,7 +630,7 @@ int MetaTrimPollCR::operate()
 
       // prevent others from trimming for our entire wait interval
       set_status("acquiring trim lock");
-      yield call(new RGWSimpleRadosLockCR(store->svc()->rados->get_async_processor(), store,
+      yield call(new RGWSimpleRadosLockCR(store->svc()->get_async_processor(), store,
                                           obj, name, cookie, interval.sec()));
       if (retcode < 0) {
         ldout(cct, 4) << "failed to lock: " << cpp_strerror(retcode) << dendl;
@@ -643,7 +643,7 @@ int MetaTrimPollCR::operate()
       if (retcode < 0) {
         // on errors, unlock so other gateways can try
         set_status("unlocking");
-        yield call(new RGWSimpleRadosUnlockCR(store->svc()->rados->get_async_processor(), store,
+        yield call(new RGWSimpleRadosUnlockCR(store->svc()->get_async_processor(), store,
                                               obj, name, cookie));
       }
     }

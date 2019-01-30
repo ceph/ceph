@@ -44,11 +44,10 @@ public:
   }
 };
 
-RGWSI_OTP::RGWSI_OTP(CephContext *cct): RGWServiceInstance(cct) {
-}
+RGWSI_OTP::RGWSI_OTP(CephContext *cct, boost::asio::io_context& ioc)
+  : RGWServiceInstance(cct, ioc) {}
 
-RGWSI_OTP::~RGWSI_OTP() {
-}
+RGWSI_OTP::~RGWSI_OTP() = default;
 
 void RGWSI_OTP::init(RGWSI_Zone *_zone_svc,
                         RGWSI_Meta *_meta_svc,
@@ -60,16 +59,17 @@ void RGWSI_OTP::init(RGWSI_Zone *_zone_svc,
   svc.meta_be = _meta_be_svc;
 }
 
-int RGWSI_OTP::do_start()
+boost::system::error_code RGWSI_OTP::do_start()
 {
   /* create first backend handler for bucket entrypoints */
 
   RGWSI_MetaBackend_Handler *_otp_be_handler;
 
-  int r = svc.meta->create_be_handler(RGWSI_MetaBackend::Type::MDBE_OTP, &_otp_be_handler);
-  if (r < 0) {
-    ldout(ctx(), 0) << "ERROR: failed to create be handler: r=" << r << dendl;
-    return r;
+  auto ec = svc.meta->create_be_handler(RGWSI_MetaBackend::Type::MDBE_OTP,
+					&_otp_be_handler);
+  if (ec) {
+    ldout(ctx(), 0) << "ERROR: failed to create be handler: r=" << ec << dendl;
+    return ec;
   }
 
   be_handler = _otp_be_handler;
@@ -80,29 +80,24 @@ int RGWSI_OTP::do_start()
   be_module.reset(otp_be_module);
   otp_be_handler->set_module(otp_be_module);
 
-  return 0;
+  return ec;
 }
 
-int RGWSI_OTP::read_all(RGWSI_OTP_BE_Ctx& ctx,
-                        const string& key,
-                        otp_devices_list_t *devices,
-                        real_time *pmtime,
-                        RGWObjVersionTracker *objv_tracker,
-                        optional_yield y)
+boost::system::error_code RGWSI_OTP::read_all(RGWSI_OTP_BE_Ctx& ctx,
+					      const string& key,
+					      otp_devices_list_t *devices,
+					      real_time *pmtime,
+					      RGWObjVersionTracker *objv_tracker,
+					      optional_yield y)
 {
   RGWSI_MBOTP_GetParams params;
   params.pdevices = devices;
   params.pmtime = pmtime;
 
-  int ret = svc.meta_be->get_entry(ctx.get(), key, params, objv_tracker, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return 0;
+  return svc.meta_be->get_entry(ctx.get(), key, params, objv_tracker, y);
 }
 
-int RGWSI_OTP::read_all(RGWSI_OTP_BE_Ctx& ctx,
+boost::system::error_code RGWSI_OTP::read_all(RGWSI_OTP_BE_Ctx& ctx,
                         const rgw_user& uid,
                         otp_devices_list_t *devices,
                         real_time *pmtime,
@@ -117,7 +112,7 @@ int RGWSI_OTP::read_all(RGWSI_OTP_BE_Ctx& ctx,
                   y);
 }
 
-int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
+boost::system::error_code RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
                          const string& key,
                          const otp_devices_list_t& devices,
                          real_time mtime,
@@ -128,15 +123,10 @@ int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
   params.mtime = mtime;
   params.devices = devices;
 
-  int ret = svc.meta_be->put_entry(ctx.get(), key, params, objv_tracker, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return 0;
+  return svc.meta_be->put_entry(ctx.get(), key, params, objv_tracker, y);
 }
 
-int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
+boost::system::error_code RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
                          const rgw_user& uid,
                          const otp_devices_list_t& devices,
                          real_time mtime,
@@ -151,22 +141,17 @@ int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
                    y);
 }
 
-int RGWSI_OTP::remove_all(RGWSI_OTP_BE_Ctx& ctx,
+boost::system::error_code RGWSI_OTP::remove_all(RGWSI_OTP_BE_Ctx& ctx,
                           const string& key,
                           RGWObjVersionTracker *objv_tracker,
                           optional_yield y)
 {
   RGWSI_MBOTP_RemoveParams params;
 
-  int ret = svc.meta_be->remove_entry(ctx.get(), key, params, objv_tracker, y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return 0;
+  return svc.meta_be->remove_entry(ctx.get(), key, params, objv_tracker, y);
 }
 
-int RGWSI_OTP::remove_all(RGWSI_OTP_BE_Ctx& ctx,
+boost::system::error_code RGWSI_OTP::remove_all(RGWSI_OTP_BE_Ctx& ctx,
                           const rgw_user& uid,
                           RGWObjVersionTracker *objv_tracker,
                           optional_yield y)

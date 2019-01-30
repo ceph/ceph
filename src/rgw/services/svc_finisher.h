@@ -3,42 +3,44 @@
 
 #pragma once
 
+#include <map>
+
+#include <boost/asio.hpp>
+
+#include "include/function2.hpp"
+
 #include "rgw/rgw_service.h"
 
-class Context;
-class Finisher;
 
 class RGWSI_Finisher : public RGWServiceInstance
 {
   friend struct RGWServices_Def;
 public:
-  class ShutdownCB;
+
+  using ShutdownCB = fu2::unique_function<void()>;
 
 private:
-  Finisher *finisher{nullptr};
+  boost::asio::io_context::strand finish_strand;
   bool finalized{false};
 
   void shutdown() override;
 
-  std::map<int, ShutdownCB *> shutdown_cbs;
+  std::map<int, ShutdownCB> shutdown_cbs;
   std::atomic<int> handles_counter{0};
 
 protected:
   void init() {}
-  int do_start() override;
 
 public:
-  RGWSI_Finisher(CephContext *cct): RGWServiceInstance(cct) {}
+  RGWSI_Finisher(CephContext* cct, boost::asio::io_context& ioc)
+    : RGWServiceInstance(cct, ioc), finish_strand(ioc) {}
   ~RGWSI_Finisher();
 
-  class ShutdownCB {
-  public:
-      virtual ~ShutdownCB() {}
-      virtual void call() = 0;
-  };
-
-  void register_caller(ShutdownCB *cb, int *phandle);
+  int register_caller(ShutdownCB&& cb);
   void unregister_caller(int handle);
 
-  void schedule_context(Context *c);
+  template<typename CompletionToken>
+  void schedule(CompletionToken&& token) {
+    boost::asio::defer(finish_strand, std::forward<CompletionToken>(token));
+  }
 };

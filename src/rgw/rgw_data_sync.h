@@ -391,7 +391,7 @@ struct rgw_bucket_shard_full_sync_marker {
 
   rgw_bucket_shard_full_sync_marker() : count(0) {}
 
-  void encode_attr(map<string, bufferlist>& attrs);
+  void encode_attr(boost::container::flat_map<string, bufferlist>& attrs);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -417,7 +417,7 @@ struct rgw_bucket_shard_inc_sync_marker {
 
   rgw_bucket_shard_inc_sync_marker() {}
 
-  void encode_attr(map<string, bufferlist>& attrs);
+  void encode_attr(boost::container::flat_map<string, bufferlist>& attrs);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -451,9 +451,9 @@ struct rgw_bucket_shard_sync_info {
   rgw_bucket_shard_full_sync_marker full_marker;
   rgw_bucket_shard_inc_sync_marker inc_marker;
 
-  void decode_from_attrs(CephContext *cct, map<string, bufferlist>& attrs);
-  void encode_all_attrs(map<string, bufferlist>& attrs);
-  void encode_state_attr(map<string, bufferlist>& attrs);
+  void decode_from_attrs(CephContext *cct, boost::container::flat_map<string, bufferlist>& attrs);
+  void encode_all_attrs(boost::container::flat_map<string, bufferlist>& attrs);
+  void encode_state_attr(boost::container::flat_map<string, bufferlist>& attrs);
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);

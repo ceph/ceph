@@ -33,17 +33,17 @@ class RGWMetadataObject {
 protected:
   obj_version objv;
   ceph::real_time mtime;
-  std::map<string, bufferlist> *pattrs{nullptr};
-  
+  boost::container::flat_map<string, bufferlist> *pattrs{nullptr};
+
 public:
   RGWMetadataObject() {}
   virtual ~RGWMetadataObject() {}
   obj_version& get_version();
   real_time& get_mtime() { return mtime; }
-  void set_pattrs(std::map<string, bufferlist> *_pattrs) {
+  void set_pattrs(boost::container::flat_map<string, bufferlist> *_pattrs) {
     pattrs = _pattrs;
   }
-  std::map<string, bufferlist> *get_pattrs() {
+  boost::container::flat_map<string, bufferlist> *get_pattrs() {
     return pattrs;
   }
 
@@ -78,10 +78,10 @@ public:
 		     RGWObjVersionTracker *objv_tracker,
                      optional_yield y,
 		     RGWMDLogStatus op_type,
-		     std::function<int()> f) = 0;
+		     std::function<boost::system::error_code()> f) = 0;
 
-  virtual int list_keys_init(const string& marker, void **phandle) = 0;
-  virtual int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated) = 0;
+  virtual int list_keys_init(std::optional<std::string> marker, void **phandle) = 0;
+  virtual int list_keys_next(void *handle, int max, std::vector<string>& keys, bool *truncated) = 0;
   virtual void list_keys_complete(void *handle) = 0;
 
   virtual string get_marker(void *handle) = 0;
@@ -167,12 +167,12 @@ public:
 	     RGWObjVersionTracker *objv_tracker,
              optional_yield y,
 	     RGWMDLogStatus op_type,
-	     std::function<int()> f) override;
+	     std::function<boost::system::error_code()> f) override;
 
-  int get_shard_id(const string& entry, int *shard_id) override;
+  // int get_shard_id(const string& entry, int *shard_id) override;
 
-  int list_keys_init(const std::string& marker, void **phandle) override;
-  int list_keys_next(void *handle, int max, std::list<string>& keys, bool *truncated) override;
+  int list_keys_init(std::optional<std::string> marker, void **phandle) override;
+  int list_keys_next(void *handle, int max, std::vector<string>& keys, bool *truncated) override;
   void list_keys_complete(void *handle) override;
 
   std::string get_marker(void *handle) override;
@@ -238,15 +238,13 @@ public:
 	     RGWObjVersionTracker *objv_tracker,
              optional_yield y,
 	     RGWMDLogStatus op_type,
-	     std::function<int()> f);
+	     std::function<boost::system::error_code()> f);
 
   int list_keys_init(const string& section, void **phandle);
-  int list_keys_init(const string& section, const string& marker, void **phandle);
-  int list_keys_next(void *handle, int max, list<string>& keys, bool *truncated);
+  int list_keys_init(const string& section, std::optional<string> marker, void **phandle);
+  int list_keys_next(void *handle, int max, std::vector<string>& keys, bool *truncated);
   void list_keys_complete(void *handle);
-
   string get_marker(void *handle);
-
   void dump_log_entry(cls_log_entry& entry, Formatter *f);
 
   void get_sections(list<string>& sections);

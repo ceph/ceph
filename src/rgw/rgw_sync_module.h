@@ -82,7 +82,7 @@ typedef std::shared_ptr<RGWSyncModule> RGWSyncModuleRef;
 class RGWSyncModulesManager {
   ceph::mutex lock = ceph::make_mutex("RGWSyncModulesManager");
 
-  map<string, RGWSyncModuleRef> modules;
+  boost::container::flat_map<string, RGWSyncModuleRef> modules;
 public:
   RGWSyncModulesManager() = default;
 
@@ -146,7 +146,7 @@ protected:
   ceph::real_time mtime;
   uint64_t size = 0;
   string etag;
-  map<string, bufferlist> attrs;
+  boost::container::flat_map<string, bufferlist> attrs;
   map<string, string> headers;
 public:
   RGWStatRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
@@ -156,7 +156,7 @@ public:
   void set_result(ceph::real_time& _mtime,
                   uint64_t _size,
                   const string& _etag,
-                  map<string, bufferlist>&& _attrs,
+                  boost::container::flat_map<string, bufferlist>&& _attrs,
                   map<string, string>&& _headers) {
     mtime = _mtime;
     size = _size;
@@ -170,7 +170,7 @@ class RGWCallStatRemoteObjCR : public RGWCoroutine {
   ceph::real_time mtime;
   uint64_t size{0};
   string etag;
-  map<string, bufferlist> attrs;
+  boost::container::flat_map<string, bufferlist> attrs;
   map<string, string> headers;
 
 protected:

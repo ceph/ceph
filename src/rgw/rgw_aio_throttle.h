@@ -61,7 +61,8 @@ class BlockingAioThrottle final : public Aio, private Throttle {
   struct Pending : AioResultEntry {
     BlockingAioThrottle *parent = nullptr;
     uint64_t cost = 0;
-    librados::AioCompletion *completion = nullptr;
+
+    Pending(const RGWSI_RADOS::Obj& o) : AioResultEntry(o) {}
   };
  public:
   BlockingAioThrottle(uint64_t window) : Throttle(window) {}
@@ -93,7 +94,11 @@ class YieldingAioThrottle final : public Aio, private Throttle {
   template <typename CompletionToken>
   auto async_wait(CompletionToken&& token);
 
-  struct Pending : AioResultEntry { uint64_t cost = 0; };
+  struct Pending : AioResultEntry {
+    uint64_t cost = 0;
+
+    Pending(const RGWSI_RADOS::Obj& o) : AioResultEntry(o) {}
+  };
 
  public:
   YieldingAioThrottle(uint64_t window, boost::asio::io_context& context,

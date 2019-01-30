@@ -11,7 +11,9 @@
 #include "rgw_op.h"
 #include "rgw_compression_types.h"
 
-int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need_decompress, RGWCompressionInfo& cs_info);
+int rgw_compression_info_from_attrset(
+  boost::container::flat_map<string, bufferlist>& attrs,
+  bool& need_decompress, RGWCompressionInfo& cs_info);
 
 class RGWGetObj_Decompress : public RGWGetObj_Filter
 {
@@ -46,7 +48,7 @@ public:
                      rgw::putobj::DataProcessor *next)
     : Pipe(next), cct(cct_), compressor(compressor) {}
 
-  int process(bufferlist&& data, uint64_t logical_offset) override;
+  boost::system::error_code process(bufferlist&& data, uint64_t logical_offset) override;
 
   bool is_compressed() { return compressed; }
   vector<compression_block>& get_compression_blocks() { return blocks; }

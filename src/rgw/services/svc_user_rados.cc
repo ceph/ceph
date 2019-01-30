@@ -3,6 +3,11 @@
 
 #include <boost/algorithm/string.hpp>
 
+#include "include/expected.hpp"
+#include "include/RADOS/RADOS.hpp"
+
+#include "common/expected.h"
+
 #include "svc_user.h"
 #include "svc_user_rados.h"
 #include "svc_zone.h"
@@ -12,17 +17,22 @@
 #include "svc_meta_be_sobj.h"
 #include "svc_sync_modules.h"
 
+#include "RADOS/cls/user.h"
+
+#include "rgw/rgw_cls.h"
+#include "rgw/rgw_error_code.h"
 #include "rgw/rgw_user.h"
 #include "rgw/rgw_bucket.h"
 #include "rgw/rgw_tools.h"
 #include "rgw/rgw_zone.h"
 #include "rgw/rgw_rados.h"
 
-#include "cls/user/cls_user_client.h"
+namespace bs = boost::system;
+
+namespace R = RADOS;
+namespace RCu = RADOS::CLS::user;
 
 #define dout_subsys ceph_subsys_rgw
-
-#define RGW_BUCKETS_OBJ_SUFFIX ".buckets"
 
 class RGWSI_User_Module : public RGWSI_MBSObj_Handler_Module {
   RGWSI_User_RADOS::Svc& svc;
@@ -59,7 +69,9 @@ public:
   }
 };
 
-RGWSI_User_RADOS::RGWSI_User_RADOS(CephContext *cct): RGWSI_User(cct) {
+RGWSI_User_RADOS::RGWSI_User_RADOS(CephContext *cct,
+				   boost::asio::io_context& ioc)
+  : RGWSI_User(cct, ioc) {
 }
 
 RGWSI_User_RADOS::~RGWSI_User_RADOS() {
@@ -81,39 +93,41 @@ void RGWSI_User_RADOS::init(RGWSI_RADOS *_rados_svc,
   svc.sync_modules = _sync_modules_svc;
 }
 
-int RGWSI_User_RADOS::do_start()
+bs::error_code RGWSI_User_RADOS::do_start()
 {
   uinfo_cache.reset(new RGWChainedCacheImpl<user_info_cache_entry>);
   uinfo_cache->init(svc.cache);
 
-  int r = svc.meta->create_be_handler(RGWSI_MetaBackend::Type::MDBE_SOBJ, &be_handler);
-  if (r < 0) {
-    ldout(ctx(), 0) << "ERROR: failed to create be handler: r=" << r << dendl;
-    return r;
+  auto ec = svc.meta->create_be_handler(RGWSI_MetaBackend::Type::MDBE_SOBJ, &be_handler);
+  if (ec) {
+    ldout(ctx(), 0) << "ERROR: failed to create be handler: r=" << ec << dendl;
+    return ec;
   }
 
-  RGWSI_MetaBackend_Handler_SObj *bh = static_cast<RGWSI_MetaBackend_Handler_SObj *>(be_handler);
+  auto bh = static_cast<RGWSI_MetaBackend_Handler_SObj*>(be_handler);
 
   auto module = new RGWSI_User_Module(svc);
   be_module.reset(module);
   bh->set_module(module);
-  return 0;
+  return ec;
 }
 
 rgw_raw_obj RGWSI_User_RADOS::get_buckets_obj(const rgw_user& user) const
 {
-  string oid = user.to_str() + RGW_BUCKETS_OBJ_SUFFIX;
+  auto oid = user.to_str();
+  oid.append(RGW_BUCKETS_OBJ_SUFFIX.data(), RGW_BUCKETS_OBJ_SUFFIX.size());
   return rgw_raw_obj(svc.zone->get_zone_params().user_uid_pool, oid);
 }
 
-int RGWSI_User_RADOS::read_user_info(RGWSI_MetaBackend::Context *ctx,
-                               const rgw_user& user,
-                               RGWUserInfo *info,
-                               RGWObjVersionTracker * const objv_tracker,
-                               real_time * const pmtime,
-                               rgw_cache_entry_info * const cache_info,
-                               map<string, bufferlist> * const pattrs,
-                               optional_yield y)
+bs::error_code
+RGWSI_User_RADOS::read_user_info(RGWSI_MetaBackend::Context *ctx,
+				 const rgw_user& user,
+				 RGWUserInfo *info,
+				 RGWObjVersionTracker * const objv_tracker,
+				 real_time * const pmtime,
+				 rgw_cache_entry_info * const cache_info,
+				 boost::container::flat_map<string, bufferlist> * const pattrs,
+				 optional_yield y)
 {
   bufferlist bl;
   RGWUID user_id;
@@ -121,8 +135,8 @@ int RGWSI_User_RADOS::read_user_info(RGWSI_MetaBackend::Context *ctx,
   RGWSI_MBSObj_GetParams params(&bl, pattrs, pmtime);
   params.set_cache_info(cache_info);
 
-  int ret = svc.meta_be->get_entry(ctx, get_meta_key(user), params, objv_tracker, y);
-  if (ret < 0) {
+  auto ret = svc.meta_be->get_entry(ctx, get_meta_key(user), params, objv_tracker, y);
+  if (ret) {
     return ret;
   }
 
@@ -130,18 +144,19 @@ int RGWSI_User_RADOS::read_user_info(RGWSI_MetaBackend::Context *ctx,
   try {
     decode(user_id, iter);
     if (user_id.user_id != user) {
-      lderr(svc.meta_be->ctx())  << "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << user_id.user_id << " != " << user << dendl;
-      return -EIO;
+      lderr(svc.meta_be->ctx())
+	<< "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << user_id.user_id << " != " << user << dendl;
+      return rgw_errc::internal_error;
     }
     if (!iter.end()) {
       decode(*info, iter);
     }
-  } catch (buffer::error& err) {
+  } catch (ceph::buffer::error& err) {
     ldout(svc.meta_be->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
-    return -EIO;
+    return err.code();
   }
 
-  return 0;
+  return {};
 }
 
 class PutOperation
@@ -154,7 +169,7 @@ class PutOperation
   RGWObjVersionTracker *objv_tracker;
   const real_time& mtime;
   bool exclusive;
-  map<string, bufferlist> *pattrs;
+  boost::container::flat_map<string, bufferlist> *pattrs;
   RGWObjVersionTracker ot;
   string err_msg;
   optional_yield y;
@@ -173,7 +188,7 @@ public:
                RGWObjVersionTracker *objv_tracker,
                const real_time& mtime,
                bool exclusive,
-               map<string, bufferlist> *pattrs,
+               boost::container::flat_map<string, bufferlist> *pattrs,
                optional_yield y) :
       svc(svc), info(info), old_info(old_info),
       objv_tracker(objv_tracker), mtime(mtime),
@@ -182,7 +197,7 @@ public:
     ui.user_id = info.user_id;
   }
 
-  int prepare() {
+  bs::error_code prepare() {
     if (objv_tracker) {
       ot = *objv_tracker;
     }
@@ -202,12 +217,13 @@ public:
       auto& k = iter->second;
       /* check if swift mapping exists */
       RGWUserInfo inf;
-      int r = svc.user->get_user_info_by_swift(ctx, k.id, &inf, nullptr, nullptr, y);
-      if (r >= 0 && inf.user_id != info.user_id &&
+      auto r = svc.user->get_user_info_by_swift(ctx, k.id, &inf, nullptr, nullptr, y);
+      if (!r && inf.user_id != info.user_id &&
           (!old_info || inf.user_id != old_info->user_id)) {
         ldout(svc.meta_be->ctx(), 0) << "WARNING: can't store user info, swift id (" << k.id
           << ") already mapped to another user (" << info.user_id << ")" << dendl;
-        return -EEXIST;
+        return bs::error_code(EEXIST,
+					 bs::system_category());
       }
     }
 
@@ -217,33 +233,29 @@ public:
         continue;
       auto& k = iter->second;
       RGWUserInfo inf;
-      int r = svc.user->get_user_info_by_access_key(ctx, k.id, &inf, nullptr, nullptr, y);
-      if (r >= 0 && inf.user_id != info.user_id &&
+      auto r = svc.user->get_user_info_by_access_key(ctx, k.id, &inf, nullptr, nullptr, y);
+      if (!r && inf.user_id != info.user_id &&
           (!old_info || inf.user_id != old_info->user_id)) {
         ldout(svc.meta_be->ctx(), 0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
-        return -EEXIST;
+        return ceph::to_error_code(EEXIST);
       }
     }
 
-    return 0;
+    return {};
   }
 
-  int put() {
+  bs::error_code put() {
     bufferlist data_bl;
     encode(ui, data_bl);
     encode(info, data_bl);
 
     RGWSI_MBSObj_PutParams params(data_bl, pattrs, mtime, exclusive);
 
-    int ret = svc.meta_be->put(ctx, RGWSI_User::get_meta_key(info.user_id), params, &ot, y);
-    if (ret < 0)
-      return ret;
-
-    return 0;
+    return svc.meta_be->put(ctx, RGWSI_User::get_meta_key(info.user_id), params, &ot, y);
   }
 
-  int complete() {
-    int ret;
+  bs::error_code complete() {
+    bs::error_code ret;
 
     bufferlist link_bl;
     encode(ui, link_bl);
@@ -255,7 +267,7 @@ public:
           old_info->user_email.compare(info.user_email) != 0) { /* only if new index changed */
         ret = rgw_put_system_obj(obj_ctx, svc.zone->get_zone_params().user_email_pool, info.user_email,
                                  link_bl, exclusive, NULL, real_time(), y);
-        if (ret < 0)
+        if (ret)
           return ret;
       }
     }
@@ -268,7 +280,7 @@ public:
 
       ret = rgw_put_system_obj(obj_ctx, svc.zone->get_zone_params().user_keys_pool, k.id,
                                link_bl, exclusive, NULL, real_time(), y);
-      if (ret < 0)
+      if (ret)
         return ret;
     }
 
@@ -279,31 +291,31 @@ public:
 
       ret = rgw_put_system_obj(obj_ctx, svc.zone->get_zone_params().user_swift_pool, k.id,
                                link_bl, exclusive, NULL, real_time(), y);
-      if (ret < 0)
+      if (ret)
         return ret;
     }
 
     if (old_info) {
       ret = remove_old_indexes(*old_info, info, y);
-      if (ret < 0) {
+      if (ret) {
         return ret;
       }
     }
 
-    return 0;
+    return {};
   }
 
-  int remove_old_indexes(const RGWUserInfo& old_info, const RGWUserInfo& new_info, optional_yield y) {
-    int ret;
+  bs::error_code remove_old_indexes(const RGWUserInfo& old_info, const RGWUserInfo& new_info, optional_yield y) {
+    bs::error_code ret;
 
     if (!old_info.user_id.empty() &&
         old_info.user_id != new_info.user_id) {
       if (old_info.user_id.tenant != new_info.user_id.tenant) {
         ldout(svc.user->ctx(), 0) << "ERROR: tenant mismatch: " << old_info.user_id.tenant << " != " << new_info.user_id.tenant << dendl;
-        return -EINVAL;
+        return rgw_errc::internal_error;
       }
       ret = svc.user->remove_uid_index(ctx, old_info, nullptr, y);
-      if (ret < 0 && ret != -ENOENT) {
+      if (ret && ret != bs::errc::no_such_file_or_directory) {
         set_err_msg("ERROR: could not remove index for uid " + old_info.user_id.to_str());
         return ret;
       }
@@ -312,7 +324,7 @@ public:
     if (!old_info.user_email.empty() &&
         old_info.user_email != new_info.user_email) {
       ret = svc.user->remove_email_index(ctx, old_info.user_email, y);
-      if (ret < 0 && ret != -ENOENT) {
+      if (ret && ret != bs::errc::no_such_file_or_directory) {
         set_err_msg("ERROR: could not remove index for email " + old_info.user_email);
         return ret;
       }
@@ -321,7 +333,7 @@ public:
     for ([[maybe_unused]] const auto& [name, access_key] : old_info.access_keys) {
       if (!new_info.access_keys.count(access_key.id)) {
         ret = svc.user->remove_key_index(ctx, access_key, y);
-        if (ret < 0 && ret != -ENOENT) {
+        if (ret && ret != bs::errc::no_such_file_or_directory) {
           set_err_msg("ERROR: could not remove index for key " + access_key.id);
           return ret;
         }
@@ -333,14 +345,14 @@ public:
       auto new_iter = new_info.swift_keys.find(swift_key.id);
       if (new_iter == new_info.swift_keys.end()) {
         ret = svc.user->remove_swift_name_index(ctx, swift_key.id, y);
-        if (ret < 0 && ret != -ENOENT) {
+        if (ret && ret != bs::errc::no_such_file_or_directory) {
           set_err_msg("ERROR: could not remove index for swift_name " + swift_key.id);
           return ret;
         }
       }
     }
 
-    return 0;
+    return {};
   }
 
   const string& get_err_msg() {
@@ -348,14 +360,15 @@ public:
   }
 };
 
-int RGWSI_User_RADOS::store_user_info(RGWSI_MetaBackend::Context *ctx,
-                                const RGWUserInfo& info,
-                                RGWUserInfo *old_info,
-                                RGWObjVersionTracker *objv_tracker,
-                                const real_time& mtime,
-                                bool exclusive,
-                                map<string, bufferlist> *attrs,
-                                optional_yield y)
+bs::error_code
+RGWSI_User_RADOS::store_user_info(RGWSI_MetaBackend::Context *ctx,
+				  const RGWUserInfo& info,
+				  RGWUserInfo *old_info,
+				  RGWObjVersionTracker *objv_tracker,
+				  const real_time& mtime,
+				  bool exclusive,
+				  boost::container::flat_map<string, bufferlist> *attrs,
+				  optional_yield y)
 {
   PutOperation op(svc, ctx,
                   info, old_info,
@@ -364,25 +377,20 @@ int RGWSI_User_RADOS::store_user_info(RGWSI_MetaBackend::Context *ctx,
                   attrs,
                   y);
 
-  int r = op.prepare();
-  if (r < 0) {
+  auto r = op.prepare();
+  if (r) {
     return r;
   }
 
   r = op.put();
-  if (r < 0) {
+  if (r) {
     return r;
   }
 
-  r = op.complete();
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
+  return op.complete();
 }
 
-int RGWSI_User_RADOS::remove_key_index(RGWSI_MetaBackend::Context *_ctx,
+bs::error_code RGWSI_User_RADOS::remove_key_index(RGWSI_MetaBackend::Context *_ctx,
                                        const RGWAccessKey& access_key,
                                        optional_yield y)
 {
@@ -392,12 +400,12 @@ int RGWSI_User_RADOS::remove_key_index(RGWSI_MetaBackend::Context *_ctx,
   return sysobj.wop().remove(y);
 }
 
-int RGWSI_User_RADOS::remove_email_index(RGWSI_MetaBackend::Context *_ctx,
+bs::error_code RGWSI_User_RADOS::remove_email_index(RGWSI_MetaBackend::Context *_ctx,
                                          const string& email,
                                          optional_yield y)
 {
   if (email.empty()) {
-    return 0;
+    return {};
   }
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
   rgw_raw_obj obj(svc.zone->get_zone_params().user_email_pool, email);
@@ -405,7 +413,7 @@ int RGWSI_User_RADOS::remove_email_index(RGWSI_MetaBackend::Context *_ctx,
   return sysobj.wop().remove(y);
 }
 
-int RGWSI_User_RADOS::remove_swift_name_index(RGWSI_MetaBackend::Context *_ctx, const string& swift_name,
+bs::error_code RGWSI_User_RADOS::remove_swift_name_index(RGWSI_MetaBackend::Context *_ctx, const string& swift_name,
                                               optional_yield y)
 {
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
@@ -420,12 +428,12 @@ int RGWSI_User_RADOS::remove_swift_name_index(RGWSI_MetaBackend::Context *_ctx, 
  * from the user and user email pools. This leaves the pools
  * themselves alone, as well as any ACLs embedded in object xattrs.
  */
-int RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *_ctx,
+bs::error_code RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *_ctx,
                                  const RGWUserInfo& info,
                                  RGWObjVersionTracker *objv_tracker,
                                  optional_yield y)
 {
-  int ret;
+  bs::error_code ret;
 
   auto cct = svc.meta_be->ctx();
 
@@ -433,7 +441,7 @@ int RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *_ctx,
   for (; kiter != info.access_keys.end(); ++kiter) {
     ldout(cct, 10) << "removing key index: " << kiter->first << dendl;
     ret = remove_key_index(_ctx, kiter->second, y);
-    if (ret < 0 && ret != -ENOENT) {
+    if (ret && ret != bs::errc::no_such_file_or_directory) {
       ldout(cct, 0) << "ERROR: could not remove " << kiter->first << " (access key object), should be fixed (err=" << ret << ")" << dendl;
       return ret;
     }
@@ -445,7 +453,7 @@ int RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *_ctx,
     ldout(cct, 10) << "removing swift subuser index: " << k.id << dendl;
     /* check if swift mapping exists */
     ret = remove_swift_name_index(_ctx, k.id, y);
-    if (ret < 0 && ret != -ENOENT) {
+    if (ret && ret != bs::errc::no_such_file_or_directory) {
       ldout(cct, 0) << "ERROR: could not remove " << k.id << " (swift name object), should be fixed (err=" << ret << ")" << dendl;
       return ret;
     }
@@ -453,7 +461,7 @@ int RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *_ctx,
 
   ldout(cct, 10) << "removing email index: " << info.user_email << dendl;
   ret = remove_email_index(_ctx, info.user_email, y);
-  if (ret < 0 && ret != -ENOENT) {
+  if (ret && ret != bs::errc::no_such_file_or_directory) {
     ldout(cct, 0) << "ERROR: could not remove email index object for "
         << info.user_email << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
@@ -464,27 +472,31 @@ int RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *_ctx,
   RGWSI_MetaBackend_SObj::Context_SObj *ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
   auto sysobj = ctx->obj_ctx->get_obj(uid_bucks);
   ret = sysobj.wop().remove(y);
-  if (ret < 0 && ret != -ENOENT) {
+  if (ret && ret != bs::errc::no_such_file_or_directory) {
     ldout(cct, 0) << "ERROR: could not remove " << info.user_id << ":" << uid_bucks << ", should be fixed (err=" << ret << ")" << dendl;
     return ret;
   }
 
   ret = remove_uid_index(ctx, info, objv_tracker, y);
-  if (ret < 0 && ret != -ENOENT) {
+  if (ret && ret != bs::errc::no_such_file_or_directory) {
     return ret;
   }
 
-  return 0;
+  return {};
 }
 
-int RGWSI_User_RADOS::remove_uid_index(RGWSI_MetaBackend::Context *ctx, const RGWUserInfo& user_info, RGWObjVersionTracker *objv_tracker,
-                                       optional_yield y)
+bs::error_code
+RGWSI_User_RADOS::remove_uid_index(RGWSI_MetaBackend::Context *ctx,
+				   const RGWUserInfo& user_info,
+				   RGWObjVersionTracker *objv_tracker,
+				   optional_yield y)
 {
   ldout(cct, 10) << "removing user index: " << user_info.user_id << dendl;
 
   RGWSI_MBSObj_RemoveParams params;
-  int ret = svc.meta_be->remove(ctx, get_meta_key(user_info.user_id), params, objv_tracker, y);
-  if (ret < 0 && ret != -ENOENT && ret  != -ECANCELED) {
+  auto ret = svc.meta_be->remove(ctx, get_meta_key(user_info.user_id), params, objv_tracker, y);
+  if (ret && ret != bs::errc::no_such_file_or_directory &&
+      ret != bs::errc::operation_canceled) {
     string key;
     user_info.user_id.to_str(key);
     rgw_raw_obj uid_obj(svc.zone->get_zone_params().user_uid_pool, key);
@@ -492,10 +504,10 @@ int RGWSI_User_RADOS::remove_uid_index(RGWSI_MetaBackend::Context *ctx, const RG
     return ret;
   }
 
-  return 0;
+  return {};
 }
 
-int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context *_ctx,
+bs::error_code RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context *_ctx,
                                          const string& key,
                                          const rgw_pool& pool,
                                          RGWUserInfo *info,
@@ -512,15 +524,15 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context *_ctx,
       *objv_tracker = e->objv_tracker;
     if (pmtime)
       *pmtime = e->mtime;
-    return 0;
+    return {};
   }
 
   user_info_cache_entry e;
   bufferlist bl;
   RGWUID uid;
 
-  int ret = rgw_get_system_obj(*ctx->obj_ctx, pool, key, bl, nullptr, &e.mtime, y);
-  if (ret < 0)
+  auto ret = rgw_get_system_obj(*ctx->obj_ctx, pool, key, bl, nullptr, &e.mtime, y);
+  if (ret)
     return ret;
 
   rgw_cache_entry_info cache_info;
@@ -529,15 +541,15 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context *_ctx,
   try {
     decode(uid, iter);
 
-    int ret = read_user_info(ctx, uid.user_id,
+    auto ret = read_user_info(ctx, uid.user_id,
                              &e.info, &e.objv_tracker, nullptr, &cache_info, nullptr,
                              y);
-    if (ret < 0) {
+    if (ret) {
       return ret;
     }
   } catch (buffer::error& err) {
     ldout(svc.meta_be->ctx(), 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
-    return -EIO;
+    return err.code();
   }
 
   uinfo_cache->put(svc.cache, cache_key, &e, { &cache_info });
@@ -548,14 +560,14 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context *_ctx,
   if (pmtime)
     *pmtime = e.mtime;
 
-  return 0;
+  return {};
 }
 
 /**
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-int RGWSI_User_RADOS::get_user_info_by_email(RGWSI_MetaBackend::Context *ctx,
+bs::error_code RGWSI_User_RADOS::get_user_info_by_email(RGWSI_MetaBackend::Context *ctx,
                                        const string& email, RGWUserInfo *info,
                                        RGWObjVersionTracker *objv_tracker,
                                        real_time *pmtime, optional_yield y)
@@ -568,7 +580,7 @@ int RGWSI_User_RADOS::get_user_info_by_email(RGWSI_MetaBackend::Context *ctx,
  * Given an swift username, finds the user_info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-int RGWSI_User_RADOS::get_user_info_by_swift(RGWSI_MetaBackend::Context *ctx,
+bs::error_code RGWSI_User_RADOS::get_user_info_by_swift(RGWSI_MetaBackend::Context *ctx,
                                        const string& swift_name,
                                        RGWUserInfo *info,        /* out */
                                        RGWObjVersionTracker * const objv_tracker,
@@ -584,7 +596,7 @@ int RGWSI_User_RADOS::get_user_info_by_swift(RGWSI_MetaBackend::Context *ctx,
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-int RGWSI_User_RADOS::get_user_info_by_access_key(RGWSI_MetaBackend::Context *ctx,
+bs::error_code RGWSI_User_RADOS::get_user_info_by_access_key(RGWSI_MetaBackend::Context *ctx,
                                             const std::string& access_key,
                                             RGWUserInfo *info,
                                             RGWObjVersionTracker* objv_tracker,
@@ -596,56 +608,44 @@ int RGWSI_User_RADOS::get_user_info_by_access_key(RGWSI_MetaBackend::Context *ct
                                   info, objv_tracker, pmtime, y);
 }
 
-int RGWSI_User_RADOS::cls_user_update_buckets(rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries, bool add)
+bs::error_code
+RGWSI_User_RADOS::cls_user_update_buckets(const rgw_raw_obj& obj,
+					  const std::vector<cls_user_bucket_entry>& entries,
+					  bool add, optional_yield y)
 {
-  auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open();
-  if (r < 0) {
-    return r;
-  }
+  auto rados_obj = TRYE(svc.rados->obj(obj, y));
 
-  librados::ObjectWriteOperation op;
-  cls_user_set_buckets(op, entries, add);
-  r = rados_obj.operate(&op, null_yield);
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
+  R::WriteOp op;
+  RCu::set_buckets(op, entries, add);
+  return rados_obj.operate(std::move(op), y);
 }
 
-int RGWSI_User_RADOS::cls_user_add_bucket(rgw_raw_obj& obj, const cls_user_bucket_entry& entry)
+bs::error_code
+RGWSI_User_RADOS::cls_user_add_bucket(const rgw_raw_obj& obj,
+				      const cls_user_bucket_entry& entry,
+				      optional_yield y)
 {
-  list<cls_user_bucket_entry> l;
-  l.push_back(entry);
-
-  return cls_user_update_buckets(obj, l, true);
+  return cls_user_update_buckets(obj, { entry }, true, y);
 }
 
-int RGWSI_User_RADOS::cls_user_remove_bucket(rgw_raw_obj& obj, const cls_user_bucket& bucket)
+bs::error_code
+RGWSI_User_RADOS::cls_user_remove_bucket(const rgw_raw_obj& obj,
+					 const cls_user_bucket& bucket,
+					 optional_yield y)
 {
-  auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open();
-  if (r < 0) {
-    return r;
-  }
+  auto rados_obj = TRYE(svc.rados->obj(obj, y));
 
-  librados::ObjectWriteOperation op;
-  ::cls_user_remove_bucket(op, bucket);
-  r = rados_obj.operate(&op, null_yield);
-  if (r < 0)
-    return r;
-
-  return 0;
+  R::WriteOp op;
+  RCu::remove_bucket(op, bucket);
+  return rados_obj.operate(std::move(op), y);
 }
 
-int RGWSI_User_RADOS::add_bucket(RGWSI_MetaBackend::Context *ctx,
-                                 const rgw_user& user,
-                                 const rgw_bucket& bucket,
-                                 ceph::real_time creation_time)
+bs::error_code RGWSI_User_RADOS::add_bucket(RGWSI_MetaBackend::Context *ctx,
+					    const rgw_user& user,
+					    const rgw_bucket& bucket,
+					    ceph::real_time creation_time,
+					    optional_yield y)
 {
-  int ret;
-
   cls_user_bucket_entry new_bucket;
 
   bucket.convert(&new_bucket.bucket);
@@ -656,210 +656,164 @@ int RGWSI_User_RADOS::add_bucket(RGWSI_MetaBackend::Context *ctx,
     new_bucket.creation_time = creation_time;
 
   rgw_raw_obj obj = get_buckets_obj(user);
-  ret = cls_user_add_bucket(obj, new_bucket);
-  if (ret < 0) {
+  auto ret = cls_user_add_bucket(obj, new_bucket, y);
+  if (ret) {
     ldout(cct, 0) << "ERROR: error adding bucket to user: ret=" << ret << dendl;
-    return ret;
   }
-
-  return 0;
+  return ret;
 }
 
 
-int RGWSI_User_RADOS::remove_bucket(RGWSI_MetaBackend::Context *ctx,
-                                    const rgw_user& user,
-                                    const rgw_bucket& _bucket)
+bs::error_code
+RGWSI_User_RADOS::remove_bucket(RGWSI_MetaBackend::Context *ctx,
+				const rgw_user& user,
+				const rgw_bucket& _bucket,
+				optional_yield y)
 {
   cls_user_bucket bucket;
   bucket.name = _bucket.name;
   rgw_raw_obj obj = get_buckets_obj(user);
-  int ret = cls_user_remove_bucket(obj, bucket);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: error removing bucket from user: ret=" << ret << dendl;
+  auto ret = cls_user_remove_bucket(obj, bucket, y);
+  if (ret) {
+    ldout(cct, 0) << "ERROR: error removing bucket from user: ret="
+		  << ret << dendl;
   }
 
-  return 0;
+  return ret;
 }
 
-int RGWSI_User_RADOS::cls_user_flush_bucket_stats(rgw_raw_obj& user_obj,
-                                                  const RGWBucketEnt& ent)
+bs::error_code
+RGWSI_User_RADOS::cls_user_flush_bucket_stats(const rgw_raw_obj& user_obj,
+					      const RGWBucketEnt& ent,
+					      optional_yield y)
 {
   cls_user_bucket_entry entry;
   ent.convert(&entry);
 
-  list<cls_user_bucket_entry> entries;
-  entries.push_back(entry);
+  std::vector entries{ entry };
 
-  int r = cls_user_update_buckets(user_obj, entries, false);
-  if (r < 0) {
+  auto r = cls_user_update_buckets(user_obj, entries, false, y);
+  if (r) {
     ldout(cct, 20) << "cls_user_update_buckets() returned " << r << dendl;
-    return r;
   }
 
-  return 0;
+  return r;
 }
 
-int RGWSI_User_RADOS::cls_user_list_buckets(rgw_raw_obj& obj,
-                                            const string& in_marker,
-                                            const string& end_marker,
-                                            const int max_entries,
-                                            list<cls_user_bucket_entry>& entries,
-                                            string * const out_marker,
-                                            bool * const truncated)
+tl::expected<std::tuple<std::vector<cls_user_bucket_entry>,
+			std::string, bool>,
+	     bs::error_code>
+RGWSI_User_RADOS::cls_user_list_buckets(const rgw_raw_obj& oid,
+					const string& in_marker,
+					const string& end_marker,
+					const int max_entries,
+					optional_yield y)
 {
-  auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open();
-  if (r < 0) {
-    return r;
-  }
+  auto obj = TRY(svc.rados->obj(oid, y));
 
-  librados::ObjectReadOperation op;
-  int rc;
-
-  cls_user_bucket_list(op, in_marker, end_marker, max_entries, entries, out_marker, truncated, &rc);
-  bufferlist ibl;
-  r = rados_obj.operate(&op, &ibl, null_yield);
-  if (r < 0)
-    return r;
-  if (rc < 0)
-    return rc;
-
-  return 0;
+  return rgw::cls::user_bucket_list(obj, in_marker, end_marker, max_entries, y);
 }
 
-int RGWSI_User_RADOS::list_buckets(RGWSI_MetaBackend::Context *ctx,
-                                 const rgw_user& user,
-                                 const string& marker,
-                                 const string& end_marker,
-                                 uint64_t max,
-                                 RGWUserBuckets *buckets,
-                                 bool *is_truncated)
+bs::error_code
+RGWSI_User_RADOS::list_buckets(RGWSI_MetaBackend::Context *ctx,
+			       const rgw_user& user,
+			       const string& marker,
+			       const string& end_marker,
+			       uint64_t max,
+			       RGWUserBuckets *buckets,
+			       bool *is_truncated,
+			       optional_yield y)
 {
-  int ret;
-
   buckets->clear();
-  
+
   rgw_raw_obj obj = get_buckets_obj(user);
 
-  bool truncated = false;
   string m = marker;
 
   uint64_t total = 0;
+  bool truncated = false;
 
   do {
-    std::list<cls_user_bucket_entry> entries;
-    ret = cls_user_list_buckets(obj, m, end_marker, max - total, entries, &m, &truncated);
-    if (ret == -ENOENT) {
-      ret = 0;
+    std::string m;
+    auto r = cls_user_list_buckets(obj, m, end_marker, max - total, y);
+
+    if (!r) {
+      if (r.error() == bs::errc::no_such_file_or_directory) {
+	continue;
+      } else {
+	return r.error();
+      }
     }
 
-    if (ret < 0) {
-      return ret;
-    }
-
+    auto& entries = std::get<0>(*r);
+    truncated = std::get<2>(*r);
     for (auto& entry : entries) {
       buckets->add(RGWBucketEnt(user, std::move(entry)));
       total++;
     }
-
   } while (truncated && total < max);
 
   if (is_truncated) {
     *is_truncated = truncated;
   }
 
-  return 0;
+  return {};
 }
 
-int RGWSI_User_RADOS::flush_bucket_stats(RGWSI_MetaBackend::Context *ctx,
-                                         const rgw_user& user,
-                                         const RGWBucketEnt& ent)
+bs::error_code
+RGWSI_User_RADOS::flush_bucket_stats(RGWSI_MetaBackend::Context *ctx,
+				     const rgw_user& user,
+				     const RGWBucketEnt& ent,
+				     optional_yield y)
 {
   rgw_raw_obj obj = get_buckets_obj(user);
 
-  return cls_user_flush_bucket_stats(obj, ent);
+  return cls_user_flush_bucket_stats(obj, ent, y);
 }
 
-int RGWSI_User_RADOS::reset_bucket_stats(RGWSI_MetaBackend::Context *ctx,
-                                         const rgw_user& user)
+bs::error_code RGWSI_User_RADOS::reset_bucket_stats(RGWSI_MetaBackend::Context *ctx,
+						    const rgw_user& user,
+						    optional_yield y)
 {
-  return cls_user_reset_stats(user);
+  return cls_user_reset_stats(user, y);
 }
 
-int RGWSI_User_RADOS::cls_user_reset_stats(const rgw_user& user)
-{
-  rgw_raw_obj obj = get_buckets_obj(user);
-  auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open();
-  if (r < 0) {
-    return r;
-  }
-  librados::ObjectWriteOperation op;
-  ::cls_user_reset_stats(op);
-  return rados_obj.operate(&op, null_yield);
-}
-
-int RGWSI_User_RADOS::complete_flush_stats(RGWSI_MetaBackend::Context *ctx,
-                                           const rgw_user& user)
+bs::error_code RGWSI_User_RADOS::cls_user_reset_stats(const rgw_user& user,
+						      optional_yield y)
 {
   rgw_raw_obj obj = get_buckets_obj(user);
-  auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open();
-  if (r < 0) {
-    return r;
-  }
-  librados::ObjectWriteOperation op;
-  ::cls_user_complete_stats_sync(op);
-  return rados_obj.operate(&op, null_yield);
+  auto rados_obj = TRYE(svc.rados->obj(obj, y));
+  R::WriteOp op;
+  RCu::reset_stats(op);
+  return rados_obj.operate(std::move(op), y);
 }
 
-int RGWSI_User_RADOS::cls_user_get_header(const rgw_user& user, cls_user_header *header)
+bs::error_code RGWSI_User_RADOS::complete_flush_stats(RGWSI_MetaBackend::Context *ctx,
+						      const rgw_user& user,
+						      optional_yield y)
 {
-  rgw_raw_obj obj = get_buckets_obj(user);
-  auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open();
-  if (r < 0) {
-    return r;
-  }
-  int rc;
-  bufferlist ibl;
-  librados::ObjectReadOperation op;
-  ::cls_user_get_header(op, header, &rc);
-  return rados_obj.operate(&op, &ibl, null_yield);
+  auto rados_obj = TRYE(svc.rados->obj(get_buckets_obj(user), y));
+  R::WriteOp op;
+  RCu::complete_stats_sync(op);
+  return rados_obj.operate(std::move(op), y);
 }
 
-int RGWSI_User_RADOS::cls_user_get_header_async(const string& user_str, RGWGetUserHeader_CB *cb)
+tl::expected<cls_user_header, bs::error_code>
+RGWSI_User_RADOS::cls_user_get_header(const rgw_user& user,
+				      optional_yield y)
 {
-  rgw_raw_obj obj = get_buckets_obj(rgw_user(user_str));
-  auto rados_obj = svc.rados->obj(obj);
-  int r = rados_obj.open();
-  if (r < 0) {
-    return r;
-  }
-
-  auto& ref = rados_obj.get_ref();
-
-  r = ::cls_user_get_header_async(ref.pool.ioctx(), ref.obj.oid, cb);
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
+  auto obj = TRY(svc.rados->obj(get_buckets_obj(user), y));
+  return rgw::cls::user_get_header(obj, y);
 }
 
-int RGWSI_User_RADOS::read_stats(RGWSI_MetaBackend::Context *ctx,
-                                 const rgw_user& user, RGWStorageStats *stats,
-                                 ceph::real_time *last_stats_sync,
-                                 ceph::real_time *last_stats_update)
+bs::error_code RGWSI_User_RADOS::read_stats(RGWSI_MetaBackend::Context *ctx,
+					    const rgw_user& user, RGWStorageStats *stats,
+					    ceph::real_time *last_stats_sync,
+					    ceph::real_time *last_stats_update,
+					    optional_yield y)
 {
-  string user_str = user.to_str();
-
-  cls_user_header header;
-  int r = cls_user_get_header(rgw_user(user_str), &header);
-  if (r < 0)
-    return r;
-
-  const cls_user_stats& hs = header.stats;
+  auto header = TRYE(cls_user_get_header(user, y));
+  const auto& hs = header.stats;
 
   stats->size = hs.total_bytes;
   stats->size_rounded = hs.total_bytes_rounded;
@@ -873,47 +827,5 @@ int RGWSI_User_RADOS::read_stats(RGWSI_MetaBackend::Context *ctx,
    *last_stats_update = header.last_stats_update;
   }
 
-  return 0;
+  return {};
 }
-
-class RGWGetUserStatsContext : public RGWGetUserHeader_CB {
-  RGWGetUserStats_CB *cb;
-
-public:
-  explicit RGWGetUserStatsContext(RGWGetUserStats_CB * const cb)
-    : cb(cb) {}
-
-  void handle_response(int r, cls_user_header& header) override {
-    const cls_user_stats& hs = header.stats;
-    if (r >= 0) {
-      RGWStorageStats stats;
-
-      stats.size = hs.total_bytes;
-      stats.size_rounded = hs.total_bytes_rounded;
-      stats.num_objects = hs.total_entries;
-
-      cb->set_response(stats);
-    }
-
-    cb->handle_response(r);
-
-    cb->put();
-  }
-};
-
-int RGWSI_User_RADOS::read_stats_async(RGWSI_MetaBackend::Context *ctx,
-                                       const rgw_user& user, RGWGetUserStats_CB *_cb)
-{
-  string user_str = user.to_str();
-
-  RGWGetUserStatsContext *cb = new RGWGetUserStatsContext(_cb);
-  int r = cls_user_get_header_async(user_str, cb);
-  if (r < 0) {
-    _cb->put();
-    delete cb;
-    return r;
-  }
-
-  return 0;
-}
-

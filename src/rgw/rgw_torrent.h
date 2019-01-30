@@ -15,23 +15,23 @@
 #include "rgw_common.h"
 
 using ceph::crypto::SHA1;
+using namespace std::literals;
 
 struct req_state;
 
-#define RGW_OBJ_TORRENT    "rgw.torrent"
-
-#define ANNOUNCE           "announce"
-#define ANNOUNCE_LIST      "announce-list"
-#define COMMENT            "comment"
-#define CREATED_BY         "created by"
-#define CREATION_DATE      "creation date"
-#define ENCODING           "encoding"
-#define LENGTH             "length"
-#define NAME               "name"
-#define PIECE_LENGTH       "piece length"
-#define PIECES             "pieces"
-#define INFO_PIECES        "info"
-#define GET_TORRENT        "torrent"
+inline constexpr auto RGW_OBJ_TORRENT = "rgw.torrent"sv;
+inline constexpr auto ANNOUNCE = "announce"sv;
+inline constexpr auto ANNOUNCE_LIST = "announce-list"sv;
+inline constexpr auto COMMENT = "comment"sv;
+inline constexpr auto CREATED_BY = "created by"sv;
+inline constexpr auto CREATION_DATE = "creation date"sv;
+inline constexpr auto ENCODING = "encoding"sv;
+inline constexpr auto LENGTH = "length"sv;
+inline constexpr auto NAME = "name"sv;
+inline constexpr auto PIECE_LENGTH = "piece length"sv;
+inline constexpr auto PIECES = "pieces"sv;
+inline constexpr auto INFO_PIECES = "info"sv;
+inline constexpr auto GET_TORRENT = "torrent"sv;
 
 class TorrentBencode
 {
@@ -55,33 +55,33 @@ public:
   }
 
   //single values
-  void bencode(const std::string& str, bufferlist& bl) 
+  void bencode(std::string_view str, bufferlist& bl) 
   {
     bencode_key(str, bl);
   }
 
   //dictionary elements
-  void bencode(const std::string& key, int value, bufferlist& bl) 
+  void bencode(std::string_view key, int value, bufferlist& bl) 
   {
     bencode_key(key, bl);
     bencode(value, bl);
   }
 
   //dictionary elements
-  void bencode(const std::string& key, const std::string& value, bufferlist& bl) 
+  void bencode(std::string_view key, const std::string& value, bufferlist& bl) 
   {
     bencode_key(key, bl);
     bencode(value, bl);
   }
 
   //key len
-  void bencode_key(const std::string& key, bufferlist& bl) 
+  void bencode_key(std::string_view key, bufferlist& bl)
   {
     int len = key.length();
-    char info[100] = { 0 }; 
+    char info[100] = { 0 };
     sprintf(info, "%d:", len);
     bl.append(info, strlen(info));
-    bl.append(key.c_str(), len); 
+    bl.append(key.data(), len);
   }
 };
 

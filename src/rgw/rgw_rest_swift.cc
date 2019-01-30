@@ -39,6 +39,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+namespace bc = boost::container;
+
 int RGWListBuckets_ObjStore_SWIFT::get_params()
 {
   prefix = s->info.args.get("prefix");
@@ -86,7 +88,7 @@ int RGWListBuckets_ObjStore_SWIFT::get_params()
 static void dump_account_metadata(struct req_state * const s,
                                   const RGWUsageStats& global_stats,
                                   const std::map<std::string, RGWUsageStats> &policies_stats,
-                                  /* const */map<string, bufferlist>& attrs,
+                                  /* const */bc::flat_map<string, bufferlist>& attrs,
                                   const RGWQuotaInfo& quota,
                                   const RGWAccessControlPolicy_SWIFTAcct &policy)
 {
@@ -140,8 +142,7 @@ static void dump_account_metadata(struct req_state * const s,
 
   /* Dump user-defined metadata items and generic attrs. */
   const size_t PREFIX_LEN = sizeof(RGW_ATTR_META_PREFIX) - 1;
-  map<string, bufferlist>::iterator iter;
-  for (iter = attrs.lower_bound(RGW_ATTR_PREFIX); iter != attrs.end(); ++iter) {
+  for (auto iter = attrs.lower_bound(RGW_ATTR_PREFIX); iter != attrs.end(); ++iter) {
     const char *name = iter->first.c_str();
     map<string, string>::const_iterator geniter = rgw_to_http_attrs.find(name);
 
@@ -480,8 +481,7 @@ static void dump_container_metadata(struct req_state *s,
 
     /* Dump user-defined metadata items and generic attrs. */
     const size_t PREFIX_LEN = sizeof(RGW_ATTR_META_PREFIX) - 1;
-    map<string, bufferlist>::iterator iter;
-    for (iter = s->bucket_attrs.lower_bound(RGW_ATTR_PREFIX);
+    for (auto iter = s->bucket_attrs.lower_bound(RGW_ATTR_PREFIX);
          iter != s->bucket_attrs.end();
          ++iter) {
       const char *name = iter->first.c_str();
@@ -848,7 +848,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
 
   if (bucket_name.compare(s->bucket.name) != 0) {
     RGWBucketInfo bucket_info;
-    map<string, bufferlist> bucket_attrs;
+    bc::flat_map<string, bufferlist> bucket_attrs;
     r = store->getRados()->get_bucket_info(store->svc(), s->user->get_id().tenant,
 			       bucket_name, bucket_info, nullptr,
 			       s->yield, &bucket_attrs);
@@ -875,7 +875,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
 
   bool compressed;
   RGWCompressionInfo cs_info;
-  map<std::string, buffer::list> attrs;
+  bc::flat_map<std::string, buffer::list> attrs;
   uint64_t size_bytes{0};
 
   read_op.params.attrs = &attrs;
@@ -1309,19 +1309,19 @@ void RGWDeleteObj_ObjStore_SWIFT::send_response()
 
 }
 
-static void get_contype_from_attrs(map<string, bufferlist>& attrs,
+static void get_contype_from_attrs(bc::flat_map<string, bufferlist>& attrs,
 				   string& content_type)
 {
-  map<string, bufferlist>::iterator iter = attrs.find(RGW_ATTR_CONTENT_TYPE);
+  auto iter = attrs.find(RGW_ATTR_CONTENT_TYPE);
   if (iter != attrs.end()) {
     content_type = rgw_bl_str(iter->second);
   }
 }
 
 static void dump_object_metadata(const DoutPrefixProvider* dpp, struct req_state * const s,
-				 const map<string, bufferlist>& attrs)
+				 const bc::flat_map<string, bufferlist>& attrs)
 {
-  map<string, string> response_attrs;
+  bc::flat_map<string, string> response_attrs;
 
   for (auto kv : attrs) {
     const char * name = kv.first.c_str();

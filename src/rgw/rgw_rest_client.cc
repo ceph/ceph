@@ -15,6 +15,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+namespace bc = boost::container;
+
 int RGWHTTPSimpleRequest::get_status()
 {
   int retcode = get_req_retcode();
@@ -480,9 +482,9 @@ void RGWRESTGenerateHTTPHeaders::set_extra_headers(const map<string, string>& ex
   }
 }
 
-int RGWRESTGenerateHTTPHeaders::set_obj_attrs(map<string, bufferlist>& rgw_attrs)
+int RGWRESTGenerateHTTPHeaders::set_obj_attrs(bc::flat_map<string, bufferlist>& rgw_attrs)
 {
-  map<string, string> new_attrs;
+  std::map<string, string> new_attrs;
 
   /* merge send headers */
   for (auto& attr: rgw_attrs) {
@@ -582,7 +584,7 @@ void RGWRESTStreamS3PutObj::send_init(rgw_obj& obj)
   url = headers_gen.get_url();
 }
 
-int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, map<string, bufferlist>& rgw_attrs, bool send)
+int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, bc::flat_map<string, bufferlist>& rgw_attrs, bool send)
 {
   headers_gen.set_obj_attrs(rgw_attrs);
 
@@ -617,7 +619,10 @@ int RGWRESTStreamS3PutObj::send_ready(RGWAccessKey& key, bool send)
   return 0;
 }
 
-int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_t obj_size, map<string, bufferlist>& attrs, bool send)
+int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj,
+					uint64_t obj_size,
+					bc::flat_map<string, bufferlist>& attrs,
+					bool send)
 {
   send_init(obj);
   return send_ready(key, attrs, send);
@@ -625,7 +630,7 @@ int RGWRESTStreamS3PutObj::put_obj_init(RGWAccessKey& key, rgw_obj& obj, uint64_
 
 void set_str_from_headers(map<string, string>& out_headers, const string& header_name, string& str)
 {
-  map<string, string>::iterator iter = out_headers.find(header_name);
+  auto iter = out_headers.find(header_name);
   if (iter != out_headers.end()) {
     str = iter->second;
   } else {

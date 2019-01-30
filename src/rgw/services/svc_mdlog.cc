@@ -21,24 +21,34 @@
 using Svc = RGWSI_MDLog::Svc;
 using Cursor = RGWPeriodHistory::Cursor;
 
-RGWSI_MDLog::RGWSI_MDLog(CephContext *cct, bool _run_sync) : RGWServiceInstance(cct), run_sync(_run_sync) {
+namespace bs = boost::system;
+
+RGWSI_MDLog::RGWSI_MDLog(CephContext *cct, boost::asio::io_context& ioctx,
+                         bool _run_sync) : RGWServiceInstance(cct, ioctx),
+                                           run_sync(_run_sync) {
 }
 
-RGWSI_MDLog::~RGWSI_MDLog() {
-}
+RGWSI_MDLog::~RGWSI_MDLog() = default;
 
-int RGWSI_MDLog::init(RGWSI_RADOS *_rados_svc, RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc, RGWSI_Cls *_cls_svc)
+boost::system::error_code RGWSI_MDLog::init(RGWAsyncRadosProcessor *_async,
+					    RGWRados* _rr,
+					    RGWSI_RADOS *_rados_svc,
+					    RGWSI_Zone *_zone_svc,
+					    RGWSI_SysObj *_sysobj_svc,
+					    RGWSI_Cls *_cls_svc)
 {
+  rr = _rr;
+  svc.async = _async;
   svc.zone = _zone_svc;
   svc.sysobj = _sysobj_svc;
   svc.mdlog = this;
   svc.rados = _rados_svc;
   svc.cls = _cls_svc;
 
-  return 0;
+  return {};
 }
 
-int RGWSI_MDLog::do_start()
+boost::system::error_code RGWSI_MDLog::do_start()
 {
   auto& current_period = svc.zone->get_current_period();
 
@@ -53,43 +63,45 @@ int RGWSI_MDLog::do_start()
     // initialize the log period history
     svc.mdlog->init_oldest_log_period();
   }
-  return 0;
+  return {};
 }
 
-int RGWSI_MDLog::read_history(RGWMetadataLogHistory *state,
-                              RGWObjVersionTracker *objv_tracker) const
+boost::system::error_code
+RGWSI_MDLog::read_history(RGWMetadataLogHistory *state,
+			  RGWObjVersionTracker *objv_tracker) const
 {
   auto obj_ctx = svc.sysobj->init_obj_ctx();
   auto& pool = svc.zone->get_zone_params().log_pool;
   const auto& oid = RGWMetadataLogHistory::oid;
   bufferlist bl;
-  int ret = rgw_get_system_obj(obj_ctx, pool, oid, bl, objv_tracker, nullptr, null_yield);
-  if (ret < 0) {
-    return ret;
+  auto ec = rgw_get_system_obj(obj_ctx, pool, oid, bl, objv_tracker, nullptr, null_yield);
+  if (ec) {
+    return ec;
   }
   if (bl.length() == 0) {
     /* bad history object, remove it */
     rgw_raw_obj obj(pool, oid);
     auto sysobj = obj_ctx.get_obj(obj);
-    ret = sysobj.wop().remove(null_yield);
-    if (ret < 0) {
-      ldout(cct, 0) << "ERROR: meta history is empty, but cannot remove it (" << cpp_strerror(-ret) << ")" << dendl;
-      return ret;
+    ec = sysobj.wop().remove(null_yield);
+    if (ec) {
+      ldout(cct, 0) << "ERROR: meta history is empty, but cannot remove it ("
+		    << ec << ")" << dendl;
+      return ec;
     }
-    return -ENOENT;
+    return bs::errc::make_error_code(bs::errc::no_such_file_or_directory);
   }
   try {
     auto p = bl.cbegin();
     state->decode(p);
-  } catch (buffer::error& e) {
+  } catch (ceph::buffer::error& e) {
     ldout(cct, 1) << "failed to decode the mdlog history: "
-        << e.what() << dendl;
-    return -EIO;
+                  << e.what() << dendl;
+    return e.code();
   }
-  return 0;
+  return {};
 }
 
-int RGWSI_MDLog::write_history(const RGWMetadataLogHistory& state,
+boost::system::error_code RGWSI_MDLog::write_history(const RGWMetadataLogHistory& state,
                                RGWObjVersionTracker *objv_tracker,
                                bool exclusive)
 {
@@ -122,7 +134,7 @@ class ReadHistoryCR : public RGWCoroutine {
     : RGWCoroutine(svc.zone->ctx()), svc(svc),
       cursor(cursor),
       objv_tracker(objv_tracker),
-      async_processor(svc.rados->get_async_processor())
+      async_processor(svc.async)
   {}
 
   int operate() {
@@ -169,7 +181,7 @@ class WriteHistoryCR : public RGWCoroutine {
                  RGWObjVersionTracker *objv)
     : RGWCoroutine(svc.zone->ctx()), svc(svc),
       cursor(cursor), objv(objv),
-      async_processor(svc.rados->get_async_processor())
+      async_processor(svc.async)
   {}
 
   int operate() {
@@ -281,9 +293,9 @@ Cursor RGWSI_MDLog::init_oldest_log_period()
   // read the mdlog history
   RGWMetadataLogHistory state;
   RGWObjVersionTracker objv;
-  int ret = read_history(&state, &objv);
+  int ret = ceph::from_error_code(read_history(&state, &objv));
 
-  if (ret == -ENOENT) {
+  if (ret == bs::errc::no_such_file_or_directory) {
     // initialize the mdlog history and write it
     ldout(cct, 10) << "initializing mdlog history" << dendl;
     auto cursor = find_oldest_period();
@@ -295,7 +307,7 @@ Cursor RGWSI_MDLog::init_oldest_log_period()
     state.oldest_period_id = cursor.get_period().get_id();
 
     constexpr bool exclusive = true; // don't overwrite
-    int ret = write_history(state, &objv, exclusive);
+    int ret = ceph::from_error_code(write_history(state, &objv, exclusive));
     if (ret < 0 && ret != -EEXIST) {
       ldout(cct, 1) << "failed to write mdlog history: "
           << cpp_strerror(ret) << dendl;
@@ -304,7 +316,7 @@ Cursor RGWSI_MDLog::init_oldest_log_period()
     return cursor;
   } else if (ret < 0) {
     ldout(cct, 1) << "failed to read mdlog history: "
-        << cpp_strerror(ret) << dendl;
+		  << cpp_strerror(ret) << dendl;
     return Cursor{ret};
   }
 
@@ -317,7 +329,7 @@ Cursor RGWSI_MDLog::init_oldest_log_period()
     state.oldest_realm_epoch = cursor.get_epoch();
     state.oldest_period_id = cursor.get_period().get_id();
     ldout(cct, 10) << "rewriting mdlog history" << dendl;
-    ret = write_history(state, &objv);
+    ret = ceph::from_error_code(write_history(state, &objv));
     if (ret < 0 && ret != -ECANCELED) {
     ldout(cct, 1) << "failed to write mdlog history: "
           << cpp_strerror(ret) << dendl;
@@ -348,7 +360,7 @@ Cursor RGWSI_MDLog::init_oldest_log_period()
 Cursor RGWSI_MDLog::read_oldest_log_period() const
 {
   RGWMetadataLogHistory state;
-  int ret = read_history(&state, nullptr);
+  int ret = ceph::from_error_code(read_history(&state, nullptr));
   if (ret < 0) {
     ldout(cct, 1) << "failed to read mdlog history: "
         << cpp_strerror(ret) << dendl;
@@ -379,24 +391,23 @@ RGWMetadataLog* RGWSI_MDLog::get_log(const std::string& period)
   // construct the period's log in place if it doesn't exist
   auto insert = md_logs.emplace(std::piecewise_construct,
                                 std::forward_as_tuple(period),
-                                std::forward_as_tuple(cct, svc.zone, svc.cls, period));
+                                std::forward_as_tuple(cct, rr, svc.zone, svc.cls, period));
   return &insert.first->second;
 }
 
-int RGWSI_MDLog::add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl)
+boost::system::error_code RGWSI_MDLog::add_entry(const string& hash_key, const string& section, const string& key, bufferlist& bl)
 {
   ceph_assert(current_log); // must have called init()
   return current_log->add_entry(hash_key, section, key, bl);
 }
 
-int RGWSI_MDLog::get_shard_id(const string& hash_key, int *shard_id)
+int RGWSI_MDLog::get_shard_id(const string& hash_key)
 {
   ceph_assert(current_log); // must have called init()
-  return current_log->get_shard_id(hash_key, shard_id);
+  return current_log->get_shard_id(hash_key);
 }
 
-int RGWSI_MDLog::pull_period(const std::string& period_id, RGWPeriod& period)
+boost::system::error_code RGWSI_MDLog::pull_period(const std::string& period_id, RGWPeriod& period)
 {
-  return period_puller->pull(period_id, period);
+  return ceph::to_error_code(period_puller->pull(period_id, period));
 }
-

@@ -27,6 +27,8 @@
 #include <boost/algorithm/hex.hpp>
 #include <boost/asio/yield.hpp>
 
+namespace bc = boost::container;
+
 #define dout_subsys ceph_subsys_rgw
 
 
@@ -605,11 +607,11 @@ class PSSubscription {
 
   public:
     InitBucketLifecycleCR(RGWDataSyncEnv *_sync_env,
-           PSConfigRef& _conf,
-           RGWBucketInfo& _bucket_info,
-           std::map<string, bufferlist>& _bucket_attrs) : RGWCoroutine(_sync_env->cct),
-                                                     sync_env(_sync_env),
-                                                     conf(_conf) {
+			  PSConfigRef& _conf,
+			  RGWBucketInfo& _bucket_info,
+			  bc::flat_map<string, bufferlist>& _bucket_attrs)
+      : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+	conf(_conf) {
       lc_config.bucket_info = _bucket_info;
       lc_config.bucket_attrs = _bucket_attrs;
       retention_days = conf->events_retention_days;

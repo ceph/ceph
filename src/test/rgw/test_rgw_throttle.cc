@@ -12,7 +12,11 @@
  *
  */
 
+#include <optional>
+#include "common/async/context_pool.h"
+
 #include "rgw/rgw_aio_throttle.h"
+#include "rgw/rgw_error_code.h"
 
 #include <optional>
 #include <thread>
@@ -23,25 +27,28 @@
 #endif
 #include <gtest/gtest.h>
 
+
 struct RadosEnv : public ::testing::Environment {
  public:
   static constexpr auto poolname = "ceph_test_rgw_throttle";
 
+  static std::optional<ceph::async::io_context_pool> poolctx;
   static std::optional<RGWSI_RADOS> rados;
 
   void SetUp() override {
-    rados.emplace(g_ceph_context);
-    ASSERT_EQ(0, rados->start());
-    int r = rados->pool({poolname}).create();
-    if (r == -EEXIST)
-      r = 0;
-    ASSERT_EQ(0, r);
+    poolctx.emplace(2);
+    rados.emplace(g_ceph_context, poolctx->get_io_context());
+    ASSERT_FALSE(rados->start());
+    auto r = rados->create_pool({poolname}, null_yield);
+    if (r == boost::system::errc::file_exists)
+      r = {};
+    ASSERT_FALSE(r);
   }
   void TearDown() override {
-    rados->shutdown();
     rados.reset();
   }
 };
+std::optional<ceph::async::io_context_pool> RadosEnv::poolctx;
 std::optional<RGWSI_RADOS> RadosEnv::rados;
 
 auto *const rados_env = ::testing::AddGlobalTestEnvironment(new RadosEnv);
@@ -50,9 +57,9 @@ auto *const rados_env = ::testing::AddGlobalTestEnvironment(new RadosEnv);
 class RadosFixture : public ::testing::Test {
  protected:
   RGWSI_RADOS::Obj make_obj(const std::string& oid) {
-    auto obj = RadosEnv::rados->obj({{RadosEnv::poolname}, oid});
-    ceph_assert_always(0 == obj.open());
-    return obj;
+    auto obj = RadosEnv::rados->obj({{RadosEnv::poolname}, oid}, null_yield);
+    ceph_assert_always(!!obj);
+    return *obj;
   }
 };
 
@@ -63,9 +70,9 @@ namespace rgw {
 struct scoped_completion {
   Aio* aio = nullptr;
   AioResult* result = nullptr;
-  ~scoped_completion() { if (aio) { complete(-ECANCELED); } }
-  void complete(int r) {
-    result->result = r;
+  ~scoped_completion() { if (aio) { ceph::to_error_code(ECANCELED); } }
+  void complete(boost::system::error_code ec) {
+    result->result = ec;
     aio->put(*result);
     aio = nullptr;
   }
@@ -113,7 +120,7 @@ TEST_F(Aio_Throttle, NoThrottleUpToMax)
   auto completions = throttle.drain();
   ASSERT_EQ(4u, completions.size());
   for (auto& c : completions) {
-    EXPECT_EQ(-ECANCELED, c.result);
+    EXPECT_EQ(boost::system::errc::operation_canceled, c.result);
   }
 }
 
@@ -125,7 +132,7 @@ TEST_F(Aio_Throttle, CostOverWindow)
   scoped_completion op;
   auto c = throttle.get(obj, wait_on(op), 8, 0);
   ASSERT_EQ(1u, c.size());
-  EXPECT_EQ(-EDEADLK, c.front().result);
+  EXPECT_EQ(rgw_errc::requirement_exceeds_limit, c.front().result);
 }
 
 TEST_F(Aio_Throttle, ThrottleOverMax)
@@ -178,7 +185,7 @@ TEST_F(Aio_Throttle, YieldCostOverWindow)
       scoped_completion op;
       auto c = throttle.get(obj, wait_on(op), 8, 0);
       ASSERT_EQ(1u, c.size());
-      EXPECT_EQ(-EDEADLK, c.front().result);
+      EXPECT_EQ(rgw_errc::requirement_exceeds_limit, c.front().result);
     });
 }
 

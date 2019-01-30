@@ -22,6 +22,8 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+namespace bc = boost::container;
+
 const string reshard_oid_prefix = "reshard.";
 const string reshard_lock_name = "reshard_process";
 const string bucket_instance_lock_name = "bucket_instance_lock";
@@ -155,7 +157,7 @@ public:
     if (ret < 0) {
       return ret;
     }
-    ret = bs.bucket_obj.aio_operate(c, &op);
+    ret = bs.bucket_obj.ioctx.aio_operate(bs.bucket_obj.obj.oid, c, &op);
     if (ret < 0) {
       derr << "ERROR: failed to store entries in target bucket shard (bs=" << bs.bucket << "/" << bs.shard_id << ") error=" << cpp_strerror(-ret) << dendl;
       return ret;
@@ -246,7 +248,7 @@ public:
 
 RGWBucketReshard::RGWBucketReshard(rgw::sal::RGWRadosStore *_store,
 				   const RGWBucketInfo& _bucket_info,
-				   const map<string, bufferlist>& _bucket_attrs,
+				   const bc::flat_map<string, bufferlist>& _bucket_attrs,
 				   RGWBucketReshardLock* _outer_reshard_lock) :
   store(_store), bucket_info(_bucket_info), bucket_attrs(_bucket_attrs),
   reshard_lock(store, bucket_info, true),
@@ -324,7 +326,7 @@ int RGWBucketReshard::clear_index_shard_reshard_status(rgw::sal::RGWRadosStore* 
 static int create_new_bucket_instance(rgw::sal::RGWRadosStore *store,
 				      int new_num_shards,
 				      const RGWBucketInfo& bucket_info,
-				      map<string, bufferlist>& attrs,
+				      bc::flat_map<string, bufferlist>& attrs,
 				      RGWBucketInfo& new_bucket_info)
 {
   new_bucket_info = bucket_info;
@@ -337,7 +339,7 @@ static int create_new_bucket_instance(rgw::sal::RGWRadosStore *store,
   new_bucket_info.new_bucket_instance_id.clear();
   new_bucket_info.reshard_status = 0;
 
-  int ret = store->svc()->bi->init_index(new_bucket_info);
+  int ret = ceph::from_error_code(store->svc()->bi->init_index(new_bucket_info, null_yield));
   if (ret < 0) {
     cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
     return ret;
@@ -376,7 +378,7 @@ class BucketInfoReshardUpdate
 {
   rgw::sal::RGWRadosStore *store;
   RGWBucketInfo& bucket_info;
-  std::map<string, bufferlist> bucket_attrs;
+  bc::flat_map<string, bufferlist> bucket_attrs;
 
   bool in_progress{false};
 
@@ -393,7 +395,7 @@ class BucketInfoReshardUpdate
 public:
   BucketInfoReshardUpdate(rgw::sal::RGWRadosStore *_store,
 			  RGWBucketInfo& _bucket_info,
-                          map<string, bufferlist>& _bucket_attrs,
+                          bc::flat_map<string, bufferlist>& _bucket_attrs,
 			  const string& new_bucket_id) :
     store(_store),
     bucket_info(_bucket_info),
@@ -673,9 +675,13 @@ int RGWBucketReshard::do_reshard(int num_shards,
   // NB: some error clean-up is done by ~BucketInfoReshardUpdate
 } // RGWBucketReshard::do_reshard
 
-int RGWBucketReshard::get_status(list<cls_rgw_bucket_instance_entry> *status)
+int RGWBucketReshard::get_status(vector<cls_rgw_bucket_instance_entry> *status)
 {
-  return store->svc()->bi_rados->get_reshard_status(bucket_info, status);
+  auto s = store->svc()->bi_rados->get_reshard_status(bucket_info, null_yield);
+  if (!s)
+    return ceph::from_error_code(s.error());
+  *status = std::move(*s);
+  return 0;
 }
 
 
@@ -728,7 +734,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
   // best effort and don't report out an error; the lock isn't needed
   // at this point since all we're using a best effor to to remove old
   // shard objects
-  ret = store->svc()->bi->clean_index(bucket_info);
+  ret = ceph::from_error_code(store->svc()->bi->clean_index(bucket_info, null_yield));
   if (ret < 0) {
     lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean up old shards; " <<
@@ -758,7 +764,7 @@ error_out:
   // since the real problem is the issue that led to this error code
   // path, we won't touch ret and instead use another variable to
   // temporarily error codes
-  int ret2 = store->svc()->bi->clean_index(new_bucket_info);
+  int ret2 = ceph::from_error_code(store->svc()->bi->clean_index(new_bucket_info, null_yield));
   if (ret2 < 0) {
     lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean up shards from failed incomplete resharding; " <<
@@ -1008,7 +1014,7 @@ int RGWReshard::process_single_logshard(int logshard_num)
 
 	rgw_bucket bucket;
 	RGWBucketInfo bucket_info;
-	map<string, bufferlist> attrs;
+	bc::flat_map<string, bufferlist> attrs;
 
 	ret = store->getRados()->get_bucket_info(store->svc(),
 						 entry.tenant, entry.bucket_name,

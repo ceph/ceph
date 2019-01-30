@@ -12,7 +12,6 @@
 #include "rgw_bucket.h"
 
 #include "services/svc_zone.h"
-#include "services/svc_datalog_rados.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -128,7 +127,7 @@ int DataLogTrimCR::operate()
         ldout(cct, 10) << "trimming log shard " << i
             << " at marker=" << m
             << " last_trim=" << last_trim[i] << dendl;
-        spawn(new TrimCR(store, store->svc()->datalog_rados->get_oid(i),
+        spawn(new TrimCR(store, store->svc()->log->get_oid(i),
                          m, &last_trim[i]),
               true);
       }
@@ -160,7 +159,7 @@ class DataLogTrimPollCR : public RGWCoroutine {
                     int num_shards, utime_t interval)
     : RGWCoroutine(store->ctx()), store(store), http(http),
       num_shards(num_shards), interval(interval),
-      lock_oid(store->svc()->datalog_rados->get_oid(0)),
+      lock_oid(store->svc()->log->get_oid(0)),
       lock_cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
       last_trim(num_shards)
   {}
@@ -178,7 +177,7 @@ int DataLogTrimPollCR::operate()
       // request a 'data_trim' lock that covers the entire wait interval to
       // prevent other gateways from attempting to trim for the duration
       set_status("acquiring trim lock");
-      yield call(new RGWSimpleRadosLockCR(store->svc()->rados->get_async_processor(), store,
+      yield call(new RGWSimpleRadosLockCR(store->svc()->get_async_processor(), store,
                                           rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, lock_oid),
                                           "data_trim", lock_cookie,
                                           interval.sec()));

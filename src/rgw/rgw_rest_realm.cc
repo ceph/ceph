@@ -302,7 +302,7 @@ void RGWOp_Realm_Get::send_response()
 // GET /admin/realm?list
 class RGWOp_Realm_List : public RGWRESTOp {
   std::string default_id;
-  std::list<std::string> realms;
+  std::vector<std::string> realms;
 public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("zone", RGW_CAP_READ);
@@ -322,7 +322,8 @@ void RGWOp_Realm_List::execute()
     RGWRealm realm(store->ctx(), store->svc()->sysobj);
     [[maybe_unused]] int ret = realm.read_default_id(default_id);
   }
-  http_ret = store->svc()->zone->list_realms(realms);
+  http_ret = ceph::from_error_code(
+    store->svc()->zone->list_realms(realms, null_yield));
   if (http_ret < 0)
     lderr(store->ctx()) << "failed to list realms" << dendl;
 }

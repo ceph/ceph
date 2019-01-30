@@ -67,7 +67,7 @@ int seed::get_torrent_file(RGWRados::Object::Read &read_op,
   get_obj_bucket_and_oid_loc(obj, oid, key);
   ldout(s->cct, 20) << "NOTICE: head obj oid= " << oid << dendl;
 
-  const set<string> obj_key{RGW_OBJ_TORRENT};
+  const set<string> obj_key{std::string(RGW_OBJ_TORRENT)};
   map<string, bufferlist> m;
   const int r = read_op.state.cur_ioctx->omap_get_vals_by_keys(oid, obj_key, &m);
   if (r < 0) {
@@ -75,7 +75,8 @@ int seed::get_torrent_file(RGWRados::Object::Read &read_op,
     return r;
   }
   if (m.size() != 1) {
-    ldout(s->cct, 0) << "ERROR: omap key " RGW_OBJ_TORRENT " not found" << dendl;
+    ldout(s->cct, 0) << "ERROR: omap key " << RGW_OBJ_TORRENT << " not found"
+		     << dendl;
     return -EINVAL;
   }
   bl.append(std::move(m.begin()->second));
@@ -247,8 +248,8 @@ void seed::do_encode()
 int seed::save_torrent_file()
 {
   int op_ret = 0;
-  string key = RGW_OBJ_TORRENT;
-  rgw_obj obj(s->bucket, s->object.name);    
+  auto key = std::string(RGW_OBJ_TORRENT);
+  rgw_obj obj(s->bucket, s->object.name);
 
   rgw_raw_obj raw_obj;
   store->getRados()->obj_to_raw(s->bucket_info.placement_rule, obj, &raw_obj);
@@ -256,7 +257,7 @@ int seed::save_torrent_file()
   auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(raw_obj);
 
-  op_ret = sysobj.omap().set(key, bl, null_yield);
+  op_ret = ceph::from_error_code(sysobj.omap().set(key, bl, null_yield));
   if (op_ret < 0)
   {
     ldout(s->cct, 0) << "ERROR: failed to omap_set() op_ret = " << op_ret << dendl;

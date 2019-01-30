@@ -65,6 +65,8 @@ using namespace ceph::crypto;
 
 using std::get;
 
+namespace bc = boost::container;
+
 void list_all_buckets_start(struct req_state *s)
 {
   s->formatter->open_array_section_in_ns("ListAllMyBucketsResult", XMLNS_AWS_S3);
@@ -120,8 +122,7 @@ static struct response_attr_param resp_attr_params[] = {
 };
 
 int RGWGetObj_ObjStore_S3Website::send_response_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) {
-  map<string, bufferlist>::iterator iter;
-  iter = attrs.find(RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION);
+  auto iter = attrs.find(RGW_ATTR_AMZ_WEBSITE_REDIRECT_LOCATION);
   if (iter != attrs.end()) {
     bufferlist &bl = iter->second;
     s->redirect = bl.c_str();
@@ -166,9 +167,10 @@ int RGWGetObj_ObjStore_S3::send_response_data_error()
 }
 
 template <class T>
-int decode_attr_bl_single_value(map<string, bufferlist>& attrs, const char *attr_name, T *result, T def_val)
+int decode_attr_bl_single_value(bc::flat_map<string, bufferlist>& attrs,
+				const char *attr_name, T *result, T def_val)
 {
-  map<string, bufferlist>::iterator iter = attrs.find(attr_name);
+  auto iter = attrs.find(attr_name);
   if (iter == attrs.end()) {
     *result = def_val;
     return 0;
@@ -1235,7 +1237,7 @@ void RGWGetBucketLocation_ObjStore_S3::send_response()
   RGWZoneGroup zonegroup;
   string api_name;
 
-  int ret = store->svc()->zone->get_zonegroup(s->bucket_info.zonegroup, zonegroup);
+  int ret = ceph::from_error_code(store->svc()->zone->get_zonegroup(s->bucket_info.zonegroup, zonegroup));
   if (ret >= 0) {
     api_name = zonegroup.api_name;
   } else  {
@@ -1692,7 +1694,7 @@ int RGWPutObj_ObjStore_S3::get_params()
   if (!s->length)
     return -ERR_LENGTH_REQUIRED;
 
-  map<string, bufferlist> src_attrs;
+  bc::flat_map<string, bufferlist> src_attrs;
   size_t pos;
   int ret;
 
@@ -1938,7 +1940,9 @@ void RGWPutObj_ObjStore_S3::send_response()
   end_header(s, this);
 }
 
-static inline int get_obj_attrs(rgw::sal::RGWRadosStore *store, struct req_state *s, rgw_obj& obj, map<string, bufferlist>& attrs)
+inline int get_obj_attrs(rgw::sal::RGWRadosStore *store,
+			 struct req_state *s, rgw_obj& obj,
+			 bc::flat_map<string, bufferlist>& attrs)
 {
   RGWRados::Object op_target(store->getRados(), s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
   RGWRados::Object::Read read_op(&op_target);
@@ -1955,7 +1959,8 @@ static inline void set_attr(map<string, bufferlist>& attrs, const char* key, con
   attrs.emplace(key, std::move(bl));
 }
 
-static inline void set_attr(map<string, bufferlist>& attrs, const char* key, const char* value)
+inline void set_attr(bc::flat_map<string, bufferlist>& attrs,
+		     const char* key, const char* value)
 {
   bufferlist bl;
   encode(value,bl);
@@ -1965,10 +1970,10 @@ static inline void set_attr(map<string, bufferlist>& attrs, const char* key, con
 int RGWPutObj_ObjStore_S3::get_decrypt_filter(
     std::unique_ptr<RGWGetObj_Filter>* filter,
     RGWGetObj_Filter* cb,
-    map<string, bufferlist>& attrs,
+    bc::flat_map<string, bufferlist>& attrs,
     bufferlist* manifest_bl)
 {
-  std::map<std::string, std::string> crypt_http_responses_unused;
+  bc::flat_map<std::string, std::string> crypt_http_responses_unused;
 
   int res = 0;
   std::unique_ptr<BlockCrypt> block_crypt;
@@ -2000,7 +2005,7 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
     rgw_obj obj;
     obj.init_ns(s->bucket, mp.get_meta(), RGW_OBJ_NS_MULTIPART);
     obj.set_in_extra_data(true);
-    map<string, bufferlist> xattrs;
+    bc::flat_map<string, bufferlist> xattrs;
     res = get_obj_attrs(store, s, obj, xattrs);
     if (res == 0) {
       std::unique_ptr<BlockCrypt> block_crypt;
@@ -2766,7 +2771,7 @@ void RGWGetLC_ObjStore_S3::execute()
 {
   config.set_ctx(s->cct);
 
-  map<string, bufferlist>::iterator aiter = s->bucket_attrs.find(RGW_ATTR_LC);
+  auto aiter = s->bucket_attrs.find(RGW_ATTR_LC);
   if (aiter == s->bucket_attrs.end()) {
     op_ret = -ENOENT;
     return;
@@ -3072,7 +3077,7 @@ void RGWInitMultipart_ObjStore_S3::send_response()
   }
 }
 
-int RGWInitMultipart_ObjStore_S3::prepare_encryption(map<string, bufferlist>& attrs)
+int RGWInitMultipart_ObjStore_S3::prepare_encryption(bc::flat_map<string, bufferlist>& attrs)
 {
   int res = 0;
   res = rgw_s3_prepare_encrypt(s, attrs, nullptr, nullptr, crypt_http_responses);
@@ -3947,7 +3952,9 @@ static int verify_mfa(rgw::sal::RGWRadosStore *store, RGWUserInfo *user, const s
     return -EACCES;
   }
 
-  int ret = store->svc()->cls->mfa.check_mfa(user->user_id, serial, pin, null_yield);
+  int ret = ceph::from_error_code(
+    store->svc()->cls->mfa.check_mfa(user->user_id,serial, pin,
+				     null_yield));
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "NOTICE: failed to check MFA, serial=" << serial << dendl;
     return -EACCES;

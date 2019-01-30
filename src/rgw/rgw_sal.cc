@@ -216,7 +216,7 @@ int RGWRadosBucket::link(RGWUser* new_user, optional_yield y)
   ep.owner = new_user->get_user();
   ep.creation_time = get_creation_time();
   ep.linked = true;
-  map<string, bufferlist> ep_attrs;
+  RGWAttrs ep_attrs;
   rgw_ep_info ep_data{ep, ep_attrs};
 
   return store->ctl()->bucket->link_bucket(new_user->get_user(), info.bucket,
@@ -327,9 +327,9 @@ rgw::sal::RGWRadosStore *RGWStoreManager::init_raw_storage_provider(CephContext 
 
   rados->set_context(cct);
 
-  int ret = rados->init_svc(true);
-  if (ret < 0) {
-    ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
+  auto ret = rados->init_svc(true);
+  if (ret) {
+    ldout(cct, 0) << "ERROR: failed to init services (ret=" << ret << ")" << dendl;
     delete store;
     return nullptr;
   }

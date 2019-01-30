@@ -69,56 +69,56 @@ extern void rgw_get_anon_user(RGWUserInfo& info);
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_store_user_info(RGWUserCtl *user_ctl,
-                               RGWUserInfo& info,
-                               RGWUserInfo *old_info,
-                               RGWObjVersionTracker *objv_tracker,
-                               real_time mtime,
-                               bool exclusive,
-                               map<string, bufferlist> *pattrs = nullptr);
+int rgw_store_user_info(RGWUserCtl *user_ctl,
+			RGWUserInfo& info,
+			RGWUserInfo *old_info,
+			RGWObjVersionTracker *objv_tracker,
+			real_time mtime,
+			bool exclusive,
+			boost::container::flat_map<string, bufferlist> *pattrs = nullptr);
 
 /**
  * Given an user_id, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_uid(RGWUserCtl *user_ctl,
-                                    const rgw_user& user_id,
-                                    RGWUserInfo& info,
-                                    RGWObjVersionTracker *objv_tracker = nullptr,
-                                    real_time *pmtime                  = nullptr,
-                                    rgw_cache_entry_info *cache_info   = nullptr,
-                                    map<string, bufferlist> *pattrs    = nullptr);
+int rgw_get_user_info_by_uid(RGWUserCtl *user_ctl,
+			     const rgw_user& user_id,
+			     RGWUserInfo& info,
+			     RGWObjVersionTracker *objv_tracker = nullptr,
+			     real_time *pmtime                  = nullptr,
+			     rgw_cache_entry_info *cache_info   = nullptr,
+			     boost::container::flat_map<string, bufferlist> *pattrs    = nullptr);
 /**
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_email(RGWUserCtl *user_ctl,
-                                      string& email, RGWUserInfo& info,
-                                      RGWObjVersionTracker *objv_tracker = NULL,
-                                      real_time *pmtime = nullptr);
+int rgw_get_user_info_by_email(RGWUserCtl *user_ctl,
+			       string& email, RGWUserInfo& info,
+			       RGWObjVersionTracker *objv_tracker = NULL,
+			       real_time *pmtime = nullptr);
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(RGWUserCtl *user_ctl,
-                                      const string& swift_name,
-                                      RGWUserInfo& info,        /* out */
-                                      RGWObjVersionTracker *objv_tracker = nullptr,
-                                      real_time *pmtime = nullptr);
+int rgw_get_user_info_by_swift(RGWUserCtl *user_ctl,
+			       const string& swift_name,
+			       RGWUserInfo& info,        /* out */
+			       RGWObjVersionTracker *objv_tracker = nullptr,
+			       real_time *pmtime = nullptr);
 /**
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_access_key(RGWUserCtl *user_ctl,
-                                           const std::string& access_key,
-                                           RGWUserInfo& info,
-                                           RGWObjVersionTracker* objv_tracker = nullptr,
-                                           real_time* pmtime = nullptr);
+int rgw_get_user_info_by_access_key(RGWUserCtl *user_ctl,
+				    const std::string& access_key,
+				    RGWUserInfo& info,
+				    RGWObjVersionTracker* objv_tracker = nullptr,
+				    real_time* pmtime = nullptr);
 
-extern void rgw_perm_to_str(uint32_t mask, char *buf, int len);
-extern uint32_t rgw_str_to_perm(const char *str);
+void rgw_perm_to_str(uint32_t mask, char *buf, int len);
+uint32_t rgw_str_to_perm(const char *str);
 
-extern int rgw_validate_tenant_name(const string& t);
+int rgw_validate_tenant_name(const string& t);
 
 enum ObjectKeyType {
   KEY_TYPE_SWIFT,
@@ -777,7 +777,7 @@ public:
 
 struct RGWUserCompleteInfo {
   RGWUserInfo info;
-  map<string, bufferlist> attrs;
+  boost::container::flat_map<string, bufferlist> attrs;
   bool has_attrs{false};
 
   void dump(Formatter * const f) const {
@@ -817,6 +817,7 @@ class RGWUserCtl
   struct Svc {
     RGWSI_Zone *zone{nullptr};
     RGWSI_User *user{nullptr};
+    RGWSI_RADOS *rados{nullptr};
   } svc;
 
   struct Ctl {
@@ -825,10 +826,11 @@ class RGWUserCtl
 
   RGWUserMetadataHandler *umhandler;
   RGWSI_MetaBackend_Handler *be_handler{nullptr};
-  
+
 public:
   RGWUserCtl(RGWSI_Zone *zone_svc,
              RGWSI_User *user_svc,
+	     RGWSI_RADOS *rados_svc,
              RGWUserMetadataHandler *_umhandler);
 
   void init(RGWBucketCtl *bucket_ctl) {
@@ -843,7 +845,7 @@ public:
     RGWObjVersionTracker *objv_tracker{nullptr};
     ceph::real_time *mtime{nullptr};
     rgw_cache_entry_info *cache_info{nullptr};
-    map<string, bufferlist> *attrs{nullptr};
+    boost::container::flat_map<string, bufferlist> *attrs{nullptr};
 
     GetParams() {}
 
@@ -862,7 +864,7 @@ public:
       return *this;
     }
 
-    GetParams& set_attrs(map<string, bufferlist> *_attrs) {
+    GetParams& set_attrs(boost::container::flat_map<string, bufferlist> *_attrs) {
       attrs = _attrs;
       return *this;
     }
@@ -873,7 +875,7 @@ public:
     RGWObjVersionTracker *objv_tracker{nullptr};
     ceph::real_time mtime;
     bool exclusive{false};
-    map<string, bufferlist> *attrs{nullptr};
+    boost::container::flat_map<string, bufferlist> *attrs{nullptr};
 
     PutParams() {}
 
@@ -897,7 +899,7 @@ public:
       return *this;
     }
 
-    PutParams& set_attrs(map<string, bufferlist> *_attrs) {
+    PutParams& set_attrs(boost::container::flat_map<string, bufferlist> *_attrs) {
       attrs = _attrs;
       return *this;
     }
@@ -924,7 +926,7 @@ public:
                              optional_yield y, const GetParams& params = {});
 
   int get_attrs_by_uid(const rgw_user& user_id,
-                       map<string, bufferlist> *attrs,
+                       boost::container::flat_map<string, bufferlist> *attrs,
                        optional_yield y,
                        RGWObjVersionTracker *objv_tracker = nullptr);
 

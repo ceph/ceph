@@ -4,6 +4,7 @@
 
 #include "svc_meta_be.h"
 
+#include "rgw/rgw_error_code.h"
 #include "rgw/rgw_mdlog.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -15,15 +16,16 @@ RGWSI_MetaBackend::PutParams::~PutParams() {} // ...
 RGWSI_MetaBackend::GetParams::~GetParams() {} // ...
 RGWSI_MetaBackend::RemoveParams::~RemoveParams() {} // ...
 
-int RGWSI_MetaBackend::pre_modify(RGWSI_MetaBackend::Context *ctx,
-                                  const string& key,
-                                  RGWMetadataLogData& log_data,
-                                  RGWObjVersionTracker *objv_tracker,
-                                  RGWMDLogStatus op_type,
-                                  optional_yield y)
+boost::system::error_code
+RGWSI_MetaBackend::pre_modify(RGWSI_MetaBackend::Context *ctx,
+			      const string& key,
+			      RGWMetadataLogData& log_data,
+			      RGWObjVersionTracker *objv_tracker,
+			      RGWMDLogStatus op_type,
+			      optional_yield y)
 {
-  /* if write version has not been set, and there's a read version, set it so that we can
-   * log it
+  /* if write version has not been set, and there's a read version,
+   * set it so that we can log it
    */
   if (objv_tracker &&
       objv_tracker->read_version.ver && !objv_tracker->write_version.ver) {
@@ -31,19 +33,19 @@ int RGWSI_MetaBackend::pre_modify(RGWSI_MetaBackend::Context *ctx,
     objv_tracker->write_version.ver++;
   }
 
-  return 0;
+  return {};
 }
 
-int RGWSI_MetaBackend::post_modify(RGWSI_MetaBackend::Context *ctx,
-                                   const string& key,
-                                   RGWMetadataLogData& log_data,
-                                   RGWObjVersionTracker *objv_tracker, int ret,
-                                   optional_yield y)
+boost::system::error_code RGWSI_MetaBackend::post_modify(
+  RGWSI_MetaBackend::Context *ctx, const string& key,
+  RGWMetadataLogData& log_data, RGWObjVersionTracker *objv_tracker,
+  boost::system::error_code ret,
+  optional_yield y)
 {
   return ret;
 }
 
-int RGWSI_MetaBackend::prepare_mutate(RGWSI_MetaBackend::Context *ctx,
+boost::system::error_code RGWSI_MetaBackend::prepare_mutate(RGWSI_MetaBackend::Context *ctx,
                                       const string& key,
                                       const real_time& mtime,
                                       RGWObjVersionTracker *objv_tracker,
@@ -51,11 +53,11 @@ int RGWSI_MetaBackend::prepare_mutate(RGWSI_MetaBackend::Context *ctx,
 {
   real_time orig_mtime;
 
-  int ret = call_with_get_params(&orig_mtime, [&](GetParams& params) {
+  auto ec = call_with_get_params(&orig_mtime, [&](GetParams& params) {
     return get_entry(ctx, key, params, objv_tracker, y);
   });
-  if (ret < 0 && ret != -ENOENT) {
-    return ret;
+  if (ec && ec != boost::system::errc::no_such_file_or_directory) {
+    return ec;
   }
 
   if (objv_tracker->write_version.tag.empty()) {
@@ -66,31 +68,31 @@ int RGWSI_MetaBackend::prepare_mutate(RGWSI_MetaBackend::Context *ctx,
       objv_tracker->write_version.ver++;
     }
   }
-  return 0;
+  return {};
 }
 
-int RGWSI_MetaBackend::do_mutate(RGWSI_MetaBackend::Context *ctx,
-				 const string& key,
-				 const ceph::real_time& mtime,
-				 RGWObjVersionTracker *objv_tracker,
-				 RGWMDLogStatus op_type,
-                                 optional_yield y,
-				 std::function<int()> f,
-				 bool generic_prepare)
+boost::system::error_code
+RGWSI_MetaBackend::do_mutate(RGWSI_MetaBackend::Context *ctx,
+			     const string& key,
+			     const ceph::real_time& mtime,
+			     RGWObjVersionTracker *objv_tracker,
+			     RGWMDLogStatus op_type,
+			     optional_yield y,
+			     std::function<boost::system::error_code()> f,
+			     bool generic_prepare)
 {
-  int ret;
+  boost::system::error_code ret;
 
   if (generic_prepare) {
     ret = prepare_mutate(ctx, key, mtime, objv_tracker, y);
-    if (ret < 0 ||
-	ret == STATUS_NO_APPLY) {
+    if (ret || ret == rgw_errc::no_apply) {
       return ret;
     }
   }
 
   RGWMetadataLogData log_data;
   ret = pre_modify(ctx, key, log_data, objv_tracker, op_type, y);
-  if (ret < 0) {
+  if (ret) {
     return ret;
   }
 
@@ -98,14 +100,10 @@ int RGWSI_MetaBackend::do_mutate(RGWSI_MetaBackend::Context *ctx,
 
   /* cascading ret into post_modify() */
 
-  ret = post_modify(ctx, key, log_data, objv_tracker, ret, y);
-  if (ret < 0)
-    return ret;
-
-  return 0;
+  return post_modify(ctx, key, log_data, objv_tracker, ret, y);
 }
 
-int RGWSI_MetaBackend::get(Context *ctx,
+boost::system::error_code RGWSI_MetaBackend::get(Context *ctx,
 			   const string& key,
 			   GetParams& params,
 			   RGWObjVersionTracker *objv_tracker,
@@ -114,13 +112,13 @@ int RGWSI_MetaBackend::get(Context *ctx,
   return get_entry(ctx, key, params, objv_tracker, y);
 }
 
-int RGWSI_MetaBackend::put(Context *ctx,
+boost::system::error_code RGWSI_MetaBackend::put(Context *ctx,
 			   const string& key,
 			   PutParams& params,
 			   RGWObjVersionTracker *objv_tracker,
                            optional_yield y)
 {
-  std::function<int()> f = [&]() {
+  std::function<boost::system::error_code()> f = [&]() {
     return put_entry(ctx, key, params, objv_tracker, y);
   };
 
@@ -131,13 +129,13 @@ int RGWSI_MetaBackend::put(Context *ctx,
                 false);
 }
 
-int RGWSI_MetaBackend::remove(Context *ctx,
+boost::system::error_code RGWSI_MetaBackend::remove(Context *ctx,
                               const string& key,
                               RemoveParams& params,
                               RGWObjVersionTracker *objv_tracker,
                               optional_yield y)
 {
-  std::function<int()> f = [&]() {
+  std::function<boost::system::error_code()> f = [&]() {
     return remove_entry(ctx, key, params, objv_tracker, y);
   };
 
@@ -148,12 +146,12 @@ int RGWSI_MetaBackend::remove(Context *ctx,
                 false);
 }
 
-int RGWSI_MetaBackend::mutate(Context *ctx,
+boost::system::error_code RGWSI_MetaBackend::mutate(Context *ctx,
 			      const std::string& key,
 			      MutateParams& params,
 			      RGWObjVersionTracker *objv_tracker,
                               optional_yield y,
-			      std::function<int()> f)
+			      std::function<boost::system::error_code()> f)
 {
   return do_mutate(ctx, key, params.mtime, objv_tracker,
 		   params.op_type, y,
@@ -161,8 +159,9 @@ int RGWSI_MetaBackend::mutate(Context *ctx,
 		   false);
 }
 
-int RGWSI_MetaBackend_Handler::call(std::optional<RGWSI_MetaBackend_CtxParams> bectx_params,
-                                    std::function<int(Op *)> f)
+boost::system::error_code RGWSI_MetaBackend_Handler::call(
+  std::optional<RGWSI_MetaBackend_CtxParams> bectx_params,
+  std::function<boost::system::error_code(Op *)> f)
 {
   return be->call(bectx_params, [&](RGWSI_MetaBackend::Context *ctx) {
     ctx->init(this);
@@ -177,4 +176,3 @@ RGWSI_MetaBackend_Handler::Op_ManagedCtx::Op_ManagedCtx(RGWSI_MetaBackend_Handle
   c->init(handler);
   pctx.reset(c);
 }
-

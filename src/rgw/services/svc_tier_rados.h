@@ -20,7 +20,8 @@
 
 #include "svc_rados.h"
 
-extern const std::string MP_META_SUFFIX;
+using namespace std::literals;
+inline constexpr std::string_view MP_META_SUFFIX = ".meta"sv;
 
 class RGWMPObj {
   string oid;
@@ -43,7 +44,7 @@ public:
     oid = _oid;
     upload_id = _upload_id;
     prefix = oid + ".";
-    meta = prefix + upload_id + MP_META_SUFFIX;
+    meta = prefix + upload_id + std::string(MP_META_SUFFIX);
     prefix.append(part_unique_str);
   }
   const string& get_meta() const { return meta; }
@@ -97,26 +98,24 @@ public:
  * the name provided is such. It will also extract the key used for
  * bucket index shard calculation from the adorned name.
  */
-class MultipartMetaFilter : public RGWAccessListFilter {
-public:
-  MultipartMetaFilter() {}
 
-  /**
-   * @param name [in] The object name as it appears in the bucket index.
-   * @param key [out] An output parameter that will contain the bucket
-   *        index key if this entry is in the form of a multipart meta object.
-   * @return true if the name provided is in the form of a multipart meta
-   *         object, false otherwise
-   */
-  bool filter(const string& name, string& key) override;
-};
+/**
+ * @param name [in] The object name as it appears in the bucket index.
+ * @param key [out] An output parameter that will contain the bucket
+ *        index key if this entry is in the form of a multipart meta object.
+ * @return true if the name provided is in the form of a multipart meta
+ *         object, false otherwise
+ */
+
+bool MultipartMetaFilter(std::string_view name, std::string_view key);
 
 class RGWSI_Tier_RADOS : public RGWServiceInstance
 {
   RGWSI_Zone *zone_svc{nullptr};
 
 public:
-  RGWSI_Tier_RADOS(CephContext *cct): RGWServiceInstance(cct) {}
+  RGWSI_Tier_RADOS(CephContext *cct, boost::asio::io_context& ioctx)
+    : RGWServiceInstance(cct, ioctx) {}
 
   void init(RGWSI_Zone *_zone_svc) {
     zone_svc = _zone_svc;

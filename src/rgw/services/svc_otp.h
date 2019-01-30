@@ -31,7 +31,7 @@ class RGWSI_OTP : public RGWServiceInstance
   RGWSI_OTP_BE_Handler be_handler;
   std::unique_ptr<RGWSI_MetaBackend::Module> be_module;
 
-  int do_start() override;
+  boost::system::error_code do_start() override;
 
 public:
   struct Svc {
@@ -41,7 +41,7 @@ public:
     RGWSI_MetaBackend *meta_be{nullptr};
   } svc;
 
-  RGWSI_OTP(CephContext *cct);
+  RGWSI_OTP(CephContext *cct, boost::asio::io_context& ioc);
   ~RGWSI_OTP();
 
   RGWSI_OTP_BE_Handler& get_be_handler() {
@@ -52,38 +52,36 @@ public:
             RGWSI_Meta *_meta_svc,
             RGWSI_MetaBackend *_meta_be_svc);
 
-  int read_all(RGWSI_OTP_BE_Ctx& ctx,
+  boost::system::error_code read_all(RGWSI_OTP_BE_Ctx& ctx,
                const string& key,
                otp_devices_list_t *devices,
                real_time *pmtime,
                RGWObjVersionTracker *objv_tracker,
                optional_yield y);
-  int read_all(RGWSI_OTP_BE_Ctx& ctx,
+  boost::system::error_code read_all(RGWSI_OTP_BE_Ctx& ctx,
                const rgw_user& uid,
                otp_devices_list_t *devices,
                real_time *pmtime,
                RGWObjVersionTracker *objv_tracker,
                optional_yield y);
-  int store_all(RGWSI_OTP_BE_Ctx& ctx,
+  boost::system::error_code store_all(RGWSI_OTP_BE_Ctx& ctx,
                 const string& key,
                 const otp_devices_list_t& devices,
                 real_time mtime,
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y);
-  int store_all(RGWSI_OTP_BE_Ctx& ctx,
+  boost::system::error_code store_all(RGWSI_OTP_BE_Ctx& ctx,
                 const rgw_user& uid,
                 const otp_devices_list_t& devices,
                 real_time mtime,
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y);
-  int remove_all(RGWSI_OTP_BE_Ctx& ctx,
+  boost::system::error_code remove_all(RGWSI_OTP_BE_Ctx& ctx,
                  const string& key,
                  RGWObjVersionTracker *objv_tracker,
                  optional_yield y);
-  int remove_all(RGWSI_OTP_BE_Ctx& ctx,
+  boost::system::error_code remove_all(RGWSI_OTP_BE_Ctx& ctx,
                  const rgw_user& uid,
                  RGWObjVersionTracker *objv_tracker,
                  optional_yield y);
 };
-
-

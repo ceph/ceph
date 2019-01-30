@@ -21,6 +21,7 @@
 #include "include/utime.h"
 #include "include/str_list.h"
 
+#include "rgw_cls.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_rados.h"
@@ -38,10 +39,12 @@
 #include "services/svc_bi_rados.h"
 
 #include "cls/lock/cls_lock_client.h"
-#include "cls/timeindex/cls_timeindex_client.h"
+#include "RADOS/cls/timeindex.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
+namespace bs = boost::system;
 
 static string objexp_lock_name = "gc_process";
 
@@ -101,17 +104,15 @@ int RGWObjExpStore::objexp_hint_add(const ceph::real_time& delete_at,
       .exp_time = delete_at };
   bufferlist hebl;
   encode(he, hebl);
-  librados::ObjectWriteOperation op;
-  cls_timeindex_add(op, delete_at, keyext, hebl);
+  auto op = RADOS::CLS::timeindex::add(delete_at, keyext, std::move(hebl));
 
   string shard_name = objexp_hint_get_shardname(objexp_key_shard(obj_key, cct->_conf->rgw_objexp_hints_num_shards));
-  auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_zone_params().log_pool, shard_name));
-  int r = obj.open();
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
-    return r;
+  auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_zone_params().log_pool, shard_name), null_yield);
+  if (!obj) {
+    ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << shard_name << " (r=" << obj.error() << ")" << dendl;
+    return ceph::from_error_code(obj.error());
   }
-  return obj.operate(&op, null_yield);
+  return ceph::from_error_code(obj->operate(std::move(op), null_yield));
 }
 
 int RGWObjExpStore::objexp_hint_list(const string& oid,
@@ -123,72 +124,57 @@ int RGWObjExpStore::objexp_hint_list(const string& oid,
 				     string *out_marker,                 /* out */
 				     bool *truncated)                    /* out */
 {
-  librados::ObjectReadOperation op;
-  cls_timeindex_list(op, start_time, end_time, marker, max_entries, entries,
-        out_marker, truncated);
-
-  auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_zone_params().log_pool, oid));
-  int r = obj.open();
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
-    return r;
-  }
-  bufferlist obl;
-  int ret = obj.operate(&op, &obl, null_yield);
-
-  if ((ret < 0 ) && (ret != -ENOENT)) {
-    return ret;
+  auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_zone_params().log_pool,
+					oid), null_yield);
+  if (!obj) {
+    ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << oid
+		  << " (r=" << obj.error() << ")" << dendl;
+    return ceph::from_error_code(obj.error());
   }
 
-  if ((ret == -ENOENT) && truncated) {
-    *truncated = false;
+  auto r = rgw::cls::timeindex_list(*obj, start_time, end_time, marker,
+				    max_entries, null_yield);
+
+  if (!r) {
+    if ((r.error() == bs::errc::no_such_file_or_directory) && truncated) {
+      *truncated = false;
+      return 0;
+    } else {
+      return ceph::from_error_code(r.error());
+    }
   }
 
-  return 0;
-}
-
-static int cls_timeindex_trim_repeat(rgw_rados_ref ref,
-				     const std::string& oid,
-				     ceph::real_time from_time,
-				     ceph::real_time to_time,
-				     const std::string& from_marker,
-				     const std::string& to_marker)
-{
-  bool done = false;
-  do {
-    librados::ObjectWriteOperation op;
-    cls_timeindex_trim(op, from_time, to_time, from_marker, to_marker);
-    int r = rgw_rados_operate(ref.pool.ioctx(), oid, &op, null_yield);
-    if (r == -ENODATA)
-      done = true;
-    else if (r < 0)
-      return r;
-  } while (!done);
+  auto&& [e, m, t] = *r;
+  entries = std::move(e);
+  if (out_marker)
+    *out_marker = std::move(m);
+  if (truncated)
+    *truncated = t;
 
   return 0;
 }
 
 int RGWObjExpStore::objexp_hint_trim(const string& oid,
-                               const ceph::real_time& start_time,
-                               const ceph::real_time& end_time,
-                               const string& from_marker,
-                               const string& to_marker)
+				     const ceph::real_time& start_time,
+				     const ceph::real_time& end_time,
+				     const string& from_marker,
+				     const string& to_marker)
 {
-  auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_zone_params().log_pool, oid));
-  int r = obj.open();
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << obj << " (r=" << r << ")" << dendl;
-    return r;
-  }
-  auto& ref = obj.get_ref();
-  int ret = cls_timeindex_trim_repeat(ref, oid, start_time, end_time,
-				      from_marker, to_marker);
+  bs::error_code ec;
+  auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_zone_params().log_pool,
+					oid), null_yield);
 
-  if ((ret < 0 ) && (ret != -ENOENT)) {
-    return ret;
+  if (!obj) {
+    ldout(cct, 0) << "ERROR: " << __func__ << "(): failed to open obj=" << oid
+		  << " (r=" << obj.error() << ")" << dendl;
+    ec = obj.error();
+  } else {
+    ec = rgw::cls::timeindex_trim(*obj, start_time, end_time, from_marker,
+				  to_marker, null_yield);
+    if (ec == bs::errc::no_such_file_or_directory)
+      ec.clear();
   }
-
-  return 0;
+  return ceph::from_error_code(ec);
 }
 
 int RGWObjectExpirer::init_bucket_info(const string& tenant_name,

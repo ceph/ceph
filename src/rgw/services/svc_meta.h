@@ -35,14 +35,14 @@ class RGWSI_Meta : public RGWServiceInstance
   vector<unique_ptr<RGWSI_MetaBackend_Handler> > be_handlers;
 
 public:
-  RGWSI_Meta(CephContext *cct);
+  RGWSI_Meta(CephContext *cct, boost::asio::io_context& ioc);
   ~RGWSI_Meta();
 
   void init(RGWSI_SysObj *_sysobj_svc,
             RGWSI_MDLog *_mdlog_svc,
             vector<RGWSI_MetaBackend *>& _be_svc);
 
-  int create_be_handler(RGWSI_MetaBackend::Type be_type,
-                        RGWSI_MetaBackend_Handler **phandler);
+  boost::system::error_code
+  create_be_handler(RGWSI_MetaBackend::Type be_type,
+		    RGWSI_MetaBackend_Handler **phandler);
 };
-

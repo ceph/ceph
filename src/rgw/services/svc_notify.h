@@ -7,19 +7,14 @@
 
 #include "svc_rados.h"
 
-
-class Context;
-
 class RGWSI_Zone;
 class RGWSI_Finisher;
 
 class RGWWatcher;
-class RGWSI_Notify_ShutdownCB;
 
 class RGWSI_Notify : public RGWServiceInstance
 {
   friend class RGWWatcher;
-  friend class RGWSI_Notify_ShutdownCB;
   friend class RGWServices_Def;
 
 public:
@@ -36,7 +31,7 @@ private:
   int num_watchers{0};
   RGWWatcher **watchers{nullptr};
   std::set<int> watchers_set;
-  vector<RGWSI_RADOS::Obj> notify_objs;
+  std::vector<RGWSI_RADOS::Obj> notify_objs;
 
   bool enabled{false};
 
@@ -49,11 +44,10 @@ private:
   CB *cb{nullptr};
 
   std::optional<int> finisher_handle;
-  RGWSI_Notify_ShutdownCB *shutdown_cb{nullptr};
 
   bool finalized{false};
 
-  int init_watch();
+  boost::system::error_code init_watch();
   void finalize_watch();
 
   void init(RGWSI_Zone *_zone_svc,
@@ -63,10 +57,11 @@ private:
     rados_svc = _rados_svc;
     finisher_svc = _finisher_svc;
   }
-  int do_start() override;
+  boost::system::error_code do_start() override;
   void shutdown() override;
 
-  int unwatch(RGWSI_RADOS::Obj& obj, uint64_t watch_handle);
+  boost::system::error_code unwatch(RGWSI_RADOS::Obj& obj,
+                                    uint64_t watch_handle);
   void add_watcher(int i);
   void remove_watcher(int i);
 
@@ -77,12 +72,13 @@ private:
   void _set_enabled(bool status);
   void set_enabled(bool status);
 
-  int robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
-                    optional_yield y);
+  boost::system::error_code robust_notify(RGWSI_RADOS::Obj& notify_obj,
+                                          bufferlist& bl,
+                                          optional_yield y);
 
-  void schedule_context(Context *c);
 public:
-  RGWSI_Notify(CephContext *cct): RGWServiceInstance(cct) {}
+  RGWSI_Notify(CephContext *cct, boost::asio::io_context& ioc)
+    : RGWServiceInstance(cct, ioc) {}
   ~RGWSI_Notify();
 
   class CB {
@@ -95,7 +91,8 @@ public:
       virtual void set_enabled(bool status) = 0;
   };
 
-  int distribute(const string& key, bufferlist& bl, optional_yield y);
+  boost::system::error_code distribute(const string& key, bufferlist& bl,
+                                       optional_yield y);
 
   void register_watch_cb(CB *cb);
 };

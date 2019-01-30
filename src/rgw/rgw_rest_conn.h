@@ -115,7 +115,7 @@ public:
   /* async requests */
   int put_obj_send_init(rgw_obj& obj, const rgw_http_param_pair *extra_params, RGWRESTStreamS3PutObj **req);
   int put_obj_async(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
-                    map<string, bufferlist>& attrs, bool send, RGWRESTStreamS3PutObj **req);
+                    boost::container::flat_map<string, bufferlist>& attrs, bool send, RGWRESTStreamS3PutObj **req);
   int complete_request(RGWRESTStreamS3PutObj *req, string& etag, ceph::real_time *mtime);
 
   struct get_obj_params {

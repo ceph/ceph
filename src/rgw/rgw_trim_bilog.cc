@@ -264,18 +264,18 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
     }
 
     // register a watch on the realm's control object
-    r = ref.pool.ioctx().watch2(ref.obj.oid, &handle, this);
+    r = ref.ioctx.watch2(ref.obj.oid, &handle, this);
     if (r == -ENOENT) {
       constexpr bool exclusive = true;
-      r = ref.pool.ioctx().create(ref.obj.oid, exclusive);
+      r = ref.ioctx.create(ref.obj.oid, exclusive);
       if (r == -EEXIST || r == 0) {
-        r = ref.pool.ioctx().watch2(ref.obj.oid, &handle, this);
+        r = ref.ioctx.watch2(ref.obj.oid, &handle, this);
       }
     }
     if (r < 0) {
       lderr(store->ctx()) << "Failed to watch " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
-      ref.pool.ioctx().close();
+      ref.ioctx.close();
       return r;
     }
 
@@ -284,24 +284,24 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
   }
 
   int restart() {
-    int r = ref.pool.ioctx().unwatch2(handle);
+    int r = ref.ioctx.unwatch2(handle);
     if (r < 0) {
       lderr(store->ctx()) << "Failed to unwatch on " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
     }
-    r = ref.pool.ioctx().watch2(ref.obj.oid, &handle, this);
+    r = ref.ioctx.watch2(ref.obj.oid, &handle, this);
     if (r < 0) {
       lderr(store->ctx()) << "Failed to restart watch on " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
-      ref.pool.ioctx().close();
+      ref.ioctx.close();
     }
     return r;
   }
 
   void stop() {
     if (handle) {
-      ref.pool.ioctx().unwatch2(handle);
-      ref.pool.ioctx().close();
+      ref.ioctx.unwatch2(handle);
+      ref.ioctx.close();
     }
   }
 
@@ -326,7 +326,7 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
     } catch (const buffer::error& e) {
       lderr(store->ctx()) << "Failed to decode notification: " << e.what() << dendl;
     }
-    ref.pool.ioctx().notify_ack(ref.obj.oid, notify_id, cookie, reply);
+    ref.ioctx.notify_ack(ref.obj.oid, notify_id, cookie, reply);
   }
 
   /// reestablish the watch if it gets disconnected
@@ -467,7 +467,7 @@ int BucketTrimInstanceCR::operate()
         ++p;
       }
       // in parallel, read the local bucket instance info
-      spawn(new RGWGetBucketInstanceInfoCR(store->svc()->rados->get_async_processor(), store,
+      spawn(new RGWGetBucketInstanceInfoCR(store->svc()->get_async_processor(), store,
                                            bucket, &bucket_info),
             false);
     }
@@ -598,7 +598,7 @@ class AsyncMetadataList : public RGWAsyncRadosRequest {
 int AsyncMetadataList::_send_request()
 {
   void* handle = nullptr;
-  std::list<std::string> keys;
+  std::vector<std::string> keys;
   bool truncated{false};
   std::string marker;
 
@@ -789,7 +789,7 @@ int BucketTrimCR::operate()
       // read BucketTrimStatus for marker position
       set_status("reading trim status");
       using ReadStatus = RGWSimpleRadosReadCR<BucketTrimStatus>;
-      yield call(new ReadStatus(store->svc()->rados->get_async_processor(), store->svc()->sysobj, obj,
+      yield call(new ReadStatus(store->svc()->get_async_processor(), store->svc()->sysobj, obj,
                                 &status, true, &objv));
       if (retcode < 0) {
         ldout(cct, 10) << "failed to read bilog trim status: "
@@ -824,7 +824,7 @@ int BucketTrimCR::operate()
           return buckets.size() < config.buckets_per_interval;
         };
 
-        call(new MetadataListCR(cct, store->svc()->rados->get_async_processor(),
+        call(new MetadataListCR(cct, store->svc()->get_async_processor(),
                                 store->ctl()->meta.mgr,
                                 section, status.marker, cb));
       }
@@ -848,7 +848,7 @@ int BucketTrimCR::operate()
       status.marker = std::move(last_cold_marker);
       ldout(cct, 20) << "writing bucket trim marker=" << status.marker << dendl;
       using WriteStatus = RGWSimpleRadosWriteCR<BucketTrimStatus>;
-      yield call(new WriteStatus(store->svc()->rados->get_async_processor(), store->svc()->sysobj, obj,
+      yield call(new WriteStatus(store->svc()->get_async_processor(), store->svc()->sysobj, obj,
                                  status, &objv));
       if (retcode < 0) {
         ldout(cct, 4) << "failed to write updated trim status: "
@@ -910,7 +910,7 @@ int BucketTrimPollCR::operate()
 
       // prevent others from trimming for our entire wait interval
       set_status("acquiring trim lock");
-      yield call(new RGWSimpleRadosLockCR(store->svc()->rados->get_async_processor(), store,
+      yield call(new RGWSimpleRadosLockCR(store->svc()->get_async_processor(), store,
                                           obj, name, cookie,
                                           config.trim_interval_sec));
       if (retcode < 0) {
@@ -923,7 +923,7 @@ int BucketTrimPollCR::operate()
       if (retcode < 0) {
         // on errors, unlock so other gateways can try
         set_status("unlocking");
-        yield call(new RGWSimpleRadosUnlockCR(store->svc()->rados->get_async_processor(), store,
+        yield call(new RGWSimpleRadosUnlockCR(store->svc()->get_async_processor(), store,
                                               obj, name, cookie));
       }
     }

@@ -8,8 +8,8 @@
 #include "rgw/rgw_service.h"
 
 #include "svc_rados.h"
-#include "svc_sys_obj_types.h"
 #include "svc_sys_obj_core_types.h"
+#include "common/expected.h"
 
 
 class RGWSI_Zone;
@@ -50,10 +50,10 @@ public:
     struct ROp {
       Obj& source;
 
-      ceph::static_ptr<RGWSI_SysObj_Obj_GetObjState, sizeof(RGWSI_SysObj_Core_GetObjState)> state;
-      
+      RGWSI_SysObj_Obj_GetObjState state;
+
       RGWObjVersionTracker *objv_tracker{nullptr};
-      map<string, bufferlist> *attrs{nullptr};
+      boost::container::flat_map<std::string, ceph::buffer::list>* attrs{nullptr};
       bool raw_attrs{false};
       boost::optional<obj_version> refresh_version{boost::none};
       ceph::real_time *lastmod{nullptr};
@@ -75,7 +75,8 @@ public:
         return *this;
       }
 
-      ROp& set_attrs(map<string, bufferlist> *_attrs) {
+      ROp& set_attrs(boost::container::flat_map<std::string,
+                                                ceph::buffer::list>* _attrs) {
         attrs = _attrs;
         return *this;
       }
@@ -97,19 +98,19 @@ public:
 
       ROp(Obj& _source);
 
-      int stat(optional_yield y);
-      int read(int64_t ofs, int64_t end, bufferlist *pbl, optional_yield y);
-      int read(bufferlist *pbl, optional_yield y) {
+      boost::system::error_code stat(optional_yield y);
+      boost::system::error_code read(int64_t ofs, int64_t end, bufferlist *pbl, optional_yield y);
+      boost::system::error_code read(bufferlist *pbl, optional_yield y) {
         return read(0, -1, pbl, y);
       }
-      int get_attr(const char *name, bufferlist *dest, optional_yield y);
+      boost::system::error_code get_attr(const char *name, bufferlist *dest, optional_yield y);
     };
 
     struct WOp {
       Obj& source;
 
       RGWObjVersionTracker *objv_tracker{nullptr};
-      map<string, bufferlist> attrs;
+      boost::container::flat_map<std::string, ceph::buffer::list> attrs;
       ceph::real_time mtime;
       ceph::real_time *pmtime{nullptr};
       bool exclusive{false};
@@ -119,12 +120,12 @@ public:
         return *this;
       }
 
-      WOp& set_attrs(map<string, bufferlist>& _attrs) {
+      WOp& set_attrs(boost::container::flat_map<std::string, ceph::buffer::list>& _attrs) {
         attrs = _attrs;
         return *this;
       }
 
-      WOp& set_attrs(map<string, bufferlist>&& _attrs) {
+      WOp& set_attrs(boost::container::flat_map<std::string, ceph::buffer::list>&& _attrs) {
         attrs = _attrs;
         return *this;
       }
@@ -146,13 +147,13 @@ public:
 
       WOp(Obj& _source) : source(_source) {}
 
-      int remove(optional_yield y);
-      int write(bufferlist& bl, optional_yield y);
+      boost::system::error_code remove(optional_yield y);
+      boost::system::error_code write(bufferlist& bl, optional_yield y);
 
-      int write_data(bufferlist& bl, optional_yield y); /* write data only */
-      int write_attrs(optional_yield y); /* write attrs only */
-      int write_attr(const char *name, bufferlist& bl,
-                     optional_yield y); /* write attrs only */
+      boost::system::error_code write_data(bufferlist& bl, optional_yield y); /* write data only */
+      boost::system::error_code write_attrs(optional_yield y); /* write attrs only */
+      boost::system::error_code write_attr(const char *name, bufferlist& bl,
+                                           optional_yield y); /* write attrs only */
     };
 
     struct OmapOp {
@@ -167,13 +168,19 @@ public:
 
       OmapOp(Obj& _source) : source(_source) {}
 
-      int get_all(std::map<string, bufferlist> *m, optional_yield y);
-      int get_vals(const string& marker, uint64_t count,
-                   std::map<string, bufferlist> *m,
-                   bool *pmore, optional_yield y);
-      int set(const std::string& key, bufferlist& bl, optional_yield y);
-      int set(const map<std::string, bufferlist>& m, optional_yield y);
-      int del(const std::string& key, optional_yield y);
+      boost::system::error_code
+      get_all(boost::container::flat_map<std::string, ceph::buffer::list> *m,
+              optional_yield y);
+      boost::system::error_code
+      get_vals(const std::string& marker, uint64_t count,
+               boost::container::flat_map<std::string, ceph::buffer::list> *m,
+               bool *pmore, optional_yield y);
+      boost::system::error_code set(const std::string& key, bufferlist& bl,
+                                    optional_yield y);
+      boost::system::error_code
+      set(const boost::container::flat_map<std::string, ceph::buffer::list>& m,
+          optional_yield y);
+      boost::system::error_code del(const std::string& key, optional_yield y);
     };
 
     struct WNOp {
@@ -181,8 +188,9 @@ public:
 
       WNOp(Obj& _source) : source(_source) {}
 
-      int notify(bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl,
-                 optional_yield y);
+      boost::system::error_code notify(bufferlist& bl,
+                                       std::optional<std::chrono::milliseconds> timeout,
+                                       bufferlist *pbl, optional_yield y);
     };
     ROp rop() {
       return ROp(*this);
@@ -205,56 +213,68 @@ public:
     friend class Op;
     friend class RGWSI_SysObj_Core;
 
-    RGWSI_SysObj_Core *core_svc;
-    rgw_pool pool;
-
-  protected:
-    using ListImplInfo = RGWSI_SysObj_Pool_ListInfo;
-
-    struct ListCtx {
-      ceph::static_ptr<ListImplInfo, sizeof(RGWSI_SysObj_Core_PoolListImplInfo)> impl; /* update this if creating new backend types */
-    };
+    RGWSI_SysObj_Core* core_svc;
+    RGWSI_RADOS::Pool pool;
 
   public:
     Pool(RGWSI_SysObj_Core *_core_svc,
-         const rgw_pool& _pool) : core_svc(_core_svc),
-                                  pool(_pool) {}
+	 RGWSI_RADOS::Pool&& pool) : core_svc(_core_svc),
+				   pool(std::move(pool)) {}
 
-    rgw_pool& get_pool() {
-      return pool;
+    CephContext* cct() const {
+      return pool.get_cct();
+    }
+
+    rgw_pool get_pool() const {
+      return pool.get_rgw_pool();
     }
 
     struct Op {
-      Pool& source;
-      ListCtx ctx;
+      static constexpr auto dout_subsys = ceph_subsys_rgw;
+      RGWSI_RADOS::Pool::List ctx;
 
-      Op(Pool& _source) : source(_source) {}
+      Op(Pool* pool, RGWAccessListFilter filter,
+	 std::optional<std::string> marker)
+	: ctx(pool->pool.list(std::move(filter))) {
+	if (marker) {
+	  auto b = ctx.set_marker(*marker);
+	  if (!b) {
+	    ldout(pool->cct(), -1) << __func__
+				   << " ERROR: failed to convert cursor "
+				   << *marker << dendl;
+	  }
+	}
+      }
 
-      int init(const std::string& marker, const std::string& prefix);
-      int get_next(int max, std::vector<string> *oids, bool *is_truncated);
-      int get_marker(string *marker);
+      boost::system::error_code get_next(int max, std::vector<string> *oids,
+					 bool *is_truncated);
+      std::string get_marker();
     };
 
-    int list_prefixed_objs(const std::string& prefix, std::function<void(const string&)> cb);
+    boost::system::error_code list_prefixed_objs(
+      const std::string& prefix,
+      std::function<void(std::string_view)> cb);
+    boost::system::error_code list_prefixed_objs(
+      const std::string& prefix,
+      std::vector<std::string>* oids);
 
     template <typename Container>
-    int list_prefixed_objs(const string& prefix,
-                           Container *result) {
+    boost::system::error_code list_prefixed_objs(std::string_view prefix,
+						 Container *result) {
       return list_prefixed_objs(prefix, [&](const string& val) {
         result->push_back(val);
       });
     }
 
-    Op op() {
-      return Op(*this);
+    Op op(RGWAccessListFilter filter,
+	  std::optional<std::string> marker = nullopt) {
+      return Op{this, filter, marker};
     }
   };
 
   friend class Obj;
-  friend class Obj::ROp;
-  friend class Obj::WOp;
-  friend class Pool;
-  friend class Pool::Op;
+  friend struct Obj::ROp;
+  friend struct Obj::WOp;
 
 protected:
   RGWSI_RADOS *rados_svc{nullptr};
@@ -267,15 +287,16 @@ protected:
   }
 
 public:
-  RGWSI_SysObj(CephContext *cct): RGWServiceInstance(cct) {}
+  RGWSI_SysObj(CephContext *cct, boost::asio::io_context& ioc)
+    : RGWServiceInstance(cct, ioc) {}
 
   RGWSysObjectCtx init_obj_ctx();
   Obj get_obj(RGWSysObjectCtx& obj_ctx, const rgw_raw_obj& obj);
 
-  Pool get_pool(const rgw_pool& pool) {
-    return Pool(core_svc, pool);
+  tl::expected<Pool, boost::system::error_code>
+  get_pool(const rgw_pool& pool, optional_yield y) {
+    return Pool(core_svc, TRY(rados_svc->pool(pool, y)));
   }
-
   RGWSI_Zone *get_zone_svc();
 };
 

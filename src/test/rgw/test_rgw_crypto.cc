@@ -48,10 +48,10 @@ class ut_put_sink: public rgw::putobj::DataProcessor
 {
   std::stringstream sink;
 public:
-  int process(bufferlist&& bl, uint64_t ofs) override
+  boost::system::error_code process(bufferlist&& bl, uint64_t ofs) override
   {
     sink << boost::string_ref(bl.c_str(),bl.length());
-    return 0;
+    return {};
   }
   std::string get_sink()
   {

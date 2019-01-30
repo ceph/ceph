@@ -29,7 +29,6 @@
 #include "services/svc_zone.h"
 #include "services/svc_mdlog.h"
 #include "services/svc_bilog_rados.h"
-#include "services/svc_datalog_rados.h"
 
 #include "common/errno.h"
 #include "include/ceph_assert.h"
@@ -104,7 +103,8 @@ void RGWOp_MDLog_List::execute() {
     }
   }
 
-  RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
+  RGWMetadataLog meta_log{s->cct, store->svc()->rr, store->svc()->zone, store->svc()->cls,
+      period};
 
   meta_log.init_list_entries(shard_id, ut_st, ut_et, marker, &handle);
 
@@ -127,7 +127,7 @@ void RGWOp_MDLog_List::send_response() {
   s->formatter->dump_bool("truncated", truncated);
   {
     s->formatter->open_array_section("entries");
-    for (list<cls_log_entry>::iterator iter = entries.begin();
+    for (auto iter = entries.begin();
 	 iter != entries.end(); ++iter) {
       cls_log_entry& entry = *iter;
       store->ctl()->meta.mgr->dump_log_entry(entry, s->formatter);
@@ -182,7 +182,7 @@ void RGWOp_MDLog_ShardInfo::execute() {
       return;
     }
   }
-  RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
+  RGWMetadataLog meta_log{s->cct, store->svc()->rr, store->svc()->zone, store->svc()->cls, period};
 
   http_ret = meta_log.get_info(shard_id, &info);
 }
@@ -241,7 +241,8 @@ void RGWOp_MDLog_Delete::execute() {
       return;
     }
   }
-  RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
+  RGWMetadataLog meta_log{s->cct, store->svc()->rr, store->svc()->zone,
+      store->svc()->cls, period};
 
   http_ret = meta_log.trim(shard_id, ut_st, ut_et, start_marker, end_marker);
 }
@@ -281,7 +282,8 @@ void RGWOp_MDLog_Lock::execute() {
     return;
   }
 
-  RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
+  RGWMetadataLog meta_log{s->cct, store->svc()->rr, store->svc()->zone,
+      store->svc()->cls, period};
   unsigned dur;
   dur = (unsigned)strict_strtol(duration_str.c_str(), 10, &err);
   if (!err.empty() || dur <= 0) {
@@ -328,8 +330,9 @@ void RGWOp_MDLog_Unlock::execute() {
     return;
   }
 
-  RGWMetadataLog meta_log{s->cct, store->svc()->zone, store->svc()->cls, period};
-  http_ret = meta_log.unlock(shard_id, zone_id, locker_id);
+  RGWMetadataLog meta_log{s->cct, store->svc()->rr, store->svc()->zone,
+      store->svc()->cls, period};
+  http_ret = meta_log.unlock(shard_id, locker_id);
 }
 
 void RGWOp_MDLog_Notify::execute() {
@@ -411,7 +414,6 @@ void RGWOp_BILog_List::execute() {
     }
   }
 
-  bool truncated;
   unsigned count = 0;
   string err;
 
@@ -420,16 +422,18 @@ void RGWOp_BILog_List::execute() {
     max_entries = LOG_CLASS_LIST_MAX_ENTRIES;
 
   send_response();
+  std::vector<rgw_bi_log_entry> entries;
+  bool truncated;
   do {
-    list<rgw_bi_log_entry> entries;
-    int ret = store->svc()->bilog_rados->log_list(bucket_info, shard_id,
-                                               marker, max_entries - count, 
-                                               entries, &truncated);
-    if (ret < 0) {
-      ldpp_dout(s, 5) << "ERROR: list_bi_log_entries()" << dendl;
+    auto llr = store->svc()->bilog_rados->log_list(bucket_info, shard_id,
+						   marker, max_entries - count,
+						   null_yield);
+    if (!llr) {
+      ldpp_dout(s, 5) << "ERROR: list_bi_log_entries()" << llr.error() << dendl;
       return;
     }
 
+    std::tie(entries, truncated) = std::move(*llr);
     count += entries.size();
 
     send_response(entries, marker);
@@ -454,9 +458,10 @@ void RGWOp_BILog_List::send_response() {
   s->formatter->open_array_section("entries");
 }
 
-void RGWOp_BILog_List::send_response(list<rgw_bi_log_entry>& entries, string& marker)
+void RGWOp_BILog_List::send_response(std::vector<rgw_bi_log_entry>& entries,
+				     string& marker)
 {
-  for (list<rgw_bi_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
+  for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
     rgw_bi_log_entry& entry = *iter;
     encode_json("entry", entry, s->formatter);
 
@@ -469,7 +474,7 @@ void RGWOp_BILog_List::send_response_end() {
   s->formatter->close_section();
   flusher.flush();
 }
-      
+
 void RGWOp_BILog_Info::execute() {
   string tenant_name = s->info.args.get("tenant"),
          bucket_name = s->info.args.get("bucket"),
@@ -567,7 +572,10 @@ void RGWOp_BILog_Delete::execute() {
       return;
     }
   }
-  http_ret = store->svc()->bilog_rados->log_trim(bucket_info, shard_id, start_marker, end_marker);
+  http_ret = ceph::from_error_code(
+    store->svc()->bilog_rados->log_trim(bucket_info, shard_id,
+					start_marker, end_marker,
+					null_yield));
   if (http_ret < 0) {
     ldpp_dout(s, 5) << "ERROR: trim_bi_log_entries() " << dendl;
   }
@@ -619,9 +627,9 @@ void RGWOp_DATALog_List::execute() {
 
   // Note that last_marker is updated to be the marker of the last
   // entry listed
-  http_ret = store->svc()->datalog_rados->list_entries(shard_id, ut_st, ut_et,
-                                                    max_entries, entries, marker,
-                                                    &last_marker, &truncated);
+  http_ret = store->svc()->log->list_entries(shard_id, ut_st, ut_et,
+					     max_entries, entries, marker,
+					     &last_marker, &truncated);
 }
 
 void RGWOp_DATALog_List::send_response() {
@@ -681,7 +689,7 @@ void RGWOp_DATALog_ShardInfo::execute() {
     return;
   }
 
-  http_ret = store->svc()->datalog_rados->get_info(shard_id, &info);
+  http_ret = store->svc()->log->get_info(shard_id, &info);
 }
 
 void RGWOp_DATALog_ShardInfo::send_response() {
@@ -774,7 +782,7 @@ void RGWOp_DATALog_Delete::execute() {
     return;
   }
 
-  http_ret = store->svc()->datalog_rados->trim_entries(shard_id, ut_st, ut_et, start_marker, end_marker);
+  http_ret = store->svc()->log->trim_entries(shard_id, ut_st, ut_et, start_marker, end_marker);
 }
 
 // not in header to avoid pulling in rgw_sync.h

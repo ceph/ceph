@@ -19,7 +19,6 @@
 #define dout_subsys ceph_subsys_rgw
 
 
-
 bool RGWMultiPart::xml_end(const char *el)
 {
   RGWMultiPartNumber *num_obj = static_cast<RGWMultiPartNumber *>(find_first("PartNumber"));
@@ -85,8 +84,8 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_i
 			 int *next_marker, bool *truncated,
 			 bool assume_unsorted)
 {
-  map<string, bufferlist> parts_map;
-  map<string, bufferlist>::iterator iter;
+  boost::container::flat_map<string, bufferlist> parts_map;
+  boost::container::flat_map<string, bufferlist>::iterator iter;
 
   rgw_obj obj;
   obj.init_ns(bucket_info.bucket, meta_oid, RGW_OBJ_NS_MULTIPART);
@@ -110,10 +109,12 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_i
     snprintf(buf, sizeof(buf), "%08d", marker);
     p.append(buf);
 
-    ret = sysobj.omap().get_vals(p, num_parts + 1, &parts_map,
-                                 nullptr, null_yield);
+    ret = ceph::from_error_code(
+      sysobj.omap().get_vals(p, num_parts + 1, &parts_map,
+			     nullptr, null_yield));
   } else {
-    ret = sysobj.omap().get_all(&parts_map, null_yield);
+    ret = ceph::from_error_code(
+      sysobj.omap().get_all(&parts_map, null_yield));
   }
   if (ret < 0) {
     return ret;
@@ -133,8 +134,8 @@ int list_multipart_parts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_i
     try {
       decode(info, bli);
     } catch (buffer::error& err) {
-      ldout(cct, 0) << "ERROR: could not part info, caught buffer::error" <<
-	dendl;
+      ldout(cct, 0) << "ERROR: could not part info, caught " << err.what()
+		    << dendl;
       return -EIO;
     }
     if (sorted_omap) {
@@ -289,13 +290,12 @@ int list_bucket_multiparts(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket
 {
   RGWRados::Bucket target(store->getRados(), bucket_info);
   RGWRados::Bucket::List list_op(&target);
-  MultipartMetaFilter mp_filter;
 
   list_op.params.prefix = prefix;
   list_op.params.delim = delim;
   list_op.params.marker = marker;
   list_op.params.ns = RGW_OBJ_NS_MULTIPART;
-  list_op.params.filter = &mp_filter;
+  list_op.params.filter = MultipartMetaFilter;
 
   return(list_op.list_objects(max_uploads, objs, common_prefixes, is_truncated, null_yield));
 }

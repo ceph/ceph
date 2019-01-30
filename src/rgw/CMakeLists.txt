@@ -26,7 +26,6 @@ set(librgw_common_srcs
   services/svc_bucket.cc
   services/svc_bucket_sobj.cc
   services/svc_cls.cc
-  services/svc_datalog_rados.cc
   services/svc_mdlog.cc
   services/svc_meta.cc
   services/svc_meta_be.cc
@@ -57,6 +56,7 @@ set(librgw_common_srcs
   rgw_basic_types.cc
   rgw_bucket.cc
   rgw_cache.cc
+  rgw_cls.cc
   rgw_common.cc
   rgw_compression.cc
   rgw_cors.cc
@@ -226,9 +226,11 @@ endif()
 
 target_link_libraries(rgw_a
   PRIVATE
-  librados cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
+  librados libRADOS cls_otp_client cls_lock_client cls_rgw_client cls_refcount_client
   cls_log_client cls_timeindex_client cls_version_client
-  cls_user_client cls_rgw_gc_client ceph-common common_utf8 global
+  cls_user_client cls_rgw_gc_client RADOS_cls_version RADOS_cls_rgw
+  RADOS_cls_lock RADOS_cls_log RADOS_cls_otp RADOS_cls_user
+  RADOS_cls_timeindex atomic ceph-common common_utf8 global
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES} ${CRYPTO_LIBS}
@@ -302,10 +304,13 @@ set_target_properties(radosgw PROPERTIES OUTPUT_NAME radosgw VERSION 2.0.0
 install(TARGETS radosgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
 
 add_executable(radosgwd radosgw.cc)
-target_link_libraries(radosgwd radosgw librados
+target_link_libraries(radosgwd radosgw librados libRADOS
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
+  RADOS_cls_version RADOS_cls_rgw
+  RADOS_cls_lock RADOS_cls_log RADOS_cls_otp RADOS_cls_user
+  RADOS_cls_timeindex atomic
   global
   ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
@@ -317,10 +322,13 @@ set(radosgw_admin_srcs
   rgw_admin.cc
   rgw_orphan.cc)
 add_executable(radosgw-admin ${radosgw_admin_srcs})
-target_link_libraries(radosgw-admin ${rgw_libs} librados
+target_link_libraries(radosgw-admin ${rgw_libs} librados libRADOS
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
-  cls_version_client cls_user_client
+  cls_version_client cls_user_client atomic
+  RADOS_cls_version RADOS_cls_rgw
+  RADOS_cls_lock RADOS_cls_log RADOS_cls_otp RADOS_cls_user
+  RADOS_cls_timeindex
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-admin DESTINATION bin)
@@ -332,6 +340,9 @@ target_link_libraries(radosgw-es ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
+  RADOS_cls_version RADOS_cls_rgw
+  RADOS_cls_lock RADOS_cls_log RADOS_cls_otp RADOS_cls_user
+  RADOS_cls_timeindex atomic
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
 install(TARGETS radosgw-es DESTINATION bin)
@@ -346,10 +357,13 @@ install(TARGETS radosgw-token DESTINATION bin)
 set(radosgw_object_expirer_srcs
   rgw_object_expirer.cc)
 add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs})
-target_link_libraries(radosgw-object-expirer ${rgw_libs} librados
+target_link_libraries(radosgw-object-expirer ${rgw_libs} librados libRADOS
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
+  RADOS_cls_version RADOS_cls_rgw
+  RADOS_cls_lock RADOS_cls_log RADOS_cls_otp RADOS_cls_user
+  RADOS_cls_timeindex atomic
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
 install(TARGETS radosgw-object-expirer DESTINATION bin)
@@ -362,6 +376,7 @@ target_link_libraries(rgw
   PRIVATE
   ${rgw_libs}
   librados
+  libRADOS
   cls_rgw_client
   cls_otp_client
   cls_lock_client
@@ -370,6 +385,10 @@ target_link_libraries(rgw
   cls_timeindex_client
   cls_version_client
   cls_user_client
+  RADOS_cls_version RADOS_cls_rgw
+  RADOS_cls_lock RADOS_cls_log RADOS_cls_otp RADOS_cls_user
+  RADOS_cls_timeindex
+  atomic
   global
   ${LIB_RESOLV}
   ${CURL_LIBRARIES}
@@ -401,6 +420,7 @@ add_dependencies(rgw_admin_user civetweb_h)
 
 target_link_libraries(rgw_admin_user PRIVATE
   librados
+  libRADOS
   cls_rgw_client
   cls_otp_client
   cls_lock_client
@@ -410,6 +430,10 @@ target_link_libraries(rgw_admin_user PRIVATE
   cls_version_client
   cls_user_client
   cls_rgw_gc_client
+  RADOS_cls_version RADOS_cls_rgw
+  RADOS_cls_lock RADOS_cls_log RADOS_cls_otp RADOS_cls_user
+  RADOS_cls_timeindex
+  atomic
   global
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}

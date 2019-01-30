@@ -9,6 +9,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+namespace bc = boost::container;
+
 RGWRESTConn::RGWRESTConn(CephContext *_cct, RGWSI_Zone *zone_svc,
                          const string& _remote_id,
                          const list<string>& remote_endpoints,
@@ -138,7 +140,7 @@ int RGWRESTConn::put_obj_send_init(rgw_obj& obj, const rgw_http_param_pair *extr
 }
 
 int RGWRESTConn::put_obj_async(const rgw_user& uid, rgw_obj& obj, uint64_t obj_size,
-                               map<string, bufferlist>& attrs, bool send,
+                               bc::flat_map<string, bufferlist>& attrs, bool send,
                                RGWRESTStreamS3PutObj **req)
 {
   string url;
@@ -148,7 +150,7 @@ int RGWRESTConn::put_obj_async(const rgw_user& uid, rgw_obj& obj, uint64_t obj_s
 
   param_vec_t params;
   populate_params(params, &uid, self_zone_group);
-  RGWRESTStreamS3PutObj *wr = new RGWRESTStreamS3PutObj(cct, "PUT", url, NULL, &params, host_style);
+  auto wr = new RGWRESTStreamS3PutObj(cct, "PUT", url, NULL, &params, host_style);
   ret = wr->put_obj_init(key, obj, obj_size, attrs, send);
   if (ret < 0) {
     delete wr;

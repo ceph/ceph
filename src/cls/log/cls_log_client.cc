@@ -10,7 +10,7 @@ using namespace librados;
 
 
 
-void cls_log_add(librados::ObjectWriteOperation& op, list<cls_log_entry>& entries, bool monotonic_inc)
+void cls_log_add(librados::ObjectWriteOperation& op, vector<cls_log_entry>& entries, bool monotonic_inc)
 {
   bufferlist in;
   cls_log_add_op call;
@@ -18,6 +18,14 @@ void cls_log_add(librados::ObjectWriteOperation& op, list<cls_log_entry>& entrie
             std::back_inserter(call.entries));
   encode(call, in);
   op.exec("log", "add", in);
+}
+
+void cls_log_add(librados::ObjectWriteOperation& op, list<cls_log_entry>& entries, bool monotonic_inc)
+{
+  std::vector<cls_log_entry> e;
+  std::move(entries.begin(), entries.end(),
+            std::back_inserter(e));
+  cls_log_add(op, e, monotonic_inc);
 }
 
 void cls_log_add(librados::ObjectWriteOperation& op, cls_log_entry& entry)

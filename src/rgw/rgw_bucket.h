@@ -44,7 +44,7 @@ extern void rgw_parse_url_bucket(const string& bucket,
 
 struct RGWBucketCompleteInfo {
   RGWBucketInfo info;
-  map<string, bufferlist> attrs;
+  boost::container::flat_map<string, bufferlist> attrs;
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
@@ -52,14 +52,16 @@ struct RGWBucketCompleteInfo {
 
 class RGWBucketEntryMetadataObject : public RGWMetadataObject {
   RGWBucketEntryPoint ep;
-  map<string, bufferlist> attrs;
+  boost::container::flat_map<string, bufferlist> attrs;
 public:
   RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, const obj_version& v, real_time m) : ep(_ep) {
     objv = v;
     mtime = m;
     set_pattrs (&attrs);
   }
-  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep, const obj_version& v, real_time m, std::map<string, bufferlist>&& _attrs) :
+  RGWBucketEntryMetadataObject(RGWBucketEntryPoint& _ep,
+			       const obj_version& v, real_time m,
+			       boost::container::flat_map<string, bufferlist>&& _attrs) :
     ep(_ep), attrs(std::move(_attrs)) {
     objv = v;
     mtime = m;
@@ -74,7 +76,7 @@ public:
     return ep;
   }
 
-  map<string, bufferlist>& get_attrs() {
+  boost::container::flat_map<string, bufferlist>& get_attrs() {
     return attrs;
   }
 };
@@ -109,7 +111,7 @@ public:
  */
 class RGWUserBuckets
 {
-  std::map<std::string, RGWBucketEnt> buckets;
+  boost::container::flat_map<std::string, RGWBucketEnt> buckets;
 
 public:
   RGWUserBuckets() = default;
@@ -129,8 +131,7 @@ public:
    * Check if the user owns a bucket by the given name.
    */
   bool owns(string& name) {
-    map<string, RGWBucketEnt>::iterator iter;
-    iter = buckets.find(name);
+    auto iter = buckets.find(name);
     return (iter != buckets.end());
   }
 
@@ -145,8 +146,7 @@ public:
    * Remove a bucket from the user's list by name.
    */
   void remove(const string& name) {
-    map<string, RGWBucketEnt>::iterator iter;
-    iter = buckets.find(name);
+    auto iter = buckets.find(name);
     if (iter != buckets.end()) {
       buckets.erase(iter);
     }
@@ -155,7 +155,9 @@ public:
   /**
    * Get the user's buckets as a map.
    */
-  map<string, RGWBucketEnt>& get_buckets() { return buckets; }
+  boost::container::flat_map<string, RGWBucketEnt>& get_buckets() {
+    return buckets;
+  }
 
   /**
    * Cleanup data structure
@@ -328,7 +330,7 @@ class RGWBucket
 public:
   RGWBucket() : store(NULL), handle(NULL), failure(false) {}
   int init(rgw::sal::RGWRadosStore *storage, RGWBucketAdminOpState& op_state, optional_yield y,
-              std::string *err_msg = NULL, map<string, bufferlist> *pattrs = NULL);
+	   std::string *err_msg = NULL, boost::container::flat_map<string, bufferlist> *pattrs = NULL);
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
               RGWFormatterFlusher& flusher, std::string *err_msg = NULL);
@@ -345,7 +347,7 @@ public:
 
   int remove(RGWBucketAdminOpState& op_state, optional_yield y, bool bypass_gc = false, bool keep_index_consistent = true, std::string *err_msg = NULL);
   int link(RGWBucketAdminOpState& op_state, optional_yield y,
-           map<string, bufferlist>& attrs, std::string *err_msg = NULL);
+           boost::container::flat_map<string, bufferlist>& attrs, std::string *err_msg = NULL);
   int chown(RGWBucketAdminOpState& op_state, const string& marker,
             optional_yield y, std::string *err_msg = NULL);
   int unlink(RGWBucketAdminOpState& op_state, optional_yield y, std::string *err_msg = NULL);
@@ -354,7 +356,7 @@ public:
   int remove_object(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int policy_bl_to_stream(bufferlist& bl, ostream& o);
   int get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolicy& policy, optional_yield y);
-  int sync(RGWBucketAdminOpState& op_state, map<string, bufferlist> *attrs, std::string *err_msg = NULL);
+  int sync(RGWBucketAdminOpState& op_state, boost::container::flat_map<string, bufferlist> *attrs, std::string *err_msg = NULL);
 
   void clear_failure() { failure = false; }
 
@@ -382,7 +384,7 @@ public:
   static int remove_object(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state);
   static int info(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher);
   static int limit_check(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state,
-			 const std::list<std::string>& user_ids,
+			 const std::vector<std::string>& user_ids,
 			 RGWFormatterFlusher& flusher,
 			 bool warnings_only = false);
   static int set_quota(rgw::sal::RGWRadosStore *store, RGWBucketAdminOpState& op_state);
@@ -568,9 +570,9 @@ public:
 
 struct rgw_ep_info {
   RGWBucketEntryPoint &ep;
-  map<std::string, buffer::list>& attrs;
+  boost::container::flat_map<string, bufferlist>& attrs;
   RGWObjVersionTracker ep_objv;
-  rgw_ep_info(RGWBucketEntryPoint &ep, map<string, bufferlist>& attrs)
+  rgw_ep_info(RGWBucketEntryPoint &ep, boost::container::flat_map<string, bufferlist>& attrs)
     : ep(ep), attrs(attrs) {}
 };
 
@@ -594,7 +596,7 @@ class RGWBucketCtl
   RGWSI_Bucket_BE_Handler bucket_be_handler; /* bucket backend handler */
   RGWSI_BucketInstance_BE_Handler bi_be_handler; /* bucket instance backend handler */
 
-  int call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f);
+  boost::system::error_code call(std::function<boost::system::error_code(RGWSI_Bucket_X_Ctx& ctx)> f);
   
 public:
   RGWBucketCtl(RGWSI_Zone *zone_svc,
@@ -609,7 +611,7 @@ public:
     struct GetParams {
       RGWObjVersionTracker *objv_tracker{nullptr};
       real_time *mtime{nullptr};
-      map<string, bufferlist> *attrs{nullptr};
+      boost::container::flat_map<string, bufferlist> *attrs{nullptr};
       rgw_cache_entry_info *cache_info{nullptr};
       boost::optional<obj_version> refresh_version;
       std::optional<RGWSI_MetaBackend_CtxParams> bectx_params;
@@ -626,7 +628,7 @@ public:
         return *this;
       }
 
-      GetParams& set_attrs(map<string, bufferlist> *_attrs) {
+      GetParams& set_attrs(boost::container::flat_map<string, bufferlist> *_attrs) {
         attrs = _attrs;
         return *this;
       }
@@ -651,7 +653,7 @@ public:
       RGWObjVersionTracker *objv_tracker{nullptr};
       ceph::real_time mtime;
       bool exclusive{false};
-      map<string, bufferlist> *attrs{nullptr};
+      boost::container::flat_map<string, bufferlist> *attrs{nullptr};
 
       PutParams() {}
 
@@ -670,7 +672,7 @@ public:
         return *this;
       }
 
-      PutParams& set_attrs(map<string, bufferlist> *_attrs) {
+      PutParams& set_attrs(boost::container::flat_map<string, bufferlist> *_attrs) {
         attrs = _attrs;
         return *this;
       }
@@ -691,7 +693,7 @@ public:
   struct BucketInstance {
     struct GetParams {
       real_time *mtime{nullptr};
-      map<string, bufferlist> *attrs{nullptr};
+      boost::container::flat_map<string, bufferlist> *attrs{nullptr};
       rgw_cache_entry_info *cache_info{nullptr};
       boost::optional<obj_version> refresh_version;
       RGWObjVersionTracker *objv_tracker{nullptr};
@@ -704,7 +706,7 @@ public:
         return *this;
       }
 
-      GetParams& set_attrs(map<string, bufferlist> *_attrs) {
+      GetParams& set_attrs(boost::container::flat_map<string, bufferlist> *_attrs) {
         attrs = _attrs;
         return *this;
       }
@@ -735,7 +737,7 @@ public:
                                                    nullptr: orig_info was not found (new bucket instance */
       ceph::real_time mtime;
       bool exclusive{false};
-      map<string, bufferlist> *attrs{nullptr};
+      boost::container::flat_map<string, bufferlist> *attrs{nullptr};
       RGWObjVersionTracker *objv_tracker{nullptr};
 
       PutParams() {}
@@ -755,7 +757,7 @@ public:
         return *this;
       }
 
-      PutParams& set_attrs(map<string, bufferlist> *_attrs) {
+      PutParams& set_attrs(boost::container::flat_map<string, bufferlist> *_attrs) {
         attrs = _attrs;
         return *this;
       }
@@ -819,7 +821,7 @@ public:
 
 
   int set_bucket_instance_attrs(RGWBucketInfo& bucket_info,
-                                map<string, bufferlist>& attrs,
+                                boost::container::flat_map<string, bufferlist>& attrs,
                                 RGWObjVersionTracker *objv_tracker,
                                 optional_yield y);
 
@@ -843,8 +845,8 @@ public:
   int set_acl(ACLOwner& owner, rgw_bucket& bucket,
               RGWBucketInfo& bucket_info, bufferlist& bl, optional_yield y);
 
-  int read_buckets_stats(map<string, RGWBucketEnt>& m,
-                         optional_yield y);
+  int read_buckets_stats(boost::container::flat_map<string, RGWBucketEnt>& m,
+			 optional_yield y);
 
   int read_bucket_stats(const rgw_bucket& bucket,
                         RGWBucketEnt *result,
@@ -870,7 +872,7 @@ private:
                                   RGWBucketInfo *orig_info,
                                   bool exclusive, real_time mtime,
                                   obj_version *pep_objv,
-                                  map<string, bufferlist> *pattrs,
+                                  boost::container::flat_map<string, bufferlist> *pattrs,
                                   bool create_entry_point,
 				  optional_yield);
 

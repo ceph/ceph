@@ -75,7 +75,7 @@ private:
 
   rgw::sal::RGWRadosStore *store;
   RGWBucketInfo bucket_info;
-  std::map<string, bufferlist> bucket_attrs;
+  boost::container::flat_map<string, bufferlist> bucket_attrs;
 
   RGWBucketReshardLock reshard_lock;
   RGWBucketReshardLock* outer_reshard_lock;
@@ -98,13 +98,13 @@ public:
   // manage
   RGWBucketReshard(rgw::sal::RGWRadosStore *_store,
 		   const RGWBucketInfo& _bucket_info,
-                   const std::map<string, bufferlist>& _bucket_attrs,
+                   const boost::container::flat_map<string, bufferlist>& _bucket_attrs,
 		   RGWBucketReshardLock* _outer_reshard_lock);
   int execute(int num_shards, int max_op_entries,
               bool verbose = false, ostream *out = nullptr,
               Formatter *formatter = nullptr,
 	      RGWReshard *reshard_log = nullptr);
-  int get_status(std::list<cls_rgw_bucket_instance_entry> *status);
+  int get_status(std::vector<cls_rgw_bucket_instance_entry> *status);
   int cancel();
   static int clear_resharding(rgw::sal::RGWRadosStore* store,
 			      const RGWBucketInfo& bucket_info);

@@ -16,7 +16,7 @@ void RGWSI_SyncModules::init(RGWSI_Zone *zone_svc)
   rgw_register_sync_modules(sync_modules_manager);
 }
 
-int RGWSI_SyncModules::do_start()
+boost::system::error_code RGWSI_SyncModules::do_start()
 {
   auto& zone_public_config = svc.zone->get_zone();
 
@@ -29,16 +29,15 @@ int RGWSI_SyncModules::do_start()
         << sync_modules_manager->get_registered_module_names()
         << dendl;
     }
-    return ret;
+    return ceph::to_error_code(ret);
   }
 
   ldout(cct, 20) << "started sync module instance, tier type = " << zone_public_config.tier_type << dendl;
 
-  return 0;
+  return {};
 }
 
 RGWSI_SyncModules::~RGWSI_SyncModules()
 {
   delete sync_modules_manager;
 }
-

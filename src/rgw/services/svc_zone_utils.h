@@ -24,12 +24,13 @@ class RGWSI_ZoneUtils : public RGWServiceInstance
     zone_svc = _zone_svc;
   }
 
-  int do_start() override;
+  boost::system::error_code do_start() override;
 
   void init_unique_trans_id_deps();
 
 public:
-  RGWSI_ZoneUtils(CephContext *cct): RGWServiceInstance(cct) {}
+  RGWSI_ZoneUtils(CephContext *cct, boost::asio::io_context& ioc)
+    : RGWServiceInstance(cct, ioc) {}
 
   string gen_host_id();
   string unique_id(uint64_t unique_num);

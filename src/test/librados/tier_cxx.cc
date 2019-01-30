@@ -22,10 +22,19 @@
 #include <sstream>
 #include <string>
 
-using namespace librados;
 using std::map;
 using std::ostringstream;
 using std::string;
+
+using librados::NObjectIterator;
+using librados::ObjectReadOperation;
+using librados::ObjectWriteOperation;
+using librados::all_nspaces;
+using librados::IoCtx;
+using librados::snap_set_t;
+using librados::Rados;
+using librados::completion_t;
+using librados::AioCompletion;
 
 typedef RadosTestPP LibRadosTierPP;
 typedef RadosTestECPP LibRadosTierECPP;

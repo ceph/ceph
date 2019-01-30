@@ -450,12 +450,12 @@ struct es_obj_metadata {
   rgw_obj_key key;
   ceph::real_time mtime;
   uint64_t size;
-  map<string, bufferlist> attrs;
+  boost::container::flat_map<string, bufferlist> attrs;
   uint64_t versioned_epoch;
 
   es_obj_metadata(CephContext *_cct, ElasticConfigRef _es_conf, const RGWBucketInfo& _bucket_info,
                   const rgw_obj_key& _key, ceph::real_time& _mtime, uint64_t _size,
-                  map<string, bufferlist>& _attrs, uint64_t _versioned_epoch) : cct(_cct), es_conf(_es_conf), bucket_info(_bucket_info), key(_key),
+                  boost::container::flat_map<string, bufferlist>& _attrs, uint64_t _versioned_epoch) : cct(_cct), es_conf(_es_conf), bucket_info(_bucket_info), key(_key),
                                                      mtime(_mtime), size(_size), attrs(std::move(_attrs)), versioned_epoch(_versioned_epoch) {}
 
   void dump(Formatter *f) const {

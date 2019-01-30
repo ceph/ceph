@@ -1,5 +1,3 @@
-
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
@@ -29,7 +27,7 @@
 using RGWSI_MBOTP_Handler_Module  = RGWSI_MBSObj_Handler_Module;
 using RGWSI_MetaBackend_Handler_OTP  = RGWSI_MetaBackend_Handler_SObj;
 
-using otp_devices_list_t = list<rados::cls::otp::otp_info_t>;
+using otp_devices_list_t = std::vector<rados::cls::otp::otp_info_t>;
 
 struct RGWSI_MBOTP_GetParams : public RGWSI_MetaBackend::GetParams {
   otp_devices_list_t *pdevices{nullptr};
@@ -52,7 +50,7 @@ public:
     Context_OTP(RGWSI_SysObj*_sysobj_svc) : RGWSI_MetaBackend_SObj::Context_SObj(_sysobj_svc, nullptr) {}
   };
 
-  RGWSI_MetaBackend_OTP(CephContext *cct);
+  RGWSI_MetaBackend_OTP(CephContext *cct, boost::asio::io_context& ioc);
   virtual ~RGWSI_MetaBackend_OTP();
 
   RGWSI_MetaBackend::Type get_type() {
@@ -71,14 +69,15 @@ public:
   RGWSI_MetaBackend_Handler *alloc_be_handler() override;
   RGWSI_MetaBackend::Context *alloc_ctx() override;
 
-  int call_with_get_params(ceph::real_time *pmtime, std::function<int(RGWSI_MetaBackend::GetParams&)> cb) override;
+  boost::system::error_code call_with_get_params(ceph::real_time *pmtime,
+                                                 std::function<boost::system::error_code(RGWSI_MetaBackend::GetParams&)> cb) override;
 
-  int get_entry(RGWSI_MetaBackend::Context *ctx,
+  boost::system::error_code get_entry(RGWSI_MetaBackend::Context *ctx,
                 const string& key,
                 RGWSI_MetaBackend::GetParams& _params,
                 RGWObjVersionTracker *objv_tracker,
                 optional_yield y);
-  int put_entry(RGWSI_MetaBackend::Context *ctx,
+  boost::system::error_code put_entry(RGWSI_MetaBackend::Context *ctx,
                 const string& key,
                 RGWSI_MetaBackend::PutParams& _params,
                 RGWObjVersionTracker *objv_tracker,

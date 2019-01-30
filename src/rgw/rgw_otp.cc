@@ -74,10 +74,11 @@ class RGWOTPMetadataHandler : public RGWOTPMetadataHandlerBase {
   }
 
   int call(std::function<int(RGWSI_OTP_BE_Ctx& ctx)> f) {
-    return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-      RGWSI_OTP_BE_Ctx ctx(op->ctx());
-      return f(ctx);
-    });
+    return ceph::from_error_code(
+      be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
+			 RGWSI_OTP_BE_Ctx ctx(op->ctx());
+			 return ceph::to_error_code(f(ctx));
+		       }));
   }
 
   RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) override {
@@ -99,14 +100,14 @@ class RGWOTPMetadataHandler : public RGWOTPMetadataHandlerBase {
     
     RGWSI_OTP_BE_Ctx be_ctx(op->ctx());
 
-    int ret = svc.otp->read_all(be_ctx,
+    auto ret = svc.otp->read_all(be_ctx,
                                 entry,
                                 &mdo->get_devs(),
                                 &mdo->get_mtime(),
                                 &objv_tracker,
                                 y);
-    if (ret < 0) {
-      return ret;
+    if (ret) {
+      return ceph::from_error_code(ret);
     }
 
     mdo->objv = objv_tracker.read_version;
@@ -124,12 +125,13 @@ class RGWOTPMetadataHandler : public RGWOTPMetadataHandlerBase {
 
     RGWSI_OTP_BE_Ctx be_ctx(op->ctx());
 
-    int ret = svc.otp->store_all(be_ctx,
-                                 entry,
-                                 obj->devices,
-                                 obj->mtime,
-                                 &objv_tracker,
-                                 y);
+    int ret = ceph::from_error_code(
+      svc.otp->store_all(be_ctx,
+			 entry,
+			 obj->devices,
+			 obj->mtime,
+			 &objv_tracker,
+			 y));
     if (ret < 0) {
       return ret;
     }
@@ -143,10 +145,11 @@ class RGWOTPMetadataHandler : public RGWOTPMetadataHandlerBase {
 
     RGWSI_OTP_BE_Ctx be_ctx(op->ctx());
 
-    return svc.otp->remove_all(be_ctx,
-                               entry,
-                               &objv_tracker,
-                               y);
+    return ceph::from_error_code(
+      svc.otp->remove_all(be_ctx,
+			  entry,
+			  &objv_tracker,
+			  y));
   }
 
 public:
@@ -176,17 +179,26 @@ int RGWOTPCtl::read_all(const rgw_user& uid,
                         const GetParams& params)
 {
   info->uid = uid;
-  return meta_handler->call([&](RGWSI_OTP_BE_Ctx& ctx) {
-    return svc.otp->read_all(ctx, uid, &info->devices, params.mtime, params.objv_tracker, y);
-  });
+  return meta_handler->call(
+    [&](RGWSI_OTP_BE_Ctx& ctx) {
+      return ceph::from_error_code(
+	svc.otp->read_all(ctx, uid, &info->devices,
+			  params.mtime,
+			  params.objv_tracker, y));
+    });
 }
 
 int RGWOTPCtl::store_all(const RGWOTPInfo& info,
                          optional_yield y,
                          const PutParams& params)
 {
-  return meta_handler->call([&](RGWSI_OTP_BE_Ctx& ctx) {
-    return svc.otp->store_all(ctx, info.uid, info.devices, params.mtime, params.objv_tracker, y);
+  return meta_handler->call(
+    [&](RGWSI_OTP_BE_Ctx& ctx) {
+      return ceph::from_error_code(svc.otp->store_all(ctx, info.uid,
+						      info.devices,
+						      params.mtime,
+						      params.objv_tracker,
+						      y));
   });
 }
 
@@ -194,8 +206,10 @@ int RGWOTPCtl::remove_all(const rgw_user& uid,
                           optional_yield y,
                           const RemoveParams& params)
 {
-  return meta_handler->call([&](RGWSI_OTP_BE_Ctx& ctx) {
-    return svc.otp->remove_all(ctx, uid, params.objv_tracker, y);
+  return meta_handler->call(
+    [&](RGWSI_OTP_BE_Ctx& ctx) {
+      return ceph::from_error_code(
+	svc.otp->remove_all(ctx, uid, params.objv_tracker, y));
   });
 }
 

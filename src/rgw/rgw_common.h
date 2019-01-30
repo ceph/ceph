@@ -36,6 +36,7 @@
 #include "cls/user/cls_user_types.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "include/rados/librados.hpp"
+#include "include/RADOS/RADOS.hpp"
 
 namespace ceph {
   class Formatter;
@@ -1341,6 +1342,9 @@ struct RGWObjVersionTracker {
   void prepare_op_for_read(librados::ObjectReadOperation *op);
   void prepare_op_for_write(librados::ObjectWriteOperation *op);
 
+  void prepare_op_for_read(RADOS::ReadOp& op);
+  void prepare_op_for_write(RADOS::WriteOp& op);
+
   void apply_write() {
     read_version = write_version;
     write_version = obj_version();
@@ -2025,7 +2029,7 @@ struct req_state : DoutPrefixProvider {
   RGWBucketInfo bucket_info;
   obj_version bucket_ep_objv;
   real_time bucket_mtime;
-  std::map<std::string, ceph::bufferlist> bucket_attrs;
+  boost::container::flat_map<std::string, ceph::bufferlist> bucket_attrs;
   bool bucket_exists{false};
   rgw_placement_rule dest_placement;
 

@@ -14,49 +14,36 @@
  */
 
 #include <type_traits>
-#include "include/rados/librados.hpp"
-#include "librados/librados_asio.h"
-
 #include "rgw_aio.h"
 
 namespace rgw {
 
 namespace {
 
-void cb(librados::completion_t, void* arg);
-
 struct state {
   Aio* aio;
-  librados::AioCompletion* c;
+  AioResult& r;
+
+  void operator ()(boost::system::error_code ec) {
+    static_assert(sizeof(AioResult::user_data) >= sizeof(state));
+    static_assert(std::is_trivially_destructible_v<state>);
+    r.result = ec;
+    aio->put(r);
+  }
 
   state(Aio* aio, AioResult& r)
-    : aio(aio),
-      c(librados::Rados::aio_create_completion(&r, &cb)) {}
+    : aio(aio), r(r) {}
 };
 
-void cb(librados::completion_t, void* arg) {
-  static_assert(sizeof(AioResult::user_data) >= sizeof(state));
-  static_assert(std::is_trivially_destructible_v<state>);
-  auto& r = *(static_cast<AioResult*>(arg));
-  auto s = reinterpret_cast<state*>(&r.user_data);
-  r.result = s->c->get_return_value();
-  s->c->release();
-  s->aio->put(r);
-}
 
 template <typename Op>
 Aio::OpFunc aio_abstract(Op&& op) {
   return [op = std::move(op)] (Aio* aio, AioResult& r) mutable {
-      constexpr bool read = std::is_same_v<std::decay_t<Op>, librados::ObjectReadOperation>;
       auto s = new (&r.user_data) state(aio, r);
-      if constexpr (read) {
-        r.result = r.obj.aio_operate(s->c, &op, &r.data);
+      if constexpr (std::is_same_v<std::decay_t<Op>, RADOS::ReadOp>) {
+	r.obj.aio_operate(std::move(op), &r.data, std::ref(*s));
       } else {
-        r.result = r.obj.aio_operate(s->c, &op);
-      }
-      if (r.result < 0) {
-        s->c->release();
-        aio->put(r);
+	r.obj.aio_operate(std::move(op), std::ref(*s));
       }
     };
 }
@@ -65,15 +52,9 @@ Aio::OpFunc aio_abstract(Op&& op) {
 struct Handler {
   Aio* throttle = nullptr;
   AioResult& r;
-  // write callback
-  void operator()(boost::system::error_code ec) const {
-    r.result = -ec.value();
-    throttle->put(r);
-  }
-  // read callback
-  void operator()(boost::system::error_code ec, bufferlist bl) const {
-    r.result = -ec.value();
-    r.data = std::move(bl);
+  // callback
+  void operator()(boost::system::error_code ec) {
+    r.result = ec;
     throttle->put(r);
   }
 };
@@ -81,42 +62,44 @@ struct Handler {
 template <typename Op>
 Aio::OpFunc aio_abstract(Op&& op, boost::asio::io_context& context,
                          spawn::yield_context yield) {
-  return [op = std::move(op), &context, yield] (Aio* aio, AioResult& r) mutable {
+  return [op = std::move(op), yield] (Aio* aio, AioResult& r) mutable {
       // arrange for the completion Handler to run on the yield_context's strand
       // executor so it can safely call back into Aio without locking
       using namespace boost::asio;
       async_completion<spawn::yield_context, void()> init(yield);
       auto ex = get_associated_executor(init.completion_handler);
 
-      auto& ref = r.obj.get_ref();
-      librados::async_operate(context, ref.pool.ioctx(), ref.obj.oid, &op, 0,
-                              bind_executor(ex, Handler{aio, r}));
+      if constexpr (std::is_same_v<std::decay_t<Op>, RADOS::ReadOp>) {
+	r.obj.aio_operate(std::move(op), &r.data, bind_executor(ex, Handler{aio, r}));
+      } else {
+	r.obj.aio_operate(std::move(op), bind_executor(ex, Handler{aio, r}));
+      }
     };
 }
 #endif // HAVE_BOOST_CONTEXT
 
 template <typename Op>
 Aio::OpFunc aio_abstract(Op&& op, optional_yield y) {
-  static_assert(std::is_base_of_v<librados::ObjectOperation, std::decay_t<Op>>);
+  static_assert(std::is_base_of_v<RADOS::Op, std::decay_t<Op>>);
   static_assert(!std::is_lvalue_reference_v<Op>);
   static_assert(!std::is_const_v<Op>);
 #ifdef HAVE_BOOST_CONTEXT
   if (y) {
-    return aio_abstract(std::forward<Op>(op), y.get_io_context(),
+    return aio_abstract(std::move(op), y.get_io_context(),
                         y.get_yield_context());
   }
 #endif
-  return aio_abstract(std::forward<Op>(op));
+  return aio_abstract(std::move(op));
 }
 
 } // anonymous namespace
 
-Aio::OpFunc Aio::librados_op(librados::ObjectReadOperation&& op,
-                             optional_yield y) {
+Aio::OpFunc Aio::rados_op(RADOS::ReadOp&& op,
+			  optional_yield y) {
   return aio_abstract(std::move(op), y);
 }
-Aio::OpFunc Aio::librados_op(librados::ObjectWriteOperation&& op,
-                             optional_yield y) {
+Aio::OpFunc Aio::rados_op(RADOS::WriteOp&& op,
+			  optional_yield y) {
   return aio_abstract(std::move(op), y);
 }
 

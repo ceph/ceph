@@ -1,4 +1,3 @@
-
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
@@ -17,6 +16,7 @@
 
 #pragma once
 
+#include "include/expected.hpp"
 #include "rgw/rgw_service.h"
 #include "rgw/rgw_tools.h"
 
@@ -26,7 +26,6 @@
 struct rgw_bucket_dir_header;
 
 class RGWSI_BILog_RADOS;
-class RGWSI_DataLog_RADOS;
 
 #define RGW_NO_SHARD -1
 
@@ -37,29 +36,34 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
 {
   friend class RGWSI_BILog_RADOS;
 
-  int open_pool(const rgw_pool& pool,
-                RGWSI_RADOS::Pool *index_pool,
-                bool mostly_omap);
+  tl::expected<RGWSI_RADOS::Pool, boost::system::error_code>
+  open_bucket_index_pool(const RGWBucketInfo& bucket_info,
+                         optional_yield y);
 
-  int open_bucket_index_pool(const RGWBucketInfo& bucket_info,
-                            RGWSI_RADOS::Pool *index_pool);
-  int open_bucket_index_base(const RGWBucketInfo& bucket_info,
-                             RGWSI_RADOS::Pool *index_pool,
-                             string *bucket_oid_base);
+  tl::expected<std::pair<RGWSI_RADOS::Pool, std::string>,
+	       boost::system::error_code>
+  open_bucket_index_base(const RGWBucketInfo& bucket_info,
+                         optional_yield y);
 
-  void get_bucket_index_object(const string& bucket_oid_base,
-                               uint32_t num_shards,
-                               int shard_id,
-                               string *bucket_obj);
-  int get_bucket_index_object(const string& bucket_oid_base, const string& obj_key,
-                              uint32_t num_shards, RGWBucketInfo::BIShardsHashType hash_type,
-                              string *bucket_obj, int *shard_id);
 
-  int cls_bucket_head(const RGWBucketInfo& bucket_info,
-                      int shard_id,
-                      vector<rgw_bucket_dir_header> *headers,
-                      map<int, string> *bucket_instance_ids,
-                      optional_yield y);
+public:
+  tl::expected<rgw_pool, boost::system::error_code>
+  get_bucket_index_pool(const RGWBucketInfo& bucket_info);
+  std::string get_bucket_index_object(const string& bucket_oid_base,
+                                      uint32_t num_shards,
+                                      int shard_id);
+  tl::expected<std::pair<std::string, int>, boost::system::error_code>
+  get_bucket_index_object(const string& bucket_oid_base,
+                          const string& obj_key,
+                          uint32_t num_shards,
+                          RGWBucketInfo::BIShardsHashType hash_type);
+
+private:
+  tl::expected<std::pair<std::vector<rgw_bucket_dir_header>,
+			 boost::container::flat_map<int, string>>,
+	       boost::system::error_code>
+  cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id,
+		  optional_yield y);
 
 public:
 
@@ -67,15 +71,15 @@ public:
     RGWSI_Zone *zone{nullptr};
     RGWSI_RADOS *rados{nullptr};
     RGWSI_BILog_RADOS *bilog{nullptr};
-    RGWSI_DataLog_RADOS *datalog_rados{nullptr};
+    RGWDataChangesLog* datalog_rados{nullptr};
   } svc;
 
-  RGWSI_BucketIndex_RADOS(CephContext *cct);
+  RGWSI_BucketIndex_RADOS(CephContext *cct, boost::asio::io_context& ioc);
 
   void init(RGWSI_Zone *zone_svc,
             RGWSI_RADOS *rados_svc,
             RGWSI_BILog_RADOS *bilog_svc,
-            RGWSI_DataLog_RADOS *datalog_rados_svc);
+            RGWDataChangesLog *_datalog_rados);
 
   static int shards_max() {
     return RGW_SHARDS_PRIME_1;
@@ -92,40 +96,46 @@ public:
     return rgw_shards_mod(sid2, num_shards);
   }
 
-  int init_index(RGWBucketInfo& bucket_info);
-  int clean_index(RGWBucketInfo& bucket_info);
+  boost::system::error_code init_index(RGWBucketInfo& bucket_info,
+				       optional_yield y) override;
+  boost::system::error_code clean_index(RGWBucketInfo& bucket_info,
+					optional_yield y) override;
 
 
   /* RADOS specific */
 
-  int read_stats(const RGWBucketInfo& bucket_info,
-                 RGWBucketEnt *stats,
-                 optional_yield y) override;
+  tl::expected<RGWBucketEnt, boost::system::error_code>
+  read_stats(const RGWBucketInfo& bucket_info, optional_yield y) override;
 
-  int get_reshard_status(const RGWBucketInfo& bucket_info,
-                         std::list<cls_rgw_bucket_instance_entry> *status);
+  tl::expected<std::vector<cls_rgw_bucket_instance_entry>,
+	       boost::system::error_code>
+  get_reshard_status(const RGWBucketInfo& bucket_info, optional_yield y);
 
-  int handle_overwrite(const RGWBucketInfo& info,
-                       const RGWBucketInfo& orig_info) override;
+  boost::system::error_code
+  handle_overwrite(const RGWBucketInfo& info,
+		   const RGWBucketInfo& orig_info,
+		   optional_yield y) override;
 
-  int open_bucket_index_shard(const RGWBucketInfo& bucket_info,
-                              const string& obj_key,
-                              RGWSI_RADOS::Obj *bucket_obj,
-                              int *shard_id);
+  tl::expected<std::pair<RGWSI_RADOS::Obj, int>, boost::system::error_code>
+  open_bucket_index_shard(const RGWBucketInfo& bucket_info,
+                          const string& obj_key,
+                          optional_yield y);
 
-  int open_bucket_index_shard(const RGWBucketInfo& bucket_info,
-                              int shard_id,
-                              RGWSI_RADOS::Obj *bucket_obj);
+  tl::expected<RGWSI_RADOS::Obj, boost::system::error_code>
+  open_bucket_index_shard(const RGWBucketInfo& bucket_info,
+                          int shard_id,
+                          optional_yield y);
 
-  int open_bucket_index(const RGWBucketInfo& bucket_info,
-                        RGWSI_RADOS::Pool *index_pool,
-                        string *bucket_oid);
 
-  int open_bucket_index(const RGWBucketInfo& bucket_info,
-                        std::optional<int> shard_id,
-                        RGWSI_RADOS::Pool *index_pool,
-                        map<int, string> *bucket_objs,
-                        map<int, string> *bucket_instance_ids);
+  tl::expected<std::pair<RGWSI_RADOS::Pool, std::string>,
+	       boost::system::error_code>
+  open_bucket_index(const RGWBucketInfo& bucket_info, optional_yield y);
+
+  tl::expected<std::tuple<RGWSI_RADOS::Pool,
+			  boost::container::flat_map<int, string>,
+			  boost::container::flat_map<int, string>>,
+	       boost::system::error_code>
+  open_bucket_index(const RGWBucketInfo& bucket_info,
+                    std::optional<int> _shard_id,
+                    optional_yield y);
 };
-
-

@@ -1,15 +1,15 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <string_view>
 #include "svc_tier_rados.h"
 
-const std::string MP_META_SUFFIX = ".meta";
 
-bool MultipartMetaFilter::filter(const string& name, string& key) {
+bool MultipartMetaFilter(std::string_view name, std::string_view key) {
   // the length of the suffix so we can skip past it
-  static const size_t MP_META_SUFFIX_LEN = MP_META_SUFFIX.length();
+  static constexpr auto MP_META_SUFFIX_LEN = MP_META_SUFFIX.length();
 
-  size_t len = name.size();
+  auto len = name.size();
 
   // make sure there's room for suffix plus at least one more
   // character
@@ -17,16 +17,14 @@ bool MultipartMetaFilter::filter(const string& name, string& key) {
     return false;
 
   size_t pos = name.find(MP_META_SUFFIX, len - MP_META_SUFFIX_LEN);
-  if (pos == string::npos)
+  if (pos == std::string_view::npos)
     return false;
 
   pos = name.rfind('.', pos - 1);
-  if (pos == string::npos)
+  if (pos == std::string_view::npos)
     return false;
 
   key = name.substr(0, pos);
 
   return true;
 }
-
-

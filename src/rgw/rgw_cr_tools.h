@@ -42,7 +42,7 @@ struct rgw_get_bucket_info_params {
 struct rgw_get_bucket_info_result {
   ceph::real_time mtime;
   RGWBucketInfo bucket_info;
-  map<string, bufferlist> attrs;
+  boost::container::flat_map<string, bufferlist> attrs;
 };
 
 using RGWGetBucketInfoCR = RGWSimpleAsyncCR<rgw_get_bucket_info_params, rgw_get_bucket_info_result>;
@@ -59,7 +59,7 @@ struct rgw_object_simple_put_params {
   RGWDataAccess::BucketRef bucket;
   rgw_obj_key key;
   bufferlist data;
-  map<string, bufferlist> attrs;
+  boost::container::flat_map<string, bufferlist> attrs;
   std::optional<string> user_data;
 };
 
@@ -68,7 +68,7 @@ using RGWObjectSimplePutCR = RGWSimpleWriteOnlyAsyncCR<rgw_object_simple_put_par
 
 struct rgw_bucket_lifecycle_config_params {
   RGWBucketInfo bucket_info;
-  map<string, bufferlist> bucket_attrs;
+  boost::container::flat_map<string, bufferlist> bucket_attrs;
   RGWLifecycleConfiguration config;
 };
 

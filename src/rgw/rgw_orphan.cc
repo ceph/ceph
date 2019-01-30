@@ -388,14 +388,14 @@ int RGWOrphanSearch::build_buckets_instance_index()
   uint64_t total = 0;
 
   do {
-    list<string> keys;
+    std::vector<string> keys;
     ret = store->ctl()->meta.mgr->list_keys_next(handle, max, keys, &truncated);
     if (ret < 0) {
       lderr(store->ctx()) << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << dendl;
       return ret;
     }
 
-    for (list<string>::iterator iter = keys.begin(); iter != keys.end(); ++iter) {
+    for (auto iter = keys.begin(); iter != keys.end(); ++iter) {
       ++total;
       ldout(store->ctx(), 10) << "bucket_instance=" << *iter << " total=" << total << dendl;
       int shard = orphan_shard(*iter);

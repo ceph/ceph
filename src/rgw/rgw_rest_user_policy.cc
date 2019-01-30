@@ -18,6 +18,8 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+namespace bc = boost::container;
+
 using rgw::IAM::Policy;
 
 void RGWRestUserPolicy::dump(Formatter *f) const
@@ -124,7 +126,7 @@ void RGWPutUserPolicy::execute()
     return;
   }
 
-  map<string, bufferlist> uattrs;
+  bc::flat_map<string, bufferlist> uattrs;
   op_ret = store->ctl()->user->get_attrs_by_uid(user_id, &uattrs, s->yield);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_ENTITY;
@@ -192,7 +194,7 @@ void RGWGetUserPolicy::execute()
   }
 
   rgw_user user_id(user_name);
-  map<string, bufferlist> uattrs;
+  bc::flat_map<string, bufferlist> uattrs;
   op_ret = store->ctl()->user->get_attrs_by_uid(user_id, &uattrs, s->yield);
   if (op_ret == -ENOENT) {
     ldout(s->cct, 0) << "ERROR: attrs not found for user" << user_name << dendl;
@@ -256,7 +258,7 @@ void RGWListUserPolicies::execute()
   }
 
   rgw_user user_id(user_name);
-  map<string, bufferlist> uattrs;
+  bc::flat_map<string, bufferlist> uattrs;
   op_ret = store->ctl()->user->get_attrs_by_uid(user_id, &uattrs, s->yield);
   if (op_ret == -ENOENT) {
     ldout(s->cct, 0) << "ERROR: attrs not found for user" << user_name << dendl;
@@ -318,7 +320,7 @@ void RGWDeleteUserPolicy::execute()
   }
 
   RGWUserInfo info;
-  map<string, bufferlist> uattrs;
+  bc::flat_map<string, bufferlist> uattrs;
   rgw_user user_id(user_name);
   op_ret = store->ctl()->user->get_info_by_uid(user_id, &info, s->yield,
                                             RGWUserCtl::GetParams()
