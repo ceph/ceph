@@ -1,3 +1,5 @@
+@import '../../../../defaults';
+
 .info-card-popover-cluster-status {
   max-width: 23vw;
   max-height: 20vh;
@@ -9,18 +11,18 @@
   }
 }
 
-@media (max-width: 1199px) {
+@media (max-width: $screen-md-max) {
   .info-card-popover-cluster-status {
     max-width: 31vw;
   }
 }
 
-@media (max-width: 991px) {
+@media (max-width: $screen-sm-max) {
   .info-card-popover-cluster-status {
     max-width: 46vw;
   }
 }
-@media (max-width: 767px) {
+@media (max-width: $screen-xs-max) {
   .info-card-popover-cluster-status {
     max-width: 83vw;
   }

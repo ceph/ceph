@@ -96,7 +96,7 @@ $logs-text-font-size: $card-font-min-size;
   }
 }
 
-@media (max-width: 1199px) {
+@media (max-width: $screen-md-max) {
   .card-medium {
     min-height: $card-medium-height * 1.5;
   }
@@ -106,7 +106,7 @@ $logs-text-font-size: $card-font-min-size;
   }
 }
 
-@media (max-width: 991px) {
+@media (max-width: $screen-sm-max) {
   .card {
     min-height: $card-height * 2;
   }
@@ -116,7 +116,7 @@ $logs-text-font-size: $card-font-min-size;
   }
 }
 
-@media (max-width: 991px) and (min-width: 768px) {
+@media (max-width: $screen-sm-max) and (min-width: $screen-sm-min) {
   .card-medium {
     min-height: $card-medium-height * 2.2;
   }
