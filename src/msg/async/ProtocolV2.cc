@@ -90,9 +90,6 @@ static void alloc_aligned_buffer(bufferlist &data, unsigned len, unsigned off) {
  * Protocol V2 Frame Structures
  **/
 
-// this type is used to specify the position of the signature within a frame
-struct signature_t {};
-
 template <class T>
 struct Frame {
 protected:
@@ -131,9 +128,6 @@ protected:
   // this tuple is only used when decoding values from a payload buffer
   std::tuple<Args...> _values;
 
-  // required only when signing and encryting payload, otherwise is null
-  ProtocolV2 *protocol;
-
   template <typename T>
   inline void _encode_payload_each(T &t) {
     if constexpr (std::is_same<T, bufferlist const>()) {
@@ -145,9 +139,6 @@ protected:
       }
     } else if constexpr (std::is_same<T, ceph_msg_header2 const>()) {
       this->payload.append((char *)&t, sizeof(t));
-    } else if constexpr (std::is_same<T, signature_t const>()) {
-      ceph_assert(protocol);
-      protocol->authencrypt_payload(this->payload);
     } else {
       encode(t, this->payload, -1ll);
     }
@@ -170,9 +161,6 @@ protected:
       auto ptr = ti.get_current_ptr();
       ti.advance(sizeof(T));
       t = *(T *)ptr.raw_c_str();
-    } else if constexpr (std::is_same<T, signature_t>()) {
-      // ignore signature_t marker, at this point signature was already
-      // verified in the ctor of SignedEncryptedFrame
     } else {
       decode(t, ti);
     }
@@ -190,20 +178,14 @@ protected:
   }
 
 public:
-  PayloadFrame(const Args &... args) : protocol(nullptr) {
+  PayloadFrame(const Args &... args) {
     (_encode_payload_each(args), ...);
   }
 
-  PayloadFrame(ProtocolV2 *protocol, const Args &... args)
-      : protocol(protocol) {
-    (_encode_payload_each(args), ...);
-  }
-
-  PayloadFrame(char *payload, uint32_t length) : protocol(nullptr) {
+  PayloadFrame() = default;
+  PayloadFrame(char *payload, uint32_t length) {
     this->decode_frame(payload, length);
   }
-
-  PayloadFrame(ProtocolV2 *protocol) : protocol(protocol) {}
 
   void decode_payload(bufferlist::const_iterator &ti) {
     _decode_payload(ti, std::index_sequence_for<Args...>());
@@ -266,13 +248,15 @@ struct AuthDoneFrame
 };
 
 template <class T, typename... Args>
-struct SignedEncryptedFrame : public PayloadFrame<T, Args..., signature_t> {
+struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
   SignedEncryptedFrame(ProtocolV2 *protocol, const Args &... args)
-      : PayloadFrame<T, Args..., signature_t>(protocol, args...,
-                                              signature_t()) {}
+      : PayloadFrame<T, Args...>(args...) {
+    ceph_assert(protocol);
+    protocol->authencrypt_payload(this->payload);
+  }
 
   SignedEncryptedFrame(ProtocolV2 *protocol, char *payload, uint32_t length)
-      : PayloadFrame<T, Args..., signature_t>(protocol) {
+      : PayloadFrame<T, Args...>() {
     ceph_assert(protocol);
     protocol->authdecrypt_payload(payload, length);
     this->decode_frame(payload, length);
