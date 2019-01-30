@@ -43,61 +43,6 @@ class AuthClientHandler;
 class KeyRing;
 class RotatingKeyRing;
 
-struct MonClientPinger : public Dispatcher {
-
-  Mutex lock;
-  Cond ping_recvd_cond;
-  string *result;
-  bool done;
-
-  MonClientPinger(CephContext *cct_, string *res_) :
-    Dispatcher(cct_),
-    lock("MonClientPinger::lock"),
-    result(res_),
-    done(false)
-  { }
-
-  int wait_for_reply(double timeout = 0.0) {
-    utime_t until = ceph_clock_now();
-    until += (timeout > 0 ? timeout : cct->_conf->client_mount_timeout);
-    done = false;
-
-    int ret = 0;
-    while (!done) {
-      ret = ping_recvd_cond.WaitUntil(lock, until);
-      if (ret == ETIMEDOUT)
-        break;
-    }
-    return ret;
-  }
-
-  bool ms_dispatch(Message *m) override {
-    std::lock_guard l(lock);
-    if (m->get_type() != CEPH_MSG_PING)
-      return false;
-
-    bufferlist &payload = m->get_payload();
-    if (result && payload.length() > 0) {
-      auto p = std::cbegin(payload);
-      decode(*result, p);
-    }
-    done = true;
-    ping_recvd_cond.SignalAll();
-    m->put();
-    return true;
-  }
-  bool ms_handle_reset(Connection *con) override {
-    std::lock_guard l(lock);
-    done = true;
-    ping_recvd_cond.SignalAll();
-    return true;
-  }
-  void ms_handle_remote_reset(Connection *con) override {}
-  bool ms_handle_refused(Connection *con) override {
-    return false;
-  }
-};
-
 class MonConnection {
 public:
   MonConnection(CephContext *cct,
@@ -182,6 +127,108 @@ private:
 
   AuthRegistry *auth_registry;
 };
+
+
+struct MonClientPinger : public Dispatcher,
+			 public AuthClient {
+
+  Mutex lock;
+  Cond ping_recvd_cond;
+  string *result;
+  bool done;
+  RotatingKeyRing *keyring;
+  std::unique_ptr<MonConnection> mc;
+
+  MonClientPinger(CephContext *cct_,
+		  RotatingKeyRing *keyring,
+		  string *res_) :
+    Dispatcher(cct_),
+    lock("MonClientPinger::lock"),
+    result(res_),
+    done(false),
+    keyring(keyring)
+  { }
+
+  int wait_for_reply(double timeout = 0.0) {
+    utime_t until = ceph_clock_now();
+    until += (timeout > 0 ? timeout : cct->_conf->client_mount_timeout);
+    done = false;
+
+    int ret = 0;
+    while (!done) {
+      ret = ping_recvd_cond.WaitUntil(lock, until);
+      if (ret == ETIMEDOUT)
+        break;
+    }
+    return ret;
+  }
+
+  bool ms_dispatch(Message *m) override {
+    std::lock_guard l(lock);
+    if (m->get_type() != CEPH_MSG_PING)
+      return false;
+
+    bufferlist &payload = m->get_payload();
+    if (result && payload.length() > 0) {
+      auto p = std::cbegin(payload);
+      decode(*result, p);
+    }
+    done = true;
+    ping_recvd_cond.SignalAll();
+    m->put();
+    return true;
+  }
+  bool ms_handle_reset(Connection *con) override {
+    std::lock_guard l(lock);
+    done = true;
+    ping_recvd_cond.SignalAll();
+    return true;
+  }
+  void ms_handle_remote_reset(Connection *con) override {}
+  bool ms_handle_refused(Connection *con) override {
+    return false;
+  }
+
+  // AuthClient
+  int get_auth_request(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    uint32_t *auth_method,
+    std::vector<uint32_t> *preferred_modes,
+    bufferlist *bl) override {
+    return mc->get_auth_request(auth_method, preferred_modes, bl,
+				cct->_conf->name, 0, keyring);
+  }
+  int handle_auth_reply_more(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    const bufferlist& bl,
+    bufferlist *reply) override {
+    return mc->handle_auth_reply_more(auth_meta, bl, reply);
+  }
+  int handle_auth_done(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    uint64_t global_id,
+    uint32_t con_mode,
+    const bufferlist& bl,
+    CryptoKey *session_key,
+    std::string *connection_secret) override {
+    return mc->handle_auth_done(auth_meta, global_id, bl,
+				session_key, connection_secret);
+  }
+  int handle_auth_bad_method(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    uint32_t old_auth_method,
+    int result,
+    const std::vector<uint32_t>& allowed_methods,
+    const std::vector<uint32_t>& allowed_modes) override {
+    return mc->handle_auth_bad_method(old_auth_method, result,
+				      allowed_methods, allowed_modes);
+  }
+};
+
 
 class MonClient : public Dispatcher,
 		  public AuthClient,
