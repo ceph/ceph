@@ -1,3 +1,5 @@
+.. _msgr2:
+
 msgr2 protocol
 ==============
 
