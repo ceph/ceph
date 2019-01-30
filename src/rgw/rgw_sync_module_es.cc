@@ -208,6 +208,10 @@ struct ElasticConfig {
     return index_path;
   }
 
+  map<string, string>& get_request_headers() {
+    return default_headers;
+  }
+
   string get_obj_path(const RGWBucketInfo& bucket_info, const rgw_obj_key& key) {
     return index_path +  "/object/" + url_encode(bucket_info.bucket.bucket_id + ":" + key.name + ":" + (key.instance.empty() ? "null" : key.instance));
   }
@@ -821,6 +825,10 @@ public:
   string get_index_path() {
     return conf->get_index_path();
   }
+
+  map<string, string>& get_request_headers() {
+    return conf->get_request_headers();
+  }
 };
 
 RGWElasticSyncModuleInstance::RGWElasticSyncModuleInstance(CephContext *cct, const JSONFormattable& config)
@@ -840,6 +848,10 @@ RGWRESTConn *RGWElasticSyncModuleInstance::get_rest_conn()
 
 string RGWElasticSyncModuleInstance::get_index_path() {
   return data_handler->get_index_path();
+}
+
+map<string, string>& RGWElasticSyncModuleInstance::get_request_headers() {
+  return data_handler->get_request_headers();
 }
 
 RGWRESTMgr *RGWElasticSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMgr *orig) {
