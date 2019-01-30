@@ -296,6 +296,11 @@ seastar::future<> OSD::ms_handle_remote_reset(ceph::net::ConnectionRef conn)
   return seastar::now();
 }
 
+seastar::lw_shared_ptr<OSDMap> OSD::get_map() const
+{
+  return osdmap;
+}
+
 seastar::future<seastar::lw_shared_ptr<OSDMap>> OSD::get_map(epoch_t e)
 {
   // TODO: use LRU cache for managing osdmap, fallback to disk if we have to
