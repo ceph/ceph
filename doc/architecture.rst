@@ -676,7 +676,7 @@ encoding function splits the content into three data chunks simply by dividing
 the content in three: the first contains ``ABC``, the second ``DEF`` and the
 last ``GHI``. The content will be padded if the content length is not a multiple
 of ``K``. The function also creates two coding chunks: the fourth with ``YXY``
-and the fifth with ``GQC``. Each chunk is stored in an OSD in the acting set.
+and the fifth with ``QGC``. Each chunk is stored in an OSD in the acting set.
 The chunks are stored in objects that have the same name (**NYAN**) but reside
 on different OSDs. The order in which the chunks were created must be preserved
 and is stored as an attribute of the object (``shard_t``), in addition to its
