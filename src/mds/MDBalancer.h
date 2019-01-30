@@ -78,6 +78,7 @@ public:
 private:
   bool bal_fragment_dirs;
   int64_t bal_fragment_interval;
+  static const unsigned int AUTH_TREES_THRESHOLD = 5;
 
   typedef struct {
     std::map<mds_rank_t, double> targets;
