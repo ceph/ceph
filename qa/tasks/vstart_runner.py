@@ -23,6 +23,11 @@ Alternative usage:
     # If you wish to run a named test case, pass it as an argument:
     python ~/git/ceph/qa/tasks/vstart_runner.py tasks.cephfs.test_data_scan
 
+    # Also, you can create the cluster once and then run named test cases against it:
+    python ~/git/ceph/qa/tasks/vstart_runner.py --create-cluster-only
+    python ~/git/ceph/qa/tasks/vstart_runner.py tasks.mgr.dashboard.test_health
+    python ~/git/ceph/qa/tasks/vstart_runner.py tasks.mgr.dashboard.test_rgw
+
 """
 
 from StringIO import StringIO
@@ -878,6 +883,7 @@ def exec_test():
     # Parse arguments
     interactive_on_error = False
     create_cluster = False
+    create_cluster_only = False
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
@@ -887,6 +893,8 @@ def exec_test():
             interactive_on_error = True
         elif f == "--create":
             create_cluster = True
+        elif f == "--create-cluster-only":
+            create_cluster_only = True
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
@@ -917,7 +925,7 @@ def exec_test():
             os.kill(pid, signal.SIGKILL)
 
     # Fire up the Ceph cluster if the user requested it
-    if create_cluster:
+    if create_cluster or create_cluster_only:
         log.info("Creating cluster with {0} MDS daemons".format(
             max_required_mds))
         remote.run([os.path.join(SRC_PREFIX, "stop.sh")], check_status=False)
@@ -939,6 +947,9 @@ def exec_test():
         # Wait for OSD to come up so that subsequent injectargs etc will
         # definitely succeed
         LocalCephCluster(LocalContext()).mon_manager.wait_for_all_osds_up(timeout=30)
+
+    if create_cluster_only:
+        return
 
     # List of client mounts, sufficient to run the selected tests
     clients = [i.__str__() for i in range(0, max_required_clients)]
