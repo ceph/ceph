@@ -6117,6 +6117,7 @@ int Monitor::handle_auth_request(
 	dout(10) << __func__ << " entity " << entity_name << " method "
 		 << auth_method << " not among supported "
 		 << auth_cluster_required.get_supported_set() << dendl;
+	delete auth_handler;
 	return -EOPNOTSUPP;
       }
     } else {
@@ -6124,6 +6125,7 @@ int Monitor::handle_auth_request(
 	dout(10) << __func__ << " entity " << entity_name << " method "
 		 << auth_method << " not among supported "
 		 << auth_cluster_required.get_supported_set() << dendl;
+	delete auth_handler;
 	return -EOPNOTSUPP;
       }
     }
@@ -6136,6 +6138,7 @@ int Monitor::handle_auth_request(
       con->peer_global_id = authmon()->assign_global_id(false);
       if (!con->peer_global_id) {
 	dout(1) << __func__ << " failed to assign global_id" << dendl;
+	delete auth_handler;
 	return -EBUSY;
       }
       dout(10) << __func__ << "  assigned global_id " << con->peer_global_id
