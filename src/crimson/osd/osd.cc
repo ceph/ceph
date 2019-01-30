@@ -549,8 +549,3 @@ seastar::future<> OSD::send_beacon()
                                     min_last_epoch_clean);
   return monc.send_message(m);
 }
-
-ghobject_t OSD::get_osdmap_pobject_name(epoch_t epoch) {
-  string name = fmt::format("osdmap.{}", epoch);
-  return ghobject_t(hobject_t(sobject_t(object_t(name), 0)));
-}

@@ -78,8 +78,6 @@ public:
   seastar::future<> start();
   seastar::future<> stop();
 
-  static ghobject_t get_osdmap_pobject_name(epoch_t epoch);
-
 private:
   seastar::future<> start_boot();
   seastar::future<> _preboot(version_t newest_osdmap, version_t oldest_osdmap);
