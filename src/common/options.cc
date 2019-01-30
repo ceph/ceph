@@ -7094,6 +7094,16 @@ std::vector<Option> get_mds_options() {
     Option("mds_max_retries_on_remount_failure", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
      .set_default(5)
      .set_description("number of consecutive failed remount attempts for invalidating kernel dcache after which client would abort."),
+
+    Option("mds_dump_cache_threshold_formatter", Option::TYPE_SIZE, Option::LEVEL_DEV)
+     .set_default(1_G)
+     .set_description("threshold for cache usage to disallow \"dump cache\" operation to formatter")
+     .set_long_description("Disallow MDS from dumping caches to formatter via \"dump cache\" command if cache usage exceeds this threshold."),
+
+    Option("mds_dump_cache_threshold_file", Option::TYPE_SIZE, Option::LEVEL_DEV)
+     .set_default(0)
+     .set_description("threshold for cache usage to disallow \"dump cache\" operation to file")
+     .set_long_description("Disallow MDS from dumping caches to file via \"dump cache\" command if cache usage exceeds this threshold."),
   });
 }
 

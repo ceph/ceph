@@ -12298,6 +12298,32 @@ int MDCache::dump_cache(Formatter *f)
 int MDCache::dump_cache(std::string_view fn, Formatter *f)
 {
   int r = 0;
+
+  // dumping large caches may cause mds to hang or worse get killed.
+  // so, disallow the dump if the cache size exceeds the configured
+  // threshold, which is 1G for formatter and unlimited for file (note
+  // that this can be jacked up by the admin... and is nothing but foot
+  // shooting, but the option itself is for devs and hence dangerous to
+  // tune). TODO: remove this when fixed.
+  uint64_t threshold = f ?
+    g_conf->get_val<Option::size_t>("mds_dump_cache_threshold_formatter") :
+    g_conf->get_val<Option::size_t>("mds_dump_cache_threshold_file");
+
+  if (threshold && cache_size() > threshold) {
+    if (f) {
+      std::stringstream ss;
+      ss << "cache usage exceeds dump threshold";
+      f->open_object_section("result");
+      f->dump_string("error", ss.str());
+      f->close_section();
+    } else {
+      derr << "cache usage exceeds dump threshold" << dendl;
+      r = -EINVAL;
+    }
+    return r;
+  }
+
+  r = 0;
   int fd = -1;
 
   if (f) {
