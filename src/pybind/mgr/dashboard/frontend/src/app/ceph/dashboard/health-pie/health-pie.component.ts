@@ -126,11 +126,11 @@ export class HealthPieComponent implements OnChanges, OnInit {
     this.chartConfig.colors = [
       {
         backgroundColor: [
-          HealthPieColor.MEDIUM_LIGHT_SHADE_PINK_RED,
-          HealthPieColor.MEDIUM_DARK_SHADE_CYAN_BLUE,
-          HealthPieColor.LIGHT_SHADE_BROWN,
-          HealthPieColor.SHADE_GREEN_CYAN,
-          HealthPieColor.MEDIUM_DARK_SHADE_BLUE_MAGENTA
+          HealthPieColor.DEFAULT_RED,
+          HealthPieColor.DEFAULT_BLUE,
+          HealthPieColor.DEFAULT_ORANGE,
+          HealthPieColor.DEFAULT_GREEN,
+          HealthPieColor.DEFAULT_MAGENTA
         ]
       }
     ];
