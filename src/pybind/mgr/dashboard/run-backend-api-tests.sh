@@ -30,7 +30,7 @@ setup_teuthology() {
     CURR_DIR=`pwd`
     BUILD_DIR="$CURR_DIR/../../../../build"
 
-    read -r -d '' TEUTHOLOFY_PY_REQS <<EOF
+    read -r -d '' TEUTHOLOGY_PY_REQS <<EOF
 apache-libcloud==2.2.1 \
 asn1crypto==0.22.0 \
 bcrypt==3.1.4 \
@@ -70,7 +70,7 @@ EOF
 
     virtualenv --python=/usr/bin/python venv
     source venv/bin/activate
-    eval pip install $TEUTHOLOFY_PY_REQS
+    eval pip install $TEUTHOLOGY_PY_REQS
     pip install -r $CURR_DIR/requirements.txt
     deactivate
 
@@ -92,8 +92,6 @@ EOF
 #    export COVERAGE_ENABLED=true
 #    export COVERAGE_FILE=.coverage.mgr.dashboard
 
-    MGR=2 RGW=1 ../src/vstart.sh -n -d
-    sleep 10
     cd $CURR_DIR
 }
 
@@ -102,21 +100,28 @@ run_teuthology_tests() {
     find ../src/pybind/mgr/dashboard/ -name '*.pyc' -exec rm -f {} \;
     source $TEMP_DIR/venv/bin/activate
 
-
-    if [ "$#" -gt 0 ]; then
-      TEST_CASES=""
+    OPTIONS=''
+    TEST_CASES=''
+    if [[ "$@" == '' || "$@" == '--create-cluster-only' ]]; then
+      TEST_CASES=`for i in \`ls $BUILD_DIR/../qa/tasks/mgr/dashboard/test_*\`; do F=$(basename $i); M="${F%.*}"; echo -n " tasks.mgr.dashboard.$M"; done`
+      TEST_CASES="tasks.mgr.test_dashboard $TEST_CASES"
+      if [[ "$@" == '--create-cluster-only' ]]; then
+        OPTIONS="$@"
+      fi
+    else
       for t in "$@"; do
         TEST_CASES="$TEST_CASES $t"
       done
-    else
-      TEST_CASES=`for i in \`ls $BUILD_DIR/../qa/tasks/mgr/dashboard/test_*\`; do F=$(basename $i); M="${F%.*}"; echo -n " tasks.mgr.dashboard.$M"; done`
-      TEST_CASES="tasks.mgr.test_dashboard $TEST_CASES"
     fi
 
     export PATH=$BUILD_DIR/bin:$PATH
     export LD_LIBRARY_PATH=$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$BUILD_DIR/lib
     export PYTHONPATH=$TEMP_DIR/teuthology:$BUILD_DIR/../qa:$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$BUILD_DIR/../src/pybind
-    eval python ../qa/tasks/vstart_runner.py $TEST_CASES
+    if [[ -z "$RGW" ]]; then
+        export RGW=1
+    fi
+
+    eval python ../qa/tasks/vstart_runner.py $OPTIONS $TEST_CASES
 
     deactivate
     cd $CURR_DIR
@@ -141,6 +146,7 @@ cleanup_teuthology() {
 }
 
 setup_teuthology
+run_teuthology_tests --create-cluster-only
 
 # End sourced section
 return 2> /dev/null
