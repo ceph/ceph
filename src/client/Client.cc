@@ -2643,13 +2643,14 @@ void Client::handle_fs_map_user(MFSMapUser *m)
 
 void Client::handle_mds_map(MMDSMap* m)
 {
+  mds_gid_t old_inc, new_inc;
   if (m->get_epoch() <= mdsmap->get_epoch()) {
     ldout(cct, 1) << __func__ << " epoch " << m->get_epoch()
                   << " is identical to or older than our "
                   << mdsmap->get_epoch() << dendl;
     m->put();
     return;
-  }  
+  }
 
   ldout(cct, 1) << __func__ << " epoch " << m->get_epoch() << dendl;
 
@@ -2695,6 +2696,13 @@ void Client::handle_mds_map(MMDSMap* m)
     if (!mdsmap->is_up(mds)) {
       session->con->mark_down();
     } else if (mdsmap->get_inst(mds) != session->inst) {
+      old_inc = oldmap->get_incarnation(mds);
+      new_inc = mdsmap->get_incarnation(mds);
+      if (old_inc != new_inc) {
+        ldout(cct, 1) << "mds incarnation changed from "
+		      << old_inc << " to " << new_inc << dendl;
+        oldstate = MDSMap::STATE_NULL;
+      }
       session->con->mark_down();
       session->inst = mdsmap->get_inst(mds);
       // When new MDS starts to take over, notify kernel to trim unused entries
@@ -2705,6 +2713,11 @@ void Client::handle_mds_map(MMDSMap* m)
       continue;  // no change
     
     session->mds_state = newstate;
+    if (old_inc != new_inc && newstate > MDSMap::STATE_RECONNECT) {
+      // missed reconnect close the session so that it can be reopened
+      _closed_mds_session(session);
+      continue;
+    }
     if (newstate == MDSMap::STATE_RECONNECT) {
       session->con = messenger->get_connection(session->inst);
       send_reconnect(session);
