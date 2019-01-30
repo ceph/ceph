@@ -2582,6 +2582,42 @@ int set_size(
   return 0;
 }
 
+int clear_data_digest(ObjectStore *store, coll_t coll, ghobject_t &ghobj) {
+  auto ch = store->open_collection(coll);
+  bufferlist attr;
+  int r = store->getattr(ch, ghobj, OI_ATTR, attr);
+  if (r < 0) {
+    cerr << "Error getting attr on : " << make_pair(coll, ghobj) << ", "
+       << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  object_info_t oi;
+  auto bp = attr.cbegin();
+  try {
+    decode(oi, bp);
+  } catch (...) {
+    r = -EINVAL;
+    cerr << "Error getting attr on : " << make_pair(coll, ghobj) << ", "
+         << cpp_strerror(r) << std::endl;
+    return r;
+  }
+  if (!dry_run) {
+    attr.clear();
+    oi.clear_data_digest();
+    encode(oi, attr, -1); /* fixme: using full features */
+    ObjectStore::Transaction t;
+    t.setattr(coll, ghobj, OI_ATTR, attr);
+    auto ch = store->open_collection(coll);
+    r = store->queue_transaction(ch, std::move(t));
+    if (r < 0) {
+      cerr << "Error writing object info: " << make_pair(coll, ghobj) << ", "
+         << cpp_strerror(r) << std::endl;
+      return r;
+    }
+  }
+  return 0;
+}
+
 int clear_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj,
                   string arg)
 {
@@ -2911,6 +2947,7 @@ void usage(po::options_description &desc)
     cerr << "ceph-objectstore-tool ... <object> remove|removeall" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> dump" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> set-size" << std::endl;
+    cerr << "ceph-objectstore-tool ... <object> clear-data-digest" << std::endl;
     cerr << "ceph-objectstore-tool ... <object> remove-clone-metadata <cloneid>" << std::endl;
     cerr << std::endl;
     cerr << "<object> can be a JSON object description as displayed" << std::endl;
@@ -4002,6 +4039,9 @@ int main(int argc, char **argv)
 	uint64_t size = atoll(arg1.c_str());
 	ret = set_size(fs, coll, ghobj, size, formatter, corrupt);
 	goto out;
+      } else if (objcmd == "clear-data-digest") {
+        ret = clear_data_digest(fs, coll, ghobj);
+        goto out;
       } else if (objcmd == "clear-snapset") {
         // UNDOCUMENTED: For testing zap SnapSet
         // IGNORE extra args since not in usage anyway
