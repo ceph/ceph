@@ -20,7 +20,7 @@ class PoolId(RestController):
 
         if not pool:
             response.status = 500
-            return {'message': 'Failed to identify the pool id "%d"' % self.pool_id}
+            return {'message': 'Failed to identify the pool id "{}"'.format(self.pool_id)}
 
         # pgp_num is called pg_placement_num, deal with that
         if 'pg_placement_num' in pool:
@@ -44,13 +44,13 @@ class PoolId(RestController):
         pool = context.instance.get_pool_by_id(self.pool_id)
         if not pool:
             response.status = 500
-            return {'message': 'Failed to identify the pool id "%d"' % self.pool_id}
+            return {'message': 'Failed to identify the pool id "{}"'.format(self.pool_id)}
 
         # Check for invalid pool args
         invalid = common.invalid_pool_args(args)
         if invalid:
             response.status = 500
-            return {'message': 'Invalid arguments found: "%s"' % str(invalid)}
+            return {'message': 'Invalid arguments found: "{}"'.format(invalid)}
 
         # Schedule the update request
         return context.instance.submit_request(common.pool_update_commands(pool['pool_name'], args), **kwargs)
@@ -66,7 +66,7 @@ class PoolId(RestController):
 
         if not pool:
             response.status = 500
-            return {'message': 'Failed to identify the pool id "%d"' % self.pool_id}
+            return {'message': 'Failed to identify the pool id "{}"'.format(self.pool_id)}
 
         return context.instance.submit_request([[{
             'prefix': 'osd pool delete',
@@ -125,7 +125,7 @@ class Pool(RestController):
         invalid = common.invalid_pool_args(args)
         if invalid:
             response.status = 500
-            return {'message': 'Invalid arguments found: "%s"' % str(invalid)}
+            return {'message': 'Invalid arguments found: "{}"'.format(invalid)}
 
         # Schedule the creation and update requests
         return context.instance.submit_request(
