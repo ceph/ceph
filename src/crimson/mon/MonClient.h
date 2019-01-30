@@ -71,6 +71,9 @@ public:
   seastar::future<> start();
   seastar::future<> stop();
 
+  const uuid_d& get_fsid() const {
+    return monmap.fsid;
+  }
   get_version_t get_version(const std::string& map);
   command_result_t run_command(const std::vector<std::string>& cmd,
 			       const bufferlist& bl);
