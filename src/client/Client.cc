@@ -9199,6 +9199,8 @@ int Client::_preadv_pwritev(int fd, const struct iovec *iov, unsigned iovcnt, in
 int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 	                const struct iovec *iov, int iovcnt)
 {
+  uint64_t fpos = 0;
+
   if ((uint64_t)(offset+size) > mdsmap->get_max_filesize()) //too large!
     return -EFBIG;
 
@@ -9237,7 +9239,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
       }
     }
     offset = f->pos;
-    f->pos = offset+size;
+    fpos = offset+size;
     unlock_fh_pos(f);
   }
 
@@ -9372,6 +9374,11 @@ success:
   lat -= start;
   logger->tinc(l_c_wrlat, lat);
 
+  if (fpos) {
+    lock_fh_pos(f);
+    f->pos = fpos;
+    unlock_fh_pos(f);
+  }
   totalwritten = size;
   r = (int64_t)totalwritten;
 
