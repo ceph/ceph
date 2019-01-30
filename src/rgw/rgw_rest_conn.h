@@ -49,6 +49,18 @@ inline param_vec_t make_param_list(const rgw_http_param_pair* pp)
   return params;
 }
 
+inline param_vec_t make_param_list(const map<string, string> *pp)
+{
+  param_vec_t params;
+  if (!pp) {
+    return params;
+  }
+  for (auto iter : *pp) {
+    params.emplace_back(make_pair(iter.first, iter.second));
+  }
+  return params;
+}
+
 class RGWRESTConn
 {
   CephContext *cct;

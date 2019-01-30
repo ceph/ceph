@@ -74,6 +74,7 @@ class RGWSendRESTResourceCR : public RGWSimpleCoroutine {
   string method;
   string path;
   param_vec_t params;
+  param_vec_t headers;
   T *result;
   S input;
 
@@ -83,9 +84,10 @@ public:
   RGWSendRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                         RGWHTTPManager *_http_manager,
                         const string& _method, const string& _path,
-                        rgw_http_param_pair *_params, S& _input, T *_result)
+                        rgw_http_param_pair *_params, map<string, string> *_attrs,
+                        S& _input, T *_result)
     : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
-      method(_method), path(_path), params(make_param_list(_params)), result(_result),
+      method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_attrs)), result(_result),
       input(_input)
   {}
 
@@ -95,7 +97,7 @@ public:
 
   int send_request() override {
     auto op = boost::intrusive_ptr<RGWRESTSendResource>(
-        new RGWRESTSendResource(conn, method, path, params, NULL, http_manager));
+        new RGWRESTSendResource(conn, method, path, params, &headers, http_manager));
 
     op->set_user_info((void *)stack);
 
@@ -154,7 +156,7 @@ public:
                         rgw_http_param_pair *_params, S& _input, T *_result)
     : RGWSendRESTResourceCR<S, T>(_cct, _conn, _http_manager,
                             "POST", _path,
-                            _params, _input, _result) {}
+                            _params, nullptr, _input, _result) {}
 };
 
 template <class S, class T>
@@ -166,7 +168,7 @@ public:
                         rgw_http_param_pair *_params, S& _input, T *_result)
     : RGWSendRESTResourceCR<S, T>(_cct, _conn, _http_manager,
                             "PUT", _path,
-                            _params, _input, _result) {}
+                            _params, nullptr, _input, _result) {}
 };
 
 class RGWDeleteRESTResourceCR : public RGWSimpleCoroutine {
