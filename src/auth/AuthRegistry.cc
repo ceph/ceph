@@ -120,6 +120,12 @@ void AuthRegistry::_refresh_config()
 		<< " service_methods " << service_methods
 		<< " client_methods " << client_methods
 		<< dendl;
+  ldout(cct,10) << __func__ << " mon_cluster_modes " << mon_cluster_modes
+		<< " mon_service_mdoes " << mon_service_modes
+		<< " cluster_modes " << cluster_modes
+		<< " service_modes " << service_modes
+		<< " client_modes " << client_modes
+		<< dendl;
 
   // if we have no keyring, filter out cephx
   _no_keyring_disabled_cephx = false;
