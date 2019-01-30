@@ -961,6 +961,9 @@ public:
     return adjust_item_weight_in_loc(cct, id, (int)(weight * (float)0x10000), loc);
   }
   void reweight(CephContext *cct);
+  void reweight_bucket(crush_bucket *b,
+		       crush_choose_arg_map& arg_map,
+		       vector<uint32_t> *weightv);
 
   int adjust_subtree_weight(CephContext *cct, int id, int weight);
   int adjust_subtree_weightf(CephContext *cct, int id, float weight) {
@@ -1199,6 +1202,8 @@ private:
    **/
   int detach_bucket(CephContext *cct, int item);
 
+  int get_new_bucket_id();
+
 public:
   int get_max_buckets() const {
     if (!crush) return -EINVAL;
@@ -1298,6 +1303,15 @@ public:
   int rebuild_roots_with_classes();
   /* remove unused roots generated for class devices */
   int trim_roots_with_class();
+
+  int reclassify(
+    CephContext *cct,
+    ostream& out,
+    const map<string,string>& classify_root,
+    const map<string,pair<string,string>>& classify_bucket
+    );
+
+  int set_subtree_class(const string& name, const string& class_name);
 
   void start_choose_profile() {
     free(crush->choose_tries);
