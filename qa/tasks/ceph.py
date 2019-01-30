@@ -419,7 +419,7 @@ def cephfs_setup(ctx, config):
     yield
 
 
-def get_mons(roles, ips,
+def get_mons(roles, ips, cluster_name,
              mon_bind_msgr2=False,
              mon_bind_addrvec=False):
     """
@@ -429,7 +429,7 @@ def get_mons(roles, ips,
     v1_ports = {}
     v2_ports = {}
     mon_id = 0
-    is_mon = teuthology.is_type('mon')
+    is_mon = teuthology.is_type('mon', cluster_name)
     for idx, roles in enumerate(roles):
         for role in roles:
             if not is_mon(role):
@@ -528,8 +528,8 @@ def create_simple_monmap(ctx, remote, conf, mons,
     ]
     if mon_bind_addrvec:
         args.extend(['--enable-all-features'])
-    for (name, addr) in addresses:
-        n = name[4:]
+    for (role, addr) in addresses:
+        _, _, n = teuthology.split_role(role)
         if mon_bind_addrvec and (',' in addr or 'v' in addr or ':' in addr):
             args.extend(('--addv', n, addr))
         else:
@@ -652,7 +652,7 @@ def cluster(ctx, config):
     ips = [host for (host, port) in
            (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
     mons = get_mons(
-        roles, ips,
+        roles, ips, cluster_name,
         mon_bind_msgr2=config.get('mon_bind_msgr2'),
         mon_bind_addrvec=config.get('mon_bind_addrvec'),
         )
