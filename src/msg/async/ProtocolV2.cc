@@ -373,9 +373,19 @@ struct AckFrame : public SignedEncryptedFrame<AckFrame, uint64_t> {
 // Body is processed almost independently with the sole junction point
 // being the `extra_payload_len` passed to get_buffer().
 struct MessageHeaderFrame
-    : public SignedEncryptedFrame<MessageHeaderFrame, ceph_msg_header2> {
+    : public PayloadFrame<MessageHeaderFrame, ceph_msg_header2> {
   const ProtocolV2::Tag tag = ProtocolV2::Tag::MESSAGE;
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+
+  MessageHeaderFrame(ProtocolV2 &protocol, const ceph_msg_header2 &msghdr)
+      : PayloadFrame<MessageHeaderFrame, ceph_msg_header2>(msghdr) {
+    protocol.authencrypt_payload(this->payload);
+  }
+
+  MessageHeaderFrame(ProtocolV2 &protocol, char *payload, uint32_t length)
+      : PayloadFrame<MessageHeaderFrame, ceph_msg_header2>() {
+    protocol.authdecrypt_payload(payload, length);
+    this->decode_frame(payload, length);
+  }
 
   inline ceph_msg_header2 &header() { return get_val<0>(); }
 };
