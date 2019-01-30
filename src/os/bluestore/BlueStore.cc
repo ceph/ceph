@@ -11212,6 +11212,8 @@ void BlueStore::_choose_write_options(
 
   dout(20) << __func__ << " prefer csum_order " << wctx->csum_order
            << " target_blob_size 0x" << std::hex << wctx->target_blob_size
+	   << " compress=" << (int)wctx->compress
+	   << " buffered=" << (int)wctx->buffered
            << std::dec << dendl;
 }
 
@@ -12075,6 +12077,11 @@ int BlueStore::_rename(TransContext *txc,
   // Onode in the old slot
   c->onode_map.rename(oldo, old_oid, new_oid, new_okey);
   r = 0;
+
+  // hold a ref to new Onode in old name position, to ensure we don't drop
+  // it from the cache before this txc commits (or else someone may come along
+  // and read newo's metadata via the old name).
+  txc->note_modified_object(oldo);
 
  out:
   dout(10) << __func__ << " " << c->cid << " " << old_oid << " -> "
