@@ -1,4 +1,4 @@
-import { Component, Input, OnChanges, ViewChild } from '@angular/core';
+import { Component, Input, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { TabsetComponent } from 'ngx-bootstrap/tabs';
@@ -12,9 +12,8 @@ import { Permissions } from '../../../shared/models/permissions';
   templateUrl: './pool-details.component.html',
   styleUrls: ['./pool-details.component.scss']
 })
-export class PoolDetailsComponent implements OnChanges {
+export class PoolDetailsComponent {
   cacheTierColumns: Array<CdTableColumn> = [];
-  prevSelectionPool: Number = -1;
 
   @Input()
   selection: CdTableSelection;
@@ -58,16 +57,5 @@ export class PoolDetailsComponent implements OnChanges {
         flexGrow: 2
       }
     ];
-  }
-
-  ngOnChanges() {
-    if (this.tabsetChild) {
-      if (this.prevSelectionPool !== this.selection.first().pool) {
-        this.tabsetChild.tabs[0].active = true;
-        this.prevSelectionPool = this.selection.first().pool;
-      } else {
-        return;
-      }
-    }
   }
 }
