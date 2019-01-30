@@ -9216,13 +9216,6 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   if ((f->mode & CEPH_FILE_MODE_WR) == 0)
     return -EBADF;
 
-  // check quota
-  uint64_t endoff = offset + size;
-  if (endoff > in->size && is_quota_bytes_exceeded(in, endoff - in->size,
-						   f->actor_perms)) {
-    return -EDQUOT;
-  }
-
   // use/adjust fd pos?
   if (offset < 0) {
     lock_fh_pos(f);
@@ -9240,6 +9233,13 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     offset = f->pos;
     fpos = offset+size;
     unlock_fh_pos(f);
+  }
+
+  // check quota
+  uint64_t endoff = offset + size;
+  if (endoff > in->size && is_quota_bytes_exceeded(in, endoff - in->size,
+						   f->actor_perms)) {
+    return -EDQUOT;
   }
 
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
