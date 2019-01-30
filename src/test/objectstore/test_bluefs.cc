@@ -7,6 +7,7 @@
 #include <time.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <random>
 #include <thread>
 #include "global/global_init.h"
 #include "common/ceph_argparse.h"
@@ -33,8 +34,8 @@ string get_temp_bdev(uint64_t size)
 std::unique_ptr<char[]> gen_buffer(uint64_t size)
 {
     std::unique_ptr<char[]> buffer = std::make_unique<char[]>(size);
-    boost::random::random_device rand;
-    rand.generate(buffer.get(), buffer.get() + size);
+    std::independent_bits_engine<std::default_random_engine, CHAR_BIT, unsigned char> e;
+    std::generate(buffer.get(), buffer.get()+size, std::ref(e));
     return buffer;
 }
 

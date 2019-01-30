@@ -185,7 +185,7 @@ void LogMonitor::update_from_paxos(bool *need_bootstrap)
              << "' logging " << p->second.length() << " bytes" << dendl;
     string log_file = channels.get_log_file(p->first);
 
-    int fd = ::open(log_file.c_str(), O_WRONLY|O_APPEND|O_CREAT, 0600);
+    int fd = ::open(log_file.c_str(), O_WRONLY|O_APPEND|O_CREAT|O_CLOEXEC, 0600);
     if (fd < 0) {
       int err = -errno;
       dout(1) << "unable to write to '" << log_file << "' for channel '"
