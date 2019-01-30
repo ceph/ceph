@@ -163,6 +163,7 @@ EXPORT
         self.assertEqual(export.fsal.name, "CEPH")
         self.assertEqual(export.fsal.user_id, "ganesha")
         self.assertEqual(export.fsal.fs_name, "a")
+        self.assertEqual(export.fsal.sec_label_xattr, None)
         self.assertEqual(len(export.clients), 2)
         self.assertEqual(export.clients[0].addresses,
                          ["192.168.0.10", "192.168.1.0/8"])
@@ -234,6 +235,7 @@ EXPORT
         self.assertEqual(export.fsal.name, "CEPH")
         self.assertEqual(export.fsal.user_id, "ganesha")
         self.assertEqual(export.fsal.fs_name, "a")
+        self.assertEqual(export.fsal.sec_label_xattr, None)
         self.assertEqual(len(export.clients), 2)
         self.assertEqual(export.clients[0].addresses,
                          ["192.168.0.10", "192.168.1.0/8"])
@@ -289,7 +291,8 @@ EXPORT
             'fsal': {
                 'name': 'CEPH',
                 'user_id': 'ganesha',
-                'fs_name': 'a'
+                'fs_name': 'a',
+                'sec_label_xattr': None
             }
         })
 
@@ -339,7 +342,8 @@ EXPORT
             'fsal': {
                 'name': 'CEPH',
                 'user_id': 'ganesha',
-                'fs_name': 'a'
+                'fs_name': 'a',
+                'sec_label_xattr': 'security.selinux'
             }
         })
 
@@ -354,6 +358,7 @@ EXPORT
         self.assertEqual(export.fsal.name, "CEPH")
         self.assertEqual(export.fsal.user_id, "ganesha")
         self.assertEqual(export.fsal.fs_name, "a")
+        self.assertEqual(export.fsal.sec_label_xattr, 'security.selinux')
         self.assertEqual(len(export.clients), 2)
         self.assertEqual(export.clients[0].addresses,
                          ["192.168.0.10", "192.168.1.0/8"])
@@ -427,6 +432,7 @@ EXPORT
         self.assertEqual(export.fsal.name, "CEPH")
         self.assertEqual(export.fsal.user_id, "ganesha")
         self.assertEqual(export.fsal.fs_name, "a")
+        self.assertEqual(export.fsal.sec_label_xattr, None)
         self.assertEqual(len(export.clients), 2)
         self.assertEqual(export.clients[0].addresses,
                          ["192.168.0.10", "192.168.1.0/8"])
@@ -614,7 +620,8 @@ EXPORT
             'fsal': {
                 'name': 'CEPH',
                 'user_id': 'fs',
-                'fs_name': None
+                'fs_name': None,
+                'sec_label_xattr': 'security.selinux'
             }
         })
 
@@ -633,6 +640,7 @@ EXPORT
         self.assertEqual(export.fsal.name, "CEPH")
         self.assertEqual(export.fsal.user_id, "fs")
         self.assertEqual(export.fsal.cephx_key, "fs_key")
+        self.assertEqual(export.fsal.sec_label_xattr, "security.selinux")
         self.assertIsNone(export.fsal.fs_name)
         self.assertEqual(len(export.clients), 0)
         self.assertEqual(export.daemons, {"nodeb", "nodea"})
