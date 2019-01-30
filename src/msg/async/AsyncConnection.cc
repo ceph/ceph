@@ -386,7 +386,7 @@ void AsyncConnection::process() {
       ssize_t r = cs.is_connected();
       if (r < 0) {
         ldout(async_msgr->cct, 1) << __func__ << " reconnect failed to "
-				  << target_addr << dendl;
+                                  << target_addr << dendl;
         if (r == -ECONNREFUSED) {
           ldout(async_msgr->cct, 2)
               << __func__ << " connection refused!" << dendl;
@@ -479,6 +479,7 @@ void AsyncConnection::accept(ConnectedSocket socket,
   std::lock_guard<std::mutex> l(lock);
   cs = std::move(socket);
   socket_addr = listen_addr;
+  target_addr = peer_addr; // until we know better
   state = STATE_ACCEPTING;
   protocol->accept();
   // rescheduler connection in order to avoid lock dep
