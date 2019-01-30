@@ -31,6 +31,9 @@ function map_unmap() {
 
 rbd create "${IMAGE_NAME}" --size="${IMAGE_SIZE}"
 
+# disable as suggested from openstack teuthology run
+rbd feature disable "${IMAGE_NAME}" object-map fast-diff deep-flatten
+
 COUNT=0
 START_TIME=$(get_time)
 END_TIME=$(expr $(get_time) + ${RUN_TIME})
