@@ -12,6 +12,7 @@
 #include "rgw_pubsub.h"
 #include "rgw_amqp.h"
 #include <boost/asio/yield.hpp>
+#include <boost/algorithm/string.hpp>
 #include <functional>
 #include "rgw_perf_counters.h"
 
@@ -31,6 +32,7 @@ private:
   std::string str_ack_level;
   typedef unsigned ack_level_t;
   ack_level_t ack_level; // TODO: not used for now
+  bool verify_ssl;
   static const ack_level_t ACK_LEVEL_ANY = 0;
   static const ack_level_t ACK_LEVEL_NON_ERROR = 1;
 
@@ -45,8 +47,9 @@ private:
     PostCR(const std::string& _post_data,
         RGWDataSyncEnv* _sync_env,
         const std::string& endpoint,
-        ack_level_t _ack_level) :
-      RGWPostHTTPData(_sync_env->cct, "POST", endpoint, &read_bl, false),
+        ack_level_t _ack_level,
+        bool verify_ssl) :
+      RGWPostHTTPData(_sync_env->cct, "POST", endpoint, &read_bl, verify_ssl),
       RGWSimpleCoroutine(_sync_env->cct), 
       sync_env(_sync_env),
       ack_level (_ack_level) {
@@ -85,6 +88,7 @@ public:
       const RGWHTTPArgs& args) :
     endpoint(_endpoint) {
       bool exists;
+
       str_ack_level = args.get("http-ack-level", &exists);
       if (!exists || str_ack_level == "any") {
         // "any" is default
@@ -97,16 +101,28 @@ public:
           throw configuration_error("HTTP: invalid http-ack-level " + str_ack_level);
         }
       }
+
+      auto str_verify_ssl = args.get("verify-ssl", &exists);
+      boost::algorithm::to_lower(str_verify_ssl);
+      // verify server certificate by default
+      if (!exists || str_verify_ssl == "true") {
+        verify_ssl = true;
+      } else if (str_verify_ssl == "false") {
+        verify_ssl = false;
+      } else {
+          throw configuration_error("HTTP: verify-ssl must be true/false, not: " + str_verify_ssl);
+      }
     }
 
   RGWCoroutine* send_to_completion_async(const rgw_pubsub_event& event, RGWDataSyncEnv* env) override {
-    return new PostCR(json_format_pubsub_event(event), env, endpoint, ack_level);
+    return new PostCR(json_format_pubsub_event(event), env, endpoint, ack_level, verify_ssl);
   }
 
   std::string to_str() const override {
     std::string str("HTTP Endpoint");
     str += "\nURI: " + endpoint;
     str += "\nAck Level: " + str_ack_level;
+    str += (verify_ssl ? "\nverify SSL" : "\ndon't verify SSL");
     return str;
 
   }
@@ -268,6 +284,9 @@ class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
     }
 };
 
+static const std::string AMQP_0_9_1("0-9-1");
+static const std::string AMQP_1_0("1-0");
+
 RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint, 
     const std::string& topic, 
     const RGWHTTPArgs& args) {
@@ -278,20 +297,17 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
     return nullptr;
   }
   const auto& schema = endpoint.substr(0,pos);
-  if (schema == "http") {
+  if (schema == "http" || schema == "https") {
     return Ptr(new RGWPubSubHTTPEndpoint(endpoint, args));
-  } else if (schema == "https") {
-    throw configuration_error("https not supported");
-    return nullptr;
   } else if (schema == "amqp") {
     bool exists;
     std::string version = args.get("amqp-version", &exists);
     if (!exists) {
-      version = "0-9-1";
+      version = AMQP_0_9_1;
     }
-    if (version == "0-9-1") {
+    if (version == AMQP_0_9_1) {
       return Ptr(new RGWPubSubAMQPEndpoint(endpoint, topic, args));
-    } else if (version == "1-0") {
+    } else if (version == AMQP_1_0) {
       throw configuration_error("amqp v1.0 not supported");
       return nullptr;
     } else {

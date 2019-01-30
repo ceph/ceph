@@ -144,7 +144,7 @@ struct PSSubConfig { /* subscription config */
     string default_bucket_name = data_bucket_prefix + name;
     data_bucket_name = config["data_bucket"](default_bucket_name.c_str());
     data_oid_prefix = config["data_oid_prefix"](default_oid_prefix.c_str());
-    if (push_endpoint_name != "") {
+    if (!push_endpoint_name.empty()) {
       push_endpoint_args = config["push_endpoint_args"];
       try {
         push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args));
@@ -581,9 +581,8 @@ using PSSubscriptionRef = std::shared_ptr<PSSubscription>;
 
 class PSSubscription {
   class InitCR;
-  class StoreEventCR;
   friend class InitCR;
-  friend class StoreEventCR;
+  friend class RGWPSHandleObjEventCR;
 
   RGWDataSyncEnv *sync_env;
   PSEnvRef env;
@@ -598,7 +597,6 @@ class PSSubscription {
     string path;
   } push;
 
-  class InitCR;
   InitCR *init_cr{nullptr};
 
   class InitBucketLifecycleCR : public RGWCoroutine {
@@ -815,21 +813,19 @@ class PSSubscription {
 
     int operate() override {
       reenter(this) {
-        if (sub_conf->push_endpoint) {
-          yield call(sub_conf->push_endpoint->send_to_completion_async(*event.get(), sync_env));
-          
-          if (retcode < 0) {
-            ldout(sync_env->cct, 10) << "ERROR: failed to push event: " << event->id <<
-              " to endpoint: " << sub_conf->push_endpoint_name << " ret=" << retcode << dendl;
-            if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
-            return set_cr_error(retcode);
-          } else {
-            ldout(sync_env->cct, 10) << "event: " << event->id <<
-              " pushed to endpoint: " << sub_conf->push_endpoint_name << dendl;
-            if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
-          }
+        ceph_assert(sub_conf->push_endpoint);
+        yield call(sub_conf->push_endpoint->send_to_completion_async(*event.get(), sync_env));
+      
+        if (retcode < 0) {
+          ldout(sync_env->cct, 10) << "ERROR: failed to push event: " << event->id <<
+            " to endpoint: " << sub_conf->push_endpoint_name << " ret=" << retcode << dendl;
+          if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
+          return set_cr_error(retcode);
         }
-
+        
+        ldout(sync_env->cct, 10) << "event: " << event->id <<
+          " pushed to endpoint: " << sub_conf->push_endpoint_name << dendl;
+        if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
         return set_cr_done();
       }
       return 0;
@@ -1160,7 +1156,7 @@ public:
   }
 };
 
-class RGWPSHandleObjEvent : public RGWCoroutine {
+class RGWPSHandleObjEventCR : public RGWCoroutine {
   RGWDataSyncEnv* const sync_env;
   const PSEnvRef env;
   const rgw_user& owner;
@@ -1177,7 +1173,7 @@ class RGWPSHandleObjEvent : public RGWCoroutine {
   int last_sub_conf_error;
 
 public:
-  RGWPSHandleObjEvent(RGWDataSyncEnv* const _sync_env,
+  RGWPSHandleObjEventCR(RGWDataSyncEnv* const _sync_env,
                       const PSEnvRef _env,
                       const rgw_user& _owner,
                       const EventRef& _event,
@@ -1232,12 +1228,14 @@ public:
             } else {
               event_handled = true;
             }
-            ldout(sync_env->cct, 20) << "push event for subscription=" << *siter << " owner=" << *oiter << " ret=" << retcode << dendl;
-            yield call(PSSubscription::push_event_cr(sync_env, sub, event));
-            if (retcode < 0) {
-              ldout(sync_env->cct, 10) << "ERROR: failed to push event for subscription=" << *siter << " ret=" << retcode << dendl;
-            } else {
-              event_handled = true;
+            if (sub->sub_conf->push_endpoint) {
+                ldout(sync_env->cct, 20) << "push event for subscription=" << *siter << " owner=" << *oiter << " ret=" << retcode << dendl;
+              yield call(PSSubscription::push_event_cr(sync_env, sub, event));
+              if (retcode < 0) {
+                ldout(sync_env->cct, 10) << "ERROR: failed to push event for subscription=" << *siter << " ret=" << retcode << dendl;
+              } else {
+                event_handled = true;
+              }
             }
           }
           if (!sub_conf_found) {
@@ -1298,7 +1296,7 @@ public:
                        EVENT_NAME_OBJECT_CREATE, &event);
       }
 
-      yield call(new RGWPSHandleObjEvent(sync_env, env, bucket_info.owner, event, topics));
+      yield call(new RGWPSHandleObjEventCR(sync_env, env, bucket_info.owner, event, topics));
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
@@ -1414,7 +1412,7 @@ public:
                        event_name, &event);
       }
 
-      yield call(new RGWPSHandleObjEvent(sync_env, env, owner, event, topics));
+      yield call(new RGWPSHandleObjEventCR(sync_env, env, owner, event, topics));
       if (retcode < 0) {
         return set_cr_error(retcode);
       }

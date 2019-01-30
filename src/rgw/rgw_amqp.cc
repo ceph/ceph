@@ -17,10 +17,10 @@
 #include <boost/lockfree/queue.hpp>
 
 // TODO investigation, not necessarily issues:
-// (1) in case of single threaded writer contex use spsc_queue
+// (1) in case of single threaded writer context use spsc_queue
 // (2) support multiple channels
 // (3) check performance of emptying queue to local list, and go over the list and publish
-// (4) use std::shared_mutex (c++17) or eqivalent for the connections lock
+// (4) use std::shared_mutex (c++17) or equivalent for the connections lock
 
 namespace rgw::amqp {
 
@@ -129,7 +129,7 @@ struct connection_t {
 
   // cleanup of all internal connection resource
   // the object can still remain, and internal connection
-  // resources created again on successfull reconnections
+  // resources created again on successful reconnection
   void destroy(int s) {
     status = s;
     ConnectionCleaner clean_state(state);
@@ -372,7 +372,7 @@ connection_ptr_t& create_connection(connection_ptr_t& conn, const amqp_connectio
     conn->status = RGW_AMQP_STATUS_CONN_ALLOC_FAILED;
     return conn;
   }
-  // make sure tha the connection state is cleaned up in case of error
+  // make sure that the connection state is cleaned up in case of error
   ConnectionCleaner state_guard(state);
 
   // create and open socket
@@ -484,7 +484,7 @@ connection_ptr_t create_new_connection(const amqp_connection_info& info,
   return create_connection(conn, info);
 }
 
-/// struct used for holding mesages in the message queue
+/// struct used for holding messages in the message queue
 struct message_wrapper_t {
   connection_ptr_t conn; 
   std::string topic;
@@ -501,14 +501,14 @@ struct message_wrapper_t {
 typedef std::unordered_map<connection_id_t, connection_ptr_t, connection_id_t::hasher> ConnectionList;
 typedef boost::lockfree::queue<message_wrapper_t*, boost::lockfree::fixed_sized<true>> MessageQueue;
 
-// macros used inside a loop where an iterator is either incremented or reased
+// macros used inside a loop where an iterator is either incremented or erased
 #define INCREMENT_AND_CONTINUE(IT) \
           ++IT; \
           continue;
 
 #define ERASE_AND_CONTINUE(IT,CONTAINER) \
           IT=CONTAINER.erase(IT); \
-          --connection_number; \
+          --connection_count; \
           continue;
 
 class Manager {
@@ -517,7 +517,7 @@ public:
   const size_t max_inflight;
   const size_t max_queue;
 private:
-  std::atomic<size_t> connection_number;
+  std::atomic<size_t> connection_count;
   bool stopped;
   struct timeval read_timeout;
   ConnectionList connections;
@@ -553,7 +553,7 @@ private:
       if (rc == AMQP_STATUS_OK) {
         return;
       }
-      // an error occured, close connection
+      // an error occurred, close connection
       // it will be retied by the main loop
       conn->destroy(rc);
       return;
@@ -579,14 +579,14 @@ private:
       if (conn->callbacks.size() < max_inflight) {
         conn->callbacks.emplace_back(conn->delivery_tag++, message->cb);
       } else {
-        // immediatly invoke callback with error
+        // immediately invoke callback with error
         message->cb(RGW_AMQP_STATUS_MAX_INFLIGHT);
       }
     } else {
-      // an error occured, close connection
+      // an error occurred, close connection
       // it will be retied by the main loop
       conn->destroy(rc);
-      // immediatly invoke callback with error
+      // immediately invoke callback with error
       message->cb(rc);
     }
   }
@@ -595,7 +595,7 @@ private:
   // (1) empty the queue of messages to be published
   // (2) loop over all connections and read acks
   // (3) manages deleted connections
-  // (4) TODO reconnect on conection errors
+  // (4) TODO reconnect on connection errors
   // (5) TODO cleanup timedout callbacks
   void run() {
     amqp_frame_t frame;
@@ -652,12 +652,12 @@ private:
         }
        
         // this is just to prevent spinning idle, does not indicate that a message
-        // was sucessfully processd or not
+        // was successfully processed or not
         incoming_message = true;
 
-        // check if error occured that require reopening the connection
+        // check if error occurred that require reopening the connection
         if (rc != AMQP_STATUS_OK) {
-          // an error occured, close connection
+          // an error occurred, close connection
           // it will be retied by the main loop
           conn->destroy(rc);
           INCREMENT_AND_CONTINUE(conn_it);
@@ -752,7 +752,7 @@ public:
     max_connections(_max_connections),
     max_inflight(_max_inflight),
     max_queue(_max_queue),
-    connection_number(0),
+    connection_count(0),
     stopped(false),
     read_timeout{0, _usec_timeout},
     connections(_max_connections),
@@ -816,16 +816,16 @@ public:
     }
 
     // connection not found, creating a new one
-    if (connection_number >= max_connections) {
+    if (connection_count >= max_connections) {
       // TODO: increment counter
       return nullptr;
     }
     const auto conn = create_new_connection(info, exchange);
     // create_new_connection must always return a connection object
-    // even if error occured during creation. 
+    // even if error occurred during creation. 
     // in such a case the creation will be retried in the main thread
     ceph_assert(conn);
-    ++connection_number;
+    ++connection_count;
     return connections.emplace(id, conn).first->second;
   }
 
@@ -863,15 +863,11 @@ public:
     stopped = true;
     runner.join();
     messages.consume_all(delete_message);
-    // TODO
-    /*for (auto& conn : connections) {
-      conn.second->destroy(RGW_AMQP_STATUS_CONNECTION_CLOSED);
-    }*/
   }
 
   // get the number of connections
-  size_t get_connection_number() const {
-    return connection_number;
+  size_t get_connection_count() const {
+    return connection_count;
   }
   
   // get the number of in-flight messages
@@ -917,8 +913,8 @@ int publish_with_confirm(connection_ptr_t& conn,
   return s_manager.publish_with_confirm(conn, topic, message, cb);
 }
 
-size_t get_connection_number() {
-  return s_manager.get_connection_number();
+size_t get_connection_count() {
+  return s_manager.get_connection_count();
 }
   
 size_t get_inflight() {
