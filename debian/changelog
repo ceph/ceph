@@ -1,3 +1,9 @@
+ceph (12.2.11-1) stable; urgency=medium
+
+  * New upstream release
+
+ -- Ceph Release Team <ceph-maintainers@ceph.com>  Wed, 30 Jan 2019 15:51:24 +0000
+
 ceph (12.2.10-1) stable; urgency=medium
 
   * New upstream release
