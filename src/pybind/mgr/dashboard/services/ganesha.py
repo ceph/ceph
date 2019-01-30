@@ -455,10 +455,12 @@ class RGWFSal(FSal):
 
 
 class CephFSFSal(FSal):
-    def __init__(self, name, user_id=None, fs_name=None, cephx_key=None):
+    def __init__(self, name, user_id=None, fs_name=None, sec_label_xattr=None,
+                 cephx_key=None):
         super(CephFSFSal, self).__init__(name)
         self.fs_name = fs_name
         self.user_id = user_id
+        self.sec_label_xattr = sec_label_xattr
         self.cephx_key = cephx_key
 
     @classmethod
@@ -484,6 +486,7 @@ class CephFSFSal(FSal):
         return cls(fsal_block['name'],
                    fsal_block.get('user_id', None),
                    fsal_block.get('filesystem', None),
+                   fsal_block.get('sec_label_xattr', None),
                    fsal_block.get('secret_access_key', None))
 
     def to_fsal_block(self):
@@ -495,6 +498,8 @@ class CephFSFSal(FSal):
             result['user_id'] = self.user_id
         if self.fs_name:
             result['filesystem'] = self.fs_name
+        if self.sec_label_xattr:
+            result['sec_label_xattr'] = self.sec_label_xattr
         if self.cephx_key:
             result['secret_access_key'] = self.cephx_key
         return result
@@ -502,13 +507,14 @@ class CephFSFSal(FSal):
     @classmethod
     def from_dict(cls, fsal_dict):
         return cls(fsal_dict['name'], fsal_dict['user_id'],
-                   fsal_dict['fs_name'], None)
+                   fsal_dict['fs_name'], fsal_dict['sec_label_xattr'], None)
 
     def to_dict(self):
         return {
             'name': self.name,
             'user_id': self.user_id,
-            'fs_name': self.fs_name
+            'fs_name': self.fs_name,
+            'sec_label_xattr': self.sec_label_xattr
         }
 
 

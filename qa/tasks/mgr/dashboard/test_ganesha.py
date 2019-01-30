@@ -67,9 +67,9 @@ class GaneshaTest(DashboardTestCase):
         self.assertIn(('node3', 'cluster2'), daemons)
 
     @classmethod
-    def create_export(cls, path, cluster_id, daemons, fsal):
+    def create_export(cls, path, cluster_id, daemons, fsal, sec_label_xattr=None):
         if fsal == 'CEPH':
-            fsal = {"name": "CEPH", "user_id":"admin", "fs_name": None}
+            fsal = {"name": "CEPH", "user_id":"admin", "fs_name": None, "sec_label_xattr": sec_label_xattr}
             pseudo = "/cephfs{}".format(path)
         else:
             fsal = {"name": "RGW", "rgw_user_id": "admin"}
@@ -83,7 +83,7 @@ class GaneshaTest(DashboardTestCase):
             "tag": None,
             "access_type": "RW",
             "squash": "no_root_squash",
-            "security_label": False,
+            "security_label": sec_label_xattr is not None,
             "protocols": [4],
             "transports": ["TCP"],
             "clients": [{
@@ -108,7 +108,7 @@ class GaneshaTest(DashboardTestCase):
         exports = self._get("/api/nfs-ganesha/export")
         self.assertEqual(len(exports), 0)
 
-        data = self.create_export("/foo", 'cluster1', ['node1', 'node2'], 'CEPH')
+        data = self.create_export("/foo", 'cluster1', ['node1', 'node2'], 'CEPH', "security.selinux")
 
         exports = self._get("/api/nfs-ganesha/export")
         self.assertEqual(len(exports), 1)
