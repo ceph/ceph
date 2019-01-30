@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # run from ./ or from ../
-: ${MGR_ORCHESTRATOR_CLI_VIRTUALENV:=/tmp/mgr-orchestrator_cli-virtualenv}
+: ${MGR_ORCHESTRATOR_CLI_VIRTUALENV:=$CEPH_BUILD_DIR/mgr-orchestrator_cli-virtualenv}
 : ${WITH_PYTHON2:=ON}
 : ${WITH_PYTHON3:=ON}
 : ${CEPH_BUILD_DIR:=$PWD/.tox}
