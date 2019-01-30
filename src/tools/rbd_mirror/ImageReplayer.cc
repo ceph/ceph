@@ -1254,21 +1254,26 @@ void ImageReplayer<I>::handle_process_entry_safe(const ReplayEntry &replay_entry
     m_remote_journaler->committed(replay_entry);
   }
 
-  m_perf_counters->inc(l_rbd_mirror_replay);
-  m_perf_counters->inc(l_rbd_mirror_replay_bytes,
-                       replay_entry.get_data().length());
-  m_perf_counters->tinc(l_rbd_mirror_replay_latency,
-                        ceph_clock_now() - replay_start_time);
+  auto bytes = replay_entry.get_data().length();
+  auto latency = ceph_clock_now() - replay_start_time;
 
   if (g_perf_counters) {
     g_perf_counters->inc(l_rbd_mirror_replay);
-    g_perf_counters->inc(l_rbd_mirror_replay_bytes,
-                         replay_entry.get_data().length());
-    g_perf_counters->tinc(l_rbd_mirror_replay_latency,
-                          ceph_clock_now() - replay_start_time);
+    g_perf_counters->inc(l_rbd_mirror_replay_bytes, bytes);
+    g_perf_counters->tinc(l_rbd_mirror_replay_latency, latency);
   }
 
-  m_event_replay_tracker.finish_op();
+  auto ctx = new FunctionContext(
+    [this, bytes, latency](int r) {
+      Mutex::Locker locker(m_lock);
+      if (m_perf_counters) {
+        m_perf_counters->inc(l_rbd_mirror_replay);
+        m_perf_counters->inc(l_rbd_mirror_replay_bytes, bytes);
+        m_perf_counters->tinc(l_rbd_mirror_replay_latency, latency);
+      }
+      m_event_replay_tracker.finish_op();
+    });
+  m_threads->work_queue->queue(ctx, 0);
 }
 
 template <typename I>
