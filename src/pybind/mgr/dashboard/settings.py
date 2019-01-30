@@ -40,6 +40,9 @@ class Options(object):
     GRAFANA_API_USERNAME = ('admin', str)
     GRAFANA_API_PASSWORD = ('admin', str)
 
+    # Orchestrator settings
+    ORCHESTRATOR_BACKEND = ('', str)
+
     @staticmethod
     def has_default_value(name):
         return getattr(Settings, name, None) is None or \
