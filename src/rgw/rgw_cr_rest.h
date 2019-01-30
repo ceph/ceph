@@ -90,7 +90,7 @@ class RGWSendRESTResourceCR : public RGWSimpleCoroutine {
   param_vec_t headers;
   T *result;
   E *err_result;
-  S input;
+  bufferlist input_bl;
 
   boost::intrusive_ptr<RGWRESTSendResource> http_op;
 
@@ -121,14 +121,7 @@ public:
 
     op->set_user_info((void *)stack);
 
-    JSONFormatter jf;
-    encode_json("data", input, &jf);
-    std::stringstream ss;
-    jf.flush(ss);
-    bufferlist bl;
-    bl.append(ss.str());
-
-    int ret = op->aio_send(bl);
+    int ret = op->aio_send(input_bl);
     if (ret < 0) {
       lsubdout(cct, rgw, 0) << "ERROR: failed to send request" << dendl;
       op->put();
