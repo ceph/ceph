@@ -179,7 +179,7 @@ int RGWSI_Notify::init_watch()
       notify_oid = notify_oid_prefix;
     }
 
-    notify_objs[i] = rados_svc->handle(0).obj({control_pool, notify_oid});
+    notify_objs[i] = rados_svc->handle().obj({control_pool, notify_oid});
     auto& notify_obj = notify_objs[i];
 
     int r = notify_obj.open();
@@ -295,7 +295,7 @@ int RGWSI_Notify::unwatch(RGWSI_RADOS::Obj& obj, uint64_t watch_handle)
     ldout(cct, 0) << "ERROR: rados->unwatch2() returned r=" << r << dendl;
     return r;
   }
-  r = rados_svc->handle(0).watch_flush();
+  r = rados_svc->handle().watch_flush();
   if (r < 0) {
     ldout(cct, 0) << "ERROR: rados->watch_flush() returned r=" << r << dendl;
     return r;
