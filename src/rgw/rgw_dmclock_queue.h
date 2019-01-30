@@ -18,6 +18,8 @@
 #include <boost/asio.hpp>
 #include "common/ceph_time.h"
 #include "common/async/completion.h"
+#include "common/ceph_context.h"
+#include "common/config.h"
 #include "rgw_dmclock.h"
 
 namespace rgw::dmclock {
@@ -25,16 +27,24 @@ namespace rgw::dmclock {
 namespace async = ceph::async;
 
 /// A dmclock request scheduling service for use with boost::asio.
-class PriorityQueue {
+class PriorityQueue : public md_config_obs_t {
  public:
   template <typename ...Args> // args forwarded to PullPriorityQueue ctor
-  PriorityQueue(boost::asio::io_context& context, Args&& ...args)
+  PriorityQueue(CephContext *cct, boost::asio::io_context& context,
+                md_config_obs_t *observer, Args&& ...args)
     : queue(std::forward<Args>(args)...),
-      timer(context)
-  {}
+      timer(context), cct(cct), observer(observer)
+  {
+    if (observer) {
+      cct->_conf->add_observer(this);
+    }
+  }
 
   ~PriorityQueue() {
     cancel();
+    if (observer) {
+      cct->_conf->remove_observer(this);
+    }
   }
 
   using executor_type = boost::asio::io_context::executor_type;
@@ -59,6 +69,10 @@ class PriorityQueue {
   /// handler with an operation_aborted error and default-constructed result
   void cancel(const client_id& client);
 
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const md_config_t *conf,
+                          const std::set<std::string>& changed) override;
+
  private:
   struct Request {}; // empty request type
   using Queue = crimson::dmclock::PullPriorityQueue<client_id, Request>;
@@ -71,6 +85,9 @@ class PriorityQueue {
   using Clock = ceph::coarse_real_clock;
   using Timer = boost::asio::basic_waitable_timer<Clock>;
   Timer timer; //< timer for the next scheduled request
+
+  CephContext *const cct;
+  md_config_obs_t *const observer; //< observer to update ClientInfoFunc
 
   /// set a timer to process the next request
   void schedule(const Time& time);
