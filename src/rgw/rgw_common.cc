@@ -723,7 +723,7 @@ sha256_digest_t calc_hash_sha256(const boost::string_view& msg)
   sha256_digest_t hash;
 
   SHA256 hasher;
-  hasher.Update(reinterpret_cast<const unsigned char*>(hash.v), msg.size());
+  hasher.Update(reinterpret_cast<const unsigned char*>(msg.data()), msg.size());
   hasher.Final(hash.v);
 
   return hash;
