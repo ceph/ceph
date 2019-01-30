@@ -11,17 +11,16 @@
           <tree [tree]="tree"
                 (nodeSelected)="onNodeSelected($event)">
             <ng-template let-node>
-              <span class="node-name" [innerHTML]="node.value"></span>
-              <span>&nbsp;</span>
               <span class="label"
                     [ngClass]="{'label-success': ['in', 'up'].includes(node.status), 'label-danger': ['down', 'out'].includes(node.status)}">{{ node.status }}</span>
+              <span>&nbsp;</span>
+              <span class="node-name" [innerHTML]="node.value"></span>
             </ng-template>
           </tree>
         </div>
-        <div class="col-sm-6 col-lg-6 metadata">
-          <cd-table-key-value *ngIf="metadata"
-                              [data]="metadata">
-          </cd-table-key-value>
+        <div class="col-sm-6 col-lg-6 metadata" *ngIf="metadata">
+          <legend>{{ metadataTitle }}</legend>
+          <cd-table-key-value [data]="metadata"></cd-table-key-value>
         </div>
       </div>
     </div>
