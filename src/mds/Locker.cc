@@ -2240,7 +2240,7 @@ void Locker::request_inode_file_caps(CInode *in)
 {
   assert(!in->is_auth());
 
-  int wanted = in->get_caps_wanted() & ~CEPH_CAP_PIN;
+  int wanted = in->get_caps_wanted() & in->get_caps_allowed_ever() & ~CEPH_CAP_PIN;
   if (wanted != in->replica_caps_wanted) {
     // wait for single auth
     if (in->is_ambiguous_auth()) {
@@ -2938,9 +2938,9 @@ void Locker::handle_client_caps(MClientCaps *m)
 
     // filter wanted based on what we could ever give out (given auth/replica status)
     bool need_flush = m->flags & MClientCaps::FLAG_SYNC;
-    int new_wanted = m->get_wanted() & head_in->get_caps_allowed_ever();
+    int new_wanted = m->get_wanted();
     if (new_wanted != cap->wanted()) {
-      if (!need_flush && (new_wanted & ~cap->pending())) {
+      if (!need_flush && in->is_auth() && (new_wanted & ~cap->pending())) {
 	// exapnding caps.  make sure we aren't waiting for a log flush
 	need_flush = _need_flush_mdlog(head_in, new_wanted & ~cap->pending());
       }
