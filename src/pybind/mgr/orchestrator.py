@@ -489,33 +489,41 @@ class ServiceDescription(object):
 
 
 class DeviceSelection(object):
+    """
+    Used within :class:`myclass.DriveGroupSpec` to specify the devices
+    used by the Drive Group.
+
+    Any attributes (even none) can be included in the device
+    specification structure.
+    """
+
     def __init__(self, paths=None, id_model=None, size=None, rotates=None, count=None):
         # type: (List[str], str, str, bool, int) -> None
         """
         ephemeral drive group device specification
 
-        :param paths: abs paths to the devices.
-        :param id_model: A wildcard string. e.g: "SDD*"
-        :param size: Size specification of format LOW:HIGH.
-            Can also take the the form :HIGH, LOW:
-            or an exact value (as ceph-volume inventory reports)
-        :param rotates: is the drive rotating or not
-        :param count: if this is present limit the number of drives to this number.
-
-        Any attributes (even none) can be included in the device
-        specification structure.
-
         TODO: translate from the user interface (Drive Groups) to an actual list of devices.
         """
         if paths is None:
             paths = []
+
+        #: List of absolute paths to the devices.
         self.paths = paths  # type: List[str]
         if self.paths and any(p is not None for p in [id_model, size, rotates, count]):
             raise TypeError('`paths` and other parameters are mutually exclusive')
 
+        #: A wildcard string. e.g: "SDD*"
         self.id_model = id_model
+
+        #: Size specification of format LOW:HIGH.
+        #: Can also take the the form :HIGH, LOW:
+        #: or an exact value (as ceph-volume inventory reports)
         self.size = size
+
+        #: is the drive rotating or not
         self.rotates = rotates
+
+        #: if this is present limit the number of drives to this number.
         self.count = count
 
     @classmethod
@@ -536,38 +544,51 @@ class DriveGroupSpec(object):
         # concept of applying a drive group to a (set) of hosts is tightly
         # linked to the drive group itself
         #
-        # An fnmatch pattern to select hosts. Can also be a single host.
+        #: An fnmatch pattern to select hosts. Can also be a single host.
         self.host_pattern = host_pattern
 
+        #: A :class:`orchestrator.DeviceSelection`
         self.data_devices = data_devices
+
+        #: A :class:`orchestrator.DeviceSelection`
         self.db_devices = db_devices
+
+        #: A :class:`orchestrator.DeviceSelection`
         self.wal_devices = wal_devices
+
+        #: A :class:`orchestrator.DeviceSelection`
         self.journal_devices = journal_devices
 
-        # Number of osd daemons per "DATA" device.
-        # To fully utilize nvme devices multiple osds are required.
+        #: Number of osd daemons per "DATA" device.
+        #: To fully utilize nvme devices multiple osds are required.
         self.osds_per_device = osds_per_device
 
         assert objectstore in ('filestore', 'bluestore')
+        #: ``filestore`` or ``bluestore``
         self.objectstore = objectstore
 
+        #: ``true`` or ``false``
         self.encrypted = encrypted
 
+        #: How many OSDs per DB device
         self.db_slots = db_slots
+
+        #: How many OSDs per WAL device
         self.wal_slots = wal_slots
 
         # FIXME: needs ceph-volume support
-        # Optional: mapping of drive to OSD ID, used when the
-        # created OSDs are meant to replace previous OSDs on
-        # the same node.
+        #: Optional: mapping of drive to OSD ID, used when the
+        #: created OSDs are meant to replace previous OSDs on
+        #: the same node.
         self.osd_id_claims = {}
 
     @classmethod
     def from_json(self, json_drive_group):
         """
         Initialize and verify 'Drive group' structure
+
         :param json_drive_group: A valid json string with a Drive Group
-                                 specification
+               specification
         """
         args = {k: (DeviceSelection.from_json(v) if k.endswith('_devices') else v) for k, v in
                 json_drive_group.items()}
