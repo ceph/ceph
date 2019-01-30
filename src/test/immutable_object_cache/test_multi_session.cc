@@ -148,7 +148,7 @@ TEST_F(TestMultiSession, test_multi_session) {
       test_register_client(random_index);
     } else {
       test_lookup_object(string("test_nspace") + std::to_string(random_index),
-                         random_index, 32, i == test_times ? true : false);
+                         random_index, 4, i == test_times ? true : false);
     }
   }
 
