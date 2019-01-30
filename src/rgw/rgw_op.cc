@@ -4903,6 +4903,9 @@ int RGWGetACLs::verify_permission()
     }
     perm = verify_object_permission(this, s, iam_action);
   } else {
+    if (!s->bucket_exists) {
+      return -ERR_NO_SUCH_BUCKET;
+    }
     perm = verify_bucket_permission(this, s, rgw::IAM::s3GetBucketAcl);
   }
   if (!perm)
