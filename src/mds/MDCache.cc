@@ -4729,7 +4729,13 @@ void MDCache::handle_cache_rejoin_strong(MMDSCacheRejoin *strong)
   mds_rank_t from = mds_rank_t(strong->get_source().num());
 
   // only a recovering node will get a strong rejoin.
-  assert(mds->is_rejoin());
+  if (!mds->is_rejoin()) {
+    if (mds->get_want_state() == MDSMap::STATE_REJOIN) {
+      mds->wait_for_rejoin(new C_MDS_RetryMessage(mds, strong));
+      return;
+    }
+    ceph_assert(!"got unexpected rejoin message during recovery");
+  }
 
   // assimilate any potentially dirty scatterlock state
   for (map<inodeno_t,MMDSCacheRejoin::lock_bls>::iterator p = strong->inode_scatterlocks.begin();
