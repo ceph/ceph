@@ -1,6 +1,6 @@
 # salt_api_test.sh
 # Salt API test script
-set -e
+set -ex
 TMPFILE=$(mktemp)
 curl --silent http://$(hostname):8000/ | tee $TMPFILE # show curl output in log
 test -s $TMPFILE
