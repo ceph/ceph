@@ -33,7 +33,7 @@ class ConfigOsd(RestController):
         valid_flags = set(args.keys()) & set(common.OSD_FLAGS)
         invalid_flags = list(set(args.keys()) - valid_flags)
         if invalid_flags:
-            context.instance.log.warn("%s not valid to set/unset" % invalid_flags)
+            context.instance.log.warn("%s not valid to set/unset", invalid_flags)
 
         for flag in list(valid_flags):
             if args[flag]:

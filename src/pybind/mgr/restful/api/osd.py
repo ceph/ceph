@@ -20,7 +20,7 @@ class OsdIdCommand(RestController):
 
         if not osd:
             response.status = 500
-            return {'message': 'Failed to identify the OSD id "%d"' % self.osd_id}
+            return {'message': 'Failed to identify the OSD id "{}"'.format(self.osd_id)}
 
         if osd['up']:
             return common.OSD_IMPLEMENTED_COMMANDS
@@ -40,11 +40,11 @@ class OsdIdCommand(RestController):
 
         if not osd:
             response.status = 500
-            return {'message': 'Failed to identify the OSD id "%d"' % self.osd_id}
+            return {'message': 'Failed to identify the OSD id "{}"'.format(self.osd_id)}
 
         if not osd['up'] or command not in common.OSD_IMPLEMENTED_COMMANDS:
             response.status = 500
-            return {'message': 'Command "%s" not available' % command}
+            return {'message': 'Command "{}" not available'.format(command)}
 
         return context.instance.submit_request([[{
             'prefix': 'osd ' + command,
@@ -68,7 +68,7 @@ class OsdId(RestController):
         osd = context.instance.get_osds(ids=[str(self.osd_id)])
         if len(osd) != 1:
             response.status = 500
-            return {'message': 'Failed to identify the OSD id "%d"' % self.osd_id}
+            return {'message': 'Failed to identify the OSD id "{}"'.format(self.osd_id)}
 
         return osd[0]
 
