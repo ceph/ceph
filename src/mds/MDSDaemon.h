@@ -178,6 +178,8 @@ private:
 
   static const std::vector<MDSCommand>& get_commands();
 
+  bool parse_caps(const AuthCapsInfo&, MDSAuthCaps&);
+
   mono_time starttime = mono_clock::zero();
 };
 
