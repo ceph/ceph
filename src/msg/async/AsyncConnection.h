@@ -197,7 +197,7 @@ class AsyncConnection : public Connection {
   entity_addr_t target_addr;  ///< which of the peer_addrs we're connecting to (as clienet) or should reconnect to (as peer)
 
   entity_addr_t _infer_target_addr(const entity_addrvec_t& av);
-  
+
   // used only by "read_until"
   uint64_t state_offset;
   Worker *worker;
