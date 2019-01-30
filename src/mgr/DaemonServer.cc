@@ -2575,8 +2575,9 @@ void DaemonServer::got_mgr_map()
       auto md_update = [&] (DaemonKey key) {
         std::ostringstream oss;
         auto c = new MetadataUpdate(daemon_state, key);
+	// FIXME remove post-nautilus: include 'id' for luminous mons
         oss << "{\"prefix\": \"mgr metadata\", \"who\": \""
-              << key.second << "\"}";
+	    << key.second << "\", \"id\": \"" << key.second << "\"}";
         monc->start_mon_command({oss.str()}, {}, &c->outbl, &c->outs, c);
       };
       if (mgrmap.active_name.size()) {
