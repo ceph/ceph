@@ -4625,6 +4625,9 @@ int RGWGetACLs::verify_permission()
 				    rgw::IAM::s3GetObjectAcl :
 				    rgw::IAM::s3GetObjectVersionAcl);
   } else {
+    if (!s->bucket_exists) {
+      return -ERR_NO_SUCH_BUCKET;
+    }
     perm = verify_bucket_permission(s, rgw::IAM::s3GetBucketAcl);
   }
   if (!perm)
