@@ -19,6 +19,7 @@
 #include <boost/asio/spawn.hpp>
 #include <gtest/gtest.h>
 #include "acconfig.h"
+#include "global/global_context.h"
 
 namespace rgw::dmclock {
 
@@ -37,7 +38,7 @@ auto capture(std::optional<error_code>& opt_ec,
 TEST(Queue, AsyncRequest)
 {
   boost::asio::io_context context;
-  PriorityQueue queue(context,
+  PriorityQueue queue(g_ceph_context, context, nullptr,
                       [] (client_id client) -> ClientInfo* {
       static ClientInfo clients[] = {
         {1, 1, 1}, // admin: satisfy by reservation
@@ -72,7 +73,7 @@ TEST(Queue, AsyncRequest)
 TEST(Queue, Cancel)
 {
   boost::asio::io_context context;
-  PriorityQueue queue(context,
+  PriorityQueue queue(g_ceph_context, context, nullptr,
                       [] (client_id client) -> ClientInfo* {
       static ClientInfo info{0, 1, 1};
       return &info;
@@ -104,7 +105,7 @@ TEST(Queue, Cancel)
 TEST(Queue, CancelClient)
 {
   boost::asio::io_context context;
-  PriorityQueue queue(context,
+  PriorityQueue queue(g_ceph_context, context, nullptr,
                       [] (client_id client) -> ClientInfo* {
       static ClientInfo info{0, 1, 1};
       return &info;
@@ -144,7 +145,7 @@ TEST(Queue, CancelOnDestructor)
   std::optional<PhaseType> p1, p2;
 
   {
-    PriorityQueue queue(context,
+    PriorityQueue queue(g_ceph_context, context, nullptr,
                         [] (client_id client) -> ClientInfo* {
         static ClientInfo info{0, 1, 1};
         return &info;
@@ -178,7 +179,7 @@ auto capture(const Executor& ex, std::optional<error_code>& opt_ec,
 TEST(Queue, CrossExecutorRequest)
 {
   boost::asio::io_context queue_context;
-  PriorityQueue queue(queue_context,
+  PriorityQueue queue(g_ceph_context, queue_context, nullptr,
                       [] (client_id client) -> ClientInfo* {
       static ClientInfo info{1, 1, 1};
       return &info;
@@ -215,12 +216,12 @@ TEST(Queue, CrossExecutorRequest)
   ASSERT_TRUE(ec1);
   EXPECT_EQ(boost::system::errc::success, *ec1);
   ASSERT_TRUE(p1);
-  EXPECT_EQ(PhaseType::reservation, *p1);
+  EXPECT_EQ(PhaseType::priority, *p1);
 
   ASSERT_TRUE(ec2);
   EXPECT_EQ(boost::system::errc::success, *ec2);
   ASSERT_TRUE(p2);
-  EXPECT_EQ(PhaseType::reservation, *p2);
+  EXPECT_EQ(PhaseType::priority, *p2);
 }
 
 #ifdef HAVE_BOOST_CONTEXT
@@ -230,7 +231,7 @@ TEST(Queue, SpawnAsyncRequest)
   boost::asio::io_context context;
 
   boost::asio::spawn(context, [&] (boost::asio::yield_context yield) {
-    PriorityQueue queue(context,
+    PriorityQueue queue(g_ceph_context, context, nullptr,
                         [] (client_id client) -> ClientInfo* {
         static ClientInfo clients[] = {
           {1, 1, 1}, // admin: satisfy by reservation

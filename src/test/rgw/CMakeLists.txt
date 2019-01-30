@@ -130,7 +130,7 @@ add_executable(unittest_rgw_string test_rgw_string.cc)
 add_ceph_unittest(unittest_rgw_string)
 
 # unitttest_rgw_dmclock_queue
-add_executable(unittest_rgw_dmclock_queue test_rgw_dmclock_queue.cc)
+add_executable(unittest_rgw_dmclock_queue test_rgw_dmclock_queue.cc $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_rgw_dmclock_queue)
 target_link_libraries(unittest_rgw_dmclock_queue rgw_a dmclock ${Boost_LIBRARIES})
 if(WITH_BOOST_CONTEXT)

@@ -16,6 +16,7 @@
 #define RGW_DMCLOCK_H
 
 #include "dmclock/src/dmclock_server.h"
+#include "common/config_obs.h"
 
 namespace rgw::dmclock {
 
@@ -36,6 +37,21 @@ using crimson::dmclock::ClientInfo;
 
 using crimson::dmclock::Time;
 using crimson::dmclock::get_time;
+
+class ClientConfig : public md_config_obs_t {
+  std::vector<ClientInfo> clients;
+
+  void update(const md_config_t *conf);
+
+ public:
+  ClientConfig(CephContext *cct);
+
+  ClientInfo* operator()(client_id client);
+
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const md_config_t *conf,
+                          const std::set<std::string>& changed) override;
+};
 
 class PriorityQueue;
 

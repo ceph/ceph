@@ -16,6 +16,18 @@
 
 namespace rgw::dmclock {
 
+const char** PriorityQueue::get_tracked_conf_keys() const
+{
+  return observer->get_tracked_conf_keys();
+}
+
+void PriorityQueue::handle_conf_change(const md_config_t *conf,
+                                       const std::set<std::string>& changed)
+{
+  observer->handle_conf_change(conf, changed);
+  queue.update_client_infos();
+}
+
 void PriorityQueue::cancel()
 {
   queue.remove_by_req_filter([] (RequestRef&& request) {
