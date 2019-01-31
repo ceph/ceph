@@ -81,6 +81,7 @@ various aspects of your Ceph cluster:
   counters. Display and manage (add/edit/delete) object gateway users and their
   details (e.g. quotas) as well as the users' buckets and their details (e.g.
   owner, quotas).
+* **NFS-Ganesha**: Manage NFS-Ganesha exports that are stored as RADOS objects.
 
 Enabling
 --------
@@ -614,3 +615,74 @@ by default. Execute the following command to disable this behaviour::
 A log entry may look like this::
 
   2018-10-22 15:27:01.302514 mgr.x [INF] [DASHBOARD] from='https://[::ffff:127.0.0.1]:37022' path='/api/rgw/user/klaus' method='PUT' user='admin' params='{"max_buckets": "1000", "display_name": "Klaus Mustermann", "uid": "klaus", "suspended": "0", "email": "klaus.mustermann@ceph.com"}'
+
+
+NFS-Ganesha Management
+----------------------
+
+Ceph Dashboard can help with the management of NFS-Ganesha exports that use
+CephFS or RadosGW as their backstore.
+
+To enable this feature in Ceph Dashboard there are some assumptions that need
+to be met regarding the way NFS-Ganesha services are configured.
+
+Ceph Dashboard reads NFS-Ganesha configuration from the Ceph cluster, therefore
+NFS-Ganesha must store part of their configuration in the Ceph cluster.
+
+The NFS-Ganesha configuration stored in the Ceph cluster must follow some
+conventions.
+Each export block must be stored in its own RADOS object named
+``export-<id>``, where ``<id>`` must match the ``Export_ID`` attribute of the
+export configuration. Then, for each NFS-Ganesha service daemon there should
+exist a RADOS object named ``conf-<daemon_id>``, where ``<daemon_id>`` is an
+arbitrary string that should uniquely identify the daemon instance (e.g., the
+hostname where the daemon is running).
+Each ``conf-<daemon_id>`` object contains the RADOS URLs to the exports that
+the NFS-Ganesha daemon should serve. These URLs are of the form::
+
+  %url rados://<pool_name>[/<namespace>]/export-<id>
+
+Both the ``conf-<daemon_id>`` and ``export-<id>`` objects must be stored in the
+same RADOS pool/namespace.
+
+
+Configuring NFS-Ganesha in the dashboard
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+To enable the management of NFS-Ganesha exports in Ceph Dashboard, we only
+need to tell the Dashboard, in which RADOS pool and namespace are stored the
+configuration objects. Then, Ceph Dashboard knows how search for the objects
+following the naming convention described above.
+
+The Dashboard command to configure the NFS-Ganesha configuration objects
+location is::
+
+  $ ceph dashboard set-ganesha-clusters-rados-pool-namespace <pool_name>[/<namespace>]
+
+After running the above command, Ceph Dashboard is able to find the NFS-Ganesha
+configuration objects and we can start manage the exports through the Web UI.
+
+
+Support for multiple NFS-Ganesha clusters
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Ceph Dashboard also supports the management of NFS-Ganesha export belonging
+to different NFS-Ganesha clusters. An NFS-Ganesha cluster is a group of
+NFS-Ganesha service daemons sharing the same exports. Different NFS-Ganesha
+clusters are independent and don't share the exports configuration between each
+other.
+
+Each NFS-Ganesha cluster should store their configuration objects in a
+different RADOS pool/namespace to isolate the configuration from each other.
+
+To specify the locations of the configuration of each NFS-Ganesha cluster we
+can use the same command as above but with a different value pattern::
+
+  $ ceph dashboard set-ganesha-clusters-rados-pool-namespace <cluster_id>:<pool_name>[/<namespace>](,<cluster_id>:<pool_name>[/<namespace>])*
+
+The ``<cluster_id>`` is an arbitrary string that should uniquely identify the
+NFS-Ganesha cluster.
+
+When configuring the Ceph Dashboard with multiple NFS-Ganesha clusters the
+Web UI will automatically allow to choose to which cluster an export belongs.
+
