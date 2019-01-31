@@ -54,11 +54,33 @@ void SocketMessenger::bind(const entity_addrvec_t& addrs)
   }
 
   set_myaddrs(addrs);
-
+  logger().info("listening on {}", addr);
   seastar::socket_address address(addr.in4_addr());
   seastar::listen_options lo;
   lo.reuse_address = true;
   listener = seastar::listen(address, lo);
+}
+
+void SocketMessenger::try_bind(const entity_addrvec_t& addrs,
+			       uint32_t min_port, uint32_t max_port)
+{
+  auto addr = addrs.legacy_or_front_addr();
+  if (addr.get_port() != 0) {
+    return bind(addrs);
+  }
+  for (auto port = min_port; port <= max_port; port++) {
+    try {
+      addr.set_port(port);
+      bind(entity_addrvec_t{addr});
+      logger().info("{}: try_bind: done", *this);
+      return;
+    } catch (const std::system_error& e) {
+      logger().debug("{}: try_bind: {} already used", *this, port);
+      if (port == max_port) {
+	throw;
+      }
+    }
+  }
 }
 
 seastar::future<> SocketMessenger::start(Dispatcher *disp)
