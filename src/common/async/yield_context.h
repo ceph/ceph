@@ -61,4 +61,4 @@ class optional_yield {
 };
 
 // type tag object to construct an empty optional_yield
-static constexpr optional_yield::empty_t null_yield{};
+inline constexpr optional_yield::empty_t null_yield{};
