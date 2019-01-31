@@ -18,6 +18,7 @@ class entity_addrvec_t;
 #define CEPH_PICK_ADDRESS_PREFER_IPV4 0x40
 #define CEPH_PICK_ADDRESS_DEFAULT_MON_PORTS  0x80
 
+#ifndef WITH_SEASTAR
 /*
   Pick addresses based on subnets if needed.
 
@@ -38,6 +39,8 @@ class entity_addrvec_t;
   This function will exit on error.
  */
 void pick_addresses(CephContext *cct, int needs);
+
+#endif	// !WITH_SEASTAR
 
 int pick_addresses(CephContext *cct, unsigned flags, entity_addrvec_t *addrs,
 		   int preferred_numa_node = -1);
