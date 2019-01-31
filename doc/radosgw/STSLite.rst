@@ -212,27 +212,3 @@ Lines 13-16 have been added as a workaround in the code block below:
         else:
             self._service_name = service_name
 
-2. Currently boto does not include the payload hash with the request, but uses 
-it to calculate the signature for STS requests, which results in an incorrect 
-signature at the server side. The workaround is to send the payload hash in the
-request itself. The changes are in the file – botocore/auth.py.
-
-Lines 14-15 have been added as a workaround in the code block below:
-
-.. code-block:: python
-
-  def _modify_request_before_signing(self, request):
-          if 'Authorization' in request.headers:
-              del request.headers['Authorization']
-          self._set_necessary_date_headers(request)
-          if self.credentials.token:
-              if 'X-Amz-Security-Token' in request.headers:
-                  del request.headers['X-Amz-Security-Token']
-              request.headers['X-Amz-Security-Token'] = self.credentials.token
-
-          if not request.context.get('payload_signing_enabled', True):
-              if 'X-Amz-Content-SHA256' in request.headers:
-                  del request.headers['X-Amz-Content-SHA256']
-              request.headers['X-Amz-Content-SHA256'] = UNSIGNED_PAYLOAD
-          else:
-              request.headers['X-Amz-Content-SHA256'] = self.payload(request)
