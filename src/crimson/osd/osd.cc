@@ -1,5 +1,8 @@
 #include "osd.h"
 
+#include <boost/range/join.hpp>
+
+#include "common/pick_address.h"
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDMap.h"
@@ -110,6 +113,17 @@ seastar::future<> OSD::mkfs(uuid_d cluster_fsid)
   });
 }
 
+namespace {
+  entity_addrvec_t pick_addresses(int what) {
+    entity_addrvec_t addrs;
+    CephContext cct;
+    if (int r = ::pick_addresses(&cct, what, &addrs, -1); r < 0) {
+      throw std::runtime_error("failed to pick address");
+    }
+    return addrs;
+  }
+}
+
 seastar::future<> OSD::start()
 {
   logger().info("start");
@@ -126,7 +140,14 @@ seastar::future<> OSD::start()
     osdmap = std::move(map);
     return load_pgs();
   }).then([this] {
-    return public_msgr->start(&dispatchers);
+    cluster_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER),
+                           local_conf()->ms_bind_port_min,
+                           local_conf()->ms_bind_port_max);
+    public_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
+                          local_conf()->ms_bind_port_min,
+                          local_conf()->ms_bind_port_max);
+    return seastar::when_all_succeed(cluster_msgr->start(&dispatchers),
+                                     public_msgr->start(&dispatchers));
   }).then([this] {
     return monc.start();
   }).then([this] {
@@ -185,14 +206,14 @@ seastar::future<> OSD::_send_boot()
 
   entity_addrvec_t hb_back_addrs;
   entity_addrvec_t hb_front_addrs;
-  entity_addrvec_t cluster_addrs = cluster_msgr->get_myaddrs();
 
+  logger().info("cluster_msgr: {}", cluster_msgr->get_myaddr());
   auto m = make_message<MOSDBoot>(superblock,
                                   osdmap->get_epoch(),
                                   osdmap->get_epoch(),
                                   hb_back_addrs,
                                   hb_front_addrs,
-                                  cluster_addrs,
+                                  cluster_msgr->get_myaddrs(),
                                   CEPH_FEATURES_ALL);
   return monc.send_message(m);
 }
