@@ -382,21 +382,31 @@ void PyModuleRegistry::get_health_checks(health_check_map_t *checks)
         ss << "Module '" << iter->first << "' has failed dependency: "
            << iter->second;
       } else if (dependency_modules.size() > 1) {
-        ss << dependency_modules.size() << " ceph-mgr modules have failed dependencies";
+        ss << dependency_modules.size()
+	   << " mgr modules have failed dependencies";
       }
-      checks->add("MGR_MODULE_DEPENDENCY", HEALTH_WARN, ss.str());
+      auto& d = checks->add("MGR_MODULE_DEPENDENCY", HEALTH_WARN, ss.str());
+      for (auto& i : dependency_modules) {
+	std::ostringstream ss;
+        ss << "Module '" << i.first << "' has failed dependency: " << i.second;
+	d.detail.push_back(ss.str());
+      }
     }
 
     if (!failed_modules.empty()) {
       std::ostringstream ss;
       if (failed_modules.size() == 1) {
         auto iter = failed_modules.begin();
-        ss << "Module '" << iter->first << "' has failed: "
-           << iter->second;
+        ss << "Module '" << iter->first << "' has failed: " << iter->second;
       } else if (failed_modules.size() > 1) {
-        ss << failed_modules.size() << " modules have failed";
+        ss << failed_modules.size() << " mgr modules have failed";
       }
-      checks->add("MGR_MODULE_ERROR", HEALTH_ERR, ss.str());
+      auto& d = checks->add("MGR_MODULE_ERROR", HEALTH_ERR, ss.str());
+      for (auto& i : failed_modules) {
+	std::ostringstream ss;
+        ss << "Module '" << i.first << "' has failed: " << i.second;
+	d.detail.push_back(ss.str());
+      }
     }
   }
 }
