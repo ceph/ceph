@@ -6,6 +6,10 @@ import * as _ from 'lodash';
 import { HealthService } from '../../../shared/api/health.service';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import {
+  FeatureTogglesMap$,
+  FeatureTogglesService
+} from '../../../shared/services/feature-toggles.service';
 import { PgCategoryService } from '../../shared/pg-category.service';
 import { HealthPieColor } from '../health-pie/health-pie-color.enum';
 
@@ -18,14 +22,17 @@ export class HealthComponent implements OnInit, OnDestroy {
   healthData: any;
   interval: number;
   permissions: Permissions;
+  enabled_feature$: FeatureTogglesMap$;
 
   constructor(
     private healthService: HealthService,
     private i18n: I18n,
     private authStorageService: AuthStorageService,
-    private pgCategoryService: PgCategoryService
+    private pgCategoryService: PgCategoryService,
+    private featureToggles: FeatureTogglesService
   ) {
     this.permissions = this.authStorageService.getPermissions();
+    this.enabled_feature$ = this.featureToggles.get();
   }
 
   ngOnInit() {
