@@ -142,7 +142,7 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
       RGWRequest req{env.store->get_new_req_id()};
 
       auto& socket = stream.lowest_layer();
-      StreamIO real_client{cct, stream, parser, yield, buffer, is_ssl,
+      StreamIO real_client{cct, stream, parser, buffer, is_ssl,
                            socket.local_endpoint(),
                            socket.remote_endpoint()};
 
