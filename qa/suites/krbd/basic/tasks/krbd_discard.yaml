@@ -1,0 +1,8 @@
+tasks:
+- cram:
+    clients:
+      client.0:
+      - qa/rbd/krbd_discard.t
+      - qa/rbd/krbd_discard_1b.t
+      - qa/rbd/krbd_discard_4M.t
+      - qa/rbd/krbd_zeroout.t
