@@ -4202,6 +4202,11 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_CREATE)
     .set_description("Preallocate file created via bluestore_block*_create"),
 
+    Option("bluestore_ignore_data_csum", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_flag(Option::FLAG_RUNTIME)
+    .set_description("Ignore checksum errors on read and do not generate an EIO error"),
+
     Option("bluestore_csum_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("crc32c")
     .set_enum_allowed({"none", "crc32c", "crc32c_16", "crc32c_8", "xxhash32", "xxhash64"})
