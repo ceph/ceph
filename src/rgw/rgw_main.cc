@@ -425,6 +425,14 @@ int main(int argc, const char **argv)
   /* Header custom behavior */
   rest.register_x_headers(g_conf()->rgw_log_http_headers);
 
+  if (cct->_conf.get_val<std::string>("rgw_scheduler_type") == "dmclock" &&
+      !cct->check_experimental_feature_enabled("dmclock")){
+    derr << "dmclock scheduler type is experimental and needs to be"
+	 << "set in the option enable experimental data corrupting features"
+	 << dendl;
+    return EINVAL;
+  }
+
   rgw::dmclock::SchedulerCtx sched_ctx{cct.get()};
 
   OpsLogSocket *olog = NULL;
