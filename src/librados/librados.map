@@ -1,0 +1,31 @@
+LIBRADOS_PRIVATE {
+	local:	*;
+};
+
+LIBRADOS_14.2.0 {
+	global:
+		extern "C++" {
+			ceph::buffer::*;
+			librados::AioCompletion::*;
+			librados::IoCtx::*;
+			librados::ListObject::*;
+			librados::NObjectIterator::*;
+			librados::ObjectCursor::*;
+			librados::ObjectOperation::*;
+			librados::ObjectReadOperation::*;
+			librados::ObjectWriteOperation::*;
+			librados::PlacementGroup::*;
+			librados::PoolAsyncCompletion::*;
+			librados::Rados::*;
+			librados::WatchCtx::*;
+			librados::WatchCtx2::*;
+			"librados::operator<<(std::ostream&, librados::ListObject const&)";
+			"librados::operator<<(std::ostream&, librados::ObjectCursor const&)";
+			"librados::operator<<(std::ostream&, librados::PlacementGroup const&)";
+			"typeinfo for librados::ObjectOperation";
+			"typeinfo for librados::ObjectReadOperation";
+			"typeinfo for librados::ObjectWriteOperation";
+			"typeinfo for librados::WatchCtx";
+			"typeinfo for librados::WatchCtx2";
+		};
+} LIBRADOS_PRIVATE;
