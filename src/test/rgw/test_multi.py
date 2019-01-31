@@ -18,10 +18,12 @@ from rgw_multi.zone_es  import ESZone as ESZone
 from rgw_multi.zone_es  import ESZoneConfig as ESZoneConfig
 from rgw_multi.zone_cloud  import CloudZone as CloudZone
 from rgw_multi.zone_cloud  import CloudZoneConfig as CloudZoneConfig
+from rgw_multi.zone_pubsub  import PSZone as PSZone
 
 # make tests from rgw_multi.tests available to nose
 from rgw_multi.tests import *
 from rgw_multi.tests_es import *
+from rgw_multi.tests_ps import *
 
 mstart_path = os.getenv('MSTART_PATH')
 if mstart_path is None:
@@ -158,6 +160,7 @@ def init(parse_args):
     cfg = configparser.RawConfigParser({
                                          'num_zonegroups': 1,
                                          'num_zones': 3,
+                                         'num_ps_zones': 0,
                                          'num_es_zones': 0,
                                          'num_cloud_zones': 0,
                                          'gateways_per_zone': 2,
@@ -198,6 +201,7 @@ def init(parse_args):
     parser.add_argument('--checkpoint-retries', type=int, default=cfg.getint(section, 'checkpoint_retries'))
     parser.add_argument('--checkpoint-delay', type=int, default=cfg.getint(section, 'checkpoint_delay'))
     parser.add_argument('--reconfigure-delay', type=int, default=cfg.getint(section, 'reconfigure_delay'))
+    parser.add_argument('--num-ps-zones', type=int, default=cfg.getint(section, 'num_ps_zones'))
 
     es_cfg = []
     cloud_cfg = []
@@ -243,7 +247,7 @@ def init(parse_args):
     num_es_zones = len(es_cfg)
     num_cloud_zones = len(cloud_cfg)
 
-    num_zones = args.num_zones + num_es_zones + num_cloud_zones
+    num_zones = args.num_zones + num_es_zones + num_cloud_zones + args.num_ps_zones
 
     for zg in range(0, args.num_zonegroups):
         zonegroup = multisite.ZoneGroup(zonegroup_name(zg), period)
@@ -282,7 +286,8 @@ def init(parse_args):
                     zonegroup.get(cluster)
 
             es_zone = (z >= args.num_zones and z < args.num_zones + num_es_zones)
-            cloud_zone = (z >= args.num_zones + num_es_zones)
+            cloud_zone = (z >= args.num_zones + num_es_zones and z < args.num_zones + num_es_zones + num_cloud_zones)
+            ps_zone = (z >= args.num_zones + num_es_zones + num_cloud_zones)
 
             # create the zone in its zonegroup
             zone = multisite.Zone(zone_name(zg, z), zonegroup, cluster)
@@ -294,6 +299,9 @@ def init(parse_args):
                 ccfg = cloud_cfg[zone_index]
                 zone = CloudZone(zone_name(zg, z), ccfg.endpoint, ccfg.credentials, ccfg.source_bucket,
                                  ccfg.target_path, zonegroup, cluster)
+            elif ps_zone:
+                zone_index = z - args.num_zones - num_es_zones - num_cloud_zones
+                zone = PSZone(zone_name(zg, z), zonegroup, cluster)
             else:
                 zone = RadosZone(zone_name(zg, z), zonegroup, cluster)
 
@@ -362,3 +370,4 @@ def setup_module():
 
 if __name__ == "__main__":
     init(True)
+
