@@ -265,11 +265,6 @@ class AsioFrontend {
   {
     auto sched_t = dmc::get_scheduler_t(ctx());
     switch(sched_t){
-    case dmc::scheduler_t::none:
-      break;
-    case dmc::scheduler_t::throttler:
-      scheduler.reset(new dmc::SimpleThrottler(ctx()));
-      break;
     case dmc::scheduler_t::dmclock:
       scheduler.reset(new dmc::AsyncScheduler(ctx(),
                                               context,
@@ -277,6 +272,13 @@ class AsioFrontend {
                                               sched_ctx.get_dmc_client_config(),
                                               *sched_ctx.get_dmc_client_config(),
                                               dmc::AtLimit::Reject));
+      break;
+    case dmc::scheduler_t::none:
+      lderr(ctx()) << "Got invalid scheduler type for beast, defaulting to throttler" << dendl;
+      [[fallthrough]];
+    case dmc::scheduler_t::throttler:
+      scheduler.reset(new dmc::SimpleThrottler(ctx()));
+
     }
   }
 
