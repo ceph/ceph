@@ -42,12 +42,14 @@ class TestClientLimits(CephFSTestCase):
         cache_size = open_files/2
 
         self.set_conf('mds', 'mds cache size', cache_size)
+        self.set_conf('mds', 'mds_recall_max_caps', open_files/2)
+        self.set_conf('mds', 'mds_recall_warning_threshold', open_files)
         self.fs.mds_fail_restart()
         self.fs.wait_for_daemons()
 
         mds_min_caps_per_client = int(self.fs.get_config("mds_min_caps_per_client"))
+        mds_recall_warning_decay_rate = self.fs.get_config("mds_recall_warning_decay_rate")
         self.assertTrue(open_files >= mds_min_caps_per_client)
-        mds_max_ratio_caps_per_client = float(self.fs.get_config("mds_max_ratio_caps_per_client"))
 
         mount_a_client_id = self.mount_a.get_global_id()
         path = "subdir/mount_a" if use_subdir else "mount_a"
@@ -64,13 +66,11 @@ class TestClientLimits(CephFSTestCase):
 
         # MDS should not be happy about that, as the client is failing to comply
         # with the SESSION_RECALL messages it is being sent
-        mds_recall_state_timeout = float(self.fs.get_config("mds_recall_state_timeout"))
-        self.wait_for_health("MDS_CLIENT_RECALL", mds_recall_state_timeout+10)
+        self.wait_for_health("MDS_CLIENT_RECALL", mds_recall_warning_decay_rate*2)
 
         # We can also test that the MDS health warning for oversized
         # cache is functioning as intended.
-        self.wait_for_health("MDS_CACHE_OVERSIZED",
-                mds_recall_state_timeout + 10)
+        self.wait_for_health("MDS_CACHE_OVERSIZED", mds_recall_warning_decay_rate*2)
 
         # When the client closes the files, it should retain only as many caps as allowed
         # under the SESSION_RECALL policy
@@ -84,14 +84,13 @@ class TestClientLimits(CephFSTestCase):
 
         # The remaining caps should comply with the numbers sent from MDS in SESSION_RECALL message,
         # which depend on the caps outstanding, cache size and overall ratio
-        recall_expected_value = int((1.0-mds_max_ratio_caps_per_client)*(open_files+2))
         def expected_caps():
             num_caps = self.get_session(mount_a_client_id)['num_caps']
             if num_caps < mds_min_caps_per_client:
                 raise RuntimeError("client caps fell below min!")
             elif num_caps == mds_min_caps_per_client:
                 return True
-            elif recall_expected_value*.95 <= num_caps <= recall_expected_value*1.05:
+            elif num_caps < cache_size:
                 return True
             else:
                 return False
@@ -237,3 +236,28 @@ class TestClientLimits(CephFSTestCase):
     def test_client_cache_size(self):
         self._test_client_cache_size(False)
         self._test_client_cache_size(True)
+
+    def test_client_max_caps(self):
+        """
+        That the MDS will not let a client sit above mds_max_caps_per_client caps.
+        """
+
+        mds_min_caps_per_client = int(self.fs.get_config("mds_min_caps_per_client"))
+        mds_max_caps_per_client = 2*mds_min_caps_per_client
+        self.set_conf('mds', 'mds_max_caps_per_client', mds_max_caps_per_client)
+        self.fs.mds_fail_restart()
+        self.fs.wait_for_daemons()
+
+        self.mount_a.create_n_files("foo/", 3*mds_max_caps_per_client, sync=True)
+
+        mount_a_client_id = self.mount_a.get_global_id()
+        def expected_caps():
+            num_caps = self.get_session(mount_a_client_id)['num_caps']
+            if num_caps < mds_min_caps_per_client:
+                raise RuntimeError("client caps fell below min!")
+            elif num_caps <= mds_max_caps_per_client:
+                return True
+            else:
+                return False
+
+        self.wait_until_true(expected_caps, timeout=60)
