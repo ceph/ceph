@@ -17,6 +17,7 @@
 #include "include/str_list.h"
 #include "common/ceph_context.h"
 #ifndef WITH_SEASTAR
+#include "common/config.h"
 #include "common/config_obs.h"
 #endif
 #include "common/debug.h"
