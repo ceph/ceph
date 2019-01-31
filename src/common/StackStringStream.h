@@ -157,6 +157,13 @@ public:
     return osp.get();
   }
 
+  sss const* get() const {
+    return osp.get();
+  }
+  sss* get() {
+    return osp.get();
+  }
+
 private:
   static constexpr std::size_t max_elems = 8;
 

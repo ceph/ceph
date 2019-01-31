@@ -207,7 +207,7 @@ bool Messenger::ms_deliver_verify_authorizer(
 	connection_secret,
 	challenge);
       if (isvalid) {
-	dis->ms_handle_authentication(con);
+	return dis->ms_handle_authentication(con)>=0;
       }
       return true;
     }
