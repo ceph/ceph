@@ -783,6 +783,16 @@
           <context context-type="sourcefile">app/ceph/cluster/hosts/hosts.component.html</context>
           <context context-type="linenumber">3</context>
         </context-group>
+      </trans-unit><trans-unit id="e6d57f36aa2bad303c8a8ee944b9bd7fae3c8c26" datatype="html">
+        <source>No entries found</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/logs/logs.component.html</context>
+          <context context-type="linenumber">14</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/logs/logs.component.html</context>
+          <context context-type="linenumber">30</context>
+        </context-group>
       </trans-unit><trans-unit id="d556ab48a65722b400e497f61737f553ee0f89e2" datatype="html">
         <source>Cluster Logs</source>
         <context-group purpose="location">
@@ -793,7 +803,7 @@
         <source>Audit Logs</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/logs/logs.component.html</context>
-          <context context-type="linenumber">19</context>
+          <context context-type="linenumber">20</context>
         </context-group>
       </trans-unit><trans-unit id="81b97b8ea996ad1e4f9fca8415021850214884b1" datatype="html">
         <source>Status</source>

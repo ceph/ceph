@@ -13,7 +13,6 @@ import { HealthPieComponent } from './health-pie/health-pie.component';
 import { HealthComponent } from './health/health.component';
 import { InfoCardComponent } from './info-card/info-card.component';
 import { InfoGroupComponent } from './info-group/info-group.component';
-import { LogColorPipe } from './log-color.pipe';
 import { MdsSummaryPipe } from './mds-summary.pipe';
 import { MgrSummaryPipe } from './mgr-summary.pipe';
 import { MonSummaryPipe } from './mon-summary.pipe';
@@ -35,7 +34,6 @@ import { OsdSummaryPipe } from './osd-summary.pipe';
     DashboardComponent,
     MonSummaryPipe,
     OsdSummaryPipe,
-    LogColorPipe,
     MgrSummaryPipe,
     MdsSummaryPipe,
     HealthPieComponent,
