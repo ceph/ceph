@@ -32,11 +32,11 @@ OSD::OSD(int id, uint32_t nonce)
   : whoami{id},
     cluster_msgr{new ceph::net::SocketMessenger{entity_name_t::OSD(whoami),
                                                 "cluster", nonce}},
-    client_msgr{new ceph::net::SocketMessenger{entity_name_t::OSD(whoami),
+    public_msgr{new ceph::net::SocketMessenger{entity_name_t::OSD(whoami),
                                                "client", nonce}},
-    monc{*client_msgr}
+    monc{*public_msgr},
 {
-  for (auto msgr : {cluster_msgr.get(), client_msgr.get()}) {
+  for (auto msgr : {cluster_msgr.get(), public_msgr.get()}) {
     if (local_conf()->ms_crc_data) {
       msgr->set_crc_data();
     }
@@ -126,7 +126,7 @@ seastar::future<> OSD::start()
     osdmap = std::move(map);
     return load_pgs();
   }).then([this] {
-    return client_msgr->start(&dispatchers);
+    return public_msgr->start(&dispatchers);
   }).then([this] {
     return monc.start();
   }).then([this] {
@@ -204,7 +204,7 @@ seastar::future<> OSD::stop()
   return gate.close().then([this] {
     return monc.stop();
   }).then([this] {
-    return client_msgr->shutdown();
+    return public_msgr->shutdown();
   });
 }
 
@@ -458,7 +458,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
       osdmap = o;
       if (up_epoch != 0 &&
           osdmap->is_up(whoami) &&
-          osdmap->get_addrs(whoami) == client_msgr->get_myaddrs()) {
+          osdmap->get_addrs(whoami) == public_msgr->get_myaddrs()) {
         up_epoch = osdmap->get_epoch();
         if (!boot_epoch) {
           boot_epoch = osdmap->get_epoch();
@@ -467,7 +467,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
     });
   }).then([m, this] {
     if (osdmap->is_up(whoami) &&
-        osdmap->get_addrs(whoami) == client_msgr->get_myaddrs() &&
+        osdmap->get_addrs(whoami) == public_msgr->get_myaddrs() &&
         bind_epoch < osdmap->get_up_from(whoami)) {
       if (state.is_booting()) {
         logger().info("osd.{}: activating...", whoami);
@@ -511,11 +511,11 @@ bool OSD::should_restart() const
     logger().info("map e {} marked osd.{} down",
                   osdmap->get_epoch(), whoami);
     return true;
-  } else if (osdmap->get_addrs(whoami) != client_msgr->get_myaddrs()) {
+  } else if (osdmap->get_addrs(whoami) != public_msgr->get_myaddrs()) {
     logger().error("map e {} had wrong client addr ({} != my {})",
                    osdmap->get_epoch(),
                    osdmap->get_addrs(whoami),
-                   client_msgr->get_myaddrs());
+                   public_msgr->get_myaddrs());
     return true;
   } else if (osdmap->get_cluster_addrs(whoami) != cluster_msgr->get_myaddrs()) {
     logger().error("map e {} had wrong cluster addr ({} != my {})",

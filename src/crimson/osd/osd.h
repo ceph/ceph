@@ -41,8 +41,8 @@ class OSD : public ceph::net::Dispatcher,
   const int whoami;
   // talk with osd
   std::unique_ptr<ceph::net::Messenger> cluster_msgr;
-  // talk with mon/mgr
-  std::unique_ptr<ceph::net::Messenger> client_msgr;
+  // talk with client/mon/mgr
+  std::unique_ptr<ceph::net::Messenger> public_msgr;
   ChainedDispatchers dispatchers;
   ceph::mon::Client monc;
 
