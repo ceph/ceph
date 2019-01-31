@@ -62,11 +62,7 @@
 
 #include "inline_memory.h"
 
-#if __GNUC__ >= 4
-  #define CEPH_BUFFER_API  __attribute__ ((visibility ("default")))
-#else
-  #define CEPH_BUFFER_API
-#endif
+#define CEPH_BUFFER_API
 
 #if defined(HAVE_XIO)
 struct xio_reg_mem;
