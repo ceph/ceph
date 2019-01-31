@@ -25,7 +25,6 @@
 #include "common/LogEntry.h"
 #include "include/str_map.h"
 
-class MMonCommand;
 class MLog;
 
 static const string LOG_META_CHANNEL = "$channel";

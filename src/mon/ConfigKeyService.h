@@ -19,9 +19,6 @@
 
 class Paxos;
 class Monitor;
-namespace ceph {
-class Formatter;
-}
 
 class ConfigKeyService : public QuorumService
 {

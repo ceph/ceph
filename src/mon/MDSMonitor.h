@@ -27,9 +27,6 @@
 #include "msg/Messenger.h"
 #include "messages/MMDSBeacon.h"
 
-class MMonCommand;
-class MMDSLoadTargets;
-class MMDSMap;
 class FileSystemCommandHandler;
 
 class MDSMonitor : public PaxosService, public PaxosFSMap {

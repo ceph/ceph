@@ -24,9 +24,7 @@
 #include "mon/PaxosService.h"
 #include "mon/MonitorDBStore.h"
 
-class MMonCommand;
 struct MAuth;
-struct MMonGlobalID;
 class KeyRing;
 class Monitor;
 
