@@ -52,7 +52,8 @@ struct MDSCapSpec {
   static const unsigned RWS		= (READ|WRITE|SNAPSHOT);
   static const unsigned RWPS		= (READ|WRITE|SET_VXATTR|SNAPSHOT);
 
-  MDSCapSpec(unsigned _caps=0) : caps(_caps) {
+  MDSCapSpec() = default;
+  MDSCapSpec(unsigned _caps) : caps(_caps) {
     if (caps & ALL)
       caps |= RWPS;
   }
@@ -84,7 +85,7 @@ struct MDSCapSpec {
     return (caps & SET_VXATTR);
   }
 private:
-  unsigned caps;
+  unsigned caps = 0;
 };
 
 // conditions before we are allowed to do it
@@ -153,16 +154,19 @@ struct MDSCapGrant {
 
 class MDSAuthCaps
 {
-  CephContext *cct;
+  CephContext *cct = nullptr;
   std::vector<MDSCapGrant> grants;
 
 public:
-  explicit MDSAuthCaps(CephContext *cct_=NULL)
-    : cct(cct_) { }
+  MDSAuthCaps() = default;
+  explicit MDSAuthCaps(CephContext *cct_) : cct(cct_) {}
 
   // this ctor is used by spirit/phoenix; doesn't need cct.
-  explicit MDSAuthCaps(const std::vector<MDSCapGrant> &grants_)
-    : cct(NULL), grants(grants_) { }
+  explicit MDSAuthCaps(const std::vector<MDSCapGrant>& grants_) : grants(grants_) {}
+
+  void clear() {
+    grants.clear();
+  }
 
   void set_allow_all();
   bool parse(CephContext *cct, std::string_view str, std::ostream *err);
