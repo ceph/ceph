@@ -1037,7 +1037,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
         with open(os.path.dirname(__file__) + '/bootstrap-teuthology.sh', 'r') as f:
             bootstrap_content = cmd_str(f.read().encode('base64'))
 
-        openrc = ''
+        openrc_sh = ''
         cacert_cmd = None
         for (var, value) in os.environ.items():
             if var in ('OS_TOKEN_VALUE', 'OS_TOKEN_EXPIRES'):
@@ -1045,7 +1045,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
             if var == 'OS_CACERT':
                 cacert_path = '/home/%s/.openstack.crt' % self.username
                 cacert_file = value
-                openrc += ' ' + var + '=' + cacert_path
+                openrc_sh += 'export %s=%s\n' % (var, cacert_path)
                 cacert_cmd = (
                     "su - -c 'cat > {path}' {user} <<EOF\n"
                     "{data}\n"
@@ -1054,7 +1054,7 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
                         user=self.username,
                         data=open(cacert_file).read())
             elif var.startswith('OS_'):
-                openrc += ' ' + var + '=' + value
+                openrc_sh += 'export %s=%s\n' % (var, value)
         # if self.args.upload:
         #     upload = '--archive-upload ' + self.args.archive_upload
         # else:
@@ -1117,13 +1117,11 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
                     url=self.args.teuthology_git_url,
                     branch=self.args.teuthology_branch,
                     user=self.username)),
-            #"echo 'export %s' | tee /home/%s/openrc.sh" % (openrc, self.username),
             cmd_str(
-                "su - -c 'cat | tee $HOME/openrc.sh' {user} <<EOF\n"
-                "export {openrc}\n"
-                "EOF\n".format(user=self.username, openrc=openrc)),
+                "su - -c 'cp /tmp/openrc.sh $HOME/openrc.sh' {user}"
+                    .format(user=self.username)),
             cmd_str(
-                "su - -c '(set -x ; source openrc.sh ; cd teuthology ; "
+                "su - -c '(set +x ; source openrc.sh ; set -x ; cd teuthology ; "
                 "source virtualenv/bin/activate ; "
                 "teuthology/openstack/setup-openstack.sh {opts})' "
                 "{user} >> /tmp/init.out "
@@ -1162,6 +1160,13 @@ ssh access           : ssh {identity}{username}@{ip} # logs in /usr/share/nginx/
                     'encoding': 'b64',
                     'permissions': '0755',
                 },
+                {
+                    'path': '/tmp/openrc.sh',
+                    'owner': self.username,
+                    'content': cmd_str(openrc_sh.encode('base64')),
+                    'encoding': 'b64',
+                    'permissions': '0644',
+                }
             ],
             'runcmd': cmds,
             'final_message': 'teuthology is up and running after $UPTIME seconds'
