@@ -62,9 +62,9 @@ except ImportError:
 
 
 class Features(Enum):
-    RBD_IMAGES = 'rbd_images'
-    RBD_MIRRORING = 'rbd_mirroring'
-    RBD_ISCSI = 'rbd_iscsi'
+    RBD = 'rbd'
+    MIRRORING = 'mirroring'
+    ISCSI = 'iscsi'
     CEPHFS = 'cephfs'
     RGW = 'rgw'
 
@@ -78,9 +78,9 @@ class Actions(Enum):
 PREDISABLED_FEATURES = set()
 
 Feature2Endpoint = {
-    Features.RBD_IMAGES: ["/api/block/image"],
-    Features.RBD_MIRRORING: ["/api/block/mirroring"],
-    Features.RBD_ISCSI: ["/api/tcmuiscsi"],
+    Features.RBD: ["/api/block/image"],
+    Features.MIRRORING: ["/api/block/mirroring"],
+    Features.ISCSI: ["/api/tcmuiscsi"],
     Features.CEPHFS: ["/api/cephfs"],
     Features.RGW: ["/api/rgw"],
 }

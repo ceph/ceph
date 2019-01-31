@@ -11,6 +11,7 @@ import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-h
 import { HealthService } from '../../../shared/api/health.service';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { FeatureTogglesService } from '../../../shared/services/feature-toggles.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { PgCategoryService } from '../../shared/pg-category.service';
 import { HealthPieColor } from '../health-pie/health-pie-color.enum';
@@ -45,6 +46,17 @@ describe('HealthComponent', () => {
       return new Permissions({ log: ['read'] });
     }
   };
+  const fakeFeatureTogglesService = {
+    get: () => {
+      return of({
+        rbd: true,
+        mirroring: true,
+        iscsi: true,
+        cephfs: true,
+        rgw: true
+      });
+    }
+  };
 
   configureTestBed({
     imports: [SharedModule, HttpClientTestingModule, PopoverModule.forRoot()],
@@ -60,6 +72,7 @@ describe('HealthComponent', () => {
     providers: [
       i18nProviders,
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
+      { provide: FeatureTogglesService, useValue: fakeFeatureTogglesService },
       PgCategoryService
     ]
   });
