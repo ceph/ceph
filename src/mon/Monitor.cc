@@ -5873,17 +5873,19 @@ int Monitor::get_auth_request(
   vector<uint32_t> *preferred_modes,
   bufferlist *out)
 {
+  std::scoped_lock l(auth_lock);
+  if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
+    return -EACCES;
+  }
   AuthAuthorizer *auth;
   if (!ms_get_authorizer(con->get_peer_type(), &auth)) {
     return -EACCES;
   }
-  if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
-    return -EACCES;
-  }
   auth_meta->authorizer.reset(auth);
-  *method = auth->protocol;
-  auth_registry.get_supported_modes(CEPH_ENTITY_TYPE_MON, auth->protocol,
+  auth_registry.get_supported_modes(CEPH_ENTITY_TYPE_MON,
+				    auth->protocol,
 				    preferred_modes);
+  *method = auth->protocol;
   *out = auth->bl;
   return 0;
 }
@@ -5894,6 +5896,7 @@ int Monitor::handle_auth_reply_more(
   const bufferlist& bl,
   bufferlist *reply)
 {
+  std::scoped_lock l(auth_lock);
   if (!auth_meta->authorizer) {
     derr << __func__ << " no authorizer?" << dendl;
     return -EACCES;
@@ -5912,6 +5915,7 @@ int Monitor::handle_auth_done(
   CryptoKey *session_key,
   std::string *connection_secret)
 {
+  std::scoped_lock l(auth_lock);
   // verify authorizer reply
   auto p = bl.begin();
   if (!auth_meta->authorizer->verify_reply(p, connection_secret)) {
@@ -6036,6 +6040,8 @@ int Monitor::handle_auth_request(
   const bufferlist &payload,
   bufferlist *reply)
 {
+  std::scoped_lock l(auth_lock);
+
   // NOTE: be careful, the Connection hasn't fully negotiated yet, so
   // e.g., peer_features, peer_addrs, and others are still unknown.
 
