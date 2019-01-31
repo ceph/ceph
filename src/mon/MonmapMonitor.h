@@ -29,10 +29,6 @@
 #include "MonMap.h"
 #include "MonitorDBStore.h"
 
-class MMonMap;
-class MMonCommand;
-class MMonJoin;
-
 class MonmapMonitor : public PaxosService {
  public:
   MonmapMonitor(Monitor *mn, Paxos *p, const string& service_name)
