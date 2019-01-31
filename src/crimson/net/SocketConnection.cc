@@ -276,12 +276,13 @@ seastar::future<> SocketConnection::write_message(MessageRef msg)
     bl.append((const char*)&old_footer, sizeof(old_footer));
   }
   // write as a seastar::net::packet
-  return socket->write_flush(std::move(bl))
-    .then([this, msg = std::move(msg)] {
-      if (!policy.lossy) {
-        sent.push(std::move(msg));
-      }
-    });
+  return socket->write_flush(std::move(bl));
+  // TODO: lossless policy
+  //  .then([this, msg = std::move(msg)] {
+  //    if (!policy.lossy) {
+  //      sent.push(std::move(msg));
+  //    }
+  //  });
 }
 
 seastar::future<> SocketConnection::do_send(MessageRef msg)
