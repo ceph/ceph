@@ -163,7 +163,7 @@ cache_status_t SimplePolicy::get_status(std::string file_name) {
 
   RWLock::RLocker locker(m_cache_map_lock);
   auto entry_it = m_cache_map.find(file_name);
-  if(entry_it == m_cache_map.end()) {
+  if (entry_it == m_cache_map.end()) {
     return OBJ_CACHE_NONE;
   }
 

@@ -32,10 +32,10 @@ stream_protocol::socket& CacheSession::socket() {
 }
 
 void CacheSession::close() {
-  if(m_dm_socket.is_open()) {
+  if (m_dm_socket.is_open()) {
     boost::system::error_code close_ec;
     m_dm_socket.close(close_ec);
-    if(close_ec) {
+    if (close_ec) {
        ldout(cct, 20) << "close: " << close_ec.message() << dendl;
     }
   }
@@ -59,7 +59,7 @@ void CacheSession::read_request_header() {
 void CacheSession::handle_request_header(const boost::system::error_code& err,
                                          size_t bytes_transferred) {
   ldout(cct, 20) << dendl;
-  if(err || bytes_transferred != sizeof(ObjectCacheMsgHeader)) {
+  if (err || bytes_transferred != sizeof(ObjectCacheMsgHeader)) {
     fault();
     return;
   }
@@ -67,8 +67,7 @@ void CacheSession::handle_request_header(const boost::system::error_code& err,
   ObjectCacheMsgHeader* head = (ObjectCacheMsgHeader*)(m_head_buffer);
   ceph_assert(head->version == 0);
   ceph_assert(head->reserved == 0);
-  ceph_assert(head->type == RBDSC_REGISTER || head->type == RBDSC_READ ||
-              head->type == RBDSC_LOOKUP);
+  ceph_assert(head->type == RBDSC_REGISTER || head->type == RBDSC_READ);
 
   read_request_data(head->data_len);
 }
@@ -89,7 +88,7 @@ void CacheSession::handle_request_data(bufferptr bp, uint64_t data_len,
                                       const boost::system::error_code& err,
                                       size_t bytes_transferred) {
   ldout(cct, 20) << dendl;
-  if(err || bytes_transferred != data_len) {
+  if (err || bytes_transferred != data_len) {
     fault();
     return;
   }
@@ -120,7 +119,7 @@ void CacheSession::send(ObjectCacheRequest* reply) {
         boost::asio::buffer(bl.c_str(), bl.length()),
         boost::asio::transfer_exactly(bl.length()),
         [this, bl, reply](const boost::system::error_code& err, size_t bytes_transferred) {
-          if(err || bytes_transferred != bl.length()) {
+          if (err || bytes_transferred != bl.length()) {
             fault();
             return;
           }

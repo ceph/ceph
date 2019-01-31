@@ -23,7 +23,7 @@ namespace immutable_obj_cache {
     // TODO : configure it.
     m_use_dedicated_worker = true;
     m_worker_thread_num = 2;
-    if(m_use_dedicated_worker) {
+    if (m_use_dedicated_worker) {
       m_worker = new boost::asio::io_service();
       m_worker_io_service_work = new boost::asio::io_service::work(*m_worker);
       for(uint64_t i = 0; i < m_worker_thread_num; i++) {
@@ -50,10 +50,10 @@ namespace immutable_obj_cache {
     m_session_work.store(false);
     m_io_service.stop();
 
-    if(m_io_thread != nullptr) {
+    if (m_io_thread != nullptr) {
       m_io_thread->join();
     }
-    if(m_use_dedicated_worker) {
+    if (m_use_dedicated_worker) {
       m_worker->stop();
       for(auto thd : m_worker_threads) {
         thd->join();
@@ -69,7 +69,7 @@ namespace immutable_obj_cache {
     m_session_work.store(false);
     boost::system::error_code close_ec;
     m_dm_socket.close(close_ec);
-    if(close_ec) {
+    if (close_ec) {
        ldout(cct, 20) << "close: " << close_ec.message() << dendl;
     }
   }
@@ -77,7 +77,7 @@ namespace immutable_obj_cache {
   int CacheClient::connect() {
     boost::system::error_code ec;
     m_dm_socket.connect(m_ep, ec);
-    if(ec) {
+    if (ec) {
       fault(ASIO_ERROR_CONNECT, ec);
       return -1;
     }
@@ -121,7 +121,7 @@ namespace immutable_obj_cache {
   }
 
   void CacheClient::try_send() {
-    if(!m_writing.load()) {
+    if (!m_writing.load()) {
       m_writing.store(true);
       send_message();
     }
@@ -148,7 +148,7 @@ namespace immutable_obj_cache {
 
         {
            Mutex::Locker locker(m_lock);
-           if(m_outcoming_bl.length() == 0) {
+           if (m_outcoming_bl.length() == 0) {
              m_writing.store(false);
              return;
            }
@@ -161,7 +161,7 @@ namespace immutable_obj_cache {
   }
 
   void CacheClient::try_receive() {
-    if(!m_reading.load()) {
+    if (!m_reading.load()) {
       m_reading.store(true);
       receive_message();
     }
@@ -173,9 +173,6 @@ namespace immutable_obj_cache {
   }
 
   void CacheClient::read_reply_header() {
-
-    /* one head buffer for all arrived reply. */
-    // bufferptr bp_head(buffer::create_static(sizeof(ObjectCacheMsgHeader), m_header_buffer));
 
     /* create new head buffer for every reply */
     bufferptr bp_head(buffer::create(sizeof(ObjectCacheMsgHeader)));
@@ -193,7 +190,7 @@ namespace immutable_obj_cache {
   void CacheClient::handle_reply_header(bufferptr bp_head,
                                         const boost::system::error_code& ec,
                                         size_t bytes_transferred) {
-    if(ec || bytes_transferred != sizeof(ObjectCacheMsgHeader)) {
+    if (ec || bytes_transferred != sizeof(ObjectCacheMsgHeader)) {
       fault(ASIO_ERROR_READ, ec);
       return;
     }
@@ -246,12 +243,12 @@ namespace immutable_obj_cache {
 
     {
       Mutex::Locker locker(m_lock);
-      if(m_seq_to_req.size() == 0 && m_outcoming_bl.length()) {
+      if (m_seq_to_req.size() == 0 && m_outcoming_bl.length()) {
         m_reading.store(false);
         return;
       }
     }
-    if(is_session_work()) {
+    if (is_session_work()) {
       receive_message();
     }
 
@@ -269,7 +266,7 @@ namespace immutable_obj_cache {
     ceph_assert(current_request != nullptr);
     auto process_reply = new FunctionContext([this, current_request, reply]
       (bool dedicated) {
-       if(dedicated) {
+       if (dedicated) {
          // dedicated thrad to execute this context.
        }
        current_request->m_process_msg->complete(reply);
@@ -277,7 +274,7 @@ namespace immutable_obj_cache {
        delete reply;
     });
 
-    if(m_use_dedicated_worker) {
+    if (m_use_dedicated_worker) {
       m_worker->post([process_reply]() {
         process_reply->complete(true);
       });
@@ -290,9 +287,9 @@ namespace immutable_obj_cache {
   void CacheClient::fault(const int err_type, const boost::system::error_code& ec) {
     ldout(cct, 20) << "fault." << ec.message() << dendl;
 
-    if(err_type == ASIO_ERROR_CONNECT) {
+    if (err_type == ASIO_ERROR_CONNECT) {
        ceph_assert(!m_session_work.load());
-       if(ec == boost::asio::error::connection_refused) {
+       if (ec == boost::asio::error::connection_refused) {
          ldout(cct, 20) << "Connecting RO daenmon fails : "<< ec.message()
                         << ". Immutable-object-cache daemon is down ? "
                         << "Data will be read from ceph cluster " << dendl;
@@ -300,20 +297,20 @@ namespace immutable_obj_cache {
          ldout(cct, 20) << "Connecting RO daemon fails : " << ec.message() << dendl;
        }
 
-       if(m_dm_socket.is_open()) {
+       if (m_dm_socket.is_open()) {
          // Set to indicate what error occurred, if any.
          // Note that, even if the function indicates an error,
          // the underlying descriptor is closed.
          boost::system::error_code close_ec;
          m_dm_socket.close(close_ec);
-         if(close_ec) {
+         if (close_ec) {
            ldout(cct, 20) << "close: " << close_ec.message() << dendl;
          }
       }
       return;
     }
 
-    if(!m_session_work.load()) {
+    if (!m_session_work.load()) {
       return;
     }
 
@@ -324,16 +321,16 @@ namespace immutable_obj_cache {
     // make sure just have one thread to modify execute below code.
     m_session_work.store(false);
 
-    if(err_type == ASIO_ERROR_MSG_INCOMPLETE) {
+    if (err_type == ASIO_ERROR_MSG_INCOMPLETE) {
        ldout(cct, 20) << "ASIO In-complete message." << ec.message() << dendl;
        ceph_assert(0);
     }
 
-    if(err_type == ASIO_ERROR_READ) {
+    if (err_type == ASIO_ERROR_READ) {
        ldout(cct, 20) << "ASIO async read fails : " << ec.message() << dendl;
     }
 
-    if(err_type == ASIO_ERROR_WRITE) {
+    if (err_type == ASIO_ERROR_WRITE) {
        ldout(cct, 20) << "ASIO asyn write fails : " << ec.message() << dendl;
        // CacheClient should not occur this error.
        ceph_assert(0);
@@ -357,9 +354,6 @@ namespace immutable_obj_cache {
                        << ec.message() << dendl;
   }
 
-
-  // TODO : use async + wait_event
-  // TODO : accept one parameter : ObjectCacheRequest
   int CacheClient::register_client(Context* on_finish) {
     ObjectCacheRequest* message = new ObjectCacheRequest();
     message->m_head.version = 0;
@@ -378,14 +372,14 @@ namespace immutable_obj_cache {
     ret = boost::asio::write(m_dm_socket,
       boost::asio::buffer(bl.c_str(), bl.length()), ec);
 
-    if(ec || ret != bl.length()) {
+    if (ec || ret != bl.length()) {
       fault(ASIO_ERROR_WRITE, ec);
       return -1;
     }
 
     ret = boost::asio::read(m_dm_socket,
       boost::asio::buffer(m_header_buffer, sizeof(ObjectCacheMsgHeader)), ec);
-    if(ec || ret != sizeof(ObjectCacheMsgHeader)) {
+    if (ec || ret != sizeof(ObjectCacheMsgHeader)) {
       fault(ASIO_ERROR_READ, ec);
       return -1;
     }
@@ -395,7 +389,7 @@ namespace immutable_obj_cache {
     bufferptr bp_data(buffer::create(data_len));
 
     ret = boost::asio::read(m_dm_socket, boost::asio::buffer(bp_data.c_str(), data_len), ec);
-    if(ec || ret != data_len) {
+    if (ec || ret != data_len) {
       fault(ASIO_ERROR_READ, ec);
       return -1;
     }
