@@ -38,13 +38,13 @@ int ObjectCacheStore::init(bool reset) {
   ldout(m_cct, 20) << dendl;
 
   int ret = m_rados->init_with_context(m_cct);
-  if(ret < 0) {
+  if (ret < 0) {
     lderr(m_cct) << "fail to init Ceph context" << dendl;
     return ret;
   }
 
   ret = m_rados->connect();
-  if(ret < 0 ) {
+  if (ret < 0 ) {
     lderr(m_cct) << "fail to connect to cluster" << dendl;
     return ret;
   }
@@ -128,7 +128,7 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
   ldout(m_cct, 20) << " cache_file_name: " << cache_file_name << dendl;
 
   // rados read error
-  if(ret != -ENOENT && ret < 0) {
+  if (ret != -ENOENT && ret < 0) {
     lderr(m_cct) << "fail to read from rados" << dendl;
 
     m_policy->update_status(cache_file_name, OBJ_CACHE_NONE);
@@ -140,8 +140,6 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
     // object is empty
     ret = 0;
   }
-
-  uint32_t file_size = ret;
 
   std::string cache_file_path = std::move(generate_cache_file_path(cache_file_name));
 
@@ -208,7 +206,7 @@ int ObjectCacheStore::promote_object(librados::IoCtx* ioctx,
   librados::AioCompletion* read_completion = create_rados_callback(on_finish);
   // issue a zero-sized read req to get full obj
   int ret = ioctx->aio_read(object_name, read_completion, read_buf, 0, 0);
-  if(ret < 0) {
+  if (ret < 0) {
     lderr(m_cct) << "failed to read from rados" << dendl;
   }
   read_completion->release();
@@ -260,7 +258,7 @@ std::string ObjectCacheStore::generate_cache_file_path(std::string cache_file_na
 
   std::string cache_file_dir = "";
 
-  if(m_dir_num > 0) {
+  if (m_dir_num > 0) {
     auto const pos = cache_file_name.find_last_of('.');
     cache_file_dir = std::to_string(stoul(cache_file_name.substr(pos+1)) % m_dir_num);
   }

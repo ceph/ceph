@@ -29,13 +29,13 @@ int CacheServer::run() {
   ldout(cct, 20) << dendl;
 
   int ret = start_accept();
-  if(ret != 0) {
+  if (ret != 0) {
     return ret;
   }
 
   boost::system::error_code ec;
   ret = m_io_service.run(ec);
-  if(ec) {
+  if (ec) {
     ldout(cct, 1) << "m_io_service run fails: " << ec.message() << dendl;
     return -1;
   }
@@ -52,19 +52,19 @@ int CacheServer::start_accept() {
 
   boost::system::error_code ec;
   m_acceptor.open(m_local_path.protocol(), ec);
-  if(ec) {
+  if (ec) {
     ldout(cct, 1) << "m_acceptor open fails: " << ec.message() << dendl;
     return -1;
   }
 
   m_acceptor.bind(m_local_path, ec);
-  if(ec) {
+  if (ec) {
     ldout(cct, 1) << "m_acceptor bind fails: " << ec.message() << dendl;
     return -1;
   }
 
   m_acceptor.listen(boost::asio::socket_base::max_connections, ec);
-  if(ec) {
+  if (ec) {
     ldout(cct, 1) << "m_acceptor listen fails: " << ec.message() << dendl;
     return -1;
   }
