@@ -300,7 +300,7 @@ class Task(object):
                 if param['name'] in kwargs:
                     arg_map[param['name']] = kwargs[param['name']]
                 else:
-                    assert not param['required']
+                    assert not param['required'], "{0} is required".format(param['name'])
                     arg_map[param['name']] = param['default']
 
             if param['name'] in arg_map:
