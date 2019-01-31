@@ -44,11 +44,24 @@ int CacheController::init() {
 int CacheController::shutdown() {
   ldout(m_cct, 20) << dendl;
 
-  int r = m_object_cache_store->shutdown();
+  int r = m_cache_server->stop();
+  if (r < 0) {
+    lderr(m_cct) << "stop error\n" << dendl;
+    return r;
+  }
+
+  r = m_object_cache_store->shutdown();
+  if (r < 0) {
+    lderr(m_cct) << "stop error\n" << dendl;
+    return r;
+  }
+
   return r;
 }
 
-void CacheController::handle_signal(int signum){}
+void CacheController::handle_signal(int signum) {
+  shutdown();
+}
 
 void CacheController::run() {
   try {
