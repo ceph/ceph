@@ -159,7 +159,6 @@ struct MonSessionMap {
     if (s->con_features) {
       feature_map.add(s->con_type, s->con_features);
     }
-    s->get();  // caller gets a ref
     return s;
   }
 

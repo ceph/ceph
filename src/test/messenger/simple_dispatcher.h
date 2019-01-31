@@ -96,8 +96,8 @@ public:
     return false;
   };
 
-  int ms_handle_authentication(Connection *con) override {
-    return 1;
+  bool ms_handle_authentication(Connection *con) override {
+    return true;
   }
 };
 

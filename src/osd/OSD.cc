@@ -7164,9 +7164,8 @@ KeyStore *OSD::ms_get_auth1_authorizer_keystore()
   return monc->rotating_secrets.get();
 }
 
-int OSD::ms_handle_authentication(Connection *con)
+bool OSD::ms_handle_authentication(Connection *con)
 {
-  int ret = 0;
   auto priv = con->get_priv();
   Session *s = static_cast<Session*>(priv.get());
   if (!s) {
@@ -7183,10 +7182,10 @@ int OSD::ms_handle_authentication(Connection *con)
   }
 
   AuthCapsInfo &caps_info = con->get_peer_caps_info();
-  if (caps_info.allow_all)
+  if (caps_info.allow_all) {
     s->caps.set_allow_all();
-
-  if (caps_info.caps.length() > 0) {
+    return true;
+  } else if (caps_info.caps.length() > 0) {
     bufferlist::const_iterator p = caps_info.caps.cbegin();
     string str;
     try {
@@ -7195,23 +7194,22 @@ int OSD::ms_handle_authentication(Connection *con)
     catch (buffer::error& e) {
       dout(10) << __func__ << " session " << s << " " << s->entity_name
 	       << " failed to decode caps string" << dendl;
-      ret = -EPERM;
+      return false;
     }
-    if (!ret) {
-      bool success = s->caps.parse(str);
-      if (success) {
-	dout(10) << __func__ << " session " << s
-		 << " " << s->entity_name
-		 << " has caps " << s->caps << " '" << str << "'" << dendl;
-	ret = 1;
-      } else {
-	dout(10) << __func__ << " session " << s << " " << s->entity_name
-		 << " failed to parse caps '" << str << "'" << dendl;
-	ret = -EPERM;
-      }
+    bool success = s->caps.parse(str);
+    if (success) {
+      dout(10) << __func__ << " session " << s
+               << " " << s->entity_name
+               << " has caps " << s->caps << " '" << str << "'" << dendl;
+      return true;
+    } else {
+      dout(10) << __func__ << " session " << s << " " << s->entity_name
+               << " failed to parse caps '" << str << "'" << dendl;
+      return false;
     }
   }
-  return ret;
+
+  return false;
 }
 
 void OSD::do_waiters()

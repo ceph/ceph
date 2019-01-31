@@ -1663,7 +1663,7 @@ public:
     bool ms_handle_refused(Connection *con) override {
       return osd->ms_handle_refused(con);
     }
-    int ms_handle_authentication(Connection *con) override {
+    bool ms_handle_authentication(Connection *con) override {
       return true;
     }
     bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer) override {
@@ -2204,7 +2204,7 @@ private:
   void ms_handle_connect(Connection *con) override;
   void ms_handle_fast_connect(Connection *con) override;
   void ms_handle_fast_accept(Connection *con) override;
-  int ms_handle_authentication(Connection *con) override;
+  bool ms_handle_authentication(Connection *con) override;
   KeyStore *ms_get_auth1_authorizer_keystore() override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}

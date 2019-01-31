@@ -200,8 +200,8 @@ class FakeDispatcher : public Dispatcher {
     cond.Signal();
   }
 
-  int ms_handle_authentication(Connection *con) override {
-    return 1;
+  bool ms_handle_authentication(Connection *con) override {
+    return true;
   }
 
   void reply_message(Message *m) {
@@ -918,8 +918,8 @@ class SyntheticDispatcher : public Dispatcher {
     }
   }
 
-  int ms_handle_authentication(Connection *con) override {
-    return 1;
+  bool ms_handle_authentication(Connection *con) override {
+    return true;
   }
 
   void reply_message(const Message *m, Payload& pl) {
@@ -1464,8 +1464,8 @@ class MarkdownDispatcher : public Dispatcher {
   void ms_fast_dispatch(Message *m) override {
     ceph_abort();
   }
-  int ms_handle_authentication(Connection *con) override {
-    return 1;
+  bool ms_handle_authentication(Connection *con) override {
+    return true;
   }
 };
 

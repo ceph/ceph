@@ -166,55 +166,58 @@ KeyStore *DaemonServer::ms_get_auth1_authorizer_keystore()
   return monc->rotating_secrets.get();
 }
 
-int DaemonServer::ms_handle_authentication(Connection *con)
+void DaemonServer::ms_handle_accept(Connection* con)
 {
-  int ret = 0;
+  std::lock_guard l(lock);
   MgrSession *s = new MgrSession(cct);
-  con->set_priv(s);
-  s->inst.addr = con->get_peer_addr();
+  con->set_priv(RefCountedPtr{s, false});
+  s->inst.addr = con->get_peer_socket_addr();
   s->entity_name = con->peer_name;
   dout(10) << __func__ << " new session " << s << " con " << con
 	   << " entity " << con->peer_name
 	   << " addr " << con->get_peer_addrs()
 	   << dendl;
 
-  AuthCapsInfo &caps_info = con->get_peer_caps_info();
+  const AuthCapsInfo& caps_info = con->get_peer_caps_info();
   if (caps_info.allow_all) {
     dout(10) << " session " << s << " " << s->entity_name
 	     << " allow_all" << dendl;
     s->caps.set_allow_all();
-  }
-
-  if (caps_info.caps.length() > 0) {
-    auto p = caps_info.caps.cbegin();
+  } else {
+    auto it = caps_info.caps.begin();
     string str;
-    try {
-      decode(str, p);
-    }
-    catch (buffer::error& e) {
-      ret = -EPERM;
-    }
-    bool success = s->caps.parse(str);
-    if (success) {
-      dout(10) << " session " << s << " " << s->entity_name
-	       << " has caps " << s->caps << " '" << str << "'" << dendl;
-      ret = 1;
-    } else {
-      dout(10) << " session " << s << " " << s->entity_name
-	       << " failed to parse caps '" << str << "'" << dendl;
-      ret = -EPERM;
-    }
+    decode(str, it);
+    auto r = s->caps.parse(str);
+    ceph_assert(r);
   }
 
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
-    std::lock_guard l(lock);
     s->osd_id = atoi(s->entity_name.get_id().c_str());
     dout(10) << "registering osd." << s->osd_id << " session "
 	     << s << " con " << con << dendl;
     osd_cons[s->osd_id].insert(con);
   }
+}
 
-  return ret;
+bool DaemonServer::ms_handle_authentication(Connection *con)
+{
+  const AuthCapsInfo& caps_info = con->get_peer_caps_info();
+  if (!caps_info.allow_all) {
+    MonCap caps;
+    auto it = caps_info.caps.begin();
+    string str;
+    try {
+      decode(str, it);
+    } catch (buffer::error& e) {
+      return false;
+    }
+    if (!caps.parse(str)) {
+      dout(10) << " entity " << con->peer_name
+	       << " failed to parse caps '" << str << "'" << dendl;
+      return false;
+    }
+  }
+  return true;
 }
 
 bool DaemonServer::ms_get_authorizer(

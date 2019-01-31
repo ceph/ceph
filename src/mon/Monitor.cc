@@ -4171,11 +4171,12 @@ void Monitor::_ms_dispatch(Message *m)
   bool src_is_mon = op->is_src_mon();
   op->mark_event("mon:_ms_dispatch");
   MonSession *s = op->get_session();
-  if (s && s->closed) {
+  ceph_assert(s);
+  if (s->closed) {
     return;
   }
 
-  if (src_is_mon && s) {
+  if (src_is_mon) {
     ConnectionRef con = m->get_connection();
     if (con->get_messenger() && con->get_features() != s->con_features) {
       // only update features if this is a non-anonymous connection
@@ -4196,9 +4197,7 @@ void Monitor::_ms_dispatch(Message *m)
       s->put();
       s = nullptr;
     }
-  }
-
-  if (!s) {
+  } else {
     // if the sender is not a monitor, make sure their first message for a
     // session is an MAuth.  If it is not, assume it's a stray message,
     // and considering that we are creating a new session it is safe to
@@ -4211,37 +4210,10 @@ void Monitor::_ms_dispatch(Message *m)
 	      << " from " << m->get_source_inst() << dendl;
       return;
     }
-
-    ConnectionRef con = m->get_connection();
-    {
-      std::lock_guard l(session_map_lock);
-      s = session_map.new_session(m->get_source(),
-				  m->get_source_addrs(),
-				  con.get());
-    }
-    ceph_assert(s);
-    con->set_priv(RefCountedPtr{s, false});
-    dout(10) << __func__ << " new session " << s << " " << *s
-	     << " features 0x" << std::hex
-	     << s->con_features << std::dec << dendl;
-    op->set_session(s);
-
-    logger->set(l_mon_num_sessions, session_map.get_size());
-    logger->inc(l_mon_session_add);
-
-    if (src_is_mon) {
-      // give it monitor caps; the peer type has been authenticated
-      dout(5) << __func__ << " setting monitor caps on this connection" << dendl;
-      if (!s->caps.is_allow_all()) // but no need to repeatedly copy
-        s->caps = mon_caps;
-      s->authenticated = true;
-    }
-  } else {
-    dout(20) << __func__ << " existing session " << s << " for " << s->name
-	     << dendl;
   }
 
-  ceph_assert(s);
+  dout(20) << __func__ << " existing session " << s << " for "
+           << s->name << dendl;
 
   s->session_timeout = ceph_clock_now();
   s->session_timeout += g_conf()->mon_session_timeout;
@@ -5095,8 +5067,7 @@ bool Monitor::ms_handle_reset(Connection *con)
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON)
     return false;
 
-  auto priv = con->get_priv();
-  auto s = static_cast<MonSession*>(priv.get());
+  auto s = static_cast<MonSession*>(con->get_priv().get());
   if (!s)
     return false;
 
@@ -5949,60 +5920,95 @@ KeyStore *Monitor::ms_get_auth1_authorizer_keystore()
   return &keyring;
 }
 
-int Monitor::ms_handle_authentication(Connection *con)
+bool Monitor::ms_handle_authentication(Connection *con)
 {
-  if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-    // mon <-> mon connections need no Session, and setting one up
-    // creates an awkward ref cycle between Session and Connection.
-    return 1;
-  }
-
-  auto priv = con->get_priv();
-  MonSession *s = static_cast<MonSession*>(priv.get());
-  if (!s) {
-    // must be msgr2, otherwise dispatch would have set up the session.
-    s = session_map.new_session(
-      entity_name_t(con->get_peer_type(), -1),  // we don't know yet
-      con->get_peer_addrs(),
-      con);
-    assert(s);
-    dout(10) << __func__ << " adding session " << s << " to con " << con
-	     << dendl;
-    con->set_priv(s);
-    logger->set(l_mon_num_sessions, session_map.get_size());
-    logger->inc(l_mon_session_add);
-  }
-  dout(10) << __func__ << " session " << s << " con " << con
-	   << " addr " << s->con->get_peer_addr()
-	   << " " << *s << dendl;
-
-  AuthCapsInfo &caps_info = con->get_peer_caps_info();
+  const AuthCapsInfo& caps_info = con->get_peer_caps_info();
   if (caps_info.allow_all) {
-    s->caps.set_allow_all();
-    s->authenticated = true;
-  }
-  int ret = 1;
-  if (caps_info.caps.length()) {
-    bufferlist::const_iterator p = caps_info.caps.cbegin();
+    derr << __func__ << " allow all " << dendl;
+    return true;
+  } else if (caps_info.caps.length()>0) {
+    auto it = caps_info.caps.begin();
     string str;
     try {
-      decode(str, p);
+      decode(str, it);
     } catch (const buffer::error &err) {
       derr << __func__ << " corrupt cap data for " << con->get_peer_entity_name()
 	   << " in auth db" << dendl;
-      str.clear();
-      ret = -EPERM;
+      return false;
     }
-    if (ret >= 0) {
-      if (s->caps.parse(str, NULL)) {
-	s->authenticated = true;
-      } else {
-	derr << __func__ << " unparseable caps '" << str << "' for "
-	     << con->get_peer_entity_name() << dendl;
-	ret = -EPERM;
-      }
+    MonCap caps;
+    if (!caps.parse(str, NULL)) {
+      derr << __func__ << " unparseable caps '" << str << "' for "
+           << con->get_peer_entity_name() << dendl;
+      return false;
     }
+    derr << __func__ << " parsed caps" << dendl;
+  } else {
+    derr << __func__ << " done" << dendl;
+    return true;
+  }
+  return true;
+}
+
+void Monitor::ms_handle_accept(Connection *con)
+{
+  bool is_mon = con->get_peer_type() == CEPH_ENTITY_TYPE_MON;
+  std::lock_guard l(lock);
+  entity_name_t n(con->get_peer_type(), con->get_peer_global_id());
+  MonSession *s = static_cast<MonSession*>(con->get_priv().get());
+  if (!s) {
+    {
+      std::lock_guard l(session_map_lock);
+      s = session_map.new_session(n, con->get_peer_addrs(), con);
+    }
+    assert(s);
+    con->set_priv(s);
+    ceph_assert(s->get_nref() == 2);
+
+    dout(15) << __func__ << " new session " << s << " " << *s << dendl;
+
+    logger->set(l_mon_num_sessions, session_map.get_size());
+    logger->inc(l_mon_session_add);
+    // XXX op->set_session(s);
   }
 
-  return ret;
+  dout(10) << __func__
+           << " con " << con
+           << " session " << s
+	   << " " << *s << dendl;
+
+  if (is_mon) {
+    // give it monitor caps; the peer type has been authenticated
+    dout(5) << __func__ << " setting monitor caps on this connection" << dendl;
+    s->caps = mon_caps;
+    s->authenticated = true;
+  } else {
+    const AuthCapsInfo& caps_info = con->get_peer_caps_info();
+    if (caps_info.allow_all) {
+      s->caps.set_allow_all();
+      s->authenticated = true;
+    } else if (caps_info.caps.length()) {
+      auto it = caps_info.caps.begin();
+      string str;
+      try {
+        decode(str, it);
+      } catch (const buffer::error &err) {
+        derr << __func__ << " corrupt cap data for " << con->get_peer_entity_name()
+	     << " in auth db" << dendl;
+        ceph_abort();
+      }
+      if (!s->caps.parse(str, NULL)) {
+        derr << __func__ << " unparseable caps '" << str << "' for "
+             << con->get_peer_entity_name() << dendl;
+        ceph_abort();
+      }
+      derr << __func__ << " parsed caps" << dendl;
+      //string str;
+      //decode(str, it);
+      //auto r = s->caps.parse(str, NULL);
+      //ceph_assert(r);
+      s->authenticated = true;
+    } /* N.B. else not authenticated! */
+  }
+  derr << __func__ << "done" << dendl;
 }
