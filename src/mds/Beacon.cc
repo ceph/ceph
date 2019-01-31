@@ -374,40 +374,27 @@ void Beacon::notify_health(MDSRank const *mds)
     set<Session*> sessions;
     mds->sessionmap.get_client_session_set(sessions);
 
-    auto mds_recall_state_timeout = g_conf()->mds_recall_state_timeout;
-    auto last_recall = mds->mdcache->last_recall_state;
-    auto last_recall_span = std::chrono::duration<double>(clock::now()-last_recall).count();
-    bool recall_state_timedout = last_recall_span > mds_recall_state_timeout;
-
+    const auto recall_warning_threshold = g_conf().get_val<Option::size_t>("mds_recall_warning_threshold");
+    const auto max_completed_requests = g_conf()->mds_max_completed_requests;
+    const auto max_completed_flushes = g_conf()->mds_max_completed_flushes;
     std::list<MDSHealthMetric> late_recall_metrics;
     std::list<MDSHealthMetric> large_completed_requests_metrics;
     for (auto& session : sessions) {
-      if (session->recalled_at != Session::clock::zero()) {
-        auto last_recall_sent = session->last_recall_sent;
-        auto recalled_at = session->recalled_at;
-        auto recalled_at_span = std::chrono::duration<double>(clock::now()-recalled_at).count();
-
-        dout(20) << "Session servicing RECALL " << session->info.inst
-          << ": " << recalled_at_span << "s ago " << session->recall_release_count
-          << "/" << session->recall_count << dendl;
-	if (recall_state_timedout || last_recall_sent < last_recall) {
-	  dout(20) << "  no longer recall" << dendl;
-	  session->clear_recalled_at();
-	} else if (recalled_at_span > mds_recall_state_timeout) {
-          dout(20) << "  exceeded timeout " << recalled_at_span << " vs. " << mds_recall_state_timeout << dendl;
-          std::ostringstream oss;
-	  oss << "Client " << session->get_human_name() << " failing to respond to cache pressure";
-          MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL, HEALTH_WARN, oss.str());
-          m.metadata["client_id"] = stringify(session->get_client());
-          late_recall_metrics.push_back(m);
-        } else {
-          dout(20) << "  within timeout " << recalled_at_span << " vs. " << mds_recall_state_timeout << dendl;
-        }
+      const uint64_t recall_caps = session->get_recall_caps();
+      if (recall_caps > recall_warning_threshold) {
+        dout(2) << "Session " << *session <<
+             " is not releasing caps fast enough. Recalled caps at " << recall_caps
+          << " > " << recall_warning_threshold << " (mds_recall_warning_threshold)." << dendl;
+        std::ostringstream oss;
+        oss << "Client " << session->get_human_name() << " failing to respond to cache pressure";
+        MDSHealthMetric m(MDS_HEALTH_CLIENT_RECALL, HEALTH_WARN, oss.str());
+        m.metadata["client_id"] = stringify(session->get_client());
+        late_recall_metrics.push_back(m);
       }
       if ((session->get_num_trim_requests_warnings() > 0 &&
-	   session->get_num_completed_requests() >= g_conf()->mds_max_completed_requests) ||
+	   session->get_num_completed_requests() >= max_completed_requests) ||
 	  (session->get_num_trim_flushes_warnings() > 0 &&
-	   session->get_num_completed_flushes() >= g_conf()->mds_max_completed_flushes)) {
+	   session->get_num_completed_flushes() >= max_completed_flushes)) {
 	std::ostringstream oss;
 	oss << "Client " << session->get_human_name() << " failing to advance its oldest client/flush tid";
 	MDSHealthMetric m(MDS_HEALTH_CLIENT_OLDEST_TID, HEALTH_WARN, oss.str());

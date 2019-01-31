@@ -370,6 +370,7 @@ const char** MDSDaemon::get_tracked_conf_keys() const
     "mds_health_cache_threshold",
     "mds_cache_mid",
     "mds_dump_cache_threshold_formatter",
+    "mds_cache_trim_decay_rate",
     "mds_dump_cache_threshold_file",
     // MDBalancer
     "mds_bal_fragment_dirs",
@@ -383,8 +384,10 @@ const char** MDSDaemon::get_tracked_conf_keys() const
     "mds_inject_migrator_session_race",
     "host",
     "fsid",
-    "mds_request_load_average_decay_rate",
     "mds_cap_revoke_eviction_timeout",
+    // SessionMap
+    "mds_request_load_average_decay_rate",
+    "mds_recall_max_decay_rate",
     NULL
   };
   return KEYS;
