@@ -170,6 +170,7 @@ seastar::future<> OSD::start_boot()
 
 seastar::future<> OSD::_preboot(version_t newest, version_t oldest)
 {
+  logger().info("osd.{}: _preboot", whoami);
   if (osdmap->get_epoch() == 0) {
     logger().warn("waiting for initial osdmap");
   } else if (osdmap->is_destroyed(whoami)) {
@@ -512,7 +513,6 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
       logger().info("osd.{}: now preboot", whoami);
 
       if (m->get_source().is_mon()) {
-        logger().info("osd.{}: _preboot", whoami);
         return _preboot(m->oldest_map, m->newest_map);
       } else {
         logger().info("osd.{}: start_boot", whoami);
