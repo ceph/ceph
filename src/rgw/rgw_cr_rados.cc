@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "include/compat.h"
 #include "rgw_rados.h"
 #include "rgw_zone.h"
 #include "rgw_coroutine.h"
@@ -819,9 +820,10 @@ RGWSyncLogTrimCR::RGWSyncLogTrimCR(RGWRados *store, const std::string& oid,
 int RGWSyncLogTrimCR::request_complete()
 {
   int r = RGWRadosTimelogTrimCR::request_complete();
-  if (r < 0 && r != -ENODATA) {
+  if (r != -ENODATA) {
     return r;
   }
+  // nothing left to trim, update last_trim_marker
   if (*last_trim_marker < to_marker) {
     *last_trim_marker = to_marker;
   }
