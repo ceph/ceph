@@ -655,6 +655,13 @@ void IoCtx::snap_set_read(snap_t seq) {
   ctx->set_snap_read(seq);
 }
 
+int IoCtx::sparse_read(const std::string& oid, std::map<uint64_t,uint64_t>& m,
+                       bufferlist& bl, size_t len, uint64_t off) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::sparse_read, _1, _2, off, len, &m, &bl));
+}
+
 int IoCtx::stat(const std::string& oid, uint64_t *psize, time_t *pmtime) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->execute_operation(

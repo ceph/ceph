@@ -468,6 +468,7 @@ int TestMemIoCtxImpl::sparse_read(const std::string& oid, uint64_t off,
 
   RWLock::RLocker l(file->lock);
   len = clip_io(off, len, file->data.length());
+  // TODO support sparse read
   if (m != NULL) {
     m->clear();
     if (len > 0) {
@@ -479,7 +480,7 @@ int TestMemIoCtxImpl::sparse_read(const std::string& oid, uint64_t off,
     bit.substr_of(file->data, off, len);
     append_clone(bit, data_bl);
   }
-  return 0;
+  return len > 0 ? 1 : 0;
 }
 
 int TestMemIoCtxImpl::stat(const std::string& oid, uint64_t *psize,
