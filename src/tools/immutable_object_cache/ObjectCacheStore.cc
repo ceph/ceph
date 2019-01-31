@@ -18,12 +18,13 @@ namespace immutable_obj_cache {
 
 ObjectCacheStore::ObjectCacheStore(CephContext *cct)
       : m_cct(cct), m_rados(new librados::Rados()),
-        m_ioctxs_lock("ceph::cache::ObjectCacheStore::m_ioctxs_lock") {
+        m_ioctx_map_lock("ceph::cache::ObjectCacheStore::m_ioctx_map_lock") {
 
   object_cache_max_size =
     m_cct->_conf.get_val<Option::size_t>("immutable_object_cache_max_size");
 
-  std::string cache_path = m_cct->_conf.get_val<std::string>("immutable_object_cache_path");
+  std::string cache_path =
+    m_cct->_conf.get_val<std::string>("immutable_object_cache_path");
   m_cache_root_dir = cache_path + "/ceph_immutable_obj_cache/";
 
   //TODO(): allow to set cache level
@@ -32,6 +33,9 @@ ObjectCacheStore::ObjectCacheStore(CephContext *cct)
 
 ObjectCacheStore::~ObjectCacheStore() {
   delete m_policy;
+  for (auto it: m_ioctx_map) {
+    delete it.second;
+  }
 }
 
 int ObjectCacheStore::init(bool reset) {
@@ -90,29 +94,33 @@ int ObjectCacheStore::init_cache() {
 int ObjectCacheStore::do_promote(std::string pool_nspace,
                                   uint64_t pool_id, uint64_t snap_id,
                                   std::string object_name) {
-  ldout(m_cct, 20) << "to promote object = "
-                   << object_name << " from pool ID : "
-                   << pool_id << dendl;
+  ldout(m_cct, 20) << "to promote object: " << object_name
+                   << " from pool id: " << pool_id
+                   << " namespace: " << pool_nspace
+                   << " snapshot: " << snap_id << dendl;
 
   int ret = 0;
-  std::string cache_file_name = std::move(generate_cache_file_name(pool_nspace,
+  std::string cache_file_name = std::move(get_cache_file_name(pool_nspace,
                                           pool_id, snap_id, object_name));
+  librados::IoCtx* ioctx = nullptr;
   {
-    Mutex::Locker _locker(m_ioctxs_lock);
-    if (m_ioctxs.find(pool_id) == m_ioctxs.end()) {
-      librados::IoCtx* io_ctx = new librados::IoCtx();
-      ret = m_rados->ioctx_create2(pool_id, *io_ctx);
+    Mutex::Locker _locker(m_ioctx_map_lock);
+    if (m_ioctx_map.find(pool_id) == m_ioctx_map.end()) {
+      ioctx = new librados::IoCtx();
+      ret = m_rados->ioctx_create2(pool_id, *ioctx);
       if (ret < 0) {
         lderr(m_cct) << "fail to create ioctx" << dendl;
         return ret;
       }
-      m_ioctxs.emplace(pool_id, io_ctx);
+      m_ioctx_map.emplace(pool_id, ioctx);
+    } else {
+      ioctx = m_ioctx_map[pool_id];
     }
   }
+  ceph_assert(ioctx != nullptr);
 
-  ceph_assert(m_ioctxs.find(pool_id) != m_ioctxs.end());
-
-  librados::IoCtx* ioctx = m_ioctxs[pool_id];
+  ioctx->set_namespace(pool_nspace);
+  ioctx->snap_set_read(snap_id);
 
   librados::bufferlist* read_buf = new librados::bufferlist();
 
@@ -141,7 +149,7 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
     ret = 0;
   }
 
-  std::string cache_file_path = std::move(generate_cache_file_path(cache_file_name));
+  std::string cache_file_path = std::move(get_cache_file_path(cache_file_name));
 
   ret = read_buf->write_file(cache_file_path.c_str());
   if (ret < 0) {
@@ -172,7 +180,7 @@ int ObjectCacheStore::lookup_object(std::string pool_nspace,
                    << " in pool ID : " << pool_id << dendl;
 
   int pret = -1;
-  std::string cache_file_name = std::move(generate_cache_file_name(pool_nspace,
+  std::string cache_file_name = std::move(get_cache_file_name(pool_nspace,
                                             pool_id, snap_id, object_name));
 
   cache_status_t ret = m_policy->lookup_object(cache_file_name);
@@ -186,8 +194,8 @@ int ObjectCacheStore::lookup_object(std::string pool_nspace,
       return -1;
     }
     case OBJ_CACHE_PROMOTED:
-      // librbd hook will go to target_cache_file_path to read data
-      target_cache_file_path = std::move(generate_cache_file_path(cache_file_name));
+      target_cache_file_path = std::move(
+        get_cache_file_path(cache_file_name));
       return 0;
     case OBJ_CACHE_SKIP:
       return -1;
@@ -204,7 +212,7 @@ int ObjectCacheStore::promote_object(librados::IoCtx* ioctx,
   ldout(m_cct, 20) << "object name = " << object_name << dendl;
 
   librados::AioCompletion* read_completion = create_rados_callback(on_finish);
-  // issue a zero-sized read req to get full obj
+  // issue a zero-sized read req to get the entire obj
   int ret = ioctx->aio_read(object_name, read_completion, read_buf, 0, 0);
   if (ret < 0) {
     lderr(m_cct) << "failed to read from rados" << dendl;
@@ -227,17 +235,17 @@ int ObjectCacheStore::evict_objects() {
 int ObjectCacheStore::do_evict(std::string cache_file) {
   ldout(m_cct, 20) << "file = " << cache_file << dendl;
 
-  //TODO(): need a better way to get file path
-
   if (cache_file == "") {
     return 0;
   }
 
-  std::string cache_file_path = std::move(generate_cache_file_path(cache_file));
+  std::string cache_file_path = std::move(get_cache_file_path(cache_file));
 
-  ldout(m_cct, 20) << "delete file: " << cache_file_path << dendl;
+  ldout(m_cct, 20) << "evict cache: " << cache_file_path << dendl;
+
+  // TODO(): possible race on read?
   int ret = std::remove(cache_file_path.c_str());
-   // evict entry in policy
+   // evict metadata
   if (ret == 0) {
     m_policy->update_status(cache_file, OBJ_CACHE_SKIP);
     m_policy->evict_entry(cache_file);
@@ -246,7 +254,7 @@ int ObjectCacheStore::do_evict(std::string cache_file) {
   return ret;
 }
 
-std::string ObjectCacheStore::generate_cache_file_name(std::string pool_nspace,
+std::string ObjectCacheStore::get_cache_file_name(std::string pool_nspace,
                                                        uint64_t pool_id,
                                                        uint64_t snap_id,
                                                        std::string oid) {
@@ -254,13 +262,14 @@ std::string ObjectCacheStore::generate_cache_file_name(std::string pool_nspace,
          std::to_string(snap_id) + ":" + oid;
 }
 
-std::string ObjectCacheStore::generate_cache_file_path(std::string cache_file_name) {
+std::string ObjectCacheStore::get_cache_file_path(std::string cache_file_name) {
 
   std::string cache_file_dir = "";
 
   if (m_dir_num > 0) {
     auto const pos = cache_file_name.find_last_of('.');
-    cache_file_dir = std::to_string(stoul(cache_file_name.substr(pos+1)) % m_dir_num);
+    cache_file_dir = std::to_string(
+      stoul(cache_file_name.substr(pos+1)) % m_dir_num);
   }
 
   return m_cache_root_dir + cache_file_dir + "/" + cache_file_name;
