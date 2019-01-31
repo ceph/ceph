@@ -1400,23 +1400,53 @@
         <source>No entries found</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/logs/logs.component.html</context>
-          <context context-type="linenumber">14</context>
+          <context context-type="linenumber">15</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/logs/logs.component.html</context>
-          <context context-type="linenumber">30</context>
+          <context context-type="linenumber">31</context>
         </context-group>
       </trans-unit><trans-unit id="d556ab48a65722b400e497f61737f553ee0f89e2" datatype="html">
         <source>Cluster Logs</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/logs/logs.component.html</context>
-          <context context-type="linenumber">4</context>
+          <context context-type="linenumber">5</context>
         </context-group>
       </trans-unit><trans-unit id="5f966baffd188be0e8adc2d7067b86e55fc9b9de" datatype="html">
         <source>Audit Logs</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/logs/logs.component.html</context>
-          <context context-type="linenumber">20</context>
+          <context context-type="linenumber">21</context>
+        </context-group>
+      </trans-unit><trans-unit id="4193c9eb868aeec119b78a14795241e0aa5e8b60" datatype="html">
+        <source>Priority:</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/logs/logs.component.html</context>
+          <context context-type="linenumber">41</context>
+        </context-group>
+      </trans-unit><trans-unit id="1d78ca51eab260ce3fd917d39190d64df5229b6e" datatype="html">
+        <source>Keyword:</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/logs/logs.component.html</context>
+          <context context-type="linenumber">51</context>
+        </context-group>
+      </trans-unit><trans-unit id="05fa0bded36de6e73a1fa44838b627349dace044" datatype="html">
+        <source>Date:</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/logs/logs.component.html</context>
+          <context context-type="linenumber">70</context>
+        </context-group>
+      </trans-unit><trans-unit id="31dadb362bf7f7c2afa10e5f96474ccd3977f91f" datatype="html">
+        <source>Datepicker</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/logs/logs.component.html</context>
+          <context context-type="linenumber">75</context>
+        </context-group>
+      </trans-unit><trans-unit id="85a400388de1899b1917138cf7e5286376f72847" datatype="html">
+        <source>Time range:</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/logs/logs.component.html</context>
+          <context context-type="linenumber">91</context>
         </context-group>
       </trans-unit><trans-unit id="2447796ddbda942f4e2c46619cb84d69f066e568" datatype="html">
         <source>Loading configuration...</source>
