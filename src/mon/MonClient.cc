@@ -414,6 +414,10 @@ void MonClient::handle_monmap(MMonMap *m)
   sub.got("monmap", monmap.get_epoch());
   map_cond.Signal();
   want_monmap = false;
+
+  if (authenticate_err == 1) {
+    _finish_auth(0);
+  }
 }
 
 void MonClient::handle_config(MConfig *m)
@@ -527,8 +531,8 @@ int MonClient::authenticate(double timeout)
   until += timeout;
   if (timeout > 0.0)
     ldout(cct, 10) << "authenticate will time out at " << until << dendl;
-  authenticate_err = 0;
-  while (!active_con && !authenticate_err) {
+  authenticate_err = 1;  // == in progress
+  while (!active_con && authenticate_err >= 0) {
     if (timeout > 0.0) {
       int r = auth_cond.WaitUntil(monc_lock, until);
       if (r == ETIMEDOUT && !active_con) {
@@ -544,7 +548,7 @@ int MonClient::authenticate(double timeout)
     ldout(cct, 5) << __func__ << " success, global_id "
 		  << active_con->get_global_id() << dendl;
     // active_con should not have been set if there was an error
-    ceph_assert(authenticate_err == 0);
+    ceph_assert(authenticate_err >= 0);
     authenticated = true;
   }
 
@@ -597,10 +601,12 @@ void MonClient::handle_auth(MAuthReply *m)
   }
 
   _finish_hunting(auth_err);
+  _finish_auth(auth_err);
 }
 
 void MonClient::_finish_auth(int auth_err)
 {
+  ldout(cct,10) << __func__ << " " << auth_err << dendl;
   authenticate_err = auth_err;
   // _resend_mon_commands() could _reopen_session() if the connected mon is not
   // the one the MonCommand is targeting.
@@ -609,6 +615,18 @@ void MonClient::_finish_auth(int auth_err)
     _check_auth_tickets();
   }
   auth_cond.SignalAll();
+
+  if (!auth_err) {
+    Context *cb = nullptr;
+    if (session_established_context) {
+      cb = session_established_context.release();
+    }
+    if (cb) {
+      monc_lock.Unlock();
+      cb->complete(0);
+      monc_lock.Lock();
+    }
+  }
 }
 
 // ---------
@@ -761,6 +779,7 @@ void MonClient::_start_hunting()
 
 void MonClient::_finish_hunting(int auth_err)
 {
+  ldout(cct,10) << __func__ << " " << auth_err << dendl;
   ceph_assert(monc_lock.is_locked());
   // the pending conns have been cleaned.
   ceph_assert(!_hunting());
@@ -791,18 +810,6 @@ void MonClient::_finish_hunting(int auth_err)
 		   << " to " << active_con->get_global_id() << dendl;
       }
       global_id = active_con->get_global_id();
-    }
-  }
-  _finish_auth(auth_err);
-  if (!auth_err) {
-    Context *cb = nullptr;
-    if (session_established_context) {
-      cb = session_established_context.release();
-    }
-    if (cb) {
-      monc_lock.Unlock();
-      cb->complete(0);
-      monc_lock.Lock();
     }
   }
 }
@@ -1323,6 +1330,9 @@ int MonClient::handle_auth_done(
 	}
 
 	_finish_hunting(r);
+	if (r || monmap.get_epoch() > 0) {
+	  _finish_auth(r);
+	}
 	return r;
       }
     }
@@ -1367,6 +1377,7 @@ int MonClient::handle_auth_bad_method(
 	}
 	// fail hunt
 	_finish_hunting(r);
+	_finish_auth(r);
 	return r;
       }
     }
