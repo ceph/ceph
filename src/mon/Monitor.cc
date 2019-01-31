@@ -856,6 +856,12 @@ int Monitor::preinit()
   // add ourselves as a conf observer
   g_conf().add_observer(this);
 
+  messenger->set_auth_client(this);
+  messenger->set_auth_server(this);
+  mgr_messenger->set_auth_client(this);
+
+  auth_registry.refresh_config();
+
   lock.Unlock();
   return 0;
 }
@@ -875,15 +881,10 @@ int Monitor::init()
 
   // i'm ready!
   messenger->add_dispatcher_tail(this);
-  messenger->set_auth_client(this);
-  messenger->set_auth_server(this);
 
   mgr_client.init();
   mgr_messenger->add_dispatcher_tail(&mgr_client);
   mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
-  mgr_messenger->set_auth_client(this);
-
-  auth_registry.refresh_config();
 
   bootstrap();
   // add features of myself into feature_map

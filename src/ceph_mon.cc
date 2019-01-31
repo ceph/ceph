@@ -772,18 +772,6 @@ int main(int argc, const char **argv)
 	  << " fsid " << monmap.get_fsid()
 	  << dendl;
 
-  err = msgr->bindv(bind_addrs);
-  if (err < 0) {
-    derr << "unable to bind monitor to " << bind_addrs << dendl;
-    prefork.exit(1);
-  }
-
-  // if the public and bind addr are different set the msgr addr
-  // to the public one, now that the bind is complete.
-  if (public_addrs != bind_addrs) {
-    msgr->set_addrs(public_addrs);
-  }
-
   Messenger *mgr_msgr = Messenger::create(g_ceph_context, public_msgr_type,
 					  entity_name_t::MON(rank), "mon-mgrc",
 					  getpid(), 0);
@@ -792,13 +780,6 @@ int main(int argc, const char **argv)
     prefork.exit(1);
   }
 
-  dout(0) << "starting " << g_conf()->name << " rank " << rank
-	  << " at " << public_addrs
-	  << " mon_data " << g_conf()->mon_data
-	  << " fsid " << monmap.get_fsid()
-	  << dendl;
-
-  // start monitor
   mon = new Monitor(g_ceph_context, g_conf()->name.get_id(), store,
 		    msgr, mgr_msgr, &monmap);
 
@@ -823,6 +804,19 @@ int main(int argc, const char **argv)
     derr << "compacting monitor store ..." << dendl;
     mon->store->compact();
     derr << "done compacting" << dendl;
+  }
+
+  // bind
+  err = msgr->bindv(bind_addrs);
+  if (err < 0) {
+    derr << "unable to bind monitor to " << bind_addrs << dendl;
+    prefork.exit(1);
+  }
+
+  // if the public and bind addr are different set the msgr addr
+  // to the public one, now that the bind is complete.
+  if (public_addrs != bind_addrs) {
+    msgr->set_addrs(public_addrs);
   }
 
   if (g_conf()->daemonize) {
