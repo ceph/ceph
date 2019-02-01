@@ -94,9 +94,9 @@ describe('OsdService', () => {
     expect(req.request.method).toBe('POST');
   });
 
-  it('should remove an OSD', () => {
-    service.remove(1).subscribe();
-    const req = httpTesting.expectOne('api/osd/1/remove');
+  it('should purge an OSD', () => {
+    service.purge(1).subscribe();
+    const req = httpTesting.expectOne('api/osd/1/purge');
     expect(req.request.method).toBe('POST');
   });
 

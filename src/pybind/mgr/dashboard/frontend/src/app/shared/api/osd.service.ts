@@ -98,8 +98,8 @@ export class OsdService {
     return this.http.post(`${this.path}/${id}/mark_lost`, null);
   }
 
-  remove(id: number) {
-    return this.http.post(`${this.path}/${id}/remove`, null);
+  purge(id: number) {
+    return this.http.post(`${this.path}/${id}/purge`, null);
   }
 
   destroy(id: number) {

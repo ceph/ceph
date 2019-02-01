@@ -5064,8 +5064,8 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="019d4bd6a5690f0cfa0ecf346a4e6bf7f0d8debb" datatype="html">
-        <source>Remove</source>
+      <trans-unit id="40fedc157ad899a18ec40573f770d18b040959d2" datatype="html">
+        <source>Purge</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-list/osd-list.component.ts</context>
           <context context-type="linenumber">1</context>
@@ -5086,8 +5086,8 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="c640261f80e6afd42cac3f4b63594012f198e0e8" datatype="html">
-        <source>removed</source>
+      <trans-unit id="4f3cff08c7033b63bbccfe66006b1bcaea48ddd8" datatype="html">
+        <source>purged</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-list/osd-list.component.ts</context>
           <context context-type="linenumber">1</context>
