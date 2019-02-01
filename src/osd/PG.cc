@@ -2467,7 +2467,7 @@ unsigned PG::get_backfill_priority()
   // a higher value -> a higher priority
   int ret = OSD_BACKFILL_PRIORITY_BASE;
   if (state & PG_STATE_FORCED_BACKFILL) {
-    ret = OSD_RECOVERY_PRIORITY_FORCED;
+    ret = OSD_BACKFILL_PRIORITY_FORCED;
   } else {
     if (acting.size() < pool.info.min_size) {
       // inactive: no. of replicas < min_size, highest priority since it blocks IO
