@@ -1402,7 +1402,8 @@ int MonClient::handle_auth_request(
   bufferlist *reply)
 {
   auth_meta->auth_mode = payload[0];
-  if (auth_meta->auth_mode != AUTH_MODE_AUTHORIZER) {
+  if (auth_meta->auth_mode < AUTH_MODE_AUTHORIZER ||
+      auth_meta->auth_mode > AUTH_MODE_AUTHORIZER_MAX) {
     return -EACCES;
   }
   AuthAuthorizeHandler *ah = get_auth_authorize_handler(con->get_peer_type(),

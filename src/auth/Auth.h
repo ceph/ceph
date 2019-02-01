@@ -18,10 +18,16 @@
 #include "Crypto.h"
 #include "common/entity_name.h"
 
+// The _MAX values are a bit wonky here because we are overloading the first
+// byte of the auth payload to identify both the type of authentication to be
+// used *and* the encoding version for the authenticator.  So, we define a
+// range.
 enum {
   AUTH_MODE_NONE = 0,
   AUTH_MODE_AUTHORIZER = 1,
-  AUTH_MODE_MON = 100,
+  AUTH_MODE_AUTHORIZER_MAX = 9,
+  AUTH_MODE_MON = 10,
+  AUTH_MODE_MON_MAX = 19,
 };
 
 class Cond;
@@ -160,7 +166,7 @@ struct AuthConnectionMeta {
   /// client: initial empty, but populated if server said bad method
   std::vector<uint32_t> allowed_methods;
 
-  int auth_mode = 0;  ///< AUTH_MODE_*
+  int auth_mode = AUTH_MODE_NONE;  ///< AUTH_MODE_*
 
   int con_mode = 0;  ///< negotiated mode
 
