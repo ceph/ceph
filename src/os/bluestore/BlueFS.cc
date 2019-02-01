@@ -157,12 +157,17 @@ void BlueFS::_update_logger_stats()
   }
 }
 
-int BlueFS::add_block_device(unsigned id, const string& path, bool trim)
+int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
+			     bool shared_with_bluestore)
 {
   dout(10) << __func__ << " bdev " << id << " path " << path << dendl;
   ceph_assert(id < bdev.size());
   ceph_assert(bdev[id] == NULL);
-  BlockDevice *b = BlockDevice::create(cct, path, NULL, NULL, discard_cb[id], static_cast<void*>(this));
+  BlockDevice *b = BlockDevice::create(cct, path, NULL, NULL,
+				       discard_cb[id], static_cast<void*>(this));
+  if (shared_with_bluestore) {
+    b->set_no_exclusive_lock();
+  }
   int r = b->open(path);
   if (r < 0) {
     delete b;
