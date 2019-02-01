@@ -12,17 +12,22 @@ class AuthClient {
 public:
   virtual ~AuthClient() {}
 
+  /// Build an authentication request to begin the handshake
   virtual int get_auth_request(
     Connection *con,
     AuthConnectionMeta *auth_meta,
     uint32_t *method,
     std::vector<uint32_t> *preferred_modes,
     bufferlist *out) = 0;
+
+  /// Handle server's request to continue the handshake
   virtual int handle_auth_reply_more(
     Connection *con,
     AuthConnectionMeta *auth_meta,
     const bufferlist& bl,
     bufferlist *reply) = 0;
+
+  /// Handle server's indication that authentication succeeded
   virtual int handle_auth_done(
     Connection *con,
     AuthConnectionMeta *auth_meta,
@@ -31,6 +36,8 @@ public:
     const bufferlist& bl,
     CryptoKey *session_key,
     std::string *connection_secret) = 0;
+
+  /// Handle server's indication that the previous auth attempt failed
   virtual int handle_auth_bad_method(
     Connection *con,
     AuthConnectionMeta *auth_meta,
