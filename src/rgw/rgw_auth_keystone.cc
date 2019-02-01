@@ -380,91 +380,6 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const boost::string_
   return std::make_pair(std::move(token_envelope), 0);
 }
 
-std::string EC2Engine::sign(const DoutPrefixProvider* dpp,
-			    const std::string& secret,
-			    const std::string& string_to_sign) const
-{
-  using ceph::crypto::HMACSHA256;
-
-  /*
-     The extra data needed for the signing is included in the clear in the string_to_sign
-     so we really need to extract it.
-  */
-
-  std::vector<std::string> lines;
-  boost::split(lines, string_to_sign, boost::is_any_of("\r\n"));
-
-  if (lines.size() < 1) {
-    ldpp_dout(dpp, 0) << "String to sign is not in any recognisable format" << dendl;
-    throw -ERR_SIGNATURE_NO_MATCH;
-  }
-
-  if (lines[0] != "AWS4-HMAC-SHA256") {
-    ldpp_dout(dpp, 0) << "Signature format " << lines[0] << "cannot be handled internally" << dendl;
-    throw -ERR_SIGNATURE_NO_MATCH;
-  }
-
-  if (lines.size() < 4) {
-    ldpp_dout(dpp, 0) << "String to sign does not contain all necessary data for AWS4-HMAC-SHA256 signing mode" << dendl;
-    throw -ERR_SIGNATURE_NO_MATCH;
-  }
-  std::string& credential_scope = lines[2];
-
-  std::vector<std::string> scope_data;
-  boost::split(scope_data, credential_scope, boost::is_any_of("/"));
-
-  if (scope_data.size() < 4) {
-    ldpp_dout(dpp, 0) << "String to sign does not contain all necessary credential scope data for AWS4-HMAC-SHA256 signing mode" << dendl;
-    throw -ERR_SIGNATURE_NO_MATCH;
-  }
-
-  std::string& timestamp = scope_data[0];
-  std::string& region_name = scope_data[1];
-  std::string& service_name = scope_data[2];
-  std::string& command_name = scope_data[3];
-
-  if (command_name != "aws4_request") {
-    ldpp_dout(dpp, 0) << "credential_scope is not for aws4_request when using AWS4-HMAC-SHA256 signing mode" << dendl;
-    throw -ERR_SIGNATURE_NO_MATCH;
-  }
-
-  /* With these data we can now construct the signing key */
-  std::string key = std::string("AWS4") + secret;
-
-  unsigned char date_digest[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
-  HMACSHA256 date_hash((const unsigned char *)key.c_str(), key.size());
-  date_hash.Update((const unsigned char *)timestamp.c_str(), timestamp.size());
-  date_hash.Final(date_digest);
-
-  unsigned char region_digest[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
-  HMACSHA256 region_hash(date_digest, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE);
-  region_hash.Update((const unsigned char *)region_name.c_str(), region_name.size());
-  region_hash.Final(region_digest);
-
-  unsigned char service_digest[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
-  HMACSHA256 service_hash(region_digest, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE);
-  service_hash.Update((const unsigned char *)service_name.c_str(), service_name.size());
-  service_hash.Final(service_digest);
-
-  unsigned char command_digest[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
-  HMACSHA256 command_hash(service_digest, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE);
-  command_hash.Update((const unsigned char *)"aws4_request", 12);
-  command_hash.Final(command_digest);
-
-  /* And sign the data with it */
-  unsigned char signature[CEPH_CRYPTO_HMACSHA256_DIGESTSIZE];
-  HMACSHA256 hash(command_digest, CEPH_CRYPTO_HMACSHA256_DIGESTSIZE);
-  hash.Update((const unsigned char *)string_to_sign.c_str(), string_to_sign.size());
-  hash.Final(signature);
-
-  std::stringstream ss;
-  for (int i=0; i < CEPH_CRYPTO_HMACSHA256_DIGESTSIZE; i++) {
-    ss << std::setfill('0') << std::setw(2) << std::hex << (int)signature[i];
-  }
-
-  return ss.str();
-}
-
 std::pair<boost::optional<std::string>, int> EC2Engine::get_secret_from_keystone(const DoutPrefixProvider* dpp,
                                                                                  const std::string& user_id,
                                                                                  const boost::string_view& access_key_id) const
@@ -559,8 +474,10 @@ std::pair<boost::optional<rgw::keystone::TokenEnvelope>, int>
 EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
 			    const boost::string_view& access_key_id,
                             const std::string& string_to_sign,
-                            const boost::string_view& signature) const
+                            const boost::string_view& signature,
+			    const signature_factory_t& signature_factory) const
 {
+  using server_signature_t = VersionAbstractor::server_signature_t;
   boost::optional<rgw::keystone::TokenEnvelope> token;
   int failure_reason;
 
@@ -571,8 +488,8 @@ EC2Engine::get_access_token(const DoutPrefixProvider* dpp,
   /* Check that credentials can correctly be used to sign data */
   if (t) {
     std::string sig(signature);
-    std::string calculated_signature = sign(dpp, t->get<1>(), string_to_sign);
-    if (sig == calculated_signature) {
+    server_signature_t server_signature = signature_factory(cct, t->get<1>(), string_to_sign);
+    if (sig.compare(server_signature) == 0) {
       return std::make_pair(t->get<0>(), 0);
     } else {
       ldpp_dout(dpp, 0) << "Secret string does not correctly sign payload, cache miss" << dendl;
@@ -642,7 +559,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
   const boost::string_view& signature,
   const boost::string_view& session_token,
   const string_to_sign_t& string_to_sign,
-  const signature_factory_t&,
+  const signature_factory_t& signature_factory,
   const completer_factory_t& completer_factory,
   /* Passthorugh only! */
   const req_state* s) const
@@ -665,7 +582,7 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
   boost::optional<token_envelope_t> t;
   int failure_reason;
   std::tie(t, failure_reason) = \
-    get_access_token(dpp, access_key_id, string_to_sign, signature);
+    get_access_token(dpp, access_key_id, string_to_sign, signature, signature_factory);
   if (! t) {
     return result_t::deny(failure_reason);
   }
@@ -708,7 +625,7 @@ bool SecretCache::find(const std::string& token_id,
                        SecretCache::token_envelope_t& token,
 		       std::string &secret)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
 
   map<std::string, secret_entry>::iterator iter = secrets.find(token_id);
   if (iter == secrets.end()) {
@@ -718,7 +635,7 @@ bool SecretCache::find(const std::string& token_id,
   secret_entry& entry = iter->second;
   secrets_lru.erase(entry.lru_iter);
 
-  const uint64_t now = ceph_clock_now().sec();
+  const utime_t now = ceph_clock_now();
   if (entry.token.expired() || now > entry.expires) {
     secrets.erase(iter);
     return false;
@@ -736,7 +653,7 @@ void SecretCache::add(const std::string& token_id,
                       const SecretCache::token_envelope_t& token,
 		      const std::string& secret)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard<std::mutex> l(lock);
 
   map<string, secret_entry>::iterator iter = secrets.find(token_id);
   if (iter != secrets.end()) {
@@ -744,7 +661,7 @@ void SecretCache::add(const std::string& token_id,
     secrets_lru.erase(e.lru_iter);
   }
 
-  const uint64_t now = ceph_clock_now().sec();
+  const utime_t now = ceph_clock_now();
   secrets_lru.push_front(token_id);
   secret_entry& entry = secrets[token_id];
   entry.token = token;
