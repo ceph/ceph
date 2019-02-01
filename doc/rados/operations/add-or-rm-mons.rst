@@ -106,7 +106,7 @@ on ``mon.a``).
 
 #. Retrieve the monitor map, where ``{tmp}`` is the path to 
    the retrieved monitor map, and ``{map-filename}`` is the name of the file 
-   containing the retrieved monitor monitor map. :: 
+   containing the retrieved monitor map. :: 
 
 	ceph mon getmap -o {tmp}/{map-filename}
 
