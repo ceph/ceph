@@ -4017,6 +4017,7 @@ void BlueStore::_set_compression()
 {
   auto m = Compressor::get_comp_mode_type(cct->_conf->bluestore_compression_mode);
   if (m) {
+    _clear_compression_alert();
     comp_mode = *m;
   } else {
     derr << __func__ << " unrecognized value '"
@@ -4024,6 +4025,9 @@ void BlueStore::_set_compression()
          << "' for bluestore_compression_mode, reverting to 'none'"
          << dendl;
     comp_mode = Compressor::COMP_NONE;
+    string s("unknown mode: ");
+    s += cct->_conf->bluestore_compression_mode;
+    _set_compression_alert(true, s.c_str());
   }
 
   compressor = nullptr;
@@ -4062,6 +4066,7 @@ void BlueStore::_set_compression()
     if (!compressor) {
       derr << __func__ << " unable to initialize " << alg_name.c_str() << " compressor"
            << dendl;
+      _set_compression_alert(false, alg_name.c_str());
     }
   }
  
@@ -4361,7 +4366,6 @@ void BlueStore::_init_logger()
 int BlueStore::_reload_logger()
 {
   struct store_statfs_t store_statfs;
-
   int r = statfs(&store_statfs);
   if (r >= 0) {
     logger->set(l_bluestore_allocated, store_statfs.allocated);
@@ -5565,6 +5569,20 @@ int BlueStore::_balance_bluefs_freespace()
   vector<pair<uint64_t,uint64_t>> bluefs_usage;  // <free, total> ...
   bluefs->get_usage(&bluefs_usage);
   ceph_assert(bluefs_usage.size() > bluefs_shared_bdev);
+
+  bool clear_alert = true;
+  if (bluefs_shared_bdev == BlueFS::BDEV_SLOW) {
+    auto& p = bluefs_usage[bluefs_shared_bdev];
+    if (p.first != p.second) {
+      string s("spilled over to slow device: ");
+      s += stringify(byte_u_t(p.second - p.first));
+      _set_spillover_alert(s.c_str());
+      clear_alert = false;
+    }
+  }
+  if (clear_alert) {
+    _clear_spillover_alert();
+  }
 
   // fixme: look at primary bdev only for now
   int64_t delta = _get_bluefs_size_delta(
@@ -7987,8 +8005,13 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
   buf->available = bfree;
 }
 
-int BlueStore::statfs(struct store_statfs_t *buf)
+int BlueStore::statfs(struct store_statfs_t *buf,
+		      osd_alert_list_t* alerts)
 {
+  if (alerts) {
+    alerts->clear();
+    _log_alerts(*alerts);
+  }
   _get_statfs_overall(buf);
   {
     std::lock_guard l(vstatfs_lock);
@@ -8697,7 +8720,10 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
   if (!cp.get()) {
     // if compressor isn't available - error, because cannot return
     // decompressed data?
-    derr << __func__ << " can't load decompressor " << alg << dendl;
+    
+    const char* alg_name = Compressor::get_comp_alg_name(alg);
+    derr << __func__ << " can't load decompressor " << alg_name << dendl;
+    _set_compression_alert(false, alg_name);
     r = -EIO;
   } else {
     r = cp->decompress(i, chdr.length, *result);
@@ -11726,6 +11752,12 @@ int BlueStore::_do_alloc_write(
           CompressorRef cp = compressor;
           if (!cp || cp->get_type_name() != val) {
             cp = Compressor::create(cct, val);
+	    if (!cp) {
+	      if (_set_compression_alert(false, val.c_str())) {
+	        derr << __func__ << " unable to initialize " << val.c_str()
+		     << " compressor" << dendl;
+	      }
+	    }
           }
           return boost::optional<CompressorRef>(cp);
         }
@@ -13574,6 +13606,38 @@ void BlueStore::_record_onode(OnodeRef &o, KeyValueDB::Transaction &txn)
 
 
   txn->set(PREFIX_OBJ, o->key.c_str(), o->key.size(), bl);
+}
+
+void BlueStore::_log_alerts(osd_alert_list_t& alerts)
+{
+  std::lock_guard l(qlock);
+
+  if (!spillover_alert.empty() &&
+      cct->_conf->bluestore_warn_on_bluefs_spillover) {
+    alerts.emplace(
+      "BLUEFS_SPILLOVER",
+      spillover_alert);
+  }
+  string s0(failed_cmode);
+
+  if (!failed_compressors.empty()) {
+    if (!s0.empty()) {
+      s0 += ", ";
+    }
+    s0 += "unable to load:";
+    bool first = true;
+    for (auto& s : failed_compressors) {
+      if (first) {
+	first = false;
+      } else {
+	s0 += ", ";
+      }
+      s0 += s;
+    }
+    alerts.emplace(
+      "BLUESTORE_NO_COMPRESSION",
+      s0);
+  }
 }
 
 // ===========================================

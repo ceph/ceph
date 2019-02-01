@@ -2939,6 +2939,50 @@ void PGMap::get_health_checks(
     }
   }
 
+  // OBJECT_STORE_WARN
+  if (osd_sum.os_alerts.size()) {
+    map<string, pair<size_t, list<string>>> os_alerts_sum;
+
+    for (auto& a : osd_sum.os_alerts) {
+      int left = max;
+      string s0 = " osd:";
+      s0 += stringify(a.first);
+      for (auto& aa : a.second) {
+        string s(s0);
+        s += " ";
+        s += aa.second;
+        auto it = os_alerts_sum.find(aa.first);
+        if (it == os_alerts_sum.end()) {
+          list<string> d;
+          d.emplace_back(s);
+          os_alerts_sum.emplace(aa.first, std::make_pair(1, d));
+        } else {
+          auto& p = it->second;
+          ++p.first;
+          p.second.emplace_back(s);
+        }
+	if (--left == 0) {
+	  break;
+	}
+      }
+    }
+
+    for (auto& asum : os_alerts_sum) {
+      string summary;
+      if (asum.first == "BLUEFS_SPILLOVER") {
+	summary = "BlueFS spillover detected";
+      } else if (asum.first == "BLUESTORE_NO_COMPRESSION") {
+	summary = "BlueStore compression broken";
+      }
+      summary += " on ";
+      summary += stringify(asum.second.first);
+      summary += " OSD(s)";
+      auto& d = checks->add(asum.first, HEALTH_WARN, summary);
+      for (auto& s : asum.second.second) {
+        d.detail.push_back(s);
+      }
+    }
+  }
   // PG_NOT_SCRUBBED
   // PG_NOT_DEEP_SCRUBBED
   if (cct->_conf->mon_warn_pg_not_scrubbed_ratio ||

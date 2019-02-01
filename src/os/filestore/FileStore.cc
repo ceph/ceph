@@ -728,10 +728,13 @@ int FileStore::get_devices(set<string> *ls)
   return 0;
 }
 
-int FileStore::statfs(struct store_statfs_t *buf0)
+int FileStore::statfs(struct store_statfs_t *buf0, osd_alert_list_t* alerts)
 {
   struct statfs buf;
   buf0->reset();
+  if (alerts) {
+    alerts->clear(); // returns nothing for now
+  }
   if (::statfs(basedir.c_str(), &buf) < 0) {
     int r = -errno;
     ceph_assert(!m_filestore_fail_eio || r != -EIO);
