@@ -17,6 +17,7 @@
 #include "include/scope_guard.h"
 #include "include/stringify.h"
 
+#include "messages/MMonGetMap.h"
 #include "messages/MMonGetVersion.h"
 #include "messages/MMonGetVersionReply.h"
 #include "messages/MMonMap.h"
@@ -1476,7 +1477,7 @@ void MonConnection::start(epoch_t epoch,
   if (con->get_peer_addr().is_msgr2()) {
     ldout(cct, 10) << __func__ << " opening mon connection" << dendl;
     state = State::AUTHENTICATING;
-    con->send_message(new MPing());
+    con->send_message(new MMonGetMap());
     return;
   }
 
