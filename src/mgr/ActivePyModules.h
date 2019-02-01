@@ -161,7 +161,7 @@ public:
   int init();
   void shutdown();
 
-  int start_one(PyModuleRef py_module);
+  void start_one(PyModuleRef py_module);
 
   void dump_server(const std::string &hostname,
                    const DaemonStateCollection &dmc,

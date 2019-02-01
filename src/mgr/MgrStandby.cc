@@ -53,6 +53,7 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
   clog(log_client.create_channel(CLOG_CHANNEL_CLUSTER)),
   audit_clog(log_client.create_channel(CLOG_CHANNEL_AUDIT)),
   lock("MgrStandby::lock"),
+  finisher(g_ceph_context, "MgrStandby", "mgrsb-fin"),
   timer(g_ceph_context, lock),
   py_module_registry(clog),
   active_mgr(nullptr),
@@ -106,6 +107,9 @@ int MgrStandby::init()
   register_async_signal_handler(SIGHUP, sighup_handler);
 
   std::lock_guard l(lock);
+
+  // Start finisher
+  finisher.start();
 
   // Initialize Messenger
   client_messenger->add_dispatcher_tail(this);
@@ -257,7 +261,6 @@ void MgrStandby::tick()
 
 void MgrStandby::handle_signal(int signum)
 {
-  std::lock_guard l(lock);
   ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
   shutdown();
@@ -265,29 +268,35 @@ void MgrStandby::handle_signal(int signum)
 
 void MgrStandby::shutdown()
 {
-  // Expect already to be locked as we're called from signal handler
-  ceph_assert(lock.is_locked_by_me());
+  finisher.queue(new FunctionContext([&](int) {
+    std::lock_guard l(lock);
 
-  dout(4) << "Shutting down" << dendl;
+    dout(4) << "Shutting down" << dendl;
 
-  // stop sending beacon first, i use monc to talk with monitors
-  timer.shutdown();
-  // client uses monc and objecter
-  client.shutdown();
-  mgrc.shutdown();
-  // stop monc, so mon won't be able to instruct me to shutdown/activate after
-  // the active_mgr is stopped
-  monc.shutdown();
-  if (active_mgr) {
-    active_mgr->shutdown();
-  }
+    // stop sending beacon first, i use monc to talk with monitors
+    timer.shutdown();
+    // client uses monc and objecter
+    client.shutdown();
+    mgrc.shutdown();
+    // stop monc, so mon won't be able to instruct me to shutdown/activate after
+    // the active_mgr is stopped
+    monc.shutdown();
+    if (active_mgr) {
+      active_mgr->shutdown();
+    }
 
-  py_module_registry.shutdown();
+    py_module_registry.shutdown();
 
-  // objecter is used by monc and active_mgr
-  objecter.shutdown();
-  // client_messenger is used by all of them, so stop it in the end
-  client_messenger->shutdown();
+    // objecter is used by monc and active_mgr
+    objecter.shutdown();
+    // client_messenger is used by all of them, so stop it in the end
+    client_messenger->shutdown();
+  }));
+
+  // Then stop the finisher to ensure its enqueued contexts aren't going
+  // to touch references to the things we're about to tear down
+  finisher.wait_for_empty();
+  finisher.stop();
 }
 
 void MgrStandby::respawn()
@@ -405,7 +414,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
       // I am the standby and someone else is active, start modules
       // in standby mode to do redirects if needed
       if (!py_module_registry.is_standby_running()) {
-        py_module_registry.standby_start(monc);
+        py_module_registry.standby_start(monc, finisher);
       }
     }
   }
