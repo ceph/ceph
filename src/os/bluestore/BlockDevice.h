@@ -142,6 +142,7 @@ protected:
   uint64_t block_size;
   bool support_discard = false;
   bool rotational = true;
+  bool lock_exclusive = true;
 
 public:
   aio_callback_t aio_callback;
@@ -162,6 +163,10 @@ public:
 
   virtual void aio_submit(IOContext *ioc) = 0;
 
+  void set_no_exclusive_lock() {
+    lock_exclusive = false;
+  }
+  
   uint64_t get_size() const { return size; }
   uint64_t get_block_size() const { return block_size; }
 

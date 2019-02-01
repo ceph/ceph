@@ -4982,7 +4982,8 @@ int BlueStore::_minimal_open_bluefs(bool create)
   // shared device
   bfn = path + "/block";
   // never trim here
-  r = bluefs->add_block_device(bluefs_shared_bdev, bfn, false);
+  r = bluefs->add_block_device(bluefs_shared_bdev, bfn, false,
+			       true /* shared with bluestore */);
   if (r < 0) {
     derr << __func__ << " add block device(" << bfn << ") returned: "
 	  << cpp_strerror(r) << dendl;
