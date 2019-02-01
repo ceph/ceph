@@ -169,7 +169,9 @@ seastar::future<bool> Connection::do_auth()
                    conn->get_peer_addr(), *m, m->result);
     reply = decltype(reply){};
     auto p = m->result_bl.cbegin();
-    auto ret = auth->handle_response(m->result, p);
+    auto ret = auth->handle_response(m->result, p,
+#warning fix crimson: session_key, connection_secret
+				     nullptr, nullptr);
     if (ret != 0 && ret != -EAGAIN) {
       throw std::system_error(make_error_code(
         ceph::net::error::negotiation_failure));
@@ -193,7 +195,9 @@ Connection::authenticate(epoch_t epoch,
     auth = create_auth(m, name, want_keys);
     global_id = m->global_id;
     switch (auto p = m->result_bl.cbegin();
-            auth->handle_response(m->result, p)) {
+            auth->handle_response(m->result, p,
+#warning fix crimson: session_key, connection_secret
+				  nullptr, nullptr)) {
     case 0:
       // none
       return seastar::now();

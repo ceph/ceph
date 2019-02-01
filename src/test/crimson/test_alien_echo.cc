@@ -29,10 +29,10 @@ struct DummyAuthAuthorizer : public AuthAuthorizer {
     : AuthAuthorizer(CEPH_AUTH_CEPHX)
   {}
   bool verify_reply(bufferlist::const_iterator&,
-                    CryptoKey *connection_secret) override {
+                    std::string *connection_secret) override {
     return true;
   }
-  bool add_challenge(CephContext*, bufferlist&) override {
+  bool add_challenge(CephContext*, const bufferlist&) override {
     return true;
   }
 };
