@@ -90,10 +90,10 @@ export class HealthComponent implements OnInit, OnDestroy {
     chart.colors = [
       {
         backgroundColor: [
-          HealthPieColor.SHADE_GREEN_CYAN,
-          HealthPieColor.MEDIUM_DARK_SHADE_CYAN_BLUE,
-          HealthPieColor.LIGHT_SHADE_BROWN,
-          HealthPieColor.MEDIUM_LIGHT_SHADE_PINK_RED
+          HealthPieColor.DEFAULT_GREEN,
+          HealthPieColor.DEFAULT_BLUE,
+          HealthPieColor.DEFAULT_ORANGE,
+          HealthPieColor.DEFAULT_RED
         ]
       }
     ];
