@@ -6053,7 +6053,8 @@ int Monitor::handle_auth_request(
     auth_meta->auth_mode = payload[0];
   }
 
-  if (auth_meta->auth_mode == AUTH_MODE_AUTHORIZER) {
+  if (auth_meta->auth_mode >= AUTH_MODE_AUTHORIZER &&
+      auth_meta->auth_mode <= AUTH_MODE_AUTHORIZER_MAX) {
     AuthAuthorizeHandler *ah = get_auth_authorize_handler(con->get_peer_type(),
 							  auth_method);
     if (!ah) {
@@ -6083,7 +6084,8 @@ int Monitor::handle_auth_request(
     }
     dout(10) << __func__ << " bad authorizer on " << con << dendl;
     return -EACCES;
-  } else if (auth_meta->auth_mode != AUTH_MODE_MON) {
+  } else if (auth_meta->auth_mode < AUTH_MODE_MON &&
+	     auth_meta->auth_mode > AUTH_MODE_MON_MAX) {
     derr << __func__ << " unrecognized auth mode " << auth_meta->auth_mode
 	 << dendl;
     return -EACCES;
@@ -6118,7 +6120,7 @@ int Monitor::handle_auth_request(
     EntityName entity_name;
 
     decode(mode, p);
-    assert(mode == AUTH_MODE_MON);
+    assert(mode >= AUTH_MODE_MON && mode <= AUTH_MODE_MON_MAX);
     decode(entity_name, p);
     decode(con->peer_global_id, p);
 
