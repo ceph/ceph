@@ -4824,21 +4824,42 @@ int BlueStore::_is_bluefs(bool create, bool* ret)
   return 0;
 }
 
-/*
-* opens both DB and dependant super_meta, FreelistManager and allocator
-* in the proper order
-*/
-int BlueStore::_open_db_and_around()
-{
-  int r;
-  bool do_bluefs = false;
-  _is_bluefs(false, &do_bluefs); // ignore err code
-  if (do_bluefs) {
-    // open in read-only first to read FM list and init allocator
-    // as they might be needed for some BlueFS procedures
-    r = _open_db(false);
-    if (r < 0)
-      return r;
+  // shared device
+  bfn = path + "/block";
+  // never trim here
+  r = bluefs->add_block_device(bluefs_shared_bdev, bfn, false,
+			       true /* shared with bluestore */);
+  if (r < 0) {
+    derr << __func__ << " add block device(" << bfn << ") returned: "
+	  << cpp_strerror(r) << dendl;
+    goto free_bluefs;
+  }
+  if (create) {
+    // note: we always leave the first SUPER_RESERVED (8k) of the device unused
+    uint64_t initial =
+      bdev->get_size() * (cct->_conf->bluestore_bluefs_min_ratio +
+			  cct->_conf->bluestore_bluefs_gift_ratio);
+    initial = std::max(initial, cct->_conf->bluestore_bluefs_min);
+    if (cct->_conf->bluefs_alloc_size % min_alloc_size) {
+      derr << __func__ << " bluefs_alloc_size 0x" << std::hex
+	    << cct->_conf->bluefs_alloc_size << " is not a multiple of "
+	    << "min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+      r = -EINVAL;
+      goto free_bluefs;
+    }
+    // align to bluefs's alloc_size
+    initial = p2roundup(initial, cct->_conf->bluefs_alloc_size);
+    // put bluefs in the middle of the device in case it is an HDD
+    uint64_t start = p2align((bdev->get_size() - initial) / 2,
+			      cct->_conf->bluefs_alloc_size);
+    //avoiding superblock overwrite
+    ceph_assert(cct->_conf->bluefs_alloc_size > _get_ondisk_reserved());
+    start = std::max(cct->_conf->bluefs_alloc_size, start);
+
+    bluefs->add_block_extent(bluefs_shared_bdev, start, initial);
+    bluefs_extents.insert(start, initial);
+    ++out_of_sync_fm;
+  }
 
     r = _open_super_meta();
     if (r < 0) {

@@ -99,6 +99,7 @@ private:
 
 protected:
   bool rotational = true;
+  bool lock_exclusive = true;
 
 public:
   BlockDevice(CephContext* cct) : cct(cct) {}
@@ -112,8 +113,12 @@ public:
 
   virtual void aio_submit(IOContext *ioc) = 0;
 
-  virtual uint64_t get_size() const = 0;
-  virtual uint64_t get_block_size() const = 0;
+  void set_no_exclusive_lock() {
+    lock_exclusive = false;
+  }
+  
+  uint64_t get_size() const { return size; }
+  uint64_t get_block_size() const { return block_size; }
 
   virtual int collect_metadata(std::string prefix, std::map<std::string,std::string> *pm) const = 0;
 
