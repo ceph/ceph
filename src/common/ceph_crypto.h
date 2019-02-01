@@ -1,3 +1,4 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 #ifndef CEPH_CRYPTO_H
 #define CEPH_CRYPTO_H
 
@@ -20,61 +21,144 @@
 // with error checking, and just say these really should never fail.
 // This assert MUST NOT be compiled out, even on non-debug builds.
 # include "include/ceph_assert.h"
+#endif /*USE_NSS*/
+
+#ifdef USE_OPENSSL
+#include <openssl/ossl_typ.h>
+
+extern "C" {
+  const EVP_MD *EVP_md5(void);
+  const EVP_MD *EVP_sha1(void);
+  const EVP_MD *EVP_sha256(void);
+}
+#endif /*USE_OPENSSL*/
 
 namespace ceph {
   namespace crypto {
     void assert_init();
     void init(CephContext *cct);
     void shutdown(bool shared=true);
-    class Digest {
-    private:
-      PK11Context *ctx;
-      size_t digest_size;
-    public:
-      Digest (SECOidTag _type, size_t _digest_size) : digest_size(_digest_size) {
-	ctx = PK11_CreateDigestContext(_type);
-	ceph_assert_always(ctx);
-	Restart();
-      }
-      ~Digest () {
-	PK11_DestroyContext(ctx, PR_TRUE);
-      }
-      void Restart() {
-	SECStatus s;
-	s = PK11_DigestBegin(ctx);
-	ceph_assert_always(s == SECSuccess);
-      }
-      void Update (const unsigned char *input, size_t length) {
-        if (length) {
-	  SECStatus s;
-	  s = PK11_DigestOp(ctx, input, length);
-	  ceph_assert_always(s == SECSuccess);
+  }
+}
+
+#ifdef USE_NSS
+namespace ceph {
+  namespace crypto {
+    namespace nss {
+      class NSSDigest {
+      private:
+        PK11Context *ctx;
+        size_t digest_size;
+      public:
+        NSSDigest (SECOidTag _type, size_t _digest_size)
+	  : digest_size(_digest_size) {
+	  ctx = PK11_CreateDigestContext(_type);
+	  ceph_assert_always(ctx);
+	  Restart();
         }
-      }
-      void Final (unsigned char *digest) {
-	SECStatus s;
-	unsigned int dummy;
-	s = PK11_DigestFinal(ctx, digest, &dummy, digest_size);
-	ceph_assert_always(s == SECSuccess);
-	ceph_assert_always(dummy == digest_size);
-	Restart();
-      }
-    };
-    class MD5 : public Digest {
-    public:
-      MD5 () : Digest(SEC_OID_MD5, CEPH_CRYPTO_MD5_DIGESTSIZE) { }
-    };
+        ~NSSDigest () {
+	  PK11_DestroyContext(ctx, PR_TRUE);
+	}
+	void Restart() {
+	  SECStatus s;
+	  s = PK11_DigestBegin(ctx);
+	  ceph_assert_always(s == SECSuccess);
+	}
+	void Update (const unsigned char *input, size_t length) {
+	  if (length) {
+	    SECStatus s;
+	    s = PK11_DigestOp(ctx, input, length);
+	    ceph_assert_always(s == SECSuccess);
+	  }
+	}
+	void Final (unsigned char *digest) {
+	  SECStatus s;
+	  unsigned int dummy;
+	  s = PK11_DigestFinal(ctx, digest, &dummy, digest_size);
+	  ceph_assert_always(s == SECSuccess);
+	  ceph_assert_always(dummy == digest_size);
+	  Restart();
+	}
+      };
 
-    class SHA1 : public Digest {
-    public:
-      SHA1 () : Digest(SEC_OID_SHA1, CEPH_CRYPTO_SHA1_DIGESTSIZE) { }
-    };
+      class MD5 : public NSSDigest {
+      public:
+	MD5 () : NSSDigest(SEC_OID_MD5, CEPH_CRYPTO_MD5_DIGESTSIZE) { }
+      };
 
-    class SHA256 : public Digest {
-    public:
-      SHA256 () : Digest(SEC_OID_SHA256, CEPH_CRYPTO_SHA256_DIGESTSIZE) { }
-    };
+      class SHA1 : public NSSDigest {
+      public:
+        SHA1 () : NSSDigest(SEC_OID_SHA1, CEPH_CRYPTO_SHA1_DIGESTSIZE) { }
+      };
 
+      class SHA256 : public NSSDigest {
+      public:
+        SHA256 () : NSSDigest(SEC_OID_SHA256, CEPH_CRYPTO_SHA256_DIGESTSIZE) { }
+      };
+    }
+  }
+}
+#endif /*USE_NSS*/
+
+#ifdef USE_OPENSSL
+namespace ceph {
+  namespace crypto {
+    namespace ssl {
+      class OpenSSLDigest {
+      private:
+	EVP_MD_CTX *mpContext;
+	const EVP_MD *mpType;
+      public:
+	OpenSSLDigest (const EVP_MD *_type);
+	~OpenSSLDigest ();
+	void Restart();
+	void Update (const unsigned char *input, size_t length);
+	void Final (unsigned char *digest);
+      };
+
+      class MD5 : public OpenSSLDigest {
+      public:
+	MD5 () : OpenSSLDigest(EVP_md5()) { }
+      };
+
+      class SHA1 : public OpenSSLDigest {
+      public:
+        SHA1 () : OpenSSLDigest(EVP_sha1()) { }
+      };
+
+      class SHA256 : public OpenSSLDigest {
+      public:
+        SHA256 () : OpenSSLDigest(EVP_sha256()) { }
+      };
+    }
+  }
+}
+#endif /*USE_OPENSSL*/
+
+#if defined(USE_OPENSSL)
+namespace ceph {
+  namespace crypto {
+    using ceph::crypto::ssl::SHA256;
+    using ceph::crypto::ssl::MD5;
+    using ceph::crypto::ssl::SHA1;
+  }
+}
+#elif defined(USE_NSS)
+namespace ceph {
+  namespace crypto {
+    using ceph::crypto::nss::SHA256;
+    using ceph::crypto::nss::MD5;
+    using ceph::crypto::nss::SHA1;
+  }
+}
+#else
+# error "No supported crypto implementation found."
+#endif
+
+
+#ifdef USE_NSS
+namespace ceph {
+  namespace crypto {
     class HMAC {
     private:
       PK11SlotInfo *slot;
