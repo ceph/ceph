@@ -196,7 +196,7 @@ Usage:
         try:
             drive_group.validate(all_hosts)
         except orchestrator.DriveGroupValidationError as e:
-                return HandleCommandResult(-errno.EINVAL, stderr=str(e))
+            return HandleCommandResult(-errno.EINVAL, stderr=str(e))
 
         completion = self.create_osds(drive_group, all_hosts)
         self._orchestrator_wait([completion])
