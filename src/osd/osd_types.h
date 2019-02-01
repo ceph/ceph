@@ -82,9 +82,12 @@
 #define OSD_BACKFILL_INACTIVE_PRIORITY_BASE 220
 
 /// max manually/automatically set recovery priority for MBackfillReserve
-#define OSD_RECOVERY_PRIORITY_MAX 254
+#define OSD_RECOVERY_PRIORITY_MAX 253
 
-/// max recovery priority for MBackfillReserve, only when forced manually
+/// backfill priority for MBackfillReserve, when forced manually
+#define OSD_BACKFILL_PRIORITY_FORCED 254
+
+/// recovery priority for MRecoveryReserve, when forced manually
 #define OSD_RECOVERY_PRIORITY_FORCED 255
 
 /// priority for pg deletion when osd is not fullish
