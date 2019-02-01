@@ -409,11 +409,8 @@ ceph_get_module_option(BaseMgrModule *self, PyObject *args)
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
-  auto pKey = PyString_FromString(key);
-  auto pModule = PyString_FromString(self->this_module->get_name().c_str());
-  auto pArgs = PyTuple_Pack(2, pModule, pKey);
-  Py_DECREF(pKey);
-  Py_DECREF(pModule);
+  auto pArgs = Py_BuildValue("(ss)", self->this_module->get_name().c_str(),
+    key);
   auto pResult = ceph_get_module_option_ex(self, pArgs);
   Py_DECREF(pArgs);
   return pResult;
@@ -461,13 +458,8 @@ ceph_set_module_option(BaseMgrModule *self, PyObject *args)
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
-  auto pModule = PyString_FromString(self->this_module->get_name().c_str());
-  auto pKey = PyString_FromString(key);
-  auto pValue = PyString_FromString(value);
-  auto pArgs = PyTuple_Pack(3, pModule, pKey, pValue);
-  Py_DECREF(pValue);
-  Py_DECREF(pKey);
-  Py_DECREF(pModule);
+  auto pArgs = Py_BuildValue("(ssz)", self->this_module->get_name().c_str(),
+    key, value);
   auto pResult = ceph_set_module_option_ex(self, pArgs);
   Py_DECREF(pArgs);
   return pResult;
