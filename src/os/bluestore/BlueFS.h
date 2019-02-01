@@ -458,7 +458,8 @@ public:
   void set_slow_device_expander(BlueFSDeviceExpander* a) {
     slow_dev_expander = a;
   }
-  int add_block_device(unsigned bdev, const string& path, bool trim);
+  int add_block_device(unsigned bdev, const string& path, bool trim,
+		       bool shared_with_bluestore=false);
   bool bdev_support_label(unsigned id);
   uint64_t get_block_device_size(unsigned bdev);
 
