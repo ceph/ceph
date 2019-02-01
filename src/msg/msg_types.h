@@ -18,6 +18,9 @@
 #include <sstream>
 
 #include <netinet/in.h>
+#if defined(__FreeBSD__)
+#include <sys/socket.h>
+#endif
 
 #include "include/ceph_features.h"
 #include "include/types.h"
@@ -265,9 +268,7 @@ struct entity_addr_t {
     type = o.type;
     nonce = o.nonce;
     memcpy(&u, &o.in_addr, sizeof(u));
-#if !defined(__FreeBSD__)
     u.sa.sa_family = ntohs(u.sa.sa_family);
-#endif
   }
 
   uint32_t get_type() const { return type; }
@@ -379,9 +380,7 @@ struct entity_addr_t {
     a.type = 0;
     a.nonce = nonce;
     a.in_addr = get_sockaddr_storage();
-#if !defined(__FreeBSD__)
     a.in_addr.ss_family = htons(a.in_addr.ss_family);
-#endif
     return a;
   }
 
