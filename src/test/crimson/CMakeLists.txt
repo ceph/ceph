@@ -27,7 +27,7 @@ target_link_libraries(unittest_seastar_config crimson)
 
 add_executable(unittest_seastar_monc
   test_monc.cc)
-target_link_libraries(unittest_seastar_monc crimson)
+target_link_libraries(unittest_seastar_monc ceph-common crimson)
 
 add_executable(unittest_seastar_perfcounters
   test_perfcounters.cc)

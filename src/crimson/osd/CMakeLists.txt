@@ -3,4 +3,5 @@ add_executable(crimson-osd
   osd.cc
   chained_dispatchers.cc)
 target_link_libraries(crimson-osd
-  crimson-common crimson-os crimson)
+  crimson-common crimson-os crimson ceph-common)
+
