@@ -4,6 +4,8 @@ ceph-mgr orchestrator interface
 
 Please see the ceph-mgr module developer's guide for more information.
 """
+import six
+
 try:
     from typing import TypeVar, Generic, List, Optional, Union
     T = TypeVar('T')
@@ -12,6 +14,7 @@ except ImportError:
     T, G = object, object
 
 import time
+import fnmatch
 
 
 class _Completion(G):
@@ -255,7 +258,7 @@ class Orchestrator(object):
         assert not (service_name and service_id)
         raise NotImplementedError()
 
-    def create_osds(self, drive_group, all_hosts=None):
+    def create_osds(self, drive_group, all_hosts):
         # type: (DriveGroupSpec, List[str]) -> WriteCompletion
         """
         Create one or more OSDs within a single Drive Group.
@@ -509,8 +512,6 @@ class DeviceSelection(object):
 
         #: List of absolute paths to the devices.
         self.paths = paths  # type: List[str]
-        if self.paths and any(p is not None for p in [id_model, size, rotates, count]):
-            raise TypeError('`paths` and other parameters are mutually exclusive')
 
         #: A wildcard string. e.g: "SDD*"
         self.id_model = id_model
@@ -525,11 +526,28 @@ class DeviceSelection(object):
 
         #: if this is present limit the number of drives to this number.
         self.count = count
+        self.validate()
+
+    def validate(self):
+        props = [self.id_model, self.size, self.rotates, self.count]
+        if self.paths and any(p is not None for p in props):
+            raise DriveGroupValidationError('DeviceSelection: `paths` and other parameters are mutually exclusive')
+        if not any(p is not None for p in [self.paths] + props):
+            raise DriveGroupValidationError('DeviceSelection cannot be empty')
 
     @classmethod
     def from_json(cls, device_spec):
         return cls(**device_spec)
 
+
+class DriveGroupValidationError(Exception):
+    """
+    Defining an exception here is a bit problematic, cause you cannot properly catch it,
+    if it was raised in a different mgr module.
+    """
+
+    def __init__(self, msg):
+        super(DriveGroupValidationError, self).__init__('Failed to validate Drive Group: ' + msg)
 
 class DriveGroupSpec(object):
     """
@@ -563,7 +581,6 @@ class DriveGroupSpec(object):
         #: To fully utilize nvme devices multiple osds are required.
         self.osds_per_device = osds_per_device
 
-        assert objectstore in ('filestore', 'bluestore')
         #: ``filestore`` or ``bluestore``
         self.objectstore = objectstore
 
@@ -585,7 +602,7 @@ class DriveGroupSpec(object):
     @classmethod
     def from_json(self, json_drive_group):
         """
-        Initialize and verify 'Drive group' structure
+        Initialize 'Drive group' structure
 
         :param json_drive_group: A valid json string with a Drive Group
                specification
@@ -595,8 +612,20 @@ class DriveGroupSpec(object):
         return DriveGroupSpec(**args)
 
     def hosts(self, all_hosts):
-        import fnmatch
         return fnmatch.filter(all_hosts, self.host_pattern)
+
+    def validate(self, all_hosts):
+        if not isinstance(self.host_pattern, six.string_types):
+            raise DriveGroupValidationError('host_pattern must be of type string')
+
+        specs = [self.data_devices, self.db_devices, self.wal_devices, self.journal_devices]
+        for s in filter(None, specs):
+            s.validate()
+        if self.objectstore not in ('filestore', 'bluestore'):
+            raise DriveGroupValidationError("objectstore not in ('filestore', 'bluestore')")
+        if not self.hosts(all_hosts):
+            raise DriveGroupValidationError(
+                "host_pattern '{}' does not match any hosts".format(self.host_pattern))
 
 
 class StatelessServiceSpec(object):
@@ -702,7 +731,7 @@ def _mk_orch_methods(cls):
         return inner
 
     for meth in Orchestrator.__dict__:
-        if not meth.startswith('_') and meth not in ['is_orchestrator_module', 'available']:
+        if not meth.startswith('_') and meth not in ['is_orchestrator_module']:
             setattr(cls, meth, shim(meth))
     return cls
 
@@ -717,6 +746,7 @@ class OrchestratorClientMixin(Orchestrator):
             o = self._select_orchestrator()
         except AttributeError:
             o = self.remote('orchestrator_cli', '_select_orchestrator')
+        self.log.debug("_oremote {} -> {}.{}(*{}, **{})".format(self.module_name, o, meth, args, kwargs))
         return self.remote(o, meth, *args, **kwargs)
 
     def _orchestrator_wait(self, completions):

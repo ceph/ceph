@@ -290,7 +290,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return ansible_operation
 
-    def create_osds(self, drive_group, all_hosts=None):
+    def create_osds(self, drive_group, all_hosts):
         """Create one or more OSDs within a single Drive Group.
         If no host provided the operation affects all the host in the OSDS role
 

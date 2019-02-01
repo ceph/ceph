@@ -27,6 +27,10 @@ class TestReadCompletion(orchestrator.ReadCompletion):
         global all_completions
         all_completions.append(self)
 
+    def __str__(self):
+        return "TestReadCompletion(result={} message={})".format(self.result, self.message)
+
+
     @property
     def result(self):
         return self._result
@@ -41,10 +45,9 @@ class TestReadCompletion(orchestrator.ReadCompletion):
 
 
 class TestWriteCompletion(orchestrator.WriteCompletion):
-    def __init__(self, execute_cb, complete_cb, message):
+    def __init__(self, execute_cb, message):
         super(TestWriteCompletion, self).__init__()
         self.execute_cb = execute_cb
-        self.complete_cb = complete_cb
 
         # Executed means I executed my API call, it may or may
         # not have succeeded
@@ -64,6 +67,13 @@ class TestWriteCompletion(orchestrator.WriteCompletion):
         global all_completions
         all_completions.append(self)
 
+    def __str__(self):
+        return "TestWriteCompletion(executed={} result={} id={} message={} error={})".format(self.executed, self._result, self.id, self.message,  self.error)
+
+    @property
+    def result(self):
+        return self._result
+
     @property
     def is_persistent(self):
         return (not self.is_errored) and self.executed
@@ -80,13 +90,18 @@ class TestWriteCompletion(orchestrator.WriteCompletion):
         if not self.executed:
             self._result = self.execute_cb()
             self.executed = True
+            self.effective = True
 
-        if not self.effective:
-            # TODO: check self.result for API errors
-            if self.complete_cb is None:
-                self.effective = True
-            else:
-                self.effective = self.complete_cb()
+
+def deferred_write(message):
+    def wrapper(f):
+        @functools.wraps(f)
+        def inner(*args, **kwargs):
+            args[0].log.warning('message' + message)
+            return TestWriteCompletion(lambda: f(*args, **kwargs),
+                                       '{}, args={}, kwargs={}'.format(message, args, kwargs))
+        return inner
+    return wrapper
 
 
 def deferred_read(f):
@@ -247,12 +262,12 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def add_stateless_service(self, service_type, spec):
         raise NotImplementedError(service_type)
 
+    @deferred_write("create_osds")
     def create_osds(self, drive_group, all_hosts):
-        raise NotImplementedError(str(drive_group))
+        drive_group.validate(all_hosts)
 
+
+    @deferred_write("service_action")
     def service_action(self, action, service_type, service_name=None, service_id=None):
-        return TestWriteCompletion(
-            lambda: True, None,
-            "Pretending to {} service {} (name={}, id={})".format(
-                action, service_type, service_name, service_id))
+        pass
 
