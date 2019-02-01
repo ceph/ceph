@@ -118,17 +118,17 @@ export class OsdListComponent implements OnInit {
         icon: 'fa-unlink'
       },
       {
-        name: this.i18n('Remove'),
+        name: this.i18n('Purge'),
         permission: 'delete',
         click: () =>
           this.showCriticalConfirmationModal(
-            this.i18n('Remove'),
+            this.i18n('Purge'),
             this.i18n('OSD'),
-            this.i18n('removed'),
-            this.osdService.remove
+            this.i18n('purged'),
+            this.osdService.purge
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: 'fa-remove'
+        icon: 'fa-eraser'
       },
       {
         name: this.i18n('Destroy'),
@@ -141,7 +141,7 @@ export class OsdListComponent implements OnInit {
             this.osdService.destroy
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: 'fa-eraser'
+        icon: 'fa-remove'
       }
     ];
   }
