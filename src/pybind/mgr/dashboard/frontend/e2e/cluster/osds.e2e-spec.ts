@@ -16,4 +16,19 @@ describe('OSDs page', () => {
     page.navigateTo();
     expect(Helper.getBreadcrumbText()).toEqual('OSDs');
   });
+
+  it('should show two tabs', () => {
+    page.navigateTo();
+    expect(Helper.getTabsCount()).toEqual(2);
+  });
+
+  it('should show OSDs list tab at first', () => {
+    page.navigateTo();
+    expect(Helper.getTabText(0)).toEqual('OSDs List');
+  });
+
+  it('should show overall performance as a second tab', () => {
+    page.navigateTo();
+    expect(Helper.getTabText(1)).toEqual('Overall Performance');
+  });
 });
