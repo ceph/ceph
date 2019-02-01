@@ -1,3 +1,5 @@
+.. _rgw-multitenancy:
+
 =================
 RGW Multi-tenancy
 =================
