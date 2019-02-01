@@ -32,3 +32,7 @@ roles:
   - client.0
 - - rgw.1
   - client.1
+- - rgw.2
+  - client.2
+- - rgw.3
+  - client.3
