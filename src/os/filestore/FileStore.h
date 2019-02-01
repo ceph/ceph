@@ -517,7 +517,8 @@ public:
   void collect_metadata(map<string,string> *pm) override;
   int get_devices(set<string> *ls) override;
 
-  int statfs(struct store_statfs_t *buf) override;
+  int statfs(struct store_statfs_t *buf,
+             osd_alert_list_t* alerts = nullptr) override;
   int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
 
   int _do_transactions(

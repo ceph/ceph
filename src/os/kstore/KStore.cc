@@ -1083,10 +1083,13 @@ void KStore::_sync()
   dout(10) << __func__ << " done" << dendl;
 }
 
-int KStore::statfs(struct store_statfs_t* buf0)
+int KStore::statfs(struct store_statfs_t* buf0, osd_alert_list_t* alerts)
 {
   struct statfs buf;
   buf0->reset();
+  if (alerts) {
+    alerts->clear(); // returns nothing for now
+  }
   if (::statfs(basedir.c_str(), &buf) < 0) {
     int r = -errno;
     ceph_assert(r != -ENOENT);

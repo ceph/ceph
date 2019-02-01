@@ -112,6 +112,10 @@ string ceph_osd_op_flag_string(unsigned flags);
 /// conver CEPH_OSD_ALLOC_HINT_FLAG_* op flags to a string
 string ceph_osd_alloc_hint_flag_string(unsigned flags);
 
+typedef map<string,string> osd_alert_list_t;
+/// map osd id -> alert_list_t
+typedef map<int, osd_alert_list_t> osd_alerts_t;
+void dump(Formatter* f, const osd_alerts_t& alerts);
 
 /**
  * osd request identifier
@@ -2269,6 +2273,7 @@ struct osd_stat_t {
   pow2_hist_t op_queue_age_hist;
 
   objectstore_perf_stat_t os_perf_stat;
+  osd_alerts_t os_alerts;
 
   epoch_t up_from = 0;
   uint64_t seq = 0;
@@ -2277,13 +2282,19 @@ struct osd_stat_t {
 
   osd_stat_t() : snap_trim_queue_len(0), num_snap_trimming(0) {}
 
-  void add(const osd_stat_t& o) {
+ void add(const osd_stat_t& o) {
     statfs.add(o.statfs);
     snap_trim_queue_len += o.snap_trim_queue_len;
     num_snap_trimming += o.num_snap_trimming;
     op_queue_age_hist.add(o.op_queue_age_hist);
     os_perf_stat.add(o.os_perf_stat);
     num_pgs += o.num_pgs;
+    for (const auto& a : o.os_alerts) {
+      auto& target = os_alerts[a.first];
+      for (auto& i : a.second) {
+	target.emplace(i.first, i.second);
+      }
+    }
   }
   void sub(const osd_stat_t& o) {
     statfs.sub(o.statfs);
@@ -2292,8 +2303,16 @@ struct osd_stat_t {
     op_queue_age_hist.sub(o.op_queue_age_hist);
     os_perf_stat.sub(o.os_perf_stat);
     num_pgs -= o.num_pgs;
+    for (const auto& a : o.os_alerts) {
+      auto& target = os_alerts[a.first];
+      for (auto& i : a.second) {
+        target.erase(i.first);
+      }
+      if (target.empty()) {
+	os_alerts.erase(a.first);
+      }
+    }
   }
-
   void dump(Formatter *f) const;
   void encode(bufferlist &bl, uint64_t features) const;
   void decode(bufferlist::const_iterator &bl);
