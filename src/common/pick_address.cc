@@ -16,7 +16,10 @@
 #include "include/ipaddr.h"
 #include "include/str_list.h"
 #include "common/ceph_context.h"
+#ifndef WITH_SEASTAR
+#include "common/config.h"
 #include "common/config_obs.h"
+#endif
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/numa.h"
@@ -115,6 +118,7 @@ const struct sockaddr *find_ip_in_subnet_list(
   return r;
 }
 
+#ifndef WITH_SEASTAR
 // observe this change
 struct Observer : public md_config_obs_t {
   const char *keys[2];
@@ -219,6 +223,7 @@ void pick_addresses(CephContext *cct, int needs)
 
   freeifaddrs(ifa);
 }
+#endif	// !WITH_SEASTAR
 
 static int fill_in_one_address(
   CephContext *cct,

@@ -3,9 +3,11 @@
 #ifndef CEPH_PICK_ADDRESS_H
 #define CEPH_PICK_ADDRESS_H
 
-#include "common/config.h"
+#include <string>
+#include <list>
 
 class CephContext;
+struct entity_addr_t;
 class entity_addrvec_t;
 
 
@@ -18,6 +20,7 @@ class entity_addrvec_t;
 #define CEPH_PICK_ADDRESS_PREFER_IPV4 0x40
 #define CEPH_PICK_ADDRESS_DEFAULT_MON_PORTS  0x80
 
+#ifndef WITH_SEASTAR
 /*
   Pick addresses based on subnets if needed.
 
@@ -38,6 +41,8 @@ class entity_addrvec_t;
   This function will exit on error.
  */
 void pick_addresses(CephContext *cct, int needs);
+
+#endif	// !WITH_SEASTAR
 
 int pick_addresses(CephContext *cct, unsigned flags, entity_addrvec_t *addrs,
 		   int preferred_numa_node = -1);
@@ -60,8 +65,7 @@ std::string pick_iface(CephContext *cct, const struct sockaddr_storage &network)
  * @param ls list of addresses
  * @param match [out] pointer to match, if an item in @a ls is found configured locally.
  */
-bool have_local_addr(CephContext *cct, const list<entity_addr_t>& ls, entity_addr_t *match);
-
+bool have_local_addr(CephContext *cct, const std::list<entity_addr_t>& ls, entity_addr_t *match);
 
 const struct sockaddr *find_ip_in_subnet_list(
   CephContext *cct,

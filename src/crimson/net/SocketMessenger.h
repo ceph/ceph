@@ -52,6 +52,9 @@ class SocketMessenger final : public Messenger {
 
   void bind(const entity_addrvec_t& addr) override;
 
+  void try_bind(const entity_addrvec_t& addr,
+		uint32_t min_port, uint32_t max_port) override;
+
   seastar::future<> start(Dispatcher *dispatcher) override;
 
   ConnectionRef connect(const entity_addr_t& peer_addr,

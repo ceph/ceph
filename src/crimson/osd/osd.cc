@@ -1,5 +1,8 @@
 #include "osd.h"
 
+#include <boost/range/join.hpp>
+
+#include "common/pick_address.h"
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDMap.h"
@@ -9,6 +12,7 @@
 #include "crimson/os/cyan_object.h"
 #include "crimson/os/cyan_store.h"
 #include "crimson/os/Transaction.h"
+#include "crimson/osd/heartbeat.h"
 #include "crimson/osd/osd_meta.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_meta.h"
@@ -23,6 +27,7 @@ namespace {
   {
     return {new Message{std::forward<Args>(args)...}, false};
   }
+  static constexpr int TICK_INTERVAL = 1;
 }
 
 using ceph::common::local_conf;
@@ -32,11 +37,13 @@ OSD::OSD(int id, uint32_t nonce)
   : whoami{id},
     cluster_msgr{new ceph::net::SocketMessenger{entity_name_t::OSD(whoami),
                                                 "cluster", nonce}},
-    client_msgr{new ceph::net::SocketMessenger{entity_name_t::OSD(whoami),
+    public_msgr{new ceph::net::SocketMessenger{entity_name_t::OSD(whoami),
                                                "client", nonce}},
-    monc{*client_msgr}
+    monc{*public_msgr},
+    heartbeat{new Heartbeat{whoami, nonce, *this, monc}},
+    heartbeat_timer{[this] { update_heartbeat_peers(); }}
 {
-  for (auto msgr : {cluster_msgr.get(), client_msgr.get()}) {
+  for (auto msgr : {cluster_msgr.get(), public_msgr.get()}) {
     if (local_conf()->ms_crc_data) {
       msgr->set_crc_data();
     }
@@ -110,6 +117,17 @@ seastar::future<> OSD::mkfs(uuid_d cluster_fsid)
   });
 }
 
+namespace {
+  entity_addrvec_t pick_addresses(int what) {
+    entity_addrvec_t addrs;
+    CephContext cct;
+    if (int r = ::pick_addresses(&cct, what, &addrs, -1); r < 0) {
+      throw std::runtime_error("failed to pick address");
+    }
+    return addrs;
+  }
+}
+
 seastar::future<> OSD::start()
 {
   logger().info("start");
@@ -126,7 +144,14 @@ seastar::future<> OSD::start()
     osdmap = std::move(map);
     return load_pgs();
   }).then([this] {
-    return client_msgr->start(&dispatchers);
+    cluster_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER),
+                           local_conf()->ms_bind_port_min,
+                           local_conf()->ms_bind_port_max);
+    public_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
+                          local_conf()->ms_bind_port_min,
+                          local_conf()->ms_bind_port_max);
+    return seastar::when_all_succeed(cluster_msgr->start(&dispatchers),
+                                     public_msgr->start(&dispatchers));
   }).then([this] {
     return monc.start();
   }).then([this] {
@@ -134,6 +159,9 @@ seastar::future<> OSD::start()
     monc.sub_want("mgrmap", 0, 0);
     monc.sub_want("osdmap", 0, 0);
     return monc.renew_subs();
+  }).then([this] {
+    return heartbeat->start(public_msgr->get_myaddrs(),
+                            cluster_msgr->get_myaddrs());
   }).then([this] {
     return start_boot();
   });
@@ -149,6 +177,7 @@ seastar::future<> OSD::start_boot()
 
 seastar::future<> OSD::_preboot(version_t newest, version_t oldest)
 {
+  logger().info("osd.{}: _preboot", whoami);
   if (osdmap->get_epoch() == 0) {
     logger().warn("waiting for initial osdmap");
   } else if (osdmap->is_destroyed(whoami)) {
@@ -183,16 +212,15 @@ seastar::future<> OSD::_send_boot()
 {
   state.set_booting();
 
-  entity_addrvec_t hb_back_addrs;
-  entity_addrvec_t hb_front_addrs;
-  entity_addrvec_t cluster_addrs = cluster_msgr->get_myaddrs();
-
+  logger().info("hb_back_msgr: {}", heartbeat->get_back_addrs());
+  logger().info("hb_front_msgr: {}", heartbeat->get_front_addrs());
+  logger().info("cluster_msgr: {}", cluster_msgr->get_myaddr());
   auto m = make_message<MOSDBoot>(superblock,
                                   osdmap->get_epoch(),
                                   osdmap->get_epoch(),
-                                  hb_back_addrs,
-                                  hb_front_addrs,
-                                  cluster_addrs,
+                                  heartbeat->get_back_addrs(),
+                                  heartbeat->get_front_addrs(),
+                                  cluster_msgr->get_myaddrs(),
                                   CEPH_FEATURES_ALL);
   return monc.send_message(m);
 }
@@ -202,9 +230,11 @@ seastar::future<> OSD::stop()
   // see also OSD::shutdown()
   state.set_stopping();
   return gate.close().then([this] {
+    return heartbeat->stop();
+  }).then([this] {
     return monc.stop();
   }).then([this] {
-    return client_msgr->shutdown();
+    return public_msgr->shutdown();
   });
 }
 
@@ -294,6 +324,11 @@ seastar::future<> OSD::ms_handle_remote_reset(ceph::net::ConnectionRef conn)
 {
   logger().warn("ms_handle_remote_reset");
   return seastar::now();
+}
+
+seastar::lw_shared_ptr<OSDMap> OSD::get_map() const
+{
+  return osdmap;
 }
 
 seastar::future<seastar::lw_shared_ptr<OSDMap>> OSD::get_map(epoch_t e)
@@ -453,7 +488,7 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
       osdmap = o;
       if (up_epoch != 0 &&
           osdmap->is_up(whoami) &&
-          osdmap->get_addrs(whoami) == client_msgr->get_myaddrs()) {
+          osdmap->get_addrs(whoami) == public_msgr->get_myaddrs()) {
         up_epoch = osdmap->get_epoch();
         if (!boot_epoch) {
           boot_epoch = osdmap->get_epoch();
@@ -462,13 +497,15 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
     });
   }).then([m, this] {
     if (osdmap->is_up(whoami) &&
-        osdmap->get_addrs(whoami) == client_msgr->get_myaddrs() &&
+        osdmap->get_addrs(whoami) == public_msgr->get_myaddrs() &&
         bind_epoch < osdmap->get_up_from(whoami)) {
       if (state.is_booting()) {
         logger().info("osd.{}: activating...", whoami);
         state.set_active();
         beacon_timer.arm_periodic(
           std::chrono::seconds(local_conf()->osd_beacon_report_interval));
+        heartbeat_timer.arm_periodic(
+          std::chrono::seconds(TICK_INTERVAL));
       }
     }
 
@@ -486,7 +523,6 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
       logger().info("osd.{}: now preboot", whoami);
 
       if (m->get_source().is_mon()) {
-        logger().info("osd.{}: _preboot", whoami);
         return _preboot(m->oldest_map, m->newest_map);
       } else {
         logger().info("osd.{}: start_boot", whoami);
@@ -506,11 +542,11 @@ bool OSD::should_restart() const
     logger().info("map e {} marked osd.{} down",
                   osdmap->get_epoch(), whoami);
     return true;
-  } else if (osdmap->get_addrs(whoami) != client_msgr->get_myaddrs()) {
+  } else if (osdmap->get_addrs(whoami) != public_msgr->get_myaddrs()) {
     logger().error("map e {} had wrong client addr ({} != my {})",
                    osdmap->get_epoch(),
                    osdmap->get_addrs(whoami),
-                   client_msgr->get_myaddrs());
+                   public_msgr->get_myaddrs());
     return true;
   } else if (osdmap->get_cluster_addrs(whoami) != cluster_msgr->get_myaddrs()) {
     logger().error("map e {} had wrong cluster addr ({} != my {})",
@@ -550,7 +586,21 @@ seastar::future<> OSD::send_beacon()
   return monc.send_message(m);
 }
 
-ghobject_t OSD::get_osdmap_pobject_name(epoch_t epoch) {
-  string name = fmt::format("osdmap.{}", epoch);
-  return ghobject_t(hobject_t(sobject_t(object_t(name), 0)));
+void OSD::update_heartbeat_peers()
+{
+  if (!state.is_active()) {
+    return;
+  }
+  for (auto& pg : pgs) {
+    vector<int> up, acting;
+    osdmap->pg_to_up_acting_osds(pg.first.pgid,
+                                 &up, nullptr,
+                                 &acting, nullptr);
+    for (auto osd : boost::join(up, acting)) {
+      if (osd != CRUSH_ITEM_NONE) {
+        heartbeat->add_peer(osd);
+      }
+    }
+  }
+  // TODO: remove down OSD
 }
