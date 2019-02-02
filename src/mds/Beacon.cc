@@ -28,6 +28,7 @@
 
 #include "Beacon.h"
 
+#include <math.h>
 #include <chrono>
 
 #define dout_context g_ceph_context
@@ -397,7 +398,7 @@ void Beacon::notify_health(MDSRank const *mds)
     std::list<MDSHealthMetric> late_recall_metrics;
     std::list<MDSHealthMetric> large_completed_requests_metrics;
     for (auto& session : sessions) {
-      const uint64_t recall_caps = session->get_recall_caps();
+      const uint64_t recall_caps = fmax(0.0, session->get_recall_caps()); /* In Luminous: decay counter may go negative due to hit */
       if (recall_caps > recall_warning_threshold) {
         dout(2) << "Session " << *session <<
              " is not releasing caps fast enough. Recalled caps at " << recall_caps
