@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #pragma once
 
 #include <map>
@@ -9,6 +12,7 @@
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/osd/chained_dispatchers.h"
+#include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/state.h"
 
 #include "osd/OSDMap.h"
@@ -17,6 +21,7 @@ class MOSDMap;
 class OSDMap;
 class OSDMeta;
 class PG;
+class Heartbeat;
 
 namespace ceph::net {
   class Messenger;
@@ -30,16 +35,20 @@ namespace ceph::os {
 
 template<typename T> using Ref = boost::intrusive_ptr<T>;
 
-class OSD : public ceph::net::Dispatcher {
+class OSD : public ceph::net::Dispatcher,
+	    private OSDMapService {
   seastar::gate gate;
   seastar::timer<seastar::lowres_clock> beacon_timer;
   const int whoami;
   // talk with osd
   std::unique_ptr<ceph::net::Messenger> cluster_msgr;
-  // talk with mon/mgr
-  std::unique_ptr<ceph::net::Messenger> client_msgr;
+  // talk with client/mon/mgr
+  std::unique_ptr<ceph::net::Messenger> public_msgr;
   ChainedDispatchers dispatchers;
   ceph::mon::Client monc;
+
+  std::unique_ptr<Heartbeat> heartbeat;
+  seastar::timer<seastar::lowres_clock> heartbeat_timer;
 
   // TODO: use LRU cache
   std::map<epoch_t, seastar::lw_shared_ptr<OSDMap>> osdmaps;
@@ -71,14 +80,12 @@ class OSD : public ceph::net::Dispatcher {
 
 public:
   OSD(int id, uint32_t nonce);
-  ~OSD();
+  ~OSD() override;
 
   seastar::future<> mkfs(uuid_d fsid);
 
   seastar::future<> start();
   seastar::future<> stop();
-
-  static ghobject_t get_osdmap_pobject_name(epoch_t epoch);
 
 private:
   seastar::future<> start_boot();
@@ -88,7 +95,10 @@ private:
   seastar::future<Ref<PG>> load_pg(spg_t pgid);
   seastar::future<> load_pgs();
 
-  seastar::future<seastar::lw_shared_ptr<OSDMap>> get_map(epoch_t e);
+  // OSDMapService methods
+  seastar::future<seastar::lw_shared_ptr<OSDMap>> get_map(epoch_t e) override;
+  seastar::lw_shared_ptr<OSDMap> get_map() const override;
+
   seastar::future<bufferlist> load_map_bl(epoch_t e);
   void store_map_bl(ceph::os::Transaction& t,
                     epoch_t e, bufferlist&& bl);
@@ -109,4 +119,5 @@ private:
   seastar::future<> shutdown();
 
   seastar::future<> send_beacon();
+  void update_heartbeat_peers();
 };
