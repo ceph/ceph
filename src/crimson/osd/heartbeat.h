@@ -31,7 +31,7 @@ public:
 			  entity_addrvec_t back);
   seastar::future<> stop();
 
-  void add_peer(osd_id_t peer);
+  void add_peer(osd_id_t peer, epoch_t epoch);
   seastar::future<> remove_peer(osd_id_t peer);
 
   seastar::future<> send_heartbeats();
@@ -83,6 +83,8 @@ private:
     clock::time_point last_rx_front;
     /// last time we got a ping reply on the back side
     clock::time_point last_rx_back;
+    /// most recent epoch we wanted this peer
+    epoch_t epoch;
     /// history of inflight pings, arranging by timestamp we sent
     std::map<utime_t, reply_t> ping_history;
 
