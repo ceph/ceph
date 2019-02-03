@@ -598,7 +598,7 @@ void OSD::update_heartbeat_peers()
                                  &acting, nullptr);
     for (auto osd : boost::join(up, acting)) {
       if (osd != CRUSH_ITEM_NONE) {
-        heartbeat->add_peer(osd);
+        heartbeat->add_peer(osd, osdmap->get_epoch());
       }
     }
   }

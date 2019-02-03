@@ -77,7 +77,7 @@ const entity_addrvec_t& Heartbeat::get_back_addrs() const
   return back_msgr->get_myaddrs();
 }
 
-void Heartbeat::add_peer(osd_id_t peer)
+void Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
 {
   auto found = peers.find(peer);
   if (found == peers.end()) {
@@ -91,7 +91,10 @@ void Heartbeat::add_peer(osd_id_t peer)
     info.con_back =
       back_msgr->connect(osdmap->get_hb_back_addrs(peer).legacy_addr(),
                          CEPH_ENTITY_TYPE_OSD);
+    info.epoch = epoch;
     peers.emplace(peer, std::move(info));
+  } else {
+    found->second.epoch = epoch;
   }
 }
 
