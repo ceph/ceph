@@ -30,7 +30,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {
-  return *_dout << "-- " << msgr->get_myaddr() << " ";
+  return *_dout << "-- " << msgr->get_myaddr_legacy() << " ";
 }
 
 
@@ -70,7 +70,7 @@ SimpleMessenger::~SimpleMessenger()
 
 void SimpleMessenger::ready()
 {
-  ldout(cct,10) << "ready " << get_myaddr() << dendl;
+  ldout(cct,10) << "ready " << get_myaddr_legacy() << dendl;
   dispatch_queue.start();
 
   lock.Lock();
@@ -82,7 +82,7 @@ void SimpleMessenger::ready()
 
 int SimpleMessenger::shutdown()
 {
-  ldout(cct,10) << "shutdown " << get_myaddr() << dendl;
+  ldout(cct,10) << "shutdown " << get_myaddr_legacy() << dendl;
   mark_down_all();
 
   // break ref cycles on the loopback connection

@@ -263,7 +263,7 @@ public:
     {
       const entity_inst_t &inst = xcon->get_messenger()->get_myinst();
       hdr.peer_type = inst.name.type();
-      hdr.addr = xcon->get_messenger()->get_myaddr();
+      hdr.addr = xcon->get_messenger()->get_myaddr_legacy();
       hdr.hdr->src.type = inst.name.type();
       hdr.hdr->src.num = inst.name.num();
       hdr.msg_cnt = _ex_cnt+1;

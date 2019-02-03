@@ -4682,7 +4682,8 @@ void Objecter::blacklist_self(bool set)
   else
     cmd.push_back("\"blacklistop\":\"rm\",");
   stringstream ss;
-  ss << messenger->get_myaddr();
+  // this is somewhat imprecise in that we are blacklisting our first addr only
+  ss << messenger->get_myaddrs().front().get_legacy_str();
   cmd.push_back("\"addr\":\"" + ss.str() + "\"");
 
   MMonCommand *m = new MMonCommand(monc->get_fsid());

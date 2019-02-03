@@ -86,7 +86,7 @@ public:
     ceph_assert(msg != NULL);
     msg->set_default_policy(Messenger::Policy::lossy_client(0));
     dout(0) << __func__ << " starting messenger at "
-            << msg->get_myaddr() << dendl;
+            << msg->get_myaddrs() << dendl;
     msg->start();
     return 0;
   }

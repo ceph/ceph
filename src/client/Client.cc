@@ -462,7 +462,7 @@ void Client::dump_status(Formatter *f)
     f->dump_int("dentry_count", lru.lru_get_size());
     f->dump_int("dentry_pinned_count", lru.lru_get_num_pinned());
     f->dump_int("id", get_nodeid().v);
-    entity_inst_t inst(messenger->get_myname(), messenger->get_myaddr());
+    entity_inst_t inst(messenger->get_myname(), messenger->get_myaddr_legacy());
     f->dump_object("inst", inst);
     f->dump_object("addr", inst.addr);
     f->dump_stream("inst_str") << inst.name << " " << inst.addr.get_legacy_str();
@@ -1546,7 +1546,7 @@ void Client::connect_mds_targets(mds_rank_t mds)
 void Client::dump_mds_sessions(Formatter *f)
 {
   f->dump_int("id", get_nodeid().v);
-  entity_inst_t inst(messenger->get_myname(), messenger->get_myaddr());
+  entity_inst_t inst(messenger->get_myname(), messenger->get_myaddr_legacy());
   f->dump_object("inst", inst);
   f->dump_stream("inst_str") << inst;
   f->dump_stream("addr_str") << inst.addr;

@@ -372,8 +372,8 @@ void AsyncConnection::process() {
 
       SocketOptions opts;
       opts.priority = async_msgr->get_socket_priority();
-      opts.connect_bind_addr = msgr->get_myaddr();
-      ssize_t r = worker->connect(get_peer_addr(), opts, &cs);
+      opts.connect_bind_addr = msgr->get_myaddrs().front();
+      ssize_t r = worker->connect(target_addr, opts, &cs);
       if (r < 0) {
         protocol->fault();
         return;

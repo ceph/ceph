@@ -219,10 +219,10 @@ int Accepter::bind(const entity_addr_t &bind_addr, const set<int>& avoid_ports)
   else
     ceph_assert(msgr->get_need_addr());  // should still be true.
 
-  if (msgr->get_myaddr().get_port() == 0) {
+  if (msgr->get_myaddr_legacy().get_port() == 0) {
     msgr->set_myaddrs(entity_addrvec_t(listen_addr));
   }
-  entity_addr_t addr = msgr->get_myaddr();
+  entity_addr_t addr = msgr->get_myaddr_legacy();
   addr.nonce = nonce;
   msgr->set_myaddrs(entity_addrvec_t(addr));
 
@@ -245,7 +245,7 @@ int Accepter::rebind(const set<int>& avoid_ports)
 {
   ldout(msgr->cct,1) << __func__ << " avoid " << avoid_ports << dendl;
   
-  entity_addr_t addr = msgr->get_myaddr();
+  entity_addr_t addr = msgr->get_myaddr_legacy();
   set<int> new_avoid = avoid_ports;
   new_avoid.insert(addr.get_port());
   addr.set_port(0);
