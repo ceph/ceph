@@ -9,6 +9,8 @@
 #include <seastar/core/shared_ptr.hh>
 #include <seastar/core/timer.hh>
 
+#include "crimson/common/simple_lru.h"
+#include "crimson/common/shared_lru.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/osd/chained_dispatchers.h"
@@ -51,10 +53,9 @@ class OSD : public ceph::net::Dispatcher,
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> heartbeat_timer;
 
-  // TODO: use LRU cache
-  std::map<epoch_t, seastar::lw_shared_ptr<OSDMap>> osdmaps;
-  std::map<epoch_t, bufferlist> map_bl_cache;
-  seastar::lw_shared_ptr<OSDMap> osdmap;
+  SharedLRU<epoch_t, OSDMap> osdmaps;
+  SimpleLRU<epoch_t, bufferlist, false> map_bl_cache;
+  cached_map_t osdmap;
   // TODO: use a wrapper for ObjectStore
   std::unique_ptr<ceph::os::CyanStore> store;
   std::unique_ptr<OSDMeta> meta_coll;
@@ -97,8 +98,8 @@ private:
   seastar::future<> load_pgs();
 
   // OSDMapService methods
-  seastar::future<seastar::lw_shared_ptr<OSDMap>> get_map(epoch_t e) override;
-  seastar::lw_shared_ptr<OSDMap> get_map() const override;
+  seastar::future<cached_map_t> get_map(epoch_t e) override;
+  cached_map_t get_map() const override;
 
   seastar::future<bufferlist> load_map_bl(epoch_t e);
   void store_map_bl(ceph::os::Transaction& t,
