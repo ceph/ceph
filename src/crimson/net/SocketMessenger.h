@@ -21,14 +21,10 @@
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sharded.hh>
 
-#include "msg/Policy.h"
 #include "Messenger.h"
 #include "SocketConnection.h"
-#include "crimson/thread/Throttle.h"
 
 namespace ceph::net {
-
-using SocketPolicy = ceph::net::Policy<ceph::thread::Throttle>;
 
 class SocketMessenger final : public Messenger, public seastar::peering_sharded_service<SocketMessenger> {
   const int master_sid;
@@ -39,7 +35,6 @@ class SocketMessenger final : public Messenger, public seastar::peering_sharded_
   Dispatcher *dispatcher = nullptr;
   std::map<entity_addr_t, SocketConnectionRef> connections;
   std::set<SocketConnectionRef> accepting_conns;
-  using Throttle = ceph::thread::Throttle;
   ceph::net::PolicySet<Throttle> policy_set;
   // Distinguish messengers with meaningful names for debugging
   const std::string logic_name;
@@ -96,11 +91,14 @@ class SocketMessenger final : public Messenger, public seastar::peering_sharded_
         << ") " << get_myaddr();
   }
 
+  void set_default_policy(const SocketPolicy& p) override;
+
+  void set_policy(entity_type_t peer_type, const SocketPolicy& p) override;
+
+  void set_policy_throttler(entity_type_t peer_type, Throttle* throttle) override;
+
  public:
   seastar::future<> learned_addr(const entity_addr_t &peer_addr_for_me);
-  void set_default_policy(const SocketPolicy& p);
-  void set_policy(entity_type_t peer_type, const SocketPolicy& p);
-  void set_policy_throttler(entity_type_t peer_type, Throttle* throttle);
 
   SocketConnectionRef lookup_conn(const entity_addr_t& addr);
   void accept_conn(SocketConnectionRef);
