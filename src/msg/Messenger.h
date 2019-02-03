@@ -167,6 +167,31 @@ public:
   }
 
   /**
+   * get legacy addr for myself, suitable for protocol v1
+   *
+   * Note that myaddrs might be a proper addrvec with v1 in it, or it might be an
+   * ANY addr (if i am a pure client).
+   */
+  entity_addr_t get_myaddr_legacy() {
+    auto& av = *my_addrs;
+    for (auto& a : av.v) {
+      if (a.is_legacy()) {
+	return a;
+      }
+      if (a.is_any()) {
+	auto b = a;
+	b.set_type(entity_addr_t::TYPE_LEGACY);
+	return b;
+      }
+    }
+    // hrm... lie!
+    auto a = av.front();
+    a.set_type(entity_addr_t::TYPE_LEGACY);
+    return a;
+  }
+
+
+  /**
    * set messenger's instance
    */
   uint32_t get_magic() { return magic; }
