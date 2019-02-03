@@ -195,7 +195,8 @@ seastar::future<> Heartbeat::remove_peer(osd_id_t peer)
 seastar::future<> Heartbeat::ms_dispatch(ceph::net::ConnectionRef conn,
                                          MessageRef m)
 {
-  logger().info("heartbeat: ms_dispatch {}", *m);
+  logger().info("heartbeat: ms_dispatch {} from {}",
+                *m, m->get_source());
   switch (m->get_type()) {
   case CEPH_MSG_PING:
     return handle_osd_ping(conn, boost::static_pointer_cast<MOSDPing>(m));
