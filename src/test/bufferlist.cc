@@ -828,6 +828,53 @@ TEST(BufferListIterator, advance) {
   }
 }
 
+TEST(BufferListIterator, iterate_with_empties) {
+  ceph::bufferlist bl;
+  EXPECT_EQ(bl.get_num_buffers(), 0u);
+
+  bl.push_back(ceph::buffer::create(0));
+  EXPECT_EQ(bl.length(), 0u);
+  EXPECT_EQ(bl.get_num_buffers(), 1u);
+
+  encode(42l, bl);
+  EXPECT_EQ(bl.get_num_buffers(), 2u);
+
+  bl.push_back(ceph::buffer::create(0));
+  EXPECT_EQ(bl.get_num_buffers(), 3u);
+
+  // append bufferlist with single, 0-sized ptr inside
+  {
+    ceph::bufferlist bl_with_empty_ptr;
+    bl_with_empty_ptr.push_back(ceph::buffer::create(0));
+    EXPECT_EQ(bl_with_empty_ptr.length(), 0u);
+    EXPECT_EQ(bl_with_empty_ptr.get_num_buffers(), 1u);
+
+    bl.append(bl_with_empty_ptr);
+  }
+
+  encode(24l, bl);
+  EXPECT_EQ(bl.get_num_buffers(), 5u);
+
+  auto i = bl.cbegin();
+  long val;
+  decode(val, i);
+  EXPECT_EQ(val, 42l);
+
+  decode(val, i);
+  EXPECT_EQ(val, 24l);
+
+  val = 0;
+  i.seek(sizeof(long));
+  decode(val, i);
+  EXPECT_EQ(val, 24l);
+  EXPECT_TRUE(i == bl.end());
+
+  i.seek(0);
+  decode(val, i);
+  EXPECT_EQ(val, 42);
+  EXPECT_FALSE(i == bl.end());
+}
+
 TEST(BufferListIterator, get_ptr_and_advance)
 {
   bufferptr a("one", 3);
@@ -2611,6 +2658,59 @@ TEST(BufferList, EmptyAppend) {
   bufferptr ptr;
   bl.push_back(ptr);
   ASSERT_EQ(bl.begin().end(), 1);
+}
+
+TEST(BufferList, InternalCarriage) {
+  ceph::bufferlist bl;
+  EXPECT_EQ(bl.get_num_buffers(), 0u);
+
+  encode(42l, bl);
+  EXPECT_EQ(bl.get_num_buffers(), 1u);
+
+  {
+    ceph::bufferlist bl_with_foo;
+    bl_with_foo.append("foo", 3);
+    EXPECT_EQ(bl_with_foo.length(), 3u);
+    EXPECT_EQ(bl_with_foo.get_num_buffers(), 1u);
+
+    bl.append(bl_with_foo);
+    EXPECT_EQ(bl.get_num_buffers(), 2u);
+  }
+
+  encode(24l, bl);
+  EXPECT_EQ(bl.get_num_buffers(), 3u);
+}
+
+TEST(BufferList, ContiguousAppender) {
+  ceph::bufferlist bl;
+  EXPECT_EQ(bl.get_num_buffers(), 0u);
+
+  // we expect a flush in ~contiguous_appender
+  {
+    auto ap = bl.get_contiguous_appender(100);
+
+    denc(42l, ap);
+    EXPECT_EQ(bl.get_num_buffers(), 1u);
+
+    // append bufferlist with single ptr inside. This should
+    // commit changes to bl::_len and the underlying bp::len.
+    {
+      ceph::bufferlist bl_with_foo;
+      bl_with_foo.append("foo", 3);
+      EXPECT_EQ(bl_with_foo.length(), 3u);
+      EXPECT_EQ(bl_with_foo.get_num_buffers(), 1u);
+
+      ap.append(bl_with_foo);
+      // 3 as the ap::append(const bl&) splits the bp with free
+      // space.
+      EXPECT_EQ(bl.get_num_buffers(), 3u);
+    }
+
+    denc(24l, ap);
+    EXPECT_EQ(bl.get_num_buffers(), 3u);
+    EXPECT_EQ(bl.length(), sizeof(long) + 3u);
+  }
+  EXPECT_EQ(bl.length(), 2u * sizeof(long) + 3u);
 }
 
 TEST(BufferList, TestPtrAppend) {
