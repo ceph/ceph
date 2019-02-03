@@ -107,6 +107,9 @@ template<class K, class V>
 typename SharedLRU<K,V>::shared_ptr_t
 SharedLRU<K,V>::operator[](const K& key)
 {
+  if (auto found = cache.find(key); found) {
+    return *found;
+  }
   shared_ptr_t val;
   if (auto found = weak_refs.find(key); found != weak_refs.end()) {
     val = found->second.first.lock();
@@ -123,6 +126,9 @@ template<class K, class V>
 typename SharedLRU<K,V>::shared_ptr_t
 SharedLRU<K,V>::find(const K& key)
 {
+  if (auto found = cache.find(key); found) {
+    return *found;
+  }
   shared_ptr_t val;
   if (auto found = weak_refs.find(key); found != weak_refs.end()) {
     val = found->second.first.lock();
