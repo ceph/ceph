@@ -4,7 +4,7 @@ add_executable(ceph_test_cls_lua
 target_link_libraries(ceph_test_cls_lua
   cls_lua_client
   liblua
-  librados-cxx
+  librados
   global
   ${UNITTEST_LIBS}
   ${EXTRALIBS}

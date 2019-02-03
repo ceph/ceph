@@ -4,7 +4,7 @@ if(${WITH_RADOSGW})
     )
   target_link_libraries(ceph_test_cls_rgw
     cls_rgw_client
-    librados-cxx
+    librados
     global
     ${UNITTEST_LIBS}
     ${EXTRALIBS}

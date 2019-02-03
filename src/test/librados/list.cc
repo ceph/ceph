@@ -169,7 +169,7 @@ TEST_F(LibRadosList, ListObjectsStart) {
 
 // this function replicates
 // librados::operator<<(std::ostream& os, const librados::ObjectCursor& oc)
-// because we don't want to use librados-cxx in librados client.
+// because we don't want to use librados in librados client.
 std::ostream& operator<<(std::ostream&os, const rados_object_list_cursor& oc)
 {
   if (oc) {

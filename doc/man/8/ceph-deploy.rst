@@ -330,7 +330,7 @@ uninstall
 
 Remove Ceph packages from remote hosts. It detects the platform and distro of
 selected host and uninstalls Ceph packages from it. However, some dependencies
-like ``librbd1`` and ``librados3`` will not be removed because they can cause
+like ``librbd1`` and ``librados2`` will not be removed because they can cause
 issues with ``qemu-kvm``.
 
 Usage::
@@ -345,7 +345,7 @@ purge
 
 Remove Ceph packages from remote hosts and purge all data. It detects the
 platform and distro of selected host, uninstalls Ceph packages and purges all
-data. However, some dependencies like ``librbd1`` and ``librados3`` will not be
+data. However, some dependencies like ``librbd1`` and ``librados2`` will not be
 removed because they can cause issues with ``qemu-kvm``.
 
 Usage::
