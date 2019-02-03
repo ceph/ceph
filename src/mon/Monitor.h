@@ -195,14 +195,15 @@ public:
   // -- monitor state --
 private:
   enum {
-    STATE_PROBING = 1,
+    STATE_INIT = 1,
+    STATE_PROBING,
     STATE_SYNCHRONIZING,
     STATE_ELECTING,
     STATE_LEADER,
     STATE_PEON,
     STATE_SHUTDOWN
   };
-  int state;
+  int state = STATE_INIT;
 
 public:
   static const char *get_state_name(int s) {
@@ -220,6 +221,7 @@ public:
     return get_state_name(state);
   }
 
+  bool is_init() const { return state == STATE_INIT; }
   bool is_shutdown() const { return state == STATE_SHUTDOWN; }
   bool is_probing() const { return state == STATE_PROBING; }
   bool is_synchronizing() const { return state == STATE_SYNCHRONIZING; }

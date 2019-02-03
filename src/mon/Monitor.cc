@@ -156,8 +156,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   gss_ktfile_client(cct->_conf.get_val<std::string>("gss_ktab_client_file")),
   store(s),
   
-  state(STATE_PROBING),
-  
   elector(this),
   required_features(0),
   leader(0),
@@ -882,10 +880,13 @@ int Monitor::init()
   // i'm ready!
   messenger->add_dispatcher_tail(this);
 
+  // kickstart pet mgrclient
   mgr_client.init();
   mgr_messenger->add_dispatcher_tail(&mgr_client);
   mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
+  mgrmon()->prime_mgr_client();
 
+  state = STATE_PROBING;
   bootstrap();
   // add features of myself into feature_map
   session_map.feature_map.add_mon(con_self->get_features());

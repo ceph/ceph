@@ -87,6 +87,8 @@ public:
 
   version_t get_trim_to() const override;
 
+  void prime_mgr_client();
+
   void create_initial() override;
   void get_store_prefixes(std::set<string>& s) const override;
   void update_from_paxos(bool *need_bootstrap) override;
