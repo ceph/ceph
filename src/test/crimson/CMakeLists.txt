@@ -12,10 +12,9 @@ add_executable(unittest_seastar_messenger test_messenger.cc)
 add_ceph_unittest(unittest_seastar_messenger)
 target_link_libraries(unittest_seastar_messenger ceph-common crimson)
 
-# TODO: fix unittest_seastar_echo with the new design
-#add_executable(unittest_seastar_echo
-#  test_alien_echo.cc)
-#target_link_libraries(unittest_seastar_echo ceph-common global crimson)
+add_executable(unittest_seastar_echo
+  test_alien_echo.cc)
+target_link_libraries(unittest_seastar_echo ceph-common global crimson)
 
 add_executable(unittest_seastar_thread_pool
   test_thread_pool.cc)
@@ -26,10 +25,9 @@ add_executable(unittest_seastar_config
   test_config.cc)
 target_link_libraries(unittest_seastar_config crimson)
 
-# TODO: fix unittest_seastar_monc with the new design
-#add_executable(unittest_seastar_monc
-#  test_monc.cc)
-#target_link_libraries(unittest_seastar_monc crimson)
+add_executable(unittest_seastar_monc
+  test_monc.cc)
+target_link_libraries(unittest_seastar_monc crimson)
 
 add_executable(unittest_seastar_perfcounters
   test_perfcounters.cc)

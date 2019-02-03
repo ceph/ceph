@@ -7,7 +7,7 @@
 
 #include "crimson/common/config_proxy.h"
 #include "crimson/net/Connection.h"
-#include "crimson/net/SocketMessenger.h"
+#include "crimson/net/Messenger.h"
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/mon/MonClient.h"
 
@@ -31,10 +31,8 @@ Heartbeat::Heartbeat(int whoami,
                      uint32_t nonce,
                      const OSDMapService& service,
                      ceph::mon::Client& monc)
-  : front_msgr{new ceph::net::SocketMessenger{entity_name_t::OSD(whoami),
-                                              "hb_front", nonce}},
-    back_msgr{new ceph::net::SocketMessenger{entity_name_t::OSD(whoami),
-                                             "hb_back", nonce}},
+  : whoami{whoami},
+    nonce{nonce},
     service{service},
     monc{monc},
     timer{[this] {send_heartbeats();}}
@@ -48,17 +46,31 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
   for (auto& addr : boost::join(front_addrs.v, back_addrs.v)) {
     addr.set_port(0);
   }
-  front_msgr->try_bind(front_addrs,
-                       local_conf()->ms_bind_port_min,
-                       local_conf()->ms_bind_port_max);
-  back_msgr->try_bind(front_addrs,
-                      local_conf()->ms_bind_port_min,
-                      local_conf()->ms_bind_port_max);
-  return seastar::when_all_succeed(front_msgr->start(this),
-                                   back_msgr->start(this)).then([this] {
-    timer.arm_periodic(
-      std::chrono::seconds(local_conf()->osd_heartbeat_interval));
-  });
+  return seastar::when_all_succeed(
+      ceph::net::Messenger::create(entity_name_t::OSD(whoami),
+                                   "hb_front",
+                                   nonce,
+                                   seastar::engine().cpu_id())
+        .then([this, front_addrs] (auto msgr) {
+          front_msgr = msgr;
+          return front_msgr->try_bind(front_addrs,
+                                      local_conf()->ms_bind_port_min,
+                                      local_conf()->ms_bind_port_max);
+        }).then([this] { return front_msgr->start(this); }),
+      ceph::net::Messenger::create(entity_name_t::OSD(whoami),
+                                   "hb_back",
+                                   nonce,
+                                   seastar::engine().cpu_id())
+        .then([this, back_addrs] (auto msgr) {
+          back_msgr = msgr;
+          return back_msgr->try_bind(back_addrs,
+                                     local_conf()->ms_bind_port_min,
+                                     local_conf()->ms_bind_port_max);
+        }).then([this] { return back_msgr->start(this); }))
+    .then([this] {
+      timer.arm_periodic(
+        std::chrono::seconds(local_conf()->osd_heartbeat_interval));
+    });
 }
 
 seastar::future<> Heartbeat::stop()
@@ -77,24 +89,29 @@ const entity_addrvec_t& Heartbeat::get_back_addrs() const
   return back_msgr->get_myaddrs();
 }
 
-void Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
+seastar::future<> Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
 {
   auto found = peers.find(peer);
   if (found == peers.end()) {
     logger().info("add_peer({})", peer);
-    PeerInfo info;
     auto osdmap = service.get_map();
     // TODO: msgr v2
-    info.con_front =
-      front_msgr->connect(osdmap->get_hb_front_addrs(peer).legacy_addr(),
-                          CEPH_ENTITY_TYPE_OSD);
-    info.con_back =
-      back_msgr->connect(osdmap->get_hb_back_addrs(peer).legacy_addr(),
-                         CEPH_ENTITY_TYPE_OSD);
-    info.epoch = epoch;
-    peers.emplace(peer, std::move(info));
+    return seastar::when_all_succeed(
+        front_msgr->connect(osdmap->get_hb_front_addrs(peer).legacy_addr(),
+                            CEPH_ENTITY_TYPE_OSD),
+        back_msgr->connect(osdmap->get_hb_back_addrs(peer).legacy_addr(),
+                           CEPH_ENTITY_TYPE_OSD))
+      .then([this, peer, epoch] (auto xcon_front, auto xcon_back) {
+        PeerInfo info;
+        // sharded-messenger compatible mode
+        info.con_front = xcon_front->release();
+        info.con_back = xcon_back->release();
+        info.epoch = epoch;
+        peers.emplace(peer, std::move(info));
+      });
   } else {
     found->second.epoch = epoch;
+    return seastar::now();
   }
 }
 

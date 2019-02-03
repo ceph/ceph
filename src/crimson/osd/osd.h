@@ -40,12 +40,13 @@ class OSD : public ceph::net::Dispatcher,
   seastar::gate gate;
   seastar::timer<seastar::lowres_clock> beacon_timer;
   const int whoami;
+  const uint32_t nonce;
   // talk with osd
-  std::unique_ptr<ceph::net::Messenger> cluster_msgr;
+  ceph::net::Messenger* cluster_msgr = nullptr;
   // talk with client/mon/mgr
-  std::unique_ptr<ceph::net::Messenger> public_msgr;
+  ceph::net::Messenger* public_msgr = nullptr;
   ChainedDispatchers dispatchers;
-  ceph::mon::Client monc;
+  std::unique_ptr<ceph::mon::Client> monc;
 
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> heartbeat_timer;
