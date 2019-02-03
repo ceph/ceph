@@ -602,5 +602,5 @@ void OSD::update_heartbeat_peers()
       }
     }
   }
-  // TODO: remove down OSD
+  heartbeat->update_peers(whoami);
 }

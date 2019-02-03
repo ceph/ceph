@@ -32,6 +32,7 @@ public:
   seastar::future<> stop();
 
   void add_peer(osd_id_t peer, epoch_t epoch);
+  seastar::future<> update_peers(int whoami);
   seastar::future<> remove_peer(osd_id_t peer);
 
   seastar::future<> send_heartbeats();
@@ -54,6 +55,13 @@ private:
   seastar::future<> handle_you_died();
 
   seastar::future<> send_still_alive(osd_id_t, const entity_addrvec_t&);
+
+  using osds_t = std::vector<osd_id_t>;
+  /// remove down OSDs
+  /// @return peers not needed in this epoch
+  seastar::future<osds_t> remove_down_peers();
+  /// add enough reporters for fast failure detection
+  void add_reporter_peers(int whoami);
 
 private:
   std::unique_ptr<ceph::net::Messenger> front_msgr;
