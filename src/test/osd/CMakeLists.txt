@@ -6,7 +6,7 @@ add_executable(ceph_test_rados
   RadosModel.cc
   )
 target_link_libraries(ceph_test_rados
-  librados-cxx
+  librados
   global
   ${BLKID_LIBRARIES}
   ${CMAKE_DL_LIBS}

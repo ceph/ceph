@@ -6,7 +6,7 @@ add_library(radosstriper ${CEPH_SHARED}
   ${libradosstriper_srcs})
 target_link_libraries(radosstriper
   PRIVATE
-    librados-cxx
+    librados
     librados_impl cls_lock_client osdc ceph-common
     pthread ${CRYPTO_LIBS} ${EXTRALIBS})
 set_target_properties(radosstriper PROPERTIES

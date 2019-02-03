@@ -2,7 +2,7 @@ add_executable(ceph_test_cls_sdk
   test_cls_sdk.cc
   )
 target_link_libraries(ceph_test_cls_sdk
-  librados-cxx
+  librados
   global
   ${EXTRALIBS}
   ${BLKID_LIBRARIES}

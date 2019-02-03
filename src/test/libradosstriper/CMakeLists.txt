@@ -13,8 +13,7 @@ add_executable(ceph_test_rados_striper_api_striping
 target_link_libraries(ceph_test_rados_striper_api_striping
   ${UNITTEST_LIBS} rados_striper_test
   radosstriper
-  librados
-  librados-cxx)
+  librados)
 install(TARGETS ceph_test_rados_striper_api_striping
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
@@ -23,14 +22,13 @@ add_executable(ceph_test_rados_striper_api_io
 target_link_libraries(ceph_test_rados_striper_api_io
   ${UNITTEST_LIBS} rados_striper_test
   radosstriper
-  librados
-  librados-cxx)
+  librados)
 install(TARGETS ceph_test_rados_striper_api_io
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 add_executable(ceph_test_rados_striper_api_aio
   aio.cc)
-target_link_libraries(ceph_test_rados_striper_api_aio librados-cxx radosstriper
+target_link_libraries(ceph_test_rados_striper_api_aio librados radosstriper
   ${UNITTEST_LIBS} rados_striper_test)
 install(TARGETS ceph_test_rados_striper_api_aio
   DESTINATION ${CMAKE_INSTALL_BINDIR})

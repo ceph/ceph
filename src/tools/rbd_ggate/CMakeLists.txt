@@ -5,5 +5,5 @@ add_executable(rbd-ggate
   debug.cc
   ggate_drv.c
   main.cc)
-target_link_libraries(rbd-ggate geom librbd librados-cxx global)
+target_link_libraries(rbd-ggate geom librbd librados global)
 install(TARGETS rbd-ggate DESTINATION bin)
