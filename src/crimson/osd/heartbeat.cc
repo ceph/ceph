@@ -297,7 +297,7 @@ seastar::future<> Heartbeat::send_heartbeats()
       std::vector<ceph::net::ConnectionRef> conns{info.con_front,
                                                   info.con_back};
       return seastar::parallel_for_each(std::move(conns),
-        [=] (auto con) {
+        [sent_stamp, &reply=reply->second, this] (auto con) {
           if (con) {
             auto min_message = static_cast<uint32_t>(
               local_conf()->osd_heartbeat_min_size);
@@ -307,7 +307,7 @@ seastar::future<> Heartbeat::send_heartbeats()
                                                sent_stamp,
                                                min_message);
             return con->send(ping).then([&reply] {
-              reply->second.unacknowledged++;
+              reply.unacknowledged++;
               return seastar::now();
             });
           } else {
