@@ -125,8 +125,7 @@ set(crimson_thread_srcs
   thread/Throttle.cc)
 add_library(crimson STATIC
   ${crimson_auth_srcs}
-  # TODO: fix crimson_mon_client with the new design
-  # ${crimson_mon_srcs}
+  ${crimson_mon_srcs}
   ${crimson_net_srcs}
   ${crimson_thread_srcs}
   ${CMAKE_SOURCE_DIR}/src/common/buffer_seastar.cc)

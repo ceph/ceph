@@ -7,7 +7,7 @@
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDMap.h"
 #include "crimson/net/Connection.h"
-#include "crimson/net/SocketMessenger.h"
+#include "crimson/net/Messenger.h"
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_object.h"
 #include "crimson/os/cyan_store.h"
@@ -35,29 +35,8 @@ using ceph::os::CyanStore;
 
 OSD::OSD(int id, uint32_t nonce)
   : whoami{id},
-    cluster_msgr{new ceph::net::SocketMessenger{entity_name_t::OSD(whoami),
-                                                "cluster", nonce}},
-    public_msgr{new ceph::net::SocketMessenger{entity_name_t::OSD(whoami),
-                                               "client", nonce}},
-    monc{*public_msgr},
-    heartbeat{new Heartbeat{whoami, nonce, *this, monc}},
-    heartbeat_timer{[this] { update_heartbeat_peers(); }}
-{
-  for (auto msgr : {cluster_msgr.get(), public_msgr.get()}) {
-    if (local_conf()->ms_crc_data) {
-      msgr->set_crc_data();
-    }
-    if (local_conf()->ms_crc_header) {
-      msgr->set_crc_header();
-    }
-  }
-  dispatchers.push_front(this);
-  dispatchers.push_front(&monc);
-  osdmaps[0] = seastar::make_lw_shared<OSDMap>();
-  beacon_timer.set_callback([this] {
-    send_beacon();
-  });
-}
+    nonce{nonce}
+{}
 
 OSD::~OSD() = default;
 
@@ -131,9 +110,38 @@ namespace {
 seastar::future<> OSD::start()
 {
   logger().info("start");
-  const auto data_path = local_conf().get_val<std::string>("osd_data");
-  store = std::make_unique<ceph::os::CyanStore>(data_path);
-  return store->mount().then([this] {
+
+  return seastar::when_all_succeed(
+    ceph::net::Messenger::create(entity_name_t::OSD(whoami),
+                                 "cluster",
+                                 nonce,
+                                 seastar::engine().cpu_id())
+      .then([this] (auto msgr) { cluster_msgr = msgr; }),
+    ceph::net::Messenger::create(entity_name_t::OSD(whoami),
+                                 "client",
+                                 nonce,
+                                 seastar::engine().cpu_id())
+      .then([this] (auto msgr) { public_msgr = msgr; }))
+  .then([this] {
+    monc.reset(new ceph::mon::Client{*public_msgr});
+    heartbeat.reset(new Heartbeat{whoami, nonce, *this, *monc});
+
+    for (auto msgr : {cluster_msgr, public_msgr}) {
+      if (local_conf()->ms_crc_data) {
+        msgr->set_crc_data();
+      }
+      if (local_conf()->ms_crc_header) {
+        msgr->set_crc_header();
+      }
+    }
+    dispatchers.push_front(this);
+    dispatchers.push_front(monc.get());
+    osdmaps[0] = seastar::make_lw_shared<OSDMap>();
+
+    const auto data_path = local_conf().get_val<std::string>("osd_data");
+    store = std::make_unique<ceph::os::CyanStore>(data_path);
+    return store->mount();
+  }).then([this] {
     meta_coll = make_unique<OSDMeta>(store->open_collection(coll_t::meta()),
                                      store.get());
     return meta_coll->load_superblock();
@@ -144,25 +152,28 @@ seastar::future<> OSD::start()
     osdmap = std::move(map);
     return load_pgs();
   }).then([this] {
-    cluster_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER),
-                           local_conf()->ms_bind_port_min,
-                           local_conf()->ms_bind_port_max);
-    public_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
-                          local_conf()->ms_bind_port_min,
-                          local_conf()->ms_bind_port_max);
-    return seastar::when_all_succeed(cluster_msgr->start(&dispatchers),
-                                     public_msgr->start(&dispatchers));
+    return seastar::when_all_succeed(
+      cluster_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER),
+                             local_conf()->ms_bind_port_min,
+                             local_conf()->ms_bind_port_max)
+        .then([this] { return cluster_msgr->start(&dispatchers); }),
+      public_msgr->try_bind(pick_addresses(CEPH_PICK_ADDRESS_PUBLIC),
+                            local_conf()->ms_bind_port_min,
+                            local_conf()->ms_bind_port_max)
+        .then([this] { return public_msgr->start(&dispatchers); }));
   }).then([this] {
-    return monc.start();
+    return monc->start();
   }).then([this] {
-    monc.sub_want("osd_pg_creates", last_pg_create_epoch, 0);
-    monc.sub_want("mgrmap", 0, 0);
-    monc.sub_want("osdmap", 0, 0);
-    return monc.renew_subs();
+    monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0);
+    monc->sub_want("mgrmap", 0, 0);
+    monc->sub_want("osdmap", 0, 0);
+    return monc->renew_subs();
   }).then([this] {
     return heartbeat->start(public_msgr->get_myaddrs(),
                             cluster_msgr->get_myaddrs());
   }).then([this] {
+    beacon_timer.set_callback([this] { send_beacon(); });
+    heartbeat_timer.set_callback([this] { update_heartbeat_peers(); });
     return start_boot();
   });
 }
@@ -170,7 +181,7 @@ seastar::future<> OSD::start()
 seastar::future<> OSD::start_boot()
 {
   state.set_preboot();
-  return monc.get_version("osdmap").then([this](version_t newest, version_t oldest) {
+  return monc->get_version("osdmap").then([this](version_t newest, version_t oldest) {
     return _preboot(newest, oldest);
   });
 }
@@ -222,7 +233,7 @@ seastar::future<> OSD::_send_boot()
                                   heartbeat->get_front_addrs(),
                                   cluster_msgr->get_myaddrs(),
                                   CEPH_FEATURES_ALL);
-  return monc.send_message(m);
+  return monc->send_message(m);
 }
 
 seastar::future<> OSD::stop()
@@ -232,9 +243,11 @@ seastar::future<> OSD::stop()
   return gate.close().then([this] {
     return heartbeat->stop();
   }).then([this] {
-    return monc.stop();
+    return monc->stop();
   }).then([this] {
     return public_msgr->shutdown();
+  }).then([this] {
+    return cluster_msgr->shutdown();
   });
 }
 
@@ -402,9 +415,9 @@ seastar::future<> OSD::store_maps(ceph::os::Transaction& t,
 seastar::future<> OSD::osdmap_subscribe(version_t epoch, bool force_request)
 {
   logger().info("{}({})", __func__, epoch);
-  if (monc.sub_want_increment("osdmap", epoch, CEPH_SUBSCRIBE_ONETIME) ||
+  if (monc->sub_want_increment("osdmap", epoch, CEPH_SUBSCRIBE_ONETIME) ||
       force_request) {
-    return monc.renew_subs();
+    return monc->renew_subs();
   } else {
     return seastar::now();
   }
@@ -455,7 +468,7 @@ seastar::future<> OSD::handle_osd_map(ceph::net::ConnectionRef conn,
                           [=](auto& t) {
     return store_maps(t, start, m).then([=, &t] {
       // even if this map isn't from a mon, we may have satisfied our subscription
-      monc.sub_got("osdmap", last);
+      monc->sub_got("osdmap", last);
       if (!superblock.oldest_map || skip_maps) {
         superblock.oldest_map = first;
       }
@@ -583,7 +596,7 @@ seastar::future<> OSD::send_beacon()
   epoch_t min_last_epoch_clean = osdmap->get_epoch();
   auto m = make_message<MOSDBeacon>(osdmap->get_epoch(),
                                     min_last_epoch_clean);
-  return monc.send_message(m);
+  return monc->send_message(m);
 }
 
 void OSD::update_heartbeat_peers()
