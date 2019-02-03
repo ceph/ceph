@@ -159,9 +159,6 @@ public:
    * @return A const reference to the address this Messenger
    * currently believes to be its own.
    */
-  entity_addr_t get_myaddr() {
-    return my_addrs->front();
-  }
   const entity_addrvec_t& get_myaddrs() {
     return *my_addrs;
   }
