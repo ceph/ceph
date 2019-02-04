@@ -150,6 +150,9 @@ static int parse_map_options(const std::string &options_string)
       put_map_option("notrim", this_char);
     } else if (!strcmp(this_char, "abort_on_full")) {
       put_map_option("abort_on_full", this_char);
+    } else if (!strcmp(this_char, "alloc_size")) {
+      if (put_map_option_value("alloc_size", value_char, map_option_int_cb))
+        return -EINVAL;
     } else {
       std::cerr << "rbd: unknown map option '" << this_char << "'" << std::endl;
       return -EINVAL;
