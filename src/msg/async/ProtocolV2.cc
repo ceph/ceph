@@ -2701,15 +2701,29 @@ CtPtr ProtocolV2::handle_reconnect(char *payload, uint32_t length) {
     return WRITE(bl, "session retry", read_frame);
   }
 
-  if (!exproto->cookie) {
-    // server connection was reseted, reset client
-    ldout(cct, 5) << __func__ << " no cookie set, reseting client" << dendl;
-    return WRITE(bl, "session reset", read_frame);
-  } else if (exproto->cookie != reconnect.cookie()) {
-    ldout(cct, 5) << __func__ << " cookie mismatch sc=" << exproto->cookie
-                  << " cc=" << reconnect.cookie() << ", reseting client"
-                  << dendl;
-    return WRITE(bl, "session reset", read_frame);
+  if (connection->policy.resetcheck) {
+    if (!exproto->cookie) {
+      // server connection was reseted, reset client
+      ldout(cct, 5) << __func__ << " no cookie set, reseting client" << dendl;
+      return WRITE(bl, "session reset", read_frame);
+    } else if (exproto->cookie != reconnect.cookie()) {
+      ldout(cct, 5) << __func__ << " cookie mismatch sc=" << exproto->cookie
+		    << " cc=" << reconnect.cookie() << ", reseting client"
+		    << dendl;
+      return WRITE(bl, "session reset", read_frame);
+    }
+  } else {
+    if (exproto->cookie == 0) {
+      // this happens when:
+      //   - a connects to b
+      //   - a sends client_ident
+      //   - b gets client_ident, sends server_ident and sets cookie X
+      //   - connection fault
+      //   - b reconnects to a with cookie X, connect_seq=1
+      //   - a has cookie==0
+      ldout(cct, 5) << __func__ << " no cookie set, setting" << dendl;
+      exproto->cookie = reconnect.cookie();
+    }
   }
 
   if (exproto->peer_global_seq > reconnect.global_seq()) {
