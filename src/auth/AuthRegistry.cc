@@ -55,14 +55,11 @@ void AuthRegistry::_parse_method_list(const string& s,
     } else if (i == "gss") {
       v->push_back(CEPH_AUTH_GSS);
     } else {
-      v->push_back(CEPH_AUTH_UNKNOWN);
       lderr(cct) << "WARNING: unknown auth protocol defined: " << i << dendl;
     }
   }
   if (v->empty()) {
-    lderr(cct) << "WARNING: no auth protocol defined, use 'cephx' by default"
-	       << dendl;
-    v->push_back(CEPH_AUTH_CEPHX);
+    lderr(cct) << "WARNING: no auth protocol defined" << dendl;
   }
   ldout(cct,20) << __func__ << " " << s << " -> " << *v << dendl;
 }
@@ -82,14 +79,11 @@ void AuthRegistry::_parse_mode_list(const string& s,
     } else if (i == "secure") {
       v->push_back(CEPH_CON_MODE_SECURE);
     } else {
-      v->push_back(CEPH_CON_MODE_UNKNOWN);
       lderr(cct) << "WARNING: unknown connection mode " << i << dendl;
     }
   }
   if (v->empty()) {
-    lderr(cct) << "WARNING: no connection modes defined, use 'crc' by default"
-	       << dendl;
-    v->push_back(CEPH_CON_MODE_CRC);
+    lderr(cct) << "WARNING: no connection modes defined" << dendl;
   }
   ldout(cct,20) << __func__ << " " << s << " -> " << *v << dendl;
 }
