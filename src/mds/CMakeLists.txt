@@ -42,6 +42,7 @@ set(mds_srcs
   OpenFileTable.cc
   MDSPinger.cc
   MetricAggregator.cc
+  MetricsHandler.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/common/MemoryModel.cc
   ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc
