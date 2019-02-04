@@ -19,7 +19,7 @@ TEST(Log, Simple)
   Log log(&subs);
   log.start();
  
-  log.set_log_file("/tmp/foo");
+  log.set_log_file("foo");
   log.reopen_log_file();
 
   log.set_stderr_level(5, -1);
@@ -53,7 +53,7 @@ TEST(Log, ManyNoGather)
   subs.add(1, "foo", 1, 1);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -71,7 +71,7 @@ TEST(Log, ManyGatherLog)
   subs.add(1, "foo", 20, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -89,7 +89,7 @@ TEST(Log, ManyGatherLogStringAssign)
   subs.add(1, "foo", 20, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -110,7 +110,7 @@ TEST(Log, ManyGatherLogStringAssignWithReserve)
   subs.add(1, "foo", 20, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -133,7 +133,7 @@ TEST(Log, ManyGatherLogPrebuf)
   subs.add(1, "foo", 20, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -156,7 +156,7 @@ TEST(Log, ManyGatherLogPrebufOverflow)
   subs.add(1, "foo", 20, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -180,7 +180,7 @@ TEST(Log, ManyGather)
   subs.add(1, "foo", 20, 1);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -197,7 +197,7 @@ void do_segv()
   subs.add(1, "foo", 20, 1);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
 
   log.inject_segv();
@@ -222,7 +222,7 @@ TEST(Log, LargeLog)
   subs.add(1, "foo", 20, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   int l = 10;
   Entry *e = new Entry(ceph_clock_now(), pthread_self(), l, 1);
