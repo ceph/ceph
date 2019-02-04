@@ -71,13 +71,23 @@ void AuthMonitor::tick()
 
   dout(10) << *this << dendl;
 
-  if (!mon->is_leader()) return;
-
   // increase global_id?
   bool propose = false;
   if (should_increase_max_global_id()) {
-    increase_max_global_id();
-    propose = true;
+    if (mon->is_leader()) {
+      increase_max_global_id();
+      propose = true;
+    } else {
+      dout(10) << __func__ << "requesting more ids from leader" << dendl;
+      int leader = mon->get_leader();
+      MMonGlobalID *req = new MMonGlobalID();
+      req->old_max_id = max_global_id;
+      mon->send_mon_message(req, leader);
+    }
+  }
+
+  if (!mon->is_leader()) {
+    return;
   }
 
   if (check_rotate()) {
