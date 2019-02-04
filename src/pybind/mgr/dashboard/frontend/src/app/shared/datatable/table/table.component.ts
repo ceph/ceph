@@ -384,7 +384,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }
     this.rows = [...this.data];
     if (this.search.length > 0) {
-      this.updateFilter(true);
+      this.updateFilter();
     }
     this.reset();
     this.updateSelected();
@@ -468,10 +468,11 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.userConfig.sorts = sorts;
   }
 
-  updateFilter(event?: any) {
-    if (!event) {
+  updateFilter(clearSearch = false) {
+    if (clearSearch) {
       this.search = '';
     }
+    // prepare search strings
     let search = this.search.toLowerCase().replace(/,/g, '');
     const columns = this.columns.filter((c) => c.cellTransformation !== CellTemplate.sparkline);
     if (search.match(/['"][^'"]+['"]/)) {
@@ -509,20 +510,22 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     return this.subSearch(data, currentSearch, columnsClone);
   }
 
-  basicDataSearch(searchTerm: string, data: any[], columns: CdTableColumn[]) {
+  basicDataSearch(searchTerm: string, rows: any[], columns: CdTableColumn[]) {
     if (searchTerm.length === 0) {
-      return data;
+      return rows;
     }
-    return data.filter((d) => {
+    return rows.filter((row) => {
       return (
-        columns.filter((c) => {
-          let cellValue: any = _.get(d, c.prop);
-          if (!_.isUndefined(c.pipe)) {
-            cellValue = c.pipe.transform(cellValue);
+        columns.filter((col) => {
+          let cellValue: any = _.get(row, col.prop);
+
+          if (!_.isUndefined(col.pipe)) {
+            cellValue = col.pipe.transform(cellValue);
           }
           if (_.isUndefined(cellValue)) {
             return;
           }
+
           if (_.isArray(cellValue)) {
             cellValue = cellValue.join(' ');
           } else if (_.isNumber(cellValue) || _.isBoolean(cellValue)) {

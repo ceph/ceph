@@ -100,7 +100,7 @@ describe('TableComponent', () => {
     describe('test search', () => {
       const doSearch = (search: string, expectedLength: number, firstObject: object) => {
         component.search = search;
-        component.updateFilter(true);
+        component.updateFilter();
         expect(component.rows.length).toBe(expectedLength);
         expect(component.rows[0]).toEqual(firstObject);
       };
@@ -131,7 +131,7 @@ describe('TableComponent', () => {
         const searchTest = (s: string, st: string[]) => {
           component.search = s;
           searchTerms = st;
-          component.updateFilter(true);
+          component.updateFilter();
         };
         searchTest('a b c', ['a', 'b', 'c']);
         searchTest('a+b c', ['a+b', 'c']);
@@ -168,9 +168,9 @@ describe('TableComponent', () => {
       it('should restore full table after search', () => {
         expect(component.rows.length).toBe(100);
         component.search = '13';
-        component.updateFilter(true);
-        expect(component.rows.length).toBe(9);
         component.updateFilter();
+        expect(component.rows.length).toBe(9);
+        component.updateFilter(true);
         expect(component.rows.length).toBe(100);
       });
     });
