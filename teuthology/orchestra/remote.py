@@ -198,14 +198,10 @@ class Remote(object):
 
         TODO refactor to move run.run here?
         """
-        if self.ssh is None:
-            self.reconnect(timeout=5)
-        if self.ssh:
-            # There is a chance that the ssh(paramiko) instance
-            # is populated but has no transport yet.
-            if self.ssh.get_transport():
-                if not self.ssh.get_transport().is_active():
-                    self.reconnect(timeout=5)
+        if not self.ssh or \
+           not self.ssh.get_transport() or \
+           not self.ssh.get_transport().is_active():
+            self.reconnect()
         r = self._runner(client=self.ssh, name=self.shortname, **kwargs)
         r.remote = self
         return r
