@@ -1,5 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 
+import { PrometheusService } from '../../../shared/api/prometheus.service';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SummaryService } from '../../../shared/services/summary.service';
@@ -12,10 +13,13 @@ import { SummaryService } from '../../../shared/services/summary.service';
 export class NavigationComponent implements OnInit {
   permissions: Permissions;
   summaryData: any;
+
   isCollapsed = true;
+  prometheusConfigured = false;
 
   constructor(
     private authStorageService: AuthStorageService,
+    private prometheusService: PrometheusService,
     private summaryService: SummaryService
   ) {
     this.permissions = this.authStorageService.getPermissions();
@@ -28,6 +32,7 @@ export class NavigationComponent implements OnInit {
       }
       this.summaryData = data;
     });
+    this.prometheusService.ifAlertmanagerConfigured(() => (this.prometheusConfigured = true));
   }
 
   blockHealthColor() {

@@ -339,3 +339,17 @@ uib-accordion .panel-title,
 .nav-tabs {
   margin-bottom: 15px;
 }
+/* Icons */
+.ceph-icon {
+  background: url('assets/Ceph_Logo_Stacked_RGB_120411_fa_228x228.png');
+}
+.prometheus-icon {
+  background: url('assets/prometheus_logo.png');
+}
+.custom-icon {
+  padding: 10px;
+  margin-right: 1em;
+  background-clip: padding-box;
+  background-size: contain;
+  background-repeat: no-repeat;
+}

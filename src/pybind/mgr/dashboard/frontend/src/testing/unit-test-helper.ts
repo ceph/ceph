@@ -9,6 +9,11 @@ import * as _ from 'lodash';
 import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
 import { CdFormGroup } from '../app/shared/forms/cd-form-group';
 import { Permission } from '../app/shared/models/permissions';
+import {
+  PrometheusAlert,
+  PrometheusNotification,
+  PrometheusNotificationAlert
+} from '../app/shared/models/prometheus-alerts';
 import { _DEV_ } from '../unit-test-configuration';
 
 export function configureTestBed(configuration, useOldMethod?) {
@@ -179,6 +184,48 @@ export class FormHelper {
    */
   expectElementVisible(fixture: ComponentFixture<any>, css: string, visibility: boolean) {
     expect(Boolean(fixture.debugElement.query(By.css(css)))).toBe(visibility);
+  }
+}
+
+export class PrometheusHelper {
+  createAlert(name, state = 'active', timeMultiplier = 1) {
+    return {
+      fingerprint: name,
+      status: { state },
+      labels: {
+        alertname: name
+      },
+      annotations: {
+        summary: `${name} is ${state}`
+      },
+      generatorURL: `http://${name}`,
+      startsAt: new Date(new Date('2022-02-22').getTime() * timeMultiplier).toString()
+    } as PrometheusAlert;
+  }
+
+  createNotificationAlert(name, status = 'firing') {
+    return {
+      status: status,
+      labels: {
+        alertname: name
+      },
+      annotations: {
+        summary: `${name} is ${status}`
+      },
+      generatorURL: `http://${name}`
+    } as PrometheusNotificationAlert;
+  }
+
+  createNotification(alertNumber = 1, status = 'firing') {
+    const alerts = [];
+    for (let i = 0; i < alertNumber; i++) {
+      alerts.push(this.createNotificationAlert('alert' + i, status));
+    }
+    return { alerts, status } as PrometheusNotification;
+  }
+
+  createLink(url) {
+    return `<a href="${url}" target="_blank"><i class="fa fa-line-chart"></i></a>`;
   }
 }
 
