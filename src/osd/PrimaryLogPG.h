@@ -482,9 +482,6 @@ public:
   pg_shard_t primary_shard() const override {
     return primary;
   }
-  uint64_t min_peer_features() const override {
-    return get_min_peer_features();
-  }
 
   void send_message_osd_cluster(
     int peer, Message *m, epoch_t from_epoch) override;
