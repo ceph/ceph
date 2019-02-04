@@ -136,7 +136,7 @@ class Run(object):
         if kernel_hash:
             log.info("kernel sha1: {hash}".format(hash=kernel_hash))
             kernel_dict = dict(kernel=dict(kdb=True, sha1=kernel_hash))
-            if kernel_hash is not 'distro':
+            if kernel_hash != 'distro':
                 kernel_dict['kernel']['flavor'] = self.args.kernel_flavor
         else:
             kernel_dict = dict()
