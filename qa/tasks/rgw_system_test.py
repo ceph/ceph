@@ -23,6 +23,19 @@ MASTER_BRANCH = 'master'
 
 @contextlib.contextmanager
 def task(ctx, config):
+
+    """
+    example:
+    tasks:
+        rgw-system-test:
+            test: <test-name>
+            script: <script-name>        | default value is <test-name>.py
+            test_version: <test-version> | ex: v1 or v2, default value is v2
+            clients: <clients list>      | ex: [client.0, client.1] default value is ['client.0]
+            config:
+                <configuration of the test-name> | default values is the yaml file config from ceph-qe-scripts
+    """
+
     log.info('starting rgw-tests')
     log.info('config %s' % config)
     if config is None:
@@ -32,12 +45,12 @@ def task(ctx, config):
     config_file_name = config['test'] + ".yaml"
     log.info('test_version: %s' % config.get('test_version', 'v2'))
     log.info('test: %s' % config['test'])
-    log.info('script: %s' % config['script'])
+    log.info('script: %s' % config.get('script', config['test'] + ".py"))
     test_root_dir = 'rgw-tests'
     test_base_path = os.path.join(test_root_dir, 'ceph-qe-scripts')
     script = os.path.join(test_base_path,
                           DIR[config.get('test_version', 'v2')]['script'],
-                          config['script'])
+                          config.get('script', config['test'] + ".py"))
     config_file = os.path.join(test_base_path,
                                DIR[config.get('test_version', 'v2')]['config'],
                                config_file_name)
