@@ -43,27 +43,6 @@ struct SHA256SignatureError : public std::exception {
 
 struct DecryptionError : public std::exception {};
 
-void ProtocolV2::get_auth_allowed_methods(
-  int peer_type, std::vector<uint32_t> &allowed_methods)
-{
-  std::string method;
-  if (!cct->_conf->auth_supported.empty()) {
-    method = cct->_conf->auth_supported;
-  } else if (peer_type == CEPH_ENTITY_TYPE_OSD ||
-	     peer_type == CEPH_ENTITY_TYPE_MDS ||
-	     peer_type == CEPH_ENTITY_TYPE_MON ||
-	     peer_type == CEPH_ENTITY_TYPE_MGR) {
-    method = cct->_conf->auth_cluster_required;
-  } else {
-    method = cct->_conf->auth_client_required;
-  }
-  AuthMethodList auth_list(cct, method);
-  for (auto pt : auth_list.get_supported_set()) {
-    allowed_methods.push_back(pt);
-  }
-}
-
-
 void ProtocolV2::run_continuation(CtPtr continuation) {
   try {
     CONTINUATION_RUN(continuation)
