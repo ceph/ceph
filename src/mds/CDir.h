@@ -306,12 +306,12 @@ public:
    * ENOENT: there are no remaining dentries to scrub
    * <0: There was an unexpected error
    *
-   * @param cb An MDSInternalContext which will be activated only if
+   * @param cb An MDSContext which will be activated only if
    *   we return EAGAIN via rcode, or else ignored
    * @param dnout CDentry * which you should next scrub, or NULL
    * @returns a value as described above
    */
-  int scrub_dentry_next(MDSInternalContext *cb, CDentry **dnout);
+  int scrub_dentry_next(MDSContext *cb, CDentry **dnout);
   /**
    * Get the currently scrubbing dentries. When returned, the passed-in
    * list will be filled with all CDentry * which have been returned
@@ -349,7 +349,7 @@ private:
    * next key to scrub and look it up (or fail!).
    */
   int _next_dentry_on_set(dentry_key_set &dns, bool missing_okay,
-                          MDSInternalContext *cb, CDentry **dnout);
+                          MDSContext *cb, CDentry **dnout);
 
 
 protected:
@@ -500,8 +500,8 @@ public:
 
 
 public:
-  void split(int bits, std::list<CDir*>& subs, MDSInternalContextBase::vec& waiters, bool replay);
-  void merge(std::list<CDir*>& subs, MDSInternalContextBase::vec& waiters, bool replay);
+  void split(int bits, std::list<CDir*>& subs, MDSContext::vec& waiters, bool replay);
+  void merge(std::list<CDir*>& subs, MDSContext::vec& waiters, bool replay);
 
   bool should_split() const {
     return (int)get_frag_size() > g_conf()->mds_bal_split_size;
@@ -513,9 +513,9 @@ public:
 
 private:
   void prepare_new_fragment(bool replay);
-  void prepare_old_fragment(map<string_snap_t, MDSInternalContextBase::vec >& dentry_waiters, bool replay);
+  void prepare_old_fragment(map<string_snap_t, MDSContext::vec >& dentry_waiters, bool replay);
   void steal_dentry(CDentry *dn);  // from another dir.  used by merge/split.
-  void finish_old_fragment(MDSInternalContextBase::vec& waiters, bool replay);
+  void finish_old_fragment(MDSContext::vec& waiters, bool replay);
   void init_fragment_pins();
 
 
@@ -605,16 +605,16 @@ private:
   object_t get_ondisk_object() { 
     return file_object_t(ino(), frag);
   }
-  void fetch(MDSInternalContextBase *c, bool ignore_authpinnability=false);
-  void fetch(MDSInternalContextBase *c, std::string_view want_dn, bool ignore_authpinnability=false);
-  void fetch(MDSInternalContextBase *c, const std::set<dentry_key_t>& keys);
+  void fetch(MDSContext *c, bool ignore_authpinnability=false);
+  void fetch(MDSContext *c, std::string_view want_dn, bool ignore_authpinnability=false);
+  void fetch(MDSContext *c, const std::set<dentry_key_t>& keys);
 protected:
   mempool::mds_co::compact_set<mempool::mds_co::string> wanted_items;
 
-  void _omap_fetch(MDSInternalContextBase *fin, const std::set<dentry_key_t>& keys);
+  void _omap_fetch(MDSContext *fin, const std::set<dentry_key_t>& keys);
   void _omap_fetch_more(
     bufferlist& hdrbl, std::map<std::string, bufferlist>& omap,
-    MDSInternalContextBase *fin);
+    MDSContext *fin);
   CDentry *_load_dentry(
       std::string_view key,
       std::string_view dname,
@@ -643,7 +643,7 @@ protected:
 		     bool complete, int r);
 
   // -- commit --
-  mempool::mds_co::compact_map<version_t, MDSInternalContextBase::vec_alloc<mempool::mds_co::pool_allocator> > waiting_for_commit;
+  mempool::mds_co::compact_map<version_t, MDSContext::vec_alloc<mempool::mds_co::pool_allocator> > waiting_for_commit;
   void _commit(version_t want, int op_prio);
   void _omap_commit(int op_prio);
   void _encode_dentry(CDentry *dn, bufferlist& bl, const std::set<snapid_t> *snaps);
@@ -653,7 +653,7 @@ public:
   void wait_for_commit(Context *c, version_t v=0);
 #endif
   void commit_to(version_t want);
-  void commit(version_t want, MDSInternalContextBase *c,
+  void commit(version_t want, MDSContext *c,
 	      bool ignore_authpinnability=false, int op_prio=-1);
 
   // -- dirtyness --
@@ -670,18 +670,18 @@ public:
 
   // -- waiters --
 protected:
-  mempool::mds_co::compact_map< string_snap_t, MDSInternalContextBase::vec_alloc<mempool::mds_co::pool_allocator> > waiting_on_dentry; // FIXME string_snap_t not in mempool
+  mempool::mds_co::compact_map< string_snap_t, MDSContext::vec_alloc<mempool::mds_co::pool_allocator> > waiting_on_dentry; // FIXME string_snap_t not in mempool
 
 public:
   bool is_waiting_for_dentry(std::string_view dname, snapid_t snap) {
     return waiting_on_dentry.count(string_snap_t(dname, snap));
   }
-  void add_dentry_waiter(std::string_view dentry, snapid_t snap, MDSInternalContextBase *c);
-  void take_dentry_waiting(std::string_view dentry, snapid_t first, snapid_t last, MDSInternalContextBase::vec& ls);
-  void take_sub_waiting(MDSInternalContextBase::vec& ls);  // dentry or ino
+  void add_dentry_waiter(std::string_view dentry, snapid_t snap, MDSContext *c);
+  void take_dentry_waiting(std::string_view dentry, snapid_t first, snapid_t last, MDSContext::vec& ls);
+  void take_sub_waiting(MDSContext::vec& ls);  // dentry or ino
 
-  void add_waiter(uint64_t mask, MDSInternalContextBase *c) override;
-  void take_waiting(uint64_t mask, MDSInternalContextBase::vec& ls) override;  // may include dentry waiters
+  void add_waiter(uint64_t mask, MDSContext *c) override;
+  void take_waiting(uint64_t mask, MDSContext::vec& ls) override;  // may include dentry waiters
   void finish_waiting(uint64_t mask, int result = 0);    // ditto
   
 

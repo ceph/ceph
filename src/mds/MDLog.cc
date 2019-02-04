@@ -121,7 +121,7 @@ class C_MDL_WriteError : public MDSIOContextBase {
 };
 
 
-void MDLog::write_head(MDSInternalContextBase *c) 
+void MDLog::write_head(MDSContext *c) 
 {
   Context *fin = NULL;
   if (c != NULL) {
@@ -147,7 +147,7 @@ uint64_t MDLog::get_safe_pos() const
 
 
 
-void MDLog::create(MDSInternalContextBase *c)
+void MDLog::create(MDSContext *c)
 {
   dout(5) << "create empty log" << dendl;
 
@@ -184,7 +184,7 @@ void MDLog::create(MDSInternalContextBase *c)
   submit_thread.create("md_submit");
 }
 
-void MDLog::open(MDSInternalContextBase *c)
+void MDLog::open(MDSContext *c)
 {
   dout(5) << "open discovering log bounds" << dendl;
 
@@ -202,9 +202,9 @@ void MDLog::open(MDSInternalContextBase *c)
  */
 class C_ReopenComplete : public MDSInternalContext {
   MDLog *mdlog;
-  MDSInternalContextBase *on_complete;
+  MDSContext *on_complete;
 public:
-  C_ReopenComplete(MDLog *mdlog_, MDSInternalContextBase *on_complete_) : MDSInternalContext(mdlog_->mds), mdlog(mdlog_), on_complete(on_complete_) {}
+  C_ReopenComplete(MDLog *mdlog_, MDSContext *on_complete_) : MDSInternalContext(mdlog_->mds), mdlog(mdlog_), on_complete(on_complete_) {}
   void finish(int r) override {
     mdlog->append();
     on_complete->complete(r);
@@ -216,7 +216,7 @@ public:
  * recovery procedure again, potentially reformatting the journal if it
  * was in an old format.
  */
-void MDLog::reopen(MDSInternalContextBase *c)
+void MDLog::reopen(MDSContext *c)
 {
   dout(5) << "reopen" << dendl;
 
@@ -335,7 +335,7 @@ class C_MDL_Flushed : public MDSLogContextBase {
 protected:
   MDLog *mdlog;
   MDSRank *get_mds() override {return mdlog->mds;}
-  MDSInternalContextBase *wrapped;
+  MDSContext *wrapped;
 
   void finish(int r) override {
     if (wrapped)
@@ -343,7 +343,7 @@ protected:
   }
 
 public:
-  C_MDL_Flushed(MDLog *m, MDSInternalContextBase *w)
+  C_MDL_Flushed(MDLog *m, MDSContext *w)
     : mdlog(m), wrapped(w) {}
   C_MDL_Flushed(MDLog *m, uint64_t wp) : mdlog(m), wrapped(NULL) {
     set_write_pos(wp);
@@ -419,8 +419,8 @@ void MDLog::_submit_thread()
       delete le;
     } else {
       if (data.fin) {
-	MDSInternalContextBase* fin =
-		dynamic_cast<MDSInternalContextBase*>(data.fin);
+	MDSContext* fin =
+		dynamic_cast<MDSContext*>(data.fin);
 	ceph_assert(fin);
 	C_MDL_Flushed *fin2 = new C_MDL_Flushed(this, fin);
 	fin2->set_write_pos(journaler->get_write_pos());
@@ -440,7 +440,7 @@ void MDLog::_submit_thread()
   submit_mutex.Unlock();
 }
 
-void MDLog::wait_for_safe(MDSInternalContextBase *c)
+void MDLog::wait_for_safe(MDSContext *c)
 {
   submit_mutex.Lock();
 
@@ -561,7 +561,7 @@ void MDLog::_prepare_new_segment()
   mds->mdcache->advance_stray();
 }
 
-void MDLog::_journal_segment_subtree_map(MDSInternalContextBase *onsync)
+void MDLog::_journal_segment_subtree_map(MDSContext *onsync)
 {
   ceph_assert(submit_mutex.is_locked_by_me());
 
@@ -892,7 +892,7 @@ void MDLog::_expired(LogSegment *ls)
 
 
 
-void MDLog::replay(MDSInternalContextBase *c)
+void MDLog::replay(MDSContext *c)
 {
   ceph_assert(journaler->is_active());
   ceph_assert(journaler->is_readonly());
@@ -941,7 +941,7 @@ void MDLog::replay(MDSInternalContextBase *c)
  * When this function completes, the `journaler` attribute will be set to
  * a Journaler instance using the latest available serialization format.
  */
-void MDLog::_recovery_thread(MDSInternalContextBase *completion)
+void MDLog::_recovery_thread(MDSContext *completion)
 {
   ceph_assert(journaler == NULL);
   if (g_conf()->mds_journal_format > JOURNAL_FORMAT_MAX) {
@@ -1102,7 +1102,7 @@ void MDLog::_recovery_thread(MDSInternalContextBase *completion)
  * swapping pointers to make that one the front journal only when we have
  * safely completed.
  */
-void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journal, MDSInternalContextBase *completion)
+void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journal, MDSContext *completion)
 {
   ceph_assert(!jp_in.is_null());
   ceph_assert(completion != NULL);

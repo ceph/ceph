@@ -63,7 +63,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".server "
 
-class ServerContext : public MDSInternalContextBase {
+class ServerContext : public MDSContext {
   protected:
   Server *server;
   MDSRank *get_mds() override
@@ -688,7 +688,7 @@ void Server::flush_client_sessions(set<client_t>& client_set, MDSGatherBuilder& 
 
 void Server::finish_flush_session(Session *session, version_t seq)
 {
-  MDSInternalContextBase::vec finished;
+  MDSContext::vec finished;
   session->finish_flush(seq, finished);
   mds->queue_waiters(finished);
 }
@@ -1081,7 +1081,7 @@ void Server::handle_conf_change(const ConfigProxy& conf,
 }
 
 /*
- * XXX bump in the interface here, not using an MDSInternalContextBase here
+ * XXX bump in the interface here, not using an MDSContext here
  * because all the callers right now happen to use a SaferCond
  */
 void Server::kill_session(Session *session, Context *on_safe)
@@ -1169,7 +1169,7 @@ void Server::journal_close_session(Session *session, int state, Context *on_safe
   finish_flush_session(session, session->get_push_seq());
 }
 
-void Server::reconnect_clients(MDSInternalContext *reconnect_done_)
+void Server::reconnect_clients(MDSContext *reconnect_done_)
 {
   reconnect_done = reconnect_done_;
 
@@ -3196,7 +3196,7 @@ public:
 class CF_MDS_MDRContextFactory : public MDSContextFactory {
 public:
   CF_MDS_MDRContextFactory(MDCache *cache, MDRequestRef &mdr) : cache(cache), mdr(mdr) {}
-  MDSInternalContextBase *build() {
+  MDSContext *build() {
     return new C_MDS_RetryRequest(cache, mdr);
   }
 private:
@@ -3270,7 +3270,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
       respond_to_request(mdr, r);
     } else if (r == -ESTALE) {
       dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
-      MDSInternalContextBase *c = new C_MDS_TryFindInode(this, mdr);
+      MDSContext *c = new C_MDS_TryFindInode(this, mdr);
       mdcache->find_ino_peers(refpath.get_ino(), c);
     } else {
       dout(10) << "FAIL on error " << r << dendl;
@@ -4014,7 +4014,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
     if (r < 0 && r != -ENOENT) {
       if (r == -ESTALE) {
 	dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
-	MDSInternalContextBase *c = new C_MDS_TryFindInode(this, mdr);
+	MDSContext *c = new C_MDS_TryFindInode(this, mdr);
 	mdcache->find_ino_peers(req->get_filepath().get_ino(), c);
       } else {
 	dout(10) << "FAIL on error " << r << dendl;
@@ -4521,7 +4521,7 @@ void Server::handle_client_file_setlock(MDRequestRef& mdr)
   dout(10) << " state prior to lock change: " << *lock_state << dendl;
   if (CEPH_LOCK_UNLOCK == set_lock.type) {
     list<ceph_filelock> activated_locks;
-    MDSInternalContextBase::vec waiters;
+    MDSContext::vec waiters;
     if (lock_state->is_waiting(set_lock)) {
       dout(10) << " unlock removing waiting lock " << set_lock << dendl;
       lock_state->remove_waiting(set_lock);
@@ -8798,7 +8798,7 @@ void Server::_commit_slave_rename(MDRequestRef& mdr, int r,
   if (srcdn->is_auth() && srcdn->get_dir()->inode->is_stray())
     migrated_stray = in->ino();
 
-  MDSInternalContextBase::vec finished;
+  MDSContext::vec finished;
   if (r == 0) {
     // unfreeze+singleauth inode
     //  hmm, do i really need to delay this?
@@ -9311,7 +9311,7 @@ void Server::_rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentr
   }
 
   if (mdr) {
-    MDSInternalContextBase::vec finished;
+    MDSContext::vec finished;
     if (mdr->more()->is_ambiguous_auth) {
       if (srcdn->is_auth())
 	mdr->more()->rename_inode->unfreeze_inode(finished);

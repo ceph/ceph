@@ -81,7 +81,7 @@ void ScrubStack::pop_inode(CInode *in)
 
 void ScrubStack::_enqueue_inode(CInode *in, CDentry *parent,
 				ScrubHeaderRef& header,
-				MDSInternalContextBase *on_finish, bool top)
+				MDSContext *on_finish, bool top)
 {
   dout(10) << __func__ << " with {" << *in << "}"
            << ", on_finish=" << on_finish << ", top=" << top << dendl;
@@ -94,7 +94,7 @@ void ScrubStack::_enqueue_inode(CInode *in, CDentry *parent,
 }
 
 void ScrubStack::enqueue_inode(CInode *in, ScrubHeaderRef& header,
-                               MDSInternalContextBase *on_finish, bool top)
+                               MDSContext *on_finish, bool top)
 {
   // abort in progress
   if (clear_inode_stack) {
@@ -477,7 +477,7 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
     dout(10) << __func__ << " scrub passed on inode " << *in << dendl;
   }
 
-  MDSInternalContextBase *c = NULL;
+  MDSContext *c = NULL;
   in->scrub_finished(&c);
 
   if (in == header->get_origin()) {
@@ -611,7 +611,7 @@ void ScrubStack::abort_pending_scrubs() {
       scrub_origins.erase(in);
     }
 
-    MDSInternalContextBase *ctx = nullptr;
+    MDSContext *ctx = nullptr;
     in->scrub_aborted(&ctx);
     if (ctx != nullptr) {
       ctx->complete(-ECANCELED);

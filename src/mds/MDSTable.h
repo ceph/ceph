@@ -40,7 +40,7 @@ protected:
   
   version_t version, committing_version, committed_version, projected_version;
   
-  map<version_t, MDSInternalContextBase::vec > waitfor_save;
+  map<version_t, MDSContext::vec > waitfor_save;
   
 public:
   MDSTable(MDSRank *m, std::string_view n, bool is_per_mds) :
@@ -72,7 +72,7 @@ public:
   bool is_opening() const { return state == STATE_OPENING; }
 
   void reset();
-  void save(MDSInternalContextBase *onfinish=0, version_t need=0);
+  void save(MDSContext *onfinish=0, version_t need=0);
   void save_2(int r, version_t v);
 
   void shutdown() {
@@ -80,7 +80,7 @@ public:
   }
 
   object_t get_object_name() const;
-  void load(MDSInternalContextBase *onfinish);
+  void load(MDSContext *onfinish);
   void load_2(int, bufferlist&, Context *onfinish);
 
   // child must overload these

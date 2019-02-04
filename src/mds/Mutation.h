@@ -322,7 +322,7 @@ struct MDRequestImpl : public MutationImpl {
     Context *slave_commit = nullptr;
     bufferlist rollback_bl;
 
-    MDSInternalContextBase::vec waiting_for_finish;
+    MDSContext::vec waiting_for_finish;
 
     // export & fragment
     CDir* export_dir = nullptr;
