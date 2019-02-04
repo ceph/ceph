@@ -3007,23 +3007,6 @@ int OSD::init()
     service.set_statfs(stbuf, alerts);
   }
 
-  // i'm ready!
-  client_messenger->add_dispatcher_head(this);
-  cluster_messenger->add_dispatcher_head(this);
-
-  hb_front_client_messenger->add_dispatcher_head(&heartbeat_dispatcher);
-  hb_back_client_messenger->add_dispatcher_head(&heartbeat_dispatcher);
-  hb_front_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
-  hb_back_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
-
-  objecter_messenger->add_dispatcher_head(service.objecter);
-
-  monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD
-                      | CEPH_ENTITY_TYPE_MGR);
-  r = monc->init();
-  if (r < 0)
-    goto out;
-
   // client_messenger auth_client is already set up by monc.
   for (auto m : { cluster_messenger,
 	objecter_messenger,
@@ -3040,6 +3023,23 @@ int OSD::init()
     m->set_auth_server(monc);
   }
   monc->set_handle_authentication_dispatcher(this);
+
+  // i'm ready!
+  client_messenger->add_dispatcher_head(this);
+  cluster_messenger->add_dispatcher_head(this);
+
+  hb_front_client_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hb_back_client_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hb_front_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hb_back_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+
+  objecter_messenger->add_dispatcher_head(service.objecter);
+
+  monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD
+                      | CEPH_ENTITY_TYPE_MGR);
+  r = monc->init();
+  if (r < 0)
+    goto out;
 
   mgrc.set_pgstats_cb([this](){ return collect_pg_stats(); });
   mgrc.set_perf_metric_query_cb(
