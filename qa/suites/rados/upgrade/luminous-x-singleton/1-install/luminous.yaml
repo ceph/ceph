@@ -3,6 +3,7 @@ overrides:
     log-whitelist:
       - \(MON_DOWN\)
       - \(MGR_DOWN\)
+      - slow request
 meta:
 - desc: install ceph/luminous latest
 tasks:
