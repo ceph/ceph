@@ -145,6 +145,7 @@ void AuthRegistry::get_supported_methods(
   std::vector<uint32_t> *methods,
   std::vector<uint32_t> *modes)
 {
+  std::scoped_lock l(lock);
   switch (cct->get_module_type()) {
   case CEPH_ENTITY_TYPE_CLIENT:
     // i am client
