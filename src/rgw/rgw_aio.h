@@ -15,14 +15,10 @@
 
 #pragma once
 
+#include "include/rados/librados_fwd.hpp"
 #include <boost/intrusive/list.hpp>
 #include "rgw_common.h"
 #include "services/svc_rados.h" // cant forward declare RGWSI_RADOS::Obj
-
-namespace librados {
-class ObjectReadOperation;
-class ObjectWriteOperation;
-}
 
 namespace rgw {
 

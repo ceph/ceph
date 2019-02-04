@@ -4,11 +4,10 @@
 #ifndef CEPH_LIBRBD_API_NAMESPACE_H
 #define CEPH_LIBRBD_API_NAMESPACE_H
 
+#include "include/rados/librados_fwd.hpp"
 #include "include/rbd/librbd.hpp"
 #include <string>
 #include <vector>
-
-namespace librados { struct IoCtx; }
 
 namespace librbd {
 

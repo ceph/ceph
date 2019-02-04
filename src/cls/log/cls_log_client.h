@@ -1,13 +1,8 @@
 #ifndef CEPH_CLS_LOG_CLIENT_H
 #define CEPH_CLS_LOG_CLIENT_H
 
+#include "include/rados/librados_fwd.hpp"
 #include "cls_log_types.h"
-
-namespace librados {
-  class ObjectWriteOperation;
-  class ObjectReadOperation;
-  class IoCtx;
-}
 
 /*
  * log objclass

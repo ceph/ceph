@@ -4,12 +4,8 @@
 #ifndef CEPH_CLS_OTP_CLIENT_H
 #define CEPH_CLS_OTP_CLIENT_H
 
+#include "include/rados/librados_fwd.hpp"
 #include "cls/otp/cls_otp_types.h"
-
-namespace librados {
-  class ObjectWriteOperation;
-  class IoCtx;
-}
 
 namespace rados {
   namespace cls {

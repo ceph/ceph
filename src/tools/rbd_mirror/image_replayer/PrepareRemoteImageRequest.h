@@ -4,7 +4,8 @@
 #ifndef RBD_MIRROR_IMAGE_REPLAYER_PREPARE_REMOTE_IMAGE_REQUEST_H
 #define RBD_MIRROR_IMAGE_REPLAYER_PREPARE_REMOTE_IMAGE_REQUEST_H
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
+#include "include/rados/librados_fwd.hpp"
 #include "cls/journal/cls_journal_types.h"
 #include "journal/Settings.h"
 #include "librbd/journal/TypeTraits.h"
@@ -12,7 +13,6 @@
 
 namespace journal { class Journaler; }
 namespace journal { class Settings; }
-namespace librados { struct IoCtx; }
 namespace librbd { struct ImageCtx; }
 namespace librbd { namespace journal { struct MirrorPeerClientMeta; } }
 

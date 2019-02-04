@@ -5,10 +5,9 @@
 #define CEPH_LIBRBD_API_POOL_H
 
 #include "include/int_types.h"
+#include "include/rados/librados_fwd.hpp"
 #include "include/rbd/librbd.h"
 #include <map>
-
-namespace librados { class IoCtx; }
 
 namespace librbd {
 

@@ -5,10 +5,9 @@
 #define CEPH_LIBRBD_API_GROUP_H
 
 #include "include/rbd/librbd.hpp"
+#include "include/rados/librados_fwd.hpp"
 #include <string>
 #include <vector>
-
-namespace librados { struct IoCtx; }
 
 namespace librbd {
 

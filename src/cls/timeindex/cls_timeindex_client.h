@@ -8,12 +8,6 @@
 
 #include "cls_timeindex_ops.h"
 
-namespace librados {
-  class ObjectWriteOperation;
-  class ObjectReadOperation;
-  class IoCtx;
-}
-
 /**
  * timeindex objclass
  */

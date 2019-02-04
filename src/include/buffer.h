@@ -189,6 +189,8 @@ namespace buffer CEPH_BUFFER_API {
   raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
 #endif
 
+inline namespace v14_2_0 {
+
   /*
    * a buffer pointer.  references (a subsequence of) a raw buffer.
    */
@@ -1242,6 +1244,8 @@ namespace buffer CEPH_BUFFER_API {
     static list static_from_cstring(char* c);
     static list static_from_string(std::string& s);
   };
+
+} // inline namespace v14_2_0
 
   /*
    * efficient hash of one or more bufferlists

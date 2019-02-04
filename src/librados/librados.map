@@ -3,29 +3,29 @@ LIBRADOS_PRIVATE {
 };
 
 LIBRADOS_14.2.0 {
-	global:
-		extern "C++" {
-			ceph::buffer::*;
-			librados::AioCompletion::*;
-			librados::IoCtx::*;
-			librados::ListObject::*;
-			librados::NObjectIterator::*;
-			librados::ObjectCursor::*;
-			librados::ObjectOperation::*;
-			librados::ObjectReadOperation::*;
-			librados::ObjectWriteOperation::*;
-			librados::PlacementGroup::*;
-			librados::PoolAsyncCompletion::*;
-			librados::Rados::*;
-			librados::WatchCtx::*;
-			librados::WatchCtx2::*;
-			"librados::operator<<(std::ostream&, librados::ListObject const&)";
-			"librados::operator<<(std::ostream&, librados::ObjectCursor const&)";
-			"librados::operator<<(std::ostream&, librados::PlacementGroup const&)";
-			"typeinfo for librados::ObjectOperation";
-			"typeinfo for librados::ObjectReadOperation";
-			"typeinfo for librados::ObjectWriteOperation";
-			"typeinfo for librados::WatchCtx";
-			"typeinfo for librados::WatchCtx2";
-		};
+        global:
+                extern "C++" {
+			ceph::buffer::v14_2_0::*;
+			librados::v14_2_0::*;
+
+                        "typeinfo for librados::v14_2_0::ObjectOperation";
+                        "typeinfo name for librados::v14_2_0::ObjectOperation";
+                        "vtable for librados::v14_2_0::ObjectOperation";
+
+                        "typeinfo for librados::v14_2_0::ObjectReadOperation";
+                        "typeinfo name for librados::v14_2_0::ObjectReadOperation";
+                        "vtable for librados::v14_2_0::ObjectReadOperation";
+
+                        "typeinfo for librados::v14_2_0::ObjectWriteOperation";
+                        "typeinfo name for librados::v14_2_0::ObjectWriteOperation";
+                        "vtable for librados::v14_2_0::ObjectWriteOperation";
+
+                        "typeinfo for librados::v14_2_0::WatchCtx";
+                        "typeinfo name for librados::v14_2_0::WatchCtx";
+                        "vtable for librados::v14_2_0::WatchCtx";
+
+                        "typeinfo for librados::v14_2_0::WatchCtx2";
+                        "typeinfo name for librados::v14_2_0::WatchCtx2";
+                        "vtable for librados::v14_2_0::WatchCtx2";
+                };
 } LIBRADOS_PRIVATE;

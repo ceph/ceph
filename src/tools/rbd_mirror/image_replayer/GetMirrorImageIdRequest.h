@@ -5,9 +5,9 @@
 #define RBD_MIRROR_IMAGE_REPLAYER_GET_MIRROR_IMAGE_ID_REQUEST_H
 
 #include "include/buffer.h"
+#include "include/rados/librados_fwd.hpp"
 #include <string>
 
-namespace librados { struct IoCtx; }
 namespace librbd { struct ImageCtx; }
 
 struct Context;

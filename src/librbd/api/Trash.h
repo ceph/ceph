@@ -4,11 +4,10 @@
 #ifndef LIBRBD_API_TRASH_H
 #define LIBRBD_API_TRASH_H
 
+#include "include/rados/librados_fwd.hpp"
 #include "include/rbd/librbd.hpp"
 #include <string>
 #include <vector>
-
-namespace librados { struct IoCtx; }
 
 namespace librbd {
 

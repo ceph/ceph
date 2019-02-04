@@ -1868,6 +1868,7 @@ fi
 %{_includedir}/rados/crc32c.h
 %{_includedir}/rados/inline_memory.h
 %{_includedir}/rados/librados.hpp
+%{_includedir}/rados/librados_fwd.hpp
 %{_includedir}/rados/page.h
 %{_includedir}/rados/rados_types.hpp
 
