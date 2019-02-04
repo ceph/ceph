@@ -392,6 +392,81 @@ To enable SSO::
 
   $ ceph dashboard sso enable saml2
 
+Enabling Prometheus alerting
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Using Prometheus for monitoring, you have to define `alerting rules
+<https://prometheus.io/docs/prometheus/latest/configuration/alerting_rules>`_.
+To manage them you need to use the `Alertmanager
+<https://prometheus.io/docs/alerting/alertmanager>`_.
+If you are not using the Alertmanager yet, please `install it
+<https://github.com/prometheus/alertmanager#install>`_ as it's mandatory in
+order to receive and manage alerts from Prometheus.
+
+The Alertmanager capabilities can be consumed by the dashboard in three different
+ways:
+
+#. Use the notification receiver of the dashboard.
+
+#. Use the Prometheus Alertmanager API.
+
+#. Use both sources simultaneously.
+
+All three methods are going to notify you about alerts. You won't be notified
+twice if you use both sources.
+
+#. Use the notification receiver of the dashboard:
+
+   This allows you to get notifications as `configured
+   <https://prometheus.io/docs/alerting/configuration/>`_ from the Alertmanager.
+   You will get notified inside the dashboard once a notification is send out,
+   but you are not able to manage alerts.
+
+   Add the dashboard receiver and the new route to your Alertmanager configuration.
+   This should look like::
+
+     route:
+       receiver: 'ceph-dashboard'
+     ...
+     receivers:
+       - name: 'ceph-dashboard'
+         webhook_configs:
+         - url: '<url-to-dashboard>/api/prometheus_receiver'
+
+
+   Please make sure that the Alertmanager considers your SSL certificate in terms
+   of the dashboard as valid. For more information about the correct
+   configuration checkout the `<http_config> documentation
+   <https://prometheus.io/docs/alerting/configuration/#%3Chttp_config%3E>`_.
+
+#. Use the API of the Prometheus Alertmanager
+
+   This allows you to manage alerts. You will see all alerts, the Alertmanager
+   currently knows of, in the alerts listing. It can be found in the *Cluster*
+   submenu as *Alerts*. The alerts can be sorted by name, job, severity,
+   state and start time. Unfortunately it's not possible to know when an alert
+   was sent out through a notification by the Alertmanager based on your
+   configuration, that's why the dashboard will notify the user on any visible
+   change to an alert and will notify the changed alert.
+
+   Currently it's not yet possible to silence an alert and expire an silenced
+   alert, but this is work in progress and will be added in a future release.
+
+   To use it, specify the host and port of the Alertmanager server::
+
+     $ ceph dashboard set-alertmanager-api-host <alertmanager-host:port>  # default: ''
+
+   For example::
+
+     $ ceph dashboard set-alertmanager-api-host 'http://localhost:9093'
+
+
+#. Use both methods
+
+   The different behaviors of both methods are configured in a way that they
+   should not disturb each other through annoying duplicated notifications
+   popping up.
+
 Accessing the dashboard
 ^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -470,6 +545,7 @@ scopes are:
   management.
 - **log**: include all features related to Ceph logs management.
 - **grafana**: include all features related to Grafana proxy.
+- **prometheus**: include all features related to Prometheus alert management.
 - **dashboard-settings**: allows to change dashboard settings.
 
 A *role* specifies a set of mappings between a *security scope* and a set of

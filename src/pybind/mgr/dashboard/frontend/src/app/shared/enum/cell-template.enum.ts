@@ -4,5 +4,6 @@ export enum CellTemplate {
   perSecond = 'perSecond',
   checkIcon = 'checkIcon',
   routerLink = 'routerLink',
-  executing = 'executing'
+  executing = 'executing',
+  classAdding = 'classAdding'
 }

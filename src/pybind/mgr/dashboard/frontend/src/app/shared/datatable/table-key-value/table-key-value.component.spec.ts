@@ -6,6 +6,8 @@ import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../components/components.module';
+import { CellTemplate } from '../../enum/cell-template.enum';
+import { CdTableColumn } from '../../models/cd-table-column';
 import { TableComponent } from '../table/table.component';
 import { TableKeyValueComponent } from './table-key-value.component';
 
@@ -24,6 +26,7 @@ describe('TableKeyValueComponent', () => {
   });
 
   it('should create', () => {
+    fixture.detectChanges();
     expect(component).toBeTruthy();
   });
 
@@ -311,6 +314,38 @@ describe('TableKeyValueComponent', () => {
         { key: 'someObject something', value: 0.1 },
         { key: 'someString', value: '0' }
       ]);
+    });
+  });
+
+  describe('columns set up', () => {
+    let columns: CdTableColumn[];
+
+    beforeEach(() => {
+      columns = [
+        {
+          prop: 'key',
+          flexGrow: 1,
+          cellTransformation: CellTemplate.bold
+        },
+        {
+          prop: 'value',
+          flexGrow: 3
+        }
+      ];
+    });
+
+    it('should have the following default column set up', () => {
+      component.ngOnInit();
+      expect(component.columns).toEqual(columns);
+    });
+
+    it('should have the following column set up if customCss is defined', () => {
+      component.customCss = {
+        'answer-of-everything': 42
+      };
+      component.ngOnInit();
+      columns[1].cellTransformation = CellTemplate.classAdding;
+      expect(component.columns).toEqual(columns);
     });
   });
 });

@@ -125,7 +125,7 @@ describe('TableComponent', () => {
 
       it('should test search manipulation', () => {
         let searchTerms = [];
-        spyOn(component, 'subSearch').and.callFake((d, search, c) => {
+        spyOn(component, 'subSearch').and.callFake((d, search) => {
           expect(search).toEqual(searchTerms);
         });
         const searchTest = (s: string, st: string[]) => {
@@ -252,7 +252,7 @@ describe('TableComponent', () => {
     beforeEach(() => {
       component.ngOnInit();
       component.data = [];
-      component.updating = false;
+      component['updating'] = false;
     });
 
     it('should call fetchData callback function', () => {
@@ -269,7 +269,7 @@ describe('TableComponent', () => {
         expect(component.loadingError).toBeTruthy();
         expect(component.data.length).toBe(0);
         expect(component.loadingIndicator).toBeFalsy();
-        expect(component.updating).toBeFalsy();
+        expect(component['updating']).toBeFalsy();
       });
       component.reloadData();
     });
@@ -283,7 +283,7 @@ describe('TableComponent', () => {
         expect(component.loadingError).toBeFalsy();
         expect(component.data.length).toBe(10);
         expect(component.loadingIndicator).toBeFalsy();
-        expect(component.updating).toBeFalsy();
+        expect(component['updating']).toBeFalsy();
       });
       component.reloadData();
     });
@@ -326,6 +326,44 @@ describe('TableComponent', () => {
 
     afterEach(() => {
       clearLocalStorage();
+    });
+  });
+
+  describe('useCustomClass', () => {
+    beforeEach(() => {
+      component.customCss = {
+        'label label-danger': 'active',
+        'secret secret-number': 123.456,
+        'btn btn-sm': (v) => _.isString(v) && v.startsWith('http'),
+        secure: (v) => _.isString(v) && v.startsWith('https')
+      };
+    });
+
+    it('should throw an error if custom classes are not set', () => {
+      component.customCss = undefined;
+      expect(() => component.useCustomClass('active')).toThrowError('Custom classes are not set!');
+    });
+
+    it('should not return any class', () => {
+      ['', 'something', 123, { complex: 1 }, [1, 2, 3]].forEach((value) =>
+        expect(component.useCustomClass(value)).toBe(undefined)
+      );
+    });
+
+    it('should match a string and return the corresponding class', () => {
+      expect(component.useCustomClass('active')).toBe('label label-danger');
+    });
+
+    it('should match a number and return the corresponding class', () => {
+      expect(component.useCustomClass(123.456)).toBe('secret secret-number');
+    });
+
+    it('should match against a function and return the corresponding class', () => {
+      expect(component.useCustomClass('http://no.ssl')).toBe('btn btn-sm');
+    });
+
+    it('should match against multiple functions and return the corresponding classes', () => {
+      expect(component.useCustomClass('https://secure.it')).toBe('btn btn-sm secure');
     });
   });
 });

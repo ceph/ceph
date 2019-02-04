@@ -1,21 +1,18 @@
-<ng-template #popTemplate>
+<ng-template #notificationsTpl>
   <div *ngIf="notifications.length > 0">
-    <div class="separator">
-      <ng-container i18n>Recent Notifications</ng-container>
-      <div *ngIf="notifications.length > 0"
-           class="pull-right">
-        <a (click)="removeAll()"
-           i18n>Remove all</a>
-      </div>
-    </div>
+    <button type="button" class="btn btn-default btn-sm btn-block" (click)="removeAll()">
+      <i class="fa fa-trash-o" aria-hidden="true"></i>
+      &nbsp;
+      <ng-container i18n>Remove all</ng-container>
+    </button>
     <hr>
     <div *ngFor="let notification of notifications">
       <table>
         <tr>
           <td rowspan="3" class="icon-col text-center">
-            <span [ngClass]="['fa-stack fa-2x', notification.textClass()]">
+            <span [ngClass]="['fa-stack fa-2x', notification.textClass]">
               <i class="fa fa-circle fa-stack-2x"></i>
-              <i [ngClass]="['fa fa-stack-1x fa-inverse', notification.iconClass()]"></i>
+              <i [ngClass]="['fa fa-stack-1x fa-inverse', notification.iconClass]"></i>
             </span>
           </td>
           <td>
@@ -23,27 +20,32 @@
           </td>
         </tr>
         <tr>
-          <td>
-            {{ notification.message }}
+          <td [innerHtml]="notification.message">
           </td>
         </tr>
         <tr>
-          <td>
-            <small class="date">{{ notification.timestamp | cdDate }}</small>
-          </td>
+          <td [innerHtml]="notificationService.renderTimeAndApplicationHtml(notification)"></td>
         </tr>
       </table>
       <hr>
     </div>
   </div>
-  <!-- Empty -->
+</ng-template>
+
+<ng-template #emptyTpl>
   <div *ngIf="notifications.length === 0">
     <div class="message">
       There are no notifications.
     </div>
   </div>
 </ng-template>
-<a [popover]="popTemplate"
+
+<ng-template #popTpl>
+  <ng-container *ngTemplateOutlet="notificationsTpl"></ng-container>
+  <ng-container *ngTemplateOutlet="emptyTpl"></ng-container>
+</ng-template>
+
+<a [popover]="popTpl"
    placement="bottom"
    container="body"
    outsideClick="true"
