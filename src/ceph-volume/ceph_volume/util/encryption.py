@@ -65,6 +65,7 @@ def plain_open(key, device, mapping):
         device,
         mapping,
         '--type', 'plain',
+        '--hash', 'plain',
         '--key-size', '256',
     ]
 
