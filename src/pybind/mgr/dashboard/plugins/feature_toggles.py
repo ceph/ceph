@@ -7,58 +7,14 @@ from mgr_module import CLICommand, Option
 
 from . import PLUGIN_MANAGER as PM
 from . import interfaces as I
+from .ttl_cache import ttl_cache
 
-
-try:
-    from functools import lru_cache
-except ImportError:
-    try:
-        from backports.functools_lru_cache import lru_cache
-    except ImportError:
-        """
-        This is a minimal implementation of lru_cache function.
-
-        Based on Python 3 functools and backports.functools_lru_cache.
-        """
-
-        from functools import wraps
-        from collections import OrderedDict
-        from threading import RLock
-
-        def lru_cache(maxsize=128, typed=False):
-            if typed is not False:
-                raise NotImplementedError("typed caching not supported")
-
-            def decorating_function(function):
-                cache = OrderedDict()
-                stats = [0, 0]
-                rlock = RLock()
-                setattr(
-                    function,
-                    'cache_info',
-                    lambda:
-                    "hits={}, misses={}, maxsize={}, currsize={}".format(
-                        stats[0], stats[1], maxsize, len(cache)))
-
-                @wraps(function)
-                def wrapper(*args, **kwargs):
-                    key = args + tuple(kwargs.items())
-                    with rlock:
-                        if key in cache:
-                            ret = cache[key]
-                            del cache[key]
-                            cache[key] = ret
-                            stats[0] += 1
-                        else:
-                            ret = function(*args, **kwargs)
-                            if len(cache) == maxsize:
-                                cache.popitem(last=False)
-                            cache[key] = ret
-                            stats[1] += 1
-                    return ret
-
-                return wrapper
-            return decorating_function
+from ..controllers.rbd import Rbd, RbdSnapshot, RbdTrash
+from ..controllers.rbd_mirroring import (
+    RbdMirroringSummary, RbdMirroringPoolMode, RbdMirroringPoolPeer)
+from ..controllers.iscsi import Iscsi, IscsiTarget
+from ..controllers.cephfs import CephFS
+from ..controllers.rgw import Rgw, RgwDaemon, RgwBucket, RgwUser
 
 
 class Features(Enum):
@@ -69,21 +25,23 @@ class Features(Enum):
     RGW = 'rgw'
 
 
+PREDISABLED_FEATURES = set()
+
+
+Feature2Controller = {
+    Features.RBD: [Rbd, RbdSnapshot, RbdTrash],
+    Features.MIRRORING: [
+        RbdMirroringSummary, RbdMirroringPoolMode, RbdMirroringPoolPeer],
+    Features.ISCSI: [Iscsi, IscsiTarget],
+    Features.CEPHFS: [CephFS],
+    Features.RGW: [Rgw, RgwDaemon, RgwBucket, RgwUser],
+}
+
+
 class Actions(Enum):
     ENABLE = 'enable'
     DISABLE = 'disable'
     STATUS = 'status'
-
-
-PREDISABLED_FEATURES = set()
-
-Feature2Endpoint = {
-    Features.RBD: ["/api/block/image"],
-    Features.MIRRORING: ["/api/block/mirroring"],
-    Features.ISCSI: ["/api/tcmuiscsi"],
-    Features.CEPHFS: ["/api/cephfs"],
-    Features.RGW: ["/api/rgw"],
-}
 
 
 @PM.add_plugin
@@ -92,14 +50,15 @@ class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
                      I.HasControllers):
     OPTION_FMT = 'FEATURE_TOGGLE_{}'
     CACHE_MAX_SIZE = 128  # Optimum performance with 2^N sizes
+    CACHE_TTL = 10  # seconds
 
     @PM.add_hook
     def setup(self):
         url_prefix = self.mgr.get_module_option('url_prefix')
-        self.Endpoint2Feature = {
-            '{}{}'.format(url_prefix, endpoint): feature
-            for feature, endpoints in Feature2Endpoint.items()
-            for endpoint in endpoints}
+        self.Controller2Feature = {
+            controller: feature
+            for feature, controllers in Feature2Controller.items()
+            for controller in controllers}
 
     @PM.add_hook
     def get_options(self):
@@ -117,14 +76,13 @@ class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
             + "name=features,type=CephChoices,strings={},req=false,n=N".format(
                 "|".join(f.value for f in Features)),
             "Enable or disable features in Ceph-Mgr Dashboard")
-        def _(mgr, action, features=None):
+        def cmd(mgr, action, features=None):
             ret = 0
             msg = []
             if action in [Actions.ENABLE.value, Actions.DISABLE.value]:
                 if features is None:
                     ret = 1
-                    msg = ["Feature '{}' requires at least a feature specified".format(
-                        action)]
+                    msg = ["At least one feature must be specified"]
                 else:
                     for feature in features:
                         mgr.set_module_option(
@@ -132,7 +90,8 @@ class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
                             action == Actions.ENABLE.value)
                         msg += ["Feature '{}': {}".format(
                             feature,
-                            'enabled' if action == Actions.ENABLE.value else 'disabled')]
+                            'enabled' if action == Actions.ENABLE.value else
+                            'disabled')]
             else:
                 for feature in features or [f.value for f in Features]:
                     enabled = mgr.get_module_option(self.OPTION_FMT.format(feature))
@@ -140,32 +99,32 @@ class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
                         feature,
                         'enabled' if enabled else 'disabled')]
             return ret, '\n'.join(msg), ''
+        return {'handle_command': cmd}
 
-    @lru_cache(maxsize=CACHE_MAX_SIZE)
-    def __get_feature_from_path(self, path):
-        for endpoint in self.Endpoint2Feature:
-            if path.startswith(endpoint):
-                return self.Endpoint2Feature[endpoint]
-        return None
+    def _get_feature_from_request(self, request):
+        try:
+            return self.Controller2Feature[
+                cherrypy.request.handler.callable.__self__]
+        except (AttributeError, KeyError):
+            return None
 
-    def _get_feature_status(self, feature):
-        return self.mgr.get_module_option(
-            self.OPTION_FMT.format(feature.value))
+    @ttl_cache(ttl=CACHE_TTL, maxsize=CACHE_MAX_SIZE)
+    def _is_feature_enabled(self, feature):
+        return self.mgr.get_module_option(self.OPTION_FMT.format(feature.value))
 
     @PM.add_hook
     def filter_request_before_handler(self, request):
-        feature = self.__get_feature_from_path(request.path_info)
-
+        feature = self._get_feature_from_request(request)
         if feature is None:
             return
 
-        if self._get_feature_status(feature) is False:
+        if not self._is_feature_enabled(feature):
             raise cherrypy.HTTPError(
-                501, "Feature='{}' (path='{}') disabled by option '{}'".format(
+                404, "Feature='{}' disabled by option '{}'".format(
                     feature.value,
-                    request.path_info,
-                    self.OPTION_FMT.format(feature.value)
-                    ))
+                    self.OPTION_FMT.format(feature.value),
+                    )
+                )
 
     @PM.add_hook
     def get_controllers(self):
@@ -178,10 +137,7 @@ class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
 
             def list(_):
                 return {
-                    feature.value: self._get_feature_status(feature)
+                    feature.value: self._is_feature_enabled(feature)
                     for feature in Features
                 }
-
-        return [
-            FeatureTogglesEndpoint,
-        ]
+        return [FeatureTogglesEndpoint]
