@@ -61,6 +61,11 @@ export class PermissionHelper {
     return this.tableActions;
   }
 
+  // Overwrite if needed
+  createSelection(): object {
+    return {};
+  }
+
   testScenarios({
     fn,
     empty,
@@ -76,17 +81,19 @@ export class PermissionHelper {
   }) {
     this.testScenario(
       // 'multiple selections'
-      [{}, {}],
+      [this.createSelection(), this.createSelection()],
       fn,
       _.isUndefined(multiple) ? empty : multiple
     );
+    const executing = this.createSelection();
+    executing['cdExecuting'] = 'someAction';
     this.testScenario(
       // 'select executing item'
-      [{ cdExecuting: 'someAction' }],
+      [executing],
       fn,
       _.isUndefined(singleExecuting) ? single : singleExecuting
     );
-    this.testScenario([{}], fn, single); // 'select non-executing item'
+    this.testScenario([this.createSelection()], fn, single); // 'select non-executing item'
     this.testScenario([], fn, empty); // 'no selection'
   }
 
