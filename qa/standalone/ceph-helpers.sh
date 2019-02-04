@@ -256,7 +256,9 @@ function kill_daemon() {
     local send_signal=$2
     local delays=${3:-0.1 0.2 1 1 1 2 3 5 5 5 10 10 20 60 60 60 120}
     local exit_code=1
-    for try in $delays ; do
+    # In order to try after the last large sleep add 0 at the end so we check
+    # one last time before dropping out of the loop
+    for try in $delays 0 ; do
          if kill -$send_signal $pid 2> /dev/null ; then
             exit_code=1
          else
