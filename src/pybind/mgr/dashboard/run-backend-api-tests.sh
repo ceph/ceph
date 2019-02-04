@@ -102,10 +102,12 @@ run_teuthology_tests() {
 
     OPTIONS=''
     TEST_CASES=''
-    if [[ "$@" == '' || "$@" == '--create-cluster-only' ]]; then
-      TEST_CASES=`for i in \`ls $BUILD_DIR/../qa/tasks/mgr/dashboard/test_*\`; do F=$(basename $i); M="${F%.*}"; echo -n " tasks.mgr.dashboard.$M"; done`
-      TEST_CASES="tasks.mgr.test_dashboard $TEST_CASES"
-      if [[ "$@" == '--create-cluster-only' ]]; then
+    if [ "$@" = '' -o "$@" = '--create-cluster-only' ]; then
+      if [ "$(basename "$PWD")" = "dashboard" ]; then
+        TEST_CASES=`for i in \`ls $BUILD_DIR/../qa/tasks/mgr/dashboard/test_*\`; do F=$(basename $i); M="${F%.*}"; echo -n " tasks.mgr.dashboard.$M"; done`
+        TEST_CASES="tasks.mgr.test_dashboard $TEST_CASES"
+      fi
+      if [ "$@" = '--create-cluster-only' ]; then
         OPTIONS="$@"
       fi
     else
@@ -117,7 +119,7 @@ run_teuthology_tests() {
     export PATH=$BUILD_DIR/bin:$PATH
     export LD_LIBRARY_PATH=$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$BUILD_DIR/lib
     export PYTHONPATH=$TEMP_DIR/teuthology:$BUILD_DIR/../qa:$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$BUILD_DIR/../src/pybind
-    if [[ -z "$RGW" ]]; then
+    if [ -z "$RGW" ]; then
         export RGW=1
     fi
 
