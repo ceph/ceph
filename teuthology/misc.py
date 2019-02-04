@@ -1226,7 +1226,7 @@ def ssh_keyscan_wait(hostname):
     False otherwise. Try again if ssh-keyscan timesout.
     :param hostname: on which ssh-keyscan is run
     """
-    with safe_while(sleep=6, tries=100,
+    with safe_while(sleep=6, tries=100, _raise=False,
                     action="ssh_keyscan_wait " + hostname) as proceed:
         success = False
         while proceed():
