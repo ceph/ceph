@@ -17,6 +17,7 @@ import { ListPipe } from './list.pipe';
 import { LogPriorityPipe } from './log-priority.pipe';
 import { MillisecondsPipe } from './milliseconds.pipe';
 import { OrdinalPipe } from './ordinal.pipe';
+import { RbdConfigurationSourcePipe } from './rbd-configuration-source.pipe';
 import { RelativeDatePipe } from './relative-date.pipe';
 import { RoundPipe } from './round.pipe';
 import { UpperFirstPipe } from './upper-first.pipe';
@@ -42,7 +43,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     OrdinalPipe,
     MillisecondsPipe,
     IopsPipe,
-    UpperFirstPipe
+    UpperFirstPipe,
+    RbdConfigurationSourcePipe
   ],
   exports: [
     BooleanTextPipe,
@@ -63,7 +65,8 @@ import { UpperFirstPipe } from './upper-first.pipe';
     OrdinalPipe,
     MillisecondsPipe,
     IopsPipe,
-    UpperFirstPipe
+    UpperFirstPipe,
+    RbdConfigurationSourcePipe
   ],
   providers: [
     BooleanTextPipe,

@@ -1,12 +1,14 @@
 import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import {
   RbdConfigurationEntry,
   RbdConfigurationSourceField,
   RbdConfigurationType
 } from '../../../shared/models/configuration';
+import { RbdConfigurationSourcePipe } from '../../../shared/pipes/rbd-configuration-source.pipe';
 import { FormatterService } from '../../../shared/services/formatter.service';
 import { RbdConfigurationService } from '../../../shared/services/rbd-configuration.service';
 
@@ -23,6 +25,8 @@ export class RbdConfigurationListComponent implements OnInit, OnChanges {
   configurationSourceTpl: TemplateRef<any>;
   @ViewChild('configurationValueTpl')
   configurationValueTpl: TemplateRef<any>;
+  @ViewChild('poolConfTable')
+  poolConfTable: TableComponent;
 
   readonly sourceField = RbdConfigurationSourceField;
   readonly typeField = RbdConfigurationType;
@@ -38,7 +42,12 @@ export class RbdConfigurationListComponent implements OnInit, OnChanges {
       { prop: 'displayName', name: this.i18n('Name') },
       { prop: 'description', name: this.i18n('Description') },
       { prop: 'name', name: this.i18n('Key') },
-      { prop: 'source', name: this.i18n('Source'), cellTemplate: this.configurationSourceTpl },
+      {
+        prop: 'source',
+        name: this.i18n('Source'),
+        cellTemplate: this.configurationSourceTpl,
+        pipe: new RbdConfigurationSourcePipe()
+      },
       { prop: 'value', name: this.i18n('Value'), cellTemplate: this.configurationValueTpl }
     ];
   }

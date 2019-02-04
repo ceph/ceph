@@ -3556,35 +3556,19 @@
           <context context-type="sourcefile">app/ceph/performance-counter/table-performance-counter/table-performance-counter.component.html</context>
           <context context-type="linenumber">12</context>
         </context-group>
-      </trans-unit><trans-unit id="5decb3917d46a9ac6e5813699801becb7c3c1455" datatype="html">
-        <source>Global</source>
+      </trans-unit><trans-unit id="a949d7e577902d0e5dc5d0971bb0170a21be7728" datatype="html">
+        <source><x id="INTERPOLATION" equiv-text="{{ value | titlecase }}"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-configuration-list/rbd-configuration-list.component.html</context>
-          <context context-type="linenumber">10</context>
+          <context context-type="linenumber">13</context>
         </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
-          <context context-type="linenumber">137</context>
-        </context-group>
-      </trans-unit><trans-unit id="a5f9ba9bb9faa8284bcadb1cdbc6aaf969e9c4bb" datatype="html">
-        <source>Image</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-configuration-list/rbd-configuration-list.component.html</context>
-          <context context-type="linenumber">11</context>
+          <context context-type="linenumber">14</context>
         </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
-          <context context-type="linenumber">135</context>
-        </context-group>
-      </trans-unit><trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
-        <source>Pool</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-configuration-list/rbd-configuration-list.component.html</context>
-          <context context-type="linenumber">12</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
-          <context context-type="linenumber">18</context>
+          <context context-type="linenumber">15</context>
         </context-group>
       </trans-unit><trans-unit id="ff92fbdec9fdd5054493eeda0d7ee8b450f83e72" datatype="html">
         <source>RBD Configuration</source>
@@ -3873,6 +3857,12 @@
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
           <context context-type="linenumber">2</context>
         </context-group>
+      </trans-unit><trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
+        <source>Pool</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
+          <context context-type="linenumber">18</context>
+        </context-group>
       </trans-unit><trans-unit id="03cc5b14b0a20d075e9009ff021f4f1660ba348a" datatype="html">
         <source>Data Pool</source>
         <context-group purpose="location">
@@ -3943,11 +3933,23 @@
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
           <context context-type="linenumber">119</context>
         </context-group>
+      </trans-unit><trans-unit id="a5f9ba9bb9faa8284bcadb1cdbc6aaf969e9c4bb" datatype="html">
+        <source>Image</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
+          <context context-type="linenumber">135</context>
+        </context-group>
       </trans-unit><trans-unit id="58e58f1a8786da9031a05e6770c5dafce82badf5" datatype="html">
         <source>This setting overrides the global value</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
           <context context-type="linenumber">135</context>
+        </context-group>
+      </trans-unit><trans-unit id="5decb3917d46a9ac6e5813699801becb7c3c1455" datatype="html">
+        <source>Global</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
+          <context context-type="linenumber">137</context>
         </context-group>
       </trans-unit><trans-unit id="36b46714164964c6258b08ed0a25f57d8a950f92" datatype="html">
         <source>This is the global value. No value for this option has been set for this image.</source>
