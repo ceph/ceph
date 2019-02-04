@@ -1414,7 +1414,7 @@
   
   rbd help migration commit
   usage: rbd migration commit [--pool <pool>] [--namespace <namespace>] 
-                              [--image <image>] [--no-progress] 
+                              [--image <image>] [--no-progress] [--force] 
                               <image-spec> 
   
   Commit image migration.
@@ -1428,6 +1428,7 @@
     --namespace arg      namespace name
     --image arg          image name
     --no-progress        disable progress output
+    --force              proceed even if the image has children
   
   rbd help migration execute
   usage: rbd migration execute [--pool <pool>] [--namespace <namespace>] 
