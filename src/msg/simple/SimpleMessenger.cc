@@ -150,7 +150,7 @@ int SimpleMessenger::_send_message(Message *m, Connection *con)
 bool SimpleMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
 {
   bool ret = false;
-  auto addr = addrs.legacy_addr();
+  auto addr = addrs.front();
   ceph_assert(my_addr == my_addrs->front());
   if (my_addr.is_blank_ip()) {
     ldout(cct,1) << __func__ << " " << addr << dendl;
