@@ -94,6 +94,7 @@ def get_daemons_and_pools():  # pylint: disable=R0915
                 mirror_mode = rbdctx.mirror_mode_get(ioctx)
             except:  # noqa pylint: disable=W0702
                 logger.exception("Failed to query mirror mode %s", pool_name)
+                mirror_mode = None
 
             stats = {}
             if mirror_mode == rbd.RBD_MIRROR_MODE_DISABLED:
