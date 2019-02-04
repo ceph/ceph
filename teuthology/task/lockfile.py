@@ -225,7 +225,7 @@ def lock_one(op, ctx):
             raise
         if bool(op["expectfail"]):
             result = 1
-        if result is 1:
+        if result == 1:
             if bool(op["expectfail"]):
                 log.info("failed as expected for op {op_}".format(op_=op))
             else:

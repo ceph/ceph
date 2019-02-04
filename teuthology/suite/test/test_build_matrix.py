@@ -621,14 +621,14 @@ class TestSubset(object):
                 x += 1
         def generate_tree(
                 max_facets, max_fanout, max_depth, namegen, top=True):
-            if max_depth is 0:
+            if max_depth == 0:
                 return None
-            if max_facets is 0:
+            if max_facets == 0:
                 return None
             items = random.choice(range(max_fanout))
-            if items is 0 and top:
+            if items == 0 and top:
                 items = 1
-            if items is 0:
+            if items == 0:
                 return None
             sub_max_facets = max_facets / items
             tree = {}
