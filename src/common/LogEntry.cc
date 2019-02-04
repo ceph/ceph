@@ -197,7 +197,7 @@ void LogEntry::encode(bufferlist& bl, uint64_t features) const
     __u16 t = prio;
     entity_inst_t who;
     who.name = rank;
-    who.addr = addrs.legacy_addr();
+    who.addr = addrs.as_legacy_addr();
     encode(who, bl, features);
     encode(stamp, bl);
     encode(seq, bl);
