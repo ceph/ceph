@@ -444,7 +444,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mon_cluster_log_file_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("info")
+    .set_default("debug")
     .set_description(""),
 
     Option("mon_cluster_log_to_graylog", Option::TYPE_STR, Option::LEVEL_ADVANCED)
