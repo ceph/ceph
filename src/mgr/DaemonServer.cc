@@ -1822,6 +1822,9 @@ void DaemonServer::send_report()
 	  jf.dump_object("health_checks", m->health_checks);
 	  jf.flush(*_dout);
 	  *_dout << dendl;
+          if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+              clog->debug() << "pgmap v" << pg_map.version << ": " << pg_map;
+          }
 	});
     });
 
