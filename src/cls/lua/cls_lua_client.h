@@ -4,10 +4,6 @@
 
 #include "include/rados/librados.hpp"
 
-namespace librados {
-  class IoCtx;
-}
-
 namespace cls_lua_client {
   int exec(librados::IoCtx& ioctx, const std::string& oid,
       const std::string& script, const std::string& handler,

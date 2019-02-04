@@ -15,14 +15,11 @@
 
 #pragma once
 
+#include "include/rados/librados_fwd.hpp"
 #include <memory>
 #include "common/ceph_mutex.h"
 #include "services/svc_rados.h"
 #include "rgw_aio.h"
-
-namespace librados {
-class AioCompletion;
-}
 
 namespace rgw {
 

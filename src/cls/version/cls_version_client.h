@@ -1,14 +1,8 @@
 #ifndef CEPH_CLS_VERSION_CLIENT_H
 #define CEPH_CLS_VERSION_CLIENT_H
 
+#include "include/rados/librados_fwd.hpp"
 #include "cls_version_ops.h"
-
-namespace librados {
-  class ObjectWriteOperation;
-  class ObjectReadOperation;
-  class ObjectOperation;
-  class IoCtx;
-}
 
 /*
  * version objclass

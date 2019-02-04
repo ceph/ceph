@@ -5,12 +5,11 @@
 #define LIBRBD_API_IMAGE_H
 
 #include "include/rbd/librbd.hpp"
+#include "include/rados/librados_fwd.hpp"
 #include "librbd/Types.h"
 #include <map>
 #include <set>
 #include <string>
-
-namespace librados { struct IoCtx; }
 
 namespace librbd {
 

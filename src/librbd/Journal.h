@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/Context.h"
 #include "include/interval_set.h"
+#include "include/rados/librados_fwd.hpp"
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
@@ -28,9 +29,6 @@
 class SafeTimer;
 namespace journal {
 class Journaler;
-}
-namespace librados {
-  class IoCtx;
 }
 
 namespace librbd {

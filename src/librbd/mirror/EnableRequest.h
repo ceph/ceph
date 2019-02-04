@@ -4,15 +4,14 @@
 #ifndef CEPH_LIBRBD_MIRROR_ENABLE_REQUEST_H
 #define CEPH_LIBRBD_MIRROR_ENABLE_REQUEST_H
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
+#include "include/rados/librados_fwd.hpp"
 #include "cls/rbd/cls_rbd_types.h"
 #include <map>
 #include <string>
 
 class Context;
 class ContextWQ;
-
-namespace librados { class IoCtx; }
 
 namespace librbd {
 

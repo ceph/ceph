@@ -864,7 +864,7 @@ Description: Meta-package for python libraries for the Ceph libraries
 Package: python-rados
 Architecture: linux-any
 Section: python
-Depends: librados2 | librados2
+Depends: librados2
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
@@ -898,7 +898,7 @@ Description: Python 2 libraries for the Ceph librados library
 Package: python3-rados
 Architecture: linux-any
 Section: python
-Depends: librados2 | librados2,
+Depends: librados2,
          ${misc:Depends},
          ${python3:Depends},
          ${shlibs:Depends},

@@ -1,6 +1,8 @@
-install(FILES rados/librados.h
+install(FILES
+  rados/librados.h
   rados/rados_types.h
   rados/rados_types.hpp
+  rados/librados_fwd.hpp
   rados/librados.hpp
   buffer.h
   buffer_fwd.h

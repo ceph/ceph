@@ -5,14 +5,9 @@
 #define CEPH_LIBRBD_API_CONFIG_H
 
 #include "include/rbd/librbd.hpp"
+#include "include/rados/librados_fwd.hpp"
 
 struct ConfigProxy;
-
-namespace librados {
-
-class IoCtx;
-
-}
 
 namespace librbd {
 

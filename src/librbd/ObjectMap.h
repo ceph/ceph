@@ -6,6 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/fs_types.h"
+#include "include/rados/librados_fwd.hpp"
 #include "include/rbd/object_map_types.h"
 #include "common/bit_vector.hpp"
 #include "librbd/Utils.h"
@@ -13,7 +14,6 @@
 
 class Context;
 class RWLock;
-namespace librados { class IoCtx; }
 namespace ZTracer { struct Trace; }
 
 namespace librbd {

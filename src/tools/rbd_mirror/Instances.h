@@ -7,13 +7,13 @@
 #include <map>
 #include <vector>
 
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
+#include "include/rados/librados_fwd.hpp"
 #include "common/AsyncOpTracker.h"
 #include "common/Mutex.h"
 #include "librbd/Watcher.h"
 #include "tools/rbd_mirror/instances/Types.h"
 
-namespace librados { class IoCtx; }
 namespace librbd { class ImageCtx; }
 
 namespace rbd {
