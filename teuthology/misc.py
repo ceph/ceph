@@ -1230,8 +1230,8 @@ def ssh_keyscan_wait(hostname):
                     action="ssh_keyscan_wait " + hostname) as proceed:
         success = False
         while proceed():
-            keys_dict = ssh_keyscan([hostname])
-            if len(keys_dict) == 1:
+            key = _ssh_keyscan(hostname)
+            if key:
                 success = True
                 break
             log.info("try ssh_keyscan again for " + str(hostname))
