@@ -2,8 +2,9 @@ tasks:
 - ssh-keys: null
 - ceph-ansible: null
 - rgw-system-test:
-    test-name: test_Mbuckets
-    test_dir_version: v1
+    test: test_Mbuckets
+    test_version: v1
+    clients: ['client.0']
     config:
       user_count: 25
       bucket_count: 25

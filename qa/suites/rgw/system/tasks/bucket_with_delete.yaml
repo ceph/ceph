@@ -2,8 +2,9 @@ tasks:
 - ssh-keys: null
 - ceph-ansible: null
 - rgw-system-test:
-    test-name: test_bucket_with_delete
-    test_dir_version: v1
+    test: test_bucket_with_delete
+    test_version: v1
+    clients: ['client.0']
     config:
       user_count: 2
       bucket_count: 25
