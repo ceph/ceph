@@ -6,10 +6,6 @@ import uuid
 import json
 
 
-# How often to potentially write back any dirty events (event history
-# persistence is best effort!
-PERSIST_PERIOD = 5
-
 ENCODING_VERSION = 1
 
 
@@ -250,6 +246,13 @@ class Module(MgrModule):
             'desc': 'number of past completed events to remember',
             'runtime': True,
         },
+        {
+            'name': 'persist_interval',
+            'default': 5,
+            'type': 'secs',
+            'desc': 'how frequently to persist completed events',
+            'runtime': True,
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -442,7 +445,7 @@ class Module(MgrModule):
                 self._save()
                 self._dirty = False
 
-            self._shutdown.wait(timeout=PERSIST_PERIOD)
+            self._shutdown.wait(timeout=self.persist_interval)
 
         self._shutdown.wait()
 
