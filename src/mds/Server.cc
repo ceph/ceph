@@ -29,6 +29,7 @@
 #include "InoTable.h"
 #include "SnapClient.h"
 #include "Mutation.h"
+#include "MetricsHandler.h"
 #include "cephfs_features.h"
 
 #include "msg/Messenger.h"
@@ -223,10 +224,11 @@ void Server::create_logger()
   g_ceph_context->get_perfcounters_collection()->add(logger);
 }
 
-Server::Server(MDSRank *m) : 
+Server::Server(MDSRank *m, MetricsHandler *metrics_handler) :
   mds(m), 
   mdcache(mds->mdcache), mdlog(mds->mdlog),
-  recall_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate"))
+  recall_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate")),
+  metrics_handler(metrics_handler)
 {
   replay_unsafe_with_closed_session = g_conf().get_val<bool>("mds_replay_unsafe_with_closed_session");
   cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
@@ -641,8 +643,9 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 	}
       }
 
-      if (session->is_closed())
-	mds->sessionmap.add_session(session);
+      if (session->is_closed()) {
+        mds->sessionmap.add_session(session);
+      }
 
       pv = mds->sessionmap.mark_projected(session);
       sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
@@ -720,7 +723,6 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
   }
 }
 
-
 void Server::flush_session(Session *session, MDSGatherBuilder *gather) {
   if (!session->is_open() ||
       !session->get_connection() ||
@@ -787,6 +789,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     ceph_assert(session->is_opening());
     mds->sessionmap.set_state(session, Session::STATE_OPEN);
     mds->sessionmap.touch_session(session);
+    metrics_handler->add_session(session);
     ceph_assert(session->get_connection());
     auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
     if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
@@ -843,6 +846,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       mds->send_message_client(make_message<MClientSession>(CEPH_SESSION_CLOSE), session);
       mds->sessionmap.set_state(session, Session::STATE_CLOSED);
       session->clear();
+      metrics_handler->remove_session(session);
       mds->sessionmap.remove_session(session);
     } else if (session->is_killing()) {
       // destroy session, close connection
@@ -851,6 +855,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
         mds->sessionmap.set_state(session, Session::STATE_CLOSED);
         session->set_connection(nullptr);
       }
+      metrics_handler->remove_session(session);
       mds->sessionmap.remove_session(session);
     } else {
       ceph_abort();
@@ -937,6 +942,7 @@ void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_
 	dout(10) << "force_open_sessions opened " << session->info.inst << dendl;
 	mds->sessionmap.set_state(session, Session::STATE_OPEN);
 	mds->sessionmap.touch_session(session);
+        metrics_handler->add_session(session);
 
 	auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
 	if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
@@ -1403,6 +1409,7 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
   }
 
   if (!m->has_more()) {
+    metrics_handler->add_session(session);
     // notify client of success with an OPEN
     auto reply = make_message<MClientSession>(CEPH_SESSION_OPEN);
     if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
