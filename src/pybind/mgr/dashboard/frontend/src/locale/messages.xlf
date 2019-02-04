@@ -260,7 +260,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">451</context>
+          <context context-type="linenumber">449</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
@@ -2486,13 +2486,13 @@
         <source><x id="ICU" equiv-text="{editing, select, 1 {...} other {...}}"/> pool</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">446</context>
+          <context context-type="linenumber">444</context>
         </context-group>
       </trans-unit><trans-unit id="e2b15aacc2f17a9c3276895eeeaadd342ab26555" datatype="html">
         <source>{VAR_SELECT, select, 1 {Edit} other {Create} }</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">446</context>
+          <context context-type="linenumber">444</context>
         </context-group>
       </trans-unit><trans-unit id="1d8a7c8aea58294a3c57c23af0468ddf0ba0c9c7" datatype="html">
         <source>Pools List</source>
