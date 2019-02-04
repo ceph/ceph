@@ -55,7 +55,7 @@ public:
   explicit StrayManagerLogContext(StrayManager *sm_) : sm(sm_) {}
 };
 
-class StrayManagerContext : public virtual MDSInternalContextBase {
+class StrayManagerContext : public virtual MDSContext {
 protected:
   StrayManager *sm;
   MDSRank *get_mds() override

@@ -2365,9 +2365,9 @@ void MDSRankDispatcher::handle_mds_map(
   }
 
   {
-    map<epoch_t,MDSInternalContextBase::vec >::iterator p = waiting_for_mdsmap.begin();
+    map<epoch_t,MDSContext::vec >::iterator p = waiting_for_mdsmap.begin();
     while (p != waiting_for_mdsmap.end() && p->first <= mdsmap->get_epoch()) {
-      MDSInternalContextBase::vec ls;
+      MDSContext::vec ls;
       ls.swap(p->second);
       waiting_for_mdsmap.erase(p++);
       queue_waiters(ls);

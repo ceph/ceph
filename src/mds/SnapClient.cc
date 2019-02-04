@@ -97,7 +97,7 @@ void SnapClient::handle_query_result(const MMDSTableRequest::const_ref &m)
     synced = true;
 
   if (synced && !waiting_for_version.empty()) {
-    MDSInternalContextBase::vec finished;
+    MDSContext::vec finished;
     while (!waiting_for_version.empty()) {
       auto it = waiting_for_version.begin();
       if (it->first > cached_version)
@@ -141,7 +141,7 @@ void SnapClient::notify_commit(version_t tid)
   }
 }
 
-void SnapClient::refresh(version_t want, MDSInternalContextBase *onfinish)
+void SnapClient::refresh(version_t want, MDSContext *onfinish)
 {
   dout(10) << __func__ << " want " << want << dendl;
 
@@ -161,7 +161,7 @@ void SnapClient::refresh(version_t want, MDSInternalContextBase *onfinish)
   mds->send_message_mds(req, ts);
 }
 
-void SnapClient::sync(MDSInternalContextBase *onfinish)
+void SnapClient::sync(MDSContext *onfinish)
 {
   dout(10) << __func__ << dendl;
 

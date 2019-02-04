@@ -69,8 +69,8 @@ public:
     return false;
   }
 
-  bool _open_parents(MDSInternalContextBase *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
-  bool open_parents(MDSInternalContextBase *retryorfinish);
+  bool _open_parents(MDSContext *retryorfinish, snapid_t first=1, snapid_t last=CEPH_NOSNAP);
+  bool open_parents(MDSContext *retryorfinish);
   void _remove_missing_parent(snapid_t snapid, inodeno_t parent, int err);
   bool have_past_parents_open(snapid_t first=1, snapid_t last=CEPH_NOSNAP) const;
   void add_open_past_parent(SnapRealm *parent, snapid_t last);

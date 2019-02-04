@@ -35,13 +35,13 @@ protected:
 
   // prepares
   struct _pending_prepare {
-    MDSInternalContextBase *onfinish;
+    MDSContext *onfinish;
     version_t *ptid;
     bufferlist *pbl; 
     bufferlist mutation;
 
     _pending_prepare() : onfinish(0), ptid(0), pbl(0) {}
-    _pending_prepare(MDSInternalContextBase *c, version_t *pt, bufferlist *pb, bufferlist& m) :
+    _pending_prepare(MDSContext *c, version_t *pt, bufferlist *pb, bufferlist& m) :
       onfinish(c), ptid(pt), pbl(pb), mutation(m) {}
   };
 
@@ -51,7 +51,7 @@ protected:
 
   // pending commits
   map<version_t, LogSegment*> pending_commit;
-  map<version_t, MDSInternalContextBase::vec > ack_waiters;
+  map<version_t, MDSContext::vec > ack_waiters;
 
   void handle_reply(class MMDSTableQuery *m);  
   void _logged_ack(version_t tid);
@@ -64,7 +64,7 @@ public:
 
   void handle_request(const MMDSTableRequest::const_ref &m);
 
-  void _prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl, MDSInternalContextBase *onfinish);
+  void _prepare(bufferlist& mutation, version_t *ptid, bufferlist *pbl, MDSContext *onfinish);
   void commit(version_t tid, LogSegment *ls);
 
   void resend_commits();
@@ -77,7 +77,7 @@ public:
   bool has_committed(version_t tid) const {
     return pending_commit.count(tid) == 0;
   }
-  void wait_for_ack(version_t tid, MDSInternalContextBase *c) {
+  void wait_for_ack(version_t tid, MDSContext *c) {
     ack_waiters[tid].push_back(c);
   }
 
