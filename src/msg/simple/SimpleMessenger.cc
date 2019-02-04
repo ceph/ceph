@@ -742,6 +742,7 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   lock.Lock();
   if (need_addr) {
     entity_addr_t t = peer_addr_for_me;
+    t.set_type(entity_addr_t::TYPE_ANY);
     t.set_port(my_addr.get_port());
     t.set_nonce(my_addr.get_nonce());
     ANNOTATE_BENIGN_RACE_SIZED(&my_addr, sizeof(my_addr),
