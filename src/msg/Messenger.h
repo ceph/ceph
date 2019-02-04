@@ -170,21 +170,7 @@ public:
    * ANY addr (if i am a pure client).
    */
   entity_addr_t get_myaddr_legacy() {
-    auto& av = *my_addrs;
-    for (auto& a : av.v) {
-      if (a.is_legacy()) {
-	return a;
-      }
-      if (a.is_any()) {
-	auto b = a;
-	b.set_type(entity_addr_t::TYPE_LEGACY);
-	return b;
-      }
-    }
-    // hrm... lie!
-    auto a = av.front();
-    a.set_type(entity_addr_t::TYPE_LEGACY);
-    return a;
+    return my_addrs->as_legacy_addr();
   }
 
 
