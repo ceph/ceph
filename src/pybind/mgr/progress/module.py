@@ -242,6 +242,16 @@ class Module(MgrModule):
          "perm": "rw"}
     ]
 
+    MODULE_OPTIONS = [
+        {
+            'name': 'max_completed_events',
+            'default': 50,
+            'type': 'int',
+            'desc': 'number of past completed events to remember',
+            'runtime': True,
+        },
+    ]
+
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
 
@@ -256,6 +266,13 @@ class Module(MgrModule):
         self._latest_osdmap = None
 
         self._dirty = False
+
+    def config_notify(self):
+        for opt in self.MODULE_OPTIONS:
+            setattr(self,
+                    opt['name'],
+                    self.get_module_option(opt['name']))
+            self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
     def _osd_out(self, old_map, old_dump, new_map, osd_id):
         affected_pgs = []
@@ -399,7 +416,16 @@ class Module(MgrModule):
         for ev in decoded['events']:
             self._completed_events.append(GhostEvent(ev['id'], ev['message'], ev['refs']))
 
+        self._prune_completed_events()
+
+    def _prune_completed_events(self):
+        l = len(self._completed_events)
+        if l > self.max_completed_events:
+            self._completed_events = self._completed_events[l - self.max_completed_events : l]
+            self._dirty = True
+
     def serve(self):
+        self.config_notify()
         self.log.info("Loading...")
 
         self._load()
@@ -449,6 +475,7 @@ class Module(MgrModule):
         self._completed_events.append(
             GhostEvent(ev.id, ev.message, ev.refs))
         del self._events[ev.id]
+        self._prune_completed_events()
         self._dirty = True
 
     def complete(self, ev_id):
