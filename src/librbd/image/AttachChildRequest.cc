@@ -82,7 +82,7 @@ void AttachChildRequest<I>::v1_refresh() {
 
   using klass = AttachChildRequest<I>;
   RefreshRequest<I> *req = RefreshRequest<I>::create(
-      *m_image_ctx, false, false,
+      *m_parent_image_ctx, false, false,
       create_context_callback<klass, &klass::handle_v1_refresh>(this));
   req->send();
 }
@@ -93,10 +93,9 @@ void AttachChildRequest<I>::handle_v1_refresh(int r) {
 
   bool snap_protected = false;
   if (r == 0) {
-    m_parent_image_ctx->snap_lock.get_read();
+    RWLock::RLocker snap_locker(m_parent_image_ctx->snap_lock);
     r = m_parent_image_ctx->is_snap_protected(m_parent_snap_id,
                                               &snap_protected);
-    m_parent_image_ctx->snap_lock.put_read();
   }
 
   if (r < 0 || !snap_protected) {
