@@ -462,7 +462,6 @@ int AsyncMessenger::client_bind(const entity_addr_t &bind_addr)
     return 0;
   Mutex::Locker l(lock);
   if (did_bind) {
-    ceph_assert(my_addrs->legacy_addr() == bind_addr);
     return 0;
   }
   if (started) {
