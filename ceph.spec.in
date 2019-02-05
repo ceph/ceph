@@ -146,7 +146,7 @@ BuildRequires:	fuse-devel
 %if 0%{?rhel} == 7
 # devtoolset offers newer make and valgrind-devel, but the old ones are good
 # enough.
-BuildRequires:	devtoolset-7-gcc-c++ >= 7.3.1
+BuildRequires:	devtoolset-7-gcc-c++ >= 7.3.1-5.13
 %else
 BuildRequires:	gcc-c++
 %endif
