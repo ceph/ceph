@@ -218,7 +218,7 @@ ostream& operator<<(ostream& out, const CInode& in)
       if (it->second->issued() != it->second->pending())
 	out << "/" << ccap_string(it->second->issued());
       out << "/" << ccap_string(it->second->wanted())
-	  << "@" << it->second->get_last_sent();
+	  << "@" << it->second->get_last_seq();
     }
     out << "}";
     if (in.get_loner() >= 0 || in.get_wanted_loner() >= 0) {
@@ -4260,7 +4260,7 @@ void CInode::dump(Formatter *f) const
     f->dump_string("pending", ccap_string(it->second->pending()));
     f->dump_string("issued", ccap_string(it->second->issued()));
     f->dump_string("wanted", ccap_string(it->second->wanted()));
-    f->dump_int("last_sent", it->second->get_last_sent());
+    f->dump_int("last_sent", it->second->get_last_seq());
     f->close_section();
   }
   f->close_section();

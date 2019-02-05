@@ -184,7 +184,7 @@ public:
   void kick_cap_releases(MDRequestRef& mdr);
   void kick_issue_caps(CInode *in, client_t client, ceph_seq_t seq);
 
-  void remove_client_cap(CInode *in, client_t client);
+  void remove_client_cap(CInode *in, Capability *cap);
 
   void get_late_revoking_clients(std::list<client_t> *result, double timeout) const;
 
@@ -244,7 +244,6 @@ public:
   void issue_caps_set(set<CInode*>& inset);
   void issue_truncate(CInode *in);
   void revoke_stale_caps(Session *session);
-  void revoke_stale_caps(Capability *cap);
   void resume_stale_caps(Session *session);
   void remove_stale_leases(Session *session);
 

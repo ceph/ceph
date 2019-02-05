@@ -2123,19 +2123,27 @@ void Locker::issue_truncate(CInode *in)
     check_inode_max_size(in);
 }
 
-
-void Locker::revoke_stale_caps(Capability *cap)
+void Locker::revoke_stale_caps(Session *session)
 {
-  CInode *in = cap->get_inode();
-  if (in->state_test(CInode::STATE_EXPORTINGCAPS)) {
-    // if export succeeds, the cap will be removed. if export fails, we need to
-    // revoke the cap if it's still stale.
-    in->state_set(CInode::STATE_EVALSTALECAPS);
-    return;
-  }
+  dout(10) << "revoke_stale_caps for " << session->info.inst.name << dendl;
 
-  int issued = cap->issued();
-  if (issued & ~CEPH_CAP_PIN) {
+  std::vector<CInode*> to_eval;
+
+  for (auto p = session->caps.begin(); !p.end(); ) {
+    Capability *cap = *p;
+    ++p;
+    if (!cap->is_notable()) {
+      // the rest ones are not being revoked and don't have writeable range
+      // and don't want exclusive caps or want file read/write. They don't
+      // need recover, they don't affect eval_gather()/try_eval()
+      break;
+    }
+
+    int issued = cap->issued();
+    if (!(issued & ~CEPH_CAP_PIN))
+      continue;
+
+    CInode *in = cap->get_inode();
     dout(10) << " revoking " << ccap_string(issued) << " on " << *in << dendl;
     cap->revoke();
 
@@ -2143,26 +2151,31 @@ void Locker::revoke_stale_caps(Capability *cap)
 	in->inode.client_ranges.count(cap->get_client()))
       in->state_set(CInode::STATE_NEEDSRECOVER);
 
-    if (!in->filelock.is_stable()) eval_gather(&in->filelock);
-    if (!in->linklock.is_stable()) eval_gather(&in->linklock);
-    if (!in->authlock.is_stable()) eval_gather(&in->authlock);
-    if (!in->xattrlock.is_stable()) eval_gather(&in->xattrlock);
-
-    if (in->is_auth()) {
-      try_eval(in, CEPH_CAP_LOCKS);
-    } else {
-      request_inode_file_caps(in);
-    }
+    // eval lock/inode may finish contexts, which may modify other cap's position
+    // in the session->caps.
+    to_eval.push_back(in);
   }
-}
 
-void Locker::revoke_stale_caps(Session *session)
-{
-  dout(10) << "revoke_stale_caps for " << session->info.inst.name << dendl;
+  // invalidate the rest
+  session->inc_cap_gen();
 
-  for (xlist<Capability*>::iterator p = session->caps.begin(); !p.end(); ++p) {
-    Capability *cap = *p;
-    revoke_stale_caps(cap);
+  for (auto in : to_eval) {
+    if (in->state_test(CInode::STATE_EXPORTINGCAPS))
+      continue;
+
+    if (!in->filelock.is_stable())
+      eval_gather(&in->filelock);
+    if (!in->linklock.is_stable())
+      eval_gather(&in->linklock);
+    if (!in->authlock.is_stable())
+      eval_gather(&in->authlock);
+    if (!in->xattrlock.is_stable())
+      eval_gather(&in->xattrlock);
+
+    if (in->is_auth())
+      try_eval(in, CEPH_CAP_LOCKS);
+    else
+      request_inode_file_caps(in);
   }
 }
 
@@ -2323,7 +2336,7 @@ void Locker::calc_new_client_ranges(CInode *in, uint64_t size, bool update,
   for (map<client_t,Capability*>::iterator p = in->client_caps.begin();
        p != in->client_caps.end();
        ++p) {
-    if ((p->second->issued() | p->second->wanted()) & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER)) {
+    if ((p->second->issued() | p->second->wanted()) & (CEPH_CAP_ANY_FILE_WR)) {
       client_writeable_range_t& nr = (*new_ranges)[p->first];
       nr.range.first = 0;
       if (latest->client_ranges.count(p->first)) {
@@ -3028,7 +3041,7 @@ public:
 void Locker::kick_issue_caps(CInode *in, client_t client, ceph_seq_t seq)
 {
   Capability *cap = in->get_client_cap(client);
-  if (!cap || cap->get_last_sent() != seq)
+  if (!cap || cap->get_last_seq() != seq)
     return;
   if (in->is_frozen()) {
     dout(10) << "kick_issue_caps waiting for unfreeze on " << *in << dendl;
@@ -3509,18 +3522,20 @@ void Locker::_do_cap_release(client_t client, inodeno_t ino, uint64_t cap_id,
     eval_cap_gather(in);
     return;
   }
-  remove_client_cap(in, client);
+  remove_client_cap(in, cap);
 }
 
-/* This function DOES put the passed message before returning */
-
-void Locker::remove_client_cap(CInode *in, client_t client)
+void Locker::remove_client_cap(CInode *in, Capability *cap)
 {
+  client_t client = cap->get_client();
   // clean out any pending snapflush state
   if (!in->client_need_snapflush.empty())
     _do_null_snapflush(in, client);
 
+  bool notable = cap->is_notable();
   in->remove_client_cap(client);
+  if (!notable)
+    return;
 
   if (in->is_auth()) {
     // make sure we clear out the client byte range
