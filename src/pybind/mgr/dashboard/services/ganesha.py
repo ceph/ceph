@@ -976,3 +976,9 @@ class GaneshaConf(object):
 
     def list_daemons(self):
         return [daemon_id for daemon_id in self.daemons_conf_blocks]
+
+    def reload_daemons(self, daemons):
+        with mgr.rados.open_ioctx(self.rados_pool) as ioctx:
+            ioctx.set_namespace(self.rados_namespace)
+            for daemon_id in daemons:
+                ioctx.notify("conf-{}".format(daemon_id))
