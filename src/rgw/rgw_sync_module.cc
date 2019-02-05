@@ -50,6 +50,11 @@ int RGWCallStatRemoteObjCR::operate() {
       ldout(sync_env->cct, 0) << "RGWStatRemoteObjCR() returned " << retcode << dendl;
       return set_cr_error(retcode);
     }
+    if (attrs.find(RGW_ATTR_CONTENT_TYPE) == attrs.end()) {
+      bufferlist bl;
+      bl.append("binary/octet-stream");
+      attrs.emplace(RGW_ATTR_CONTENT_TYPE, std::move(bl));
+    }
     ldout(sync_env->cct, 20) << "stat of remote obj: z=" << sync_env->source_zone
                              << " b=" << bucket_info.bucket << " k=" << key
                              << " size=" << size << " mtime=" << mtime << dendl;
