@@ -985,7 +985,6 @@ void ProtocolV2::write_event() {
       } else if (r > 0)
         break;
     } while (can_write);
-    connection->write_lock.unlock();
 
     // if r > 0 mean data still lefted, so no need _try_send.
     if (r == 0) {
@@ -1004,6 +1003,7 @@ void ProtocolV2::write_event() {
         r = connection->_try_send();
       }
     }
+    connection->write_lock.unlock();
 
     connection->logger->tinc(l_msgr_running_send_time,
                              ceph::mono_clock::now() - start);
