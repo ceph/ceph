@@ -2,10 +2,10 @@ import { Component, NgZone } from '@angular/core';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { ActivatedRouteSnapshot, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
+
 import { of as observableOf } from 'rxjs';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
-
 import { FeatureTogglesGuardService } from './feature-toggles-guard.service';
 import { FeatureTogglesService } from './feature-toggles.service';
 

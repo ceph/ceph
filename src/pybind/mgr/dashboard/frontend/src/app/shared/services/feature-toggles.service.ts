@@ -3,6 +3,7 @@ import { Injectable } from '@angular/core';
 
 import { Observable, timer } from 'rxjs';
 import { flatMap, shareReplay } from 'rxjs/operators';
+
 import { ServicesModule } from './services.module';
 
 export type FeatureTogglesMap = Map<string, boolean>;
