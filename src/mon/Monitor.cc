@@ -2897,6 +2897,13 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     f->close_section();
 
     f->dump_object("servicemap", mgrstatmon()->get_service_map());
+
+    f->open_object_section("progress_events");
+    for (auto& i : mgrstatmon()->get_progress_events()) {
+      f->dump_object(i.first.c_str(), i.second);
+    }
+    f->close_section();
+
     f->close_section();
   } else {
     ss << "  cluster:\n";
@@ -2949,6 +2956,23 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 
     ss << "\n \n  data:\n";
     mgrstatmon()->print_summary(NULL, &ss);
+
+    auto& pem = mgrstatmon()->get_progress_events();
+    if (!pem.empty()) {
+      ss << "\n \n  progress:\n";
+      for (auto& i : pem) {
+	ss << "    " << i.second.message << "\n";
+	ss << "      [";
+	unsigned j;
+	for (j=0; j < i.second.progress * 30; ++j) {
+	  ss << '=';
+	}
+	for (; j < 30; ++j) {
+	  ss << '.';
+	}
+	ss << "]\n";
+      }
+    }
     ss << "\n ";
   }
 }
