@@ -123,20 +123,30 @@ void AuthRegistry::_refresh_config()
 
   // if we have no keyring, filter out cephx
   _no_keyring_disabled_cephx = false;
-  KeyRing k;
-  int r = k.from_ceph_context(cct);
-  if (r == -ENOENT) {
-    for (auto *p : {&cluster_methods, &service_methods, &client_methods}) {
-      auto q = std::find(p->begin(), p->end(), CEPH_AUTH_CEPHX);
-      if (q != p->end()) {
-	p->erase(q);
-	_no_keyring_disabled_cephx = true;
-      }
+  bool any_cephx = false;
+  for (auto *p : {&cluster_methods, &service_methods, &client_methods}) {
+    auto q = std::find(p->begin(), p->end(), CEPH_AUTH_CEPHX);
+    if (q != p->end()) {
+      any_cephx = true;
+      break;
     }
   }
-  if (_no_keyring_disabled_cephx) {
-    lderr(cct) << "no keyring found at " << cct->_conf->keyring
+  if (any_cephx) {
+    KeyRing k;
+    int r = k.from_ceph_context(cct);
+    if (r == -ENOENT) {
+      for (auto *p : {&cluster_methods, &service_methods, &client_methods}) {
+	auto q = std::find(p->begin(), p->end(), CEPH_AUTH_CEPHX);
+	if (q != p->end()) {
+	  p->erase(q);
+	  _no_keyring_disabled_cephx = true;
+	}
+      }
+    }
+    if (_no_keyring_disabled_cephx) {
+      lderr(cct) << "no keyring found at " << cct->_conf->keyring
 	       << ", disabling cephx" << dendl;
+    }
   }
 }
 
