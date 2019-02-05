@@ -305,6 +305,7 @@ cdef extern from "rados/librados.h" nogil:
     void rados_read_op_set_flags(rados_read_op_t read_op, int flags)
     int rados_omap_get_next(rados_omap_iter_t iter, const char * const* key, const char * const* val, size_t * len)
     void rados_omap_get_end(rados_omap_iter_t iter)
+    int rados_notify2(rados_ioctx_t io, const char * o, const char *buf, int buf_len, uint64_t timeout_ms, char **reply_buffer, size_t *reply_buffer_len)
 
 
 LIBRADOS_OP_FLAG_EXCL = _LIBRADOS_OP_FLAG_EXCL
@@ -3071,6 +3072,40 @@ returned %d, but should return zero on success." % (self.name, ret))
         if ret < 0:
             raise make_ex(ret, "Failed to delete key %r xattr %r" %
                           (key, xattr_name))
+        return True
+
+    @requires(('obj', str_type), ('msg', str_type), ('timeout_ms', int))
+    def notify(self, obj, msg='', timeout_ms=5000):
+        """
+        Send a rados notification to an object.
+
+        :param obj: the name of the object to notify
+        :type obj: str
+        :param msg: optional message to send in the notification
+        :type msg: str
+        :param timeout_ms: notify timeout (in ms)
+        :type timeout_ms: int
+
+        :raises: :class:`TypeError`
+        :raises: :class:`Error`
+        :returns: bool - True on success, otherwise raise an error
+        """
+        self.require_ioctx_open()
+
+        msglen = len(msg)
+        obj = cstr(obj, 'obj')
+        msg = cstr(msg, 'msg')
+        cdef:
+            char *_obj = obj
+            char *_msg = msg
+            int _msglen = msglen
+            uint64_t _timeout_ms = timeout_ms
+
+        with nogil:
+            ret = rados_notify2(self.io, _obj, _msg, _msglen, _timeout_ms,
+                                NULL, NULL)
+        if ret < 0:
+            raise make_ex(ret, "Failed to notify %r" % (obj))
         return True
 
     def list_objects(self):
