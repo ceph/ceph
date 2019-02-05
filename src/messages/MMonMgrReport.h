@@ -24,13 +24,14 @@ class MMonMgrReport : public MessageInstance<MMonMgrReport, PaxosServiceMessage>
 public:
   friend factory;
 private:
-  static constexpr int HEAD_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
   // PGMapDigest is in data payload
   health_check_map_t health_checks;
   bufferlist service_map_bl;  // encoded ServiceMap
+  std::map<std::string,ProgressEvent> progress_events;
 
   MMonMgrReport()
     : MessageInstance(MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION)
@@ -42,7 +43,8 @@ public:
   std::string_view get_type_name() const override { return "monmgrreport"; }
 
   void print(ostream& out) const override {
-    out << get_type_name() << "(" << health_checks.checks.size() << " checks)";
+    out << get_type_name() << "(" << health_checks.checks.size() << " checks, "
+	<< progress_events.size() << " progress events)";
   }
 
   void encode_payload(uint64_t features) override {
@@ -50,12 +52,16 @@ public:
     paxos_encode();
     encode(health_checks, payload);
     encode(service_map_bl, payload);
+    if (header.version >= 2) {
+      encode(progress_events, payload);
+    }
   }
   void decode_payload() override {
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(health_checks, p);
     decode(service_map_bl, p);
+    decode(progress_events, p);
   }
 };
 
