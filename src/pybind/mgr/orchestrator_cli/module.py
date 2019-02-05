@@ -2,12 +2,11 @@ import errno
 import json
 
 try:
-    from typing import Dict
+    from typing import Dict, List
 except ImportError:
     pass  # just for type checking.
 
 from functools import wraps
-from typing import List
 
 from mgr_module import MgrModule, HandleCommandResult, CLIWriteCommand, CLIReadCommand
 

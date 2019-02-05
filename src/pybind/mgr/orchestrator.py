@@ -6,6 +6,8 @@ Please see the ceph-mgr module developer's guide for more information.
 """
 import six
 
+from mgr_util import format_bytes
+
 try:
     from typing import TypeVar, Generic, List, Optional, Union, Tuple
     T = TypeVar('T')
@@ -694,26 +696,59 @@ class InventoryDevice(object):
     is permitted to support no extended properties (only normal block
     devices)
     """
-    def __init__(self):
-        self.blank = False
-        self.type = None  # 'ssd', 'hdd', 'nvme'
-        self.id = None  # unique within a node (or globally if you like).
-        self.size = None  # byte integer.
-        self.rotates = False # indicates if it is a spinning disk
-        self.available = False # can be used to create a new OSD?
-        self.dev_id = None  # vendor/model
-        self.extended = {}  # arbitrary JSON-serializable object
+    def __init__(self, blank=False, type=None, id=None, size=None,
+                 rotates=False, available=False, dev_id=None, extended=None,
+                 metadata_space_free=None):
+        # type: (bool, str, str, int, bool, bool. str, dict, bool) -> None
+
+        self.blank = blank
+
+        #: 'ssd', 'hdd', 'nvme'
+        self.type = type
+
+        #: unique within a node (or globally if you like).
+        self.id = id
+
+        #: byte integer.
+        self.size = size
+
+        #: indicates if it is a spinning disk
+        self.rotates = rotates
+
+        #: can be used to create a new OSD?
+        self.available = available
+
+        #: vendor/model
+        self.dev_id = dev_id
+
+        #: arbitrary JSON-serializable object
+        self.extended = extended if extended is not None else extended
 
         # If this drive is not empty, but is suitable for appending
         # additional journals, wals, or bluestore dbs, then report
         # how much space is available.
-        self.metadata_space_free = None
+        self.metadata_space_free = metadata_space_free
 
     def to_json(self):
         return dict(type=self.type, blank=self.blank, id=self.id,
                     size=self.size, rotates=self.rotates,
                     available=self.available, dev_id=self.dev_id,
-                    **self.extended)
+                    extended=self.extended)
+
+    @classmethod
+    def from_ceph_volume_inventory(cls, data):
+        # TODO: change InventoryDevice itself to mirror c-v inventory closely!
+
+        dev = InventoryDevice()
+        dev.id = data["path"]
+        dev.type = 'hdd' if data["sys_api"]["rotational"] == "1" else 'sdd/nvme'
+        dev.size = data["sys_api"]["size"]
+        dev.rotates = data["sys_api"]["rotational"] == "1"
+        dev.available = data["available"]
+        dev.dev_id = "%s/%s" % (data["sys_api"]["vendor"],
+                                data["sys_api"]["model"])
+        dev.extended = data
+        return dev
 
     def pretty_print(self, only_header=False):
         """Print a human friendly line with the information of the device
@@ -730,7 +765,7 @@ class InventoryDevice(object):
             return row_format.format("Device Path", "Type", "Size", "Rotates",
                                      "Available", "Model")
         else:
-            return row_format.format(self.id, self.type, self.size,
+            return row_format.format(self.id, self.type, format_bytes(self.size, 5, colored=False),
                                      str(self.rotates), str(self.available),
                                      self.dev_id)
 
