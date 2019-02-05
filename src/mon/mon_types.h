@@ -591,4 +591,28 @@ inline ostream& operator<<(ostream& out, const mon_feature_t& f) {
   return out;
 }
 
+
+struct ProgressEvent {
+  string message;                  ///< event description
+  float progress;                  ///< [0..1]
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(message, bl);
+    encode(progress, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& p) {
+    DECODE_START(1, p);
+    decode(message, p);
+    decode(progress, p);
+    DECODE_FINISH(p);
+  }
+  void dump(Formatter *f) const {
+    f->dump_string("message", message);
+    f->dump_float("progress", progress);
+  }
+};
+WRITE_CLASS_ENCODER(ProgressEvent)
+
 #endif

@@ -25,6 +25,7 @@
 #include "common/LogClient.h"
 #include "mon/MgrMap.h"
 #include "mon/MonCommand.h"
+#include "mon/mon_types.h"
 
 #include "DaemonState.h"
 #include "ClusterState.h"
@@ -49,6 +50,7 @@ class ActivePyModules
   DaemonServer &server;
   PyModuleRegistry &py_module_registry;
 
+  map<std::string,ProgressEvent> progress_events;
 
   mutable Mutex lock{"ActivePyModules::lock"};
 
@@ -118,6 +120,13 @@ public:
   void set_health_checks(const std::string& module_name,
 			 health_check_map_t&& checks);
   void get_health_checks(health_check_map_t *checks);
+
+  void update_progress_event(const std::string& evid,
+			     const std::string& desc,
+			     float progress);
+  void complete_progress_event(const std::string& evid);
+  void clear_all_progress_events();
+  void get_progress_events(std::map<std::string,ProgressEvent>* events);
 
   void config_notify();
 
