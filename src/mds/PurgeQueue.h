@@ -106,6 +106,7 @@ protected:
   CephContext *cct;
   const mds_rank_t rank;
   Mutex lock;
+  bool readonly = false;
 
   int64_t metadata_pool;
 
@@ -134,7 +135,7 @@ protected:
 
   uint32_t _calculate_ops(const PurgeItem &item) const;
 
-  bool can_consume();
+  bool _can_consume();
 
   // How many bytes were remaining when drain() was first called,
   // used for indicating progress.
@@ -163,6 +164,8 @@ protected:
 
   bool recovered;
   std::list<Context*> waiting_for_recovery;
+
+  void _go_readonly(int r);
 
 public:
   void init();
