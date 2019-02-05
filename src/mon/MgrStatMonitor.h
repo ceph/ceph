@@ -13,10 +13,12 @@ class MgrStatMonitor : public PaxosService {
   version_t version = 0;
   PGMapDigest digest;
   ServiceMap service_map;
+  std::map<std::string,ProgressEvent> progress_events;
 
   // pending commit
   PGMapDigest pending_digest;
   health_check_map_t pending_health_checks;
+  std::map<std::string,ProgressEvent> pending_progress_events;
   bufferlist pending_service_map_bl;
 
 public:
@@ -62,6 +64,10 @@ public:
 
   const ServiceMap& get_service_map() const {
     return service_map;
+  }
+
+  const std::map<std::string,ProgressEvent>& get_progress_events() {
+    return progress_events;
   }
 
   // pg stat access
