@@ -41,7 +41,8 @@ class NFSGaneshaExports(RESTController):
     @NfsTask('create', {'path': '{path}', 'fsal': '{fsal.name}',
                         'cluster_id': '{cluster_id}'}, 2.0)
     def create(self, path, cluster_id, daemons, pseudo, tag, access_type,
-               squash, security_label, protocols, transports, fsal, clients):
+               squash, security_label, protocols, transports, fsal, clients,
+               reload_daemons=True):
         if fsal['name'] not in Ganesha.fsals_available():
             raise NFSException("Cannot create this export. "
                                "FSAL '{}' cannot be managed by the dashboard."
@@ -62,7 +63,8 @@ class NFSGaneshaExports(RESTController):
             'fsal': fsal,
             'clients': clients
         })
-        Ganesha.reload_daemons(cluster_id, daemons)
+        if reload_daemons:
+            ganesha_conf.reload_daemons(daemons)
         return ganesha_conf.get_export(ex_id).to_dict()
 
     def get(self, cluster_id, export_id):
@@ -75,7 +77,8 @@ class NFSGaneshaExports(RESTController):
     @NfsTask('edit', {'cluster_id': '{cluster_id}', 'export_id': '{export_id}'},
              2.0)
     def set(self, cluster_id, export_id, path, daemons, pseudo, tag, access_type,
-            squash, security_label, protocols, transports, fsal, clients):
+            squash, security_label, protocols, transports, fsal, clients,
+            reload_daemons=True):
         export_id = int(export_id)
         ganesha_conf = GaneshaConf.instance(cluster_id)
 
@@ -106,12 +109,13 @@ class NFSGaneshaExports(RESTController):
         for d_id in old_export.daemons:
             if d_id not in daemons:
                 daemons.append(d_id)
-        Ganesha.reload_daemons(cluster_id, daemons)
+        if reload_daemons:
+            ganesha_conf.reload_daemons(daemons)
         return ganesha_conf.get_export(export_id).to_dict()
 
     @NfsTask('delete', {'cluster_id': '{cluster_id}',
                         'export_id': '{export_id}'}, 2.0)
-    def delete(self, cluster_id, export_id):
+    def delete(self, cluster_id, export_id, reload_daemons=True):
         export_id = int(export_id)
         ganesha_conf = GaneshaConf.instance(cluster_id)
 
@@ -119,7 +123,8 @@ class NFSGaneshaExports(RESTController):
             raise cherrypy.HTTPError(404)
 
         export = ganesha_conf.remove_export(export_id)
-        Ganesha.reload_daemons(cluster_id, export.daemons)
+        if reload_daemons:
+            ganesha_conf.reload_daemons(export.daemons)
 
 
 @ApiController('/nfs-ganesha/daemon')
