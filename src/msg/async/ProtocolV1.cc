@@ -1963,6 +1963,13 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   if (existing == connection) {
     existing = nullptr;
   }
+  if (existing && existing->protocol->proto_type != 1) {
+    ldout(cct,1) << __func__ << " existing " << existing << " proto "
+		 << existing->protocol.get() << " version is "
+		 << existing->protocol->proto_type << ", marking down" << dendl;
+    existing->mark_down();
+    existing = nullptr;
+  }
 
   if (existing) {
     // There is no possible that existing connection will acquire this
@@ -1970,15 +1977,11 @@ CtPtr ProtocolV1::handle_connect_message_2() {
     existing->lock.lock();  // skip lockdep check (we are locking a second
                             // AsyncConnection here)
 
-    ProtocolV1 *exproto = dynamic_cast<ProtocolV1 *>(existing->protocol.get());
     ldout(cct,10) << __func__ << " existing=" << existing << " exproto="
-		  << exproto << dendl;
-    assert(exproto->proto_type == 1);
-
-    if (!exproto) {
-      ldout(cct, 1) << __func__ << " existing=" << existing << dendl;
-      ceph_assert(false);
-    }
+		  << existing->protocol.get() << dendl;
+    ProtocolV1 *exproto = dynamic_cast<ProtocolV1 *>(existing->protocol.get());
+    ceph_assert(exproto);
+    ceph_assert(exproto->proto_type == 1);
 
     if (exproto->state == CLOSED) {
       ldout(cct, 1) << __func__ << " existing " << existing
