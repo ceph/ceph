@@ -350,6 +350,10 @@
           <context context-type="linenumber">38</context>
         </context-group>
         <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
+          <context context-type="linenumber">137</context>
+        </context-group>
+        <context-group purpose="location">
           <context context-type="sourcefile">app/shared/components/confirmation-modal/confirmation-modal.component.html</context>
           <context context-type="linenumber">21</context>
         </context-group>
@@ -436,6 +440,22 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">326</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
+          <context context-type="linenumber">25</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
+          <context context-type="linenumber">60</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
+          <context context-type="linenumber">84</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
+          <context context-type="linenumber">119</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
@@ -681,6 +701,10 @@
           <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">223</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
+          <context context-type="linenumber">17</context>
+        </context-group>
       </trans-unit><trans-unit id="bbf0b34a3fcc80800fcb44b9e1e86931a530dfe3" datatype="html">
         <source>Usernames must have a length of 8 to 64 characters and
                         can only contain letters, &apos;.&apos;, &apos;@&apos;, &apos;-&apos;, &apos;_&apos; or &apos;:&apos;.</source>
@@ -699,6 +723,10 @@
           <context context-type="linenumber">245</context>
         </context-group>
         <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
+          <context context-type="linenumber">39</context>
+        </context-group>
+        <context-group purpose="location">
           <context context-type="sourcefile">app/core/auth/user-form/user-form.component.html</context>
           <context context-type="linenumber">42</context>
         </context-group>
@@ -715,11 +743,19 @@
           <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">281</context>
         </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
+          <context context-type="linenumber">74</context>
+        </context-group>
       </trans-unit><trans-unit id="0cf73dbebe99b737c4d288788182fc356e3c93d3" datatype="html">
         <source>Mutual Password</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">305</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
+          <context context-type="linenumber">98</context>
         </context-group>
       </trans-unit><trans-unit id="c58e136a292acf8ebccfa6d777fdff9f392b6ee2" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and
@@ -830,6 +866,59 @@
           <context context-type="sourcefile">app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component.html</context>
           <context context-type="linenumber">25</context>
         </context-group>
+      </trans-unit><trans-unit id="6803e31b7395d94934e091a49a9524026b59b018" datatype="html">
+        <source>Discovery Authentication</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
+          <context context-type="linenumber">3</context>
+        </context-group>
+      </trans-unit><trans-unit id="0214f773f8e394f50f953f39962e352d7863e959" datatype="html">
+        <source>Usernames must have a length of 8 to 64 characters and
+              can only contain letters, &apos;.&apos;, &apos;@&apos;, &apos;-&apos;, &apos;_&apos; or &apos;:&apos;.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
+          <context context-type="linenumber">29</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
+          <context context-type="linenumber">88</context>
+        </context-group>
+      </trans-unit><trans-unit id="fcbd385c9738f3c376e7f0935c9ac1ae6f863476" datatype="html">
+        <source>Passwords must have a length of 12 to 16 characters
+              and can only contain letters, &apos;@&apos;, &apos;-&apos; or &apos;_&apos;.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
+          <context context-type="linenumber">64</context>
+        </context-group>
+      </trans-unit><trans-unit id="fd0c0472536d61ac9f5bc62d5f9ed01673cf3603" datatype="html">
+        <source>Passwords must have a length of 12 to 16 characters and
+              can only contain letters, &apos;@&apos;, &apos;-&apos; or &apos;_&apos;.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
+          <context context-type="linenumber">123</context>
+        </context-group>
+      </trans-unit><trans-unit id="71c77bb8cecdf11ec3eead24dd1ba506573fa9cd" datatype="html">
+        <source>Submit</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
+          <context context-type="linenumber">133</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/osd/osd-flags-modal/osd-flags-modal.component.html</context>
+          <context context-type="linenumber">34</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/osd/osd-recv-speed-modal/osd-recv-speed-modal.component.html</context>
+          <context context-type="linenumber">87</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/osd/osd-scrub-modal/osd-scrub-modal.component.html</context>
+          <context context-type="linenumber">21</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/mirroring/pool-edit-peer-modal/pool-edit-peer-modal.component.html</context>
+          <context context-type="linenumber">106</context>
+        </context-group>
       </trans-unit><trans-unit id="53a583cd5f15059cc958b7d547f72cc78f68e123" datatype="html">
         <source>Please consult the <x id="START_LINK" ctype="x-a" equiv-text="&lt;a&gt;"/>documentation<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a&gt;"/>
     on how to configure and enable the iSCSI Targets management functionality.</source>
@@ -848,6 +937,12 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-list/iscsi-target-list.component.html</context>
           <context context-type="linenumber">4</context>
+        </context-group>
+      </trans-unit><trans-unit id="8f4c079a38df7c3b64a4dfe8daa4d02aeffefbfa" datatype="html">
+        <source>Set discovery authentication</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/iscsi-target-list/iscsi-target-list.component.html</context>
+          <context context-type="linenumber">39</context>
         </context-group>
       </trans-unit><trans-unit id="beb1391a148bd032914f49a2665dcc414a5d56d0" datatype="html">
         <source>{VAR_SELECT, select, editing {Edit} cloning {Clone} copying {Copy} other {Add} }</source>
@@ -1260,24 +1355,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-flags-modal/osd-flags-modal.component.html</context>
           <context context-type="linenumber">3</context>
-        </context-group>
-      </trans-unit><trans-unit id="71c77bb8cecdf11ec3eead24dd1ba506573fa9cd" datatype="html">
-        <source>Submit</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/cluster/osd/osd-flags-modal/osd-flags-modal.component.html</context>
-          <context context-type="linenumber">34</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/cluster/osd/osd-recv-speed-modal/osd-recv-speed-modal.component.html</context>
-          <context context-type="linenumber">87</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/cluster/osd/osd-scrub-modal/osd-scrub-modal.component.html</context>
-          <context context-type="linenumber">21</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/mirroring/pool-edit-peer-modal/pool-edit-peer-modal.component.html</context>
-          <context context-type="linenumber">106</context>
         </context-group>
       </trans-unit><trans-unit id="c35f9c5f268a514b970cc55e9a5dc4bed0988e7f" datatype="html">
         <source>OSD Recovery Priority</source>
@@ -3550,6 +3627,20 @@
         <source>Current</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-details/iscsi-target-details.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="bfd67d01ffc87759d7f29ecb67e64ec6c1672fdd" datatype="html">
+        <source>Discovery authentication was updated.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="8414a5cb9d71cc1b21b10e4a9d1f2dad558f3361" datatype="html">
+        <source>Discovery authentication</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>

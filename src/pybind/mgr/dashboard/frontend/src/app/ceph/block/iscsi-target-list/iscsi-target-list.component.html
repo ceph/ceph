@@ -29,6 +29,15 @@
                       [selection]="selection"
                       [tableActions]="tableActions">
     </cd-table-actions>
+
+    <button class="btn btn-sm btn-default btn-label"
+            type="button"
+            (click)="configureDiscoveryAuth()">
+      <i class="fa fa-fw fa-key-modern"
+         aria-hidden="true">
+      </i>
+      <ng-container i18n>Set discovery authentication</ng-container>
+    </button>
   </div>
 
   <cd-iscsi-target-details cdTableDetail

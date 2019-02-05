@@ -1,0 +1,142 @@
+<cd-modal [modalRef]="bsModalRef">
+  <ng-container class="modal-title"
+                i18n>Discovery Authentication</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="discoveryForm"
+          class="form-horizontal"
+          #formDir="ngForm"
+          [formGroup]="discoveryForm"
+          novalidate>
+      <div class="modal-body">
+        <!-- User -->
+        <div class="form-group"
+             [ngClass]="{'has-error': discoveryForm.showError('user', formDir)}">
+          <label class="control-label col-sm-4"
+                 for="user"
+                 i18n>User</label>
+          <div class="col-sm-8">
+            <input id="user"
+                   class="form-control"
+                   formControlName="user"
+                   type="text">
+            <span class="help-block"
+                  *ngIf="discoveryForm.showError('user', formDir, 'required')"
+                  i18n>This field is required.</span>
+
+            <span class="help-block"
+                  *ngIf="discoveryForm.showError('user', formDir, 'pattern')"
+                  i18n>Usernames must have a length of 8 to 64 characters and
+              can only contain letters, '.', '@', '-', '_' or ':'.</span>
+          </div>
+        </div>
+
+        <!-- Password -->
+        <div class="form-group"
+             [ngClass]="{'has-error': discoveryForm.showError('password', formDir)}">
+          <label class="control-label col-sm-4"
+                 for="password"
+                 i18n>Password</label>
+          <div class="col-sm-8">
+            <div class="input-group">
+              <input id="password"
+                     class="form-control"
+                     formControlName="password"
+                     type="password">
+
+              <span class="input-group-btn">
+                <button type="button"
+                        class="btn btn-default"
+                        cdPasswordButton="password">
+                </button>
+                <button type="button"
+                        class="btn btn-default"
+                        cdCopy2ClipboardButton="password">
+                </button>
+              </span>
+            </div>
+            <span class="help-block"
+                  *ngIf="discoveryForm.showError('password', formDir, 'required')"
+                  i18n>This field is required.</span>
+
+            <span class="help-block"
+                  *ngIf="discoveryForm.showError('password', formDir, 'pattern')"
+                  i18n>Passwords must have a length of 12 to 16 characters
+              and can only contain letters, '@', '-' or '_'.</span>
+          </div>
+        </div>
+
+        <!-- mutual_user -->
+        <div class="form-group"
+             [ngClass]="{'has-error': discoveryForm.showError('mutual_user', formDir)}">
+          <label class="control-label col-sm-4"
+                 for="mutual_user">
+            <ng-container i18n>Mutual User</ng-container>
+          </label>
+          <div class="col-sm-8">
+            <input id="mutual_user"
+                   class="form-control"
+                   formControlName="mutual_user"
+                   type="text">
+
+            <span class="help-block"
+                  *ngIf="discoveryForm.showError('mutual_user', formDir, 'required')"
+                  i18n>This field is required.</span>
+
+            <span class="help-block"
+                  *ngIf="discoveryForm.showError('mutual_user', formDir, 'pattern')"
+                  i18n>Usernames must have a length of 8 to 64 characters and
+              can only contain letters, '.', '@', '-', '_' or ':'.</span>
+          </div>
+        </div>
+
+        <!-- mutual_password -->
+        <div class="form-group"
+             [ngClass]="{'has-error': discoveryForm.showError('mutual_password', formDir)}">
+          <label class="control-label col-sm-4"
+                 for="mutual_password"
+                 i18n>Mutual Password</label>
+          <div class="col-sm-8">
+            <div class="input-group">
+              <input id="mutual_password"
+                     class="form-control"
+                     formControlName="mutual_password"
+                     type="mutual_password">
+
+              <span class="input-group-btn">
+                <button type="button"
+                        class="btn btn-default"
+                        cdPasswordButton="mutual_password">
+                </button>
+                <button type="button"
+                        class="btn btn-default"
+                        cdCopy2ClipboardButton="mutual_password">
+                </button>
+              </span>
+            </div>
+            <span class="help-block"
+                  *ngIf="discoveryForm.showError('mutual_password', formDir, 'required')"
+                  i18n>This field is required.</span>
+
+            <span class="help-block"
+                  *ngIf="discoveryForm.showError('mutual_password', formDir, 'pattern')"
+                  i18n>Passwords must have a length of 12 to 16 characters and
+              can only contain letters, '@', '-' or '_'.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="button-group text-right">
+          <cd-submit-button (submitAction)="submitAction()"
+                            [form]="discoveryForm"
+                            i18n>Submit</cd-submit-button>
+
+          <button class="btn btn-link btn-sm"
+                  (click)="bsModalRef.hide()"
+                  i18n>Cancel</button>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>
