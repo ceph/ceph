@@ -10,7 +10,7 @@ import { AuthService } from '../../../shared/api/auth.service';
 import { RoleService } from '../../../shared/api/role.service';
 import { UserService } from '../../../shared/api/user.service';
 import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
-import { SelectBadgesMessages } from '../../../shared/components/select-badges/select-badges-messages.model';
+import { SelectMessages } from '../../../shared/components/select/select-messages.model';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
@@ -37,7 +37,7 @@ export class UserFormComponent implements OnInit {
   userFormMode = UserFormMode;
   mode: UserFormMode;
   allRoles: Array<UserFormRoleModel>;
-  messages: SelectBadgesMessages;
+  messages = new SelectMessages({ empty: 'There are no roles.' }, this.i18n);
 
   constructor(
     private authService: AuthService,
@@ -51,7 +51,7 @@ export class UserFormComponent implements OnInit {
     private i18n: I18n
   ) {
     this.createForm();
-    this.messages = new SelectBadgesMessages({ empty: 'There are no roles.' }, this.i18n);
+    this.messages = new SelectMessages({ empty: 'There are no roles.' }, this.i18n);
   }
 
   createForm() {

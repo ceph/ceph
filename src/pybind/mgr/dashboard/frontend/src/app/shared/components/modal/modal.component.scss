@@ -9,3 +9,9 @@
   @include hf;
   border-radius: 0 0 5px 5px;
 }
+
+::ng-deep .modal-body {
+  max-height: 70vh;
+  overflow-y: auto;
+  overflow-x: hidden;
+}

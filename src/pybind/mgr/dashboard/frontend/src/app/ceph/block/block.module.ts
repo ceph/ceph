@@ -3,6 +3,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
+import { TreeModule } from 'ng2-tree';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
@@ -11,6 +12,12 @@ import { TabsModule } from 'ngx-bootstrap/tabs';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { SharedModule } from '../../shared/shared.module';
+import { IscsiTabsComponent } from './iscsi-tabs/iscsi-tabs.component';
+import { IscsiTargetDetailsComponent } from './iscsi-target-details/iscsi-target-details.component';
+import { IscsiTargetFormComponent } from './iscsi-target-form/iscsi-target-form.component';
+import { IscsiTargetImageSettingsModalComponent } from './iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component';
+import { IscsiTargetIqnSettingsModalComponent } from './iscsi-target-iqn-settings-modal/iscsi-target-iqn-settings-modal.component';
+import { IscsiTargetListComponent } from './iscsi-target-list/iscsi-target-list.component';
 import { IscsiComponent } from './iscsi/iscsi.component';
 import { MirroringModule } from './mirroring/mirroring.module';
 import { RbdDetailsComponent } from './rbd-details/rbd-details.component';
@@ -30,7 +37,10 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     RbdSnapshotFormComponent,
     RbdTrashMoveModalComponent,
     RbdTrashRestoreModalComponent,
-    RbdTrashPurgeModalComponent
+    RbdTrashPurgeModalComponent,
+    IscsiTargetDetailsComponent,
+    IscsiTargetImageSettingsModalComponent,
+    IscsiTargetIqnSettingsModalComponent
   ],
   imports: [
     CommonModule,
@@ -44,11 +54,14 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     TooltipModule.forRoot(),
     ModalModule.forRoot(),
     SharedModule,
-    RouterModule
+    RouterModule,
+    TreeModule
   ],
   declarations: [
     RbdListComponent,
     IscsiComponent,
+    IscsiTabsComponent,
+    IscsiTargetListComponent,
     RbdDetailsComponent,
     RbdFormComponent,
     RbdSnapshotListComponent,
@@ -57,7 +70,11 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     RbdTrashMoveModalComponent,
     RbdImagesComponent,
     RbdTrashRestoreModalComponent,
-    RbdTrashPurgeModalComponent
+    RbdTrashPurgeModalComponent,
+    IscsiTargetDetailsComponent,
+    IscsiTargetFormComponent,
+    IscsiTargetImageSettingsModalComponent,
+    IscsiTargetIqnSettingsModalComponent
   ]
 })
 export class BlockModule {}
