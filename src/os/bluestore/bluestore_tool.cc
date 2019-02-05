@@ -493,21 +493,32 @@ int main(int argc, char **argv)
   }
   else if (action == "bluefs-bdev-expand") {
     BlueFS *fs = open_bluefs(cct.get(), path, devs);
-    cout << "start:" << std::endl;
     fs->dump_block_extents(cout);
+    cout << "Expanding..." << std::endl;
     for (int devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB }) {
+      if (!fs->is_device(devid)) {
+        continue;
+      }
+      if (!fs->is_device_expandable(devid)) {
+	cout << devid
+	     << " : can't be expanded. Bypassing..."
+	     << std::endl;
+	continue;
+      }
       interval_set<uint64_t> before;
       fs->get_block_extents(devid, &before);
-      if (before.empty()) continue;
+      ceph_assert(!before.empty());
       uint64_t end = before.range_end();
       uint64_t size = fs->get_block_device_size(devid);
       if (end < size) {
-	cout << "expanding dev " << devid << " from 0x" << std::hex
+	cout << devid
+	     <<" : expanding " << " from 0x" << std::hex
 	     << end << " to 0x" << size << std::dec << std::endl;
 	fs->add_block_extent(devid, end, size-end);
 	const char* path = find_device_path(devid, cct.get(), devs);
 	if (path == nullptr) {
-	  cerr << "Can't find device path for dev " << devid << std::endl;
+	  cerr << devid
+	       <<": can't find device path " << std::endl;
 	  continue;
 	}
 	bluestore_bdev_label_t label;
@@ -524,8 +535,9 @@ int main(int argc, char **argv)
 		<< cpp_strerror(r) << std::endl;
 	  continue;
 	}
-	cout << "dev " << devid << " size label updated to "
-	      << size << std::endl;
+	cout << devid
+	     <<" : size label updated to " << size
+	     << std::endl;
       }
     }
     delete fs;

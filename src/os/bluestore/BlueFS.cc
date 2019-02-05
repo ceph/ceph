@@ -327,6 +327,30 @@ int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
   return 0;
 }
 
+// returns true if specified device is attached
+bool BlueFS::is_device(unsigned id)
+{
+  return !(id >= MAX_BDEV || bdev[id] == nullptr);
+}
+
+// returns true if specified device is under full bluefs control
+// and hence can be expanded
+bool BlueFS::is_device_expandable(unsigned id)
+{
+  if (id >= MAX_BDEV || bdev[id] == nullptr) {
+    return false;
+  }
+  switch(id) {
+  case BDEV_WAL:
+    return true;
+
+  case BDEV_DB:
+    // true if DB volume is non-shared
+    return bdev[BDEV_SLOW] != nullptr;
+  }
+  return false;
+}
+
 int BlueFS::mkfs(uuid_d osd_uuid)
 {
   std::unique_lock<std::mutex> l(lock);
