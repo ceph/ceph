@@ -66,18 +66,16 @@ class Saml2(BaseController):
                                              SSO_DB.saml2.get_username_attribute(),
                                              auth.get_attributes()))
             username = username_attribute[0]
+            url_prefix = prepare_url_prefix(mgr.get_module_option('url_prefix', default=''))
             try:
                 ACCESS_CTRL_DB.get_user(username)
             except UserDoesNotExist:
-                raise cherrypy.HTTPError(400,
-                                         'SSO error - Username `{}` does not exist.'
-                                         .format(username))
+                raise cherrypy.HTTPRedirect("{}/#/sso/404".format(url_prefix))
 
             token = JwtManager.gen_token(username)
             JwtManager.set_user(JwtManager.decode_token(token))
             token = token.decode('utf-8')
             logger.debug("JWT Token: %s", token)
-            url_prefix = prepare_url_prefix(mgr.get_module_option('url_prefix', default=''))
             raise cherrypy.HTTPRedirect("{}/#/login?access_token={}".format(url_prefix, token))
         else:
             return {
