@@ -16,8 +16,11 @@
 #ifndef CEPH_CRYPTO_ONWIRE_H
 #define CEPH_CRYPTO_ONWIRE_H
 
-#include "include/types.h"
+#include <cstdint>
+#include <memory>
 
+#include "auth/Auth.h"
+#include "include/buffer.h"
 
 namespace ceph::math {
 
@@ -64,7 +67,7 @@ struct TxHandler {
   // bufferlist. The method MUST NOT be called after _final() if there
   // was no call to _reset().
   virtual void authenticated_encrypt_update(
-    ceph::bufferlist&& plaintext) = 0;
+    const ceph::bufferlist& plaintext) = 0;
 
   // Generates authentication signature and returns bufferlist crafted
   // basing on plaintext from preceding call to _update().
@@ -100,11 +103,13 @@ struct rxtx_t {
   // Hmm, isn't that too much flexbility?
   std::unique_ptr<RxHandler> rx;
   std::unique_ptr<TxHandler> tx;
+
+  static rxtx_t create_handler_pair(
+    CephContext* ctx,
+    const class AuthConnectionMeta& auth_meta,
+    bool crossed);
 };
 
-static rxtx_t create_stream_handler_pair(
-  CephContext* ctx,
-  const class AuthConnectionMeta& auth_meta);
 
 } // namespace ceph::crypto::onwire
 

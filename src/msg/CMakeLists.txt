@@ -28,6 +28,7 @@ list(APPEND msg_srcs
   async/EventSelect.cc
   async/PosixStack.cc
   async/Stack.cc
+  async/crypto_onwire.cc
   async/net_handler.cc)
 
 if(LINUX)
