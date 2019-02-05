@@ -2593,7 +2593,11 @@ void Locker::snapflush_nudge(CInode *in)
     return;
 
   CInode *head = mdcache->get_inode(in->ino());
-  assert(head);
+  // head inode gets unpinned when snapflush starts. It might get trimmed
+  // before snapflush finishes.
+  if (!head)
+    return;
+
   assert(head->is_auth());
   if (head->client_need_snapflush.empty())
     return;
