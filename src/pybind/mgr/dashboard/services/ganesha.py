@@ -144,7 +144,7 @@ class Ganesha(object):
             if RgwClient.admin_instance().is_service_online() and \
                     RgwClient.admin_instance().is_system_user():
                 result.append("RGW")
-        except (NoCredentialsException, RequestException):
+        except (NoCredentialsException, RequestException, LookupError):
             pass
         return result
 
