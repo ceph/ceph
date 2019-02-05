@@ -380,7 +380,7 @@ describe('PoolFormComponent', () => {
       fixture.detectChanges();
       const selectBadges = fixture.debugElement.query(By.directive(SelectBadgesComponent))
         .componentInstance;
-      const control = selectBadges.filter;
+      const control = selectBadges.cdSelect.filter;
       formHelper.expectValid(control);
       control.setValue('?');
       formHelper.expectError(control, 'pattern');
@@ -529,21 +529,21 @@ describe('PoolFormComponent', () => {
     let selectBadges: SelectBadgesComponent;
 
     const testAddApp = (app?: string, result?: string[]) => {
-      selectBadges.filter.setValue(app);
-      selectBadges.updateFilter();
-      selectBadges.selectOption();
+      selectBadges.cdSelect.filter.setValue(app);
+      selectBadges.cdSelect.updateFilter();
+      selectBadges.cdSelect.selectOption();
       expect(component.data.applications.selected).toEqual(result);
     };
 
     const testRemoveApp = (app: string, result: string[]) => {
-      selectBadges.removeItem(app);
+      selectBadges.cdSelect.removeItem(app);
       expect(component.data.applications.selected).toEqual(result);
     };
 
     const setCurrentApps = (apps: string[]) => {
       component.data.applications.selected = apps;
       fixture.detectChanges();
-      selectBadges.ngOnInit();
+      selectBadges.cdSelect.ngOnInit();
       return apps;
     };
 

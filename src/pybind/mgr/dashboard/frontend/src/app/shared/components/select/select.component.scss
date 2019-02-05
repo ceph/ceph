@@ -1,0 +1,19 @@
+@import '../../../../defaults';
+
+.select-menu-item {
+  display: block;
+  cursor: pointer;
+  border-bottom: 1px solid $color-transparent;
+  font-size: 12px;
+  &:hover {
+    background-color: $color-whitesmoke-gray;
+  }
+}
+.select-menu-item-icon {
+  float: left;
+  padding: 0.5em;
+  width: 3em;
+}
+.select-menu-item-content {
+  padding: 0.5em;
+}

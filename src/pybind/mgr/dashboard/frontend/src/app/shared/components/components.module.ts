@@ -21,6 +21,7 @@ import { LanguageSelectorComponent } from './language-selector/language-selector
 import { LoadingPanelComponent } from './loading-panel/loading-panel.component';
 import { ModalComponent } from './modal/modal.component';
 import { SelectBadgesComponent } from './select-badges/select-badges.component';
+import { SelectComponent } from './select/select.component';
 import { SparklineComponent } from './sparkline/sparkline.component';
 import { SubmitButtonComponent } from './submit-button/submit-button.component';
 import { UsageBarComponent } from './usage-bar/usage-bar.component';
@@ -57,7 +58,8 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     ConfirmationModalComponent,
     WarningPanelComponent,
     LanguageSelectorComponent,
-    GrafanaComponent
+    GrafanaComponent,
+    SelectComponent
   ],
   providers: [],
   exports: [
@@ -73,7 +75,8 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     ModalComponent,
     WarningPanelComponent,
     LanguageSelectorComponent,
-    GrafanaComponent
+    GrafanaComponent,
+    SelectComponent
   ],
   entryComponents: [ModalComponent, CriticalConfirmationModalComponent, ConfirmationModalComponent]
 })
