@@ -242,7 +242,7 @@ int main(int argc, char **argv)
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
-    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, bluefs-bdev-expand, bluefs-bdev-new-db, bluefs-bdev-new-wal, bluefs-bdev-migrate, show-label, set-label-key, rm-label-key, prime-osd-dir, bluefs-log-dump")
+    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, bluefs-bdev-expand, bluefs-bdev-emergency-expand, bluefs-bdev-new-db, bluefs-bdev-new-wal, bluefs-bdev-migrate, show-label, set-label-key, rm-label-key, prime-osd-dir, bluefs-log-dump")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -325,7 +325,7 @@ int main(int argc, char **argv)
     }
     inferring_bluefs_devices(devs, path);
   }
-  if (action == "bluefs-bdev-sizes" || action == "bluefs-bdev-expand") {
+  if (action == "bluefs-bdev-sizes" || action == "bluefs-bdev-expand" || action == "bluefs-bdev-emergency-expand") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -532,6 +532,15 @@ int main(int argc, char **argv)
     if (r <0) {
       cerr << "failed to expand bluestore devices: "
 	   << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+  else if (action == "bluefs-bdev-emergency-expand") {
+    BlueStore bluestore(cct.get(), path);
+    auto r = bluestore.expand_devices(cout, true);
+    if (r <0) {
+      cerr << "failed to expand bluestore devices: "
+           << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
     }
   }

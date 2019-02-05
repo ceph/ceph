@@ -2190,7 +2190,7 @@ private:
   * opens both DB and dependant super_meta, FreelistManager and allocator
   * in the proper order
   */
-  int _open_db_and_around(bool read_only);
+  int _open_db_and_around(bool read_only, bool do_bdev_expand = false);
   void _close_db_and_around();
 
   // updates legacy bluefs related recs in DB to a state valid for
@@ -2207,7 +2207,7 @@ private:
   void _close_db();
   int _open_fm(KeyValueDB::Transaction t);
   void _close_fm();
-  int _open_alloc();
+  int _open_alloc(bool do_bdev_expand = false);
   void _close_alloc();
   int _open_collections(int *errors=0);
   void _close_collections();
@@ -2395,7 +2395,7 @@ public:
   bool test_mount_in_use() override;
 
 private:
-  int _mount(bool kv_only, bool open_db=true);
+  int _mount(bool kv_only, bool open_db = true, bool do_bdev_expand = false);
 public:
   int mount() override {
     return _mount(false);
@@ -2470,7 +2470,8 @@ public:
   int migrate_to_new_bluefs_device(const set<int>& devs_source,
     int id,
     const string& path);
-  int expand_devices(ostream& out);
+  int expand_devices(ostream& out, bool recovery_from_enospc = false);
+  int check_during_expand();
   string get_device_path(unsigned id);
 
 public:

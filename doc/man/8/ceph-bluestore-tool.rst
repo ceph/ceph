@@ -57,6 +57,10 @@ Commands
 
    Instruct BlueFS to check the size of its block devices and, if they have expanded, make use of the additional space.
 
+:command:`bluefs-bdev-emergency-expand` --path *osd path*
+
+   Instruct BlueFS to check the size of its block devices and, if they have expanded, make use of the additional space. This differs from `bluefs-bdev-expand` in that it can be done in cases when bluefs is critically out of space and BlueStore cannot start. If expansion process is started but terminated, device cannot be used until expansion is restarted and finished.
+
 :command:`bluefs-bdev-new-wal` --path *osd path* --dev-target *new-device*
 
    Adds WAL device to BlueFS, fails if WAL device already exists.

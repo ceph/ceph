@@ -4719,7 +4719,7 @@ void BlueStore::_close_fm()
   fm = NULL;
 }
 
-int BlueStore::_open_alloc()
+int BlueStore::_open_alloc(bool do_bdev_expand)
 {
   ceph_assert(alloc == NULL);
   ceph_assert(bdev->get_size());
@@ -4758,6 +4758,22 @@ int BlueStore::_open_alloc()
     alloc->init_add_free(offset, length);
     ++num;
     bytes += length;
+  }
+  if (do_bdev_expand) {
+    /*
+      This code is executed by ceph-bluestore-tool's 'bluefs-bdev-expand' option.
+      It is located here to recover from fatal error of ENOSPC when rocksdb compacts tables.
+      It is necessary to allow bluefs to allocate more space BEFORE FreeListManager will
+      require rocksdb to update "B" entries.
+    */
+    uint64_t size0 = fm->get_size();
+    uint64_t new_size = bdev->get_size();
+    new_size = p2align(new_size, fm->get_alloc_size());
+    dout(1) << __func__ << " expanding bdev from=" << size0 << " to=" << new_size << dendl;
+
+    alloc->init_add_free(size0, new_size - size0);
+    num++;
+    bytes += new_size - size0;
   }
   fm->enumerate_reset();
   dout(1) << __func__ << " loaded " << byte_u_t(bytes)
@@ -5118,7 +5134,7 @@ int BlueStore::_is_bluefs(bool create, bool* ret)
 * opens both DB and dependant super_meta, FreelistManager and allocator
 * in the proper order
 */
-int BlueStore::_open_db_and_around(bool read_only)
+int BlueStore::_open_db_and_around(bool read_only, bool do_bdev_expand)
 {
   int r;
   bool do_bluefs = false;
@@ -5139,7 +5155,7 @@ int BlueStore::_open_db_and_around(bool read_only)
     if (r < 0)
       goto out_db;
 
-    r = _open_alloc();
+    r = _open_alloc(do_bdev_expand);
     if (r < 0)
       goto out_fm;
 
@@ -6277,9 +6293,51 @@ string BlueStore::get_device_path(unsigned id)
   return res;
 }
 
-int BlueStore::expand_devices(ostream& out)
+int BlueStore::expand_devices(ostream& out, bool recovery_from_enospc)
 {
-  int r = _mount(false);
+  /*
+    _mount may cause rocksdb to flush wal, causing need for more space.
+    To be sure space is available, allocator is given additional space
+    BEFORE FreeListManager is aware of that.
+
+    Here we are _mount-ing bluestore with special do_bdev_expand flag set.
+    This is the only place that should set this flag.
+
+    expand_devices process consists of steps:
+    1) open rocksdb read only
+    2) open freelist manager
+    3) open allocator and expand space
+    4) allocator is initialized with free regions obtained from bluefs
+    5) re-open rocksdb in r/w
+    6) possible wal flush, compaction, etc
+    7) fix bdev label
+    8) expand freelist
+
+    Analysis.
+    A) Failure at 6)
+    Assuming rocksdb is capable of maintaining its internal consistency.
+    Bluefs maintains list of regions used for rocksdb storage. If bluefs
+    during 6) allocated some space from Allocator, then on restart it
+    will also exclude those allocated region in 4). No override will occur.
+    If 6) allocates any extra space, fail and does not complete 8), 
+    then any fsck will fail on space allocated outside available area.
+    Still, expand_device can restart.
+    B) Failure at 7)
+    Label can be overwritten multiple times.
+    c) Failure at 8)
+    This is rocksdb atomic operation. If finished, expand successfull.
+  */
+  int r = 0;
+  if (recovery_from_enospc) {
+    string s;
+    r = write_meta("during_emergency_expand", "1");
+    if (r < 0) {
+      derr << __func__ << " unable to set emergency expand flag to device " <<
+	(path + "/block") << dendl;
+      return -EIO;
+    }
+  }
+  r = _mount(false, true, recovery_from_enospc /*do_bdev_expand*/);
   ceph_assert(r == 0);
   bluefs->dump_block_extents(out);
   out << "Expanding..." << std::endl;
@@ -6334,8 +6392,7 @@ int BlueStore::expand_devices(ostream& out)
     int r = fm->expand(size, txn);
     ceph_assert(r == 0);
     db->submit_transaction_sync(txn);
-
-     // always reference to slow device here
+    // always reference to slow device here
     string p = get_device_path(BlueFS::BDEV_SLOW);
     ceph_assert(!p.empty());
     const char* path = p.c_str();
@@ -6357,6 +6414,12 @@ int BlueStore::expand_devices(ostream& out)
       }
     }
   }
+  if (recovery_from_enospc) {
+    r = write_meta("during_emergency_expand","");
+    if (r < 0) {
+      derr << "unable to reset emergency expand marker for " << path << dendl;	
+    }
+  }
   umount();
   return r;
 }
@@ -6373,7 +6436,7 @@ void BlueStore::set_cache_shards(unsigned num)
   }
 }
 
-int BlueStore::_mount(bool kv_only, bool open_db)
+int BlueStore::_mount(bool kv_only, bool open_db, bool do_bdev_expand)
 {
   dout(1) << __func__ << " path " << path << dendl;
 
@@ -6391,6 +6454,20 @@ int BlueStore::_mount(bool kv_only, bool open_db)
     if (type != "bluestore") {
       derr << __func__ << " expected bluestore, but type is " << type << dendl;
       return -EIO;
+    }
+  }
+
+  {
+    string s;
+    int r = read_meta("during_emergency_expand",&s);
+    if (r == 0 && s != "") {
+      if (do_bdev_expand) {
+	dout(1) << __func__ << " continuing device expand" << dendl;
+      } else {
+      	derr << __func__ << " device " << (path + "/block") << " has unfinished emergency expand." << dendl;
+	derr << __func__ << " please rerun: ceph-bluestore-tool bluefs-bdev-emergency-expand." << dendl;
+        return -EIO;
+      }
     }
   }
 
@@ -6424,7 +6501,7 @@ int BlueStore::_mount(bool kv_only, bool open_db)
     goto out_fsid;
 
   if (open_db) {
-    r = _open_db_and_around(false);
+    r = _open_db_and_around(false, do_bdev_expand);
   } else {
     // we can bypass db open exclusively in case of kv_only mode
     ceph_assert(kv_only);
@@ -6793,6 +6870,16 @@ int BlueStore::_fsck(bool deep, bool repair)
   r = _lock_fsid();
   if (r < 0)
     goto out_fsid;
+
+  {
+    string s;
+    r = read_meta("during_emergency_expand",&s);
+    if (r == 0 && s != "") {
+      derr << __func__ << " device " << (path + "/block") << " has unfinished emergency expand." << dendl;
+      derr << __func__ << " please rerun: ceph-bluestore-tool bluefs-bdev-emergency-expand." << dendl;
+      goto out_fsid;      
+    }
+  }
 
   r = _open_bdev(false);
   if (r < 0)
