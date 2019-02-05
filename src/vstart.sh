@@ -680,7 +680,7 @@ start_mon() {
 		    "$keyring_fn"
 
 		# build a fresh fs monmap, mon fs
-		local str=""
+		local params=()
 		local count=0
 		local mon_host=""
 		for f in $MONS
@@ -694,7 +694,7 @@ start_mon() {
 		    if [ $msgr -eq 21 ]; then
 			A="[v2:$IP:$(($CEPH_PORT+$count)),v1:$IP:$(($CEPH_PORT+$count+1))]"
 		    fi
-		    str="$str --addv $f $A"
+		    params+=("--addv" "$f" "$A")
 		    mon_host="$mon_host $A"
 		    wconf <<EOF
 [mon.$f]
@@ -707,7 +707,7 @@ EOF
 [global]
         mon host = $mon_host
 EOF
-		prun "$CEPH_BIN/monmaptool" --create --clobber $str --print "$monmap_fn"
+		prun "$CEPH_BIN/monmaptool" --create --clobber "${params[@]}" --print "$monmap_fn"
 
 		for f in $MONS
 		do
