@@ -44,13 +44,15 @@ class Ganesha(object):
                 cluster = "_default_"
                 if location.count('/') == 0:
                     pool, namespace = location, None
-                pool, namespace = location.split('/', 1)
+                else:
+                    pool, namespace = location.split('/', 1)
             else:
                 cluster = location[:location.find(':')]
                 pool_nm = location[location.find(':')+1:]
                 if pool_nm.count('/') == 0:
                     pool, namespace = pool_nm, None
-                pool, namespace = pool_nm.split('/', 1)
+                else:
+                    pool, namespace = pool_nm.split('/', 1)
 
             if cluster in result:
                 raise NFSException("Duplicate Ganesha cluster definition in "
@@ -780,7 +782,8 @@ class GaneshaConf(object):
 
     def _read_raw_config(self):
         with mgr.rados.open_ioctx(self.rados_pool) as ioctx:
-            ioctx.set_namespace(self.rados_namespace)
+            if self.rados_namespace:
+                ioctx.set_namespace(self.rados_namespace)
             objs = ioctx.list_objects()
             for obj in objs:
                 if obj.key.startswith("export-"):
@@ -806,7 +809,8 @@ class GaneshaConf(object):
     def _write_raw_config(self, conf_block, obj):
         raw_config = GaneshaConfParser.write_conf(conf_block)
         with mgr.rados.open_ioctx(self.rados_pool) as ioctx:
-            ioctx.set_namespace(self.rados_namespace)
+            if self.rados_namespace:
+                ioctx.set_namespace(self.rados_namespace)
             ioctx.write_full(obj, raw_config.encode('utf-8'))
             logger.debug(
                 "[NFS] write configuration into rados object %s/%s/%s:\n%s",
@@ -936,7 +940,8 @@ class GaneshaConf(object):
     def _delete_export(self, export_id):
         self._persist_daemon_configuration()
         with mgr.rados.open_ioctx(self.rados_pool) as ioctx:
-            ioctx.set_namespace(self.rados_namespace)
+            if self.rados_namespace:
+                ioctx.set_namespace(self.rados_namespace)
             ioctx.remove_object("export-{}".format(export_id))
 
     def list_exports(self):
@@ -979,6 +984,7 @@ class GaneshaConf(object):
 
     def reload_daemons(self, daemons):
         with mgr.rados.open_ioctx(self.rados_pool) as ioctx:
-            ioctx.set_namespace(self.rados_namespace)
+            if self.rados_namespace:
+                ioctx.set_namespace(self.rados_namespace)
             for daemon_id in daemons:
                 ioctx.notify("conf-{}".format(daemon_id))
