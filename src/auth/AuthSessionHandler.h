@@ -59,13 +59,6 @@ struct SHA256SignatureError : public std::exception {
 
 struct DecryptionError : public std::exception {};
 
-// TODO: make this a static member of AuthSessionHandler.
-extern AuthSessionHandler *get_auth_session_handler(
-  CephContext *cct, int protocol,
-  const CryptoKey& key,
-  uint64_t features);
-
-
 struct AuthStreamHandler {
   virtual ~AuthStreamHandler() = default;
   //virtual ceph::bufferlist authenticated_encrypt(ceph::bufferlist& in) = 0;
@@ -85,5 +78,11 @@ struct AuthStreamHandler {
     CephContext* ctx,
     const class AuthConnectionMeta& auth_meta);
 };
+
+// TODO: make this a static member of AuthSessionHandler.
+extern AuthSessionHandler *get_auth_session_handler(
+  CephContext *cct, int protocol,
+  const CryptoKey& key,
+  uint64_t features);
 
 #endif
