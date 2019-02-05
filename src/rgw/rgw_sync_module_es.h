@@ -6,6 +6,33 @@
 
 #include "rgw_sync_module.h"
 
+enum class ESType {
+  /* string datatypes */
+  String, /* Deprecated Since 5.X+ */
+  Text,
+  Keyword,
+
+  /* Numeric Types */
+  Long, Integer, Short, Byte, Double, Float, Half_Float, Scaled_Float,
+
+  /* Date Type */
+  Date,
+
+  /* Boolean */
+  Boolean,
+
+  /* Binary; Must Be Base64 Encoded */
+  Binary,
+
+  /* Range Types */
+  Integer_Range, Float_Range, Long_Range, Double_Range, Date_Range,
+
+  /* A Few Specialized Types */
+  Geo_Point,
+  Ip
+};
+
+
 class RGWElasticSyncModule : public RGWSyncModule {
 public:
   RGWElasticSyncModule() {}
@@ -26,6 +53,7 @@ public:
   RGWRESTMgr *get_rest_filter(int dialect, RGWRESTMgr *orig) override;
   RGWRESTConn *get_rest_conn();
   std::string get_index_path();
+  map<string, string>& get_request_headers();
   bool supports_user_writes() override {
     return true;
   }
