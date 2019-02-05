@@ -10,6 +10,7 @@ overrides:
     conf:
       global:
         osd heartbeat grace: 40
+        debug refs: 5
       mon:
         mon osd crush smoke test: false
     log-whitelist:
