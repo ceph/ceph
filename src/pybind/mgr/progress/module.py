@@ -8,6 +8,9 @@ import json
 
 ENCODING_VERSION = 1
 
+# keep a global reference to the module so we can use it from Event methods
+_module = None
+
 
 class Event(object):
     """
@@ -23,6 +26,12 @@ class Event(object):
         self.started_at = datetime.datetime.utcnow()
 
         self.id = None
+
+    def _refresh(self):
+        global _module
+        _module.log.debug('refreshing mgr for %s (%s) at %f' % (self.id, self._message,
+                                                                self._progress))
+        _module.update_progress_event(self.id, self._message, self._progress)
 
     @property
     def message(self):
@@ -94,9 +103,11 @@ class RemoteEvent(Event):
         super(RemoteEvent, self).__init__(message, refs)
         self.id = my_id
         self._progress = 0.0
+        self._refresh()
 
     def set_progress(self, progress):
         self._progress = progress
+        self._refresh()
 
     @property
     def progress(self):
@@ -125,6 +136,7 @@ class PgRecoveryEvent(Event):
         self._progress = 0.0
 
         self.id = str(uuid.uuid4())
+        self._refresh()
 
     @property
     def evacuating_osds(self):
@@ -200,6 +212,7 @@ class PgRecoveryEvent(Event):
         completed_pgs = self._original_pg_count - len(self._pgs)
         self._progress = (completed_pgs + complete_accumulate)\
             / self._original_pg_count
+        self._refresh()
 
         log.info("Updated progress to {0} ({1})".format(
             self._progress, self._message
@@ -269,6 +282,9 @@ class Module(MgrModule):
         self._latest_osdmap = None
 
         self._dirty = False
+
+        global _module
+        _module = self
 
     def config_notify(self):
         for opt in self.MODULE_OPTIONS:
@@ -422,13 +438,14 @@ class Module(MgrModule):
         self._prune_completed_events()
 
     def _prune_completed_events(self):
-        l = len(self._completed_events)
-        if l > self.max_completed_events:
-            self._completed_events = self._completed_events[l - self.max_completed_events : l]
+        length = len(self._completed_events)
+        if length > self.max_completed_events:
+            self._completed_events = self._completed_events[length - self.max_completed_events : length]
             self._dirty = True
 
     def serve(self):
         self.config_notify()
+        self.clear_all_progress_events()
         self.log.info("Loading...")
 
         self._load()
@@ -451,6 +468,7 @@ class Module(MgrModule):
 
     def shutdown(self):
         self._shutdown.set()
+        self.clear_all_progress_events()
 
     def update(self, ev_id, ev_msg, ev_progress):
         """
@@ -468,12 +486,14 @@ class Module(MgrModule):
                 ev_progress, ev_msg))
 
         ev.set_progress(ev_progress)
+        ev._refresh()
 
     def _complete(self, ev):
         duration = (datetime.datetime.utcnow() - ev.started_at)
         self.log.info("Completed event {0} ({1}) in {2} seconds".format(
             ev.id, ev.message, duration.seconds
         ))
+        self.complete_progress_event(ev.id)
 
         self._completed_events.append(
             GhostEvent(ev.id, ev.message, ev.refs))
