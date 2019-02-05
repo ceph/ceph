@@ -223,16 +223,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
                 self.log.error(out)
                 devs = []
                 for device in json.loads(out):
-                    dev = orchestrator.InventoryDevice()
-                    if device["sys_api"]["rotational"] == "1":
-                        dev.type = 'hdd'  # 'ssd', 'hdd', 'nvme'
-                    elif 'nvme' in device["path"]:
-                        dev.type = 'nvme'
-                    else:
-                        dev.type = 'ssd'
-                    dev.size = device['sys_api']['size']
-                    dev.id = device['path']
-                    dev.extended = device
+                    dev = orchestrator.InventoryDevice.from_ceph_volume_inventory(device)
                     devs.append(dev)
                 return [orchestrator.InventoryNode('localhost', devs)]
         self.log.error('c-v failed: ' + str(c_v_out))
