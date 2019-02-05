@@ -2627,6 +2627,15 @@ CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {
   connection->lock.unlock();
   AsyncConnectionRef existing = messenger->lookup_conn(*connection->peer_addrs);
 
+  if (existing &&
+      existing->protocol->proto_type != 2) {
+    ldout(cct,1) << __func__ << " existing " << existing << " proto "
+		 << existing->protocol.get() << " version is "
+		 << existing->protocol->proto_type << ", marking down" << dendl;
+    existing->mark_down();
+    existing = nullptr;
+  }
+
   connection->inject_delay();
 
   connection->lock.lock();
@@ -2664,6 +2673,15 @@ CtPtr ProtocolV2::handle_reconnect(char *payload, uint32_t length) {
 
   connection->lock.unlock();
   AsyncConnectionRef existing = messenger->lookup_conn(*connection->peer_addrs);
+
+  if (existing &&
+      existing->protocol->proto_type != 2) {
+    ldout(cct,1) << __func__ << " existing " << existing << " proto "
+		 << existing->protocol.get() << " version is "
+		 << existing->protocol->proto_type << ", marking down" << dendl;
+    existing->mark_down();
+    existing = nullptr;
+  }
 
   connection->inject_delay();
 
