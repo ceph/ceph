@@ -230,7 +230,7 @@ def test_ps_subscription():
     zones[0].delete_bucket(bucket_name)
 
 
-def test_event_type_subscription():
+def test_ps_event_type_subscription():
     """ test subscriptions for different events """
     zones, ps_zones = init_env()
     bucket_name = gen_bucket_name()
