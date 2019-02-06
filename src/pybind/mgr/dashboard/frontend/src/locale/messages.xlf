@@ -2552,6 +2552,18 @@
           <context context-type="sourcefile">app/core/auth/user-form/user-form.component.html</context>
           <context context-type="linenumber">147</context>
         </context-group>
+      </trans-unit><trans-unit id="58fc1b5c79a75370eb52644fd83fb2e7096b6649" datatype="html">
+        <source>Sorry, the user does not exist in Ceph.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/core/auth/sso/sso-not-found/sso-not-found.component.html</context>
+          <context context-type="linenumber">3</context>
+        </context-group>
+      </trans-unit><trans-unit id="d9deb94f78e7c41b35c6622b874f06657d7604c1" datatype="html">
+        <source>Return to <x id="START_LINK" ctype="x-a" equiv-text="&lt;a&gt;"/>Login Page<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a&gt;"/>. You&apos;ll be logged out from the Identity Provider when you retry logging in.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/core/auth/sso/sso-not-found/sso-not-found.component.html</context>
+          <context context-type="linenumber">4</context>
+        </context-group>
       </trans-unit><trans-unit id="e83cda1d2f391695610a1c572332e5f81499dd83" datatype="html">
         <source><x id="ICU" equiv-text="{mode, select, editing {...} other {...}}"/> User</source>
         <context-group purpose="location">

@@ -29,6 +29,7 @@ import { RgwUserListComponent } from './ceph/rgw/rgw-user-list/rgw-user-list.com
 import { LoginComponent } from './core/auth/login/login.component';
 import { RoleFormComponent } from './core/auth/role-form/role-form.component';
 import { RoleListComponent } from './core/auth/role-list/role-list.component';
+import { SsoNotFoundComponent } from './core/auth/sso/sso-not-found/sso-not-found.component';
 import { UserFormComponent } from './core/auth/user-form/user-form.component';
 import { UserListComponent } from './core/auth/user-list/user-list.component';
 import { ForbiddenComponent } from './core/forbidden/forbidden.component';
@@ -282,6 +283,8 @@ const routes: Routes = [
       }
     ]
   },
+  // Single Sign-On (SSO)
+  { path: 'sso/404', component: SsoNotFoundComponent },
   // System
   { path: 'login', component: LoginComponent },
   { path: 'logout', children: [] },
