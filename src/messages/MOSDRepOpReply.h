@@ -119,7 +119,7 @@ public:
   MOSDRepOpReply(
     const MOSDRepOp *req, pg_shard_t from, int result_, epoch_t e, epoch_t mine,
     int at) :
-    MessageInstance(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance<MOSDRepOpReply, MOSDFastDispatchOp>(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
     map_epoch(e),
     min_epoch(mine),
     reqid(req->reqid),
@@ -131,7 +131,7 @@ public:
     set_tid(req->get_tid());
   }
   MOSDRepOpReply() 
-    : MessageInstance(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDRepOpReply, MOSDFastDispatchOp>(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0),
       min_epoch(0),
       ack_type(0), result(0),

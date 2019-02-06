@@ -31,7 +31,7 @@ private:
 protected:
   MExportDirPrepAck() {}
   MExportDirPrepAck(dirfrag_t df, bool s, uint64_t tid) :
-    MessageInstance(MSG_MDS_EXPORTDIRPREPACK), dirfrag(df), success(s) {
+    MessageInstance<MExportDirPrepAck>(MSG_MDS_EXPORTDIRPREPACK), dirfrag(df), success(s) {
     set_tid(tid);
   }
   ~MExportDirPrepAck() override {}

@@ -216,10 +216,10 @@ private:
   
 protected:
   MMDSCacheRejoin() :
-    MessageInstance(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance<MMDSCacheRejoin>(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
     op(0) {}
   MMDSCacheRejoin(int o) : 
-    MessageInstance(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance<MMDSCacheRejoin>(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
     op(o) {}
   ~MMDSCacheRejoin() override {}
 

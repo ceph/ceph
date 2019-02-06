@@ -22,7 +22,7 @@ class MPing : public MessageInstance<MPing> {
 public:
   friend factory;
 
-  MPing() : MessageInstance(CEPH_MSG_PING) {}
+  MPing() : MessageInstance<MPing>(CEPH_MSG_PING) {}
 private:
   ~MPing() override {}
 

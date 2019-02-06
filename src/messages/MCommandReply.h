@@ -28,13 +28,13 @@ public:
   std::string rs;
   
   MCommandReply()
-    : MessageInstance(MSG_COMMAND_REPLY) {}
+    : MessageInstance<MCommandReply>(MSG_COMMAND_REPLY) {}
   MCommandReply(MCommand *m, int _r)
-    : MessageInstance(MSG_COMMAND_REPLY), r(_r) {
+    : MessageInstance<MCommandReply>(MSG_COMMAND_REPLY), r(_r) {
     header.tid = m->get_tid();
   }
   MCommandReply(int _r, std::string_view s)
-    : MessageInstance(MSG_COMMAND_REPLY),
+    : MessageInstance<MCommandReply>(MSG_COMMAND_REPLY),
       r(_r), rs(s) { }
 private:
   ~MCommandReply() override {}

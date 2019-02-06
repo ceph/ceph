@@ -50,9 +50,9 @@ public:
 protected:
   friend factory;
   MClientReclaim() :
-    MessageInstance(CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION) {}
+    MessageInstance<MClientReclaim>(CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION) {}
   MClientReclaim(std::string_view _uuid, uint32_t _flags) :
-    MessageInstance(CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance<MClientReclaim>(CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION),
     uuid(_uuid), flags(_flags) {}
 private:
   ~MClientReclaim() override {}

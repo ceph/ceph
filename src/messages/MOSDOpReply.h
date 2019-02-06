@@ -128,13 +128,13 @@ public:
 
 public:
   MOSDOpReply()
-    : MessageInstance(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDOpReply>(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
     bdata_encode(false) {
     do_redirect = false;
   }
   MOSDOpReply(const MOSDOp *req, int r, epoch_t e, int acktype,
 	      bool ignore_out_data)
-    : MessageInstance(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDOpReply>(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
       oid(req->hobj.oid), pgid(req->pgid.pgid), ops(req->ops),
       bdata_encode(false) {
 

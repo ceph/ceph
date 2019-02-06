@@ -44,12 +44,12 @@ public:
   pair<string,string> key;
 
   MMonScrub()
-    : MessageInstance(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MMonScrub>(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       num_keys(-1)
   { }
 
   MMonScrub(op_type_t op, version_t v, int32_t num_keys)
-    : MessageInstance(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MMonScrub>(MSG_MON_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       op(op), version(v), num_keys(num_keys)
   { }
 

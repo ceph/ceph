@@ -28,9 +28,9 @@ public:
 
 protected:
   MExportCapsAck() :
-    MessageInstance(MSG_MDS_EXPORTCAPSACK) {}
+    MessageInstance<MExportCapsAck>(MSG_MDS_EXPORTCAPSACK) {}
   MExportCapsAck(inodeno_t i) :
-    MessageInstance(MSG_MDS_EXPORTCAPSACK), ino(i) {}
+    MessageInstance<MExportCapsAck>(MSG_MDS_EXPORTCAPSACK), ino(i) {}
   ~MExportCapsAck() override {}
 
 public:

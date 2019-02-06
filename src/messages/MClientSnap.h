@@ -30,7 +30,7 @@ public:
 
 protected:
   MClientSnap(int o=0) : 
-    MessageInstance(CEPH_MSG_CLIENT_SNAP) {
+    MessageInstance<MClientSnap>(CEPH_MSG_CLIENT_SNAP) {
     memset(&head, 0, sizeof(head));
     head.op = o;
   }

@@ -31,9 +31,9 @@ public:
   string name;
   entity_addrvec_t addrs;
 
-  MMonJoin() : MessageInstance(MSG_MON_JOIN, 0, HEAD_VERSION, COMPAT_VERSION) {}
+  MMonJoin() : MessageInstance<MMonJoin, PaxosServiceMessage>(MSG_MON_JOIN, 0, HEAD_VERSION, COMPAT_VERSION) {}
   MMonJoin(uuid_d &f, string n, const entity_addrvec_t& av)
-    : MessageInstance(MSG_MON_JOIN, 0, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MMonJoin, PaxosServiceMessage>(MSG_MON_JOIN, 0, HEAD_VERSION, COMPAT_VERSION),
       fsid(f), name(n), addrs(av)
   { }
   

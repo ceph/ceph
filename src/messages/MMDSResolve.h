@@ -68,7 +68,7 @@ public:
   list<table_client> table_clients;
 
 protected:
-  MMDSResolve() : MessageInstance(MSG_MDS_RESOLVE) {}
+  MMDSResolve() : MessageInstance<MMDSResolve>(MSG_MDS_RESOLVE) {}
   ~MMDSResolve() override {}
 
 public:

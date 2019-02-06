@@ -42,11 +42,11 @@ public:
   static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 4;
 
-  MForward() : MessageInstance(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
+  MForward() : MessageInstance<MForward>(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
                tid(0), con_features(0), msg(NULL) {}
   MForward(uint64_t t, PaxosServiceMessage *m, uint64_t feat,
            const MonCap& caps) :
-    MessageInstance(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance<MForward>(MSG_FORWARD, HEAD_VERSION, COMPAT_VERSION),
     tid(t), client_caps(caps), msg(NULL) {
     client_type = m->get_source().type();
     client_addrs = m->get_source_addrs();

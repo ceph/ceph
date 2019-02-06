@@ -33,7 +33,7 @@ private:
 
 public:
   MMonGetOSDMap()
-    : MessageInstance(CEPH_MSG_MON_GET_OSDMAP, 0),
+    : MessageInstance<MMonGetOSDMap, PaxosServiceMessage>(CEPH_MSG_MON_GET_OSDMAP, 0),
       full_first(0),
       full_last(0),
       inc_first(0),

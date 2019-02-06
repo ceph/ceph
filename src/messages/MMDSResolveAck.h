@@ -28,7 +28,7 @@ public:
   vector<metareqid_t> abort;
 
 protected:
-  MMDSResolveAck() : MessageInstance(MSG_MDS_RESOLVEACK) {}
+  MMDSResolveAck() : MessageInstance<MMDSResolveAck>(MSG_MDS_RESOLVEACK) {}
   ~MMDSResolveAck() override {}
 
 public:

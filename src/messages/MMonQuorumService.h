@@ -23,7 +23,7 @@ public:
 
 protected:
 template<typename... Args>
-  MMonQuorumService(Args&&... args) : MessageSubType(std::forward<Args>(args)...) {}
+  MMonQuorumService(Args&&... args) : MessageSubType<MMonQuorumService>(std::forward<Args>(args)...) {}
 
   ~MMonQuorumService() override { }
 

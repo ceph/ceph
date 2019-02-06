@@ -88,7 +88,7 @@ public:
   }
 
   MMgrOpen()
-    : MessageInstance(MSG_MGR_OPEN, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance<MMgrOpen>(MSG_MGR_OPEN, HEAD_VERSION, COMPAT_VERSION)
   {}
 };
 

@@ -203,12 +203,13 @@ private:
   uint64_t mds_features = 0;
 
 protected:
-  MMDSBeacon() : MessageInstance(MSG_MDS_BEACON, 0, HEAD_VERSION, COMPAT_VERSION)
+  MMDSBeacon()
+    : MessageInstance<MMDSBeacon, PaxosServiceMessage>(MSG_MDS_BEACON, 0, HEAD_VERSION, COMPAT_VERSION)
   {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
   MMDSBeacon(const uuid_d &f, mds_gid_t g, const string& n, epoch_t les, MDSMap::DaemonState st, version_t se, uint64_t feat) :
-    MessageInstance(MSG_MDS_BEACON, les, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance<MMDSBeacon, PaxosServiceMessage>(MSG_MDS_BEACON, les, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), global_id(g), name(n), state(st), seq(se),
     mds_features(feat) {
     set_priority(CEPH_MSG_PRIO_HIGH);

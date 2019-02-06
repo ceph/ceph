@@ -35,13 +35,13 @@ public:
   snapid_t get_last() const { return snapid_t(h.last); }
 
 protected:
-  MClientLease() : MessageInstance(CEPH_MSG_CLIENT_LEASE) {}
+  MClientLease() : MessageInstance<MClientLease>(CEPH_MSG_CLIENT_LEASE) {}
   MClientLease(const MClientLease& m) :
-    MessageInstance(CEPH_MSG_CLIENT_LEASE),
+    MessageInstance<MClientLease>(CEPH_MSG_CLIENT_LEASE),
     h(m.h),
     dname(m.dname) {}
   MClientLease(int ac, ceph_seq_t seq, int m, uint64_t i, uint64_t sf, uint64_t sl) :
-    MessageInstance(CEPH_MSG_CLIENT_LEASE) {
+    MessageInstance<MClientLease>(CEPH_MSG_CLIENT_LEASE) {
     h.action = ac;
     h.seq = seq;
     h.mask = m;
@@ -51,7 +51,7 @@ protected:
     h.duration_ms = 0;
   }
   MClientLease(int ac, ceph_seq_t seq, int m, uint64_t i, uint64_t sf, uint64_t sl, std::string_view d) :
-    MessageInstance(CEPH_MSG_CLIENT_LEASE),
+    MessageInstance<MClientLease>(CEPH_MSG_CLIENT_LEASE),
     dname(d) {
     h.action = ac;
     h.seq = seq;

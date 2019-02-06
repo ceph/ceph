@@ -40,10 +40,10 @@ private:
   epoch_t epoch = 0;
   int32_t failed_for = 0;  // known to be failed since at least this long
 
-  MOSDFailure() : MessageInstance(MSG_OSD_FAILURE, 0, HEAD_VERSION) { }
+  MOSDFailure() : MessageInstance<MOSDFailure, PaxosServiceMessage>(MSG_OSD_FAILURE, 0, HEAD_VERSION) { }
   MOSDFailure(const uuid_d &fs, int osd, const entity_addrvec_t& av,
 	      int duration, epoch_t e)
-    : MessageInstance(MSG_OSD_FAILURE, e, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDFailure, PaxosServiceMessage>(MSG_OSD_FAILURE, e, HEAD_VERSION, COMPAT_VERSION),
       fsid(fs),
       target_osd(osd),
       target_addrs(av),
@@ -52,7 +52,7 @@ private:
   MOSDFailure(const uuid_d &fs, int osd, const entity_addrvec_t& av,
 	      int duration,
               epoch_t e, __u8 extra_flags)
-    : MessageInstance(MSG_OSD_FAILURE, e, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDFailure, PaxosServiceMessage>(MSG_OSD_FAILURE, e, HEAD_VERSION, COMPAT_VERSION),
       fsid(fs),
       target_osd(osd),
       target_addrs(av),

@@ -28,9 +28,9 @@ public:
   bufferlist client_map;
 
 protected:
-  MExportDir() : MessageInstance(MSG_MDS_EXPORTDIR) {}
+  MExportDir() : MessageInstance<MExportDir>(MSG_MDS_EXPORTDIR) {}
   MExportDir(dirfrag_t df, uint64_t tid) :
-    MessageInstance(MSG_MDS_EXPORTDIR), dirfrag(df) {
+    MessageInstance<MExportDir>(MSG_MDS_EXPORTDIR), dirfrag(df) {
     set_tid(tid);
   }
   ~MExportDir() override {}

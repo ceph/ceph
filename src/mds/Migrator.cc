@@ -96,54 +96,54 @@ void Migrator::dispatch(const Message::const_ref &m)
   switch (m->get_type()) {
     // import
   case MSG_MDS_EXPORTDIRDISCOVER:
-    handle_export_discover(MExportDirDiscover::msgref_cast(m));
+    handle_export_discover(MExportDirDiscover::ref_cast(m));
     break;
   case MSG_MDS_EXPORTDIRPREP:
-    handle_export_prep(MExportDirPrep::msgref_cast(m));
+    handle_export_prep(MExportDirPrep::ref_cast(m));
     break;
   case MSG_MDS_EXPORTDIR:
     if (unlikely(inject_session_race)) {
       dout(0) << "waiting for inject_session_race" << dendl;
       mds->wait_for_any_client_connection(new C_MDS_RetryMessage(mds, m));
     } else {
-      handle_export_dir(MExportDir::msgref_cast(m));
+      handle_export_dir(MExportDir::ref_cast(m));
     }
     break;
   case MSG_MDS_EXPORTDIRFINISH:
-    handle_export_finish(MExportDirFinish::msgref_cast(m));
+    handle_export_finish(MExportDirFinish::ref_cast(m));
     break;
   case MSG_MDS_EXPORTDIRCANCEL:
-    handle_export_cancel(MExportDirCancel::msgref_cast(m));
+    handle_export_cancel(MExportDirCancel::ref_cast(m));
     break;
 
     // export 
   case MSG_MDS_EXPORTDIRDISCOVERACK:
-    handle_export_discover_ack(MExportDirDiscoverAck::msgref_cast(m));
+    handle_export_discover_ack(MExportDirDiscoverAck::ref_cast(m));
     break;
   case MSG_MDS_EXPORTDIRPREPACK:
-    handle_export_prep_ack(MExportDirPrepAck::msgref_cast(m));
+    handle_export_prep_ack(MExportDirPrepAck::ref_cast(m));
     break;
   case MSG_MDS_EXPORTDIRACK:
-    handle_export_ack(MExportDirAck::msgref_cast(m));
+    handle_export_ack(MExportDirAck::ref_cast(m));
     break;
   case MSG_MDS_EXPORTDIRNOTIFYACK:
-    handle_export_notify_ack(MExportDirNotifyAck::msgref_cast(m));
+    handle_export_notify_ack(MExportDirNotifyAck::ref_cast(m));
     break;
 
     // export 3rd party (dir_auth adjustments)
   case MSG_MDS_EXPORTDIRNOTIFY:
-    handle_export_notify(MExportDirNotify::msgref_cast(m));
+    handle_export_notify(MExportDirNotify::ref_cast(m));
     break;
 
     // caps
   case MSG_MDS_EXPORTCAPS:
-    handle_export_caps(MExportCaps::msgref_cast(m));
+    handle_export_caps(MExportCaps::ref_cast(m));
     break;
   case MSG_MDS_EXPORTCAPSACK:
-    handle_export_caps_ack(MExportCapsAck::msgref_cast(m));
+    handle_export_caps_ack(MExportCapsAck::ref_cast(m));
     break;
   case MSG_MDS_GATHERCAPS:
-    handle_gather_caps(MGatherCaps::msgref_cast(m));
+    handle_gather_caps(MGatherCaps::ref_cast(m));
     break;
 
   default:

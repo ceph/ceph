@@ -35,9 +35,9 @@ public:
   map<pg_t,utime_t> ctimes;
 
   MOSDPGCreate()
-    : MessageInstance(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance<MOSDPGCreate>(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGCreate(epoch_t e)
-    : MessageInstance(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDPGCreate>(MSG_OSD_PG_CREATE, HEAD_VERSION, COMPAT_VERSION),
       epoch(e) { }
 private:
   ~MOSDPGCreate() override {}

@@ -34,12 +34,12 @@ public:
   bool repair = false;
   bool deep = false;
 
-  MOSDScrub() : MessageInstance(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDScrub() : MessageInstance<MOSDScrub>(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDScrub(const uuid_d& f, bool r, bool d) :
-    MessageInstance(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance<MOSDScrub>(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), repair(r), deep(d) {}
   MOSDScrub(const uuid_d& f, vector<pg_t>& pgs, bool r, bool d) :
-    MessageInstance(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance<MOSDScrub>(MSG_OSD_SCRUB, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), scrub_pgs(pgs), repair(r), deep(d) {}
 private:
   ~MOSDScrub() override {}

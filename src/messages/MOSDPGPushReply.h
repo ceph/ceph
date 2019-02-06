@@ -42,7 +42,7 @@ public:
   }
 
   MOSDPGPushReply()
-    : MessageInstance(MSG_OSD_PG_PUSH_REPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDPGPushReply, MOSDFastDispatchOp>(MSG_OSD_PG_PUSH_REPLY, HEAD_VERSION, COMPAT_VERSION),
       cost(0)
     {}
 

@@ -37,7 +37,7 @@ private:
 protected:
   MExportDirNotify() {}
   MExportDirNotify(dirfrag_t i, uint64_t tid, bool a, pair<__s32,__s32> oa, pair<__s32,__s32> na) :
-    MessageInstance(MSG_MDS_EXPORTDIRNOTIFY),
+    MessageInstance<MExportDirNotify>(MSG_MDS_EXPORTDIRNOTIFY),
     base(i), ack(a), old_auth(oa), new_auth(na) {
     set_tid(tid);
   }

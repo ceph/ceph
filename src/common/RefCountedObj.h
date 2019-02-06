@@ -27,6 +27,9 @@
 
 struct RefCountedObject {
 public:
+  using ref = boost::intrusive_ptr<RefCountedObject>;
+  using const_ref = boost::intrusive_ptr<RefCountedObject const>;
+
   RefCountedObject(CephContext *c = NULL, int n=1) : nref(n), cct(c) {}
   virtual ~RefCountedObject() {
     ceph_assert(nref == 0);
@@ -75,6 +78,64 @@ private:
   mutable std::atomic<uint64_t> nref;
   CephContext *cct;
 };
+
+template <class RefCountedObjectType>
+class RefCountedObjectFactory {
+public:
+template<typename... Args>
+  static typename RefCountedObjectType::ref build(Args&&... args) {
+    return typename RefCountedObjectType::ref(new RefCountedObjectType(std::forward<Args>(args)...), false);
+  }
+};
+
+template<class T, class R = RefCountedObject>
+class RefCountedObjectSubType : public R {
+public:
+  using ref = boost::intrusive_ptr<T>;
+  using const_ref = boost::intrusive_ptr<T const>;
+
+  static auto ref_cast(const auto& m) {
+    if constexpr(std::is_const<typename std::remove_reference<decltype(m)>::type::element_type>::value) {
+      return boost::static_pointer_cast<typename T::const_ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
+    } else {
+      return boost::static_pointer_cast<typename T::ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
+    }
+  }
+  static auto const_ref_cast(const auto& m) {
+    return boost::static_pointer_cast<typename T::const_ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
+  }
+
+  const T* get() const {
+    return static_cast<T*>(R::get());
+  }
+  T* get() {
+    return static_cast<T*>(R::get());
+  }
+
+protected:
+template<typename... Args>
+  RefCountedObjectSubType(Args&&... args) : R(std::forward<Args>(args)...) {}
+  virtual ~RefCountedObjectSubType() override {}
+};
+
+
+template<class T, class R = RefCountedObject>
+class RefCountedObjectInstance : public RefCountedObjectSubType<T, R> {
+public:
+  using factory = RefCountedObjectFactory<T>;
+
+  template<typename... Args>
+  static auto create(Args&&... args) {
+    return RefCountedObjectFactory<T>::build(std::forward<Args>(args)...);
+  }
+
+protected:
+template<typename... Args>
+  RefCountedObjectInstance(Args&&... args) : RefCountedObjectSubType<T,R>(std::forward<Args>(args)...) {}
+  virtual ~RefCountedObjectInstance() override {}
+};
+
+using RefCountedPtr = boost::intrusive_ptr<RefCountedObject>;
 
 #ifndef WITH_SEASTAR
 
@@ -174,7 +235,5 @@ static inline void intrusive_ptr_add_ref(const RefCountedObject *p) {
 static inline void intrusive_ptr_release(const RefCountedObject *p) {
   p->put();
 }
-
-using RefCountedPtr = boost::intrusive_ptr<RefCountedObject>;
 
 #endif

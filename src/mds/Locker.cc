@@ -95,21 +95,21 @@ void Locker::dispatch(const Message::const_ref &m)
   switch (m->get_type()) {
     // inter-mds locking
   case MSG_MDS_LOCK:
-    handle_lock(MLock::msgref_cast(m));
+    handle_lock(MLock::ref_cast(m));
     break;
     // inter-mds caps
   case MSG_MDS_INODEFILECAPS:
-    handle_inode_file_caps(MInodeFileCaps::msgref_cast(m));
+    handle_inode_file_caps(MInodeFileCaps::ref_cast(m));
     break;
     // client sync
   case CEPH_MSG_CLIENT_CAPS:
-    handle_client_caps(MClientCaps::msgref_cast(m));
+    handle_client_caps(MClientCaps::ref_cast(m));
     break;
   case CEPH_MSG_CLIENT_CAPRELEASE:
-    handle_client_cap_release(MClientCapRelease::msgref_cast(m));
+    handle_client_cap_release(MClientCapRelease::ref_cast(m));
     break;
   case CEPH_MSG_CLIENT_LEASE:
-    handle_client_lease(MClientLease::msgref_cast(m));
+    handle_client_lease(MClientLease::ref_cast(m));
     break;
   default:
     derr << "locker unknown message " << m->get_type() << dendl;

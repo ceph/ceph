@@ -63,7 +63,7 @@ public:
   }
 
   MOSDPGPush()
-    : MessageInstance(MSG_OSD_PG_PUSH, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDPGPush, MOSDFastDispatchOp>(MSG_OSD_PG_PUSH, HEAD_VERSION, COMPAT_VERSION),
       cost(0)
     {}
 

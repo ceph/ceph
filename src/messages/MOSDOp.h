@@ -170,14 +170,14 @@ public:
   }
 
   MOSDOp()
-    : MessageInstance(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDOp, MOSDFastDispatchOp>(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       partial_decode_needed(true),
       final_decode_needed(true),
       bdata_encode(false) { }
   MOSDOp(int inc, long tid, const hobject_t& ho, spg_t& _pgid,
 	 epoch_t _osdmap_epoch,
 	 int _flags, uint64_t feat)
-    : MessageInstance(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDOp, MOSDFastDispatchOp>(CEPH_MSG_OSD_OP, HEAD_VERSION, COMPAT_VERSION),
       client_inc(inc),
       osdmap_epoch(_osdmap_epoch), flags(_flags), retry_attempt(-1),
       hobj(ho),

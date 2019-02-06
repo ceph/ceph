@@ -30,7 +30,7 @@ public:
   // service specific data
   DataStats data_stats;
 
-  MMonHealth() : MessageInstance(MSG_MON_HEALTH, HEAD_VERSION) { }
+  MMonHealth() : MessageInstance<MMonHealth, MMonQuorumService>(MSG_MON_HEALTH, HEAD_VERSION) { }
 
 private:
   ~MMonHealth() override { }

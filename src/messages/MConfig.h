@@ -15,12 +15,12 @@ public:
   // use transparent comparator so we can lookup in it by std::string_view keys
   std::map<std::string,std::string,std::less<>> config;
 
-  MConfig() : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
+  MConfig() : MessageInstance<MConfig>(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
   MConfig(const std::map<std::string,std::string,std::less<>>& c)
-    : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MConfig>(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
       config{c} {}
   MConfig(std::map<std::string,std::string,std::less<>>&& c)
-    : MessageInstance(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MConfig>(MSG_CONFIG, HEAD_VERSION, COMPAT_VERSION),
       config{std::move(c)} {}
 
   std::string_view get_type_name() const override {

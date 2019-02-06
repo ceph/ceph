@@ -31,8 +31,8 @@ public:
   version_t last = 0;
   std::string channel;
 
-  MLogAck() : MessageInstance(MSG_LOGACK) {}
-  MLogAck(uuid_d& f, version_t l) : MessageInstance(MSG_LOGACK), fsid(f), last(l) {}
+  MLogAck() : MessageInstance<MLogAck>(MSG_LOGACK) {}
+  MLogAck(uuid_d& f, version_t l) : MessageInstance<MLogAck>(MSG_LOGACK), fsid(f), last(l) {}
 private:
   ~MLogAck() override {}
 

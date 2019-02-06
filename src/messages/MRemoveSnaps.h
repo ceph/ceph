@@ -25,9 +25,9 @@ public:
   
 protected:
   MRemoveSnaps() : 
-    MessageInstance(MSG_REMOVE_SNAPS, 0) { }
+    MessageInstance<MRemoveSnaps, PaxosServiceMessage>(MSG_REMOVE_SNAPS, 0) { }
   MRemoveSnaps(map<int, vector<snapid_t> >& s) : 
-    MessageInstance(MSG_REMOVE_SNAPS, 0) {
+    MessageInstance<MRemoveSnaps, PaxosServiceMessage>(MSG_REMOVE_SNAPS, 0) {
     snaps.swap(s);
   }
   ~MRemoveSnaps() override {}

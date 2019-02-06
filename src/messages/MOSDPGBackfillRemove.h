@@ -40,11 +40,11 @@ public:
   }
 
   MOSDPGBackfillRemove()
-    : MessageInstance(MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
+    : MessageInstance<MOSDPGBackfillRemove, MOSDFastDispatchOp>(MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
 			COMPAT_VERSION) {}
 
   MOSDPGBackfillRemove(spg_t pgid, epoch_t map_epoch)
-    : MessageInstance(MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
+    : MessageInstance<MOSDPGBackfillRemove, MOSDFastDispatchOp>(MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
 			 COMPAT_VERSION),
       pgid(pgid),
       map_epoch(map_epoch) {}

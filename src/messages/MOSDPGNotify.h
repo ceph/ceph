@@ -48,7 +48,7 @@ private:
     : MOSDPGNotify(0, {})
   {}
   MOSDPGNotify(epoch_t e, pg_list_t&& l)
-    : MessageInstance(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDPGNotify>(MSG_OSD_PG_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
       epoch(e),
       pg_list(std::move(l)) {
     set_priority(CEPH_MSG_PRIO_HIGH);

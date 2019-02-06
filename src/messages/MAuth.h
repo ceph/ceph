@@ -33,7 +33,7 @@ public:
 
   /* if protocol == 0, then auth_payload is a set<__u32> listing protocols the client supports */
 
-  MAuth() : MessageInstance(CEPH_MSG_AUTH, 0), protocol(0), monmap_epoch(0) { }
+  MAuth() : MessageInstance<MAuth, PaxosServiceMessage>(CEPH_MSG_AUTH, 0), protocol(0), monmap_epoch(0) { }
 private:
   ~MAuth() override {}
 

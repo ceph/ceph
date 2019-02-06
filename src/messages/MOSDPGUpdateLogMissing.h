@@ -52,7 +52,7 @@ public:
   }
 
   MOSDPGUpdateLogMissing()
-    : MessageInstance(MSG_OSD_PG_UPDATE_LOG_MISSING, HEAD_VERSION,
+    : MessageInstance<MOSDPGUpdateLogMissing, MOSDFastDispatchOp>(MSG_OSD_PG_UPDATE_LOG_MISSING, HEAD_VERSION,
 			 COMPAT_VERSION) { }
   MOSDPGUpdateLogMissing(
     const mempool::osd_pglog::list<pg_log_entry_t> &entries,
@@ -63,7 +63,7 @@ public:
     ceph_tid_t rep_tid,
     eversion_t pg_trim_to,
     eversion_t pg_roll_forward_to)
-    : MessageInstance(MSG_OSD_PG_UPDATE_LOG_MISSING, HEAD_VERSION,
+    : MessageInstance<MOSDPGUpdateLogMissing, MOSDFastDispatchOp>(MSG_OSD_PG_UPDATE_LOG_MISSING, HEAD_VERSION,
 			 COMPAT_VERSION),
       map_epoch(epoch),
       min_epoch(min_epoch),

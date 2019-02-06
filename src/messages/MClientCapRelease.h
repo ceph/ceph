@@ -35,7 +35,7 @@ private:
   epoch_t osd_epoch_barrier;
 
   MClientCapRelease() : 
-    MessageInstance(CEPH_MSG_CLIENT_CAPRELEASE, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance<MClientCapRelease>(CEPH_MSG_CLIENT_CAPRELEASE, HEAD_VERSION, COMPAT_VERSION),
     osd_epoch_barrier(0)
   {
     memset(&head, 0, sizeof(head));

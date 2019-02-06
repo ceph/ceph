@@ -111,9 +111,9 @@ private:
   void set_base_dir_frag(frag_t df) { base_dir_frag = df; }
 
 protected:
-  MDiscoverReply() : MessageInstance(MSG_MDS_DISCOVERREPLY, HEAD_VERSION) { }
+  MDiscoverReply() : MessageInstance<MDiscoverReply>(MSG_MDS_DISCOVERREPLY, HEAD_VERSION) { }
   MDiscoverReply(const MDiscover &dis) :
-    MessageInstance(MSG_MDS_DISCOVERREPLY, HEAD_VERSION),
+    MessageInstance<MDiscoverReply>(MSG_MDS_DISCOVERREPLY, HEAD_VERSION),
     base_ino(dis.get_base_ino()),
     base_dir_frag(dis.get_base_dir_frag()),
     wanted_base_dir(dis.wants_base_dir()),
@@ -128,7 +128,7 @@ protected:
     header.tid = dis.get_tid();
   }
   MDiscoverReply(dirfrag_t df) :
-    MessageInstance(MSG_MDS_DISCOVERREPLY, HEAD_VERSION),
+    MessageInstance<MDiscoverReply>(MSG_MDS_DISCOVERREPLY, HEAD_VERSION),
     base_ino(df.ino),
     base_dir_frag(df.frag),
     wanted_base_dir(false),

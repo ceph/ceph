@@ -21,6 +21,7 @@
 #ifndef CEPH_PGMAP_H
 #define CEPH_PGMAP_H
 
+#include "include/ceph_fs.h"
 #include "include/health.h"
 #include "common/debug.h"
 #include "common/TextTable.h"
@@ -186,7 +187,7 @@ public:
       return p->second.primary;
   }
 
-  ceph_statfs get_statfs(OSDMap &osdmap,
+  struct ceph_statfs get_statfs(OSDMap &osdmap,
                          boost::optional<int64_t> data_pool) const;
 
   int64_t get_rule_avail(int ruleno) const {

@@ -91,9 +91,9 @@ public:
   }
 
   MOSDPGBackfill()
-    : MessageInstance(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance<MOSDPGBackfill, MOSDFastDispatchOp>(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGBackfill(__u32 o, epoch_t e, epoch_t qe, spg_t p)
-    : MessageInstance(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDPGBackfill, MOSDFastDispatchOp>(MSG_OSD_PG_BACKFILL, HEAD_VERSION, COMPAT_VERSION),
       op(o),
       map_epoch(e), query_epoch(e),
       pgid(p) {}

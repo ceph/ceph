@@ -45,7 +45,7 @@ protected:
     b_did_assim = false;
   }
   MExportDirPrep(dirfrag_t df, uint64_t tid) :
-    MessageInstance(MSG_MDS_EXPORTDIRPREP),
+    MessageInstance<MExportDirPrep>(MSG_MDS_EXPORTDIRPREP),
     dirfrag(df), b_did_assim(false) {
     set_tid(tid);
   }

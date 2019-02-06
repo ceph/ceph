@@ -28,7 +28,7 @@ public:
   bool forced = false;
 
   MOSDPGTemp(epoch_t e)
-    : MessageInstance(MSG_OSD_PGTEMP, e, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDPGTemp, PaxosServiceMessage>(MSG_OSD_PGTEMP, e, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(e)
   {}
   MOSDPGTemp()

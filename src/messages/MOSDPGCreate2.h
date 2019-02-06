@@ -21,9 +21,9 @@ public:
   map<spg_t,pair<epoch_t,utime_t>> pgs;
 
   MOSDPGCreate2()
-    : MessageInstance(MSG_OSD_PG_CREATE2, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance<MOSDPGCreate2>(MSG_OSD_PG_CREATE2, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGCreate2(epoch_t e)
-    : MessageInstance(MSG_OSD_PG_CREATE2, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDPGCreate2>(MSG_OSD_PG_CREATE2, HEAD_VERSION, COMPAT_VERSION),
       epoch(e) { }
 private:
   ~MOSDPGCreate2() override {}

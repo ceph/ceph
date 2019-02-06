@@ -36,7 +36,7 @@ public:
   std::map<std::string,ProgressEvent> progress_events;
 
   MMonMgrReport()
-    : MessageInstance(MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance<MMonMgrReport, PaxosServiceMessage>(MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION)
   {}
 private:
   ~MMonMgrReport() override {}

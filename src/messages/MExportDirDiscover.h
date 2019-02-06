@@ -36,10 +36,10 @@ private:
 
 protected:
   MExportDirDiscover() :     
-    MessageInstance(MSG_MDS_EXPORTDIRDISCOVER),
+    MessageInstance<MExportDirDiscover>(MSG_MDS_EXPORTDIRDISCOVER),
     started(false) { }
   MExportDirDiscover(dirfrag_t df, filepath& p, mds_rank_t f, uint64_t tid) :
-    MessageInstance(MSG_MDS_EXPORTDIRDISCOVER),
+    MessageInstance<MExportDirDiscover>(MSG_MDS_EXPORTDIRDISCOVER),
     from(f), dirfrag(df), path(p), started(false) {
     set_tid(tid);
   }

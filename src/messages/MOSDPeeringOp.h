@@ -11,7 +11,7 @@ class MOSDPeeringOp : public MessageSubType<MOSDPeeringOp> {
 public:
 
 template<typename... Args>
-  MOSDPeeringOp(Args&&... args) : MessageSubType(std::forward<Args>(args)...) {}
+  MOSDPeeringOp(Args&&... args) : MessageSubType<MOSDPeeringOp>(std::forward<Args>(args)...) {}
 
   void print(std::ostream& out) const override final {
     out << get_type_name() << "("

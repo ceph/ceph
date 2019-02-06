@@ -68,12 +68,12 @@ public:
 	false));
   }
 
-  MOSDPGLog() : MessageInstance(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION) {
+  MOSDPGLog() : MessageInstance<MOSDPGLog, MOSDPeeringOp>(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION) {
     set_priority(CEPH_MSG_PRIO_HIGH); 
   }
   MOSDPGLog(shard_id_t to, shard_id_t from,
 	    version_t mv, const pg_info_t& i, epoch_t query_epoch)
-    : MessageInstance(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDPGLog, MOSDPeeringOp>(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION),
       epoch(mv), query_epoch(query_epoch),
       to(to), from(from),
       info(i)  {

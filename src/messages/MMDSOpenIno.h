@@ -25,9 +25,9 @@ public:
   vector<inode_backpointer_t> ancestors;
 
 protected:
-  MMDSOpenIno() : MessageInstance(MSG_MDS_OPENINO) {}
+  MMDSOpenIno() : MessageInstance<MMDSOpenIno>(MSG_MDS_OPENINO) {}
   MMDSOpenIno(ceph_tid_t t, inodeno_t i, vector<inode_backpointer_t>* pa) :
-    MessageInstance(MSG_MDS_OPENINO), ino(i) {
+    MessageInstance<MMDSOpenIno>(MSG_MDS_OPENINO), ino(i) {
     header.tid = t;
     if (pa)
       ancestors = *pa;

@@ -44,7 +44,7 @@ public:
   }
 
   MOSDECSubOpRead()
-    : MessageInstance(MSG_OSD_EC_READ, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance<MOSDECSubOpRead, MOSDFastDispatchOp>(MSG_OSD_EC_READ, HEAD_VERSION, COMPAT_VERSION)
     {}
 
   void decode_payload() override {

@@ -52,14 +52,14 @@ public:
   }
 
   MOSDRepScrub()
-    : MessageInstance(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDRepScrub, MOSDFastDispatchOp>(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       chunky(false),
       deep(false) { }
 
   MOSDRepScrub(spg_t pgid, eversion_t scrub_to, epoch_t map_epoch, epoch_t min_epoch,
                hobject_t start, hobject_t end, bool deep,
 	       bool preemption, int prio, bool highprio)
-    : MessageInstance(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDRepScrub, MOSDFastDispatchOp>(MSG_OSD_REP_SCRUB, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid),
       scrub_to(scrub_to),
       map_epoch(map_epoch),

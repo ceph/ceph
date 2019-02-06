@@ -11,7 +11,7 @@ class MOSDFastDispatchOp : public MessageSubType<MOSDFastDispatchOp> {
 public:
 
 template<typename... Args>
-  MOSDFastDispatchOp(Args&&... args) : MessageSubType(std::forward<Args>(args)...) {}
+  MOSDFastDispatchOp(Args&&... args) : MessageSubType<MOSDFastDispatchOp>(std::forward<Args>(args)...) {}
 
   virtual epoch_t get_map_epoch() const = 0;
   virtual epoch_t get_min_epoch() const {

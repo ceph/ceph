@@ -31,7 +31,7 @@ private:
   static constexpr int HEAD_VERSION = 2;
 
 public:
-  MMonGetVersionReply() : MessageInstance(CEPH_MSG_MON_GET_VERSION_REPLY, HEAD_VERSION) { }
+  MMonGetVersionReply() : MessageInstance<MMonGetVersionReply>(CEPH_MSG_MON_GET_VERSION_REPLY, HEAD_VERSION) { }
 
   std::string_view get_type_name() const override {
     return "mon_get_version_reply";

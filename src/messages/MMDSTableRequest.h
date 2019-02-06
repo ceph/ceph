@@ -29,9 +29,9 @@ public:
   bufferlist bl;
 
 protected:
-  MMDSTableRequest() : MessageInstance(MSG_MDS_TABLE_REQUEST) {}
+  MMDSTableRequest() : MessageInstance<MMDSTableRequest>(MSG_MDS_TABLE_REQUEST) {}
   MMDSTableRequest(int tab, int o, uint64_t r, version_t v=0) : 
-    MessageInstance(MSG_MDS_TABLE_REQUEST),
+    MessageInstance<MMDSTableRequest>(MSG_MDS_TABLE_REQUEST),
     table(tab), op(o), reqid(r) {
     set_tid(v);
   }

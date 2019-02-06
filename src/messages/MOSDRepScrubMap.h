@@ -42,10 +42,10 @@ public:
   }
 
   MOSDRepScrubMap()
-    : MessageInstance(MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance<MOSDRepScrubMap, MOSDFastDispatchOp>(MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION) {}
 
   MOSDRepScrubMap(spg_t pgid, epoch_t map_epoch, pg_shard_t from)
-    : MessageInstance(MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDRepScrubMap, MOSDFastDispatchOp>(MSG_OSD_REP_SCRUBMAP, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid),
       map_epoch(map_epoch),
       from(from) {}

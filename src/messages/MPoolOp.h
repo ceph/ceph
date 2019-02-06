@@ -34,9 +34,9 @@ public:
   __s16 crush_rule = 0;
 
   MPoolOp()
-    : MessageInstance(CEPH_MSG_POOLOP, 0, HEAD_VERSION, COMPAT_VERSION) { }
+    : MessageInstance<MPoolOp, PaxosServiceMessage>(CEPH_MSG_POOLOP, 0, HEAD_VERSION, COMPAT_VERSION) { }
   MPoolOp(const uuid_d& f, ceph_tid_t t, int p, std::string& n, int o, version_t v)
-    : MessageInstance(CEPH_MSG_POOLOP, v, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MPoolOp, PaxosServiceMessage>(CEPH_MSG_POOLOP, v, HEAD_VERSION, COMPAT_VERSION),
       fsid(f), pool(p), name(n), op(o),
       snapid(0), crush_rule(0) {
     set_tid(t);

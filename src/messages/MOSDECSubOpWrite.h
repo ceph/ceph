@@ -44,10 +44,10 @@ public:
   }
 
   MOSDECSubOpWrite()
-    : MessageInstance(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance<MOSDECSubOpWrite, MOSDFastDispatchOp>(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION)
     {}
   MOSDECSubOpWrite(ECSubWrite &in_op)
-    : MessageInstance(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION) {
+    : MessageInstance<MOSDECSubOpWrite, MOSDFastDispatchOp>(MSG_OSD_EC_WRITE, HEAD_VERSION, COMPAT_VERSION) {
     op.claim(in_op);
   }
 

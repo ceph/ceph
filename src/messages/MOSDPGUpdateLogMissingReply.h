@@ -52,7 +52,7 @@ public:
   }
 
   MOSDPGUpdateLogMissingReply()
-    : MessageInstance(
+    : MessageInstance<MOSDPGUpdateLogMissingReply, MOSDFastDispatchOp>(
       MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY,
       HEAD_VERSION,
       COMPAT_VERSION)
@@ -64,7 +64,7 @@ public:
     epoch_t min_epoch,
     ceph_tid_t rep_tid,
     eversion_t last_complete_ondisk)
-    : MessageInstance(
+    : MessageInstance<MOSDPGUpdateLogMissingReply, MOSDFastDispatchOp>(
         MSG_OSD_PG_UPDATE_LOG_MISSING_REPLY,
         HEAD_VERSION,
         COMPAT_VERSION),

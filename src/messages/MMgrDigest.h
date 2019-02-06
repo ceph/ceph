@@ -30,7 +30,7 @@ public:
   bufferlist health_json;
 
   MMgrDigest() : 
-    MessageInstance(MSG_MGR_DIGEST) {}
+    MessageInstance<MMgrDigest>(MSG_MGR_DIGEST) {}
 
   std::string_view get_type_name() const override { return "mgrdigest"; }
   void print(ostream& out) const override {

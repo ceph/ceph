@@ -30,9 +30,9 @@ public:
   std::map<int64_t, store_statfs_t> pool_stat;
   epoch_t epoch = 0;
 
-  MPGStats() : MessageInstance(MSG_PGSTATS, 0, HEAD_VERSION, COMPAT_VERSION) {}
+  MPGStats() : MessageInstance<MPGStats, PaxosServiceMessage>(MSG_PGSTATS, 0, HEAD_VERSION, COMPAT_VERSION) {}
   MPGStats(const uuid_d& f, epoch_t e)
-    : MessageInstance(MSG_PGSTATS, 0, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MPGStats, PaxosServiceMessage>(MSG_PGSTATS, 0, HEAD_VERSION, COMPAT_VERSION),
       fsid(f),
       epoch(e)
   {}

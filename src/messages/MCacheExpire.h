@@ -68,9 +68,9 @@ public:
   int get_from() const { return from; }
 
 protected:
-  MCacheExpire() : MessageInstance(MSG_MDS_CACHEEXPIRE), from(-1) {}
+  MCacheExpire() : MessageInstance<MCacheExpire>(MSG_MDS_CACHEEXPIRE), from(-1) {}
   MCacheExpire(int f) : 
-    MessageInstance(MSG_MDS_CACHEEXPIRE),
+    MessageInstance<MCacheExpire>(MSG_MDS_CACHEEXPIRE),
     from(f) { }
   ~MCacheExpire() override {}
 

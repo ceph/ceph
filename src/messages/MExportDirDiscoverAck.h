@@ -31,9 +31,9 @@ private:
   bool is_success() const { return success; }
 
 protected:
-  MExportDirDiscoverAck() : MessageInstance(MSG_MDS_EXPORTDIRDISCOVERACK) {}
+  MExportDirDiscoverAck() : MessageInstance<MExportDirDiscoverAck>(MSG_MDS_EXPORTDIRDISCOVERACK) {}
   MExportDirDiscoverAck(dirfrag_t df, uint64_t tid, bool s=true) :
-    MessageInstance(MSG_MDS_EXPORTDIRDISCOVERACK),
+    MessageInstance<MExportDirDiscoverAck>(MSG_MDS_EXPORTDIRDISCOVERACK),
     dirfrag(df), success(s) {
     set_tid(tid);
   }

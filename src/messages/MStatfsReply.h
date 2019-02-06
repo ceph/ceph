@@ -22,8 +22,8 @@ public:
 
   struct ceph_mon_statfs_reply h{};
 
-  MStatfsReply() : MessageInstance(CEPH_MSG_STATFS_REPLY) {}
-  MStatfsReply(uuid_d &f, ceph_tid_t t, epoch_t epoch) : MessageInstance(CEPH_MSG_STATFS_REPLY) {
+  MStatfsReply() : MessageInstance<MStatfsReply>(CEPH_MSG_STATFS_REPLY) {}
+  MStatfsReply(uuid_d &f, ceph_tid_t t, epoch_t epoch) : MessageInstance<MStatfsReply>(CEPH_MSG_STATFS_REPLY) {
     memcpy(&h.fsid, f.bytes(), sizeof(h.fsid));
     header.tid = t;
     h.version = epoch;

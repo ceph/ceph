@@ -45,19 +45,19 @@ public:
   MDSCacheObjectInfo &get_object_info() { return object_info; }
 
 protected:
-  MLock() : MessageInstance(MSG_MDS_LOCK) {}
+  MLock() : MessageInstance<MLock>(MSG_MDS_LOCK) {}
   MLock(int ac, mds_rank_t as) :
-    MessageInstance(MSG_MDS_LOCK),
+    MessageInstance<MLock>(MSG_MDS_LOCK),
     action(ac), asker(as),
     lock_type(0) { }
   MLock(SimpleLock *lock, int ac, mds_rank_t as) :
-    MessageInstance(MSG_MDS_LOCK),
+    MessageInstance<MLock>(MSG_MDS_LOCK),
     action(ac), asker(as),
     lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
   }
   MLock(SimpleLock *lock, int ac, mds_rank_t as, bufferlist& bl) :
-    MessageInstance(MSG_MDS_LOCK),
+    MessageInstance<MLock>(MSG_MDS_LOCK),
     action(ac), asker(as), lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
     lockdata.claim(bl);

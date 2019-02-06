@@ -24,10 +24,10 @@ public:
   __u32 interval;
   uuid_d fsid;
   
-  MMonSubscribeAck() : MessageInstance(CEPH_MSG_MON_SUBSCRIBE_ACK),
+  MMonSubscribeAck() : MessageInstance<MMonSubscribeAck>(CEPH_MSG_MON_SUBSCRIBE_ACK),
 		       interval(0) {
   }
-  MMonSubscribeAck(uuid_d& f, int i) : MessageInstance(CEPH_MSG_MON_SUBSCRIBE_ACK),
+  MMonSubscribeAck(uuid_d& f, int i) : MessageInstance<MMonSubscribeAck>(CEPH_MSG_MON_SUBSCRIBE_ACK),
 				       interval(i), fsid(f) { }
 private:
   ~MMonSubscribeAck() override {}

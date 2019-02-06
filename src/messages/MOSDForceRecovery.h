@@ -42,12 +42,12 @@ public:
   vector<spg_t> forced_pgs;
   uint8_t options = 0;
 
-  MOSDForceRecovery() : MessageInstance(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION) {}
+  MOSDForceRecovery() : MessageInstance<MOSDForceRecovery>(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDForceRecovery(const uuid_d& f, char opts) :
-    MessageInstance(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance<MOSDForceRecovery>(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), options(opts) {}
   MOSDForceRecovery(const uuid_d& f, vector<spg_t>& pgs, char opts) :
-    MessageInstance(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance<MOSDForceRecovery>(MSG_OSD_FORCE_RECOVERY, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), forced_pgs(pgs), options(opts) {}
 private:
   ~MOSDForceRecovery() {}

@@ -43,13 +43,13 @@ public:
   }
 
   MOSDScrubReserve()
-    : MessageInstance(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDScrubReserve, MOSDFastDispatchOp>(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0), type(-1) {}
   MOSDScrubReserve(spg_t pgid,
 		   epoch_t map_epoch,
 		   int type,
 		   pg_shard_t from)
-    : MessageInstance(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDScrubReserve, MOSDFastDispatchOp>(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid), map_epoch(map_epoch),
       type(type), from(from) {}
 

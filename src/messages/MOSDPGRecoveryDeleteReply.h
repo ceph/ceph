@@ -29,7 +29,7 @@ public:
   }
 
   MOSDPGRecoveryDeleteReply()
-    : MessageInstance(MSG_OSD_PG_RECOVERY_DELETE_REPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDPGRecoveryDeleteReply, MOSDFastDispatchOp>(MSG_OSD_PG_RECOVERY_DELETE_REPLY, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0), min_epoch(0)
     {}
 
