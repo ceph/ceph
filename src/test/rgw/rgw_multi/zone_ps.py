@@ -1,3 +1,4 @@
+import logging
 import httplib
 import urllib
 import hmac
@@ -5,6 +6,8 @@ import hashlib
 import base64
 from time import gmtime, strftime
 from multisite import Zone
+
+log = logging.getLogger('rgw_multi.tests')
 
 
 class PSZone(Zone):  # pylint: disable=too-many-ancestors
@@ -47,7 +50,8 @@ def make_request(conn, method, resource, parameters=None):
                'Date': string_date,
                'Host': conn.host+':'+str(conn.port)}
     http_conn = httplib.HTTPConnection(conn.host, conn.port)
-    http_conn.set_debuglevel(5)
+    # TODO set http log level from regular log level
+    # http_conn.set_debuglevel(log.getEffectiveLevel())
     http_conn.request(method, resource+url_params, NO_HTTP_BODY, headers)
     response = http_conn.getresponse()
     data = response.read()
@@ -154,7 +158,7 @@ class PSSubscription:
         if max_entries is not None:
             parameters['max-entries'] = max_entries
         if marker is not None:
-            parameters['market'] = marker
+            parameters['marker'] = marker
         return self.send_request('GET', parameters)
 
     def ack_events(self, event_id):
