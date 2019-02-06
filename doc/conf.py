@@ -9,7 +9,7 @@ release = 'dev'
 templates_path = ['_templates']
 source_suffix = '.rst'
 master_doc = 'index'
-exclude_patterns = ['**/.#*', '**/*~', 'start/quick-common.rst']
+exclude_patterns = ['**/.#*', '**/*~', 'start/quick-common.rst', '**/*.inc.rst']
 if tags.has('man'):
     master_doc = 'man_index'
     exclude_patterns += ['index.rst', 'architecture.rst', 'glossary.rst', 'release*.rst',

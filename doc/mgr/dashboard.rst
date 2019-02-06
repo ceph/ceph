@@ -769,4 +769,4 @@ Plug-ins
 Dashboard Plug-ins allow to extend the functionality of the dashboard in a modular
 and loosely coupled approach.
 
-.. include:: dashboard_plugins/feature_toggles.rst.inc
+.. include:: dashboard_plugins/feature_toggles.inc.rst
