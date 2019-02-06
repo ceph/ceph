@@ -441,9 +441,6 @@ int MonClient::init()
 {
   ldout(cct, 10) << __func__ << dendl;
 
-  messenger->add_dispatcher_head(this);
-  messenger->set_auth_client(this);
-
   entity_name = cct->_conf->name;
 
   auth_registry.refresh_config();
@@ -468,6 +465,9 @@ int MonClient::init()
     new RotatingKeyRing(cct, cct->get_module_type(), keyring.get()));
 
   initialized = true;
+
+  messenger->set_auth_client(this);
+  messenger->add_dispatcher_head(this);
 
   timer.init();
   finisher.start();
