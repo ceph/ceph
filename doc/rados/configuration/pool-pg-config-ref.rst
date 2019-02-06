@@ -264,6 +264,20 @@ Ceph configuration file.
 :Type: Float
 :Default: ``2``
 
+``osd recovery priority``
+
+:Description: Priority of recovery in the work queue.
+
+:Type: Integer
+:Default: ``5``
+
+``osd recovery op priority``
+
+:Description: Default priority used for recovery operations if pool doesn't override.
+
+:Type: Integer
+:Default: ``3``
+
 .. _pool: ../../operations/pools
 .. _Monitoring OSDs and PGs: ../../operations/monitoring-osd-pg#peering
 .. _Weighting Bucket Items: ../../operations/crush-map#weightingbucketitems
