@@ -34,6 +34,17 @@ from ..task.internal import check_lock, add_remotes, connect
 log = logging.getLogger(__name__)
 
 
+def openstack_volume_id(volume):
+    return (volume.get('ID') or volume['id'])
+
+
+def openstack_volume_name(volume):
+    return (volume.get('Display Name') or
+            volume.get('display_name') or
+            volume.get('Name') or
+            volume.get('name') or "")
+
+
 def stale_openstack(ctx):
     targets = dict(map(lambda i: (i['ID'], i),
                        OpenStack.list_instances()))
@@ -93,7 +104,7 @@ def openstack_delete_volume(id):
 def stale_openstack_volumes(ctx, volumes):
     now = datetime.datetime.now()
     for volume in volumes:
-        volume_id = volume.get('ID') or volume['id']
+        volume_id = openstack_volume_id(volume)
         try:
             volume = json.loads(OpenStack().run("volume show -f json " +
                                                 volume_id))
@@ -101,8 +112,7 @@ def stale_openstack_volumes(ctx, volumes):
             log.debug("stale-openstack: {id} disappeared, ignored"
                       .format(id=volume_id))
             continue
-        volume_name = (volume.get('Display Name') or volume.get('display_name')
-                       or volume['name'])
+        volume_name = openstack_volume_name(volume)
         enforce_json_dictionary(volume)
         created_at = datetime.datetime.strptime(
             volume['created_at'], '%Y-%m-%dT%H:%M:%S.%f')
@@ -156,11 +166,12 @@ def openstack_remove_again():
     xargs --no-run-if-empty --max-args 1 -P20 openstack server delete --wait
     true
     """)
-    sh("""
-    openstack volume list --name REMOVE-ME --column ID --format value |
-    xargs --no-run-if-empty --max-args 1 -P20 openstack volume delete
-    true
-    """)
+    volumes = json.loads(OpenStack().run("volume list -f json --long"))
+    remove_me = [openstack_volume_id(v) for v in volumes
+                 if 'REMOVE-ME' in openstack_volume_name(v)]
+    for i in remove_me:
+        log.info("Trying to remove stale volume %s" % i)
+        openstack_delete_volume(i)
 
 
 def main(args):
