@@ -57,6 +57,9 @@ class RadosZone(Zone):
         def create_bucket(self, name):
             return self.conn.create_bucket(name)
 
+        def delete_bucket(self, name):
+            return self.conn.delete_bucket(name)
+
         def check_bucket_eq(self, zone_conn, bucket_name):
             log.info('comparing bucket=%s zones={%s, %s}', bucket_name, self.name, zone_conn.name)
             b1 = self.get_bucket(bucket_name)

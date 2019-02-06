@@ -14,11 +14,11 @@ import nose.core
 
 from rgw_multi import multisite
 from rgw_multi.zone_rados import RadosZone as RadosZone
-from rgw_multi.zone_es  import ESZone as ESZone
-from rgw_multi.zone_es  import ESZoneConfig as ESZoneConfig
-from rgw_multi.zone_cloud  import CloudZone as CloudZone
-from rgw_multi.zone_cloud  import CloudZoneConfig as CloudZoneConfig
-from rgw_multi.zone_pubsub  import PSZone as PSZone
+from rgw_multi.zone_es import ESZone as ESZone
+from rgw_multi.zone_es import ESZoneConfig as ESZoneConfig
+from rgw_multi.zone_cloud import CloudZone as CloudZone
+from rgw_multi.zone_cloud import CloudZoneConfig as CloudZoneConfig
+from rgw_multi.zone_ps import PSZone as PSZone
 
 # make tests from rgw_multi.tests available to nose
 from rgw_multi.tests import *
@@ -161,8 +161,6 @@ def init(parse_args):
                                          'num_zonegroups': 1,
                                          'num_zones': 3,
                                          'num_ps_zones': 0,
-                                         'num_es_zones': 0,
-                                         'num_cloud_zones': 0,
                                          'gateways_per_zone': 2,
                                          'no_bootstrap': 'false',
                                          'log_level': 20,
