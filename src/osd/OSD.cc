@@ -2117,35 +2117,44 @@ int OSD::write_meta(CephContext *cct, ObjectStore *store, uuid_d& cluster_fsid, 
   return 0;
 }
 
-int OSD::peek_meta(ObjectStore *store, std::string& magic,
-		   uuid_d& cluster_fsid, uuid_d& osd_fsid, int& whoami)
+int OSD::peek_meta(ObjectStore *store,
+		   std::string *magic,
+		   uuid_d *cluster_fsid,
+		   uuid_d *osd_fsid,
+		   int *whoami,
+		   int *require_osd_release)
 {
   string val;
 
   int r = store->read_meta("magic", &val);
   if (r < 0)
     return r;
-  magic = val;
+  *magic = val;
 
   r = store->read_meta("whoami", &val);
   if (r < 0)
     return r;
-  whoami = atoi(val.c_str());
+  *whoami = atoi(val.c_str());
 
   r = store->read_meta("ceph_fsid", &val);
   if (r < 0)
     return r;
-  r = cluster_fsid.parse(val.c_str());
+  r = cluster_fsid->parse(val.c_str());
   if (!r)
     return -EINVAL;
 
   r = store->read_meta("fsid", &val);
   if (r < 0) {
-    osd_fsid = uuid_d();
+    *osd_fsid = uuid_d();
   } else {
-    r = osd_fsid.parse(val.c_str());
+    r = osd_fsid->parse(val.c_str());
     if (!r)
       return -EINVAL;
+  }
+
+  r = store->read_meta("require_osd_release", &val);
+  if (r >= 0) {
+    *require_osd_release = atoi(val.c_str());
   }
 
   return 0;
@@ -2807,6 +2816,12 @@ int OSD::init()
   service.sleep_timer.init();
 
   boot_finisher.start();
+
+  {
+    string val;
+    store->read_meta("require_osd_release", &val);
+    last_require_osd_release = atoi(val.c_str());
+  }
 
   // mount.
   dout(2) << "init " << dev_path
@@ -8362,6 +8377,13 @@ void OSD::check_osdmap_features()
 
   if (osdmap->require_osd_release < CEPH_RELEASE_NAUTILUS) {
     heartbeat_dispatcher.ms_set_require_authorizer(false);
+  }
+
+  if (osdmap->require_osd_release != last_require_osd_release) {
+    dout(1) << __func__ << " require_osd_release " << last_require_osd_release
+	    << " -> " << osdmap->require_osd_release << dendl;
+    store->write_meta("require_osd_release", stringify(osdmap->require_osd_release));
+    last_require_osd_release = osdmap->require_osd_release;
   }
 }
 
