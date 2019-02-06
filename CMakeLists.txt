@@ -232,7 +232,7 @@ if(WITH_OPENLDAP)
   set(HAVE_OPENLDAP ${OPENLDAP_FOUND})
 endif()
 
-option(WITH_GSSAPI "GSSAPI/KRB5 is here" ON)
+option(WITH_GSSAPI "GSSAPI/KRB5 is here" OFF)
 if(WITH_GSSAPI)
   find_package(GSSApi REQUIRED)
   set(HAVE_GSSAPI ${GSSApi_FOUND})
