@@ -113,7 +113,8 @@ class C_tick_wakeup : public EventCallback {
 
 AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
                                  Worker *w, bool m2, bool local)
-  : Connection(cct, m), delay_state(NULL), async_msgr(m), conn_id(q->get_id()),
+  : RefCountedObjectInstance<AsyncConnection, Connection>(cct, m),
+    delay_state(NULL), async_msgr(m), conn_id(q->get_id()),
     logger(w->get_perf_counter()),
     state(STATE_NONE), port(-1),
     dispatch_queue(q), recv_buf(NULL),

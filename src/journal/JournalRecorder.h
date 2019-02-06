@@ -22,7 +22,7 @@ namespace journal {
 class JournalRecorder {
 public:
   JournalRecorder(librados::IoCtx &ioctx, const std::string &object_oid_prefix,
-                  const JournalMetadataPtr &journal_metadata,
+                  const JournalMetadata::ref &journal_metadata,
                   uint32_t flush_interval, uint64_t flush_bytes,
                   double flush_age, uint64_t max_in_flight_appends);
   ~JournalRecorder();
@@ -30,10 +30,10 @@ public:
   Future append(uint64_t tag_tid, const bufferlist &bl);
   void flush(Context *on_safe);
 
-  ObjectRecorderPtr get_object(uint8_t splay_offset);
+  const ObjectRecorder::ref& get_object(uint8_t splay_offset);
 
 private:
-  typedef std::map<uint8_t, ObjectRecorderPtr> ObjectRecorderPtrs;
+  typedef std::map<uint8_t, ObjectRecorder::ref> ObjectRecorderPtrs;
 
   struct Listener : public JournalMetadataListener {
     JournalRecorder *journal_recorder;
@@ -76,7 +76,7 @@ private:
   CephContext *m_cct;
   std::string m_object_oid_prefix;
 
-  JournalMetadataPtr m_journal_metadata;
+  JournalMetadata::ref m_journal_metadata;
 
   uint32_t m_flush_interval;
   uint64_t m_flush_bytes;
@@ -94,7 +94,7 @@ private:
   ObjectRecorderPtrs m_object_ptrs;
   std::vector<std::shared_ptr<Mutex>> m_object_locks;
 
-  FutureImplPtr m_prev_future;
+  FutureImpl::ref m_prev_future;
 
   void open_object_set();
   bool close_object_set(uint64_t active_set);
@@ -104,9 +104,9 @@ private:
 
   void close_and_advance_object_set(uint64_t object_set);
 
-  ObjectRecorderPtr create_object_recorder(uint64_t object_number,
+  ObjectRecorder::ref create_object_recorder(uint64_t object_number,
                                            std::shared_ptr<Mutex> lock);
-  void create_next_object_recorder_unlock(ObjectRecorderPtr object_recorder);
+  void create_next_object_recorder_unlock(ObjectRecorder::ref object_recorder);
 
   void handle_update();
 

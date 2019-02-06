@@ -124,12 +124,8 @@ public:
    * ObjectStore users my get collection handles with open_collection() (or,
    * for bootstrapping a new collection, create_new_collection()).
    */
-  struct CollectionImpl : public RefCountedObject {
+  struct CollectionImpl : public RefCountedObjectSubType<CollectionImpl> {
     const coll_t cid;
-
-    CollectionImpl(const coll_t& c)
-      : RefCountedObject(NULL, 0),
-	cid(c) {}
 
     /// wait for any queued transactions to apply
     // block until any previous transactions are visible.  specifically,
@@ -152,8 +148,12 @@ public:
     const coll_t &get_cid() {
       return cid;
     }
+  protected:
+    CollectionImpl() = delete;
+    CollectionImpl(const coll_t& c) : cid(c) {}
+    ~CollectionImpl() = default;
   };
-  typedef boost::intrusive_ptr<CollectionImpl> CollectionHandle;
+  using CollectionHandle = CollectionImpl::ref;
 
 
   /*********************************

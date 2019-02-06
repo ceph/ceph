@@ -15,7 +15,6 @@
 #include "cls/journal/cls_journal_types.h"
 #include "journal/JournalMetadataListener.h"
 #include "journal/Settings.h"
-#include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/optional.hpp>
 #include <functional>
@@ -28,10 +27,7 @@ class SafeTimer;
 
 namespace journal {
 
-class JournalMetadata;
-typedef boost::intrusive_ptr<JournalMetadata> JournalMetadataPtr;
-
-class JournalMetadata : public RefCountedObject, boost::noncopyable {
+class JournalMetadata : public RefCountedObjectInstance<JournalMetadata>, boost::noncopyable {
 public:
   typedef std::function<Context*()> CreateContext;
   typedef cls::journal::ObjectPosition ObjectPosition;
@@ -42,11 +38,6 @@ public:
 
   typedef std::set<Client> RegisteredClients;
   typedef std::list<Tag> Tags;
-
-  JournalMetadata(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
-                  librados::IoCtx &ioctx, const std::string &oid,
-                  const std::string &client_id, const Settings &settings);
-  ~JournalMetadata() override;
 
   void init(Context *on_init);
   void shut_down(Context *on_finish);
@@ -154,6 +145,14 @@ public:
   void async_notify_update(Context *on_safe);
 
   void wait_for_ops();
+
+private:
+  friend factory;
+
+  JournalMetadata(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
+                  librados::IoCtx &ioctx, const std::string &oid,
+                  const std::string &client_id, const Settings &settings);
+  ~JournalMetadata() override;
 
 private:
   typedef std::map<uint64_t, uint64_t> AllocatedEntryTids;

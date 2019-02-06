@@ -33,9 +33,6 @@ public:
       : lock("lock"), entries_available(false), complete(false),
         complete_result(0) {}
 
-    void get() override {}
-    void put() override {}
-
     void handle_entries_available() override {
       Mutex::Locker locker(lock);
       entries_available = true;
@@ -58,7 +55,7 @@ public:
     RadosTestFixture::TearDown();
   }
 
-  journal::JournalMetadataPtr create_metadata(const std::string &oid) {
+  journal::JournalMetadata::ref create_metadata(const std::string &oid) {
     return RadosTestFixture::create_metadata(oid, "client", 0.1,
                                              max_fetch_bytes);
   }
@@ -76,7 +73,7 @@ public:
   }
 
   journal::JournalPlayer *create_player(const std::string &oid,
-                                        const journal::JournalMetadataPtr &metadata) {
+                                        const journal::JournalMetadata::ref &metadata) {
     journal::JournalPlayer *player(new journal::JournalPlayer(
       m_ioctx, oid + ".", metadata, &m_replay_hander));
     m_players.push_back(player);
@@ -157,7 +154,7 @@ TYPED_TEST(TestJournalPlayer, Prefetch) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -203,7 +200,7 @@ TYPED_TEST(TestJournalPlayer, PrefetchSkip) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -238,7 +235,7 @@ TYPED_TEST(TestJournalPlayer, PrefetchWithoutCommit) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -278,7 +275,7 @@ TYPED_TEST(TestJournalPlayer, PrefetchMultipleTags) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -317,7 +314,7 @@ TYPED_TEST(TestJournalPlayer, PrefetchCorruptSequence) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -351,7 +348,7 @@ TYPED_TEST(TestJournalPlayer, PrefetchMissingSequence) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -401,7 +398,7 @@ TYPED_TEST(TestJournalPlayer, PrefetchLargeMissingSequence) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -437,7 +434,7 @@ TYPED_TEST(TestJournalPlayer, PrefetchBlockedNewTag) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -476,7 +473,7 @@ TYPED_TEST(TestJournalPlayer, PrefetchStaleEntries) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -512,7 +509,7 @@ TYPED_TEST(TestJournalPlayer, PrefetchUnexpectedTag) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -549,7 +546,7 @@ TYPED_TEST(TestJournalPlayer, PrefetchAndWatch) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -587,7 +584,7 @@ TYPED_TEST(TestJournalPlayer, PrefetchSkippedObject) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
   ASSERT_EQ(0, metadata->set_active_set(2));
 
@@ -638,7 +635,7 @@ TYPED_TEST(TestJournalPlayer, ImbalancedJournal) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
   ASSERT_EQ(0, metadata->set_active_set(2));
   metadata->set_minimum_set(2);
@@ -687,7 +684,7 @@ TYPED_TEST(TestJournalPlayer, LiveReplayLaggyAppend) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -737,7 +734,7 @@ TYPED_TEST(TestJournalPlayer, LiveReplayMissingSequence) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -792,7 +789,7 @@ TYPED_TEST(TestJournalPlayer, LiveReplayLargeMissingSequence) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -828,7 +825,7 @@ TYPED_TEST(TestJournalPlayer, LiveReplayBlockedNewTag) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -887,7 +884,7 @@ TYPED_TEST(TestJournalPlayer, LiveReplayStaleEntries) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -923,7 +920,7 @@ TYPED_TEST(TestJournalPlayer, LiveReplayRefetchRemoveEmpty) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, commit_position));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -965,7 +962,7 @@ TYPED_TEST(TestJournalPlayer, PrefechShutDown) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, {}));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);
@@ -984,7 +981,7 @@ TYPED_TEST(TestJournalPlayer, LiveReplayShutDown) {
   ASSERT_EQ(0, this->client_register(oid));
   ASSERT_EQ(0, this->client_commit(oid, {}));
 
-  journal::JournalMetadataPtr metadata = this->create_metadata(oid);
+  journal::JournalMetadata::ref metadata = this->create_metadata(oid);
   ASSERT_EQ(0, this->init_metadata(metadata));
 
   journal::JournalPlayer *player = this->create_player(oid, metadata);

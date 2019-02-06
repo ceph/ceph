@@ -21,7 +21,6 @@ class SafeTimer;
 namespace journal {
 
 class Entry;
-class ReplayHandler;
 
 class JournalPlayer {
 public:
@@ -30,8 +29,8 @@ public:
   typedef cls::journal::ObjectSetPosition ObjectSetPosition;
 
   JournalPlayer(librados::IoCtx &ioctx, const std::string &object_oid_prefix,
-                const JournalMetadataPtr& journal_metadata,
-                ReplayHandler *replay_handler);
+                const JournalMetadata::ref& journal_metadata,
+                class ReplayHandler* replay_handler);
   ~JournalPlayer();
 
   void prefetch();
@@ -42,7 +41,7 @@ public:
 
 private:
   typedef std::set<uint8_t> PrefetchSplayOffsets;
-  typedef std::map<uint8_t, ObjectPlayerPtr> SplayedObjectPlayers;
+  typedef std::map<uint8_t, ObjectPlayer::ref> SplayedObjectPlayers;
   typedef std::map<uint8_t, ObjectPosition> SplayedObjectPositions;
   typedef std::set<uint64_t> ObjectNumbers;
 
@@ -92,9 +91,9 @@ private:
   librados::IoCtx m_ioctx;
   CephContext *m_cct;
   std::string m_object_oid_prefix;
-  JournalMetadataPtr m_journal_metadata;
+  JournalMetadata::ref m_journal_metadata;
 
-  ReplayHandler *m_replay_handler;
+  class ReplayHandler* m_replay_handler;
 
   AsyncOpTracker m_async_op_tracker;
 
@@ -131,16 +130,16 @@ private:
   void prune_tag(uint64_t tag_tid);
   void prune_active_tag(const boost::optional<uint64_t>& tag_tid);
 
-  ObjectPlayerPtr get_object_player() const;
-  ObjectPlayerPtr get_object_player(uint64_t object_number) const;
-  bool remove_empty_object_player(const ObjectPlayerPtr &object_player);
+  ObjectPlayer::ref get_object_player() const;
+  ObjectPlayer::ref get_object_player(uint64_t object_number) const;
+  bool remove_empty_object_player(const ObjectPlayer::ref &object_player);
 
   void process_state(uint64_t object_number, int r);
   int process_prefetch(uint64_t object_number);
   int process_playback(uint64_t object_number);
 
   void fetch(uint64_t object_num);
-  void fetch(const ObjectPlayerPtr &object_player);
+  void fetch(const ObjectPlayer::ref &object_player);
   void handle_fetched(uint64_t object_num, int r);
   void refetch(bool immediate);
 

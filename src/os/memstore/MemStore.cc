@@ -157,7 +157,7 @@ int MemStore::_load()
     int r = cbl.read_file(fn.c_str(), &err);
     if (r < 0)
       return r;
-    CollectionRef c(new Collection(cct, *q));
+    auto c = Collection::create(cct, *q);
     auto p = cbl.cbegin();
     c->decode(p);
     coll_map[*q] = c;
@@ -257,7 +257,7 @@ MemStore::CollectionRef MemStore::get_collection(const coll_t& cid)
 ObjectStore::CollectionHandle MemStore::create_new_collection(const coll_t& cid)
 {
   std::lock_guard l{coll_lock};
-  Collection *c = new Collection(cct, cid);
+  auto c = Collection::create(cct, cid);
   new_coll_map[cid] = c;
   return c;
 }
@@ -1560,7 +1560,7 @@ int BufferlistObject::truncate(uint64_t size)
 
 // PageSetObject
 
-struct MemStore::PageSetObject : public Object {
+struct MemStore::PageSetObject : public RefCountedObjectInstance<PageSetObject, Object> {
   PageSet data;
   uint64_t data_len;
 #if defined(__GLIBCXX__)
@@ -1568,8 +1568,6 @@ struct MemStore::PageSetObject : public Object {
   // can avoid allocations in read/write()
   static thread_local PageSet::page_vector tls_pages;
 #endif
-
-  explicit PageSetObject(size_t page_size) : data(page_size), data_len(0) {}
 
   size_t get_size() const override { return data_len; }
 
@@ -1593,6 +1591,10 @@ struct MemStore::PageSetObject : public Object {
     decode_base(p);
     DECODE_FINISH(p);
   }
+
+private:
+  friend factory;
+  explicit PageSetObject(size_t page_size) : data(page_size), data_len(0) {}
 };
 
 #if defined(__GLIBCXX__)
@@ -1796,6 +1798,6 @@ int MemStore::PageSetObject::truncate(uint64_t size)
 
 MemStore::ObjectRef MemStore::Collection::create_object() const {
   if (use_page_set)
-    return new PageSetObject(cct->_conf->memstore_page_size);
+    return PageSetObject::create(cct->_conf->memstore_page_size);
   return new BufferlistObject();
 }

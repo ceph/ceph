@@ -461,9 +461,6 @@ protected:
     JournalPlayer *journal;
     explicit ReplayHandler(JournalPlayer *_journal) : journal(_journal) {}
 
-    void get() override {}
-    void put() override {}
-
     void handle_entries_available() override {
       journal->handle_replay_ready();
     }

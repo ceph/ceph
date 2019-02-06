@@ -7,6 +7,20 @@
 
 namespace journal {
 
+Future::Future() {}
+Future::Future(const Future& o) : m_future_impl(o.m_future_impl) {}
+Future& Future::operator=(const Future& o) {
+  m_future_impl = o.m_future_impl;
+  return *this;
+}
+Future::Future(Future&& o) : m_future_impl(std::move(o.m_future_impl)) {}
+Future& Future::operator=(Future&& o) {
+  m_future_impl = std::move(o.m_future_impl);
+  return *this;
+}
+Future::Future(const FutureImpl::ref& future_impl) : m_future_impl(future_impl) {}
+Future::~Future() {}
+
 void Future::flush(Context *on_safe) {
   m_future_impl->flush(on_safe);
 }
@@ -24,16 +38,8 @@ int Future::get_return_value() const {
   return m_future_impl->get_return_value();
 }
 
-void intrusive_ptr_add_ref(FutureImpl *p) {
-  p->get();
-}
-
-void intrusive_ptr_release(FutureImpl *p) {
-  p->put();
-}
-
 std::ostream &operator<<(std::ostream &os, const Future &future) {
-  return os << *future.m_future_impl.get();
+  return os << *future.m_future_impl;
 }
 
 } // namespace journal

@@ -1737,7 +1737,7 @@ void PrimaryLogPG::get_src_oloc(const object_t& oid, const object_locator_t& olo
 void PrimaryLogPG::handle_backoff(OpRequestRef& op)
 {
   const MOSDBackoff *m = static_cast<const MOSDBackoff*>(op->get_req());
-  SessionRef session{static_cast<Session*>(m->get_connection()->get_priv().get())};
+  auto session = Session::ref_cast(m->get_connection()->get_priv());
   if (!session)
     return;  // drop it.
   hobject_t begin = info.pgid.pgid.get_hobj_start();
@@ -1788,7 +1788,7 @@ void PrimaryLogPG::do_request(
   const Message *m = op->get_req();
   int msg_type = m->get_type();
   if (m->get_connection()->has_feature(CEPH_FEATURE_RADOS_BACKOFF)) {
-    SessionRef session{static_cast<Session*>(m->get_connection()->get_priv().get())};
+    auto session = Session::ref_cast(m->get_connection()->get_priv());
     if (!session)
       return;  // drop it.
 
@@ -1977,7 +1977,7 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
 
   bool can_backoff =
     m->get_connection()->has_feature(CEPH_FEATURE_RADOS_BACKOFF);
-  SessionRef session;
+  Session::ref session;
   if (can_backoff) {
     session = static_cast<Session*>(m->get_connection()->get_priv().get());
     if (!session.get()) {

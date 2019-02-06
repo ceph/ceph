@@ -13,7 +13,6 @@
 #include "journal/Entry.h"
 #include <list>
 #include <string>
-#include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/unordered_map.hpp>
 #include "include/ceph_assert.h"
@@ -22,10 +21,7 @@ class SafeTimer;
 
 namespace journal {
 
-class ObjectPlayer;
-typedef boost::intrusive_ptr<ObjectPlayer> ObjectPlayerPtr;
-
-class ObjectPlayer : public RefCountedObject {
+class ObjectPlayer : public RefCountedObjectInstance<ObjectPlayer> {
 public:
   typedef std::list<Entry> Entries;
   typedef interval_set<uint64_t> InvalidRanges;
@@ -35,11 +31,6 @@ public:
     REFETCH_STATE_REQUIRED,
     REFETCH_STATE_IMMEDIATE
   };
-
-  ObjectPlayer(librados::IoCtx &ioctx, const std::string &object_oid_prefix,
-               uint64_t object_num, SafeTimer &timer, Mutex &timer_lock,
-               uint8_t order, uint64_t max_fetch_bytes);
-  ~ObjectPlayer() override;
 
   inline const std::string &get_oid() const {
     return m_oid;
@@ -79,11 +70,17 @@ public:
   }
 
 private:
+  friend factory;
+  ObjectPlayer(librados::IoCtx &ioctx, const std::string &object_oid_prefix,
+               uint64_t object_num, SafeTimer &timer, Mutex &timer_lock,
+               uint8_t order, uint64_t max_fetch_bytes);
+  ~ObjectPlayer() override;
+
   typedef std::pair<uint64_t, uint64_t> EntryKey;
   typedef boost::unordered_map<EntryKey, Entries::iterator> EntryKeys;
 
   struct C_Fetch : public Context {
-    ObjectPlayerPtr object_player;
+    ObjectPlayer::ref object_player;
     Context *on_finish;
     bufferlist read_bl;
     C_Fetch(ObjectPlayer *o, Context *ctx) : object_player(o), on_finish(ctx) {
@@ -91,7 +88,7 @@ private:
     void finish(int r) override;
   };
   struct C_WatchFetch : public Context {
-    ObjectPlayerPtr object_player;
+    ObjectPlayer::ref object_player;
     C_WatchFetch(ObjectPlayer *o) : object_player(o) {
     }
     void finish(int r) override;

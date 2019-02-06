@@ -143,7 +143,7 @@ private:
   std::string m_object_oid_prefix;
 
   bool m_initialized = false;
-  JournalMetadata *m_metadata = nullptr;
+  boost::intrusive_ptr<class JournalMetadata> m_metadata;
   JournalPlayer *m_player = nullptr;
   JournalRecorder *m_recorder = nullptr;
   JournalTrimmer *m_trimmer = nullptr;

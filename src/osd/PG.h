@@ -399,7 +399,7 @@ public:
     __u8 &);
   static bool _has_removal_flag(ObjectStore *store, spg_t pgid);
 
-  void rm_backoff(BackoffRef b);
+  void rm_backoff(Backoff::ref b);
 
   void update_snap_mapper_bits(uint32_t bits) {
     snap_mapper.update_bits(bits);
@@ -1651,16 +1651,16 @@ protected:
 
   // -- backoff --
   Mutex backoff_lock;  // orders inside Backoff::lock
-  map<hobject_t,set<BackoffRef>> backoffs;
+  map<hobject_t,set<Backoff::ref>> backoffs;
 
-  void add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end);
+  void add_backoff(const Session::ref& s, const hobject_t& begin, const hobject_t& end);
   void release_backoffs(const hobject_t& begin, const hobject_t& end);
   void release_backoffs(const hobject_t& o) {
     release_backoffs(o, o);
   }
   void clear_backoffs();
 
-  void add_pg_backoff(SessionRef s) {
+  void add_pg_backoff(const Session::ref& s) {
     hobject_t begin = info.pgid.pgid.get_hobj_start();
     hobject_t end = info.pgid.pgid.get_hobj_end(pool.info.get_pg_num());
     add_backoff(s, begin, end);

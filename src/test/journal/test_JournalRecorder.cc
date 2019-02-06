@@ -20,7 +20,7 @@ public:
   }
 
   journal::JournalRecorder *create_recorder(
-      const std::string &oid, const journal::JournalMetadataPtr &metadata) {
+      const std::string &oid, const journal::JournalMetadata::ref &metadata) {
     journal::JournalRecorder *recorder(new journal::JournalRecorder(
         m_ioctx, oid + ".", metadata, 0, std::numeric_limits<uint32_t>::max(),
         0, 0));
@@ -37,7 +37,7 @@ TEST_F(TestJournalRecorder, Append) {
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalRecorder *recorder = create_recorder(oid, metadata);
@@ -54,7 +54,7 @@ TEST_F(TestJournalRecorder, AppendKnownOverflow) {
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_EQ(0U, metadata->get_active_set());
 
@@ -76,7 +76,7 @@ TEST_F(TestJournalRecorder, AppendDelayedOverflow) {
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_EQ(0U, metadata->get_active_set());
 
@@ -101,7 +101,7 @@ TEST_F(TestJournalRecorder, FutureFlush) {
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalRecorder *recorder = create_recorder(oid, metadata);
@@ -121,7 +121,7 @@ TEST_F(TestJournalRecorder, Flush) {
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   journal::JournalRecorder *recorder = create_recorder(oid, metadata);
@@ -145,7 +145,7 @@ TEST_F(TestJournalRecorder, OverflowCommitObjectNumber) {
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_EQ(0U, metadata->get_active_set());
 

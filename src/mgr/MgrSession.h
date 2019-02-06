@@ -13,7 +13,7 @@
 /**
  * Session state associated with the Connection.
  */
-struct MgrSession : public RefCountedObject {
+struct MgrSession : public RefCountedObjectInstance<MgrSession> {
   uint64_t global_id = 0;
   EntityName entity_name;
   entity_inst_t inst;
@@ -25,15 +25,17 @@ struct MgrSession : public RefCountedObject {
 
   std::set<std::string> declared_types;
 
-  explicit MgrSession(CephContext *cct) : RefCountedObject(cct, 0) {}
-  ~MgrSession() override {}
-
   const entity_addr_t& get_peer_addr() {
     return inst.addr;
   }
+
+private:
+  friend factory;
+  explicit MgrSession(CephContext *cct) : RefCountedObjectInstance<MgrSession>(cct) {}
+  ~MgrSession() override = default;
 };
 
-typedef boost::intrusive_ptr<MgrSession> MgrSessionRef;
+using MgrSessionRef = MgrSession::ref;
 
 
 #endif

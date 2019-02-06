@@ -23,7 +23,7 @@ public:
 
   int create(const std::string &oid, uint8_t order = 14,
              uint8_t splay_width = 2);
-  journal::JournalMetadataPtr create_metadata(const std::string &oid,
+  journal::JournalMetadata::ref create_metadata(const std::string &oid,
                                               const std::string &client_id = "client",
                                               double commit_internal = 0.1,
                                               uint64_t max_fetch_bytes = 0,
@@ -53,9 +53,9 @@ public:
     }
   };
 
-  int init_metadata(journal::JournalMetadataPtr metadata);
+  int init_metadata(journal::JournalMetadata::ref metadata);
 
-  bool wait_for_update(journal::JournalMetadataPtr metadata);
+  bool wait_for_update(journal::JournalMetadata::ref metadata);
 
   static std::string _pool_name;
   static librados::Rados _rados;
@@ -71,5 +71,5 @@ public:
 
   Listener m_listener;
 
-  std::list<journal::JournalMetadataPtr> m_metadatas;
+  std::list<journal::JournalMetadata::ref> m_metadatas;
 };

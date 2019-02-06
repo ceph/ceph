@@ -565,7 +565,7 @@ int KStore::OnodeHashLRU::trim(int max)
 #define dout_prefix *_dout << "kstore(" << store->path << ").collection(" << cid << ") "
 
 KStore::Collection::Collection(KStore *ns, coll_t cid)
-  : CollectionImpl(cid),
+  : RefCountedObjectInstance<Collection, CollectionImpl>(cid),
     store(ns),
     lock("KStore::Collection::lock", true, false),
     osr(new OpSequencer()),
@@ -897,7 +897,7 @@ int KStore::_open_collections(int *errors)
        it->next()) {
     coll_t cid;
     if (cid.parse(it->key())) {
-      CollectionRef c(new Collection(this, cid));
+      auto c = Collection::create(this, cid);
       bufferlist bl = it->value();
       auto p = bl.cbegin();
       try {
@@ -1109,7 +1109,7 @@ ObjectStore::CollectionHandle KStore::open_collection(const coll_t& cid)
 
 ObjectStore::CollectionHandle KStore::create_new_collection(const coll_t& cid)
 {
-  auto *c = new Collection(this, cid);
+  auto c = Collection::create(this, cid);
   RWLock::WLocker l(coll_lock);
   new_coll_map[cid] = c;
   return c;

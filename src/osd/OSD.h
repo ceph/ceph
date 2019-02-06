@@ -1481,37 +1481,36 @@ private:
 
   // -- sessions --
 private:
-  void dispatch_session_waiting(SessionRef session, OSDMapRef osdmap);
-  void maybe_share_map(Session *session, OpRequestRef op, OSDMapRef osdmap);
+  void dispatch_session_waiting(const Session::ref& session, OSDMapRef osdmap);
+  void maybe_share_map(const Session::ref& session, OpRequestRef op, OSDMapRef osdmap);
 
   Mutex session_waiting_lock;
-  set<SessionRef> session_waiting_for_map;
+  set<Session::ref> session_waiting_for_map;
 
   /// Caller assumes refs for included Sessions
-  void get_sessions_waiting_for_map(set<SessionRef> *out) {
+  void get_sessions_waiting_for_map(set<Session::ref> *out) {
     std::lock_guard l(session_waiting_lock);
     out->swap(session_waiting_for_map);
   }
-  void register_session_waiting_on_map(SessionRef session) {
+  void register_session_waiting_on_map(Session::ref session) {
     std::lock_guard l(session_waiting_lock);
     session_waiting_for_map.insert(session);
   }
-  void clear_session_waiting_on_map(SessionRef session) {
+  void clear_session_waiting_on_map(Session::ref session) {
     std::lock_guard l(session_waiting_lock);
     session_waiting_for_map.erase(session);
   }
   void dispatch_sessions_waiting_on_map() {
-    set<SessionRef> sessions_to_check;
+    set<Session::ref> sessions_to_check;
     get_sessions_waiting_for_map(&sessions_to_check);
     for (auto i = sessions_to_check.begin();
 	 i != sessions_to_check.end();
 	 sessions_to_check.erase(i++)) {
       std::lock_guard l{(*i)->session_dispatch_lock};
-      SessionRef session = *i;
-      dispatch_session_waiting(session, osdmap);
+      dispatch_session_waiting(*i, osdmap);
     }
   }
-  void session_handle_reset(SessionRef session) {
+  void session_handle_reset(const Session::ref& session) {
     std::lock_guard l(session->session_dispatch_lock);
     clear_session_waiting_on_map(session);
 

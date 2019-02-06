@@ -11,7 +11,7 @@
 
 void Session::clear_backoffs()
 {
-  map<spg_t,map<hobject_t,set<BackoffRef>>> ls;
+  map<spg_t,map<hobject_t,set<Backoff::ref>>> ls;
   {
     std::lock_guard l(backoff_lock);
     ls.swap(backoffs);
@@ -85,7 +85,7 @@ void Session::ack_backoff(
 bool Session::check_backoff(
   CephContext *cct, spg_t pgid, const hobject_t& oid, const Message *m)
 {
-  BackoffRef b(have_backoff(pgid, oid));
+  auto&& b = have_backoff(pgid, oid);
   if (b) {
     dout(10) << __func__ << " session " << this << " has backoff " << *b
 	     << " for " << *m << dendl;

@@ -8,14 +8,14 @@ namespace journal {
 
 FutureImpl::FutureImpl(uint64_t tag_tid, uint64_t entry_tid,
                        uint64_t commit_tid)
-  : RefCountedObject(NULL, 0), m_tag_tid(tag_tid), m_entry_tid(entry_tid),
+  : m_tag_tid(tag_tid), m_entry_tid(entry_tid),
     m_commit_tid(commit_tid),
     m_lock("FutureImpl::m_lock", false, false), m_safe(false),
     m_consistent(false), m_return_value(0), m_flush_state(FLUSH_STATE_NONE),
     m_consistent_ack(this) {
 }
 
-void FutureImpl::init(const FutureImplPtr &prev_future) {
+void FutureImpl::init(const FutureImpl::ref &prev_future) {
   // chain ourself to the prior future (if any) to that we known when the
   // journal is consistent
   if (prev_future) {
@@ -30,7 +30,7 @@ void FutureImpl::flush(Context *on_safe) {
 
   bool complete;
   FlushHandlers flush_handlers;
-  FutureImplPtr prev_future;
+  FutureImpl::ref prev_future;
   {
     Mutex::Locker locker(m_lock);
     complete = (m_safe && m_consistent);
@@ -60,12 +60,12 @@ void FutureImpl::flush(Context *on_safe) {
   }
 }
 
-FutureImplPtr FutureImpl::prepare_flush(FlushHandlers *flush_handlers) {
+FutureImpl::ref FutureImpl::prepare_flush(FlushHandlers *flush_handlers) {
   Mutex::Locker locker(m_lock);
   return prepare_flush(flush_handlers, m_lock);
 }
 
-FutureImplPtr FutureImpl::prepare_flush(FlushHandlers *flush_handlers,
+FutureImpl::ref FutureImpl::prepare_flush(FlushHandlers *flush_handlers,
                                         Mutex &lock) {
   ceph_assert(m_lock.is_locked());
 
@@ -103,10 +103,10 @@ int FutureImpl::get_return_value() const {
   return m_return_value;
 }
 
-bool FutureImpl::attach(const FlushHandlerPtr &flush_handler) {
+bool FutureImpl::attach(FlushHandler::ref flush_handler) {
   Mutex::Locker locker(m_lock);
   ceph_assert(!m_flush_handler);
-  m_flush_handler = flush_handler;
+  m_flush_handler = std::move(flush_handler);
   return m_flush_state != FLUSH_STATE_NONE;
 }
 
@@ -161,14 +161,6 @@ std::ostream &operator<<(std::ostream &os, const FutureImpl &future) {
      << "entry_tid=" << future.m_entry_tid << ", "
      << "commit_tid=" << future.m_commit_tid << "]";
   return os;
-}
-
-void intrusive_ptr_add_ref(FutureImpl::FlushHandler *p) {
-  p->get();
-}
-
-void intrusive_ptr_release(FutureImpl::FlushHandler *p) {
-  p->put();
 }
 
 } // namespace journal

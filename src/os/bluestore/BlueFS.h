@@ -70,7 +70,7 @@ public:
     WRITER_SST,
   };
 
-  struct File : public RefCountedObject {
+  struct File : public RefCountedObjectInstance<File> {
     MEMPOOL_CLASS_HELPERS();
 
     bluefs_fnode_t fnode;
@@ -83,8 +83,10 @@ public:
     std::atomic_int num_readers, num_writers;
     std::atomic_int num_reading;
 
+  private:
+    friend factory;
     File()
-      : RefCountedObject(NULL, 0),
+      :
 	refs(0),
 	dirty_seq(0),
 	locked(false),
@@ -99,15 +101,8 @@ public:
       ceph_assert(num_reading.load() == 0);
       ceph_assert(!locked);
     }
-
-    friend void intrusive_ptr_add_ref(File *f) {
-      f->get();
-    }
-    friend void intrusive_ptr_release(File *f) {
-      f->put();
-    }
   };
-  typedef boost::intrusive_ptr<File> FileRef;
+  using FileRef = File::ref;
 
   typedef boost::intrusive::list<
       File,
@@ -116,19 +111,14 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&File::dirty_item> > dirty_file_list_t;
 
-  struct Dir : public RefCountedObject {
+  struct Dir : public RefCountedObjectInstance<Dir> {
     MEMPOOL_CLASS_HELPERS();
 
     mempool::bluefs::map<string,FileRef> file_map;
 
-    Dir() : RefCountedObject(NULL, 0) {}
-
-    friend void intrusive_ptr_add_ref(Dir *d) {
-      d->get();
-    }
-    friend void intrusive_ptr_release(Dir *d) {
-      d->put();
-    }
+  private:
+    friend factory;
+    Dir() = default;
   };
   typedef boost::intrusive_ptr<Dir> DirRef;
 

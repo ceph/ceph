@@ -62,8 +62,6 @@ template <typename I>
 struct ReplayHandler : public ::journal::ReplayHandler {
   ImageReplayer<I> *replayer;
   ReplayHandler(ImageReplayer<I> *replayer) : replayer(replayer) {}
-  void get() override {}
-  void put() override {}
 
   void handle_entries_available() override {
     replayer->handle_replay_ready();

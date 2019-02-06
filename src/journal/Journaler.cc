@@ -99,10 +99,9 @@ void Journaler::set_up(ContextWQ *work_queue, SafeTimer *timer,
   m_header_oid = header_oid(journal_id);
   m_object_oid_prefix = object_oid_prefix(m_header_ioctx.get_id(), journal_id);
 
-  m_metadata = new JournalMetadata(work_queue, timer, timer_lock,
+  m_metadata = JournalMetadata::create(work_queue, timer, timer_lock,
                                    m_header_ioctx, m_header_oid, m_client_id,
                                    settings);
-  m_metadata->get();
 }
 
 Journaler::~Journaler() {
@@ -113,8 +112,7 @@ Journaler::~Journaler() {
       // since we wouldn't expect shut_down to be invoked
       m_metadata->wait_for_ops();
     }
-    m_metadata->put();
-    m_metadata = nullptr;
+    m_metadata.reset();
   }
   ceph_assert(m_trimmer == nullptr);
   ceph_assert(m_player == nullptr);
@@ -174,13 +172,10 @@ void Journaler::shut_down(Context *on_finish) {
   ceph_assert(m_player == nullptr);
   ceph_assert(m_recorder == nullptr);
 
-  JournalMetadata *metadata = nullptr;
-  ceph_assert(m_metadata != nullptr);
-  std::swap(metadata, m_metadata);
-  ceph_assert(metadata != nullptr);
+  auto metadata = std::move(m_metadata);
+  ceph_assert(metadata);
 
   on_finish = new FunctionContext([metadata, on_finish](int r) {
-      metadata->put();
       on_finish->complete(0);
     });
 
@@ -387,7 +382,7 @@ void Journaler::committed(const ReplayEntry &replay_entry) {
 }
 
 void Journaler::committed(const Future &future) {
-  FutureImplPtr future_impl = future.get_future_impl();
+  auto& future_impl = future.get_future_impl();
   m_trimmer->committed(future_impl->get_commit_tid());
 }
 

@@ -2876,12 +2876,12 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
   dirty_big_info = true;
 }
 
-void PG::add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end)
+void PG::add_backoff(const Session::ref& s, const hobject_t& begin, const hobject_t& end)
 {
-  ConnectionRef con = s->con;
+  auto& con = s->con;
   if (!con)   // OSD::ms_handle_reset clears s->con without a lock
     return;
-  BackoffRef b(s->have_backoff(info.pgid, begin));
+  Backoff::ref b(s->have_backoff(info.pgid, begin));
   if (b) {
     derr << __func__ << " already have backoff for " << s << " begin " << begin
 	 << " " << *b << dendl;
@@ -2889,7 +2889,7 @@ void PG::add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end)
   }
   std::lock_guard l(backoff_lock);
   {
-    b = new Backoff(info.pgid, this, s, ++s->backoff_seq, begin, end);
+    b = Backoff::create(info.pgid, this, s, ++s->backoff_seq, begin, end);
     backoffs[begin].insert(b);
     s->add_backoff(b);
     dout(10) << __func__ << " session " << s << " added " << *b << dendl;
@@ -2907,7 +2907,7 @@ void PG::add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end)
 void PG::release_backoffs(const hobject_t& begin, const hobject_t& end)
 {
   dout(10) << __func__ << " [" << begin << "," << end << ")" << dendl;
-  vector<BackoffRef> bv;
+  vector<Backoff::ref> bv;
   {
     std::lock_guard l(backoff_lock);
     auto p = backoffs.lower_bound(begin);
@@ -2969,7 +2969,7 @@ void PG::release_backoffs(const hobject_t& begin, const hobject_t& end)
 void PG::clear_backoffs()
 {
   dout(10) << __func__ << " " << dendl;
-  map<hobject_t,set<BackoffRef>> ls;
+  map<hobject_t,set<Backoff::ref>> ls;
   {
     std::lock_guard l(backoff_lock);
     ls.swap(backoffs);
@@ -2993,7 +2993,7 @@ void PG::clear_backoffs()
 }
 
 // called by Session::clear_backoffs()
-void PG::rm_backoff(BackoffRef b)
+void PG::rm_backoff(Backoff::ref b)
 {
   dout(10) << __func__ << " " << *b << dendl;
   std::lock_guard l(backoff_lock);

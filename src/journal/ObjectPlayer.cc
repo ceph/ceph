@@ -17,7 +17,7 @@ ObjectPlayer::ObjectPlayer(librados::IoCtx &ioctx,
                            uint64_t object_num, SafeTimer &timer,
                            Mutex &timer_lock, uint8_t order,
                            uint64_t max_fetch_bytes)
-  : RefCountedObject(NULL, 0), m_object_num(object_num),
+  : m_object_num(object_num),
     m_oid(utils::get_object_name(object_oid_prefix, m_object_num)),
     m_cct(NULL), m_timer(timer), m_timer_lock(timer_lock), m_order(order),
     m_max_fetch_bytes(max_fetch_bytes > 0 ? max_fetch_bytes : 2 << order),

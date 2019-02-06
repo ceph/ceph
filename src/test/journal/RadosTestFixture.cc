@@ -67,7 +67,7 @@ int RadosTestFixture::create(const std::string &oid, uint8_t order,
   return cls::journal::client::create(m_ioctx, oid, order, splay_width, -1);
 }
 
-journal::JournalMetadataPtr RadosTestFixture::create_metadata(
+journal::JournalMetadata::ref RadosTestFixture::create_metadata(
     const std::string &oid, const std::string &client_id,
     double commit_interval, uint64_t max_fetch_bytes,
     int max_concurrent_object_sets) {
@@ -76,8 +76,8 @@ journal::JournalMetadataPtr RadosTestFixture::create_metadata(
   settings.max_fetch_bytes = max_fetch_bytes;
   settings.max_concurrent_object_sets = max_concurrent_object_sets;
 
-  journal::JournalMetadataPtr metadata(new journal::JournalMetadata(
-    m_work_queue, m_timer, &m_timer_lock, m_ioctx, oid, client_id, settings));
+  auto metadata = journal::JournalMetadata::create(
+    m_work_queue, m_timer, &m_timer_lock, m_ioctx, oid, client_id, settings);
   m_metadatas.push_back(metadata);
   return metadata;
 }
@@ -110,13 +110,13 @@ bufferlist RadosTestFixture::create_payload(const std::string &payload) {
   return bl;
 }
 
-int RadosTestFixture::init_metadata(journal::JournalMetadataPtr metadata) {
+int RadosTestFixture::init_metadata(journal::JournalMetadata::ref metadata) {
   C_SaferCond cond;
   metadata->init(&cond);
   return cond.wait();
 }
 
-bool RadosTestFixture::wait_for_update(journal::JournalMetadataPtr metadata) {
+bool RadosTestFixture::wait_for_update(journal::JournalMetadata::ref metadata) {
   Mutex::Locker locker(m_listener.mutex);
   while (m_listener.updates[metadata.get()] == 0) {
     if (m_listener.cond.WaitInterval(

@@ -3235,7 +3235,7 @@ void BlueStore::DeferredBatch::_audit(CephContext *cct)
 #define dout_prefix *_dout << "bluestore(" << store->path << ").collection(" << cid << " " << this << ") "
 
 BlueStore::Collection::Collection(BlueStore *store_, Cache *c, coll_t cid)
-  : CollectionImpl(cid),
+  : RefCountedObjectInstance<Collection, CollectionImpl>(cid),
     store(store_),
     cache(c),
     lock("BlueStore::Collection::lock", true, false),
@@ -5753,11 +5753,10 @@ int BlueStore::_open_collections(int *errors)
        it->next()) {
     coll_t cid;
     if (cid.parse(it->key())) {
-      CollectionRef c(
-	new Collection(
+      auto c = Collection::create(
 	  this,
 	  cache_shards[cid.hash_to_shard(cache_shards.size())],
-	  cid));
+	  cid);
       bufferlist bl = it->value();
       auto p = bl.cbegin();
       try {
@@ -8267,12 +8266,12 @@ ObjectStore::CollectionHandle BlueStore::create_new_collection(
   const coll_t& cid)
 {
   RWLock::WLocker l(coll_lock);
-  Collection *c = new Collection(
+  auto c = Collection::create(
     this,
     cache_shards[cid.hash_to_shard(cache_shards.size())],
     cid);
   new_coll_map[cid] = c;
-  _osr_attach(c);
+  _osr_attach(c.get());
   return c;
 }
 
@@ -10159,7 +10158,7 @@ void BlueStore::_osr_attach(Collection *c)
     std::lock_guard l(zombie_osr_lock);
     auto p = zombie_osr_set.find(c->cid);
     if (p == zombie_osr_set.end()) {
-      c->osr = new OpSequencer(this, c->cid);
+      c->osr = OpSequencer::create(this, c->cid);
       ldout(cct, 10) << __func__ << " " << c->cid
 		     << " fresh osr " << c->osr << dendl;
     } else {

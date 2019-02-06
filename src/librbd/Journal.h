@@ -253,13 +253,6 @@ private:
     ReplayHandler(Journal *_journal) : journal(_journal) {
     }
 
-    void get() override {
-      // TODO
-    }
-    void put() override {
-      // TODO
-    }
-
     void handle_entries_available() override {
       journal->handle_replay_ready();
     }

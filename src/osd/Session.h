@@ -25,10 +25,6 @@
 
 //#define PG_DEBUG_REFS
 
-struct Session;
-typedef boost::intrusive_ptr<Session> SessionRef;
-struct Backoff;
-typedef boost::intrusive_ptr<Backoff> BackoffRef;
 class PG;
 #ifdef PG_DEBUG_REFS
 #include "common/tracked_int_ptr.hpp"
@@ -68,7 +64,9 @@ typedef boost::intrusive_ptr<PG> PGRef;
  *
  */
 
-struct Backoff : public RefCountedObject {
+struct Backoff : public RefCountedObjectInstance<Backoff> {
+  using SessionRef = boost::intrusive_ptr<class Session>;
+
   enum {
     STATE_NEW = 1,     ///< backoff in flight to client
     STATE_ACKED = 2,   ///< backoff acked
@@ -105,18 +103,6 @@ struct Backoff : public RefCountedObject {
   SessionRef session;   ///< owning session
   hobject_t begin, end; ///< [) range to block, unless ==, then single obj
 
-  Backoff(spg_t pgid, PGRef pg, SessionRef s,
-	  uint64_t i,
-	  const hobject_t& b, const hobject_t& e)
-    : RefCountedObject(g_ceph_context, 0),
-      pgid(pgid),
-      id(i),
-      lock("Backoff::lock"),
-      pg(pg),
-      session(s),
-      begin(b),
-      end(e) {}
-
   friend ostream& operator<<(ostream& out, const Backoff& b) {
     return out << "Backoff(" << &b << " " << b.pgid << " " << b.id
 	       << " " << b.get_state_name()
@@ -124,11 +110,25 @@ struct Backoff : public RefCountedObject {
 	       << " session " << b.session
 	       << " pg " << b.pg << ")";
   }
+
+private:
+  friend factory;
+  Backoff(spg_t pgid, PGRef pg, SessionRef s,
+	  uint64_t i,
+	  const hobject_t& b, const hobject_t& e)
+    : RefCountedObjectInstance<Backoff>(g_ceph_context),
+      pgid(pgid),
+      id(i),
+      lock("Backoff::lock"),
+      pg(pg),
+      session(s),
+      begin(b),
+      end(e) {}
 };
 
 
 
-struct Session : public RefCountedObject {
+struct Session : public RefCountedObjectInstance<Session> {
   EntityName entity_name;
   OSDCap caps;
   ConnectionRef con;
@@ -144,19 +144,9 @@ struct Session : public RefCountedObject {
   /// protects backoffs; orders inside Backoff::lock *and* PG::backoff_lock
   Mutex backoff_lock;
   std::atomic<int> backoff_count= {0};  ///< simple count of backoffs
-  map<spg_t,map<hobject_t,set<BackoffRef>>> backoffs;
+  map<spg_t,map<hobject_t,set<Backoff::ref>>> backoffs;
 
   std::atomic<uint64_t> backoff_seq = {0};
-
-  explicit Session(CephContext *cct, Connection *con_) :
-    RefCountedObject(cct),
-    con(con_),
-    socket_addr(con_->get_peer_socket_addr()),
-    wstate(cct),
-    session_dispatch_lock("Session::session_dispatch_lock"),
-    last_sent_epoch(0),
-    backoff_lock("Session::backoff_lock")
-    {}
 
   entity_addr_t& get_peer_socket_addr() {
     return socket_addr;
@@ -169,7 +159,7 @@ struct Session : public RefCountedObject {
     const hobject_t& start,
     const hobject_t& end);
 
-  BackoffRef have_backoff(spg_t pgid, const hobject_t& oid) {
+  Backoff::ref have_backoff(spg_t pgid, const hobject_t& oid) {
     if (!backoff_count.load()) {
       return nullptr;
     }
@@ -200,15 +190,15 @@ struct Session : public RefCountedObject {
   bool check_backoff(
     CephContext *cct, spg_t pgid, const hobject_t& oid, const Message *m);
 
-  void add_backoff(BackoffRef b) {
+  void add_backoff(Backoff::ref b) {
     std::lock_guard l(backoff_lock);
     ceph_assert(!backoff_count == backoffs.empty());
-    backoffs[b->pgid][b->begin].insert(b);
+    backoffs[b->pgid][b->begin].insert(std::move(b));
     ++backoff_count;
   }
 
   // called by PG::release_*_backoffs and PG::clear_backoffs()
-  void rm_backoff(BackoffRef b) {
+  void rm_backoff(const Backoff::ref& b) {
     std::lock_guard l(backoff_lock);
     ceph_assert(b->lock.is_locked_by_me());
     ceph_assert(b->session == this);
@@ -233,6 +223,18 @@ struct Session : public RefCountedObject {
     ceph_assert(!backoff_count == backoffs.empty());
   }
   void clear_backoffs();
+
+private:
+  friend factory;
+  explicit Session(CephContext *cct, Connection *con_) :
+    RefCountedObjectInstance<Session>(cct),
+    con(con_),
+    socket_addr(con_->get_peer_socket_addr()),
+    wstate(cct),
+    session_dispatch_lock("Session::session_dispatch_lock"),
+    last_sent_epoch(0),
+    backoff_lock("Session::backoff_lock")
+    {}
 };
 
 #endif

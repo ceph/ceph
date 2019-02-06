@@ -133,7 +133,7 @@ public:
   class OpSequencer;
   typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
 
-  struct Collection : public CollectionImpl {
+  struct Collection : public RefCountedObjectInstance<Collection, CollectionImpl> {
     KStore *store;
     kstore_cnode_t cnode;
     RWLock lock;
@@ -160,9 +160,11 @@ public:
     void flush() override;
     bool flush_commit(Context *c) override;
 
+  private:
+    friend factory;
     Collection(KStore *ns, coll_t c);
   };
-  typedef boost::intrusive_ptr<Collection> CollectionRef;
+  using CollectionRef = Collection::ref;
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
     CollectionRef c;

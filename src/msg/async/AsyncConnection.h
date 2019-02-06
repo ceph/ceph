@@ -50,8 +50,7 @@ static const int ASYNC_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
  * descriptor broken, AsyncConnection will maintain the message queue and
  * sequence, try to reconnect peer endpoint.
  */
-class AsyncConnection : public Connection {
-
+class AsyncConnection : public RefCountedObjectInstance<AsyncConnection, Connection> {
   ssize_t read(unsigned len, char *buffer,
                std::function<void(char *, ssize_t)> callback);
   ssize_t read_until(unsigned needed, char *p);
@@ -106,10 +105,12 @@ class AsyncConnection : public Connection {
     void flush();
   } *delay_state;
 
- public:
+private:
+  friend factory;
   AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQueue *q,
 		  Worker *w, bool is_msgr2, bool local);
   ~AsyncConnection() override;
+public:
   void maybe_start_delay_thread();
 
   ostream& _conn_prefix(std::ostream *_dout);

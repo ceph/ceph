@@ -30,11 +30,14 @@ public:
   using ref = boost::intrusive_ptr<RefCountedObject>;
   using const_ref = boost::intrusive_ptr<RefCountedObject const>;
 
-  RefCountedObject(CephContext *c = NULL, int n=1) : nref(n), cct(c) {}
-  virtual ~RefCountedObject() {
-    ceph_assert(nref == 0);
+  void set_cct(CephContext *c) {
+    cct = c;
   }
-  
+
+  auto get_nref() const {
+    return nref.load();
+  }
+
   const RefCountedObject *get() const {
     int v = ++nref;
     if (cct)
@@ -66,17 +69,22 @@ public:
       ANNOTATE_HAPPENS_BEFORE(&nref);
     }
   }
-  void set_cct(CephContext *c) {
-    cct = c;
-  }
 
-  uint64_t get_nref() const {
-    return nref;
+protected:
+  RefCountedObject() = default;
+  RefCountedObject(const RefCountedObject& o) : cct(o.cct) {}
+  RefCountedObject& operator=(const RefCountedObject& o) = delete;
+  RefCountedObject(RefCountedObject&&) = delete;
+  RefCountedObject& operator=(RefCountedObject&&) = delete;
+  RefCountedObject(CephContext* c) : cct(c) {}
+
+  virtual ~RefCountedObject() {
+    ceph_assert(nref == 0);
   }
 
 private:
-  mutable std::atomic<int64_t> nref;
-  CephContext *cct;
+  mutable std::atomic<int64_t> nref = {1};
+  CephContext *cct = nullptr;
 };
 
 template <class RefCountedObjectType>
@@ -144,14 +152,9 @@ using RefCountedPtr = boost::intrusive_ptr<RefCountedObject>;
  *
  *  a refcounted condition, will be removed when all references are dropped
  */
-
-struct RefCountedCond : public RefCountedObject {
-  bool complete;
-  ceph::mutex lock = ceph::make_mutex("RefCountedCond::lock");
-  ceph::condition_variable cond;
-  int rval;
-
-  RefCountedCond() : complete(false), rval(0) {}
+struct RefCountedCond : public RefCountedObjectInstance<RefCountedCond> {
+  RefCountedCond() = default;
+  ~RefCountedCond() = default;
 
   int wait() {
     std::unique_lock l(lock);
@@ -171,6 +174,12 @@ struct RefCountedCond : public RefCountedObject {
   void done() {
     done(0);
   }
+
+private:
+  bool complete = false;
+  ceph::mutex lock = ceph::make_mutex("RefCountedCond::lock");
+  ceph::condition_variable cond;
+  int rval = 0;
 };
 
 /**

@@ -5731,11 +5731,10 @@ void OSD::ms_handle_fast_connect(Connection *con)
 {
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON &&
       con->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
-    auto priv = con->get_priv();
-    auto s = static_cast<Session*>(priv.get());
+    auto s = Session::ref_cast(con->get_priv());
     if (!s) {
-      s = new Session{cct, con};
-      con->set_priv(RefCountedPtr{s, false});
+      s = Session::create(cct, con);
+      con->set_priv(s);
       dout(10) << " new session (outgoing) " << s << " con=" << s->con
           << " addr=" << s->con->get_peer_addr() << dendl;
       // we don't connect to clients
@@ -5749,11 +5748,10 @@ void OSD::ms_handle_fast_accept(Connection *con)
 {
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON &&
       con->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
-    auto priv = con->get_priv();
-    auto s = static_cast<Session*>(priv.get());
+    auto s = Session::ref_cast(con->get_priv());
     if (!s) {
-      s = new Session{cct, con};
-      con->set_priv(RefCountedPtr{s, false});
+      s = Session::create(cct, con);
+      con->set_priv(s);
       dout(10) << "new session (incoming)" << s << " con=" << con
           << " addr=" << con->get_peer_addr()
           << " must have raced with connect" << dendl;
@@ -5765,9 +5763,8 @@ void OSD::ms_handle_fast_accept(Connection *con)
 
 bool OSD::ms_handle_reset(Connection *con)
 {
-  auto s = con->get_priv();
-  auto session = static_cast<Session*>(s.get());
-  dout(2) << "ms_handle_reset con " << con << " session " << session << dendl;
+  auto session = Session::ref_cast(con->get_priv());
+  dout(2) << "ms_handle_reset con " << con << " session " << session.get() << dendl;
   if (!session)
     return false;
   session->wstate.reset(con);
@@ -5776,7 +5773,7 @@ bool OSD::ms_handle_reset(Connection *con)
   // note that we break session->con *before* the session_handle_reset
   // cleanup below.  this avoids a race between us and
   // PG::add_backoff, Session::check_backoff, etc.
-  session_handle_reset(SessionRef{session});
+  session_handle_reset(session);
   return true;
 }
 
@@ -5785,9 +5782,8 @@ bool OSD::ms_handle_refused(Connection *con)
   if (!cct->_conf->osd_fast_fail_on_connection_refused)
     return false;
 
-  auto priv = con->get_priv();
-  auto session = static_cast<Session*>(priv.get());
-  dout(2) << "ms_handle_refused con " << con << " session " << session << dendl;
+  auto session = Session::ref_cast(con->get_priv());
+  dout(2) << "ms_handle_refused con " << con << " session " << session.get() << dendl;
   if (!session)
     return false;
   int type = con->get_peer_type();
@@ -6310,8 +6306,7 @@ void OSD::handle_command(MMonCommand *m)
 void OSD::handle_command(MCommand *m)
 {
   ConnectionRef con = m->get_connection();
-  auto priv = con->get_priv();
-  auto session = static_cast<Session *>(priv.get());
+  auto session = Session::ref_cast(con->get_priv());
   if (!session) {
     con->send_message(new MCommandReply(m, -EPERM));
     m->put();
@@ -6319,7 +6314,6 @@ void OSD::handle_command(MCommand *m)
   }
 
   OSDCap& caps = session->caps;
-  priv.reset();
 
   if (!caps.allow_all() || m->get_source().is_mon()) {
     con->send_message(new MCommandReply(m, -EPERM));
@@ -7076,7 +7070,7 @@ bool OSD::ms_dispatch(Message *m)
 }
 
 void OSD::maybe_share_map(
-  Session *session,
+  const Session::ref& session,
   OpRequestRef op,
   OSDMapRef osdmap)
 {
@@ -7110,7 +7104,7 @@ void OSD::maybe_share_map(
   op->check_send_map = false;
 }
 
-void OSD::dispatch_session_waiting(SessionRef session, OSDMapRef osdmap)
+void OSD::dispatch_session_waiting(const Session::ref& session, OSDMapRef osdmap)
 {
   ceph_assert(session->session_dispatch_lock.is_locked());
 
@@ -7265,11 +7259,10 @@ KeyStore *OSD::ms_get_auth1_authorizer_keystore()
 int OSD::ms_handle_authentication(Connection *con)
 {
   int ret = 0;
-  auto priv = con->get_priv();
-  Session *s = static_cast<Session*>(priv.get());
+  auto s = Session::ref_cast(con->get_priv());
   if (!s) {
-    s = new Session(cct, con);
-    con->set_priv(RefCountedPtr{s, false});
+    s = Session::create(cct, con);
+    con->set_priv(s);
     s->entity_name = con->get_peer_entity_name();
     dout(10) << __func__ << " new session " << s << " con " << s->con
 	     << " entity " << s->entity_name
@@ -7887,9 +7880,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     return;
   }
 
-  auto priv = m->get_connection()->get_priv();
-  if (auto session = static_cast<Session *>(priv.get());
-      session && !(session->entity_name.is_mon() ||
+  auto session = Session::ref_cast(m->get_connection()->get_priv());
+  if (session && !(session->entity_name.is_mon() ||
 		   session->entity_name.is_osd())) {
     //not enough perms!
     dout(10) << "got osd map from Session " << session
@@ -8887,8 +8879,7 @@ bool OSD::require_same_peer_instance(const Message *m, OSDMapRef& map,
 	    << dendl;
     ConnectionRef con = m->get_connection();
     con->mark_down();
-    auto priv = con->get_priv();
-    if (auto s = static_cast<Session*>(priv.get()); s) {
+    if (auto s = Session::ref_cast(con->get_priv()); s) {
       if (!is_fast_dispatch)
 	s->session_dispatch_lock.Lock();
       clear_session_waiting_on_map(s);
@@ -9747,7 +9738,7 @@ void OSD::dequeue_op(
   logger->tinc(l_osd_op_before_dequeue_op_lat, latency);
 
   auto priv = op->get_req()->get_connection()->get_priv();
-  if (auto session = static_cast<Session *>(priv.get()); session) {
+  if (auto&& session = Session::ref_cast(priv); session) {
     maybe_share_map(session, op, pg->get_osdmap());
   }
 
@@ -10884,7 +10875,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
       // share map with client?
       if (boost::optional<OpRequestRef> _op = qi.maybe_get_op()) {
 	auto priv = (*_op)->get_req()->get_connection()->get_priv();
-	if (auto session = static_cast<Session *>(priv.get()); session) {
+	if (auto&& session = Session::ref_cast(priv); session) {
 	  osd->maybe_share_map(session, *_op, sdata->shard_osdmap);
 	}
       }

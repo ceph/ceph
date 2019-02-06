@@ -32,11 +32,6 @@ public:
       : lock("ReplayHandler::lock"), entries_available(false), complete(false) {
     }
 
-    void get() override {
-    }
-    void put() override {
-    }
-
     void handle_entries_available() override  {
       Mutex::Locker locker(lock);
       entries_available = true;

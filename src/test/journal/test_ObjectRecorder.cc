@@ -48,7 +48,7 @@ public:
     }
   };
 
-  typedef std::list<journal::ObjectRecorderPtr> ObjectRecorders;
+  typedef std::list<journal::ObjectRecorder::ref> ObjectRecorders;
   typedef std::map<std::string, shared_ptr<Mutex>> ObjectRecorderLocksMap;
 
   ObjectRecorders m_object_recorders;
@@ -84,21 +84,20 @@ public:
 
   journal::AppendBuffer create_append_buffer(uint64_t tag_tid, uint64_t entry_tid,
                                              const std::string &payload) {
-    journal::FutureImplPtr future(new journal::FutureImpl(tag_tid, entry_tid,
-                                                          456));
-    future->init(journal::FutureImplPtr());
+    auto future = journal::FutureImpl::create(tag_tid, entry_tid, 456);
+    future->init(journal::FutureImpl::ref());
 
     bufferlist bl;
     bl.append(payload);
     return std::make_pair(future, bl);
   }
 
-  journal::ObjectRecorderPtr create_object(const std::string &oid,
+  journal::ObjectRecorder::ref create_object(const std::string &oid,
                                            uint8_t order, shared_ptr<Mutex> lock) {
-    journal::ObjectRecorderPtr object(new journal::ObjectRecorder(
+    auto object = journal::ObjectRecorder::create(
       m_ioctx, oid, 0, lock, m_work_queue, *m_timer, m_timer_lock, &m_handler,
       order, m_flush_interval, m_flush_bytes, m_flush_age,
-      m_max_in_flight_appends));
+      m_max_in_flight_appends);
     m_object_recorders.push_back(object);
     m_object_recorder_locks.insert(std::make_pair(oid, lock));
     m_handler.object_lock = lock;
@@ -110,11 +109,11 @@ TEST_F(TestObjectRecorder, Append) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
-  journal::ObjectRecorderPtr object = create_object(oid, 24, lock);
+  journal::ObjectRecorder::ref object = create_object(oid, 24, lock);
 
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                               "payload");
@@ -141,12 +140,12 @@ TEST_F(TestObjectRecorder, AppendFlushByCount) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   set_flush_interval(2);
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
-  journal::ObjectRecorderPtr object = create_object(oid, 24, lock);
+  journal::ObjectRecorder::ref object = create_object(oid, 24, lock);
 
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                               "payload");
@@ -172,12 +171,12 @@ TEST_F(TestObjectRecorder, AppendFlushByBytes) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   set_flush_bytes(10);
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
-  journal::ObjectRecorderPtr object = create_object(oid, 24, lock);
+  journal::ObjectRecorder::ref object = create_object(oid, 24, lock);
 
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                               "payload");
@@ -203,12 +202,12 @@ TEST_F(TestObjectRecorder, AppendFlushByAge) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   set_flush_age(0.1);
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
-  journal::ObjectRecorderPtr object = create_object(oid, 24, lock);
+  journal::ObjectRecorder::ref object = create_object(oid, 24, lock);
 
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                               "payload");
@@ -233,11 +232,11 @@ TEST_F(TestObjectRecorder, AppendFilledObject) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
-  journal::ObjectRecorderPtr object = create_object(oid, 12, lock);
+  journal::ObjectRecorder::ref object = create_object(oid, 12, lock);
 
   std::string payload(2048, '1');
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
@@ -263,11 +262,11 @@ TEST_F(TestObjectRecorder, Flush) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
-  journal::ObjectRecorderPtr object = create_object(oid, 24, lock);
+  journal::ObjectRecorder::ref object = create_object(oid, 24, lock);
 
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                               "payload");
@@ -291,11 +290,11 @@ TEST_F(TestObjectRecorder, FlushFuture) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
-  journal::ObjectRecorderPtr object = create_object(oid, 24, lock);
+  journal::ObjectRecorder::ref object = create_object(oid, 24, lock);
 
   journal::AppendBuffer append_buffer = create_append_buffer(234, 123,
                                                              "payload");
@@ -320,11 +319,11 @@ TEST_F(TestObjectRecorder, FlushDetachedFuture) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
-  journal::ObjectRecorderPtr object = create_object(oid, 24, lock);
+  journal::ObjectRecorder::ref object = create_object(oid, 24, lock);
 
   journal::AppendBuffer append_buffer = create_append_buffer(234, 123,
                                                              "payload");
@@ -350,12 +349,12 @@ TEST_F(TestObjectRecorder, Close) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   set_flush_interval(2);
   shared_ptr<Mutex> lock(new Mutex("object_recorder_lock"));
-  journal::ObjectRecorderPtr object = create_object(oid, 24, lock);
+  journal::ObjectRecorder::ref object = create_object(oid, 24, lock);
 
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                               "payload");
@@ -388,13 +387,13 @@ TEST_F(TestObjectRecorder, Overflow) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  journal::JournalMetadata::ref metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   shared_ptr<Mutex> lock1(new Mutex("object_recorder_lock_1"));
-  journal::ObjectRecorderPtr object1 = create_object(oid, 12, lock1);
+  journal::ObjectRecorder::ref object1 = create_object(oid, 12, lock1);
   shared_ptr<Mutex> lock2(new Mutex("object_recorder_lock_2"));
-  journal::ObjectRecorderPtr object2 = create_object(oid, 12, lock2);
+  journal::ObjectRecorder::ref object2 = create_object(oid, 12, lock2);
 
   std::string payload(2048, '1');
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,

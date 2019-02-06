@@ -199,7 +199,7 @@ typedef std::shared_ptr<DaemonState> DaemonStatePtr;
 typedef std::map<DaemonKey, DaemonStatePtr> DaemonStateCollection;
 
 
-struct DeviceState : public RefCountedObject
+struct DeviceState : public RefCountedObjectInstance<DeviceState>
 {
   std::string devid;
   std::set<pair<std::string,std::string>> devnames; ///< (server,devname)
@@ -209,10 +209,6 @@ struct DeviceState : public RefCountedObject
 
   pair<utime_t,utime_t> life_expectancy;  ///< when device failure is expected
   utime_t life_expectancy_stamp;          ///< when life expectency was recorded
-
-  DeviceState(const std::string& n)
-    : RefCountedObject(nullptr, 0),
-      devid(n) {}
 
   void set_metadata(map<string,string>&& m);
 
@@ -228,9 +224,13 @@ struct DeviceState : public RefCountedObject
 
   void dump(Formatter *f) const;
   void print(ostream& out) const;
+
+private:
+  friend factory;
+  DeviceState(const std::string& n) : devid(n) {}
 };
 
-typedef boost::intrusive_ptr<DeviceState> DeviceStateRef;
+using DeviceStateRef = DeviceState::ref;
 
 /**
  * Fuse the collection of per-daemon metadata from Ceph into
@@ -246,19 +246,19 @@ private:
   DaemonStateCollection all;
   std::set<DaemonKey> updating;
 
-  std::map<std::string,DeviceStateRef> devices;
+  std::map<std::string,DeviceState::ref> devices;
 
   void _erase(const DaemonKey& dmk);
 
-  DeviceStateRef _get_or_create_device(const std::string& dev) {
+  const DeviceState::ref& _get_or_create_device(const std::string& dev) {
     auto p = devices.find(dev);
     if (p != devices.end()) {
       return p->second;
     }
-    devices[dev] = new DeviceState(dev);
+    devices[dev] = DeviceState::create(dev);
     return devices[dev];
   }
-  void _erase_device(DeviceStateRef d) {
+  void _erase_device(DeviceState::ref d) {
     devices.erase(d->devid);
   }
 

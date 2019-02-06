@@ -31,7 +31,7 @@ struct JournalTrimmer::C_RemoveSet : public Context {
 
 JournalTrimmer::JournalTrimmer(librados::IoCtx &ioctx,
                                const std::string &object_oid_prefix,
-                               const JournalMetadataPtr &journal_metadata)
+                               const JournalMetadata::ref &journal_metadata)
     : m_cct(NULL), m_object_oid_prefix(object_oid_prefix),
       m_journal_metadata(journal_metadata), m_metadata_listener(this),
       m_lock("JournalTrimmer::m_lock"), m_remove_set_pending(false),

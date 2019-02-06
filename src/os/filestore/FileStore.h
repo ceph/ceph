@@ -220,7 +220,7 @@ private:
     ZTracer::Trace trace;
     bool registered_apply = false;
   };
-  class OpSequencer : public CollectionImpl {
+  class OpSequencer : public RefCountedObjectInstance<OpSequencer, CollectionImpl> {
     CephContext *cct;
     Mutex qlock; // to protect q, for benefit of flush (peek/dequeue also protected by lock)
     list<Op*> q;
@@ -354,8 +354,10 @@ private:
       }
     }
 
+  private:
+    friend factory;
     OpSequencer(CephContext* cct, int i, coll_t cid)
-      : CollectionImpl(cid),
+      : RefCountedObjectInstance<OpSequencer, CollectionImpl>(cid),
 	cct(cct),
 	qlock("FileStore::OpSequencer::qlock", false, false),
 	osr_name_str(stringify(cid)),

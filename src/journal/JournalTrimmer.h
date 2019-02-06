@@ -22,7 +22,7 @@ public:
   typedef cls::journal::ObjectSetPosition ObjectSetPosition;
 
   JournalTrimmer(librados::IoCtx &ioctx, const std::string &object_oid_prefix,
-                 const JournalMetadataPtr &journal_metadata);
+                 const JournalMetadata::ref &journal_metadata);
   ~JournalTrimmer();
 
   void shut_down(Context *on_finish);
@@ -65,7 +65,7 @@ private:
   CephContext *m_cct;
   std::string m_object_oid_prefix;
 
-  JournalMetadataPtr m_journal_metadata;
+  JournalMetadata::ref m_journal_metadata;
   MetadataListener m_metadata_listener;
 
   AsyncOpTracker m_async_op_tracker;
