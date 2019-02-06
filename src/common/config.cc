@@ -1341,6 +1341,8 @@ namespace {
 template<typename Size>
 struct get_size_visitor : public boost::static_visitor<Size>
 {
+  get_size_visitor() {}
+
   template<typename T>
   Size operator()(const T&) const {
     return -1;
