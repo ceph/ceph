@@ -16,8 +16,6 @@ except ImportError:
 from .. import mgr, logger
 from ..exceptions import UserDoesNotExist
 from ..services.auth import JwtManager
-from ..services.access_control import ACCESS_CTRL_DB
-from ..services.sso import SSO_DB
 from ..tools import prepare_url_prefix
 from . import Controller, Endpoint, BaseController
 
@@ -43,7 +41,7 @@ class Saml2(BaseController):
             raise cherrypy.HTTPError(400,
                                      'Required library not found: `{}`'.format(python_saml_name))
         try:
-            OneLogin_Saml2_Settings(SSO_DB.saml2.onelogin_settings)
+            OneLogin_Saml2_Settings(mgr.SSO_DB.saml2.onelogin_settings)
         except OneLogin_Saml2_Error:
             raise cherrypy.HTTPError(400, 'Single Sign-On is not configured.')
 
@@ -51,23 +49,23 @@ class Saml2(BaseController):
     def auth_response(self, **kwargs):
         Saml2._check_python_saml()
         req = Saml2._build_req(self._request, kwargs)
-        auth = OneLogin_Saml2_Auth(req, SSO_DB.saml2.onelogin_settings)
+        auth = OneLogin_Saml2_Auth(req, mgr.SSO_DB.saml2.onelogin_settings)
         auth.process_response()
         errors = auth.get_errors()
 
         if auth.is_authenticated():
             JwtManager.reset_user()
-            username_attribute = auth.get_attribute(SSO_DB.saml2.get_username_attribute())
+            username_attribute = auth.get_attribute(mgr.SSO_DB.saml2.get_username_attribute())
             if username_attribute is None:
                 raise cherrypy.HTTPError(400,
                                          'SSO error - `{}` not found in auth attributes. '
                                          'Received attributes: {}'
                                          .format(
-                                             SSO_DB.saml2.get_username_attribute(),
+                                             mgr.SSO_DB.saml2.get_username_attribute(),
                                              auth.get_attributes()))
             username = username_attribute[0]
             try:
-                ACCESS_CTRL_DB.get_user(username)
+                mgr.ACCESS_CTRL_DB.get_user(username)
             except UserDoesNotExist:
                 raise cherrypy.HTTPError(400,
                                          'SSO error - Username `{}` does not exist.'
@@ -89,21 +87,21 @@ class Saml2(BaseController):
     @Endpoint(xml=True)
     def metadata(self):
         Saml2._check_python_saml()
-        saml_settings = OneLogin_Saml2_Settings(SSO_DB.saml2.onelogin_settings)
+        saml_settings = OneLogin_Saml2_Settings(mgr.SSO_DB.saml2.onelogin_settings)
         return saml_settings.get_sp_metadata()
 
     @Endpoint(json_response=False)
     def login(self):
         Saml2._check_python_saml()
         req = Saml2._build_req(self._request, {})
-        auth = OneLogin_Saml2_Auth(req, SSO_DB.saml2.onelogin_settings)
+        auth = OneLogin_Saml2_Auth(req, mgr.SSO_DB.saml2.onelogin_settings)
         raise cherrypy.HTTPRedirect(auth.login())
 
     @Endpoint(json_response=False)
     def slo(self):
         Saml2._check_python_saml()
         req = Saml2._build_req(self._request, {})
-        auth = OneLogin_Saml2_Auth(req, SSO_DB.saml2.onelogin_settings)
+        auth = OneLogin_Saml2_Auth(req, mgr.SSO_DB.saml2.onelogin_settings)
         raise cherrypy.HTTPRedirect(auth.logout())
 
     @Endpoint(json_response=False)

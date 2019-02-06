@@ -26,6 +26,7 @@ class Scope(object):
     PROMETHEUS = "prometheus"
     USER = "user"
     DASHBOARD_SETTINGS = "dashboard-settings"
+    NFS_GANESHA = "nfs-ganesha"
 
     @classmethod
     def all_scopes(cls):
