@@ -10,5 +10,7 @@ tasks:
     osd.0:
       - ceph osd set pglog_hardlimit
       - ceph osd dump --format=json-pretty | grep "flags"
+      - ceph osd require-osd-release nautilus
+      - ceph osd set-require-min-compat-client nautilus
 - print: "**** try to set pglog_hardlimit again, should succeed"
-
+- print: "**** set require nautilus OSDs"
