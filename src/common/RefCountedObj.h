@@ -20,7 +20,27 @@
 
 #include <atomic>
 
-struct RefCountedObject {
+/* This class provides mechanisms to make a sub-class work with
+ * boost::intrusive_ptr (aka ceph::ref_t).
+ *
+ * Generally, you'll want to inherit from RefCountedObjectSafe and not from
+ * RefCountedObject directly. This is because the ::get and ::put methods are
+ * public and can be used to create/delete references outside of the
+ * ceph::ref_t pointers with the potential to leak memory.
+ *
+ * It is also suggested that you make constructors and destructors private in
+ * your final class. This prevents instantiation of the object with assignment
+ * to a raw pointer. Consequently, you'll want to use ceph::make_ref<> to
+ * create a ceph::ref_t<> holding your object:
+ *
+ *    auto ptr = ceph::make_ref<Foo>(...);
+ *
+ * Use FRIEND_MAKE_REF(ClassName) to allow ceph::make_ref to call the private
+ * constructors.
+ *
+ */
+
+class RefCountedObject {
 public:
   void set_cct(class CephContext *c) {
     cct = c;
@@ -46,7 +66,7 @@ protected:
   RefCountedObject& operator=(const RefCountedObject& o) = delete;
   RefCountedObject(RefCountedObject&&) = delete;
   RefCountedObject& operator=(RefCountedObject&&) = delete;
-  RefCountedObject(class CephContext* c = nullptr, int n = 1) : cct(c), nref(n) {}
+  RefCountedObject(class CephContext* c) : cct(c) {}
 
   virtual ~RefCountedObject();
 
@@ -60,6 +80,17 @@ private:
   mutable uint64_t nref{1};
 #endif
   class CephContext *cct{nullptr};
+};
+
+class RefCountedObjectSafe : public RefCountedObject {
+public:
+  RefCountedObject *get() = delete;
+  const RefCountedObject *get() const = delete;
+  void put() const = delete;
+protected:
+template<typename... Args>
+  RefCountedObjectSafe(Args&&... args) : RefCountedObject(std::forward<Args>(args)...) {}
+  virtual ~RefCountedObjectSafe() override {}
 };
 
 #ifndef WITH_SEASTAR

@@ -168,7 +168,7 @@ entity_addrvec_t DaemonServer::get_myaddrs() const
 
 int DaemonServer::ms_handle_authentication(Connection *con)
 {
-  MgrSession *s = new MgrSession(cct);
+  auto s = ceph::make_ref<MgrSession>(cct);
   con->set_priv(s);
   s->inst.addr = con->get_peer_addr();
   s->entity_name = con->peer_name;
