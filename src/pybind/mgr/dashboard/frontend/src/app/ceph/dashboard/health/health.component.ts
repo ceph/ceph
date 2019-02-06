@@ -22,7 +22,7 @@ export class HealthComponent implements OnInit, OnDestroy {
   healthData: any;
   interval: number;
   permissions: Permissions;
-  enabled_feature$: FeatureTogglesMap$;
+  enabledFeature$: FeatureTogglesMap$;
 
   constructor(
     private healthService: HealthService,
@@ -32,7 +32,7 @@ export class HealthComponent implements OnInit, OnDestroy {
     private featureToggles: FeatureTogglesService
   ) {
     this.permissions = this.authStorageService.getPermissions();
-    this.enabled_feature$ = this.featureToggles.get();
+    this.enabledFeature$ = this.featureToggles.get();
   }
 
   ngOnInit() {
