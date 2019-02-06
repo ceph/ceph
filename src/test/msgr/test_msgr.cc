@@ -98,6 +98,7 @@ class FakeDispatcher : public Dispatcher {
   bool got_remote_reset;
   bool got_connect;
   bool loopback;
+  entity_addrvec_t last_accept;
 
   explicit FakeDispatcher(bool s): Dispatcher(g_ceph_context), lock("FakeDispatcher::lock"),
                           is_server(s), got_new(false), got_remote_reset(false),
@@ -130,6 +131,7 @@ class FakeDispatcher : public Dispatcher {
     lock.Unlock();
   }
   void ms_handle_fast_accept(Connection *con) override {
+    last_accept = con->get_peer_addrs();
     if (!con->get_priv()) {
       con->set_priv(RefCountedPtr{new Session(con), false});
     }
@@ -414,7 +416,7 @@ TEST_P(MessengerTest, NameAddrTest) {
   ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
   ASSERT_TRUE(conn->get_peer_addrs() == server_msgr->get_myaddrs());
   ConnectionRef server_conn = server_msgr->connect_to(
-    client_msgr->get_mytype(), client_msgr->get_myaddrs());
+    client_msgr->get_mytype(), srv_dispatcher.last_accept);
   // Verify that server_conn is the one we already accepted from client,
   // so it means the session counter in server_conn is also incremented.
   ASSERT_EQ(1U, static_cast<Session*>(server_conn->get_priv().get())->get_count());
@@ -434,6 +436,8 @@ TEST_P(MessengerTest, FeatureTest) {
   uint64_t all_feature_supported, feature_required, feature_supported = 0;
   for (int i = 0; i < 10; i++)
     feature_supported |= 1ULL << i;
+  feature_supported |= CEPH_FEATUREMASK_MSG_ADDR2;
+  feature_supported |= CEPH_FEATUREMASK_SERVER_NAUTILUS;
   feature_required = feature_supported | 1ULL << 13;
   all_feature_supported = feature_required | 1ULL << 14;
 
@@ -562,7 +566,7 @@ TEST_P(MessengerTest, StatefulTest) {
   conn->mark_down();
   ASSERT_FALSE(conn->is_connected());
   ConnectionRef server_conn = server_msgr->connect_to(
-    client_msgr->get_mytype(), client_msgr->get_myaddrs());
+    client_msgr->get_mytype(), srv_dispatcher.last_accept);
   // don't lose state
   ASSERT_EQ(1U, static_cast<Session*>(server_conn->get_priv().get())->get_count());
 
@@ -579,7 +583,7 @@ TEST_P(MessengerTest, StatefulTest) {
   }
   ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
   server_conn = server_msgr->connect_to(client_msgr->get_mytype(),
-					client_msgr->get_myaddrs());
+					srv_dispatcher.last_accept);
   {
     Mutex::Locker l(srv_dispatcher.lock);
     while (!srv_dispatcher.got_remote_reset)
@@ -621,7 +625,7 @@ TEST_P(MessengerTest, StatefulTest) {
   // resetcheck happen
   ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
   server_conn = server_msgr->connect_to(client_msgr->get_mytype(),
-					client_msgr->get_myaddrs());
+					srv_dispatcher.last_accept);
   ASSERT_EQ(1U, static_cast<Session*>(server_conn->get_priv().get())->get_count());
   cli_dispatcher.got_remote_reset = false;
 
@@ -678,7 +682,7 @@ TEST_P(MessengerTest, StatelessTest) {
   }
   ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
   ConnectionRef server_conn = server_msgr->connect_to(client_msgr->get_mytype(),
-						      client_msgr->get_myaddrs());
+						      srv_dispatcher.last_accept);
   // server lose state
   {
     Mutex::Locker l(srv_dispatcher.lock);
@@ -694,7 +698,7 @@ TEST_P(MessengerTest, StatelessTest) {
   CHECK_AND_WAIT_TRUE(!conn->is_connected());
   ASSERT_FALSE(conn->is_connected());
   conn = client_msgr->connect_to(server_msgr->get_mytype(),
-						    server_msgr->get_myaddrs());
+				 server_msgr->get_myaddrs());
   {
     m = new MPing();
     ASSERT_EQ(conn->send_message(m), 0);
@@ -744,7 +748,7 @@ TEST_P(MessengerTest, ClientStandbyTest) {
   ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
   ConnectionRef server_conn = server_msgr->connect_to(
     client_msgr->get_mytype(),
-    client_msgr->get_myaddrs());
+    srv_dispatcher.last_accept);
   ASSERT_FALSE(cli_dispatcher.got_remote_reset);
   cli_dispatcher.got_connect = false;
   server_conn->mark_down();
@@ -776,7 +780,7 @@ TEST_P(MessengerTest, ClientStandbyTest) {
   }
   ASSERT_EQ(1U, static_cast<Session*>(conn->get_priv().get())->get_count());
   server_conn = server_msgr->connect_to(client_msgr->get_mytype(),
-					client_msgr->get_myaddrs());
+					srv_dispatcher.last_accept);
   ASSERT_EQ(1U, static_cast<Session*>(server_conn->get_priv().get())->get_count());
 
   server_msgr->shutdown();
