@@ -9,6 +9,7 @@ overrides:
 tasks:
 - install:
     branch: hammer
+    downgrade_packages: ['librbd1', 'librados2']
     exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev','python34-rados','python34-cephfs','python3-rados','python3-cephfs']
 - install.upgrade:
     mon.a:
