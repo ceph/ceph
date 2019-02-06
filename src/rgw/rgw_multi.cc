@@ -13,6 +13,7 @@
 #include "rgw_op.h"
 
 #include "services/svc_sys_obj.h"
+#include "services/svc_tier_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -221,7 +222,7 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
         if (oiter != obj_part.manifest.obj_end()) {
           rgw_obj head;
           rgw_raw_obj raw_head = oiter.get_location().get_raw_obj(store);
-          rgw_raw_obj_to_obj(bucket_info.bucket, raw_head, &head);
+          RGWSI_Tier_RADOS::raw_obj_to_obj(bucket_info.bucket, raw_head, &head);
 
           rgw_obj_index_key key;
           head.key.get_index_key(&key);

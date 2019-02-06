@@ -1298,6 +1298,12 @@ struct rgw_bucket_shard {
   }
 };
 
+struct rgw_bucket_placement {
+  rgw_placement_rule placement_rule;
+  rgw_bucket bucket;
+
+  void dump(Formatter *f) const;
+};
 
 struct RGWObjVersionTracker {
   obj_version read_version;

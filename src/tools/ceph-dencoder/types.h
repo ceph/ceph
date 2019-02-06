@@ -449,8 +449,10 @@ TYPE(RGWUserInfo)
 TYPE(rgw_bucket)
 TYPE(RGWBucketInfo)
 TYPE(RGWBucketEnt)
-TYPE(RGWUploadPartInfo)
 TYPE(rgw_obj)
+
+#include "rgw/rgw_multi.h"
+TYPE(RGWUploadPartInfo)
 
 #include "rgw/rgw_log.h"
 TYPE(rgw_log_entry)

@@ -6,6 +6,7 @@
 #include "rgw_zone.h"
 
 #include "services/svc_sys_obj.h"
+#include "services/svc_zone.h"
 
 
 struct rgw_pubsub_event {

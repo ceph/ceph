@@ -682,8 +682,8 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
         return ret;
       }
 
-      if (astate->has_manifest) {
-        RGWObjManifest& manifest = astate->manifest;
+      if (astate->manifest) {
+        RGWObjManifest& manifest = *astate->manifest;
         RGWObjManifest::obj_iterator miter = manifest.obj_begin();
         rgw_obj head_obj = manifest.get_obj();
         rgw_raw_obj raw_head_obj;

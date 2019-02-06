@@ -28,6 +28,8 @@
 #include "rgw_lib_frontend.h"
 #include "common/errno.h"
 
+#include "services/svc_zone.h"
+
 #include <atomic>
 
 #define dout_subsys ceph_subsys_rgw

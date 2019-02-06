@@ -40,6 +40,7 @@
 #include "rgw_cors.h"
 #include "rgw_quota.h"
 #include "rgw_putobj.h"
+#include "rgw_multi.h"
 
 #include "rgw_lc.h"
 #include "rgw_torrent.h"
@@ -48,6 +49,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 
 #include "services/svc_sys_obj.h"
+#include "services/svc_tier_rados.h"
 
 #include "include/ceph_assert.h"
 

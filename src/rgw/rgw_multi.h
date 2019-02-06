@@ -6,11 +6,56 @@
 
 #include <map>
 #include "rgw_xml.h"
-#include "rgw_rados.h"
+#include "rgw_obj_manifest.h"
+#include "rgw_compression_types.h"
 
-#define MP_META_SUFFIX ".meta"
 #define MULTIPART_UPLOAD_ID_PREFIX_LEGACY "2/"
 #define MULTIPART_UPLOAD_ID_PREFIX "2~" // must contain a unique char that may not come up in gen_rand_alpha()
+
+class RGWMPObj;
+
+struct RGWUploadPartInfo {
+  uint32_t num;
+  uint64_t size;
+  uint64_t accounted_size{0};
+  string etag;
+  ceph::real_time modified;
+  RGWObjManifest manifest;
+  RGWCompressionInfo cs_info;
+
+  RGWUploadPartInfo() : num(0), size(0) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(4, 2, bl);
+    encode(num, bl);
+    encode(size, bl);
+    encode(etag, bl);
+    encode(modified, bl);
+    encode(manifest, bl);
+    encode(cs_info, bl);
+    encode(accounted_size, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
+    decode(num, bl);
+    decode(size, bl);
+    decode(etag, bl);
+    decode(modified, bl);
+    if (struct_v >= 3)
+      decode(manifest, bl);
+    if (struct_v >= 4) {
+      decode(cs_info, bl);
+      decode(accounted_size, bl);
+    } else {
+      accounted_size = size;
+    }
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWUploadPartInfo*>& o);
+};
+WRITE_CLASS_ENCODER(RGWUploadPartInfo)
 
 class RGWMultiCompleteUpload : public XMLObj
 {
@@ -55,28 +100,6 @@ class RGWMultiXMLParser : public RGWXMLParser
 public:
   RGWMultiXMLParser() {}
   ~RGWMultiXMLParser() override {}
-};
-
-class MultipartMetaFilter : public RGWAccessListFilter {
-public:
-  MultipartMetaFilter() {}
-  bool filter(string& name, string& key) override {
-    int len = name.size();
-    if (len < 6)
-      return false;
-
-    size_t pos = name.find(MP_META_SUFFIX, len - 5);
-    if (pos == string::npos)
-      return false;
-
-    pos = name.rfind('.', pos - 1);
-    if (pos == string::npos)
-      return false;
-
-    key = name.substr(0, pos);
-
-    return true;
-  }
 };
 
 extern bool is_v2_upload_id(const string& upload_id);
