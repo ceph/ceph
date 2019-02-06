@@ -592,4 +592,31 @@ ceph::bufferlist AES128GCM_OnWireRxHandler::authenticated_decrypt_update_final(
 
   return plainbl;
 }
+
+ceph::crypto::onwire::rxtx_t ceph::crypto::onwire::rxtx_t::create_handler_pair(
+  CephContext* cct,
+  const AuthConnectionMeta& auth_meta)
+{
+  if (auth_meta.is_mode_secure()) {
+    // CLEANME, CLEANME CLEANME
+    ceph_assert_always(
+      auth_meta.connection_secret.length() >= 16 + 2*sizeof(ceph::uint128_t));
+
+    ceph::uint128_t rx_nonce;
+    ::memcpy(&rx_nonce, auth_meta.connection_secret.c_str() + 16, sizeof(rx_nonce));
+
+    ceph::uint128_t tx_nonce;
+    ::memcpy(&tx_nonce, auth_meta.connection_secret.c_str() + 16 + sizeof(rx_nonce),
+      sizeof(tx_nonce));
+    return {
+      //std::make_unique<AES128GCM_OnWireRxHandler>(cct, auth_meta, rx_nonce),
+      //std::make_unique<AES128GCM_OnWireTxHandler>(cct, auth_meta, tx_nonce)
+      std::make_unique<AES128GCM_OnWireRxHandler>(cct, auth_meta, rx_nonce),
+      std::make_unique<AES128GCM_OnWireTxHandler>(cct, auth_meta, tx_nonce)
+    };
+  } else {
+    return { nullptr, nullptr };
+  }
+}
+
 #endif

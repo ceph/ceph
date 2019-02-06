@@ -73,7 +73,8 @@ private:
   char *temp_buffer;
   State state;
   uint64_t peer_required_features;
-  AuthStreamHandler::rxtx_t session_security;
+  AuthStreamHandler::rxtx_t session_security_old;
+  ceph::crypto::onwire::rxtx_t session_security;
 
   uint64_t connection_features;
   uint64_t cookie;
