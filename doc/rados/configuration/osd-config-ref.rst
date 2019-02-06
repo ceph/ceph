@@ -410,8 +410,7 @@ recovery operations to ensure optimal performance during recovery.
 
 ``osd recovery op priority``
 
-:Description: The priority set for recovery operations. It is relative to
-              ``osd client op priority``.
+:Description: The priority set for recovery operations, if not specified by the pool's ``recovery_op_priority``.
 
 :Type: 32-bit Integer
 :Default: ``3``
@@ -938,6 +937,16 @@ perform well in a degraded state.
 
 :Type: Float
 :Default: ``0.025``
+
+
+``osd recovery priority``
+
+:Description: The default priority set for recovery work queue.  Not
+              related to a pool's ``recovery_priority``.
+
+:Type: 32-bit Integer
+:Default: ``5``
+
 
 Tiering
 =======
