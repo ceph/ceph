@@ -97,7 +97,6 @@ def deferred_write(message):
     def wrapper(f):
         @functools.wraps(f)
         def inner(*args, **kwargs):
-            args[0].log.warning('message' + message)
             return TestWriteCompletion(lambda: f(*args, **kwargs),
                                        '{}, args={}, kwargs={}'.format(message, args, kwargs))
         return inner
@@ -208,11 +207,13 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         """
         There is no guarantee which devices are returned by get_inventory.
         """
+        if node_filter and node_filter.nodes is not None:
+            assert isinstance(node_filter.nodes, list)
         try:
             c_v_out = check_output(['ceph-volume', 'inventory', '--format', 'json'])
         except OSError:
             cmd = """
-            . {}/ceph-volume-virtualenv/bin/activate
+            . {tmpdir}/ceph-volume-virtualenv/bin/activate
             ceph-volume inventory --format json
             """.format(tmpdir=os.environ.get('TMPDIR', '/tmp'))
             c_v_out = check_output(cmd, shell=True)
@@ -222,16 +223,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
                 self.log.error(out)
                 devs = []
                 for device in json.loads(out):
-                    dev = orchestrator.InventoryDevice()
-                    if device["sys_api"]["rotational"] == "1":
-                        dev.type = 'hdd'  # 'ssd', 'hdd', 'nvme'
-                    elif 'nvme' in device["path"]:
-                        dev.type = 'nvme'
-                    else:
-                        dev.type = 'ssd'
-                    dev.size = device['sys_api']['size']
-                    dev.id = device['path']
-                    dev.extended = device
+                    dev = orchestrator.InventoryDevice.from_ceph_volume_inventory(device)
                     devs.append(dev)
                 return [orchestrator.InventoryNode('localhost', devs)]
         self.log.error('c-v failed: ' + str(c_v_out))
@@ -259,15 +251,22 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return result
 
+    @deferred_write("Adding stateless service")
     def add_stateless_service(self, service_type, spec):
-        raise NotImplementedError(service_type)
+        pass
 
     @deferred_write("create_osds")
     def create_osds(self, drive_group, all_hosts):
         drive_group.validate(all_hosts)
 
+    @deferred_write("remove_osds")
+    def remove_osds(self, osd_ids):
+        assert isinstance(osd_ids, list)
 
     @deferred_write("service_action")
     def service_action(self, action, service_type, service_name=None, service_id=None):
         pass
 
+    @deferred_write("remove_stateless_service")
+    def remove_stateless_service(self, service_type, id_):
+        pass

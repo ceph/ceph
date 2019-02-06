@@ -424,19 +424,11 @@ def process_inventory_json(inventory_events, ar_client, playbook_uuid, logger):
             event_data = json.loads(event_response.text)["data"]["event_data"]
 
             host = event_data["host"]
-            devices =  json.loads(event_data["res"]["stdout"])
+            devices = json.loads(event_data["res"]["stdout"])
 
             devs = []
             for storage_device in devices:
-                dev = orchestrator.InventoryDevice()
-                dev.id = storage_device["path"]
-                dev.type = 'hdd' if storage_device["sys_api"]["rotational"] == "1" else 'sdd/nvme'
-                dev.size = storage_device["sys_api"]["human_readable_size"]
-                dev.rotates = storage_device["sys_api"]["rotational"] == "1"
-                dev.available = storage_device["available"]
-                dev.dev_id = "%s/%s" % (storage_device["sys_api"]["vendor"],
-                                        storage_device["sys_api"]["model"])
-
+                dev = orchestrator.InventoryDevice.from_ceph_volume_inventory(storage_device)
                 devs.append(dev)
 
             inventory_nodes.append(orchestrator.InventoryNode(host, devs))

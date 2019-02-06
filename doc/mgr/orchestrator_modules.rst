@@ -133,7 +133,9 @@ Inventory and status
 .. automethod:: Orchestrator.get_inventory
 .. autoclass:: InventoryFilter
 .. autoclass:: InventoryNode
+
 .. autoclass:: InventoryDevice
+   :members:
 
 .. automethod:: Orchestrator.describe_service
 .. autoclass:: ServiceDescription

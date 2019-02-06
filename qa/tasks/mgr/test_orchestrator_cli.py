@@ -39,9 +39,25 @@ class TestOrchestratorCli(MgrTestCase):
         ret = self._orch_cmd("device", "ls")
         self.assertIn("localhost:", ret)
 
+    def test_device_ls_hoshs(self):
+        ret = self._orch_cmd("device", "ls", "localhost", "host1")
+        self.assertIn("localhost:", ret)
+
+
+    def test_device_ls_json(self):
+        ret = self._orch_cmd("device", "ls", "--format", "json")
+        self.assertIn("localhost", ret)
+        self.assertIsInstance(json.loads(ret), list)
+
     def test_service_ls(self):
         ret = self._orch_cmd("service", "ls")
         self.assertIn("ceph-mgr", ret)
+
+    def test_service_ls_json(self):
+        ret = self._orch_cmd("service", "ls", "--format", "json")
+        self.assertIsInstance(json.loads(ret), list)
+        self.assertIn("ceph-mgr", ret)
+
 
     def test_service_action(self):
         self._orch_cmd("service", "reload", "mds", "cephfs")
@@ -67,3 +83,24 @@ class TestOrchestratorCli(MgrTestCase):
         with self.assertRaises(CommandFailedError):
             self._orch_cmd("osd", "create", "notfound:device")
 
+    def test_mds_add(self):
+        self._orch_cmd("mds", "add", "service_name")
+
+    def test_rgw_add(self):
+        self._orch_cmd("rgw", "add", "service_name")
+
+    def test_nfs_add(self):
+        self._orch_cmd("nfs", "add", "service_name", "pool", "--namespace", "ns")
+        self._orch_cmd("nfs", "add", "service_name", "pool")
+
+    def test_osd_rm(self):
+        self._orch_cmd("osd", "rm", "osd.0")
+
+    def test_mds_rm(self):
+        self._orch_cmd("mds", "rm", "foo")
+
+    def test_rgw_rm(self):
+        self._orch_cmd("rgw", "rm", "foo")
+
+    def test_nfs_rm(self):
+        self._orch_cmd("nfs", "rm", "service_name")
