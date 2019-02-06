@@ -35,9 +35,9 @@ public:
   map<int, double> skews;
   map<int, double> latencies;
 
-  MTimeCheck2() : MessageInstance(MSG_TIMECHECK2, HEAD_VERSION, COMPAT_VERSION) { }
+  MTimeCheck2() : MessageInstance<MTimeCheck2>(MSG_TIMECHECK2, HEAD_VERSION, COMPAT_VERSION) { }
   MTimeCheck2(int op) :
-    MessageInstance(MSG_TIMECHECK2, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance<MTimeCheck2>(MSG_TIMECHECK2, HEAD_VERSION, COMPAT_VERSION),
     op(op)
   { }
 

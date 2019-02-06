@@ -37,9 +37,9 @@ private:
 
 protected:
   MDentryUnlink() :
-    MessageInstance(MSG_MDS_DENTRYUNLINK) { }
+    MessageInstance<MDentryUnlink>(MSG_MDS_DENTRYUNLINK) { }
   MDentryUnlink(dirfrag_t df, std::string_view n) :
-    MessageInstance(MSG_MDS_DENTRYUNLINK),
+    MessageInstance<MDentryUnlink>(MSG_MDS_DENTRYUNLINK),
     dirfrag(df),
     dn(n) {}
   ~MDentryUnlink() override {}

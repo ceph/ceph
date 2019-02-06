@@ -40,9 +40,9 @@ private:
 
 protected:
   MMDSFragmentNotify() :
-    MessageInstance(MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION) {}
+    MessageInstance<MMDSFragmentNotify>(MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION) {}
   MMDSFragmentNotify(dirfrag_t df, int b, uint64_t tid) :
-    MessageInstance(MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance<MMDSFragmentNotify>(MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION),
     base_dirfrag(df), bits(b) {
     set_tid(tid);
   }

@@ -102,7 +102,7 @@ bool Beacon::ms_dispatch2(const Message::ref& m)
 {
   if (m->get_type() == MSG_MDS_BEACON) {
     if (m->get_connection()->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
-      handle_mds_beacon(MMDSBeacon::msgref_cast(m));
+      handle_mds_beacon(MMDSBeacon::ref_cast(m));
     }
     return true;
   }

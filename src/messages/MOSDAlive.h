@@ -25,8 +25,8 @@ public:
 
   epoch_t want = 0;
 
-  MOSDAlive(epoch_t h, epoch_t w) : MessageInstance(MSG_OSD_ALIVE, h), want(w) { }
-  MOSDAlive() : MessageInstance(MSG_OSD_ALIVE, 0) {}
+  MOSDAlive(epoch_t h, epoch_t w) : MessageInstance<MOSDAlive, PaxosServiceMessage>(MSG_OSD_ALIVE, h), want(w) { }
+  MOSDAlive() : MessageInstance<MOSDAlive, PaxosServiceMessage>(MSG_OSD_ALIVE, 0) {}
 private:
   ~MOSDAlive() override {}
 

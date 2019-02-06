@@ -26,10 +26,10 @@ public:
   epoch_t epoch = 0;
   ceph::buffer::list response_data;
 
-  MPoolOpReply() : MessageInstance(CEPH_MSG_POOLOP_REPLY, 0)
+  MPoolOpReply() : MessageInstance<MPoolOpReply, PaxosServiceMessage>(CEPH_MSG_POOLOP_REPLY, 0)
   {}
   MPoolOpReply( uuid_d& f, ceph_tid_t t, int rc, int e, version_t v) :
-    MessageInstance(CEPH_MSG_POOLOP_REPLY, v),
+    MessageInstance<MPoolOpReply, PaxosServiceMessage>(CEPH_MSG_POOLOP_REPLY, v),
     fsid(f),
     replyCode(rc),
     epoch(e) {
@@ -37,7 +37,7 @@ public:
   }
   MPoolOpReply(uuid_d& f, ceph_tid_t t, int rc, int e, version_t v,
 	       ceph::buffer::list *blp) :
-    MessageInstance(CEPH_MSG_POOLOP_REPLY, v),
+    MessageInstance<MPoolOpReply, PaxosServiceMessage>(CEPH_MSG_POOLOP_REPLY, v),
     fsid(f),
     replyCode(rc),
     epoch(e) {

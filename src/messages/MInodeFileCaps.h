@@ -31,9 +31,9 @@ private:
   int       get_caps() const { return caps; }
 
 protected:
-  MInodeFileCaps() : MessageInstance(MSG_MDS_INODEFILECAPS) {}
+  MInodeFileCaps() : MessageInstance<MInodeFileCaps>(MSG_MDS_INODEFILECAPS) {}
   MInodeFileCaps(inodeno_t ino, int caps) :
-    MessageInstance(MSG_MDS_INODEFILECAPS) {
+    MessageInstance<MInodeFileCaps>(MSG_MDS_INODEFILECAPS) {
     this->ino = ino;
     this->caps = caps;
   }

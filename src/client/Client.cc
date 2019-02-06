@@ -2573,53 +2573,53 @@ bool Client::ms_dispatch2(const MessageRef &m)
   switch (m->get_type()) {
     // mounting and mds sessions
   case CEPH_MSG_MDS_MAP:
-    handle_mds_map(MMDSMap::msgref_cast(m));
+    handle_mds_map(MMDSMap::ref_cast(m));
     break;
   case CEPH_MSG_FS_MAP:
-    handle_fs_map(MFSMap::msgref_cast(m));
+    handle_fs_map(MFSMap::ref_cast(m));
     break;
   case CEPH_MSG_FS_MAP_USER:
-    handle_fs_map_user(MFSMapUser::msgref_cast(m));
+    handle_fs_map_user(MFSMapUser::ref_cast(m));
     break;
   case CEPH_MSG_CLIENT_SESSION:
-    handle_client_session(MClientSession::msgref_cast(m));
+    handle_client_session(MClientSession::ref_cast(m));
     break;
 
   case CEPH_MSG_OSD_MAP:
-    handle_osd_map(MOSDMap::msgref_cast(m));
+    handle_osd_map(MOSDMap::ref_cast(m));
     break;
 
     // requests
   case CEPH_MSG_CLIENT_REQUEST_FORWARD:
-    handle_client_request_forward(MClientRequestForward::msgref_cast(m));
+    handle_client_request_forward(MClientRequestForward::ref_cast(m));
     break;
   case CEPH_MSG_CLIENT_REPLY:
-    handle_client_reply(MClientReply::msgref_cast(m));
+    handle_client_reply(MClientReply::ref_cast(m));
     break;
 
   // reclaim reply
   case CEPH_MSG_CLIENT_RECLAIM_REPLY:
-    handle_client_reclaim_reply(MClientReclaimReply::msgref_cast(m));
+    handle_client_reclaim_reply(MClientReclaimReply::ref_cast(m));
     break;
 
   case CEPH_MSG_CLIENT_SNAP:
-    handle_snap(MClientSnap::msgref_cast(m));
+    handle_snap(MClientSnap::ref_cast(m));
     break;
   case CEPH_MSG_CLIENT_CAPS:
-    handle_caps(MClientCaps::msgref_cast(m));
+    handle_caps(MClientCaps::ref_cast(m));
     break;
   case CEPH_MSG_CLIENT_LEASE:
-    handle_lease(MClientLease::msgref_cast(m));
+    handle_lease(MClientLease::ref_cast(m));
     break;
   case MSG_COMMAND_REPLY:
     if (m->get_source().type() == CEPH_ENTITY_TYPE_MDS) {
-      handle_command_reply(MCommandReply::msgref_cast(m));
+      handle_command_reply(MCommandReply::ref_cast(m));
     } else {
       return false;
     }
     break;
   case CEPH_MSG_CLIENT_QUOTA:
-    handle_quota(MClientQuota::msgref_cast(m));
+    handle_quota(MClientQuota::ref_cast(m));
     break;
 
   default:

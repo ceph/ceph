@@ -32,8 +32,7 @@ public:
   vector<snaprealm_reconnect_t> realms;
   bool more = false;
 
-  MClientReconnect() :
-    MessageInstance(CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION, COMPAT_VERSION) {}
+  MClientReconnect() : MessageInstance<MClientReconnect>(CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION, COMPAT_VERSION) {}
 private:
   ~MClientReconnect() override {}
 

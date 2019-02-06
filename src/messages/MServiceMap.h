@@ -12,9 +12,9 @@ public:
 
   ServiceMap service_map;
 
-  MServiceMap() : MessageInstance(MSG_SERVICE_MAP) { }
+  MServiceMap() : MessageInstance<MServiceMap>(MSG_SERVICE_MAP) { }
   explicit MServiceMap(const ServiceMap& sm)
-    : MessageInstance(MSG_SERVICE_MAP),
+    : MessageInstance<MServiceMap>(MSG_SERVICE_MAP),
       service_map(sm) {
   }
 private:

@@ -158,9 +158,9 @@ public:
   bufferlist& get_lock_data() { return inode_export; }
 
 protected:
-  MMDSSlaveRequest() : MessageInstance(MSG_MDS_SLAVE_REQUEST) { }
+  MMDSSlaveRequest() : MessageInstance<MMDSSlaveRequest>(MSG_MDS_SLAVE_REQUEST) { }
   MMDSSlaveRequest(metareqid_t ri, __u32 att, int o) : 
-    MessageInstance(MSG_MDS_SLAVE_REQUEST),
+    MessageInstance<MMDSSlaveRequest>(MSG_MDS_SLAVE_REQUEST),
     reqid(ri), attempt(att), op(o), flags(0), lock_type(0),
     inode_export_v(0), srcdn_auth(MDS_RANK_NONE) { }
   ~MMDSSlaveRequest() override {}

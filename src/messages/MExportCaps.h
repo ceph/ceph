@@ -33,7 +33,7 @@ public:
 
 protected:
   MExportCaps() :
-    MessageInstance(MSG_MDS_EXPORTCAPS, HEAD_VERSION, COMPAT_VERSION) {}
+    MessageInstance<MExportCaps>(MSG_MDS_EXPORTCAPS, HEAD_VERSION, COMPAT_VERSION) {}
   ~MExportCaps() override {}
 
 public:

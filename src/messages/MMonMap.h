@@ -27,8 +27,8 @@ public:
 
   ceph::buffer::list monmapbl;
 
-  MMonMap() : MessageInstance(CEPH_MSG_MON_MAP) { }
-  explicit MMonMap(ceph::buffer::list &bl) : MessageInstance(CEPH_MSG_MON_MAP) { 
+  MMonMap() : MessageInstance<MMonMap>(CEPH_MSG_MON_MAP) { }
+  explicit MMonMap(ceph::buffer::list &bl) : MessageInstance<MMonMap>(CEPH_MSG_MON_MAP) { 
     monmapbl.claim(bl);
   }
 private:

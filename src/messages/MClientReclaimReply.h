@@ -53,9 +53,9 @@ public:
 protected:
   friend factory;
   MClientReclaimReply() :
-    MessageInstance(CEPH_MSG_CLIENT_RECLAIM_REPLY, HEAD_VERSION, COMPAT_VERSION) {}
+    MessageInstance<MClientReclaimReply>(CEPH_MSG_CLIENT_RECLAIM_REPLY, HEAD_VERSION, COMPAT_VERSION) {}
   MClientReclaimReply(int r, epoch_t e=0) :
-    MessageInstance(CEPH_MSG_CLIENT_RECLAIM_REPLY, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance<MClientReclaimReply>(CEPH_MSG_CLIENT_RECLAIM_REPLY, HEAD_VERSION, COMPAT_VERSION),
     result(r), epoch(e) {}
 
 private:

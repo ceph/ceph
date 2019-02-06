@@ -28,9 +28,9 @@ public:
   dirfrag_t get_dirfrag() const { return dirfrag; }
   
 protected:
-  MExportDirAck() : MessageInstance(MSG_MDS_EXPORTDIRACK) {}
+  MExportDirAck() : MessageInstance<MExportDirAck>(MSG_MDS_EXPORTDIRACK) {}
   MExportDirAck(dirfrag_t df, uint64_t tid) :
-    MessageInstance(MSG_MDS_EXPORTDIRACK), dirfrag(df) {
+    MessageInstance<MExportDirAck>(MSG_MDS_EXPORTDIRACK), dirfrag(df) {
     set_tid(tid);
   }
   ~MExportDirAck() override {}

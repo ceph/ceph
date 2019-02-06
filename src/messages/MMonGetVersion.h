@@ -29,7 +29,7 @@ class MMonGetVersion : public MessageInstance<MMonGetVersion> {
 public:
   friend factory;
 
-  MMonGetVersion() : MessageInstance(CEPH_MSG_MON_GET_VERSION) {}
+  MMonGetVersion() : MessageInstance<MMonGetVersion>(CEPH_MSG_MON_GET_VERSION) {}
 
   std::string_view get_type_name() const override {
     return "mon_get_version";

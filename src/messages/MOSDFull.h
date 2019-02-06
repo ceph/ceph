@@ -23,9 +23,9 @@ private:
 
 public:
   MOSDFull(epoch_t e, unsigned s)
-    : MessageInstance(MSG_OSD_FULL, e), map_epoch(e), state(s) { }
+    : MessageInstance<MOSDFull, PaxosServiceMessage>(MSG_OSD_FULL, e), map_epoch(e), state(s) { }
   MOSDFull()
-    : MessageInstance(MSG_OSD_FULL, 0) {}
+    : MessageInstance<MOSDFull, PaxosServiceMessage>(MSG_OSD_FULL, 0) {}
 
 public:
   void encode_payload(uint64_t features) {

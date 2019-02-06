@@ -26,7 +26,7 @@ private:
   //long pcid;
 
  public:
-  MGenericMessage(int t=0) : MessageInstance(t) { 
+  MGenericMessage(int t=0) : MessageInstance<MGenericMessage>(t) { 
     snprintf(tname, sizeof(tname), "generic%d", get_type());
   }
 

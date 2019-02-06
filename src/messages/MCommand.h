@@ -27,9 +27,9 @@ public:
   std::vector<std::string> cmd;
 
   MCommand()
-    : MessageInstance(MSG_COMMAND) {}
+    : MessageInstance<MCommand>(MSG_COMMAND) {}
   MCommand(const uuid_d &f)
-    : MessageInstance(MSG_COMMAND),
+    : MessageInstance<MCommand>(MSG_COMMAND),
       fsid(f) { }
 
 private:

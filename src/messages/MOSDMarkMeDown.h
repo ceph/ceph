@@ -32,11 +32,11 @@ private:
   bool request_ack = false;          // ack requested
 
   MOSDMarkMeDown()
-    : MessageInstance(MSG_OSD_MARK_ME_DOWN, 0,
+    : MessageInstance<MOSDMarkMeDown, PaxosServiceMessage>(MSG_OSD_MARK_ME_DOWN, 0,
 			  HEAD_VERSION, COMPAT_VERSION) { }
   MOSDMarkMeDown(const uuid_d &fs, int osd, const entity_addrvec_t& av,
 		 epoch_t e, bool request_ack)
-    : MessageInstance(MSG_OSD_MARK_ME_DOWN, e,
+    : MessageInstance<MOSDMarkMeDown, PaxosServiceMessage>(MSG_OSD_MARK_ME_DOWN, e,
 			  HEAD_VERSION, COMPAT_VERSION),
       fsid(fs), target_osd(osd), target_addrs(av),
       epoch(e), request_ack(request_ack) {}

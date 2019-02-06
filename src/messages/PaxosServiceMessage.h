@@ -18,11 +18,11 @@ public:
   epoch_t rx_election_epoch;
 
   PaxosServiceMessage()
-    : MessageSubType(MSG_PAXOS),
+    : MessageSubType<PaxosServiceMessage>(MSG_PAXOS),
       version(0), deprecated_session_mon(-1), deprecated_session_mon_tid(0),
       rx_election_epoch(0) { }
   PaxosServiceMessage(int type, version_t v, int enc_version=1, int compat_enc_version=0)
-    : MessageSubType(type, enc_version, compat_enc_version),
+    : MessageSubType<PaxosServiceMessage>(type, enc_version, compat_enc_version),
       version(v), deprecated_session_mon(-1), deprecated_session_mon_tid(0),
       rx_election_epoch(0)  { }
  protected:

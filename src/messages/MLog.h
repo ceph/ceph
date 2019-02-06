@@ -27,10 +27,10 @@ public:
   uuid_d fsid;
   std::deque<LogEntry> entries;
   
-  MLog() : MessageInstance(MSG_LOG, 0) {}
+  MLog() : MessageInstance<MLog, PaxosServiceMessage>(MSG_LOG, 0) {}
   MLog(const uuid_d& f, const std::deque<LogEntry>& e)
-    : MessageInstance(MSG_LOG, 0), fsid(f), entries(e) { }
-  MLog(const uuid_d& f) : MessageInstance(MSG_LOG, 0), fsid(f) { }
+    : MessageInstance<MLog, PaxosServiceMessage>(MSG_LOG, 0), fsid(f), entries(e) { }
+  MLog(const uuid_d& f) : MessageInstance<MLog, PaxosServiceMessage>(MSG_LOG, 0), fsid(f) { }
 private:
   ~MLog() override {}
 

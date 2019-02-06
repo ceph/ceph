@@ -31,9 +31,9 @@ public:
   const FSMap& get_fsmap() const {return fsmap;}
 
   MFSMap() : 
-    MessageInstance(CEPH_MSG_FS_MAP), epoch(0) {}
+    MessageInstance<MFSMap>(CEPH_MSG_FS_MAP), epoch(0) {}
   MFSMap(const uuid_d &f, const FSMap &fsmap_) :
-    MessageInstance(CEPH_MSG_FS_MAP), epoch(fsmap_.get_epoch())
+    MessageInstance<MFSMap>(CEPH_MSG_FS_MAP), epoch(fsmap_.get_epoch())
   {
     fsmap = fsmap_;
   }

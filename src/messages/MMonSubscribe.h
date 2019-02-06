@@ -39,7 +39,7 @@ public:
   std::string hostname;
   std::map<std::string, ceph_mon_subscribe_item> what;
 
-  MMonSubscribe() : MessageInstance(CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION, COMPAT_VERSION) { }
+  MMonSubscribe() : MessageInstance<MMonSubscribe>(CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION, COMPAT_VERSION) { }
 private:
   ~MMonSubscribe() override {}
 

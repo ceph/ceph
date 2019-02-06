@@ -13,7 +13,7 @@ public:
 
 protected:
   MGatherCaps() :
-    MessageInstance(MSG_MDS_GATHERCAPS) {}
+    MessageInstance<MGatherCaps>(MSG_MDS_GATHERCAPS) {}
   ~MGatherCaps() override {}
 
 public:

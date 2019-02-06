@@ -67,9 +67,9 @@ private:
 
   bufferlist feature_map;
 
-  MMonPaxos() : MessageInstance(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION) { }
+  MMonPaxos() : MessageInstance<MMonPaxos>(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION) { }
   MMonPaxos(epoch_t e, int o, utime_t now) : 
-    MessageInstance(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance<MMonPaxos>(MSG_MON_PAXOS, HEAD_VERSION, COMPAT_VERSION),
     epoch(e),
     op(o),
     first_committed(0), last_committed(0), pn_from(0), pn(0), uncommitted_pn(0),

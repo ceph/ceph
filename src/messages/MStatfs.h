@@ -30,9 +30,9 @@ public:
   uuid_d fsid;
   boost::optional<int64_t> data_pool;
 
-  MStatfs() : MessageInstance(CEPH_MSG_STATFS, 0, HEAD_VERSION, COMPAT_VERSION) {}
+  MStatfs() : MessageInstance<MStatfs, PaxosServiceMessage>(CEPH_MSG_STATFS, 0, HEAD_VERSION, COMPAT_VERSION) {}
   MStatfs(const uuid_d& f, ceph_tid_t t, boost::optional<int64_t> _data_pool,
-	      version_t v) : MessageInstance(CEPH_MSG_STATFS, v,
+	      version_t v) : MessageInstance<MStatfs, PaxosServiceMessage>(CEPH_MSG_STATFS, v,
                                             HEAD_VERSION, COMPAT_VERSION),
 					         fsid(f), data_pool(_data_pool) {
     set_tid(t);

@@ -30,10 +30,10 @@ private:
 
 public:
   MMonMetadata() :
-    MessageInstance(CEPH_MSG_MON_METADATA)
+    MessageInstance<MMonMetadata>(CEPH_MSG_MON_METADATA)
   {}
   MMonMetadata(const Metadata& metadata) :
-    MessageInstance(CEPH_MSG_MON_METADATA, HEAD_VERSION),
+    MessageInstance<MMonMetadata>(CEPH_MSG_MON_METADATA, HEAD_VERSION),
     data(metadata)
   {}
 

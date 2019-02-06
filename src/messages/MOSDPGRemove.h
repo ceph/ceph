@@ -35,9 +35,9 @@ private:
   epoch_t get_epoch() const { return epoch; }
 
   MOSDPGRemove() :
-    MessageInstance(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {}
+    MessageInstance<MOSDPGRemove>(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDPGRemove(epoch_t e, vector<spg_t>& l) :
-    MessageInstance(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {
+    MessageInstance<MOSDPGRemove>(MSG_OSD_PG_REMOVE, HEAD_VERSION, COMPAT_VERSION) {
     this->epoch = e;
     pg_list.swap(l);
   }

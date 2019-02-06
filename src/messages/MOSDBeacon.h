@@ -13,10 +13,10 @@ public:
   epoch_t min_last_epoch_clean = 0;
 
   MOSDBeacon()
-    : MessageInstance(MSG_OSD_BEACON, 0)
+    : MessageInstance<MOSDBeacon, PaxosServiceMessage>(MSG_OSD_BEACON, 0)
   {}
   MOSDBeacon(epoch_t e, epoch_t min_lec)
-    : MessageInstance(MSG_OSD_BEACON, e),
+    : MessageInstance<MOSDBeacon, PaxosServiceMessage>(MSG_OSD_BEACON, e),
       min_last_epoch_clean(min_lec)
   {}
   void encode_payload(uint64_t features) override {

@@ -65,9 +65,9 @@ private:
   }
 
 
-  MOSDMap() : MessageInstance(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION) { }
+  MOSDMap() : MessageInstance<MOSDMap>(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION) { }
   MOSDMap(const uuid_d &f, const uint64_t features)
-    : MessageInstance(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDMap>(CEPH_MSG_OSD_MAP, HEAD_VERSION, COMPAT_VERSION),
       fsid(f), encode_features(features),
       oldest_map(0), newest_map(0) { }
 private:

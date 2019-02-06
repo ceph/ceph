@@ -13,11 +13,11 @@ public:
   bool ready = true;
 
   MOSDPGReadyToMerge()
-    : MessageInstance(MSG_OSD_PG_READY_TO_MERGE, 0)
+    : MessageInstance<MOSDPGReadyToMerge, PaxosServiceMessage>(MSG_OSD_PG_READY_TO_MERGE, 0)
   {}
   MOSDPGReadyToMerge(pg_t p, eversion_t sv, eversion_t tv,
 		     epoch_t les, epoch_t lec, bool r, epoch_t v)
-    : MessageInstance(MSG_OSD_PG_READY_TO_MERGE, v),
+    : MessageInstance<MOSDPGReadyToMerge, PaxosServiceMessage>(MSG_OSD_PG_READY_TO_MERGE, v),
       pgid(p),
       source_version(sv),
       target_version(tv),

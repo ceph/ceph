@@ -13,7 +13,7 @@ public:
 
 protected:
   MClientQuota() :
-    MessageInstance(CEPH_MSG_CLIENT_QUOTA),
+    MessageInstance<MClientQuota>(CEPH_MSG_CLIENT_QUOTA),
     ino(0)
   {}
   ~MClientQuota() override {}

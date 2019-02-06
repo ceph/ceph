@@ -29,9 +29,9 @@ public:
   const FSMapUser& get_fsmap() const { return fsmap; }
 
   MFSMapUser() :
-    MessageInstance(CEPH_MSG_FS_MAP_USER), epoch(0) {}
+    MessageInstance<MFSMapUser>(CEPH_MSG_FS_MAP_USER), epoch(0) {}
   MFSMapUser(const uuid_d &f, const FSMapUser &fsmap_) :
-    MessageInstance(CEPH_MSG_FS_MAP_USER), epoch(fsmap_.epoch)
+    MessageInstance<MFSMapUser>(CEPH_MSG_FS_MAP_USER), epoch(fsmap_.epoch)
   {
     fsmap = fsmap_;
   }

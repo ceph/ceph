@@ -63,11 +63,11 @@ public:
   entity_inst_t reply_to;
 
   MMonSync()
-    : MessageInstance(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance<MMonSync>(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION)
   { }
 
   MMonSync(uint32_t op, uint64_t c = 0)
-    : MessageInstance(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MMonSync>(MSG_MON_SYNC, HEAD_VERSION, COMPAT_VERSION),
       op(op),
       cookie(c),
       last_committed(0)

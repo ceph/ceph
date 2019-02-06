@@ -26,8 +26,8 @@ public:
   filepath path;
 
 protected:
-  MMDSFindInoReply() : MessageInstance(MSG_MDS_FINDINOREPLY) {}
-  MMDSFindInoReply(ceph_tid_t t) : MessageInstance(MSG_MDS_FINDINOREPLY), tid(t) {}
+  MMDSFindInoReply() : MessageInstance<MMDSFindInoReply>(MSG_MDS_FINDINOREPLY) {}
+  MMDSFindInoReply(ceph_tid_t t) : MessageInstance<MMDSFindInoReply>(MSG_MDS_FINDINOREPLY), tid(t) {}
   ~MMDSFindInoReply() override {}
 
 public:

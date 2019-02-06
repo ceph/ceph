@@ -17,10 +17,10 @@ public:
   health_check_map_t health_checks;
 
   MMonHealthChecks()
-    : MessageInstance(MSG_MON_HEALTH_CHECKS, HEAD_VERSION, COMPAT_VERSION) {
+    : MessageInstance<MMonHealthChecks, PaxosServiceMessage>(MSG_MON_HEALTH_CHECKS, HEAD_VERSION, COMPAT_VERSION) {
   }
   MMonHealthChecks(health_check_map_t& m)
-    : MessageInstance(MSG_MON_HEALTH_CHECKS, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MMonHealthChecks, PaxosServiceMessage>(MSG_MON_HEALTH_CHECKS, HEAD_VERSION, COMPAT_VERSION),
       health_checks(m) {
   }
 

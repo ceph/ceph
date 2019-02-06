@@ -67,11 +67,11 @@ private:
   uint32_t min_message_size;
 
   MOSDPing(const uuid_d& f, epoch_t e, __u8 o, utime_t s, uint32_t min_message)
-    : MessageInstance(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDPing>(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION),
       fsid(f), map_epoch(e), op(o), stamp(s), min_message_size(min_message)
   { }
   MOSDPing()
-    : MessageInstance(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION), min_message_size(0)
+    : MessageInstance<MOSDPing>(MSG_OSD_PING, HEAD_VERSION, COMPAT_VERSION), min_message_size(0)
   {}
 private:
   ~MOSDPing() override {}

@@ -31,7 +31,7 @@ private:
 protected:
   MExportDirFinish() : last(false) {}
   MExportDirFinish(dirfrag_t df, bool l, uint64_t tid) :
-    MessageInstance(MSG_MDS_EXPORTDIRFINISH), dirfrag(df), last(l) {
+    MessageInstance<MExportDirFinish>(MSG_MDS_EXPORTDIRFINISH), dirfrag(df), last(l) {
     set_tid(tid);
   }
   ~MExportDirFinish() override {}

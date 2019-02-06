@@ -50,7 +50,7 @@ protected:
 
 public:
   MMgrBeacon()
-    : MessageInstance(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MMgrBeacon, PaxosServiceMessage>(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
       gid(0), available(false)
   {
   }
@@ -59,7 +59,7 @@ public:
              entity_addrvec_t server_addrs_, bool available_,
 	     std::vector<MgrMap::ModuleInfo>&& modules_,
 	     map<string,string>&& metadata_)
-    : MessageInstance(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MMgrBeacon, PaxosServiceMessage>(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
       gid(gid_), server_addrs(server_addrs_), available(available_), name(name_),
       fsid(fsid_), modules(std::move(modules_)), metadata(std::move(metadata_))
   {

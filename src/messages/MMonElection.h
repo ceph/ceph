@@ -54,14 +54,14 @@ public:
   bufferlist sharing_bl;
   map<string,string> metadata;
   
-  MMonElection() : MessageInstance(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
+  MMonElection() : MessageInstance<MMonElection>(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
     op(0), epoch(0),
     quorum_features(0),
     mon_features(0)
   { }
 
   MMonElection(int o, epoch_t e, MonMap *m)
-    : MessageInstance(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MMonElection>(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
       fsid(m->fsid), op(o), epoch(e),
       quorum_features(0),
       mon_features(0)

@@ -91,9 +91,9 @@ public:
 protected:
   // cons
   MClientRequest()
-    : MessageInstance(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance<MClientRequest>(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
   MClientRequest(int op)
-    : MessageInstance(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
+    : MessageInstance<MClientRequest>(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = op;
   }

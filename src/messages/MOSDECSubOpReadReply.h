@@ -44,7 +44,7 @@ public:
   }
 
   MOSDECSubOpReadReply()
-    : MessageInstance(MSG_OSD_EC_READ_REPLY, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance<MOSDECSubOpReadReply, MOSDFastDispatchOp>(MSG_OSD_EC_READ_REPLY, HEAD_VERSION, COMPAT_VERSION)
     {}
 
   void decode_payload() override {

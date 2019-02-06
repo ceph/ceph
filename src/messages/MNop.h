@@ -32,7 +32,7 @@ public:
   __u32 tag; // ignored tag value
 
   MNop()
-    : MessageInstance(MSG_NOP, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance<MNop>(MSG_NOP, HEAD_VERSION, COMPAT_VERSION)
     {}
 
   ~MNop() {}

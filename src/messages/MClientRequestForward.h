@@ -28,10 +28,10 @@ private:
 
 protected:
   MClientRequestForward()
-    : MessageInstance(CEPH_MSG_CLIENT_REQUEST_FORWARD),
+    : MessageInstance<MClientRequestForward>(CEPH_MSG_CLIENT_REQUEST_FORWARD),
       dest_mds(-1), num_fwd(-1), client_must_resend(false) {}
   MClientRequestForward(ceph_tid_t t, int dm, int nf, bool cmr) :
-    MessageInstance(CEPH_MSG_CLIENT_REQUEST_FORWARD),
+    MessageInstance<MClientRequestForward>(CEPH_MSG_CLIENT_REQUEST_FORWARD),
     dest_mds(dm), num_fwd(nf), client_must_resend(cmr) {
     ceph_assert(client_must_resend);
     header.tid = t;

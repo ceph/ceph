@@ -44,6 +44,6 @@ public:
   }
 
   MMgrClose()
-    : MessageInstance(MSG_MGR_CLOSE, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance<MMgrClose>(MSG_MGR_CLOSE, HEAD_VERSION, COMPAT_VERSION)
   {}
 };

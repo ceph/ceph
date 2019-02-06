@@ -28,9 +28,9 @@ private:
   dirfrag_t get_dirfrag() const { return dirfrag; }
 
 protected:
-  MExportDirCancel() : MessageInstance(MSG_MDS_EXPORTDIRCANCEL) {}
+  MExportDirCancel() : MessageInstance<MExportDirCancel>(MSG_MDS_EXPORTDIRCANCEL) {}
   MExportDirCancel(dirfrag_t df, uint64_t tid) :
-    MessageInstance(MSG_MDS_EXPORTDIRCANCEL), dirfrag(df) {
+    MessageInstance<MExportDirCancel>(MSG_MDS_EXPORTDIRCANCEL), dirfrag(df) {
     set_tid(tid);
   }
   ~MExportDirCancel() override {}

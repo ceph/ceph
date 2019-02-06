@@ -23,9 +23,9 @@ public:
   uuid_d fsid;
   std::map<std::string,pool_stat_t> pool_stats;
 
-  MGetPoolStatsReply() : MessageInstance(MSG_GETPOOLSTATSREPLY, 0) {}
+  MGetPoolStatsReply() : MessageInstance<MGetPoolStatsReply, PaxosServiceMessage>(MSG_GETPOOLSTATSREPLY, 0) {}
   MGetPoolStatsReply(uuid_d& f, ceph_tid_t t, version_t v) :
-    MessageInstance(MSG_GETPOOLSTATSREPLY, v),
+    MessageInstance<MGetPoolStatsReply, PaxosServiceMessage>(MSG_GETPOOLSTATSREPLY, v),
     fsid(f) {
     set_tid(t);
   }

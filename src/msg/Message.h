@@ -231,7 +231,7 @@
 // XioMessenger diagnostic "ping pong" flag (resend msg when send completes)
 #define MSG_MAGIC_REDUPE       0x0100
 
-class Message : public RefCountedObject {
+class Message : public RefCountedObjectSubType<Message> {
 protected:
   ceph_msg_header  header;      // headerelope
   ceph_msg_footer  footer;
@@ -257,9 +257,6 @@ protected:
   boost::intrusive::list_member_hook<> dispatch_q;
 
 public:
-  using ref = MessageRef;
-  using const_ref = MessageConstRef;
-
   // zipkin tracing
   ZTracer::Trace trace;
   void encode_trace(ceph::buffer::list &bl, uint64_t features) const;
@@ -312,10 +309,6 @@ public:
     header.priority = 0;  // undef
     header.data_off = 0;
     memset(&footer, 0, sizeof(footer));
-  }
-
-  Message *get() {
-    return static_cast<Message *>(RefCountedObject::get());
   }
 
 protected:
@@ -521,55 +514,10 @@ extern void encode_message(Message *m, uint64_t features, ceph::buffer::list& bl
 extern Message *decode_message(CephContext *cct, int crcflags,
                                ceph::buffer::list::const_iterator& bl);
 
-template <class MessageType>
-class MessageFactory {
-public:
-template<typename... Args>
-  static typename MessageType::ref build(Args&&... args) {
-    return typename MessageType::ref(new MessageType(std::forward<Args>(args)...), false);
-  }
-};
+template<class T, class M = Message>
+using MessageSubType = RefCountedObjectSubType<T,M>;
 
 template<class T, class M = Message>
-class MessageSubType : public M {
-public:
-  typedef boost::intrusive_ptr<T> ref;
-  typedef boost::intrusive_ptr<T const> const_ref;
-
-  static auto msgref_cast(typename M::ref const& m) {
-    return boost::static_pointer_cast<typename T::const_ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
-  }
-  static auto msgref_cast(typename M::const_ref const& m) {
-    return boost::static_pointer_cast<typename T::ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
-  }
-
-protected:
-template<typename... Args>
-  MessageSubType(Args&&... args) : M(std::forward<Args>(args)...) {}
-  virtual ~MessageSubType() override {}
-};
-
-
-template<class T, class M = Message>
-class MessageInstance : public MessageSubType<T, M> {
-public:
-  using factory = MessageFactory<T>;
-
-  template<typename... Args>
-  static auto create(Args&&... args) {
-    return MessageFactory<T>::build(std::forward<Args>(args)...);
-  }
-  static auto msgref_cast(typename Message::ref const& m) {
-    return boost::static_pointer_cast<typename T::ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
-  }
-  static auto msgref_cast(typename Message::const_ref const& m) {
-    return boost::static_pointer_cast<typename T::const_ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
-  }
-
-protected:
-template<typename... Args>
-  MessageInstance(Args&&... args) : MessageSubType<T,M>(std::forward<Args>(args)...) {}
-  virtual ~MessageInstance() override {}
-};
+using MessageInstance = RefCountedObjectInstance<T, M>;
 
 #endif

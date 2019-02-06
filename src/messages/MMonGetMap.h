@@ -23,7 +23,7 @@ class MMonGetMap : public MessageInstance<MMonGetMap> {
 public:
   friend factory;
 
-  MMonGetMap() : MessageInstance(CEPH_MSG_MON_GET_MAP) { }
+  MMonGetMap() : MessageInstance<MMonGetMap>(CEPH_MSG_MON_GET_MAP) { }
 private:
   ~MMonGetMap() override {}
 

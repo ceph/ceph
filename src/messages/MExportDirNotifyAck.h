@@ -31,7 +31,7 @@ private:
 protected:
   MExportDirNotifyAck() {}
   MExportDirNotifyAck(dirfrag_t df, uint64_t tid, pair<__s32,__s32> na) :
-    MessageInstance(MSG_MDS_EXPORTDIRNOTIFYACK), dirfrag(df), new_auth(na) {
+    MessageInstance<MExportDirNotifyAck>(MSG_MDS_EXPORTDIRNOTIFYACK), dirfrag(df), new_auth(na) {
     set_tid(tid);
   }
   ~MExportDirNotifyAck() override {}

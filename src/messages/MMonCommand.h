@@ -27,9 +27,9 @@ public:
   uuid_d fsid;
   std::vector<std::string> cmd;
 
-  MMonCommand() : MessageInstance(MSG_MON_COMMAND, 0) {}
+  MMonCommand() : MessageInstance<MMonCommand, PaxosServiceMessage>(MSG_MON_COMMAND, 0) {}
   MMonCommand(const uuid_d &f)
-    : MessageInstance(MSG_MON_COMMAND, 0),
+    : MessageInstance<MMonCommand, PaxosServiceMessage>(MSG_MON_COMMAND, 0),
       fsid(f)
   { }
 

@@ -36,9 +36,9 @@ private:
   map<mds_rank_t, float>& get_import_map() { return import_map; }
 
 protected:
-  MHeartbeat() : MessageInstance(MSG_MDS_HEARTBEAT), load(DecayRate()) {}
+  MHeartbeat() : MessageInstance<MHeartbeat>(MSG_MDS_HEARTBEAT), load(DecayRate()) {}
   MHeartbeat(mds_load_t& load, int beat)
-    : MessageInstance(MSG_MDS_HEARTBEAT),
+    : MessageInstance<MHeartbeat>(MSG_MDS_HEARTBEAT),
       load(load) {
     this->beat = beat;
   }

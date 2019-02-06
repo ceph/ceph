@@ -50,7 +50,7 @@ public:
   }
 
   MOSDPGPull()
-    : MessageInstance(MSG_OSD_PG_PULL, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDPGPull, MOSDFastDispatchOp>(MSG_OSD_PG_PULL, HEAD_VERSION, COMPAT_VERSION),
       cost(0)
     {}
 

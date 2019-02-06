@@ -41,7 +41,7 @@ public:
     : MOSDPGInfo(mv, {})
   {}
   MOSDPGInfo(epoch_t mv, pg_list_t&& l)
-    : MessageInstance(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDPGInfo>(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION),
       epoch{mv},
       pg_list{std::move(l)}
   {

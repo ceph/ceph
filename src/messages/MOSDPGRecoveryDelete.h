@@ -45,12 +45,12 @@ public:
   }
 
   MOSDPGRecoveryDelete()
-    : MessageInstance(MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
+    : MessageInstance<MOSDPGRecoveryDelete, MOSDFastDispatchOp>(MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
 			 COMPAT_VERSION), cost(0) {}
 
   MOSDPGRecoveryDelete(pg_shard_t from, spg_t pgid, epoch_t map_epoch,
 		       epoch_t min_epoch)
-    : MessageInstance(MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
+    : MessageInstance<MOSDPGRecoveryDelete, MOSDFastDispatchOp>(MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
 			 COMPAT_VERSION),
       from(from),
       pgid(pgid),

@@ -31,9 +31,9 @@ public:
   set<mds_rank_t> targets;
 
 protected:
-  MMDSLoadTargets() : MessageInstance(MSG_MDS_OFFLOAD_TARGETS, 0) {}
+  MMDSLoadTargets() : MessageInstance<MMDSLoadTargets, PaxosServiceMessage>(MSG_MDS_OFFLOAD_TARGETS, 0) {}
   MMDSLoadTargets(mds_gid_t g, set<mds_rank_t>& mds_targets) :
-    MessageInstance(MSG_MDS_OFFLOAD_TARGETS, 0),
+    MessageInstance<MMDSLoadTargets, PaxosServiceMessage>(MSG_MDS_OFFLOAD_TARGETS, 0),
     global_id(g), targets(mds_targets) {}
   ~MMDSLoadTargets() override {}
 

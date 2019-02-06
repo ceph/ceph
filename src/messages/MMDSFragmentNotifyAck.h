@@ -31,9 +31,9 @@ private:
   bufferlist basebl;
 
 protected:
-  MMDSFragmentNotifyAck() : MessageInstance(MSG_MDS_FRAGMENTNOTIFYACK) {}
+  MMDSFragmentNotifyAck() : MessageInstance<MMDSFragmentNotifyAck>(MSG_MDS_FRAGMENTNOTIFYACK) {}
   MMDSFragmentNotifyAck(dirfrag_t df, int b, uint64_t tid) :
-    MessageInstance(MSG_MDS_FRAGMENTNOTIFYACK),
+    MessageInstance<MMDSFragmentNotifyAck>(MSG_MDS_FRAGMENTNOTIFYACK),
     base_dirfrag(df), bits(b) {
     set_tid(tid);
   }

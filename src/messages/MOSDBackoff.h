@@ -40,10 +40,10 @@ public:
   }
 
   MOSDBackoff()
-    : MessageInstance(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance<MOSDBackoff, MOSDFastDispatchOp>(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDBackoff(spg_t pgid_, epoch_t ep, uint8_t op_, uint64_t id_,
 	      hobject_t begin_, hobject_t end_)
-    : MessageInstance(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MOSDBackoff, MOSDFastDispatchOp>(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid_),
       map_epoch(ep),
       op(op_),

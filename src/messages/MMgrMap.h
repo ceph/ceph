@@ -30,9 +30,9 @@ public:
   const MgrMap & get_map() {return map;}
 
   MMgrMap() : 
-    MessageInstance(MSG_MGR_MAP) {}
+    MessageInstance<MMgrMap>(MSG_MGR_MAP) {}
   MMgrMap(const MgrMap &map_) :
-    MessageInstance(MSG_MGR_MAP), map(map_)
+    MessageInstance<MMgrMap>(MSG_MGR_MAP), map(map_)
   {
   }
 

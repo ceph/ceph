@@ -36,9 +36,9 @@ private:
   uint64_t notifier_gid; ///< who sent the notify
 
   MWatchNotify()
-    : MessageInstance(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { }
+    : MessageInstance<MWatchNotify>(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION) { }
   MWatchNotify(uint64_t c, uint64_t v, uint64_t i, uint8_t o, ceph::buffer::list b)
-    : MessageInstance(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MWatchNotify>(CEPH_MSG_WATCH_NOTIFY, HEAD_VERSION, COMPAT_VERSION),
       cookie(c),
       ver(v),
       notify_id(i),

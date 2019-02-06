@@ -26,8 +26,8 @@ public:
   inodeno_t ino;
 
 protected:
-  MMDSFindIno() : MessageInstance(MSG_MDS_FINDINO) {}
-  MMDSFindIno(ceph_tid_t t, inodeno_t i) : MessageInstance(MSG_MDS_FINDINO), tid(t), ino(i) {}
+  MMDSFindIno() : MessageInstance<MMDSFindIno>(MSG_MDS_FINDINO) {}
+  MMDSFindIno(ceph_tid_t t, inodeno_t i) : MessageInstance<MMDSFindIno>(MSG_MDS_FINDINO), tid(t), ino(i) {}
   ~MMDSFindIno() override {}
 
 public:

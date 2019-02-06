@@ -16,9 +16,9 @@ public:
   std::string host;      ///< our hostname
   std::string device_class;
 
-  MGetConfig() : MessageInstance(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
+  MGetConfig() : MessageInstance<MGetConfig>(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION) { }
   MGetConfig(const EntityName& n, const std::string& h)
-    : MessageInstance(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance<MGetConfig>(MSG_GET_CONFIG, HEAD_VERSION, COMPAT_VERSION),
       name(n),
       host(h) {}
 

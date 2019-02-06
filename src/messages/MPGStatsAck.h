@@ -23,7 +23,7 @@ public:
 
   map<pg_t,pair<version_t,epoch_t> > pg_stat;
   
-  MPGStatsAck() : MessageInstance(MSG_PGSTATSACK) {}
+  MPGStatsAck() : MessageInstance<MPGStatsAck>(MSG_PGSTATSACK) {}
 
 private:
   ~MPGStatsAck() override {}
