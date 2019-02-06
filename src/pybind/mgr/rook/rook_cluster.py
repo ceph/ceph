@@ -404,8 +404,7 @@ class RookCluster(object):
                 })
 
         if len(patch) == 0:
-            log.warning("No-op adding stateful service")
-            return
+            return "No change"
 
         try:
             self.rook_api_patch(
@@ -416,3 +415,5 @@ class RookCluster(object):
             raise ApplyException(
                 "Failed to create OSD entries in Cluster CRD: {0}".format(
                     e))
+
+        return "Success"
