@@ -14,6 +14,7 @@ tasks:
 split_tasks:
   sequential:
     - thrashosds:
+        disable_objectstore_tool_tests: true
         timeout: 1200
         chance_pgnum_grow: 1
         chance_pgpnum_fix: 1
