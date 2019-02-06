@@ -49,7 +49,7 @@ SnapshotCopyRequest<I>::SnapshotCopyRequest(I *src_image_ctx,
                                             bool flatten, ContextWQ *work_queue,
                                             SnapSeqs *snap_seqs,
                                             Context *on_finish)
-  : RefCountedObject(dst_image_ctx->cct, 1), m_src_image_ctx(src_image_ctx),
+  : RefCountedObject(dst_image_ctx->cct), m_src_image_ctx(src_image_ctx),
     m_dst_image_ctx(dst_image_ctx), m_snap_id_end(snap_id_end),
     m_flatten(flatten), m_work_queue(work_queue), m_snap_seqs_result(snap_seqs),
     m_snap_seqs(*snap_seqs), m_on_finish(on_finish), m_cct(dst_image_ctx->cct),

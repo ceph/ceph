@@ -32,11 +32,6 @@ public:
       : entries_available(false), complete(false) {
     }
 
-    void get() override {
-    }
-    void put() override {
-    }
-
     void handle_entries_available() override  {
       std::lock_guard locker{lock};
       entries_available = true;

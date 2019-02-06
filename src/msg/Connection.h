@@ -18,12 +18,11 @@
 #include <stdlib.h>
 #include <ostream>
 
-#include <boost/intrusive_ptr.hpp>
-
 #include "auth/Auth.h"
 #include "common/RefCountedObj.h"
 #include "common/config.h"
 #include "common/debug.h"
+#include "common/ref.h"
 #include "common/ceph_mutex.h"
 #include "include/ceph_assert.h" // Because intusive_ptr clobbers our assert...
 #include "include/buffer.h"
@@ -41,21 +40,21 @@ class Messenger;
 class Interceptor;
 #endif
 
-struct Connection : public RefCountedObject {
+struct Connection : public RefCountedObjectSafe {
   mutable ceph::mutex lock = ceph::make_mutex("Connection::lock");
   Messenger *msgr;
   RefCountedPtr priv;
-  int peer_type;
+  int peer_type = -1;
   int64_t peer_id = -1;  // [msgr2 only] the 0 of osd.0, 4567 or client.4567
   safe_item_history<entity_addrvec_t> peer_addrs;
   utime_t last_keepalive, last_keepalive_ack;
 private:
-  uint64_t features;
+  uint64_t features = 0;
 public:
-  bool is_loopback;
-  bool failed; // true if we are a lossy connection that has failed.
+  bool is_loopback = false;
+  bool failed = false; // true if we are a lossy connection that has failed.
 
-  int rx_buffers_version;
+  int rx_buffers_version = 0;
   std::map<ceph_tid_t,std::pair<ceph::buffer::list, int>> rx_buffers;
 
   // authentication state
@@ -69,26 +68,9 @@ public:
   Interceptor *interceptor;
 #endif
 
-  friend class boost::intrusive_ptr<Connection>;
   friend class PipeConnection;
 
 public:
-  Connection(CephContext *cct, Messenger *m)
-    // we are managed exclusively by ConnectionRef; make it so you can
-    //   ConnectionRef foo = new Connection;
-    : RefCountedObject(cct, 0),
-      msgr(m),
-      peer_type(-1),
-      features(0),
-      is_loopback(false),
-      failed(false),
-      rx_buffers_version(0) {
-  }
-
-  ~Connection() override {
-    //generic_dout(0) << "~Connection " << this << dendl;
-  }
-
   void set_priv(const RefCountedPtr& o) {
     std::lock_guard l{lock};
     priv = o;
@@ -254,9 +236,18 @@ public:
     last_keepalive_ack = t;
   }
   bool is_blackhole() const;
+
+protected:
+  Connection(CephContext *cct, Messenger *m)
+    : RefCountedObjectSafe(cct),
+      msgr(m)
+  {}
+
+  ~Connection() override {
+    //generic_dout(0) << "~Connection " << this << dendl;
+  }
 };
 
-typedef boost::intrusive_ptr<Connection> ConnectionRef;
-
+using ConnectionRef = ceph::ref_t<Connection>;
 
 #endif /* CEPH_CONNECTION_H */
