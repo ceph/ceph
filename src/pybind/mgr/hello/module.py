@@ -53,13 +53,12 @@ class Hello(MgrModule):
         if 'person_name' in cmd:
             message = "Hello, " + cmd['person_name']
         else:
-            message = "Hello " + self.get_module_option('place');
+            message = "Hello " + self.get_module_option('place')
         if self.get_module_option('emphatic'):
             message += '!'
 
         return HandleCommandResult(retval=status_code, stdout=output_buffer,
                                    stderr=message + "\n" + output_string)
-
 
     def serve(self):
         """
