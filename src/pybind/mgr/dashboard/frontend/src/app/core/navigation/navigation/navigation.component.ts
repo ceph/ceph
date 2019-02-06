@@ -20,7 +20,7 @@ export class NavigationComponent implements OnInit {
 
   isCollapsed = true;
   prometheusConfigured = false;
-  enabled_feature$: FeatureTogglesMap$;
+  enabledFeature$: FeatureTogglesMap$;
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -29,7 +29,7 @@ export class NavigationComponent implements OnInit {
     private featureToggles: FeatureTogglesService
   ) {
     this.permissions = this.authStorageService.getPermissions();
-    this.enabled_feature$ = this.featureToggles.get();
+    this.enabledFeature$ = this.featureToggles.get();
   }
 
   ngOnInit() {

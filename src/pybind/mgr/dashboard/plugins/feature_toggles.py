@@ -54,7 +54,6 @@ class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
 
     @PM.add_hook
     def setup(self):
-        url_prefix = self.mgr.get_module_option('url_prefix')
         self.Controller2Feature = {
             controller: feature
             for feature, controllers in Feature2Controller.items()
@@ -104,7 +103,7 @@ class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
     def _get_feature_from_request(self, request):
         try:
             return self.Controller2Feature[
-                cherrypy.request.handler.callable.__self__]
+                request.handler.callable.__self__]
         except (AttributeError, KeyError):
             return None
 
@@ -128,9 +127,7 @@ class FeatureToggles(I.CanMgr, I.CanLog, I.Setupable, I.HasOptions,
 
     @PM.add_hook
     def get_controllers(self):
-        from ..controllers import ApiController,\
-            RESTController, Endpoint, ReadPermission
-        from ..security import Scope
+        from ..controllers import ApiController, RESTController
 
         @ApiController('/feature_toggles')
         class FeatureTogglesEndpoint(RESTController):

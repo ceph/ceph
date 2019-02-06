@@ -46,17 +46,7 @@ describe('HealthComponent', () => {
       return new Permissions({ log: ['read'] });
     }
   };
-  const fakeFeatureTogglesService = {
-    get: () => {
-      return of({
-        rbd: true,
-        mirroring: true,
-        iscsi: true,
-        cephfs: true,
-        rgw: true
-      });
-    }
-  };
+  let fakeFeatureTogglesService;
 
   configureTestBed({
     imports: [SharedModule, HttpClientTestingModule, PopoverModule.forRoot()],
@@ -72,12 +62,20 @@ describe('HealthComponent', () => {
     providers: [
       i18nProviders,
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
-      { provide: FeatureTogglesService, useValue: fakeFeatureTogglesService },
       PgCategoryService
     ]
   });
 
   beforeEach(() => {
+    fakeFeatureTogglesService = spyOn(TestBed.get(FeatureTogglesService), 'get').and.returnValue(
+      of({
+        rbd: true,
+        mirroring: true,
+        iscsi: true,
+        cephfs: true,
+        rgw: true
+      })
+    );
     fixture = TestBed.createComponent(HealthComponent);
     component = fixture.componentInstance;
     getHealthSpy = spyOn(TestBed.get(HealthService), 'getMinimalHealth');
@@ -96,6 +94,32 @@ describe('HealthComponent', () => {
 
     const infoCards = fixture.debugElement.nativeElement.querySelectorAll('cd-info-card');
     expect(infoCards.length).toBe(18);
+  });
+
+  describe('features disabled', () => {
+    beforeEach(() => {
+      fakeFeatureTogglesService.and.returnValue(
+        of({
+          rbd: false,
+          mirroring: false,
+          iscsi: false,
+          cephfs: false,
+          rgw: false
+        })
+      );
+      fixture = TestBed.createComponent(HealthComponent);
+      component = fixture.componentInstance;
+    });
+
+    it('should not render cards related to disabled features', () => {
+      fixture.detectChanges();
+
+      const infoGroups = fixture.debugElement.nativeElement.querySelectorAll('cd-info-group');
+      expect(infoGroups.length).toBe(3);
+
+      const infoCards = fixture.debugElement.nativeElement.querySelectorAll('cd-info-card');
+      expect(infoCards.length).toBe(15);
+    });
   });
 
   it('should render all except "Status" group and cards', () => {
