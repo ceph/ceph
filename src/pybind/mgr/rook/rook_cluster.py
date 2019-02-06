@@ -343,7 +343,7 @@ class RookCluster(object):
         Rook currently (0.8) can only do single-drive OSDs, so we
         treat all drive groups as just a list of individual OSDs.
         """
-        block_devices = drive_group.data_devices
+        block_devices = drive_group.data_devices.paths
 
         assert drive_group.objectstore in ("bluestore", "filestore")
 
