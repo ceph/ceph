@@ -53,7 +53,7 @@ public:
   }
   void put() const {
     CephContext *local_cct = cct;
-    int v = --nref;
+    auto v = --nref;
     if (local_cct)
       lsubdout(local_cct, refs, 1) << "RefCountedObject::put " << this << " "
 				   << (v + 1) << " -> " << v
