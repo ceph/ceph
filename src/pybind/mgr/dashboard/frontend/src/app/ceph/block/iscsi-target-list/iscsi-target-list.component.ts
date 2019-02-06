@@ -117,7 +117,7 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
       } else {
         const summary = this.summaryservice.getCurrentSummary();
         const releaseName = this.cephReleaseNamePipe.transform(summary.version);
-        this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/rbd/iscsi-targets/`;
+        this.docsUrl = `http://docs.ceph.com/docs/${releaseName}/mgr/dashboard/#enabling-iscsi-management`;
         this.status = result.message;
       }
     });
