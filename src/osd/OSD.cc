@@ -1750,6 +1750,9 @@ int OSD::mkfs(CephContext *cct, ObjectStore *store, const string &dev,
   }
 
 umount_store:
+  if (ch) {
+    ch.reset();
+  }
   store->umount();
 free_store:
   delete store;
