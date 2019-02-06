@@ -2427,9 +2427,9 @@ CtPtr ProtocolV2::handle_auth_request(char *payload, uint32_t length) {
   std::vector<uint32_t> allowed_modes;
   messenger->auth_server->get_supported_con_modes(
     connection->get_peer_type(), auth_meta->auth_method, &allowed_modes);
-  for (auto mode : allowed_modes) {
-    if (std::find(preferred_modes.begin(), preferred_modes.end(), mode)
-	!= preferred_modes.end()) {
+  for (auto mode : preferred_modes) {
+    if (std::find(allowed_modes.begin(), allowed_modes.end(), mode)
+	!= allowed_modes.end()) {
       auth_meta->con_mode = mode;
       break;
     }
