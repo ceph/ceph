@@ -1299,6 +1299,8 @@ protected:
   int whoami;
   std::string dev_path, journal_path;
 
+  int last_require_osd_release = 0;
+
   int numa_node = -1;
   size_t numa_cpu_set_size = 0;
   cpu_set_t numa_cpu_set;
@@ -2298,8 +2300,12 @@ private:
   void probe_smart(const string& devid, ostream& ss);
 
 public:
-  static int peek_meta(ObjectStore *store, string& magic,
-		       uuid_d& cluster_fsid, uuid_d& osd_fsid, int& whoami);
+  static int peek_meta(ObjectStore *store,
+		       string *magic,
+		       uuid_d *cluster_fsid,
+		       uuid_d *osd_fsid,
+		       int *whoami,
+		       int *min_osd_release);
   
 
   // startup/shutdown
