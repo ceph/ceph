@@ -338,15 +338,21 @@ struct ServerIdentFrame
 
 struct ReconnectFrame
     : public SignedEncryptedFrame<ReconnectFrame, entity_addrvec_t, uint64_t,
-                                  uint64_t, uint64_t, uint64_t> {
+				  int64_t,
+                                  uint64_t, uint64_t,
+				  uint64_t, uint64_t,
+				  uint64_t> {
   const ProtocolV2::Tag tag = ProtocolV2::Tag::SESSION_RECONNECT;
   using SignedEncryptedFrame::SignedEncryptedFrame;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
   inline uint64_t &cookie() { return get_val<1>(); }
-  inline uint64_t &global_seq() { return get_val<2>(); }
-  inline uint64_t &connect_seq() { return get_val<3>(); }
-  inline uint64_t &msg_seq() { return get_val<4>(); }
+  inline int64_t &gid() { return get_val<2>(); }
+  inline uint64_t &global_seq() { return get_val<3>(); }
+  inline uint64_t &connect_seq() { return get_val<4>(); }
+  inline uint64_t &supported_features() { return get_val<5>(); }
+  inline uint64_t &required_features() { return get_val<6>(); }
+  inline uint64_t &msg_seq() { return get_val<7>(); }
 };
 
 struct ResetFrame : public Frame<ResetFrame> {
@@ -2248,8 +2254,13 @@ CtPtr ProtocolV2::send_client_ident() {
 CtPtr ProtocolV2::send_reconnect() {
   ldout(cct, 20) << __func__ << dendl;
 
-  ReconnectFrame reconnect(this, messenger->get_myaddrs(), cookie, global_seq,
-                           connect_seq, in_seq);
+  ReconnectFrame reconnect(this, messenger->get_myaddrs(), cookie,
+			   messenger->get_myname().num(),
+			   global_seq,
+                           connect_seq,
+			   connection->policy.features_supported,
+			   connection->policy.features_required,
+			   in_seq);
 
   ldout(cct, 5) << __func__ << " reconnect to session: cookie=" << cookie
                 << " gs=" << global_seq << " cs=" << connect_seq
@@ -2571,14 +2582,21 @@ CtPtr ProtocolV2::handle_reconnect(char *payload, uint32_t length) {
 
   ldout(cct, 5) << __func__
                 << " received reconnect: cookie=" << reconnect.cookie()
+		<< " gid=" << reconnect.gid()
                 << " gs=" << reconnect.global_seq()
                 << " cs=" << reconnect.connect_seq()
-                << " ms=" << reconnect.msg_seq() << dendl;
+                << " ms=" << reconnect.msg_seq()
+		<< dendl;
 
   // Should we check if one of the ident.addrs match connection->target_addr
   // as we do in ProtocolV1?
   connection->set_peer_addrs(reconnect.addrs());
   connection->target_addr = connection->_infer_target_addr(reconnect.addrs());
+
+  peer_name = entity_name_t(connection->get_peer_type(), reconnect.gid());
+  connection_features = reconnect.supported_features() &
+    connection->policy.features_supported;
+  peer_global_seq = reconnect.global_seq();
 
   connection->lock.unlock();
   AsyncConnectionRef existing = messenger->lookup_conn(*connection->peer_addrs);
@@ -2805,11 +2823,11 @@ CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
     ceph_assert(!connection->delay_state);
   }
   exproto->reset_recv_state();
-  if (!reconnecting) {
-    exproto->peer_name = peer_name;
-    exproto->peer_global_seq = peer_global_seq;
-    exproto->connection_features = connection_features;
-  }
+
+  exproto->peer_name = peer_name;
+  exproto->peer_global_seq = peer_global_seq;
+  exproto->connection_features = connection_features;
+  existing->set_features(connection_features);
 
   auto temp_cs = std::move(connection->cs);
   EventCenter *new_center = connection->center;
