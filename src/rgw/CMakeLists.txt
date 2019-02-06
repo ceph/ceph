@@ -60,6 +60,7 @@ set(librgw_common_srcs
   rgw_metadata.cc
   rgw_multi.cc
   rgw_multi_del.cc
+  rgw_obj_manifest.cc
   rgw_pubsub.cc
   rgw_sync.cc
   rgw_data_sync.cc

@@ -9,6 +9,7 @@
 #include "compressor/Compressor.h"
 #include "rgw_putobj.h"
 #include "rgw_op.h"
+#include "rgw_compression_types.h"
 
 class RGWGetObj_Decompress : public RGWGetObj_Filter
 {

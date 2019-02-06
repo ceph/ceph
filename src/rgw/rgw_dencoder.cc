@@ -10,6 +10,7 @@
 #include "rgw_cache.h"
 #include "rgw_meta_sync_status.h"
 #include "rgw_data_sync.h"
+#include "rgw_multi.h"
 
 #include "common/Formatter.h"
 
