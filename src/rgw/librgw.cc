@@ -55,6 +55,8 @@
 #include "rgw_http_client_curl.h"
 #include "rgw_perf_counters.h"
 
+#include "services/svc_zone.h"
+
 #include <errno.h>
 #include <thread>
 #include <string>

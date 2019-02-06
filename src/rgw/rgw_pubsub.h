@@ -8,6 +8,7 @@
 #include "rgw_zone.h"
 #include "rgw_rados.h"
 #include "services/svc_sys_obj.h"
+#include "services/svc_zone.h"
 
 class XMLObj;
 

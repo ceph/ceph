@@ -19,6 +19,7 @@
 #include "rgw_lc.h"
 #include "rgw_zone.h"
 #include "rgw_string.h"
+#include "rgw_multi.h"
 
 // this seems safe to use, at least for now--arguably, we should
 // prefer header-only fmt, in general
@@ -27,6 +28,7 @@
 #include "fmt/format.h"
 
 #include "services/svc_sys_obj.h"
+#include "services/svc_tier_rados.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw

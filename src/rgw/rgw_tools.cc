@@ -23,6 +23,7 @@
 #include "osd/osd_types.h"
 
 #include "services/svc_sys_obj.h"
+#include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
 
 #define dout_subsys ceph_subsys_rgw
