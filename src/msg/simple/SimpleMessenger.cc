@@ -740,10 +740,15 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
     return;
 
   lock.Lock();
-  if (need_addr) {
+  if (need_addr && my_addr.is_blank_ip()) {
     entity_addr_t t = peer_addr_for_me;
-    t.set_type(entity_addr_t::TYPE_ANY);
-    t.set_port(my_addr.get_port());
+    if (!did_bind) {
+      t.set_type(entity_addr_t::TYPE_ANY);
+      t.set_port(0);
+    } else {
+      t.set_type(entity_addr_t::TYPE_LEGACY);
+      t.set_port(my_addr.get_port());
+    }
     t.set_nonce(my_addr.get_nonce());
     ANNOTATE_BENIGN_RACE_SIZED(&my_addr, sizeof(my_addr),
                                "SimpleMessenger learned addr");
