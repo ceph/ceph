@@ -15,7 +15,6 @@
 #include "cls/journal/cls_journal_types.h"
 #include "journal/JournalMetadataListener.h"
 #include "journal/Settings.h"
-#include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/optional.hpp>
 #include <functional>
@@ -28,9 +27,6 @@ class SafeTimer;
 
 namespace journal {
 
-class JournalMetadata;
-typedef boost::intrusive_ptr<JournalMetadata> JournalMetadataPtr;
-
 class JournalMetadata : public RefCountedObject, boost::noncopyable {
 public:
   typedef std::function<Context*()> CreateContext;
@@ -42,11 +38,6 @@ public:
 
   typedef std::set<Client> RegisteredClients;
   typedef std::list<Tag> Tags;
-
-  JournalMetadata(ContextWQ *work_queue, SafeTimer *timer, ceph::mutex *timer_lock,
-                  librados::IoCtx &ioctx, const std::string &oid,
-                  const std::string &client_id, const Settings &settings);
-  ~JournalMetadata() override;
 
   void init(Context *on_init);
   void shut_down(Context *on_finish);
@@ -156,6 +147,12 @@ public:
   void wait_for_ops();
 
 private:
+  FRIEND_MAKE_REF(JournalMetadata);
+  JournalMetadata(ContextWQ *work_queue, SafeTimer *timer, ceph::mutex *timer_lock,
+                  librados::IoCtx &ioctx, const std::string &oid,
+                  const std::string &client_id, const Settings &settings);
+  ~JournalMetadata() override;
+
   typedef std::map<uint64_t, uint64_t> AllocatedEntryTids;
   typedef std::list<JournalMetadataListener*> Listeners;
   typedef std::list<Context*> Contexts;
@@ -299,15 +296,15 @@ private:
   };
 
   librados::IoCtx m_ioctx;
-  CephContext *m_cct;
+  CephContext *m_cct = nullptr;
   std::string m_oid;
   std::string m_client_id;
   Settings m_settings;
 
-  uint8_t m_order;
-  uint8_t m_splay_width;
-  int64_t m_pool_id;
-  bool m_initialized;
+  uint8_t m_order = 0;
+  uint8_t m_splay_width = 0;
+  int64_t m_pool_id = -1;
+  bool m_initialized = false;
 
   ContextWQ *m_work_queue;
   SafeTimer *m_timer;
@@ -315,22 +312,22 @@ private:
 
   mutable ceph::mutex m_lock = ceph::make_mutex("JournalMetadata::m_lock");
 
-  uint64_t m_commit_tid;
+  uint64_t m_commit_tid = 0;
   CommitTids m_pending_commit_tids;
 
   Listeners m_listeners;
 
   C_WatchCtx m_watch_ctx;
-  uint64_t m_watch_handle;
+  uint64_t m_watch_handle = 0;
 
-  uint64_t m_minimum_set;
-  uint64_t m_active_set;
+  uint64_t m_minimum_set = 0;
+  uint64_t m_active_set = 0;
   RegisteredClients m_registered_clients;
   Client m_client;
 
   AllocatedEntryTids m_allocated_entry_tids;
 
-  size_t m_update_notifications;
+  size_t m_update_notifications = 0;
   ceph::condition_variable m_update_cond;
 
   size_t m_ignore_watch_notifies = 0;
@@ -339,8 +336,8 @@ private:
 
   uint64_t m_commit_position_tid = 0;
   ObjectSetPosition m_commit_position;
-  Context *m_commit_position_ctx;
-  Context *m_commit_position_task_ctx;
+  Context *m_commit_position_ctx = nullptr;
+  Context *m_commit_position_task_ctx = nullptr;
 
   size_t m_flush_commits_in_progress = 0;
   Contexts m_flush_commit_position_ctxs;

@@ -76,12 +76,10 @@ public:
 	}
       }
     }
-    journal::ObjectRecorderPtr create_object(const std::string& oid,
-					     uint8_t order,
-					     ceph::mutex* lock) {
-      journal::ObjectRecorderPtr object(new journal::ObjectRecorder(
+    auto create_object(std::string_view oid, uint8_t order, ceph::mutex* lock) {
+      auto object = ceph::make_ref<journal::ObjectRecorder>(
         m_ioctx, oid, 0, lock, m_work_queue, &m_handler,
-	order, m_max_in_flight_appends));
+	order, m_max_in_flight_appends);
       {
 	std::lock_guard locker{*lock};
 	object->set_append_batch_options(m_flush_interval,
@@ -115,16 +113,15 @@ public:
     double m_flush_age = 600;
     uint64_t m_max_in_flight_appends = 0;
     using ObjectRecorders =
-      std::list<std::pair<journal::ObjectRecorderPtr, ceph::mutex*>>;
+      std::list<std::pair<ceph::ref_t<journal::ObjectRecorder>, ceph::mutex*>>;
     ObjectRecorders m_object_recorders;
     Handler m_handler;
   };
 
   journal::AppendBuffer create_append_buffer(uint64_t tag_tid, uint64_t entry_tid,
                                              const std::string &payload) {
-    journal::FutureImplPtr future(new journal::FutureImpl(tag_tid, entry_tid,
-                                                          456));
-    future->init(journal::FutureImplPtr());
+    auto future = ceph::make_ref<journal::FutureImpl>(tag_tid, entry_tid, 456);
+    future->init(ceph::ref_t<journal::FutureImpl>());
 
     bufferlist bl;
     bl.append(payload);
@@ -136,12 +133,12 @@ TEST_F(TestObjectRecorder, Append) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   ceph::mutex lock = ceph::make_mutex("object_recorder_lock");
   ObjectRecorderFlusher flusher(m_ioctx, m_work_queue, 0, 0, 0, 0);
-  journal::ObjectRecorderPtr object = flusher.create_object(oid, 24, &lock);
+  auto object = flusher.create_object(oid, 24, &lock);
 
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                               "payload");
@@ -170,12 +167,12 @@ TEST_F(TestObjectRecorder, AppendFlushByCount) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   ceph::mutex lock = ceph::make_mutex("object_recorder_lock");
   ObjectRecorderFlusher flusher(m_ioctx, m_work_queue, 2, 0, 0, -1);
-  journal::ObjectRecorderPtr object = flusher.create_object(oid, 24, &lock);
+  auto object = flusher.create_object(oid, 24, &lock);
 
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                               "payload");
@@ -203,12 +200,12 @@ TEST_F(TestObjectRecorder, AppendFlushByBytes) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   ceph::mutex lock = ceph::make_mutex("object_recorder_lock");
   ObjectRecorderFlusher flusher(m_ioctx, m_work_queue, 0, 10, 0, -1);
-  journal::ObjectRecorderPtr object = flusher.create_object(oid, 24, &lock);
+  auto object = flusher.create_object(oid, 24, &lock);
 
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                               "payload");
@@ -236,12 +233,12 @@ TEST_F(TestObjectRecorder, AppendFlushByAge) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   ceph::mutex lock = ceph::make_mutex("object_recorder_lock");
   ObjectRecorderFlusher flusher(m_ioctx, m_work_queue, 0, 0, 0.1, -1);
-  journal::ObjectRecorderPtr object = flusher.create_object(oid, 24, &lock);
+  auto object = flusher.create_object(oid, 24, &lock);
 
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                               "payload");
@@ -268,12 +265,12 @@ TEST_F(TestObjectRecorder, AppendFilledObject) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   ceph::mutex lock = ceph::make_mutex("object_recorder_lock");
   ObjectRecorderFlusher flusher(m_ioctx, m_work_queue);
-  journal::ObjectRecorderPtr object = flusher.create_object(oid, 12, &lock);
+  auto object = flusher.create_object(oid, 12, &lock);
 
   std::string payload(2048, '1');
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
@@ -301,12 +298,12 @@ TEST_F(TestObjectRecorder, Flush) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   ceph::mutex lock = ceph::make_mutex("object_recorder_lock");
   ObjectRecorderFlusher flusher(m_ioctx, m_work_queue, 0, 10, 0, -1);
-  journal::ObjectRecorderPtr object = flusher.create_object(oid, 24, &lock);
+  auto object = flusher.create_object(oid, 24, &lock);
 
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                               "payload");
@@ -331,12 +328,12 @@ TEST_F(TestObjectRecorder, FlushFuture) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   ceph::mutex lock = ceph::make_mutex("object_recorder_lock");
   ObjectRecorderFlusher flusher(m_ioctx, m_work_queue, 0, 10, 0, -1);
-  journal::ObjectRecorderPtr object = flusher.create_object(oid, 24, &lock);
+  auto object = flusher.create_object(oid, 24, &lock);
 
   journal::AppendBuffer append_buffer = create_append_buffer(234, 123,
                                                              "payload");
@@ -359,12 +356,12 @@ TEST_F(TestObjectRecorder, FlushDetachedFuture) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   ceph::mutex lock = ceph::make_mutex("object_recorder_lock");
   ObjectRecorderFlusher flusher(m_ioctx, m_work_queue);
-  journal::ObjectRecorderPtr object = flusher.create_object(oid, 24, &lock);
+  auto object = flusher.create_object(oid, 24, &lock);
 
   journal::AppendBuffer append_buffer = create_append_buffer(234, 123,
                                                              "payload");
@@ -388,12 +385,12 @@ TEST_F(TestObjectRecorder, Close) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   ceph::mutex lock = ceph::make_mutex("object_recorder_lock");
   ObjectRecorderFlusher flusher(m_ioctx, m_work_queue, 2, 0, 0, -1);
-  journal::ObjectRecorderPtr object = flusher.create_object(oid, 24, &lock);
+  auto object = flusher.create_object(oid, 24, &lock);
 
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
                                                               "payload");
@@ -418,14 +415,14 @@ TEST_F(TestObjectRecorder, Overflow) {
   std::string oid = get_temp_oid();
   ASSERT_EQ(0, create(oid));
   ASSERT_EQ(0, client_register(oid));
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   ceph::mutex lock1 = ceph::make_mutex("object_recorder_lock_1");
   ceph::mutex lock2 = ceph::make_mutex("object_recorder_lock_2");
 
   ObjectRecorderFlusher flusher(m_ioctx, m_work_queue);
-  journal::ObjectRecorderPtr object1 = flusher.create_object(oid, 12, &lock1);
+  auto object1 = flusher.create_object(oid, 12, &lock1);
 
   std::string payload(1 << 11, '1');
   journal::AppendBuffer append_buffer1 = create_append_buffer(234, 123,
@@ -445,7 +442,7 @@ TEST_F(TestObjectRecorder, Overflow) {
 
   ASSERT_TRUE(flusher.wait_for_overflow());
 
-  journal::ObjectRecorderPtr object2 = flusher.create_object(oid, 12, &lock2);
+  auto object2 = flusher.create_object(oid, 12, &lock2);
 
   journal::AppendBuffer append_buffer3 = create_append_buffer(456, 123,
                                                               payload);

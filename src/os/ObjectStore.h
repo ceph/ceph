@@ -124,10 +124,6 @@ public:
   struct CollectionImpl : public RefCountedObject {
     const coll_t cid;
 
-    CollectionImpl(const coll_t& c)
-      : RefCountedObject(NULL, 0),
-	cid(c) {}
-
     /// wait for any queued transactions to apply
     // block until any previous transactions are visible.  specifically,
     // collection_list and collection_empty need to reflect prior operations.
@@ -149,8 +145,12 @@ public:
     const coll_t &get_cid() {
       return cid;
     }
+  protected:
+    CollectionImpl() = delete;
+    CollectionImpl(CephContext* cct, const coll_t& c) : RefCountedObject(cct), cid(c) {}
+    ~CollectionImpl() = default;
   };
-  typedef boost::intrusive_ptr<CollectionImpl> CollectionHandle;
+  using CollectionHandle = ceph::ref_t<CollectionImpl>;
 
 
   /*********************************

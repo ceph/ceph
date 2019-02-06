@@ -33,7 +33,7 @@ DeepCopyRequest<I>::DeepCopyRequest(I *src_image_ctx, I *dst_image_ctx,
                                     ContextWQ *work_queue, SnapSeqs *snap_seqs,
                                     ProgressContext *prog_ctx,
                                     Context *on_finish)
-  : RefCountedObject(dst_image_ctx->cct, 1), m_src_image_ctx(src_image_ctx),
+  : RefCountedObject(dst_image_ctx->cct), m_src_image_ctx(src_image_ctx),
     m_dst_image_ctx(dst_image_ctx), m_snap_id_start(snap_id_start),
     m_snap_id_end(snap_id_end), m_flatten(flatten),
     m_object_number(object_number), m_work_queue(work_queue),

@@ -3979,10 +3979,6 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
 // fake connection attached to forwarded messages
 struct AnonConnection : public Connection {
   entity_addr_t socket_addr;
-  explicit AnonConnection(CephContext *cct,
-			  const entity_addr_t& sa)
-    : Connection(cct, NULL),
-      socket_addr(sa) {}
 
   int send_message(Message *m) override {
     ceph_assert(!"send_message on anonymous connection");
@@ -4000,6 +3996,12 @@ struct AnonConnection : public Connection {
   entity_addr_t get_peer_socket_addr() const override {
     return socket_addr;
   }
+
+private:
+  FRIEND_MAKE_REF(AnonConnection);
+  explicit AnonConnection(CephContext *cct, const entity_addr_t& sa)
+    : Connection(cct, nullptr),
+      socket_addr(sa) {}
 };
 
 //extract the original message and put it into the regular dispatch function
@@ -4022,7 +4024,7 @@ void Monitor::handle_forward(MonOpRequestRef op)
     PaxosServiceMessage *req = m->claim_message();
     ceph_assert(req != NULL);
 
-    ConnectionRef c(new AnonConnection(cct, m->client_socket_addr));
+    auto c = ceph::make_ref<AnonConnection>(cct, m->client_socket_addr);
     MonSession *s = new MonSession(static_cast<Connection*>(c.get()));
     s->_ident(req->get_source(),
 	      req->get_source_addrs());

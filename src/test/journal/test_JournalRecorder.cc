@@ -14,7 +14,7 @@ public:
   using JournalRecorderPtr = std::unique_ptr<journal::JournalRecorder,
 					     std::function<void(journal::JournalRecorder*)>>;
   JournalRecorderPtr create_recorder(
-      const std::string &oid, const journal::JournalMetadataPtr &metadata) {
+      const std::string &oid, const ceph::ref_t<journal::JournalMetadata>& metadata) {
     JournalRecorderPtr recorder{
       new journal::JournalRecorder(m_ioctx, oid + ".", metadata, 0),
       [](journal::JournalRecorder* recorder) {
@@ -34,7 +34,7 @@ TEST_F(TestJournalRecorder, Append) {
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   JournalRecorderPtr recorder = create_recorder(oid, metadata);
@@ -51,7 +51,7 @@ TEST_F(TestJournalRecorder, AppendKnownOverflow) {
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_EQ(0U, metadata->get_active_set());
 
@@ -73,7 +73,7 @@ TEST_F(TestJournalRecorder, AppendDelayedOverflow) {
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_EQ(0U, metadata->get_active_set());
 
@@ -98,7 +98,7 @@ TEST_F(TestJournalRecorder, FutureFlush) {
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   JournalRecorderPtr recorder = create_recorder(oid, metadata);
@@ -118,7 +118,7 @@ TEST_F(TestJournalRecorder, Flush) {
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
 
   JournalRecorderPtr recorder = create_recorder(oid, metadata);
@@ -142,7 +142,7 @@ TEST_F(TestJournalRecorder, OverflowCommitObjectNumber) {
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_EQ(0U, metadata->get_active_set());
 

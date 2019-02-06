@@ -1266,7 +1266,7 @@ public:
   };
 
   class OpSequencer;
-  typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
+  using OpSequencerRef = ceph::ref_t<OpSequencer>;
 
   struct Collection : public CollectionImpl {
     BlueStore *store;
@@ -1659,14 +1659,6 @@ public:
 
     std::atomic_bool zombie = {false};    ///< in zombie_osr set (collection going away)
 
-    OpSequencer(BlueStore *store, const coll_t& c)
-      : RefCountedObject(store->cct, 0),
-	store(store), cid(c) {
-    }
-    ~OpSequencer() {
-      ceph_assert(q.empty());
-    }
-
     void queue_new(TransContext *txc) {
       std::lock_guard l(qlock);
       txc->seq = ++last_seq;
@@ -1746,6 +1738,15 @@ public:
       }
       txc->oncommits.push_back(c);
       return false;
+    }
+  private:
+    FRIEND_MAKE_REF(OpSequencer);
+    OpSequencer(BlueStore *store, const coll_t& c)
+      : RefCountedObject(store->cct),
+	store(store), cid(c) {
+    }
+    ~OpSequencer() {
+      ceph_assert(q.empty());
     }
   };
 

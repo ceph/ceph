@@ -109,10 +109,6 @@ struct HeartbeatStamps : public RefCountedObject {
   /// highest up_from we've seen from this rank
   epoch_t up_from = 0;
 
-  HeartbeatStamps(int o)
-    : RefCountedObject(NULL, 0),
-      osd(o) {}
-
   void print(ostream& out) const {
     std::lock_guard l(lock);
     out << "hbstamp(osd." << osd << " up_from " << up_from
@@ -163,8 +159,13 @@ struct HeartbeatStamps : public RefCountedObject {
     peer_clock_delta_ub = delta_ub;
   }
 
+private:
+  FRIEND_MAKE_REF(HeartbeatStamps);
+  HeartbeatStamps(int o)
+    : RefCountedObject(NULL),
+      osd(o) {}
 };
-typedef boost::intrusive_ptr<HeartbeatStamps> HeartbeatStampsRef;
+using HeartbeatStampsRef = ceph::ref_t<HeartbeatStamps>;
 
 inline ostream& operator<<(ostream& out, const HeartbeatStamps& hb)
 {

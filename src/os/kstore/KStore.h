@@ -161,9 +161,11 @@ public:
     void flush() override;
     bool flush_commit(Context *c) override;
 
+  private:
+    FRIEND_MAKE_REF(Collection);
     Collection(KStore *ns, coll_t c);
   };
-  typedef boost::intrusive_ptr<Collection> CollectionRef;
+  using CollectionRef = ceph::ref_t<Collection>;
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
     CollectionRef c;

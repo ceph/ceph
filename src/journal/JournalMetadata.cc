@@ -405,14 +405,11 @@ JournalMetadata::JournalMetadata(ContextWQ *work_queue, SafeTimer *timer,
                                  const std::string &oid,
                                  const std::string &client_id,
                                  const Settings &settings)
-    : RefCountedObject(NULL, 0), m_cct(NULL), m_oid(oid),
-      m_client_id(client_id), m_settings(settings), m_order(0),
-      m_splay_width(0), m_pool_id(-1), m_initialized(false),
+    : m_oid(oid),
+      m_client_id(client_id), m_settings(settings),
       m_work_queue(work_queue), m_timer(timer), m_timer_lock(timer_lock),
-      m_commit_tid(0), m_watch_ctx(this),
-      m_watch_handle(0), m_minimum_set(0), m_active_set(0),
-      m_update_notifications(0), m_commit_position_ctx(NULL),
-      m_commit_position_task_ctx(NULL) {
+      m_watch_ctx(this)
+{
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
 }
