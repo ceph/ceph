@@ -1,3 +1,5 @@
 roles:
   - [client.salt_master]
   - [mon.a, mgr.x, osd.0, mds.0, rgw.0]
+  - [mon.b, mgr.y, osd.1, mds.1]
+  - [mon.c, mgr.z, osd.2, mds.2]
