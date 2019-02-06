@@ -267,6 +267,9 @@ class Module(MgrModule, CherryPyConfig):
         self._stopping = threading.Event()
         self.shutdown_event = threading.Event()
 
+        self.ACCESS_CTRL_DB = None
+        self.SSO_DB = None
+
     @classmethod
     def can_run(cls):
         if cherrypy is None:

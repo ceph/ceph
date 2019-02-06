@@ -33,6 +33,7 @@ class AccessControlTest(unittest.TestCase):
         # kludge below
         mgr.set_store.side_effect = cls.mock_set_module_option
         mgr.get_store.side_effect = cls.mock_get_module_option
+        mgr.ACCESS_CONTROL_DB = None
 
     def setUp(self):
         self.CONFIG_KEY_DICT.clear()
@@ -66,8 +67,7 @@ class AccessControlTest(unittest.TestCase):
     # not be needed unless we're testing very specific behaviors.
     #
     def setup_and_load_persistent_db(self):
-        from ..services.access_control import ACCESS_CTRL_DB
-        ACCESS_CTRL_DB.save()
+        mgr.ACCESS_CTRL_DB.save()
         self.load_persistent_db()
 
     def validate_persistent_role(self, rolename, scopes_permissions,

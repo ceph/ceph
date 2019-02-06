@@ -49,7 +49,7 @@ class OrchClient(object):
         if not isinstance(service_ids, list):
             service_ids = [service_ids]
 
-        completion_list = [self._call("update_stateless_service", service_type,
-                                      service_id, None)
-                           for service_id in service_ids]
+        completion_list = [self._call("service_action", 'reload', service_type,
+                                      service_name, service_id)
+                           for service_name, service_id in service_ids]
         self._wait(completion_list)
