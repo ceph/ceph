@@ -308,12 +308,12 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def update_mons(self, num, hosts):
-        # type: (int, List[List[str,str]]) -> WriteCompletion
+        # type: (int, List[Tuple[str,str]]) -> WriteCompletion
         """
         Update the number of cluster monitors.
 
         :param num: requested number of monitors.
-        :param hosts: list of hosts (optional)
+        :param hosts: list of hosts + network (optional)
         """
         raise NotImplementedError()
 
@@ -796,9 +796,10 @@ class InventoryNode(object):
     InventoryNode.
     """
     def __init__(self, name, devices):
+        # type: (str, List[InventoryDevice]) -> None
         assert isinstance(devices, list)
         self.name = name  # unique within cluster.  For example a hostname.
-        self.devices = devices  # type: List[InventoryDevice]
+        self.devices = devices
 
     def to_json(self):
         return {'name': self.name, 'devices': [d.to_json() for d in self.devices]}

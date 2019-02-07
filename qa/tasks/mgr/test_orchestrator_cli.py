@@ -104,3 +104,21 @@ class TestOrchestratorCli(MgrTestCase):
 
     def test_nfs_rm(self):
         self._orch_cmd("nfs", "rm", "service_name")
+
+    def test_host_ls(self):
+        out = self._orch_cmd("host", "ls")
+        self.assertEqual(out, "localhost\n")
+
+    def test_host_add(self):
+        self._orch_cmd("host", "add", "hostname")
+
+    def test_host_rm(self):
+        self._orch_cmd("host", "rm", "hostname")
+
+    def test_mon_update(self):
+        self._orch_cmd("mon", "update", "3")
+        self._orch_cmd("mon", "update", "3", "host1", "host2", "host3")
+        self._orch_cmd("mon", "update", "3", "host1:network", "host2:network", "host3:network")
+
+    def test_mgr_update(self):
+        self._orch_cmd("mgr", "update", "3")
