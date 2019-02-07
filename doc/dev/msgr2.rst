@@ -101,6 +101,17 @@ the form::
   has completed (TAG_AUTH_DONE has been sent) and signatures are
   enabled.
 
+Hello
+-----
+
+* TAG_HELLO: client->server and server->client::
+
+    __u8 entity_type
+    entity_addr_t peer_socket_address
+
+  - We immediately share our entity type and the address of the peer (which can be useful
+    for detecting our effective IP address, especially in the presence of NAT).
+
 
 Authentication
 --------------
@@ -276,13 +287,19 @@ an established session.
   - The cookie can be used by the client if it is later disconnected and wants to
     reconnect and resume the session.
 
+* TAG_RECONNECT (client->server): reconnect to an established session::
 
+    __le32 num_addrs
+    entity_addr_t * num_addrs
     __le64 cookie
+    __le64 id (of name.id, e.g., osd.123 -> 123)
     __le64 global_seq
     __le64 connect_seq
+    __le64 supported_features
+    __le64 required_features
     __le64 msg_seq (the last msg seq received)
 
-* TAG_RECONNECT_OK (server only): acknowledge a reconnect attempt::
+* TAG_RECONNECT_OK (server->client): acknowledge a reconnect attempt::
 
     __le64 msg_seq (last msg seq received)
 
