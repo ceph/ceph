@@ -1,6 +1,6 @@
 
 
-#include "svc_mfa.h"
+#include "svc_cls.h"
 #include "svc_rados.h"
 #include "svc_zone.h"
 
@@ -12,7 +12,19 @@
 #define dout_subsys ceph_subsys_rgw
 
 
-int RGWSI_MFA::get_mfa_obj(const rgw_user& user, std::optional<RGWSI_RADOS::Obj> *obj) {
+int RGWSI_Cls::do_start()
+{
+  int r = mfa.do_start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start mfa service" << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int RGWSI_Cls::MFA::get_mfa_obj(const rgw_user& user, std::optional<RGWSI_RADOS::Obj> *obj)
+{
   string oid = get_mfa_oid(user);
   rgw_raw_obj o(zone_svc->get_zone_params().otp_pool, oid);
 
@@ -26,7 +38,8 @@ int RGWSI_MFA::get_mfa_obj(const rgw_user& user, std::optional<RGWSI_RADOS::Obj>
   return 0;
 }
 
-int RGWSI_MFA::get_mfa_ref(const rgw_user& user, rgw_rados_ref *ref) {
+int RGWSI_Cls::MFA::get_mfa_ref(const rgw_user& user, rgw_rados_ref *ref)
+{
   std::optional<RGWSI_RADOS::Obj> obj;
   int r = get_mfa_obj(user, &obj);
   if (r < 0) {
@@ -36,7 +49,7 @@ int RGWSI_MFA::get_mfa_ref(const rgw_user& user, rgw_rados_ref *ref) {
   return 0;
 }
 
-int RGWSI_MFA::check_mfa(const rgw_user& user, const string& otp_id, const string& pin, optional_yield y)
+int RGWSI_Cls::MFA::check_mfa(const rgw_user& user, const string& otp_id, const string& pin, optional_yield y)
 {
   rgw_rados_ref ref;
   int r = get_mfa_ref(user, &ref);
@@ -55,7 +68,7 @@ int RGWSI_MFA::check_mfa(const rgw_user& user, const string& otp_id, const strin
   return (result.result == rados::cls::otp::OTP_CHECK_SUCCESS ? 0 : -EACCES);
 }
 
-void RGWSI_MFA::prepare_mfa_write(librados::ObjectWriteOperation *op,
+void RGWSI_Cls::MFA::prepare_mfa_write(librados::ObjectWriteOperation *op,
                                  RGWObjVersionTracker *objv_tracker,
                                  const ceph::real_time& mtime)
 {
@@ -79,7 +92,7 @@ void RGWSI_MFA::prepare_mfa_write(librados::ObjectWriteOperation *op,
   op->mtime2(&mtime_ts);
 }
 
-int RGWSI_MFA::create_mfa(const rgw_user& user, const rados::cls::otp::otp_info_t& config,
+int RGWSI_Cls::MFA::create_mfa(const rgw_user& user, const rados::cls::otp::otp_info_t& config,
                          RGWObjVersionTracker *objv_tracker, const ceph::real_time& mtime, optional_yield y)
 {
   std::optional<RGWSI_RADOS::Obj> obj;
@@ -100,7 +113,7 @@ int RGWSI_MFA::create_mfa(const rgw_user& user, const rados::cls::otp::otp_info_
   return 0;
 }
 
-int RGWSI_MFA::remove_mfa(const rgw_user& user, const string& id,
+int RGWSI_Cls::MFA::remove_mfa(const rgw_user& user, const string& id,
                          RGWObjVersionTracker *objv_tracker,
                          const ceph::real_time& mtime,
                          optional_yield y)
@@ -123,8 +136,8 @@ int RGWSI_MFA::remove_mfa(const rgw_user& user, const string& id,
   return 0;
 }
 
-int RGWSI_MFA::get_mfa(const rgw_user& user, const string& id, rados::cls::otp::otp_info_t *result,
-                       optional_yield y)
+int RGWSI_Cls::MFA::get_mfa(const rgw_user& user, const string& id, rados::cls::otp::otp_info_t *result,
+			    optional_yield y)
 {
   rgw_rados_ref ref;
 
@@ -141,8 +154,8 @@ int RGWSI_MFA::get_mfa(const rgw_user& user, const string& id, rados::cls::otp::
   return 0;
 }
 
-int RGWSI_MFA::list_mfa(const rgw_user& user, list<rados::cls::otp::otp_info_t> *result,
-                        optional_yield y)
+int RGWSI_Cls::MFA::list_mfa(const rgw_user& user, list<rados::cls::otp::otp_info_t> *result,
+			     optional_yield y)
 {
   rgw_rados_ref ref;
 
@@ -159,8 +172,8 @@ int RGWSI_MFA::list_mfa(const rgw_user& user, list<rados::cls::otp::otp_info_t> 
   return 0;
 }
 
-int RGWSI_MFA::otp_get_current_time(const rgw_user& user, ceph::real_time *result,
-                                    optional_yield y)
+int RGWSI_Cls::MFA::otp_get_current_time(const rgw_user& user, ceph::real_time *result,
+					 optional_yield y)
 {
   rgw_rados_ref ref;
 
@@ -177,10 +190,10 @@ int RGWSI_MFA::otp_get_current_time(const rgw_user& user, ceph::real_time *resul
   return 0;
 }
 
-int RGWSI_MFA::set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t>& entries,
-                      bool reset_obj, RGWObjVersionTracker *objv_tracker,
-                      const real_time& mtime,
-                      optional_yield y)
+int RGWSI_Cls::MFA::set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t>& entries,
+			    bool reset_obj, RGWObjVersionTracker *objv_tracker,
+			    const real_time& mtime,
+			    optional_yield y)
 {
   rgw_raw_obj o(zone_svc->get_zone_params().otp_pool, oid);
   auto obj = rados_svc->obj(o);
@@ -206,9 +219,9 @@ int RGWSI_MFA::set_mfa(const string& oid, const list<rados::cls::otp::otp_info_t
   return 0;
 }
 
-int RGWSI_MFA::list_mfa(const string& oid, list<rados::cls::otp::otp_info_t> *result,
-                       RGWObjVersionTracker *objv_tracker, ceph::real_time *pmtime,
-                       optional_yield y)
+int RGWSI_Cls::MFA::list_mfa(const string& oid, list<rados::cls::otp::otp_info_t> *result,
+			     RGWObjVersionTracker *objv_tracker, ceph::real_time *pmtime,
+			     optional_yield y)
 {
   rgw_raw_obj o(zone_svc->get_zone_params().otp_pool, oid);
   auto obj = rados_svc->obj(o);

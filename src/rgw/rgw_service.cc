@@ -4,7 +4,7 @@
 #include "rgw_service.h"
 
 #include "services/svc_finisher.h"
-#include "services/svc_mfa.h"
+#include "services/svc_cls.h"
 #include "services/svc_notify.h"
 #include "services/svc_rados.h"
 #include "services/svc_zone.h"
@@ -31,7 +31,7 @@ int RGWServices_Def::init(CephContext *cct,
                           bool raw)
 {
   finisher = std::make_unique<RGWSI_Finisher>(cct);
-  mfa = std::make_unique<RGWSI_MFA>(cct);
+  cls = std::make_unique<RGWSI_Cls>(cct);
   notify = std::make_unique<RGWSI_Notify>(cct);
   rados = std::make_unique<RGWSI_RADOS>(cct);
   zone = std::make_unique<RGWSI_Zone>(cct);
@@ -45,7 +45,7 @@ int RGWServices_Def::init(CephContext *cct,
     sysobj_cache = std::make_unique<RGWSI_SysObj_Cache>(cct);
   }
   finisher->init();
-  mfa->init(zone.get(), rados.get());
+  cls->init(zone.get(), rados.get());
   notify->init(zone.get(), rados.get(), finisher.get());
   rados->init();
   zone->init(sysobj.get(), rados.get(), sync_modules.get());
@@ -90,9 +90,9 @@ int RGWServices_Def::init(CephContext *cct,
     }
   }
 
-  r = mfa->start();
+  r = cls->start();
   if (r < 0) {
-    ldout(cct, 0) << "ERROR: failed to start mfa service (" << cpp_strerror(-r) << dendl;
+    ldout(cct, 0) << "ERROR: failed to start cls service (" << cpp_strerror(-r) << dendl;
     return r;
   }
 
@@ -167,6 +167,7 @@ int RGWServices::do_init(CephContext *cct, bool have_cache, bool raw)
   }
 
   finisher = _svc.finisher.get();
+  cls = _svc.cls.get();
   notify = _svc.notify.get();
   rados = _svc.rados.get();
   zone = _svc.zone.get();
