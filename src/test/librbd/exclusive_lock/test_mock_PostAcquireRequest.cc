@@ -458,6 +458,7 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, OpenObjectMapError) {
   expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
   expect_create_object_map(mock_image_ctx, mock_object_map);
   expect_open_object_map(mock_image_ctx, *mock_object_map, -EINVAL);
+  expect_handle_prepare_lock_complete(mock_image_ctx);
 
   C_SaferCond *acquire_ctx = new C_SaferCond();
   C_SaferCond ctx;
