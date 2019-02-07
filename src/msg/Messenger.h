@@ -35,7 +35,7 @@
 #include "include/ceph_features.h"
 #include "auth/Crypto.h"
 #include "common/item_history.h"
-#include "auth/AuthAuthorizeHandler.h"
+#include "auth/AuthRegistry.h"
 #include "include/ceph_assert.h"
 
 #include <errno.h>
@@ -46,7 +46,8 @@
 
 class Timer;
 
-class AuthAuthorizerHandlerRegistry;
+class AuthClient;
+class AuthServer;
 
 class Messenger {
 private:
@@ -72,6 +73,9 @@ protected:
   int socket_priority;
 
 public:
+  AuthClient *auth_client = 0;
+  AuthServer *auth_server = 0;
+
   /**
    * Various Messenger conditional config/type flags to allow
    * different "transport" Messengers to tune themselves
@@ -91,8 +95,7 @@ public:
 
 protected:
   // for authentication
-  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_service_registry;
-  std::unique_ptr<AuthAuthorizeHandlerRegistry> auth_ah_cluster_registry;
+  AuthRegistry auth_registry;
 
 public:
   /**
@@ -179,6 +182,13 @@ public:
    */
   uint32_t get_magic() { return magic; }
   void set_magic(int _magic) { magic = _magic; }
+
+  void set_auth_client(AuthClient *ac) {
+    auth_client = ac;
+  }
+  void set_auth_server(AuthServer *as) {
+    auth_server = as;
+  }
 
 protected:
   /**
@@ -759,12 +769,6 @@ public:
   }
 
   /**
-   * Get allowed authentication methods for a specific peer type
-   **/
-  void ms_deliver_get_auth_allowed_methods(
-      int peer_type, std::vector<uint32_t> &allowed_methods);
-
-  /**
    * Get the AuthAuthorizer for a new outgoing Connection.
    *
    * @param peer_type The peer type for the new Connection
@@ -796,8 +800,9 @@ public:
   bool ms_deliver_verify_authorizer(
     Connection *con, int peer_type,
     int protocol, bufferlist& authorizer, bufferlist& authorizer_reply,
-    bool& isvalid, CryptoKey& session_key,
-    CryptoKey *connection_secret,
+    bool& isvalid,
+    CryptoKey& session_key,
+    std::string *connection_secret,
     std::unique_ptr<AuthAuthorizerChallenge> *challenge);
 
   /**

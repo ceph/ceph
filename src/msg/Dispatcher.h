@@ -204,14 +204,6 @@ public:
    */
 
   /**
-   * Return the allowed authentication methods for peer
-   **/
-  virtual int ms_get_auth_allowed_methods(
-    uint32_t peer_type, std::vector<uint32_t> &allowed_methods) {
-    return 0;
-  }
-
-  /**
    * handle successful authentication (msgr2)
    *
    * Authenticated result/state will be attached to the Connection.

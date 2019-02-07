@@ -38,7 +38,7 @@ class KrbSessionHandler : public AuthSessionHandler {
   public:
     KrbSessionHandler(CephContext* ceph_ctx,
 		      const CryptoKey& session_key,
-		      const CryptoKey& connection_secret) : 
+		      const std::string& connection_secret) :
       AuthSessionHandler(ceph_ctx, CEPH_AUTH_GSS, session_key,
 			 connection_secret) { }
     ~KrbSessionHandler() override = default; 

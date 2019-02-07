@@ -26,8 +26,6 @@
 #include <msg/Messenger.h>
 #include <mon/MonClient.h>
 
-#include "auth/AuthAuthorizeHandler.h"
-
 #include "ServiceMap.h"
 #include "MgrSession.h"
 #include "DaemonState.h"
@@ -66,11 +64,6 @@ protected:
   ClusterState &cluster_state;
   PyModuleRegistry &py_modules;
   LogChannelRef clog, audit_clog;
-
-  // Authentication methods for cluster peers
-  AuthAuthorizeHandlerRegistry auth_cluster_registry;
-  // Authentication methods for clients
-  AuthAuthorizeHandlerRegistry auth_service_registry;
 
   // Connections for daemons, and clients with service names set
   // (i.e. those MgrClients that are allowed to send MMgrReports)

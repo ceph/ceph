@@ -26,14 +26,28 @@ public:
     : AuthServiceHandler(cct_) {}
   ~AuthUnknownServiceHandler() {}
   
-  int start_session(EntityName& name, bufferlist::iterator& indata, bufferlist& result_bl, AuthCapsInfo& caps) {
-    return CEPH_AUTH_UNKNOWN;
+  int start_session(const EntityName& name,
+		    size_t connection_secret_required_length,
+		    bufferlist *result_bl,
+		    AuthCapsInfo *caps,
+		    CryptoKey *session_key,
+		    std::string *connection_secret) {
+    return 1;
   }
-  int handle_request(bufferlist::iterator& indata, bufferlist& result_bl, uint64_t& global_id, AuthCapsInfo& caps) {
+  int handle_request(bufferlist::iterator& indata,
+		     size_t connection_secret_required_length,
+		     bufferlist *result_bl,
+		     uint64_t *global_id,
+		     AuthCapsInfo *caps,
+		     CryptoKey *session_key,
+		     std::string *connection_secret) {
     ceph_abort();  // shouldn't get called
     return 0;
   }
-  void build_cephx_response_header(int request_type, int status, bufferlist& bl) { }
+
+  void build_cephx_response_header(int request_type, int status,
+				   bufferlist& bl) {
+  }
 };
 
 #endif

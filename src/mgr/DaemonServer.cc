@@ -76,14 +76,6 @@ DaemonServer::DaemonServer(MonClient *monc_,
       py_modules(py_modules_),
       clog(clog_),
       audit_clog(audit_clog_),
-      auth_cluster_registry(g_ceph_context,
-                    g_conf()->auth_supported.empty() ?
-                      g_conf()->auth_cluster_required :
-                      g_conf()->auth_supported),
-      auth_service_registry(g_ceph_context,
-                   g_conf()->auth_supported.empty() ?
-                      g_conf()->auth_service_required :
-                      g_conf()->auth_supported),
       lock("DaemonServer"),
       pgmap_ready(false),
       timer(g_ceph_context, lock),
@@ -110,6 +102,8 @@ int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 			   "mgr",
 			   getpid(), 0);
   msgr->set_default_policy(Messenger::Policy::stateless_server(0));
+
+  msgr->set_auth_client(monc);
 
   // throttle clients
   msgr->set_policy_throttlers(entity_name_t::TYPE_CLIENT,
@@ -144,6 +138,9 @@ int DaemonServer::init(uint64_t gid, entity_addrvec_t client_addrs)
 
   msgr->start();
   msgr->add_dispatcher_tail(this);
+
+  msgr->set_auth_server(monc);
+  monc->set_handle_authentication_dispatcher(this);
 
   started_at = ceph_clock_now();
 

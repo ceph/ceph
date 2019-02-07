@@ -48,13 +48,12 @@ public:
     reset();
   }
 
-  void reset() override {
-    starting = true;
-    server_challenge = 0;
-  }
+  void reset() override;
   void prepare_build_request() override;
   int build_request(bufferlist& bl) const override;
-  int handle_response(int ret, bufferlist::const_iterator& iter) override;
+  int handle_response(int ret, bufferlist::const_iterator& iter,
+		      CryptoKey *session_key,
+		      std::string *connection_secret) override;
   bool build_rotating_request(bufferlist& bl) const override;
 
   int get_protocol() const override { return CEPH_AUTH_CEPHX; }

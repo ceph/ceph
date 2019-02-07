@@ -19,17 +19,18 @@
 
 #define dout_subsys ceph_subsys_auth 
 
-bool KrbAuthorizeHandler::verify_authorizer(CephContext* ceph_ctx, 
-                                            KeyStore* keys, 
-                                            bufferlist& authorizer_data,  
-                                            bufferlist& authorizer_reply, 
-                                            EntityName& entity_name, 
-                                            uint64_t& global_id,  
-                                            AuthCapsInfo& caps_info, 
-                                            CryptoKey& session_key,
-					    CryptoKey *connection_secret,
-                                            std::unique_ptr<
-                                              AuthAuthorizerChallenge>* challenge)
+bool KrbAuthorizeHandler::verify_authorizer(
+  CephContext* ceph_ctx,
+  KeyStore* keys,
+  const bufferlist& authorizer_data,
+  size_t connection_secret_required_len,
+  bufferlist *authorizer_reply,
+  EntityName *entity_name,
+  uint64_t *global_id,
+  AuthCapsInfo *caps_info,
+  CryptoKey *session_key,
+  std::string *connection_secret,
+  std::unique_ptr<AuthAuthorizerChallenge>* challenge)
 {
   auto itr(authorizer_data.cbegin());
 
@@ -38,14 +39,14 @@ bool KrbAuthorizeHandler::verify_authorizer(CephContext* ceph_ctx,
 
     using ceph::decode;
     decode(value, itr);
-    decode(entity_name, itr);
-    decode(global_id, itr);
+    decode(*entity_name, itr);
+    decode(*global_id, itr);
   } catch (const buffer::error& err) {
     ldout(ceph_ctx, 0) 
         << "Error: KrbAuthorizeHandler::verify_authorizer() failed!" << dendl;
     return false;
   }
-  caps_info.allow_all = true; 
+  caps_info->allow_all = true;
   return true;
 }
 

@@ -23,13 +23,14 @@ struct CephxAuthorizeHandler : public AuthAuthorizeHandler {
   bool verify_authorizer(
     CephContext *cct,
     KeyStore *keys,
-    bufferlist& authorizer_data,
-    bufferlist& authorizer_reply,
-    EntityName& entity_name,
-    uint64_t& global_id,
-    AuthCapsInfo& caps_info,
-    CryptoKey& session_key,
-    CryptoKey *connection_secret,
+    const bufferlist& authorizer_data,
+    size_t connection_secret_required_len,
+    bufferlist *authorizer_reply,
+    EntityName *entity_name,
+    uint64_t *global_id,
+    AuthCapsInfo *caps_info,
+    CryptoKey *session_key,
+    std::string *connection_secret,
     std::unique_ptr<AuthAuthorizerChallenge> *challenge) override;
   int authorizer_session_crypto() override;
 };

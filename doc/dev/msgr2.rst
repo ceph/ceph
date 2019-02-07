@@ -108,40 +108,41 @@ Authentication
 * TAG_AUTH_REQUEST: client->server::
 
     __le32 method;  // CEPH_AUTH_{NONE, CEPHX, ...}
+    __le32 num_preferred_modes;
+    list<__le32> mode  // CEPH_CON_MODE_*
+    method specific payload
+
+* TAG_AUTH_BAD_METHOD server -> client: reject client-selected auth method::
+
+    __le32 method
+    __le32 negative error result code
+    __le32 num_methods
+    list<__le32> allowed_methods // CEPH_AUTH_{NONE, CEPHX, ...}
+    __le32 num_modes
+    list<__le32> allowed_modes   // CEPH_CON_MODE_*
+
+  - Returns the attempted auth method, and error code (-EOPNOTSUPP if
+    the method is unsupported), and the list of allowed authentication
+    methods.
+
+* TAG_AUTH_REPLY_MORE: server->client::
+
     __le32 len;
     method specific payload
 
-* TAG_AUTH_BAD_METHOD (server only): reject client-selected auth method::
-
-    __le32 method
-    __le32 num_methods
-    __le32 allowed_methods[num_methods] // CEPH_AUTH_{NONE, CEPHX, ...}
-
-  - Returns the unsupported/forbidden method along with the list of allowed
-    authentication methods.
-
-* TAG_AUTH_BAD_AUTH: server->client::
-
-    __le32 error code (e.g., EPERM, EACCESS)
-    __le32 len;
-    error string;
-
-  - Sent when the authentication fails
-
-* TAG_AUTH_MORE: server->client or client->server::
+* TAG_AUTH_REQUEST_MORE: client->server::
 
     __le32 len;
     method specific payload
 
 * TAG_AUTH_DONE: (server->client)::
 
-    confounder (block_size bytes of random garbage)
-    __le64 flags
-      FLAG_ENCRYPTED  1
-      FLAG_SIGNED     2
-    signature
+    __le64 global_id
+    __le32 connection mode // CEPH_CON_MODE_*
+    method specific payload
 
-  - The server is the one to decide authentication has completed.
+  - The server is the one to decide authentication has completed and what
+    the final connection mode will be.
 
 
 Example of authentication phase interaction when the client uses an

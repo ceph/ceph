@@ -37,7 +37,6 @@
 
 #define CEPH_MDS_PROTOCOL    34 /* cluster internal */
 
-class AuthAuthorizeHandlerRegistry;
 class Messenger;
 class MonClient;
 
@@ -63,9 +62,6 @@ class MDSDaemon : public Dispatcher, public md_config_obs_t {
 
  protected:
   Beacon  beacon;
-
-  AuthAuthorizeHandlerRegistry *authorize_handler_cluster_registry;
-  AuthAuthorizeHandlerRegistry *authorize_handler_service_registry;
 
   std::string name;
 

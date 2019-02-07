@@ -41,6 +41,8 @@ typedef boost::mt11213b gen_type;
 #include "common/dout.h"
 #include "include/ceph_assert.h"
 
+#include "auth/DummyAuth.h"
+
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix *_dout << " ceph_test_msgr "
@@ -59,16 +61,24 @@ typedef boost::mt11213b gen_type;
 
 class MessengerTest : public ::testing::TestWithParam<const char*> {
  public:
+  DummyAuthClientServer dummy_auth;
   Messenger *server_msgr;
   Messenger *client_msgr;
 
-  MessengerTest(): server_msgr(NULL), client_msgr(NULL) {}
+  MessengerTest() : dummy_auth(g_ceph_context),
+		    server_msgr(NULL), client_msgr(NULL) {
+    dummy_auth.auth_registry.refresh_config();
+  }
   void SetUp() override {
     lderr(g_ceph_context) << __func__ << " start set up " << GetParam() << dendl;
     server_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid(), 0);
     client_msgr = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::CLIENT(-1), "client", getpid(), 0);
     server_msgr->set_default_policy(Messenger::Policy::stateless_server(0));
     client_msgr->set_default_policy(Messenger::Policy::lossy_client(0));
+    server_msgr->set_auth_client(&dummy_auth);
+    server_msgr->set_auth_server(&dummy_auth);
+    client_msgr->set_auth_client(&dummy_auth);
+    client_msgr->set_auth_server(&dummy_auth);
   }
   void TearDown() override {
     ASSERT_EQ(server_msgr->get_dispatch_queue_len(), 0);
@@ -1101,6 +1111,7 @@ class SyntheticWorkload {
   SyntheticDispatcher dispatcher;
   gen_type rng;
   vector<bufferlist> rand_data;
+  DummyAuthClientServer dummy_auth;
 
  public:
   static const unsigned max_in_flight = 64;
@@ -1112,7 +1123,9 @@ class SyntheticWorkload {
     : lock("SyntheticWorkload::lock"),
       client_policy(cli_policy),
       dispatcher(false, this),
-      rng(time(NULL)) {
+      rng(time(NULL)),
+      dummy_auth(g_ceph_context) {
+    dummy_auth.auth_registry.refresh_config();
     Messenger *msgr;
     int base_port = 16800;
     entity_addr_t bind_addr;
@@ -1126,6 +1139,8 @@ class SyntheticWorkload {
       bind_addr.parse(addr);
       msgr->bind(bind_addr);
       msgr->add_dispatcher_head(&dispatcher);
+      msgr->set_auth_client(&dummy_auth);
+      msgr->set_auth_server(&dummy_auth);
 
       ceph_assert(msgr);
       msgr->set_default_policy(srv_policy);
@@ -1144,6 +1159,8 @@ class SyntheticWorkload {
         msgr->bind(bind_addr);
       }
       msgr->add_dispatcher_head(&dispatcher);
+      msgr->set_auth_client(&dummy_auth);
+      msgr->set_auth_server(&dummy_auth);
 
       ceph_assert(msgr);
       msgr->set_default_policy(cli_policy);
@@ -1604,6 +1621,8 @@ class MarkdownDispatcher : public Dispatcher {
 TEST_P(MessengerTest, MarkdownTest) {
   Messenger *server_msgr2 = Messenger::create(g_ceph_context, string(GetParam()), entity_name_t::OSD(0), "server", getpid(), 0);
   MarkdownDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  DummyAuthClientServer dummy_auth(g_ceph_context);
+  dummy_auth.auth_registry.refresh_config();
   entity_addr_t bind_addr;
   if (string(GetParam()) == "simple")
     bind_addr.parse("v1:127.0.0.1:16800");
@@ -1611,6 +1630,8 @@ TEST_P(MessengerTest, MarkdownTest) {
     bind_addr.parse("v2:127.0.0.1:16800");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->set_auth_client(&dummy_auth);
+  server_msgr->set_auth_server(&dummy_auth);
   server_msgr->start();
   if (string(GetParam()) == "simple")
     bind_addr.parse("v1:127.0.0.1:16801");
@@ -1618,9 +1639,13 @@ TEST_P(MessengerTest, MarkdownTest) {
     bind_addr.parse("v2:127.0.0.1:16801");
   server_msgr2->bind(bind_addr);
   server_msgr2->add_dispatcher_head(&srv_dispatcher);
+  server_msgr2->set_auth_client(&dummy_auth);
+  server_msgr2->set_auth_server(&dummy_auth);
   server_msgr2->start();
 
   client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->set_auth_client(&dummy_auth);
+  client_msgr->set_auth_server(&dummy_auth);
   client_msgr->start();
 
   int i = 1000;
@@ -1691,6 +1716,7 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf.set_val("auth_cluster_required", "none");
   g_ceph_context->_conf.set_val("auth_service_required", "none");
   g_ceph_context->_conf.set_val("auth_client_required", "none");
+  g_ceph_context->_conf.set_val("keyring", "/dev/null");
   g_ceph_context->_conf.set_val("enable_experimental_unrecoverable_data_corrupting_features", "ms-type-async");
   g_ceph_context->_conf.set_val("ms_die_on_bad_msg", "true");
   g_ceph_context->_conf.set_val("ms_die_on_old_message", "true");

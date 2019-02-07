@@ -23,7 +23,7 @@ class AuthUnknownSessionHandler  : public AuthSessionHandler {
 public:
   AuthUnknownSessionHandler(CephContext *cct_,
 			    const CryptoKey& session_key,
-			    const CryptoKey& connection_secret)
+			    const std::string& connection_secret)
     : AuthSessionHandler(cct_, CEPH_AUTH_UNKNOWN,
 			 session_key, connection_secret) {}
   ~AuthUnknownSessionHandler() override {}

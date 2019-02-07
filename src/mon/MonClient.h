@@ -25,6 +25,10 @@
 #include "common/Finisher.h"
 #include "common/config.h"
 
+#include "auth/AuthClient.h"
+#include "auth/AuthServer.h"
+#include "auth/AuthRegistry.h"
+
 class MMonMap;
 class MConfig;
 class MMonGetVersionReply;
@@ -39,18 +43,111 @@ class AuthClientHandler;
 class KeyRing;
 class RotatingKeyRing;
 
-struct MonClientPinger : public Dispatcher {
+class MonConnection {
+public:
+  MonConnection(CephContext *cct,
+		ConnectionRef conn,
+		uint64_t global_id,
+		AuthRegistry *auth_registry);
+  ~MonConnection();
+  MonConnection(MonConnection&& rhs) = default;
+  MonConnection& operator=(MonConnection&&) = default;
+  MonConnection(const MonConnection& rhs) = delete;
+  MonConnection& operator=(const MonConnection&) = delete;
+  int handle_auth(MAuthReply *m,
+		  const EntityName& entity_name,
+		  uint32_t want_keys,
+		  RotatingKeyRing* keyring);
+  int authenticate(MAuthReply *m);
+  void start(epoch_t epoch,
+             const EntityName& entity_name);
+  bool have_session() const;
+  uint64_t get_global_id() const {
+    return global_id;
+  }
+  ConnectionRef get_con() {
+    return con;
+  }
+  std::unique_ptr<AuthClientHandler>& get_auth() {
+    return auth;
+  }
+
+  int get_auth_request(
+    uint32_t *method,
+    std::vector<uint32_t> *preferred_modes,
+    bufferlist *out,
+    const EntityName& entity_name,
+    uint32_t want_keys,
+    RotatingKeyRing* keyring);
+  int handle_auth_reply_more(
+    AuthConnectionMeta *auth_meta,
+    const bufferlist& bl,
+    bufferlist *reply);
+  int handle_auth_done(
+    AuthConnectionMeta *auth_meta,
+    uint64_t global_id,
+    const bufferlist& bl,
+    CryptoKey *session_key,
+    std::string *connection_secret);
+  int handle_auth_bad_method(
+    uint32_t old_auth_method,
+    int result,
+    const std::vector<uint32_t>& allowed_methods,
+    const std::vector<uint32_t>& allowed_modes);
+
+  bool is_con(Connection *c) const {
+    return con.get() == c;
+  }
+
+private:
+  int _negotiate(MAuthReply *m,
+		 const EntityName& entity_name,
+		 uint32_t want_keys,
+		 RotatingKeyRing* keyring);
+  int _init_auth(uint32_t method,
+		 const EntityName& entity_name,
+		 uint32_t want_keys,
+		 RotatingKeyRing* keyring,
+		 bool msgr2);
+
+private:
+  CephContext *cct;
+  enum class State {
+    NONE,
+    NEGOTIATING,       // v1 only
+    AUTHENTICATING,    // v1 and v2
+    HAVE_SESSION,
+  };
+  State state = State::NONE;
+  ConnectionRef con;
+  int auth_method = -1;
+  utime_t auth_start;
+
+  std::unique_ptr<AuthClientHandler> auth;
+  uint64_t global_id;
+
+  AuthRegistry *auth_registry;
+};
+
+
+struct MonClientPinger : public Dispatcher,
+			 public AuthClient {
 
   Mutex lock;
   Cond ping_recvd_cond;
   string *result;
   bool done;
+  RotatingKeyRing *keyring;
+  std::unique_ptr<MonConnection> mc;
 
-  MonClientPinger(CephContext *cct_, string *res_) :
+  MonClientPinger(CephContext *cct_,
+		  RotatingKeyRing *keyring,
+		  string *res_) :
     Dispatcher(cct_),
     lock("MonClientPinger::lock"),
     result(res_),
-    done(false)
+    done(false),
+    keyring(keyring)
   { }
 
   int wait_for_reply(double timeout = 0.0) {
@@ -92,62 +189,55 @@ struct MonClientPinger : public Dispatcher {
   bool ms_handle_refused(Connection *con) override {
     return false;
   }
+
+  // AuthClient
+  int get_auth_request(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    uint32_t *auth_method,
+    std::vector<uint32_t> *preferred_modes,
+    bufferlist *bl) override {
+    return mc->get_auth_request(auth_method, preferred_modes, bl,
+				cct->_conf->name, 0, keyring);
+  }
+  int handle_auth_reply_more(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    const bufferlist& bl,
+    bufferlist *reply) override {
+    return mc->handle_auth_reply_more(auth_meta, bl, reply);
+  }
+  int handle_auth_done(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    uint64_t global_id,
+    uint32_t con_mode,
+    const bufferlist& bl,
+    CryptoKey *session_key,
+    std::string *connection_secret) override {
+    return mc->handle_auth_done(auth_meta, global_id, bl,
+				session_key, connection_secret);
+  }
+  int handle_auth_bad_method(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    uint32_t old_auth_method,
+    int result,
+    const std::vector<uint32_t>& allowed_methods,
+    const std::vector<uint32_t>& allowed_modes) override {
+    return mc->handle_auth_bad_method(old_auth_method, result,
+				      allowed_methods, allowed_modes);
+  }
 };
 
-class MonConnection {
-public:
-  MonConnection(CephContext *cct,
-		ConnectionRef conn,
-		uint64_t global_id);
-  ~MonConnection();
-  MonConnection(MonConnection&& rhs) = default;
-  MonConnection& operator=(MonConnection&&) = default;
-  MonConnection(const MonConnection& rhs) = delete;
-  MonConnection& operator=(const MonConnection&) = delete;
-  int handle_auth(MAuthReply *m,
-		  const EntityName& entity_name,
-		  uint32_t want_keys,
-		  RotatingKeyRing* keyring);
-  int authenticate(MAuthReply *m);
-  void start(epoch_t epoch,
-             const EntityName& entity_name,
-             const AuthMethodList& auth_supported);
-  bool have_session() const;
-  uint64_t get_global_id() const {
-    return global_id;
-  }
-  ConnectionRef get_con() {
-    return con;
-  }
-  std::unique_ptr<AuthClientHandler>& get_auth() {
-    return auth;
-  }
 
-private:
-  int _negotiate(MAuthReply *m,
-		 const EntityName& entity_name,
-		 uint32_t want_keys,
-		 RotatingKeyRing* keyring);
-
-private:
-  CephContext *cct;
-  enum class State {
-    NONE,
-    NEGOTIATING,
-    AUTHENTICATING,
-    HAVE_SESSION,
-  };
-  State state = State::NONE;
-  ConnectionRef con;
-
-  std::unique_ptr<AuthClientHandler> auth;
-  uint64_t global_id;
-};
-
-class MonClient : public Dispatcher {
+class MonClient : public Dispatcher,
+		  public AuthClient,
+		  public AuthServer /* for mgr, osd, mds */ {
 public:
   MonMap monmap;
   map<string,string> config_mgr;
+
 private:
   Messenger *messenger;
 
@@ -164,15 +254,11 @@ private:
 
   bool initialized;
   bool stopping = false;
-  bool no_keyring_disabled_cephx;
-  bool no_ktfile_disabled_krb;
 
   LogClient *log_client;
   bool more_log_pending;
 
   void send_log(bool flush = false);
-
-  std::unique_ptr<AuthMethodList> auth_supported;
 
   bool ms_dispatch(Message *m) override;
   bool ms_handle_reset(Connection *con) override;
@@ -207,11 +293,13 @@ private:
   std::unique_ptr<Context> session_established_context;
   bool had_a_connection;
   double reopen_interval_multiplier;
+
+  Dispatcher *handle_authentication_dispatcher = nullptr;
   
   bool _opened() const;
   bool _hunting() const;
   void _start_hunting();
-  void _finish_hunting();
+  void _finish_hunting(int auth_err);
   void _finish_auth(int auth_err);
   void _reopen_session(int rank = -1);
   MonConnection& _add_conn(unsigned rank, uint64_t global_id);
@@ -230,8 +318,46 @@ private:
   }
 
 public:
-  void set_entity_name(EntityName name) { entity_name = name; }
+  // AuthClient
+  int get_auth_request(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    uint32_t *method,
+    std::vector<uint32_t> *preferred_modes,
+    bufferlist *bl) override;
+  int handle_auth_reply_more(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    const bufferlist& bl,
+    bufferlist *reply) override;
+  int handle_auth_done(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    uint64_t global_id,
+    uint32_t con_mode,
+    const bufferlist& bl,
+    CryptoKey *session_key,
+    std::string *connection_secret) override;
+  int handle_auth_bad_method(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    uint32_t old_auth_method,
+    int result,
+    const std::vector<uint32_t>& allowed_methods,
+    const std::vector<uint32_t>& allowed_modes) override;
+  // AuthServer
+  int handle_auth_request(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    bool more,
+    uint32_t auth_method,
+    const bufferlist& bl,
+    bufferlist *reply);
 
+  void set_entity_name(EntityName name) { entity_name = name; }
+  void set_handle_authentication_dispatcher(Dispatcher *d) {
+    handle_authentication_dispatcher = d;
+  }
   int _check_auth_tickets();
   int _check_auth_rotating();
   int wait_auth_rotating(double timeout);
