@@ -43,9 +43,6 @@ class Options(object):
     # NFS Ganesha settings
     GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE = ('', str)
 
-    # Orchestrator settings
-    ORCHESTRATOR_BACKEND = ('', str)
-
     # Prometheus settings
     PROMETHEUS_API_HOST = ('', str)  # Not in use ATM
     ALERTMANAGER_API_HOST = ('', str)
