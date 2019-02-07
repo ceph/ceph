@@ -602,7 +602,8 @@ ceph::bufferlist AES128GCM_OnWireRxHandler::authenticated_decrypt_update_final(
 
 ceph::crypto::onwire::rxtx_t ceph::crypto::onwire::rxtx_t::create_handler_pair(
   CephContext* cct,
-  const AuthConnectionMeta& auth_meta)
+  const AuthConnectionMeta& auth_meta,
+  bool crossed)
 {
   if (auth_meta.is_mode_secure()) {
     // CLEANME, CLEANME CLEANME
@@ -618,8 +619,10 @@ ceph::crypto::onwire::rxtx_t ceph::crypto::onwire::rxtx_t::create_handler_pair(
     return {
       //std::make_unique<AES128GCM_OnWireRxHandler>(cct, auth_meta, rx_nonce),
       //std::make_unique<AES128GCM_OnWireTxHandler>(cct, auth_meta, tx_nonce)
-      std::make_unique<AES128GCM_OnWireRxHandler>(cct, auth_meta, rx_nonce),
-      std::make_unique<AES128GCM_OnWireTxHandler>(cct, auth_meta, tx_nonce)
+      std::make_unique<AES128GCM_OnWireRxHandler>(
+	cct, auth_meta, crossed ? tx_nonce : rx_nonce),
+      std::make_unique<AES128GCM_OnWireTxHandler>(
+	cct, auth_meta, crossed ? rx_nonce : tx_nonce)
     };
   } else {
     return { nullptr, nullptr };

@@ -149,7 +149,8 @@ struct rxtx_t {
 
   static rxtx_t create_handler_pair(
     CephContext* ctx,
-    const class AuthConnectionMeta& auth_meta);
+    const class AuthConnectionMeta& auth_meta,
+    bool crossed);
 };
 
 
