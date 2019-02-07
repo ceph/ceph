@@ -189,7 +189,7 @@ describe('IscsiTargetListComponent', () => {
       );
       scenario = {
         fn: () => tableActions.getCurrentButton().name,
-        single: 'Delete',
+        single: 'Edit',
         empty: 'Add'
       };
     });
@@ -199,11 +199,12 @@ describe('IscsiTargetListComponent', () => {
         tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 1);
       });
 
-      it(`shows 'Delete' for single selection else 'Add' as main action`, () =>
-        permissionHelper.testScenarios(scenario));
+      it(`shows 'Edit' for single selection else 'Add' as main action`, () => {
+        permissionHelper.testScenarios(scenario);
+      });
 
       it('shows all actions', () => {
-        expect(tableActions.tableActions.length).toBe(2);
+        expect(tableActions.tableActions.length).toBe(3);
         expect(tableActions.tableActions).toEqual(component.tableActions);
       });
     });
@@ -211,15 +212,15 @@ describe('IscsiTargetListComponent', () => {
     describe('with read, create and update', () => {
       beforeEach(() => {
         tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 0);
-        scenario.single = 'Add';
+        scenario.single = 'Edit';
       });
 
-      it(`should always show 'Add'`, () => {
+      it(`should always show 'Edit'`, () => {
         permissionHelper.testScenarios(scenario);
       });
 
       it(`shows all actions except for 'Delete'`, () => {
-        expect(tableActions.tableActions.length).toBe(1);
+        expect(tableActions.tableActions.length).toBe(2);
         component.tableActions.pop();
         expect(tableActions.tableActions).toEqual(component.tableActions);
       });
@@ -239,7 +240,7 @@ describe('IscsiTargetListComponent', () => {
         expect(tableActions.tableActions.length).toBe(2);
         expect(tableActions.tableActions).toEqual([
           component.tableActions[0],
-          component.tableActions[1]
+          component.tableActions[2]
         ]);
       });
     });
@@ -249,14 +250,17 @@ describe('IscsiTargetListComponent', () => {
         tableActions = permissionHelper.setPermissionsAndGetActions(0, 1, 1);
       });
 
-      it(`shows always 'Delete' as main action`, () => {
-        scenario.empty = 'Delete';
+      it(`shows always 'Edit' as main action`, () => {
+        scenario.empty = 'Edit';
         permissionHelper.testScenarios(scenario);
       });
 
-      it(`shows 'Delete' action`, () => {
-        expect(tableActions.tableActions.length).toBe(1);
-        expect(tableActions.tableActions).toEqual([component.tableActions[1]]);
+      it(`shows 'Edit' and 'Delete' actions`, () => {
+        expect(tableActions.tableActions.length).toBe(2);
+        expect(tableActions.tableActions).toEqual([
+          component.tableActions[1],
+          component.tableActions[2]
+        ]);
       });
     });
 
@@ -282,8 +286,8 @@ describe('IscsiTargetListComponent', () => {
       });
 
       it(`shows no actions`, () => {
-        expect(tableActions.tableActions.length).toBe(0);
-        expect(tableActions.tableActions).toEqual([]);
+        expect(tableActions.tableActions.length).toBe(1);
+        expect(tableActions.tableActions).toEqual([component.tableActions[1]]);
       });
     });
 
@@ -300,7 +304,7 @@ describe('IscsiTargetListComponent', () => {
 
       it(`shows 'Delete' actions`, () => {
         expect(tableActions.tableActions.length).toBe(1);
-        expect(tableActions.tableActions).toEqual([component.tableActions[1]]);
+        expect(tableActions.tableActions).toEqual([component.tableActions[2]]);
       });
     });
 
