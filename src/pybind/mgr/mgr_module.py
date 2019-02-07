@@ -905,7 +905,7 @@ class MgrModule(ceph_module.BaseMgrModule):
                                format(key, self.__class__.__name__))
 
     def _get_module_option(self, key, default):
-        r = self._ceph_get_module_option(key)
+        r = self._ceph_get_module_option(self.module_name, key)
         if r is None:
             final_key = key.split('/')[-1]
             return self.MODULE_OPTION_DEFAULTS.get(final_key, default)
@@ -937,7 +937,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         if module == self.module_name:
             self._validate_module_option(key)
-        r = self._ceph_get_module_option_ex(module, key)
+        r = self._ceph_get_module_option(module, key)
         return default if r is None else r
 
     def get_store_prefix(self, key_prefix):
@@ -971,7 +971,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         return self._get_localized(key, default, self._get_module_option)
 
     def _set_module_option(self, key, val):
-        return self._ceph_set_module_option(key, str(val))
+        return self._ceph_set_module_option(self.module_name, key, str(val))
 
     def set_module_option(self, key, val):
         """
@@ -994,7 +994,7 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         if module == self.module_name:
             self._validate_module_option(key)
-        return self._ceph_set_module_option_ex(module, key, str(val))
+        return self._ceph_set_module_option(module, key, str(val))
 
     def set_localized_module_option(self, key, val):
         """
