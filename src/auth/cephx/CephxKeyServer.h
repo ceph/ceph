@@ -199,7 +199,8 @@ class KeyServer : public KeyStore {
   bool _check_rotating_secrets();
   void _dump_rotating_secrets();
   int _build_session_auth_info(uint32_t service_id, 
-	CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info);
+			       const AuthTicket& parent_ticket,
+			       CephXSessionAuthInfo& info);
   bool _get_service_caps(const EntityName& name, uint32_t service_id,
 	AuthCapsInfo& caps) const;
 public:
@@ -213,9 +214,14 @@ public:
   int start_server();
   void rotate_timeout(double timeout);
 
-  int build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info);
-  int build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info,
-                                        CryptoKey& service_secret, uint64_t secret_id);
+  int build_session_auth_info(uint32_t service_id,
+			      const AuthTicket& parent_ticket,
+			      CephXSessionAuthInfo& info);
+  int build_session_auth_info(uint32_t service_id,
+			      const AuthTicket& parent_ticket,
+			      CephXSessionAuthInfo& info,
+			      CryptoKey& service_secret,
+			      uint64_t secret_id);
 
   /* get current secret for specific service type */
   bool get_service_secret(uint32_t service_id, CryptoKey& service_key, 

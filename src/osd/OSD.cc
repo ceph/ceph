@@ -2183,14 +2183,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   tick_timer_lock("OSD::tick_timer_lock"),
   tick_timer_without_osd_lock(cct, tick_timer_lock),
   gss_ktfile_client(cct->_conf.get_val<std::string>("gss_ktab_client_file")),
-  authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(cct,
-								      cct->_conf->auth_supported.empty() ?
-								      cct->_conf->auth_cluster_required :
-								      cct->_conf->auth_supported)),
-  authorize_handler_service_registry(new AuthAuthorizeHandlerRegistry(cct,
-								      cct->_conf->auth_supported.empty() ?
-								      cct->_conf->auth_service_required :
-								      cct->_conf->auth_supported)),
   cluster_messenger(internal_messenger),
   client_messenger(external_messenger),
   objecter_messenger(osdc_messenger),
@@ -2298,8 +2290,6 @@ OSD::~OSD()
     delete shards.back();
     shards.pop_back();
   }
-  delete authorize_handler_cluster_registry;
-  delete authorize_handler_service_registry;
   delete class_handler;
   cct->get_perfcounters_collection()->remove(recoverystate_perf);
   cct->get_perfcounters_collection()->remove(logger);
@@ -3017,16 +3007,22 @@ int OSD::init()
     service.set_statfs(stbuf, alerts);
   }
 
-  // i'm ready!
-  client_messenger->add_dispatcher_head(this);
-  cluster_messenger->add_dispatcher_head(this);
-
-  hb_front_client_messenger->add_dispatcher_head(&heartbeat_dispatcher);
-  hb_back_client_messenger->add_dispatcher_head(&heartbeat_dispatcher);
-  hb_front_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
-  hb_back_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
-
-  objecter_messenger->add_dispatcher_head(service.objecter);
+  // client_messenger auth_client is already set up by monc.
+  for (auto m : { cluster_messenger,
+	objecter_messenger,
+	hb_front_client_messenger,
+	hb_back_client_messenger,
+	hb_front_server_messenger,
+	hb_back_server_messenger } ) {
+    m->set_auth_client(monc);
+  }
+  for (auto m : { client_messenger,
+	cluster_messenger,
+	hb_front_server_messenger,
+	hb_back_server_messenger }) {
+    m->set_auth_server(monc);
+  }
+  monc->set_handle_authentication_dispatcher(this);
 
   monc->set_want_keys(CEPH_ENTITY_TYPE_MON | CEPH_ENTITY_TYPE_OSD
                       | CEPH_ENTITY_TYPE_MGR);
@@ -3043,11 +3039,22 @@ int OSD::init()
         get_perf_reports(reports);
       });
   mgrc.init();
-  client_messenger->add_dispatcher_head(&mgrc);
 
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&log_client);
   update_log_config();
+
+  // i'm ready!
+  client_messenger->add_dispatcher_tail(&mgrc);
+  client_messenger->add_dispatcher_tail(this);
+  cluster_messenger->add_dispatcher_head(this);
+
+  hb_front_client_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hb_back_client_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hb_front_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+  hb_back_server_messenger->add_dispatcher_head(&heartbeat_dispatcher);
+
+  objecter_messenger->add_dispatcher_head(service.objecter);
 
   service.init();
   service.publish_map(osdmap);

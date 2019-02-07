@@ -79,6 +79,8 @@ protected:
   AsyncConnection *connection;
   AsyncMessenger *messenger;
   CephContext *cct;
+public:
+  std::shared_ptr<AuthConnectionMeta> auth_meta;
 
 public:
   Protocol(int type, AsyncConnection *connection);
@@ -102,6 +104,7 @@ public:
   virtual void read_event() = 0;
   virtual void write_event() = 0;
   virtual bool is_queued() = 0;
+
 };
 
 #endif /* _MSG_ASYNC_PROTOCOL_ */

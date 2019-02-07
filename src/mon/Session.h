@@ -67,19 +67,22 @@ struct MonSession : public RefCountedObject {
   map<string,string> last_config;    ///< most recently shared config
   bool any_config = false;
 
-  MonSession(const entity_name_t& n, const entity_addrvec_t& av, Connection *c) :
-    RefCountedObject(g_ceph_context),
-    con(c),
-    con_type(c->get_peer_type()),
-    name(n),
-    addrs(av),
-    socket_addr(c->get_peer_socket_addr()),
-    item(this) {
-    if (c->get_messenger()) {
+  MonSession(Connection *c)
+    : RefCountedObject(g_ceph_context),
+      con(c),
+      item(this) { }
+
+  void _ident(const entity_name_t& n, const entity_addrvec_t& av) {
+    con_type = con->get_peer_type();
+    name = n;
+    addrs = av;
+    socket_addr = con->get_peer_socket_addr();
+    if (con->get_messenger()) {
       // only fill in features if this is a non-anonymous connection
-      con_features = c->get_features();
+      con_features = con->get_features();
     }
   }
+
   ~MonSession() override {
     //generic_dout(0) << "~MonSession " << this << dendl;
     // we should have been removed before we get destructed; see MonSessionMap::remove_session()
@@ -151,16 +154,22 @@ struct MonSessionMap {
   MonSession *new_session(const entity_name_t& n,
 			  const entity_addrvec_t& av,
 			  Connection *c) {
-    MonSession *s = new MonSession(n, av, c);
+    MonSession *s = new MonSession(c);
     ceph_assert(s);
+    s->_ident(n, av);
+    add_session(s);
+    return s;
+  }
+
+  void add_session(MonSession *s) {
     sessions.push_back(&s->item);
-    if (n.is_osd())
-      by_osd.insert(pair<int,MonSession*>(n.num(), s));
+    s->get();
+    if (s->name.is_osd()) {
+      by_osd.insert(pair<int,MonSession*>(s->name.num(), s));
+    }
     if (s->con_features) {
       feature_map.add(s->con_type, s->con_features);
     }
-    s->get();  // caller gets a ref
-    return s;
   }
 
   MonSession *get_random_osd_session(OSDMap *osdmap) {

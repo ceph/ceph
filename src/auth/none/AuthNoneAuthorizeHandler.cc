@@ -18,11 +18,16 @@
 #define dout_subsys ceph_subsys_auth
 
 bool AuthNoneAuthorizeHandler::verify_authorizer(
-  CephContext *cct, KeyStore *keys,
-  bufferlist& authorizer_data, bufferlist& authorizer_reply,
-  EntityName& entity_name, uint64_t& global_id, AuthCapsInfo& caps_info,
-  CryptoKey& session_key,
-  CryptoKey *connection_secret,
+  CephContext *cct,
+  KeyStore *keys,
+  const bufferlist& authorizer_data,
+  size_t connection_secret_required_len,
+  bufferlist *authorizer_reply,
+  EntityName *entity_name,
+  uint64_t *global_id,
+  AuthCapsInfo *caps_info,
+  CryptoKey *session_key,
+  std::string *connection_secret,
   std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
   auto iter = authorizer_data.cbegin();
@@ -30,14 +35,14 @@ bool AuthNoneAuthorizeHandler::verify_authorizer(
   try {
     __u8 struct_v = 1;
     decode(struct_v, iter);
-    decode(entity_name, iter);
-    decode(global_id, iter);
+    decode(*entity_name, iter);
+    decode(*global_id, iter);
   } catch (const buffer::error &err) {
     ldout(cct, 0) << "AuthNoneAuthorizeHandle::verify_authorizer() failed to decode" << dendl;
     return false;
   }
 
-  caps_info.allow_all = true;
+  caps_info->allow_all = true;
 
   return true;
 }

@@ -71,10 +71,32 @@ void AuthMonitor::tick()
 
   dout(10) << *this << dendl;
 
-  if (!mon->is_leader()) return;
+  // increase global_id?
+  bool propose = false;
+  if (should_increase_max_global_id()) {
+    if (mon->is_leader()) {
+      increase_max_global_id();
+      propose = true;
+    } else {
+      dout(10) << __func__ << "requesting more ids from leader" << dendl;
+      int leader = mon->get_leader();
+      MMonGlobalID *req = new MMonGlobalID();
+      req->old_max_id = max_global_id;
+      mon->send_mon_message(req, leader);
+    }
+  }
 
-  if (check_rotate())
+  if (!mon->is_leader()) {
+    return;
+  }
+
+  if (check_rotate()) {
+    propose = true;
+  }
+
+  if (propose) {
     propose_pending();
+  }
 }
 
 void AuthMonitor::on_active()
@@ -84,6 +106,11 @@ void AuthMonitor::on_active()
   if (!mon->is_leader())
     return;
   mon->key_server.start_server();
+
+  if (is_writeable() && should_increase_max_global_id()) {
+    increase_max_global_id();
+    propose_pending();
+  }
 }
 
 bufferlist _encode_cap(const string& cap)
@@ -289,15 +316,24 @@ void AuthMonitor::update_from_paxos(bool *need_bootstrap)
 	   << dendl;
 }
 
+bool AuthMonitor::should_increase_max_global_id()
+{
+  auto num_prealloc = g_conf()->mon_globalid_prealloc;
+  if (max_global_id < num_prealloc ||
+      (last_allocated_id + 1) >= max_global_id - num_prealloc / 2) {
+    return true;
+  }
+  return false;
+}
+
 void AuthMonitor::increase_max_global_id()
 {
   ceph_assert(mon->is_leader());
 
-  max_global_id += g_conf()->mon_globalid_prealloc;
   dout(10) << "increasing max_global_id to " << max_global_id << dendl;
   Incremental inc;
   inc.inc_type = GLOBAL_ID;
-  inc.max_global_id = max_global_id;
+  inc.max_global_id = max_global_id + g_conf()->mon_globalid_prealloc;
   pending_auth.push_back(inc);
 }
 
@@ -457,12 +493,13 @@ bool AuthMonitor::prepare_update(MonOpRequestRef op)
   }
 }
 
-uint64_t AuthMonitor::assign_global_id(MonOpRequestRef op, bool should_increase_max)
+uint64_t AuthMonitor::assign_global_id(bool should_increase_max)
 {
-  MAuth *m = static_cast<MAuth*>(op->get_req());
   int total_mon = mon->monmap->size();
-  dout(10) << "AuthMonitor::assign_global_id m=" << *m << " mon=" << mon->rank << "/" << total_mon
-	   << " last_allocated=" << last_allocated_id << " max_global_id=" <<  max_global_id << dendl;
+  dout(10) << "AuthMonitor::assign_global_id mon=" << mon->rank
+	   << "/" << total_mon
+	   << " last_allocated=" << last_allocated_id
+	   << " max_global_id=" <<  max_global_id << dendl;
 
   uint64_t next_global_id = last_allocated_id + 1;
   int remainder = next_global_id % total_mon;
@@ -481,9 +518,8 @@ uint64_t AuthMonitor::assign_global_id(MonOpRequestRef op, bool should_increase_
   bool return_next = (next_global_id <= max_global_id);
 
   // bump the max?
-  while (mon->is_leader() &&
-	 (max_global_id < g_conf()->mon_globalid_prealloc ||
-	  next_global_id >= max_global_id - g_conf()->mon_globalid_prealloc / 2)) {
+  if (mon->is_leader() &&
+      should_increase_max_global_id()) {
     increase_max_global_id();
   }
 
@@ -598,6 +634,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
       goto reply;
     }
     start = true;
+    proto = type;
   } else if (!s->auth_handler) {
       dout(10) << "protocol specified but no s->auth_handler" << dendl;
       ret = -EINVAL;
@@ -608,7 +645,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
      request. If a client tries to send it later, it'll screw up its auth
      session */
   if (!s->con->peer_global_id) {
-    s->con->peer_global_id = assign_global_id(op, paxos_writable);
+    s->con->peer_global_id = assign_global_id(paxos_writable);
     if (!s->con->peer_global_id) {
 
       delete s->auth_handler;
@@ -638,23 +675,31 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
   try {
     if (start) {
       // new session
-      proto = s->auth_handler->start_session(entity_name, indata, response_bl,
-					     s->con->peer_caps_info);
-      ret = 0;
+      ret = s->auth_handler->start_session(entity_name,
+					   0, // no connection_secret needed
+					   &response_bl,
+					   &s->con->peer_caps_info,
+					   nullptr, nullptr);
     } else {
       // request
       ret = s->auth_handler->handle_request(
 	indata,
-	response_bl,
-	s->con->peer_global_id,
-	s->con->peer_caps_info);
+	0, // no connection_secret needed
+	&response_bl,
+	&s->con->peer_global_id,
+	&s->con->peer_caps_info,
+	nullptr, nullptr);
     }
     if (ret == -EIO) {
       wait_for_active(op, new C_RetryMessage(this,op));
       goto done;
     }
-    if (mon->ms_handle_authentication(s->con.get()) > 0) {
-      finished = true;
+    if (ret > 0) {
+      if (!s->authenticated &&
+	  mon->ms_handle_authentication(s->con.get()) > 0) {
+	finished = true;
+      }
+      ret = 0;
     }
   } catch (const buffer::error &err) {
     ret = -EINVAL;

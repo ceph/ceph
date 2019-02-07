@@ -213,7 +213,15 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
   // pointers into our mgr_module_options (which we just rebuilt).
   mon->configmon()->load_config();
 
-  // feed our pet MgrClient
+  if (!mon->is_init()) {
+    // feed our pet MgrClient, unless we are in Monitor::[pre]init()
+    prime_mgr_client();
+  }
+}
+
+void MgrMonitor::prime_mgr_client()
+{
+  dout(10) << __func__ << dendl;
   mon->mgr_client.ms_dispatch(new MMgrMap(map));
 }
 

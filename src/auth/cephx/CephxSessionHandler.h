@@ -25,7 +25,7 @@ class CephxSessionHandler  : public AuthSessionHandler {
 public:
   CephxSessionHandler(CephContext *cct_,
 		      const CryptoKey& session_key,
-		      const CryptoKey& connection_secret,
+		      const std::string& connection_secret,
 		      uint64_t features)
     : AuthSessionHandler(cct_, CEPH_AUTH_CEPHX, session_key, connection_secret),
       features(features) {}

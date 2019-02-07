@@ -410,12 +410,14 @@ bool KeyServer::get_service_caps(const EntityName& name, uint32_t service_id,
 }
 
 
-int KeyServer::_build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info,
+int KeyServer::_build_session_auth_info(uint32_t service_id,
+					const AuthTicket& parent_ticket,
 					CephXSessionAuthInfo& info)
 {
   info.service_id = service_id;
-  info.ticket = auth_ticket_info.ticket;
-  info.ticket.init_timestamps(ceph_clock_now(), cct->_conf->auth_service_ticket_ttl);
+  info.ticket = parent_ticket;
+  info.ticket.init_timestamps(ceph_clock_now(),
+			      cct->_conf->auth_service_ticket_ttl);
 
   generate_secret(info.session_key);
 
@@ -429,7 +431,8 @@ int KeyServer::_build_session_auth_info(uint32_t service_id, CephXServiceTicketI
   return 0;
 }
 
-int KeyServer::build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info,
+int KeyServer::build_session_auth_info(uint32_t service_id,
+				       const AuthTicket& parent_ticket,
 				       CephXSessionAuthInfo& info)
 {
   if (!get_service_secret(service_id, info.service_secret, info.secret_id)) {
@@ -438,16 +441,19 @@ int KeyServer::build_session_auth_info(uint32_t service_id, CephXServiceTicketIn
 
   std::scoped_lock l{lock};
 
-  return _build_session_auth_info(service_id, auth_ticket_info, info);
+  return _build_session_auth_info(service_id, parent_ticket, info);
 }
 
-int KeyServer::build_session_auth_info(uint32_t service_id, CephXServiceTicketInfo& auth_ticket_info, CephXSessionAuthInfo& info,
-                                        CryptoKey& service_secret, uint64_t secret_id)
+int KeyServer::build_session_auth_info(uint32_t service_id,
+				       const AuthTicket& parent_ticket,
+				       CephXSessionAuthInfo& info,
+				       CryptoKey& service_secret,
+				       uint64_t secret_id)
 {
   info.service_secret = service_secret;
   info.secret_id = secret_id;
 
   std::scoped_lock l{lock};
-  return _build_session_auth_info(service_id, auth_ticket_info, info);
+  return _build_session_auth_info(service_id, parent_ticket, info);
 }
 

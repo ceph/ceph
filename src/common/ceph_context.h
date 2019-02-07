@@ -67,6 +67,7 @@ public:
   {}
   ~CephContext();
 
+  uint32_t get_module_type() const;
   CryptoRandom* random() const;
   PerfCountersCollectionImpl* get_perfcounters_collection();
   ceph::common::ConfigProxy& _conf;
@@ -76,6 +77,8 @@ public:
 private:
   std::unique_ptr<CryptoRandom> _crypto_random;
   unsigned nref;
+#warning fixme need to set module_type for seastar
+  int module_type;
 };
 #else
 /* A CephContext represents the context held by a single library user.

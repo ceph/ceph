@@ -37,18 +37,23 @@ class KrbServiceHandler : public AuthServiceHandler {
       m_gss_service_name(GSS_C_NO_NAME), 
       m_key_server(kserver) { }
     ~KrbServiceHandler();
-    int handle_request(bufferlist::const_iterator& indata, 
-                       bufferlist& buff_list, 
-                       uint64_t& global_id, 
-                       AuthCapsInfo& caps) override;
+    int handle_request(bufferlist::const_iterator& indata,
+		       size_t connection_secret_required_length,
+		       bufferlist *buff_list,
+                       uint64_t *global_id,
+                       AuthCapsInfo *caps,
+		       CryptoKey *session_key,
+		       std::string *connection_secret) override;
 
-    int start_session(EntityName& name, 
-                      bufferlist::const_iterator& indata, 
-                      bufferlist& buff_list, 
-                      AuthCapsInfo& caps) override;
+    int start_session(const EntityName& name,
+		      size_t connection_secret_required_length,
+		      bufferlist *buff_list,
+                      AuthCapsInfo *caps,
+		      CryptoKey *session_key,
+		      std::string *connection_secret) override;
 
-  private: 
-    gss_buffer_desc m_gss_buffer_out; 
+  private:
+    gss_buffer_desc m_gss_buffer_out;
     gss_cred_id_t m_gss_credentials; 
     gss_ctx_id_t m_gss_sec_ctx; 
     gss_name_t m_gss_service_name; 

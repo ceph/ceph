@@ -26,10 +26,14 @@
 #define dout_prefix *_dout << "krb5/gssapi service: " << entity_name <<  " : "
 
 
-int KrbServiceHandler::handle_request(bufferlist::const_iterator& indata, 
-                                      bufferlist& buff_list, 
-                                      uint64_t& global_id, 
-                                      AuthCapsInfo& caps) 
+int KrbServiceHandler::handle_request(
+  bufferlist::const_iterator& indata,
+  size_t connection_secret_required_length,
+  bufferlist *buff_list,
+  uint64_t *global_id,
+  AuthCapsInfo *caps,
+  CryptoKey *session_key,
+  std::string *connection_secret)
 {
   auto result(0);
   gss_buffer_desc gss_buffer_in = {0, nullptr};
@@ -93,13 +97,13 @@ int KrbServiceHandler::handle_request(bufferlist::const_iterator& indata,
                "[KrbServiceHandler(GSS_S_COMPLETE)] " << dendl; 
         if (!m_key_server->get_service_caps(entity_name, 
                                             CEPH_ENTITY_TYPE_MON, 
-                                            caps)) {
+                                            *caps)) {
           result = (-EACCES);
           ldout(cct, 0)
               << "KrbServiceHandler::handle_response() : "
                  "ERROR: Could not get MONITOR CAPS : " << entity_name << dendl;
         } else {
-          if (!caps.caps.c_str()) {
+          if (!caps->caps.c_str()) {
             result = (-EACCES);
             ldout(cct, 0)
                 << "KrbServiceHandler::handle_response() : "
@@ -132,13 +136,13 @@ int KrbServiceHandler::handle_request(bufferlist::const_iterator& indata,
         static_cast<int>(GSSAuthenticationRequest::GSS_TOKEN);
 
     using ceph::encode;
-    encode(krb_response, buff_list);
+    encode(krb_response, *buff_list);
 
     krb_token.m_token_blob.append(buffer::create_static(
                                     m_gss_buffer_out.length, 
                                     reinterpret_cast<char*>
                                       (m_gss_buffer_out.value)));
-    encode(krb_token, buff_list);
+    encode(krb_token, *buff_list);
     ldout(cct, 20) 
         << "KrbServiceHandler::handle_request() : Token Blob: " << "\n"; 
     krb_token.m_token_blob.hexdump(*_dout);
@@ -148,10 +152,13 @@ int KrbServiceHandler::handle_request(bufferlist::const_iterator& indata,
   return result;
 }
 
-int KrbServiceHandler::start_session(EntityName& name, 
-                                     bufferlist::const_iterator& indata, 
-                                     bufferlist& buff_list,
-                                     AuthCapsInfo& caps)
+int KrbServiceHandler::start_session(
+  const EntityName& name,
+  size_t connection_secret_required_length,
+  bufferlist *buff_list,
+  AuthCapsInfo *caps,
+  CryptoKey *session_key,
+  std::string *connection_secret)
 {
   gss_buffer_desc gss_buffer_in = {0, nullptr};
   gss_OID gss_object_id = GSS_C_NT_HOSTBASED_SERVICE;
@@ -206,7 +213,7 @@ int KrbServiceHandler::start_session(EntityName& name,
         static_cast<int>(GSSAuthenticationRequest::GSS_MUTUAL);
 
     using ceph::encode;
-    encode(krb_response, buff_list);
+    encode(krb_response, *buff_list);
     return (CEPH_AUTH_GSS);
   }
 }

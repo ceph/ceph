@@ -68,14 +68,6 @@ MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   timer(m->cct, mds_lock),
   gss_ktfile_client(m->cct->_conf.get_val<std::string>("gss_ktab_client_file")),
   beacon(m->cct, mc, n),
-  authorize_handler_cluster_registry(new AuthAuthorizeHandlerRegistry(m->cct,
-								      m->cct->_conf->auth_supported.empty() ?
-								      m->cct->_conf->auth_cluster_required :
-								      m->cct->_conf->auth_supported)),
-  authorize_handler_service_registry(new AuthAuthorizeHandlerRegistry(m->cct,
-								      m->cct->_conf->auth_supported.empty() ?
-								      m->cct->_conf->auth_service_required :
-								      m->cct->_conf->auth_supported)),
   name(n),
   messenger(m),
   monc(mc),
@@ -115,9 +107,6 @@ MDSDaemon::~MDSDaemon() {
 
   delete mds_rank;
   mds_rank = NULL;
-
-  delete authorize_handler_service_registry;
-  delete authorize_handler_cluster_registry;
 }
 
 class MDSSocketHook : public AdminSocketHook {
@@ -491,6 +480,10 @@ int MDSDaemon::init()
     mds_lock.Unlock();
     return r;
   }
+
+  messenger->set_auth_client(monc);
+  messenger->set_auth_server(monc);
+  monc->set_handle_authentication_dispatcher(this);
 
   // tell monc about log_client so it will know about mon session resets
   monc->set_log_client(&log_client);

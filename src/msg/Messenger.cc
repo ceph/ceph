@@ -58,19 +58,10 @@ Messenger::Messenger(CephContext *cct_, entity_name_t w)
     socket_priority(-1),
     cct(cct_),
     crcflags(get_default_crc_flags(cct->_conf)),
-    auth_ah_service_registry(
-      new AuthAuthorizeHandlerRegistry(
-	cct,
-	cct->_conf->auth_supported.empty() ?
-	cct->_conf->auth_service_required :
-	cct->_conf->auth_supported)),
-    auth_ah_cluster_registry(
-      new AuthAuthorizeHandlerRegistry(
-	cct,
-	cct->_conf->auth_supported.empty() ?
-	cct->_conf->auth_cluster_required :
-	cct->_conf->auth_supported))
-{}
+    auth_registry(cct)
+{
+  auth_registry.refresh_config();
+}
 
 void Messenger::set_endpoint_addr(const entity_addr_t& a,
                                   const entity_name_t &name)
@@ -116,37 +107,6 @@ int Messenger::bindv(const entity_addrvec_t& addrs)
   return bind(addrs.legacy_addr());
 }
 
-void Messenger::ms_deliver_get_auth_allowed_methods(
-    int peer_type, std::vector<uint32_t> &allowed_methods)
-{
-  for (const auto &dispatcher : dispatchers) {
-    if (dispatcher->ms_get_auth_allowed_methods(peer_type, allowed_methods))
-      return;
-  }
-  if (allowed_methods.empty()) {
-    if (get_mytype() == CEPH_ENTITY_TYPE_MON &&
-        peer_type != CEPH_ENTITY_TYPE_MON) {
-      allowed_methods.push_back(CEPH_AUTH_NONE);
-      return;
-    }
-    std::string method;
-    if (!cct->_conf->auth_supported.empty()) {
-      method = cct->_conf->auth_supported;
-    } else if (peer_type == CEPH_ENTITY_TYPE_OSD ||
-               peer_type == CEPH_ENTITY_TYPE_MDS ||
-               peer_type == CEPH_ENTITY_TYPE_MON ||
-               peer_type == CEPH_ENTITY_TYPE_MGR) {
-      method = cct->_conf->auth_cluster_required;
-    } else {
-      method = cct->_conf->auth_client_required;
-    }
-    AuthMethodList auth_list(cct, method);
-    for (auto pt : auth_list.get_supported_set()) {
-      allowed_methods.push_back(pt);
-    }
-  }
-}
-
 bool Messenger::ms_deliver_verify_authorizer(
   Connection *con,
   int peer_type,
@@ -155,7 +115,7 @@ bool Messenger::ms_deliver_verify_authorizer(
   bufferlist& authorizer_reply,
   bool& isvalid,
   CryptoKey& session_key,
-  CryptoKey *connection_secret,
+  std::string *connection_secret,
   std::unique_ptr<AuthAuthorizerChallenge> *challenge)
 {
   if (authorizer.length() == 0) {
@@ -167,16 +127,7 @@ bool Messenger::ms_deliver_verify_authorizer(
       }
     }
   }
-  AuthAuthorizeHandler *ah = 0;
-  switch (peer_type) {
-  case CEPH_ENTITY_TYPE_MDS:
-  case CEPH_ENTITY_TYPE_MON:
-  case CEPH_ENTITY_TYPE_OSD:
-    ah = auth_ah_cluster_registry->get_handler(protocol);
-    break;
-  default:
-    ah = auth_ah_service_registry->get_handler(protocol);
-  }
+  AuthAuthorizeHandler *ah = auth_registry.get_handler(peer_type, protocol);
   if (get_mytype() == CEPH_ENTITY_TYPE_MON &&
       peer_type != CEPH_ENTITY_TYPE_MON) {
     // the monitor doesn't do authenticators for msgr1.
@@ -197,11 +148,12 @@ bool Messenger::ms_deliver_verify_authorizer(
 	cct,
 	ks,
 	authorizer,
-	authorizer_reply,
-	con->peer_name,
-	con->peer_global_id,
-	con->peer_caps_info,
-	session_key,
+	0,
+	&authorizer_reply,
+	&con->peer_name,
+	&con->peer_global_id,
+	&con->peer_caps_info,
+	&session_key,
 	connection_secret,
 	challenge);
       if (isvalid) {

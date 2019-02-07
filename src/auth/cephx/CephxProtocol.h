@@ -122,23 +122,28 @@ struct CephXAuthenticate {
   uint64_t client_challenge;
   uint64_t key;
   CephXTicketBlob old_ticket;
+  uint32_t other_keys = 0;  // replaces CephXServiceTicketRequest
 
   void encode(bufferlist& bl) const {
-     using ceph::encode;
-     __u8 struct_v = 1;
-     encode(struct_v, bl);
-     encode(client_challenge, bl);
-     encode(key, bl);
-     encode(old_ticket, bl);
+    using ceph::encode;
+    __u8 struct_v = 2;
+    encode(struct_v, bl);
+    encode(client_challenge, bl);
+    encode(key, bl);
+    encode(old_ticket, bl);
+    encode(other_keys, bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-     using ceph::decode;
-     __u8 struct_v;
-     decode(struct_v, bl);
-     decode(client_challenge, bl);
-     decode(key, bl);
-     decode(old_ticket, bl);
- }
+    using ceph::decode;
+    __u8 struct_v;
+    decode(struct_v, bl);
+    decode(client_challenge, bl);
+    decode(key, bl);
+    decode(old_ticket, bl);
+    if (struct_v >= 2) {
+      decode(other_keys, bl);
+    }
+  }
 };
 WRITE_CLASS_ENCODER(CephXAuthenticate)
 
@@ -215,11 +220,11 @@ WRITE_CLASS_ENCODER(CephXServiceTicketRequest)
 
 struct CephXAuthorizeReply {
   uint64_t nonce_plus_one;
-  CryptoKey connection_secret;
+  std::string connection_secret;
   void encode(bufferlist& bl) const {
     using ceph::encode;
     __u8 struct_v = 1;
-    if (connection_secret.get_type()) {
+    if (connection_secret.size()) {
       struct_v = 2;
     }
     encode(struct_v, bl);
@@ -254,8 +259,8 @@ public:
 
   bool build_authorizer();
   bool verify_reply(bufferlist::const_iterator& reply,
-		    CryptoKey *connection_secret) override;
-  bool add_challenge(CephContext *cct, bufferlist& challenge) override;
+		    std::string *connection_secret) override;
+  bool add_challenge(CephContext *cct, const bufferlist& challenge) override;
 };
 
 
@@ -418,12 +423,14 @@ bool cephx_decode_ticket(CephContext *cct, KeyStore *keys,
  * Verify authorizer and generate reply authorizer
  */
 extern bool cephx_verify_authorizer(
-  CephContext *cct, KeyStore *keys,
+  CephContext *cct,
+  KeyStore *keys,
   bufferlist::const_iterator& indata,
+  size_t connection_secret_required_len,
   CephXServiceTicketInfo& ticket_info,
   std::unique_ptr<AuthAuthorizerChallenge> *challenge,
-  CryptoKey *connection_secret,
-  bufferlist& reply_bl);
+  std::string *connection_secret,
+  bufferlist *reply_bl);
 
 
 
@@ -436,7 +443,8 @@ extern bool cephx_verify_authorizer(
 static constexpr uint64_t AUTH_ENC_MAGIC = 0xff009cad8826aa55ull;
 
 template <typename T>
-void decode_decrypt_enc_bl(CephContext *cct, T& t, CryptoKey key, bufferlist& bl_enc, 
+void decode_decrypt_enc_bl(CephContext *cct, T& t, CryptoKey key,
+			   const bufferlist& bl_enc,
 			   std::string &error)
 {
   uint64_t magic;

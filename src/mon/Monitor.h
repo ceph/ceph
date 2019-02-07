@@ -43,6 +43,8 @@
 
 #include "common/config_obs.h"
 #include "common/LogClient.h"
+#include "auth/AuthClient.h"
+#include "auth/AuthServer.h"
 #include "auth/cephx/CephxKeyServer.h"
 #include "auth/AuthMethodList.h"
 #include "auth/KeyRing.h"
@@ -123,6 +125,8 @@ public:
 };
 
 class Monitor : public Dispatcher,
+		public AuthClient,
+		public AuthServer,
                 public md_config_obs_t {
 public:
   int orig_argc = 0;
@@ -137,7 +141,9 @@ public:
   SafeTimer timer;
   Finisher finisher;
   ThreadPool cpu_tp;  ///< threadpool for CPU intensive work
-  
+
+  ceph::mutex auth_lock = ceph::make_mutex("Monitor::auth_lock");
+
   /// true if we have ever joined a quorum.  if false, we are either a
   /// new cluster, a newly joining monitor, or a just-upgraded
   /// monitor.
@@ -189,14 +195,15 @@ public:
   // -- monitor state --
 private:
   enum {
-    STATE_PROBING = 1,
+    STATE_INIT = 1,
+    STATE_PROBING,
     STATE_SYNCHRONIZING,
     STATE_ELECTING,
     STATE_LEADER,
     STATE_PEON,
     STATE_SHUTDOWN
   };
-  int state;
+  int state = STATE_INIT;
 
 public:
   static const char *get_state_name(int s) {
@@ -214,6 +221,7 @@ public:
     return get_state_name(state);
   }
 
+  bool is_init() const { return state == STATE_INIT; }
   bool is_shutdown() const { return state == STATE_SHUTDOWN; }
   bool is_probing() const { return state == STATE_PROBING; }
   bool is_synchronizing() const { return state == STATE_SYNCHRONIZING; }
@@ -897,9 +905,48 @@ public:
 public: // for AuthMonitor msgr1:
   int ms_handle_authentication(Connection *con) override;
 private:
+  void ms_handle_accept(Connection *con) override;
   bool ms_handle_reset(Connection *con) override;
   void ms_handle_remote_reset(Connection *con) override {}
   bool ms_handle_refused(Connection *con) override;
+
+  // AuthClient
+  int get_auth_request(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    uint32_t *method,
+    vector<uint32_t> *preferred_modes,
+    bufferlist *out) override;
+  int handle_auth_reply_more(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+   const bufferlist& bl,
+    bufferlist *reply) override;
+  int handle_auth_done(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    uint64_t global_id,
+    uint32_t con_mode,
+    const bufferlist& bl,
+    CryptoKey *session_key,
+    std::string *connection_secret) override;
+  int handle_auth_bad_method(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    uint32_t old_auth_method,
+    int result,
+    const std::vector<uint32_t>& allowed_methods,
+    const std::vector<uint32_t>& allowed_modes) override;
+  // /AuthClient
+  // AuthServer
+  int handle_auth_request(
+    Connection *con,
+    AuthConnectionMeta *auth_meta,
+    bool more,
+    uint32_t auth_method,
+    const bufferlist& bl,
+    bufferlist *reply) override;
+  // /AuthServer
 
   int write_default_keyring(bufferlist& bl);
   void extract_save_mon_key(KeyRing& keyring);

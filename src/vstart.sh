@@ -486,6 +486,7 @@ ms bind msgr1 = true
     fi
     if [ $msgr -eq 2 ]; then
 	msgr_conf="ms bind msgr2 = true
+ms bind msgr1 = false
 ";
     fi
     if [ $msgr -eq 1 ]; then

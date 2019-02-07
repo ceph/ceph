@@ -690,7 +690,7 @@ SocketConnection::handle_connect_reply(msgr_tag_t tag)
         h.backoff = 0ms;
         set_features(h.reply.features & h.connect.features);
         if (h.authorizer) {
-          CryptoKey connection_secret;  // this is not used here, we just need
+          std::string connection_secret;  // this is not used here, we just need
                                         // to make get_auth_session_handler
                                         // call happy
           session_security.reset(

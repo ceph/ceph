@@ -11,9 +11,9 @@ private:
   enum State {
     NONE,
     START_CONNECT,
-    CONNECTING,
+    CONNECTING,     // banner + authentication + ident
     START_ACCEPT,
-    ACCEPTING,
+    ACCEPTING,      // banner + authentication + ident
     ACCEPTING_SESSION,
     READY,
     THROTTLE_MESSAGE,
@@ -50,8 +50,8 @@ public:
     HELLO = 1,
     AUTH_REQUEST,
     AUTH_BAD_METHOD,
-    AUTH_BAD_AUTH,
-    AUTH_MORE,
+    AUTH_REPLY_MORE,
+    AUTH_REQUEST_MORE,
     AUTH_DONE,
     IDENT,
     IDENT_MISSING_FEATURES,
@@ -74,14 +74,8 @@ private:
   char *temp_buffer;
   State state;
   uint64_t peer_required_features;
-  AuthAuthorizer *authorizer;
-  uint32_t auth_method;
-  uint32_t got_bad_method;
-  CryptoKey session_key;
-  CryptoKey connection_secret;
   std::shared_ptr<AuthSessionHandler> session_security;
-  std::unique_ptr<AuthAuthorizerChallenge> authorizer_challenge;
-  uint64_t auth_flags;
+
   uint64_t cookie;
   uint64_t global_seq;
   uint64_t connect_seq;
@@ -115,12 +109,6 @@ private:
   ostream &_conn_prefix(std::ostream *_dout);
   void run_continuation(Ct<ProtocolV2> *continuation);
   void calc_signature(const char *in, uint32_t length, char *out);
-  inline bool sign_frames() {
-    return auth_flags & static_cast<uint64_t>(AuthFlag::SIGNED);
-  }
-  inline bool encrypt_frames() {
-    return auth_flags & static_cast<uint64_t>(AuthFlag::ENCRYPTED);
-  }
 
   Ct<ProtocolV2> *read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
                        int len, char *buffer = nullptr);
@@ -167,7 +155,6 @@ private:
   Ct<ProtocolV2> *read_frame();
   Ct<ProtocolV2> *handle_read_frame_length_and_tag(char *buffer, int r);
   Ct<ProtocolV2> *handle_frame_payload(char *buffer, int r);
-  Ct<ProtocolV2> *handle_auth_more(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_ident(char *payload, uint32_t length);
 
   Ct<ProtocolV2> *ready();
@@ -231,7 +218,7 @@ private:
   }
   Ct<ProtocolV2> *send_auth_request(std::vector<uint32_t> &allowed_methods);
   Ct<ProtocolV2> *handle_auth_bad_method(char *payload, uint32_t length);
-  Ct<ProtocolV2> *handle_auth_bad_auth(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_auth_reply_more(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_auth_done(char *payload, uint32_t length);
   Ct<ProtocolV2> *send_client_ident();
   Ct<ProtocolV2> *send_reconnect();
@@ -250,8 +237,10 @@ private:
 
   Ct<ProtocolV2> *start_server_banner_exchange();
   Ct<ProtocolV2> *post_server_banner_exchange();
-  Ct<ProtocolV2> *handle_cephx_auth(bufferlist &auth_payload);
   Ct<ProtocolV2> *handle_auth_request(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_auth_request_more(char *payload, uint32_t length);
+  Ct<ProtocolV2> *_handle_auth_request(bufferlist& auth_payload, bool more);
+  Ct<ProtocolV2> *_auth_bad_method(int r);
   Ct<ProtocolV2> *handle_client_ident(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_ident_missing_features_write(int r);
   Ct<ProtocolV2> *handle_reconnect(char *payload, uint32_t length);

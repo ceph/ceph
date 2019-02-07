@@ -121,6 +121,7 @@ MonCommand mon_commands[] = {
 #undef COMMAND_WITH_FLAG
 
 
+
 void C_MonContext::finish(int r) {
   if (mon->is_shutdown())
     return;
@@ -130,6 +131,7 @@ void C_MonContext::finish(int r) {
 Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 		 Messenger *m, Messenger *mgr_m, MonMap *map) :
   Dispatcher(cct_),
+  AuthServer(cct_),
   name(nm),
   rank(-1), 
   messenger(m),
@@ -153,8 +155,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   mgr_client(cct_, mgr_m),
   gss_ktfile_client(cct->_conf.get_val<std::string>("gss_ktab_client_file")),
   store(s),
-  
-  state(STATE_PROBING),
   
   elector(this),
   required_features(0),
@@ -854,6 +854,12 @@ int Monitor::preinit()
   // add ourselves as a conf observer
   g_conf().add_observer(this);
 
+  messenger->set_auth_client(this);
+  messenger->set_auth_server(this);
+  mgr_messenger->set_auth_client(this);
+
+  auth_registry.refresh_config();
+
   lock.Unlock();
   return 0;
 }
@@ -874,10 +880,13 @@ int Monitor::init()
   // i'm ready!
   messenger->add_dispatcher_tail(this);
 
+  // kickstart pet mgrclient
   mgr_client.init();
   mgr_messenger->add_dispatcher_tail(&mgr_client);
   mgr_messenger->add_dispatcher_tail(this);  // for auth ms_* calls
+  mgrmon()->prime_mgr_client();
 
+  state = STATE_PROBING;
   bootstrap();
   // add features of myself into feature_map
   session_map.feature_map.add_mon(con_self->get_features());
@@ -3898,9 +3907,9 @@ void Monitor::handle_forward(MonOpRequestRef op)
     ceph_assert(req != NULL);
 
     ConnectionRef c(new AnonConnection(cct, m->client_socket_addr));
-    MonSession *s = new MonSession(req->get_source(),
-				   req->get_source_addrs(),
-				   static_cast<Connection*>(c.get()));
+    MonSession *s = new MonSession(static_cast<Connection*>(c.get()));
+    s->_ident(req->get_source(),
+	      req->get_source_addrs());
     c->set_priv(RefCountedPtr{s, false});
     c->set_peer_addrs(m->client_addrs);
     c->set_peer_type(m->client_type);
@@ -5109,7 +5118,7 @@ bool Monitor::ms_handle_reset(Connection *con)
   std::lock_guard l(lock);
 
   dout(10) << "reset/close on session " << s->name << " " << s->addrs << dendl;
-  if (!s->closed) {
+  if (!s->closed && s->item.is_on_list()) {
     std::lock_guard l(session_map_lock);
     remove_session(s);
   }
@@ -5857,6 +5866,80 @@ void Monitor::extract_save_mon_key(KeyRing& keyring)
   }
 }
 
+// AuthClient methods -- for mon <-> mon communication
+int Monitor::get_auth_request(
+  Connection *con,
+  AuthConnectionMeta *auth_meta,
+  uint32_t *method,
+  vector<uint32_t> *preferred_modes,
+  bufferlist *out)
+{
+  std::scoped_lock l(auth_lock);
+  if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
+    return -EACCES;
+  }
+  AuthAuthorizer *auth;
+  if (!ms_get_authorizer(con->get_peer_type(), &auth)) {
+    return -EACCES;
+  }
+  auth_meta->authorizer.reset(auth);
+  auth_registry.get_supported_modes(CEPH_ENTITY_TYPE_MON,
+				    auth->protocol,
+				    preferred_modes);
+  *method = auth->protocol;
+  *out = auth->bl;
+  return 0;
+}
+
+int Monitor::handle_auth_reply_more(
+  Connection *con,
+  AuthConnectionMeta *auth_meta,
+  const bufferlist& bl,
+  bufferlist *reply)
+{
+  std::scoped_lock l(auth_lock);
+  if (!auth_meta->authorizer) {
+    derr << __func__ << " no authorizer?" << dendl;
+    return -EACCES;
+  }
+  auth_meta->authorizer->add_challenge(cct, bl);
+  *reply = auth_meta->authorizer->bl;
+  return 0;
+}
+
+int Monitor::handle_auth_done(
+  Connection *con,
+  AuthConnectionMeta *auth_meta,
+  uint64_t global_id,
+  uint32_t con_mode,
+  const bufferlist& bl,
+  CryptoKey *session_key,
+  std::string *connection_secret)
+{
+  std::scoped_lock l(auth_lock);
+  // verify authorizer reply
+  auto p = bl.begin();
+  if (!auth_meta->authorizer->verify_reply(p, connection_secret)) {
+    dout(0) << __func__ << " failed verifying authorizer reply" << dendl;
+    return -EACCES;
+  }
+  auth_meta->session_key = auth_meta->authorizer->session_key;
+  return 0;
+}
+
+int Monitor::handle_auth_bad_method(
+  Connection *con,
+  AuthConnectionMeta *auth_meta,
+  uint32_t old_auth_method,
+  int result,
+  const std::vector<uint32_t>& allowed_methods,
+  const std::vector<uint32_t>& allowed_modes)
+{
+  derr << __func__ << " hmm, they didn't like " << old_auth_method
+       << " result " << cpp_strerror(result) << dendl;
+  return -EACCES;
+}
+
 bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer)
 {
   dout(10) << "ms_get_authorizer for " << ceph_entity_type_name(service_id)
@@ -5906,8 +5989,8 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer)
       return false;
     }
 
-    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info,
-					     secret, (uint64_t)-1);
+    ret = key_server.build_session_auth_info(
+      service_id, auth_ticket_info.ticket, info, secret, (uint64_t)-1);
     if (ret < 0) {
       dout(0) << __func__ << " failed to build mon session_auth_info "
 	      << cpp_strerror(ret) << dendl;
@@ -5915,7 +5998,8 @@ bool Monitor::ms_get_authorizer(int service_id, AuthAuthorizer **authorizer)
     }
   } else if (service_id == CEPH_ENTITY_TYPE_MGR) {
     // mgr
-    ret = key_server.build_session_auth_info(service_id, auth_ticket_info, info);
+    ret = key_server.build_session_auth_info(
+      service_id, auth_ticket_info.ticket, info);
     if (ret < 0) {
       derr << __func__ << " failed to build mgr service session_auth_info "
 	   << cpp_strerror(ret) << dendl;
@@ -5949,6 +6033,194 @@ KeyStore *Monitor::ms_get_auth1_authorizer_keystore()
   return &keyring;
 }
 
+int Monitor::handle_auth_request(
+  Connection *con,
+  AuthConnectionMeta *auth_meta,
+  bool more,
+  uint32_t auth_method,
+  const bufferlist &payload,
+  bufferlist *reply)
+{
+  std::scoped_lock l(auth_lock);
+
+  // NOTE: be careful, the Connection hasn't fully negotiated yet, so
+  // e.g., peer_features, peer_addrs, and others are still unknown.
+
+  dout(10) << __func__ << " con " << con << (more ? " (more)":" (start)")
+	   << " method " << auth_method
+	   << " payload " << payload.length()
+	   << dendl;
+  if (!more) {
+    auth_meta->auth_mode = payload[0];
+  }
+
+  if (auth_meta->auth_mode >= AUTH_MODE_AUTHORIZER &&
+      auth_meta->auth_mode <= AUTH_MODE_AUTHORIZER_MAX) {
+    AuthAuthorizeHandler *ah = get_auth_authorize_handler(con->get_peer_type(),
+							  auth_method);
+    if (!ah) {
+      lderr(cct) << __func__ << " no AuthAuthorizeHandler found for auth method "
+		 << auth_method << dendl;
+      return -EOPNOTSUPP;
+    }
+    bool was_challenge = (bool)auth_meta->authorizer_challenge;
+    bool isvalid = ah->verify_authorizer(
+      cct,
+      &keyring,
+      payload,
+      auth_meta->get_connection_secret_length(),
+      reply,
+      &con->peer_name,
+      &con->peer_global_id,
+      &con->peer_caps_info,
+      &auth_meta->session_key,
+      &auth_meta->connection_secret,
+      &auth_meta->authorizer_challenge);
+    if (isvalid) {
+      ms_handle_authentication(con);
+      return 1;
+    }
+    if (!more && !was_challenge && auth_meta->authorizer_challenge) {
+      return 0;
+    }
+    dout(10) << __func__ << " bad authorizer on " << con << dendl;
+    return -EACCES;
+  } else if (auth_meta->auth_mode < AUTH_MODE_MON &&
+	     auth_meta->auth_mode > AUTH_MODE_MON_MAX) {
+    derr << __func__ << " unrecognized auth mode " << auth_meta->auth_mode
+	 << dendl;
+    return -EACCES;
+  }
+
+  // wait until we've formed an initial quorum on mkfs so that we have
+  // the initial keys (e.g., client.admin).
+  if (authmon()->get_last_committed() == 0) {
+    dout(10) << __func__ << " haven't formed initial quorum, EBUSY" << dendl;
+    return -EBUSY;
+  }
+
+  RefCountedPtr priv;
+  MonSession *s;
+  int32_t r = 0;
+  auto p = payload.begin();
+  if (!more) {
+    if (con->get_priv()) {
+      return -EACCES; // wtf
+    }
+
+    // handler?
+    AuthServiceHandler *auth_handler = get_auth_service_handler(
+      auth_method, g_ceph_context, &key_server);
+    if (!auth_handler) {
+      dout(1) << __func__ << " auth_method " << auth_method << " not supported"
+	      << dendl;
+      return -EOPNOTSUPP;
+    }
+
+    uint8_t mode;
+    EntityName entity_name;
+
+    decode(mode, p);
+    assert(mode >= AUTH_MODE_MON && mode <= AUTH_MODE_MON_MAX);
+    decode(entity_name, p);
+    decode(con->peer_global_id, p);
+
+    // supported method?
+    if (entity_name.get_type() == CEPH_ENTITY_TYPE_MON ||
+	entity_name.get_type() == CEPH_ENTITY_TYPE_OSD ||
+	entity_name.get_type() == CEPH_ENTITY_TYPE_MDS ||
+	entity_name.get_type() == CEPH_ENTITY_TYPE_MGR) {
+      if (!auth_cluster_required.is_supported_auth(auth_method)) {
+	dout(10) << __func__ << " entity " << entity_name << " method "
+		 << auth_method << " not among supported "
+		 << auth_cluster_required.get_supported_set() << dendl;
+	delete auth_handler;
+	return -EOPNOTSUPP;
+      }
+    } else {
+      if (!auth_service_required.is_supported_auth(auth_method)) {
+	dout(10) << __func__ << " entity " << entity_name << " method "
+		 << auth_method << " not among supported "
+		 << auth_cluster_required.get_supported_set() << dendl;
+	delete auth_handler;
+	return -EOPNOTSUPP;
+      }
+    }
+
+    // for msgr1 we would do some weirdness here to ensure signatures
+    // are supported by the client if we require it.  for msgr2 that
+    // is not necessary.
+
+    if (!con->peer_global_id) {
+      con->peer_global_id = authmon()->assign_global_id(false);
+      if (!con->peer_global_id) {
+	dout(1) << __func__ << " failed to assign global_id" << dendl;
+	delete auth_handler;
+	return -EBUSY;
+      }
+      dout(10) << __func__ << "  assigned global_id " << con->peer_global_id
+	       << dendl;
+    }
+
+    // set up partial session
+    s = new MonSession(con);
+    s->auth_handler = auth_handler;
+    con->set_priv(RefCountedPtr{s, false});
+
+    r = s->auth_handler->start_session(
+      entity_name,
+      auth_meta->get_connection_secret_length(),
+      reply,
+      &con->peer_caps_info,
+      &auth_meta->session_key,
+      &auth_meta->connection_secret);
+  } else {
+    priv = con->get_priv();
+    s = static_cast<MonSession*>(priv.get());
+    r = s->auth_handler->handle_request(
+      p,
+      auth_meta->get_connection_secret_length(),
+      reply,
+      &con->peer_global_id,
+      &con->peer_caps_info,
+      &auth_meta->session_key,
+      &auth_meta->connection_secret);
+  }
+  if (r > 0 &&
+      !s->authenticated) {
+    ms_handle_authentication(con);
+  }
+
+  dout(30) << " r " << r << " reply:\n";
+  reply->hexdump(*_dout);
+  *_dout << dendl;
+  return r;
+}
+
+void Monitor::ms_handle_accept(Connection *con)
+{
+  auto priv = con->get_priv();
+  MonSession *s = static_cast<MonSession*>(priv.get());
+  if (!s) {
+    // legacy protocol v1?
+    dout(10) << __func__ << " con " << con << " no session" << dendl;
+    return;
+  }
+
+  if (s->item.is_on_list()) {
+    dout(10) << __func__ << " con " << con << " session " << s
+	     << " already on list" << dendl;
+  } else {
+    dout(10) << __func__ << " con " << con << " session " << s
+	     << " registering session for "
+	     << con->get_peer_addrs() << dendl;
+    s->_ident(entity_name_t(con->get_peer_type(), con->get_peer_id()),
+	      con->get_peer_addrs());
+    std::lock_guard l(session_map_lock);
+    session_map.add_session(s);
+  }
+}
+
 int Monitor::ms_handle_authentication(Connection *con)
 {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
@@ -5977,11 +6249,12 @@ int Monitor::ms_handle_authentication(Connection *con)
 	   << " " << *s << dendl;
 
   AuthCapsInfo &caps_info = con->get_peer_caps_info();
+  int ret = 0;
   if (caps_info.allow_all) {
     s->caps.set_allow_all();
     s->authenticated = true;
+    ret = 1;
   }
-  int ret = 1;
   if (caps_info.caps.length()) {
     bufferlist::const_iterator p = caps_info.caps.cbegin();
     string str;
@@ -5996,6 +6269,7 @@ int Monitor::ms_handle_authentication(Connection *con)
     if (ret >= 0) {
       if (s->caps.parse(str, NULL)) {
 	s->authenticated = true;
+	ret = 1;
       } else {
 	derr << __func__ << " unparseable caps '" << str << "' for "
 	     << con->get_peer_entity_name() << dendl;
