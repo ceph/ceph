@@ -155,6 +155,7 @@ def setup_logging(log_level_console, log_file, log_level_file):
     ch.setFormatter(formatter)
     ch.setLevel(get_log_level(log_level_console))
     log.addHandler(ch)
+    log.setLevel(get_log_level(log_level_console))
 
 def init(parse_args):
     cfg = configparser.RawConfigParser({
