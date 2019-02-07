@@ -70,13 +70,17 @@ function check() {
     local misplaced_end=$8
     local primary_start=${9:-}
     local primary_end=${10:-}
+    local check_setup=${11:-true}
 
     local log=$(grep -l +backfilling $dir/osd.$primary.log)
-    test -n "$log" || return 1
-    if [ "$(echo "$log" | wc -w)" != "1" ];
+    if [ $check_setup = "true" ];
     then
-      echo "Test setup failure, a single OSD should have performed backfill"
-      return 1
+      local alllogs=$(grep -l +backfilling $dir/osd.*.log)
+      if [ "$(echo "$alllogs" | wc -w)" != "1" ];
+      then
+        echo "Test setup failure, a single OSD should have performed backfill"
+        return 1
+      fi
     fi
 
     local addp=" "
@@ -478,7 +482,7 @@ function TEST_backfill_remapped() {
 
     local misplaced=$(expr $objects \* 2)
 
-    check $dir $PG $primary replicated 0 0 $misplaced $objects || return 1
+    check $dir $PG $primary replicated 0 0 $misplaced $objects "" "" false || return 1
 
     delete_pool $poolname
     kill_daemons $dir || return 1
