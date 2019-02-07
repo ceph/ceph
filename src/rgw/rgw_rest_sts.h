@@ -148,7 +148,7 @@ public:
   void execute() override;
   int verify_permission() override;
   int get_params();
-  const char* name() const override { return "get_keystone_session_token"; }
+  const char* name() const override { return "get_session_token"; }
   RGWOpType get_type() override { return RGW_STS_GET_SESSION_TOKEN; }
 };
 
