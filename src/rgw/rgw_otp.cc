@@ -19,7 +19,7 @@
 #include "rgw_tools.h"
 
 #include "services/svc_zone.h"
-#include "services/svc_mfa.h"
+#include "services/svc_cls.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -52,7 +52,7 @@ public:
     real_time mtime;
 
     list<rados::cls::otp::otp_info_t> result;
-    int r = store->svc.mfa->list_mfa(entry, &result, &objv_tracker, &mtime, null_yield);
+    int r = store->svc.cls->mfa.list_mfa(entry, &result, &objv_tracker, &mtime, null_yield);
     if (r < 0) {
       return r;
     }
@@ -74,7 +74,7 @@ public:
     int ret = store->meta_mgr->mutate(this, entry, mtime, &objv_tracker,
                                       MDLOG_STATUS_WRITE, sync_mode,
                                       [&] {
-         return store->svc.mfa->set_mfa(entry, devices, true, &objv_tracker, mtime, null_yield);
+         return store->svc.cls->mfa.set_mfa(entry, devices, true, &objv_tracker, mtime, null_yield);
     });
     if (ret < 0) {
       return ret;

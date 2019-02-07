@@ -48,7 +48,7 @@
 #include "rgw_zone.h"
 
 #include "services/svc_zone.h"
-#include "services/svc_mfa.h"
+#include "services/svc_cls.h"
 
 #include "include/ceph_assert.h"
 #include "rgw_role.h"
@@ -3369,7 +3369,7 @@ static int verify_mfa(RGWRados *store, RGWUserInfo *user, const string& mfa_str,
     return -EACCES;
   }
 
-  int ret = store->svc.mfa->check_mfa(user->user_id, serial, pin, null_yield);
+  int ret = store->svc.cls->mfa.check_mfa(user->user_id, serial, pin, null_yield);
   if (ret < 0) {
     ldout(store->ctx(), 20) << "NOTICE: failed to check MFA, serial=" << serial << dendl;
     return -EACCES;

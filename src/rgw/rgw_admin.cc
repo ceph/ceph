@@ -56,7 +56,7 @@ extern "C" {
 #include "rgw_sync_module_pubsub.h"
 
 #include "services/svc_sync_modules.h"
-#include "services/svc_mfa.h"
+#include "services/svc_cls.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -7623,12 +7623,12 @@ next:
     }
 
     real_time mtime = real_clock::now();
-    string oid = store->svc.mfa->get_mfa_oid(user_id);
+    string oid = store->svc.cls->mfa.get_mfa_oid(user_id);
 
     int ret = store->meta_mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
                                       MDLOG_STATUS_WRITE, RGWMetadataHandler::APPLY_ALWAYS,
                                       [&] {
-      return store->svc.mfa->create_mfa(user_id, config, &objv_tracker, mtime, null_yield);
+      return store->svc.cls->mfa.create_mfa(user_id, config, &objv_tracker, mtime, null_yield);
     });
     if (ret < 0) {
       cerr << "MFA creation failed, error: " << cpp_strerror(-ret) << std::endl;
@@ -7658,12 +7658,12 @@ next:
     }
 
     real_time mtime = real_clock::now();
-    string oid = store->svc.mfa->get_mfa_oid(user_id);
+    string oid = store->svc.cls->mfa.get_mfa_oid(user_id);
 
     int ret = store->meta_mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
                                       MDLOG_STATUS_WRITE, RGWMetadataHandler::APPLY_ALWAYS,
                                       [&] {
-      return store->svc.mfa->remove_mfa(user_id, totp_serial, &objv_tracker, mtime, null_yield);
+      return store->svc.cls->mfa.remove_mfa(user_id, totp_serial, &objv_tracker, mtime, null_yield);
     });
     if (ret < 0) {
       cerr << "MFA removal failed, error: " << cpp_strerror(-ret) << std::endl;
@@ -7693,7 +7693,7 @@ next:
     }
 
     rados::cls::otp::otp_info_t result;
-    int ret = store->svc.mfa->get_mfa(user_id, totp_serial, &result, null_yield);
+    int ret = store->svc.cls->mfa.get_mfa(user_id, totp_serial, &result, null_yield);
     if (ret < 0) {
       if (ret == -ENOENT || ret == -ENODATA) {
         cerr << "MFA serial id not found" << std::endl;
@@ -7715,7 +7715,7 @@ next:
     }
 
     list<rados::cls::otp::otp_info_t> result;
-    int ret = store->svc.mfa->list_mfa(user_id, &result, null_yield);
+    int ret = store->svc.cls->mfa.list_mfa(user_id, &result, null_yield);
     if (ret < 0) {
       cerr << "MFA listing failed, error: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7743,7 +7743,7 @@ next:
     }
 
     list<rados::cls::otp::otp_info_t> result;
-    int ret = store->svc.mfa->check_mfa(user_id, totp_serial, totp_pin.front(), null_yield);
+    int ret = store->svc.cls->mfa.check_mfa(user_id, totp_serial, totp_pin.front(), null_yield);
     if (ret < 0) {
       cerr << "MFA check failed, error: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7768,7 +7768,7 @@ next:
     }
 
     rados::cls::otp::otp_info_t config;
-    int ret = store->svc.mfa->get_mfa(user_id, totp_serial, &config, null_yield);
+    int ret = store->svc.cls->mfa.get_mfa(user_id, totp_serial, &config, null_yield);
     if (ret < 0) {
       if (ret == -ENOENT || ret == -ENODATA) {
         cerr << "MFA serial id not found" << std::endl;
@@ -7780,7 +7780,7 @@ next:
 
     ceph::real_time now;
 
-    ret = store->svc.mfa->otp_get_current_time(user_id, &now, null_yield);
+    ret = store->svc.cls->mfa.otp_get_current_time(user_id, &now, null_yield);
     if (ret < 0) {
       cerr << "ERROR: failed to fetch current time from osd: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7801,12 +7801,12 @@ next:
 
     /* now update the backend */
     real_time mtime = real_clock::now();
-    string oid = store->svc.mfa->get_mfa_oid(user_id);
+    string oid = store->svc.cls->mfa.get_mfa_oid(user_id);
 
     ret = store->meta_mgr->mutate(rgw_otp_get_handler(), oid, mtime, &objv_tracker,
                                   MDLOG_STATUS_WRITE, RGWMetadataHandler::APPLY_ALWAYS,
                                   [&] {
-      return store->svc.mfa->create_mfa(user_id, config, &objv_tracker, mtime, null_yield);
+      return store->svc.cls->mfa.create_mfa(user_id, config, &objv_tracker, mtime, null_yield);
     });
     if (ret < 0) {
       cerr << "MFA update failed, error: " << cpp_strerror(-ret) << std::endl;
