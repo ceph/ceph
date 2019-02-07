@@ -5,6 +5,7 @@
 #define _MSG_ASYNC_PROTOCOL_V2_
 
 #include "Protocol.h"
+#include "crypto_onwire.h"
 
 class ProtocolV2 : public Protocol {
 private:
@@ -68,6 +69,8 @@ public:
     ACK
   };
 
+  // TODO: move into auth_meta?
+  ceph::crypto::onwire::rxtx_t session_stream_handlers;
 private:
   enum class AuthFlag : uint64_t { ENCRYPTED = 1, SIGNED = 2 };
 
