@@ -45,6 +45,7 @@ public:
 };
 
 class RGWSI_Finisher;
+class RGWSI_MFA;
 class RGWSI_Notify;
 class RGWSI_RADOS;
 class RGWSI_Zone;
@@ -61,6 +62,7 @@ struct RGWServices_Def
   bool has_shutdown{false};
 
   std::unique_ptr<RGWSI_Finisher> finisher;
+  std::unique_ptr<RGWSI_MFA> mfa;
   std::unique_ptr<RGWSI_Notify> notify;
   std::unique_ptr<RGWSI_RADOS> rados;
   std::unique_ptr<RGWSI_Zone> zone;
@@ -84,6 +86,7 @@ struct RGWServices
   RGWServices_Def _svc;
 
   RGWSI_Finisher *finisher{nullptr};
+  RGWSI_MFA *mfa{nullptr};
   RGWSI_Notify *notify{nullptr};
   RGWSI_RADOS *rados{nullptr};
   RGWSI_Zone *zone{nullptr};
