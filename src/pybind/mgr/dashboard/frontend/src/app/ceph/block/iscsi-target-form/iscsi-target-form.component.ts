@@ -1,6 +1,6 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { FormArray, FormControl, Validators } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
@@ -23,19 +23,24 @@ import { IscsiTargetIqnSettingsModalComponent } from '../iscsi-target-iqn-settin
   templateUrl: './iscsi-target-form.component.html',
   styleUrls: ['./iscsi-target-form.component.scss']
 })
-export class IscsiTargetFormComponent {
+export class IscsiTargetFormComponent implements OnInit {
   targetForm: CdFormGroup;
   modalRef: BsModalRef;
   minimum_gateways = 1;
   target_default_controls: any;
   disk_default_controls: any;
 
+  isEdit = false;
+  target_iqn: string;
+
   imagesAll: any[];
   imagesSelections: SelectOption[];
   portalsSelections: SelectOption[] = [];
-  imagesInitiatorSelections: SelectOption[] = [];
-  groupDiskSelections: SelectOption[] = [];
-  groupMembersSelections: SelectOption[] = [];
+
+  imagesInitiatorSelections: SelectOption[][] = [];
+  groupDiskSelections: SelectOption[][] = [];
+  groupMembersSelections: SelectOption[][] = [];
+
   imagesSettings: any = {};
   messages = {
     portals: new SelectMessages(
@@ -73,39 +78,64 @@ export class IscsiTargetFormComponent {
     private modalService: BsModalService,
     private rbdService: RbdService,
     private router: Router,
+    private route: ActivatedRoute,
     private i18n: I18n,
     private taskWrapper: TaskWrapperService
-  ) {
-    forkJoin([this.rbdService.list(), this.iscsiService.listTargets()]).subscribe((data: any[]) => {
-      const usedImages = _(data[1])
+  ) {}
+
+  ngOnInit() {
+    const promises: any[] = [
+      this.iscsiService.listTargets(),
+      this.rbdService.list(),
+      this.iscsiService.portals(),
+      this.iscsiService.settings()
+    ];
+
+    if (this.router.url.startsWith('/block/iscsi/targets/edit')) {
+      this.isEdit = true;
+      this.route.params.subscribe((params: { target_iqn: string }) => {
+        this.target_iqn = decodeURIComponent(params.target_iqn);
+        promises.push(this.iscsiService.getTarget(this.target_iqn));
+      });
+    }
+
+    forkJoin(promises).subscribe((data: any[]) => {
+      // iscsiService.listTargets
+      const usedImages = _(data[0])
+        .filter((target) => target.target_iqn !== this.target_iqn)
         .flatMap((target) => target.disks)
         .map((image) => `${image.pool}/${image.image}`)
         .value();
 
-      this.imagesAll = _(data[0])
+      // rbdService.list()
+      this.imagesAll = _(data[1])
         .flatMap((pool) => pool.value)
         .map((image) => `${image.pool_name}/${image.name}`)
         .filter((image) => usedImages.indexOf(image) === -1)
         .value();
 
       this.imagesSelections = this.imagesAll.map((image) => new SelectOption(false, image, ''));
-    });
 
-    this.iscsiService.portals().subscribe((result: any) => {
+      // iscsiService.portals()
       const portals: SelectOption[] = [];
-      result.forEach((portal) => {
+      data[2].forEach((portal) => {
         portal.ip_addresses.forEach((ip) => {
           portals.push(new SelectOption(false, portal.name + ':' + ip, ''));
         });
       });
       this.portalsSelections = [...portals];
-    });
 
-    this.iscsiService.settings().subscribe((result: any) => {
-      this.minimum_gateways = result.config.minimum_gateways;
-      this.target_default_controls = result.target_default_controls;
-      this.disk_default_controls = result.disk_default_controls;
+      // iscsiService.settings()
+      this.minimum_gateways = data[3].config.minimum_gateways;
+      this.target_default_controls = data[3].target_default_controls;
+      this.disk_default_controls = data[3].disk_default_controls;
+
       this.createForm();
+
+      // iscsiService.getTarget()
+      if (data[4]) {
+        this.resolveModel(data[4]);
+      }
     });
   }
 
@@ -129,6 +159,50 @@ export class IscsiTargetFormComponent {
     });
   }
 
+  resolveModel(res) {
+    this.targetForm.patchValue({
+      target_iqn: res.target_iqn,
+      target_controls: res.target_controls
+    });
+
+    const portals = [];
+    _.forEach(res.portals, (portal) => {
+      const id = `${portal.host}:${portal.ip}`;
+      portals.push(id);
+    });
+    this.targetForm.patchValue({
+      portals: portals
+    });
+
+    const disks = [];
+    _.forEach(res.disks, (disk) => {
+      const id = `${disk.pool}/${disk.image}`;
+      disks.push(id);
+      this.imagesSettings[id] = disk.controls;
+      this.onImageSelection({ option: { name: id, selected: true } });
+    });
+    this.targetForm.patchValue({
+      disks: disks
+    });
+
+    _.forEach(res.clients, (client) => {
+      const initiator = this.addInitiator();
+      client.luns = _.map(client.luns, (lun) => `${lun.pool}/${lun.image}`);
+      initiator.patchValue(client);
+      // updatedInitiatorSelector()
+    });
+
+    _.forEach(res.groups, (group) => {
+      const fg = this.addGroup();
+      console.log(group);
+      group.disks = _.map(group.disks, (disk) => `${disk.pool}/${disk.image}`);
+      fg.patchValue(group);
+      _.forEach(group.members, (member) => {
+        this.onGroupMemberSelection({ option: new SelectOption(true, member, '') });
+      });
+    });
+  }
+
   hasAdvancedSettings(settings: any) {
     return Object.values(settings).length > 0;
   }
@@ -138,7 +212,7 @@ export class IscsiTargetFormComponent {
     return this.targetForm.get('portals') as FormControl;
   }
 
-  onPortalSelection($event) {
+  onPortalSelection() {
     this.portals.setValue(this.portals.value);
   }
 
@@ -181,10 +255,12 @@ export class IscsiTargetFormComponent {
       element.get('disks').setValue(newDisks);
     });
 
-    this.imagesInitiatorSelections = this.imagesInitiatorSelections.filter(
-      (item) => item.name !== name
-    );
-    this.groupDiskSelections = this.groupDiskSelections.filter((item) => item.name !== name);
+    _.forEach(this.imagesInitiatorSelections, (selections, i) => {
+      this.imagesInitiatorSelections[i] = selections.filter((item: any) => item.name !== name);
+    });
+    _.forEach(this.groupDiskSelections, (selections, i) => {
+      this.groupDiskSelections[i] = selections.filter((item: any) => item.name !== name);
+    });
   }
 
   onImageSelection($event) {
@@ -194,14 +270,19 @@ export class IscsiTargetFormComponent {
       if (!this.imagesSettings[option.name]) {
         this.imagesSettings[option.name] = {};
       }
-      this.imagesInitiatorSelections.push(new SelectOption(false, option.name, ''));
-      this.groupDiskSelections.push(new SelectOption(false, option.name, ''));
+
+      _.forEach(this.imagesInitiatorSelections, (selections, i) => {
+        selections.push(new SelectOption(false, option.name, ''));
+        this.imagesInitiatorSelections[i] = [...selections];
+      });
+
+      _.forEach(this.groupDiskSelections, (selections, i) => {
+        selections.push(new SelectOption(false, option.name, ''));
+        this.groupDiskSelections[i] = [...selections];
+      });
     } else {
       this.removeImageRefs(option.name);
     }
-
-    this.imagesInitiatorSelections = [...this.imagesInitiatorSelections];
-    this.groupDiskSelections = [...this.groupDiskSelections];
   }
 
   // Initiators
@@ -268,22 +349,36 @@ export class IscsiTargetFormComponent {
 
     this.initiators.push(fg);
 
-    this.groupMembersSelections.push(new SelectOption(false, '', ''));
-    this.groupMembersSelections = [...this.groupMembersSelections];
+    _.forEach(this.groupMembersSelections, (selections, i) => {
+      selections.push(new SelectOption(false, '', ''));
+      this.groupMembersSelections[i] = [...selections];
+    });
 
-    return false;
+    const disks = _.map(
+      this.targetForm.getValue('disks'),
+      (disk) => new SelectOption(false, disk, '')
+    );
+    this.imagesInitiatorSelections.push(disks);
+
+    return fg;
   }
 
   removeInitiator(index) {
+    const removed = this.initiators.value[index];
+
     this.initiators.removeAt(index);
 
-    const removed: SelectOption[] = this.groupMembersSelections.splice(index, 1);
-    this.groupMembersSelections = [...this.groupMembersSelections];
+    _.forEach(this.groupMembersSelections, (selections, i) => {
+      selections.splice(index, 1);
+      this.groupMembersSelections[i] = [...selections];
+    });
 
     this.groups.controls.forEach((element) => {
-      const newMembers = element.value.members.filter((item) => item !== removed[0].name);
+      const newMembers = element.value.members.filter((item) => item !== removed.client_iqn);
       element.get('members').setValue(newMembers);
     });
+
+    this.imagesInitiatorSelections.splice(index, 1);
   }
 
   updatedInitiatorSelector() {
@@ -293,21 +388,37 @@ export class IscsiTargetFormComponent {
     });
 
     // Update Group Initiator Selector
-    this.groupMembersSelections.forEach((elem, index) => {
-      const oldName = elem.name;
-      elem.name = this.initiators.controls[index].value.client_iqn;
+    _.forEach(this.groupMembersSelections, (group, group_index) => {
+      _.forEach(group, (elem, index) => {
+        const oldName = elem.name;
+        elem.name = this.initiators.controls[index].value.client_iqn;
 
-      this.groups.controls.forEach((element) => {
-        const members = element.value.members;
-        const i = members.indexOf(oldName);
+        this.groups.controls.forEach((element) => {
+          const members = element.value.members;
+          const i = members.indexOf(oldName);
 
-        if (i !== -1) {
-          members[i] = elem.name;
-        }
-        element.get('members').setValue(members);
+          if (i !== -1) {
+            members[i] = elem.name;
+          }
+          element.get('members').setValue(members);
+        });
       });
+      this.groupMembersSelections[group_index] = [...this.groupMembersSelections[group_index]];
     });
-    this.groupMembersSelections = [...this.groupMembersSelections];
+  }
+
+  removeInitiatorImage(initiator: any, lun_index: number, initiator_index: string, image: string) {
+    const luns = initiator.getValue('luns');
+    luns.splice(lun_index, 1);
+    initiator.patchValue({ luns: luns });
+
+    this.imagesInitiatorSelections[initiator_index].forEach((value) => {
+      if (value.name === image) {
+        value.selected = false;
+      }
+    });
+
+    return false;
   }
 
   // Groups
@@ -316,14 +427,32 @@ export class IscsiTargetFormComponent {
   }
 
   addGroup() {
-    this.groups.push(
-      new CdFormGroup({
-        group_id: new FormControl('', { validators: [Validators.required] }),
-        members: new FormControl([]),
-        disks: new FormControl([])
-      })
+    const fg = new CdFormGroup({
+      group_id: new FormControl('', { validators: [Validators.required] }),
+      members: new FormControl([]),
+      disks: new FormControl([])
+    });
+
+    this.groups.push(fg);
+
+    const disks = _.map(
+      this.targetForm.getValue('disks'),
+      (disk) => new SelectOption(false, disk, '')
     );
-    return false;
+    this.groupDiskSelections.push(disks);
+
+    const initiators = _.map(
+      this.initiators.value,
+      (initiator) => new SelectOption(false, initiator.client_iqn, '')
+    );
+    this.groupMembersSelections.push(initiators);
+
+    return fg;
+  }
+
+  removeGroup(index) {
+    this.groups.removeAt(index);
+    this.groupDiskSelections.splice(index, 1);
   }
 
   onGroupMemberSelection($event) {
@@ -336,18 +465,31 @@ export class IscsiTargetFormComponent {
       }
     });
   }
-  removeGroupInitiator(group, i) {
-    const name = group.getValue('members')[i];
-    group.getValue('members').splice(i, 1);
 
-    this.groupMembersSelections.forEach((value) => {
+  removeGroupInitiator(group, member_index, group_index) {
+    const name = group.getValue('members')[member_index];
+    group.getValue('members').splice(member_index, 1);
+
+    this.groupMembersSelections[group_index].forEach((value) => {
       if (value.name === name) {
         value.selected = false;
       }
     });
-    this.groupMembersSelections = [...this.groupMembersSelections];
+    this.groupMembersSelections[group_index] = [...this.groupMembersSelections[group_index]];
 
     this.onGroupMemberSelection({ option: new SelectOption(false, name, '') });
+  }
+
+  removeGroupDisk(group, disk_index, group_index) {
+    const name = group.getValue('disks')[disk_index];
+    group.getValue('disks').splice(disk_index, 1);
+
+    this.groupDiskSelections[group_index].forEach((value) => {
+      if (value.name === name) {
+        value.selected = false;
+      }
+    });
+    this.groupDiskSelections[group_index] = [...this.groupDiskSelections[group_index]];
   }
 
   submit() {
@@ -424,20 +566,32 @@ export class IscsiTargetFormComponent {
     });
     request.groups = formValue.groups;
 
-    this.taskWrapper
-      .wrapTaskAroundCall({
+    let wrapTask;
+    if (this.isEdit) {
+      request['new_target_iqn'] = request.target_iqn;
+      request.target_iqn = this.target_iqn;
+      wrapTask = this.taskWrapper.wrapTaskAroundCall({
+        task: new FinishedTask('iscsi/target/edit', {
+          target_iqn: request.target_iqn
+        }),
+        call: this.iscsiService.updateTarget(this.target_iqn, request)
+      });
+    } else {
+      wrapTask = this.taskWrapper.wrapTaskAroundCall({
         task: new FinishedTask('iscsi/target/create', {
           target_iqn: request.target_iqn
         }),
         call: this.iscsiService.createTarget(request)
-      })
-      .subscribe(
-        undefined,
-        () => {
-          this.targetForm.setErrors({ cdSubmitButton: true });
-        },
-        () => this.router.navigate(['/block/iscsi/targets'])
-      );
+      });
+    }
+
+    wrapTask.subscribe(
+      undefined,
+      () => {
+        this.targetForm.setErrors({ cdSubmitButton: true });
+      },
+      () => this.router.navigate(['/block/iscsi/targets'])
+    );
   }
 
   targetSettingsModal() {

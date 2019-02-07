@@ -1,10 +1,12 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
+import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ToastModule } from 'ng2-toastr';
 
+import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../shared/shared.module';
 import { IscsiTargetFormComponent } from './iscsi-target-form.component';
@@ -13,6 +15,7 @@ describe('IscsiTargetFormComponent', () => {
   let component: IscsiTargetFormComponent;
   let fixture: ComponentFixture<IscsiTargetFormComponent>;
   let httpTesting: HttpTestingController;
+  let activatedRoute: ActivatedRouteStub;
 
   const SETTINGS = {
     config: { minimum_gateways: 2 },
@@ -115,7 +118,13 @@ describe('IscsiTargetFormComponent', () => {
         RouterTestingModule,
         ToastModule.forRoot()
       ],
-      providers: [i18nProviders]
+      providers: [
+        i18nProviders,
+        {
+          provide: ActivatedRoute,
+          useValue: new ActivatedRouteStub({ target_iqn: undefined })
+        }
+      ]
     },
     true
   );
@@ -124,6 +133,7 @@ describe('IscsiTargetFormComponent', () => {
     fixture = TestBed.createComponent(IscsiTargetFormComponent);
     component = fixture.componentInstance;
     httpTesting = TestBed.get(HttpTestingController);
+    activatedRoute = TestBed.get(ActivatedRoute);
     fixture.detectChanges();
 
     httpTesting.expectOne('ui-api/iscsi/settings').flush(SETTINGS);
@@ -165,18 +175,8 @@ describe('IscsiTargetFormComponent', () => {
   });
 
   it('should prepare data when selecting an image', () => {
-    expect(component.imagesInitiatorSelections).toEqual([]);
-    expect(component.groupDiskSelections).toEqual([]);
     expect(component.imagesSettings).toEqual({});
-
     component.onImageSelection({ option: { name: 'rbd/disk_1', selected: true } });
-
-    expect(component.imagesInitiatorSelections).toEqual([
-      { description: '', name: 'rbd/disk_1', selected: false }
-    ]);
-    expect(component.groupDiskSelections).toEqual([
-      { description: '', name: 'rbd/disk_1', selected: false }
-    ]);
     expect(component.imagesSettings).toEqual({ 'rbd/disk_1': {} });
   });
 
@@ -197,13 +197,15 @@ describe('IscsiTargetFormComponent', () => {
     component.onImageSelection({ option: { name: 'rbd/disk_1', selected: false } });
 
     expect(component.groups.controls[0].value).toEqual({ disks: [], group_id: 'foo', members: [] });
-    expect(component.imagesInitiatorSelections).toEqual([]);
-    expect(component.groupDiskSelections).toEqual([]);
     expect(component.imagesSettings).toEqual({ 'rbd/disk_1': {} });
   });
 
   describe('should test initiators', () => {
     beforeEach(() => {
+      component.targetForm.patchValue({ disks: ['rbd/disk_1'] });
+      component.addGroup().patchValue({ name: 'group_1' });
+      component.onImageSelection({ option: { name: 'rbd/disk_1', selected: true } });
+
       component.addInitiator();
       component.initiators.controls[0].patchValue({
         client_iqn: 'iqn.initiator'
@@ -219,14 +221,17 @@ describe('IscsiTargetFormComponent', () => {
         client_iqn: 'iqn.initiator',
         luns: []
       });
+      expect(component.imagesInitiatorSelections).toEqual([
+        [{ description: '', name: 'rbd/disk_1', selected: false }]
+      ]);
       expect(component.groupMembersSelections).toEqual([
-        { description: '', name: 'iqn.initiator', selected: false }
+        [{ description: '', name: 'iqn.initiator', selected: false }]
       ]);
     });
 
     it('should update data when changing an initiator name', () => {
       expect(component.groupMembersSelections).toEqual([
-        { description: '', name: 'iqn.initiator', selected: false }
+        [{ description: '', name: 'iqn.initiator', selected: false }]
       ]);
 
       component.initiators.controls[0].patchValue({
@@ -235,12 +240,11 @@ describe('IscsiTargetFormComponent', () => {
       component.updatedInitiatorSelector();
 
       expect(component.groupMembersSelections).toEqual([
-        { description: '', name: 'iqn.initiator_new', selected: false }
+        [{ description: '', name: 'iqn.initiator_new', selected: false }]
       ]);
     });
 
     it('should clean data when removing an initiator', () => {
-      component.addGroup();
       component.groups.controls[0].patchValue({
         group_id: 'foo',
         members: ['iqn.initiator']
@@ -259,7 +263,8 @@ describe('IscsiTargetFormComponent', () => {
         group_id: 'foo',
         members: []
       });
-      expect(component.groupMembersSelections).toEqual([]);
+      expect(component.groupMembersSelections).toEqual([[]]);
+      expect(component.imagesInitiatorSelections).toEqual([]);
     });
 
     it('should remove images in the initiator when added in a group', () => {
@@ -294,40 +299,78 @@ describe('IscsiTargetFormComponent', () => {
     });
   });
 
-  it('should generate the request data', () => {
-    component.onImageSelection({ option: { name: 'rbd/disk_1', selected: true } });
-    component.portals.setValue(['node1:192.168.100.201', 'node2:192.168.100.202']);
-    component.addInitiator();
-    component.initiators.controls[0].patchValue({
-      client_iqn: 'iqn.initiator'
-    });
-    component.addGroup();
-    component.groups.controls[0].patchValue({
-      group_id: 'foo',
-      members: ['iqn.initiator'],
-      disks: ['rbd/disk_1']
+  describe('should submit request', () => {
+    beforeEach(() => {
+      component.targetForm.patchValue({ disks: ['rbd/disk_1'] });
+      component.onImageSelection({ option: { name: 'rbd/disk_1', selected: true } });
+      component.portals.setValue(['node1:192.168.100.201', 'node2:192.168.100.202']);
+      component.addInitiator().patchValue({
+        client_iqn: 'iqn.initiator'
+      });
+      component.addGroup().patchValue({
+        group_id: 'foo',
+        members: ['iqn.initiator'],
+        disks: ['rbd/disk_1']
+      });
     });
 
-    component.submit();
+    it('should call update', () => {
+      activatedRoute.setParams({ target_iqn: 'iqn.iscsi' });
+      component.isEdit = true;
+      component.target_iqn = 'iqn.iscsi';
 
-    const req = httpTesting.expectOne('api/iscsi/target');
-    expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual({
-      clients: [
-        {
-          auth: { mutual_password: null, mutual_user: null, password: null, user: null },
-          cdIsInGroup: false,
-          client_iqn: 'iqn.initiator',
-          luns: []
-        }
-      ],
-      disks: [],
-      groups: [
-        { disks: [{ image: 'disk_1', pool: 'rbd' }], group_id: 'foo', members: ['iqn.initiator'] }
-      ],
-      portals: [{ host: 'node1', ip: '192.168.100.201' }, { host: 'node2', ip: '192.168.100.202' }],
-      target_controls: {},
-      target_iqn: component.targetForm.value.target_iqn
+      component.submit();
+
+      const req = httpTesting.expectOne('api/iscsi/target/iqn.iscsi');
+      expect(req.request.method).toBe('PUT');
+      expect(req.request.body).toEqual({
+        clients: [
+          {
+            auth: { mutual_password: null, mutual_user: null, password: null, user: null },
+            cdIsInGroup: false,
+            client_iqn: 'iqn.initiator',
+            luns: []
+          }
+        ],
+        disks: [{ controls: {}, image: 'disk_1', pool: 'rbd' }],
+        groups: [
+          { disks: [{ image: 'disk_1', pool: 'rbd' }], group_id: 'foo', members: ['iqn.initiator'] }
+        ],
+        new_target_iqn: component.targetForm.value.target_iqn,
+        portals: [
+          { host: 'node1', ip: '192.168.100.201' },
+          { host: 'node2', ip: '192.168.100.202' }
+        ],
+        target_controls: {},
+        target_iqn: component.target_iqn
+      });
+    });
+
+    it('should call create', () => {
+      component.submit();
+
+      const req = httpTesting.expectOne('api/iscsi/target');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({
+        clients: [
+          {
+            auth: { mutual_password: null, mutual_user: null, password: null, user: null },
+            cdIsInGroup: false,
+            client_iqn: 'iqn.initiator',
+            luns: []
+          }
+        ],
+        disks: [{ controls: {}, image: 'disk_1', pool: 'rbd' }],
+        groups: [
+          { disks: [{ image: 'disk_1', pool: 'rbd' }], group_id: 'foo', members: ['iqn.initiator'] }
+        ],
+        portals: [
+          { host: 'node1', ip: '192.168.100.201' },
+          { host: 'node2', ip: '192.168.100.202' }
+        ],
+        target_controls: {},
+        target_iqn: component.targetForm.value.target_iqn
+      });
     });
   });
 });

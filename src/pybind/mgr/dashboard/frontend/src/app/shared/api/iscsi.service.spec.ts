@@ -32,6 +32,12 @@ describe('IscsiService', () => {
     expect(req.request.method).toBe('GET');
   });
 
+  it('should call getTarget', () => {
+    service.getTarget('iqn.foo').subscribe();
+    const req = httpTesting.expectOne('api/iscsi/target/iqn.foo');
+    expect(req.request.method).toBe('GET');
+  });
+
   it('should call status', () => {
     service.status().subscribe();
     const req = httpTesting.expectOne('ui-api/iscsi/status');
@@ -51,10 +57,17 @@ describe('IscsiService', () => {
   });
 
   it('should call createTarget', () => {
-    service.createTarget('foo').subscribe();
+    service.createTarget({ target_iqn: 'foo' }).subscribe();
     const req = httpTesting.expectOne('api/iscsi/target');
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual('foo');
+    expect(req.request.body).toEqual({ target_iqn: 'foo' });
+  });
+
+  it('should call updateTarget', () => {
+    service.updateTarget('iqn.foo', { target_iqn: 'foo' }).subscribe();
+    const req = httpTesting.expectOne('api/iscsi/target/iqn.foo');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual({ target_iqn: 'foo' });
   });
 
   it('should call deleteTarget', () => {
