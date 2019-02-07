@@ -50,8 +50,8 @@ def make_request(conn, method, resource, parameters=None):
                'Date': string_date,
                'Host': conn.host+':'+str(conn.port)}
     http_conn = httplib.HTTPConnection(conn.host, conn.port)
-    # TODO set http log level from regular log level
-    # http_conn.set_debuglevel(log.getEffectiveLevel())
+    if log.getEffectiveLevel() <= 10:
+        http_conn.set_debuglevel(5)
     http_conn.request(method, resource+url_params, NO_HTTP_BODY, headers)
     response = http_conn.getresponse()
     data = response.read()

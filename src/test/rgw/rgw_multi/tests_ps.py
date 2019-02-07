@@ -405,3 +405,69 @@ def test_ps_event_fetching():
     for key in bucket.list():
         key.delete()
     zones[0].delete_bucket(bucket_name)
+
+
+def test_ps_event_acking():
+    """ test acking of some events in a subscription """
+    zones, ps_zones = init_env()
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name+TOPIC_SUFFIX
+
+    # create topic
+    topic_conf = PSTopic(ps_zones[0].conn, topic_name)
+    topic_conf.set_config()
+    # create bucket on the first of the rados zones
+    bucket = zones[0].create_bucket(bucket_name)
+    # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
+    # create notifications
+    notification_conf = PSNotification(ps_zones[0].conn, bucket_name,
+                                       topic_name)
+    _, status = notification_conf.set_config()
+    assert_equal(status/100, 2)
+    # create subscription
+    sub_conf = PSSubscription(ps_zones[0].conn, bucket_name+SUB_SUFFIX,
+                              topic_name)
+    _, status = sub_conf.set_config()
+    assert_equal(status/100, 2)
+    # get the subscription
+    result, _ = sub_conf.get_config()
+    parsed_result = json.loads(result)
+    assert_equal(parsed_result['topic'], topic_name)
+    # create objects in the bucket
+    number_of_objects = 10
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        key.set_contents_from_string('bar')
+    # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
+
+    # get the create events from the subscription
+    result, _ = sub_conf.get_events()
+    parsed_result = json.loads(result)
+    for event in parsed_result['events']:
+        log.debug('Event (before ack)  id: "' + str(event['id']) + '"')
+    assert_equal(len(parsed_result['events']), number_of_objects)
+    # ack half of the  events
+    events_to_ack = number_of_objects/2
+    for event in parsed_result['events']:
+        if events_to_ack == 0:
+            break
+        _, status = sub_conf.ack_events(event['id'])
+        assert_equal(status/100, 2)
+        events_to_ack -= 1
+
+    # verify that acked events are gone
+    result, _ = sub_conf.get_events()
+    parsed_result = json.loads(result)
+    for event in parsed_result['events']:
+        log.debug('Event (after ack) id: "' + str(event['id']) + '"')
+    assert_equal(len(parsed_result['events']), number_of_objects - number_of_objects/2)
+
+    # cleanup
+    sub_conf.del_config()
+    notification_conf.del_config()
+    topic_conf.del_config()
+    for key in bucket.list():
+        key.delete()
+    zones[0].delete_bucket(bucket_name)
