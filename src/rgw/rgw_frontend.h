@@ -14,11 +14,16 @@
 #include "rgw_civetweb.h"
 #include "rgw_civetweb_log.h"
 #include "civetweb/civetweb.h"
-
 #include "rgw_auth_registry.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
+namespace rgw::dmclock {
+  class SyncScheduler;
+  class ClientConfig;
+  class SchedulerCtx;
+}
 
 class RGWFrontendConfig {
   std::string config;
@@ -97,6 +102,9 @@ class RGWCivetWebFrontend : public RGWFrontend {
   struct mg_context* ctx;
   RGWMongooseEnv env;
 
+  std::unique_ptr<rgw::dmclock::SyncScheduler> scheduler;
+  std::unique_ptr<rgw::dmclock::ClientConfig> client_config;
+
   void set_conf_default(std::multimap<std::string, std::string>& m,
                         const std::string& key,
 			const std::string& def_val) {
@@ -105,13 +113,11 @@ class RGWCivetWebFrontend : public RGWFrontend {
     }
   }
 
+  CephContext* cct() const { return env.store->ctx(); }
 public:
   RGWCivetWebFrontend(RGWProcessEnv& env,
-                      RGWFrontendConfig* conf)
-    : conf(conf),
-      ctx(nullptr),
-      env(env) {
-  }
+                      RGWFrontendConfig *conf,
+		      rgw::dmclock::SchedulerCtx& sched_ctx);
 
   int init() override {
     return 0;

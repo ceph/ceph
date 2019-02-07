@@ -28,6 +28,10 @@
 
 extern void signal_shutdown();
 
+namespace rgw::dmclock {
+  class Scheduler;
+}
+
 struct RGWProcessEnv {
   RGWRados *store;
   RGWREST *rest;
@@ -188,7 +192,6 @@ public:
 
   void set_access_key(RGWAccessKey& key) { access_key = key; }
 };
-
 /* process stream request */
 extern int process_request(RGWRados* store,
                            RGWREST* rest,
@@ -197,6 +200,8 @@ extern int process_request(RGWRados* store,
                            const rgw_auth_registry_t& auth_registry,
                            RGWRestfulIO* client_io,
                            OpsLogSocket* olog,
+                           optional_yield y,
+                           rgw::dmclock::Scheduler *scheduler,
                            int* http_ret = nullptr);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,

@@ -128,3 +128,12 @@ target_link_libraries(unittest_rgw_iam_policy
 
 add_executable(unittest_rgw_string test_rgw_string.cc)
 add_ceph_unittest(unittest_rgw_string)
+
+# unitttest_rgw_dmclock_queue
+add_executable(unittest_rgw_dmclock_scheduler test_rgw_dmclock_scheduler.cc $<TARGET_OBJECTS:unit-main>)
+add_ceph_unittest(unittest_rgw_dmclock_scheduler)
+target_link_libraries(unittest_rgw_dmclock_scheduler rgw_a dmclock ${Boost_LIBRARIES})
+if(WITH_BOOST_CONTEXT)
+  target_compile_definitions(unittest_rgw_dmclock_scheduler PRIVATE BOOST_COROUTINES_NO_DEPRECATION_WARNING)
+  target_link_libraries(unittest_rgw_dmclock_scheduler Boost::coroutine Boost::context)
+endif()

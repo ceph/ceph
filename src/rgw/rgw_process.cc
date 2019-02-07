@@ -4,8 +4,10 @@
 #include "common/errno.h"
 #include "common/Throttle.h"
 #include "common/WorkQueue.h"
+#include "include/scope_guard.h"
 
 #include "rgw_rados.h"
+#include "rgw_dmclock_scheduler.h"
 #include "rgw_rest.h"
 #include "rgw_frontend.h"
 #include "rgw_request.h"
@@ -17,6 +19,8 @@
 #include "services/svc_zone_utils.h"
 
 #define dout_subsys ceph_subsys_rgw
+
+using rgw::dmclock::Scheduler;
 
 void RGWProcess::RGWWQ::_dump_queue()
 {
@@ -34,6 +38,22 @@ void RGWProcess::RGWWQ::_dump_queue()
     dout(20) << "req: " << hex << *iter << dec << dendl;
   }
 } /* RGWProcess::RGWWQ::_dump_queue */
+
+auto schedule_request(Scheduler *scheduler, req_state *s, RGWOp *op)
+{
+  using rgw::dmclock::SchedulerCompleter;
+  if (!scheduler)
+    return std::make_pair(0,SchedulerCompleter{});
+
+  const auto client = op->dmclock_client();
+  const auto cost = op->dmclock_cost();
+  ldpp_dout(op,10) << "scheduling with dmclock client=" << static_cast<int>(client)
+		   << " cost=" << cost << dendl;
+  return scheduler->schedule_request(client, {},
+                                     req_state::Clock::to_double(s->time),
+                                     cost,
+                                     s->yield);
+}
 
 
 int rgw_process_authenticated(RGWHandler_REST * const handler,
@@ -127,6 +147,8 @@ int process_request(RGWRados* const store,
                     const rgw_auth_registry_t& auth_registry,
                     RGWRestfulIO* const client_io,
                     OpsLogSocket* const olog,
+                    optional_yield yield,
+		    rgw::dmclock::Scheduler *scheduler,
                     int* http_ret)
 {
   int ret = client_io->init(g_ceph_context);
@@ -157,6 +179,7 @@ int process_request(RGWRados* const store,
   s->req_id = store->svc.zone_utils->unique_id(req->id);
   s->trans_id = store->svc.zone_utils->unique_trans_id(req->id);
   s->host_id = store->host_id;
+  s->yield = yield;
 
   ldpp_dout(s, 2) << "initializing for trans_id = " << s->trans_id << dendl;
 
@@ -168,6 +191,7 @@ int process_request(RGWRados* const store,
                                                auth_registry,
                                                frontend_prefix,
                                                client_io, &mgr, &init_error);
+  rgw::dmclock::SchedulerCompleter c;
   if (init_error != 0) {
     abort_early(s, nullptr, init_error, nullptr);
     goto done;
@@ -182,7 +206,15 @@ int process_request(RGWRados* const store,
     abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED, handler);
     goto done;
   }
-
+  std::tie(ret,c) = schedule_request(scheduler, s, op);
+  if (ret < 0) {
+    if (ret == -EAGAIN) {
+      ret = -ERR_RATE_LIMITED;
+    }
+    ldpp_dout(op,0) << "Scheduling request failed with " << ret << dendl;
+    abort_early(s, op, ret, handler);
+    goto done;
+  }
   req->op = op;
   dout(10) << "op=" << typeid(*op).name() << dendl;
 
@@ -192,7 +224,7 @@ int process_request(RGWRados* const store,
   ret = op->verify_requester(auth_registry);
   if (ret < 0) {
     dout(10) << "failed to authorize request" << dendl;
-    abort_early(s, NULL, ret, handler);
+    abort_early(s, op, ret, handler);
     goto done;
   }
 

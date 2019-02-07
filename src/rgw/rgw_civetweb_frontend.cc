@@ -8,8 +8,43 @@
 
 #include "rgw_frontend.h"
 #include "rgw_client_io_filters.h"
+#include "rgw_dmclock_sync_scheduler.h"
 
 #define dout_subsys ceph_subsys_rgw
+
+namespace dmc = rgw::dmclock;
+
+RGWCivetWebFrontend::RGWCivetWebFrontend(RGWProcessEnv& env,
+					 RGWFrontendConfig *conf,
+					 dmc::SchedulerCtx& sched_ctx)
+  : conf(conf),
+    ctx(nullptr),
+    env(env)
+{
+
+  auto sched_t = dmc::get_scheduler_t(cct());
+  switch(sched_t){
+  case dmc::scheduler_t::none: [[fallthrough]];
+  case dmc::scheduler_t::throttler:
+    break;
+  case dmc::scheduler_t::dmclock:
+    // TODO: keep track of server ready state and use that here civetweb
+    // internally tracks in the ctx the threads used and free, while it is
+    // expected with the current implementation that the threads waiting on the
+    // queue would still show up in the "used" queue, it might be a useful thing
+    // to make decisions on in the future. Also while reconfiguring we should
+    // probably set this to false
+    auto server_ready_f = []() -> bool { return true; };
+
+    scheduler.reset(new dmc::SyncScheduler(cct(),
+					   std::ref(sched_ctx.get_dmc_client_counters()),
+					   *sched_ctx.get_dmc_client_config(),
+					   server_ready_f,
+					   std::ref(dmc::SyncScheduler::handle_request_cb),
+					   dmc::AtLimit::Reject));
+  }
+
+}
 
 static int civetweb_callback(struct mg_connection* conn)
 {
@@ -32,8 +67,10 @@ int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
 
   RGWRequest req(env.store->get_new_req_id());
   int http_ret = 0;
+  //assert (scheduler != nullptr);
   int ret = process_request(env.store, env.rest, &req, env.uri_prefix,
-                            *env.auth_registry, &client_io, env.olog, &http_ret);
+                            *env.auth_registry, &client_io, env.olog,
+                            null_yield, scheduler.get() ,&http_ret);
   if (ret < 0) {
     /* We don't really care about return code. */
     dout(20) << "process_request() returned " << ret << dendl;

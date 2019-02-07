@@ -118,6 +118,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_INTERNAL_ERROR, {500, "InternalError" }},
     { ERR_NOT_IMPLEMENTED, {501, "NotImplemented" }},
     { ERR_SERVICE_UNAVAILABLE, {503, "ServiceUnavailable"}},
+    { ERR_RATE_LIMITED, {503, "SlowDown"}},
     { ERR_ZERO_IN_URL, {400, "InvalidRequest" }},
 });
 
@@ -136,6 +137,7 @@ rgw_http_errors rgw_http_swift_errors({
      * procedures also for ERR_ZERO_IN_URL. This make a problem as the validation
      * is performed very early, even before setting the req_state::proto_flags. */
     { ERR_ZERO_IN_URL, {412, "Invalid UTF8 or contains NULL"}},
+    { ERR_RATE_LIMITED, {498, "Rate Limited"}},
 });
 
 rgw_http_errors rgw_http_sts_errors({

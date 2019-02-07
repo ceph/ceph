@@ -31,6 +31,8 @@ static inline int rgw_http_error_to_errno(int http_err)
         return -ENOENT;
     case 409:
         return -ENOTEMPTY;
+    case 503:
+        return -EBUSY;
     default:
         return -EIO;
   }
