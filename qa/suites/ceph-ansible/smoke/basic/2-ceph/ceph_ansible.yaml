@@ -3,7 +3,7 @@ meta:
 
 overrides:
    ceph_ansible:
-     ansible-version: "2.6"
+     ansible-version: "2.7"
      vars:
         ceph_conf_overrides:
           global:
