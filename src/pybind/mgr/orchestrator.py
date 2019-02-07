@@ -56,8 +56,6 @@ class ReadCompletion(_Completion):
     ``Orchestrator`` implementations should inherit from this
     class to implement their own handles to operations in progress, and
     return an instance of their subclass from calls into methods.
-
-    Read operations are
     """
 
     def __init__(self):
@@ -245,9 +243,10 @@ class Orchestrator(object):
         Perform an action (start/stop/reload) on a service.
 
         Either service_name or service_id must be specified:
-        - If using service_name, perform the action on that entire logical
+
+        * If using service_name, perform the action on that entire logical
           service (i.e. all daemons providing that named service).
-        - If using service_id, perform the action on a single specific daemon
+        * If using service_id, perform the action on a single specific daemon
           instance.
 
         :param action: one of "start", "stop", "reload"
