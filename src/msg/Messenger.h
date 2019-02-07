@@ -159,12 +159,20 @@ public:
    * @return A const reference to the address this Messenger
    * currently believes to be its own.
    */
-  entity_addr_t get_myaddr() {
-    return my_addrs->front();
-  }
   const entity_addrvec_t& get_myaddrs() {
     return *my_addrs;
   }
+
+  /**
+   * get legacy addr for myself, suitable for protocol v1
+   *
+   * Note that myaddrs might be a proper addrvec with v1 in it, or it might be an
+   * ANY addr (if i am a pure client).
+   */
+  entity_addr_t get_myaddr_legacy() {
+    return my_addrs->as_legacy_addr();
+  }
+
 
   /**
    * set messenger's instance

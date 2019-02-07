@@ -47,7 +47,8 @@ private:
 
 public:
   enum class Tag : uint32_t {
-    AUTH_REQUEST = 1,
+    HELLO = 1,
+    AUTH_REQUEST,
     AUTH_BAD_METHOD,
     AUTH_BAD_AUTH,
     AUTH_MORE,
@@ -81,7 +82,6 @@ private:
   std::shared_ptr<AuthSessionHandler> session_security;
   std::unique_ptr<AuthAuthorizerChallenge> authorizer_challenge;
   uint64_t auth_flags;
-  uint64_t connection_features;
   uint64_t cookie;
   uint64_t global_seq;
   uint64_t connect_seq;
@@ -142,12 +142,14 @@ private:
   void handle_message_ack(uint64_t seq);
 
   CONTINUATION_DECL(ProtocolV2, _wait_for_peer_banner);
-  READ_HANDLER_CONTINUATION_DECL(ProtocolV2,
-                                 _banner_exchange_handle_peer_banner);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, _handle_peer_banner);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, _handle_peer_banner_payload);
 
   Ct<ProtocolV2> *_banner_exchange(Ct<ProtocolV2> *callback);
   Ct<ProtocolV2> *_wait_for_peer_banner();
-  Ct<ProtocolV2> *_banner_exchange_handle_peer_banner(char *buffer, int r);
+  Ct<ProtocolV2> *_handle_peer_banner(char *buffer, int r);
+  Ct<ProtocolV2> *_handle_peer_banner_payload(char *buffer, int r);
+  Ct<ProtocolV2> *handle_hello(char *payload, uint32_t length);
 
   CONTINUATION_DECL(ProtocolV2, read_frame);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_length_and_tag);
@@ -191,6 +193,8 @@ private:
   Ct<ProtocolV2> *handle_message_ack(char *payload, uint32_t length);
 
 public:
+  uint64_t connection_features;
+
   ProtocolV2(AsyncConnection *connection);
   virtual ~ProtocolV2();
 

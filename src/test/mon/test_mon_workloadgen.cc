@@ -258,7 +258,7 @@ class ClientStub : public TestStub
     messenger->set_default_policy(
 	Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX));
     dout(10) << "ClientStub::" << __func__ << " starting messenger at "
-	    << messenger->get_myaddr() << dendl;
+	    << messenger->get_myaddrs() << dendl;
 
     objecter.reset(new Objecter(cct, messenger.get(), &monc, NULL, 0, 0));
     ceph_assert(objecter.get() != NULL);
@@ -707,7 +707,7 @@ class OSDStub : public TestStub
     for (; num_entries > 0; --num_entries) {
       LogEntry e;
       e.rank = messenger->get_myname();
-      e.addrs.v.push_back(messenger->get_myaddr());
+      e.addrs = messenger->get_myaddrs();
       e.stamp = now;
       e.seq = seq++;
       e.prio = CLOG_DEBUG;

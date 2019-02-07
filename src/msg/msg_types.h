@@ -274,6 +274,7 @@ struct entity_addr_t {
   void set_type(uint32_t t) { type = t; }
   bool is_legacy() const { return type == TYPE_LEGACY; }
   bool is_msgr2() const { return type == TYPE_MSGR2; }
+  bool is_any() const { return type == TYPE_ANY; }
 
   __u32 get_nonce() const { return nonce; }
   void set_nonce(__u32 n) { nonce = n; }
@@ -586,6 +587,22 @@ struct entity_addrvec_t {
       }
     }
     return entity_addr_t();
+  }
+  entity_addr_t as_legacy_addr() const {
+    for (auto& a : v) {
+      if (a.is_legacy()) {
+	return a;
+      }
+      if (a.is_any()) {
+	auto b = a;
+	b.set_type(entity_addr_t::TYPE_LEGACY);
+	return b;
+      }
+    }
+    // hrm... lie!
+    auto a = front();
+    a.set_type(entity_addr_t::TYPE_LEGACY);
+    return a;
   }
   entity_addr_t front() const {
     if (!v.empty()) {

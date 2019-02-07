@@ -30,7 +30,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 static ostream& _prefix(std::ostream *_dout, SimpleMessenger *msgr) {
-  return *_dout << "-- " << msgr->get_myaddr() << " ";
+  return *_dout << "-- " << msgr->get_myaddr_legacy() << " ";
 }
 
 
@@ -70,7 +70,7 @@ SimpleMessenger::~SimpleMessenger()
 
 void SimpleMessenger::ready()
 {
-  ldout(cct,10) << "ready " << get_myaddr() << dendl;
+  ldout(cct,10) << "ready " << get_myaddr_legacy() << dendl;
   dispatch_queue.start();
 
   lock.Lock();
@@ -82,7 +82,7 @@ void SimpleMessenger::ready()
 
 int SimpleMessenger::shutdown()
 {
-  ldout(cct,10) << "shutdown " << get_myaddr() << dendl;
+  ldout(cct,10) << "shutdown " << get_myaddr_legacy() << dendl;
   mark_down_all();
 
   // break ref cycles on the loopback connection
@@ -150,7 +150,7 @@ int SimpleMessenger::_send_message(Message *m, Connection *con)
 bool SimpleMessenger::set_addr_unknowns(const entity_addrvec_t &addrs)
 {
   bool ret = false;
-  auto addr = addrs.legacy_addr();
+  auto addr = addrs.front();
   ceph_assert(my_addr == my_addrs->front());
   if (my_addr.is_blank_ip()) {
     ldout(cct,1) << __func__ << " " << addr << dendl;
@@ -740,9 +740,15 @@ void SimpleMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
     return;
 
   lock.Lock();
-  if (need_addr) {
+  if (need_addr && my_addr.is_blank_ip()) {
     entity_addr_t t = peer_addr_for_me;
-    t.set_port(my_addr.get_port());
+    if (!did_bind) {
+      t.set_type(entity_addr_t::TYPE_ANY);
+      t.set_port(0);
+    } else {
+      t.set_type(entity_addr_t::TYPE_LEGACY);
+      t.set_port(my_addr.get_port());
+    }
     t.set_nonce(my_addr.get_nonce());
     ANNOTATE_BENIGN_RACE_SIZED(&my_addr, sizeof(my_addr),
                                "SimpleMessenger learned addr");
