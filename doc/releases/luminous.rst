@@ -23,6 +23,12 @@ Notable Changes
   stale-instances list` and `reshard stale-instances rm` should do the necessary
   cleanup.
 
+* CVE-2018-14662: mon: limit caps allowed to access the config store
+
+* CVE-2018-16846: rgw: enforce bounds on max-keys/max-uploads/max-parts (`issue#35994 <http://tracker.ceph.com/issues/35994>`)
+
+* CVE-2018-16889: rgw: sanitize customer encryption keys from log output in v4 auth (`issue#37847 <http://tracker.ceph.com/issues/37847>`)
+
 Changelog
 ---------
 
