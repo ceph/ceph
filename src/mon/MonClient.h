@@ -121,6 +121,7 @@ private:
   State state = State::NONE;
   ConnectionRef con;
   int auth_method = -1;
+  utime_t auth_start;
 
   std::unique_ptr<AuthClientHandler> auth;
   uint64_t global_id;

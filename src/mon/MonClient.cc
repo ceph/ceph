@@ -1475,6 +1475,8 @@ bool MonConnection::have_session() const
 void MonConnection::start(epoch_t epoch,
 			  const EntityName& entity_name)
 {
+  auth_start = ceph_clock_now();
+
   if (con->get_peer_addr().is_msgr2()) {
     ldout(cct, 10) << __func__ << " opening mon connection" << dendl;
     state = State::AUTHENTICATING;
@@ -1594,6 +1596,7 @@ int MonConnection::handle_auth_done(
   if (auth_err >= 0) {
     state = State::HAVE_SESSION;
   }
+  con->set_last_keepalive_ack(auth_start);
   return auth_err;
 }
 
