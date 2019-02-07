@@ -421,6 +421,12 @@ void AES128GCM_OnWireTxHandler::authenticated_encrypt_update(
     throw std::runtime_error("EVP_EncryptUpdate failed");
   }
   ceph_assert_always(update_len == plaintext.length());
+
+  ldout(cct, 15) << __func__
+		 << " plaintext.length()=" << plaintext.length()
+		 << " buffer.length()=" << buffer.length()
+		 << " update_len=" << update_len
+		 << dendl;
 }
 
 ceph::bufferlist AES128GCM_OnWireTxHandler::authenticated_encrypt_final()
@@ -501,9 +507,9 @@ public:
 
 void AES128GCM_OnWireRxHandler::reset_rx_handler()
 {
-  if(1 != EVP_EncryptInit_ex(ectx.get(), nullptr, nullptr, nullptr,
-      reinterpret_cast<const unsigned char*>(&nonce))) {
-    throw std::runtime_error("EVP_EncryptInit_ex failed");
+  if(1 != EVP_DecryptInit_ex(ectx.get(), nullptr, nullptr, nullptr,
+	reinterpret_cast<const unsigned char*>(&nonce))) {
+    throw std::runtime_error("EVP_DecryptInit_ex failed");
   }
   nonce++;
 }
@@ -513,7 +519,7 @@ ceph::bufferlist AES128GCM_OnWireRxHandler::authenticated_decrypt_update(
   std::uint32_t alignment)
 {
   ceph_assert(ciphertext.length() > 0);
-  ceph_assert(ciphertext.length() % AESGCM_BLOCK_LEN == 0);
+  //ceph_assert(ciphertext.length() % AESGCM_BLOCK_LEN == 0);
 
   // TODO: consider in-place transformata
   //auto plaintext = ceph::buffer::ptr_node::create_aligned(
@@ -552,15 +558,16 @@ ceph::bufferlist AES128GCM_OnWireRxHandler::authenticated_decrypt_update_final(
   std::array<char, AESGCM_TAG_LEN> auth_tag;
   ciphertext_and_tag.copy(tag_off, AESGCM_TAG_LEN, auth_tag.data());
 
+  // drop the auth tag. Maybe we could extend bl if it needs to be faster
+  ceph::bufferlist ciphertext;
+  ciphertext_and_tag.splice(0, tag_off, &ciphertext);
+  auto plainbl = \
+    authenticated_decrypt_update(std::move(ciphertext), alignment);
+
   if (1 != EVP_CIPHER_CTX_ctrl(ectx.get(), EVP_CTRL_GCM_SET_TAG,
 	AESGCM_TAG_LEN, auth_tag.data())) {
     throw std::runtime_error("EVP_CIPHER_CTX_ctrl failed");
   }
-
-  // drop the auth tag
-  ciphertext_and_tag.splice(0, tag_off);
-  auto plainbl = \
-    authenticated_decrypt_update(std::move(ciphertext_and_tag), alignment);
 
   // I expect that for AES-GCM 0 bytes will be appended
   int final_len = 0;
