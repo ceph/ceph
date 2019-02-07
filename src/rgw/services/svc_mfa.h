@@ -28,10 +28,6 @@ class RGWSI_MFA : public RGWServiceInstance
   RGWSI_Zone *zone_svc{nullptr};
   RGWSI_RADOS *rados_svc{nullptr};
 
-  string get_mfa_oid(const rgw_user& user) {
-    return string("user:") + user.to_str();
-  }
-
   int get_mfa_obj(const rgw_user& user, std::optional<RGWSI_RADOS::Obj> *obj);
   int get_mfa_ref(const rgw_user& user, rgw_rados_ref *ref);
 
@@ -45,6 +41,10 @@ public:
   void init(RGWSI_Zone *_zone_svc, RGWSI_RADOS *_rados_svc) {
     rados_svc = _rados_svc;
     zone_svc = _zone_svc;
+  }
+
+  string get_mfa_oid(const rgw_user& user) {
+    return string("user:") + user.to_str();
   }
 
   int check_mfa(const rgw_user& user, const string& otp_id, const string& pin, optional_yield y);
