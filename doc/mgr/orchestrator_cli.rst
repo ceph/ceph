@@ -55,7 +55,6 @@ You can select the orchestrator module to use with the ``set backend`` command::
 
 For example, to enable the Rook orchestrator module and use it with the CLI::
 
-    ceph mgr module enable orchestrator_cli
     ceph mgr module enable rook
     ceph orchestrator set backend rook
 
