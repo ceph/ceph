@@ -495,7 +495,7 @@ void CDentry::decode_lock_state(int type, const bufferlist& bl)
 }
 
 
-ClientLease *CDentry::add_client_lease(client_t c, Session *session) 
+ClientLease *CDentry::add_client_lease(client_t c, const Session::ref& session) 
 {
   ClientLease *l;
   if (client_lease_map.count(c))

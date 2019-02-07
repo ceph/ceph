@@ -18,6 +18,7 @@
 
 // MutationImpl
 
+
 void MutationImpl::pin(MDSCacheObject *o)
 {
   if (pins.count(o) == 0) {
@@ -223,26 +224,33 @@ void MutationImpl::_dump_op_descriptor_unlocked(ostream& stream) const
 
 // MDRequestImpl
 
+MDRequestImpl::MDRequestImpl(const Params* params, OpTracker *tracker)
+  : MutationImpl(tracker, params->initiated, params->reqid, params->attempt, params->slave_to),
+    item_session_request(this),
+    client_request(params->client_req),
+    internal_op(params->internal_op)
+{
+}
+
 MDRequestImpl::~MDRequestImpl()
 {
-  delete _more;
 }
 
 MDRequestImpl::More* MDRequestImpl::more()
 { 
   if (!_more)
-    _more = new More();
-  return _more;
+    _more = std::make_unique<More>();
+  return _more.get();
 }
 
 bool MDRequestImpl::has_more() const
 {
-  return _more != nullptr;
+  return !!_more;
 }
 
 bool MDRequestImpl::has_witnesses()
 {
-  return (_more != nullptr) && (!_more->witnessed.empty());
+  return _more && (!_more->witnessed.empty());
 }
 
 bool MDRequestImpl::slave_did_prepare()
@@ -465,4 +473,12 @@ void MDRequestImpl::_dump_op_descriptor_unlocked(ostream& stream) const
     // FIXME
     stream << "rejoin:" << reqid;
   }
+}
+
+MDRequestImpl::More::More()
+{
+}
+
+MDRequestImpl::More::~More()
+{
 }

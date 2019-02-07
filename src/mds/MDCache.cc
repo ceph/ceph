@@ -1944,7 +1944,7 @@ void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct, bool qu
     mds->server->create_quota_realm(in);
 
   for (auto &p : in->client_caps) {
-    Session *session = mds->get_session(p.first);
+    auto&& session = mds->get_session(p.first);
     if (!session ||
 	!session->get_connection() ||
         !session->get_connection()->has_feature(CEPH_FEATURE_MDS_QUOTA))
@@ -3155,7 +3155,7 @@ void MDCache::handle_resolve(const MMDSResolve::const_ref &m)
 	    im.issue_seq = 1;
 	    im.mseq = q->second.mseq;
 
-	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
+	    auto&& session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
 	    if (session)
 	      rejoin_client_map.emplace(q->first, session->info.inst);
 	  }
@@ -3932,36 +3932,34 @@ void MDCache::rejoin_send_rejoins()
   }
 
   if (mds->is_rejoin()) {
-    map<client_t, pair<Session*, set<mds_rank_t> > > client_exports;
+    map<client_t, pair<Session::ref, set<mds_rank_t> > > client_exports;
     for (auto& p : cap_exports) {
       mds_rank_t target = p.second.first;
       if (rejoins.count(target) == 0)
 	continue;
       for (auto q = p.second.second.begin(); q != p.second.second.end(); ) {
-	Session *session = nullptr;
-	auto it = client_exports.find(q->first);
-	if (it != client_exports.end()) {
-	  session = it->second.first;
-	  if (session)
-	    it->second.second.insert(target);
-	} else {
-	  session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
-	  auto& r = client_exports[q->first];
-	  r.first = session;
-	  if (session)
-	    r.second.insert(target);
-	}
-	if (session) {
-	  ++q;
-	} else {
-	  // remove reconnect with no session
-	  p.second.second.erase(q++);
-	}
+        const auto& client = q->first;
+        auto it = client_exports.find(client);
+        if (it == client_exports.end()) {
+          auto&& session = mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
+          if (session) {
+            auto em = client_exports.emplace(std::piecewise_construct, std::forward_as_tuple(client), std::forward_as_tuple());
+            ceph_assert(em.second); /* inserted */
+            it = em.first;
+            it->second.first = session;
+          } else {
+            // remove reconnect with no session
+            q = p.second.second.erase(q);
+            continue;
+          }
+        }
+        it->second.second.insert(target);
+        ++q;
       }
       rejoins[target]->cap_exports[p.first] = p.second.second;
     }
     for (auto& p : client_exports) {
-      Session *session = p.second.first;
+      auto& session = p.second.first;
       for (auto& q : p.second.second) {
 	auto rejoin =  rejoins[q];
 	rejoin->client_map[p.first] = session->info.inst;
@@ -5064,7 +5062,7 @@ void MDCache::handle_cache_rejoin_ack(const MMDSCacheRejoin::const_ref &ack)
       ceph_assert(r != ex.second.end());
 
       dout(10) << " exporting caps for client." << q->first << " ino " << p->first << dendl;
-      Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
+      auto&& session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
       if (!session) {
 	dout(10) << " no session for client." << p->first << dendl;
 	ex.second.erase(r);
@@ -5246,7 +5244,7 @@ void MDCache::rejoin_open_ino_finish(inodeno_t ino, int ret)
 
 class C_MDC_RejoinSessionsOpened : public MDCacheLogContext {
 public:
-  map<client_t,pair<Session*,uint64_t> > session_map;
+  map<client_t,pair<Session::ref,uint64_t> > session_map;
   C_MDC_RejoinSessionsOpened(MDCache *c) : MDCacheLogContext(c) {}
   void finish(int r) override {
     ceph_assert(r == 0);
@@ -5254,7 +5252,7 @@ public:
   }
 };
 
-void MDCache::rejoin_open_sessions_finish(map<client_t,pair<Session*,uint64_t> >& session_map)
+void MDCache::rejoin_open_sessions_finish(map<client_t,pair<Session::ref,uint64_t> >& session_map)
 {
   dout(10) << "rejoin_open_sessions_finish" << dendl;
   mds->server->finish_force_open_sessions(session_map);
@@ -5348,7 +5346,7 @@ bool MDCache::process_imported_caps()
 	if (r == rejoin_session_map.end())
 	  continue;
 
-	Session *session = r->second.first;
+	auto session = r->second.first;
 	Capability *cap = in->get_client_cap(q->first);
 	if (!cap) {
 	  cap = in->add_client_cap(q->first, session);
@@ -5381,7 +5379,7 @@ bool MDCache::process_imported_caps()
       }
       ceph_assert(in->is_auth());
       for (auto q = p->second.begin(); q != p->second.end(); ++q) {
-	Session *session;
+	Session::ref session;
 	{
 	  auto r = rejoin_session_map.find(q->first);
 	  session = (r != rejoin_session_map.end() ? r->second.first : nullptr);
@@ -5553,7 +5551,7 @@ void MDCache::send_snaps(map<client_t,MClientSnap::ref>& splits)
   dout(10) << "send_snaps" << dendl;
   
   for (auto &p : splits) {
-    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p.first.v));
+    auto&& session = mds->sessionmap.get_session(entity_name_t::CLIENT(p.first.v));
     if (session) {
       dout(10) << " client." << p.first
 	       << " split " << p.second->head.split
@@ -5625,7 +5623,7 @@ Capability* MDCache::rejoin_import_cap(CInode *in, client_t client, const cap_re
 {
   dout(10) << "rejoin_import_cap for client." << client << " from mds." << frommds
 	   << " on " << *in << dendl;
-  Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
+  auto&& session = mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
   if (!session) {
     dout(10) << " no session for client." << client << dendl;
     return NULL;
@@ -5651,7 +5649,7 @@ void MDCache::export_remaining_imported_caps()
   for (auto p = cap_imports.begin(); p != cap_imports.end(); ++p) {
     warn_str << " ino " << p->first << "\n";
     for (auto q = p->second.begin(); q != p->second.end(); ++q) {
-      Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
+      auto&& session = mds->sessionmap.get_session(entity_name_t::CLIENT(q->first.v));
       if (session) {
 	// mark client caps stale.
 	auto stale = MClientCaps::create(CEPH_CAP_OP_EXPORT, p->first, 0, 0, 0, mds->get_osd_epoch_barrier());
@@ -5677,7 +5675,7 @@ void MDCache::export_remaining_imported_caps()
   }
 }
 
-Capability* MDCache::try_reconnect_cap(CInode *in, Session *session)
+Capability* MDCache::try_reconnect_cap(CInode *in, const Session::ref& session)
 {
   client_t client = session->info.get_client();
   Capability *cap = nullptr;
@@ -5719,7 +5717,7 @@ Capability* MDCache::try_reconnect_cap(CInode *in, Session *session)
 // -------
 // cap imports and delayed snap parent opens
 
-void MDCache::do_cap_import(Session *session, CInode *in, Capability *cap,
+void MDCache::do_cap_import(const Session::ref& session, CInode *in, Capability *cap,
 			    uint64_t p_cap_id, ceph_seq_t p_seq, ceph_seq_t p_mseq,
 			    int peer, int p_flags)
 {
@@ -9624,7 +9622,7 @@ void MDCache::notify_global_snaprealm_update(int snap_op)
 {
   if (snap_op != CEPH_SNAP_OP_DESTROY)
     snap_op = CEPH_SNAP_OP_UPDATE;
-  set<Session*> sessions;
+  set<Session::ref> sessions;
   mds->sessionmap.get_client_session_set(sessions);
   for (auto &session : sessions) {
     if (!session->is_open() && !session->is_stale())

@@ -2994,7 +2994,7 @@ void CInode::adjust_num_caps_wanted(int d)
   ceph_assert(num_caps_wanted >= 0);
 }
 
-Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm *conrealm)
+Capability *CInode::add_client_cap(client_t client, const Session::ref& session, SnapRealm *conrealm)
 {
   ceph_assert(last == CEPH_NOSNAP);
   if (client_caps.empty()) {
@@ -3074,7 +3074,7 @@ void CInode::move_to_realm(SnapRealm *realm)
   containing_realm = realm;
 }
 
-Capability *CInode::reconnect_cap(client_t client, const cap_reconnect_t& icr, Session *session)
+Capability *CInode::reconnect_cap(client_t client, const cap_reconnect_t& icr, const Session::ref& session)
 {
   Capability *cap = get_client_cap(client);
   if (cap) {
@@ -3162,7 +3162,7 @@ int CInode::get_xlocker_mask(client_t client) const
     (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift());
 }
 
-int CInode::get_caps_allowed_for_client(Session *session, mempool_inode *file_i) const
+int CInode::get_caps_allowed_for_client(const Session::ref& session, mempool_inode *file_i) const
 {
   client_t client = session->get_client();
   int allowed;
@@ -3280,7 +3280,7 @@ void CInode::replicate_relax_locks()
 
 // =============================================
 
-int CInode::encode_inodestat(bufferlist& bl, Session *session,
+int CInode::encode_inodestat(bufferlist& bl, const Session::ref& session,
 			     SnapRealm *dir_realm,
 			     snapid_t snapid,
 			     unsigned max_bytes,

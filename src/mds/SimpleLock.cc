@@ -15,6 +15,7 @@
 
 #include "SimpleLock.h"
 #include "Mutation.h"
+#include "SessionMap.h"
 
 void SimpleLock::dump(Formatter *f) const {
   ceph_assert(f != NULL);

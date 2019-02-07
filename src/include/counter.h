@@ -20,6 +20,17 @@
 template <typename T>
 class Counter {
 public:
+  static uint64_t count() {
+    return _count();
+  }
+  static uint64_t increments() {
+    return _increments();
+  }
+  static uint64_t decrements() {
+    return increments()-count();
+  }
+
+protected:
   Counter() {
     _count()++;
     _increments()++;
@@ -29,17 +40,8 @@ public:
     _increments()++;
   }
   Counter(Counter &&rhs) {}
-  ~Counter() {
+  virtual ~Counter() {
     _count()--;
-  }
-  static uint64_t count() {
-    return _count();
-  }
-  static uint64_t increments() {
-    return _increments();
-  }
-  static uint64_t decrements() {
-    return increments()-count();
   }
 
 private:

@@ -36,6 +36,7 @@
 #include "PurgeQueue.h"
 #include "Server.h"
 #include "osdc/Journaler.h"
+#include "SessionRef.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
 // benefit of those including this header and using MDSRank::logger
@@ -195,10 +196,10 @@ class MDSRank {
     MDSTableServer *get_table_server(int t);
 
     SessionMap   sessionmap;
-    Session *get_session(client_t client) {
+    const SessionRef& get_session(client_t client) {
       return sessionmap.get_session(entity_name_t::CLIENT(client.v));
     }
-    Session *get_session(const Message::const_ref &m);
+    SessionRef get_session(const Message::const_ref &m);
 
     PerfCounters       *logger, *mlogger;
     OpTracker    op_tracker;
@@ -390,9 +391,9 @@ class MDSRank {
     void send_message_mds(const Message::ref& m, mds_rank_t mds);
     void forward_message_mds(const MClientRequest::const_ref& req, mds_rank_t mds);
     void send_message_client_counted(const Message::ref& m, client_t client);
-    void send_message_client_counted(const Message::ref& m, Session* session);
+    void send_message_client_counted(const Message::ref& m, const SessionRef& session);
     void send_message_client_counted(const Message::ref& m, const ConnectionRef& connection);
-    void send_message_client(const Message::ref& m, Session* session);
+    void send_message_client(const Message::ref& m, const SessionRef& session);
     void send_message(const Message::ref& m, const ConnectionRef& c);
 
     void wait_for_active_peer(mds_rank_t who, MDSContext *c) { 

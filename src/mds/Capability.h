@@ -23,6 +23,7 @@
 
 #include "common/config.h"
 
+#include "SessionRef.h"
 #include "mdstypes.h"
 
 
@@ -61,7 +62,6 @@
  */
 
 class CInode;
-class Session;
 
 namespace ceph {
   class Formatter;
@@ -116,10 +116,10 @@ public:
   const static unsigned STATE_NEEDSNAPFLUSH	= (1<<3);
   const static unsigned STATE_CLIENTWRITEABLE	= (1<<4);
 
-  Capability(CInode *i=nullptr, Session *s=nullptr, uint64_t id=0);
+  Capability(CInode *i=nullptr, SessionRef s=nullptr, uint64_t id=0);
   Capability(const Capability& other) = delete;
-
   const Capability& operator=(const Capability& other) = delete;
+  ~Capability() override;
 
   int pending() const {
     return is_valid() ? _pending : (_pending & CEPH_CAP_PIN);
@@ -263,7 +263,7 @@ public:
   }
 
   CInode *get_inode() const { return inode; }
-  Session *get_session() const { return session; }
+  const SessionRef& get_session() const { return session; }
   client_t get_client() const;
 
   // caps this client wants to hold
@@ -335,11 +335,11 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<Capability*>& ls);
   
-  snapid_t client_follows;
-  version_t client_xattr_version;
-  version_t client_inline_version;
-  int64_t last_rbytes;
-  int64_t last_rsize;
+  snapid_t client_follows = 0;
+  version_t client_xattr_version = 0;
+  version_t client_inline_version = 0;
+  int64_t last_rbytes = 0;
+  int64_t last_rsize = 0;
 
   xlist<Capability*>::item item_session_caps;
   xlist<Capability*>::item item_snaprealm_caps;
@@ -348,29 +348,29 @@ public:
 
 private:
   CInode *inode;
-  Session *session;
+  SessionRef session;
 
   uint64_t cap_id;
   uint32_t cap_gen;
 
-  __u32 _wanted;     // what the client wants (ideally)
+  __u32 _wanted = 0;     // what the client wants (ideally)
 
   utime_t last_issue_stamp;
   utime_t last_revoke_stamp;
-  unsigned num_revoke_warnings;
+  unsigned num_revoke_warnings = 0;
 
   // track in-flight caps --------------
   //  - add new caps to _pending
   //  - track revocations in _revokes list
-  __u32 _pending, _issued;
+  __u32 _pending = 0, _issued = 0;
   mempool::mds_co::list<revoke_info> _revokes;
 
-  ceph_seq_t last_sent;
-  ceph_seq_t last_issue;
-  ceph_seq_t mseq;
+  ceph_seq_t last_sent = 0;
+  ceph_seq_t last_issue = 0;
+  ceph_seq_t mseq = 0;
 
-  int suppress;
-  unsigned state;
+  int suppress = 0;
+  unsigned state = 0;
 
   void calc_issued() {
     _issued = _pending;

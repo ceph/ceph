@@ -142,22 +142,18 @@ void Capability::revoke_info::generate_test_instances(std::list<Capability::revo
 /*
  * Capability
  */
-Capability::Capability(CInode *i, Session *s, uint64_t id) :
-  client_follows(0),
-  client_xattr_version(0), client_inline_version(0),
-  last_rbytes(0), last_rsize(0),
+Capability::Capability(CInode *i, Session::ref s, uint64_t id) :
   item_session_caps(this), item_snaprealm_caps(this),
   item_revoking_caps(this), item_client_revoking_caps(this),
-  inode(i), session(s),
-  cap_id(id), _wanted(0), num_revoke_warnings(0),
-  _pending(0), _issued(0), last_sent(0), last_issue(0), mseq(0),
-  suppress(0), state(0)
+  inode(i), session(std::move(s)), cap_id(id)
 {
   if (session) {
     session->touch_cap_bottom(this);
     cap_gen = session->get_cap_gen();
   }
 }
+
+Capability::~Capability() {}
 
 client_t Capability::get_client() const
 {

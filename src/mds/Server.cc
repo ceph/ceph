@@ -210,7 +210,7 @@ void Server::dispatch(const Message::const_ref &m)
   if (m->get_type() == CEPH_MSG_CLIENT_REQUEST && !mds->is_active()) {
     const auto &req = MClientRequest::ref_cast(m);
     if (mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
-      Session *session = mds->get_session(req);
+      auto&& session = mds->get_session(req);
       if (!session || session->is_closed()) {
 	dout(5) << "session is closed, dropping " << req->get_reqid() << dendl;
 	return;
@@ -282,7 +282,7 @@ void Server::dispatch(const Message::const_ref &m)
 // SESSION management
 
 class C_MDS_session_finish : public ServerLogContext {
-  Session *session;
+  Session::ref session;
   uint64_t state_seq;
   bool open;
   version_t cmapv;
@@ -290,10 +290,10 @@ class C_MDS_session_finish : public ServerLogContext {
   version_t inotablev;
   Context *fin;
 public:
-  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = NULL) :
-    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
-  C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv, Context *fin_ = NULL) :
-    ServerLogContext(srv), session(se), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) { }
+  C_MDS_session_finish(Server *srv, Session::ref se, uint64_t sseq, bool s, version_t mv, Context *fin_ = NULL) :
+    ServerLogContext(srv), session(std::move(se)), state_seq(sseq), open(s), cmapv(mv), inotablev(0), fin(fin_) { }
+  C_MDS_session_finish(Server *srv, Session::ref se, uint64_t sseq, bool s, version_t mv, interval_set<inodeno_t>& i, version_t iv, Context *fin_ = NULL) :
+    ServerLogContext(srv), session(std::move(se)), state_seq(sseq), open(s), cmapv(mv), inos(i), inotablev(iv), fin(fin_) { }
   void finish(int r) override {
     ceph_assert(r == 0);
     server->_session_logged(session, state_seq, open, cmapv, inos, inotablev);
@@ -303,9 +303,9 @@ public:
   }
 };
 
-Session* Server::find_session_by_uuid(std::string_view uuid)
+Session::ref Server::find_session_by_uuid(std::string_view uuid)
 {
-  Session* session = nullptr;
+  Session::ref session;
   for (auto& it : mds->sessionmap.get_sessions()) {
     auto& metadata = it.second->info.client_metadata;
 
@@ -325,7 +325,7 @@ Session* Server::find_session_by_uuid(std::string_view uuid)
   return session;
 }
 
-void Server::reclaim_session(Session *session, const MClientReclaim::const_ref &m)
+void Server::reclaim_session(const Session::ref& session, const MClientReclaim::const_ref &m)
 {
   if (!session->is_open() && !session->is_stale()) {
     dout(10) << "session not open, dropping this req" << dendl;
@@ -348,7 +348,7 @@ void Server::reclaim_session(Session *session, const MClientReclaim::const_ref &
     return;
   }
 
-  Session* target = find_session_by_uuid(m->get_uuid());
+  auto&& target = find_session_by_uuid(m->get_uuid());
   if (target) {
     if (session->info.auth_name != target->info.auth_name) {
       dout(10) << __func__ << " session auth_name " << session->info.auth_name
@@ -371,18 +371,17 @@ void Server::reclaim_session(Session *session, const MClientReclaim::const_ref &
   ceph_abort();
 }
 
-void Server::finish_reclaim_session(Session *session, const MClientReclaimReply::ref &reply)
+void Server::finish_reclaim_session(const Session::ref& session, const MClientReclaimReply::ref &reply)
 {
-  Session *target = session->reclaiming_from;
+  auto target = std::move(session->reclaiming_from);
   if (target) {
-    session->reclaiming_from = nullptr;
-
+    ceph_assert(!session->reclaiming_from);
     Context *send_reply;
     if (reply) {
       int64_t session_id = session->get_client().v;
       send_reply = new FunctionContext([this, session_id, reply](int r) {
 	    assert(mds->mds_lock.is_locked_by_me());
-	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(session_id));
+	    auto&& session = mds->sessionmap.get_session(entity_name_t::CLIENT(session_id));
 	    if (!session) {
 	      return;
 	    }
@@ -411,7 +410,7 @@ void Server::finish_reclaim_session(Session *session, const MClientReclaimReply:
 
 void Server::handle_client_reclaim(const MClientReclaim::const_ref &m)
 {
-  Session *session = mds->get_session(m);
+  auto&& session = mds->get_session(m);
   dout(3) << __func__ <<  " " << *m << " from " << m->get_source() << dendl;
   assert(m->get_source().is_client()); // should _not_ come from an mds!
 
@@ -435,7 +434,7 @@ void Server::handle_client_reclaim(const MClientReclaim::const_ref &m)
 void Server::handle_client_session(const MClientSession::const_ref &m)
 {
   version_t pv;
-  Session *session = mds->get_session(m);
+  auto&& session = mds->get_session(m);
 
   dout(3) << "handle_client_session " << *m << " from " << m->get_source() << dendl;
   ceph_assert(m->get_source().is_client()); // should _not_ come from an mds!
@@ -663,7 +662,7 @@ void Server::handle_client_session(const MClientSession::const_ref &m)
 }
 
 
-void Server::flush_session(Session *session, MDSGatherBuilder *gather) {
+void Server::flush_session(const Session::ref& session, MDSGatherBuilder *gather) {
   if (!session->is_open() ||
       !session->get_connection() ||
       !session->get_connection()->has_feature(CEPH_FEATURE_EXPORT_PEER)) {
@@ -678,20 +677,20 @@ void Server::flush_session(Session *session, MDSGatherBuilder *gather) {
 void Server::flush_client_sessions(set<client_t>& client_set, MDSGatherBuilder& gather)
 {
   for (set<client_t>::iterator p = client_set.begin(); p != client_set.end(); ++p) {
-    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
+    auto&& session = mds->sessionmap.get_session(entity_name_t::CLIENT(p->v));
     ceph_assert(session);
     flush_session(session, &gather);
   }
 }
 
-void Server::finish_flush_session(Session *session, version_t seq)
+void Server::finish_flush_session(const Session::ref& session, version_t seq)
 {
   MDSContext::vec finished;
   session->finish_flush(seq, finished);
   mds->queue_waiters(finished);
 }
 
-void Server::_session_logged(Session *session, uint64_t state_seq, bool open, version_t pv,
+void Server::_session_logged(const Session::ref& session, uint64_t state_seq, bool open, version_t pv,
 			     interval_set<inodeno_t>& inos, version_t piv)
 {
   dout(10) << "_session_logged " << session->info.inst << " state_seq " << state_seq << " " << (open ? "open":"close")
@@ -799,7 +798,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
  */
 version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
 					      map<client_t,client_metadata_t>& cmm,
-					      map<client_t, pair<Session*,uint64_t> >& smap)
+					      map<client_t, pair<Session::ref,uint64_t> >& smap)
 {
   version_t pv = mds->sessionmap.get_projected();
 
@@ -822,7 +821,7 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
       });
 
   for (map<client_t,entity_inst_t>::iterator p = cm.begin(); p != cm.end(); ++p) {
-    Session *session = mds->sessionmap.get_or_add_session(p->second);
+    auto&& session = mds->sessionmap.get_or_add_session(p->second);
     pv = mds->sessionmap.mark_projected(session);
     uint64_t sseq;
     if (session->is_closed() || 
@@ -844,7 +843,7 @@ version_t Server::prepare_force_open_sessions(map<client_t,entity_inst_t>& cm,
   return pv;
 }
 
-void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_t> >& smap,
+void Server::finish_force_open_sessions(const map<client_t,pair<Session::ref,uint64_t> >& smap,
 					bool dec_import)
 {
   /*
@@ -856,7 +855,7 @@ void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_
 	   << " initial v " << mds->sessionmap.get_version() << dendl;
 
   for (auto &it : smap) {
-    Session *session = it.second.first;
+    auto&& session = it.second.first;
     uint64_t sseq = it.second.second;
     if (sseq > 0) {
       if (session->get_state_seq() != sseq) {
@@ -904,12 +903,8 @@ void Server::terminate_sessions()
   terminating_sessions = true;
 
   // kill them off.  clients will retry etc.
-  set<Session*> sessions;
-  mds->sessionmap.get_client_session_set(sessions);
-  for (set<Session*>::const_iterator p = sessions.begin();
-       p != sessions.end();
-       ++p) {
-    Session *session = *p;
+  for (const auto& p : mds->sessionmap.get_sessions()) {
+    auto& session = p.second;
     if (session->is_closing() ||
 	session->is_killing() ||
 	session->is_closed())
@@ -933,13 +928,13 @@ void Server::find_idle_sessions()
   double queue_max_age = mds->get_dispatch_queue_max_age(ceph_clock_now());
   double cutoff = queue_max_age + mds->mdsmap->get_session_timeout();
 
-  std::vector<Session*> to_evict;
+  std::vector<Session::ref> to_evict;
 
   const auto sessions_p1 = mds->sessionmap.by_state.find(Session::STATE_OPEN);
-  if (sessions_p1 != mds->sessionmap.by_state.end() && !sessions_p1->second->empty()) {
-    std::vector<Session*> new_stale;
+  if (sessions_p1 != mds->sessionmap.by_state.end() && !sessions_p1->second.empty()) {
+    std::vector<Session::ref> new_stale;
 
-    for (auto session : *(sessions_p1->second)) {
+    for (auto session : sessions_p1->second) {
       auto last_cap_renew_span = std::chrono::duration<double>(now - session->last_cap_renew).count();
       if (last_cap_renew_span < cutoff) {
 	dout(20) << "laggiest active session is " << session->info.inst
@@ -1007,8 +1002,8 @@ void Server::find_idle_sessions()
 
   // Collect a list of sessions exceeding the autoclose threshold
   const auto sessions_p2 = mds->sessionmap.by_state.find(Session::STATE_STALE);
-  if (sessions_p2 != mds->sessionmap.by_state.end() && !sessions_p2->second->empty()) {
-    for (auto session : *(sessions_p2->second)) {
+  if (sessions_p2 != mds->sessionmap.by_state.end() && !sessions_p2->second.empty()) {
+    for (auto session : sessions_p2->second) {
       assert(session->is_stale());
       auto last_cap_renew_span = std::chrono::duration<double>(now - session->last_cap_renew).count();
       if (last_cap_renew_span < cutoff) {
@@ -1081,7 +1076,7 @@ void Server::handle_conf_change(const ConfigProxy& conf,
  * XXX bump in the interface here, not using an MDSContext here
  * because all the callers right now happen to use a SaferCond
  */
-void Server::kill_session(Session *session, Context *on_safe)
+void Server::kill_session(const Session::ref& session, Context *on_safe)
 {
   ceph_assert(mds->mds_lock.is_locked_by_me());
 
@@ -1108,7 +1103,7 @@ void Server::kill_session(Session *session, Context *on_safe)
 
 size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
 {
-  std::vector<Session*> victims;
+  std::vector<Session::ref> victims;
   const auto& sessions = mds->sessionmap.get_sessions();
   for (const auto& p : sessions)  {
     if (!p.first.is_client()) {
@@ -1117,7 +1112,7 @@ size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
       continue;
     }
 
-    Session *s = p.second;
+    auto&& s = p.second;
     if (blacklist.count(s->info.inst.addr)) {
       victims.push_back(s);
     }
@@ -1132,7 +1127,7 @@ size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
   return victims.size();
 }
 
-void Server::journal_close_session(Session *session, int state, Context *on_safe)
+void Server::journal_close_session(const Session::ref& session, int state, Context *on_safe)
 {
   uint64_t sseq = mds->sessionmap.set_state(session, state);
   version_t pv = mds->sessionmap.mark_projected(session);
@@ -1171,7 +1166,7 @@ void Server::reconnect_clients(MDSContext *reconnect_done_)
   reconnect_done = reconnect_done_;
 
   auto now = clock::now();
-  set<Session*> sessions;
+  set<Session::ref> sessions;
   mds->sessionmap.get_client_session_set(sessions);
   for (auto session : sessions) {
     if (session->is_open()) {
@@ -1198,7 +1193,7 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
   dout(7) << "handle_client_reconnect " << m->get_source()
 	  << (m->has_more() ? " (more)" : "") << dendl;
   client_t from = m->get_source().num();
-  Session *session = mds->get_session(m);
+  auto&& session = mds->get_session(m);
   ceph_assert(session);
 
   if (!mds->is_reconnect() && mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
@@ -1329,7 +1324,7 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
   }
 }
 
-void Server::infer_supported_features(Session *session, client_metadata_t& client_metadata)
+void Server::infer_supported_features(const Session::ref& session, client_metadata_t& client_metadata)
 {
   int supported = -1;
   auto it = client_metadata.find("ceph_version");
@@ -1377,7 +1372,7 @@ void Server::update_required_client_features()
   dout(7) << "required_client_features: " << required_client_features << dendl;
 
   if (mds->get_state() >= MDSMap::STATE_RECONNECT) {
-    set<Session*> sessions;
+    set<Session::ref> sessions;
     mds->sessionmap.get_client_session_set(sessions);
     for (auto session : sessions) {
       feature_bitset_t missing_features = required_client_features;
@@ -1431,10 +1426,10 @@ void Server::reconnect_tick()
   if (elapse1 < g_conf()->mds_reconnect_timeout)
     return;
 
-  vector<Session*> remaining_sessions;
+  vector<Session::ref> remaining_sessions;
   remaining_sessions.reserve(client_reconnect_gather.size());
   for (auto c : client_reconnect_gather) {
-    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(c.v));
+    auto&& session = mds->sessionmap.get_session(entity_name_t::CLIENT(c.v));
     ceph_assert(session);
     remaining_sessions.push_back(session);
     // client re-sends cap flush messages before the reconnect message
@@ -1544,7 +1539,7 @@ std::pair<bool, uint64_t> Server::recall_client_state(MDSGatherBuilder* gather, 
            << dendl;
 
   /* trim caps of sessions with the most caps first */
-  std::multimap<uint64_t, Session*> caps_session;
+  std::multimap<uint64_t, Session::ref> caps_session;
   auto f = [&caps_session, enforce_max, max_caps_per_client](auto& s) {
     auto num_caps = s->caps.size();
     if (!enforce_max || num_caps > max_caps_per_client) {
@@ -1647,12 +1642,9 @@ std::pair<bool, uint64_t> Server::recall_client_state(MDSGatherBuilder* gather, 
 void Server::force_clients_readonly()
 {
   dout(10) << "force_clients_readonly" << dendl;
-  set<Session*> sessions;
+  set<Session::ref> sessions;
   mds->sessionmap.get_client_session_set(sessions);
-  for (set<Session*>::const_iterator p = sessions.begin();
-      p != sessions.end();
-      ++p) {
-    Session *session = *p;
+  for (const auto& session : sessions) {
     if (!session->info.inst.name.is_client() ||
 	!(session->is_open() || session->is_stale()))
       continue;
@@ -1903,7 +1895,7 @@ void Server::reply_client_request(MDRequestRef& mdr, const MClientReply::ref &re
 
   mdr->mark_event("replying");
 
-  Session *session = mdr->session;
+  auto& session = mdr->session;
 
   // note successful request in session map?
   //
@@ -2004,7 +1996,7 @@ void Server::reply_client_request(MDRequestRef& mdr, const MClientReply::ref &re
  *
  * trace is in reverse order (i.e. root inode comes last)
  */
-void Server::set_trace_dist(Session *session, const MClientReply::ref &reply,
+void Server::set_trace_dist(const Session::ref& session, const MClientReply::ref &reply,
 			    CInode *in, CDentry *dn,
 			    snapid_t snapid,
 			    int dentry_wanted,
@@ -2100,7 +2092,7 @@ void Server::handle_client_request(const MClientRequest::const_ref &req)
   }
 
   // active session?
-  Session *session = 0;
+  Session::ref session;
   if (req->get_source().is_client()) {
     session = mds->get_session(req);
     if (!session) {
@@ -3163,7 +3155,7 @@ void Server::journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob)
 		      mds->inotable->get_projected_version());
 }
 
-void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
+void Server::apply_allocated_inos(MDRequestRef& mdr, const Session::ref& session)
 {
   dout(10) << "apply_allocated_inos " << mdr->alloc_ino
 	   << " / " << mdr->prealloc_inos

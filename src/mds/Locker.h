@@ -28,7 +28,6 @@
 #include <string_view>
 
 class MDSRank;
-class Session;
 class CDentry;
 struct SnapRealm;
 
@@ -42,6 +41,7 @@ class LocalLock;
 #include "SimpleLock.h"
 #include "MDSContext.h"
 #include "Mutation.h"
+#include "SessionRef.h"
 #include "messages/MClientReply.h"
 
 class Locker {
@@ -239,13 +239,13 @@ public:
   // -- file i/o --
 public:
   version_t issue_file_data_version(CInode *in);
-  Capability* issue_new_caps(CInode *in, int mode, Session *session, SnapRealm *conrealm, bool is_replay);
+  Capability* issue_new_caps(CInode *in, int mode, const SessionRef& session, SnapRealm *conrealm, bool is_replay);
   bool issue_caps(CInode *in, Capability *only_cap=0);
   void issue_caps_set(std::set<CInode*>& inset);
   void issue_truncate(CInode *in);
-  void revoke_stale_caps(Session *session);
-  void resume_stale_caps(Session *session);
-  void remove_stale_leases(Session *session);
+  void revoke_stale_caps(const SessionRef& session);
+  void resume_stale_caps(const SessionRef& session);
+  void remove_stale_leases(const SessionRef& session);
 
 public:
   void request_inode_file_caps(CInode *in);
@@ -280,7 +280,7 @@ private:
 public:
   void handle_client_lease(const MClientLease::const_ref &m);
 
-  void issue_client_lease(CDentry *dn, client_t client, bufferlist &bl, utime_t now, Session *session);
+  void issue_client_lease(CDentry *dn, client_t client, bufferlist &bl, utime_t now, const SessionRef& session);
   void revoke_client_leases(SimpleLock *lock);
   static void encode_lease(bufferlist& bl, const session_info_t& info, const LeaseStat& ls);
 };

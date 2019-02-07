@@ -54,7 +54,7 @@ enum {
  * session
  */
 
-class Session : public RefCountedObject {
+class Session : public RefCountedObjectInstance<Session> {
   // -- state etc --
 public:
   /*
@@ -132,7 +132,7 @@ private:
   time birth_time;
 
 public:
-  Session *reclaiming_from = nullptr;
+  Session::ref reclaiming_from;
 
   void push_pv(version_t pv)
   {
@@ -392,6 +392,26 @@ public:
   int check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
 		   const vector<uint64_t> *gid_list, int new_uid, int new_gid);
 
+  void set_connection(ConnectionRef con) {
+    connection = std::move(con);
+    if (connection) {
+      socket_addr = connection->get_peer_socket_addr();
+    }
+  }
+  const ConnectionRef& get_connection() const {
+    return connection;
+  }
+
+  void clear() {
+    pending_prealloc_inos.clear();
+    info.clear_meta();
+
+    cap_push_seq = 0;
+    last_cap_renew = clock::zero();
+  }
+
+private:
+  friend factory;
   Session() = delete;
   Session(ConnectionRef con) :
     recall_caps(g_conf().get_val<double>("mds_recall_warning_decay_rate")),
@@ -412,24 +432,6 @@ public:
       ceph_assert(!item_session_list.is_on_list());
     }
     preopen_out_queue.clear();
-  }
-
-  void set_connection(ConnectionRef con) {
-    connection = std::move(con);
-    if (connection) {
-      socket_addr = connection->get_peer_socket_addr();
-    }
-  }
-  const ConnectionRef& get_connection() const {
-    return connection;
-  }
-
-  void clear() {
-    pending_prealloc_inos.clear();
-    info.clear_meta();
-
-    cap_push_seq = 0;
-    last_cap_renew = clock::zero();
   }
 };
 
@@ -477,7 +479,7 @@ public:
 
 protected:
   version_t version;
-  ceph::unordered_map<entity_name_t, Session*> session_map;
+  ceph::unordered_map<entity_name_t, Session::ref> session_map;
   PerfCounters *logger;
 
   // total request load avg
@@ -500,22 +502,19 @@ public:
     rank = r;
   }
 
-  Session* get_or_add_session(const entity_inst_t& i) {
-    Session *s;
-    auto session_map_entry = session_map.find(i.name);
-    if (session_map_entry != session_map.end()) {
-      s = session_map_entry->second;
+  const Session::ref& get_or_add_session(const entity_inst_t& i) {
+    if (auto it = session_map.find(i.name); it != session_map.end()) {
+      return it->second;
     } else {
-      s = session_map[i.name] = new Session(ConnectionRef());
+      auto& s = session_map[i.name] = Session::create(ConnectionRef());;
       s->info.inst = i;
       s->last_cap_renew = Session::clock::now();
       if (logger) {
         logger->set(l_mdssm_session_count, session_map.size());
         logger->inc(l_mdssm_session_add);
       }
+      return s;
     }
-
-    return s;
   }
 
   static void generate_test_instances(std::list<SessionMapStore*>& ls);
@@ -540,8 +539,8 @@ public:
 protected:
   version_t projected = 0, committing = 0, committed = 0;
 public:
-  map<int,xlist<Session*>* > by_state;
-  uint64_t set_state(Session *session, int state);
+  map<int,xlist<Session*>> by_state;
+  uint64_t set_state(const Session::ref& session, int state);
   map<version_t, MDSContext::vec > commit_waiters;
   void update_average_session_age();
 
@@ -550,8 +549,7 @@ public:
 
   ~SessionMap() override
   {
-    for (auto p : by_state)
-      delete p.second;
+    by_state.clear();
 
     if (logger) {
       g_ceph_context->get_perfcounters_collection()->remove(logger);
@@ -590,14 +588,13 @@ public:
   // sessions
   void decode_legacy(bufferlist::const_iterator& blp) override;
   bool empty() const { return session_map.empty(); }
-  const ceph::unordered_map<entity_name_t, Session*>& get_sessions() const
-  {
+  const auto& get_sessions() const {
     return session_map;
   }
 
   bool is_any_state(int state) const {
-    map<int,xlist<Session*>* >::const_iterator p = by_state.find(state);
-    if (p == by_state.end() || p->second->empty())
+    auto it = by_state.find(state);
+    if (it == by_state.end() || it->second.empty())
       return false;
     return true;
   }
@@ -613,32 +610,37 @@ public:
   bool have_session(entity_name_t w) const {
     return session_map.count(w);
   }
-  Session* get_session(entity_name_t w) {
-    auto session_map_entry = session_map.find(w);
-    return (session_map_entry != session_map.end() ?
-	    session_map_entry-> second : nullptr);
-  }
-  const Session* get_session(entity_name_t w) const {
-    ceph::unordered_map<entity_name_t, Session*>::const_iterator p = session_map.find(w);
-    if (p == session_map.end()) {
-      return NULL;
+  const Session::ref& get_session(entity_name_t w) {
+    if (auto it = session_map.find(w); it != session_map.end()) {
+      return it->second;
     } else {
-      return p->second;
+      static const Session::ref _null;
+      return _null;
+    }
+  }
+  const Session::ref& get_session(entity_name_t w) const {
+    if (auto it = session_map.find(w); it != session_map.end()) {
+      return it->second;
+    } else {
+      static const Session::ref _null;
+      return _null;
     }
   }
 
-  void add_session(Session *s);
-  void remove_session(Session *s);
-  void touch_session(Session *session);
+  void add_session(const Session::ref& s);
+  void remove_session(const Session::ref& s);
+  void touch_session(const Session::ref& session);
 
-  Session *get_oldest_session(int state) {
+  Session::ref get_oldest_session(int state) {
     auto by_state_entry = by_state.find(state);
-    if (by_state_entry == by_state.end() || by_state_entry->second->empty())
-      return 0;
-    return by_state_entry->second->front();
+    if (by_state_entry == by_state.end() || by_state_entry->second.empty()) {
+      static const Session::ref _null;
+      return _null;
+    }
+    return Session::ref(by_state_entry->second.front());
   }
 
-  void dump();
+  void dump() const;
 
   template<typename F>
   void get_client_sessions(F&& f) const {
@@ -650,7 +652,7 @@ public:
   }
   template<typename C>
   void get_client_session_set(C& c) const {
-    auto f = [&c](auto& s) {
+    auto f = [&c](auto&& s) {
       c.insert(s);
     };
     get_client_sessions(f);
@@ -661,7 +663,7 @@ public:
     for (map<client_t,entity_inst_t>::iterator p = client_map.begin(); 
 	 p != client_map.end(); 
 	 ++p) {
-      Session *s = get_or_add_session(p->second);
+      auto s = get_or_add_session(p->second);
       auto q = client_metadata_map.find(p->first);
       if (q != client_metadata_map.end())
 	s->info.client_metadata.merge(q->second);
@@ -673,18 +675,18 @@ public:
 
   // helpers
   entity_inst_t& get_inst(entity_name_t w) {
-    ceph_assert(session_map.count(w));
-    return session_map[w]->info.inst;
+    auto& session = session_map.at(w);
+    return session->info.inst;
   }
   version_t get_push_seq(client_t client) {
     return get_session(entity_name_t::CLIENT(client.v))->get_push_seq();
   }
   bool have_completed_request(metareqid_t rid) {
-    Session *session = get_session(rid.name);
+    auto session = get_session(rid.name);
     return session && session->have_completed_request(rid.tid, NULL);
   }
   void trim_completed_requests(entity_name_t c, ceph_tid_t tid) {
-    Session *session = get_session(c);
+    auto session = get_session(c);
     ceph_assert(session);
     session->trim_completed_requests(tid);
   }
@@ -718,7 +720,7 @@ protected:
   std::set<entity_name_t> dirty_sessions;
   std::set<entity_name_t> null_sessions;
   bool loaded_legacy = false;
-  void _mark_dirty(Session *session);
+  void _mark_dirty(const Session::ref& session);
 public:
 
   /**
@@ -729,7 +731,7 @@ public:
    * to the backing store.  Must have called
    * mark_projected previously for this session.
    */
-  void mark_dirty(Session *session);
+  void mark_dirty(const Session::ref& session);
 
   /**
    * Advance the projected version, and mark this
@@ -741,14 +743,14 @@ public:
    * for sessions in the same global order as calls
    * to mark_projected.
    */
-  version_t mark_projected(Session *session);
+  version_t mark_projected(const Session::ref& session);
 
   /**
    * During replay, advance versions to account
    * for a session modification, and mark the
    * session dirty.
    */
-  void replay_dirty_session(Session *session);
+  void replay_dirty_session(const Session::ref& session);
 
   /**
    * During replay, if a session no longer present
@@ -770,11 +772,11 @@ private:
   time avg_birth_time = clock::zero();
 
   uint64_t get_session_count_in_state(int state) {
-    return !is_any_state(state) ? 0 : by_state[state]->size();
+    return !is_any_state(state) ? 0 : by_state[state].size();
   }
 
   void update_average_birth_time(const Session &s, bool added=true) {
-    uint32_t sessions = session_map.size();
+    auto sessions = session_map.size();
     time birth_time = s.get_birth_time();
 
     if (sessions == 1) {
@@ -794,7 +796,7 @@ private:
   }
 
 public:
-  void hit_session(Session *session);
+  void hit_session(const Session::ref& session);
   void handle_conf_change(const ConfigProxy &conf,
                           const std::set <std::string> &changed);
 };

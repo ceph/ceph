@@ -1012,7 +1012,7 @@ void MDSRank::ProgressThread::shutdown()
 bool MDSRankDispatcher::ms_dispatch(const Message::const_ref &m)
 {
   if (m->get_source().is_client()) {
-    Session *session = static_cast<Session*>(m->get_connection()->get_priv().get());
+    auto session = Session::ref_cast(m->get_connection()->get_priv());
     if (session)
       session->last_seen = Session::clock::now();
   }
@@ -1328,16 +1328,16 @@ bool MDSRank::is_stale_message(const Message::const_ref &m) const
   return false;
 }
 
-Session *MDSRank::get_session(const Message::const_ref &m)
+Session::ref MDSRank::get_session(const Message::const_ref &m)
 {
-  // do not carry ref
-  auto session = static_cast<Session *>(m->get_connection()->get_priv().get());
+  auto&& con = m->get_connection();
+  auto session = Session::ref_cast(con->get_priv());
   if (session) {
     dout(20) << "get_session have " << session << " " << session->info.inst
 	     << " state " << session->get_state_name() << dendl;
     // Check if we've imported an open session since (new sessions start closed)
     if (session->is_closed()) {
-      Session *imported_session = sessionmap.get_session(session->info.inst.name);
+      auto&& imported_session = sessionmap.get_session(session->info.inst.name);
       if (imported_session && imported_session != session) {
         dout(10) << __func__ << " replacing connection bootstrap session "
 		 << session << " with imported session " << imported_session
@@ -1345,16 +1345,16 @@ Session *MDSRank::get_session(const Message::const_ref &m)
         imported_session->info.auth_name = session->info.auth_name;
         //assert(session->info.auth_name == imported_session->info.auth_name);
         ceph_assert(session->info.inst == imported_session->info.inst);
-        imported_session->set_connection(session->get_connection().get());
+        imported_session->set_connection(con);
         // send out any queued messages
         while (!session->preopen_out_queue.empty()) {
-          imported_session->get_connection()->send_message2(std::move(session->preopen_out_queue.front()));
+          con->send_message2(std::move(session->preopen_out_queue.front()));
           session->preopen_out_queue.pop_front();
         }
         imported_session->auth_caps = session->auth_caps;
         imported_session->last_seen = session->last_seen;
         ceph_assert(session->get_nref() == 1);
-        imported_session->get_connection()->set_priv(imported_session->get());
+        con->set_priv(imported_session);
         session = imported_session;
       }
     }
@@ -1403,14 +1403,14 @@ void MDSRank::forward_message_mds(const MClientRequest::const_ref& m, mds_rank_t
   bool client_must_resend = true;  //!creq->can_forward();
 
   // tell the client where it should go
-  auto session = get_session(m);
+  auto&& session = get_session(m);
   auto f = MClientRequestForward::create(m->get_tid(), mds, m->get_num_fwd()+1, client_must_resend);
   send_message_client(f, session);
 }
 
 void MDSRank::send_message_client_counted(const Message::ref& m, client_t client)
 {
-  Session *session = sessionmap.get_session(entity_name_t::CLIENT(client.v));
+  auto&& session = sessionmap.get_session(entity_name_t::CLIENT(client.v));
   if (session) {
     send_message_client_counted(m, session);
   } else {
@@ -1420,8 +1420,7 @@ void MDSRank::send_message_client_counted(const Message::ref& m, client_t client
 
 void MDSRank::send_message_client_counted(const Message::ref& m, const ConnectionRef& connection)
 {
-  // do not carry ref
-  auto session = static_cast<Session *>(connection->get_priv().get());
+  auto&& session = Session::ref_cast(connection->get_priv());
   if (session) {
     send_message_client_counted(m, session);
   } else {
@@ -1430,7 +1429,7 @@ void MDSRank::send_message_client_counted(const Message::ref& m, const Connectio
   }
 }
 
-void MDSRank::send_message_client_counted(const Message::ref& m, Session* session)
+void MDSRank::send_message_client_counted(const Message::ref& m, const Session::ref& session)
 {
   version_t seq = session->inc_push_seq();
   dout(10) << "send_message_client_counted " << session->info.inst.name << " seq "
@@ -1442,7 +1441,7 @@ void MDSRank::send_message_client_counted(const Message::ref& m, Session* sessio
   }
 }
 
-void MDSRank::send_message_client(const Message::ref& m, Session* session)
+void MDSRank::send_message_client(const Message::ref& m, const Session::ref& session)
 {
   dout(10) << "send_message_client " << session->info.inst << " " << *m << dendl;
   if (session->get_connection()) {
@@ -1629,7 +1628,7 @@ void MDSRank::validate_sessions()
   // after they have been loaded from rados during startup.
   // Mitigate bugs like: http://tracker.ceph.com/issues/16842
   for (const auto &i : sessionmap.get_sessions()) {
-    Session *session = i.second;
+    auto& session = i.second;
     interval_set<inodeno_t> badones;
     if (inotable->intersects_free(session->info.prealloc_inos, &badones)) {
       clog->error() << "client " << *session
@@ -2085,15 +2084,13 @@ void MDSRank::stopping_start()
   dout(2) << "Stopping..." << dendl;
 
   if (mdsmap->get_num_in_mds() == 1 && !sessionmap.empty()) {
-    std::vector<Session*> victims;
-    const auto& sessions = sessionmap.get_sessions();
-    for (const auto& p : sessions)  {
+    std::vector<Session::ref> victims;
+    for (const auto& p : sessionmap.get_sessions()) {
       if (!p.first.is_client()) {
         continue;
       }
 
-      Session *s = p.second;
-      victims.push_back(s);
+      victims.push_back(p.second.get());
     }
 
     dout(20) << __func__ << " matched " << victims.size() << " sessions" << dendl;
@@ -2715,15 +2712,14 @@ void MDSRankDispatcher::evict_clients(const SessionFilter &filter, const MComman
     return;
   }
 
-  std::vector<Session*> victims;
+  std::vector<Session::ref> victims;
   const auto& sessions = sessionmap.get_sessions();
   for (const auto& p : sessions)  {
     if (!p.first.is_client()) {
       continue;
     }
 
-    Session *s = p.second;
-
+    auto s = p.second.get();
     if (filter.match(*s, std::bind(&Server::waiting_for_reconnect, server, std::placeholders::_1))) {
       victims.push_back(s);
     }
@@ -2750,14 +2746,12 @@ void MDSRankDispatcher::dump_sessions(const SessionFilter &filter, Formatter *f)
 {
   // Dump sessions, decorated with recovery/replay status
   f->open_array_section("sessions");
-  const ceph::unordered_map<entity_name_t, Session*> session_map = sessionmap.get_sessions();
-  for (auto& p : session_map) {
+  for (const auto& p : sessionmap.get_sessions()) {
     if (!p.first.is_client()) {
       continue;
     }
 
-    Session *s = p.second;
-
+    auto s = p.second.get();
     if (!filter.match(*s, std::bind(&Server::waiting_for_reconnect, server, std::placeholders::_1))) {
       continue;
     }
@@ -3333,8 +3327,7 @@ bool MDSRank::evict_client(int64_t session_id,
     return false;
   }
 
-  Session *session = sessionmap.get_session(
-      entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
+  auto session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
   if (!session) {
     err_ss << "session " << session_id << " not in sessionmap!";
     return false;
@@ -3360,8 +3353,7 @@ bool MDSRank::evict_client(int64_t session_id,
 
   auto kill_client_session = [this, session_id, wait, on_killed](){
     ceph_assert(mds_lock.is_locked_by_me());
-    Session *session = sessionmap.get_session(
-        entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
+    auto&& session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
     if (session) {
       if (on_killed || !wait) {
         server->kill_session(session, on_killed);
@@ -3417,14 +3409,6 @@ bool MDSRank::evict_client(int64_t session_id,
       mds_lock.Lock();
     }
 
-    // We dropped mds_lock, so check that session still exists
-    session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT,
-          session_id));
-    if (!session) {
-      dout(1) << "session " << session_id << " was removed while we waited "
-                 "for blacklist" << dendl;
-      return true;
-    }
     kill_client_session();
   } else {
     if (blacklist) {
@@ -3442,7 +3426,7 @@ void MDSRank::bcast_mds_map()
   dout(7) << "bcast_mds_map " << mdsmap->get_epoch() << dendl;
 
   // share the map with mounted clients
-  set<Session*> clients;
+  set<Session::ref> clients;
   sessionmap.get_client_session_set(clients);
   for (const auto &session : clients) {
     auto m = MMDSMap::create(monc->get_fsid(), *mdsmap);
