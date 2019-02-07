@@ -25,19 +25,19 @@ cd-info-card {
   }
 }
 
-@media (max-width: 1199px) {
+@media (max-width: $screen-md-max) {
   .cd-col-5 {
     width: 33%;
   }
 }
 
-@media (max-width: 991px) {
+@media (max-width: $screen-sm-max) {
   .cd-col-5 {
     width: 50%;
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: $screen-xs-max) {
   cd-info-card {
     padding: 0;
   }

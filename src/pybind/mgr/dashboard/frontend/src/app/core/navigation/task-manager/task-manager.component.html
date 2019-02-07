@@ -79,5 +79,7 @@
    title="Background Tasks">
   <i class="fa fa-fw"
      [ngClass]="icon"></i>
+  <span i18n
+        class="visible-xs-inline-block">Background Tasks</span>
   <span *ngIf="executingTasks.length > 0"> ({{ executingTasks.length }})</span>
 </a>
