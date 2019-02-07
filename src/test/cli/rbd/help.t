@@ -6,7 +6,8 @@
   Positional arguments:
     <command>
       bench                             Simple benchmark.
-      children                          Display children of snapshot.
+      children                          Display children of an image or its
+                                        snapshot.
       clone                             Clone a snapshot into a CoW child image.
       config global get                 Get a global-level configuration override.
       config global list (... ls)       List global-level configuration overrides.
@@ -173,25 +174,25 @@
   usage: rbd children [--pool <pool>] [--namespace <namespace>] 
                       [--image <image>] [--snap <snap>] [--snap-id <snap-id>] 
                       [--all] [--format <format>] [--pretty-format] 
-                      <snap-spec> 
+                      <image-or-snap-spec> 
   
-  Display children of snapshot.
+  Display children of an image or its snapshot.
   
   Positional arguments
-    <snap-spec>          snapshot specification
-                         (example:
-                         [<pool-name>/[<namespace-name>/]]<image-name>@<snapshot-n
-                         ame>)
+    <image-or-snap-spec>  image or snapshot specification
+                          (example:
+                          [<pool-name>/[<namespace-name>/]]<image-name>[@<snap-nam
+                          e>])
   
   Optional arguments
-    -p [ --pool ] arg    pool name
-    --namespace arg      namespace name
-    --image arg          image name
-    --snap arg           snapshot name
-    --snap-id arg        snapshot id
-    -a [ --all ]         list all children of snapshot (include trash)
-    --format arg         output format (plain, json, or xml) [default: plain]
-    --pretty-format      pretty formatting (json and xml)
+    -p [ --pool ] arg     pool name
+    --namespace arg       namespace name
+    --image arg           image name
+    --snap arg            snapshot name
+    --snap-id arg         snapshot id
+    -a [ --all ]          list all children (include trash)
+    --format arg          output format (plain, json, or xml) [default: plain]
+    --pretty-format       pretty formatting (json and xml)
   
   rbd help clone
   usage: rbd clone [--pool <pool>] [--namespace <namespace>] [--image <image>] 
