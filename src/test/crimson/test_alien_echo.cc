@@ -28,7 +28,7 @@ struct DummyAuthAuthorizer : public AuthAuthorizer {
   DummyAuthAuthorizer()
     : AuthAuthorizer(CEPH_AUTH_CEPHX)
   {}
-  bool verify_reply(bufferlist::const_iterator&) override {
+  bool verify_reply(bufferlist::const_iterator&, CryptoKey*) override {
     return true;
   }
   bool add_challenge(CephContext*, bufferlist&) override {
