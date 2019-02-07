@@ -1818,7 +1818,7 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
   mut->apply();
 
   if (ack) {
-    Session *session = mds->get_session(client);
+    auto&& session = mds->get_session(client);
     if (session) {
       // "oldest flush tid" > 0 means client uses unique TID for each flush
       if (ack->get_oldest_flush_tid() > 0)
@@ -1868,7 +1868,7 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
 
 Capability* Locker::issue_new_caps(CInode *in,
 				   int mode,
-				   Session *session,
+				   const ceph::ref_t<Session>& session,
 				   SnapRealm *realm,
 				   bool is_replay)
 {
@@ -2136,7 +2136,7 @@ void Locker::revoke_stale_cap(CInode *in, client_t client)
     request_inode_file_caps(in);
 }
 
-bool Locker::revoke_stale_caps(Session *session)
+bool Locker::revoke_stale_caps(const ceph::ref_t<Session>& session)
 {
   dout(10) << "revoke_stale_caps for " << session->info.inst.name << dendl;
 
@@ -2198,7 +2198,7 @@ bool Locker::revoke_stale_caps(Session *session)
   return true;
 }
 
-void Locker::resume_stale_caps(Session *session)
+void Locker::resume_stale_caps(const ceph::ref_t<Session>& session)
 {
   dout(10) << "resume_stale_caps for " << session->info.inst.name << dendl;
 
@@ -2225,7 +2225,7 @@ void Locker::resume_stale_caps(Session *session)
   }
 }
 
-void Locker::remove_stale_leases(Session *session)
+void Locker::remove_stale_leases(const ceph::ref_t<Session>& session)
 {
   dout(10) << "remove_stale_leases for " << session->info.inst.name << dendl;
   xlist<ClientLease*>::iterator p = session->leases.begin();
@@ -2707,7 +2707,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
 	  << " op " << ceph_cap_op_name(op)
 	  << " flags 0x" << std::hex << m->flags << std::dec << dendl;
 
-  Session *session = mds->get_session(m);
+  auto&& session = mds->get_session(m);
   if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
     if (!session) {
       dout(5) << " no session, dropping " << *m << dendl;
@@ -3428,7 +3428,7 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
   if (!dirty && !change_max)
     return false;
 
-  Session *session = mds->get_session(m);
+  auto&& session = mds->get_session(m);
   if (session->check_access(in, MAY_WRITE,
 			    m->caller_uid, m->caller_gid, NULL, 0, 0) < 0) {
     dout(10) << "check_access failed, dropping cap update on " << *in << dendl;
@@ -3528,7 +3528,7 @@ void Locker::handle_client_cap_release(const cref_t<MClientCapRelease> &m)
     mds->set_osd_epoch_barrier(m->osd_epoch_barrier);
   }
 
-  Session *session = mds->get_session(m);
+  auto&& session = mds->get_session(m);
 
   for (const auto &cap : m->caps) {
     _do_cap_release(client, inodeno_t((uint64_t)cap.ino) , cap.cap_id, cap.migrate_seq, cap.seq);
@@ -3795,7 +3795,7 @@ void Locker::handle_client_lease(const cref_t<MClientLease> &m)
 
 
 void Locker::issue_client_lease(CDentry *dn, client_t client,
-			       bufferlist &bl, utime_t now, Session *session)
+			       bufferlist &bl, utime_t now, const ceph::ref_t<Session>& session)
 {
   CInode *diri = dn->get_dir()->get_inode();
   if (!diri->is_stray() &&  // do not issue dn leases in stray dir!

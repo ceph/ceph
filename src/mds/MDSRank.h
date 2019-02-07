@@ -199,10 +199,10 @@ class MDSRank {
     MDSTableServer *get_table_server(int t);
 
     SessionMap   sessionmap;
-    Session *get_session(client_t client) {
+    auto get_session(client_t client) {
       return sessionmap.get_session(entity_name_t::CLIENT(client.v));
     }
-    Session *get_session(const cref_t<Message> &m);
+    ceph::ref_t<class Session> get_session(const cref_t<Message>& m);
 
     PerfCounters       *logger, *mlogger;
     OpTracker    op_tracker;
@@ -393,9 +393,9 @@ class MDSRank {
     void send_message_mds(const ref_t<Message>& m, mds_rank_t mds);
     void forward_message_mds(const cref_t<MClientRequest>& req, mds_rank_t mds);
     void send_message_client_counted(const ref_t<Message>& m, client_t client);
-    void send_message_client_counted(const ref_t<Message>& m, Session* session);
+    void send_message_client_counted(const ref_t<Message>& m, const ref_t<class Session>& session);
     void send_message_client_counted(const ref_t<Message>& m, const ConnectionRef& connection);
-    void send_message_client(const ref_t<Message>& m, Session* session);
+    void send_message_client(const ref_t<Message>& m, const ref_t<class Session>& session);
     void send_message(const ref_t<Message>& m, const ConnectionRef& c);
 
     void wait_for_active_peer(mds_rank_t who, MDSContext *c) { 

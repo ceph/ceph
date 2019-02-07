@@ -50,7 +50,6 @@ class CInode;
 class MDCache;
 class LogSegment;
 struct SnapRealm;
-class Session;
 struct ObjectOperation;
 class EMetaBlob;
 
@@ -696,7 +695,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void decode_import(bufferlist::const_iterator& p, LogSegment *ls);
   
   // for giving to clients
-  int encode_inodestat(bufferlist& bl, Session *session, SnapRealm *realm,
+  int encode_inodestat(bufferlist& bl, const ceph::ref_t<class Session>& session, SnapRealm *realm,
 		       snapid_t snapid=CEPH_NOSNAP, unsigned max_bytes=0,
 		       int getattr_wants=0);
   void encode_cap_message(const ref_t<MClientCaps> &m, Capability *cap);
@@ -795,11 +794,11 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   int get_num_caps_wanted() const { return num_caps_wanted; }
   void adjust_num_caps_wanted(int d);
 
-  Capability *add_client_cap(client_t client, Session *session, SnapRealm *conrealm=0);
+  Capability *add_client_cap(client_t client, const ceph::ref_t<class Session>& session, SnapRealm *conrealm=0);
   void remove_client_cap(client_t client);
   void move_to_realm(SnapRealm *realm);
 
-  Capability *reconnect_cap(client_t client, const cap_reconnect_t& icr, Session *session);
+  Capability *reconnect_cap(client_t client, const cap_reconnect_t& icr, const ceph::ref_t<class Session>& session);
   void clear_client_caps_after_export();
   void export_client_caps(std::map<client_t,Capability::Export>& cl);
 
@@ -809,7 +808,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   int get_caps_allowed_by_type(int type) const;
   int get_caps_careful() const;
   int get_xlocker_mask(client_t client) const;
-  int get_caps_allowed_for_client(Session *s, Capability *cap, mempool_inode *file_i) const;
+  int get_caps_allowed_for_client(const ceph::ref_t<class Session>& s, Capability *cap, mempool_inode *file_i) const;
 
   // caps issued, wanted
   int get_caps_issued(int *ploner = 0, int *pother = 0, int *pxlocker = 0,

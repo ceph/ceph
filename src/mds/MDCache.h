@@ -69,10 +69,7 @@
 class PerfCounters;
 
 class MDSRank;
-class Session;
 class Migrator;
-
-class Session;
 
 class ESubtreeMap;
 
@@ -605,7 +602,7 @@ protected:
 
   map<client_t,entity_inst_t> rejoin_client_map;
   map<client_t,client_metadata_t> rejoin_client_metadata_map;
-  map<client_t,pair<Session*,uint64_t> > rejoin_session_map;
+  map<client_t,pair<ceph::ref_t<class Session>,uint64_t> > rejoin_session_map;
 
   map<inodeno_t,pair<mds_rank_t,map<client_t,cap_reconnect_t> > > cap_exports; // ino -> target, client -> capex
 
@@ -716,7 +713,7 @@ public:
   friend class C_MDC_RejoinSessionsOpened;
   void rejoin_open_ino_finish(inodeno_t ino, int ret);
   void rejoin_prefetch_ino_finish(inodeno_t ino, int ret);
-  void rejoin_open_sessions_finish(map<client_t,pair<Session*,uint64_t> >& session_map);
+  void rejoin_open_sessions_finish(map<client_t,pair<ceph::ref_t<class Session>,uint64_t> >& session_map);
   bool process_imported_caps();
   void choose_lock_states_and_reconnect_caps();
   void prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t ino,
@@ -734,7 +731,7 @@ public:
   // cap imports.  delayed snap parent opens.
   map<client_t,set<CInode*> > delayed_imported_caps;
 
-  void do_cap_import(Session *session, CInode *in, Capability *cap,
+  void do_cap_import(const ceph::ref_t<class Session>& session, CInode *in, Capability *cap,
 		     uint64_t p_cap_id, ceph_seq_t p_seq, ceph_seq_t p_mseq,
 		     int peer, int p_flags);
   void do_delayed_cap_imports();

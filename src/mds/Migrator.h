@@ -30,7 +30,6 @@ class MDSRank;
 class CDir;
 class CInode;
 class CDentry;
-class Session;
 
 #include "messages/MExportCaps.h"
 #include "messages/MExportCapsAck.h"
@@ -150,7 +149,7 @@ protected:
     std::set<mds_rank_t> bystanders;
     std::list<dirfrag_t> bound_ls;
     std::list<ScatterLock*> updated_scatterlocks;
-    std::map<client_t,pair<Session*,uint64_t> > session_map;
+    std::map<client_t,pair<ceph::ref_t<class Session>,uint64_t> > session_map;
     std::map<CInode*, std::map<client_t,Capability::Export> > peer_exports;
     MutationRef mut;
     import_state_t() : state(0), peer(0), tid(0), mut() {}
@@ -201,15 +200,14 @@ protected:
   void import_reverse_final(CDir *dir);
   void import_notify_abort(CDir *dir, std::set<CDir*>& bounds);
   void import_notify_finish(CDir *dir, std::set<CDir*>& bounds);
-  void import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
-			   std::map<client_t,pair<Session*,uint64_t> >& imported_session_map);
-  void handle_export_finish(const cref_t<MExportDirFinish> &m);
+  void import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from, std::map<client_t,pair<ref_t<class Session>,uint64_t>>& imported_session_map);
+  void handle_export_finish(const cref_t<MExportDirFinish>& m);
 
   void handle_export_caps(const cref_t<MExportCaps> &m);
   void handle_export_caps_ack(const cref_t<MExportCapsAck> &m);
   void logged_import_caps(CInode *in,
 			  mds_rank_t from,
-			  std::map<client_t,pair<Session*,uint64_t> >& imported_session_map,
+			  std::map<client_t,pair<ceph::ref_t<class Session>,uint64_t> >& imported_session_map,
 			  std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports);
 
 
@@ -355,7 +353,7 @@ public:
   void decode_import_inode_caps(CInode *in, bool auth_cap, bufferlist::const_iterator &blp,
 				std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports);
   void finish_import_inode_caps(CInode *in, mds_rank_t from, bool auth_cap,
-				const std::map<client_t,pair<Session*,uint64_t> >& smap,
+				const std::map<client_t,pair<ceph::ref_t<class Session>,uint64_t> >& smap,
 				const std::map<client_t,Capability::Export> &export_map,
 				std::map<client_t,Capability::Import> &import_map);
   void decode_import_dir(bufferlist::const_iterator& blp,

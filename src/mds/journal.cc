@@ -1491,7 +1491,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
 	       << " prealloc " << preallocated_inos
 	       << " used " << used_preallocated_ino
 	       << dendl;
-      Session *session = mds->sessionmap.get_session(client_name);
+      auto&& session = mds->sessionmap.get_session(client_name);
       if (session) {
 	dout(20) << " (session prealloc " << session->info.prealloc_inos << ")" << dendl;
 	if (used_preallocated_ino) {
@@ -1573,7 +1573,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
       // if we allocated an inode, there should be exactly one client request id.
       ceph_assert(created == inodeno_t() || client_reqs.size() == 1);
 
-      Session *session = mds->sessionmap.get_session(p.first.name);
+      auto&& session = mds->sessionmap.get_session(p.first.name);
       if (session) {
 	session->add_completed_request(p.first.tid, created);
 	if (p.second)
@@ -1586,7 +1586,7 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, MDSlaveUpdate *slaveup)
   for (const auto& p : client_flushes) {
     if (p.first.name.is_client()) {
       dout(10) << "EMetaBlob.replay flush " << p.first << " trim_to " << p.second << dendl;
-      Session *session = mds->sessionmap.get_session(p.first.name);
+      auto&& session = mds->sessionmap.get_session(p.first.name);
       if (session) {
 	session->add_completed_flush(p.first.tid);
 	if (p.second)
@@ -1619,7 +1619,7 @@ void ESession::replay(MDSRank *mds)
   } else if (mds->sessionmap.get_version() + 1 == cmapv) {
     dout(10) << "ESession.replay sessionmap " << mds->sessionmap.get_version()
 	     << " < " << cmapv << " " << (open ? "open":"close") << " " << client_inst << dendl;
-    Session *session;
+    ref_t<Session> session;
     if (open) {
       session = mds->sessionmap.get_or_add_session(client_inst);
       mds->sessionmap.set_state(session, Session::STATE_OPEN);

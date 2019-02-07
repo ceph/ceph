@@ -27,6 +27,7 @@
 #include "MDLog.h"
 #include "Locker.h"
 #include "Mutation.h"
+#include "SessionMap.h"
 
 #include "events/EUpdate.h"
 
@@ -3223,7 +3224,7 @@ void CInode::adjust_num_caps_wanted(int d)
   ceph_assert(num_caps_wanted >= 0);
 }
 
-Capability *CInode::add_client_cap(client_t client, Session *session, SnapRealm *conrealm)
+Capability *CInode::add_client_cap(client_t client, const ceph::ref_t<Session>& session, SnapRealm *conrealm)
 {
   ceph_assert(last == CEPH_NOSNAP);
   if (client_caps.empty()) {
@@ -3303,7 +3304,7 @@ void CInode::move_to_realm(SnapRealm *realm)
   containing_realm = realm;
 }
 
-Capability *CInode::reconnect_cap(client_t client, const cap_reconnect_t& icr, Session *session)
+Capability *CInode::reconnect_cap(client_t client, const cap_reconnect_t& icr, const ceph::ref_t<Session>& session)
 {
   Capability *cap = get_client_cap(client);
   if (cap) {
@@ -3391,8 +3392,7 @@ int CInode::get_xlocker_mask(client_t client) const
     (linklock.gcaps_xlocker_mask(client) << linklock.get_cap_shift());
 }
 
-int CInode::get_caps_allowed_for_client(Session *session, Capability *cap,
-					mempool_inode *file_i) const
+int CInode::get_caps_allowed_for_client(const ceph::ref_t<Session>& session, Capability *cap, mempool_inode *file_i) const
 {
   client_t client = session->get_client();
   int allowed;
@@ -3502,7 +3502,7 @@ bool CInode::issued_caps_need_gather(SimpleLock *lock)
 
 // =============================================
 
-int CInode::encode_inodestat(bufferlist& bl, Session *session,
+int CInode::encode_inodestat(bufferlist& bl, const ceph::ref_t<Session>& session,
 			     SnapRealm *dir_realm,
 			     snapid_t snapid,
 			     unsigned max_bytes,

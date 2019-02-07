@@ -24,6 +24,7 @@
 #include "mds/MDSRank.h"
 #include "mds/MDSMap.h"
 #include "mds/Locker.h"
+#include "mds/SessionMap.h"
 
 #include "Beacon.h"
 
@@ -328,8 +329,8 @@ void Beacon::notify_health(MDSRank const *mds)
       // client_t is equivalent to session.info.inst.name.num
       // Construct an entity_name_t to lookup into SessionMap
       entity_name_t ename(CEPH_ENTITY_TYPE_CLIENT, client.v);
-      Session const *s = mds->sessionmap.get_session(ename);
-      if (s == NULL) {
+      auto&& s = mds->sessionmap.get_session(ename);
+      if (!s) {
         // Shouldn't happen, but not worth crashing if it does as this is
         // just health-reporting code.
         derr << "Client ID without session: " << client.v << dendl;
@@ -361,7 +362,7 @@ void Beacon::notify_health(MDSRank const *mds)
   //
   // Detect clients failing to advance their old_client_tid
   {
-    set<Session*> sessions;
+    set<ceph::ref_t<Session>> sessions;
     mds->sessionmap.get_client_session_set(sessions);
 
     const auto recall_warning_threshold = g_conf().get_val<Option::size_t>("mds_recall_warning_threshold");

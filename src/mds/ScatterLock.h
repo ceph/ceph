@@ -35,7 +35,7 @@ class ScatterLock : public SimpleLock {
 
   more_bits_t *more() {
     if (!_more)
-      _more.reset(new more_bits_t(this));
+      _more = std::make_unique<more_bits_t>(this);
     return _more.get();
   }
 

@@ -138,32 +138,32 @@ public:
     return last_recall_state;
   }
 
-  void handle_client_session(const cref_t<MClientSession> &m);
-  void _session_logged(Session *session, uint64_t state_seq, 
+  void handle_client_session(const cref_t<MClientSession>& m);
+  void _session_logged(const ref_t<class Session>& session, uint64_t state_seq, 
 		       bool open, version_t pv, interval_set<inodeno_t>& inos,version_t piv);
   version_t prepare_force_open_sessions(map<client_t,entity_inst_t> &cm,
 					map<client_t,client_metadata_t>& cmm,
-					map<client_t,pair<Session*,uint64_t> >& smap);
-  void finish_force_open_sessions(const map<client_t,pair<Session*,uint64_t> >& smap,
+					map<client_t,pair<ceph::ref_t<class Session>,uint64_t> >& smap);
+  void finish_force_open_sessions(const map<client_t,pair<ceph::ref_t<class Session>,uint64_t> >& smap,
 				  bool dec_import=true);
   void flush_client_sessions(set<client_t>& client_set, MDSGatherBuilder& gather);
-  void finish_flush_session(Session *session, version_t seq);
+  void finish_flush_session(const ceph::ref_t<class Session>& session, version_t seq);
   void terminate_sessions();
   void find_idle_sessions();
-  void kill_session(Session *session, Context *on_safe);
+  void kill_session(const ceph::ref_t<class Session>& session, Context *on_safe);
   size_t apply_blacklist(const std::set<entity_addr_t> &blacklist);
-  void journal_close_session(Session *session, int state, Context *on_safe);
+  void journal_close_session(const ceph::ref_t<class Session>& session, int state, Context *on_safe);
 
   set<client_t> client_reclaim_gather;
   size_t get_num_pending_reclaim() const { return client_reclaim_gather.size(); }
-  Session *find_session_by_uuid(std::string_view uuid);
-  void reclaim_session(Session *session, const cref_t<MClientReclaim> &m);
-  void finish_reclaim_session(Session *session, const ref_t<MClientReclaimReply> &reply=nullptr);
-  void handle_client_reclaim(const cref_t<MClientReclaim> &m);
+  ref_t<class Session> find_session_by_uuid(std::string_view uuid);
+  void reclaim_session(const ref_t<Session>& session, const cref_t<MClientReclaim>& m);
+  void finish_reclaim_session(const ref_t<Session>& session, const ref_t<MClientReclaimReply>& reply=nullptr);
+  void handle_client_reclaim(const cref_t<MClientReclaim>& m);
 
   void reconnect_clients(MDSContext *reconnect_done_);
-  void handle_client_reconnect(const cref_t<MClientReconnect> &m);
-  void infer_supported_features(Session *session, client_metadata_t& client_metadata);
+  void handle_client_reconnect(const cref_t<MClientReconnect>& m);
+  void infer_supported_features(const ref_t<Session>& session, client_metadata_t& client_metadata);
   void update_required_client_features();
 
   //void process_reconnect_cap(CInode *in, int from, ceph_mds_cap_reconnect& capinfo);
@@ -192,7 +192,7 @@ public:
   void perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t lat);
   void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
   void respond_to_request(MDRequestRef& mdr, int r = 0);
-  void set_trace_dist(Session *session, const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
+  void set_trace_dist(const ref_t<class Session>& session, const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
 		      snapid_t snapid,
 		      int num_dentries_wanted,
 		      MDRequestRef& mdr);
@@ -207,7 +207,7 @@ public:
   // some helpers
   bool check_fragment_space(MDRequestRef& mdr, CDir *in);
   bool check_access(MDRequestRef& mdr, CInode *in, unsigned mask);
-  bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
+  bool _check_access(const ceph::ref_t<class Session>& session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
   CDir *validate_dentry_dir(MDRequestRef& mdr, CInode *diri, std::string_view dname);
   CDir *traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, filepath refpath);
   CDentry *prepare_null_dentry(MDRequestRef& mdr, CDir *dir, std::string_view dname, bool okexist=false);
@@ -215,7 +215,7 @@ public:
   CInode* prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
 			    file_layout_t *layout=NULL);
   void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
-  void apply_allocated_inos(MDRequestRef& mdr, Session *session);
+  void apply_allocated_inos(MDRequestRef& mdr, const ceph::ref_t<class Session>& session);
 
   CInode* rdlock_path_pin_ref(MDRequestRef& mdr, int n, MutationImpl::LockOpVec& lov,
 			      bool want_auth, bool no_want_auth=false,
@@ -351,7 +351,7 @@ public:
 
 private:
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
-  void flush_session(Session *session, MDSGatherBuilder *gather);
+  void flush_session(const ref_t<Session>& session, MDSGatherBuilder *gather);
   void clear_batch_ops(const MDRequestRef& mdr);
 
   DecayCounter recall_throttle;

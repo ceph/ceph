@@ -31,7 +31,6 @@
 struct SnapRealm;
 
 class MDSRank;
-class Session;
 class CDentry;
 class Capability;
 class SimpleLock;
@@ -153,14 +152,14 @@ public:
 
   // -- file i/o --
   version_t issue_file_data_version(CInode *in);
-  Capability* issue_new_caps(CInode *in, int mode, Session *session, SnapRealm *conrealm, bool is_replay);
+  Capability* issue_new_caps(CInode *in, int mode, const ceph::ref_t<class Session>& session, SnapRealm *conrealm, bool is_replay);
   int issue_caps(CInode *in, Capability *only_cap=0);
   void issue_caps_set(std::set<CInode*>& inset);
   void issue_truncate(CInode *in);
   void revoke_stale_cap(CInode *in, client_t client);
-  bool revoke_stale_caps(Session *session);
-  void resume_stale_caps(Session *session);
-  void remove_stale_leases(Session *session);
+  bool revoke_stale_caps(const ceph::ref_t<class Session>& session);
+  void resume_stale_caps(const ceph::ref_t<class Session>& session);
+  void remove_stale_leases(const ceph::ref_t<class Session>& session);
 
   void request_inode_file_caps(CInode *in);
 
@@ -175,7 +174,7 @@ public:
   // -- client leases --
   void handle_client_lease(const cref_t<MClientLease> &m);
 
-  void issue_client_lease(CDentry *dn, client_t client, bufferlist &bl, utime_t now, Session *session);
+  void issue_client_lease(CDentry *dn, client_t client, bufferlist &bl, utime_t now, const ceph::ref_t<class Session>& session);
   void revoke_client_leases(SimpleLock *lock);
   static void encode_lease(bufferlist& bl, const session_info_t& info, const LeaseStat& ls);
 

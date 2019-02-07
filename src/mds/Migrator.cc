@@ -1637,7 +1637,7 @@ void Migrator::encode_export_inode_caps(CInode *in, bool auth_cap, bufferlist& b
   for (const auto &p : in->get_client_caps()) {
     if (exported_client_map.count(p.first))
       continue;
-    Session *session =  mds->sessionmap.get_session(entity_name_t::CLIENT(p.first.v));
+    auto&& session =  mds->sessionmap.get_session(entity_name_t::CLIENT(p.first.v));
     exported_client_map[p.first] = session->info.inst;
     exported_client_metadata_map[p.first] = session->info.client_metadata;
   }
@@ -2621,7 +2621,7 @@ class C_MDS_ImportDirLoggedStart : public MigratorLogContext {
   CDir *dir;
   mds_rank_t from;
 public:
-  map<client_t,pair<Session*,uint64_t> > imported_session_map;
+  map<client_t,pair<Session::ref,uint64_t> > imported_session_map;
 
   C_MDS_ImportDirLoggedStart(Migrator *m, CDir *d, mds_rank_t f) :
     MigratorLogContext(m), df(d->dirfrag()), dir(d), from(f) {
@@ -2887,7 +2887,7 @@ void Migrator::import_reverse(CDir *dir)
       in->put(CInode::PIN_IMPORTINGCAPS);
     }
     for (auto& p : stat.session_map) {
-      Session *session = p.second.first;
+      auto&& session = p.second.first;
       session->dec_importing();
     }
   }
@@ -2985,7 +2985,7 @@ void Migrator::import_reverse_final(CDir *dir)
 
 
 void Migrator::import_logged_start(dirfrag_t df, CDir *dir, mds_rank_t from,
-				   map<client_t,pair<Session*,uint64_t> >& imported_session_map)
+				   map<client_t,pair<Session::ref,uint64_t> >& imported_session_map)
 {
   map<dirfrag_t, import_state_t>::iterator it = import_state.find(dir->dirfrag());
   if (it == import_state.end() ||
@@ -3073,7 +3073,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
 	if (r == it->second.session_map.end())
 	  continue;
 
-	Session *session = r->second.first;
+	auto&& session = r->second.first;
 	Capability *cap = in->get_client_cap(q->first);
 	ceph_assert(cap);
 	cap->merge(q->second, true);
@@ -3085,7 +3085,7 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
       in->replica_caps_wanted = 0;
     }
     for (auto& p : it->second.session_map) {
-      Session *session = p.second.first;
+      auto&& session = p.second.first;
       session->dec_importing();
     }
   }
@@ -3247,7 +3247,7 @@ void Migrator::decode_import_inode_caps(CInode *in, bool auth_cap,
 }
 
 void Migrator::finish_import_inode_caps(CInode *in, mds_rank_t peer, bool auth_cap,
-					const map<client_t,pair<Session*,uint64_t> >& session_map,
+					const map<client_t,pair<Session::ref,uint64_t> >& session_map,
 					const map<client_t,Capability::Export> &export_map,
 					map<client_t,Capability::Import> &import_map)
 {
@@ -3261,7 +3261,7 @@ void Migrator::finish_import_inode_caps(CInode *in, mds_rank_t peer, bool auth_c
       continue;
     }
 
-    Session *session = p->second.first;
+    auto& session = p->second.first;
 
     Capability *cap = in->get_client_cap(it.first);
     if (!cap) {
@@ -3541,7 +3541,7 @@ class C_M_LoggedImportCaps : public MigratorLogContext {
   CInode *in;
   mds_rank_t from;
 public:
-  map<client_t,pair<Session*,uint64_t> > imported_session_map;
+  map<client_t,pair<Session::ref,uint64_t> > imported_session_map;
   map<CInode*, map<client_t,Capability::Export> > peer_exports;
 
   C_M_LoggedImportCaps(Migrator *m, CInode *i, mds_rank_t f) : MigratorLogContext(m), in(i), from(f) {}
@@ -3588,7 +3588,7 @@ void Migrator::handle_export_caps(const cref_t<MExportCaps> &ex)
 
 void Migrator::logged_import_caps(CInode *in, 
 				  mds_rank_t from,
-				  map<client_t,pair<Session*,uint64_t> >& imported_session_map,
+				  map<client_t,pair<Session::ref,uint64_t> >& imported_session_map,
 				  map<CInode*, map<client_t,Capability::Export> >& peer_exports)
 {
   dout(10) << "logged_import_caps on " << *in << dendl;
