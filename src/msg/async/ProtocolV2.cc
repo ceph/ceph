@@ -2518,7 +2518,8 @@ CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {
                 << client_ident.supported_features()
                 << " features_required=" << client_ident.required_features()
                 << " flags=" << client_ident.flags() << std::dec << dendl;
-  if (client_ident.addrs().empty()) {
+  if (client_ident.addrs().empty() ||
+      client_ident.addrs().front() == entity_addr_t()) {
     return _fault();  // a v2 peer should never do this
   }
 
