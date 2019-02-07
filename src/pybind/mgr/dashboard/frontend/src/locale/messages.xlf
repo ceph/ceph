@@ -2656,6 +2656,10 @@
         <source>Recent Notifications</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/notifications/notifications.component.html</context>
+          <context context-type="linenumber">56</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/core/navigation/notifications/notifications.component.html</context>
           <context context-type="linenumber">53</context>
         </context-group>
       </trans-unit><trans-unit id="495ab70870b5b4a30f2bc5f55052fdc518d954a9" datatype="html">
@@ -2668,10 +2672,18 @@
         <source>Background Tasks</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/task-manager/task-manager.component.html</context>
+          <context context-type="linenumber">83</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/core/navigation/task-manager/task-manager.component.html</context>
           <context context-type="linenumber">79</context>
         </context-group>
       </trans-unit><trans-unit id="85b79c9064aed1ead31ace985f31aa1363f6bdaf" datatype="html">
         <source>Help</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/core/navigation/dashboard-help/dashboard-help.component.html</context>
+          <context context-type="linenumber">13</context>
+        </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/dashboard-help/dashboard-help.component.html</context>
           <context context-type="linenumber">10</context>
@@ -2680,22 +2692,26 @@
         <source>Documentation</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/dashboard-help/dashboard-help.component.html</context>
-          <context context-type="linenumber">21</context>
+          <context context-type="linenumber">23</context>
         </context-group>
       </trans-unit><trans-unit id="e351b40b3869a5c7d19c3d4918cb1ac7aaab95c4" datatype="html">
         <source>API</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/dashboard-help/dashboard-help.component.html</context>
-          <context context-type="linenumber">26</context>
+          <context context-type="linenumber">28</context>
         </context-group>
       </trans-unit><trans-unit id="004b222ff9ef9dd4771b777950ca1d0e4cd4348a" datatype="html">
         <source>About</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/dashboard-help/dashboard-help.component.html</context>
-          <context context-type="linenumber">31</context>
+          <context context-type="linenumber">33</context>
         </context-group>
       </trans-unit><trans-unit id="1481ecd21e760ac919a24e26cf790acd82e40199" datatype="html">
         <source>Dashboard Settings</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/core/navigation/administration/administration.component.html</context>
+          <context context-type="linenumber">10</context>
+        </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/administration/administration.component.html</context>
           <context context-type="linenumber">7</context>
@@ -2704,10 +2720,14 @@
         <source>User management</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/administration/administration.component.html</context>
-          <context context-type="linenumber">16</context>
+          <context context-type="linenumber">18</context>
         </context-group>
       </trans-unit><trans-unit id="049dfd9fe6c78914ad58cf89ac6a631fca28ec74" datatype="html">
         <source>Logged in user</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/core/navigation/identity/identity.component.html</context>
+          <context context-type="linenumber">9</context>
+        </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/identity/identity.component.html</context>
           <context context-type="linenumber">6</context>
@@ -2717,13 +2737,13 @@
       <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="&lt;strong&gt;"/><x id="INTERPOLATION" equiv-text="{{ username }}"/><x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="&lt;/strong&gt;"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/identity/identity.component.html</context>
-          <context context-type="linenumber">17</context>
+          <context context-type="linenumber">19</context>
         </context-group>
       </trans-unit><trans-unit id="5d22c795daf43877a5f708dca2bccd549eb0471d" datatype="html">
         <source>Sign out</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/identity/identity.component.html</context>
-          <context context-type="linenumber">25</context>
+          <context context-type="linenumber">27</context>
         </context-group>
       </trans-unit><trans-unit id="eeba399c4dae8d4890c27b7a2cd2dc28fcf8b5f9" datatype="html">
         <source>Performance Counters</source>
