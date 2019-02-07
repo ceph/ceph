@@ -233,11 +233,25 @@ int Image<I>::get_parent(I *ictx,
 template <typename I>
 int Image<I>::list_children(I *ictx,
                             std::vector<librbd::linked_image_spec_t> *images) {
+  images->clear();
+
   RWLock::RLocker l(ictx->snap_lock);
-  cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
-                                        ictx->md_ctx.get_namespace(),
-                                        ictx->id, ictx->snap_id};
-  return list_children(ictx, parent_spec, images);
+  std::vector<librados::snap_t> snap_ids;
+  if (ictx->snap_id != CEPH_NOSNAP) {
+    snap_ids.push_back(ictx->snap_id);
+  } else {
+    snap_ids = ictx->snaps;
+  }
+  for (auto snap_id : snap_ids) {
+    cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
+                                          ictx->md_ctx.get_namespace(),
+                                          ictx->id, snap_id};
+    int r = list_children(ictx, parent_spec, images);
+    if (r < 0) {
+      return r;
+    }
+  }
+  return 0;
 }
 
 template <typename I>
@@ -251,8 +265,6 @@ int Image<I>::list_children(I *ictx,
   if (!ictx->test_features(RBD_FEATURE_LAYERING, ictx->snap_lock)) {
     return 0;
   }
-
-  images->clear();
 
   librados::Rados rados(ictx->md_ctx);
 
