@@ -65,6 +65,7 @@
     "fork-awesome": "1.1.5",
     "lodash": "4.17.11",
     "moment": "2.23.0",
+    "ng-block-ui": "^2.1.0",
     "ng2-charts": "1.6.0",
     "ng2-toastr": "zzakir/ng2-toastr#0eafd72",
     "ng2-tree": "2.0.0-rc.11",

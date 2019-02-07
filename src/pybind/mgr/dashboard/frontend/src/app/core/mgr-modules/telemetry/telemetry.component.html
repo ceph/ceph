@@ -1,0 +1,144 @@
+<cd-loading-panel *ngIf="loading && !error"
+                  i18n>Loading configuration...</cd-loading-panel>
+<cd-error-panel *ngIf="loading && error"
+                i18n>The configuration could not be loaded.</cd-error-panel>
+
+<div class="col-sm-12 col-lg-6"
+     *ngIf="!loading && !error">
+  <form name="telemetryForm"
+        class="form-horizontal"
+        #frm="ngForm"
+        [formGroup]="telemetryForm"
+        novalidate>
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 class="panel-title" i18n>Telemetry</h3>
+      </div>
+      <div class="panel-body">
+
+        <!-- Enabled -->
+        <div class="form-group">
+          <div class="col-sm-offset-3 col-sm-9">
+            <div class="checkbox checkbox-primary">
+              <input id="enabled"
+                     type="checkbox"
+                     formControlName="enabled">
+              <label for="enabled"
+                     i18n>Enabled</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Leaderboard -->
+        <div class="form-group">
+          <div class="col-sm-offset-3 col-sm-9">
+            <div class="checkbox checkbox-primary">
+              <input id="leaderboard"
+                     type="checkbox"
+                     formControlName="leaderboard">
+              <label for="leaderboard"
+                     i18n>Leaderboard</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Contact -->
+        <div class="form-group"
+             [ngClass]="{'has-error': telemetryForm.showError('contact', frm)}">
+          <label class="control-label col-sm-3"
+                 for="contact"
+                 i18n>Contact</label>
+          <div class="col-sm-9">
+            <input id="contact"
+                   class="form-control"
+                   type="text"
+                   formControlName="contact">
+            <span class="help-block"
+                  *ngIf="telemetryForm.showError('contact', frm, 'email')"
+                  i18n>This is not a valid email address.</span>
+          </div>
+        </div>
+
+        <!-- Organization -->
+        <div class="form-group">
+          <label class="control-label col-sm-3"
+                 for="organization">
+            <ng-container i18n>Organization</ng-container>
+          </label>
+          <div class="col-sm-9">
+            <input id="organization"
+                   class="form-control"
+                   type="text"
+                   formControlName="organization">
+          </div>
+        </div>
+
+        <!-- Description -->
+        <div class="form-group">
+          <label class="control-label col-sm-3"
+                 for="organization">
+            <ng-container i18n>Description</ng-container>
+          </label>
+          <div class="col-sm-9">
+            <input id="description"
+                   class="form-control"
+                   type="text"
+                   formControlName="description">
+          </div>
+        </div>
+
+        <!-- Proxy -->
+        <div class="form-group">
+          <label class="control-label col-sm-3"
+                 for="proxy">
+            <ng-container i18n>Proxy</ng-container>
+          </label>
+          <div class="col-sm-9">
+            <input id="proxy"
+                   class="form-control"
+                   type="text"
+                   formControlName="proxy">
+          </div>
+        </div>
+
+        <!-- Interval -->
+        <div class="form-group"
+             [ngClass]="{'has-error': telemetryForm.showError('interval', frm)}">
+          <label class="control-label col-sm-3"
+                 for="interval">
+            <ng-container i18n>Interval</ng-container>
+          </label>
+          <div class="col-sm-9">
+            <input id="interval"
+                   class="form-control"
+                   type="number"
+                   formControlName="interval">
+            <span class="help-block"
+                  *ngIf="telemetryForm.showError('interval', frm, 'required')"
+                  i18n>This field is required.</span>
+            <span class="help-block"
+                  *ngIf="telemetryForm.showError('interval', frm, 'min')"
+                  i18n>The entered value must be at least 24 hours.</span>
+            <span class="help-block"
+                  *ngIf="telemetryForm.showError('interval', frm, 'pattern')"
+                  i18n>The entered value needs to be a number.</span>
+          </div>
+        </div>
+
+      </div>
+      <div class="panel-footer">
+        <div class="button-group text-right">
+          <cd-submit-button type="button"
+                            (submitAction)="onSubmit()"
+                            [form]="telemetryForm">
+            <ng-container i18n>Update</ng-container>
+          </cd-submit-button>
+          <button i18n
+                  type="button"
+                  class="btn btn-sm btn-default"
+                  routerLink="/mgr-modules">Back</button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>

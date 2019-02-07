@@ -6,6 +6,7 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 
 import { JwtModule } from '@auth0/angular-jwt';
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import { BlockUIModule } from 'ng-block-ui';
 import { ToastModule, ToastOptions } from 'ng2-toastr/ng2-toastr';
 import { AccordionModule } from 'ngx-bootstrap/accordion';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
@@ -37,6 +38,7 @@ registerLocaleData(LocaleHelper.getLocaleData(), LocaleHelper.getLocale());
   declarations: [AppComponent],
   imports: [
     HttpClientModule,
+    BlockUIModule.forRoot(),
     BrowserModule,
     BrowserAnimationsModule,
     ToastModule.forRoot(),
