@@ -23,6 +23,8 @@ ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
                 << ").";
 }
 
+const uint64_t msgr2_required = CEPH_FEATUREMASK_MSG_ADDR2;
+
 using CtPtr = Ct<ProtocolV2> *;
 
 struct SHA256SignatureError : public std::exception {
@@ -1325,7 +1327,7 @@ CtPtr ProtocolV2::_handle_peer_banner_payload(char *buffer, int r) {
 
   this->peer_required_features = peer_required_features;
   if (this->peer_required_features == 0) {
-    this->connection_features = CEPH_FEATURE_MSG_ADDR2;
+    this->connection_features = msgr2_required;
   }
 
   HelloFrame hello(this, messenger->get_mytype(), connection->target_addr);
@@ -2236,7 +2238,8 @@ CtPtr ProtocolV2::send_client_ident() {
   ClientIdentFrame client_ident(this, messenger->get_myaddrs(),
                                 messenger->get_myname().num(), global_seq,
                                 connection->policy.features_supported,
-                                connection->policy.features_required, flags);
+                                connection->policy.features_required | msgr2_required,
+				flags);
 
   ldout(cct, 5) << __func__ << " sending identification: "
                 << "addrs=" << messenger->get_myaddrs()
@@ -2244,7 +2247,8 @@ CtPtr ProtocolV2::send_client_ident() {
                 << " global_seq=" << global_seq
                 << " features_supported=" << std::hex
                 << connection->policy.features_supported
-                << " features_required=" << connection->policy.features_required
+                << " features_required="
+		<< (connection->policy.features_required | msgr2_required)
                 << " flags=" << flags << std::dec << dendl;
 
   bufferlist &bl = client_ident.get_buffer();
@@ -2259,7 +2263,7 @@ CtPtr ProtocolV2::send_reconnect() {
 			   global_seq,
                            connect_seq,
 			   connection->policy.features_supported,
-			   connection->policy.features_required,
+			   connection->policy.features_required | msgr2_required,
 			   in_seq);
 
   ldout(cct, 5) << __func__ << " reconnect to session: cookie=" << cookie
@@ -2524,8 +2528,9 @@ CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {
   peer_name = entity_name_t(connection->get_peer_type(), client_ident.gid());
   connection->set_peer_id(client_ident.gid());
 
-  uint64_t feat_missing = connection->policy.features_required &
-                          ~(uint64_t)client_ident.supported_features();
+  uint64_t feat_missing =
+    (connection->policy.features_required | msgr2_required) &
+    ~(uint64_t)client_ident.supported_features();
   if (feat_missing) {
     ldout(cct, 1) << __func__ << " peer missing required features " << std::hex
                   << feat_missing << std::dec << dendl;
@@ -2597,6 +2602,18 @@ CtPtr ProtocolV2::handle_reconnect(char *payload, uint32_t length) {
   connection_features = reconnect.supported_features() &
     connection->policy.features_supported;
   peer_global_seq = reconnect.global_seq();
+
+  uint64_t feat_missing =
+    (connection->policy.features_required | msgr2_required) &
+    ~(uint64_t)reconnect.supported_features();
+  if (feat_missing) {
+    ldout(cct, 1) << __func__ << " peer missing required features " << std::hex
+                  << feat_missing << std::dec << dendl;
+    IdentMissingFeaturesFrame ident_missing_features(this, feat_missing);
+
+    bufferlist &bl = ident_missing_features.get_buffer();
+    return WRITE(bl, "ident missing features", read_frame);
+  }
 
   connection->lock.unlock();
   AsyncConnectionRef existing = messenger->lookup_conn(*connection->peer_addrs);
@@ -2938,14 +2955,17 @@ CtPtr ProtocolV2::send_server_ident() {
   ServerIdentFrame server_ident(
       this, messenger->get_myaddrs(), messenger->get_myname().num(), gs,
       connection->policy.features_supported,
-      connection->policy.features_required, flags, cookie);
+      connection->policy.features_required | msgr2_required,
+      flags,
+      cookie);
 
   ldout(cct, 5) << __func__ << " sending identification:"
                 << " addrs=" << messenger->get_myaddrs()
                 << " gid=" << messenger->get_myname().num()
                 << " global_seq=" << gs << " features_supported=" << std::hex
                 << connection->policy.features_supported
-                << " features_required=" << connection->policy.features_required
+                << " features_required="
+		<< (connection->policy.features_required | msgr2_required)
                 << " flags=" << flags << " cookie=" << std::dec << cookie
                 << dendl;
 
