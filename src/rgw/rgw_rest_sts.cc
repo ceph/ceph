@@ -350,8 +350,8 @@ void RGWHandler_REST_STS::rgw_sts_parse_input()
   int ret = 0;
   bufferlist data;
   std::tie(ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  string post_body = data.to_str();
   if (data.length() > 0) {
-    string post_body = data.to_str();
     ldout(s->cct, 10) << "Content of POST: " << post_body << dendl;
 
     if (post_body.find("Action") != string::npos) {
@@ -371,6 +371,8 @@ void RGWHandler_REST_STS::rgw_sts_parse_input()
        }
     }
   }
+  auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(post_body);
+  s->info.args.append("PayloadHash", payload_hash);
 }
 
 RGWOp *RGWHandler_REST_STS::op_post()

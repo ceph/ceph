@@ -3930,8 +3930,23 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
     throw -EPERM;
   }
 
-  /* Get the expected hash. */
-  auto exp_payload_hash = rgw::auth::s3::get_v4_exp_payload_hash(s->info);
+  bool is_non_s3_op = false;
+  if (s->op_type == RGW_STS_GET_SESSION_TOKEN ||
+      s->op_type == RGW_STS_ASSUME_ROLE ||
+      s->op_type == RGW_STS_ASSUME_ROLE_WEB_IDENTITY) {
+    is_non_s3_op = true;
+  }
+
+  const char* exp_payload_hash = nullptr;
+  string payload_hash;
+  if (is_non_s3_op) {
+    //For non s3 ops, we need to calculate the payload hash
+    payload_hash = s->info.args.get("PayloadHash");
+    exp_payload_hash = payload_hash.c_str();
+  } else {
+    /* Get the expected hash. */
+    exp_payload_hash = rgw::auth::s3::get_v4_exp_payload_hash(s->info);
+  }
 
   /* Craft canonical URI. Using std::move later so let it be non-const. */
   auto canonical_uri = rgw::auth::s3::get_v4_canonical_uri(s->info);
@@ -3974,7 +3989,7 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
    * This means we have absolutely no business in spawning completer. Both
    * aws4_auth_needs_complete and aws4_auth_streaming_mode are set to false
    * by default. We don't need to change that. */
-  if (is_v4_payload_unsigned(exp_payload_hash) || is_v4_payload_empty(s)) {
+  if (is_v4_payload_unsigned(exp_payload_hash) || is_v4_payload_empty(s) || is_non_s3_op) {
     return {
       access_key_id,
       client_signature,
@@ -4010,8 +4025,6 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_OBJ_TAGGING:
         case RGW_OP_PUT_LC:
         case RGW_OP_SET_REQUEST_PAYMENT:
-        case RGW_STS_GET_SESSION_TOKEN:
-        case RGW_STS_ASSUME_ROLE:
           break;
         default:
           dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
