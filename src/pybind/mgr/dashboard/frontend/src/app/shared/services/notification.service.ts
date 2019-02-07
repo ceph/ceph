@@ -15,6 +15,8 @@ import { TaskMessageService } from './task-message.service';
   providedIn: ServicesModule
 })
 export class NotificationService {
+  private hideToasties = false;
+
   // Observable sources
   private dataSource = new BehaviorSubject<CdNotification[]>([]);
   private queuedNotifications: CdNotificationConfig[] = [];
@@ -128,6 +130,10 @@ export class NotificationService {
   }
 
   private showToasty(notification: CdNotification) {
+    // Exit immediately if no toasty should be displayed.
+    if (this.hideToasties) {
+      return;
+    }
     this.toastr[['error', 'info', 'success'][notification.type]](
       (notification.message ? notification.message + '<br>' : '') +
         this.renderTimeAndApplicationHtml(notification),
@@ -167,5 +173,13 @@ export class NotificationService {
    */
   cancel(timeoutId) {
     window.clearTimeout(timeoutId);
+  }
+
+  /**
+   * Suspend showing the notification toasties.
+   * @param {boolean} suspend Set to ``true`` to disable/hide toasties.
+   */
+  suspendToasties(suspend: boolean) {
+    this.hideToasties = suspend;
   }
 }

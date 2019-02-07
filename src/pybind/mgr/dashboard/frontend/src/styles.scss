@@ -353,3 +353,7 @@ uib-accordion .panel-title,
   background-size: contain;
   background-repeat: no-repeat;
 }
+/* Block UI */
+.block-ui-wrapper {
+  background: $color-transparent-black !important;
+}
