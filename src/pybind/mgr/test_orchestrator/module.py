@@ -125,7 +125,6 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     The implementation is similar to the Rook orchestrator, but simpler.
     """
-
     def _progress(self, *args, **kwargs):
         try:
             self.remote("progress", *args, **kwargs)
@@ -270,3 +269,26 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     @deferred_write("remove_stateless_service")
     def remove_stateless_service(self, service_type, id_):
         pass
+
+    @deferred_read
+    def get_hosts(self):
+        return [orchestrator.InventoryNode('localhost', [])]
+
+    @deferred_write("add_host")
+    def add_host(self, host):
+        assert isinstance(host, str)
+
+    @deferred_write("remove_host")
+    def remove_host(self, host):
+        assert isinstance(host, str)
+
+    @deferred_write("update_mgrs")
+    def update_mgrs(self, num, hosts):
+        assert not hosts or len(hosts) == num
+        assert all([isinstance(h, str) for h in hosts])
+
+    @deferred_write("update_mons")
+    def update_mons(self, num, hosts):
+        assert not hosts or len(hosts) == num
+        assert all([isinstance(h[0], str) for h in hosts])
+        assert all([isinstance(h[1], str) or h[1] is None for h in hosts])

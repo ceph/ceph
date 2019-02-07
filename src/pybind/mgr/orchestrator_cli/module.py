@@ -49,8 +49,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
     def _add_host(self, host):
         completion = self.add_host(host)
         self._orchestrator_wait([completion])
-        result = "\n".join(map(lambda r: str(r), completion.result))
-        return HandleCommandResult(stdout=result)
+        return HandleCommandResult(stdout=str(completion.result))
 
     @CLIWriteCommand('orchestrator host rm',
                      "name=host,type=CephString,req=true",
@@ -59,8 +58,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
     def _remove_host(self, host):
         completion = self.remove_host(host)
         self._orchestrator_wait([completion])
-        result = "\n".join(map(lambda r: str(r), completion.result))
-        return HandleCommandResult(stdout=result)
+        return HandleCommandResult(stdout=str(completion.result))
 
     @CLIReadCommand('orchestrator host ls',
                     desc='List hosts')
@@ -306,7 +304,7 @@ Usage:
                      "name=hosts,type=CephString,n=N,req=false",
                      'Update the number of manager instances')
     @handle_exceptions
-    def _update_mgrs(self, num, hosts):
+    def _update_mgrs(self, num, hosts=None):
         hosts = hosts if hosts is not None else []
 
         if num <= 0:
@@ -315,15 +313,14 @@ Usage:
 
         completion = self.update_mgrs(num, hosts)
         self._orchestrator_wait([completion])
-        result = "\n".join(map(lambda r: str(r), completion.result))
-        return HandleCommandResult(stdout=result)
+        return HandleCommandResult(stdout=str(completion.result))
 
     @CLIWriteCommand('orchestrator mon update',
                      "name=num,type=CephInt,req=true "
                      "name=hosts,type=CephString,n=N,req=false",
                      'Update the number of monitor instances')
     @handle_exceptions
-    def _update_mons(self, num, hosts):
+    def _update_mons(self, num, hosts=None):
         hosts = hosts if hosts is not None else []
 
         if num <= 0:
@@ -351,8 +348,7 @@ Usage:
 
         completion = self.update_mons(num, hosts)
         self._orchestrator_wait([completion])
-        result = "\n".join(map(lambda r: str(r), completion.result))
-        return HandleCommandResult(stdout=result)
+        return HandleCommandResult(stdout=str(completion.result))
 
     @CLIWriteCommand('orchestrator set backend',
                      "name=module_name,type=CephString,req=true",
