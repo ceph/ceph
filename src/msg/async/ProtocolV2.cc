@@ -1017,18 +1017,18 @@ uint32_t ProtocolV2::calculate_payload_size(
 void ProtocolV2::authencrypt_payload(bufferlist &payload) {
   if (auth_meta.is_mode_secure()) {
     // using tx
-    ceph_assert(session_security_old.tx);
-    session_security_old.tx->authenticated_encrypt(payload);
+    ceph_assert(session_security.tx);
+    session_security.tx->authenticated_encrypt(payload);
     ceph_assert(payload.length() > 0);
   }
 }
 
 void ProtocolV2::authdecrypt_payload(char *payload, uint32_t &length) {
   if (auth_meta.is_mode_secure()) {
-    ceph_assert(session_security_old.rx);
+    ceph_assert(session_security.rx);
     // using rx
     ceph_assert(length > 0);
-    session_security_old.rx->authenticated_decrypt(payload, length);
+    session_security.rx->authenticated_decrypt(payload, length);
   }
 }
 
@@ -1394,7 +1394,7 @@ CtPtr ProtocolV2::handle_message() {
   recv_stamp = ceph_clock_now();
 
   const uint32_t header_len = calculate_payload_size(
-    session_security_old.rx.get(), sizeof(ceph_msg_header2));
+    session_security.rx.get(), sizeof(ceph_msg_header2));
   return READ(header_len, handle_message_header);
 }
 
@@ -1407,7 +1407,7 @@ CtPtr ProtocolV2::handle_message_header(char *buffer, int r) {
   }
 
   const uint32_t header_len = calculate_payload_size(
-    session_security_old.rx.get(), sizeof(ceph_msg_header2));
+    session_security.rx.get(), sizeof(ceph_msg_header2));
 
   MessageHeaderFrame header_frame(*this, buffer, header_len);
   ceph_msg_header2 &header = header_frame.header();
@@ -1642,7 +1642,7 @@ CtPtr ProtocolV2::read_message_data() {
     // the message payload
     ldout(cct, 1) << __func__ << " reading message payload extra bytes left="
                   << next_payload_len << dendl;
-    ceph_assert(session_security_old.rx && session_security_old.tx &&
+    ceph_assert(session_security.rx && session_security.tx &&
 		auth_meta.is_mode_secure());
     extra.push_back(buffer::create(next_payload_len));
     return READB(next_payload_len, extra.c_str(), handle_message_extra_bytes);
@@ -2020,7 +2020,7 @@ CtPtr ProtocolV2::handle_auth_done(char *payload, uint32_t length) {
     return _fault();
   }
   auth_meta.con_mode = auth_done.con_mode();
-  session_security_old =
+  session_security =
     AuthStreamHandler::create_stream_handler_pair(cct, auth_meta);
 
   if (!cookie) {
@@ -2311,9 +2311,9 @@ CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
     return _fault();
   }
   if (r == 1) {
-    session_security_old =
+    session_security =
       AuthStreamHandler::create_stream_handler_pair(cct, auth_meta);
-    std::swap(session_security_old.rx, session_security_old.tx);
+    std::swap(session_security.rx, session_security.tx);
     AuthDoneFrame auth_done(connection->peer_global_id, auth_meta.con_mode,
 			    reply);
     return WRITE(auth_done.get_buffer(), "auth done", read_frame);
@@ -2656,7 +2656,7 @@ CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
   exproto->can_write = false;
   exproto->reconnecting = reconnecting;
   exproto->replacing = true;
-  std::swap(exproto->session_security_old, session_security_old);
+  std::swap(exproto->session_security, session_security);
   exproto->auth_meta.con_mode = auth_meta.con_mode;
   exproto->auth_meta.auth_method = auth_meta.auth_method;
   exproto->auth_meta.session_key = auth_meta.session_key;
