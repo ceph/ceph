@@ -249,16 +249,49 @@ template <class T, typename... Args>
 struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
   SignedEncryptedFrame(ProtocolV2 &protocol, const Args &... args)
       : PayloadFrame<T, Args...>(args...) {
+#if 0
     ceph::bufferlist trans_bl;
     this->payload.splice(8, this->payload.length() - 8, &trans_bl);
     protocol.authencrypt_payload(trans_bl);
     this->payload.claim_append(trans_bl);
+
+#else
+    ceph_assert(protocol.session_stream_handlers.tx);
+
+    protocol.session_stream_handlers.tx->reset_tx_handler({
+      8, this->payload.length() - 8,
+    });
+
+    // NOTE: this is just for the makeshift commits
+    ceph::bufferlist trans_bl;
+    this->payload.splice(8, this->payload.length() - 8, &trans_bl);
+    std::swap(trans_bl, this->payload);
+
+    this->preamble_filler = protocol.session_stream_handlers.tx->reserve(8);
+
+    protocol.session_stream_handlers.tx->authenticated_encrypt_update(
+      std::move(this->payload));
+    this->payload = \
+      protocol.session_stream_handlers.tx->authenticated_encrypt_final();
+#endif
   }
 
   SignedEncryptedFrame(ProtocolV2 &protocol, char *payload, uint32_t length)
       : PayloadFrame<T, Args...>() {
+#if 0
     protocol.authdecrypt_payload(payload, length);
     this->decode_frame(payload, length);
+#else
+    protocol.session_stream_handlers.rx->reset_rx_handler();
+
+    ceph::bufferlist bl;
+    bl.push_back(buffer::create_static(length, payload));
+
+    ceph::bufferlist plain_bl = \
+      protocol.session_stream_handlers.rx->authenticated_decrypt_update_final(
+        std::move(bl), 8);
+    this->decode_frame(plain_bl.c_str(), plain_bl.length());
+#endif
   }
 };
 
@@ -1638,6 +1671,7 @@ CtPtr ProtocolV2::read_message_data() {
     ldout(cct, 1) << __func__ << " reading message payload extra bytes left="
                   << next_payload_len << dendl;
     ceph_assert(session_security.rx && session_security.tx &&
+		session_stream_handlers.rx && session_stream_handlers.tx &&
 		auth_meta.is_mode_secure());
     extra.push_back(buffer::create(next_payload_len));
     return READB(next_payload_len, extra.c_str(), handle_message_extra_bytes);
@@ -2017,6 +2051,8 @@ CtPtr ProtocolV2::handle_auth_done(char *payload, uint32_t length) {
   auth_meta.con_mode = auth_done.con_mode();
   session_security =
     AuthStreamHandler::create_stream_handler_pair(cct, auth_meta);
+  session_stream_handlers =
+    ceph::crypto::onwire::rxtx_t::create_handler_pair(cct, auth_meta, false);
 
   if (!cookie) {
     ceph_assert(connect_seq == 0);
@@ -2309,6 +2345,8 @@ CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
     session_security =
       AuthStreamHandler::create_stream_handler_pair(cct, auth_meta);
     std::swap(session_security.rx, session_security.tx);
+    session_stream_handlers = \
+      ceph::crypto::onwire::rxtx_t::create_handler_pair(cct, auth_meta, true);
     AuthDoneFrame auth_done(connection->peer_global_id, auth_meta.con_mode,
 			    reply);
     return WRITE(auth_done.get_buffer(), "auth done", read_frame);
@@ -2652,6 +2690,7 @@ CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
   exproto->reconnecting = reconnecting;
   exproto->replacing = true;
   std::swap(exproto->session_security, session_security);
+  std::swap(exproto->session_stream_handlers, session_stream_handlers);
   exproto->auth_meta.con_mode = auth_meta.con_mode;
   exproto->auth_meta.auth_method = auth_meta.auth_method;
   exproto->auth_meta.session_key = auth_meta.session_key;

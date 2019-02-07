@@ -66,6 +66,7 @@ public:
     ACK
   };
 
+  ceph::crypto::onwire::rxtx_t session_stream_handlers;
 private:
   enum class AuthFlag : uint64_t { ENCRYPTED = 1, SIGNED = 2 };
 
