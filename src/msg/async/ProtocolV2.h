@@ -86,7 +86,11 @@ private:
   bool reconnecting;
   bool replacing;
   bool can_write;
-  std::map<int, std::list<std::pair<bufferlist, Message *>>> out_queue;
+  struct out_queue_entry_t {
+    bool is_prepared {false};
+    Message* m {nullptr};
+  };
+  std::map<int, std::list<out_queue_entry_t>> out_queue;
   std::list<Message *> sent;
   std::atomic<uint64_t> out_seq{0};
   std::atomic<uint64_t> in_seq{0};
@@ -123,9 +127,9 @@ private:
   Ct<ProtocolV2> *_fault();
   void discard_out_queue();
   void reset_session();
-  void prepare_send_message(uint64_t features, Message *m, bufferlist &bl);
-  Message *_get_next_outgoing(bufferlist *bl);
-  ssize_t write_message(Message *m, bufferlist &bl, bool more);
+  void prepare_send_message(uint64_t features, Message *m);
+  out_queue_entry_t _get_next_outgoing();
+  ssize_t write_message(Message *m, bool more);
   void append_keepalive();
   void append_keepalive_ack(utime_t &timestamp);
   void handle_message_ack(uint64_t seq);
