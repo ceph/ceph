@@ -387,40 +387,16 @@ ceph_option_get(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
-ceph_get_module_option_ex(BaseMgrModule *self, PyObject *args)
+ceph_get_module_option(BaseMgrModule *self, PyObject *args)
 {
   char *module = nullptr;
   char *key = nullptr;
-  if (!PyArg_ParseTuple(args, "ss:ceph_get_module_option_ex", &module, &key)) {
+  if (!PyArg_ParseTuple(args, "ss:ceph_get_module_option", &module, &key)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
   auto pResult = self->py_modules->get_typed_config(module, key);
   return pResult;
-}
-
-static PyObject*
-ceph_get_module_option(BaseMgrModule *self, PyObject *args)
-{
-  char *key = nullptr;
-  if (!PyArg_ParseTuple(args, "s:ceph_get_module_option", &key)) {
-    derr << "Invalid args!" << dendl;
-    return nullptr;
-  }
-
-  PyThreadState *tstate = PyEval_SaveThread();
-  std::string value;
-  bool found = self->py_modules->get_config(self->this_module->get_name(),
-      key, &value);
-  PyEval_RestoreThread(tstate);
-
-  if (found) {
-    dout(10) << __func__ << " " << key << " found: " << value.c_str() << dendl;
-    return self->this_module->py_module->get_typed_option_value(key, value);
-  } else {
-    dout(4) << __func__ << " " << key << " not found " << dendl;
-    Py_RETURN_NONE;
-  }
 }
 
 static PyObject*
@@ -437,12 +413,12 @@ ceph_store_get_prefix(BaseMgrModule *self, PyObject *args)
 }
 
 static PyObject*
-ceph_set_module_option_ex(BaseMgrModule *self, PyObject *args)
+ceph_set_module_option(BaseMgrModule *self, PyObject *args)
 {
   char *module = nullptr;
   char *key = nullptr;
   char *value = nullptr;
-  if (!PyArg_ParseTuple(args, "ssz:ceph_set_module_option_ex",
+  if (!PyArg_ParseTuple(args, "ssz:ceph_set_module_option",
         &module, &key, &value)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
@@ -452,24 +428,6 @@ ceph_set_module_option_ex(BaseMgrModule *self, PyObject *args)
     val = value;
   }
   self->py_modules->set_config(module, key, val);
-
-  Py_RETURN_NONE;
-}
-
-static PyObject*
-ceph_set_module_option(BaseMgrModule *self, PyObject *args)
-{
-  char *key = nullptr;
-  char *value = nullptr;
-  if (!PyArg_ParseTuple(args, "sz:ceph_set_module_option", &key, &value)) {
-    derr << "Invalid args!" << dendl;
-    return nullptr;
-  }
-  boost::optional<string> val;
-  if (value) {
-    val = value;
-  }
-  self->py_modules->set_config(self->this_module->get_name(), key, val);
 
   Py_RETURN_NONE;
 }
@@ -494,8 +452,6 @@ ceph_store_get(BaseMgrModule *self, PyObject *args)
     Py_RETURN_NONE;
   }
 }
-
-
 
 static PyObject*
 ceph_store_set(BaseMgrModule *self, PyObject *args)
@@ -1053,17 +1009,11 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get_module_option", (PyCFunction)ceph_get_module_option, METH_VARARGS,
    "Get a module configuration option value"},
 
-  {"_ceph_get_module_option_ex", (PyCFunction)ceph_get_module_option_ex, METH_VARARGS,
-   "Get a module configuration option value from the specified module"},
-
   {"_ceph_get_store_prefix", (PyCFunction)ceph_store_get_prefix, METH_VARARGS,
    "Get all KV store values with a given prefix"},
 
   {"_ceph_set_module_option", (PyCFunction)ceph_set_module_option, METH_VARARGS,
    "Set a module configuration option value"},
-
-  {"_ceph_set_module_option_ex", (PyCFunction)ceph_set_module_option_ex, METH_VARARGS,
-   "Set a module configuration option value for the specified module"},
 
   {"_ceph_get_store", (PyCFunction)ceph_store_get, METH_VARARGS,
    "Get a stored field"},
