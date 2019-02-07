@@ -6724,6 +6724,94 @@ std::vector<Option> get_rgw_options() {
     .set_default("")
     .set_description("Client Secret")
     .set_long_description("Client Secret needed for introspecting a Web Token."),
+
+    Option("rgw_max_concurrent_requests", Option::TYPE_INT, Option::LEVEL_BASIC)
+    .set_default(1024)
+    .set_description("Maximum number of concurrent HTTP requests.")
+    .set_long_description(
+        "Maximum number of concurrent HTTP requests that the beast frontend "
+        "will process. Tuning this can help to limit memory usage under heavy "
+        "load.")
+    .add_tag("performance")
+    .add_see_also("rgw_frontends"),
+
+    Option("rgw_scheduler_type", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("throttler")
+    .set_description("Set the type of dmclock scheduler, defaults to throttler "
+		     "Other valid values are dmclock which is experimental"),
+
+    Option("rgw_dmclock_admin_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(100.0)
+    .set_description("mclock reservation for admin requests")
+    .add_see_also("rgw_dmclock_admin_wgt")
+    .add_see_also("rgw_dmclock_admin_lim"),
+
+    Option("rgw_dmclock_admin_wgt", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(100.0)
+    .set_description("mclock weight for admin requests")
+    .add_see_also("rgw_dmclock_admin_res")
+    .add_see_also("rgw_dmclock_admin_lim"),
+
+    Option("rgw_dmclock_admin_lim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.0)
+    .set_description("mclock limit for admin requests")
+    .add_see_also("rgw_dmclock_admin_res")
+    .add_see_also("rgw_dmclock_admin_wgt"),
+
+    Option("rgw_dmclock_auth_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(200.0)
+    .set_description("mclock reservation for object data requests")
+    .add_see_also("rgw_dmclock_auth_wgt")
+    .add_see_also("rgw_dmclock_auth_lim"),
+
+    Option("rgw_dmclock_auth_wgt", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(100.0)
+    .set_description("mclock weight for object data requests")
+    .add_see_also("rgw_dmclock_auth_res")
+    .add_see_also("rgw_dmclock_auth_lim"),
+
+    Option("rgw_dmclock_auth_lim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.0)
+    .set_description("mclock limit for object data requests")
+    .add_see_also("rgw_dmclock_auth_res")
+    .add_see_also("rgw_dmclock_auth_wgt"),
+
+    Option("rgw_dmclock_data_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(500.0)
+    .set_description("mclock reservation for object data requests")
+    .add_see_also("rgw_dmclock_data_wgt")
+    .add_see_also("rgw_dmclock_data_lim"),
+
+    Option("rgw_dmclock_data_wgt", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(500.0)
+    .set_description("mclock weight for object data requests")
+    .add_see_also("rgw_dmclock_data_res")
+    .add_see_also("rgw_dmclock_data_lim"),
+
+    Option("rgw_dmclock_data_lim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.0)
+    .set_description("mclock limit for object data requests")
+    .add_see_also("rgw_dmclock_data_res")
+    .add_see_also("rgw_dmclock_data_wgt"),
+
+    Option("rgw_dmclock_metadata_res", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(500.0)
+    .set_description("mclock reservation for metadata requests")
+    .add_see_also("rgw_dmclock_metadata_wgt")
+    .add_see_also("rgw_dmclock_metadata_lim"),
+
+    Option("rgw_dmclock_metadata_wgt", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(500.0)
+    .set_description("mclock weight for metadata requests")
+    .add_see_also("rgw_dmclock_metadata_res")
+    .add_see_also("rgw_dmclock_metadata_lim"),
+
+    Option("rgw_dmclock_metadata_lim", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.0)
+    .set_description("mclock limit for metadata requests")
+    .add_see_also("rgw_dmclock_metadata_res")
+    .add_see_also("rgw_dmclock_metadata_wgt"),
+
   });
 }
 

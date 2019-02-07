@@ -41,6 +41,8 @@
 #include "rgw_asio_frontend.h"
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
 
+#include "rgw_dmclock_scheduler_ctx.h"
+
 #include "services/svc_zone.h"
 
 #ifdef HAVE_SYS_PRCTL_H
@@ -423,6 +425,16 @@ int main(int argc, const char **argv)
   /* Header custom behavior */
   rest.register_x_headers(g_conf()->rgw_log_http_headers);
 
+  if (cct->_conf.get_val<std::string>("rgw_scheduler_type") == "dmclock" &&
+      !cct->check_experimental_feature_enabled("dmclock")){
+    derr << "dmclock scheduler type is experimental and needs to be"
+	 << "set in the option enable experimental data corrupting features"
+	 << dendl;
+    return EINVAL;
+  }
+
+  rgw::dmclock::SchedulerCtx sched_ctx{cct.get()};
+
   OpsLogSocket *olog = NULL;
 
   if (!g_conf()->rgw_ops_log_socket_path.empty()) {
@@ -460,8 +472,9 @@ int main(int argc, const char **argv)
       config->get_val("prefix", "", &uri_prefix);
 
       RGWProcessEnv env = { store, &rest, olog, 0, uri_prefix, auth_registry };
+      //TODO: move all of scheduler initializations to frontends?
 
-      fe = new RGWCivetWebFrontend(env, config);
+      fe = new RGWCivetWebFrontend(env, config, sched_ctx);
     }
     else if (framework == "loadgen") {
       int port;
@@ -480,7 +493,7 @@ int main(int argc, const char **argv)
       std::string uri_prefix;
       config->get_val("prefix", "", &uri_prefix);
       RGWProcessEnv env{ store, &rest, olog, port, uri_prefix, auth_registry };
-      fe = new RGWAsioFrontend(env, config);
+      fe = new RGWAsioFrontend(env, config, sched_ctx);
     }
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
 #if defined(WITH_RADOSGW_FCGI_FRONTEND)

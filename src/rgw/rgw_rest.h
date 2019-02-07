@@ -488,6 +488,7 @@ public:
   virtual int check_caps(RGWUserCaps& caps)
     { return -EPERM; } /* should to be implemented! */
   int verify_permission() override;
+  dmc::client_id dmclock_client() override { return dmc::client_id::admin; }
 };
 
 class RGWHandler_REST : public RGWHandler {

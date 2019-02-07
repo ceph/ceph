@@ -20,12 +20,14 @@
 #include <boost/asio/ssl.hpp>
 #endif
 
+#include "rgw_dmclock_async_scheduler.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 namespace {
 
 using tcp = boost::asio::ip::tcp;
-namespace beast = boost::beast;
+namespace http = boost::beast::http;
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
 namespace ssl = boost::asio::ssl;
 #endif
@@ -34,10 +36,10 @@ template <typename Stream>
 class StreamIO : public rgw::asio::ClientIO {
   CephContext* const cct;
   Stream& stream;
-  beast::flat_buffer& buffer;
+  boost::beast::flat_buffer& buffer;
  public:
   StreamIO(CephContext *cct, Stream& stream, rgw::asio::parser_type& parser,
-           beast::flat_buffer& buffer, bool is_ssl,
+           boost::beast::flat_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
            const tcp::endpoint& remote_endpoint)
       : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint),
@@ -62,9 +64,9 @@ class StreamIO : public rgw::asio::ClientIO {
 
     while (body_remaining.size && !parser.is_done()) {
       boost::system::error_code ec;
-      beast::http::read_some(stream, buffer, parser, ec);
-      if (ec == beast::http::error::partial_message ||
-          ec == beast::http::error::need_buffer) {
+      http::read_some(stream, buffer, parser, ec);
+      if (ec == http::error::partial_message ||
+          ec == http::error::need_buffer) {
         break;
       }
       if (ec) {
@@ -80,8 +82,9 @@ using SharedMutex = ceph::async::SharedMutex<boost::asio::io_context::executor_t
 
 template <typename Stream>
 void handle_connection(RGWProcessEnv& env, Stream& stream,
-                       beast::flat_buffer& buffer, bool is_ssl,
+                       boost::beast::flat_buffer& buffer, bool is_ssl,
                        SharedMutex& pause_mutex,
+                       rgw::dmclock::Scheduler *scheduler,
                        boost::system::error_code& ec,
                        boost::asio::yield_context yield)
 {
@@ -100,25 +103,25 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
     parser.body_limit(body_limit);
 
     // parse the header
-    beast::http::async_read_header(stream, buffer, parser, yield[ec]);
+    http::async_read_header(stream, buffer, parser, yield[ec]);
     if (ec == boost::asio::error::connection_reset ||
         ec == boost::asio::error::bad_descriptor ||
         ec == boost::asio::error::operation_aborted ||
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
         ec == ssl::error::stream_truncated ||
 #endif
-        ec == beast::http::error::end_of_stream) {
+        ec == http::error::end_of_stream) {
       ldout(cct, 20) << "failed to read header: " << ec.message() << dendl;
       return;
     }
     if (ec) {
       ldout(cct, 1) << "failed to read header: " << ec.message() << dendl;
       auto& message = parser.get();
-      beast::http::response<beast::http::empty_body> response;
-      response.result(beast::http::status::bad_request);
+      http::response<http::empty_body> response;
+      response.result(http::status::bad_request);
       response.version(message.version() == 10 ? 10 : 11);
       response.prepare_payload();
-      beast::http::async_write(stream, response, yield[ec]);
+      http::async_write(stream, response, yield[ec]);
       if (ec) {
         ldout(cct, 5) << "failed to write response: " << ec.message() << dendl;
       }
@@ -149,8 +152,9 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
                                   rgw::io::add_conlen_controlling(
                                     &real_client))));
       RGWRestfulIO client(cct, &real_client_io);
+      auto y = optional_yield{socket.get_io_context(), yield};
       process_request(env.store, env.rest, &req, env.uri_prefix,
-                      *env.auth_registry, &client, env.olog);
+                      *env.auth_registry, &client, env.olog, y, scheduler);
     }
 
     if (!parser.keep_alive()) {
@@ -166,7 +170,7 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
       body.size = discard_buffer.size();
       body.data = discard_buffer.data();
 
-      beast::http::async_read_some(stream, buffer, parser, yield[ec]);
+      http::async_read_some(stream, buffer, parser, yield[ec]);
       if (ec == boost::asio::error::connection_reset) {
         return;
       }
@@ -217,6 +221,7 @@ class ConnectionList {
   }
 };
 
+namespace dmc = rgw::dmclock;
 class AsioFrontend {
   RGWProcessEnv env;
   RGWFrontendConfig* conf;
@@ -226,6 +231,7 @@ class AsioFrontend {
   int init_ssl();
 #endif
   SharedMutex pause_mutex;
+  std::unique_ptr<rgw::dmclock::Scheduler> scheduler;
 
   struct Listener {
     tcp::endpoint endpoint;
@@ -248,14 +254,33 @@ class AsioFrontend {
   std::atomic<bool> going_down{false};
 
   CephContext* ctx() const { return env.store->ctx(); }
-
+  std::optional<dmc::ClientCounters> client_counters;
+  std::unique_ptr<dmc::ClientConfig> client_config;
   void accept(Listener& listener, boost::system::error_code ec);
 
  public:
-  AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf)
-    : env(env), conf(conf),
-      pause_mutex(context.get_executor())
-  {}
+  AsioFrontend(const RGWProcessEnv& env, RGWFrontendConfig* conf,
+	       dmc::SchedulerCtx& sched_ctx)
+    : env(env), conf(conf), pause_mutex(context.get_executor())
+  {
+    auto sched_t = dmc::get_scheduler_t(ctx());
+    switch(sched_t){
+    case dmc::scheduler_t::dmclock:
+      scheduler.reset(new dmc::AsyncScheduler(ctx(),
+                                              context,
+                                              std::ref(sched_ctx.get_dmc_client_counters()),
+                                              sched_ctx.get_dmc_client_config(),
+                                              *sched_ctx.get_dmc_client_config(),
+                                              dmc::AtLimit::Reject));
+      break;
+    case dmc::scheduler_t::none:
+      lderr(ctx()) << "Got invalid scheduler type for beast, defaulting to throttler" << dendl;
+      [[fallthrough]];
+    case dmc::scheduler_t::throttler:
+      scheduler.reset(new dmc::SimpleThrottler(ctx()));
+
+    }
+  }
 
   int init();
   int run();
@@ -511,7 +536,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         auto c = connections.add(conn);
         // wrap the socket in an ssl stream
         ssl::stream<tcp::socket&> stream{s, *ssl_context};
-        beast::flat_buffer buffer;
+        boost::beast::flat_buffer buffer;
         // do ssl handshake
         boost::system::error_code ec;
         auto bytes = stream.async_handshake(ssl::stream_base::server,
@@ -521,7 +546,8 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
           return;
         }
         buffer.consume(bytes);
-        handle_connection(env, stream, buffer, true, pause_mutex, ec, yield);
+        handle_connection(env, stream, buffer, true, pause_mutex,
+                          scheduler.get(), ec, yield);
         if (!ec) {
           // ssl shutdown (ignoring errors)
           stream.async_shutdown(yield[ec]);
@@ -536,9 +562,10 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
       [this, s=std::move(socket)] (boost::asio::yield_context yield) mutable {
         Connection conn{s};
         auto c = connections.add(conn);
-        beast::flat_buffer buffer;
+        boost::beast::flat_buffer buffer;
         boost::system::error_code ec;
-        handle_connection(env, s, buffer, false, pause_mutex, ec, yield);
+        handle_connection(env, s, buffer, false, pause_mutex,
+                          scheduler.get(), ec, yield);
         s.shutdown(tcp::socket::shutdown_both, ec);
       });
   }
@@ -641,12 +668,15 @@ void AsioFrontend::unpause(RGWRados* const store,
 
 class RGWAsioFrontend::Impl : public AsioFrontend {
  public:
-  Impl(const RGWProcessEnv& env, RGWFrontendConfig* conf) : AsioFrontend(env, conf) {}
+  Impl(const RGWProcessEnv& env, RGWFrontendConfig* conf,
+       rgw::dmclock::SchedulerCtx& sched_ctx)
+    : AsioFrontend(env, conf, sched_ctx) {}
 };
 
 RGWAsioFrontend::RGWAsioFrontend(const RGWProcessEnv& env,
-                                 RGWFrontendConfig* conf)
-  : impl(new Impl(env, conf))
+                                 RGWFrontendConfig* conf,
+				 rgw::dmclock::SchedulerCtx& sched_ctx)
+  : impl(new Impl(env, conf, sched_ctx))
 {
 }
 

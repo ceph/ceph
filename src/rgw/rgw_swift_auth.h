@@ -284,6 +284,7 @@ public:
   int verify_permission() override { return 0; }
   void execute() override;
   const char* name() const override { return "swift_auth_get"; }
+  dmc::client_id dmclock_client() override { return dmc::client_id::auth; }
 };
 
 class RGWHandler_SWIFT_Auth : public RGWHandler_REST {

@@ -29,6 +29,7 @@
 #include "rgw_iam_policy.h"
 #include "rgw_quota.h"
 #include "rgw_string.h"
+#include "common/async/yield_context.h"
 #include "rgw_website.h"
 #include "cls/version/cls_version_types.h"
 #include "cls/user/cls_user_types.h"
@@ -224,6 +225,7 @@ using ceph::crypto::MD5;
 #define ERR_INVALID_CORS_RULES_ERROR                     2215
 #define ERR_NO_CORS_FOUND        2216
 #define ERR_INVALID_WEBSITE_ROUTING_RULES_ERROR          2217
+#define ERR_RATE_LIMITED         2218
 
 #define ERR_BUSY_RESHARDING      2300
 #define ERR_NO_SUCH_ENTITY       2301
@@ -2073,6 +2075,9 @@ struct req_state : DoutPrefixProvider {
   uint64_t id;
 
   bool mfa_verified{false};
+
+  /// optional coroutine context
+  optional_yield yield{null_yield};
 
   req_state(CephContext* _cct, RGWEnv* e, RGWUserInfo* u, uint64_t id);
   ~req_state();
