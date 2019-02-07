@@ -45,7 +45,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << *this
 ostream& Pipe::_pipe_prefix(std::ostream &out) const {
-  return out << "-- " << msgr->get_myaddr() << " >> " << peer_addr << " pipe(" << this
+  return out << "-- " << msgr->get_myaddr_legacy() << " >> " << peer_addr
+	     << " pipe(" << this
 	     << " sd=" << sd << " :" << port
              << " s=" << state
              << " pgs=" << peer_global_seq
@@ -959,7 +960,7 @@ void Pipe::set_socket_options()
     if (!peer_addr.is_blank_ip()) {
       addr_family = peer_addr.get_family();
     } else {
-      addr_family = msgr->get_myaddr().get_family();
+      addr_family = msgr->get_myaddr_legacy().get_family();
     }
     switch (addr_family) {
     case AF_INET:
@@ -1036,7 +1037,7 @@ int Pipe::connect()
   set_socket_options();
 
   {
-    entity_addr_t addr2bind = msgr->get_myaddr();
+    entity_addr_t addr2bind = msgr->get_myaddr_legacy();
     if (msgr->cct->_conf->ms_bind_before_connect && (!addr2bind.is_blank_ip())) {
       addr2bind.set_port(0);
       int r = ::bind(sd , addr2bind.get_sockaddr(), addr2bind.get_sockaddr_len());

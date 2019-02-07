@@ -2218,7 +2218,7 @@ std::string collect_compression_algorithms()
 void Monitor::collect_metadata(Metadata *m)
 {
   collect_sys_info(m, g_ceph_context);
-  (*m)["addr"] = stringify(messenger->get_myaddr());
+  (*m)["addrs"] = stringify(messenger->get_myaddrs());
   (*m)["compression_algorithms"] = collect_compression_algorithms();
 
   // infer storage device
@@ -2256,7 +2256,7 @@ void Monitor::finish_election()
   register_cluster_logger();
 
   // am i named properly?
-  string cur_name = monmap->get_name(messenger->get_myaddr());
+  string cur_name = monmap->get_name(messenger->get_myaddrs());
   if (cur_name != name) {
     dout(10) << " renaming myself from " << cur_name << " -> " << name << dendl;
     send_mon_message(
@@ -3815,7 +3815,7 @@ void Monitor::forward_request_leader(MonOpRequestRef op)
   MonSession *session = op->get_session();
   PaxosServiceMessage *req = op->get_req<PaxosServiceMessage>();
   
-  if (req->get_source().is_mon() && req->get_source_addr() != messenger->get_myaddr()) {
+  if (req->get_source().is_mon() && req->get_source_addrs() != messenger->get_myaddrs()) {
     dout(10) << "forward_request won't forward (non-local) mon request " << *req << dendl;
   } else if (session->proxy_con) {
     dout(10) << "forward_request won't double fwd request " << *req << dendl;

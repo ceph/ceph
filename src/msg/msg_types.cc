@@ -180,8 +180,10 @@ ostream& operator<<(ostream& out, const entity_addr_t &addr)
   if (addr.type == entity_addr_t::TYPE_NONE) {
     return out << "-";
   }
-  out << entity_addr_t::get_type_name(addr.type) << ":"
-      << addr.get_sockaddr() << '/' << addr.nonce;
+  if (addr.type != entity_addr_t::TYPE_ANY) {
+    out << entity_addr_t::get_type_name(addr.type) << ":";
+  }
+  out << addr.get_sockaddr() << '/' << addr.nonce;
   return out;
 }
 

@@ -14,8 +14,8 @@
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
 ostream &ProtocolV1::_conn_prefix(std::ostream *_dout) {
-  return *_dout << "--1- " << messenger->get_myaddrs().legacy_addr() << " >> "
-                << connection->peer_addrs->legacy_addr()
+  return *_dout << "--1- " << messenger->get_myaddrs() << " >> "
+                << *connection->peer_addrs
 		<< " conn("
                 << connection << " " << this
                 << " :" << connection->port << " s=" << get_state_name(state)
@@ -1385,7 +1385,7 @@ CtPtr ProtocolV1::handle_server_banner_and_identify(char *buffer, int r) {
   }
 
   bufferlist myaddrbl;
-  encode(messenger->get_myaddrs().legacy_addr(), myaddrbl, 0);  // legacy
+  encode(messenger->get_myaddr_legacy(), myaddrbl, 0);  // legacy
   return WRITE(myaddrbl, handle_my_addr_write);
 }
 
@@ -1398,7 +1398,7 @@ CtPtr ProtocolV1::handle_my_addr_write(int r) {
     return _fault();
   }
   ldout(cct, 10) << __func__ << " connect sent my addr "
-                 << messenger->get_myaddrs().legacy_addr() << dendl;
+                 << messenger->get_myaddr_legacy() << dendl;
 
   return CONTINUE(send_connect_message);
 }
@@ -1713,6 +1713,7 @@ CtPtr ProtocolV1::send_server_banner() {
 
   bl.append(CEPH_BANNER, strlen(CEPH_BANNER));
 
+  // as a server, we should have a legacy addr if we accepted this connection.
   auto legacy = messenger->get_myaddrs().legacy_addr();
   encode(legacy, bl, 0);  // legacy
   connection->port = legacy.get_port();
@@ -1962,6 +1963,13 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   if (existing == connection) {
     existing = nullptr;
   }
+  if (existing && existing->protocol->proto_type != 1) {
+    ldout(cct,1) << __func__ << " existing " << existing << " proto "
+		 << existing->protocol.get() << " version is "
+		 << existing->protocol->proto_type << ", marking down" << dendl;
+    existing->mark_down();
+    existing = nullptr;
+  }
 
   if (existing) {
     // There is no possible that existing connection will acquire this
@@ -1969,15 +1977,11 @@ CtPtr ProtocolV1::handle_connect_message_2() {
     existing->lock.lock();  // skip lockdep check (we are locking a second
                             // AsyncConnection here)
 
-    ProtocolV1 *exproto = dynamic_cast<ProtocolV1 *>(existing->protocol.get());
     ldout(cct,10) << __func__ << " existing=" << existing << " exproto="
-		  << exproto << dendl;
-    assert(exproto->proto_type == 1);
-
-    if (!exproto) {
-      ldout(cct, 1) << __func__ << " existing=" << existing << dendl;
-      ceph_assert(false);
-    }
+		  << existing->protocol.get() << dendl;
+    ProtocolV1 *exproto = dynamic_cast<ProtocolV1 *>(existing->protocol.get());
+    ceph_assert(exproto);
+    ceph_assert(exproto->proto_type == 1);
 
     if (exproto->state == CLOSED) {
       ldout(cct, 1) << __func__ << " existing " << existing
@@ -2077,7 +2081,7 @@ CtPtr ProtocolV1::handle_connect_message_2() {
       }
 
       // connection race?
-      if (connection->peer_addrs->legacy_addr() < messenger->get_myaddr() ||
+      if (connection->peer_addrs->legacy_addr() < messenger->get_myaddr_legacy() ||
           existing->policy.server) {
         // incoming wins
         ldout(cct, 10) << __func__ << " accept connection race, existing "
@@ -2092,7 +2096,7 @@ CtPtr ProtocolV1::handle_connect_message_2() {
             << ".cseq " << exproto->connect_seq
             << " == " << connect_msg.connect_seq << ", sending WAIT" << dendl;
         ceph_assert(connection->peer_addrs->legacy_addr() >
-                    messenger->get_myaddr());
+                    messenger->get_myaddr_legacy());
         existing->lock.unlock();
 	// make sure we follow through with opening the existing
 	// connection (if it isn't yet open) since we know the peer

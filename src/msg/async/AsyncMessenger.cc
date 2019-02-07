@@ -462,7 +462,6 @@ int AsyncMessenger::client_bind(const entity_addr_t &bind_addr)
     return 0;
   Mutex::Locker l(lock);
   if (did_bind) {
-    ceph_assert(my_addrs->legacy_addr() == bind_addr);
     return 0;
   }
   if (started) {
@@ -889,6 +888,7 @@ bool AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   if (need_addr) {
     if (my_addrs->empty()) {
       auto a = peer_addr_for_me;
+      a.set_type(entity_addr_t::TYPE_ANY);
       a.set_nonce(nonce);
       if (!did_bind) {
 	a.set_port(0);
@@ -899,12 +899,14 @@ bool AsyncMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
       // fix all addrs of the same family, regardless of type (msgr2 vs legacy)
       entity_addrvec_t newaddrs = *my_addrs;
       for (auto& a : newaddrs.v) {
-	if (a.get_family() == peer_addr_for_me.get_family()) {
+	if (a.is_blank_ip() &&
+	    a.get_family() == peer_addr_for_me.get_family()) {
 	  entity_addr_t t = peer_addr_for_me;
-	  t.set_type(a.get_type());
 	  if (!did_bind) {
+	    t.set_type(entity_addr_t::TYPE_ANY);
 	    t.set_port(0);
 	  } else {	  
+	    t.set_type(a.get_type());
 	    t.set_port(a.get_port());
 	  }
 	  t.set_nonce(a.get_nonce());

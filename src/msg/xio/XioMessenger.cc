@@ -344,7 +344,7 @@ void XioInit::package_init(CephContext *cct) {
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 static ostream& _prefix(std::ostream *_dout, XioMessenger *msgr) {
-  return *_dout << "-- " << msgr->get_myaddr() << " ";
+  return *_dout << "-- " << msgr->get_myaddr_legacy() << " ";
 }
 
 XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,

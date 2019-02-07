@@ -73,8 +73,9 @@ public:
 class AsyncMessenger;
 
 class Protocol {
+public:
+  const int proto_type;
 protected:
-  int proto_type;
   AsyncConnection *connection;
   AsyncMessenger *messenger;
   CephContext *cct;
