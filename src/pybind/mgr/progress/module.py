@@ -348,7 +348,7 @@ class Module(MgrModule):
 
         # TODO: reconcile with existing events referring to this OSD going out
         ev = PgRecoveryEvent(
-            "Rebalancing after OSD {0} marked out".format(osd_id),
+            "Rebalancing after osd.{0} marked out".format(osd_id),
             refs=[("osd", osd_id)],
             which_pgs=affected_pgs,
             evactuate_osds=[osd_id]
@@ -359,7 +359,7 @@ class Module(MgrModule):
     def _osd_in(self, osd_id):
         for ev_id, ev in self._events.items():
             if isinstance(ev, PgRecoveryEvent) and osd_id in ev.evacuating_osds:
-                self.log.info("OSD {0} came back in, cancelling event".format(
+                self.log.info("osd.{0} came back in, cancelling event".format(
                     osd_id
                 ))
                 self._complete(ev)
