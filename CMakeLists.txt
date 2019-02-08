@@ -58,7 +58,7 @@ endif(WITH_CCACHE)
 option(WITH_MANPAGE "Build man pages." ON)
 if(WITH_MANPAGE)
   find_program(SPHINX_BUILD
-    sphinx-build)
+    NAMES sphinx-build sphinx-build-3)
   if(NOT SPHINX_BUILD)
     message(FATAL_ERROR "Can't find sphinx-build.")
   endif(NOT SPHINX_BUILD)
