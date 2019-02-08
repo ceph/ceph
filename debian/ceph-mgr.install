@@ -18,6 +18,7 @@ usr/lib/ceph/mgr/osd_perf_query
 usr/lib/ceph/mgr/pg_autoscaler
 usr/lib/ceph/mgr/progress
 usr/lib/ceph/mgr/prometheus
+usr/lib/ceph/mgr/rbd_support
 usr/lib/ceph/mgr/restful
 usr/lib/ceph/mgr/selftest
 usr/lib/ceph/mgr/smart
