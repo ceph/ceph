@@ -37,7 +37,6 @@
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/version/cls_version_client.h"
 #include "cls/log/cls_log_client.h"
-#include "cls/timeindex/cls_timeindex_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "cls/user/cls_user_client.h"
 #include "cls/otp/cls_otp_client.h"
@@ -1944,115 +1943,6 @@ int RGWRados::time_log_trim(const string& oid, const real_time& start_time, cons
   return r;
 }
 
-string RGWRados::objexp_hint_get_shardname(int shard_num)
-{
-  char buf[32];
-  snprintf(buf, sizeof(buf), "%010u", (unsigned)shard_num);
-
-  string objname("obj_delete_at_hint.");
-  return objname + buf;
-}
-
-int RGWRados::objexp_key_shard(const rgw_obj_index_key& key)
-{
-  string obj_key = key.name + key.instance;
-  int num_shards = cct->_conf->rgw_objexp_hints_num_shards;
-  return rgw_bucket_shard_index(obj_key, num_shards);
-}
-
-static string objexp_hint_get_keyext(const string& tenant_name,
-                                     const string& bucket_name,
-                                     const string& bucket_id,
-                                     const rgw_obj_key& obj_key)
-{
-  return tenant_name + (tenant_name.empty() ? "" : ":") + bucket_name + ":" + bucket_id +
-      ":" + obj_key.name + ":" + obj_key.instance;
-}
-
-int RGWRados::objexp_hint_add(const ceph::real_time& delete_at,
-                              const string& tenant_name,
-                              const string& bucket_name,
-                              const string& bucket_id,
-                              const rgw_obj_index_key& obj_key)
-{
-  const string keyext = objexp_hint_get_keyext(tenant_name, bucket_name,
-          bucket_id, obj_key);
-  objexp_hint_entry he = {
-      .tenant = tenant_name,
-      .bucket_name = bucket_name,
-      .bucket_id = bucket_id,
-      .obj_key = obj_key,
-      .exp_time = delete_at };
-  bufferlist hebl;
-  encode(he, hebl);
-  ObjectWriteOperation op;
-  cls_timeindex_add(op, utime_t(delete_at), keyext, hebl);
-
-  string shard_name = objexp_hint_get_shardname(objexp_key_shard(obj_key));
-  return objexp_pool_ctx.operate(shard_name, &op);
-}
-
-void  RGWRados::objexp_get_shard(int shard_num,
-                                 string& shard)                       /* out */
-{
-  shard = objexp_hint_get_shardname(shard_num);
-}
-
-int RGWRados::objexp_hint_list(const string& oid,
-                               const ceph::real_time& start_time,
-                               const ceph::real_time& end_time,
-                               const int max_entries,
-                               const string& marker,
-                               list<cls_timeindex_entry>& entries, /* out */
-                               string *out_marker,                 /* out */
-                               bool *truncated)                    /* out */
-{
-  librados::ObjectReadOperation op;
-  cls_timeindex_list(op, utime_t(start_time), utime_t(end_time), marker, max_entries, entries,
-        out_marker, truncated);
-
-  bufferlist obl;
-  int ret = objexp_pool_ctx.operate(oid, &op, &obl);
-
-  if ((ret < 0 ) && (ret != -ENOENT)) {
-    return ret;
-  }
-
-  if ((ret == -ENOENT) && truncated) {
-    *truncated = false;
-  }
-
-  return 0;
-}
-
-int RGWRados::objexp_hint_parse(cls_timeindex_entry &ti_entry,  /* in */
-                                objexp_hint_entry& hint_entry)  /* out */
-{
-  try {
-    auto iter = ti_entry.value.cbegin();
-    decode(hint_entry, iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: couldn't decode avail_pools" << dendl;
-  }
-
-  return 0;
-}
-
-int RGWRados::objexp_hint_trim(const string& oid,
-                               const ceph::real_time& start_time,
-                               const ceph::real_time& end_time,
-                               const string& from_marker,
-                               const string& to_marker)
-{
-  int ret = cls_timeindex_trim(objexp_pool_ctx, oid, utime_t(start_time), utime_t(end_time),
-          from_marker, to_marker);
-  if ((ret < 0 ) && (ret != -ENOENT)) {
-    return ret;
-  }
-
-  return 0;
-}
-
 int RGWRados::lock_exclusive(const rgw_pool& pool, const string& oid, timespan& duration,
                              string& zone_id, string& owner_id) {
   librados::IoCtx io_ctx;
@@ -3484,8 +3374,8 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     rgw_obj_index_key obj_key;
     obj.key.get_index_key(&obj_key);
 
-    r = store->objexp_hint_add(meta.delete_at,
-            obj.bucket.tenant, obj.bucket.name, obj.bucket.bucket_id, obj_key);
+    r = store->obj_expirer->hint_add(meta.delete_at, obj.bucket.tenant, obj.bucket.name,
+                                     obj.bucket.bucket_id, obj_key);
     if (r < 0) {
       ldout(store->ctx(), 0) << "ERROR: objexp_hint_add() returned r=" << r << ", object will not get removed" << dendl;
       /* ignoring error, nothing we can do at this point */
@@ -5937,7 +5827,7 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& ob
         rgw_obj_index_key obj_key;
         obj.key.get_index_key(&obj_key);
 
-        objexp_hint_add(ts, bucket.tenant, bucket.name, bucket.bucket_id, obj_key);
+        obj_expirer->hint_add(ts, bucket.tenant, bucket.name, bucket.bucket_id, obj_key);
       } catch (buffer::error& err) {
 	ldout(cct, 0) << "ERROR: failed to decode " RGW_ATTR_DELETE_AT << " attr" << dendl;
       }

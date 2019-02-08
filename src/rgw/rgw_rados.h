@@ -1509,31 +1509,6 @@ public:
                     const string& from_marker, const string& to_marker,
                     librados::AioCompletion *completion = nullptr);
 
-  string objexp_hint_get_shardname(int shard_num);
-  int objexp_key_shard(const rgw_obj_index_key& key);
-  void objexp_get_shard(int shard_num,
-                        string& shard);                       /* out */
-  int objexp_hint_add(const ceph::real_time& delete_at,
-                      const string& tenant_name,
-                      const string& bucket_name,
-                      const string& bucket_id,
-                      const rgw_obj_index_key& obj_key);
-  int objexp_hint_list(const string& oid,
-                       const ceph::real_time& start_time,
-                       const ceph::real_time& end_time,
-                       const int max_entries,
-                       const string& marker,
-                       list<cls_timeindex_entry>& entries, /* out */
-                       string *out_marker,                 /* out */
-                       bool *truncated);                   /* out */
-  int objexp_hint_parse(cls_timeindex_entry &ti_entry,
-                        objexp_hint_entry& hint_entry);    /* out */
-  int objexp_hint_trim(const string& oid,
-                       const ceph::real_time& start_time,
-                       const ceph::real_time& end_time,
-                       const string& from_marker = std::string(),
-                       const string& to_marker   = std::string());
-
   int lock_exclusive(const rgw_pool& pool, const string& oid, ceph::timespan& duration, string& zone_id, string& owner_id);
   int unlock(const rgw_pool& pool, const string& oid, string& zone_id, string& owner_id);
 

@@ -94,6 +94,10 @@ public:
 
     rgw_rados_ref& get_ref() { return ref; }
     const rgw_rados_ref& get_ref() const { return ref; }
+
+    const rgw_raw_obj& get_raw_obj() const {
+      return ref.obj;
+    }
   };
 
   class Pool {
@@ -183,5 +187,9 @@ public:
   friend class Pool;
   friend class Pool::List;
 };
+
+inline ostream& operator<<(ostream& out, const RGWSI_RADOS::Obj& obj) {
+  return out << obj.get_raw_obj();
+}
 
 #endif
