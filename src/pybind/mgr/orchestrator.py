@@ -216,8 +216,8 @@ class Orchestrator(object):
         """
         return self.get_inventory()
 
-    def get_inventory(self, node_filter=None):
-        # type: (InventoryFilter) -> ReadCompletion[List[InventoryNode]]
+    def get_inventory(self, node_filter=None, refresh=False):
+        # type: (InventoryFilter, bool) -> ReadCompletion[List[InventoryNode]]
         """
         Returns something that was created by `ceph-volume inventory`.
 
