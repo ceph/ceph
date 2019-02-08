@@ -1469,6 +1469,7 @@ fi
 %{_libdir}/ceph/mgr/pg_autoscaler
 %{_libdir}/ceph/mgr/progress
 %{_libdir}/ceph/mgr/prometheus
+%{_libdir}/ceph/mgr/rbd_support
 %{_libdir}/ceph/mgr/restful
 %{_libdir}/ceph/mgr/selftest
 %{_libdir}/ceph/mgr/smart
