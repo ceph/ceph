@@ -10,7 +10,16 @@ tasks:
 - install:
     branch: hammer
     downgrade_packages: ['librbd1', 'librados2']
-    exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev', 'librados3', 'libradospp-devel']
+    exclude_packages:
+      - librados3
+      - ceph-mgr-diskprediction-local
+      - ceph-mgr-diskprediction-cloud
+      - ceph-mgr-rook
+      - ceph-mgr
+      - libcephfs2
+      - libcephfs-devel
+      - libcephfs-dev
+      - libradospp-devel
     extra_packages: ['librados2']
 - install.upgrade:
     mon.a:
