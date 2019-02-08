@@ -9,9 +9,18 @@ LimitNOFILE=1048576
 LimitNPROC=1048576
 EnvironmentFile=-@SYSTEMD_ENV_FILE@
 Environment=CLUSTER=ceph
-
 ExecStart=/usr/bin/ceph-mgr -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 ExecReload=/bin/kill -HUP $MAINPID
+LockPersonality=true
+MemoryDenyWriteExecute=true
+NoNewPrivileges=true
+PrivateDevices=yes
+ProtectControlGroups=true
+ProtectHome=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
+ProtectSystem=full
+PrivateTmp=true
 Restart=on-failure
 RestartSec=10
 StartLimitInterval=30min

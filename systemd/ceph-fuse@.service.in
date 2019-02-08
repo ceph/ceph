@@ -9,6 +9,14 @@ PartOf=ceph-fuse.target
 EnvironmentFile=-@SYSTEMD_ENV_FILE@
 Environment=CLUSTER=ceph
 ExecStart=/usr/bin/ceph-fuse -f --cluster ${CLUSTER} %I
+LockPersonality=true
+MemoryDenyWriteExecute=true
+NoNewPrivileges=true
+# ceph-fuse requires access to /dev fuse device
+PrivateDevices=no
+ProtectControlGroups=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
 TasksMax=infinity
 Restart=on-failure
 StartLimitInterval=30min

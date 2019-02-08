@@ -12,7 +12,15 @@ Environment=CLUSTER=ceph
 ExecStart=/usr/bin/ceph-osd -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 ExecStartPre=/usr/lib/ceph/ceph-osd-prestart.sh --cluster ${CLUSTER} --id %i
 ExecReload=/bin/kill -HUP $MAINPID
+LockPersonality=true
+MemoryDenyWriteExecute=true
+# Need NewPrivileges via `sudo smartctl`
+NoNewPrivileges=false
+ProtectControlGroups=true
 ProtectHome=true
+ProtectKernelModules=true
+# flushing filestore requires access to /proc/sys/vm/drop_caches
+ProtectKernelTunables=false
 ProtectSystem=full
 PrivateTmp=true
 TasksMax=infinity
