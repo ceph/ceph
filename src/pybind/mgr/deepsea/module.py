@@ -120,7 +120,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         return True, ""
 
 
-    def get_inventory(self, node_filter=None):
+    def get_inventory(self, node_filter=None, refresh=False):
         """
         Note that this will raise an exception (e.g. if the salt-api is down,
         or the username/password is incorret).  Same for other methods.

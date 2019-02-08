@@ -203,7 +203,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             self._shutdown.wait(5)
 
     @deferred_read
-    def get_inventory(self, node_filter=None):
+    def get_inventory(self, node_filter=None, refresh=False):
         """
         There is no guarantee which devices are returned by get_inventory.
         """
