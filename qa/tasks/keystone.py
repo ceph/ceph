@@ -333,7 +333,6 @@ def task(ctx, config):
     Example of configuration:
 
       - install:
-          flavor: notcmalloc
       - ceph:
       - tox: [ client.0 ]
       - keystone:
