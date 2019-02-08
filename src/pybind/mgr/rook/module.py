@@ -78,7 +78,7 @@ class RookWriteCompletion(orchestrator.WriteCompletion):
         self.executed = False
 
         # Result of k8s API call, this is set if executed==True
-        self.k8s_result = None
+        self._result = None
 
         self.effective = False
 
@@ -91,6 +91,10 @@ class RookWriteCompletion(orchestrator.WriteCompletion):
         # XXX hacky global
         global all_completions
         all_completions.append(self)
+
+    @property
+    def result(self):
+        return self._result
 
     @property
     def is_persistent(self):
@@ -106,7 +110,7 @@ class RookWriteCompletion(orchestrator.WriteCompletion):
 
     def execute(self):
         if not self.executed:
-            self.k8s_result = self.execute_cb()
+            self._result = self.execute_cb()
             self.executed = True
 
         if not self.effective:
@@ -403,7 +407,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                                "support OSD creation.")
 
         def execute():
-            self.rook_cluster.add_osds(drive_group, all_hosts)
+            return self.rook_cluster.add_osds(drive_group, all_hosts)
 
         def is_complete():
             # Find OSD pods on this host
