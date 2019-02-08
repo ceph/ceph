@@ -103,12 +103,12 @@ class SaltManager(object):
 
     def all_minions_zypper_ps(self):
         """Run "zypper ps -s" on all nodes"""
-        cmd = "zypper ps -s"
+        cmd = "zypper ps -s || true"
         self.all_minions_cmd_run(cmd, abort_on_fail=False)
 
     def all_minions_zypper_ps_requires_reboot(self):
         number_of_minions = len(self.ctx.cluster.remotes)
-        salt_cmd = "sudo salt \\* cmd.run \'zypper ps -s\' 2>/dev/null"
+        salt_cmd = "sudo salt \\* cmd.run \'zypper ps -s || true\' 2>/dev/null"
         number_with_no_processes = len(
             re.findall('No processes using deleted files found',
                        self.master_remote.sh(salt_cmd))
