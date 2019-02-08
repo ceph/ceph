@@ -343,7 +343,7 @@ class RookCluster(object):
         Rook currently (0.8) can only do single-drive OSDs, so we
         treat all drive groups as just a list of individual OSDs.
         """
-        block_devices = drive_group.data_devices
+        block_devices = drive_group.data_devices.paths
 
         assert drive_group.objectstore in ("bluestore", "filestore")
 
@@ -404,8 +404,7 @@ class RookCluster(object):
                 })
 
         if len(patch) == 0:
-            log.warning("No-op adding stateful service")
-            return
+            return "No change"
 
         try:
             self.rook_api_patch(
@@ -416,3 +415,5 @@ class RookCluster(object):
             raise ApplyException(
                 "Failed to create OSD entries in Cluster CRD: {0}".format(
                     e))
+
+        return "Success"
