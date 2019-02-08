@@ -555,6 +555,7 @@ test_clone_v2() {
     rbd clone --rbd-default-clone-format=1 test1@1 test4
 
     rbd children test1@1 | sort | tr '\n' ' ' | grep -E "test2.*test3.*test4"
+    rbd children --descendants test1 | sort | tr '\n' ' ' | grep -E "test2.*test3.*test4"
 
     rbd remove test4
     rbd snap unprotect test1@1
