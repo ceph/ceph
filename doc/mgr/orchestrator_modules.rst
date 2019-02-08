@@ -26,6 +26,39 @@ by subclasses.  The purpose of defining this common interface
 for different orchestrators is to enable common UI code, such as
 the dashboard, to work with various different backends.
 
+
+.. graphviz::
+
+    digraph G {
+        subgraph cluster_1 {
+            volumes [label="mgr/volumes"]
+            rook [label="mgr/rook"]
+            dashboard [label="mgr/dashboard"]
+            orchestrator_cli [label="mgr/orchestrator_cli"]
+            orchestrator [label="Orchestrator Interface"]
+            ansible [label="mgr/ansible"]
+            ssh [label="mgr/ssh"]
+            deepsea [label="mgr/deepsea"]
+
+            label = "ceph-mgr";
+        }
+
+        volumes -> orchestrator
+        dashboard -> orchestrator
+        orchestrator_cli -> orchestrator
+        orchestrator -> rook -> rook_io
+        orchestrator -> ansible -> ceph_ansible
+        orchestrator -> deepsea -> suse_deepsea
+        orchestrator -> ssh
+
+
+        rook_io [label="Rook"]
+        ceph_ansible [label="ceph-ansible"]
+        suse_deepsea [label="DeepSea"]
+
+        rankdir="TB";
+    }
+
 Behind all the abstraction, the purpose of orchestrator modules is simple:
 enable Ceph to do things like discover available hardware, create and
 destroy OSDs, and run MDS and RGW services.
@@ -127,6 +160,13 @@ Excluded functionality
   Ceph clusters).  Each drive is assumed to be visible only on
   a single node.
 
+Host management
+---------------
+
+.. automethod:: Orchestrator.add_host
+.. automethod:: Orchestrator.remote_host
+.. automethod:: Orchestrator.get_hosts
+
 Inventory and status
 --------------------
 
@@ -139,6 +179,11 @@ Inventory and status
 
 .. automethod:: Orchestrator.describe_service
 .. autoclass:: ServiceDescription
+
+Service Actions
+---------------
+
+.. automethod:: Orchestrator.service_action
 
 OSD management
 --------------
@@ -153,6 +198,13 @@ OSD management
 .. autoclass:: DriveGroupSpec
    :members:
    :exclude-members: from_json
+
+Stateless Services
+------------------
+
+.. automethod:: Orchestrator.add_stateless_service
+.. automethod:: Orchestrator.update_stateless_service
+.. automethod:: Orchestrator.remove_stateless_service
 
 Upgrades
 --------
