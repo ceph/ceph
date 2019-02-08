@@ -988,6 +988,14 @@ Monitors can also disallow removal of pools if configured that way.
 :Type: Boolean
 :Default: ``false``
 
+``osd pool default ec fast read``
+
+:Description: Whether to turn on fast read on the pool or not. It will be used as
+              the default setting of newly created erasure coded pools if ``fast_read``
+              is not specified at create time.
+:Type: Boolean
+:Default: ``false``
+
 ``osd pool default flag hashpspool``
 
 :Description: Set the hashpspool flag on new pools
@@ -1097,15 +1105,6 @@ Miscellaneous
 ``mon osd allow primary affinity``
 
 :Description: allow ``primary_affinity`` to be set in the osdmap.
-:Type: Boolean
-:Default: False
-
-
-``mon osd pool ec fast read``
-
-:Description: Whether turn on fast read on the pool or not. It will be used as
-              the default setting of newly created erasure pools if ``fast_read``
-              is not specified at create time.
 :Type: Boolean
 :Default: False
 

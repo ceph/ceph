@@ -5,7 +5,7 @@ overrides:
     - objects unfound and apparently lost
     conf:
       mon:
-        mon osd pool ec fast read: 1
+        osd pool default ec fast read: true
       osd:
         osd debug reject backfill probability: .1
         osd scrub min interval: 60
