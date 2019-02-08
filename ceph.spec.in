@@ -492,6 +492,7 @@ BuildArch:	noarch
 Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
+Requires:       python-kubernetes
 %description mgr-rook
 ceph-mgr-rook is a ceph-mgr plugin for orchestration functions using
 a Rook backend.
