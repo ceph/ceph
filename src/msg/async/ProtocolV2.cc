@@ -416,6 +416,7 @@ struct MessageHeaderFrame
 		     ceph::bufferlist&& middle_bl,
 		     ceph::bufferlist&& data_bl)
       : PayloadFrame<MessageHeaderFrame, ceph_msg_header2>(msghdr) {
+#if 0
     ceph::bufferlist trans_bl;
     this->payload.splice(8, this->payload.length() - 8, &trans_bl);
     protocol.authencrypt_payload(trans_bl);
@@ -427,12 +428,60 @@ struct MessageHeaderFrame
 
     protocol.authencrypt_payload(trans_bl);
     this->payload.claim_append(trans_bl);
+
+#else
+    ceph_assert(protocol.session_stream_handlers.tx);
+
+    protocol.session_stream_handlers.tx->reset_tx_handler({
+      8,
+      this->payload.length(),
+      front_bl.length(),
+      middle_bl.length(),
+      data_bl.length()
+    });
+
+    ceph::bufferlist trans_bl;
+    this->payload.splice(8, this->payload.length() - 8, &trans_bl);
+    std::swap(trans_bl, this->payload);
+
+    this->preamble_filler = protocol.session_stream_handlers.tx->reserve(8);
+
+    protocol.session_stream_handlers.tx->authenticated_encrypt_update(
+      std::move(this->payload));
+    if (front_bl.length()) {
+    protocol.session_stream_handlers.tx->authenticated_encrypt_update(
+      std::move(front_bl));
+    }
+    if (middle_bl.length()) {
+    protocol.session_stream_handlers.tx->authenticated_encrypt_update(
+      std::move(middle_bl));
+    }
+    if (data_bl.length()) {
+    protocol.session_stream_handlers.tx->authenticated_encrypt_update(
+      std::move(data_bl));
+    }
+
+    this->payload = \
+      protocol.session_stream_handlers.tx->authenticated_encrypt_final();
+#endif
   }
 
   MessageHeaderFrame(ProtocolV2 &protocol, char *payload, uint32_t length)
       : PayloadFrame<MessageHeaderFrame, ceph_msg_header2>() {
+#if 0
     protocol.authdecrypt_payload(payload, length);
     this->decode_frame(payload, length);
+#else
+    protocol.session_stream_handlers.rx->reset_rx_handler();
+
+    ceph::bufferlist bl;
+    bl.push_back(buffer::create_static(length, payload));
+
+    ceph::bufferlist plain_bl = \
+      protocol.session_stream_handlers.rx->authenticated_decrypt_update(
+        std::move(bl), 8);
+    this->decode_frame(plain_bl.c_str(), plain_bl.length());
+#endif
   }
 
   inline ceph_msg_header2 &header() { return get_val<0>(); }
@@ -854,7 +903,6 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
                     sizeof(header2) - sizeof(header2.header_crc));
   }
 
-
   MessageHeaderFrame message(*this, header2,
     ceph::bufferlist(m->get_payload()),
     ceph::bufferlist(m->get_middle()),
@@ -1034,12 +1082,16 @@ uint32_t ProtocolV2::calculate_payload_size(
   AuthStreamHandler *stream_handler,
   uint32_t length)
 {
+#if 0
   if (auth_meta.is_mode_secure()) {
     ceph_assert(stream_handler != nullptr);
     return stream_handler->calculate_payload_size(length);
   } else {
     return length;
   }
+#else
+  return length;
+#endif
 }
 
 void ProtocolV2::authencrypt_payload(bufferlist &payload) {
@@ -1735,29 +1787,22 @@ CtPtr ProtocolV2::handle_message_complete() {
                          current_header.data_crc, 0, current_header.flags};
 
   if (auth_meta.is_mode_secure()) {
-    bufferlist msg_payload;
-    msg_payload.claim_append(front);
-    msg_payload.claim_append(middle);
-    msg_payload.claim_append(data);
-    msg_payload.claim_append(extra);
+    //msg_payload.claim_append(extra);
 
-    uint32_t payload_len = msg_payload.length();
-    ceph_assert_always(payload_len > 0);
-    authdecrypt_payload(msg_payload.c_str(), payload_len);
-
-    front.clear();
-    middle.clear();
-    data.clear();
-    extra.clear();
-
-    front.push_back(
-        bufferptr(msg_payload.front(), 0, current_header.front_len));
-    middle.push_back(bufferptr(msg_payload.front(), current_header.front_len,
-                               current_header.middle_len));
-    data.push_back(
-        bufferptr(msg_payload.front(),
-                  current_header.front_len + current_header.middle_len,
-                  current_header.data_len));
+    if (front.length()) {
+      front = session_stream_handlers.rx->authenticated_decrypt_update(
+        std::move(front), 8);
+    }
+    if (middle.length()) {
+      middle = session_stream_handlers.rx->authenticated_decrypt_update(
+        std::move(middle), 8);
+    }
+    if (data.length()) {
+      data = session_stream_handlers.rx->authenticated_decrypt_update(
+        std::move(data), 8);
+    }
+    session_stream_handlers.rx->authenticated_decrypt_update_final(
+      std::move(extra), 8);
   }
 
   Message *message = decode_message(cct, messenger->crcflags, header, footer,
