@@ -561,8 +561,11 @@ ceph::bufferlist AES128GCM_OnWireRxHandler::authenticated_decrypt_update_final(
   // drop the auth tag. Maybe we could extend bl if it needs to be faster
   ceph::bufferlist ciphertext;
   ciphertext_and_tag.splice(0, tag_off, &ciphertext);
-  auto plainbl = \
+  ceph::bufferlist plainbl;
+  if (ciphertext.length()) {
+  plainbl = \
     authenticated_decrypt_update(std::move(ciphertext), alignment);
+  }
 
   if (1 != EVP_CIPHER_CTX_ctrl(ectx.get(), EVP_CTRL_GCM_SET_TAG,
 	AESGCM_TAG_LEN, auth_tag.data())) {
