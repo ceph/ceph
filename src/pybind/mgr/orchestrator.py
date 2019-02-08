@@ -11,6 +11,7 @@ import uuid
 
 import six
 
+from mgr_module import MgrModule
 from mgr_util import format_bytes
 
 try:
@@ -230,7 +231,7 @@ class Orchestrator(object):
         return True
 
     def available(self):
-        # type: () -> Tuple[Optional[bool], Optional[str]]
+        # type: () -> Tuple[bool, str]
         """
         Report whether we can talk to the orchestrator.  This is the
         place to give the user a meaningful message if the orchestrator
@@ -242,13 +243,16 @@ class Orchestrator(object):
         (e.g. based on a periodic background ping of the orchestrator)
         if that's necessary to make this method fast.
 
-        Do not override this method if you don't have a meaningful
-        status to return: the default None, None return value is used
-        to indicate that a module is unable to indicate its availability.
+        ..note:: `True` doesn't mean that the desired functionality
+            is actually available in the orchestrator. I.e. this
+            won't work as expected::
+
+                >>> if OrchestratorClientMixin().available()[0]:  # wrong.
+                ...     OrchestratorClientMixin().get_hosts()
 
         :return: two-tuple of boolean, string
         """
-        return None, None
+        raise NotImplementedError()
 
     def wait(self, completions):
         """
@@ -305,7 +309,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def describe_service(self, service_type=None, service_id=None, node_name=None):
-        # type: (str, str, str) -> ReadCompletion[List[ServiceDescription]]
+        # type: (Optional[str], Optional[str], Optional[str]) -> ReadCompletion[List[ServiceDescription]]
         """
         Describe a service (of any kind) that is already configured in
         the orchestrator.  For example, when viewing an OSD in the dashboard
@@ -643,7 +647,7 @@ class DriveGroupSpec(object):
     def __init__(self, host_pattern, data_devices=None, db_devices=None, wal_devices=None, journal_devices=None,
                  data_directories=None, osds_per_device=None, objectstore='bluestore', encrypted=False,
                  db_slots=None, wal_slots=None):
-        # type: (str, Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[List[str]], int, str, bool, int, int) -> ()
+        # type: (str, Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[List[str]], int, str, bool, int, int) -> None
 
         # concept of applying a drive group to a (set) of hosts is tightly
         # linked to the drive group itself
@@ -905,24 +909,37 @@ class OrchestratorClientMixin(Orchestrator):
     ...        self.log.debug(completion.result)
 
     """
+
+    def set_mgr(self, mgr):
+        # type: (MgrModule) -> None
+        """
+        Useable in the Dashbord that uses a global ``mgr``
+        """
+
+        self.__mgr = mgr  # Make sure we're not overwriting any other `mgr` properties
+
     def _oremote(self, meth, args, kwargs):
         """
         Helper for invoking `remote` on whichever orchestrator is enabled
 
         :raises RuntimeError: If the remote method failed.
-        :raises NoOrchestrator:
+        :raises OrchestratorError: orchestrator failed to perform
         :raises ImportError: no `orchestrator_cli` module or backend not found.
         """
         try:
-            o = self._select_orchestrator()
+            mgr = self.__mgr
         except AttributeError:
-            o = self.remote('orchestrator_cli', '_select_orchestrator')
+            mgr = self
+        try:
+            o = mgr._select_orchestrator()
+        except AttributeError:
+            o = mgr.remote('orchestrator_cli', '_select_orchestrator')
 
         if o is None:
             raise NoOrchestrator()
 
-        self.log.debug("_oremote {} -> {}.{}(*{}, **{})".format(self.module_name, o, meth, args, kwargs))
-        return self.remote(o, meth, *args, **kwargs)
+        mgr.log.debug("_oremote {} -> {}.{}(*{}, **{})".format(mgr.module_name, o, meth, args, kwargs))
+        return mgr.remote(o, meth, *args, **kwargs)
 
     def _update_completion_progress(self, completion, force_progress=None):
         # type: (WriteCompletion, Optional[float]) -> None

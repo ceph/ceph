@@ -36,7 +36,7 @@ class IscsiUi(BaseController):
             status['message'] = 'There are no gateways defined'
             return status
         try:
-            for gateway in gateways.keys():
+            for gateway in gateways:
                 try:
                     IscsiClient.instance(gateway_name=gateway).ping()
                 except RequestException:
@@ -67,7 +67,7 @@ class IscsiUi(BaseController):
     def portals(self):
         portals = []
         gateways_config = IscsiGatewaysConfig.get_gateways_config()
-        for name in gateways_config['gateways'].keys():
+        for name in gateways_config['gateways']:
             ip_addresses = IscsiClient.instance(gateway_name=name).get_ip_addresses()
             portals.append({'name': name, 'ip_addresses': ip_addresses['data']})
         return sorted(portals, key=lambda p: '{}.{}'.format(p['name'], p['ip_addresses']))
