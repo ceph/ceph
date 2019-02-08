@@ -1807,6 +1807,15 @@ namespace librbd {
     return r;
   }
 
+  int Image::list_descendants(std::vector<linked_image_spec_t> *images)
+  {
+    auto ictx = reinterpret_cast<ImageCtx*>(ctx);
+
+    images->clear();
+    int r = librbd::api::Image<>::list_descendants(ictx, {}, images);
+    return r;
+  }
+
   int Image::list_lockers(std::list<librbd::locker_t> *lockers,
 			  bool *exclusive, string *tag)
   {
@@ -4846,6 +4855,37 @@ extern "C" int rbd_list_children3(rbd_image_t image,
       .trash = cpp_children[idx].trash};
     tracepoint(librbd, list_children_entry, images[idx].pool_name,
                images[idx].image_name);
+  }
+  return 0;
+}
+
+extern "C" int rbd_list_descendants(rbd_image_t image,
+                                    rbd_linked_image_spec_t *images,
+                                    size_t *max_images)
+{
+  auto ictx = reinterpret_cast<librbd::ImageCtx*>(image);
+  memset(images, 0, sizeof(*images) * *max_images);
+
+  std::vector<librbd::linked_image_spec_t> cpp_children;
+  int r = librbd::api::Image<>::list_descendants(ictx, {}, &cpp_children);
+  if (r < 0) {
+    return r;
+  }
+
+  if (*max_images < cpp_children.size()) {
+    *max_images = cpp_children.size();
+    return -ERANGE;
+  }
+
+  *max_images = cpp_children.size();
+  for (size_t idx = 0; idx < cpp_children.size(); ++idx) {
+    images[idx] = {
+      .pool_id = cpp_children[idx].pool_id,
+      .pool_name = strdup(cpp_children[idx].pool_name.c_str()),
+      .pool_namespace = strdup(cpp_children[idx].pool_namespace.c_str()),
+      .image_id = strdup(cpp_children[idx].image_id.c_str()),
+      .image_name = strdup(cpp_children[idx].image_name.c_str()),
+      .trash = cpp_children[idx].trash};
   }
   return 0;
 }
