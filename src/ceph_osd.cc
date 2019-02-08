@@ -475,7 +475,7 @@ flushjournal_out:
   }
 
   if (require_osd_release > 0 &&
-      require_osd_release + 2 < ceph_release()) {
+      require_osd_release + 2 < (int)ceph_release()) {
     derr << "OSD's recorded require_osd_release " << require_osd_release
 	 << " + 2 < this release " << ceph_release()
 	 << "; you can only upgrade 2 releases at a time" << dendl;
