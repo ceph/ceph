@@ -56,8 +56,6 @@ class ReadCompletion(_Completion):
     ``Orchestrator`` implementations should inherit from this
     class to implement their own handles to operations in progress, and
     return an instance of their subclass from calls into methods.
-
-    Read operations are
     """
 
     def __init__(self):
@@ -193,6 +191,7 @@ class Orchestrator(object):
         # type: (str) -> WriteCompletion
         """
         Add a host to the orchestrator inventory.
+
         :param host: hostname
         """
         raise NotImplementedError()
@@ -201,6 +200,7 @@ class Orchestrator(object):
         # type: (str) -> WriteCompletion
         """
         Remove a host from the orchestrator inventory.
+
         :param host: hostname
         """
         raise NotImplementedError()
@@ -211,6 +211,7 @@ class Orchestrator(object):
         Report the hosts in the cluster.
 
         The default implementation is extra slow.
+
         :return: list of InventoryNodes
         """
         return self.get_inventory()
@@ -235,7 +236,7 @@ class Orchestrator(object):
         When viewing a CephFS filesystem in the dashboard, we would use this
         to display the pods being currently run for MDS daemons.
 
-        Returns a list of ServiceDescription objects.
+        :return: list of ServiceDescription objects.
         """
         raise NotImplementedError()
 
@@ -245,9 +246,10 @@ class Orchestrator(object):
         Perform an action (start/stop/reload) on a service.
 
         Either service_name or service_id must be specified:
-        - If using service_name, perform the action on that entire logical
+
+        * If using service_name, perform the action on that entire logical
           service (i.e. all daemons providing that named service).
-        - If using service_id, perform the action on a single specific daemon
+        * If using service_id, perform the action on a single specific daemon
           instance.
 
         :param action: one of "start", "stop", "reload"
@@ -755,9 +757,10 @@ class InventoryDevice(object):
 
         :param only_header: Print only the name of the device attributes
 
-        Ex:
-        >  Device Path           Type       Size    Rotates  Available Model
-        >     /dev/sdc            hdd   50.00 GB       True       True ATA/QEMU
+        Ex::
+
+            Device Path           Type       Size    Rotates  Available Model
+            /dev/sdc            hdd   50.00 GB       True       True ATA/QEMU
 
         """
         row_format = "  {0:<15} {1:>10} {2:>10} {3:>10} {4:>10} {5:<15}\n"
