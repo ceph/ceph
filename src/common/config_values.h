@@ -49,6 +49,7 @@ public:
 #define OPTION_OPT_U32(name) uint64_t name;
 #define OPTION_OPT_U64(name) uint64_t name;
 #define OPTION_OPT_UUID(name) uuid_d name;
+#define OPTION_OPT_SIZE(name) size_t name;
 #define OPTION(name, ty)       \
   public:                      \
     OPTION_##ty(name)          
