@@ -383,7 +383,6 @@ void Server::finish_reclaim_session(Session *session, const MClientReclaimReply:
 	    assert(mds->mds_lock.is_locked_by_me());
 	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(session_id));
 	    if (!session) {
-	      reply->put();
 	      return;
 	    }
 	    auto epoch = mds->objecter->with_osdmap([](const OSDMap &map){ return map.get_epoch(); });
@@ -417,7 +416,6 @@ void Server::handle_client_reclaim(const MClientReclaim::const_ref &m)
 
   if (!session) {
     dout(0) << " ignoring sessionless msg " << *m << dendl;
-    m->put();
     return;
   }
 
@@ -431,7 +429,6 @@ void Server::handle_client_reclaim(const MClientReclaim::const_ref &m)
   } else {
     reclaim_session(session, m);
   }
-  m->put();
 }
 
 void Server::handle_client_session(const MClientSession::const_ref &m)
