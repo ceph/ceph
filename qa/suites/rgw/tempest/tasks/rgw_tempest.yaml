@@ -1,6 +1,5 @@
 tasks:
 - install:
-    flavor: notcmalloc
 - ceph:
 - tox: [ client.0 ]
 - keystone:
