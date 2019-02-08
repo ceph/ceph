@@ -17,11 +17,16 @@ namespace at = argument_types;
 namespace po = boost::program_options;
 
 int do_list_children(librados::IoCtx &io_ctx, librbd::Image &image,
-                     bool all_flag, Formatter *f)
+                     bool all_flag, bool descendants_flag, Formatter *f)
 {
   std::vector<librbd::linked_image_spec_t> children;
   librbd::RBD rbd;
-  int r = image.list_children3(&children);
+  int r;
+  if (descendants_flag) {
+    r = image.list_descendants(&children);
+  } else {
+    r = image.list_children3(&children);
+  }
   if (r < 0)
     return r;
 
@@ -74,6 +79,8 @@ void get_arguments(po::options_description *positional,
   at::add_snap_id_option(options);
   options->add_options()
     ("all,a", po::bool_switch(), "list all children (include trash)");
+  options->add_options()
+    ("descendants", po::bool_switch(), "include all descendants");
   at::add_format_options(options);
 }
 
@@ -132,7 +139,8 @@ int execute(const po::variables_map &vm,
     return r;
   }
 
-  r = do_list_children(io_ctx, image, vm["all"].as<bool>(), formatter.get());
+  r = do_list_children(io_ctx, image, vm["all"].as<bool>(),
+                       vm["descendants"].as<bool>(), formatter.get());
   if (r < 0) {
     std::cerr << "rbd: listing children failed: " << cpp_strerror(r)
               << std::endl;
