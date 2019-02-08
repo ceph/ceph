@@ -261,6 +261,12 @@ void Elector::handle_propose(MonOpRequestRef op)
 	    << " without required features" << dendl;
     nak_old_peer(op);
     return;
+  } else if (mon->monmap->min_mon_release > m->mon_release) {
+    dout(5) << " ignoring propose from mon" << from
+	    << " release " << m->mon_release
+	    << " < min_mon_release " << mon->monmap->min_mon_release << dendl;
+    nak_old_peer(op);
+    return;
   } else if (!m->mon_features.contains_all(required_mon_features)) {
     // all the features in 'required_mon_features' not in 'm->mon_features'
     mon_feature_t missing = required_mon_features.diff(m->mon_features);
@@ -419,17 +425,16 @@ void Elector::nak_old_peer(MonOpRequestRef op)
   uint64_t required_features = mon->get_required_features();
   mon_feature_t required_mon_features = mon->get_required_mon_features();
   dout(10) << "sending nak to peer " << m->get_source()
-    << " that only supports " << supported_features
-    << " " << m->mon_features
-    << " of the required " << required_features
-    << " " << required_mon_features
-    << dendl;
-
+	   << " supports " << supported_features << " " << m->mon_features
+	   << ", required " << required_features << " " << required_mon_features
+	   << ", release " << m->mon_release
+	   << " vs required " << mon->monmap->min_mon_release
+	   << dendl;
   MMonElection *reply = new MMonElection(MMonElection::OP_NAK, m->epoch,
                                          mon->monmap);
   reply->quorum_features = required_features;
   reply->mon_features = required_mon_features;
-  reply->mon_release = ceph_release();
+  reply->mon_release = mon->monmap->min_mon_release;
   mon->features.encode(reply->sharing_bl);
   m->get_connection()->send_message(reply);
 }
@@ -441,20 +446,25 @@ void Elector::handle_nak(MonOpRequestRef op)
   dout(1) << "handle_nak from " << m->get_source()
 	  << " quorum_features " << m->quorum_features
           << " " << m->mon_features
+	  << " min_mon_release " << m->mon_release
           << dendl;
 
-  CompatSet other;
-  auto bi = m->sharing_bl.cbegin();
-  other.decode(bi);
-  CompatSet diff = Monitor::get_supported_features().unsupported(other);
+  if (m->mon_release > ceph_release()) {
+    derr << "Shutting down because I am release " << ceph_release()
+	 << " < min_mon_release " << m->mon_release << dendl;
+  } else {
+    CompatSet other;
+    auto bi = m->sharing_bl.cbegin();
+    other.decode(bi);
+    CompatSet diff = Monitor::get_supported_features().unsupported(other);
 
-  mon_feature_t mon_supported = ceph::features::mon::get_supported();
-  // all features in 'm->mon_features' not in 'mon_supported'
-  mon_feature_t mon_diff = m->mon_features.diff(mon_supported);
+    mon_feature_t mon_supported = ceph::features::mon::get_supported();
+    // all features in 'm->mon_features' not in 'mon_supported'
+    mon_feature_t mon_diff = m->mon_features.diff(mon_supported);
 
-  derr << "Shutting down because I do not support required monitor features: { "
-       << diff << " } " << mon_diff << dendl;
-
+    derr << "Shutting down because I lack required monitor features: { "
+	 << diff << " } " << mon_diff << dendl;
+  }
   exit(0);
   // the end!
 }
