@@ -955,6 +955,36 @@ TEST_F(TestMigration, Clone)
   migrate(m_ioctx, m_image_name);
 }
 
+TEST_F(TestMigration, CloneParent) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  snap_create("snap");
+
+  librbd::linked_image_spec_t expected_parent_image;
+  expected_parent_image.image_id = m_ictx->id;
+  expected_parent_image.image_name = m_ictx->name;
+
+  auto it = m_ictx->snap_ids.find({cls::rbd::UserSnapshotNamespace{}, "snap"});
+  ASSERT_TRUE(it != m_ictx->snap_ids.end());
+
+  librbd::snap_spec_t expected_parent_snap;
+  expected_parent_snap.id = it->second;
+
+  clone("snap");
+  migration_prepare(m_ioctx, m_image_name);
+
+  librbd::linked_image_spec_t parent_image;
+  librbd::snap_spec_t parent_snap;
+  ASSERT_EQ(0, librbd::api::Image<>::get_parent(m_ictx, &parent_image,
+                                                &parent_snap));
+  ASSERT_EQ(expected_parent_image.image_id, parent_image.image_id);
+  ASSERT_EQ(expected_parent_image.image_name, parent_image.image_name);
+  ASSERT_EQ(expected_parent_snap.id, parent_snap.id);
+
+  migration_abort(m_ioctx, m_image_name);
+}
+
+
 TEST_F(TestMigration, CloneUpdateAfterPrepare)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
