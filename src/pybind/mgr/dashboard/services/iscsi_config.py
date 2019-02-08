@@ -49,7 +49,7 @@ _ISCSI_STORE_KEY = "_iscsi_config"
 class IscsiGatewaysConfig(object):
     @classmethod
     def _load_config(cls):
-        if OrchClient.instance().available():
+        if OrchClient().available():
             raise ManagedByOrchestratorException()
         json_db = mgr.get_store(_ISCSI_STORE_KEY,
                                 '{"gateways": {}}')
@@ -89,7 +89,7 @@ class IscsiGatewaysConfig(object):
             config = cls._load_config()
         except ManagedByOrchestratorException:
             config = {'gateways': {}}
-            instances = OrchClient.instance().list_service_info("iscsi")
+            instances = OrchClient().list_service_info("iscsi")
             for instance in instances:
                 config['gateways'][instance.nodename] = {
                     'service_url': instance.service_url

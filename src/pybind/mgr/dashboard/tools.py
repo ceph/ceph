@@ -670,7 +670,12 @@ def build_url(host, scheme=None, port=None):
     :rtype: str
     """
     try:
-        ipaddress.IPv6Address(six.u(host))
+        try:
+            u_host = six.u(host)
+        except TypeError:
+            u_host = host
+
+        ipaddress.IPv6Address(u_host)
         netloc = '[{}]'.format(host)
     except ValueError:
         netloc = host
