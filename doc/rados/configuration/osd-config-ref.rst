@@ -401,8 +401,7 @@ recovery operations to ensure optimal performance during recovery.
 
 ``osd client op priority``
 
-:Description: The priority set for client operations. It is relative to
-              ``osd recovery op priority``.
+:Description: The priority set for client operations.
 
 :Type: 32-bit Integer
 :Default: ``63``
@@ -421,18 +420,30 @@ recovery operations to ensure optimal performance during recovery.
 
 ``osd scrub priority``
 
-:Description: The priority set for scrub operations. It is relative to
-              ``osd client op priority``.
+:Description: The default priority set for a scheduled scrub work queue when the
+              pool doesn't specify a value of ``scrub_priority``.  This can be
+              boosted to the value of ``osd client op priority`` when scrub is
+              blocking client operations.
 
 :Type: 32-bit Integer
 :Default: ``5``
 :Valid Range: 1-63
 
 
+``osd requested scrub priority``
+
+:Description: The priority set for user requested scrub on the work queue.  If
+              this value were to be smaller than ``osd client op priority`` it
+              can be boosted to the value of ``osd client op priority`` when
+              scrub is blocking client operations.
+
+:Type: 32-bit Integer
+:Default: ``120``
+
+
 ``osd snap trim priority``
 
-:Description: The priority set for snap trim operations. It is relative to
-              ``osd client op priority``.
+:Description: The priority set for the snap trim work queue.
 
 :Type: 32-bit Integer
 :Default: ``5``
