@@ -2278,7 +2278,11 @@ std::vector<Option> get_global_options() {
 
     Option("osd_map_message_max", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(40)
-    .set_description(""),
+    .set_description("maximum number of OSDMaps to include in a single message"),
+
+    Option("osd_map_message_max_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(10_M)
+    .set_description("maximum number of bytes worth of OSDMaps to include in a single message"),
 
     Option("osd_map_share_max_epochs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(40)

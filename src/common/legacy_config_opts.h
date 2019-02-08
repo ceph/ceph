@@ -604,6 +604,7 @@ OPTION(osd_objecter_finishers, OPT_INT)
 OPTION(osd_map_dedup, OPT_BOOL)
 OPTION(osd_map_cache_size, OPT_INT)
 OPTION(osd_map_message_max, OPT_INT)  // max maps per MOSDMap message
+OPTION(osd_map_message_max_bytes, OPT_SIZE)  // max maps per MOSDMap message
 OPTION(osd_map_share_max_epochs, OPT_INT)  // cap on # of inc maps we send to peers, clients
 OPTION(osd_inject_bad_map_crc_probability, OPT_FLOAT)
 OPTION(osd_inject_failure_on_pg_removal, OPT_BOOL)
