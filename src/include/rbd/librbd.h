@@ -780,6 +780,10 @@ CEPH_RBD_API int rbd_list_children3(rbd_image_t image,
                                     rbd_linked_image_spec_t *images,
                                     size_t *max_images);
 
+CEPH_RBD_API int rbd_list_descendants(rbd_image_t image,
+                                      rbd_linked_image_spec_t *images,
+                                      size_t *max_images);
+
 /**
  * @defgroup librbd_h_locking Advisory Locking
  *

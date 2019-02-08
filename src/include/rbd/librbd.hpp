@@ -485,6 +485,7 @@ public:
   int list_children2(std::vector<librbd::child_info_t> *children)
       __attribute__((deprecated));
   int list_children3(std::vector<linked_image_spec_t> *images);
+  int list_descendants(std::vector<linked_image_spec_t> *images);
 
   /* advisory locking (see librbd.h for details) */
   int list_lockers(std::list<locker_t> *lockers,

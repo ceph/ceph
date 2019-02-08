@@ -42,6 +42,17 @@ struct Image {
                            const cls::rbd::ParentImageSpec &parent_spec,
                            std::vector<librbd::linked_image_spec_t> *images);
 
+  static int list_descendants(IoCtx& io_ctx, const std::string &image_id,
+                              const std::optional<size_t> &max_level,
+                              std::vector<librbd::linked_image_spec_t> *images);
+  static int list_descendants(ImageCtxT *ictx,
+                              const std::optional<size_t> &max_level,
+                              std::vector<librbd::linked_image_spec_t> *images);
+  static int list_descendants(ImageCtxT *ictx,
+                              const cls::rbd::ParentImageSpec &parent_spec,
+                              const std::optional<size_t> &max_level,
+                              std::vector<librbd::linked_image_spec_t> *images);
+
   static int deep_copy(ImageCtxT *ictx, librados::IoCtx& dest_md_ctx,
                        const char *destname, ImageOptions& opts,
                        ProgressContext &prog_ctx);

@@ -234,7 +234,51 @@ template <typename I>
 int Image<I>::list_children(I *ictx,
                             std::vector<librbd::linked_image_spec_t> *images) {
   images->clear();
+  return list_descendants(ictx, 1, images);
+}
 
+template <typename I>
+int Image<I>::list_children(I *ictx,
+                            const cls::rbd::ParentImageSpec &parent_spec,
+                            std::vector<librbd::linked_image_spec_t> *images) {
+  images->clear();
+  return list_descendants(ictx, parent_spec, 1, images);
+}
+
+template <typename I>
+int Image<I>::list_descendants(
+    librados::IoCtx& io_ctx, const std::string &image_id,
+    const std::optional<size_t> &max_level,
+    std::vector<librbd::linked_image_spec_t> *images) {
+  ImageCtx *ictx = new librbd::ImageCtx("", image_id, nullptr,
+                                        io_ctx, true);
+  int r = ictx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT);
+  if (r < 0) {
+    if (r == -ENOENT) {
+      return 0;
+    }
+    lderr(ictx->cct) << "failed to open descendant " << image_id
+                     << " from pool " << io_ctx.get_pool_name() << ":"
+                     << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  r = list_descendants(ictx, max_level, images);
+
+  int r1 = ictx->state->close();
+  if (r1 < 0) {
+    lderr(ictx->cct) << "error when closing descendant " << image_id
+                     << " from pool " << io_ctx.get_pool_name() << ":"
+                     << cpp_strerror(r) << dendl;
+  }
+
+  return r;
+}
+
+template <typename I>
+int Image<I>::list_descendants(
+    I *ictx, const std::optional<size_t> &max_level,
+    std::vector<librbd::linked_image_spec_t> *images) {
   RWLock::RLocker l(ictx->snap_lock);
   std::vector<librados::snap_t> snap_ids;
   if (ictx->snap_id != CEPH_NOSNAP) {
@@ -246,7 +290,7 @@ int Image<I>::list_children(I *ictx,
     cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
                                           ictx->md_ctx.get_namespace(),
                                           ictx->id, snap_id};
-    int r = list_children(ictx, parent_spec, images);
+    int r = list_descendants(ictx, parent_spec, max_level, images);
     if (r < 0) {
       return r;
     }
@@ -255,9 +299,17 @@ int Image<I>::list_children(I *ictx,
 }
 
 template <typename I>
-int Image<I>::list_children(I *ictx,
-                            const cls::rbd::ParentImageSpec &parent_spec,
-                            std::vector<librbd::linked_image_spec_t> *images) {
+int Image<I>::list_descendants(
+    I *ictx, const cls::rbd::ParentImageSpec &parent_spec,
+    const std::optional<size_t> &max_level,
+    std::vector<librbd::linked_image_spec_t> *images) {
+  auto child_max_level = max_level;
+  if (child_max_level) {
+    if (child_max_level == 0) {
+      return 0;
+    }
+    (*child_max_level)--;
+  }
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
@@ -312,6 +364,10 @@ int Image<I>::list_children(I *ictx,
     for (auto& image_id : image_ids) {
       images->push_back({
         it.first, "", ictx->md_ctx.get_namespace(), image_id, "", false});
+      r = list_descendants(ictx->md_ctx, image_id, child_max_level, images);
+      if (r < 0) {
+        return r;
+      }
     }
   }
 
@@ -336,6 +392,21 @@ int Image<I>::list_children(I *ictx,
     images->push_back({
       child_image.pool_id, "", child_image.pool_namespace,
       child_image.image_id, "", false});
+    if (!child_max_level || *child_max_level > 0) {
+      IoCtx ioctx;
+      r = util::create_ioctx(ictx->md_ctx, "child image", child_image.pool_id,
+                             child_image.pool_namespace, &ioctx);
+      if (r == -ENOENT) {
+        continue;
+      } else if (r < 0) {
+        return r;
+      }
+      r = list_descendants(ioctx, child_image.image_id, child_max_level,
+                           images);
+      if (r < 0) {
+        return r;
+      }
+    }
   }
 
   // batch lookups by pool + namespace
