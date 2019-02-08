@@ -17,8 +17,15 @@ EnvironmentFile=-@SYSTEMD_ENV_FILE@
 Environment=CLUSTER=ceph
 ExecStart=/usr/bin/ceph-mon -f --cluster ${CLUSTER} --id %i --setuser ceph --setgroup ceph
 ExecReload=/bin/kill -HUP $MAINPID
+LockPersonality=true
+MemoryDenyWriteExecute=true
+# Need NewPrivileges via `sudo smartctl`
+NoNewPrivileges=false
 PrivateDevices=yes
+ProtectControlGroups=true
 ProtectHome=true
+ProtectKernelModules=true
+ProtectKernelTunables=true
 ProtectSystem=full
 PrivateTmp=true
 TasksMax=infinity
