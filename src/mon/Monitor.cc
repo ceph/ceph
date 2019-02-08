@@ -1102,6 +1102,16 @@ void Monitor::bootstrap()
   }
   dout(10) << "monmap " << *monmap << dendl;
 
+  if (monmap->min_mon_release &&
+      monmap->min_mon_release + 2 < (int)ceph_release()) {
+    derr << "current monmap has min_mon_release "
+	 << ceph_release() << " (" << ceph_release_name(monmap->min_mon_release)
+	 << ") which is >2 releases older than me " << ceph_release()
+	 << " (" << ceph_release_name(ceph_release()) << "), stopping."
+	 << dendl;
+    exit(0);
+  }
+
   // note my rank
   int newrank = monmap->get_rank(messenger->get_myaddrs());
   if (newrank < 0 && rank >= 0) {
