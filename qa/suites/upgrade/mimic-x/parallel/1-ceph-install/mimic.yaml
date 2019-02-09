@@ -6,7 +6,11 @@ meta:
 tasks:
 - install:
     branch: mimic
-    exclude_packages: ['librados3']
+    exclude_packages:
+      - librados3
+      - ceph-mgr-diskprediction-local
+      - ceph-mgr-diskprediction-cloud
+      - ceph-mgr-rook
     extra_packages: ['librados2']
 - print: "**** done installing mimic"
 - ceph:
