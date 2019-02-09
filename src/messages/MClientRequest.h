@@ -48,7 +48,7 @@
 
 // metadata ops.
 
-class MClientRequest : public MessageInstance<MClientRequest> {
+class MClientRequest : public MessageInstanceSafe<MClientRequest> {
 public:
   friend factory;
 private:
@@ -91,9 +91,9 @@ public:
 protected:
   // cons
   MClientRequest()
-    : MessageInstance<MClientRequest>(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstanceSafe<MClientRequest>(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {}
   MClientRequest(int op)
-    : MessageInstance<MClientRequest>(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
+    : MessageInstanceSafe<MClientRequest>(CEPH_MSG_CLIENT_REQUEST, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = op;
   }

@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 
-class MMDSFindInoReply : public MessageInstance<MMDSFindInoReply> {
+class MMDSFindInoReply : public MessageInstanceSafe<MMDSFindInoReply> {
 public:
   friend factory;
 
@@ -26,8 +26,8 @@ public:
   filepath path;
 
 protected:
-  MMDSFindInoReply() : MessageInstance<MMDSFindInoReply>(MSG_MDS_FINDINOREPLY) {}
-  MMDSFindInoReply(ceph_tid_t t) : MessageInstance<MMDSFindInoReply>(MSG_MDS_FINDINOREPLY), tid(t) {}
+  MMDSFindInoReply() : MessageInstanceSafe<MMDSFindInoReply>(MSG_MDS_FINDINOREPLY) {}
+  MMDSFindInoReply(ceph_tid_t t) : MessageInstanceSafe<MMDSFindInoReply>(MSG_MDS_FINDINOREPLY), tid(t) {}
   ~MMDSFindInoReply() override {}
 
 public:

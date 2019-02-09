@@ -19,7 +19,7 @@
 
 #include "include/types.h"
 
-class MMDSResolve : public MessageInstance<MMDSResolve> {
+class MMDSResolve : public MessageInstanceSafe<MMDSResolve> {
 public:
   friend factory;
 
@@ -68,7 +68,7 @@ public:
   list<table_client> table_clients;
 
 protected:
-  MMDSResolve() : MessageInstance<MMDSResolve>(MSG_MDS_RESOLVE) {}
+  MMDSResolve() : MessageInstanceSafe<MMDSResolve>(MSG_MDS_RESOLVE) {}
   ~MMDSResolve() override {}
 
 public:

@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirDiscoverAck : public MessageInstance<MExportDirDiscoverAck> {
+class MExportDirDiscoverAck : public MessageInstanceSafe<MExportDirDiscoverAck> {
 public:
   friend factory;
 private:
@@ -31,9 +31,9 @@ private:
   bool is_success() const { return success; }
 
 protected:
-  MExportDirDiscoverAck() : MessageInstance<MExportDirDiscoverAck>(MSG_MDS_EXPORTDIRDISCOVERACK) {}
+  MExportDirDiscoverAck() : MessageInstanceSafe<MExportDirDiscoverAck>(MSG_MDS_EXPORTDIRDISCOVERACK) {}
   MExportDirDiscoverAck(dirfrag_t df, uint64_t tid, bool s=true) :
-    MessageInstance<MExportDirDiscoverAck>(MSG_MDS_EXPORTDIRDISCOVERACK),
+    MessageInstanceSafe<MExportDirDiscoverAck>(MSG_MDS_EXPORTDIRDISCOVERACK),
     dirfrag(df), success(s) {
     set_tid(tid);
   }

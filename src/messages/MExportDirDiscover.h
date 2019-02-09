@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirDiscover : public MessageInstance<MExportDirDiscover> {
+class MExportDirDiscover : public MessageInstanceSafe<MExportDirDiscover> {
 public:
   friend factory;
 private:
@@ -36,10 +36,10 @@ private:
 
 protected:
   MExportDirDiscover() :     
-    MessageInstance<MExportDirDiscover>(MSG_MDS_EXPORTDIRDISCOVER),
+    MessageInstanceSafe<MExportDirDiscover>(MSG_MDS_EXPORTDIRDISCOVER),
     started(false) { }
   MExportDirDiscover(dirfrag_t df, filepath& p, mds_rank_t f, uint64_t tid) :
-    MessageInstance<MExportDirDiscover>(MSG_MDS_EXPORTDIRDISCOVER),
+    MessageInstanceSafe<MExportDirDiscover>(MSG_MDS_EXPORTDIRDISCOVER),
     from(f), dirfrag(df), path(p), started(false) {
     set_tid(tid);
   }

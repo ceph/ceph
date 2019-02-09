@@ -27,7 +27,7 @@
 
 // sent from replica to auth
 
-class MMDSCacheRejoin : public MessageInstance<MMDSCacheRejoin> {
+class MMDSCacheRejoin : public MessageInstanceSafe<MMDSCacheRejoin> {
 public:
   friend factory;
 private:
@@ -216,10 +216,10 @@ private:
   
 protected:
   MMDSCacheRejoin() :
-    MessageInstance<MMDSCacheRejoin>(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstanceSafe<MMDSCacheRejoin>(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
     op(0) {}
   MMDSCacheRejoin(int o) : 
-    MessageInstance<MMDSCacheRejoin>(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstanceSafe<MMDSCacheRejoin>(MSG_MDS_CACHEREJOIN, HEAD_VERSION, COMPAT_VERSION),
     op(o) {}
   ~MMDSCacheRejoin() override {}
 

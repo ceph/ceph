@@ -19,7 +19,7 @@
 #include "msg/Message.h"
 
 
-class MExportCapsAck : public MessageInstance<MExportCapsAck> {
+class MExportCapsAck : public MessageInstanceSafe<MExportCapsAck> {
 public:  
   friend factory;
 
@@ -28,9 +28,9 @@ public:
 
 protected:
   MExportCapsAck() :
-    MessageInstance<MExportCapsAck>(MSG_MDS_EXPORTCAPSACK) {}
+    MessageInstanceSafe<MExportCapsAck>(MSG_MDS_EXPORTCAPSACK) {}
   MExportCapsAck(inodeno_t i) :
-    MessageInstance<MExportCapsAck>(MSG_MDS_EXPORTCAPSACK), ino(i) {}
+    MessageInstanceSafe<MExportCapsAck>(MSG_MDS_EXPORTCAPSACK), ino(i) {}
   ~MExportCapsAck() override {}
 
 public:

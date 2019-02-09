@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 
-class MMDSFindIno : public MessageInstance<MMDSFindIno> {
+class MMDSFindIno : public MessageInstanceSafe<MMDSFindIno> {
 public:
   friend factory;
 
@@ -26,8 +26,8 @@ public:
   inodeno_t ino;
 
 protected:
-  MMDSFindIno() : MessageInstance<MMDSFindIno>(MSG_MDS_FINDINO) {}
-  MMDSFindIno(ceph_tid_t t, inodeno_t i) : MessageInstance<MMDSFindIno>(MSG_MDS_FINDINO), tid(t), ino(i) {}
+  MMDSFindIno() : MessageInstanceSafe<MMDSFindIno>(MSG_MDS_FINDINO) {}
+  MMDSFindIno(ceph_tid_t t, inodeno_t i) : MessageInstanceSafe<MMDSFindIno>(MSG_MDS_FINDINO), tid(t), ino(i) {}
   ~MMDSFindIno() override {}
 
 public:

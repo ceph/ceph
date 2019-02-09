@@ -20,7 +20,7 @@
 
 #include "msg/Message.h"
 
-class MDentryUnlink : public MessageInstance<MDentryUnlink> {
+class MDentryUnlink : public MessageInstanceSafe<MDentryUnlink> {
 public:
   friend factory;
 private:
@@ -37,9 +37,9 @@ private:
 
 protected:
   MDentryUnlink() :
-    MessageInstance<MDentryUnlink>(MSG_MDS_DENTRYUNLINK) { }
+    MessageInstanceSafe<MDentryUnlink>(MSG_MDS_DENTRYUNLINK) { }
   MDentryUnlink(dirfrag_t df, std::string_view n) :
-    MessageInstance<MDentryUnlink>(MSG_MDS_DENTRYUNLINK),
+    MessageInstanceSafe<MDentryUnlink>(MSG_MDS_DENTRYUNLINK),
     dirfrag(df),
     dn(n) {}
   ~MDentryUnlink() override {}

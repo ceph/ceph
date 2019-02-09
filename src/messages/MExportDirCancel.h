@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirCancel : public MessageInstance<MExportDirCancel> {
+class MExportDirCancel : public MessageInstanceSafe<MExportDirCancel> {
 public:
   friend factory;
 private:
@@ -28,9 +28,9 @@ private:
   dirfrag_t get_dirfrag() const { return dirfrag; }
 
 protected:
-  MExportDirCancel() : MessageInstance<MExportDirCancel>(MSG_MDS_EXPORTDIRCANCEL) {}
+  MExportDirCancel() : MessageInstanceSafe<MExportDirCancel>(MSG_MDS_EXPORTDIRCANCEL) {}
   MExportDirCancel(dirfrag_t df, uint64_t tid) :
-    MessageInstance<MExportDirCancel>(MSG_MDS_EXPORTDIRCANCEL), dirfrag(df) {
+    MessageInstanceSafe<MExportDirCancel>(MSG_MDS_EXPORTDIRCANCEL), dirfrag(df) {
     set_tid(tid);
   }
   ~MExportDirCancel() override {}

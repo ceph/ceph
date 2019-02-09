@@ -19,7 +19,7 @@
 #include "msg/Message.h"
 
 
-class MExportCaps : public MessageInstance<MExportCaps> {
+class MExportCaps : public MessageInstanceSafe<MExportCaps> {
 public:
   friend factory;
 private:
@@ -33,7 +33,7 @@ public:
 
 protected:
   MExportCaps() :
-    MessageInstance<MExportCaps>(MSG_MDS_EXPORTCAPS, HEAD_VERSION, COMPAT_VERSION) {}
+    MessageInstanceSafe<MExportCaps>(MSG_MDS_EXPORTCAPS, HEAD_VERSION, COMPAT_VERSION) {}
   ~MExportCaps() override {}
 
 public:

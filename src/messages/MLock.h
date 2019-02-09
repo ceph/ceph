@@ -20,7 +20,7 @@
 #include "mds/locks.h"
 #include "mds/SimpleLock.h"
 
-class MLock : public MessageInstance<MLock> {
+class MLock : public MessageInstanceSafe<MLock> {
 public:
   friend factory;
 private:
@@ -45,19 +45,19 @@ public:
   MDSCacheObjectInfo &get_object_info() { return object_info; }
 
 protected:
-  MLock() : MessageInstance<MLock>(MSG_MDS_LOCK) {}
+  MLock() : MessageInstanceSafe<MLock>(MSG_MDS_LOCK) {}
   MLock(int ac, mds_rank_t as) :
-    MessageInstance<MLock>(MSG_MDS_LOCK),
+    MessageInstanceSafe<MLock>(MSG_MDS_LOCK),
     action(ac), asker(as),
     lock_type(0) { }
   MLock(SimpleLock *lock, int ac, mds_rank_t as) :
-    MessageInstance<MLock>(MSG_MDS_LOCK),
+    MessageInstanceSafe<MLock>(MSG_MDS_LOCK),
     action(ac), asker(as),
     lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
   }
   MLock(SimpleLock *lock, int ac, mds_rank_t as, bufferlist& bl) :
-    MessageInstance<MLock>(MSG_MDS_LOCK),
+    MessageInstanceSafe<MLock>(MSG_MDS_LOCK),
     action(ac), asker(as), lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
     lockdata.claim(bl);

@@ -3,7 +3,7 @@
 
 #include "msg/Message.h"
 
-class MClientQuota : public MessageInstance<MClientQuota> {
+class MClientQuota : public MessageInstanceSafe<MClientQuota> {
 public:
   friend factory;
 
@@ -13,7 +13,7 @@ public:
 
 protected:
   MClientQuota() :
-    MessageInstance<MClientQuota>(CEPH_MSG_CLIENT_QUOTA),
+    MessageInstanceSafe<MClientQuota>(CEPH_MSG_CLIENT_QUOTA),
     ino(0)
   {}
   ~MClientQuota() override {}

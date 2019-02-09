@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MMDSFragmentNotify : public MessageInstance<MMDSFragmentNotify> {
+class MMDSFragmentNotify : public MessageInstanceSafe<MMDSFragmentNotify> {
 public:
   friend factory;
 private:
@@ -40,9 +40,9 @@ private:
 
 protected:
   MMDSFragmentNotify() :
-    MessageInstance<MMDSFragmentNotify>(MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION) {}
+    MessageInstanceSafe<MMDSFragmentNotify>(MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION) {}
   MMDSFragmentNotify(dirfrag_t df, int b, uint64_t tid) :
-    MessageInstance<MMDSFragmentNotify>(MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstanceSafe<MMDSFragmentNotify>(MSG_MDS_FRAGMENTNOTIFY, HEAD_VERSION, COMPAT_VERSION),
     base_dirfrag(df), bits(b) {
     set_tid(tid);
   }

@@ -20,7 +20,7 @@
 #include "include/types.h"
 
 
-class MMDSResolveAck : public MessageInstance<MMDSResolveAck> {
+class MMDSResolveAck : public MessageInstanceSafe<MMDSResolveAck> {
 public:
   friend factory;
 
@@ -28,7 +28,7 @@ public:
   vector<metareqid_t> abort;
 
 protected:
-  MMDSResolveAck() : MessageInstance<MMDSResolveAck>(MSG_MDS_RESOLVEACK) {}
+  MMDSResolveAck() : MessageInstanceSafe<MMDSResolveAck>(MSG_MDS_RESOLVEACK) {}
   ~MMDSResolveAck() override {}
 
 public:

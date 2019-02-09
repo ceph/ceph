@@ -19,7 +19,7 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirPrep : public MessageInstance<MExportDirPrep> {
+class MExportDirPrep : public MessageInstanceSafe<MExportDirPrep> {
 public:
   friend factory;
 private:
@@ -45,7 +45,7 @@ protected:
     b_did_assim = false;
   }
   MExportDirPrep(dirfrag_t df, uint64_t tid) :
-    MessageInstance<MExportDirPrep>(MSG_MDS_EXPORTDIRPREP),
+    MessageInstanceSafe<MExportDirPrep>(MSG_MDS_EXPORTDIRPREP),
     dirfrag(df), b_did_assim(false) {
     set_tid(tid);
   }

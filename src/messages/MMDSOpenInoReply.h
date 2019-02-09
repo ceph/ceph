@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MMDSOpenInoReply : public MessageInstance<MMDSOpenInoReply> {
+class MMDSOpenInoReply : public MessageInstanceSafe<MMDSOpenInoReply> {
 public:
   friend factory;
 
@@ -27,9 +27,9 @@ public:
   int32_t error;
 
 protected:
-  MMDSOpenInoReply() : MessageInstance<MMDSOpenInoReply>(MSG_MDS_OPENINOREPLY), error(0) {}
+  MMDSOpenInoReply() : MessageInstanceSafe<MMDSOpenInoReply>(MSG_MDS_OPENINOREPLY), error(0) {}
   MMDSOpenInoReply(ceph_tid_t t, inodeno_t i, mds_rank_t h=MDS_RANK_NONE, int e=0) :
-    MessageInstance<MMDSOpenInoReply>(MSG_MDS_OPENINOREPLY), ino(i), hint(h), error(e) {
+    MessageInstanceSafe<MMDSOpenInoReply>(MSG_MDS_OPENINOREPLY), ino(i), hint(h), error(e) {
     header.tid = t;
   }
 

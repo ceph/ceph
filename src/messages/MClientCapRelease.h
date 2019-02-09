@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 
 
-class MClientCapRelease : public MessageInstance<MClientCapRelease> {
+class MClientCapRelease : public MessageInstanceSafe<MClientCapRelease> {
 public:
   friend factory;
 
@@ -35,7 +35,7 @@ private:
   epoch_t osd_epoch_barrier;
 
   MClientCapRelease() : 
-    MessageInstance<MClientCapRelease>(CEPH_MSG_CLIENT_CAPRELEASE, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstanceSafe<MClientCapRelease>(CEPH_MSG_CLIENT_CAPRELEASE, HEAD_VERSION, COMPAT_VERSION),
     osd_epoch_barrier(0)
   {
     memset(&head, 0, sizeof(head));

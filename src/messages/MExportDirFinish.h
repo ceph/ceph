@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MExportDirFinish : public MessageInstance<MExportDirFinish> {
+class MExportDirFinish : public MessageInstanceSafe<MExportDirFinish> {
 public:
   friend factory;
 private:
@@ -31,7 +31,7 @@ private:
 protected:
   MExportDirFinish() : last(false) {}
   MExportDirFinish(dirfrag_t df, bool l, uint64_t tid) :
-    MessageInstance<MExportDirFinish>(MSG_MDS_EXPORTDIRFINISH), dirfrag(df), last(l) {
+    MessageInstanceSafe<MExportDirFinish>(MSG_MDS_EXPORTDIRFINISH), dirfrag(df), last(l) {
     set_tid(tid);
   }
   ~MExportDirFinish() override {}

@@ -18,7 +18,7 @@
 
 #include "msg/Message.h"
 
-class MDirUpdate : public MessageInstance<MDirUpdate> {
+class MDirUpdate : public MessageInstanceSafe<MDirUpdate> {
 public:
   friend factory;
 
@@ -59,19 +59,19 @@ public:
 
 protected:
   ~MDirUpdate() {}
-  MDirUpdate() : MessageInstance<MDirUpdate>(MSG_MDS_DIRUPDATE) {}
+  MDirUpdate() : MessageInstanceSafe<MDirUpdate>(MSG_MDS_DIRUPDATE) {}
   MDirUpdate(mds_rank_t f,
 	     dirfrag_t dirfrag,
              int dir_rep,
              const std::set<int32_t>& dir_rep_by,
              filepath& path,
              bool discover = false) :
-    MessageInstance<MDirUpdate>(MSG_MDS_DIRUPDATE), from_mds(f), dirfrag(dirfrag),
+    MessageInstanceSafe<MDirUpdate>(MSG_MDS_DIRUPDATE), from_mds(f), dirfrag(dirfrag),
     dir_rep(dir_rep), dir_rep_by(dir_rep_by), path(path) {
     this->discover = discover ? 5 : 0;
   }
   MDirUpdate(const MDirUpdate& m)
-  : MessageInstance<MDirUpdate>(MSG_MDS_DIRUPDATE),
+  : MessageInstanceSafe<MDirUpdate>(MSG_MDS_DIRUPDATE),
     from_mds(m.from_mds),
     dirfrag(m.dirfrag),
     dir_rep(m.dir_rep),

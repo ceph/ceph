@@ -18,7 +18,7 @@
 #include "MExportDir.h"
 #include "msg/Message.h"
 
-class MExportDirAck : public MessageInstance<MExportDirAck> {
+class MExportDirAck : public MessageInstanceSafe<MExportDirAck> {
 public:
   friend factory;
 
@@ -28,9 +28,9 @@ public:
   dirfrag_t get_dirfrag() const { return dirfrag; }
   
 protected:
-  MExportDirAck() : MessageInstance<MExportDirAck>(MSG_MDS_EXPORTDIRACK) {}
+  MExportDirAck() : MessageInstanceSafe<MExportDirAck>(MSG_MDS_EXPORTDIRACK) {}
   MExportDirAck(dirfrag_t df, uint64_t tid) :
-    MessageInstance<MExportDirAck>(MSG_MDS_EXPORTDIRACK), dirfrag(df) {
+    MessageInstanceSafe<MExportDirAck>(MSG_MDS_EXPORTDIRACK), dirfrag(df) {
     set_tid(tid);
   }
   ~MExportDirAck() override {}

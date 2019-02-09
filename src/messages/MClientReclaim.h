@@ -18,7 +18,7 @@
 
 #include "msg/Message.h"
 
-class MClientReclaim: public MessageInstance<MClientReclaim> {
+class MClientReclaim: public MessageInstanceSafe<MClientReclaim> {
 public:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -50,9 +50,9 @@ public:
 protected:
   friend factory;
   MClientReclaim() :
-    MessageInstance<MClientReclaim>(CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION) {}
+    MessageInstanceSafe<MClientReclaim>(CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION) {}
   MClientReclaim(std::string_view _uuid, uint32_t _flags) :
-    MessageInstance<MClientReclaim>(CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstanceSafe<MClientReclaim>(CEPH_MSG_CLIENT_RECLAIM, HEAD_VERSION, COMPAT_VERSION),
     uuid(_uuid), flags(_flags) {}
 private:
   ~MClientReclaim() override {}

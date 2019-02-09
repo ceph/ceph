@@ -20,7 +20,7 @@
 #include "include/ceph_features.h"
 
 
-class MClientReconnect : public MessageInstance<MClientReconnect> {
+class MClientReconnect : public MessageInstanceSafe<MClientReconnect> {
 public:
   friend factory;
 private:
@@ -32,7 +32,7 @@ public:
   vector<snaprealm_reconnect_t> realms;
   bool more = false;
 
-  MClientReconnect() : MessageInstance<MClientReconnect>(CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION, COMPAT_VERSION) {}
+  MClientReconnect() : MessageInstanceSafe<MClientReconnect>(CEPH_MSG_CLIENT_RECONNECT, HEAD_VERSION, COMPAT_VERSION) {}
 private:
   ~MClientReconnect() override {}
 

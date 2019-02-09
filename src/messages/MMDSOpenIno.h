@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MMDSOpenIno : public MessageInstance<MMDSOpenIno> {
+class MMDSOpenIno : public MessageInstanceSafe<MMDSOpenIno> {
 public:
   friend factory;
 
@@ -25,9 +25,9 @@ public:
   vector<inode_backpointer_t> ancestors;
 
 protected:
-  MMDSOpenIno() : MessageInstance<MMDSOpenIno>(MSG_MDS_OPENINO) {}
+  MMDSOpenIno() : MessageInstanceSafe<MMDSOpenIno>(MSG_MDS_OPENINO) {}
   MMDSOpenIno(ceph_tid_t t, inodeno_t i, vector<inode_backpointer_t>* pa) :
-    MessageInstance<MMDSOpenIno>(MSG_MDS_OPENINO), ino(i) {
+    MessageInstanceSafe<MMDSOpenIno>(MSG_MDS_OPENINO), ino(i) {
     header.tid = t;
     if (pa)
       ancestors = *pa;

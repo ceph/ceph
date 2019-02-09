@@ -19,7 +19,7 @@
 #include "msg/Message.h"
 
 
-class MExportDir : public MessageInstance<MExportDir> {
+class MExportDir : public MessageInstanceSafe<MExportDir> {
 public:
   friend factory;
   dirfrag_t dirfrag;
@@ -28,9 +28,9 @@ public:
   bufferlist client_map;
 
 protected:
-  MExportDir() : MessageInstance<MExportDir>(MSG_MDS_EXPORTDIR) {}
+  MExportDir() : MessageInstanceSafe<MExportDir>(MSG_MDS_EXPORTDIR) {}
   MExportDir(dirfrag_t df, uint64_t tid) :
-    MessageInstance<MExportDir>(MSG_MDS_EXPORTDIR), dirfrag(df) {
+    MessageInstanceSafe<MExportDir>(MSG_MDS_EXPORTDIR), dirfrag(df) {
     set_tid(tid);
   }
   ~MExportDir() override {}

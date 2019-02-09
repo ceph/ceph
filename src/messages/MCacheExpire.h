@@ -21,7 +21,7 @@
 
 #include "mds/mdstypes.h"
 
-class MCacheExpire : public MessageInstance<MCacheExpire> {
+class MCacheExpire : public MessageInstanceSafe<MCacheExpire> {
 public:
   friend factory;
 private:
@@ -68,9 +68,9 @@ public:
   int get_from() const { return from; }
 
 protected:
-  MCacheExpire() : MessageInstance<MCacheExpire>(MSG_MDS_CACHEEXPIRE), from(-1) {}
+  MCacheExpire() : MessageInstanceSafe<MCacheExpire>(MSG_MDS_CACHEEXPIRE), from(-1) {}
   MCacheExpire(int f) : 
-    MessageInstance<MCacheExpire>(MSG_MDS_CACHEEXPIRE),
+    MessageInstanceSafe<MCacheExpire>(MSG_MDS_CACHEEXPIRE),
     from(f) { }
   ~MCacheExpire() override {}
 

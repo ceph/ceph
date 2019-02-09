@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirPrepAck : public MessageInstance<MExportDirPrepAck> {
+class MExportDirPrepAck : public MessageInstanceSafe<MExportDirPrepAck> {
 public:
   friend factory;
 private:
@@ -31,7 +31,7 @@ private:
 protected:
   MExportDirPrepAck() {}
   MExportDirPrepAck(dirfrag_t df, bool s, uint64_t tid) :
-    MessageInstance<MExportDirPrepAck>(MSG_MDS_EXPORTDIRPREPACK), dirfrag(df), success(s) {
+    MessageInstanceSafe<MExportDirPrepAck>(MSG_MDS_EXPORTDIRPREPACK), dirfrag(df), success(s) {
     set_tid(tid);
   }
   ~MExportDirPrepAck() override {}

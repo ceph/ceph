@@ -18,7 +18,7 @@
 
 #include "msg/Message.h"
 
-class MClientReclaimReply: public MessageInstance<MClientReclaimReply> {
+class MClientReclaimReply: public MessageInstanceSafe<MClientReclaimReply> {
 public:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -53,9 +53,9 @@ public:
 protected:
   friend factory;
   MClientReclaimReply() :
-    MessageInstance<MClientReclaimReply>(CEPH_MSG_CLIENT_RECLAIM_REPLY, HEAD_VERSION, COMPAT_VERSION) {}
+    MessageInstanceSafe<MClientReclaimReply>(CEPH_MSG_CLIENT_RECLAIM_REPLY, HEAD_VERSION, COMPAT_VERSION) {}
   MClientReclaimReply(int r, epoch_t e=0) :
-    MessageInstance<MClientReclaimReply>(CEPH_MSG_CLIENT_RECLAIM_REPLY, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstanceSafe<MClientReclaimReply>(CEPH_MSG_CLIENT_RECLAIM_REPLY, HEAD_VERSION, COMPAT_VERSION),
     result(r), epoch(e) {}
 
 private:

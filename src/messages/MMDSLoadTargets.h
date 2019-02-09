@@ -23,7 +23,7 @@
 #include <map>
 using std::map;
 
-class MMDSLoadTargets : public MessageInstance<MMDSLoadTargets, PaxosServiceMessage> {
+class MMDSLoadTargets : public MessageInstanceSafe<MMDSLoadTargets, PaxosServiceMessage> {
 public:
   friend factory;
 
@@ -31,9 +31,9 @@ public:
   set<mds_rank_t> targets;
 
 protected:
-  MMDSLoadTargets() : MessageInstance<MMDSLoadTargets, PaxosServiceMessage>(MSG_MDS_OFFLOAD_TARGETS, 0) {}
+  MMDSLoadTargets() : MessageInstanceSafe<MMDSLoadTargets, PaxosServiceMessage>(MSG_MDS_OFFLOAD_TARGETS, 0) {}
   MMDSLoadTargets(mds_gid_t g, set<mds_rank_t>& mds_targets) :
-    MessageInstance<MMDSLoadTargets, PaxosServiceMessage>(MSG_MDS_OFFLOAD_TARGETS, 0),
+    MessageInstanceSafe<MMDSLoadTargets, PaxosServiceMessage>(MSG_MDS_OFFLOAD_TARGETS, 0),
     global_id(g), targets(mds_targets) {}
   ~MMDSLoadTargets() override {}
 

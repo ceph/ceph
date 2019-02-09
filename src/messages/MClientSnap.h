@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MClientSnap : public MessageInstance<MClientSnap> {
+class MClientSnap : public MessageInstanceSafe<MClientSnap> {
 public:
   friend factory;
 
@@ -30,7 +30,7 @@ public:
 
 protected:
   MClientSnap(int o=0) : 
-    MessageInstance<MClientSnap>(CEPH_MSG_CLIENT_SNAP) {
+    MessageInstanceSafe<MClientSnap>(CEPH_MSG_CLIENT_SNAP) {
     memset(&head, 0, sizeof(head));
     head.op = o;
   }

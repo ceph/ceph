@@ -260,7 +260,7 @@ struct InodeStat {
 };
 
 
-class MClientReply : public MessageInstance<MClientReply> {
+class MClientReply : public MessageInstanceSafe<MClientReply> {
 public:
   friend factory;
 
@@ -286,9 +286,9 @@ public:
   bool is_safe() const { return head.safe; }
 
 protected:
-  MClientReply() : MessageInstance<MClientReply>(CEPH_MSG_CLIENT_REPLY) {}
+  MClientReply() : MessageInstanceSafe<MClientReply>(CEPH_MSG_CLIENT_REPLY) {}
   MClientReply(const MClientRequest &req, int result = 0) :
-    MessageInstance<MClientReply>(CEPH_MSG_CLIENT_REPLY) {
+    MessageInstanceSafe<MClientReply>(CEPH_MSG_CLIENT_REPLY) {
     memset(&head, 0, sizeof(head));
     header.tid = req.get_tid();
     head.op = req.get_op();

@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MMDSSnapUpdate : public MessageInstance<MMDSSnapUpdate> {
+class MMDSSnapUpdate : public MessageInstanceSafe<MMDSSnapUpdate> {
 public:
   friend factory;
 private:
@@ -32,9 +32,9 @@ public:
   bufferlist snap_blob;
 
 protected:
-  MMDSSnapUpdate() : MessageInstance<MMDSSnapUpdate>(MSG_MDS_SNAPUPDATE) {}
+  MMDSSnapUpdate() : MessageInstanceSafe<MMDSSnapUpdate>(MSG_MDS_SNAPUPDATE) {}
   MMDSSnapUpdate(inodeno_t i, version_t tid, int op) :
-    MessageInstance<MMDSSnapUpdate>(MSG_MDS_SNAPUPDATE), ino(i), snap_op(op) {
+    MessageInstanceSafe<MMDSSnapUpdate>(MSG_MDS_SNAPUPDATE), ino(i), snap_op(op) {
       set_tid(tid);
     }
   ~MMDSSnapUpdate() override {}

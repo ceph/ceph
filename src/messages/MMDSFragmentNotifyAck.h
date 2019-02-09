@@ -17,7 +17,7 @@
 
 #include "msg/Message.h"
 
-class MMDSFragmentNotifyAck : public MessageInstance<MMDSFragmentNotifyAck> {
+class MMDSFragmentNotifyAck : public MessageInstanceSafe<MMDSFragmentNotifyAck> {
 public:
   friend factory;
 private:
@@ -31,9 +31,9 @@ private:
   bufferlist basebl;
 
 protected:
-  MMDSFragmentNotifyAck() : MessageInstance<MMDSFragmentNotifyAck>(MSG_MDS_FRAGMENTNOTIFYACK) {}
+  MMDSFragmentNotifyAck() : MessageInstanceSafe<MMDSFragmentNotifyAck>(MSG_MDS_FRAGMENTNOTIFYACK) {}
   MMDSFragmentNotifyAck(dirfrag_t df, int b, uint64_t tid) :
-    MessageInstance<MMDSFragmentNotifyAck>(MSG_MDS_FRAGMENTNOTIFYACK),
+    MessageInstanceSafe<MMDSFragmentNotifyAck>(MSG_MDS_FRAGMENTNOTIFYACK),
     base_dirfrag(df), bits(b) {
     set_tid(tid);
   }

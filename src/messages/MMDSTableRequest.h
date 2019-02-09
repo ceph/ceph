@@ -19,7 +19,7 @@
 #include "msg/Message.h"
 #include "mds/mds_table_types.h"
 
-class MMDSTableRequest : public MessageInstance<MMDSTableRequest> {
+class MMDSTableRequest : public MessageInstanceSafe<MMDSTableRequest> {
 public:
   friend factory;
 
@@ -29,9 +29,9 @@ public:
   bufferlist bl;
 
 protected:
-  MMDSTableRequest() : MessageInstance<MMDSTableRequest>(MSG_MDS_TABLE_REQUEST) {}
+  MMDSTableRequest() : MessageInstanceSafe<MMDSTableRequest>(MSG_MDS_TABLE_REQUEST) {}
   MMDSTableRequest(int tab, int o, uint64_t r, version_t v=0) : 
-    MessageInstance<MMDSTableRequest>(MSG_MDS_TABLE_REQUEST),
+    MessageInstanceSafe<MMDSTableRequest>(MSG_MDS_TABLE_REQUEST),
     table(tab), op(o), reqid(r) {
     set_tid(v);
   }

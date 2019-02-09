@@ -18,7 +18,7 @@
 #include "msg/Message.h"
 #include "mds/mdstypes.h"
 
-class MClientSession : public MessageInstance<MClientSession> {
+class MClientSession : public MessageInstanceSafe<MClientSession> {
 public:
   friend factory;
 private:
@@ -38,15 +38,15 @@ public:
   int get_max_leases() const { return head.max_leases; }
 
 protected:
-  MClientSession() : MessageInstance<MClientSession>(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) { }
+  MClientSession() : MessageInstanceSafe<MClientSession>(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) { }
   MClientSession(int o, version_t s=0) : 
-    MessageInstance<MClientSession>(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
+    MessageInstanceSafe<MClientSession>(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = s;
   }
   MClientSession(int o, utime_t st) : 
-    MessageInstance<MClientSession>(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
+    MessageInstanceSafe<MClientSession>(CEPH_MSG_CLIENT_SESSION, HEAD_VERSION, COMPAT_VERSION) {
     memset(&head, 0, sizeof(head));
     head.op = o;
     head.seq = 0;

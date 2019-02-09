@@ -20,7 +20,7 @@
 
 #include "msg/Message.h"
 
-class MDentryLink : public MessageInstance<MDentryLink> {
+class MDentryLink : public MessageInstanceSafe<MDentryLink> {
 public:
   friend factory;
 private:
@@ -39,9 +39,9 @@ private:
 
 protected:
   MDentryLink() :
-    MessageInstance<MDentryLink>(MSG_MDS_DENTRYLINK) { }
+    MessageInstanceSafe<MDentryLink>(MSG_MDS_DENTRYLINK) { }
   MDentryLink(dirfrag_t r, dirfrag_t df, std::string_view n, bool p) :
-    MessageInstance<MDentryLink>(MSG_MDS_DENTRYLINK),
+    MessageInstanceSafe<MDentryLink>(MSG_MDS_DENTRYLINK),
     subtree(r),
     dirfrag(df),
     dn(n),

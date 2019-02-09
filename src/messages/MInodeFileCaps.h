@@ -18,7 +18,7 @@
 
 #include "msg/Message.h"
 
-class MInodeFileCaps : public MessageInstance<MInodeFileCaps> {
+class MInodeFileCaps : public MessageInstanceSafe<MInodeFileCaps> {
 public:
   friend factory;
 private:
@@ -31,9 +31,9 @@ private:
   int       get_caps() const { return caps; }
 
 protected:
-  MInodeFileCaps() : MessageInstance<MInodeFileCaps>(MSG_MDS_INODEFILECAPS) {}
+  MInodeFileCaps() : MessageInstanceSafe<MInodeFileCaps>(MSG_MDS_INODEFILECAPS) {}
   MInodeFileCaps(inodeno_t ino, int caps) :
-    MessageInstance<MInodeFileCaps>(MSG_MDS_INODEFILECAPS) {
+    MessageInstanceSafe<MInodeFileCaps>(MSG_MDS_INODEFILECAPS) {
     this->ino = ino;
     this->caps = caps;
   }
