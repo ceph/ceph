@@ -2,13 +2,15 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_gc.h"
+
+#include "include/scope_guard.h"
 #include "include/rados/librados.hpp"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/lock/cls_lock_client.h"
 #include "include/random.h"
 
-#include <list>
+#include <list> // XXX
 #include <sstream>
 
 #define dout_context g_ceph_context
@@ -270,8 +272,14 @@ public:
       " removing entries from gc log shard index=" << index << ", size=" <<
       rt.size() << ", entries=[" << lister() << "]" << dendl;
 
+    auto rt_guard = make_scope_guard(
+      [&]
+	{
+	  rt.clear();
+	}
+      );
+
     int ret = gc->remove(index, rt, &index_io.c);
-    rt.clear();
     if (ret < 0) {
       /* we already cleared list of tags, this prevents us from
        * ballooning in case of a persistent problem
@@ -280,7 +288,10 @@ public:
 	index << " ret=" << ret << dendl;
       return;
     }
-
+    if (perfcounter) {
+      /* log the count of tags retired for rate estimation */
+      perfcounter->inc(l_rgw_gc_retire, rt.size());
+    }
     ios.push_back(index_io);
   }
 
