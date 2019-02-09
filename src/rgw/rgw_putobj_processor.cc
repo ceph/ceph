@@ -16,6 +16,7 @@
 #include "rgw_aio.h"
 #include "rgw_putobj_processor.h"
 #include "rgw_multi.h"
+#include "rgw_compression.h"
 #include "services/svc_sys_obj.h"
 
 #define dout_subsys ceph_subsys_rgw
