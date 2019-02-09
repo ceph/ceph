@@ -87,6 +87,26 @@ using sha1_digest_t = sha_digest_t<20>;
 
 namespace ceph {
 
+template <class T>
+struct nop_delete {
+  void operator()(T*) {}
+};
+
+// This is not unique_ptr-like smart pointer! It just signalizes ownership
+// but DOES NOT manage the resource. It WILL LEAK if not manually deleted.
+// It's rather a replacement for raw pointer than any other smart one.
+//
+// Considered options:
+//  * unique_ptr with custom deleter implemented in .cc (would provide
+//    the non-zero-cost resource management),
+//  * GSL's owner<T*> (pretty neat but would impose an extra depedency),
+//  * unique_ptr with nop deleter,
+//  * raw pointer (doesn't embed ownership enforcement - std::move).
+template <class T>
+struct unique_leakable_ptr : public std::unique_ptr<T, ceph::nop_delete<T>> {
+  using std::unique_ptr<T, ceph::nop_delete<T>>::unique_ptr;
+};
+
 namespace buffer CEPH_BUFFER_API {
   /*
    * exceptions
@@ -145,17 +165,17 @@ namespace buffer CEPH_BUFFER_API {
   /*
    * named constructors
    */
-  raw* copy(const char *c, unsigned len);
-  raw* create(unsigned len);
-  raw* create_in_mempool(unsigned len, int mempool);
+  ceph::unique_leakable_ptr<raw> copy(const char *c, unsigned len);
+  ceph::unique_leakable_ptr<raw> create(unsigned len);
+  ceph::unique_leakable_ptr<raw> create_in_mempool(unsigned len, int mempool);
   raw* claim_char(unsigned len, char *buf);
   raw* create_malloc(unsigned len);
   raw* claim_malloc(unsigned len, char *buf);
   raw* create_static(unsigned len, char *buf);
-  raw* create_aligned(unsigned len, unsigned align);
-  raw* create_aligned_in_mempool(unsigned len, unsigned align, int mempool);
-  raw* create_page_aligned(unsigned len);
-  raw* create_small_page_aligned(unsigned len);
+  ceph::unique_leakable_ptr<raw> create_aligned(unsigned len, unsigned align);
+  ceph::unique_leakable_ptr<raw> create_aligned_in_mempool(unsigned len, unsigned align, int mempool);
+  ceph::unique_leakable_ptr<raw> create_page_aligned(unsigned len);
+  ceph::unique_leakable_ptr<raw> create_small_page_aligned(unsigned len);
   raw* create_unshareable(unsigned len);
   raw* create_static(unsigned len, char *buf);
   raw* claim_buffer(unsigned len, char *buf, deleter del);
@@ -246,15 +266,17 @@ namespace buffer CEPH_BUFFER_API {
     using const_iterator = iterator_impl<true>;
     using iterator = iterator_impl<false>;
 
-    ptr() : _raw(0), _off(0), _len(0) {}
+    ptr() : _raw(nullptr), _off(0), _len(0) {}
     // cppcheck-suppress noExplicitConstructor
-    ptr(raw *r);
+    ptr(raw* r);
+    ptr(ceph::unique_leakable_ptr<raw> r);
     // cppcheck-suppress noExplicitConstructor
     ptr(unsigned l);
     ptr(const char *d, unsigned l);
     ptr(const ptr& p);
     ptr(ptr&& p) noexcept;
     ptr(const ptr& p, unsigned o, unsigned l);
+    ptr(const ptr& p, ceph::unique_leakable_ptr<raw> r);
     ptr& operator= (const ptr& p);
     ptr& operator= (ptr&& p) noexcept;
     ~ptr() {
@@ -265,9 +287,8 @@ namespace buffer CEPH_BUFFER_API {
 
     bool have_raw() const { return _raw ? true:false; }
 
-    raw *clone();
+    ceph::unique_leakable_ptr<raw> clone();
     void swap(ptr& other) noexcept;
-    ptr& make_shareable();
 
     iterator begin(size_t offset=0) {
       return iterator(this, offset, false);
@@ -377,9 +398,7 @@ namespace buffer CEPH_BUFFER_API {
   class ptr_node : public ptr_hook, public ptr {
   public:
     struct cloner {
-      ptr_node* operator()(const ptr_node& clone_this) {
-	return new ptr_node(clone_this);
-      }
+      ptr_node* operator()(const ptr_node& clone_this);
     };
     struct disposer {
       void operator()(ptr_node* const delete_this) {
@@ -391,6 +410,10 @@ namespace buffer CEPH_BUFFER_API {
 
     ~ptr_node() = default;
 
+    static std::unique_ptr<ptr_node, disposer>
+    create(ceph::unique_leakable_ptr<raw> r) {
+      return create_hypercombined(std::move(r));
+    }
     static std::unique_ptr<ptr_node, disposer> create(raw* const r) {
       return create_hypercombined(r);
     }
@@ -402,6 +425,8 @@ namespace buffer CEPH_BUFFER_API {
       return std::unique_ptr<ptr_node, disposer>(
 	new ptr_node(std::forward<Args>(args)...));
     }
+
+    static ptr_node* copy_hypercombined(const ptr_node& copy_this);
 
   private:
     template <class... Args>
@@ -417,7 +442,10 @@ namespace buffer CEPH_BUFFER_API {
     void swap(ptr_node& other) noexcept = delete;
 
     static bool dispose_if_hypercombined(ptr_node* delete_this);
-    static std::unique_ptr<ptr_node, disposer> create_hypercombined(raw* r);
+    static std::unique_ptr<ptr_node, disposer> create_hypercombined(
+      buffer::raw* r);
+    static std::unique_ptr<ptr_node, disposer> create_hypercombined(
+      ceph::unique_leakable_ptr<raw> r);
   };
   /*
    * list - the useful bit!
@@ -961,7 +989,6 @@ namespace buffer CEPH_BUFFER_API {
         _memcopy_count(other._memcopy_count),
         last_p(this) {
       _buffers.clone_from(other._buffers);
-      make_shareable();
     }
     list(list&& other) noexcept;
 
@@ -974,7 +1001,6 @@ namespace buffer CEPH_BUFFER_API {
         _carriage = &always_empty_bptr;
         _buffers.clone_from(other._buffers);
         _len = other._len;
-	make_shareable();
       }
       return *this;
     }
@@ -1070,6 +1096,9 @@ namespace buffer CEPH_BUFFER_API {
       _carriage = &_buffers.back();
       _len += _buffers.back().length();
     }
+    void push_back(ceph::unique_leakable_ptr<raw> r) {
+      push_back(r.release());
+    }
 
     void zero();
     void zero(unsigned o, unsigned l);
@@ -1095,13 +1124,6 @@ namespace buffer CEPH_BUFFER_API {
     void claim_append(list& bl, unsigned int flags = CLAIM_DEFAULT);
     // only for bl is bufferlist::page_aligned_appender
     void claim_append_piecewise(list& bl);
-
-    // clone non-shareable buffers (make shareable)
-    void make_shareable() {
-      for (auto& bp : _buffers) {
-        bp.make_shareable();
-      }
-    }
 
     // copy with explicit volatile-sharing semantics
     void share(const list& bl)
