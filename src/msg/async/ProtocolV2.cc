@@ -311,7 +311,7 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args..., signature_t> {
 struct ClientIdentFrame
     : public SignedEncryptedFrame<ClientIdentFrame, entity_addrvec_t, int64_t,
                                   uint64_t, uint64_t, uint64_t, uint64_t> {
-  const ProtocolV2::Tag tag = ProtocolV2::Tag::IDENT;
+  const ProtocolV2::Tag tag = ProtocolV2::Tag::CLIENT_IDENT;
   using SignedEncryptedFrame::SignedEncryptedFrame;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
@@ -326,7 +326,7 @@ struct ServerIdentFrame
     : public SignedEncryptedFrame<ServerIdentFrame, entity_addrvec_t,
                                   int64_t, uint64_t, uint64_t,
                                   uint64_t, uint64_t, uint64_t> {
-  const ProtocolV2::Tag tag = ProtocolV2::Tag::IDENT;
+  const ProtocolV2::Tag tag = ProtocolV2::Tag::SERVER_IDENT;
   using SignedEncryptedFrame::SignedEncryptedFrame;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
@@ -1417,7 +1417,8 @@ CtPtr ProtocolV2::handle_read_frame_length_and_tag(char *buffer, int r) {
     case Tag::AUTH_REPLY_MORE:
     case Tag::AUTH_REQUEST_MORE:
     case Tag::AUTH_DONE:
-    case Tag::IDENT:
+    case Tag::CLIENT_IDENT:
+    case Tag::SERVER_IDENT:
     case Tag::IDENT_MISSING_FEATURES:
     case Tag::SESSION_RECONNECT:
     case Tag::SESSION_RETRY:
@@ -1472,8 +1473,10 @@ CtPtr ProtocolV2::handle_frame_payload(char *buffer, int r) {
       return handle_auth_request_more(buffer, next_payload_len);
     case Tag::AUTH_DONE:
       return handle_auth_done(buffer, next_payload_len);
-    case Tag::IDENT:
-      return handle_ident(buffer, next_payload_len);
+    case Tag::CLIENT_IDENT:
+      return handle_client_ident(buffer, next_payload_len);
+    case Tag::SERVER_IDENT:
+      return handle_server_ident(buffer, next_payload_len);
     case Tag::IDENT_MISSING_FEATURES:
       return handle_ident_missing_features(buffer, next_payload_len);
     case Tag::SESSION_RECONNECT:
@@ -1494,16 +1497,6 @@ CtPtr ProtocolV2::handle_frame_payload(char *buffer, int r) {
       ceph_abort();
   }
   return nullptr;
-}
-
-CtPtr ProtocolV2::handle_ident(char *payload, uint32_t length) {
-  if (state == CONNECTING) {
-    return handle_server_ident(payload, length);
-  }
-  if (state == ACCEPTING) {
-    return handle_client_ident(payload, length);
-  }
-  ceph_abort("wrong state at handle_ident");
 }
 
 CtPtr ProtocolV2::ready() {

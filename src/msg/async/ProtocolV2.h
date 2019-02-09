@@ -53,7 +53,8 @@ public:
     AUTH_REPLY_MORE,
     AUTH_REQUEST_MORE,
     AUTH_DONE,
-    IDENT,
+    CLIENT_IDENT,
+    SERVER_IDENT,
     IDENT_MISSING_FEATURES,
     SESSION_RECONNECT,
     SESSION_RESET,
@@ -155,7 +156,6 @@ private:
   Ct<ProtocolV2> *read_frame();
   Ct<ProtocolV2> *handle_read_frame_length_and_tag(char *buffer, int r);
   Ct<ProtocolV2> *handle_frame_payload(char *buffer, int r);
-  Ct<ProtocolV2> *handle_ident(char *payload, uint32_t length);
 
   Ct<ProtocolV2> *ready();
 
