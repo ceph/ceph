@@ -81,6 +81,16 @@ void MonmapMonitor::update_from_paxos(bool *need_bootstrap)
   }
 
   check_subs();
+
+  // make sure we've recorded min_mon_release
+  string val;
+  if (mon->store->read_meta("min_mon_release", &val) < 0 ||
+      val.size() == 0 ||
+      atoi(val.c_str()) != (int)ceph_release()) {
+    dout(10) << __func__ << " updating min_mon_release meta" << dendl;
+    mon->store->write_meta("min_mon_release",
+			   stringify(ceph_release()));
+  }
 }
 
 void MonmapMonitor::create_pending()
