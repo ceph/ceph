@@ -18,6 +18,7 @@
 #include "rgw_cors_swift.h"
 #include "rgw_formats.h"
 #include "rgw_client_io.h"
+#include "rgw_compression.h"
 
 #include "rgw_auth.h"
 #include "rgw_swift_auth.h"
