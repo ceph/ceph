@@ -240,7 +240,7 @@ inline void decode(buffer::ptr& bp, bufferlist::const_iterator& p)
 
   if (len) {
     if (s.get_num_buffers() == 1)
-      bp = s.front();
+      bp = s.front().as_regular_ptr();
     else
       bp = buffer::copy(s.c_str(), s.length());
   }

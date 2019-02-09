@@ -948,7 +948,7 @@ int FileJournal::prepare_single_write(write_item &next_write, bufferlist& bl, of
   unsigned magic1_offset = offsetof(entry_header_t, magic1);
   unsigned magic2_offset = offsetof(entry_header_t, magic2);
 
-  bufferptr headerptr = ebl.buffers().front();
+  auto& headerptr = const_cast<ceph::buffer::ptr_node&>(ebl.buffers().front());
   uint64_t _seq = seq;
   uint64_t _queue_pos = queue_pos;
   uint64_t magic2 = entry_header_t::make_magic(seq, orig_len, header.get_fsid64());
@@ -956,7 +956,7 @@ int FileJournal::prepare_single_write(write_item &next_write, bufferlist& bl, of
   headerptr.copy_in(magic1_offset, sizeof(uint64_t), (char *)&_queue_pos);
   headerptr.copy_in(magic2_offset, sizeof(uint64_t), (char *)&magic2);
 
-  bufferptr footerptr = ebl.buffers().back();
+  auto& footerptr = const_cast<ceph::buffer::ptr_node&>(ebl.buffers().back());
   unsigned post_offset  = footerptr.length() - sizeof(entry_header_t);
   footerptr.copy_in(post_offset + seq_offset, sizeof(uint64_t), (char *)&_seq);
   footerptr.copy_in(post_offset + magic1_offset, sizeof(uint64_t), (char *)&_queue_pos);

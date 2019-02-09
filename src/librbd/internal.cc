@@ -1431,7 +1431,7 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       size_t write_length = 0;
       size_t offset = 0;
       size_t length = m_bl->length();
-      const auto& m_ptr = m_bl->front();
+      const auto& m_ptr = m_bl->front().as_regular_ptr();
       while (offset < length) {
 	if (util::calc_sparse_extent(m_ptr,
 				     m_sparse_size,

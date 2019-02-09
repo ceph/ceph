@@ -776,7 +776,7 @@ struct denc_traits<bufferptr> {
     p.copy(len, s);
     if (len) {
       if (s.get_num_buffers() == 1)
-	v = s.front();
+	v = s.front().as_regular_ptr();
       else
 	v = buffer::copy(s.c_str(), s.length());
     }
