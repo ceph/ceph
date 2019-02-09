@@ -565,7 +565,7 @@ int KStore::OnodeHashLRU::trim(int max)
 #define dout_prefix *_dout << "kstore(" << store->path << ").collection(" << cid << ") "
 
 KStore::Collection::Collection(KStore *ns, coll_t cid)
-  : RefCountedObjectInstance<Collection, CollectionImpl>(cid),
+  : RefCountedObjectInstanceSafe<Collection, CollectionImpl>(cid),
     store(ns),
     lock("KStore::Collection::lock", true, false),
     osr(new OpSequencer()),

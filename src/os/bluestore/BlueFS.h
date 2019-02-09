@@ -70,7 +70,7 @@ public:
     WRITER_SST,
   };
 
-  struct File : public RefCountedObjectInstance<File> {
+  struct File : public RefCountedObjectInstanceSafe<File> {
     MEMPOOL_CLASS_HELPERS();
 
     bluefs_fnode_t fnode;
@@ -111,7 +111,7 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&File::dirty_item> > dirty_file_list_t;
 
-  struct Dir : public RefCountedObjectInstance<Dir> {
+  struct Dir : public RefCountedObjectInstanceSafe<Dir> {
     MEMPOOL_CLASS_HELPERS();
 
     mempool::bluefs::map<string,FileRef> file_map;

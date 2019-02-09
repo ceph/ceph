@@ -133,7 +133,7 @@ public:
   class OpSequencer;
   typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
 
-  struct Collection : public RefCountedObjectInstance<Collection, CollectionImpl> {
+  struct Collection : public RefCountedObjectInstanceSafe<Collection, CollectionImpl> {
     KStore *store;
     kstore_cnode_t cnode;
     RWLock lock;

@@ -124,7 +124,7 @@ public:
    * ObjectStore users my get collection handles with open_collection() (or,
    * for bootstrapping a new collection, create_new_collection()).
    */
-  struct CollectionImpl : public RefCountedObjectSubType<CollectionImpl> {
+  struct CollectionImpl : public RefCountedObjectSubTypeSafe<CollectionImpl> {
     const coll_t cid;
 
     /// wait for any queued transactions to apply

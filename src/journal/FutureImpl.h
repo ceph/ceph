@@ -18,7 +18,7 @@ class Context;
 
 namespace journal {
 
-class FutureImpl : public RefCountedObjectInstance<FutureImpl>, boost::noncopyable {
+class FutureImpl : public RefCountedObjectInstanceSafe<FutureImpl>, boost::noncopyable {
 public:
   struct FlushHandler {
     using ref = std::shared_ptr<FlushHandler>;

@@ -1560,7 +1560,7 @@ int BufferlistObject::truncate(uint64_t size)
 
 // PageSetObject
 
-struct MemStore::PageSetObject : public RefCountedObjectInstance<PageSetObject, Object> {
+struct MemStore::PageSetObject : public RefCountedObjectInstanceSafe<PageSetObject, Object> {
   PageSet data;
   uint64_t data_len;
 #if defined(__GLIBCXX__)

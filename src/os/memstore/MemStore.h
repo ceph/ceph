@@ -29,7 +29,7 @@
 
 class MemStore : public ObjectStore {
 public:
-  struct Object : public RefCountedObjectSubType<Object> {
+  struct Object : public RefCountedObjectSubTypeSafe<Object> {
     ceph::mutex xattr_mutex{ceph::make_mutex("MemStore::Object::xattr_mutex")};
     ceph::mutex omap_mutex{ceph::make_mutex("MemStore::Object::omap_mutex")};
     map<string,bufferptr> xattr;
@@ -95,7 +95,7 @@ public:
   typedef Object::Ref ObjectRef;
 
   struct PageSetObject;
-  struct Collection : public RefCountedObjectInstance<Collection, CollectionImpl> {
+  struct Collection : public RefCountedObjectInstanceSafe<Collection, CollectionImpl> {
     int bits = 0;
     CephContext *cct;
     bool use_page_set;
@@ -186,7 +186,7 @@ public:
   private:
     friend factory;
     explicit Collection(CephContext *cct, coll_t c)
-      : RefCountedObjectInstance<Collection, CollectionImpl>(c),
+      : RefCountedObjectInstanceSafe<Collection, CollectionImpl>(c),
 	cct(cct),
 	use_page_set(cct->_conf->memstore_page_set) {}
   };

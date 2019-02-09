@@ -325,7 +325,7 @@ private:
   /**
    * Client IO
    */
-  struct InProgressOp : public RefCountedObjectInstance<InProgressOp> {
+  struct InProgressOp : public RefCountedObjectInstanceSafe<InProgressOp> {
     ceph_tid_t tid;
     set<pg_shard_t> waiting_for_commit;
     Context *on_commit;

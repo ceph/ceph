@@ -27,7 +27,7 @@ class SafeTimer;
 
 namespace journal {
 
-class JournalMetadata : public RefCountedObjectInstance<JournalMetadata>, boost::noncopyable {
+class JournalMetadata : public RefCountedObjectInstanceSafe<JournalMetadata>, boost::noncopyable {
 public:
   typedef std::function<Context*()> CreateContext;
   typedef cls::journal::ObjectPosition ObjectPosition;

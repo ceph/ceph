@@ -26,7 +26,7 @@ class ObjectRecorder;
 typedef std::pair<FutureImpl::ref, bufferlist> AppendBuffer;
 typedef std::list<AppendBuffer> AppendBuffers;
 
-class ObjectRecorder : public RefCountedObjectInstance<ObjectRecorder>, boost::noncopyable {
+class ObjectRecorder : public RefCountedObjectInstanceSafe<ObjectRecorder>, boost::noncopyable {
 public:
   struct Handler {
     virtual ~Handler() {

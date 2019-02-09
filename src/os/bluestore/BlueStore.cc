@@ -3235,7 +3235,7 @@ void BlueStore::DeferredBatch::_audit(CephContext *cct)
 #define dout_prefix *_dout << "bluestore(" << store->path << ").collection(" << cid << " " << this << ") "
 
 BlueStore::Collection::Collection(BlueStore *store_, Cache *c, coll_t cid)
-  : RefCountedObjectInstance<Collection, CollectionImpl>(cid),
+  : RefCountedObjectInstanceSafe<Collection, CollectionImpl>(cid),
     store(store_),
     cache(c),
     lock("BlueStore::Collection::lock", true, false),

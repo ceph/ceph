@@ -21,7 +21,7 @@ class SafeTimer;
 
 namespace journal {
 
-class ObjectPlayer : public RefCountedObjectInstance<ObjectPlayer> {
+class ObjectPlayer : public RefCountedObjectInstanceSafe<ObjectPlayer> {
 public:
   typedef std::list<Entry> Entries;
   typedef interval_set<uint64_t> InvalidRanges;

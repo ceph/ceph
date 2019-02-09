@@ -13,7 +13,7 @@
 /**
  * Session state associated with the Connection.
  */
-struct MgrSession : public RefCountedObjectInstance<MgrSession> {
+struct MgrSession : public RefCountedObjectInstanceSafe<MgrSession> {
   uint64_t global_id = 0;
   EntityName entity_name;
   entity_inst_t inst;
@@ -31,7 +31,7 @@ struct MgrSession : public RefCountedObjectInstance<MgrSession> {
 
 private:
   friend factory;
-  explicit MgrSession(CephContext *cct) : RefCountedObjectInstance<MgrSession>(cct) {}
+  explicit MgrSession(CephContext *cct) : RefCountedObjectInstanceSafe<MgrSession>(cct) {}
   ~MgrSession() override = default;
 };
 

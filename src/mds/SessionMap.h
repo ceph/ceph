@@ -54,7 +54,7 @@ enum {
  * session
  */
 
-class Session : public RefCountedObjectInstance<Session> {
+class Session : public RefCountedObjectInstanceSafe<Session> {
   // -- state etc --
 public:
   /*

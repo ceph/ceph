@@ -64,7 +64,7 @@ typedef boost::intrusive_ptr<PG> PGRef;
  *
  */
 
-struct Backoff : public RefCountedObjectInstance<Backoff> {
+struct Backoff : public RefCountedObjectInstanceSafe<Backoff> {
   using SessionRef = boost::intrusive_ptr<class Session>;
 
   enum {
@@ -116,7 +116,7 @@ private:
   Backoff(spg_t pgid, PGRef pg, SessionRef s,
 	  uint64_t i,
 	  const hobject_t& b, const hobject_t& e)
-    : RefCountedObjectInstance<Backoff>(g_ceph_context),
+    : RefCountedObjectInstanceSafe<Backoff>(g_ceph_context),
       pgid(pgid),
       id(i),
       lock("Backoff::lock"),
@@ -128,7 +128,7 @@ private:
 
 
 
-struct Session : public RefCountedObjectInstance<Session> {
+struct Session : public RefCountedObjectInstanceSafe<Session> {
   EntityName entity_name;
   OSDCap caps;
   ConnectionRef con;
@@ -227,7 +227,7 @@ struct Session : public RefCountedObjectInstance<Session> {
 private:
   friend factory;
   explicit Session(CephContext *cct, Connection *con_) :
-    RefCountedObjectInstance<Session>(cct),
+    RefCountedObjectInstanceSafe<Session>(cct),
     con(con_),
     socket_addr(con_->get_peer_socket_addr()),
     wstate(cct),

@@ -199,7 +199,7 @@ typedef std::shared_ptr<DaemonState> DaemonStatePtr;
 typedef std::map<DaemonKey, DaemonStatePtr> DaemonStateCollection;
 
 
-struct DeviceState : public RefCountedObjectInstance<DeviceState>
+struct DeviceState : public RefCountedObjectInstanceSafe<DeviceState>
 {
   std::string devid;
   std::set<pair<std::string,std::string>> devnames; ///< (server,devname)

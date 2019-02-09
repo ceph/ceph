@@ -1367,7 +1367,7 @@ public:
   class OpSequencer;
   typedef boost::intrusive_ptr<OpSequencer> OpSequencerRef;
 
-  struct Collection : public RefCountedObjectInstance<Collection, CollectionImpl> {
+  struct Collection : public RefCountedObjectInstanceSafe<Collection, CollectionImpl> {
     BlueStore *store;
     OpSequencerRef osr;
     Cache *cache;       ///< our cache shard
@@ -1719,7 +1719,7 @@ public:
     }
   };
 
-  class OpSequencer : public RefCountedObjectInstance<OpSequencer> {
+  class OpSequencer : public RefCountedObjectInstanceSafe<OpSequencer> {
   public:
     ceph::mutex qlock = ceph::make_mutex("BlueStore::OpSequencer::qlock");
     ceph::condition_variable qcond;
@@ -1831,7 +1831,7 @@ public:
   private:
     friend factory;
     OpSequencer(BlueStore *store, const coll_t& c)
-      : RefCountedObjectInstance<OpSequencer>(store->cct),
+      : RefCountedObjectInstanceSafe<OpSequencer>(store->cct),
 	store(store), cid(c) {
     }
     ~OpSequencer() {
