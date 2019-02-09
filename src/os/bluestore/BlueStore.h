@@ -3026,13 +3026,6 @@ static inline void intrusive_ptr_release(BlueStore::Onode *o) {
   o->put();
 }
 
-static inline void intrusive_ptr_add_ref(BlueStore::OpSequencer *o) {
-  o->get();
-}
-static inline void intrusive_ptr_release(BlueStore::OpSequencer *o) {
-  o->put();
-}
-
 class BlueStoreRepairer
 {
 public:

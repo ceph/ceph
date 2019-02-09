@@ -36,9 +36,7 @@ public:
     bufferlist omap_header;
     map<string,bufferlist> omap;
 
-    typedef boost::intrusive_ptr<Object> Ref;
-    friend void intrusive_ptr_add_ref(Object *o) { o->get(); }
-    friend void intrusive_ptr_release(Object *o) { o->put(); }
+    using Ref = ref;
 
     // interface for object data
     virtual size_t get_size() const = 0;
