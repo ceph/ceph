@@ -119,6 +119,9 @@ public:
   T* get() {
     return static_cast<T*>(R::get());
   }
+  void put() const {
+    return R::put();
+  }
 
 protected:
 template<typename... Args>
@@ -126,9 +129,40 @@ template<typename... Args>
   virtual ~RefCountedObjectSubType() override {}
 };
 
-
+/* This is a "safe" version of RefCountedObjectSubType. It does not allow
+ * calling get/put methods on these derived classes. This is intended to
+ * prevent some accidental reference leaks. Instead, you must either cast the
+ * derived class to a RefCountedObject and do the get/put or detach an
+ * temporary reference.
+ */
 template<class T, class R = RefCountedObject>
-class RefCountedObjectInstance : public RefCountedObjectSubType<T, R> {
+class RefCountedObjectSubTypeSafe : public R {
+public:
+  using ref = boost::intrusive_ptr<T>;
+  using const_ref = boost::intrusive_ptr<T const>;
+
+  static auto ref_cast(const auto& m) {
+    if constexpr(std::is_const<typename std::remove_reference<decltype(m)>::type::element_type>::value) {
+      return boost::static_pointer_cast<typename T::const_ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
+    } else {
+      return boost::static_pointer_cast<typename T::ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
+    }
+  }
+  static auto const_ref_cast(const auto& m) {
+    return boost::static_pointer_cast<typename T::const_ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
+  }
+  const T* get() const = delete;
+  T* get() = delete;
+  void put() const = delete;
+
+protected:
+template<typename... Args>
+  RefCountedObjectSubTypeSafe(Args&&... args) : R(std::forward<Args>(args)...) {}
+  virtual ~RefCountedObjectSubTypeSafe() override {}
+};
+
+template<class T, class R, template<typename,typename> class SubType>
+class RefCountedObjectInstanceTemplate : public SubType<T, R> {
 public:
   using factory = RefCountedObjectFactory<T>;
 
@@ -139,9 +173,15 @@ public:
 
 protected:
 template<typename... Args>
-  RefCountedObjectInstance(Args&&... args) : RefCountedObjectSubType<T,R>(std::forward<Args>(args)...) {}
-  virtual ~RefCountedObjectInstance() override {}
+  RefCountedObjectInstanceTemplate(Args&&... args) : SubType<T,R>(std::forward<Args>(args)...) {}
+  virtual ~RefCountedObjectInstanceTemplate() override {}
 };
+
+template<class T, class R = RefCountedObject>
+using RefCountedObjectInstance = RefCountedObjectInstanceTemplate<T,R,RefCountedObjectSubType>;
+
+template<class T, class R = RefCountedObject>
+using RefCountedObjectInstanceSafe = RefCountedObjectInstanceTemplate<T,R,RefCountedObjectSubTypeSafe>;
 
 using RefCountedPtr = boost::intrusive_ptr<RefCountedObject>;
 
