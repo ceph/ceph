@@ -11,6 +11,8 @@
 #include "rgw_op.h"
 #include "rgw_compression_types.h"
 
+int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need_decompress, RGWCompressionInfo& cs_info);
+
 class RGWGetObj_Decompress : public RGWGetObj_Filter
 {
   CephContext* cct;

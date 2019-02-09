@@ -9697,29 +9697,6 @@ int RGWRados::delete_obj_aio(const rgw_obj& obj,
   return ret;
 }
 
-int rgw_compression_info_from_attrset(map<string, bufferlist>& attrs, bool& need_decompress, RGWCompressionInfo& cs_info) {
-  map<string, bufferlist>::iterator value = attrs.find(RGW_ATTR_COMPRESSION);
-  if (value != attrs.end()) {
-    auto bliter = value->second.cbegin();
-    try {
-      decode(cs_info, bliter);
-    } catch (buffer::error& err) {
-      return -EIO;
-    }
-    if (cs_info.blocks.size() == 0) {
-      return -EIO;
-    }
-    if (cs_info.compression_type != "none")
-      need_decompress = true;
-    else
-      need_decompress = false;
-    return 0;
-  } else {
-    need_decompress = false;
-    return 0;
-  }
-}
-
 bool RGWRados::call(std::string_view command, const cmdmap_t& cmdmap,
 		    std::string_view format, bufferlist& out)
 {
