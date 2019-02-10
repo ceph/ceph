@@ -669,6 +669,12 @@ namespace buffer CEPH_BUFFER_API {
       typedef typename std::conditional<is_const,
 					typename buffers_t::const_iterator,
 					typename buffers_t::iterator>::type list_iter_t;
+      using iterator_category = std::forward_iterator_tag;
+      using value_type = typename std::conditional<is_const, const char, char>::type;
+      using difference_type = std::ptrdiff_t;
+      using pointer = typename std::add_pointer<value_type>::type;
+      using reference = typename std::add_lvalue_reference<value_type>::type;
+
       bl_t* bl;
       list_t* ls;  // meh.. just here to avoid an extra pointer dereference..
       list_iter_t p;
@@ -677,12 +683,6 @@ namespace buffer CEPH_BUFFER_API {
       friend class iterator_impl<true>;
 
     public:
-      using iterator_category = std::forward_iterator_tag;
-      using value_type = typename std::conditional<is_const, const char, char>::type;
-      using difference_type = std::ptrdiff_t;
-      using pointer = typename std::add_pointer<value_type>::type;
-      using reference = typename std::add_lvalue_reference<value_type>::type;
-
       // constructor.  position.
       iterator_impl()
 	: bl(0), ls(0), off(0), p_off(0) {}
