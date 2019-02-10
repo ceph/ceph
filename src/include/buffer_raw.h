@@ -18,7 +18,6 @@
 #include <atomic>
 #include <map>
 #include <utility>
-#include <type_traits>
 #include "include/buffer.h"
 #include "include/mempool.h"
 #include "include/spinlock.h"
@@ -26,10 +25,6 @@
 namespace ceph::buffer {
   class raw {
   public:
-    // In the future we might want to have a slab allocator here with few
-    // embedded slots. This would allow to avoid the "if" in dtor of ptr_node.
-    std::aligned_storage<sizeof(ptr_node),
-			 alignof(ptr_node)>::type bptr_storage;
     char *data;
     unsigned len;
     std::atomic<unsigned> nref { 0 };
@@ -41,7 +36,7 @@ namespace ceph::buffer {
     mutable ceph::spinlock crc_spinlock;
 
     explicit raw(unsigned l, int mempool=mempool::mempool_buffer_anon)
-      : data(nullptr), len(l), nref(0), mempool(mempool) {
+      : data(NULL), len(l), nref(0), mempool(mempool) {
       mempool::get_pool(mempool::pool_index_t(mempool)).adjust_count(1, len);
     }
     raw(char *c, unsigned l, int mempool=mempool::mempool_buffer_anon)

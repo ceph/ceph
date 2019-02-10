@@ -9270,9 +9270,9 @@ int Client::_read_sync(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
 	int64_t some = in->size - pos;
 	if (some > left)
 	  some = left;
-	auto z = buffer::ptr_node::create(some);
-	z->zero();
-	bl->push_back(std::move(z));
+	bufferptr z(some);
+	z.zero();
+	bl->push_back(z);
 	read += some;
 	pos += some;
 	left -= some;
@@ -13218,10 +13218,10 @@ int Client::ll_write_block(Inode *in, uint64_t blockid,
   }
   object_t oid = file_object_t(vino.ino, blockid);
   SnapContext fakesnap;
-  ceph::bufferlist bl;
-  if (length > 0) {
-    bl.push_back(buffer::copy(buf, length));
-  }
+  bufferptr bp;
+  if (length > 0) bp = buffer::copy(buf, length);
+  bufferlist bl;
+  bl.push_back(bp);
 
   ldout(cct, 1) << "ll_block_write for " << vino.ino << "." << blockid
 		<< dendl;

@@ -1372,9 +1372,11 @@ int FileJournal::write_aio_bl(off64_t& pos, bufferlist& bl, uint64_t seq)
     iovec *iov = new iovec[max];
     int n = 0;
     unsigned len = 0;
-    for (auto p = std::cbegin(bl.buffers()); n < max; ++p, ++n) {
-      ceph_assert(p != std::cend(bl.buffers()));
-      iov[n].iov_base = const_cast<void*>(static_cast<const void*>(p->c_str()));
+    for (std::list<buffer::ptr>::const_iterator p = bl.buffers().begin();
+	 n < max;
+	 ++p, ++n) {
+      ceph_assert(p != bl.buffers().end());
+      iov[n].iov_base = (void *)p->c_str();
       iov[n].iov_len = p->length();
       len += p->length();
     }

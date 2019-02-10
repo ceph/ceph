@@ -1426,12 +1426,12 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
       });
       auto gather_ctx = new C_Gather(m_dest->cct, end_op_ctx);
 
-      m_bl->rebuild(buffer::ptr_node::create(m_bl->length()));
+      bufferptr m_ptr(m_bl->length());
+      m_bl->rebuild(m_ptr);
       size_t write_offset = 0;
       size_t write_length = 0;
       size_t offset = 0;
       size_t length = m_bl->length();
-      const auto& m_ptr = m_bl->front();
       while (offset < length) {
 	if (util::calc_sparse_extent(m_ptr,
 				     m_sparse_size,
@@ -1439,9 +1439,9 @@ int validate_pool(IoCtx &io_ctx, CephContext *cct) {
 				     &write_offset,
 				     &write_length,
 				     &offset)) {
+	  bufferptr write_ptr(m_ptr, write_offset, write_length);
 	  bufferlist *write_bl = new bufferlist();
-	  write_bl->push_back(
-	    buffer::ptr_node::create(m_ptr, write_offset, write_length));
+	  write_bl->push_back(write_ptr);
 	  Context *ctx = new C_CopyWrite(write_bl, gather_ctx->new_sub());
 	  auto comp = io::AioCompletion::create(ctx);
 

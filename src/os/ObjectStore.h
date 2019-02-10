@@ -695,11 +695,15 @@ public:
       bufferlist& bl,
       vector<__le32> &cm,
       vector<__le32> &om) {
-      for (auto& bp : bl.buffers()) {
-        ceph_assert(bp.length() % sizeof(Op) == 0);
 
-        char* raw_p = const_cast<char*>(bp.c_str());
-        char* raw_end = raw_p + bp.length();
+      list<bufferptr> list = bl.buffers();
+      std::list<bufferptr>::iterator p;
+
+      for(p = list.begin(); p != list.end(); ++p) {
+        ceph_assert(p->length() % sizeof(Op) == 0);
+
+        char* raw_p = p->c_str();
+        char* raw_end = raw_p + p->length();
         while (raw_p < raw_end) {
           _update_op(reinterpret_cast<Op*>(raw_p), cm, om);
           raw_p += sizeof(Op);

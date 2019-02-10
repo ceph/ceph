@@ -2406,7 +2406,7 @@ int Pipe::write_message(const ceph_msg_header& header, const ceph_msg_footer& fo
   msg.msg_iovlen++;
 
   // payload (front+data)
-  auto pb = std::cbegin(blist.buffers());
+  list<bufferptr>::const_iterator pb = blist.buffers().begin();
   unsigned b_off = 0;  // carry-over buffer offset, if any
   unsigned bl_pos = 0; // blist pos
   unsigned left = blist.length();
