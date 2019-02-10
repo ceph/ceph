@@ -78,7 +78,6 @@ private:
   char *temp_buffer;
   State state;
   uint64_t peer_required_features;
-  AuthStreamHandler::rxtx_t session_security;
 
   uint64_t client_cookie;
   uint64_t server_cookie;
@@ -203,13 +202,6 @@ public:
   virtual void read_event() override;
   virtual void write_event() override;
   virtual bool is_queued() override;
-
-  uint32_t calculate_payload_size(
-    AuthStreamHandler *stream_handler,
-    uint32_t length);
-  // We are doing *authenticated encryption*
-  void authencrypt_payload(ceph::bufferlist &payload);
-  void authdecrypt_payload(char *payload, uint32_t &length);
 
 private:
   // Client Protocol

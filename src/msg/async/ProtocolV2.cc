@@ -277,13 +277,6 @@ template <class T, typename... Args>
 struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
   SignedEncryptedFrame(ProtocolV2 &protocol, const Args &... args)
       : PayloadFrame<T, Args...>(args...) {
-#if 0
-    ceph::bufferlist trans_bl;
-    this->payload.splice(8, this->payload.length() - 8, &trans_bl);
-    protocol.authencrypt_payload(trans_bl);
-    this->payload.claim_append(trans_bl);
-
-#else
     ceph_assert(protocol.session_stream_handlers.tx);
 
     protocol.session_stream_handlers.tx->reset_tx_handler({
@@ -301,15 +294,10 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
       std::move(this->payload));
     this->payload = \
       protocol.session_stream_handlers.tx->authenticated_encrypt_final();
-#endif
   }
 
   SignedEncryptedFrame(ProtocolV2 &protocol, char *payload, uint32_t length)
       : PayloadFrame<T, Args...>() {
-#if 0
-    protocol.authdecrypt_payload(payload, length);
-    this->decode_frame(payload, length);
-#else
     protocol.session_stream_handlers.rx->reset_rx_handler();
 
     ceph::bufferlist bl;
@@ -319,7 +307,6 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
       protocol.session_stream_handlers.rx->authenticated_decrypt_update_final(
         std::move(bl), 8);
     this->decode_frame(plain_bl.c_str(), plain_bl.length());
-#endif
   }
 };
 
@@ -1119,40 +1106,6 @@ void ProtocolV2::write_event() {
 
 bool ProtocolV2::is_queued() {
   return !out_queue.empty() || connection->is_queued();
-}
-
-uint32_t ProtocolV2::calculate_payload_size(
-  AuthStreamHandler *stream_handler,
-  uint32_t length)
-{
-#if 0
-  if (auth_meta.is_mode_secure()) {
-    ceph_assert(stream_handler != nullptr);
-    return stream_handler->calculate_payload_size(length);
-  } else {
-    return length;
-  }
-#else
-  return length;
-#endif
-}
-
-void ProtocolV2::authencrypt_payload(bufferlist &payload) {
-  if (auth_meta->is_mode_secure()) {
-    // using tx
-    ceph_assert(session_security.tx);
-    session_security.tx->authenticated_encrypt(payload);
-    ceph_assert(payload.length() > 0);
-  }
-}
-
-void ProtocolV2::authdecrypt_payload(char *payload, uint32_t &length) {
-  if (auth_meta->is_mode_secure()) {
-    ceph_assert(session_security.rx);
-    // using rx
-    ceph_assert(length > 0);
-    session_security.rx->authenticated_decrypt(payload, length);
-  }
 }
 
 CtPtr ProtocolV2::read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
@@ -2910,7 +2863,6 @@ CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
   exproto->can_write = false;
   exproto->reconnecting = reconnecting;
   exproto->replacing = true;
-  std::swap(exproto->session_security, session_security);
   std::swap(exproto->session_stream_handlers, session_stream_handlers);
   exproto->auth_meta = auth_meta;
   existing->state_offset = 0;

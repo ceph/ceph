@@ -41,45 +41,8 @@ struct DummyAuthSessionHandler : AuthSessionHandler {
   }
 };
 
-struct SHA256SignatureError : public std::exception {
-  sha256_digest_t sig1;
-  sha256_digest_t sig2;
-  std::string reason;
-
-  SHA256SignatureError(const char *sig1, const char *sig2)
-      : sig1((const unsigned char *)sig1), sig2((const unsigned char *)sig2) {
-    std::stringstream ss;
-    ss << " signature mismatch: calc signature=" << this->sig1
-       << " msg signature=" << this->sig2;
-    reason = ss.str();
-  }
-
-  const char *what() const throw() { return reason.c_str(); }
-};
-
 struct DecryptionError : public std::exception {};
 
-struct AuthStreamHandler {
-  virtual ~AuthStreamHandler() = default;
-  //virtual ceph::bufferlist authenticated_encrypt(ceph::bufferlist& in) = 0;
-  //virtual ceph::bufferlist authenticated_decrypt(ceph::bufferlist& in) = 0;
-  virtual void authenticated_encrypt(ceph::bufferlist& payload) = 0;
-  virtual void authenticated_decrypt(char* payload, uint32_t& length) = 0;
-  virtual std::size_t calculate_payload_size(std::size_t length) = 0;
-
-  struct rxtx_t {
-    //rxtx_t(rxtx_t&& r) : rx(std::move(rx)), tx(std::move(tx)) {}
-    // Each peer can use different handlers.
-    // Hmm, isn't that too much flexbility?
-    std::unique_ptr<AuthStreamHandler> rx;
-    std::unique_ptr<AuthStreamHandler> tx;
-  };
-  static rxtx_t create_stream_handler_pair(
-    CephContext* ctx,
-    const class AuthConnectionMeta& auth_meta);
-};
-
-// TODO: make this a static member of AuthSessionHandler.
 extern AuthSessionHandler *get_auth_session_handler(
   CephContext *cct, int protocol,
   const CryptoKey& key,
