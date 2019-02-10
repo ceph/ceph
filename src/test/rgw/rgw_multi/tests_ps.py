@@ -1,5 +1,6 @@
 import logging
 import json
+import tempfile
 from rgw_multi.tests import get_realm, \
     ZonegroupConns, \
     zonegroup_meta_checkpoint, \
@@ -281,7 +282,7 @@ def test_ps_event_type_subscription():
         key.set_contents_from_string('bar')
     # wait for sync
     zone_meta_checkpoint(ps_zones[0].zone)
-    
+
     # get the events from the creation subscription
     result, _ = sub_create_conf.get_events()
     parsed_result = json.loads(result)
@@ -371,10 +372,6 @@ def test_ps_event_fetching():
                               topic_name)
     _, status = sub_conf.set_config()
     assert_equal(status/100, 2)
-    # get the subscription
-    result, _ = sub_conf.get_config()
-    parsed_result = json.loads(result)
-    assert_equal(parsed_result['topic'], topic_name)
     # create objects in the bucket
     number_of_objects = 100
     for i in range(number_of_objects):
@@ -430,10 +427,6 @@ def test_ps_event_acking():
                               topic_name)
     _, status = sub_conf.set_config()
     assert_equal(status/100, 2)
-    # get the subscription
-    result, _ = sub_conf.get_config()
-    parsed_result = json.loads(result)
-    assert_equal(parsed_result['topic'], topic_name)
     # create objects in the bucket
     number_of_objects = 10
     for i in range(number_of_objects):
@@ -470,4 +463,111 @@ def test_ps_event_acking():
     topic_conf.del_config()
     for key in bucket.list():
         key.delete()
+    zones[0].delete_bucket(bucket_name)
+
+def test_ps_creation_triggers():
+    """ test object creation notifications in using put/copy/post """
+    zones, ps_zones = init_env()
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name+TOPIC_SUFFIX
+
+    # create topic
+    topic_conf = PSTopic(ps_zones[0].conn, topic_name)
+    topic_conf.set_config()
+    # create bucket on the first of the rados zones
+    bucket = zones[0].create_bucket(bucket_name)
+    # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
+    # create notifications
+    notification_conf = PSNotification(ps_zones[0].conn, bucket_name,
+                                       topic_name)
+    _, status = notification_conf.set_config()
+    assert_equal(status/100, 2)
+    # create subscription
+    sub_conf = PSSubscription(ps_zones[0].conn, bucket_name+SUB_SUFFIX,
+                              topic_name)
+    _, status = sub_conf.set_config()
+    assert_equal(status/100, 2)
+    # create objects in the bucket using PUT
+    key = bucket.new_key('put')
+    key.set_contents_from_string('bar')
+    # create objects in the bucket using COPY
+    bucket.copy_key('copy', bucket.name, key.name)
+    # create objects in the bucket using multi-part upload
+    fp = tempfile.TemporaryFile(mode='w')
+    fp.write('bar')
+    fp.close()
+    uploader = bucket.initiate_multipart_upload('multipart')
+    fp = tempfile.TemporaryFile(mode='r')
+    uploader.upload_part_from_file(fp, 1)
+    uploader.complete_upload()
+    fp.close()
+    # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
+
+    # get the create events from the subscription
+    result, _ = sub_conf.get_events()
+    parsed_result = json.loads(result)
+    for event in parsed_result['events']:
+        log.debug('Event key: "' + str(event['info']['key']['name']) + '" type: "' + str(event['event']) +'"')
+
+    assert_equal(len(parsed_result['events']), 3)
+    # cleanup
+    sub_conf.del_config()
+    notification_conf.del_config()
+    topic_conf.del_config()
+    for key in bucket.list():
+        key.delete()
+    zones[0].delete_bucket(bucket_name)
+
+
+def test_ps_versioned_deletion():
+    """ test notification of deletion markers """
+    zones, ps_zones = init_env()
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name+TOPIC_SUFFIX
+
+    # create topic
+    topic_conf = PSTopic(ps_zones[0].conn, topic_name)
+    topic_conf.set_config()
+    # create bucket on the first of the rados zones
+    bucket = zones[0].create_bucket(bucket_name)
+    bucket.configure_versioning(True)
+    # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
+    # create notifications
+    notification_conf = PSNotification(ps_zones[0].conn, bucket_name,
+                                       topic_name, "OBJECT_DELETE")
+    _, status = notification_conf.set_config()
+    assert_equal(status/100, 2)
+    # create subscription
+    sub_conf = PSSubscription(ps_zones[0].conn, bucket_name+SUB_SUFFIX,
+                              topic_name)
+    _, status = sub_conf.set_config()
+    assert_equal(status/100, 2)
+    # create objects in the bucket
+    key = bucket.new_key('foo')
+    key.set_contents_from_string('bar')
+    v1 = key.version_id
+    key.set_contents_from_string('kaboom')
+    v2 = key.version_id
+    # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
+    # set delete markers
+    bucket.delete_key(key.name, version_id=v2)
+    bucket.delete_key(key.name, version_id=v1)
+    # wait for sync
+    zone_meta_checkpoint(ps_zones[0].zone)
+
+    # get the create events from the subscription
+    result, _ = sub_conf.get_events()
+    parsed_result = json.loads(result)
+    for event in parsed_result['events']:
+        log.debug('Event key: "' + str(event['info']['key']['name']) + '" type: "' + str(event['event']) +'"')
+
+    assert_equal(len(parsed_result['events']), 2)
+    # cleanup
+    sub_conf.del_config()
+    notification_conf.del_config()
+    topic_conf.del_config()
     zones[0].delete_bucket(bucket_name)
