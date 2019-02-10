@@ -198,69 +198,6 @@ void AES128GCM_StreamHandler::authenticated_decrypt(
   char* payload,
   uint32_t& length)
 {
-  ceph_assert(length > 0);
-  ceph_assert(length % AES_BLOCK_LEN == 0);
-  if (1 != EVP_DecryptInit_ex(ectx.get(), EVP_aes_128_gcm(),
-			      nullptr, nullptr, nullptr)) {
-    throw std::runtime_error("EVP_DecryptInit_ex failed");
-  }
-
-  if (1 != EVP_CIPHER_CTX_ctrl(ectx.get(), EVP_CTRL_GCM_SET_IVLEN,
-			       STREAM_AES_IV_LEN, nullptr) ) {
-    throw std::runtime_error("EVP_CIPHER_CTX_ctrl failed");
-  }
-
-  if(1 != EVP_DecryptInit_ex(ectx.get(), nullptr, nullptr,
-	reinterpret_cast<const unsigned char*>(connection_secret.data()),
-	reinterpret_cast<const unsigned char*>(&nonce))) {
-    throw std::runtime_error("EVP_DecryptInit_ex failed");
-  }
-
-  // TODO: consider in-place transformata
-  auto out_tmp = \
-    ceph::buffer::ptr_node::create(length - STREAM_GCM_TAG_LEN);
-
-  int update_len = 0;
-  if (1 != EVP_DecryptUpdate(ectx.get(),
-	reinterpret_cast<unsigned char*>(out_tmp->c_str()),
-	&update_len,
-	reinterpret_cast<const unsigned char*>(payload),
-	length - STREAM_GCM_TAG_LEN)) {
-    throw std::runtime_error("EVP_DecryptUpdate failed");
-  }
-
-  if (1 != EVP_CIPHER_CTX_ctrl(ectx.get(), EVP_CTRL_GCM_SET_TAG,
-	STREAM_GCM_TAG_LEN,
-	payload + length - STREAM_GCM_TAG_LEN)) {
-    throw std::runtime_error("EVP_CIPHER_CTX_ctrl failed");
-  }
-
-  int final_len = 0;
-  if (0 >= EVP_DecryptFinal_ex(ectx.get(),
-	reinterpret_cast<unsigned char*>(out_tmp->c_str() + update_len),
-	&final_len)) {
-  ldout(cct, 15) << __func__
-		 << " length=" << length
-		 << " out_tmp->length()=" << out_tmp->length()
-		 << " update_len=" << update_len
-		 << " final_len=" << final_len
-		 << dendl;
-    throw std::runtime_error("EVP_DecryptFinal_ex failed");
-  } else {
-    ceph_assert_always(update_len + final_len + STREAM_GCM_TAG_LEN == length);
-    ceph_assert_always((update_len + final_len) % AES_BLOCK_LEN == 0);
-
-    // BE CAREFUL: we cannot expose any single bit of information about
-    // the cause of failure. Otherwise we'll face padding oracle attack.
-    // See: https://en.wikipedia.org/wiki/Padding_oracle_attack.
-    const auto pad_len = \
-      std::min<std::uint8_t>((*out_tmp)[update_len + final_len - 1], AES_BLOCK_LEN);
-
-    // TODO: move to a new interface after dropping AES-CBC-HMAC-SHA256
-    length = update_len + final_len - pad_len;
-    memcpy(payload, out_tmp->c_str(), length);
-    nonce++;
-  }
 }
 
 
