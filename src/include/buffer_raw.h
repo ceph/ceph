@@ -86,12 +86,12 @@ public:
       return data;
     }
     virtual raw* clone_empty() = 0;
-    ceph::unique_leakable_ptr<raw> clone() {
-      raw* const c = clone_empty();
+    raw *clone() {
+      raw *c = clone_empty();
       memcpy(c->data, data, len);
-      return ceph::unique_leakable_ptr<raw>(c);
+      return c;
     }
-    virtual bool is_shareable() const {
+    virtual bool is_shareable() {
       // true if safe to reference/share the existing buffer copy
       // false if it is not safe to share the buffer, e.g., due to special
       // and/or registered memory that is scarce

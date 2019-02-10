@@ -69,8 +69,8 @@ namespace {
 
 TracepointProvider::Traits tracepoint_traits("librbd_tp.so", "rbd_tracing");
 
-static auto create_write_raw(librbd::ImageCtx *ictx, const char *buf,
-                             size_t len) {
+buffer::raw* create_write_raw(librbd::ImageCtx *ictx, const char *buf,
+                              size_t len) {
   // TODO: until librados can guarantee memory won't be referenced after
   // it ACKs a request, always make a copy of the user-provided memory
   return buffer::copy(buf, len);

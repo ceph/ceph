@@ -278,7 +278,7 @@ static ceph::spinlock debug_lock;
     raw* clone_empty() override {
       return new raw_char(len);
     }
-    bool is_shareable() const override {
+    bool is_shareable() override {
       return false; // !shareable, will force make_shareable()
     }
     ~raw_unshareable() override {
@@ -317,7 +317,7 @@ static ceph::spinlock debug_lock;
 	unsigned l) :
       raw((char*)d, l), m_hook(_m_hook->get()) {}
 
-    bool is_shareable() const override { return false; }
+    bool is_shareable() { return false; }
     static void operator delete(void *p)
     {
       xio_msg_buffer *buf = static_cast<xio_msg_buffer*>(p);
@@ -361,16 +361,16 @@ static ceph::spinlock debug_lock;
   }
 #endif /* HAVE_XIO */
 
-  ceph::unique_leakable_ptr<buffer::raw> buffer::copy(const char *c, unsigned len) {
-    auto r = buffer::create_aligned(len, sizeof(size_t));
+  buffer::raw* buffer::copy(const char *c, unsigned len) {
+    raw* r = buffer::create_aligned(len, sizeof(size_t));
     memcpy(r->data, c, len);
     return r;
   }
 
-  ceph::unique_leakable_ptr<buffer::raw> buffer::create(unsigned len) {
+  buffer::raw* buffer::create(unsigned len) {
     return buffer::create_aligned(len, sizeof(size_t));
   }
-  ceph::unique_leakable_ptr<buffer::raw> buffer::create_in_mempool(unsigned len, int mempool) {
+  buffer::raw* buffer::create_in_mempool(unsigned len, int mempool) {
     return buffer::create_aligned_in_mempool(len, sizeof(size_t), mempool);
   }
   buffer::raw* buffer::claim_char(unsigned len, char *buf) {
@@ -389,7 +389,7 @@ static ceph::spinlock debug_lock;
     return new raw_claim_buffer(buf, len, std::move(del));
   }
 
-  ceph::unique_leakable_ptr<buffer::raw> buffer::create_aligned_in_mempool(
+  buffer::raw* buffer::create_aligned_in_mempool(
     unsigned len, unsigned align, int mempool) {
     // If alignment is a page multiple, use a separate buffer::raw to
     // avoid fragmenting the heap.
@@ -403,24 +403,23 @@ static ceph::spinlock debug_lock;
     if ((align & ~CEPH_PAGE_MASK) == 0 ||
 	len >= CEPH_PAGE_SIZE * 2) {
 #ifndef __CYGWIN__
-      return ceph::unique_leakable_ptr<buffer::raw>(new raw_posix_aligned(len, align));
+      return new raw_posix_aligned(len, align);
 #else
-      return ceph::unique_leakable_ptr<buffer::raw>(new raw_hack_aligned(len, align));
+      return new raw_hack_aligned(len, align);
 #endif
     }
-    return ceph::unique_leakable_ptr<buffer::raw>(
-      raw_combined::create(len, align, mempool));
+    return raw_combined::create(len, align, mempool);
   }
-  ceph::unique_leakable_ptr<buffer::raw> buffer::create_aligned(
+  buffer::raw* buffer::create_aligned(
     unsigned len, unsigned align) {
     return create_aligned_in_mempool(len, align,
 				     mempool::mempool_buffer_anon);
   }
 
-  ceph::unique_leakable_ptr<buffer::raw> buffer::create_page_aligned(unsigned len) {
+  buffer::raw* buffer::create_page_aligned(unsigned len) {
     return create_aligned(len, CEPH_PAGE_SIZE);
   }
-  ceph::unique_leakable_ptr<buffer::raw> buffer::create_small_page_aligned(unsigned len) {
+  buffer::raw* buffer::create_small_page_aligned(unsigned len) {
     if (len < CEPH_PAGE_SIZE) {
       return create_aligned(len, CEPH_BUFFER_ALLOC_UNIT);
     } else
@@ -431,29 +430,21 @@ static ceph::spinlock debug_lock;
     return new raw_unshareable(len);
   }
 
-  buffer::ptr::ptr(raw* r) : _raw(r), _off(0), _len(r->len)   // no lock needed; this is an unref raw.
+  buffer::ptr::ptr(raw *r) : _raw(r), _off(0), _len(r->len)   // no lock needed; this is an unref raw.
   {
     r->nref++;
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
-  buffer::ptr::ptr(ceph::unique_leakable_ptr<raw> r)
-    : _raw(r.release()),
-      _off(0),
-      _len(_raw->len)
-  {
-    _raw->nref.store(1, std::memory_order_release);
-    bdout << "ptr " << this << " get " << _raw << bendl;
-  }
   buffer::ptr::ptr(unsigned l) : _off(0), _len(l)
   {
-    _raw = buffer::create(l).release();
-    _raw->nref.store(1, std::memory_order_release);
+    _raw = create(l);
+    _raw->nref++;
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
   buffer::ptr::ptr(const char *d, unsigned l) : _off(0), _len(l)    // ditto.
   {
-    _raw = buffer::copy(d, l).release();
-    _raw->nref.store(1, std::memory_order_release);
+    _raw = copy(d, l);
+    _raw->nref++;
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
   buffer::ptr::ptr(const ptr& p) : _raw(p._raw), _off(p._off), _len(p._len)
@@ -474,14 +465,6 @@ static ceph::spinlock debug_lock;
     ceph_assert(o+l <= p._len);
     ceph_assert(_raw);
     _raw->nref++;
-    bdout << "ptr " << this << " get " << _raw << bendl;
-  }
-  buffer::ptr::ptr(const ptr& p, ceph::unique_leakable_ptr<raw> r)
-    : _raw(r.release()),
-      _off(p._off),
-      _len(p._len)
-  {
-    _raw->nref.store(1, std::memory_order_release);
     bdout << "ptr " << this << " get " << _raw << bendl;
   }
   buffer::ptr& buffer::ptr::operator= (const ptr& p)
@@ -517,9 +500,25 @@ static ceph::spinlock debug_lock;
     return *this;
   }
 
-  ceph::unique_leakable_ptr<buffer::raw> buffer::ptr::clone()
+  buffer::raw *buffer::ptr::clone()
   {
     return _raw->clone();
+  }
+
+  buffer::ptr& buffer::ptr::make_shareable() {
+    if (_raw && !_raw->is_shareable()) {
+      buffer::raw *tr = _raw;
+      _raw = tr->clone();
+      _raw->nref = 1;
+      if (unlikely(--tr->nref == 0)) {
+        ANNOTATE_HAPPENS_AFTER(&tr->nref);
+        ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&tr->nref);
+        delete tr;
+      } else {
+        ANNOTATE_HAPPENS_BEFORE(&tr->nref);
+      }
+    }
+    return *this;
   }
 
   void buffer::ptr::swap(ptr& other) noexcept
@@ -539,8 +538,7 @@ static ceph::spinlock debug_lock;
   {
     if (_raw) {
       bdout << "ptr " << this << " release " << _raw << bendl;
-      const bool last_one = (1 == _raw->nref.load(std::memory_order_acquire));
-      if (likely(last_one) || --_raw->nref == 0) {
+      if (--_raw->nref == 0) {
         // BE CAREFUL: this is called also for hypercombined ptr_node. After
         // freeing underlying raw, `*this` can become inaccessible as well!
         const auto* delete_raw = _raw;
@@ -1332,21 +1330,8 @@ static ceph::spinlock debug_lock;
   {
     // steal the other guy's buffers
     _len += bl._len;
-    if (!(flags & CLAIM_ALLOW_NONSHAREABLE)) {
-      auto curbuf = bl._buffers.begin();
-      auto curbuf_prev = bl._buffers.before_begin();
-
-      while (curbuf != bl._buffers.end()) {
-	const auto* const raw = curbuf->get_raw();
-	if (unlikely(raw && !raw->is_shareable())) {
-	  auto* clone = ptr_node::copy_hypercombined(*curbuf);
-	  curbuf = bl._buffers.erase_after_and_dispose(curbuf_prev);
-	  bl._buffers.insert_after(curbuf_prev++, *clone);
-	} else {
-	  curbuf_prev = curbuf++;
-	}
-      }
-    }
+    if (!(flags & CLAIM_ALLOW_NONSHAREABLE))
+      bl.make_shareable();
     _buffers.splice_back(bl._buffers);
     bl._carriage = &always_empty_bptr;
     bl._buffers.clear_and_dispose();
@@ -2170,13 +2155,6 @@ bool buffer::ptr_node::dispose_if_hypercombined(
 }
 
 std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>
-buffer::ptr_node::create_hypercombined(ceph::unique_leakable_ptr<buffer::raw> r)
-{
-  return std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>(
-    new (&r->bptr_storage) ptr_node(std::move(r)));
-}
-
-std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>
 buffer::ptr_node::create_hypercombined(buffer::raw* const r)
 {
   if (likely(r->nref == 0)) {
@@ -2185,26 +2163,6 @@ buffer::ptr_node::create_hypercombined(buffer::raw* const r)
   } else {
     return std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>(
       new ptr_node(r));
-  }
-}
-
-buffer::ptr_node* buffer::ptr_node::copy_hypercombined(
-  const buffer::ptr_node& copy_this)
-{
-  auto raw_new = copy_this.get_raw()->clone();
-  return new (&raw_new->bptr_storage)
-    ptr_node(copy_this, std::move(raw_new));
-}
-
-buffer::ptr_node* buffer::ptr_node::cloner::operator()(
-  const buffer::ptr_node& clone_this)
-{
-  const raw* const raw_this = clone_this.get_raw();
-  if (likely(!raw_this || raw_this->is_shareable())) {
-    return new ptr_node(clone_this);
-  } else {
-    // clone non-shareable buffers (make shareable)
-   return copy_hypercombined(clone_this);
   }
 }
 
