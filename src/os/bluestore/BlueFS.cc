@@ -2156,12 +2156,12 @@ int BlueFS::_flush_range(FileWriter *h, uint64_t offset, uint64_t length)
       if (h->file->fnode.ino > 1) {
 	// we are using the page_aligned_appender, and can safely use
 	// the tail of the raw buffer.
-	const auto& last = t.back();
+	const bufferptr &last = t.back();
 	if (last.unused_tail_length() < zlen) {
-	  derr << " wtf, last is " << last.as_regular_ptr() << " from " << t << dendl;
+	  derr << " wtf, last is " << last << " from " << t << dendl;
 	  ceph_assert(last.unused_tail_length() >= zlen);
 	}
-	bufferptr z = last.as_regular_ptr();
+	bufferptr z = last;
 	z.set_offset(last.offset() + last.length());
 	z.set_length(zlen);
 	z.zero();

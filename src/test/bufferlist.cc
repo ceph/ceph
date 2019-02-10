@@ -1947,7 +1947,7 @@ TEST(BufferList, append) {
   {
     bufferlist bl;
     bl.append('A');
-    bufferptr back(bl.back().as_regular_ptr());
+    bufferptr back(bl.back());
     bufferptr in(back);
     EXPECT_EQ((unsigned)1, bl.get_num_buffers());
     EXPECT_EQ((unsigned)1, bl.length());

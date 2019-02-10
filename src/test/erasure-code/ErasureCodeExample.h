@@ -113,12 +113,12 @@ public:
     // populate the bufferlist with bufferptr pointing
     // to chunk boundaries
     //
-    const auto& ptr = out.front();
+    const bufferptr &ptr = out.front();
     for (set<int>::iterator j = want_to_encode.begin();
          j != want_to_encode.end();
          ++j) {
       bufferlist tmp;
-      bufferptr chunk(ptr.as_regular_ptr(), (*j) * chunk_length, chunk_length);
+      bufferptr chunk(ptr, (*j) * chunk_length, chunk_length);
       tmp.push_back(chunk);
       tmp.claim_append((*encoded)[*j]);
       (*encoded)[*j].swap(tmp);

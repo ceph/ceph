@@ -229,7 +229,7 @@ public:
     virtual bufferptr value_as_ptr() {
       bufferlist bl = value();
       if (bl.length() == 1) {
-        return bl.front().as_regular_ptr();
+        return *bl.buffers().begin();
       } else if (bl.length() == 0) {
         return bufferptr();
       } else {
@@ -258,7 +258,7 @@ public:
     virtual bufferptr value_as_ptr() {
       bufferlist bl = value();
       if (bl.length()) {
-        return bl.front().as_regular_ptr();
+        return *bl.buffers().begin();
       } else {
         return bufferptr();
       }

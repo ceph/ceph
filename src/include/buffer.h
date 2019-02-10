@@ -265,7 +265,7 @@ namespace buffer CEPH_BUFFER_API {
 
     raw *clone();
     void swap(ptr& other) noexcept;
-    void make_shareable();
+    ptr& make_shareable();
 
     iterator begin(size_t offset=0) {
       return iterator(this, offset, false);
@@ -372,37 +372,8 @@ namespace buffer CEPH_BUFFER_API {
     }
   };
 
-  class ptr_node : public ptr_hook, private ptr {
+  class ptr_node : public ptr_hook, public ptr {
   public:
-    using ptr::c_str;
-    using ptr::end_c_str;
-    using ptr::raw_c_str;
-    using ptr::length;
-    using ptr::offset;
-    using ptr::make_shareable;
-    using ptr::get_raw;
-    using ptr::is_aligned;
-    using ptr::is_n_align_sized;
-    using ptr::copy_in;
-    using ptr::copy_out;
-    using ptr::is_zero;
-    using ptr::zero;
-    using ptr::get_mempool;
-    using ptr::wasted;
-    using ptr::start;
-    using ptr::end;
-    using ptr::set_length;
-    using ptr::set_offset;
-    using ptr::operator[];
-    using ptr::begin_deep;
-    using ptr::unused_tail_length;
-
-    // tests
-    using ptr::begin;
-
-    ptr& as_regular_ptr() { return *this; }
-    const ptr& as_regular_ptr() const { return *this; }
-
     struct cloner {
       ptr_node* operator()(const ptr_node& clone_this) {
 	return new ptr_node(clone_this);
@@ -739,7 +710,7 @@ namespace buffer CEPH_BUFFER_API {
       char operator*() const;
       iterator_impl& operator++();
       ptr get_current_ptr() const;
-      bool is_pointing_same_raw(const ptr_node& other) const;
+      bool is_pointing_same_raw(const ptr& other) const;
 
       bl_t& get_bl() const { return *bl; }
 
@@ -1133,7 +1104,7 @@ namespace buffer CEPH_BUFFER_API {
     void make_shareable() {
       decltype(_buffers)::iterator pb;
       for (pb = _buffers.begin(); pb != _buffers.end(); ++pb) {
-        pb->make_shareable();
+        (void) pb->make_shareable();
       }
     }
 
@@ -1143,7 +1114,7 @@ namespace buffer CEPH_BUFFER_API {
       if (this != &bl) {
         clear();
 	for (const auto& pb : bl._buffers) {
-          push_back(pb.as_regular_ptr());
+          push_back(static_cast<const ptr&>(pb));
         }
       }
     }
