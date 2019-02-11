@@ -298,8 +298,6 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
 
   SignedEncryptedFrame(ProtocolV2 &protocol, char *payload, uint32_t length)
       : PayloadFrame<T, Args...>() {
-    protocol.session_stream_handlers.rx->reset_rx_handler();
-
     ceph::bufferlist bl;
     bl.push_back(buffer::create_static(length, payload));
 
@@ -480,7 +478,6 @@ struct MessageHeaderFrame
 
     if (protocol.auth_meta->is_mode_secure()) {
       ceph_assert(protocol.session_stream_handlers.rx);
-      protocol.session_stream_handlers.rx->reset_rx_handler();
 
       text = protocol.session_stream_handlers.rx->authenticated_decrypt_update(
 	std::move(text), 8);
@@ -1334,6 +1331,11 @@ CtPtr ProtocolV2::handle_read_frame_length_and_tag(char *buffer, int r) {
     ldout(cct, 1) << __func__ << " read frame length and tag failed r=" << r
                   << " (" << cpp_strerror(r) << ")" << dendl;
     return _fault();
+  }
+
+  if (auth_meta->is_mode_secure()) {
+    ceph_assert(session_stream_handlers.rx);
+    session_stream_handlers.rx->reset_rx_handler();
   }
 
   bufferlist bl;
