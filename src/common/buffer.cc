@@ -1310,6 +1310,24 @@ static ceph::spinlock debug_lock;
    return  rebuild_aligned(CEPH_PAGE_SIZE);
   }
 
+void buffer::list::alloc_aligned_buffer(unsigned len, unsigned off) {
+  // create a buffer to read into that matches the data alignment
+  unsigned alloc_len = 0;
+  unsigned left = len;
+  unsigned head = 0;
+  if (off & ~CEPH_PAGE_MASK) {
+    // head
+    alloc_len += CEPH_PAGE_SIZE;
+    head = std::min<uint64_t>(CEPH_PAGE_SIZE - (off & ~CEPH_PAGE_MASK), left);
+    left -= head;
+  }
+  alloc_len += left;
+  bufferptr ptr(buffer::create_page_aligned(alloc_len));
+  if (head)
+    ptr.set_offset(CEPH_PAGE_SIZE - head);
+  append(ptr);
+}
+
   void buffer::list::reserve(size_t prealloc)
   {
     if (get_append_buffer_unused_tail_length() < prealloc) {

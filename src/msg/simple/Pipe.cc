@@ -2030,27 +2030,6 @@ void Pipe::unlock_maybe_reap()
   }
 }
 
-static void alloc_aligned_buffer(bufferlist& data, unsigned len, unsigned off)
-{
-  // create a buffer to read into that matches the data alignment
-  unsigned left = len;
-  if (off & ~CEPH_PAGE_MASK) {
-    // head
-    unsigned head = 0;
-    head = std::min<uint64_t>(CEPH_PAGE_SIZE - (off & ~CEPH_PAGE_MASK), left);
-    data.push_back(buffer::create(head));
-    left -= head;
-  }
-  unsigned middle = left & CEPH_PAGE_MASK;
-  if (middle > 0) {
-    data.push_back(buffer::create_small_page_aligned(middle));
-    left -= middle;
-  }
-  if (left) {
-    data.push_back(buffer::create(left));
-  }
-}
-
 int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 {
   int ret = -1;
@@ -2158,7 +2137,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       blp = p->second.first.begin();
     } else {
       ldout(msgr->cct,20) << "reader allocating new rx buffer at offset " << offset << dendl;
-      alloc_aligned_buffer(newbuf, data_len, data_off);
+      newbuf.alloc_aligned_buffer(data_len, data_off);
       blp = newbuf.begin();
     }
 

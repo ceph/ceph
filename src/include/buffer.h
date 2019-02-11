@@ -1114,6 +1114,8 @@ namespace buffer CEPH_BUFFER_API {
 					 unsigned max_buffers = 0);
     bool rebuild_page_aligned();
 
+    void alloc_aligned_buffer(unsigned len, unsigned off);
+
     void reserve(size_t prealloc);
 
     // assignment-op with move semantics
