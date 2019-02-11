@@ -420,7 +420,7 @@ def cephfs_setup(ctx, config):
 
 
 def get_mons(roles, ips, cluster_name,
-             mon_bind_msgr2=False,
+             ms_bind_msgr2=False,
              mon_bind_addrvec=False):
     """
     Get monitors and their associated addresses
@@ -438,7 +438,7 @@ def get_mons(roles, ips, cluster_name,
                 v1_ports[ips[idx]] = 6789
             else:
                 v1_ports[ips[idx]] += 1
-            if mon_bind_msgr2:
+            if ms_bind_msgr2:
                 if ips[idx] not in v2_ports:
                     v2_ports[ips[idx]] = 3300
                     addr = '{ip}'.format(ip=ips[idx])
@@ -653,7 +653,7 @@ def cluster(ctx, config):
            (remote.ssh.get_transport().getpeername() for (remote, role_list) in remotes_and_roles)]
     mons = get_mons(
         roles, ips, cluster_name,
-        mon_bind_msgr2=config.get('mon_bind_msgr2'),
+        ms_bind_msgr2=config.get('ms_bind_msgr2'),
         mon_bind_addrvec=config.get('mon_bind_addrvec'),
         )
     conf = skeleton_config(
@@ -1902,7 +1902,7 @@ def task(ctx, config):
             log_whitelist=config.get('log-whitelist', []),
             cpu_profile=set(config.get('cpu_profile', []),),
             cluster=config['cluster'],
-            mon_bind_msgr2=config.get('mon_bind_msgr2', True),
+            ms_bind_msgr2=config.get('ms_bind_msgr2', True),
             mon_bind_addrvec=config.get('mon_bind_addrvec', True),
         )),
         lambda: run_daemon(ctx=ctx, config=config, type_='mon'),

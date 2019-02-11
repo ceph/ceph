@@ -5,7 +5,7 @@ meta:
    Use xfs beneath the osds.
 overrides:
   ceph:
-    mon_bind_msgr2: false
+    ms_bind_msgr2: false
     mon_bind_addrvec: false
     fs: xfs
     log-whitelist:

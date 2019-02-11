@@ -8,7 +8,7 @@ meta:
    # skip_tags: entitlements,packages,repos
 overrides:
   ceph:
-    mon_bind_msgr2: false
+    ms_bind_msgr2: false
     mon_bind_addrvec: false
     fs: xfs
     log-whitelist:
