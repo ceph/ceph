@@ -42,6 +42,33 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
 
         return o
 
+    @CLIWriteCommand('orchestrator host add',
+                     "name=host,type=CephString,req=true",
+                     'Add a host')
+    @handle_exceptions
+    def _add_host(self, host):
+        completion = self.add_host(host)
+        self._orchestrator_wait([completion])
+        return HandleCommandResult(stdout=str(completion.result))
+
+    @CLIWriteCommand('orchestrator host rm',
+                     "name=host,type=CephString,req=true",
+                     'Remove a host')
+    @handle_exceptions
+    def _remove_host(self, host):
+        completion = self.remove_host(host)
+        self._orchestrator_wait([completion])
+        return HandleCommandResult(stdout=str(completion.result))
+
+    @CLIReadCommand('orchestrator host ls',
+                    desc='List hosts')
+    @handle_exceptions
+    def _get_hosts(self):
+        completion = self.get_hosts()
+        self._orchestrator_wait([completion])
+        result = "\n".join(map(lambda node: node.name, completion.result))
+        return HandleCommandResult(stdout=result)
+
     @CLIReadCommand('orchestrator device ls',
                     "name=host,type=CephString,n=N,req=false "
                     "name=format,type=CephChoices,strings=json|plain,req=false",
@@ -167,7 +194,7 @@ Usage:
         try:
             drive_group.validate(all_hosts)
         except orchestrator.DriveGroupValidationError as e:
-                return HandleCommandResult(-errno.EINVAL, stderr=str(e))
+            return HandleCommandResult(-errno.EINVAL, stderr=str(e))
 
         completion = self.create_osds(drive_group, all_hosts)
         self._orchestrator_wait([completion])
@@ -271,6 +298,57 @@ Usage:
         completion = self.service_action(action, svc_type, service_id=svc_id)
         self._orchestrator_wait([completion])
         return HandleCommandResult()
+
+    @CLIWriteCommand('orchestrator mgr update',
+                     "name=num,type=CephInt,req=true "
+                     "name=hosts,type=CephString,n=N,req=false",
+                     'Update the number of manager instances')
+    @handle_exceptions
+    def _update_mgrs(self, num, hosts=None):
+        hosts = hosts if hosts is not None else []
+
+        if num <= 0:
+            return HandleCommandResult(-errno.EINVAL,
+                    stderr="Invalid number of mgrs: require {} > 0".format(num))
+
+        completion = self.update_mgrs(num, hosts)
+        self._orchestrator_wait([completion])
+        return HandleCommandResult(stdout=str(completion.result))
+
+    @CLIWriteCommand('orchestrator mon update',
+                     "name=num,type=CephInt,req=true "
+                     "name=hosts,type=CephString,n=N,req=false",
+                     'Update the number of monitor instances')
+    @handle_exceptions
+    def _update_mons(self, num, hosts=None):
+        hosts = hosts if hosts is not None else []
+
+        if num <= 0:
+            return HandleCommandResult(-errno.EINVAL,
+                    stderr="Invalid number of mons: require {} > 0".format(num))
+
+        def split_host(host):
+            """Split host into host and network parts"""
+            # TODO: stricter validation
+            parts = host.split(":")
+            if len(parts) == 1:
+                return (parts[0], None)
+            elif len(parts) == 2:
+                return (parts[0], parts[1])
+            else:
+                raise RuntimeError("Invalid host specification: "
+                        "'{}'".format(host))
+
+        if hosts:
+            try:
+                hosts = list(map(split_host, hosts))
+            except Exception as e:
+                msg = "Failed to parse host list: '{}': {}".format(hosts, e)
+                return HandleCommandResult(-errno.EINVAL, stderr=msg)
+
+        completion = self.update_mons(num, hosts)
+        self._orchestrator_wait([completion])
+        return HandleCommandResult(stdout=str(completion.result))
 
     @CLIWriteCommand('orchestrator set backend',
                      "name=module_name,type=CephString,req=true",

@@ -89,23 +89,17 @@ to talk to it)
 
 Also show any in-progress actions.
 
-..
-    Host Management
-    ~ ~~~~~~~~~~~~~~
+Host Management
+~~~~~~~~~~~~~~~
 
-    List hosts associated with the cluster: :
+List hosts associated with the cluster::
 
-        ceph orchestrator host ls
+    ceph orchestrator host ls
 
-    Add and remove hosts: :
+Add and remove hosts::
 
-      ceph orchestrator host add <host>
-      ceph orchestrator host rm <host>
-
-    . . note: :
-
-    Removing a host only succeeds, if the host is unused.
-
+    ceph orchestrator host add <host>
+    ceph orchestrator host rm <host>
 
 OSD Management
 ~~~~~~~~~~~~~~
@@ -163,18 +157,23 @@ Removes one or more OSDs from the cluster and the host, if the OSDs are marked a
     bluestore and ``all`` stands for all devices associated with the osd
 
 
+Monitor and manager management
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Creates or removes MONs or MGRs from the cluster. Orchestrator may return an
+error if it doesn't know how to do this transition.
+
+Update the number of monitor nodes::
+
+    ceph orchestrator mon update <num> [host, host:network...]
+
+Each host can optionally specificy a network for the monitor to listen on.
+
+Update the number of manager nodes::
+
+    ceph orchestrator mgr update <num> [host...]
+
 ..
-    Monitor and manager management
-    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    ::
-
-        ceph orchestrator mon update <num> [host...]
-        ceph orchestrator mgr update <num> [host...]
-
-    Creates or removes MONs or MGRs from the cluster. Orchestrator may return an
-    error if it doesn't know how to do this transition.
-
     .. note::
 
         The host lists are the new full list of mon/mgr hosts
