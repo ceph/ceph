@@ -36,9 +36,10 @@ public:
 private:
   uint64_t m_session_id;
   stream_protocol::socket m_dm_socket;
-  char* m_head_buffer;
   ProcessMsg m_server_process_msg;
   CephContext* cct;
+
+  bufferptr m_bp_header;
 };
 
 typedef std::shared_ptr<CacheSession> CacheSessionPtr;

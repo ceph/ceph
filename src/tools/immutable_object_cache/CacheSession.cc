@@ -18,13 +18,12 @@ namespace immutable_obj_cache {
 CacheSession::CacheSession(uint64_t session_id, io_service& io_service,
                            ProcessMsg processmsg, CephContext* cct)
     : m_session_id(session_id), m_dm_socket(io_service),
-      m_head_buffer(new char[sizeof(ObjectCacheMsgHeader)]),
-      m_server_process_msg(processmsg), cct(cct)
-    {}
+      m_server_process_msg(processmsg), cct(cct) {
+  m_bp_header = buffer::create(get_header_size());
+}
 
 CacheSession::~CacheSession() {
   close();
-  delete[] m_head_buffer;
 }
 
 stream_protocol::socket& CacheSession::socket() {
@@ -48,8 +47,8 @@ void CacheSession::start() {
 void CacheSession::read_request_header() {
   ldout(cct, 20) << dendl;
   boost::asio::async_read(m_dm_socket,
-                          boost::asio::buffer(m_head_buffer, sizeof(ObjectCacheMsgHeader)),
-                          boost::asio::transfer_exactly(sizeof(ObjectCacheMsgHeader)),
+                          boost::asio::buffer(m_bp_header.c_str(), get_header_size()),
+                          boost::asio::transfer_exactly(get_header_size()),
                           boost::bind(&CacheSession::handle_request_header,
                                       shared_from_this(),
                                       boost::asio::placeholders::error,
@@ -59,17 +58,12 @@ void CacheSession::read_request_header() {
 void CacheSession::handle_request_header(const boost::system::error_code& err,
                                          size_t bytes_transferred) {
   ldout(cct, 20) << dendl;
-  if (err || bytes_transferred != sizeof(ObjectCacheMsgHeader)) {
+  if (err || bytes_transferred != get_header_size()) {
     fault();
     return;
   }
 
-  ObjectCacheMsgHeader* head = (ObjectCacheMsgHeader*)(m_head_buffer);
-  ceph_assert(head->version == 0);
-  ceph_assert(head->reserved == 0);
-  ceph_assert(head->type == RBDSC_REGISTER || head->type == RBDSC_READ);
-
-  read_request_data(head->data_len);
+  read_request_data(get_data_len(m_bp_header.c_str()));
 }
 
 void CacheSession::read_request_data(uint64_t data_len) {
@@ -94,25 +88,24 @@ void CacheSession::handle_request_data(bufferptr bp, uint64_t data_len,
   }
 
   bufferlist bl_data;
+
+  bl_data.append(m_bp_header);
   bl_data.append(std::move(bp));
-  ObjectCacheRequest* req = decode_object_cache_request(
-                               (ObjectCacheMsgHeader*)m_head_buffer, bl_data);
+  ObjectCacheRequest* req = decode_object_cache_request(bl_data);
   process(req);
   read_request_header();
 }
 
 void CacheSession::process(ObjectCacheRequest* req) {
   ldout(cct, 20) << dendl;
-   m_server_process_msg(m_session_id, req);
+  m_server_process_msg(m_session_id, req);
 }
 
 void CacheSession::send(ObjectCacheRequest* reply) {
   ldout(cct, 20) << dendl;
-  reply->m_head_buffer.clear();
   reply->m_data_buffer.clear();
   reply->encode();
   bufferlist bl;
-  bl.append(reply->get_head_buffer());
   bl.append(reply->get_data_buffer());
 
   boost::asio::async_write(m_dm_socket,

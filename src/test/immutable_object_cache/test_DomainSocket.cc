@@ -79,17 +79,17 @@ public:
 
   void handle_request(uint64_t session_id, ObjectCacheRequest* req) {
 
-    switch (req->m_head.type) {
+    switch (req->m_data.type) {
       case RBDSC_REGISTER: {
-        req->m_head.type = RBDSC_REGISTER_REPLY;
+        req->m_data.type = RBDSC_REGISTER_REPLY;
         m_cache_server->send(session_id, req);
         break;
       }
       case RBDSC_READ: {
         if (m_hit_entry_set.find(req->m_data.m_oid) == m_hit_entry_set.end()) {
-          req->m_head.type = RBDSC_READ_RADOS;
+          req->m_data.type = RBDSC_READ_RADOS;
         } else {
-          req->m_head.type = RBDSC_READ_REPLY;
+          req->m_data.type = RBDSC_READ_REPLY;
         }
         m_cache_server->send(session_id, req);
         break;
@@ -130,7 +130,7 @@ public:
     bool hit;
     auto ctx = new LambdaGenContext<std::function<void(ObjectCacheRequest*)>,
         ObjectCacheRequest*>([this, &hit](ObjectCacheRequest* ack){
-       hit = ack->m_head.type == RBDSC_READ_REPLY;
+       hit = ack->m_data.type == RBDSC_READ_REPLY;
        m_wait_event.signal();
     });
     m_cache_client->lookup_object(pool_nspace, 1, 2, object_id, ctx);

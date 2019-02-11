@@ -17,8 +17,7 @@ namespace immutable_obj_cache {
       m_dm_socket(m_io_service), m_ep(stream_protocol::endpoint(file)),
       m_io_thread(nullptr), m_session_work(false), m_writing(false),
       m_reading(false), m_sequence_id(0),
-      m_lock("ceph::cache::cacheclient::m_lock"),
-      m_header_buffer(new char[sizeof(ObjectCacheMsgHeader)])
+      m_lock("ceph::cache::cacheclient::m_lock")
   {
     // TODO : configure it.
     m_use_dedicated_worker = true;
@@ -31,11 +30,12 @@ namespace immutable_obj_cache {
         m_worker_threads.push_back(thd);
       }
     }
+    m_bp_header = buffer::create(get_header_size());
+
   }
 
   CacheClient::~CacheClient() {
     stop();
-    delete m_header_buffer;
   }
 
   void CacheClient::run(){
@@ -89,11 +89,8 @@ namespace immutable_obj_cache {
                                   std::string oid, GenContext<ObjectCacheRequest*>* on_finish) {
 
     ObjectCacheRequest* req = new ObjectCacheRequest();
-    req->m_head.version = 0;
-    req->m_head.reserved = 0;
-    req->m_head.type = RBDSC_READ;
-    req->m_head.padding = 0;
-    req->m_head.seq = ++m_sequence_id;
+    req->m_data.type = RBDSC_READ;
+    req->m_data.seq = ++m_sequence_id;
 
     req->m_data.m_pool_id = pool_id;
     req->m_data.m_snap_id = snap_id;
@@ -102,15 +99,11 @@ namespace immutable_obj_cache {
     req->m_process_msg = on_finish;
     req->encode();
 
-    ceph_assert(req->get_head_buffer().length() == sizeof(ObjectCacheMsgHeader));
-    ceph_assert(req->get_data_buffer().length() == req->m_head.data_len);
-
-   {
+    {
       Mutex::Locker locker(m_lock);
-      m_outcoming_bl.append(req->get_head_buffer());
       m_outcoming_bl.append(req->get_data_buffer());
-      ceph_assert(m_seq_to_req.find(req->m_head.seq) == m_seq_to_req.end());
-      m_seq_to_req[req->m_head.seq] = req;
+      ceph_assert(m_seq_to_req.find(req->m_data.seq) == m_seq_to_req.end());
+      m_seq_to_req[req->m_data.seq] = req;
     }
 
     // try to send message to server.
@@ -175,12 +168,12 @@ namespace immutable_obj_cache {
   void CacheClient::read_reply_header() {
 
     /* create new head buffer for every reply */
-    bufferptr bp_head(buffer::create(sizeof(ObjectCacheMsgHeader)));
+    bufferptr bp_head(buffer::create(get_header_size()));
     auto raw_ptr = bp_head.c_str();
 
     boost::asio::async_read(m_dm_socket,
-      boost::asio::buffer(raw_ptr, sizeof(ObjectCacheMsgHeader)),
-      boost::asio::transfer_exactly(sizeof(ObjectCacheMsgHeader)),
+      boost::asio::buffer(raw_ptr, get_header_size()),
+      boost::asio::transfer_exactly(get_header_size()),
       boost::bind(&CacheClient::handle_reply_header,
                   this, bp_head,
                   boost::asio::placeholders::error,
@@ -190,56 +183,51 @@ namespace immutable_obj_cache {
   void CacheClient::handle_reply_header(bufferptr bp_head,
                                         const boost::system::error_code& ec,
                                         size_t bytes_transferred) {
-    if (ec || bytes_transferred != sizeof(ObjectCacheMsgHeader)) {
+    if (ec || bytes_transferred != get_header_size()) {
       fault(ASIO_ERROR_READ, ec);
       return;
     }
 
     ceph_assert(bytes_transferred == bp_head.length());
 
-    ObjectCacheMsgHeader* head = (ObjectCacheMsgHeader*)bp_head.c_str();
-    uint64_t data_len = head->data_len;
-    uint64_t seq_id = head->seq;
-    ceph_assert(m_seq_to_req.find(seq_id) != m_seq_to_req.end());
+    uint32_t data_len = get_data_len(bp_head.c_str());
 
     bufferptr bp_data(buffer::create(data_len));
-    read_reply_data(std::move(bp_head), std::move(bp_data), data_len, seq_id);
+    read_reply_data(std::move(bp_head), std::move(bp_data), data_len);
   }
 
   void CacheClient::read_reply_data(bufferptr&& bp_head, bufferptr&& bp_data,
-                                    const uint64_t data_len, const uint64_t seq_id) {
+                                    const uint64_t data_len) {
 
     auto raw_ptr = bp_data.c_str();
     boost::asio::async_read(m_dm_socket, boost::asio::buffer(raw_ptr, data_len),
       boost::asio::transfer_exactly(data_len),
       boost::bind(&CacheClient::handle_reply_data,
-                  this, std::move(bp_head), std::move(bp_data), data_len, seq_id,
+                  this, std::move(bp_head), std::move(bp_data), data_len,
                   boost::asio::placeholders::error,
                   boost::asio::placeholders::bytes_transferred));
 
   }
 
   void CacheClient::handle_reply_data(bufferptr bp_head, bufferptr bp_data,
-                                      const uint64_t data_len, const uint64_t seq_id,
+                                      const uint64_t data_len,
                                       const boost::system::error_code& ec,
                                       size_t bytes_transferred) {
     if (ec || bytes_transferred != data_len) {
       fault(ASIO_ERROR_WRITE, ec);
       return;
     }
+    ceph_assert(bp_data.length() == data_len);
 
-    bufferlist head_buffer;
     bufferlist data_buffer;
-    head_buffer.append(std::move(bp_head));
+    data_buffer.append(std::move(bp_head));
     data_buffer.append(std::move(bp_data));
-    ceph_assert(head_buffer.length() == sizeof(ObjectCacheMsgHeader));
-    ceph_assert(data_buffer.length() == data_len);
 
-    ObjectCacheRequest* reply = decode_object_cache_request(head_buffer, data_buffer);
+    ObjectCacheRequest* reply = decode_object_cache_request(data_buffer);
     data_buffer.clear();
     ceph_assert(data_buffer.length() == 0);
 
-    process(reply, seq_id);
+    process(reply, reply->m_data.seq);
 
     {
       Mutex::Locker locker(m_lock);
@@ -343,7 +331,7 @@ namespace immutable_obj_cache {
     {
       Mutex::Locker locker(m_lock);
       for(auto it : m_seq_to_req) {
-        it.second->m_head.type = RBDSC_READ_RADOS;
+        it.second->m_data.type = RBDSC_READ_RADOS;
         it.second->m_process_msg->complete(it.second);
       }
       m_seq_to_req.clear();
@@ -356,14 +344,11 @@ namespace immutable_obj_cache {
 
   int CacheClient::register_client(Context* on_finish) {
     ObjectCacheRequest* message = new ObjectCacheRequest();
-    message->m_head.version = 0;
-    message->m_head.seq = m_sequence_id++;
-    message->m_head.type = RBDSC_REGISTER;
-    message->m_head.reserved = 0;
+    message->m_data.seq = m_sequence_id++;
+    message->m_data.type = RBDSC_REGISTER;
     message->encode();
 
     bufferlist bl;
-    bl.append(message->get_head_buffer());
     bl.append(message->get_data_buffer());
 
     uint64_t ret;
@@ -378,14 +363,13 @@ namespace immutable_obj_cache {
     }
 
     ret = boost::asio::read(m_dm_socket,
-      boost::asio::buffer(m_header_buffer, sizeof(ObjectCacheMsgHeader)), ec);
-    if (ec || ret != sizeof(ObjectCacheMsgHeader)) {
+      boost::asio::buffer(m_bp_header.c_str(), get_header_size()), ec);
+    if (ec || ret != get_header_size()) {
       fault(ASIO_ERROR_READ, ec);
       return -1;
     }
 
-    ObjectCacheMsgHeader* head = (ObjectCacheMsgHeader*)m_header_buffer;
-    uint64_t data_len = head->data_len;
+    uint64_t data_len = get_data_len(m_bp_header.c_str());
     bufferptr bp_data(buffer::create(data_len));
 
     ret = boost::asio::read(m_dm_socket, boost::asio::buffer(bp_data.c_str(), data_len), ec);
@@ -395,9 +379,10 @@ namespace immutable_obj_cache {
     }
 
     bufferlist data_buffer;
+    data_buffer.append(m_bp_header);
     data_buffer.append(std::move(bp_data));
-    ObjectCacheRequest* req = decode_object_cache_request(head, data_buffer);
-    if (req->m_head.type == RBDSC_REGISTER_REPLY) {
+    ObjectCacheRequest* req = decode_object_cache_request(data_buffer);
+    if (req->m_data.type == RBDSC_REGISTER_REPLY) {
       on_finish->complete(true);
     } else {
       on_finish->complete(false);

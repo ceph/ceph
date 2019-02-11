@@ -83,10 +83,10 @@ void CacheController::run() {
 void CacheController::handle_request(uint64_t session_id, ObjectCacheRequest* req){
   ldout(m_cct, 20) << dendl;
 
-  switch (req->m_head.type) {
+  switch (req->m_data.type) {
     case RBDSC_REGISTER: {
       // TODO(): skip register and allow clients to lookup directly
-      req->m_head.type = RBDSC_REGISTER_REPLY;
+      req->m_data.type = RBDSC_REGISTER_REPLY;
       m_cache_server->send(session_id, req);
 
       break;
@@ -99,9 +99,9 @@ void CacheController::handle_request(uint64_t session_id, ObjectCacheRequest* re
                                                     req->m_data.m_oid,
                                                     req->m_data.m_cache_path);
       if (ret < 0) {
-        req->m_head.type = RBDSC_READ_RADOS;
+        req->m_data.type = RBDSC_READ_RADOS;
       } else {
-        req->m_head.type = RBDSC_READ_REPLY;
+        req->m_data.type = RBDSC_READ_REPLY;
       }
       m_cache_server->send(session_id, req);
 

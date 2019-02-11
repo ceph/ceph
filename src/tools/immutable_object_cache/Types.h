@@ -10,20 +10,10 @@
 namespace ceph {
 namespace immutable_obj_cache {
 
-struct ObjectCacheMsgHeader {
-    uint64_t seq;                         /* sequence id */
-    uint16_t type;                        /* msg type */
-    uint16_t version;                     /* object cache version */
-    uint32_t padding;
-    uint32_t data_len;
-    uint32_t reserved;
-
-    void encode(bufferlist& bl) const;
-    void decode(bufferlist::const_iterator& it);
-};
-
 class ObjectCacheMsgData {
 public:
+  uint64_t seq;                         /* sequence id */
+  uint16_t type;                        /* msg type */
   uint64_t m_read_offset;
   uint64_t m_read_len;
   uint64_t m_pool_id;
@@ -38,23 +28,19 @@ public:
 
 class ObjectCacheRequest {
 public:
-    ObjectCacheMsgHeader m_head;
     ObjectCacheMsgData m_data;
-    bufferlist m_head_buffer;
     bufferlist m_data_buffer;
     GenContext<ObjectCacheRequest*>* m_process_msg;
 
     void encode();
-    bufferlist get_head_buffer();
     bufferlist get_data_buffer();
 
 };
 
-ObjectCacheRequest* decode_object_cache_request(
-            ObjectCacheMsgHeader* head, bufferlist data_buffer);
+uint8_t get_header_size();
+uint32_t get_data_len(char* buf);
 
-ObjectCacheRequest* decode_object_cache_request(
-             bufferlist head_buffer, bufferlist data_buffer);
+ObjectCacheRequest* decode_object_cache_request(bufferlist data_buffer);
 
 } // namespace immutable_obj_cache
 } // namespace ceph

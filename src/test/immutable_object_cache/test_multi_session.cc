@@ -87,14 +87,14 @@ public:
 
   void server_handle_request(uint64_t session_id, ObjectCacheRequest* req) {
 
-    switch (req->m_head.type) {
+    switch (req->m_data.type) {
       case RBDSC_REGISTER: {
-        req->m_head.type = RBDSC_REGISTER_REPLY;
+        req->m_data.type = RBDSC_REGISTER_REPLY;
         m_cache_server->send(session_id, req);
         break;
       }
       case RBDSC_READ: {
-        req->m_head.type = RBDSC_READ_REPLY;
+        req->m_data.type = RBDSC_READ_REPLY;
         m_cache_server->send(session_id, req);
         break;
       }
