@@ -4,6 +4,7 @@ import os.path
 from pytest import raises, mark
 import shutil
 import subprocess
+import tempfile
 
 from ..exceptions import BranchNotFoundError
 from .. import repo_utils
@@ -12,20 +13,21 @@ repo_utils.log.setLevel(logging.WARNING)
 
 
 class TestRepoUtils(object):
-    src_path = '/tmp/empty_src'
-    # online_repo_url = 'https://github.com/ceph/teuthology.git'
-    # online_repo_url = 'git://ceph.newdream.net/git/teuthology.git'
-    online_repo_url = 'https://github.com/ceph/empty.git'
-    offline_repo_url = 'file://' + src_path
-    repo_url = None
-    dest_path = '/tmp/empty_dest'
 
     @classmethod
     def setup_class(cls):
+        cls.temp_path = tempfile.mkdtemp(prefix='test_repo-')
+        cls.dest_path = cls.temp_path + '/empty_dest'
+        cls.src_path = cls.temp_path + '/empty_src'
+
         if 'TEST_ONLINE' in os.environ:
-            cls.repo_url = cls.online_repo_url
+            cls.repo_url = 'https://github.com/ceph/empty.git'
         else:
-            cls.repo_url = cls.offline_repo_url
+            cls.repo_url = 'file://' + cls.src_path
+
+    @classmethod
+    def teardown_class(cls):
+        shutil.rmtree(cls.temp_path)
 
     def setup_method(self, method):
         assert not os.path.exists(self.dest_path)
@@ -67,7 +69,7 @@ class TestRepoUtils(object):
         assert not os.path.exists(self.dest_path)
 
     def test_fetch_no_repo(self):
-        fake_dest_path = '/tmp/not_a_repo'
+        fake_dest_path = self.temp_path + '/not_a_repo'
         assert not os.path.exists(fake_dest_path)
         with raises(OSError):
             repo_utils.fetch(fake_dest_path)
@@ -79,7 +81,7 @@ class TestRepoUtils(object):
         assert os.path.exists(self.dest_path)
 
     def test_fetch_branch_no_repo(self):
-        fake_dest_path = '/tmp/not_a_repo'
+        fake_dest_path = self.temp_path + '/not_a_repo'
         assert not os.path.exists(fake_dest_path)
         with raises(OSError):
             repo_utils.fetch_branch(fake_dest_path, 'master')
