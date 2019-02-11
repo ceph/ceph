@@ -3,7 +3,7 @@ import mock
 
 from .helper import ControllerTestCase
 from .. import mgr
-from ..controllers.iscsi import IscsiTarget
+from ..controllers.iscsi import Iscsi, IscsiTarget
 from ..services.iscsi_client import IscsiClient
 
 
@@ -13,13 +13,42 @@ class IscsiTest(ControllerTestCase):
     def setup_server(cls):
         mgr.rados.side_effect = None
         # pylint: disable=protected-access
+        Iscsi._cp_config['tools.authenticate.on'] = False
         IscsiTarget._cp_config['tools.authenticate.on'] = False
-        cls.setup_controllers([IscsiTarget])
+        cls.setup_controllers([Iscsi, IscsiTarget])
 
     def setUp(self):
         # pylint: disable=protected-access
         IscsiClientMock._instance = IscsiClientMock()
         IscsiClient.instance = IscsiClientMock.instance
+
+    def test_enable_discoveryauth(self):
+        discoveryauth = {
+            'user': 'myiscsiusername',
+            'password': 'myiscsipassword',
+            'mutual_user': 'myiscsiusername2',
+            'mutual_password': 'myiscsipassword2'
+        }
+        self._put('/api/iscsi/discoveryauth', discoveryauth)
+        self.assertStatus(200)
+        self.assertJsonBody(discoveryauth)
+        self._get('/api/iscsi/discoveryauth')
+        self.assertStatus(200)
+        self.assertJsonBody(discoveryauth)
+
+    def test_disable_discoveryauth(self):
+        discoveryauth = {
+            'user': '',
+            'password': '',
+            'mutual_user': '',
+            'mutual_password': ''
+        }
+        self._put('/api/iscsi/discoveryauth', discoveryauth)
+        self.assertStatus(200)
+        self.assertJsonBody(discoveryauth)
+        self._get('/api/iscsi/discoveryauth')
+        self.assertStatus(200)
+        self.assertJsonBody(discoveryauth)
 
     def test_list_empty(self):
         self._get('/api/iscsi/target')
@@ -506,3 +535,15 @@ class IscsiClientMock(object):
             'node3': ['192.168.100.203']
         }
         return {'data': ips[self.gateway_name]}
+
+    def update_discoveryauth(self, user, password, mutual_user, mutual_password):
+        chap = ''
+        if user and password:
+            chap = '{}/{}'.format(user, password)
+        chap_mutual = ''
+        if mutual_user and mutual_password:
+            chap_mutual = '{}/{}'.format(mutual_user, mutual_password)
+        self.config['discovery_auth'] = {
+            'chap': chap,
+            'chap_mutual': chap_mutual
+        }

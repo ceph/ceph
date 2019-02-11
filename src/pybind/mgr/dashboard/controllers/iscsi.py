@@ -11,7 +11,7 @@ import rados
 import rbd
 
 from . import ApiController, UiApiController, RESTController, BaseController, Endpoint,\
-    ReadPermission, Task
+    ReadPermission, UpdatePermission, Task
 from .. import mgr
 from ..rest_client import RequestException
 from ..security import Scope
@@ -22,7 +22,7 @@ from ..tools import TaskManager
 
 
 @UiApiController('/iscsi', Scope.ISCSI)
-class Iscsi(BaseController):
+class IscsiUi(BaseController):
 
     @Endpoint()
     @ReadPermission
@@ -56,6 +56,40 @@ class Iscsi(BaseController):
             ip_addresses = IscsiClient.instance(gateway_name=name).get_ip_addresses()
             portals.append({'name': name, 'ip_addresses': ip_addresses['data']})
         return sorted(portals, key=lambda p: '{}.{}'.format(p['name'], p['ip_addresses']))
+
+
+@ApiController('/iscsi', Scope.ISCSI)
+class Iscsi(BaseController):
+
+    @Endpoint('GET', 'discoveryauth')
+    @UpdatePermission
+    def get_discoveryauth(self):
+        return self._get_discoveryauth()
+
+    @Endpoint('PUT', 'discoveryauth')
+    @UpdatePermission
+    def set_discoveryauth(self, user, password, mutual_user, mutual_password):
+        IscsiClient.instance().update_discoveryauth(user, password, mutual_user, mutual_password)
+        return self._get_discoveryauth()
+
+    def _get_discoveryauth(self):
+        config = IscsiClient.instance().get_config()
+        user = ''
+        password = ''
+        chap = config['discovery_auth']['chap']
+        if chap:
+            user, password = chap.split('/')
+        mutual_user = ''
+        mutual_password = ''
+        chap_mutual = config['discovery_auth']['chap_mutual']
+        if chap_mutual:
+            mutual_user, mutual_password = chap_mutual.split('/')
+        return {
+            'user': user,
+            'password': password,
+            'mutual_user': mutual_user,
+            'mutual_password': mutual_password
+        }
 
 
 def iscsi_target_task(name, metadata, wait_for=2.0):
