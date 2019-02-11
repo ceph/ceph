@@ -622,6 +622,8 @@ uint64_t ProtocolV2::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
 void ProtocolV2::reset_recv_state() {
   if (state == CONNECTING) {
     auth_meta.reset(new AuthConnectionMeta);
+    session_stream_handlers.tx.reset(nullptr);
+    session_stream_handlers.rx.reset(nullptr);
   }
 
   // clean read and write callbacks
