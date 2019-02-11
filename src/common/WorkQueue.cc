@@ -112,9 +112,9 @@ void ThreadPool::worker(WorkThread *wt)
 	  processing++;
 	  ldout(cct,12) << "worker wq " << wq->name << " start processing " << item
 			<< " (" << processing << " active)" << dendl;
+	  ul.unlock();
 	  TPHandle tp_handle(cct, hb, wq->timeout_interval, wq->suicide_interval);
 	  tp_handle.reset_tp_timeout();
-	  ul.unlock();
 	  wq->_void_process(item, tp_handle);
 	  ul.lock();
 	  wq->_void_process_finish(item);
