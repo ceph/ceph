@@ -295,6 +295,7 @@ an established session.
 
     __le32 num_addrs
     entity_addr_t * num_addrs
+    entity_addr_t target entity addr
     __le64 cookie
     __le64 id (of name.id, e.g., osd.123 -> 123)
     __le64 global_seq
