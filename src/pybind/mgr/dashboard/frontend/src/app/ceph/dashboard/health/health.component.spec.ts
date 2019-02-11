@@ -11,6 +11,7 @@ import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-h
 import { HealthService } from '../../../shared/api/health.service';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { FeatureTogglesService } from '../../../shared/services/feature-toggles.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { PgCategoryService } from '../../shared/pg-category.service';
 import { HealthPieColor } from '../health-pie/health-pie-color.enum';
@@ -45,6 +46,7 @@ describe('HealthComponent', () => {
       return new Permissions({ log: ['read'] });
     }
   };
+  let fakeFeatureTogglesService;
 
   configureTestBed({
     imports: [SharedModule, HttpClientTestingModule, PopoverModule.forRoot()],
@@ -65,6 +67,15 @@ describe('HealthComponent', () => {
   });
 
   beforeEach(() => {
+    fakeFeatureTogglesService = spyOn(TestBed.get(FeatureTogglesService), 'get').and.returnValue(
+      of({
+        rbd: true,
+        mirroring: true,
+        iscsi: true,
+        cephfs: true,
+        rgw: true
+      })
+    );
     fixture = TestBed.createComponent(HealthComponent);
     component = fixture.componentInstance;
     getHealthSpy = spyOn(TestBed.get(HealthService), 'getMinimalHealth');
@@ -83,6 +94,32 @@ describe('HealthComponent', () => {
 
     const infoCards = fixture.debugElement.nativeElement.querySelectorAll('cd-info-card');
     expect(infoCards.length).toBe(18);
+  });
+
+  describe('features disabled', () => {
+    beforeEach(() => {
+      fakeFeatureTogglesService.and.returnValue(
+        of({
+          rbd: false,
+          mirroring: false,
+          iscsi: false,
+          cephfs: false,
+          rgw: false
+        })
+      );
+      fixture = TestBed.createComponent(HealthComponent);
+      component = fixture.componentInstance;
+    });
+
+    it('should not render cards related to disabled features', () => {
+      fixture.detectChanges();
+
+      const infoGroups = fixture.debugElement.nativeElement.querySelectorAll('cd-info-group');
+      expect(infoGroups.length).toBe(3);
+
+      const infoCards = fixture.debugElement.nativeElement.querySelectorAll('cd-info-card');
+      expect(infoCards.length).toBe(15);
+    });
   });
 
   it('should render all except "Status" group and cards', () => {

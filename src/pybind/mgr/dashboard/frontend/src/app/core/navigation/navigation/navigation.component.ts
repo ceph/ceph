@@ -3,6 +3,10 @@ import { Component, OnInit } from '@angular/core';
 import { PrometheusService } from '../../../shared/api/prometheus.service';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import {
+  FeatureTogglesMap$,
+  FeatureTogglesService
+} from '../../../shared/services/feature-toggles.service';
 import { SummaryService } from '../../../shared/services/summary.service';
 
 @Component({
@@ -16,13 +20,16 @@ export class NavigationComponent implements OnInit {
 
   isCollapsed = true;
   prometheusConfigured = false;
+  enabledFeature$: FeatureTogglesMap$;
 
   constructor(
     private authStorageService: AuthStorageService,
     private prometheusService: PrometheusService,
-    private summaryService: SummaryService
+    private summaryService: SummaryService,
+    private featureToggles: FeatureTogglesService
   ) {
     this.permissions = this.authStorageService.getPermissions();
+    this.enabledFeature$ = this.featureToggles.get();
   }
 
   ngOnInit() {

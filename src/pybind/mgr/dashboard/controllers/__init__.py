@@ -24,6 +24,7 @@ from ..security import Scope, Permission
 from ..tools import wraps, getargspec, TaskManager, get_request_body_params
 from ..exceptions import ScopeNotValid, PermissionNotValid
 from ..services.auth import AuthManager, JwtManager
+from ..plugins import PLUGIN_MANAGER
 
 
 class Controller(object):
@@ -176,6 +177,9 @@ def load_controllers():
                                  cls._cp_path_, cls.__name__)
                     continue
                 controllers.append(cls)
+
+    for clist in PLUGIN_MANAGER.hook.get_controllers() or []:
+        controllers.extend(clist)
 
     return controllers
 
