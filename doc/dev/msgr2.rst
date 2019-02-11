@@ -250,6 +250,7 @@ an established session.
 
     __le32 num_addrs
     entity_addrvec_t*num_addrs entity addrs
+    entity_addr_t target entity addr
     __le64 gid (numeric part of osd.0, client.123456, ...)
     __le64 global_seq
     __le64 features supported (CEPH_FEATURE_* bitmask)
@@ -258,6 +259,9 @@ an established session.
 
   - client will send first, server will reply with same.  if this is a
     new session, the client and server can proceed to the message exchange.
+  - the target addr is who the client is trying to connect *to*, so
+    that the server side can close the connection if the client is
+    talking to the wrong daemon.
   - type.gid (entity_name_t) is set here, by combinging the type shared in the hello
     frame with the gid here.  this means we don't need it
     in the header of every message.  it also means that we can't send
