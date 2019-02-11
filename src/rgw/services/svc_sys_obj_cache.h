@@ -16,6 +16,7 @@ class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 {
   friend class RGWSI_SysObj_Cache_CB;
   friend class RGWServices_Def;
+  friend class ASocketHandler;
 
   RGWSI_Notify *notify_svc{nullptr};
   ObjectCache cache;
@@ -32,6 +33,7 @@ protected:
   }
 
   int do_start() override;
+  void shutdown() override;
 
   int raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
                map<string, bufferlist> *attrs, bufferlist *first_chunk,
@@ -81,7 +83,7 @@ protected:
   void set_enabled(bool status);
 
 public:
-  RGWSI_SysObj_Cache(CephContext *cct) : RGWSI_SysObj_Core(cct) {
+  RGWSI_SysObj_Cache(CephContext *cct) : RGWSI_SysObj_Core(cct), asocket(this) {
     cache.set_ctx(cct);
   }
 
@@ -90,10 +92,52 @@ public:
   void register_chained_cache(RGWChainedCache *cc);
   void unregister_chained_cache(RGWChainedCache *cc);
 
-  void call_list(const std::optional<std::string>& filter, Formatter* f);
-  int call_inspect(const std::string& target, Formatter* f);
-  int call_erase(const std::string& target);
-  int call_zap();
+  class ASocketHandler : public AdminSocketHook {
+    RGWSI_SysObj_Cache *svc;
+
+    static constexpr const char* admin_commands[4][3] = {
+      { "cache list",
+        "cache list name=filter,type=CephString,req=false",
+        "cache list [filter_str]: list object cache, possibly matching substrings" },
+      { "cache inspect",
+        "cache inspect name=target,type=CephString,req=true",
+        "cache inspect target: print cache element" },
+      { "cache erase",
+        "cache erase name=target,type=CephString,req=true",
+        "cache erase target: erase element from cache" },
+      { "cache zap",
+        "cache zap",
+        "cache zap: erase all elements from cache" }
+    };
+
+  public:
+    ASocketHandler(RGWSI_SysObj_Cache *_svc) : svc(_svc) {}
+
+    int start();
+    void shutdown();
+
+    bool call(std::string_view command, const cmdmap_t& cmdmap,
+              std::string_view format, bufferlist& out) override;
+
+    // `call_list` must iterate over all cache entries and call
+    // `cache_list_dump_helper` with the supplied Formatter on any that
+    // include `filter` as a substring.
+    //
+    void call_list(const std::optional<std::string>& filter, Formatter* f);
+
+    // `call_inspect` must look up the requested target and, if found,
+    // dump it to the supplied Formatter and return true. If not found,
+    // it must return false.
+    //
+    int call_inspect(const std::string& target, Formatter* f);
+
+    // `call_erase` must erase the requested target and return true. If
+    // the requested target does not exist, it should return false.
+    int call_erase(const std::string& target);
+
+    // `call_zap` must erase the cache.
+    int call_zap();
+  } asocket;
 };
 
 template <class T>

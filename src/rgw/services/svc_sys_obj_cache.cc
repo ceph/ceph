@@ -26,7 +26,12 @@ public:
 
 int RGWSI_SysObj_Cache::do_start()
 {
-  int r = RGWSI_SysObj_Core::do_start();
+  int r = asocket.start();
+  if (r < 0) {
+    return r;
+  }
+
+  r = RGWSI_SysObj_Core::do_start();
   if (r < 0) {
     return r;
   }
@@ -43,6 +48,12 @@ int RGWSI_SysObj_Cache::do_start()
   notify_svc->register_watch_cb(cb.get());
 
   return 0;
+}
+
+void RGWSI_SysObj_Cache::shutdown()
+{
+  asocket.shutdown();
+  RGWSI_SysObj_Core::shutdown();
 }
 
 static string normal_name(rgw_pool& pool, const std::string& oid) {
@@ -470,9 +481,80 @@ static void cache_list_dump_helper(Formatter* f,
   f->dump_unsigned("size", size);
 }
 
-void RGWSI_SysObj_Cache::call_list(const std::optional<std::string>& filter, Formatter* f)
+
+int RGWSI_SysObj_Cache::ASocketHandler::start()
 {
-  cache.for_each(
+  auto admin_socket = svc->ctx()->get_admin_socket();
+  for (auto cmd : admin_commands) {
+    int r = admin_socket->register_command(cmd[0], cmd[1], this,
+                                           cmd[2]);
+    if (r < 0) {
+      ldout(svc->ctx(), 0) << "ERROR: fail to register admin socket command (r=" << r
+                           << ")" << dendl;
+      return r;
+    }
+  }
+  return 0;
+}
+
+void RGWSI_SysObj_Cache::ASocketHandler::shutdown()
+{
+  auto admin_socket = svc->ctx()->get_admin_socket();
+  admin_socket->unregister_commands(this);
+}
+
+bool RGWSI_SysObj_Cache::ASocketHandler::call(std::string_view command, const cmdmap_t& cmdmap,
+                                              std::string_view format, bufferlist& out)
+{
+  if (command == "cache list"sv) {
+    std::optional<std::string> filter;
+    if (auto i = cmdmap.find("filter"); i != cmdmap.cend()) {
+      filter = boost::get<std::string>(i->second);
+    }
+    std::unique_ptr<Formatter> f(ceph::Formatter::create(format, "table"));
+    if (f) {
+      f->open_array_section("cache_entries");
+      call_list(filter, f.get());
+      f->close_section();
+      f->flush(out);
+      return true;
+    } else {
+      out.append("Unable to create Formatter.\n");
+      return false;
+    }
+  } else if (command == "cache inspect"sv) {
+    std::unique_ptr<Formatter> f(ceph::Formatter::create(format, "json-pretty"));
+    if (f) {
+      const auto& target = boost::get<std::string>(cmdmap.at("target"));
+      if (call_inspect(target, f.get())) {
+        f->flush(out);
+        return true;
+      } else {
+        out.append("Unable to find entry "s + target + ".\n");
+        return false;
+      }
+    } else {
+      out.append("Unable to create Formatter.\n");
+      return false;
+    }
+  } else if (command == "cache erase"sv) {
+    const auto& target = boost::get<std::string>(cmdmap.at("target"));
+    if (call_erase(target)) {
+      return true;
+    } else {
+      out.append("Unable to find entry "s + target + ".\n");
+      return false;
+    }
+  } else if (command == "cache zap"sv) {
+    call_zap();
+    return true;
+  }
+  return false;
+}
+
+void RGWSI_SysObj_Cache::ASocketHandler::call_list(const std::optional<std::string>& filter, Formatter* f)
+{
+  svc->cache.for_each(
     [this, &filter, f] (const string& name, const ObjectCacheEntry& entry) {
       if (!filter || name.find(*filter) != name.npos) {
 	cache_list_dump_helper(f, name, entry.info.meta.mtime,
@@ -481,9 +563,9 @@ void RGWSI_SysObj_Cache::call_list(const std::optional<std::string>& filter, For
     });
 }
 
-int RGWSI_SysObj_Cache::call_inspect(const std::string& target, Formatter* f)
+int RGWSI_SysObj_Cache::ASocketHandler::call_inspect(const std::string& target, Formatter* f)
 {
-  if (const auto entry = cache.get(target)) {
+  if (const auto entry = svc->cache.get(target)) {
     f->open_object_section("cache_entry");
     f->dump_string("name", target.c_str());
     entry->dump(f);
@@ -494,13 +576,13 @@ int RGWSI_SysObj_Cache::call_inspect(const std::string& target, Formatter* f)
   }
 }
 
-int RGWSI_SysObj_Cache::call_erase(const std::string& target)
+int RGWSI_SysObj_Cache::ASocketHandler::call_erase(const std::string& target)
 {
-  return cache.remove(target);
+  return svc->cache.remove(target);
 }
 
-int RGWSI_SysObj_Cache::call_zap()
+int RGWSI_SysObj_Cache::ASocketHandler::call_zap()
 {
-  cache.invalidate_all();
+  svc->cache.invalidate_all();
   return 0;
 }

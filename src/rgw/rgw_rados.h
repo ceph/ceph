@@ -8,7 +8,6 @@
 
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
-#include "common/admin_socket.h"
 #include "common/RefCountedObj.h"
 #include "common/RWLock.h"
 #include "common/ceph_time.h"
@@ -399,7 +398,7 @@ struct bucket_info_entry {
 struct tombstone_entry;
 class RGWIndexCompletionManager;
 
-class RGWRados : public AdminSocketHook
+class RGWRados
 {
   friend class RGWGC;
   friend class RGWMetaNotifier;
@@ -413,21 +412,6 @@ class RGWRados : public AdminSocketHook
   friend class RGWBucketReshardLock;
   friend class BucketIndexLockGuard;
   friend class RGWCompleteMultipart;
-
-  static constexpr const char* admin_commands[4][3] = {
-    { "cache list",
-      "cache list name=filter,type=CephString,req=false",
-      "cache list [filter_str]: list object cache, possibly matching substrings" },
-    { "cache inspect",
-      "cache inspect name=target,type=CephString,req=true",
-      "cache inspect target: print cache element" },
-    { "cache erase",
-      "cache erase name=target,type=CephString,req=true",
-      "cache erase target: erase element from cache" },
-    { "cache zap",
-      "cache zap",
-      "cache zap: erase all elements from cache" }
-  };
 
   /** Open the pool used as root for this gateway */
   int open_root_pool_ctx();
@@ -1394,31 +1378,7 @@ private:
 		       real_time *pmtime,
 		       map<string, bufferlist> *pattrs,
 		       boost::optional<obj_version> refresh_version);
-public:
 
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format,
-	    bufferlist& out) override final;
-
-protected:
-  // `call_list` must iterate over all cache entries and call
-  // `cache_list_dump_helper` with the supplied Formatter on any that
-  // include `filter` as a substring.
-  //
-  void call_list(const std::optional<std::string>& filter,
-			 Formatter* format);
-  // `call_inspect` must look up the requested target and, if found,
-  // dump it to the supplied Formatter and return true. If not found,
-  // it must return false.
-  //
-  bool call_inspect(const std::string& target, Formatter* format);
-
-  // `call_erase` must erase the requested target and return true. If
-  // the requested target does not exist, it should return false.
-  bool call_erase(const std::string& target);
-
-  // `call_zap` must erase the cache.
-  void call_zap();
 public:
 
   int get_bucket_info(RGWSysObjectCtx& obj_ctx,
