@@ -157,7 +157,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -181,8 +181,7 @@
   Positional arguments
     <image-or-snap-spec>  image or snapshot specification
                           (example:
-                          [<pool-name>/[<namespace-name>/]]<image-name>[@<snap-nam
-                          e>])
+                          [<pool-name>/[<namespace>/]]<image-name>[@<snap-name>])
   
   Optional arguments
     -p [ --pool ] arg     pool name
@@ -212,11 +211,10 @@
   Positional arguments
     <source-snap-spec>        source snapshot specification
                               (example:
-                              [<pool-name>/[<namespace-name>/]]<image-name>@<snaps
-                              hot-name>)
+                              [<pool-name>/[<namespace>/]]<image-name>@<snapshot-n
+                              ame>)
     <dest-image-spec>         destination image specification
-                              (example:
-                              [<pool-name>/[<namespace-name>/]]<image-name>)
+                              (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg         source pool name
@@ -294,7 +292,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
     <key>                config key
   
   Optional arguments
@@ -312,7 +310,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -330,7 +328,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
     <key>                config key
   
   Optional arguments
@@ -347,7 +345,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
     <key>                config key
     <value>              config value
   
@@ -416,11 +414,11 @@
   Positional arguments
     <source-image-or-snap-spec>  source image or snapshot specification
                                  (example:
-                                 [<pool-name>/[<namespace-name>/]]<image-name>[@<s
-                                 nap-name>])
+                                 [<pool-name>/[<namespace>/]]<image-name>[@<snap-n
+                                 ame>])
     <dest-image-spec>            destination image specification
                                  (example:
-                                 [<pool-name>/[<namespace-name>/]]<image-name>)
+                                 [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg            source pool name
@@ -467,8 +465,7 @@
   
   Positional arguments
     <image-spec>              image specification
-                              (example:
-                              [<pool-name>/[<namespace-name>/]]<image-name>)
+                              (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg         pool name
@@ -518,11 +515,11 @@
   Positional arguments
     <source-image-or-snap-spec>  source image or snapshot specification
                                  (example:
-                                 [<pool-name>/[<namespace-name>/]]<image-name>[@<s
-                                 nap-name>])
+                                 [<pool-name>/[<namespace>/]]<image-name>[@<snap-n
+                                 ame>])
     <dest-image-spec>            destination image specification
                                  (example:
-                                 [<pool-name>/[<namespace-name>/]]<image-name>)
+                                 [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg            source pool name
@@ -575,8 +572,8 @@
   Positional arguments
     <image-or-snap-spec>     image or snapshot specification
                              (example:
-                             [<pool-name>/[<namespace-name>/]]<image-name>[@<snap-
-                             name>])
+                             [<pool-name>/[<namespace>/]]<image-name>[@<snap-name>
+                             ])
   
   Optional arguments
     -t [ --device-type ] arg device type [ggate, krbd (default), nbd]
@@ -618,8 +615,7 @@
   Positional arguments
     <image-or-snap-spec>  image or snapshot specification
                           (example:
-                          [<pool-name>/[<namespace-name>/]]<image-name>[@<snap-nam
-                          e>])
+                          [<pool-name>/[<namespace>/]]<image-name>[@<snap-name>])
   
   Optional arguments
     -p [ --pool ] arg     pool name
@@ -642,8 +638,7 @@
   Positional arguments
     <image-or-snap-spec>  image or snapshot specification
                           (example:
-                          [<pool-name>/[<namespace-name>/]]<image-name>[@<snap-nam
-                          e>])
+                          [<pool-name>/[<namespace>/]]<image-name>[@<snap-name>])
   
   Optional arguments
     -p [ --pool ] arg     pool name
@@ -666,8 +661,8 @@
   Positional arguments
     <source-image-or-snap-spec>  source image or snapshot specification
                                  (example:
-                                 [<pool-name>/[<namespace-name>/]]<image-name>[@<s
-                                 nap-name>])
+                                 [<pool-name>/[<namespace>/]]<image-name>[@<snap-n
+                                 ame>])
     <path-name>                  export file (or '-' for stdout)
   
   Optional arguments
@@ -691,8 +686,8 @@
   Positional arguments
     <source-image-or-snap-spec>  source image or snapshot specification
                                  (example:
-                                 [<pool-name>/[<namespace-name>/]]<image-name>[@<s
-                                 nap-name>])
+                                 [<pool-name>/[<namespace>/]]<image-name>[@<snap-n
+                                 ame>])
     <path-name>                  export file (or '-' for stdout)
   
   Optional arguments
@@ -714,7 +709,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
     <features>           image features
                          [exclusive-lock, object-map, journaling]
   
@@ -735,8 +730,7 @@
   
   Positional arguments
     <image-spec>              image specification
-                              (example:
-                              [<pool-name>/[<namespace-name>/]]<image-name>)
+                              (example: [<pool-name>/[<namespace>/]]<image-name>)
     <features>                image features
                               [exclusive-lock, object-map, journaling]
   
@@ -757,7 +751,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -774,7 +768,7 @@
   
   Positional arguments
     <group-spec>         group specification
-                         (example: [<pool-name>/[<namespace-name>/]]<group-name>)
+                         (example: [<pool-name>/[<namespace>/]]<group-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -793,9 +787,9 @@
   
   Positional arguments
     <group-spec>          group specification
-                          (example: [<pool-name>/[<namespace-name>/]]<group-name>)
+                          (example: [<pool-name>/[<namespace>/]]<group-name>)
     <image-spec>          image specification
-                          (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                          (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     --group-pool arg      group pool name
@@ -816,7 +810,7 @@
   
   Positional arguments
     <group-spec>         group specification
-                         (example: [<pool-name>/[<namespace-name>/]]<group-name>)
+                         (example: [<pool-name>/[<namespace>/]]<group-name>)
   
   Optional arguments
     --format arg         output format (plain, json, or xml) [default: plain]
@@ -838,9 +832,9 @@
   
   Positional arguments
     <group-spec>          group specification
-                          (example: [<pool-name>/[<namespace-name>/]]<group-name>)
+                          (example: [<pool-name>/[<namespace>/]]<group-name>)
     <image-spec>          image specification
-                          (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                          (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     --group-pool arg      group pool name
@@ -861,7 +855,7 @@
   
   Positional arguments
     <pool-spec>          pool specification
-                         (example: <pool-name>[/<namespace-name>]
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -878,7 +872,7 @@
   
   Positional arguments
     <group-spec>         group specification
-                         (example: [<pool-name>/[<namespace-name>/]]<group-name>)
+                         (example: [<pool-name>/[<namespace>/]]<group-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -896,9 +890,9 @@
   
   Positional arguments
     <source-group-spec>  source group specification
-                         (example: [<pool-name>/[<namespace-name>/]]<group-name>)
+                         (example: [<pool-name>/[<namespace>/]]<group-name>)
     <dest-group-spec>    destination group specification
-                         (example: [<pool-name>/[<namespace-name>/]]<group-name>)
+                         (example: [<pool-name>/[<namespace>/]]<group-name>)
   
   Optional arguments
     -p [ --pool ] arg    source pool name
@@ -918,8 +912,7 @@
   Positional arguments
     <group-snap-spec>    group specification
                          (example:
-                         [<pool-name>/[<namespace-name>/]]<group-name>@<snap-name>
-                         )
+                         [<pool-name>/[<namespace>/]]<group-name>@<snap-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -937,7 +930,7 @@
   
   Positional arguments
     <group-spec>         group specification
-                         (example: [<pool-name>/[<namespace-name>/]]<group-name>)
+                         (example: [<pool-name>/[<namespace>/]]<group-name>)
   
   Optional arguments
     --format arg         output format (plain, json, or xml) [default: plain]
@@ -956,8 +949,7 @@
   Positional arguments
     <group-snap-spec>    group specification
                          (example:
-                         [<pool-name>/[<namespace-name>/]]<group-name>@<snap-name>
-                         )
+                         [<pool-name>/[<namespace>/]]<group-name>@<snap-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -976,8 +968,7 @@
   Positional arguments
     <group-snap-spec>    group specification
                          (example:
-                         [<pool-name>/[<namespace-name>/]]<group-name>@<snap-name>
-                         )
+                         [<pool-name>/[<namespace>/]]<group-name>@<snap-name>)
     <dest-snap>          destination snapshot name
                          (example: <snapshot-name>)
   
@@ -999,8 +990,7 @@
   Positional arguments
     <group-snap-spec>    group specification
                          (example:
-                         [<pool-name>/[<namespace-name>/]]<group-name>@<snap-name>
-                         )
+                         [<pool-name>/[<namespace>/]]<group-name>@<snap-name>)
   
   Optional arguments
     --no-progress        disable progress output
@@ -1018,7 +1008,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
     <key>                image meta key
   
   Optional arguments
@@ -1036,7 +1026,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1054,7 +1044,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
     <key>                image meta key
   
   Optional arguments
@@ -1071,7 +1061,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
     <key>                image meta key
     <value>              image meta value
   
@@ -1101,8 +1091,7 @@
   Positional arguments
     <path-name>               import file (or '-' for stdin)
     <dest-image-spec>         destination image specification
-                              (example:
-                              [<pool-name>/[<namespace-name>/]]<image-name>)
+                              (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     --path arg                import file (or '-' for stdin)
@@ -1146,7 +1135,7 @@
   Positional arguments
     <path-name>          import file (or '-' for stdin)
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     --path arg           import file (or '-' for stdin)
@@ -1167,8 +1156,7 @@
   Positional arguments
     <image-or-snap-spec>  image or snapshot specification
                           (example:
-                          [<pool-name>/[<namespace-name>/]]<image-name>[@<snap-nam
-                          e>])
+                          [<pool-name>/[<namespace>/]]<image-name>[@<snap-name>])
   
   Optional arguments
     -p [ --pool ] arg     pool name
@@ -1189,8 +1177,7 @@
   
   Positional arguments
     <journal-spec>       journal specification
-                         (example:
-                         [<pool-name>/[<namespace-name>/]]<journal-name>)
+                         (example: [<pool-name>/[<namespace>/]]<journal-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1209,8 +1196,7 @@
   
   Positional arguments
     <source-journal-spec>  source journal specification
-                           (example:
-                           [<pool-name>/[<namespace-name>/]]<journal-name>)
+                           (example: [<pool-name>/[<namespace>/]]<journal-name>)
     <path-name>            export file (or '-' for stdout)
   
   Optional arguments
@@ -1234,8 +1220,7 @@
   Positional arguments
     <path-name>          import file (or '-' for stdin)
     <dest-journal-spec>  destination journal specification
-                         (example:
-                         [<pool-name>/[<namespace-name>/]]<journal-name>)
+                         (example: [<pool-name>/[<namespace>/]]<journal-name>)
   
   Optional arguments
     --path arg           import file (or '-' for stdin)
@@ -1256,8 +1241,7 @@
   
   Positional arguments
     <journal-spec>       journal specification
-                         (example:
-                         [<pool-name>/[<namespace-name>/]]<journal-name>)
+                         (example: [<pool-name>/[<namespace>/]]<journal-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1276,8 +1260,7 @@
   
   Positional arguments
     <journal-spec>       journal specification
-                         (example:
-                         [<pool-name>/[<namespace-name>/]]<journal-name>)
+                         (example: [<pool-name>/[<namespace>/]]<journal-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1295,8 +1278,7 @@
   
   Positional arguments
     <journal-spec>       journal specification
-                         (example:
-                         [<pool-name>/[<namespace-name>/]]<journal-name>)
+                         (example: [<pool-name>/[<namespace>/]]<journal-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1314,8 +1296,7 @@
   
   Positional arguments
     <journal-spec>       journal specification
-                         (example:
-                         [<pool-name>/[<namespace-name>/]]<journal-name>)
+                         (example: [<pool-name>/[<namespace>/]]<journal-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1334,7 +1315,7 @@
   
   Positional arguments
     <pool-spec>          pool specification
-                         (example: <pool-name>[/<namespace-name>]
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -l [ --long ]        long listing format
@@ -1352,7 +1333,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
     <lock-id>            unique lock id
   
   Optional arguments
@@ -1370,7 +1351,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1388,7 +1369,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
     <lock-id>            unique lock id
     <locker>             locker client
   
@@ -1421,7 +1402,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1438,7 +1419,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1455,7 +1436,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1483,11 +1464,9 @@
   
   Positional arguments
     <source-image-spec>       source image specification
-                              (example:
-                              [<pool-name>/[<namespace-name>/]]<image-name>)
+                              (example: [<pool-name>/[<namespace>/]]<image-name>)
     <dest-image-spec>         destination image specification
-                              (example:
-                              [<pool-name>/[<namespace-name>/]]<image-name>)
+                              (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg         source pool name
@@ -1527,7 +1506,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1543,7 +1522,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     --force              disable even if not primary
@@ -1560,7 +1539,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1576,7 +1555,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     --force              promote even if not cleanly demoted by remote cluster
@@ -1593,7 +1572,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1610,7 +1589,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1759,7 +1738,7 @@
   
   Positional arguments
     <pool-spec>          pool specification
-                         (example: <pool-name>[/<namespace-name>]
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1787,7 +1766,7 @@
   
   Positional arguments
     <pool-spec>          pool specification
-                         (example: <pool-name>[/<namespace-name>]
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1803,8 +1782,7 @@
   Positional arguments
     <image-or-snap-spec>  image or snapshot specification
                           (example:
-                          [<pool-name>/[<namespace-name>/]]<image-name>[@<snap-nam
-                          e>])
+                          [<pool-name>/[<namespace>/]]<image-name>[@<snap-name>])
   
   Optional arguments
     -p [ --pool ] arg     pool name
@@ -1823,8 +1801,7 @@
   Positional arguments
     <image-or-snap-spec>  image or snapshot specification
                           (example:
-                          [<pool-name>/[<namespace-name>/]]<image-name>[@<snap-nam
-                          e>])
+                          [<pool-name>/[<namespace>/]]<image-name>[@<snap-name>])
   
   Optional arguments
     -p [ --pool ] arg     pool name
@@ -1843,7 +1820,7 @@
   
   Positional arguments
     <pool-spec>                pool specification
-                               (example: <pool-name>[/<namespace-name>]
+                               (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg          pool name
@@ -1864,7 +1841,7 @@
   
   Positional arguments
     <pool-spec>          pool specification
-                         (example: <pool-name>[/<namespace-name>]
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1893,7 +1870,7 @@
   
   Positional arguments
     <pool-spec>          pool specification
-                         (example: <pool-name>[/<namespace-name>]
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1911,7 +1888,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1929,9 +1906,9 @@
   
   Positional arguments
     <source-image-spec>  source image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
     <dest-image-spec>    destination image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    source pool name
@@ -1951,7 +1928,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1971,8 +1948,7 @@
   Positional arguments
     <snap-spec>          snapshot specification
                          (example:
-                         [<pool-name>/[<namespace-name>/]]<image-name>@<snapshot-n
-                         ame>)
+                         [<pool-name>/[<namespace>/]]<image-name>@<snapshot-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -1989,7 +1965,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2005,7 +1981,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2023,7 +1999,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2044,8 +2020,7 @@
   Positional arguments
     <snap-spec>          snapshot specification
                          (example:
-                         [<pool-name>/[<namespace-name>/]]<image-name>@<snapshot-n
-                         ame>)
+                         [<pool-name>/[<namespace>/]]<image-name>@<snapshot-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2062,7 +2037,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2083,8 +2058,7 @@
   Positional arguments
     <snap-spec>          snapshot specification
                          (example:
-                         [<pool-name>/[<namespace-name>/]]<image-name>@<snapshot-n
-                         ame>)
+                         [<pool-name>/[<namespace>/]]<image-name>@<snapshot-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2109,12 +2083,10 @@
   Positional arguments
     <source-snap-spec>   source snapshot specification
                          (example:
-                         [<pool-name>/[<namespace-name>/]]<image-name>@<snapshot-n
-                         ame>)
+                         [<pool-name>/[<namespace>/]]<image-name>@<snapshot-name>)
     <dest-snap-spec>     destination snapshot specification
                          (example:
-                         [<pool-name>/[<namespace-name>/]]<image-name>@<snapshot-n
-                         ame>)
+                         [<pool-name>/[<namespace>/]]<image-name>@<snapshot-name>)
   
   Optional arguments
     -p [ --pool ] arg    source pool name
@@ -2136,8 +2108,7 @@
   Positional arguments
     <snap-spec>          snapshot specification
                          (example:
-                         [<pool-name>/[<namespace-name>/]]<image-name>@<snapshot-n
-                         ame>)
+                         [<pool-name>/[<namespace>/]]<image-name>@<snapshot-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2157,8 +2128,7 @@
   Positional arguments
     <snap-spec>          snapshot specification
                          (example:
-                         [<pool-name>/[<namespace-name>/]]<image-name>@<snapshot-n
-                         ame>)
+                         [<pool-name>/[<namespace>/]]<image-name>@<snapshot-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2177,7 +2147,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2195,7 +2165,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2213,7 +2183,7 @@
   
   Positional arguments
     <pool-spec>          pool specification
-                         (example: <pool-name>[/<namespace-name>]
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2232,8 +2202,7 @@
   
   Positional arguments
     <image-spec>            image specification
-                            (example:
-                            [<pool-name>/[<namespace-name>/]]<image-name>)
+                            (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg       pool name
@@ -2252,7 +2221,7 @@
   
   Positional arguments
     <pool-spec>           pool specification
-                          (example: <pool-name>[/<namespace-name>]
+                          (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg     pool name
@@ -2271,7 +2240,7 @@
   
   Positional arguments
     <image-id>           image id
-                         (example: [<pool-name>/[<namespace-name>/]]<image-id>)
+                         (example: [<pool-name>/[<namespace>/]]<image-id>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
@@ -2305,7 +2274,7 @@
   
   Positional arguments
     <image-spec>         image specification
-                         (example: [<pool-name>/[<namespace-name>/]]<image-name>)
+                         (example: [<pool-name>/[<namespace>/]]<image-name>)
   
   Optional arguments
     -p [ --pool ] arg    pool name
