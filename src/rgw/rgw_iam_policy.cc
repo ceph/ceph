@@ -95,6 +95,7 @@ static const actpair actpairs[] =
  { "s3:GetObjectTagging", s3GetObjectTagging },
  { "s3:GetObjectVersionTagging", s3GetObjectVersionTagging},
  { "s3:GetReplicationConfiguration", s3GetReplicationConfiguration },
+ { "s3:GetBucketObjectLockConfiguration", s3GetBucketObjectLockConfiguration},
  { "s3:ListAllMyBuckets", s3ListAllMyBuckets },
  { "s3:ListBucketMultipartUploads", s3ListBucketMultipartUploads },
  { "s3:ListBucket", s3ListBucket },
@@ -117,6 +118,7 @@ static const actpair actpairs[] =
  { "s3:PutObjectTagging", s3PutObjectTagging },
  { "s3:PutObjectVersionTagging", s3PutObjectVersionTagging },
  { "s3:PutReplicationConfiguration", s3PutReplicationConfiguration },
+ { "s3:PutBucketObjectLockConfiguration", s3PutBucketObjectLockConfiguration},
  { "s3:RestoreObject", s3RestoreObject },
  { "iam:PutUserPolicy", iamPutUserPolicy },
  { "iam:GetUserPolicy", iamGetUserPolicy },
@@ -1180,6 +1182,12 @@ const char* action_bit_string(uint64_t action) {
 
   case s3DeleteObjectVersionTagging:
     return "s3:DeleteObjectVersionTagging";
+
+  case s3PutBucketObjectLockConfiguration:
+    return "s3:PutBucketObjectLockConfiguration";
+
+  case s3GetBucketObjectLockConfiguration:
+    return "s3:GetBucketObjectLockConfiguration";
 
   case iamPutUserPolicy:
     return "iam:PutUserPolicy";

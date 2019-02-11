@@ -263,6 +263,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   } else {
     dump_header(s, "x-rgw-object-type", "Normal");
   }
+
   if (! op_ret) {
     if (! lo_etag.empty()) {
       /* Handle etag of Swift API's large objects (DLO/SLO). It's entirerly
@@ -328,6 +329,12 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
           ldout(s->cct,0) << "Error caught buffer::error couldn't decode TagSet " << dendl;
         }
         dump_header(s, RGW_AMZ_TAG_COUNT, obj_tags.count());
+      } else if (iter->first.compare(RGW_ATTR_OBJECT_LOCK_MODE) == 0 && get_retention) {
+        dump_header(s, "x-amz-object-lock-mode", iter->second.to_str());
+      } else if (iter->first.compare(RGW_ATTR_OBJECT_LOCK_UNTIL_DATE) == 0 && get_retention) {
+        real_time lock_until_date;
+        decode(lock_until_date, iter->second);
+        dump_time_header(s, "x-amz-object-lock-retain-until-date", lock_until_date);
       }
     }
   }
@@ -1269,7 +1276,13 @@ int RGWCreateBucket_ObjStore_S3::get_params()
   } else {
     placement_rule.storage_class = s->info.storage_class;
   }
-
+  auto iter = s->info.x_meta_map.find("x-amz-bucket-object-lock-enabled");
+  if (iter != s->info.x_meta_map.end()) {
+    if ((iter->second.compare("true") != 0 && (iter->second.compare("false") != 0))) {
+      return -EINVAL;
+    }
+    obj_lock_enabled = iter->second.compare("true") == 0;
+  }
   return 0;
 }
 
@@ -2158,6 +2171,12 @@ int RGWDeleteObj_ObjStore_S3::get_params()
       return -EINVAL;
     }
     unmod_since = utime_t(epoch, nsec).to_real_time();
+  }
+
+  const char *bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
+  if (bypass_gov_header) {
+    std::string bypass_gov_decoded = url_decode(bypass_gov_header);
+    bypass_governance_mode = bypass_gov_decoded.compare("true") == 0;
   }
 
   return 0;
@@ -3061,6 +3080,95 @@ void RGWDelBucketMetaSearch_ObjStore_S3::send_response()
   end_header(s, this);
 }
 
+void RGWPutBucketObjectLock_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+void RGWGetBucketObjectLock_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  if (op_ret) {
+    return;
+  }
+  encode_xml("ObjectLockConfiguration", s->bucket_info.obj_lock, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+
+int RGWPutObjRetention_ObjStore_S3::get_params()
+{
+  const char *bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
+  if (bypass_gov_header) {
+    std::string bypass_gov_decoded = url_decode(bypass_gov_header);
+    bypass_governance_mode = bypass_gov_decoded.compare("true") == 0;
+  }
+
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  return op_ret;
+}
+
+void RGWPutObjRetention_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+void RGWGetObjRetention_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  if (op_ret) {
+    return;
+  }
+  encode_xml("Retention", obj_retention, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+void RGWPutObjLegalHold_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+void RGWGetObjLegalHold_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  if (op_ret) {
+    return;
+  }
+  encode_xml("LegalHold", obj_legal_hold, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 
 RGWOp *RGWHandler_REST_Service_S3::op_get()
 {
@@ -3183,6 +3291,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWGetLC_ObjStore_S3;
   } else if(is_policy_op()) {
     return new RGWGetBucketPolicy;
+  } else if (is_object_lock_op()) {
+    return new RGWGetBucketObjectLock_ObjStore_S3;
   } else if (is_notification_op()) {
     return RGWHandler_REST_PSNotifs_S3::create_get_op();
   }
@@ -3221,6 +3331,8 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWPutLC_ObjStore_S3;
   } else if(is_policy_op()) {
     return new RGWPutBucketPolicy;
+  } else if (is_object_lock_op()) {
+    return new RGWPutBucketObjectLock_ObjStore_S3;
   } else if (is_notification_op()) {
     return RGWHandler_REST_PSNotifs_S3::create_put_op();
   }
@@ -3288,6 +3400,10 @@ RGWOp *RGWHandler_REST_Obj_S3::op_get()
     return new RGWGetObjLayout_ObjStore_S3;
   } else if (is_tagging_op()) {
     return new RGWGetObjTags_ObjStore_S3;
+  } else if (is_obj_retention_op()) {
+    return new RGWGetObjRetention_ObjStore_S3;
+  } else if (is_obj_legal_hold_op()) {
+    return new RGWGetObjLegalHold_ObjStore_S3;
   }
   return get_obj_op(true);
 }
@@ -3308,6 +3424,10 @@ RGWOp *RGWHandler_REST_Obj_S3::op_put()
     return new RGWPutACLs_ObjStore_S3;
   } else if (is_tagging_op()) {
     return new RGWPutObjTags_ObjStore_S3;
+  } else if (is_obj_retention_op()) {
+    return new RGWPutObjRetention_ObjStore_S3;
+  } else if (is_obj_legal_hold_op()) {
+    return new RGWPutObjLegalHold_ObjStore_S3;
   }
 
   if (s->init_state.src_bucket.empty())
@@ -4085,6 +4205,11 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_PUT_LC:
         case RGW_OP_SET_REQUEST_PAYMENT:
         case RGW_OP_PUBSUB_NOTIF_CREATE:
+        case RGW_OP_PUT_BUCKET_OBJ_LOCK:
+        case RGW_OP_PUT_OBJ_RETENTION:
+        case RGW_OP_PUT_OBJ_LEGAL_HOLD:
+        case RGW_STS_GET_SESSION_TOKEN:
+        case RGW_STS_ASSUME_ROLE:
           break;
         default:
           dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
