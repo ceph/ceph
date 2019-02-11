@@ -417,7 +417,7 @@ int main(int argc, char** argv)
     std::transform(begin(unrecognized_options),
                    end(unrecognized_options),
                    std::back_inserter(av),
-                   [](auto s) {
+                   [](auto& s) {
                      return const_cast<char*>(s.c_str());
                    });
     sc.run(app, av.size(), av.data());
