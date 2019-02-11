@@ -56,7 +56,7 @@
   padding: 5px;
   position: relative;
   .oadatatableactions {
-    display: inline-block;
+    float: left;
   }
   ::ng-deep .table-filters {
     float: right;
