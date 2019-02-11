@@ -164,7 +164,7 @@ Host management
 ---------------
 
 .. automethod:: Orchestrator.add_host
-.. automethod:: Orchestrator.remote_host
+.. automethod:: Orchestrator.remove_host
 .. automethod:: Orchestrator.get_hosts
 
 Inventory and status
