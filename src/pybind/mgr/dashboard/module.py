@@ -19,10 +19,6 @@ from OpenSSL import crypto
 
 from mgr_module import MgrModule, MgrStandbyModule
 
-# Imports required for CLI commands registration
-# pylint: disable=unused-import
-from .services import iscsi_cli
-
 try:
     import cherrypy
     from cherrypy._cptools import HandlerWrapperTool
@@ -69,6 +65,9 @@ from .services.sso import SSO_COMMANDS, \
 from .services.exception import dashboard_exception_handler
 from .settings import options_command_list, options_schema_list, \
                       handle_option_command
+
+from .plugins import PLUGIN_MANAGER
+from .plugins import feature_toggles  # noqa # pylint: disable=unused-import
 
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
@@ -127,6 +126,10 @@ class CherryPyConfig(object):
 
         # Initialize custom handlers.
         cherrypy.tools.authenticate = AuthManagerTool()
+        cherrypy.tools.plugin_hooks = cherrypy.Tool(
+            'before_handler',
+            lambda: PLUGIN_MANAGER.hook.filter_request_before_handler(request=cherrypy.request),
+            priority=10)
         cherrypy.tools.request_logging = RequestLoggingTool()
         cherrypy.tools.dashboard_exception_handler = HandlerWrapperTool(dashboard_exception_handler,
                                                                         priority=31)
@@ -147,7 +150,8 @@ class CherryPyConfig(object):
                 'application/javascript',
             ],
             'tools.json_in.on': True,
-            'tools.json_in.force': False
+            'tools.json_in.force': False,
+            'tools.plugin_hooks.on': True,
         }
 
         if ssl:
@@ -241,6 +245,7 @@ class Module(MgrModule, CherryPyConfig):
     ]
     COMMANDS.extend(options_command_list())
     COMMANDS.extend(SSO_COMMANDS)
+    PLUGIN_MANAGER.hook.register_commands()
 
     MODULE_OPTIONS = [
         {'name': 'server_addr'},
@@ -254,6 +259,8 @@ class Module(MgrModule, CherryPyConfig):
         {'name': 'ssl'}
     ]
     MODULE_OPTIONS.extend(options_schema_list())
+    for options in PLUGIN_MANAGER.hook.get_options() or []:
+        MODULE_OPTIONS.extend(options)
 
     __pool_stats = collections.defaultdict(lambda: collections.defaultdict(
         lambda: collections.deque(maxlen=10)))
@@ -315,6 +322,8 @@ class Module(MgrModule, CherryPyConfig):
                 'request.dispatch': mapper
             }
         cherrypy.tree.mount(None, config=config)
+
+        PLUGIN_MANAGER.hook.setup()
 
         cherrypy.engine.start()
         NotificationQueue.start_queue()

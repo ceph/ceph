@@ -36,6 +36,7 @@ import { ForbiddenComponent } from './core/forbidden/forbidden.component';
 import { NotFoundComponent } from './core/not-found/not-found.component';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
+import { FeatureTogglesGuardService } from './shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from './shared/services/module-status-guard.service';
 
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -153,6 +154,7 @@ const routes: Routes = [
       },
       {
         path: 'rbd',
+        canActivate: [FeatureTogglesGuardService],
         data: { breadcrumbs: 'Images' },
         children: [
           { path: '', component: RbdImagesComponent },
@@ -174,11 +176,13 @@ const routes: Routes = [
       {
         path: 'mirroring',
         component: RbdMirroringComponent,
+        canActivate: [FeatureTogglesGuardService],
         data: { breadcrumbs: 'Mirroring' }
       },
       // iSCSI
       {
         path: 'iscsi',
+        canActivate: [FeatureTogglesGuardService],
         data: { breadcrumbs: 'iSCSI' },
         children: [
           {
@@ -207,7 +211,7 @@ const routes: Routes = [
   {
     path: 'cephfs',
     component: CephfsListComponent,
-    canActivate: [AuthGuardService],
+    canActivate: [FeatureTogglesGuardService, AuthGuardService],
     data: { breadcrumbs: 'Filesystems' }
   },
   // Object Gateway
@@ -219,7 +223,7 @@ const routes: Routes = [
   },
   {
     path: 'rgw',
-    canActivateChild: [ModuleStatusGuardService, AuthGuardService],
+    canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService, AuthGuardService],
     data: {
       moduleStatusGuardConfig: {
         apiPath: 'rgw',

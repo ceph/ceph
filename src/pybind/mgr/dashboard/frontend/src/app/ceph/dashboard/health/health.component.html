@@ -1,4 +1,4 @@
-<div *ngIf="healthData"
+<div *ngIf="healthData && enabledFeature$ | async as enabledFeature"
      class="container-fluid">
   <cd-info-group groupTitle="Status"
                  i18n-groupTitle
@@ -92,13 +92,13 @@
                   link="/rgw/daemon"
                   class="col-sm-6 col-md-4 col-lg-3"
                   contentClass="content-medium content-highlight"
-                  *ngIf="healthData.rgw != null">
+                  *ngIf="enabledFeature.rgw && healthData.rgw != null">
       {{ healthData.rgw }} total
     </cd-info-card>
     <cd-info-card cardTitle="Metadata Servers"
                   i18n-cardTitle
                   class="col-sm-6 col-md-4 col-lg-3"
-                  *ngIf="(healthData.fs_map | mdsSummary) as transformedResult"
+                  *ngIf="(enabledFeature.cephfs && healthData.fs_map | mdsSummary) as transformedResult"
                   [contentClass]="(transformedResult.length > 1 ? 'text-area-size-2' : '') + ' content-highlight'">
       <span *ngFor="let result of transformedResult"
             [ngClass]="result.class">
@@ -111,7 +111,7 @@
                   link="/block/iscsi"
                   class="col-sm-6 col-md-4 col-lg-3"
                   contentClass="content-medium content-highlight"
-                  *ngIf="healthData.iscsi_daemons != null">
+                  *ngIf="enabledFeature.iscsi && healthData.iscsi_daemons != null">
       {{ healthData.iscsi_daemons }} total
     </cd-info-card>
   </cd-info-group>

@@ -352,6 +352,30 @@ def CLIReadCommand(prefix, args="", desc=""):
 def CLIWriteCommand(prefix, args="", desc=""):
     return CLICommand(prefix, args, desc, "w")
 
+class Option(dict):
+    """
+    Helper class to declare options for MODULE_OPTIONS list.
+
+    Caveat: it uses argument names matching Python keywords (type, min, max),
+    so any further processing should happen in a separate method.
+
+    TODO: type validation.
+    """
+    def __init__(
+            self, name,
+            default=None,
+            type='str',
+            desc=None, longdesc=None,
+            min=None, max=None,
+            enum_allowed=None,
+            see_also=None,
+            tags=None,
+            runtime=False,
+    ):
+        super(Option, self).__init__(
+            (k, v) for k, v in vars().items()
+            if k != 'self' and v is not None)
+
 
 class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
     """

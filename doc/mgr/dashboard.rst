@@ -74,7 +74,7 @@ various aspects of your Ceph cluster:
   modification. Copy or clone snapshots, flatten cloned images.
 * **RBD mirroring**: Enable and configure RBD mirroring to a remote Ceph server.
   Lists all active sync daemons and their status, pools and RBD images including
-  their synchronization state. 
+  their synchronization state.
 * **CephFS**: Lists all active filesystem clients and associated pools,
   including their usage statistics.
 * **Object Gateway**: Lists all active object gateways and their performance
@@ -313,16 +313,16 @@ mgr/prometheus/>`_ of the prometheus module.
 
 #. Add the Dashboards to Grafana:
 
-   Dashboards can be added to Grafana by importing dashboard jsons. 
+   Dashboards can be added to Grafana by importing dashboard jsons.
    Following command can be used for downloading json files::
-	
+
 	wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/<Dashboard-name>.json
 
    You can find all the dashboard jsons `here <https://github.com/ceph/ceph/tree/
    master/monitoring/grafana/dashboards>`_ .
 
    For Example, for ceph-cluster overview you can use::
-	
+
         wget https://raw.githubusercontent.com/ceph/ceph/master/monitoring/grafana/dashboards/ceph-cluster.json
 
 #. Configure Grafana in `/etc/grafana/grafana.ini` to adapt anonymous mode::
@@ -762,3 +762,11 @@ NFS-Ganesha cluster.
 When configuring the Ceph Dashboard with multiple NFS-Ganesha clusters, the
 Web UI will automatically allow to choose to which cluster an export belongs.
 
+
+Plug-ins
+--------
+
+Dashboard Plug-ins allow to extend the functionality of the dashboard in a modular
+and loosely coupled approach.
+
+.. include:: dashboard_plugins/feature_toggles.inc.rst
