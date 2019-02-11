@@ -52,7 +52,7 @@ setup(
                       'tox',
                       'gevent',
                       # For teuthology-coverage
-                      'MySQL-python == 1.2.3',
+                      'mysqlclient == 1.4.2',
                       'PyYAML',
                       'argparse >= 1.2.1',
                       'beanstalkc >= 0.2.0',
