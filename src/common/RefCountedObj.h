@@ -75,7 +75,7 @@ public:
   }
 
 private:
-  mutable std::atomic<uint64_t> nref;
+  mutable std::atomic<int64_t> nref;
   CephContext *cct;
 };
 
