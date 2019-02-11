@@ -75,13 +75,13 @@ void add_group_spec_options(po::options_description *pos,
     pos->add_options()
       ((get_name_prefix(modifier) + GROUP_SPEC).c_str(),
        (get_description_prefix(modifier) + "group specification\n" +
-         "(example: [<pool-name>/[<namespace-name>/]]<group-name>)").c_str());
+         "(example: [<pool-name>/[<namespace>/]]<group-name>)").c_str());
   } else {
     add_snap_option(opt, modifier);
     pos->add_options()
       ((get_name_prefix(modifier) + GROUP_SNAP_SPEC).c_str(),
        (get_description_prefix(modifier) + "group specification\n" +
-         "(example: [<pool-name>/[<namespace-name>/]]<group-name>@<snap-name>)").c_str());
+         "(example: [<pool-name>/[<namespace>/]]<group-name>@<snap-name>)").c_str());
   }
 }
 
@@ -769,7 +769,7 @@ void get_add_arguments(po::options_description *positional,
   positional->add_options()
     (GROUP_SPEC.c_str(),
      "group specification\n"
-     "(example: [<pool-name>/[<namespace-name>/]]<group-name>)");
+     "(example: [<pool-name>/[<namespace>/]]<group-name>)");
 
   add_prefixed_pool_option(options, "group");
   add_prefixed_namespace_option(options, "group");
@@ -778,7 +778,7 @@ void get_add_arguments(po::options_description *positional,
   positional->add_options()
     (at::IMAGE_SPEC.c_str(),
      "image specification\n"
-     "(example: [<pool-name>/[<namespace-name>/]]<image-name>)");
+     "(example: [<pool-name>/[<namespace>/]]<image-name>)");
 
   add_prefixed_pool_option(options, "image");
   add_prefixed_namespace_option(options, "image");
@@ -793,7 +793,7 @@ void get_remove_image_arguments(po::options_description *positional,
   positional->add_options()
     (GROUP_SPEC.c_str(),
      "group specification\n"
-     "(example: [<pool-name>/[<namespace-name>/]]<group-name>)");
+     "(example: [<pool-name>/[<namespace>/]]<group-name>)");
 
   add_prefixed_pool_option(options, "group");
   add_prefixed_namespace_option(options, "group");
@@ -802,7 +802,7 @@ void get_remove_image_arguments(po::options_description *positional,
   positional->add_options()
     (at::IMAGE_SPEC.c_str(),
      "image specification\n"
-     "(example: [<pool-name>/[<namespace-name>/]]<image-name>)");
+     "(example: [<pool-name>/[<namespace>/]]<image-name>)");
 
   add_prefixed_pool_option(options, "image");
   add_prefixed_namespace_option(options, "image");

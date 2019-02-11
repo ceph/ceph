@@ -105,7 +105,7 @@ int execute_move(const po::variables_map &vm,
 void get_remove_arguments(po::options_description *positional,
                           po::options_description *options) {
   positional->add_options()
-    (at::IMAGE_ID.c_str(), "image id\n(example: [<pool-name>/[<namespace-name>/]]<image-id>)");
+    (at::IMAGE_ID.c_str(), "image id\n(example: [<pool-name>/[<namespace>/]]<image-id>)");
   at::add_pool_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_namespace_option(options, at::ARGUMENT_MODIFIER_NONE);
   at::add_image_id_option(options);
