@@ -47,9 +47,9 @@ private:
   void handle_reply_header(bufferptr bp_head,
                            const boost::system::error_code& ec, size_t bytes_transferred);
   void read_reply_data(bufferptr&& bp_head, bufferptr&& bp_data,
-                       const uint64_t data_len, const uint64_t seq_id);
+                       const uint64_t data_len);
   void handle_reply_data(bufferptr bp_head, bufferptr bp_data,
-                        const uint64_t data_len, const uint64_t seq_id,
+                        const uint64_t data_len,
                         const boost::system::error_code& ec, size_t bytes_transferred);
 private:
 
@@ -73,7 +73,7 @@ private:
   Mutex m_lock;
   std::map<uint64_t, ObjectCacheRequest*> m_seq_to_req;
   bufferlist m_outcoming_bl;
-  char* m_header_buffer;
+  bufferptr m_bp_header;
 };
 
 } // namespace immutable_obj_cache
