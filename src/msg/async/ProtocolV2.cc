@@ -342,7 +342,9 @@ struct ServerIdentFrame
 };
 
 struct ReconnectFrame
-    : public SignedEncryptedFrame<ReconnectFrame, entity_addrvec_t, uint64_t,
+    : public SignedEncryptedFrame<ReconnectFrame, entity_addrvec_t,
+				  entity_addr_t,
+				  uint64_t,
 				  int64_t,
                                   uint64_t, uint64_t,
 				  uint64_t, uint64_t,
@@ -351,13 +353,14 @@ struct ReconnectFrame
   using SignedEncryptedFrame::SignedEncryptedFrame;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
-  inline uint64_t &cookie() { return get_val<1>(); }
-  inline int64_t &gid() { return get_val<2>(); }
-  inline uint64_t &global_seq() { return get_val<3>(); }
-  inline uint64_t &connect_seq() { return get_val<4>(); }
-  inline uint64_t &supported_features() { return get_val<5>(); }
-  inline uint64_t &required_features() { return get_val<6>(); }
-  inline uint64_t &msg_seq() { return get_val<7>(); }
+  inline entity_addr_t &target_addr() { return get_val<1>(); }
+  inline uint64_t &cookie() { return get_val<2>(); }
+  inline int64_t &gid() { return get_val<3>(); }
+  inline uint64_t &global_seq() { return get_val<4>(); }
+  inline uint64_t &connect_seq() { return get_val<5>(); }
+  inline uint64_t &supported_features() { return get_val<6>(); }
+  inline uint64_t &required_features() { return get_val<7>(); }
+  inline uint64_t &msg_seq() { return get_val<8>(); }
 };
 
 struct ResetFrame : public Frame<ResetFrame> {
@@ -2255,7 +2258,9 @@ CtPtr ProtocolV2::send_client_ident() {
 CtPtr ProtocolV2::send_reconnect() {
   ldout(cct, 20) << __func__ << dendl;
 
-  ReconnectFrame reconnect(this, messenger->get_myaddrs(), cookie,
+  ReconnectFrame reconnect(this, messenger->get_myaddrs(),
+			   connection->target_addr,
+			   cookie,
 			   messenger->get_myname().num(),
 			   global_seq,
                            connect_seq,
@@ -2593,11 +2598,20 @@ CtPtr ProtocolV2::handle_reconnect(char *payload, uint32_t length) {
 
   ldout(cct, 5) << __func__
                 << " received reconnect: cookie=" << reconnect.cookie()
+		<< " target_addr=" << reconnect.target_addr()
 		<< " gid=" << reconnect.gid()
                 << " gs=" << reconnect.global_seq()
                 << " cs=" << reconnect.connect_seq()
                 << " ms=" << reconnect.msg_seq()
 		<< dendl;
+
+  if (!messenger->get_myaddrs().contains(reconnect.target_addr())) {
+    ldout(cct,5) << __func__ << " peer is trying to reach "
+		 << reconnect.target_addr()
+		 << " which is not us (" << messenger->get_myaddrs() << ")"
+		 << dendl;
+    return _fault();
+  }
 
   // Should we check if one of the ident.addrs match connection->target_addr
   // as we do in ProtocolV1?
