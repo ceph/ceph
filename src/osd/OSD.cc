@@ -5262,6 +5262,7 @@ bool OSD::heartbeat_reset(Connection *con)
 {
   std::lock_guard l(heartbeat_lock);
   auto s = con->get_priv();
+  con->set_priv(nullptr);
   if (s) {
     if (is_stopping()) {
       return true;
