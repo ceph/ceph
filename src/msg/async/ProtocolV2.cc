@@ -20,6 +20,8 @@ ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
                 << this << " :" << connection->port
                 << " s=" << get_state_name(state) << " pgs=" << peer_global_seq
                 << " cs=" << connect_seq << " l=" << connection->policy.lossy
+                << " rx=" << session_stream_handlers.rx.get()
+                << " tx=" << session_stream_handlers.tx.get()
                 << ").";
 }
 
@@ -109,19 +111,25 @@ protected:
   ceph::bufferlist payload;
   ceph::bufferlist::contiguous_filler preamble_filler;
 
-public:
-  Frame() : preamble_filler(payload.append_hole(FRAME_PREAMBLE_SIZE)) {}
-
-  bufferlist &get_buffer(const uint32_t extra_payload_len = 0) {
-    __le32 rest_len = frame_size - FRAME_PREAMBLE_SIZE + extra_payload_len;
+  void fill_preamble(const uint32_t frame_size) {
+    __le32 rest_len = frame_size - FRAME_PREAMBLE_SIZE;
     preamble_filler.copy_in(sizeof(rest_len),
 			    reinterpret_cast<const char*>(&rest_len));
 
     __le32 tag = static_cast<uint32_t>(T::tag);
     preamble_filler.copy_in(sizeof(tag),
 			    reinterpret_cast<const char*>(&tag));
+    uint32_t db = 0xbaadf00d;
+    preamble_filler.copy_in(sizeof(tag),
+			    reinterpret_cast<const char*>(&db));
     ceph_assert(tag != 0);
+  }
 
+public:
+  Frame() : preamble_filler(payload.append_hole(FRAME_PREAMBLE_SIZE)) {}
+
+  ceph::bufferlist &get_buffer() {
+    fill_preamble(payload.length());
     return payload;
   }
 
@@ -276,25 +284,29 @@ struct AuthDoneFrame
 
 template <class T, typename... Args>
 struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
+  ceph::bufferlist &get_buffer() {
+    // In contrast to Frame::get_buffer() we don't fill preamble here.
+    return this->payload;
+  }
+
   SignedEncryptedFrame(ProtocolV2 &protocol, const Args &... args)
       : PayloadFrame<T, Args...>(args...) {
     ceph_assert(protocol.session_stream_handlers.tx);
 
     protocol.session_stream_handlers.tx->reset_tx_handler({
-      8, this->payload.length() - 8,
+      this->payload.length()
     });
 
-    // NOTE: this is just for the makeshift commits
-    ceph::bufferlist trans_bl;
-    this->payload.splice(8, this->payload.length() - 8, &trans_bl);
-    std::swap(trans_bl, this->payload);
-
-    this->preamble_filler = protocol.session_stream_handlers.tx->reserve(8);
+    auto exp_size = this->payload.length() + 16;
+    // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart
+    // from auth tag size
+    this->fill_preamble(this->payload.length() + 16);
 
     protocol.session_stream_handlers.tx->authenticated_encrypt_update(
       std::move(this->payload));
     this->payload = \
       protocol.session_stream_handlers.tx->authenticated_encrypt_final();
+    ceph_assert(exp_size == this->payload.length());
   }
 
   SignedEncryptedFrame(ProtocolV2 &protocol, char *payload, uint32_t length)
@@ -305,6 +317,7 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
     ceph::bufferlist plain_bl = \
       protocol.session_stream_handlers.rx->authenticated_decrypt_update_final(
         std::move(bl), 8);
+    ceph_assert(plain_bl.length() + 16 == length);
     this->decode_frame(plain_bl.c_str(), plain_bl.length());
   }
 };
@@ -441,48 +454,23 @@ struct MessageHeaderFrame
     : public PayloadFrame<MessageHeaderFrame, ceph_msg_header2> {
   static const ProtocolV2::Tag tag = ProtocolV2::Tag::MESSAGE;
 
-  // XXX, TODO: MessageHeaderFrame needs to be aware about `protocol` only
-  // because lacking preamble encryption. This will be dropped, altogether
-  // with the magics (8 is for size and tag), in subsequent commits.
-  MessageHeaderFrame(ProtocolV2 &protocol,
-		     const ceph_msg_header2 &msghdr,
+  ceph::bufferlist &get_buffer() {
+    // In contrast to Frame::get_buffer() we don't fill preamble here.
+    return this->payload;
+  }
+
+  MessageHeaderFrame(const ceph_msg_header2 &msghdr,
 		     const uint32_t front_len,
 		     const uint32_t middle_len,
 		     const uint32_t data_len)
       : PayloadFrame<MessageHeaderFrame, ceph_msg_header2>(msghdr)
   {
-    ceph_assert(protocol.session_stream_handlers.tx);
-
-    protocol.session_stream_handlers.tx->reset_tx_handler({
-      8,
-      this->payload.length(),
-      front_len,
-      middle_len,
-      data_len
-    });
-
-    ceph::bufferlist trans_bl;
-    this->payload.splice(8, this->payload.length() - 8, &trans_bl);
-    std::swap(trans_bl, this->payload);
-
-    this->preamble_filler = protocol.session_stream_handlers.tx->reserve(8);
-
-    protocol.session_stream_handlers.tx->authenticated_encrypt_update(
-      std::move(this->payload));
+    fill_preamble(this->payload.length() + front_len + middle_len + data_len + 16);
   }
 
-  MessageHeaderFrame(ProtocolV2 &protocol, char *payload, uint32_t length)
+  MessageHeaderFrame(ceph::bufferlist&& text)
       : PayloadFrame<MessageHeaderFrame, ceph_msg_header2>()
   {
-    ceph::bufferlist text;
-    text.push_back(buffer::create_static(length, payload));
-
-    if (protocol.auth_meta->is_mode_secure()) {
-      ceph_assert(protocol.session_stream_handlers.rx);
-
-      text = protocol.session_stream_handlers.rx->authenticated_decrypt_update(
-	std::move(text), 8);
-    }
     this->decode_frame(text.c_str(), text.length());
   }
 
@@ -906,13 +894,27 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
                     sizeof(header2) - sizeof(header2.header_crc));
   }
 
-  MessageHeaderFrame message(*this, header2,
-    m->get_payload().length(),
-    m->get_middle().length(),
-    m->get_data().length());
+  MessageHeaderFrame message(header2,
+			     m->get_payload().length(),
+			     m->get_middle().length(),
+			     m->get_data().length());
 
   if (auth_meta->is_mode_secure()) {
     ceph_assert(session_stream_handlers.tx);
+
+    // let's cipher allocate one huge buffer for entire ciphertext.
+    // NOTE: ultimately we'll align these sizes to cipher's block size.
+    // AES-GCM can live without that as it's basically stream cipher.
+    session_stream_handlers.tx->reset_tx_handler({
+      message.get_buffer().length(),
+      m->get_payload().length(),
+      m->get_middle().length(),
+      m->get_data().length()
+    });
+
+    ceph_assert(message.get_buffer().length());
+    session_stream_handlers.tx->authenticated_encrypt_update(
+      std::move(message.get_buffer()));
 
     // receiver uses "front" for "payload"
     // TODO: switch TxHandler from `bl&&` to `const bl&`.
@@ -1337,12 +1339,28 @@ CtPtr ProtocolV2::handle_read_frame_length_and_tag(char *buffer, int r) {
   ceph::bufferlist preamble;
   preamble.push_back(buffer::create_static(FRAME_PREAMBLE_SIZE, buffer));
 
+  ldout(cct, 30) << __func__ << " preamble\n";
+  preamble.hexdump(*_dout);
+  *_dout << dendl;
+
   if (auth_meta->is_mode_secure()) {
     ceph_assert(session_stream_handlers.rx);
     session_stream_handlers.rx->reset_rx_handler();
+    preamble = session_stream_handlers.rx->authenticated_decrypt_update(
+      std::move(preamble), 8);
+    ldout(cct, 10) << __func__ << " got encrypted preamble."
+                   << " after decrypt premable.length()=" << preamble.length()
+                   << dendl;
+    ldout(cct, 30) << __func__ << " preamble after decrypt\n";
+    preamble.hexdump(*_dout);
+    *_dout << dendl;
   }
 
   try {
+    ldout(cct, 30) << __func__ << " preamble after decrypt\n";
+    preamble.hexdump(*_dout);
+    *_dout << dendl;
+
     auto ti = preamble.cbegin();
     uint32_t frame_len;
     decode(frame_len, ti);
@@ -1509,7 +1527,15 @@ CtPtr ProtocolV2::handle_message_header(char *buffer, int r) {
   const uint32_t header_len = calculate_payload_size(
     session_security.rx.get(), sizeof(ceph_msg_header2));
 
-  MessageHeaderFrame header_frame(*this, buffer, header_len);
+  ceph::bufferlist text;
+  text.push_back(buffer::create_static(header_len, buffer));
+  if (auth_meta->is_mode_secure()) {
+    ceph_assert(session_stream_handlers.rx);
+
+    text = session_stream_handlers.rx->authenticated_decrypt_update(
+      std::move(text), 8);
+  }
+  MessageHeaderFrame header_frame(std::move(text));
   ceph_msg_header2 &header = header_frame.header();
 
   ldout(cct, 20) << __func__ << " got envelope type=" << header.type << " src "
