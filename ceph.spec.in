@@ -439,6 +439,7 @@ Recommends:	ceph-mgr-dashboard = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-cloud = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
+Recommends:	ceph-mgr-ssh = %{_epoch_prefix}%{version}-%{release}
 %endif
 %description mgr
 ceph-mgr enables python modules that provide services (such as the REST
@@ -507,6 +508,18 @@ Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
 %description mgr-rook
 ceph-mgr-rook is a ceph-mgr plugin for orchestration functions using
 a Rook backend.
+
+%package mgr-ssh
+Summary:        ceph-mgr ssh module
+BuildArch:	noarch
+%if 0%{?suse_version}
+Group:          System/Filesystems
+%endif
+Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
+Requires:       python-remoto
+%description mgr-ssh
+ceph-mgr-ssh is a ceph-mgr module for orchestration functions using
+direct SSH connections for management operations.
 
 %package fuse
 Summary:	Ceph fuse-based client
@@ -1579,6 +1592,19 @@ if [ $1 -eq 1 ] ; then
 fi
 
 %postun mgr-rook
+if [ $1 -eq 1 ] ; then
+    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
+fi
+
+%files mgr-ssh
+%{_datadir}/ceph/mgr/ssh
+
+%post mgr-ssh
+if [ $1 -eq 1 ] ; then
+    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
+fi
+
+%postun mgr-ssh
 if [ $1 -eq 1 ] ; then
     /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
 fi
