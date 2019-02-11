@@ -29,6 +29,7 @@
 #include "common/debug.h"
 #include "include/buffer.h"
 #include "common/ceph_crypto.h"
+#include "common/errno.h"
 #include "include/compat.h"
 #include "chain_xattr.h"
 
@@ -176,10 +177,11 @@ int LFNIndex::fsync_dir(const vector<string> &path)
   maybe_inject_failure();
   int r = ::fsync(fd);
   maybe_inject_failure();
-  if (r < 0)
-    return -errno;
-  else
-    return 0;
+  if (r < 0) {
+    derr << __func__ << " fsync failed: " << cpp_strerror(errno) << dendl;
+    ceph_abort();
+  }
+  return 0;
 }
 
 int LFNIndex::link_object(const vector<string> &from,
