@@ -101,7 +101,7 @@ class TestProgress(MgrTestCase):
                               timeout=self.EVENT_CREATION_PERIOD)
         ev = self._all_events()[0]
         log.info(json.dumps(ev, indent=1))
-        self.assertIn("Rebalancing after OSD 0 marked out", ev['message'])
+        self.assertIn("Rebalancing after osd.0 marked out", ev['message'])
 
         return ev
 

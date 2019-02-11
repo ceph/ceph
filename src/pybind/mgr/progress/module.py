@@ -6,11 +6,10 @@ import uuid
 import json
 
 
-# How often to potentially write back any dirty events (event history
-# persistence is best effort!
-PERSIST_PERIOD = 5
-
 ENCODING_VERSION = 1
+
+# keep a global reference to the module so we can use it from Event methods
+_module = None
 
 
 class Event(object):
@@ -27,6 +26,12 @@ class Event(object):
         self.started_at = datetime.datetime.utcnow()
 
         self.id = None
+
+    def _refresh(self):
+        global _module
+        _module.log.debug('refreshing mgr for %s (%s) at %f' % (self.id, self._message,
+                                                                self._progress))
+        _module.update_progress_event(self.id, self._message, self._progress)
 
     @property
     def message(self):
@@ -98,9 +103,11 @@ class RemoteEvent(Event):
         super(RemoteEvent, self).__init__(message, refs)
         self.id = my_id
         self._progress = 0.0
+        self._refresh()
 
     def set_progress(self, progress):
         self._progress = progress
+        self._refresh()
 
     @property
     def progress(self):
@@ -129,6 +136,7 @@ class PgRecoveryEvent(Event):
         self._progress = 0.0
 
         self.id = str(uuid.uuid4())
+        self._refresh()
 
     @property
     def evacuating_osds(self):
@@ -204,6 +212,7 @@ class PgRecoveryEvent(Event):
         completed_pgs = self._original_pg_count - len(self._pgs)
         self._progress = (completed_pgs + complete_accumulate)\
             / self._original_pg_count
+        self._refresh()
 
         log.info("Updated progress to {0} ({1})".format(
             self._progress, self._message
@@ -242,6 +251,23 @@ class Module(MgrModule):
          "perm": "rw"}
     ]
 
+    MODULE_OPTIONS = [
+        {
+            'name': 'max_completed_events',
+            'default': 50,
+            'type': 'int',
+            'desc': 'number of past completed events to remember',
+            'runtime': True,
+        },
+        {
+            'name': 'persist_interval',
+            'default': 5,
+            'type': 'secs',
+            'desc': 'how frequently to persist completed events',
+            'runtime': True,
+        },
+    ]
+
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
 
@@ -256,6 +282,16 @@ class Module(MgrModule):
         self._latest_osdmap = None
 
         self._dirty = False
+
+        global _module
+        _module = self
+
+    def config_notify(self):
+        for opt in self.MODULE_OPTIONS:
+            setattr(self,
+                    opt['name'],
+                    self.get_module_option(opt['name']))
+            self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
     def _osd_out(self, old_map, old_dump, new_map, osd_id):
         affected_pgs = []
@@ -312,7 +348,7 @@ class Module(MgrModule):
 
         # TODO: reconcile with existing events referring to this OSD going out
         ev = PgRecoveryEvent(
-            "Rebalancing after OSD {0} marked out".format(osd_id),
+            "Rebalancing after osd.{0} marked out".format(osd_id),
             refs=[("osd", osd_id)],
             which_pgs=affected_pgs,
             evactuate_osds=[osd_id]
@@ -323,7 +359,7 @@ class Module(MgrModule):
     def _osd_in(self, osd_id):
         for ev_id, ev in self._events.items():
             if isinstance(ev, PgRecoveryEvent) and osd_id in ev.evacuating_osds:
-                self.log.info("OSD {0} came back in, cancelling event".format(
+                self.log.info("osd.{0} came back in, cancelling event".format(
                     osd_id
                 ))
                 self._complete(ev)
@@ -399,7 +435,17 @@ class Module(MgrModule):
         for ev in decoded['events']:
             self._completed_events.append(GhostEvent(ev['id'], ev['message'], ev['refs']))
 
+        self._prune_completed_events()
+
+    def _prune_completed_events(self):
+        length = len(self._completed_events)
+        if length > self.max_completed_events:
+            self._completed_events = self._completed_events[length - self.max_completed_events : length]
+            self._dirty = True
+
     def serve(self):
+        self.config_notify()
+        self.clear_all_progress_events()
         self.log.info("Loading...")
 
         self._load()
@@ -416,12 +462,13 @@ class Module(MgrModule):
                 self._save()
                 self._dirty = False
 
-            self._shutdown.wait(timeout=PERSIST_PERIOD)
+            self._shutdown.wait(timeout=self.persist_interval)
 
         self._shutdown.wait()
 
     def shutdown(self):
         self._shutdown.set()
+        self.clear_all_progress_events()
 
     def update(self, ev_id, ev_msg, ev_progress):
         """
@@ -439,16 +486,19 @@ class Module(MgrModule):
                 ev_progress, ev_msg))
 
         ev.set_progress(ev_progress)
+        ev._refresh()
 
     def _complete(self, ev):
         duration = (datetime.datetime.utcnow() - ev.started_at)
         self.log.info("Completed event {0} ({1}) in {2} seconds".format(
             ev.id, ev.message, duration.seconds
         ))
+        self.complete_progress_event(ev.id)
 
         self._completed_events.append(
             GhostEvent(ev.id, ev.message, ev.refs))
         del self._events[ev.id]
+        self._prune_completed_events()
         self._dirty = True
 
     def complete(self, ev_id):

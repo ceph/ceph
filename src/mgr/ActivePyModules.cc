@@ -911,6 +911,35 @@ void ActivePyModules::get_health_checks(health_check_map_t *checks)
   }
 }
 
+void ActivePyModules::update_progress_event(
+  const std::string& evid,
+  const std::string& desc,
+  float progress)
+{
+  std::lock_guard l(lock);
+  auto& pe = progress_events[evid];
+  pe.message = desc;
+  pe.progress = progress;
+}
+
+void ActivePyModules::complete_progress_event(const std::string& evid)
+{
+  std::lock_guard l(lock);
+  progress_events.erase(evid);
+}
+
+void ActivePyModules::clear_all_progress_events()
+{
+  std::lock_guard l(lock);
+  progress_events.clear();
+}
+
+void ActivePyModules::get_progress_events(std::map<std::string,ProgressEvent> *events)
+{
+  std::lock_guard l(lock);
+  *events = progress_events;
+}
+
 void ActivePyModules::config_notify()
 {
   std::lock_guard l(lock);
