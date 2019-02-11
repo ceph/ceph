@@ -60,8 +60,8 @@ TEST(Queue, AsyncRequest)
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
 
-  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_qlen));
-  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_qlen));
 
   context.poll();
   EXPECT_TRUE(context.stopped());
@@ -76,17 +76,17 @@ TEST(Queue, AsyncRequest)
   ASSERT_TRUE(p2);
   EXPECT_EQ(PhaseType::priority, *p2);
 
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_qlen));
-  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_res));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_prio));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_limit));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_cancel));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_res));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_prio));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_limit));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_cancel));
 
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_qlen));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_res));
-  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_prio));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_limit));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_cancel));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_res));
+  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_prio));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_limit));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_cancel));
 }
 
 TEST(Queue, SyncRequest)
@@ -115,17 +115,17 @@ TEST(Queue, SyncRequest)
 
   // We can't see the queue at length 1 as the queue len is decremented as the
   //request is processed
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_qlen));
-  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_res));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_prio));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_limit));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_cancel));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_res));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_prio));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_limit));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_cancel));
 
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_qlen));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_res));
-  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_prio));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_limit));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_cancel));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_res));
+  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_prio));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_limit));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_cancel));
 }
 
 TEST(Queue, RateLimit)
@@ -154,8 +154,8 @@ TEST(Queue, RateLimit)
   EXPECT_FALSE(ec3);
   EXPECT_FALSE(ec4);
 
-  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_qlen));
-  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_qlen));
 
   context.poll();
   EXPECT_TRUE(context.stopped());
@@ -176,17 +176,17 @@ TEST(Queue, RateLimit)
   ASSERT_TRUE(ec4);
   EXPECT_EQ(boost::system::errc::resource_unavailable_try_again, *ec4);
 
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_qlen));
-  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_res));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_prio));
-  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_limit));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_cancel));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_res));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_prio));
+  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_limit));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_cancel));
 
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_qlen));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_res));
-  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_prio));
-  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_limit));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_cancel));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_res));
+  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_prio));
+  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_limit));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_cancel));
 }
 
 TEST(Queue, Cancel)
@@ -208,8 +208,8 @@ TEST(Queue, Cancel)
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
 
-  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_qlen));
-  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_qlen));
 
   queue.cancel();
 
@@ -224,17 +224,17 @@ TEST(Queue, Cancel)
   ASSERT_TRUE(ec2);
   EXPECT_EQ(boost::asio::error::operation_aborted, *ec2);
 
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_qlen));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_res));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_prio));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_limit));
-  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_cancel));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_res));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_prio));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_limit));
+  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_cancel));
 
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_qlen));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_res));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_prio));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_limit));
-  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_cancel));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_res));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_prio));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_limit));
+  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_cancel));
 }
 
 TEST(Queue, CancelClient)
@@ -256,8 +256,8 @@ TEST(Queue, CancelClient)
   EXPECT_FALSE(ec1);
   EXPECT_FALSE(ec2);
 
-  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_qlen));
-  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_qlen));
 
   queue.cancel(client_id::admin);
 
@@ -275,17 +275,17 @@ TEST(Queue, CancelClient)
   ASSERT_TRUE(p2);
   EXPECT_EQ(PhaseType::priority, *p2);
 
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_qlen));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_res));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_prio));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_limit));
-  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_cancel));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_res));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_prio));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_limit));
+  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_cancel));
 
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_qlen));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_res));
-  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_prio));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_limit));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_cancel));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_res));
+  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_prio));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_limit));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_cancel));
 }
 
 TEST(Queue, CancelOnDestructor)
@@ -307,8 +307,8 @@ TEST(Queue, CancelOnDestructor)
     queue.async_request(client_id::admin, {}, now, 1, capture(ec1, p1));
     queue.async_request(client_id::auth, {}, now, 1, capture(ec2, p2));
 
-    EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_qlen));
-    EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_qlen));
+    EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_qlen));
+    EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_qlen));
   }
 
   EXPECT_FALSE(ec1);
@@ -322,17 +322,17 @@ TEST(Queue, CancelOnDestructor)
   ASSERT_TRUE(ec2);
   EXPECT_EQ(boost::asio::error::operation_aborted, *ec2);
 
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_qlen));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_res));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_prio));
-  EXPECT_EQ(0, counters(client_id::admin)->get(queue_counters::l_limit));
-  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_cancel));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_res));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_prio));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_limit));
+  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_cancel));
 
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_qlen));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_res));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_prio));
-  EXPECT_EQ(0, counters(client_id::auth)->get(queue_counters::l_limit));
-  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_cancel));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_res));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_prio));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_limit));
+  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_cancel));
 }
 
 // return a lambda from capture() that's bound to run on the given executor
@@ -365,8 +365,8 @@ TEST(Queue, CrossExecutorRequest)
   queue.async_request(client_id::admin, {}, now, 1, capture(ex2, ec1, p1));
   queue.async_request(client_id::auth, {}, now, 1, capture(ex2, ec2, p2));
 
-  EXPECT_EQ(1, counters(client_id::admin)->get(queue_counters::l_qlen));
-  EXPECT_EQ(1, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_qlen));
 
   callback_context.poll();
   // maintains work on callback executor while in queue
