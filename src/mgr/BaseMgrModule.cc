@@ -658,6 +658,52 @@ ceph_have_mon_connection(BaseMgrModule *self, PyObject *args)
   }
 }
 
+static PyObject*
+ceph_update_progress_event(BaseMgrModule *self, PyObject *args)
+{
+  char *evid = nullptr;
+  char *desc = nullptr;
+  float progress = 0.0;
+  if (!PyArg_ParseTuple(args, "ssf:ceph_update_progress_event",
+			&evid, &desc, &progress)) {
+    return nullptr;
+  }
+
+  PyThreadState *tstate = PyEval_SaveThread();
+  self->py_modules->update_progress_event(evid, desc, progress);
+  PyEval_RestoreThread(tstate);
+
+  Py_RETURN_NONE;
+}
+
+static PyObject*
+ceph_complete_progress_event(BaseMgrModule *self, PyObject *args)
+{
+  char *evid = nullptr;
+  if (!PyArg_ParseTuple(args, "s:ceph_complete_progress_event",
+			&evid)) {
+    return nullptr;
+  }
+
+  PyThreadState *tstate = PyEval_SaveThread();
+  self->py_modules->complete_progress_event(evid);
+  PyEval_RestoreThread(tstate);
+
+  Py_RETURN_NONE;
+}
+
+static PyObject*
+ceph_clear_all_progress_events(BaseMgrModule *self, PyObject *args)
+{
+  PyThreadState *tstate = PyEval_SaveThread();
+  self->py_modules->clear_all_progress_events();
+  PyEval_RestoreThread(tstate);
+
+  Py_RETURN_NONE;
+}
+
+
+
 static PyObject *
 ceph_dispatch_remote(BaseMgrModule *self, PyObject *args)
 {
@@ -1046,6 +1092,13 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_have_mon_connection", (PyCFunction)ceph_have_mon_connection,
     METH_NOARGS, "Find out whether this mgr daemon currently has "
                  "a connection to a monitor"},
+
+  {"_ceph_update_progress_event", (PyCFunction)ceph_update_progress_event,
+   METH_VARARGS, "Update status of a progress event"},
+  {"_ceph_complete_progress_event", (PyCFunction)ceph_complete_progress_event,
+   METH_VARARGS, "Complete a progress event"},
+  {"_ceph_clear_all_progress_events", (PyCFunction)ceph_clear_all_progress_events,
+   METH_NOARGS, "Clear all progress events"},
 
   {"_ceph_dispatch_remote", (PyCFunction)ceph_dispatch_remote,
     METH_VARARGS, "Dispatch a call to another module"},
