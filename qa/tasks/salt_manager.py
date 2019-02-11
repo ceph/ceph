@@ -242,6 +242,7 @@ class SaltManager(object):
         cmd = "sudo salt \\* saltutil.sync_all"
         if quiet:
             cmd += " 2>/dev/null"
+        cmd += " || true"
         with safe_while(sleep=15, tries=10,
                         action=cmd) as proceed:
             while proceed():
