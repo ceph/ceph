@@ -2145,43 +2145,35 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
     bufferlist newbuf, rxbuf;
     bufferlist::iterator blp;
-    int rxbuf_version = 0;
 	
+    map<ceph_tid_t,pair<bufferlist,int> >::iterator p = connection_state->rx_buffers.find(header.tid);
+    if (p != connection_state->rx_buffers.end()) {
+      ldout(msgr->cct,10) << "reader seleting rx buffer v " << p->second.second
+	<< " at offset " << offset
+	<< " len " << p->second.first.length() << dendl;
+      rxbuf = p->second.first;
+      // make sure it's big enough
+      if (rxbuf.length() < data_len)
+	rxbuf.push_back(buffer::create(data_len - rxbuf.length()));
+      blp = p->second.first.begin();
+    } else {
+      ldout(msgr->cct,20) << "reader allocating new rx buffer at offset " << offset << dendl;
+      alloc_aligned_buffer(newbuf, data_len, data_off);
+      blp = newbuf.begin();
+    }
+
     while (left > 0) {
       // wait for data
       if (tcp_read_wait() < 0)
 	goto out_dethrottle;
 
-      // get a buffer
-      connection_state->lock.Lock();
-      map<ceph_tid_t,pair<bufferlist,int> >::iterator p = connection_state->rx_buffers.find(header.tid);
-      if (p != connection_state->rx_buffers.end()) {
-	if (rxbuf.length() == 0 || p->second.second != rxbuf_version) {
-	  ldout(msgr->cct,10) << "reader seleting rx buffer v " << p->second.second
-		   << " at offset " << offset
-		   << " len " << p->second.first.length() << dendl;
-	  rxbuf = p->second.first;
-	  rxbuf_version = p->second.second;
-	  // make sure it's big enough
-	  if (rxbuf.length() < data_len)
-	    rxbuf.push_back(buffer::create(data_len - rxbuf.length()));
-	  blp = p->second.first.begin();
-	  blp.advance(offset);
-	}
-      } else {
-	if (!newbuf.length()) {
-	  ldout(msgr->cct,20) << "reader allocating new rx buffer at offset " << offset << dendl;
-	  alloc_aligned_buffer(newbuf, data_len, data_off);
-	  blp = newbuf.begin();
-	  blp.advance(offset);
-	}
-      }
       bufferptr bp = blp.get_current_ptr();
       int read = std::min(bp.length(), left);
       ldout(msgr->cct,20) << "reader reading nonblocking into " << (void*)bp.c_str() << " len " << bp.length() << dendl;
+      connection_state->lock.Lock();
       ssize_t got = tcp_read_nonblocking(bp.c_str(), read);
-      ldout(msgr->cct,30) << "reader read " << got << " of " << read << dendl;
       connection_state->lock.Unlock();
+      ldout(msgr->cct,30) << "reader read " << got << " of " << read << dendl;
       if (got < 0)
 	goto out_dethrottle;
       if (got > 0) {
