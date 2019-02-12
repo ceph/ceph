@@ -187,7 +187,10 @@ Depends: ceph-base (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
-Recommends: ceph-mgr-diskprediction-local, ceph-mgr-diskprediction-cloud, ceph-mgr-rook
+Recommends: ceph-mgr-dashboard,
+            ceph-mgr-diskprediction-local,
+            ceph-mgr-diskprediction-cloud,
+            ceph-mgr-rook
 Suggests: python-influxdb
 Replaces: ceph (<< 0.93-417),
 Breaks: ceph (<< 0.93-417),
@@ -198,6 +201,29 @@ Description: manager for the ceph distributed storage system
  .
  This package contains the manager daemon, which is used to expose high
  level management and monitoring functionality.
+
+Package: ceph-mgr-dashboard
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         python-cherrypy3,
+         python-jwt,
+         python-openssl,
+         python-bcrypt,
+         python-werkzeug,
+         ${misc:Depends},
+         ${python:Depends},
+         ${shlibs:Depends},
+Description: dashboard plugin for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package provides a ceph-mgr plugin, providing a web-based
+ application to monitor and manage many aspects of a Ceph cluster and
+ related components.
+ .
+ See the Dashboard documentation at http://docs.ceph.com/ for details
+ and a detailed feature overview.
 
 Package: ceph-mgr-diskprediction-local
 Architecture: all
