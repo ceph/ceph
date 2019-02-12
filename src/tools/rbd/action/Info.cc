@@ -324,9 +324,6 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
       f->dump_string("id", parent_image_spec.image_id);
       f->dump_string("snapshot", parent_snap_spec.name);
       f->dump_bool("trash", parent_image_spec.trash);
-      if ((features & RBD_FEATURE_MIGRATING) != 0) {
-        f->dump_bool("migration_source", true);
-      }
       f->dump_unsigned("overlap", overlap);
       f->close_section();
     } else {
@@ -338,9 +335,6 @@ static int do_show_info(librados::IoCtx &io_ctx, librbd::Image& image,
                 << parent_snap_spec.name;
       if (parent_image_spec.trash) {
         std::cout << " (trash " << parent_image_spec.image_id << ")";
-      }
-      if ((features & RBD_FEATURE_MIGRATING) != 0) {
-        std::cout << " (migration source)";
       }
       std::cout << std::endl;
       std::cout << "\toverlap: " << byte_u_t(overlap) << std::endl;
