@@ -2,7 +2,7 @@ from __future__ import absolute_import
 import pytest
 
 
-from orchestrator import DriveGroupSpec, DeviceSelection, DriveGroupValidationError
+from orchestrator import DriveGroupSpec, DeviceSelection, DriveGroupValidationError, InventoryDevice
 
 
 def test_DriveGroup():
@@ -34,3 +34,7 @@ def test_drive_selection():
     with pytest.raises(DriveGroupValidationError, match='exclusive'):
         DeviceSelection(paths=['/dev/sda'], rotates=False)
 
+def test_inventory_device():
+    i_d = InventoryDevice()
+    s = i_d.pretty_print()
+    assert len(s)
