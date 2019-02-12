@@ -40,9 +40,9 @@ template<typename T> using Ref = boost::intrusive_ptr<T>;
 class OSD : public ceph::net::Dispatcher,
 	    private OSDMapService {
   seastar::gate gate;
-  seastar::timer<seastar::lowres_clock> beacon_timer;
   const int whoami;
   const uint32_t nonce;
+  seastar::timer<seastar::lowres_clock> beacon_timer;
   // talk with osd
   ceph::net::Messenger* cluster_msgr = nullptr;
   // talk with client/mon/mgr

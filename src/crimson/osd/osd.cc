@@ -36,7 +36,9 @@ using ceph::os::CyanStore;
 
 OSD::OSD(int id, uint32_t nonce)
   : whoami{id},
-    nonce{nonce}
+    nonce{nonce},
+    beacon_timer{[this] { send_beacon(); }},
+    heartbeat_timer{[this] { update_heartbeat_peers(); }}
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
 }
@@ -174,8 +176,6 @@ seastar::future<> OSD::start()
     return heartbeat->start(public_msgr->get_myaddrs(),
                             cluster_msgr->get_myaddrs());
   }).then([this] {
-    beacon_timer.set_callback([this] { send_beacon(); });
-    heartbeat_timer.set_callback([this] { update_heartbeat_peers(); });
     return start_boot();
   });
 }
