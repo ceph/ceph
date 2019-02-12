@@ -12,8 +12,23 @@ describe('Mirroring page', () => {
     Helper.checkConsole();
   });
 
-  it('should open and show breadcrumb', () => {
-    page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('Mirroring');
+  describe('breadcrumb and tab tests', () => {
+    beforeAll(() => {
+      page.navigateTo();
+    });
+
+    it('should open and show breadcrumb', () => {
+      expect(Helper.getBreadcrumbText()).toEqual('Mirroring');
+    });
+
+    it('should show three tabs', () => {
+      expect(Helper.getTabsCount()).toEqual(3);
+    });
+
+    it('should show text for all tabs', () => {
+      expect(Helper.getTabText(0)).toEqual('Issues');
+      expect(Helper.getTabText(1)).toEqual('Syncing');
+      expect(Helper.getTabText(2)).toEqual('Ready');
+    });
   });
 });
