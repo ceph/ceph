@@ -62,4 +62,23 @@ describe('IscsiService', () => {
     const req = httpTesting.expectOne('api/iscsi/target/target_iqn');
     expect(req.request.method).toBe('DELETE');
   });
+
+  it('should call getDiscovery', () => {
+    service.getDiscovery().subscribe();
+    const req = httpTesting.expectOne('api/iscsi/discoveryauth');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call updateDiscovery', () => {
+    service
+      .updateDiscovery({
+        user: 'foo',
+        password: 'bar',
+        mutual_user: 'mutual_foo',
+        mutual_password: 'mutual_bar'
+      })
+      .subscribe();
+    const req = httpTesting.expectOne('api/iscsi/discoveryauth');
+    expect(req.request.method).toBe('PUT');
+  });
 });
