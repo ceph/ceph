@@ -18,6 +18,7 @@
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
 #include "librbd/api/Trash.h"
+#include <boost/scope_exit.hpp>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -168,33 +169,39 @@ int Image<I>::get_parent(I *ictx,
 
   RWLock::RLocker snap_locker(ictx->snap_lock);
   RWLock::RLocker parent_locker(ictx->parent_lock);
-  if (ictx->parent == nullptr) {
+
+  bool release_parent_locks = false;
+  BOOST_SCOPE_EXIT_ALL(ictx, &release_parent_locks) {
+    if (release_parent_locks) {
+      ictx->parent->parent_lock.put_read();
+      ictx->parent->snap_lock.put_read();
+    }
+  };
+
+  // if a migration is in-progress, the true parent is the parent
+  // of the migration source image
+  auto parent = ictx->parent;
+  if (!ictx->migration_info.empty() && ictx->parent != nullptr) {
+    release_parent_locks = true;
+    ictx->parent->snap_lock.get_read();
+    ictx->parent->parent_lock.get_read();
+
+    parent = ictx->parent->parent;
+  }
+
+  if (parent == nullptr) {
     return -ENOENT;
   }
 
-  cls::rbd::ParentImageSpec parent_spec;
-  if (ictx->snap_id == CEPH_NOSNAP) {
-    parent_spec = ictx->parent_md.spec;
-  } else {
-    r = ictx->get_parent_spec(ictx->snap_id, &parent_spec);
-    if (r < 0) {
-      lderr(cct) << "error looking up snapshot id " << ictx->snap_id << dendl;
-      return r;
-    }
-    if (parent_spec.pool_id == -1) {
-      return -ENOENT;
-    }
-  }
+  parent_image->pool_id = parent->md_ctx.get_id();
+  parent_image->pool_name = parent->md_ctx.get_pool_name();
+  parent_image->pool_namespace = parent->md_ctx.get_namespace();
 
-  parent_image->pool_id = parent_spec.pool_id;
-  parent_image->pool_name = ictx->parent->md_ctx.get_pool_name();
-  parent_image->pool_namespace = ictx->parent->md_ctx.get_namespace();
-
-  RWLock::RLocker parent_snap_locker(ictx->parent->snap_lock);
-  parent_snap->id = parent_spec.snap_id;
+  RWLock::RLocker parent_snap_locker(parent->snap_lock);
+  parent_snap->id = parent->snap_id;
   parent_snap->namespace_type = RBD_SNAP_NAMESPACE_TYPE_USER;
-  if (parent_spec.snap_id != CEPH_NOSNAP) {
-    auto snap_info = ictx->parent->get_snap_info(parent_spec.snap_id);
+  if (parent->snap_id != CEPH_NOSNAP) {
+    auto snap_info = parent->get_snap_info(parent->snap_id);
     if (snap_info == nullptr) {
       lderr(cct) << "error finding parent snap name: " << cpp_strerror(r)
                  << dendl;
@@ -206,13 +213,12 @@ int Image<I>::get_parent(I *ictx,
     parent_snap->name = snap_info->name;
   }
 
-  parent_image->image_id = ictx->parent->id;
-  parent_image->image_name = ictx->parent->name;
+  parent_image->image_id = parent->id;
+  parent_image->image_name = parent->name;
   parent_image->trash = true;
 
   librbd::trash_image_info_t trash_info;
-  r = Trash<I>::get(ictx->parent->md_ctx, ictx->parent->id,
-                    &trash_info);
+  r = Trash<I>::get(parent->md_ctx, parent->id, &trash_info);
   if (r == -ENOENT || r == -EOPNOTSUPP) {
     parent_image->trash = false;
   } else if (r < 0) {
