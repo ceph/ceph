@@ -7,7 +7,7 @@
 #include "msg/Messenger.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
-#include "crimson/net/SocketMessenger.h"
+#include "crimson/net/Messenger.h"
 #include "crimson/net/Config.h"
 #include "crimson/thread/Condition.h"
 #include "crimson/thread/Throttle.h"
@@ -39,8 +39,7 @@ struct DummyAuthAuthorizer : public AuthAuthorizer {
 
 struct Server {
   ceph::thread::Throttle byte_throttler;
-  static constexpr int64_t server_num = 0;
-  ceph::net::SocketMessenger msgr{entity_name_t::OSD(server_num), "server", 0};
+  ceph::net::Messenger& msgr;
   struct ServerDispatcher : ceph::net::Dispatcher {
     unsigned count = 0;
     seastar::condition_variable on_reply;
@@ -66,8 +65,9 @@ struct Server {
           new DummyAuthAuthorizer{});
     }
   } dispatcher;
-  Server()
-    : byte_throttler(ceph::net::conf.osd_client_message_size_cap)
+  Server(ceph::net::Messenger& msgr)
+    : byte_throttler(ceph::net::conf.osd_client_message_size_cap),
+      msgr{msgr}
   {
     msgr.set_crc_header();
     msgr.set_crc_data();
@@ -76,8 +76,7 @@ struct Server {
 
 struct Client {
   ceph::thread::Throttle byte_throttler;
-  static constexpr int64_t client_num = 1;
-  ceph::net::SocketMessenger msgr{entity_name_t::OSD(client_num), "client", 0};
+  ceph::net::Messenger& msgr;
   struct ClientDispatcher : ceph::net::Dispatcher {
     unsigned count = 0;
     seastar::condition_variable on_reply;
@@ -89,8 +88,9 @@ struct Client {
       return seastar::now();
     }
   } dispatcher;
-  Client()
-    : byte_throttler(ceph::net::conf.osd_client_message_size_cap)
+  Client(ceph::net::Messenger& msgr)
+    : byte_throttler(ceph::net::conf.osd_client_message_size_cap),
+      msgr{msgr}
   {
     msgr.set_crc_header();
     msgr.set_crc_data();
@@ -276,41 +276,50 @@ seastar_echo(SeastarContext& sc,
 {
   std::cout << "seastar/";
   if (role == echo_role::as_server) {
-    return seastar::do_with(seastar_pingpong::Server{},
-      [&addr, count](auto& server) mutable {
-        std::cout << "server listening at " << addr << std::endl;
-        // bind the server
-        server.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
-                                         &server.byte_throttler);
-        server.msgr.bind(entity_addrvec_t{addr});
-        return server.msgr.start(&server.dispatcher)
-          .then([&dispatcher=server.dispatcher, count] {
-            return dispatcher.on_reply.wait([&dispatcher, count] {
-              return dispatcher.count >= count;
-            });
-          }).finally([&server] {
-            std::cout << "server shutting down" << std::endl;
-            return server.msgr.shutdown();
+    return ceph::net::Messenger::create(entity_name_t::OSD(0), "server", 0,
+                                        seastar::engine().cpu_id())
+      .then([&addr, count] (auto msgr) {
+        return seastar::do_with(seastar_pingpong::Server{*msgr},
+          [&addr, count](auto& server) mutable {
+            std::cout << "server listening at " << addr << std::endl;
+            // bind the server
+            server.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
+                                             &server.byte_throttler);
+            return server.msgr.bind(entity_addrvec_t{addr})
+              .then([&server] {
+                return server.msgr.start(&server.dispatcher);
+              }).then([&dispatcher=server.dispatcher, count] {
+                return dispatcher.on_reply.wait([&dispatcher, count] {
+                  return dispatcher.count >= count;
+                });
+              }).finally([&server] {
+                std::cout << "server shutting down" << std::endl;
+                return server.msgr.shutdown();
+              });
           });
       });
   } else {
-    return seastar::do_with(seastar_pingpong::Client{},
-      [&addr, count](auto& client) {
-        std::cout << "client sending to " << addr << std::endl;
-        client.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
-                                         &client.byte_throttler);
-        return client.msgr.start(&client.dispatcher)
-          .then([&] {
-            return client.msgr.connect(addr, entity_name_t::TYPE_OSD);
-          }).then([&disp=client.dispatcher, count](ceph::net::ConnectionRef conn) {
-            return seastar::do_until(
-              [&disp,count] { return disp.count >= count; },
-              [&disp,conn] { return conn->send(MessageRef{new MPing(), false})
-                               .then([&] { return disp.on_reply.wait(); });
-            });
-          }).finally([&client] {
-            std::cout << "client shutting down" << std::endl;
-            return client.msgr.shutdown();
+    return ceph::net::Messenger::create(entity_name_t::OSD(1), "client", 1,
+                                        seastar::engine().cpu_id())
+      .then([&addr, count] (auto msgr) {
+        return seastar::do_with(seastar_pingpong::Client{*msgr},
+          [&addr, count](auto& client) {
+            std::cout << "client sending to " << addr << std::endl;
+            client.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
+                                             &client.byte_throttler);
+            return client.msgr.start(&client.dispatcher)
+              .then([&] {
+                return client.msgr.connect(addr, entity_name_t::TYPE_OSD);
+              }).then([&disp=client.dispatcher, count](ceph::net::ConnectionXRef conn) {
+                return seastar::do_until(
+                  [&disp,count] { return disp.count >= count; },
+                  [&disp,conn] { return (*conn)->send(MessageRef{new MPing(), false})
+                                   .then([&] { return disp.on_reply.wait(); });
+                });
+              }).finally([&client] {
+                std::cout << "client shutting down" << std::endl;
+                return client.msgr.shutdown();
+              });
           });
       });
   }

@@ -512,13 +512,19 @@ seastar::future<> Client::reopen_session(int rank)
 #warning fixme
     auto peer = monmap.get_addrs(rank).legacy_addr();
     logger().info("connecting to mon.{}", rank);
-    auto conn = msgr.connect(peer, CEPH_ENTITY_TYPE_MON);
-    auto& mc = pending_conns.emplace_back(conn, &keyring);
-    return mc.authenticate(
-      monmap.get_epoch(), entity_name,
-      *auth_methods, want_keys).handle_exception([conn](auto ep) {
-      return conn->close().then([ep = std::move(ep)] {
-        std::rethrow_exception(ep);
+    return msgr.connect(peer, CEPH_ENTITY_TYPE_MON)
+    .then([this] (auto xconn) {
+      // sharded-messenger compatible mode assumes all connections running
+      // in one shard.
+      ceph_assert((*xconn)->shard_id() == seastar::engine().cpu_id());
+      ceph::net::ConnectionRef conn = xconn->release();
+      auto& mc = pending_conns.emplace_back(conn, &keyring);
+      return mc.authenticate(
+        monmap.get_epoch(), entity_name,
+        *auth_methods, want_keys).handle_exception([conn](auto ep) {
+        return conn->close().then([ep = std::move(ep)] {
+          std::rethrow_exception(ep);
+        });
       });
     }).then([peer, this] {
       if (!is_hunting()) {

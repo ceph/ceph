@@ -3,7 +3,7 @@
 #include "crimson/common/config_proxy.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
-#include "crimson/net/SocketMessenger.h"
+#include "crimson/net/Messenger.h"
 
 using Config = ceph::common::ConfigProxy;
 using MonClient = ceph::mon::Client;
@@ -25,26 +25,27 @@ static seastar::future<> test_monc()
   }).then([] {
     return ceph::common::sharded_perf_coll().start();
   }).then([] {
-    return seastar::do_with(ceph::net::SocketMessenger{entity_name_t::OSD(0), "monc", 0},
-                            [](ceph::net::Messenger& msgr) {
+    return ceph::net::Messenger::create(entity_name_t::OSD(0), "monc", 0,
+                                        seastar::engine().cpu_id())
+        .then([] (ceph::net::Messenger *msgr) {
       auto& conf = ceph::common::local_conf();
       if (conf->ms_crc_data) {
-        msgr.set_crc_data();
+        msgr->set_crc_data();
       }
       if (conf->ms_crc_header) {
-        msgr.set_crc_header();
+        msgr->set_crc_header();
       }
-      return seastar::do_with(MonClient{msgr},
-                              [&msgr](auto& monc) {
-        return msgr.start(&monc).then([&monc] {
+      return seastar::do_with(MonClient{*msgr},
+                              [msgr](auto& monc) {
+        return msgr->start(&monc).then([&monc] {
           return seastar::with_timeout(
             seastar::lowres_clock::now() + std::chrono::seconds{10},
             monc.start());
         }).then([&monc] {
           return monc.stop();
         });
-      }).finally([&msgr] {
-        return msgr.shutdown();
+      }).finally([msgr] {
+        return msgr->shutdown();
       });
     });
   }).finally([] {

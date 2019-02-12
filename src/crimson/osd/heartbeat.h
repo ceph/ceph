@@ -31,7 +31,7 @@ public:
 			  entity_addrvec_t back);
   seastar::future<> stop();
 
-  void add_peer(osd_id_t peer, epoch_t epoch);
+  seastar::future<> add_peer(osd_id_t peer, epoch_t epoch);
   seastar::future<> update_peers(int whoami);
   seastar::future<> remove_peer(osd_id_t peer);
 
@@ -64,8 +64,10 @@ private:
   void add_reporter_peers(int whoami);
 
 private:
-  std::unique_ptr<ceph::net::Messenger> front_msgr;
-  std::unique_ptr<ceph::net::Messenger> back_msgr;
+  const int whoami;
+  const uint32_t nonce;
+  ceph::net::Messenger* front_msgr = nullptr;
+  ceph::net::Messenger* back_msgr = nullptr;
   const OSDMapService& service;
   ceph::mon::Client& monc;
 
