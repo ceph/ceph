@@ -35,7 +35,7 @@ struct MDRequestImpl;
 #include "CInode.h"
 #include "Capability.h"
 #include "MDSContext.h"
-#include "msg/Message.h"
+#include "msg/MessageRef.h"
 
 enum {
   l_mdssm_first = 5500,
@@ -175,7 +175,7 @@ public:
   entity_addr_t socket_addr;
   xlist<Session*>::item item_session_list;
 
-  list<Message::ref> preopen_out_queue;  ///< messages for client, queued before they connect
+  list<MessageRef> preopen_out_queue;  ///< messages for client, queued before they connect
 
   elist<MDRequestImpl*> requests;
   size_t get_request_count();

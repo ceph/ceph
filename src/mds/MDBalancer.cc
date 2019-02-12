@@ -26,7 +26,7 @@
 #include "Mantle.h"
 
 #include "include/Context.h"
-#include "msg/Messenger.h"
+#include "messages/MHeartbeat.h"
 
 #include <fstream>
 #include <iostream>

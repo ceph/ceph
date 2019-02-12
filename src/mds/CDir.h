@@ -35,7 +35,6 @@
 #include "MDSContext.h"
 #include "cephfs_features.h"
 #include "SessionMap.h"
-#include "messages/MClientReply.h"
 
 class CDentry;
 class MDCache;
@@ -561,7 +560,7 @@ private:
     }
   }
 
-  static void encode_dirstat(bufferlist& bl, const session_info_t& info, const DirStat& ds);
+  static void encode_dirstat(bufferlist& bl, const session_info_t& info, const class DirStat& ds);
 
   void _encode_base(bufferlist& bl) {
     encode(first, bl);

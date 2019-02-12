@@ -20,6 +20,7 @@
 #include "msg/Message.h"
 
 #include "include/types.h"
+#include "mds/mdstypes.h"
 
 #include "mds/CInode.h"
 #include "mds/CDir.h"

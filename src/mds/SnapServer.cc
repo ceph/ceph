@@ -159,7 +159,7 @@ void SnapServer::_get_reply_buffer(version_t tid, bufferlist *pbl) const
   assert (0 == "tid not found");
 }
 
-void SnapServer::_commit(version_t tid, MMDSTableRequest::const_ref req)
+void SnapServer::_commit(version_t tid, const MMDSTableRequest::const_ref& req)
 {
   if (pending_update.count(tid)) {
     SnapInfo &info = pending_update[tid];

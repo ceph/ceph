@@ -28,6 +28,7 @@
 #include "include/types.h"
 #include "include/lru.h"
 #include "include/compact_set.h"
+#include "msg/MessageRef.h"
 
 #include "MDSCacheObject.h"
 #include "MDSContext.h"
@@ -41,8 +42,6 @@
 #include "SessionRef.h"
 #include "SnapRealm.h"
 #include "Mutation.h"
-
-#include "messages/MClientCaps.h"
 
 #define dout_context g_ceph_context
 
@@ -895,7 +894,7 @@ public:
   int encode_inodestat(bufferlist& bl, const SessionRef& session, SnapRealm *realm,
 		       snapid_t snapid=CEPH_NOSNAP, unsigned max_bytes=0,
 		       int getattr_wants=0);
-  void encode_cap_message(const MClientCaps::ref &m, Capability *cap);
+  void encode_cap_message(const ceph::ref_t<MClientCaps>& m, Capability *cap);
 
 
   // -- locks --

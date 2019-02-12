@@ -16,11 +16,7 @@
 #define CEPH_MDS_LOCKER_H
 
 #include "include/types.h"
-
-#include "messages/MClientCaps.h"
-#include "messages/MClientCapRelease.h"
-#include "messages/MClientLease.h"
-#include "messages/MLock.h"
+#include "msg/MessageRef.h"
 
 #include <map>
 #include <list>
@@ -42,7 +38,6 @@ class LocalLock;
 #include "MDSContext.h"
 #include "Mutation.h"
 #include "SessionRef.h"
-#include "messages/MClientReply.h"
 
 class Locker {
 private:
@@ -54,8 +49,8 @@ private:
 
   SimpleLock *get_lock(int lock_type, const MDSCacheObjectInfo &info);
   
-  void dispatch(const Message::const_ref &m);
-  void handle_lock(const MLock::const_ref &m);
+  void dispatch(const ceph::cref_t<Message>& m);
+  void handle_lock(const ceph::cref_t<MLock>& m);
 
   void tick();
 
@@ -130,7 +125,7 @@ public:
   bool simple_rdlock_try(SimpleLock *lock, MDSContext *con);
 protected:
   void simple_eval(SimpleLock *lock, bool *need_issue);
-  void handle_simple_lock(SimpleLock *lock, const MLock::const_ref &m);
+  void handle_simple_lock(SimpleLock *lock, const ceph::cref_t<MLock>& m);
 
 public:
   bool simple_sync(SimpleLock *lock, bool *need_issue=0);
@@ -148,7 +143,7 @@ public:
   void scatter_nudge(ScatterLock *lock, MDSContext *c, bool forcelockchange=false);
 
 protected:
-  void handle_scatter_lock(ScatterLock *lock, const MLock::const_ref &m);
+  void handle_scatter_lock(ScatterLock *lock, const ceph::cref_t<MLock>& m);
   bool scatter_scatter_fastpath(ScatterLock *lock);
   void scatter_scatter(ScatterLock *lock, bool nowait=false);
   void scatter_tempsync(ScatterLock *lock, bool *need_issue=0);
@@ -162,7 +157,7 @@ public:
   void mark_updated_scatterlock(ScatterLock *lock);
 
 
-  void handle_reqrdlock(SimpleLock *lock, const MLock::const_ref &m);
+  void handle_reqrdlock(SimpleLock *lock, const ceph::cref_t<MLock>& m);
 
 
 
@@ -189,13 +184,13 @@ private:
 protected:
   bool _need_flush_mdlog(CInode *in, int wanted_caps);
   void adjust_cap_wanted(Capability *cap, int wanted, int issue_seq);
-  void handle_client_caps(const MClientCaps::const_ref &m);
-  void _update_cap_fields(CInode *in, int dirty, const MClientCaps::const_ref &m, CInode::mempool_inode *pi);
-  void _do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, const MClientCaps::const_ref &m, const MClientCaps::ref &ack);
+  void handle_client_caps(const ceph::cref_t<MClientCaps>& m);
+  void _update_cap_fields(CInode *in, int dirty, const ceph::cref_t<MClientCaps>& m, CInode::mempool_inode *pi);
+  void _do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t follows, client_t client, const ceph::cref_t<MClientCaps>& m, const ceph::ref_t<MClientCaps>& ack);
   void _do_null_snapflush(CInode *head_in, client_t client, snapid_t last=CEPH_NOSNAP);
-  bool _do_cap_update(CInode *in, Capability *cap, int dirty, snapid_t follows, const MClientCaps::const_ref &m,
-		      const MClientCaps::ref &ack, bool *need_flush=NULL);
-  void handle_client_cap_release(const MClientCapRelease::const_ref &m);
+  bool _do_cap_update(CInode *in, Capability *cap, int dirty, snapid_t follows, const ceph::cref_t<MClientCaps>& m,
+		      const ceph::ref_t<MClientCaps>& ack, bool *need_flush=NULL);
+  void handle_client_cap_release(const ceph::cref_t<MClientCapRelease>& m);
   void _do_cap_release(client_t client, inodeno_t ino, uint64_t cap_id, ceph_seq_t mseq, ceph_seq_t seq);
   void caps_tick();
 
@@ -223,7 +218,7 @@ protected:
 public:
   void file_eval(ScatterLock *lock, bool *need_issue);
 protected:
-  void handle_file_lock(ScatterLock *lock, const MLock::const_ref &m);
+  void handle_file_lock(ScatterLock *lock, const ceph::cref_t<MLock>& m);
   void scatter_mix(ScatterLock *lock, bool *need_issue=0);
   void file_excl(ScatterLock *lock, bool *need_issue=0);
   void file_xsyn(SimpleLock *lock, bool *need_issue=0);
@@ -250,10 +245,10 @@ public:
 public:
   void request_inode_file_caps(CInode *in);
 protected:
-  void handle_inode_file_caps(const MInodeFileCaps::const_ref &m);
+  void handle_inode_file_caps(const ceph::cref_t<MInodeFileCaps>& m);
 
   void file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
-			  client_t client, const MClientCaps::ref &ack);
+			  client_t client, const ceph::ref_t<MClientCaps>& ack);
 private:
   uint64_t calc_new_max_size(CInode::mempool_inode *pi, uint64_t size);
 public:
@@ -278,11 +273,11 @@ private:
   
   // -- client leases --
 public:
-  void handle_client_lease(const MClientLease::const_ref &m);
+  void handle_client_lease(const ceph::cref_t<MClientLease>& m);
 
   void issue_client_lease(CDentry *dn, client_t client, bufferlist &bl, utime_t now, const SessionRef& session);
   void revoke_client_leases(SimpleLock *lock);
-  static void encode_lease(bufferlist& bl, const session_info_t& info, const LeaseStat& ls);
+  static void encode_lease(bufferlist& bl, const session_info_t& info, const class LeaseStat& ls);
 };
 
 

@@ -18,6 +18,8 @@
 
 #include "msg/Message.h"
 
+#include "mds/mdstypes.h"
+#include "include/cephfs/libcephfs.h"
 
 class MExportCaps : public MessageInstanceSafe<MExportCaps> {
 public:

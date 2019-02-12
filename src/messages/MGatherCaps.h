@@ -3,6 +3,7 @@
 
 #include "msg/Message.h"
 
+#include "include/cephfs/libcephfs.h"
 
 class MGatherCaps : public MessageInstance<MGatherCaps> {
 public:

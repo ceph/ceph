@@ -34,6 +34,12 @@
 #include "msg/Messenger.h"
 #include "mon/MonClient.h"
 
+#include "messages/MCommand.h"
+#include "messages/MCommandReply.h"
+#include "messages/MGenericMessage.h"
+#include "messages/MMDSMap.h"
+#include "messages/MMonCommand.h"
+
 #include "osdc/Objecter.h"
 
 #include "MDSMap.h"

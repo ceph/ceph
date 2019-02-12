@@ -18,6 +18,8 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
+#include "mds/mdstypes.h"
+
 class MExportDirPrepAck : public MessageInstanceSafe<MExportDirPrepAck> {
 public:
   friend factory;

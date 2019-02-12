@@ -25,6 +25,8 @@
 #include "mds/MDSMap.h"
 #include "mds/Locker.h"
 
+#include "messages/MMDSBeacon.h"
+
 #include "Beacon.h"
 
 #include <chrono>

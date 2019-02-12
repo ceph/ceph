@@ -17,6 +17,8 @@
 #include "MDLog.h"
 #include "msg/Messenger.h"
 
+#include "messages/MMDSTableRequest.h"
+
 #include "events/ETableServer.h"
 
 #define dout_context g_ceph_context
@@ -371,3 +373,6 @@ void MDSTableServer::handle_mds_failure_or_stop(mds_rank_t who)
     handle_rollback(req);
   }
 }
+
+MDSTableServer::notify_info_t::notify_info_t() {}
+MDSTableServer::notify_info_t::~notify_info_t() {}

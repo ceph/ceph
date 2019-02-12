@@ -21,10 +21,7 @@
 #include "common/LogClient.h"
 #include "common/Timer.h"
 #include "common/TrackedOp.h"
-
-#include "messages/MClientRequest.h"
-#include "messages/MCommand.h"
-#include "messages/MMDSMap.h"
+#include "msg/MessageRef.h"
 
 #include "Beacon.h"
 #include "DamageTable.h"
@@ -199,7 +196,7 @@ class MDSRank {
     const SessionRef& get_session(client_t client) {
       return sessionmap.get_session(entity_name_t::CLIENT(client.v));
     }
-    SessionRef get_session(const Message::const_ref &m);
+    SessionRef get_session(const ceph::cref_t<Message>& m);
 
     PerfCounters       *logger, *mlogger;
     OpTracker    op_tracker;
@@ -261,20 +258,20 @@ class MDSRank {
       void signal() {cond.Signal();}
     } progress_thread;
 
-    list<Message::const_ref> waiting_for_nolaggy;
+    list<ceph::cref_t<Message>> waiting_for_nolaggy;
     MDSContext::que finished_queue;
     // Dispatch, retry, queues
     int dispatch_depth;
     void inc_dispatch_depth() { ++dispatch_depth; }
     void dec_dispatch_depth() { --dispatch_depth; }
-    void retry_dispatch(const Message::const_ref &m);
-    bool handle_deferrable_message(const Message::const_ref &m);
+    void retry_dispatch(const ceph::cref_t<Message>& m);
+    bool handle_deferrable_message(const ceph::cref_t<Message>& m);
     void _advance_queues();
-    bool _dispatch(const Message::const_ref &m, bool new_msg);
+    bool _dispatch(const ceph::cref_t<Message>& m, bool new_msg);
 
     ceph::heartbeat_handle_d *hb;  // Heartbeat for threads using mds_lock
 
-    bool is_stale_message(const Message::const_ref &m) const;
+    bool is_stale_message(const ceph::cref_t<Message>& m) const;
 
     map<mds_rank_t, version_t> peer_mdsmap_epoch;
 
@@ -388,13 +385,13 @@ class MDSRank {
 
     double get_dispatch_queue_max_age(utime_t now) const;
 
-    void send_message_mds(const Message::ref& m, mds_rank_t mds);
-    void forward_message_mds(const MClientRequest::const_ref& req, mds_rank_t mds);
-    void send_message_client_counted(const Message::ref& m, client_t client);
-    void send_message_client_counted(const Message::ref& m, const SessionRef& session);
-    void send_message_client_counted(const Message::ref& m, const ConnectionRef& connection);
-    void send_message_client(const Message::ref& m, const SessionRef& session);
-    void send_message(const Message::ref& m, const ConnectionRef& c);
+    void send_message_mds(const ceph::ref_t<Message>& m, mds_rank_t mds);
+    void forward_message_mds(const ceph::cref_t<MClientRequest>& req, mds_rank_t mds);
+    void send_message_client_counted(const ceph::ref_t<Message>& m, client_t client);
+    void send_message_client_counted(const ceph::ref_t<Message>& m, const SessionRef& session);
+    void send_message_client_counted(const ceph::ref_t<Message>& m, const ConnectionRef& connection);
+    void send_message_client(const ceph::ref_t<Message>& m, const SessionRef& session);
+    void send_message(const ceph::ref_t<Message>& m, const ConnectionRef& c);
 
     void wait_for_active_peer(mds_rank_t who, MDSContext *c) { 
       waiting_for_active_peer[who].push_back(c);
@@ -583,18 +580,18 @@ protected:
  * will put the Message exactly once.*/
 class C_MDS_RetryMessage : public MDSInternalContext {
 public:
-  C_MDS_RetryMessage(MDSRank *mds, const Message::const_ref &m)
+  C_MDS_RetryMessage(MDSRank *mds, const ceph::cref_t<Message>& m)
     : MDSInternalContext(mds), m(m) {}
   void finish(int r) override {
     get_mds()->retry_dispatch(m);
   }
 protected:
-  Message::const_ref m;
+  ceph::cref_t<Message> m;
 };
 
 class CF_MDS_RetryMessageFactory : public MDSContextFactory {
 public:
-  CF_MDS_RetryMessageFactory(MDSRank *mds, const Message::const_ref &m)
+  CF_MDS_RetryMessageFactory(MDSRank *mds, const ceph::cref_t<Message>& m)
     : mds(mds), m(m) {}
 
   MDSContext *build() {
@@ -603,7 +600,7 @@ public:
 
 private:
   MDSRank *mds;
-  Message::const_ref m;
+  ceph::cref_t<Message> m;
 };
 
 /**
@@ -619,13 +616,13 @@ public:
   void shutdown();
   bool handle_asok_command(std::string_view command, const cmdmap_t& cmdmap,
                            Formatter *f, std::ostream& ss);
-  void handle_mds_map(const MMDSMap::const_ref &m, const MDSMap &oldmap);
+  void handle_mds_map(const ceph::cref_t<MMDSMap>& m, const MDSMap &oldmap);
   void handle_osd_map();
   void update_log_config();
 
   bool handle_command(
     const cmdmap_t &cmdmap,
-    const MCommand::const_ref &m,
+    const ceph::cref_t<MCommand>& m,
     int *r,
     std::stringstream *ds,
     std::stringstream *ss,
@@ -633,10 +630,10 @@ public:
     bool *need_reply);
 
   void dump_sessions(const SessionFilter &filter, Formatter *f) const;
-  void evict_clients(const SessionFilter &filter, const MCommand::const_ref &m);
+  void evict_clients(const SessionFilter &filter, const ceph::cref_t<MCommand>& m);
 
   // Call into me from MDS::ms_dispatch
-  bool ms_dispatch(const Message::const_ref &m);
+  bool ms_dispatch(const ceph::cref_t<Message>& m);
 
   MDSRankDispatcher(
       mds_rank_t whoami_,

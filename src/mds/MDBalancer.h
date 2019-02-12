@@ -24,17 +24,10 @@
 #include "common/Clock.h"
 #include "common/Cond.h"
 
-#include "msg/Message.h"
-#include "messages/MHeartbeat.h"
-
 #include "MDSMap.h"
 
-class MDSRank;
-class MHeartbeat;
 class CInode;
 class CDir;
-class Messenger;
-class MonClient;
 
 class MDBalancer {
 public:
@@ -42,13 +35,13 @@ public:
   using time = ceph::coarse_mono_time;
   friend class C_Bal_SendHeartbeat;
 
-  MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc);
+  MDBalancer(class MDSRank *m, class Messenger *msgr, class MonClient *monc);
 
   void handle_conf_change(const ConfigProxy& conf,
                           const std::set <std::string> &changed,
                           const MDSMap &mds_map);
 
-  int proc_message(const Message::const_ref &m);
+  int proc_message(const ceph::cref_t<Message>& m);
 
   /**
    * Regularly called upkeep function.
@@ -100,7 +93,7 @@ private:
   mds_load_t get_load();
   int localize_balancer();
   void send_heartbeat();
-  void handle_heartbeat(const MHeartbeat::const_ref &m);
+  void handle_heartbeat(const ceph::cref_t<MHeartbeat>& m);
   void find_exports(CDir *dir,
                     double amount,
                     std::vector<CDir*>* exports,
@@ -127,9 +120,9 @@ private:
    */
   void try_rebalance(balance_state_t& state);
 
-  MDSRank *mds;
-  Messenger *messenger;
-  MonClient *mon_client;
+  class MDSRank *mds;
+  class Messenger *messenger;
+  class MonClient *mon_client;
   int beat_epoch = 0;
 
   string bal_code;

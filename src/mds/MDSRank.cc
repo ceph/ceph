@@ -17,8 +17,11 @@
 #include "common/debug.h"
 #include "common/errno.h"
 
+#include "messages/MClientRequest.h"
 #include "messages/MClientRequestForward.h"
+#include "messages/MCommand.h"
 #include "messages/MMDSLoadTargets.h"
+#include "messages/MMDSMap.h"
 #include "messages/MMDSTableRequest.h"
 
 #include "MDSDaemon.h"

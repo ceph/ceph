@@ -19,6 +19,8 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
+#include "mds/mdstypes.h"
+
 class MExportDirPrep : public MessageInstanceSafe<MExportDirPrep> {
 public:
   friend factory;

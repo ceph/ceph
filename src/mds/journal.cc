@@ -37,6 +37,8 @@
 
 #include "include/stringify.h"
 
+#include "messages/MMDSTableRequest.h"
+
 #include "LogSegment.h"
 
 #include "MDSRank.h"

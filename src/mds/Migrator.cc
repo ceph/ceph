@@ -12,6 +12,20 @@
  * 
  */
 
+#include "messages/MExportCaps.h"
+#include "messages/MExportCapsAck.h"
+#include "messages/MExportDir.h"
+#include "messages/MExportDirAck.h"
+#include "messages/MExportDirCancel.h"
+#include "messages/MExportDirDiscover.h"
+#include "messages/MExportDirDiscoverAck.h"
+#include "messages/MExportDirFinish.h"
+#include "messages/MExportDirNotify.h"
+#include "messages/MExportDirNotifyAck.h"
+#include "messages/MExportDirPrep.h"
+#include "messages/MExportDirPrepAck.h"
+#include "messages/MGatherCaps.h"
+
 #include "MDSRank.h"
 #include "MDCache.h"
 #include "CInode.h"

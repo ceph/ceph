@@ -17,6 +17,8 @@
 
 #include "msg/Message.h"
 
+#include "mds/mdstypes.h"
+
 class MExportDirNotify : public MessageInstanceSafe<MExportDirNotify> {
 public:
   friend factory;

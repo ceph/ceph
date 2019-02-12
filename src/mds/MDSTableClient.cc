@@ -19,6 +19,8 @@
 #include "MDSContext.h"
 #include "msg/Messenger.h"
 
+#include "messages/MMDSTableRequest.h"
+
 #include "MDSRank.h"
 #include "MDLog.h"
 #include "LogSegment.h"

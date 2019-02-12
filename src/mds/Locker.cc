@@ -34,13 +34,12 @@
 #include "msg/Messenger.h"
 #include "osdc/Objecter.h"
 
-#include "messages/MInodeFileCaps.h"
-#include "messages/MLock.h"
+#include "messages/MClientCapRelease.h"
+#include "messages/MClientCaps.h"
 #include "messages/MClientLease.h"
 #include "messages/MClientReply.h"
-#include "messages/MClientCaps.h"
-#include "messages/MClientCapRelease.h"
-
+#include "messages/MInodeFileCaps.h"
+#include "messages/MLock.h"
 #include "messages/MMDSSlaveRequest.h"
 
 #include <errno.h>

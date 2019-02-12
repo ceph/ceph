@@ -23,8 +23,10 @@
 #include "include/types.h"
 #include "include/Context.h"
 #include "msg/Dispatcher.h"
-
+#include "msg/MessageRef.h"
 #include "messages/MMDSBeacon.h"
+
+#include "MDSMap.h"
 
 class MonClient;
 class MDSRank;
@@ -52,9 +54,9 @@ public:
   void shutdown();
 
   bool ms_can_fast_dispatch_any() const override { return true; }
-  bool ms_can_fast_dispatch2(const Message::const_ref& m) const override;
-  void ms_fast_dispatch2(const Message::ref& m) override;
-  bool ms_dispatch2(const Message::ref &m) override;
+  bool ms_can_fast_dispatch2(const MessageConstRef& m) const override;
+  void ms_fast_dispatch2(const MessageRef& m) override;
+  bool ms_dispatch2(const MessageRef& m) override;
   void ms_handle_connect(Connection *c) override {}
   bool ms_handle_reset(Connection *c) override {return false;}
   void ms_handle_remote_reset(Connection *c) override {}
@@ -63,7 +65,7 @@ public:
   void notify_mdsmap(const MDSMap &mdsmap);
   void notify_health(const MDSRank *mds);
 
-  void handle_mds_beacon(const MMDSBeacon::const_ref &m);
+  void handle_mds_beacon(const ceph::cref_t<MMDSBeacon> &m);
   void send();
 
   void set_want_state(const MDSMap &mdsmap, MDSMap::DaemonState const newstate);

@@ -31,6 +31,7 @@
 #include "common/bloom_filter.hpp"
 #include "include/Context.h"
 #include "common/Clock.h"
+#include "messages/MClientReply.h"
 
 #include "osdc/Objecter.h"
 

@@ -32,6 +32,8 @@
 
 #include "osdc/Objecter.h"
 
+#include "messages/MClientCaps.h"
+
 #include "snap.h"
 
 #include "LogSegment.h"

@@ -19,6 +19,17 @@
 #include <boost/fusion/include/std_pair.hpp>
 #include <boost/range/adaptor/reversed.hpp>
 
+#include "messages/MClientReconnect.h"
+#include "messages/MClientReply.h"
+#include "messages/MClientRequest.h"
+#include "messages/MClientSession.h"
+#include "messages/MClientSnap.h"
+#include "messages/MClientReclaim.h"
+#include "messages/MClientReclaimReply.h"
+#include "messages/MLock.h"
+#include "messages/MMDSSlaveRequest.h"
+
+#include "MDSMap.h"
 #include "MDSRank.h"
 #include "Server.h"
 #include "Locker.h"

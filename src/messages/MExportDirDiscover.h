@@ -16,7 +16,9 @@
 #define CEPH_MEXPORTDIRDISCOVER_H
 
 #include "msg/Message.h"
+#include "include/filepath.h"
 #include "include/types.h"
+#include "mds/mdstypes.h"
 
 class MExportDirDiscover : public MessageInstanceSafe<MExportDirDiscover> {
 public:

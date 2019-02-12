@@ -27,8 +27,6 @@
 #include "SessionRef.h"
 
 #include "common/TrackedOp.h"
-#include "messages/MClientRequest.h"
-#include "messages/MMDSSlaveRequest.h"
 
 class LogSegment;
 class Capability;
@@ -244,7 +242,7 @@ struct MDRequestImpl : public MutationImpl {
   elist<MDRequestImpl*>::item item_session_request;  // if not on list, op is aborted.
 
   // -- i am a client (master) request
-  MClientRequest::const_ref client_request; // client request (if any)
+  ceph::cref_t<MClientRequest> client_request; // client request (if any)
 
   // store up to two sets of dn vectors, inode pointers, for request path1 and path2.
   vector<CDentry*> dn[2];
@@ -271,7 +269,7 @@ struct MDRequestImpl : public MutationImpl {
   map<vinodeno_t, ceph_seq_t> cap_releases;  
 
   // -- i am a slave request
-  MMDSSlaveRequest::const_ref slave_request; // slave request (if one is pending; implies slave == true)
+  ceph::cref_t<MMDSSlaveRequest> slave_request; // slave request (if one is pending; implies slave == true)
 
   // -- i am an internal op
   int internal_op;
@@ -345,15 +343,16 @@ struct MDRequestImpl : public MutationImpl {
   // ---------------------------------------------------
   struct Params {
     metareqid_t reqid;
-    __u32 attempt;
-    MClientRequest::const_ref client_req;
-    Message::const_ref triggering_slave_req;
-    mds_rank_t slave_to;
+    __u32 attempt = 0;
+    ceph::cref_t<MClientRequest> client_req;
+    ceph::cref_t<Message> triggering_slave_req;
+    mds_rank_t slave_to = MDS_RANK_NONE;
     utime_t initiated;
     utime_t throttled, all_read, dispatched;
-    int internal_op;
+    int internal_op = -1;
     // keep these default values synced to MutationImpl's
-    Params() : attempt(0), slave_to(MDS_RANK_NONE), internal_op(-1) {}
+    Params();
+    ~Params();
     const utime_t& get_recv_stamp() const {
       return initiated;
     }
@@ -392,8 +391,8 @@ struct MDRequestImpl : public MutationImpl {
   void print(ostream &out) const override;
   void dump(Formatter *f) const override;
 
-  MClientRequest::const_ref release_client_request();
-  void reset_slave_request(const MMDSSlaveRequest::const_ref& req=nullptr);
+  ceph::cref_t<MClientRequest> release_client_request();
+  void reset_slave_request(const ceph::cref_t<MMDSSlaveRequest>& req=nullptr);
 
   // TrackedOp stuff
   typedef boost::intrusive_ptr<MDRequestImpl> Ref;
