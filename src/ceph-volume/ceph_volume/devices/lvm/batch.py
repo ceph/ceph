@@ -174,7 +174,7 @@ class Batch(object):
         parser.add_argument(
             '--no-auto',
             action='store_true',
-            help=('deploy standalone OSDs if rotational and non-rotational drives'
+            help=('deploy standalone OSDs if rotational and non-rotational drives '
                   'are passed in DEVICES'),
         )
         parser.add_argument(
