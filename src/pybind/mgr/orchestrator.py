@@ -812,6 +812,10 @@ class OrchestratorClientMixin(Orchestrator):
             o = self._select_orchestrator()
         except AttributeError:
             o = self.remote('orchestrator_cli', '_select_orchestrator')
+
+        if o is None:
+            raise NoOrchestrator()
+
         self.log.debug("_oremote {} -> {}.{}(*{}, **{})".format(self.module_name, o, meth, args, kwargs))
         return self.remote(o, meth, *args, **kwargs)
 
