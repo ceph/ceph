@@ -12,6 +12,7 @@ tasks:
     downgrade_packages: ['librbd1', 'librados2']
     exclude_packages:
       - librados3
+      - ceph-mgr-dashboard
       - ceph-mgr-diskprediction-local
       - ceph-mgr-diskprediction-cloud
       - ceph-mgr-rook
