@@ -201,7 +201,7 @@ Description: manager for the ceph distributed storage system
  level management and monitoring functionality.
 
 Package: ceph-mgr-diskprediction-local
-Architecture: any
+Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
          python-numpy,
          python-scipy,
@@ -218,7 +218,7 @@ Description: diskprediction-local plugin for ceph-mgr
  daemon, which helps predict disk failures.
 
 Package: ceph-mgr-diskprediction-cloud
-Architecture: any
+Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
          ${misc:Depends},
          ${python:Depends},
@@ -232,9 +232,9 @@ Description: diskprediction-cloud plugin for ceph-mgr
  daemon, which helps predict disk failures.
 
 Package: ceph-mgr-rook
-Architecture: any
+Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
-	 python-six,
+         python-six,
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
