@@ -77,8 +77,6 @@ public:
 private:
   std::unique_ptr<CryptoRandom> _crypto_random;
   unsigned nref;
-#warning fixme need to set module_type for seastar
-  int module_type;
 };
 #else
 /* A CephContext represents the context held by a single library user.

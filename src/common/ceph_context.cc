@@ -65,7 +65,7 @@ CephContext::~CephContext()
 
 uint32_t CephContext::get_module_type() const
 {
-  return module_type;
+  return CEPH_ENTITY_TYPE_OSD;
 }
 
 CryptoRandom* CephContext::random() const
