@@ -196,6 +196,9 @@ public:
    */
   void notify_stray(CDentry *dn) {
     ceph_assert(dn->get_dir()->get_inode()->is_stray());
+    if (dn->state_test(CDentry::STATE_PURGING))
+      return;
+
     stray_manager.eval_stray(dn);
   }
 
