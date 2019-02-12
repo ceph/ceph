@@ -25,7 +25,7 @@ public:
     auth_registry.get_supported_methods(peer_type, methods, modes);
   }
 
-  /// Get support connectino modes for the given peer type and auth method
+  /// Get support connection modes for the given peer type and auth method
   virtual void get_supported_con_modes(
     int peer_type,
     uint32_t auth_method,
@@ -33,7 +33,7 @@ public:
     auth_registry.get_supported_modes(peer_type, auth_method, modes);
   }
 
-  /// return an AuthAuthorizeHandler for hte given peer type and auth method
+  /// return an AuthAuthorizeHandler for the given peer type and auth method
   AuthAuthorizeHandler *get_auth_authorize_handler(
     int peer_type,
     int auth_method) {
