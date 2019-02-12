@@ -30,11 +30,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
     ]
 
     def _select_orchestrator(self):
-        o = self.get_module_option("orchestrator")
-        if o is None:
-            raise NoOrchestrator()
-
-        return o
+        return self.get_module_option("orchestrator")
 
     @CLIReadCommand('orchestrator device ls',
                     "name=host,type=CephString,n=N,req=false "
@@ -319,14 +315,16 @@ Usage:
                     desc='Report configured backend and its status')
     @handle_exceptions
     def _status(self):
-        avail, why = self.available()
+        o = self._select_orchestrator()
+        if o is None:
+            raise orchestrator.NoOrchestrator()
 
+        avail, why = self.available()
         if avail is None:
             # The module does not report its availability
-            return HandleCommandResult(stdout="Backend: {0}".format(self._select_orchestrator()))
+            return HandleCommandResult(stdout="Backend: {0}".format(o))
         else:
             return HandleCommandResult(stdout="Backend: {0}\nAvailable: {1}{2}".format(
-                                           self._select_orchestrator(),
-                                           avail,
+                                           o, avail,
                                            " ({0})".format(why) if not avail else ""
                                        ))
