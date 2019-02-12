@@ -76,6 +76,7 @@ using namespace librados;
 #include "services/svc_sync_modules.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_sys_obj_cache.h"
+#include "services/svc_bucket.h"
 
 #include "compressor/Compressor.h"
 
@@ -7800,115 +7801,23 @@ int RGWRados::convert_old_bucket_info(RGWSysObjectCtx& obj_ctx,
   return 0;
 }
 
-int RGWRados::_get_bucket_info(RGWSysObjectCtx& obj_ctx,
-                               const string& tenant,
-                               const string& bucket_name,
-                               RGWBucketInfo& info,
-                               real_time *pmtime,
-                               map<string, bufferlist> *pattrs,
-                               boost::optional<obj_version> refresh_version)
-{
-  string bucket_entry;
-  rgw_make_bucket_entry_name(tenant, bucket_name, bucket_entry);
-
-
-  if (auto e = binfo_cache->find(bucket_entry)) {
-    if (refresh_version &&
-        e->info.objv_tracker.read_version.compare(&(*refresh_version))) {
-      lderr(cct) << "WARNING: The bucket info cache is inconsistent. This is "
-                 << "a failure that should be debugged. I am a nice machine, "
-                 << "so I will try to recover." << dendl;
-      binfo_cache->invalidate(bucket_entry);
-    } else {
-      info = e->info;
-      if (pattrs)
-	*pattrs = e->attrs;
-      if (pmtime)
-	*pmtime = e->mtime;
-      return 0;
-    }
-  }
-
-  bucket_info_entry e;
-  RGWBucketEntryPoint entry_point;
-  real_time ep_mtime;
-  RGWObjVersionTracker ot;
-  rgw_cache_entry_info entry_cache_info;
-  int ret = get_bucket_entrypoint_info(obj_ctx, tenant, bucket_name,
-				       entry_point, &ot, &ep_mtime, pattrs,
-				       &entry_cache_info, refresh_version);
-  if (ret < 0) {
-    /* only init these fields */
-    info.bucket.tenant = tenant;
-    info.bucket.name = bucket_name;
-    return ret;
-  }
-
-  if (entry_point.has_bucket_info) {
-    info = entry_point.old_bucket_info;
-    info.bucket.oid = bucket_name;
-    info.bucket.tenant = tenant;
-    info.ep_objv = ot.read_version;
-    ldout(cct, 20) << "rgw_get_bucket_info: old bucket info, bucket=" << info.bucket << " owner " << info.owner << dendl;
-    return 0;
-  }
-
-  /* data is in the bucket instance object, we need to get attributes from there, clear everything
-   * that we got
-   */
-  if (pattrs) {
-    pattrs->clear();
-  }
-
-  ldout(cct, 20) << "rgw_get_bucket_info: bucket instance: " << entry_point.bucket << dendl;
-
-
-  /* read bucket instance info */
-
-  string oid;
-  get_bucket_meta_oid(entry_point.bucket, oid);
-
-  rgw_cache_entry_info cache_info;
-
-  ret = get_bucket_instance_from_oid(obj_ctx, oid, e.info, &e.mtime, &e.attrs,
-				     &cache_info, refresh_version);
-  e.info.ep_objv = ot.read_version;
-  info = e.info;
-  if (ret < 0) {
-    lderr(cct) << "ERROR: get_bucket_instance_from_oid failed: " << ret << dendl;
-    info.bucket.tenant = tenant;
-    info.bucket.name = bucket_name;
-    // XXX and why return anything in case of an error anyway?
-    return ret;
-  }
-
-  if (pmtime)
-    *pmtime = e.mtime;
-  if (pattrs)
-    *pattrs = e.attrs;
-
-  /* chain to both bucket entry point and bucket instance */
-  if (!binfo_cache->put(svc.cache, bucket_entry, &e, {&entry_cache_info, &cache_info})) {
-    ldout(cct, 20) << "couldn't put binfo cache entry, might have raced with data changes" << dendl;
-  }
-
-  if (refresh_version &&
-      refresh_version->compare(&info.objv_tracker.read_version)) {
-    lderr(cct) << "WARNING: The OSD has the same version I have. Something may "
-               << "have gone squirrelly. An administrator may have forced a "
-               << "change; otherwise there is a problem somewhere." << dendl;
-  }
-
-  return 0;
-}
-
 int RGWRados::get_bucket_info(RGWSysObjectCtx& obj_ctx,
                               const string& tenant, const string& bucket_name,
                               RGWBucketInfo& info,
                               real_time *pmtime, map<string, bufferlist> *pattrs)
 {
-  return _get_bucket_info(obj_ctx, tenant, bucket_name, info, pmtime,
-                          pattrs, boost::none);
+  auto instance = svc.bucket->instance(obj_ctx, tenant, bucket_name);
+
+  int r = instance.get_op()
+    .set_mtime(pmtime)
+    .set_attrs(pattrs)
+    .set_pinfo(&info)
+    .exec();
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
 }
 
 int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
@@ -7916,9 +7825,22 @@ int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
                                       map<string, bufferlist> *pattrs)
 {
   RGWSysObjectCtx obj_ctx = svc.sysobj->init_obj_ctx();
+  auto instance = svc.bucket->instance(obj_ctx, info.bucket.tenant, info.bucket.name);
+  auto rv = info.objv_tracker.read_version;
 
-  return _get_bucket_info(obj_ctx, info.bucket.tenant, info.bucket.name,
-                          info, pmtime, pattrs, info.objv_tracker.read_version);
+  int r = instance.get_op()
+    .set_mtime(pmtime)
+    .set_attrs(pattrs)
+    .set_pinfo(&info)
+    .set_refresh_version(info.objv_tracker.read_version)
+    .exec();
+  if (r < 0) {
+    return r;
+  }
+
+  info = instance.get_bucket_info();
+
+  return 0;
 }
 
 int RGWRados::put_bucket_entrypoint_info(const string& tenant_name, const string& bucket_name, RGWBucketEntryPoint& entry_point,

@@ -26,6 +26,7 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
+#include "services/svc_bucket.h"
 
 #include "include/rados/librados.hpp"
 // until everything is moved from rgw_common
