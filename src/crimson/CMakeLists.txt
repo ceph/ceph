@@ -116,6 +116,7 @@ set(crimson_mon_srcs
 set(crimson_net_srcs
   net/Dispatcher.cc
   net/Errors.cc
+  net/Messenger.cc
   net/SocketConnection.cc
   net/SocketMessenger.cc
   net/Socket.cc)
