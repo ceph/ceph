@@ -7680,55 +7680,27 @@ void RGWRados::get_bucket_instance_obj(const rgw_bucket& bucket, rgw_raw_obj& ob
 int RGWRados::get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const string& meta_key, RGWBucketInfo& info,
                                        real_time *pmtime, map<string, bufferlist> *pattrs)
 {
-  size_t pos = meta_key.find(':');
-  if (pos == string::npos) {
-    return -EINVAL;
-  }
-  string oid = RGW_BUCKET_INSTANCE_MD_PREFIX + meta_key;
-  rgw_bucket_instance_key_to_oid(oid);
+  rgw_bucket bucket;
+  rgw_bucket_parse_bucket_key(cct, meta_key, &bucket, nullptr);
 
-  return get_bucket_instance_from_oid(obj_ctx, oid, info, pmtime, pattrs);
+  return get_bucket_instance_info(obj_ctx, bucket, info, pmtime, pattrs);
 }
 
 int RGWRados::get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const rgw_bucket& bucket, RGWBucketInfo& info,
                                        real_time *pmtime, map<string, bufferlist> *pattrs)
 {
-  string oid;
-  if (bucket.oid.empty()) {
-    get_bucket_meta_oid(bucket, oid);
-  } else {
-    oid = bucket.oid;
+  auto instance = svc.bucket->instance(obj_ctx, bucket);
+
+  int r = instance.get_op()
+    .set_mtime(pmtime)
+    .set_attrs(pattrs)
+    .set_pinfo(&info)
+    .exec();
+
+  if (r < 0) {
+    return r;
   }
 
-  return get_bucket_instance_from_oid(obj_ctx, oid, info, pmtime, pattrs);
-}
-
-int RGWRados::get_bucket_instance_from_oid(RGWSysObjectCtx& obj_ctx, const string& oid, RGWBucketInfo& info,
-                                           real_time *pmtime, map<string, bufferlist> *pattrs,
-                                           rgw_cache_entry_info *cache_info,
-					   boost::optional<obj_version> refresh_version)
-{
-  auto& domain_root = svc.zone->get_zone_params().domain_root;
-
-  ldout(cct, 20) << "reading from " << domain_root << ":" << oid << dendl;
-
-  bufferlist epbl;
-
-  int ret = rgw_get_system_obj(obj_ctx, domain_root,
-			       oid, epbl, &info.objv_tracker, pmtime, pattrs,
-			       cache_info, refresh_version);
-  if (ret < 0) {
-    return ret;
-  }
-
-  auto iter = epbl.cbegin();
-  try {
-    decode(info, iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
-    return -EIO;
-  }
-  info.bucket.oid = oid;
   return 0;
 }
 

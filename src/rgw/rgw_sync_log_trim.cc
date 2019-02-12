@@ -29,6 +29,7 @@
 #include "rgw_rados.h"
 #include "rgw_zone.h"
 #include "rgw_sync.h"
+#include "rgw_bucket.h"
 
 #include "services/svc_zone.h"
 
@@ -424,6 +425,7 @@ class BucketTrimInstanceCR : public RGWCoroutine {
   RGWHTTPManager *const http;
   BucketTrimObserver *const observer;
   std::string bucket_instance;
+  rgw_bucket bucket;
   const std::string& zone_id; //< my zone id
   RGWBucketInfo bucket_info; //< bucket instance info to locate bucket indices
   int child_ret = 0;
@@ -440,8 +442,9 @@ class BucketTrimInstanceCR : public RGWCoroutine {
       http(http), observer(observer),
       bucket_instance(bucket_instance),
       zone_id(store->svc.zone->get_zone().id),
-      peer_status(store->svc.zone->get_zone_conn_map().size())
-  {}
+      peer_status(store->svc.zone->get_zone_conn_map().size()) {
+    rgw_bucket_parse_bucket_key(cct, bucket_instance, &bucket, nullptr);
+  }
 
   int operate() override;
 };
@@ -472,7 +475,7 @@ int BucketTrimInstanceCR::operate()
       }
       // in parallel, read the local bucket instance info
       spawn(new RGWGetBucketInstanceInfoCR(store->get_async_rados(), store,
-                                           bucket_instance, &bucket_info),
+                                           bucket, &bucket_info),
             false);
     }
     // wait for a response from each peer. all must respond to attempt trim
