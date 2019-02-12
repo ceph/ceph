@@ -1386,9 +1386,9 @@
         </context-group>
       </trans-unit><trans-unit datatype="html" id="909411b5c8155bb36baa02f1a0bf28ab2ac41acb">
         <source>The current PGs settings were calculated for you, you
-                    should make sure the values suite your needs before submit.</source>
+                    should make sure the values suit your needs before submit.</source>
         <target state="translated">The current PGs settings were calculated for you, you
-                    should make sure the values suite your needs before submit.</target>
+                    should make sure the values suit your needs before submit.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
           <context context-type="linenumber">113</context>
