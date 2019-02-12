@@ -45,6 +45,7 @@ public:
 };
 
 class RGWSI_Finisher;
+class RGWSI_Bucket;
 class RGWSI_Cls;
 class RGWSI_Notify;
 class RGWSI_RADOS;
@@ -62,6 +63,7 @@ struct RGWServices_Def
   bool has_shutdown{false};
 
   std::unique_ptr<RGWSI_Finisher> finisher;
+  std::unique_ptr<RGWSI_Bucket> bucket;
   std::unique_ptr<RGWSI_Cls> cls;
   std::unique_ptr<RGWSI_Notify> notify;
   std::unique_ptr<RGWSI_RADOS> rados;
@@ -86,6 +88,7 @@ struct RGWServices
   RGWServices_Def _svc;
 
   RGWSI_Finisher *finisher{nullptr};
+  RGWSI_Bucket *bucket{nullptr};
   RGWSI_Cls *cls{nullptr};
   RGWSI_Notify *notify{nullptr};
   RGWSI_RADOS *rados{nullptr};
