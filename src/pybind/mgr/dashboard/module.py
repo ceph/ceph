@@ -7,17 +7,16 @@ from __future__ import absolute_import
 import collections
 import errno
 from distutils.version import StrictVersion
-from distutils.util import strtobool
 import os
 import socket
 import tempfile
 import threading
 import time
 from uuid import uuid4
-
 from OpenSSL import crypto
+from mgr_module import MgrModule, MgrStandbyModule, Option
 
-from mgr_module import MgrModule, MgrStandbyModule
+from .tools import str_to_bool
 
 try:
     import cherrypy
@@ -110,7 +109,7 @@ class CherryPyConfig(object):
         :returns our URI
         """
         server_addr = self.get_localized_module_option('server_addr', '::')
-        ssl = strtobool(self.get_localized_module_option('ssl', 'True'))
+        ssl = str_to_bool(self.get_localized_module_option('ssl', 'True'))
         def_server_port = 8443
         if not ssl:
             def_server_port = 8080
@@ -248,15 +247,15 @@ class Module(MgrModule, CherryPyConfig):
     PLUGIN_MANAGER.hook.register_commands()
 
     MODULE_OPTIONS = [
-        {'name': 'server_addr'},
-        {'name': 'server_port'},
-        {'name': 'jwt_token_ttl'},
-        {'name': 'password'},
-        {'name': 'url_prefix'},
-        {'name': 'username'},
-        {'name': 'key_file'},
-        {'name': 'crt_file'},
-        {'name': 'ssl'}
+        Option(name='server_addr', type='str', default='::'),
+        Option(name='server_port', type='int', default=8443),
+        Option(name='jwt_token_ttl', type='int', default=28800),
+        Option(name='password', type='str', default=''),
+        Option(name='url_prefix', type='str', default=''),
+        Option(name='username', type='str', default=''),
+        Option(name='key_file', type='str', default=''),
+        Option(name='crt_file', type='str', default=''),
+        Option(name='ssl', type='bool', default=True)
     ]
     MODULE_OPTIONS.extend(options_schema_list())
     for options in PLUGIN_MANAGER.hook.get_options() or []:
