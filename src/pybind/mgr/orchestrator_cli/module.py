@@ -13,19 +13,13 @@ from mgr_module import MgrModule, HandleCommandResult, CLIWriteCommand, CLIReadC
 import orchestrator
 
 
-class NoOrchestrator(Exception):
-    def __init__(self):
-        super(NoOrchestrator, self).__init__("No orchestrator configured (try "
-                                             "`ceph orchestrator set backend`)")
-
-
 def handle_exceptions(func):
 
     @wraps(func)
     def inner(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except (NoOrchestrator, ImportError) as e:
+        except (orchestrator.NoOrchestrator, ImportError) as e:
             return HandleCommandResult(-errno.ENOENT, stderr=str(e))
     return inner
 
