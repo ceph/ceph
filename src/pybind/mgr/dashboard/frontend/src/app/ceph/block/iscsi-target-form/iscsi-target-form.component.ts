@@ -159,14 +159,16 @@ export class IscsiTargetFormComponent implements OnInit {
       }),
       disks: new FormControl([]),
       initiators: new FormArray([]),
-      groups: new FormArray([])
+      groups: new FormArray([]),
+      acl_enabled: new FormControl(false)
     });
   }
 
   resolveModel(res) {
     this.targetForm.patchValue({
       target_iqn: res.target_iqn,
-      target_controls: res.target_controls
+      target_controls: res.target_controls,
+      acl_enabled: res.acl_enabled
     });
 
     const portals = [];
@@ -509,6 +511,7 @@ export class IscsiTargetFormComponent implements OnInit {
     const request = {
       target_iqn: this.targetForm.getValue('target_iqn'),
       target_controls: this.targetForm.getValue('target_controls'),
+      acl_enabled: this.targetForm.getValue('acl_enabled'),
       portals: [],
       disks: [],
       clients: [],
@@ -537,47 +540,51 @@ export class IscsiTargetFormComponent implements OnInit {
     });
 
     // Clients
-    formValue.initiators.forEach((initiator) => {
-      if (!initiator.auth.user) {
-        initiator.auth.user = null;
-      }
-      if (!initiator.auth.password) {
-        initiator.auth.password = null;
-      }
-      if (!initiator.auth.mutual_user) {
-        initiator.auth.mutual_user = null;
-      }
-      if (!initiator.auth.mutual_password) {
-        initiator.auth.mutual_password = null;
-      }
+    if (request.acl_enabled) {
+      formValue.initiators.forEach((initiator) => {
+        if (!initiator.auth.user) {
+          initiator.auth.user = null;
+        }
+        if (!initiator.auth.password) {
+          initiator.auth.password = null;
+        }
+        if (!initiator.auth.mutual_user) {
+          initiator.auth.mutual_user = null;
+        }
+        if (!initiator.auth.mutual_password) {
+          initiator.auth.mutual_password = null;
+        }
 
-      const newLuns = [];
-      initiator.luns.forEach((lun) => {
-        const imageSplit = lun.split('/');
-        newLuns.push({
-          pool: imageSplit[0],
-          image: imageSplit[1]
+        const newLuns = [];
+        initiator.luns.forEach((lun) => {
+          const imageSplit = lun.split('/');
+          newLuns.push({
+            pool: imageSplit[0],
+            image: imageSplit[1]
+          });
         });
-      });
 
-      initiator.luns = newLuns;
-    });
-    request.clients = formValue.initiators;
+        initiator.luns = newLuns;
+      });
+      request.clients = formValue.initiators;
+    }
 
     // Groups
-    formValue.groups.forEach((group) => {
-      const newDisks = [];
-      group.disks.forEach((disk) => {
-        const imageSplit = disk.split('/');
-        newDisks.push({
-          pool: imageSplit[0],
-          image: imageSplit[1]
+    if (request.acl_enabled) {
+      formValue.groups.forEach((group) => {
+        const newDisks = [];
+        group.disks.forEach((disk) => {
+          const imageSplit = disk.split('/');
+          newDisks.push({
+            pool: imageSplit[0],
+            image: imageSplit[1]
+          });
         });
-      });
 
-      group.disks = newDisks;
-    });
-    request.groups = formValue.groups;
+        group.disks = newDisks;
+      });
+      request.groups = formValue.groups;
+    }
 
     let wrapTask;
     if (this.isEdit) {
