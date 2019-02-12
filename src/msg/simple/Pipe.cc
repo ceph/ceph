@@ -2124,23 +2124,20 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
     bufferlist newbuf, rxbuf;
     bufferlist::iterator blp;
-	
-    map<ceph_tid_t,pair<bufferlist,int> >::iterator p = connection_state->rx_buffers.find(header.tid);
+    map<ceph_tid_t,bufferlist>::iterator p = connection_state->rx_buffers.find(header.tid);
     if (p != connection_state->rx_buffers.end()) {
-      ldout(msgr->cct,10) << "reader seleting rx buffer v " << p->second.second
-	<< " at offset " << offset
-	<< " len " << p->second.first.length() << dendl;
-      rxbuf = p->second.first;
+      ldout(msgr->cct,10) << " at offset " << offset
+	<< " len " << p->second.length() << dendl;
+      rxbuf = p->second;
       // make sure it's big enough
       if (rxbuf.length() < data_len)
 	rxbuf.push_back(buffer::create(data_len - rxbuf.length()));
-      blp = p->second.first.begin();
+      blp = p->second.begin();
     } else {
       ldout(msgr->cct,20) << "reader allocating new rx buffer at offset " << offset << dendl;
       newbuf.alloc_aligned_buffer(data_len, data_off);
       blp = newbuf.begin();
     }
-
     while (left > 0) {
       // wait for data
       if (tcp_read_wait() < 0)

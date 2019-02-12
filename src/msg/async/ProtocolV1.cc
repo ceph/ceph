@@ -781,13 +781,12 @@ CtPtr ProtocolV1::read_message_data_prepare() {
 
   if (data_len) {
     // get a buffer
-    map<ceph_tid_t, pair<bufferlist, int> >::iterator p =
+    map<ceph_tid_t, bufferlist >::iterator p =
         connection->rx_buffers.find(current_header.tid);
     if (p != connection->rx_buffers.end()) {
-      ldout(cct, 10) << __func__ << " seleting rx buffer v " << p->second.second
-                     << " at offset " << data_off << " len "
-                     << p->second.first.length() << dendl;
-      data_buf = p->second.first;
+      ldout(cct, 10) << __func__ << " at offset " << data_off << " len "
+                     << p->second.length() << dendl;
+      data_buf = p->second;
       // make sure it's big enough
       if (data_buf.length() < data_len)
         data_buf.push_back(buffer::create(data_len - data_buf.length()));
