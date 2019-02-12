@@ -36,6 +36,8 @@ trap finish TERM HUP INT
 
 PATH=$(pwd)/bin:$PATH
 
+export LD_LIBRARY_PATH="$(pwd)/lib"
+
 # TODO: Use getops
 dryrun=false
 if [[ "$1" = "--dry-run" ]]; then
