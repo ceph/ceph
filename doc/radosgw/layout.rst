@@ -42,8 +42,7 @@ Some variables have been used in above commands, they are:
 - bucket: Holds a mapping between bucket name and bucket instance id
 - bucket.instance: Holds bucket instance information[2]
 
-Every metadata entry is kept on a single rados object.
-See below for implementation defails.
+Every metadata entry is kept on a single rados object. See below for implementation details.
 
 Note that the metadata is not indexed. When listing a metadata section we do a
 rados pgls operation on the containing pool.
