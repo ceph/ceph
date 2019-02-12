@@ -43,6 +43,7 @@
 #include "auth/KeyRing.h"
 #include "auth/AuthClientHandler.h"
 #include "auth/AuthMethodList.h"
+#include "auth/AuthRegistry.h"
 #include "auth/RotatingKeyRing.h"
 
 #define dout_subsys ceph_subsys_monc

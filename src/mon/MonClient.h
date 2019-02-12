@@ -27,7 +27,6 @@
 
 #include "auth/AuthClient.h"
 #include "auth/AuthServer.h"
-#include "auth/AuthRegistry.h"
 
 class MMonMap;
 class MConfig;
@@ -38,8 +37,9 @@ struct MAuthReply;
 class MAuthRotating;
 class LogClient;
 class AuthAuthorizer;
-class AuthMethodList;
 class AuthClientHandler;
+class AuthMethodList;
+class AuthRegistry;
 class KeyRing;
 class RotatingKeyRing;
 
