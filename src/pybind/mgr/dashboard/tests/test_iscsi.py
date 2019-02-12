@@ -1,3 +1,5 @@
+# pylint: disable=too-many-public-methods
+
 import copy
 import mock
 
@@ -334,6 +336,7 @@ iscsi_target_request = {
             }
         }
     ],
+    "acl_enabled": True,
     "target_controls": {},
     "groups": [
         {
@@ -379,6 +382,7 @@ iscsi_target_response = {
             }
         }
     ],
+    "acl_enabled": True,
     'groups': [
         {
             'group_id': 'mygroup',
@@ -407,7 +411,7 @@ class IscsiClientMock(object):
             "gateways": {},
             "targets": {},
             "updated": "",
-            "version": 4
+            "version": 5
         }
 
     @classmethod
@@ -459,6 +463,7 @@ class IscsiClientMock(object):
     def create_target(self, target_iqn, target_controls):
         self.config['targets'][target_iqn] = {
             "clients": {},
+            "acl_enabled": True,
             "controls": target_controls,
             "created": "2019/01/17 09:22:34",
             "disks": [],
@@ -560,3 +565,6 @@ class IscsiClientMock(object):
             'chap': chap,
             'chap_mutual': chap_mutual
         }
+
+    def update_targetauth(self, target_iqn, action):
+        self.config['targets'][target_iqn]['acl_enabled'] = (action == 'enable_acl')

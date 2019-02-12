@@ -180,3 +180,10 @@ class IscsiClient(RestClient):
             'chap': chap,
             'chap_mutual': chap_mutual
         })
+
+    @RestClient.api_put('/api/targetauth/{target_iqn}')
+    def update_targetauth(self, target_iqn, action, request=None):
+        logger.debug("iSCSI: Updating targetauth: %s/%s", target_iqn, action)
+        return request({
+            'action': action
+        })
