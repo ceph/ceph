@@ -4,6 +4,7 @@
 #include "rgw_service.h"
 
 #include "services/svc_finisher.h"
+#include "services/svc_bucket.h"
 #include "services/svc_cls.h"
 #include "services/svc_notify.h"
 #include "services/svc_rados.h"
@@ -31,6 +32,7 @@ int RGWServices_Def::init(CephContext *cct,
                           bool raw)
 {
   finisher = std::make_unique<RGWSI_Finisher>(cct);
+  bucket = std::make_unique<RGWSI_Bucket>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
   notify = std::make_unique<RGWSI_Notify>(cct);
   rados = std::make_unique<RGWSI_RADOS>(cct);
@@ -59,6 +61,7 @@ int RGWServices_Def::init(CephContext *cct,
   } else {
     sysobj->init(rados.get(), sysobj_core.get());
   }
+  bucket->init(zone.get(), sysobj.get(), sysobj_cache.get());
 
   can_shutdown = true;
 
@@ -128,6 +131,12 @@ int RGWServices_Def::init(CephContext *cct,
     return r;
   }
 
+  r = bucket->start();
+  if (r < 0) {
+    ldout(cct, 0) << "ERROR: failed to start bucket service (" << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
   /* cache or core services will be started by sysobj */
 
   return  0;
@@ -167,6 +176,7 @@ int RGWServices::do_init(CephContext *cct, bool have_cache, bool raw)
   }
 
   finisher = _svc.finisher.get();
+  bucket = _svc.bucket.get();
   cls = _svc.cls.get();
   notify = _svc.notify.get();
   rados = _svc.rados.get();

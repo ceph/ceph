@@ -55,8 +55,6 @@ class RGWSysObjectCtx;
 #define RGW_OBJ_NS_MULTIPART "multipart"
 #define RGW_OBJ_NS_SHADOW    "shadow"
 
-#define RGW_BUCKET_INSTANCE_MD_PREFIX ".bucket.meta."
-
 #define RGW_NO_SHARD -1
 
 #define RGW_SHARDS_PRIME_0 7877
@@ -1388,17 +1386,6 @@ public:
 
   int convert_old_bucket_info(RGWSysObjectCtx& obj_ctx, const string& tenant_name, const string& bucket_name);
   static void make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry);
-
-
-private:
-  int _get_bucket_info(RGWSysObjectCtx& obj_ctx, const string& tenant,
-		       const string& bucket_name, RGWBucketInfo& info,
-		       real_time *pmtime,
-		       map<string, bufferlist> *pattrs,
-		       boost::optional<obj_version> refresh_version,
-                       optional_yield y);
-
-public:
 
   int get_bucket_info(RGWSysObjectCtx& obj_ctx,
 		      const string& tenant_name, const string& bucket_name,

@@ -14,6 +14,7 @@
 #include <atomic>
 
 #include "services/svc_sys_obj.h"
+#include "services/svc_bucket.h"
 
 class RGWAsyncRadosRequest : public RefCountedObject {
   RGWCoroutine *caller;
