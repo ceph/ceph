@@ -631,12 +631,12 @@ public:
   virtual void shutdown();
 
   // messaging
-  void handle_mds_map(const MConstRef<MMDSMap>& m);
-  void handle_fs_map(const MConstRef<MFSMap>& m);
-  void handle_fs_map_user(const MConstRef<MFSMapUser>& m);
-  void handle_osd_map(const MConstRef<MOSDMap>& m);
+  void handle_mds_map(const ceph::cref_t<MMDSMap>& m);
+  void handle_fs_map(const ceph::cref_t<MFSMap>& m);
+  void handle_fs_map_user(const ceph::cref_t<MFSMapUser>& m);
+  void handle_osd_map(const ceph::cref_t<MOSDMap>& m);
 
-  void handle_lease(const MConstRef<MClientLease>& m);
+  void handle_lease(const ceph::cref_t<MClientLease>& m);
 
   // inline data
   int uninline_data(Inode *in, Context *onfinish);
@@ -661,15 +661,15 @@ public:
   void maybe_update_snaprealm(SnapRealm *realm, snapid_t snap_created, snapid_t snap_highwater,
 			      vector<snapid_t>& snaps);
 
-  void handle_quota(const MConstRef<MClientQuota>& m);
-  void handle_snap(const MConstRef<MClientSnap>& m);
-  void handle_caps(const MConstRef<MClientCaps>& m);
-  void handle_cap_import(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
-  void handle_cap_export(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
-  void handle_cap_trunc(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
-  void handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, const MConstRef<MClientCaps>& m);
-  void handle_cap_flushsnap_ack(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
-  void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const MConstRef<MClientCaps>& m);
+  void handle_quota(const ceph::cref_t<MClientQuota>& m);
+  void handle_snap(const ceph::cref_t<MClientSnap>& m);
+  void handle_caps(const ceph::cref_t<MClientCaps>& m);
+  void handle_cap_import(MetaSession *session, Inode *in, const ceph::cref_t<MClientCaps>& m);
+  void handle_cap_export(MetaSession *session, Inode *in, const ceph::cref_t<MClientCaps>& m);
+  void handle_cap_trunc(MetaSession *session, Inode *in, const ceph::cref_t<MClientCaps>& m);
+  void handle_cap_flush_ack(MetaSession *session, Inode *in, Cap *cap, const ceph::cref_t<MClientCaps>& m);
+  void handle_cap_flushsnap_ack(MetaSession *session, Inode *in, const ceph::cref_t<MClientCaps>& m);
+  void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const ceph::cref_t<MClientCaps>& m);
   void cap_delay_requeue(Inode *in);
   void send_cap(Inode *in, MetaSession *session, Cap *cap, bool sync,
 		int used, int want, int retain, int flush,
@@ -766,7 +766,7 @@ protected:
 
   void set_cap_epoch_barrier(epoch_t e);
 
-  void handle_command_reply(const MConstRef<MCommandReply>& m);
+  void handle_command_reply(const ceph::cref_t<MCommandReply>& m);
   int fetch_fsmap(bool user);
   int resolve_mds(
       const std::string &mds_spec,
@@ -782,7 +782,7 @@ protected:
   void _closed_mds_session(MetaSession *s);
   bool _any_stale_sessions() const;
   void _kick_stale_sessions();
-  void handle_client_session(const MConstRef<MClientSession>& m);
+  void handle_client_session(const ceph::cref_t<MClientSession>& m);
   void send_reconnect(MetaSession *s);
   void resend_unsafe_requests(MetaSession *s);
   void wait_unsafe_requests();
@@ -798,7 +798,7 @@ protected:
   void put_request(MetaRequest *request);
   void unregister_request(MetaRequest *request);
 
-  int verify_reply_trace(int r, MetaRequest *request, const MConstRef<MClientReply>& reply,
+  int verify_reply_trace(int r, MetaRequest *request, const ceph::cref_t<MClientReply>& reply,
 			 InodeRef *ptarget, bool *pcreated,
 			 const UserPerm& perms);
   void encode_cap_releases(MetaRequest *request, mds_rank_t mds);
@@ -811,11 +811,11 @@ protected:
   void connect_mds_targets(mds_rank_t mds);
   void send_request(MetaRequest *request, MetaSession *session,
 		    bool drop_cap_releases=false);
-  MRef<MClientRequest> build_client_request(MetaRequest *request);
+  ceph::ref_t<MClientRequest> build_client_request(MetaRequest *request);
   void kick_requests(MetaSession *session);
   void kick_requests_closed(MetaSession *session);
-  void handle_client_request_forward(const MConstRef<MClientRequestForward>& reply);
-  void handle_client_reply(const MConstRef<MClientReply>& reply);
+  void handle_client_request_forward(const ceph::cref_t<MClientRequestForward>& reply);
+  void handle_client_reply(const ceph::cref_t<MClientReply>& reply);
   bool is_dir_operation(MetaRequest *request);
 
   // fake inode number for 32-bits ino_t
@@ -937,7 +937,7 @@ protected:
 
   int check_pool_perm(Inode *in, int need);
 
-  void handle_client_reclaim_reply(const MConstRef<MClientReclaimReply>& reply);
+  void handle_client_reclaim_reply(const ceph::cref_t<MClientReclaimReply>& reply);
 
   /**
    * Call this when an OSDMap is seen with a full flag (global or per pool)

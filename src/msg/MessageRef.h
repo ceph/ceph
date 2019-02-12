@@ -15,15 +15,10 @@
 #ifndef CEPH_MESSAGEREF_H
 #define CEPH_MESSAGEREF_H
  
-#include <boost/intrusive_ptr.hpp>
+#include "common/Ref.h"
 
-template<typename T>
-using MRef = boost::intrusive_ptr<T>;
-template<typename T>
-using MConstRef = boost::intrusive_ptr<T const>;
-
-using MessageRef = MRef<class Message>;
-using MessageConstRef = MConstRef<class Message>;
+using MessageRef = ceph::ref_t<class Message>;
+using MessageConstRef = ceph::cref_t<class Message>;
 
 /* cd src/messages/ && for f in *; do printf 'class '; basename "$f" .h | tr -d '\n'; printf ';\n'; done >> ../msg/MessageRef.h */
 
