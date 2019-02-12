@@ -31,7 +31,8 @@ public:
 			  entity_addrvec_t back);
   seastar::future<> stop();
 
-  void add_peer(osd_id_t peer);
+  void add_peer(osd_id_t peer, epoch_t epoch);
+  seastar::future<> update_peers(int whoami);
   seastar::future<> remove_peer(osd_id_t peer);
 
   seastar::future<> send_heartbeats();
@@ -54,6 +55,13 @@ private:
   seastar::future<> handle_you_died();
 
   seastar::future<> send_still_alive(osd_id_t, const entity_addrvec_t&);
+
+  using osds_t = std::vector<osd_id_t>;
+  /// remove down OSDs
+  /// @return peers not needed in this epoch
+  seastar::future<osds_t> remove_down_peers();
+  /// add enough reporters for fast failure detection
+  void add_reporter_peers(int whoami);
 
 private:
   std::unique_ptr<ceph::net::Messenger> front_msgr;
@@ -83,6 +91,8 @@ private:
     clock::time_point last_rx_front;
     /// last time we got a ping reply on the back side
     clock::time_point last_rx_back;
+    /// most recent epoch we wanted this peer
+    epoch_t epoch;
     /// history of inflight pings, arranging by timestamp we sent
     std::map<utime_t, reply_t> ping_history;
 
