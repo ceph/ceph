@@ -190,7 +190,8 @@ Depends: ceph-base (= ${binary:Version}),
 Recommends: ceph-mgr-dashboard,
             ceph-mgr-diskprediction-local,
             ceph-mgr-diskprediction-cloud,
-            ceph-mgr-rook
+            ceph-mgr-rook,
+            ceph-mgr-ssh
 Suggests: python-influxdb
 Replaces: ceph (<< 0.93-417),
 Breaks: ceph (<< 0.93-417),
@@ -271,6 +272,21 @@ Description: rook plugin for ceph-mgr
  This package contains the rook plugin for ceph-mgr's orchestration
  functionality, to allow ceph-mgr to install and configure ceph using
  Rook.
+
+Package: ceph-mgr-ssh
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+	 python-six,
+         ${misc:Depends},
+         ${python:Depends},
+Description: ssh orchestrator plugin for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the SSH plugin for ceph-mgr's orchestration
+ functionality, to allow ceph-mgr to perform orchestration functions
+ over a standard SSH connection.
 
 Package: ceph-mgr-dbg
 Architecture: linux-any
