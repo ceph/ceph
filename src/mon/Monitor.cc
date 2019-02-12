@@ -5899,7 +5899,8 @@ int Monitor::get_auth_request(
   bufferlist *out)
 {
   std::scoped_lock l(auth_lock);
-  if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON) {
+  if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON &&
+      con->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
     return -EACCES;
   }
   AuthAuthorizer *auth;
@@ -5907,7 +5908,7 @@ int Monitor::get_auth_request(
     return -EACCES;
   }
   auth_meta->authorizer.reset(auth);
-  auth_registry.get_supported_modes(CEPH_ENTITY_TYPE_MON,
+  auth_registry.get_supported_modes(con->get_peer_type(),
 				    auth->protocol,
 				    preferred_modes);
   *method = auth->protocol;
