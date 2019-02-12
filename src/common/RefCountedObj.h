@@ -19,16 +19,16 @@
 #include "common/ceph_context.h"
 #include "common/valgrind.h"
 #include "common/debug.h"
-
-#include <boost/smart_ptr/intrusive_ptr.hpp>
+#include "common/Ref.h"
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/ceph_assert.h"
 
 struct RefCountedObject {
 public:
-  using ref = boost::intrusive_ptr<RefCountedObject>;
-  using const_ref = boost::intrusive_ptr<RefCountedObject const>;
+  using ref = ceph::ref_t<RefCountedObject>;
+  using cref = ceph::cref_t<RefCountedObject>;
+  using const_ref = ceph::cref_t<RefCountedObject>;
 
   void set_cct(CephContext *c) {
     cct = c;
@@ -99,8 +99,9 @@ template<typename... Args>
 template<class T, class R = RefCountedObject>
 class RefCountedObjectSubType : public R {
 public:
-  using ref = boost::intrusive_ptr<T>;
-  using const_ref = boost::intrusive_ptr<T const>;
+  using ref = ceph::ref_t<T>;
+  using cref = ceph::cref_t<T>;
+  using const_ref = ceph::cref_t<T>;
 
   static auto ref_cast(const auto& m) {
     if constexpr(std::is_const<typename std::remove_reference<decltype(m)>::type::element_type>::value) {
@@ -138,8 +139,9 @@ template<typename... Args>
 template<class T, class R = RefCountedObject>
 class RefCountedObjectSubTypeSafe : public R {
 public:
-  using ref = boost::intrusive_ptr<T>;
-  using const_ref = boost::intrusive_ptr<T const>;
+  using ref = ceph::ref_t<T>;
+  using cref = ceph::cref_t<T>;
+  using const_ref = ceph::cref_t<T>;
 
   static auto ref_cast(const auto& m) {
     if constexpr(std::is_const<typename std::remove_reference<decltype(m)>::type::element_type>::value) {
@@ -183,7 +185,7 @@ using RefCountedObjectInstance = RefCountedObjectInstanceTemplate<T,R,RefCounted
 template<class T, class R = RefCountedObject>
 using RefCountedObjectInstanceSafe = RefCountedObjectInstanceTemplate<T,R,RefCountedObjectSubTypeSafe>;
 
-using RefCountedPtr = boost::intrusive_ptr<RefCountedObject>;
+using RefCountedPtr = RefCountedObject::ref;
 
 #ifndef WITH_SEASTAR
 
