@@ -15,10 +15,12 @@
 #include "SocketMessenger.h"
 
 #include <tuple>
+#include <boost/functional/hash.hpp>
 
 #include "auth/Auth.h"
 #include "Errors.h"
 #include "Dispatcher.h"
+#include "Socket.h"
 
 using namespace ceph::net;
 
@@ -31,59 +33,106 @@ namespace {
 SocketMessenger::SocketMessenger(const entity_name_t& myname,
                                  const std::string& logic_name,
                                  uint32_t nonce)
-  : Messenger{myname}, logic_name{logic_name}, nonce{nonce}
+  : Messenger{myname},
+    sid{seastar::engine().cpu_id()},
+    logic_name{logic_name},
+    nonce{nonce}
 {}
 
-void SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
+seastar::future<> SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
 {
   auto my_addrs = addrs;
   for (auto& addr : my_addrs.v) {
     addr.nonce = nonce;
   }
-  // TODO: propagate to all the cores of the Messenger
-  Messenger::set_myaddrs(my_addrs);
+  return container().invoke_on_all([my_addrs](auto& msgr) {
+      return msgr.Messenger::set_myaddrs(my_addrs);
+    });
 }
 
-void SocketMessenger::bind(const entity_addrvec_t& addrs)
+seastar::future<> SocketMessenger::bind(const entity_addrvec_t& addrs)
 {
-  // TODO: v2: listen on multiple addresses
-  auto addr = addrs.legacy_addr();
-
-  if (addr.get_family() != AF_INET) {
-    throw std::system_error(EAFNOSUPPORT, std::generic_category());
+  ceph_assert(addrs.legacy_addr().get_family() == AF_INET);
+  auto my_addrs = addrs;
+  for (auto& addr : my_addrs.v) {
+    addr.nonce = nonce;
   }
-
-  set_myaddrs(addrs);
-  logger().info("listening on {}", addr);
-  seastar::socket_address address(addr.in4_addr());
-  seastar::listen_options lo;
-  lo.reuse_address = true;
-  listener = seastar::listen(address, lo);
+  logger().info("listening on {}", my_addrs.legacy_addr().in4_addr());
+  return container().invoke_on_all([my_addrs](auto& msgr) {
+      msgr.do_bind(my_addrs);
+    });
 }
 
-void SocketMessenger::try_bind(const entity_addrvec_t& addrs,
-			       uint32_t min_port, uint32_t max_port)
+seastar::future<>
+SocketMessenger::try_bind(const entity_addrvec_t& addrs,
+                          uint32_t min_port, uint32_t max_port)
 {
   auto addr = addrs.legacy_or_front_addr();
   if (addr.get_port() != 0) {
     return bind(addrs);
   }
-  for (auto port = min_port; port <= max_port; port++) {
-    try {
-      addr.set_port(port);
-      bind(entity_addrvec_t{addr});
-      logger().info("{}: try_bind: done", *this);
-      return;
-    } catch (const std::system_error& e) {
-      logger().debug("{}: try_bind: {} already used", *this, port);
-      if (port == max_port) {
-	throw;
-      }
-    }
-  }
+  ceph_assert(min_port <= max_port);
+  return seastar::do_with(uint32_t(min_port),
+    [this, max_port, addr] (auto& port) {
+      return seastar::repeat([this, max_port, addr, &port] {
+          auto to_bind = addr;
+          to_bind.set_port(port);
+          return bind(entity_addrvec_t{to_bind})
+            .then([this] {
+              logger().info("{}: try_bind: done", *this);
+              return stop_t::yes;
+            }).handle_exception_type([this, max_port, &port] (const std::system_error& e) {
+              logger().debug("{}: try_bind: {} already used", *this, port);
+              if (port == max_port) {
+                throw e;
+              }
+              ++port;
+              return stop_t::no;
+            });
+        });
+    });
 }
 
-seastar::future<> SocketMessenger::start(Dispatcher *disp)
+seastar::future<> SocketMessenger::start(Dispatcher *disp) {
+  return container().invoke_on_all([disp](auto& msgr) {
+      return msgr.do_start(disp->get_local_shard());
+    });
+}
+
+seastar::future<ceph::net::ConnectionXRef>
+SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& peer_type)
+{
+  auto shard = locate_shard(peer_addr);
+  return container().invoke_on(shard, [peer_addr, peer_type](auto& msgr) {
+      return msgr.do_connect(peer_addr, peer_type);
+    }).then([](seastar::foreign_ptr<ConnectionRef>&& conn) {
+      return seastar::make_lw_shared<seastar::foreign_ptr<ConnectionRef>>(std::move(conn));
+    });
+}
+
+seastar::future<> SocketMessenger::shutdown()
+{
+  return container().invoke_on_all([](auto& msgr) {
+      return msgr.do_shutdown();
+    }).finally([this] {
+      return container().invoke_on_all([](auto& msgr) {
+          msgr.shutdown_promise.set_value();
+        });
+    });
+}
+
+void SocketMessenger::do_bind(const entity_addrvec_t& addrs)
+{
+  Messenger::set_myaddrs(addrs);
+
+  // TODO: v2: listen on multiple addresses
+  seastar::socket_address address(addrs.legacy_addr().in4_addr());
+  seastar::listen_options lo;
+  lo.reuse_address = true;
+  listener = seastar::listen(address, lo);
+}
+
+seastar::future<> SocketMessenger::do_start(Dispatcher *disp)
 {
   dispatcher = disp;
 
@@ -96,9 +145,15 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
             // allocate the connection
             entity_addr_t peer_addr;
             peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
-            SocketConnectionRef conn = new SocketConnection(*this, *dispatcher);
+            auto shard = locate_shard(peer_addr);
+#warning fixme
+            // we currently do dangerous i/o from a Connection core, different from the Socket core.
+            auto sock = seastar::make_foreign(std::make_unique<Socket>(std::move(socket)));
             // don't wait before accepting another
-            conn->start_accept(std::move(socket), peer_addr);
+            container().invoke_on(shard, [sock = std::move(sock), peer_addr, this](auto& msgr) mutable {
+                SocketConnectionRef conn = seastar::make_shared<SocketConnection>(msgr, *msgr.dispatcher);
+                conn->start_accept(std::move(sock), peer_addr);
+              });
           });
       }).handle_exception_type([this] (const std::system_error& e) {
         // stop gracefully on connection_aborted
@@ -111,18 +166,18 @@ seastar::future<> SocketMessenger::start(Dispatcher *disp)
   return seastar::now();
 }
 
-ceph::net::ConnectionRef
-SocketMessenger::connect(const entity_addr_t& peer_addr, const entity_type_t& peer_type)
+seastar::foreign_ptr<ceph::net::ConnectionRef>
+SocketMessenger::do_connect(const entity_addr_t& peer_addr, const entity_type_t& peer_type)
 {
   if (auto found = lookup_conn(peer_addr); found) {
-    return found;
+    return seastar::make_foreign(found->shared_from_this());
   }
-  SocketConnectionRef conn = new SocketConnection(*this, *dispatcher);
+  SocketConnectionRef conn = seastar::make_shared<SocketConnection>(*this, *dispatcher);
   conn->start_connect(peer_addr, peer_type);
-  return conn;
+  return seastar::make_foreign(conn->shared_from_this());
 }
 
-seastar::future<> SocketMessenger::shutdown()
+seastar::future<> SocketMessenger::do_shutdown()
 {
   if (listener) {
     listener->abort_accept();
@@ -140,11 +195,11 @@ seastar::future<> SocketMessenger::shutdown()
     });
 }
 
-void SocketMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
+seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
 {
   if (!get_myaddr().is_blank_ip()) {
     // already learned or binded
-    return;
+    return seastar::now();
   }
 
   // Only learn IP address if blank.
@@ -152,7 +207,7 @@ void SocketMessenger::learned_addr(const entity_addr_t &peer_addr_for_me)
   addr.u = peer_addr_for_me.u;
   addr.set_type(peer_addr_for_me.get_type());
   addr.set_port(get_myaddr().get_port());
-  set_myaddrs(entity_addrvec_t{addr});
+  return set_myaddrs(entity_addrvec_t{addr});
 }
 
 void SocketMessenger::set_default_policy(const SocketPolicy& p)
@@ -171,6 +226,16 @@ void SocketMessenger::set_policy_throttler(entity_type_t peer_type,
 {
   // only byte throttler is used in OSD
   policy_set.set_throttlers(peer_type, throttle, nullptr);
+}
+
+seastar::shard_id SocketMessenger::locate_shard(const entity_addr_t& addr)
+{
+  ceph_assert(addr.get_family() == AF_INET);
+  std::size_t seed = 0;
+  boost::hash_combine(seed, addr.u.sin.sin_addr.s_addr);
+  //boost::hash_combine(seed, addr.u.sin.sin_port);
+  //boost::hash_combine(seed, addr.nonce);
+  return seed % seastar::smp::count;
 }
 
 ceph::net::SocketConnectionRef SocketMessenger::lookup_conn(const entity_addr_t& addr)
