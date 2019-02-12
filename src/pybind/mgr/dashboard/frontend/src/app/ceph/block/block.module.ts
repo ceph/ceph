@@ -14,6 +14,7 @@ import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { SharedModule } from '../../shared/shared.module';
 import { IscsiTabsComponent } from './iscsi-tabs/iscsi-tabs.component';
 import { IscsiTargetDetailsComponent } from './iscsi-target-details/iscsi-target-details.component';
+import { IscsiTargetDiscoveryModalComponent } from './iscsi-target-discovery-modal/iscsi-target-discovery-modal.component';
 import { IscsiTargetFormComponent } from './iscsi-target-form/iscsi-target-form.component';
 import { IscsiTargetImageSettingsModalComponent } from './iscsi-target-image-settings-modal/iscsi-target-image-settings-modal.component';
 import { IscsiTargetIqnSettingsModalComponent } from './iscsi-target-iqn-settings-modal/iscsi-target-iqn-settings-modal.component';
@@ -40,7 +41,8 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     RbdTrashPurgeModalComponent,
     IscsiTargetDetailsComponent,
     IscsiTargetImageSettingsModalComponent,
-    IscsiTargetIqnSettingsModalComponent
+    IscsiTargetIqnSettingsModalComponent,
+    IscsiTargetDiscoveryModalComponent
   ],
   imports: [
     CommonModule,
@@ -74,7 +76,8 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     IscsiTargetDetailsComponent,
     IscsiTargetFormComponent,
     IscsiTargetImageSettingsModalComponent,
-    IscsiTargetIqnSettingsModalComponent
+    IscsiTargetIqnSettingsModalComponent,
+    IscsiTargetDiscoveryModalComponent
   ]
 })
 export class BlockModule {}

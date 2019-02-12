@@ -83,4 +83,12 @@ export class IscsiService {
   deleteTarget(targetIqn) {
     return this.http.delete(`api/iscsi/target/${targetIqn}`, { observe: 'response' });
   }
+
+  getDiscovery() {
+    return this.http.get(`api/iscsi/discoveryauth`);
+  }
+
+  updateDiscovery(auth) {
+    return this.http.put(`api/iscsi/discoveryauth`, auth);
+  }
 }

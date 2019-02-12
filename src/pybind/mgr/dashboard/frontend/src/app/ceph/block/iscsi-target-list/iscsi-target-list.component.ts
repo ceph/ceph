@@ -18,6 +18,7 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+import { IscsiTargetDiscoveryModalComponent } from '../iscsi-target-discovery-modal/iscsi-target-discovery-modal.component';
 
 @Component({
   selector: 'cd-iscsi-target-list',
@@ -169,5 +170,9 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
           })
       }
     });
+  }
+
+  configureDiscoveryAuth() {
+    this.modalService.show(IscsiTargetDiscoveryModalComponent, {});
   }
 }
