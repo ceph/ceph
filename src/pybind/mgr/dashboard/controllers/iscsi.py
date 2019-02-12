@@ -127,7 +127,7 @@ class IscsiTarget(RESTController):
         IscsiTarget._delete(target_iqn, config, 0, 100)
 
     @iscsi_target_task('create', {'target_iqn': '{target_iqn}'})
-    def create(self, target_iqn=None, target_controls=None,
+    def create(self, target_iqn=None, target_controls=None, acl_enabled=None,
                portals=None, disks=None, clients=None, groups=None):
         target_controls = target_controls or {}
         portals = portals or []
@@ -141,11 +141,11 @@ class IscsiTarget(RESTController):
                                      code='target_already_exists',
                                      component='iscsi')
         IscsiTarget._validate(target_iqn, portals, disks)
-        IscsiTarget._create(target_iqn, target_controls, portals, disks, clients, groups, 0, 100,
-                            config)
+        IscsiTarget._create(target_iqn, target_controls, acl_enabled, portals, disks, clients,
+                            groups, 0, 100, config)
 
     @iscsi_target_task('edit', {'target_iqn': '{target_iqn}'})
-    def set(self, target_iqn, new_target_iqn=None, target_controls=None,
+    def set(self, target_iqn, new_target_iqn=None, target_controls=None, acl_enabled=None,
             portals=None, disks=None, clients=None, groups=None):
         target_controls = target_controls or {}
         portals = IscsiTarget._sorted_portals(portals)
@@ -165,8 +165,8 @@ class IscsiTarget(RESTController):
         IscsiTarget._validate(new_target_iqn, portals, disks)
         config = IscsiTarget._delete(target_iqn, config, 0, 50, new_target_iqn, target_controls,
                                      portals, disks, clients, groups)
-        IscsiTarget._create(new_target_iqn, target_controls, portals, disks, clients, groups,
-                            50, 100, config)
+        IscsiTarget._create(new_target_iqn, target_controls, acl_enabled, portals, disks, clients,
+                            groups, 50, 100, config)
 
     @staticmethod
     def _delete(target_iqn, config, task_progress_begin, task_progress_end, new_target_iqn=None,
@@ -367,7 +367,7 @@ class IscsiTarget(RESTController):
                                      component='iscsi')
 
     @staticmethod
-    def _create(target_iqn, target_controls,
+    def _create(target_iqn, target_controls, acl_enabled,
                 portals, disks, clients, groups,
                 task_progress_begin, task_progress_end, config):
         target_config = config['targets'].get(target_iqn, None)
@@ -391,6 +391,9 @@ class IscsiTarget(RESTController):
                                                                                    host,
                                                                                    ip_list)
                     TaskManager.current_task().inc_progress(task_progress_inc)
+            targetauth_action = ('enable_acl' if acl_enabled else 'disable_acl')
+            IscsiClient.instance(gateway_name=gateway_name).update_targetauth(target_iqn,
+                                                                              targetauth_action)
             for disk in disks:
                 pool = disk['pool']
                 image = disk['image']
@@ -523,6 +526,7 @@ class IscsiTarget(RESTController):
         for key, value in target_controls.items():
             if isinstance(value, bool):
                 target_controls[key] = 'Yes' if value else 'No'
+        acl_enabled = target_config['acl_enabled']
         target = {
             'target_iqn': target_iqn,
             'portals': portals,
@@ -530,6 +534,7 @@ class IscsiTarget(RESTController):
             'clients': clients,
             'groups': groups,
             'target_controls': target_controls,
+            'acl_enabled': acl_enabled
         }
         return target
 
