@@ -2,20 +2,19 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { TestBed } from '@angular/core/testing';
 
 import { configureTestBed } from '../../../testing/unit-test-helper';
-import { UserFormModel } from '../../core/auth/user-form/user-form.model';
-import { UserService } from './user.service';
+import { IscsiService } from './iscsi.service';
 
-describe('UserService', () => {
-  let service: UserService;
+describe('IscsiService', () => {
+  let service: IscsiService;
   let httpTesting: HttpTestingController;
 
   configureTestBed({
-    providers: [UserService],
+    providers: [IscsiService],
     imports: [HttpClientTestingModule]
   });
 
   beforeEach(() => {
-    service = TestBed.get(UserService);
+    service = TestBed.get(IscsiService);
     httpTesting = TestBed.get(HttpTestingController);
   });
 
@@ -27,47 +26,40 @@ describe('UserService', () => {
     expect(service).toBeTruthy();
   });
 
-  it('should call create', () => {
-    const user = new UserFormModel();
-    user.username = 'user0';
-    user.password = 'pass0';
-    user.name = 'User 0';
-    user.email = 'user0@email.com';
-    user.roles = ['administrator'];
-    service.create(user).subscribe();
-    const req = httpTesting.expectOne('api/user');
+  it('should call listTargets', () => {
+    service.listTargets().subscribe();
+    const req = httpTesting.expectOne('api/iscsi/target');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call status', () => {
+    service.status().subscribe();
+    const req = httpTesting.expectOne('ui-api/iscsi/status');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call settings', () => {
+    service.settings().subscribe();
+    const req = httpTesting.expectOne('ui-api/iscsi/settings');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call portals', () => {
+    service.portals().subscribe();
+    const req = httpTesting.expectOne('ui-api/iscsi/portals');
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call createTarget', () => {
+    service.createTarget('foo').subscribe();
+    const req = httpTesting.expectOne('api/iscsi/target');
     expect(req.request.method).toBe('POST');
-    expect(req.request.body).toEqual(user);
+    expect(req.request.body).toEqual('foo');
   });
 
-  it('should call delete', () => {
-    service.delete('user0').subscribe();
-    const req = httpTesting.expectOne('api/user/user0');
+  it('should call deleteTarget', () => {
+    service.deleteTarget('target_iqn').subscribe();
+    const req = httpTesting.expectOne('api/iscsi/target/target_iqn');
     expect(req.request.method).toBe('DELETE');
-  });
-
-  it('should call update', () => {
-    const user = new UserFormModel();
-    user.username = 'user0';
-    user.password = 'pass0';
-    user.name = 'User 0';
-    user.email = 'user0@email.com';
-    user.roles = ['administrator'];
-    service.update(user).subscribe();
-    const req = httpTesting.expectOne('api/user/user0');
-    expect(req.request.body).toEqual(user);
-    expect(req.request.method).toBe('PUT');
-  });
-
-  it('should call get', () => {
-    service.get('user0').subscribe();
-    const req = httpTesting.expectOne('api/user/user0');
-    expect(req.request.method).toBe('GET');
-  });
-
-  it('should call list', () => {
-    service.list().subscribe();
-    const req = httpTesting.expectOne('api/user');
-    expect(req.request.method).toBe('GET');
   });
 });
