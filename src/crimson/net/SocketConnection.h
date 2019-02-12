@@ -17,6 +17,7 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/shared_future.hh>
+#include <seastar/core/sharded.hh>
 
 #include "msg/Policy.h"
 #include "Connection.h"
@@ -32,11 +33,11 @@ using stop_t = seastar::stop_iteration;
 
 class SocketMessenger;
 class SocketConnection;
-using SocketConnectionRef = boost::intrusive_ptr<SocketConnection>;
+using SocketConnectionRef = seastar::shared_ptr<SocketConnection>;
 
 class SocketConnection : public Connection {
   SocketMessenger& messenger;
-  std::optional<Socket> socket;
+  seastar::foreign_ptr<std::unique_ptr<Socket>> socket;
   Dispatcher& dispatcher;
   seastar::gate pending_dispatch;
 
@@ -162,6 +163,7 @@ class SocketConnection : public Connection {
 
   seastar::future<> do_send(MessageRef msg);
   seastar::future<> do_keepalive();
+  seastar::future<> do_close();
 
  public:
   SocketConnection(SocketMessenger& messenger,
@@ -174,13 +176,15 @@ class SocketConnection : public Connection {
     return peer_type;
   }
 
-  bool is_connected() override;
+  seastar::future<bool> is_connected() override;
 
   seastar::future<> send(MessageRef msg) override;
 
   seastar::future<> keepalive() override;
 
   seastar::future<> close() override;
+
+  seastar::shard_id shard_id() const override;
 
   void print(ostream& out) const override;
 
@@ -191,7 +195,7 @@ class SocketConnection : public Connection {
                      const entity_type_t& peer_type);
   /// start a handshake from the server's perspective,
   /// only call when SocketConnection first construct
-  void start_accept(seastar::connected_socket&& socket,
+  void start_accept(seastar::foreign_ptr<std::unique_ptr<Socket>>&& socket,
                     const entity_addr_t& peer_addr);
 
   /// the number of connections initiated in this session, increment when a
