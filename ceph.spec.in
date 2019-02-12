@@ -1078,9 +1078,6 @@ ${CMAKE} .. \
     -DWITH_PYTHON2=OFF \
     -DMGR_PYTHON_VERSION=3 \
 %endif
-%if 0%{?rhel} && ! 0%{?centos}
-    -DWITH_SUBMAN=ON \
-%endif
 %if 0%{without ceph_test_package}
     -DWITH_TESTS=OFF \
 %endif
@@ -1737,9 +1734,6 @@ fi
 %{_mandir}/man8/ceph-bluestore-tool.8*
 %{_mandir}/man8/ceph-volume.8*
 %{_mandir}/man8/ceph-volume-systemd.8*
-%if 0%{?rhel} && ! 0%{?centos}
-%attr(0755,-,-) %{_sysconfdir}/cron.hourly/subman
-%endif
 %{_unitdir}/ceph-osd@.service
 %{_unitdir}/ceph-osd.target
 %{_unitdir}/ceph-volume@.service
