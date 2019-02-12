@@ -124,9 +124,9 @@ TEST(MDSSessionFilter, MetadataEquality)
   int r = filter.parse({"client_metadata.root=/rhubarb"}, &ss);
   ASSERT_EQ(r, 0);
   Session *a = new Session();
-  a->set_client_metadata({{"root", "/rhubarb"}});
+  a->set_client_metadata(std::map<std::string,std::string>({{"root", "/rhubarb"}}));
   Session *b = new Session();
-  b->set_client_metadata({{"root", "/custard"}});
+  b->set_client_metadata(std::map<std::string,std::string>({{"root", "/custard"}}));
 
   ASSERT_TRUE(filter.match(*a, [](client_t c) -> bool {return false;}));
   ASSERT_FALSE(filter.match(*b, [](client_t c) -> bool {return false;}));

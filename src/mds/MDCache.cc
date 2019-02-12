@@ -7486,7 +7486,7 @@ void MDCache::check_memory_usage()
   if (CInode::count())
     caps_per_inode = (double)Capability::count() / (double)CInode::count();
 
-  dout(2) << "check_memory_usage"
+  dout(2) << "Memory usage: "
 	   << " total " << last.get_total()
 	   << ", rss " << last.get_rss()
 	   << ", heap " << last.get_heap()
@@ -7512,7 +7512,7 @@ void MDCache::check_memory_usage()
     // Only do this once we are back in bounds: otherwise the releases would
     // slow down whatever process caused us to exceed bounds to begin with
     if (ceph_using_tcmalloc()) {
-      dout(2) << "check_memory_usage: releasing unused space from tcmalloc" 
+      dout(5) << "check_memory_usage: releasing unused space from tcmalloc"
 	      << dendl;
       ceph_heap_release_free_memory();
     }
@@ -7562,7 +7562,7 @@ void MDCache::shutdown_check()
 
 void MDCache::shutdown_start()
 {
-  dout(2) << "shutdown_start" << dendl;
+  dout(5) << "shutdown_start" << dendl;
 
   if (g_conf->mds_shutdown_check)
     mds->timer.add_event_after(g_conf->mds_shutdown_check, new C_MDC_ShutdownCheck(this));
@@ -7759,7 +7759,7 @@ bool MDCache::shutdown_pass()
   }
 
   // done!
-  dout(2) << "shutdown done." << dendl;
+  dout(5) << "shutdown done." << dendl;
   return true;
 }
 
