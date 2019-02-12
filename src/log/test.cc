@@ -31,7 +31,7 @@ TEST(Log, Simple)
   Log log(&subs);
   log.start();
  
-  log.set_log_file("/tmp/foo");
+  log.set_log_file("foo");
   log.reopen_log_file();
 
   log.set_stderr_level(5, -1);
@@ -60,7 +60,7 @@ TEST(Log, ReuseBad)
   subs.set_gather_level(1, 1);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/foo");
+  log.set_log_file("foo");
   log.reopen_log_file();
 
   const int l = 0;
@@ -92,7 +92,7 @@ TEST(Log, ManyNoGather)
   subs.set_gather_level(1, 1);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -111,7 +111,7 @@ TEST(Log, ManyGatherLog)
   subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -176,7 +176,7 @@ TEST(Log, ManyGatherLogPrebuf)
   subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -225,7 +225,7 @@ TEST(Log, ManyGather)
   subs.set_gather_level(1, 1);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   for (int i=0; i<many; i++) {
     int l = 10;
@@ -243,7 +243,7 @@ void do_segv()
   subs.set_gather_level(1, 1);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
 
   log.inject_segv();
@@ -269,7 +269,7 @@ TEST(Log, LargeLog)
   subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/big");
+  log.set_log_file("big");
   log.reopen_log_file();
   int l = 10;
   Entry *e = log.create_entry(l, 1);
@@ -290,7 +290,7 @@ TEST(Log, TimeSwitch)
   subs.set_gather_level(1, 10);
   Log log(&subs);
   log.start();
-  log.set_log_file("/tmp/time_switch_log");
+  log.set_log_file("time_switch_log");
   log.reopen_log_file();
   int l = 10;
   bool coarse = true;
