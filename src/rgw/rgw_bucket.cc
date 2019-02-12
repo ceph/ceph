@@ -389,7 +389,9 @@ int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
   pos = instance.find(':');
   if (pos == boost::string_ref::npos) {
     bucket->bucket_id.assign(instance.begin(), instance.end());
-    *shard_id = -1;
+    if (shard_id) {
+      *shard_id = -1;
+    }
     return 0;
   }
 
@@ -403,7 +405,9 @@ int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
     return -EINVAL;
   }
 
-  *shard_id = id;
+  if (shard_id) {
+    *shard_id = id;
+  }
   instance = instance.substr(0, pos);
   bucket->bucket_id.assign(instance.begin(), instance.end());
   return 0;
