@@ -232,7 +232,7 @@ class GaneshaConfParser(object):
             try:
                 return int(raw_value)
             except ValueError:
-                if raw_value == "true":
+                if raw_value == "true":  # pylint: disable=no-else-return
                     return True
                 elif raw_value == "false":
                     return False
@@ -247,7 +247,7 @@ class GaneshaConfParser(object):
         equal_idx = self.stream().find('=')
         semicolon_idx = self.stream().find(';')
         if equal_idx == -1:
-            raise Exception("Maformed stanza: no equal symbol found.")
+            raise Exception("Malformed stanza: no equal symbol found.")
         parameter_name = self.stream()[:equal_idx].lower()
         parameter_value = self.stream()[equal_idx+1:semicolon_idx]
         block_dict[parameter_name] = self.parse_parameter_value(
@@ -300,7 +300,7 @@ class GaneshaConfParser(object):
     @staticmethod
     def write_block_body(block, depth=0):
         def format_val(key, val):
-            if isinstance(val, list):
+            if isinstance(val, list):  # pylint: disable=no-else-return
                 return ', '.join([format_val(key, v) for v in val])
             elif isinstance(val, bool):
                 return str(val).lower()
@@ -364,7 +364,7 @@ class FSal(object):
 
     @staticmethod
     def from_fsal_block(fsal_block):
-        if fsal_block['name'] == "CEPH":
+        if fsal_block['name'] == "CEPH":  # pylint: disable=no-else-return
             return CephFSFSal.from_fsal_block(fsal_block)
         elif fsal_block['name'] == 'RGW':
             return RGWFSal.from_fsal_block(fsal_block)
@@ -375,7 +375,7 @@ class FSal(object):
 
     @staticmethod
     def from_dict(fsal_dict):
-        if fsal_dict['name'] == "CEPH":
+        if fsal_dict['name'] == "CEPH":  # pylint: disable=no-else-return
             return CephFSFSal.from_dict(fsal_dict)
         elif fsal_dict['name'] == 'RGW':
             return RGWFSal.from_dict(fsal_dict)
@@ -579,7 +579,7 @@ class Export(object):
         else:
             self.attr_expiration_time = attr_expiration_time
         self.security_label = security_label
-        self.protocols = set([GaneshaConf.format_protocol(p) for p in protocols])
+        self.protocols = {GaneshaConf.format_protocol(p) for p in protocols}
         self.transports = set(transports)
         self.clients = clients
 
@@ -833,6 +833,7 @@ class GaneshaConf(object):
     def format_squash(cls, squash):
         if squash is None:
             return None
+        # pylint: disable=no-else-return
         if squash.lower() in ["no_root_squash", "noidsquash", "none"]:
             return "no_root_squash"
         elif squash.lower() in ["rootid", "root_id_squash", "rootidsquash"]:
@@ -847,7 +848,7 @@ class GaneshaConf(object):
 
     @classmethod
     def format_protocol(cls, protocol):
-        if str(protocol) in ["NFSV3", "3", "V3", "NFS3"]:
+        if str(protocol) in ["NFSV3", "3", "V3", "NFS3"]:  # pylint: disable=no-else-return
             return 3
         elif str(protocol) in ["NFSV4", "4", "V4", "NFS4"]:
             return 4
