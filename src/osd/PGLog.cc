@@ -269,6 +269,11 @@ void PGLog::proc_replica_log(
     limit :
     first_non_divergent->version;
 
+  // We need to preserve the original crt before it gets updated in rewind_from_head().
+  // Later, in merge_object_divergent_entries(), we use it to check whether we can rollback
+  // a divergent entry or not.
+  eversion_t original_crt = log.get_can_rollback_to();
+  dout(20) << __func__ << " original_crt = " << original_crt << dendl;
   IndexedLog folog(olog);
   auto divergent = folog.rewind_from_head(lu);
   _merge_divergent_entries(
@@ -276,7 +281,7 @@ void PGLog::proc_replica_log(
     divergent,
     oinfo,
     olog.get_can_rollback_to(),
-    olog.get_can_rollback_to(),
+    original_crt,
     omissing,
     0,
     this);
