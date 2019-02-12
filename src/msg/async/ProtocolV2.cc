@@ -309,17 +309,20 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args..., signature_t> {
 };
 
 struct ClientIdentFrame
-    : public SignedEncryptedFrame<ClientIdentFrame, entity_addrvec_t, int64_t,
+    : public SignedEncryptedFrame<ClientIdentFrame, entity_addrvec_t,
+				  entity_addr_t,
+				  int64_t,
                                   uint64_t, uint64_t, uint64_t, uint64_t> {
   const ProtocolV2::Tag tag = ProtocolV2::Tag::CLIENT_IDENT;
   using SignedEncryptedFrame::SignedEncryptedFrame;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
-  inline int64_t &gid() { return get_val<1>(); }
-  inline uint64_t &global_seq() { return get_val<2>(); }
-  inline uint64_t &supported_features() { return get_val<3>(); }
-  inline uint64_t &required_features() { return get_val<4>(); }
-  inline uint64_t &flags() { return get_val<5>(); }
+  inline entity_addr_t &target_addr() { return get_val<1>(); }
+  inline int64_t &gid() { return get_val<2>(); }
+  inline uint64_t &global_seq() { return get_val<3>(); }
+  inline uint64_t &supported_features() { return get_val<4>(); }
+  inline uint64_t &required_features() { return get_val<5>(); }
+  inline uint64_t &flags() { return get_val<6>(); }
 };
 
 struct ServerIdentFrame
@@ -339,7 +342,9 @@ struct ServerIdentFrame
 };
 
 struct ReconnectFrame
-    : public SignedEncryptedFrame<ReconnectFrame, entity_addrvec_t, uint64_t,
+    : public SignedEncryptedFrame<ReconnectFrame, entity_addrvec_t,
+				  entity_addr_t,
+				  uint64_t,
 				  int64_t,
                                   uint64_t, uint64_t,
 				  uint64_t, uint64_t,
@@ -348,13 +353,14 @@ struct ReconnectFrame
   using SignedEncryptedFrame::SignedEncryptedFrame;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
-  inline uint64_t &cookie() { return get_val<1>(); }
-  inline int64_t &gid() { return get_val<2>(); }
-  inline uint64_t &global_seq() { return get_val<3>(); }
-  inline uint64_t &connect_seq() { return get_val<4>(); }
-  inline uint64_t &supported_features() { return get_val<5>(); }
-  inline uint64_t &required_features() { return get_val<6>(); }
-  inline uint64_t &msg_seq() { return get_val<7>(); }
+  inline entity_addr_t &target_addr() { return get_val<1>(); }
+  inline uint64_t &cookie() { return get_val<2>(); }
+  inline int64_t &gid() { return get_val<3>(); }
+  inline uint64_t &global_seq() { return get_val<4>(); }
+  inline uint64_t &connect_seq() { return get_val<5>(); }
+  inline uint64_t &supported_features() { return get_val<6>(); }
+  inline uint64_t &required_features() { return get_val<7>(); }
+  inline uint64_t &msg_seq() { return get_val<8>(); }
 };
 
 struct ResetFrame : public Frame<ResetFrame> {
@@ -2229,6 +2235,7 @@ CtPtr ProtocolV2::send_client_ident() {
   }
 
   ClientIdentFrame client_ident(this, messenger->get_myaddrs(),
+				connection->target_addr,
                                 messenger->get_myname().num(), global_seq,
                                 connection->policy.features_supported,
                                 connection->policy.features_required | msgr2_required,
@@ -2251,7 +2258,9 @@ CtPtr ProtocolV2::send_client_ident() {
 CtPtr ProtocolV2::send_reconnect() {
   ldout(cct, 20) << __func__ << dendl;
 
-  ReconnectFrame reconnect(this, messenger->get_myaddrs(), cookie,
+  ReconnectFrame reconnect(this, messenger->get_myaddrs(),
+			   connection->target_addr,
+			   cookie,
 			   messenger->get_myname().num(),
 			   global_seq,
                            connect_seq,
@@ -2505,6 +2514,7 @@ CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {
 
   ldout(cct, 5) << __func__ << " received client identification: "
                 << "addrs=" << client_ident.addrs()
+		<< " target=" << client_ident.target_addr()
                 << " gid=" << client_ident.gid()
                 << " global_seq=" << client_ident.global_seq()
                 << " features_supported=" << std::hex
@@ -2514,6 +2524,13 @@ CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {
   if (client_ident.addrs().empty() ||
       client_ident.addrs().front() == entity_addr_t()) {
     return _fault();  // a v2 peer should never do this
+  }
+  if (!messenger->get_myaddrs().contains(client_ident.target_addr())) {
+    ldout(cct,5) << __func__ << " peer is trying to reach "
+		 << client_ident.target_addr()
+		 << " which is not us (" << messenger->get_myaddrs() << ")"
+		 << dendl;
+    return _fault();
   }
 
   connection->set_peer_addrs(client_ident.addrs());
@@ -2581,11 +2598,20 @@ CtPtr ProtocolV2::handle_reconnect(char *payload, uint32_t length) {
 
   ldout(cct, 5) << __func__
                 << " received reconnect: cookie=" << reconnect.cookie()
+		<< " target_addr=" << reconnect.target_addr()
 		<< " gid=" << reconnect.gid()
                 << " gs=" << reconnect.global_seq()
                 << " cs=" << reconnect.connect_seq()
                 << " ms=" << reconnect.msg_seq()
 		<< dendl;
+
+  if (!messenger->get_myaddrs().contains(reconnect.target_addr())) {
+    ldout(cct,5) << __func__ << " peer is trying to reach "
+		 << reconnect.target_addr()
+		 << " which is not us (" << messenger->get_myaddrs() << ")"
+		 << dendl;
+    return _fault();
+  }
 
   // Should we check if one of the ident.addrs match connection->target_addr
   // as we do in ProtocolV1?
