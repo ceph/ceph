@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <type_traits>
+
 #include "ProtocolV2.h"
 #include "AsyncMessenger.h"
 
@@ -90,32 +92,92 @@ static void alloc_aligned_buffer(bufferlist &data, unsigned len, unsigned off) {
  * Protocol V2 Frame Structures
  **/
 
-static constexpr uint32_t FRAME_PREAMBLE_SIZE = 4 * sizeof(__le32);
+static constexpr uint8_t CRYPTO_BLOCK_SIZE { 16 };
+
+struct segment_t {
+  __le32 length;
+  __le16 alignment;
+} __attribute__((packed));
+
+struct preamble_main_t {
+  static constexpr std::size_t MAX_NUM_SEGMENTS = 2;
+
+  __le16 crc;
+  __u8 tag;
+  __u8 num_segments;
+  std::array<segment_t, MAX_NUM_SEGMENTS> segments;
+
+  uint8_t num_extra_preamble_blocks() const {
+    // the first 16 bytes of preamble can carry up to 2 segment descriptors.
+    return num_segments <= MAX_NUM_SEGMENTS ? 0
+					    : num_segments - MAX_NUM_SEGMENTS;
+  }
+} __attribute__((packed));
+static_assert(sizeof(preamble_main_t) == CRYPTO_BLOCK_SIZE);
+static_assert(std::is_standard_layout<preamble_main_t>::value);
+
+struct preamble_extra_t {
+  static constexpr std::size_t MAX_NUM_SEGMENTS = 2;
+  std::array<segment_t, MAX_NUM_SEGMENTS> segments;
+  std::array<__u8, 4> always_padding;
+} __attribute__((packed));
+static_assert(sizeof(preamble_extra_t) == CRYPTO_BLOCK_SIZE);
+static_assert(std::is_standard_layout<preamble_extra_t>::value);
+
+
+static constexpr uint32_t FRAME_PREAMBLE_SIZE = CRYPTO_BLOCK_SIZE;
+
 template <class T>
 struct Frame {
 protected:
   ceph::bufferlist payload;
   ceph::bufferlist::contiguous_filler preamble_filler;
 
-  void fill_preamble(const uint32_t frame_size) {
-    __le32 rest_len = frame_size - FRAME_PREAMBLE_SIZE;
-    preamble_filler.copy_in(sizeof(rest_len),
-			    reinterpret_cast<const char*>(&rest_len));
+  void fill_preamble(
+    const std::initializer_list<segment_t> main_segments,
+    const std::initializer_list<segment_t> extra_segments)
+  {
+    ceph_assert(
+      std::size(main_segments) <= preamble_main_t::MAX_NUM_SEGMENTS);
+    ceph_assert(
+      std::size(extra_segments) <= preamble_extra_t::MAX_NUM_SEGMENTS);
 
-    __le32 tag = static_cast<uint32_t>(T::tag);
-    preamble_filler.copy_in(sizeof(tag),
-			    reinterpret_cast<const char*>(&tag));
-    uint32_t db = 0xbaadf00d;
-    preamble_filler.copy_in(sizeof(tag),
-			    reinterpret_cast<const char*>(&db));
-    ceph_assert(tag != 0);
+    // Craft the main preamble. It's always present regardless of the number
+    // of segments message is composed from. This doesn't apply to extra one
+    // as it's optional -- if there is up to 2 segments, we'll never transmit
+    // preamble_extra_t;
+    preamble_main_t main_preamble;
+    main_preamble.num_segments = \
+      std::size(main_segments) + std::size(extra_segments);
+    main_preamble.tag = static_cast<__u8>(T::tag);
+    std::copy(std::cbegin(main_segments), std::cend(main_segments),
+	      std::begin(main_preamble.segments));
+    main_preamble.crc = 0;
+
+    ceph_assert(main_preamble.tag != 0);
+
+    if (std::empty(extra_segments)) {
+      preamble_filler.copy_in(sizeof(main_preamble),
+			      reinterpret_cast<const char*>(&main_preamble));
+    } else {
+      preamble_extra_t extra_preamble;
+      std::copy(std::cbegin(extra_segments), std::cend(extra_segments),
+	        std::begin(extra_preamble.segments));
+      //main_preamble.crc = \
+      //  ceph::crc16(main_preamble.crc, &extra_preamble, sizeof(extra_preamble);
+
+      preamble_filler.copy_in(sizeof(main_preamble),
+			      reinterpret_cast<const char*>(&main_preamble));
+      preamble_filler.copy_in(sizeof(extra_preamble),
+			      reinterpret_cast<const char*>(&extra_preamble));
+    }
   }
 
 public:
   Frame() : preamble_filler(payload.append_hole(FRAME_PREAMBLE_SIZE)) {}
 
   ceph::bufferlist &get_buffer() {
-    fill_preamble(payload.length());
+    fill_preamble({ segment_t{ payload.length(), 1} }, {});
     return payload;
   }
 
@@ -272,7 +334,7 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
     auto exp_size = this->payload.length() + 16;
     // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart
     // from auth tag size
-    this->fill_preamble(this->payload.length() + 16);
+    //this->fill_preamble(this->payload.length() + 16);
 
     protocol.session_stream_handlers.tx->authenticated_encrypt_update(
       std::move(this->payload));
@@ -430,7 +492,7 @@ struct MessageHeaderFrame
     });
 
     // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart from auth tag size
-    fill_preamble(this->payload.length() + front_bl.length() + middle_bl.length() + data_bl.length() + 16);
+    //fill_preamble(this->payload.length() + front_bl.length() + middle_bl.length() + data_bl.length() + 16);
     const auto exp_size = this->payload.length() + front_bl.length() + middle_bl.length() + data_bl.length() + 16;
 
     protocol.session_stream_handlers.tx->authenticated_encrypt_update(

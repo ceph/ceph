@@ -46,7 +46,7 @@ private:
   }
 
 public:
-  enum class Tag : uint32_t {
+  enum class Tag : __u8 {
     AUTH_REQUEST = 1,
     AUTH_BAD_METHOD,
     AUTH_REPLY_MORE,
