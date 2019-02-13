@@ -147,7 +147,7 @@ private:
   Ct<ProtocolV2> *handle_hello(char *payload, uint32_t length);
 
   CONTINUATION_DECL(ProtocolV2, read_frame);
-  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_length_and_tag);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_preamble_main);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_frame_payload);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_header);
   CONTINUATION_DECL(ProtocolV2, throttle_message);
@@ -160,7 +160,7 @@ private:
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_extra_bytes);
 
   Ct<ProtocolV2> *read_frame();
-  Ct<ProtocolV2> *handle_read_frame_length_and_tag(char *buffer, int r);
+  Ct<ProtocolV2> *handle_read_frame_preamble_main(char *buffer, int r);
   Ct<ProtocolV2> *handle_frame_payload(char *buffer, int r);
 
   Ct<ProtocolV2> *ready();
