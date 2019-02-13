@@ -1214,7 +1214,8 @@ class MgrModule(ceph_module.BaseMgrModule):
                             exception is raised.
         :param args: Argument tuple
         :param kwargs: Keyword argument dict
-        :return:
+        :raises RuntimeError: **Any** error raised within the method is converted to a RuntimeError
+        :raises ImportError: No such module
         """
         return self._ceph_dispatch_remote(module_name, method_name,
                                           args, kwargs)
