@@ -19,6 +19,8 @@
 #include "common/ceph_json.h"
 #include "mon/MonClient.h"
 
+#include "json_spirit/json_spirit.h"
+
 class Command
 {
 protected:

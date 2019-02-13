@@ -9,6 +9,7 @@
 #include <boost/tokenizer.hpp>
 #include <boost/lexical_cast.hpp>
 
+#include "json_spirit/json_spirit.h"
 #include "json_spirit/json_spirit_writer_template.h"
 
 using namespace json_spirit;
@@ -136,7 +137,7 @@ bool JSONObj::get_data(const string& key, data_val *dest)
  * a JSON Spirit Value, v,  and creates a JSONObj for each
  * child contained in v
  */
-void JSONObj::handle_value(Value v)
+void JSONObj::handle_value(Value& v)
 {
   if (v.type() == obj_type) {
     Object temp_obj = v.get_obj();
@@ -163,7 +164,7 @@ void JSONObj::handle_value(Value v)
   }
 }
 
-void JSONObj::init(JSONObj *p, Value v, string n)
+void JSONObj::init(JSONObj *p, Value& v, string n)
 {
   name = n;
   parent = p;
