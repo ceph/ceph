@@ -159,6 +159,7 @@ private:
 
   Ct<ProtocolV2> *read_frame();
   Ct<ProtocolV2> *handle_read_frame_preamble_main(char *buffer, int r);
+  Ct<ProtocolV2> *handle_read_frame_dispatch();
   Ct<ProtocolV2> *handle_frame_payload(char *buffer, int r);
   Ct<ProtocolV2> *handle_ident(char *payload, uint32_t length);
 

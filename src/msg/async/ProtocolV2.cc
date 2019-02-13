@@ -1423,6 +1423,10 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
     }
   }
 
+  return handle_read_frame_dispatch();
+}
+
+CtPtr ProtocolV2::handle_read_frame_dispatch() {
   ldout(cct, 10) << __func__ << " next payload_len=" << next_payload_len
                  << " tag=" << static_cast<uint32_t>(next_tag) << dendl;
 
