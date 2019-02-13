@@ -9,6 +9,7 @@
 #include "rgw_cr_rest.h"
 #include "rgw_data_sync.h"
 #include "rgw_zone.h"
+#include "rgw_bucket.h"
 
 #include <boost/asio/yield.hpp>
 

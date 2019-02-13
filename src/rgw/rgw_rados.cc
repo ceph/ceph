@@ -46,6 +46,7 @@
 #include "rgw_tools.h"
 #include "rgw_coroutine.h"
 #include "rgw_compression.h"
+#include "rgw_worker.h"
 
 #undef fork // fails to compile RGWPeriod::fork() below
 
