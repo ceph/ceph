@@ -788,9 +788,11 @@ class InventoryDevice(object):
             return row_format.format("Device Path", "Type", "Size", "Rotates",
                                      "Available", "Model")
         else:
-            return row_format.format(self.id, self.type, format_bytes(self.size, 5, colored=False),
+            return row_format.format(str(self.id), self.type if self.type is not None else "",
+                                     format_bytes(self.size if self.size is not None else 0, 5,
+                                                  colored=False),
                                      str(self.rotates), str(self.available),
-                                     self.dev_id)
+                                     self.dev_id if self.dev_id is not None else "")
 
 
 class InventoryNode(object):
