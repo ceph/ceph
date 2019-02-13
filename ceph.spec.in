@@ -195,6 +195,12 @@ BuildRequires:	python%{_python_buildid}-requests
 BuildRequires:	python%{_python_buildid}-six
 BuildRequires:	python%{_python_buildid}-tox
 BuildRequires:	python%{_python_buildid}-virtualenv
+%if 0%{?fedora} || 0%{?rhel}
+BuildRequires:  pyOpenSSL%{_python_buildid}
+%endif
+%if 0%{?suse_version}
+BuildRequires:  python%{_python_buildid}-pyOpenSSL
+%endif
 BuildRequires:	socat
 %endif
 %if 0%{with seastar}
