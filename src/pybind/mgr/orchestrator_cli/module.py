@@ -13,19 +13,13 @@ from mgr_module import MgrModule, HandleCommandResult, CLIWriteCommand, CLIReadC
 import orchestrator
 
 
-class NoOrchestrator(Exception):
-    def __init__(self):
-        super(NoOrchestrator, self).__init__("No orchestrator configured (try "
-                                             "`ceph orchestrator set backend`)")
-
-
 def handle_exceptions(func):
 
     @wraps(func)
     def inner(*args, **kwargs):
         try:
             return func(*args, **kwargs)
-        except (NoOrchestrator, ImportError) as e:
+        except (orchestrator.NoOrchestrator, ImportError) as e:
             return HandleCommandResult(-errno.ENOENT, stderr=str(e))
     return inner
 
@@ -36,11 +30,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
     ]
 
     def _select_orchestrator(self):
-        o = self.get_module_option("orchestrator")
-        if o is None:
-            raise NoOrchestrator()
-
-        return o
+        return self.get_module_option("orchestrator")
 
     @CLIWriteCommand('orchestrator host add',
                      "name=host,type=CephString,req=true",
@@ -404,14 +394,16 @@ Usage:
                     desc='Report configured backend and its status')
     @handle_exceptions
     def _status(self):
-        avail, why = self.available()
+        o = self._select_orchestrator()
+        if o is None:
+            raise orchestrator.NoOrchestrator()
 
+        avail, why = self.available()
         if avail is None:
             # The module does not report its availability
-            return HandleCommandResult(stdout="Backend: {0}".format(self._select_orchestrator()))
+            return HandleCommandResult(stdout="Backend: {0}".format(o))
         else:
             return HandleCommandResult(stdout="Backend: {0}\nAvailable: {1}{2}".format(
-                                           self._select_orchestrator(),
-                                           avail,
+                                           o, avail,
                                            " ({0})".format(why) if not avail else ""
                                        ))

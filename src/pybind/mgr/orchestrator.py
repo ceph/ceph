@@ -18,6 +18,10 @@ except ImportError:
 import time
 import fnmatch
 
+class NoOrchestrator(Exception):
+    def __init__(self):
+        super(NoOrchestrator, self).__init__("No orchestrator configured (try "
+                                             "`ceph orchestrator set backend`)")
 
 class _Completion(G):
     @property
@@ -834,6 +838,10 @@ class OrchestratorClientMixin(Orchestrator):
             o = self._select_orchestrator()
         except AttributeError:
             o = self.remote('orchestrator_cli', '_select_orchestrator')
+
+        if o is None:
+            raise NoOrchestrator()
+
         self.log.debug("_oremote {} -> {}.{}(*{}, **{})".format(self.module_name, o, meth, args, kwargs))
         return self.remote(o, meth, *args, **kwargs)
 

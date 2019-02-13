@@ -4,7 +4,6 @@ from __future__ import absolute_import
 import time
 
 from .. import mgr, logger
-from ..settings import Settings
 
 
 class NoOrchesrtatorConfiguredException(Exception):
@@ -21,10 +20,10 @@ class OrchClient(object):
         return cls._instance
 
     def _call(self, method, *args, **kwargs):
-        if not Settings.ORCHESTRATOR_BACKEND:
+        _backend = mgr.get_module_option_ex("orchestrator_cli", "orchestrator")
+        if not _backend:
             raise NoOrchesrtatorConfiguredException()
-        return mgr.remote(Settings.ORCHESTRATOR_BACKEND, method, *args,
-                          **kwargs)
+        return mgr.remote(_backend, method, *args, **kwargs)
 
     def _wait(self, completions):
         while not self._call("wait", completions):
@@ -39,7 +38,8 @@ class OrchClient(object):
         return completion.result
 
     def available(self):
-        if not Settings.ORCHESTRATOR_BACKEND:
+        _backend = mgr.get_module_option_ex("orchestrator_cli", "orchestrator")
+        if not _backend:
             return False
         status, desc = self._call("available")
         logger.info("[ORCH] is orchestrator available: %s, %s", status, desc)
