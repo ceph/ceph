@@ -26,8 +26,6 @@ enum {
 #define CACHE_FLAG_MODIFY_XATTRS  0x08
 #define CACHE_FLAG_OBJV           0x10
 
-#define mydout(v) lsubdout(T::cct, rgw, v)
-
 struct ObjectMetaInfo {
   uint64_t size;
   real_time mtime;

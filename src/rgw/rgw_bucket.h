@@ -14,6 +14,8 @@
 
 #include "rgw_string.h"
 
+#include "common/Mutex.h"
+#include "common/Cond.h"
 #include "common/Formatter.h"
 #include "common/lru_map.h"
 #include "common/ceph_time.h"

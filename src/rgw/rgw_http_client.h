@@ -9,6 +9,7 @@
 #include "common/Cond.h"
 #include "rgw_common.h"
 #include "rgw_string.h"
+#include "rgw_http_client_types.h"
 
 #include <atomic>
 
@@ -20,54 +21,6 @@ void rgw_http_client_cleanup();
 
 struct rgw_http_req_data;
 class RGWHTTPManager;
-
-class RGWIOIDProvider
-{
-  std::atomic<int64_t> max = {0};
-
-public:
-  RGWIOIDProvider() {}
-  int64_t get_next() {
-    return ++max;
-  }
-};
-
-struct rgw_io_id {
-  int64_t id{0};
-  int channels{0};
-
-  rgw_io_id() {}
-  rgw_io_id(int64_t _id, int _channels) : id(_id), channels(_channels) {}
-
-  bool intersects(const rgw_io_id& rhs) {
-    return (id == rhs.id && ((channels | rhs.channels) != 0));
-  }
-
-  bool operator<(const rgw_io_id& rhs) const {
-    if (id < rhs.id) {
-      return true;
-    }
-    return (id == rhs.id &&
-            channels < rhs.channels);
-  }
-};
-
-class RGWIOProvider
-{
-  int64_t id{-1};
-
-public:
-  RGWIOProvider() {}
-  virtual ~RGWIOProvider() = default; 
-
-  void assign_io(RGWIOIDProvider& io_id_provider, int io_type = -1);
-  rgw_io_id get_io_id(int io_type) {
-    return rgw_io_id{id, io_type};
-  }
-
-  virtual void set_io_user_info(void *_user_info) = 0;
-  virtual void *get_io_user_info() = 0;
-};
 
 class RGWHTTPClient : public RGWIOProvider
 {

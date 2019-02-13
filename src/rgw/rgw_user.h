@@ -12,8 +12,6 @@
 #include "rgw_common.h"
 #include "rgw_tools.h"
 
-#include "rgw_rados.h"
-
 #include "rgw_string.h"
 
 #include "common/Formatter.h"
@@ -26,6 +24,8 @@
 #define RAND_SUBUSER_LEN 5
 
 #define XMLNS_AWS_S3 "http://s3.amazonaws.com/doc/2006-03-01/"
+
+class RGWRados;
 
 /**
  * A string wrapper that includes encode/decode functions
