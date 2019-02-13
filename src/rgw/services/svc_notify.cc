@@ -1,4 +1,5 @@
 #include "include/random.h"
+#include "include/Context.h"
 #include "common/errno.h"
 
 #include "svc_notify.h"

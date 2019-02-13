@@ -33,7 +33,6 @@
 #include "common/ceph_time.h"
 
 #include "rgw_common.h"
-#include "rgw_rados.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_acl.h"
@@ -57,6 +56,7 @@ using ceph::crypto::SHA1;
 
 struct req_state;
 class RGWOp;
+class RGWRados;
 
 
 namespace rgw {

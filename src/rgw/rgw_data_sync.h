@@ -11,7 +11,6 @@
 
 #include "rgw_coroutine.h"
 #include "rgw_http_client.h"
-#include "rgw_bucket.h"
 
 #include "rgw_sync_module.h"
 #include "rgw_sync_trace.h"
@@ -267,6 +266,7 @@ struct RGWDataSyncEnv {
 };
 
 class RGWRados;
+class RGWDataChangesLogInfo;
 
 class RGWRemoteDataLog : public RGWCoroutinesManager {
   const DoutPrefixProvider *dpp;

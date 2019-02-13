@@ -7,6 +7,8 @@
 #include "svc_rados.h"
 
 
+class Context;
+
 class RGWSI_Zone;
 class RGWSI_Finisher;
 

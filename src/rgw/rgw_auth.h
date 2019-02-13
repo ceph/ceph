@@ -12,7 +12,6 @@
 #include <utility>
 
 #include "rgw_common.h"
-#include "rgw_keystone.h"
 #include "rgw_web_idp.h"
 
 #define RGW_USER_ANON_ID "anonymous"

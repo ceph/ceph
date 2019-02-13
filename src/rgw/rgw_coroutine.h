@@ -21,8 +21,11 @@
 #include "common/debug.h"
 #include "common/Timer.h"
 #include "common/admin_socket.h"
+#include "common/RWLock.h"
 
 #include "rgw_common.h"
+#include "rgw_http_client_types.h"
+
 #include <boost/asio/coroutine.hpp>
 
 #include <atomic>

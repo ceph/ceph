@@ -10,6 +10,8 @@
 #include <boost/scope_exit.hpp>
 #include <iostream>
 
+#include "json_spirit/json_spirit.h"
+
 namespace rbd {
 
 int MirrorDaemonServiceInfo::init() {

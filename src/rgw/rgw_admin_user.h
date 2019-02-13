@@ -19,6 +19,8 @@
 #include <string>
 #include "common/config.h"
 
+#include <boost/intrusive_ptr.hpp>
+
 class RGWRados;
 
 namespace rgw {

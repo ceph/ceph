@@ -1,11 +1,12 @@
 #ifndef CEPH_RGW_SERVICES_RADOS_H
 #define CEPH_RGW_SERVICES_RADOS_H
 
-
 #include "rgw/rgw_service.h"
 
 #include "include/rados/librados.hpp"
 #include "common/async/yield_context.h"
+#include "common/RWLock.h"
+
 
 class RGWAccessListFilter {
 public:
