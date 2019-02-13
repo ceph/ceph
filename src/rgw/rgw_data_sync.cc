@@ -561,6 +561,16 @@ public:
   }
 };
 
+RGWRemoteDataLog::RGWRemoteDataLog(const DoutPrefixProvider *dpp, RGWRados *_store,
+                                   RGWAsyncRadosProcessor *async_rados)
+  : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
+      dpp(dpp), store(_store), async_rados(async_rados),
+      http_manager(store->ctx(), completion_mgr),
+      lock("RGWRemoteDataLog::lock"), data_sync_cr(NULL),
+      initialized(false)
+{
+}
+
 int RGWRemoteDataLog::read_log_info(rgw_datalog_info *log_info)
 {
   rgw_http_param_pair pairs[] = { { "type", "data" },
@@ -1835,6 +1845,11 @@ int RGWRemoteDataLog::run_sync(int num_shards)
   return 0;
 }
 
+CephContext *RGWDataSyncStatusManager::get_cct() const
+{
+  return store->ctx();
+}
+
 int RGWDataSyncStatusManager::init()
 {
   RGWZone *zone_def;
@@ -1917,6 +1932,16 @@ string RGWDataSyncStatusManager::shard_obj_name(const string& source_zone, int s
   snprintf(buf, sizeof(buf), "%s.%s.%d", datalog_sync_status_shard_prefix.c_str(), source_zone.c_str(), shard_id);
 
   return string(buf);
+}
+
+RGWRemoteBucketLog::RGWRemoteBucketLog(const DoutPrefixProvider *_dpp, RGWRados *_store,
+                                       RGWBucketSyncStatusManager *_sm,
+                                       RGWAsyncRadosProcessor *_async_rados,
+                                       RGWHTTPManager *_http_manager)
+    : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
+      dpp(_dpp), store(_store), status_manager(_sm),
+      async_rados(_async_rados), http_manager(_http_manager)
+{
 }
 
 int RGWRemoteBucketLog::init(const string& _source_zone, RGWRESTConn *_conn,
@@ -2294,13 +2319,29 @@ RGWCoroutine *RGWRemoteBucketLog::read_sync_status_cr(rgw_bucket_shard_sync_info
   return new RGWReadBucketSyncStatusCoroutine(&sync_env, bs, sync_status);
 }
 
-RGWBucketSyncStatusManager::~RGWBucketSyncStatusManager() {
+RGWBucketSyncStatusManager::RGWBucketSyncStatusManager(RGWRados *_store, const string& _source_zone,
+                                                       const rgw_bucket& bucket) : store(_store),
+                                                                                     cr_mgr(_store->ctx(), _store->get_cr_registry()),
+                                                                                     http_manager(store->ctx(), cr_mgr.get_completion_mgr()),
+                                                                                     source_zone(_source_zone),
+                                                                                     conn(NULL), error_logger(NULL),
+                                                                                     bucket(bucket),
+                                                                                     num_shards(0)
+{
+}
+
+RGWBucketSyncStatusManager::~RGWBucketSyncStatusManager()
+{
   for (map<int, RGWRemoteBucketLog *>::iterator iter = source_logs.begin(); iter != source_logs.end(); ++iter) {
     delete iter->second;
   }
   delete error_logger;
 }
 
+CephContext *RGWBucketSyncStatusManager::get_cct() const
+{
+  return store->ctx();
+}
 
 void rgw_bucket_entry_owner::decode_json(JSONObj *obj)
 {

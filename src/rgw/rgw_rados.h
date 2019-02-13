@@ -10,8 +10,6 @@
 #include "common/RefCountedObj.h"
 #include "common/RWLock.h"
 #include "common/ceph_time.h"
-#include "common/lru_map.h"
-#include "common/ceph_json.h"
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/version/cls_version_types.h"
@@ -393,6 +391,11 @@ struct bucket_info_entry {
 };
 
 struct tombstone_entry;
+
+template <class K, class V>
+class lru_map;
+using tombstone_cache_t = lru_map<rgw_obj, tombstone_entry>;
+
 class RGWIndexCompletionManager;
 
 class RGWRados
@@ -506,7 +509,6 @@ protected:
   using RGWChainedCacheImpl_bucket_info_entry = RGWChainedCacheImpl<bucket_info_entry>;
   RGWChainedCacheImpl_bucket_info_entry *binfo_cache;
 
-  using tombstone_cache_t = lru_map<rgw_obj, tombstone_entry>;
   tombstone_cache_t *obj_tombstone_cache;
 
   librados::IoCtx gc_pool_ctx;        // .rgw.gc

@@ -30,7 +30,6 @@
 #include "rgw_iam_policy_keywords.h"
 #include "rgw_string.h"
 
-class RGWRados;
 namespace rgw {
 namespace auth {
 class Identity;
