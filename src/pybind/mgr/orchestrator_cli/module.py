@@ -71,11 +71,12 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @CLIReadCommand('orchestrator device ls',
                     "name=host,type=CephString,n=N,req=false "
-                    "name=format,type=CephChoices,strings=json|plain,req=false",
+                    "name=format,type=CephChoices,strings=json|plain,req=false "
+                    "name=refresh,type=CephBool,req=false",
                     'List devices on a node')
     @handle_exceptions
-    def _list_devices(self, host=None, format='plain'):
-        # type: (List[str], str) -> HandleCommandResult
+    def _list_devices(self, host=None, format='plain', refresh=False):
+        # type: (List[str], str, bool) -> HandleCommandResult
         """
         Provide information about storage devices present in cluster hosts
 
@@ -85,7 +86,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         """
         nf = orchestrator.InventoryFilter(nodes=host) if host else None
 
-        completion = self.get_inventory(node_filter=nf)
+        completion = self.get_inventory(node_filter=nf, refresh=refresh)
 
         self._orchestrator_wait([completion])
 
