@@ -329,8 +329,8 @@ def is_device(dev):
         return False
     # use lsblk first, fall back to using stat
     TYPE = lsblk(dev).get('TYPE')
-    if TYPE:
-        return TYPE == 'disk'
+    if TYPE and  (TYPE == 'disk' or TYPE.startswith(('raid'))):
+        return True
 
     # fallback to stat
     return _stat_is_device(os.lstat(dev).st_mode)
