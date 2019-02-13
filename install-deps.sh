@@ -44,14 +44,18 @@ function munge_ceph_spec_in {
 function munge_debian_control {
     local version=$1
     shift
-    local control=$1
+    local for_make_check=$1
     shift
+    local control=$1
     case "$version" in
         *squeeze*|*wheezy*)
 	    control="/tmp/control.$$"
 	    grep -v babeltrace debian/control > $control
 	    ;;
     esac
+    if $for_make_check; then
+        sed -i 's/^# Make-Check[[:space:]]/             /g' $control
+    fi
     echo $control
 }
 
@@ -247,6 +251,15 @@ if [ x$(uname)x = xFreeBSDx ]; then
 
     exit
 else
+    for_make_check=false
+    if tty -s; then
+        # interactive
+        for_make_check=true
+    elif [ $FOR_MAKE_CHECK ]; then
+        for_make_check=true
+    else
+        for_make_check=false
+    fi
     source /etc/os-release
     case $ID in
     debian|ubuntu|devuan)
@@ -275,7 +288,7 @@ else
         touch $DIR/status
 
 	backports=""
-	control=$(munge_debian_control "$VERSION" "debian/control")
+	control=$(munge_debian_control "$VERSION" "$for_make_check" "debian/control")
         case "$VERSION" in
             *squeeze*|*wheezy*)
                 backports="-t $codename-backports"

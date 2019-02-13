@@ -101,6 +101,7 @@ function run() {
 
     if test -f ./install-deps.sh ; then
 	    export WITH_SEASTAR=1
+	    export FOR_MAKE_CHECK=1
 	    $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi
