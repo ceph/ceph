@@ -83,28 +83,39 @@ void CacheController::run() {
 void CacheController::handle_request(uint64_t session_id, ObjectCacheRequest* req){
   ldout(m_cct, 20) << dendl;
 
-  switch (req->m_data.type) {
+  switch (req->type) {
     case RBDSC_REGISTER: {
       // TODO(): skip register and allow clients to lookup directly
-      req->m_data.type = RBDSC_REGISTER_REPLY;
-      m_cache_server->send(session_id, req);
 
+      ObjectCacheRegReplyData data;
+      data.type = RBDSC_REGISTER_REPLY;
+      data.seq = req->seq;
+      req = encode_object_cache_request(&data, RBDSC_REGISTER_REPLY);
+      m_cache_server->send(session_id, req);
       break;
     }
     case RBDSC_READ: {
       // lookup object in local cache store
-      int ret = m_object_cache_store->lookup_object(req->m_data.m_pool_namespace,
-                                                    req->m_data.m_pool_id,
-                                                    req->m_data.m_snap_id,
-                                                    req->m_data.m_oid,
-                                                    req->m_data.m_cache_path);
+      ObjectCacheReadData* data = (ObjectCacheReadData*)(req->m_data);
+      std::string cache_path;
+      int ret = m_object_cache_store->lookup_object(data->m_pool_namespace,
+                                                    data->m_pool_id,
+                                                    data->m_snap_id,
+                                                    data->m_oid,
+                                                    cache_path);
       if (ret < 0) {
-        req->m_data.type = RBDSC_READ_RADOS;
+        ObjectCacheReadRadosData reply_data;
+        reply_data.type = RBDSC_READ_RADOS;
+        reply_data.seq = req->seq;
+        req = encode_object_cache_request(&reply_data, RBDSC_READ_RADOS);
       } else {
-        req->m_data.type = RBDSC_READ_REPLY;
+        ObjectCacheReadReplyData reply_data;
+        reply_data.m_cache_path = cache_path;
+        reply_data.type = RBDSC_READ_REPLY;
+        reply_data.seq = req->seq;
+        req = encode_object_cache_request(&reply_data, RBDSC_READ_REPLY);
       }
       m_cache_server->send(session_id, req);
-
       break;
     }
     default:

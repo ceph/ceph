@@ -91,6 +91,7 @@ void CacheSession::handle_request_data(bufferptr bp, uint64_t data_len,
 
   bl_data.append(m_bp_header);
   bl_data.append(std::move(bp));
+
   ObjectCacheRequest* req = decode_object_cache_request(bl_data);
   process(req);
   read_request_header();
@@ -103,8 +104,6 @@ void CacheSession::process(ObjectCacheRequest* req) {
 
 void CacheSession::send(ObjectCacheRequest* reply) {
   ldout(cct, 20) << dendl;
-  reply->m_data_buffer.clear();
-  reply->encode();
   bufferlist bl;
   bl.append(reply->get_data_buffer());
 
