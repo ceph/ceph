@@ -413,6 +413,7 @@ int main(int argc, const char **argv)
 
 	entity_addr_t local;
 	if (have_local_addr(g_ceph_context, ls, &local)) {
+	  dout(0) << " have local addr " << local << dendl;
 	  string name;
 	  local.set_type(entity_addr_t::TYPE_MSGR2);
 	  if (!monmap.get_addr_name(local, name)) {
@@ -432,6 +433,8 @@ int main(int argc, const char **argv)
 		    << " is local, but not 'noname-' + something; "
 		    << "not assuming it's me" << dendl;
 	  }
+	} else {
+	  dout(0) << " no local addrs match monmap" << dendl;
 	}
       }
     }
