@@ -21,7 +21,6 @@ usr/lib/ceph/mgr/prometheus
 usr/lib/ceph/mgr/rbd_support
 usr/lib/ceph/mgr/restful
 usr/lib/ceph/mgr/selftest
-usr/lib/ceph/mgr/smart
 usr/lib/ceph/mgr/status
 usr/lib/ceph/mgr/test_orchestrator
 usr/lib/ceph/mgr/telegraf
