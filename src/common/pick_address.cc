@@ -352,6 +352,10 @@ int pick_addresses(
 	  (ipv & CEPH_PICK_ADDRESS_IPV6)) {
 	r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV6, networks,
 				interfaces, addrs, preferred_numa_node);
+
+        if (r >= 0) {
+            break;
+        }
       }
       if (r >= 0 &&
 	  (ipv & CEPH_PICK_ADDRESS_IPV4) &&
