@@ -24,6 +24,7 @@
 #include "librbd/mirror/Types.h"
 #include "librbd/MirroringWatcher.h"
 #include <boost/scope_exit.hpp>
+#include "json_spirit/json_spirit.h"
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
