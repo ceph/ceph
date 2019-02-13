@@ -157,11 +157,14 @@ struct TestMigration : public TestFixture {
     m_ictxs.insert(*ictx);
 
     ASSERT_EQ(0, (*ictx)->state->open(flags));
+    (*ictx)->skip_partial_discard = false;
   }
 
   void open_image(librados::IoCtx& io_ctx, const std::string &name,
                   librbd::ImageCtx **ictx) {
     open_image(io_ctx, name, "", false, 0, ictx);
+    ASSERT_EQ(0, (*ictx)->state->open(0));
+    (*ictx)->skip_partial_discard = false;
   }
 
   void migration_prepare(librados::IoCtx& dst_io_ctx,
