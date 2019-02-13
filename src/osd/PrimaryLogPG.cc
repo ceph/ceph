@@ -564,13 +564,17 @@ bool PrimaryLogPG::should_send_op(
       hoid.pool != (int64_t)info.pgid.pool() ||
       hoid <= last_backfill_started ||
       hoid <= peer_info[peer].last_backfill;
+  if (is_backfill_targets(peer) && peer_missing[peer].is_missing(hoid))
+    should_send = false;
   if (!should_send) {
     ceph_assert(is_backfill_targets(peer));
     dout(10) << __func__ << " issue_repop shipping empty opt to osd." << peer
              << ", object " << hoid
              << " beyond std::max(last_backfill_started "
              << ", peer_info[peer].last_backfill "
-             << peer_info[peer].last_backfill << ")" << dendl;
+             << peer_info[peer].last_backfill << ") or "
+             << " is missing on osd. " << peer << ": " << peer_missing[peer].is_missing(hoid)
+             << dendl;
     return should_send;
   }
   if (async_recovery_targets.count(peer) && peer_missing[peer].is_missing(hoid)) {
