@@ -191,9 +191,10 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
     return r;
   }
 
-  constexpr auto MAX_LIST_OBJS_ENTRIES = 100;
+  constexpr int64_t MAX_LIST_OBJS_ENTRIES=100;
+
   max_list_bucket_entries = std::max(store->ctx()->_conf->rgw_list_bucket_min_readahead,
-                                     MAX_LIST_OBJS_ENTRIES)
+                                     MAX_LIST_OBJS_ENTRIES);
 
   RGWOrphanSearchState state;
   r = orphan_store.read_job(job_name, state);
@@ -502,8 +503,6 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
 
   deque<RGWRados::Object::Stat> stat_ops;
 
-  int count = 0;
-
   do {
     vector<rgw_bucket_dir_entry> result;
 
@@ -544,13 +543,12 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
           }
         }
       }
-      if (++count >= COUNT_BEFORE_FLUSH) {
+      if (oids.size() >= COUNT_BEFORE_FLUSH) {
         ret = log_oids(linked_objs_index, oids);
         if (ret < 0) {
           cerr << __func__ << ": ERROR: log_oids() returned ret=" << ret << std::endl;
           return ret;
         }
-        count = 0;
         oids.clear();
       }
     }
