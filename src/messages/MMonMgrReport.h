@@ -52,16 +52,16 @@ public:
     paxos_encode();
     encode(health_checks, payload);
     encode(service_map_bl, payload);
-    if (header.version >= 2) {
-      encode(progress_events, payload);
-    }
+    encode(progress_events, payload);
   }
   void decode_payload() override {
     auto p = payload.cbegin();
     paxos_decode(p);
     decode(health_checks, p);
     decode(service_map_bl, p);
-    decode(progress_events, p);
+    if (header.version >= 2) {
+      decode(progress_events, p);
+    }
   }
 };
 
