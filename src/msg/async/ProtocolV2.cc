@@ -147,6 +147,9 @@ protected:
     // as it's optional -- if there is up to 2 segments, we'll never transmit
     // preamble_extra_t;
     preamble_main_t main_preamble;
+    // TODO: we might fill/pad with pseudo-random data.
+    ::memset(&main_preamble, 0, sizeof(main_preamble));
+
     main_preamble.num_segments = \
       std::size(main_segments) + std::size(extra_segments);
     main_preamble.tag = static_cast<__u8>(T::tag);
@@ -161,6 +164,9 @@ protected:
 			      reinterpret_cast<const char*>(&main_preamble));
     } else {
       preamble_extra_t extra_preamble;
+      // TODO: we might fill/pad with pseudo-random data.
+      ::memset(&extra_preamble, 0, sizeof(extra_preamble));
+
       std::copy(std::cbegin(extra_segments), std::cend(extra_segments),
 	        std::begin(extra_preamble.segments));
       //main_preamble.crc = \
