@@ -185,7 +185,8 @@ int RGWOrphanStore::read_entries(const string& oid, const string& marker, map<st
   return 0;
 }
 
-int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
+int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info, bool detailed_mode)
+{
   int r = orphan_store.init();
   if (r < 0) {
     return r;
@@ -196,6 +197,7 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
   max_list_bucket_entries = std::max(store->ctx()->_conf->rgw_list_bucket_min_readahead,
                                      MAX_LIST_OBJS_ENTRIES);
 
+  detailed_mode = detailed_mode;
   RGWOrphanSearchState state;
   r = orphan_store.read_job(job_name, state);
   if (r < 0 && r != -ENOENT) {
@@ -437,6 +439,12 @@ int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, RGWRados:
   } else {
     RGWObjManifest& manifest = result.manifest;
 
+    if (!detailed_mode &&
+        manifest.get_obj_size() <= manifest.get_head_size()) {
+      ldout(store->ctx(), 5) << "skipping object as it fits in a head" << dendl;
+      return 0;
+    }
+
     RGWObjManifest::obj_iterator miter;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
       const rgw_raw_obj& loc = miter.get_location().get_raw_obj(store);
@@ -522,6 +530,14 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
       }
 
       ldout(store->ctx(), 20) << __func__ << ": entry.key.name=" << entry.key.name << " entry.key.instance=" << entry.key.instance << dendl;
+
+      if (!detailed_mode &&
+          entry.meta.accounted_size <= (uint64_t)store->ctx()->_conf->rgw_max_chunk_size) {
+        ldout(store->ctx(),5) << __func__ << "skipping stat as the object " << entry.key.name
+                              << "fits in a head" << dendl;
+        continue;
+      }
+
       rgw_obj obj(bucket_info.bucket, entry.key);
 
       RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
