@@ -2948,7 +2948,6 @@ void Locker::handle_client_caps(const MClientCaps::const_ref &m)
 
       if (cap->get_last_seq() == 0 &&
 	  (cap->pending() & (CEPH_CAP_FILE_WR|CEPH_CAP_FILE_BUFFER))) {
-	cap->issue_norevoke(cap->issued());
 	share_inode_max_size(in, cap);
       }
     }
