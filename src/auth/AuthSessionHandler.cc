@@ -332,6 +332,7 @@ void AES128GCM_OnWireTxHandler::reset_tx_handler(
 
   buffer.reserve(std::accumulate(std::begin(update_size_sequence),
     std::end(update_size_sequence), AESGCM_TAG_LEN));
+  // transplantate the nonce update management from OpenVPN's AES-GCM
   nonce++;
 }
 
