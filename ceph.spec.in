@@ -1437,6 +1437,7 @@ fi
 
 %files mgr
 %{_bindir}/ceph-mgr
+%dir %{_libdir}/ceph/mgr
 %{_libdir}/ceph/mgr/ansible
 %{_libdir}/ceph/mgr/balancer
 %{_libdir}/ceph/mgr/crash
