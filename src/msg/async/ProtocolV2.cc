@@ -29,6 +29,16 @@ ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
 
 using CtPtr = Ct<ProtocolV2> *;
 
+// NOTE: I guess this will be moved outside the ProtocolV2 soon.
+// https://stackoverflow.com/q/48819797
+static std::uint16_t ceph_crc16c(
+  std::uint16_t crc,
+  unsigned char const* const data,
+  const std::size_t  length)
+{
+  return ceph_crc32c(crc, data, length);
+}
+
 void ProtocolV2::get_auth_allowed_methods(
   int peer_type, std::vector<uint32_t> &allowed_methods)
 {
@@ -155,7 +165,9 @@ protected:
     main_preamble.tag = static_cast<__u8>(T::tag);
     std::copy(std::cbegin(main_segments), std::cend(main_segments),
 	      std::begin(main_preamble.segments));
-    main_preamble.crc = 0;
+    main_preamble.crc = \
+      ceph_crc16c(0, reinterpret_cast<unsigned char*>(&main_preamble) + sizeof(main_preamble.crc),
+		  sizeof(main_preamble) - sizeof(main_preamble.crc));
 
     ceph_assert(main_preamble.tag != 0);
 
@@ -169,8 +181,11 @@ protected:
 
       std::copy(std::cbegin(extra_segments), std::cend(extra_segments),
 	        std::begin(extra_preamble.segments));
-      //main_preamble.crc = \
-      //  ceph::crc16(main_preamble.crc, &extra_preamble, sizeof(extra_preamble);
+      // TODO: we might want to make the extra crc separated from main's one
+      main_preamble.crc = \
+        ceph_crc16c(main_preamble.crc,
+		    reinterpret_cast<unsigned char*>(&extra_preamble),
+		    sizeof(extra_preamble));
 
       preamble_filler.copy_in(sizeof(main_preamble),
 			      reinterpret_cast<const char*>(&main_preamble));
@@ -1395,6 +1410,17 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
     // I expect ceph_le32 will make the endian conversion for me. Passing
     // everything through ::decode is unnecessary.
     next_payload_len = main_preamble.segments[0].length;
+
+    // TODO: move this ugliness into dedicated procedure
+    const auto rx_crc = ceph_crc16c(0,
+      reinterpret_cast<const unsigned char*>(&main_preamble) + sizeof(main_preamble.crc),
+      sizeof(main_preamble) - sizeof(main_preamble.crc));
+    if (rx_crc != main_preamble.crc) {
+     ldout(cct, 10) << __func__ << "crc mismatch for main preamble"
+		    << " rx_crc=" << rx_crc
+		    << " tx_crc=" << main_preamble.crc << dendl;
+      _fault();
+    }
   }
 
   ldout(cct, 10) << __func__ << " next payload_len=" << next_payload_len
