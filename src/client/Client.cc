@@ -4250,7 +4250,7 @@ void Client::trim_caps(MetaSession *s, uint64_t max)
       // disposable non-auth cap
       if (!(get_caps_used(in.get()) & ~oissued & mine)) {
 	ldout(cct, 20) << " removing unused, unneeded non-auth cap on " << *in << dendl;
-	cap = (remove_cap(cap, true), nullptr);
+	remove_cap(cap, true);
 	trimmed++;
       }
     } else {
@@ -4288,7 +4288,6 @@ void Client::trim_caps(MetaSession *s, uint64_t max)
   }
   to_trim.clear();
 
-  caps_size = s->caps.size();
   if (caps_size > (size_t)max)
     _invalidate_kernel_dcache();
 }
