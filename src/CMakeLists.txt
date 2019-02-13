@@ -468,6 +468,7 @@ set(libcommon_files
   mon/MonClient.cc
   mon/MonMap.cc
   mgr/MgrClient.cc
+  mon/PGMap.cc
   msg/simple/Accepter.cc
   msg/DispatchQueue.cc
   msg/Message.cc
