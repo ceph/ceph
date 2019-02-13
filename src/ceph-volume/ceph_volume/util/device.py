@@ -106,6 +106,9 @@ class Device(object):
     def __eq__(self, other):
         return self.path == other.path
 
+    def __hash__(self):
+        return hash(self.path)
+
     def _parse(self):
         if not sys_info.devices:
             sys_info.devices = disk.get_devices()
