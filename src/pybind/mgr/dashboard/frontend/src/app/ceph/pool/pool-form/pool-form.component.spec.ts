@@ -10,7 +10,12 @@ import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { of } from 'rxjs';
 
-import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  FixtureHelper,
+  FormHelper,
+  i18nProviders
+} from '../../../../testing/unit-test-helper';
 import { NotFoundComponent } from '../../../core/not-found/not-found.component';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
@@ -29,6 +34,7 @@ import { PoolFormComponent } from './pool-form.component';
 describe('PoolFormComponent', () => {
   const OSDS = 8;
   let formHelper: FormHelper;
+  let fixtureHelper: FixtureHelper;
   let component: PoolFormComponent;
   let fixture: ComponentFixture<PoolFormComponent>;
   let poolService: PoolService;
@@ -104,6 +110,7 @@ describe('PoolFormComponent', () => {
 
   const setUpPoolComponent = () => {
     fixture = TestBed.createComponent(PoolFormComponent);
+    fixtureHelper = new FixtureHelper(fixture);
     component = fixture.componentInstance;
     component.info = {
       pool_names: [],
@@ -746,8 +753,8 @@ describe('PoolFormComponent', () => {
     });
 
     it('should not show info per default', () => {
-      formHelper.expectElementVisible(fixture, '#crushRule', true);
-      formHelper.expectElementVisible(fixture, '#crush-info-block', false);
+      fixtureHelper.expectElementVisible('#crushRule', true);
+      fixtureHelper.expectElementVisible('#crush-info-block', false);
     });
 
     it('should show info if the info button is clicked', () => {
@@ -757,7 +764,7 @@ describe('PoolFormComponent', () => {
       expect(component.data.crushInfo).toBeTruthy();
       fixture.detectChanges();
       expect(infoButton.classes['active']).toBeTruthy();
-      formHelper.expectIdElementsVisible(fixture, ['crushRule', 'crush-info-block'], true);
+      fixtureHelper.expectIdElementsVisible(['crushRule', 'crush-info-block'], true);
     });
   });
 
@@ -772,8 +779,8 @@ describe('PoolFormComponent', () => {
     });
 
     it('should not show info per default', () => {
-      formHelper.expectElementVisible(fixture, '#erasureProfile', true);
-      formHelper.expectElementVisible(fixture, '#ecp-info-block', false);
+      fixtureHelper.expectElementVisible('#erasureProfile', true);
+      fixtureHelper.expectElementVisible('#ecp-info-block', false);
     });
 
     it('should show info if the info button is clicked', () => {
@@ -782,7 +789,7 @@ describe('PoolFormComponent', () => {
       expect(component.data.erasureInfo).toBeTruthy();
       fixture.detectChanges();
       expect(infoButton.classes['active']).toBeTruthy();
-      formHelper.expectIdElementsVisible(fixture, ['erasureProfile', 'ecp-info-block'], true);
+      fixtureHelper.expectIdElementsVisible(['erasureProfile', 'ecp-info-block'], true);
     });
 
     describe('ecp deletion', () => {
