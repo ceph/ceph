@@ -34,7 +34,6 @@ Enable the Ansible orchestrator module and use it with the :ref:`CLI <orchestrat
 
 ::
 
-    ceph mgr module enable orchestrator_cli
     ceph mgr module enable ansible
     ceph orchestrator set backend ansible
 
