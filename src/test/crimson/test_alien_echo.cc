@@ -275,8 +275,8 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
 {
   std::cout << "seastar/";
   if (role == echo_role::as_server) {
-    return ceph::net::Messenger::create(entity_name_t::OSD(0), "server", 0,
-                                        seastar::engine().cpu_id())
+    return ceph::net::Messenger::create(entity_name_t::OSD(0), "server",
+                                        addr.get_nonce(), 0)
       .then([addr, count] (auto msgr) {
         return seastar::do_with(seastar_pingpong::Server{*msgr},
           [addr, count](auto& server) mutable {
@@ -298,8 +298,8 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
           });
       });
   } else {
-    return ceph::net::Messenger::create(entity_name_t::OSD(1), "client", 1,
-                                        seastar::engine().cpu_id())
+    return ceph::net::Messenger::create(entity_name_t::OSD(1), "client",
+                                        addr.get_nonce(), 0)
       .then([addr, count] (auto msgr) {
         return seastar::do_with(seastar_pingpong::Client{*msgr},
           [addr, count](auto& client) {
