@@ -5426,6 +5426,16 @@ void RGWRados::cls_obj_check_mtime(ObjectOperation& op, const real_time& mtime, 
   cls_rgw_obj_check_mtime(op, mtime, high_precision_time, type);
 }
 
+struct tombstone_entry {
+  ceph::real_time mtime;
+  uint32_t zone_short_id;
+  uint64_t pg_ver;
+
+  tombstone_entry() = default;
+  explicit tombstone_entry(const RGWObjState& state)
+    : mtime(state.mtime), zone_short_id(state.zone_short_id),
+      pg_ver(state.pg_ver) {}
+};
 
 /**
  * Delete an object.

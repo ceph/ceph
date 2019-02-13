@@ -11,8 +11,6 @@
 #include "common/RefCountedObj.h"
 #include "common/RWLock.h"
 #include "common/ceph_time.h"
-#include "common/lru_map.h"
-#include "common/ceph_json.h"
 #include "rgw_common.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/version/cls_version_types.h"
@@ -1139,16 +1137,11 @@ struct bucket_info_entry {
   map<string, bufferlist> attrs;
 };
 
-struct tombstone_entry {
-  ceph::real_time mtime;
-  uint32_t zone_short_id;
-  uint64_t pg_ver;
+struct tombstone_entry;
 
-  tombstone_entry() = default;
-  explicit tombstone_entry(const RGWObjState& state)
-    : mtime(state.mtime), zone_short_id(state.zone_short_id),
-      pg_ver(state.pg_ver) {}
-};
+template <class K, class V>
+class lru_map;
+using tombstone_cache_t = lru_map<rgw_obj, tombstone_entry>;
 
 class RGWIndexCompletionManager;
 
@@ -1276,7 +1269,6 @@ protected:
   using RGWChainedCacheImpl_bucket_info_entry = RGWChainedCacheImpl<bucket_info_entry>;
   RGWChainedCacheImpl_bucket_info_entry *binfo_cache;
 
-  using tombstone_cache_t = lru_map<rgw_obj, tombstone_entry>;
   tombstone_cache_t *obj_tombstone_cache;
 
   librados::IoCtx gc_pool_ctx;        // .rgw.gc

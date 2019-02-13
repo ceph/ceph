@@ -10,8 +10,7 @@
 #include "include/types.h"
 #include "rgw_common.h"
 #include "rgw_tools.h"
-
-#include "rgw_rados.h"
+#include "rgw_metadata.h"
 
 #include "rgw_string.h"
 
