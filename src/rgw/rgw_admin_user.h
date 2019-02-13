@@ -19,7 +19,7 @@
 #include <string>
 #include "common/config.h"
 
-#include "rgw_rados.h"
+class RGWRados;
 
 namespace rgw {
 
@@ -35,7 +35,7 @@ namespace rgw {
     }
 
     int init();
-    int init(vector<const char *>& args);
+    int init(std::vector<const char *>& args);
     int stop();
   };
 }
