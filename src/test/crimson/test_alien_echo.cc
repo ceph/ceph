@@ -371,7 +371,9 @@ int main(int argc, char** argv)
     ("nonce", po::value<uint32_t>()->default_value(42),
      "a unique number to identify the pong server")
     ("count", po::value<unsigned>()->default_value(10),
-     "stop after sending/echoing <count> MPing messages");
+     "stop after sending/echoing <count> MPing messages")
+    ("v2", po::value<bool>()->default_value(false),
+     "using msgr v2 protocol");
   po::variables_map vm;
   std::vector<std::string> unrecognized_options;
   try {
@@ -392,7 +394,11 @@ int main(int argc, char** argv)
   }
 
   entity_addr_t addr;
-  addr.set_type(addr.TYPE_DEFAULT);
+  if (vm["v2"].as<bool>()) {
+    addr.set_type(entity_addr_t::TYPE_MSGR2);
+  } else {
+    addr.set_type(entity_addr_t::TYPE_LEGACY);
+  }
   addr.set_family(AF_INET);
   addr.set_port(vm["port"].as<std::uint16_t>());
   addr.set_nonce(vm["nonce"].as<std::uint32_t>());
