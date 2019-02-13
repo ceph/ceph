@@ -13,13 +13,23 @@ upgrade-sequence:
    - sleep:
        duration: 60
    - ceph.restart:
-       daemons: [mon.b, mon.c, mgr.x]
+       daemons: [mon.b, mgr.x]
        wait-for-healthy: true
        mon-health-to-clog: false
    - sleep:
        duration: 60
    - ceph.restart:
-       daemons: [osd.0, osd.1]
+       daemons: [mon.c]
+       wait-for-healthy: false
+       mon-health-to-clog: false
+   - exec:
+       mon.a:
+         - ceph config set global mon_warn_on_msgr2_not_enabled false
+   - ceph.healthy:
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [osd.0, osd.1, osd.2, osd.3]
        wait-for-healthy: true
    - sleep:
        duration: 60
@@ -29,8 +39,12 @@ upgrade-sequence:
    - sleep:
        duration: 60
    - ceph.restart:
-       daemons: [osd.2, osd.3]
-       wait-for-healthy: false
-       wait-for-osds-up: true
+       daemons: [osd.4, osd.5, osd.6, osd.7]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [osd.8, osd.9, osd.10, osd.11]
+       wait-for-healthy: true
    - sleep:
        duration: 60

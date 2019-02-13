@@ -368,6 +368,7 @@ bool HealthMonitor::check_leader_health()
 
   // MON_MSGR2_NOT_ENABLED
   if (g_conf().get_val<bool>("ms_bind_msgr2") &&
+      g_conf().get_val<bool>("mon_warn_on_msgr2_not_enabled") &&
       mon->monmap->get_required_features().contains_all(
 	ceph::features::mon::FEATURE_NAUTILUS)) {
     list<string> details;
