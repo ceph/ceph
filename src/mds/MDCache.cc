@@ -5993,6 +5993,7 @@ void MDCache::finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snap
     snap->bl = realm->get_snap_trace();
     for (const auto& child : realm->open_children)
       snap->split_realms.push_back(child->inode->ino());
+    updates.emplace(std::piecewise_construct, std::forward_as_tuple(client), std::forward_as_tuple(snap));
   } else {
     dout(10) << "finish_snaprealm_reconnect client." << client << " up to date"
 	     << " on " << *realm << dendl;
