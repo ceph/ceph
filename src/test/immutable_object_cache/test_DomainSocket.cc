@@ -79,17 +79,26 @@ public:
 
   void handle_request(uint64_t session_id, ObjectCacheRequest* req) {
 
-    switch (req->m_data.type) {
+    switch (req->type) {
       case RBDSC_REGISTER: {
-        req->m_data.type = RBDSC_REGISTER_REPLY;
+        ObjectCacheRegReplyData* data = new ObjectCacheRegReplyData();
+        data->type = RBDSC_REGISTER_REPLY;
+        req = encode_object_cache_request(data, RBDSC_REGISTER_REPLY);
         m_cache_server->send(session_id, req);
         break;
       }
       case RBDSC_READ: {
-        if (m_hit_entry_set.find(req->m_data.m_oid) == m_hit_entry_set.end()) {
-          req->m_data.type = RBDSC_READ_RADOS;
+        ObjectCacheReadData* req_data = (ObjectCacheReadData*)req->m_data;
+        if (m_hit_entry_set.find(req_data->m_oid) == m_hit_entry_set.end()) {
+          ObjectCacheReadRadosData* data = new ObjectCacheReadRadosData();
+          data->type = RBDSC_READ_RADOS;
+          data->seq = req_data->seq;
+          req = encode_object_cache_request(data, RBDSC_READ_RADOS);
         } else {
-          req->m_data.type = RBDSC_READ_REPLY;
+          ObjectCacheReadReplyData* data = new ObjectCacheReadReplyData();
+          data->type = RBDSC_READ_REPLY;
+          data->seq = req_data->seq;
+          req = encode_object_cache_request(data, RBDSC_READ_REPLY);
         }
         m_cache_server->send(session_id, req);
         break;
@@ -130,7 +139,7 @@ public:
     bool hit;
     auto ctx = new LambdaGenContext<std::function<void(ObjectCacheRequest*)>,
         ObjectCacheRequest*>([this, &hit](ObjectCacheRequest* ack){
-       hit = ack->m_data.type == RBDSC_READ_REPLY;
+       hit = ack->type == RBDSC_READ_REPLY;
        m_wait_event.signal();
     });
     m_cache_client->lookup_object(pool_nspace, 1, 2, object_id, ctx);

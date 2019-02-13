@@ -88,22 +88,22 @@ namespace immutable_obj_cache {
   void CacheClient::lookup_object(std::string pool_nspace, uint64_t pool_id, uint64_t snap_id,
                                   std::string oid, GenContext<ObjectCacheRequest*>* on_finish) {
 
-    ObjectCacheRequest* req = new ObjectCacheRequest();
-    req->m_data.type = RBDSC_READ;
-    req->m_data.seq = ++m_sequence_id;
+    ObjectCacheReadData data;
+    data.type = RBDSC_READ;
+    data.seq = ++m_sequence_id;
 
-    req->m_data.m_pool_id = pool_id;
-    req->m_data.m_snap_id = snap_id;
-    req->m_data.m_pool_namespace = pool_nspace;
-    req->m_data.m_oid = oid;
+    data.m_pool_id = pool_id;
+    data.m_snap_id = snap_id;
+    data.m_pool_namespace = pool_nspace;
+    data.m_oid = oid;
+    ObjectCacheRequest* req = encode_object_cache_request(&data, RBDSC_READ);
     req->m_process_msg = on_finish;
-    req->encode();
 
     {
       Mutex::Locker locker(m_lock);
       m_outcoming_bl.append(req->get_data_buffer());
-      ceph_assert(m_seq_to_req.find(req->m_data.seq) == m_seq_to_req.end());
-      m_seq_to_req[req->m_data.seq] = req;
+      ceph_assert(m_seq_to_req.find(data.seq) == m_seq_to_req.end());
+      m_seq_to_req[data.seq] = req;
     }
 
     // try to send message to server.
@@ -227,7 +227,7 @@ namespace immutable_obj_cache {
     data_buffer.clear();
     ceph_assert(data_buffer.length() == 0);
 
-    process(reply, reply->m_data.seq);
+    process(reply, reply->seq);
 
     {
       Mutex::Locker locker(m_lock);
@@ -331,7 +331,7 @@ namespace immutable_obj_cache {
     {
       Mutex::Locker locker(m_lock);
       for(auto it : m_seq_to_req) {
-        it.second->m_data.type = RBDSC_READ_RADOS;
+        it.second->type = RBDSC_READ_RADOS;
         it.second->m_process_msg->complete(it.second);
       }
       m_seq_to_req.clear();
@@ -343,13 +343,13 @@ namespace immutable_obj_cache {
   }
 
   int CacheClient::register_client(Context* on_finish) {
-    ObjectCacheRequest* message = new ObjectCacheRequest();
-    message->m_data.seq = m_sequence_id++;
-    message->m_data.type = RBDSC_REGISTER;
-    message->encode();
+    ObjectCacheRegData data;
+    data.seq = m_sequence_id++;
+    data.type = RBDSC_REGISTER;
+    ObjectCacheRequest* reg_req = encode_object_cache_request(&data, RBDSC_REGISTER);
 
     bufferlist bl;
-    bl.append(message->get_data_buffer());
+    bl.append(reg_req->get_data_buffer());
 
     uint64_t ret;
     boost::system::error_code ec;
@@ -361,6 +361,7 @@ namespace immutable_obj_cache {
       fault(ASIO_ERROR_WRITE, ec);
       return -1;
     }
+    delete reg_req;
 
     ret = boost::asio::read(m_dm_socket,
       boost::asio::buffer(m_bp_header.c_str(), get_header_size()), ec);
@@ -382,7 +383,7 @@ namespace immutable_obj_cache {
     data_buffer.append(m_bp_header);
     data_buffer.append(std::move(bp_data));
     ObjectCacheRequest* req = decode_object_cache_request(data_buffer);
-    if (req->m_data.type == RBDSC_REGISTER_REPLY) {
+    if (req->type == RBDSC_REGISTER_REPLY) {
       on_finish->complete(true);
     } else {
       on_finish->complete(false);
