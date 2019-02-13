@@ -134,6 +134,11 @@ if(LINUX)
 endif(LINUX)
 CHECK_INCLUDE_FILES("valgrind/helgrind.h" HAVE_VALGRIND_HELGRIND_H)
 
+CHECK_INCLUDE_FILE_CXX("amqp.h" HAVE_AMQP_H)
+if(NOT HAVE_AMQP_H)
+    message(FATAL_ERROR "Can't find librabbitmq. Please run install-deps.sh")
+endif()
+
 include(CheckTypeSize)
 set(CMAKE_EXTRA_INCLUDE_FILES "linux/types.h")
 CHECK_TYPE_SIZE(__be16 __BE16) 
