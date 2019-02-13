@@ -154,28 +154,28 @@ used as fallbacks.
 
 :Description: Automatically tune the ratios assigned to different bluestore caches while respecting minimum values.
 :Type: Boolean
-:Requered: Yes
+:Required: Yes
 :Default: ``True``
 
 ``osd_memory_target``
 
 :Description: When tcmalloc is available and cache autotuning is enabled, try to keep this many bytes mapped in memory. Note: This may not exactly match the RSS memory usage of the process.  While the total amount of heap memory mapped by the process should generally stay close to this target, there is no guarantee that the kernel will actually reclaim  memory that has been unmapped.  During initial developement, it was found that some kernels result in the OSD's RSS Memory exceeding the mapped memory by up to 20%.  It is hypothesised however, that the kernel generally may be more aggressive about reclaiming unmapped memory when there is a high amount of memory pressure.  Your mileage may vary.
 :Type: Unsigned Integer
-:Requered: Yes
+:Required: Yes
 :Default: ``4294967296``
 
 ``bluestore_cache_autotune_chunk_size``
 
 :Description: The chunk size in bytes to allocate to caches when cache autotune is enabled.  When the autotuner assigns memory to different caches, it will allocate memory in chunks.  This is done to avoid evictions when there are minor fluctuations in the heap size or autotuned cache ratios.
 :Type: Unsigned Integer
-:Requered: No
+:Required: No
 :Default: ``33554432``
 
 ``bluestore_cache_autotune_interval``
 
 :Description: The number of seconds to wait between rebalances when cache autotune is enabled.  This setting changes how quickly the ratios of the difference caches are recomputed.  Note:  Setting the interval too small can result in high CPU usage and lower performance.
 :Type: Float
-:Requered: No
+:Required: No
 :Default: ``5``
 
 ``osd_memory_base``
