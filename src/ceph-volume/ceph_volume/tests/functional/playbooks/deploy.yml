@@ -63,9 +63,20 @@
         - ansible_distribution == 'Fedora'
         - ansible_distribution_major_version|int >= 23
 
-  roles:
-    - ceph-defaults
-    - ceph-validate
+    - name: check if it is atomic host
+      stat:
+        path: /run/ostree-booted
+      register: stat_ostree
+
+    - name: set_fact is_atomic
+      set_fact:
+        is_atomic: '{{ stat_ostree.stat.exists }}'
+
+  tasks:
+    - import_role:
+        name: ceph-defaults
+    - import_role:
+        name: ceph-validate
 
 - hosts:
   - mons
@@ -74,15 +85,19 @@
   gather_facts: false
   become: True
   any_errors_fatal: true
-  roles:
-    - ceph-defaults
-    - ceph-facts
-    - ceph-handler
-    - ceph-common
   tasks:
+    - import_role:
+        name: ceph-defaults
+    - import_role:
+        name: ceph-facts
+    - import_role:
+        name: ceph-handler
+    - import_role:
+        name: ceph-common
+
     - name: rsync ceph-volume to test nodes on centos
       synchronize:
-        src: "{{ toxinidir}}/../../../../ceph_volume"
+        src: "{{ toxinidir }}/../../../../ceph_volume"
         dest: "/usr/lib/python2.7/site-packages"
         use_ssh_args: true
       when:
@@ -91,7 +106,7 @@
 
     - name: rsync ceph-volume to test nodes on ubuntu
       synchronize:
-        src: "{{ toxinidir}}/../../../../ceph_volume"
+        src: "{{ toxinidir }}/../../../../ceph_volume"
         dest: "/usr/lib/python2.7/dist-packages"
         use_ssh_args: true
       when:
