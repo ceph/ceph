@@ -4,7 +4,6 @@
 #ifndef CEPH_RGWCACHE_H
 #define CEPH_RGWCACHE_H
 
-#include "rgw_rados.h"
 #include <string>
 #include <map>
 #include <unordered_map>
@@ -12,6 +11,9 @@
 #include "include/utime.h"
 #include "include/ceph_assert.h"
 #include "common/RWLock.h"
+
+#include "cls/version/cls_version_types.h"
+#include "rgw_common.h"
 
 enum {
   UPDATE_OBJ,
