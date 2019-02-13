@@ -163,6 +163,7 @@ class RGWOrphanSearch {
 
   uint16_t max_concurrent_ios;
   uint64_t stale_secs;
+  uint64_t max_list_obj_entries;
 
   struct log_iter_info {
     string oid;
