@@ -177,7 +177,7 @@ public:
   Frame() : preamble_filler(payload.append_hole(FRAME_PREAMBLE_SIZE)) {}
 
   ceph::bufferlist &get_buffer() {
-    fill_preamble({ segment_t{ payload.length(), 1} }, {});
+    fill_preamble({ segment_t{ payload.length() - FRAME_PREAMBLE_SIZE, 1} }, {});
     return payload;
   }
 
@@ -334,7 +334,9 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
     auto exp_size = this->payload.length() + 16;
     // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart
     // from auth tag size
-    //this->fill_preamble(this->payload.length() + 16);
+    this->fill_preamble({
+      segment_t{ this->payload.length() + 16 - FRAME_PREAMBLE_SIZE, 16 }
+    }, {});
 
     protocol.session_stream_handlers.tx->authenticated_encrypt_update(
       std::move(this->payload));
@@ -492,7 +494,9 @@ struct MessageHeaderFrame
     });
 
     // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart from auth tag size
-    //fill_preamble(this->payload.length() + front_bl.length() + middle_bl.length() + data_bl.length() + 16);
+    fill_preamble({
+      segment_t { this->payload.length() + front_bl.length() + middle_bl.length() + data_bl.length() + 16 - FRAME_PREAMBLE_SIZE, 16 },
+    }, {});
     const auto exp_size = this->payload.length() + front_bl.length() + middle_bl.length() + data_bl.length() + 16;
 
     protocol.session_stream_handlers.tx->authenticated_encrypt_update(
@@ -1346,10 +1350,10 @@ CtPtr ProtocolV2::read_frame() {
   }
 
   ldout(cct, 20) << __func__ << dendl;
-  return READ(FRAME_PREAMBLE_SIZE, handle_read_frame_length_and_tag);
+  return READ(FRAME_PREAMBLE_SIZE, handle_read_frame_preamble_main);
 }
 
-CtPtr ProtocolV2::handle_read_frame_length_and_tag(char *buffer, int r) {
+CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
   ldout(cct, 20) << __func__ << " r=" << r << dendl;
 
   if (r < 0) {
@@ -1374,22 +1378,17 @@ CtPtr ProtocolV2::handle_read_frame_length_and_tag(char *buffer, int r) {
                    << dendl;
   }
 
-  try {
-    ldout(cct, 30) << __func__ << " preamble after decrypt\n";
-    preamble.hexdump(*_dout);
-    *_dout << dendl;
+  {
+    const auto& main_preamble = \
+      reinterpret_cast<preamble_main_t&>(*preamble.c_str());
+    next_tag = static_cast<Tag>(main_preamble.tag);
 
-    auto ti = preamble.cbegin();
-    uint32_t frame_len;
-    decode(frame_len, ti);
-    next_payload_len = frame_len;
-    uint32_t tag;
-    decode(tag, ti);
-    next_tag = static_cast<Tag>(tag);
-  } catch (const buffer::error &e) {
-    lderr(cct) << __func__ << " failed decoding of frame header: " << e
-               << dendl;
-    return _fault();
+    // FIXME: makeshift solution
+    ceph_assert_always(main_preamble.num_segments == 1);
+
+    // I expect ceph_le32 will make the endian conversion for me. Passing
+    // everything through ::decode is unnecessary.
+    next_payload_len = main_preamble.segments[0].length;
   }
 
   ldout(cct, 10) << __func__ << " next payload_len=" << next_payload_len
