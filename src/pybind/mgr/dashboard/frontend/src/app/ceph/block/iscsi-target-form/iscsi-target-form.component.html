@@ -8,7 +8,7 @@
     <div class="panel panel-default">
       <div class="panel-heading">
         <h3 class="panel-title"
-            i18n>Create target</h3>
+            i18n>{isEdit, select, 1 {Edit} other {Add}} target</h3>
       </div>
 
       <div class="panel-body">
@@ -175,13 +175,13 @@
           <div class="col-sm-9"
                formArrayName="initiators">
             <div class="panel panel-default"
-                 *ngFor="let initiator of initiators.controls; let i = index"
-                 [formGroupName]="i">
+                 *ngFor="let initiator of initiators.controls; let ii = index"
+                 [formGroupName]="ii">
               <div class="panel-heading">
                 <ng-container i18n>Initiator</ng-container>: {{ initiator.getValue('client_iqn') }}
                 <button type="button"
                         class="close"
-                        (click)="removeInitiator(i)">
+                        (click)="removeInitiator(ii)">
                   <i class="fa fa-remove fa-fw"></i>
                 </button>
               </div>
@@ -340,7 +340,7 @@
                          for="luns"
                          i18n>Images</label>
                   <div class="col-sm-9">
-                    <ng-container *ngFor="let image of initiator.getValue('luns'); let i = index">
+                    <ng-container *ngFor="let image of initiator.getValue('luns'); let li = index">
                       <div class="input-group cd-mb">
                         <input class="form-control"
                                type="text"
@@ -349,7 +349,7 @@
                         <span class="input-group-btn">
                           <button class="btn btn-default"
                                   type="button"
-                                  (click)="initiator.getValue('luns').splice(i, 1)">
+                                  (click)="removeInitiatorImage(initiator, li, ii, image)">
                             <i class="fa fa-remove fa-fw"
                                aria-hidden="true"></i>
                           </button>
@@ -364,7 +364,7 @@
                          *ngIf="!initiator.getValue('cdIsInGroup')">
                       <div class="col-md-12">
                         <cd-select [data]="initiator.getValue('luns')"
-                                   [options]="imagesInitiatorSelections"
+                                   [options]="imagesInitiatorSelections[ii]"
                                    [messages]="messages.initiatorImage"
                                    elemClass="btn btn-default pull-right">
                           <i class="fa fa-fw fa-plus"></i>
@@ -383,7 +383,7 @@
                       *ngIf="initiators.controls.length === 0"
                       i18n>No items added.</span>
 
-                <button (click)="addInitiator()"
+                <button (click)="addInitiator(); false"
                         class="btn btn-default pull-right">
                   <i class="fa fa-fw fa-plus"></i>
                   <ng-container i18n>Add initiator</ng-container>
@@ -404,13 +404,13 @@
           <div class="col-sm-9"
                formArrayName="groups">
             <div class="panel panel-default"
-                 *ngFor="let group of groups.controls; let i = index"
-                 [formGroupName]="i">
+                 *ngFor="let group of groups.controls; let gi = index"
+                 [formGroupName]="gi">
               <div class="panel-heading">
                 <ng-container i18n>Group</ng-container>: {{ group.getValue('group_id') }}
                 <button type="button"
                         class="close"
-                        (click)="groups.removeAt(i)">
+                        (click)="groups.removeAt(gi)">
                   <i class="fa fa-remove fa-fw"></i>
                 </button>
               </div>
@@ -446,7 +446,7 @@
                         <span class="input-group-btn">
                           <button class="btn btn-default"
                                   type="button"
-                                  (click)="removeGroupInitiator(group, i)">
+                                  (click)="removeGroupInitiator(group, i, gi)">
                             <i class="fa fa-remove fa-fw"
                                aria-hidden="true"></i>
                           </button>
@@ -457,7 +457,7 @@
                     <div class="row">
                       <div class="col-md-12">
                         <cd-select [data]="group.getValue('members')"
-                                   [options]="groupMembersSelections"
+                                   [options]="groupMembersSelections[gi]"
                                    [messages]="messages.groupInitiator"
                                    (selection)="onGroupMemberSelection($event)"
                                    elemClass="btn btn-default pull-right">
@@ -488,7 +488,7 @@
                         <span class="input-group-btn">
                           <button class="btn btn-default"
                                   type="button"
-                                  (click)="group.getValue('disks').splice(i, 1)">
+                                  (click)="removeGroupDisk(group, i, gi)">
                             <i class="fa fa-remove fa-fw"
                                aria-hidden="true"></i>
                           </button>
@@ -499,7 +499,7 @@
                     <div class="row">
                       <div class="col-md-12">
                         <cd-select [data]="group.getValue('disks')"
-                                   [options]="groupDiskSelections"
+                                   [options]="groupDiskSelections[gi]"
                                    [messages]="messages.initiatorImage"
                                    elemClass="btn btn-default pull-right">
                           <i class="fa fa-fw fa-plus"></i>
@@ -520,7 +520,7 @@
                       *ngIf="groups.controls.length === 0"
                       i18n>No items added.</span>
 
-                <button (click)="addGroup()"
+                <button (click)="addGroup(); false"
                         class="btn btn-default pull-right">
                   <i class="fa fa-fw fa-plus"></i>
                   <ng-container i18n>Add group</ng-container>
@@ -536,7 +536,7 @@
           <cd-submit-button [form]="formDir"
                             type="button"
                             (submitAction)="submit()"
-                            i18n>Create target</cd-submit-button>
+                            i18n>Submit</cd-submit-button>
 
           <button type="button"
                   class="btn btn-sm btn-default"
