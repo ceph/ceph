@@ -271,16 +271,15 @@ private:
 };
 
 static seastar::future<>
-seastar_echo(SeastarContext& sc,
-             const entity_addr_t& addr, echo_role role, unsigned count)
+seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
 {
   std::cout << "seastar/";
   if (role == echo_role::as_server) {
     return ceph::net::Messenger::create(entity_name_t::OSD(0), "server", 0,
                                         seastar::engine().cpu_id())
-      .then([&addr, count] (auto msgr) {
+      .then([addr, count] (auto msgr) {
         return seastar::do_with(seastar_pingpong::Server{*msgr},
-          [&addr, count](auto& server) mutable {
+          [addr, count](auto& server) mutable {
             std::cout << "server listening at " << addr << std::endl;
             // bind the server
             server.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
@@ -301,14 +300,14 @@ seastar_echo(SeastarContext& sc,
   } else {
     return ceph::net::Messenger::create(entity_name_t::OSD(1), "client", 1,
                                         seastar::engine().cpu_id())
-      .then([&addr, count] (auto msgr) {
+      .then([addr, count] (auto msgr) {
         return seastar::do_with(seastar_pingpong::Client{*msgr},
-          [&addr, count](auto& client) {
+          [addr, count](auto& client) {
             std::cout << "client sending to " << addr << std::endl;
             client.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
                                              &client.byte_throttler);
             return client.msgr.start(&client.dispatcher)
-              .then([&] {
+              .then([addr, &client] {
                 return client.msgr.connect(addr, entity_name_t::TYPE_OSD);
               }).then([&disp=client.dispatcher, count](ceph::net::ConnectionXRef conn) {
                 return seastar::do_until(
@@ -408,8 +407,8 @@ int main(int argc, char** argv)
     seastar::app_template app;
     SeastarContext sc;
     auto job = sc.with_seastar([&] {
-      auto fut = seastar::alien::submit_to(0, [&sc, &addr, role, count] {
-        return seastar_echo(sc, addr, role, count);
+      auto fut = seastar::alien::submit_to(0, [addr, role, count] {
+        return seastar_echo(addr, role, count);
       });
       fut.wait();
     });
