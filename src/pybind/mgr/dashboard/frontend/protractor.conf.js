@@ -29,6 +29,8 @@ exports.config = {
     }
   },
   onPrepare() {
+    browser.manage().timeouts().implicitlyWait(360000);
+
     require('ts-node').register({
       project: 'e2e/tsconfig.e2e.json'
     });
