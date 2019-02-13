@@ -267,10 +267,11 @@ class Module(MgrModule, orchestrator.Orchestrator):
         self.log.info('Stopping Ansible orchestrator module')
         self.run = False
 
-    def get_inventory(self, node_filter=None):
+    def get_inventory(self, node_filter=None, refresh=False):
         """
 
         :param   :	node_filter instance
+        :param   :      refresh any cached state
         :Return  :	A AnsibleReadOperation instance (Completion Object)
         """
 

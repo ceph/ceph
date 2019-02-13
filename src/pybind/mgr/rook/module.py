@@ -294,7 +294,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         # things look a bit out of sync?
 
     @deferred_read
-    def get_inventory(self, node_filter=None):
+    def get_inventory(self, node_filter=None, refresh=False):
         node_list = None
         if node_filter and node_filter.nodes:
             # Explicit node list
