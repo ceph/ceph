@@ -228,6 +228,7 @@ describe('PoolFormComponent', () => {
       expect(component.editing).toBeFalsy();
       formHelper.expectError('name', 'required');
       formHelper.expectValidChange('name', 'some-name');
+      formHelper.expectValidChange('name', 'name/with/slash');
       component.info.pool_names.push('someExistingPoolName');
       formHelper.expectErrorChange('name', 'someExistingPoolName', 'uniqueName');
       formHelper.expectErrorChange('name', 'wrong format with spaces', 'pattern');

@@ -68,7 +68,7 @@ export class PoolListComponent implements OnInit {
       {
         permission: 'update',
         icon: 'fa-pencil',
-        routerLink: () => '/pool/edit/' + this.selection.first().pool_name,
+        routerLink: () => '/pool/edit/' + encodeURIComponent(this.selection.first().pool_name),
         name: this.i18n('Edit')
       },
       {
