@@ -41,6 +41,20 @@ function munge_ceph_spec_in {
     fi
 }
 
+function munge_debian_control {
+    local version=$1
+    shift
+    local control=$1
+    shift
+    case "$version" in
+        *squeeze*|*wheezy*)
+	    control="/tmp/control.$$"
+	    grep -v babeltrace debian/control > $control
+	    ;;
+    esac
+    echo $control
+}
+
 function ensure_decent_gcc_on_ubuntu {
     # point gcc to the one offered by g++-7 if the used one is not
     # new enough
@@ -261,11 +275,9 @@ else
         touch $DIR/status
 
 	backports=""
-	control="debian/control"
+	control=$(munge_debian_control "$VERSION" "debian/control")
         case "$VERSION" in
             *squeeze*|*wheezy*)
-		control="/tmp/control.$$"
-		grep -v babeltrace debian/control > $control
                 backports="-t $codename-backports"
                 ;;
         esac
@@ -276,7 +288,7 @@ else
 	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps --install --remove --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	install_seastar_deps
-	if [ -n "$backports" ] ; then rm $control; fi
+	if [ "$control" != "debian/control" ] ; then rm $control; fi
 	$SUDO apt-get install -y libxmlsec1 libxmlsec1-nss libxmlsec1-openssl libxmlsec1-dev
         ;;
     centos|fedora|rhel|ol|virtuozzo)
