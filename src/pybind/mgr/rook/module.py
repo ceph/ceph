@@ -392,6 +392,14 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             lambda: self.rook_cluster.rm_service(service_type, service_id), None,
             "Removing {0} services for {1}".format(service_type, service_id))
 
+    def update_mons(self, num, hosts):
+        if hosts:
+            raise RuntimeError("Host list is not supported by rook.")
+
+        return RookWriteCompletion(
+            lambda: self.rook_cluster.update_mon_count(num), None,
+            "Updating mon count to {0}".format(num))
+
     def create_osds(self, drive_group, all_hosts):
         # type: (orchestrator.DriveGroupSpec, List[str]) -> RookWriteCompletion
 
