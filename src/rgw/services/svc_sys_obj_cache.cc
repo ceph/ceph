@@ -1,3 +1,5 @@
+#include "common/admin_socket.h"
+
 #include "svc_sys_obj_cache.h"
 #include "svc_zone.h"
 #include "svc_notify.h"
@@ -481,8 +483,35 @@ static void cache_list_dump_helper(Formatter* f,
   f->dump_unsigned("size", size);
 }
 
+class RGWSI_SysObj_Cache_ASocketHook : public AdminSocketHook {
+  RGWSI_SysObj_Cache *svc;
 
-int RGWSI_SysObj_Cache::ASocketHandler::start()
+  static constexpr const char* admin_commands[4][3] = {
+    { "cache list",
+      "cache list name=filter,type=CephString,req=false",
+      "cache list [filter_str]: list object cache, possibly matching substrings" },
+    { "cache inspect",
+      "cache inspect name=target,type=CephString,req=true",
+      "cache inspect target: print cache element" },
+    { "cache erase",
+      "cache erase name=target,type=CephString,req=true",
+      "cache erase target: erase element from cache" },
+    { "cache zap",
+      "cache zap",
+      "cache zap: erase all elements from cache" }
+  };
+
+public:
+    RGWSI_SysObj_Cache_ASocketHook(RGWSI_SysObj_Cache *_svc) : svc(_svc) {}
+
+    int start();
+    void shutdown();
+
+    bool call(std::string_view command, const cmdmap_t& cmdmap,
+              std::string_view format, bufferlist& out) override;
+};
+
+int RGWSI_SysObj_Cache_ASocketHook::start()
 {
   auto admin_socket = svc->ctx()->get_admin_socket();
   for (auto cmd : admin_commands) {
@@ -497,14 +526,14 @@ int RGWSI_SysObj_Cache::ASocketHandler::start()
   return 0;
 }
 
-void RGWSI_SysObj_Cache::ASocketHandler::shutdown()
+void RGWSI_SysObj_Cache_ASocketHook::shutdown()
 {
   auto admin_socket = svc->ctx()->get_admin_socket();
   admin_socket->unregister_commands(this);
 }
 
-bool RGWSI_SysObj_Cache::ASocketHandler::call(std::string_view command, const cmdmap_t& cmdmap,
-                                              std::string_view format, bufferlist& out)
+bool RGWSI_SysObj_Cache_ASocketHook::call(std::string_view command, const cmdmap_t& cmdmap,
+                                          std::string_view format, bufferlist& out)
 {
   if (command == "cache list"sv) {
     std::optional<std::string> filter;
@@ -514,7 +543,7 @@ bool RGWSI_SysObj_Cache::ASocketHandler::call(std::string_view command, const cm
     std::unique_ptr<Formatter> f(ceph::Formatter::create(format, "table"));
     if (f) {
       f->open_array_section("cache_entries");
-      call_list(filter, f.get());
+      svc->asocket.call_list(filter, f.get());
       f->close_section();
       f->flush(out);
       return true;
@@ -526,7 +555,7 @@ bool RGWSI_SysObj_Cache::ASocketHandler::call(std::string_view command, const cm
     std::unique_ptr<Formatter> f(ceph::Formatter::create(format, "json-pretty"));
     if (f) {
       const auto& target = boost::get<std::string>(cmdmap.at("target"));
-      if (call_inspect(target, f.get())) {
+      if (svc->asocket.call_inspect(target, f.get())) {
         f->flush(out);
         return true;
       } else {
@@ -539,17 +568,36 @@ bool RGWSI_SysObj_Cache::ASocketHandler::call(std::string_view command, const cm
     }
   } else if (command == "cache erase"sv) {
     const auto& target = boost::get<std::string>(cmdmap.at("target"));
-    if (call_erase(target)) {
+    if (svc->asocket.call_erase(target)) {
       return true;
     } else {
       out.append("Unable to find entry "s + target + ".\n");
       return false;
     }
   } else if (command == "cache zap"sv) {
-    call_zap();
+    svc->asocket.call_zap();
     return true;
   }
   return false;
+}
+
+RGWSI_SysObj_Cache::ASocketHandler::ASocketHandler(RGWSI_SysObj_Cache *_svc) : svc(_svc)
+{
+  hook.reset(new RGWSI_SysObj_Cache_ASocketHook(_svc));
+}
+
+RGWSI_SysObj_Cache::ASocketHandler::~ASocketHandler()
+{
+}
+
+int RGWSI_SysObj_Cache::ASocketHandler::start()
+{
+  return hook->start();
+}
+
+void RGWSI_SysObj_Cache::ASocketHandler::shutdown()
+{
+  return hook->shutdown();
 }
 
 void RGWSI_SysObj_Cache::ASocketHandler::call_list(const std::optional<std::string>& filter, Formatter* f)

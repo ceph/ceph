@@ -2,7 +2,6 @@
 #ifndef CEPH_RGW_SERVICES_SYS_OBJ_CACHE_H
 #define CEPH_RGW_SERVICES_SYS_OBJ_CACHE_H
 
-
 #include "rgw/rgw_service.h"
 #include "rgw/rgw_cache.h"
 
@@ -11,6 +10,7 @@
 class RGWSI_Notify;
 
 class RGWSI_SysObj_Cache_CB;
+class RGWSI_SysObj_Cache_ASocketHook;
 
 class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 {
@@ -92,32 +92,17 @@ public:
   void register_chained_cache(RGWChainedCache *cc);
   void unregister_chained_cache(RGWChainedCache *cc);
 
-  class ASocketHandler : public AdminSocketHook {
+  class ASocketHandler {
     RGWSI_SysObj_Cache *svc;
 
-    static constexpr const char* admin_commands[4][3] = {
-      { "cache list",
-        "cache list name=filter,type=CephString,req=false",
-        "cache list [filter_str]: list object cache, possibly matching substrings" },
-      { "cache inspect",
-        "cache inspect name=target,type=CephString,req=true",
-        "cache inspect target: print cache element" },
-      { "cache erase",
-        "cache erase name=target,type=CephString,req=true",
-        "cache erase target: erase element from cache" },
-      { "cache zap",
-        "cache zap",
-        "cache zap: erase all elements from cache" }
-    };
+    std::unique_ptr<RGWSI_SysObj_Cache_ASocketHook> hook;
 
   public:
-    ASocketHandler(RGWSI_SysObj_Cache *_svc) : svc(_svc) {}
+    ASocketHandler(RGWSI_SysObj_Cache *_svc);
+    ~ASocketHandler();
 
     int start();
     void shutdown();
-
-    bool call(std::string_view command, const cmdmap_t& cmdmap,
-              std::string_view format, bufferlist& out) override;
 
     // `call_list` must iterate over all cache entries and call
     // `cache_list_dump_helper` with the supplied Formatter on any that
