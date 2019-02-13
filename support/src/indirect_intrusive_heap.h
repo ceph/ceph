@@ -344,6 +344,16 @@ namespace crimson {
       return cend();
     }
 
+    Iterator at(const I& ind_item) {
+      auto ind = intru_data_of(ind_item);
+      if (ind >= count) {
+        throw std::out_of_range(
+          std::to_string(ind) + " >= " + std::to_string(count));
+      }
+      assert(data[ind] == ind_item);
+      return Iterator(*this, ind);
+    }
+
     void promote(T& item) {
       sift_up(item.*heap_info);
     }
@@ -416,7 +426,7 @@ namespace crimson {
 
   protected:
 
-    static IndIntruHeapData& intru_data_of(I& item) {
+    static IndIntruHeapData& intru_data_of(const I& item) {
       return (*item).*heap_info;
     }
 
