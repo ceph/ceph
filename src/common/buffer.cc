@@ -2164,6 +2164,7 @@ bool buffer::ptr_node::dispose_if_hypercombined(
   const bool is_hypercombined = static_cast<void*>(delete_this) == \
     static_cast<void*>(&delete_this->get_raw()->bptr_storage);
   if (is_hypercombined) {
+    ceph_assert_always("hypercombining is currently disabled" == nullptr);
     delete_this->~ptr_node();
   }
   return is_hypercombined;
@@ -2172,16 +2173,22 @@ bool buffer::ptr_node::dispose_if_hypercombined(
 std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>
 buffer::ptr_node::create_hypercombined(ceph::unique_leakable_ptr<buffer::raw> r)
 {
+  // FIXME: we don't currently hypercombine buffers due to crashes
+  // observed in the rados suite. After fixing we'll use placement
+  // new to create ptr_node on buffer::raw::bptr_storage.
   return std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>(
-    new (&r->bptr_storage) ptr_node(std::move(r)));
+    new ptr_node(std::move(r)));
 }
 
 std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>
 buffer::ptr_node::create_hypercombined(buffer::raw* const r)
 {
   if (likely(r->nref == 0)) {
+    // FIXME: we don't currently hypercombine buffers due to crashes
+    // observed in the rados suite. After fixing we'll use placement
+    // new to create ptr_node on buffer::raw::bptr_storage.
     return std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>(
-      new (&r->bptr_storage) ptr_node(r));
+      new ptr_node(r));
   } else {
     return std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>(
       new ptr_node(r));
@@ -2191,9 +2198,11 @@ buffer::ptr_node::create_hypercombined(buffer::raw* const r)
 buffer::ptr_node* buffer::ptr_node::copy_hypercombined(
   const buffer::ptr_node& copy_this)
 {
+  // FIXME: we don't currently hypercombine buffers due to crashes
+  // observed in the rados suite. After fixing we'll use placement
+  // new to create ptr_node on buffer::raw::bptr_storage.
   auto raw_new = copy_this.get_raw()->clone();
-  return new (&raw_new->bptr_storage)
-    ptr_node(copy_this, std::move(raw_new));
+  return new ptr_node(copy_this, std::move(raw_new));
 }
 
 buffer::ptr_node* buffer::ptr_node::cloner::operator()(
