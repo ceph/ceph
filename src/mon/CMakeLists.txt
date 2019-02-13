@@ -18,7 +18,6 @@ set(lib_mon_srcs
   ConfigMonitor.cc
   Elector.cc
   HealthMonitor.cc
-  PGMap.cc
   ConfigKeyService.cc
   ../mds/MDSAuthCaps.cc
   ../mgr/mgr_commands.cc

@@ -80,6 +80,12 @@ void MetadataUpdate::finish(int r)
                 << key.first << "." << key.second << dendl;
         return;
       }
+      if (json_result.type() != json_spirit::obj_type) {
+        dout(1) << "mon returned valid JSON "
+                << key.first << "." << key.second
+		<< " but not an object: '" << outbl.to_str() << "'" << dendl;
+        return;
+      }
       dout(4) << "mon returned valid metadata JSON for "
               << key.first << "." << key.second << dendl;
 
