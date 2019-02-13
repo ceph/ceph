@@ -7071,8 +7071,8 @@ static std::vector<Option> get_rbd_options() {
     .set_description("number of seconds before maintenance request times out"),
 
     Option("rbd_skip_partial_discard", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description("when trying to discard a range inside an object, set to true to skip zeroing the range"),
+    .set_default(true)
+    .set_description("skip discard (zero) of unaligned extents within an object"),
 
     Option("rbd_enable_alloc_hint", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
