@@ -191,6 +191,10 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info) {
     return r;
   }
 
+  constexpr auto MAX_LIST_OBJS_ENTRIES = 100;
+  max_list_bucket_entries = std::max(store->ctx()->_conf->rgw_list_bucket_min_readahead,
+                                     MAX_LIST_OBJS_ENTRIES)
+
   RGWOrphanSearchState state;
   r = orphan_store.read_job(job_name, state);
   if (r < 0 && r != -ENOENT) {
@@ -503,8 +507,8 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
   do {
     vector<rgw_bucket_dir_entry> result;
 
-#define MAX_LIST_OBJS_ENTRIES 100
-    ret = list_op.list_objects(MAX_LIST_OBJS_ENTRIES, &result, NULL, &truncated);
+    ret = list_op.list_objects(max_list_bucket_entries,
+                               &result, nullptr, &truncated);
     if (ret < 0) {
       cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
