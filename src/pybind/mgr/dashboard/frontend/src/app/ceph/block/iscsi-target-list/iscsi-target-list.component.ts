@@ -70,6 +70,12 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
         name: this.i18n('Add')
       },
       {
+        permission: 'update',
+        icon: 'fa-pencil',
+        routerLink: () => `/block/iscsi/targets/edit/${this.selection.first().target_iqn}`,
+        name: this.i18n('Edit')
+      },
+      {
         permission: 'delete',
         icon: 'fa-times',
         click: () => this.deleteIscsiTargetModal(),
@@ -148,7 +154,7 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
   }
 
   taskFilter(task) {
-    return ['iscsi/target/create', 'iscsi/target/delete'].includes(task.name);
+    return ['iscsi/target/create', 'iscsi/target/edit', 'iscsi/target/delete'].includes(task.name);
   }
 
   updateSelection(selection: CdTableSelection) {
