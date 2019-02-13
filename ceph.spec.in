@@ -1461,7 +1461,6 @@ fi
 %{_libdir}/ceph/mgr/rbd_support
 %{_libdir}/ceph/mgr/restful
 %{_libdir}/ceph/mgr/selftest
-%{_libdir}/ceph/mgr/smart
 %{_libdir}/ceph/mgr/status
 %{_libdir}/ceph/mgr/telegraf
 %{_libdir}/ceph/mgr/telemetry
