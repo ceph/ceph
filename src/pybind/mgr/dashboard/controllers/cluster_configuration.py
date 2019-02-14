@@ -7,6 +7,7 @@ from . import ApiController, RESTController
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
+from ..exceptions import DashboardException
 
 
 @ApiController('/cluster_conf', Scope.CONFIG_OPT)
@@ -31,17 +32,22 @@ class ClusterConfiguration(RESTController):
         return options
 
     def list(self):
-        options = mgr.get("config_options")['options']
+        options = mgr.get('config_options')['options']
         return self._append_config_option_values(options)
 
     def get(self, name):
-        for option in mgr.get('config_options')['options']:
-            if option['name'] == name:
-                return self._append_config_option_values([option])[0]
-
-        raise cherrypy.HTTPError(404)
+        return self._get_config_option(name)
 
     def create(self, name, value):
+        # Check if config option is updateable at runtime
+        config_option = self._get_config_option(name)
+        if not config_option['can_update_at_runtime']:
+            raise DashboardException(
+                msg='Config option {} is not updatable at runtime'.format(name),
+                code='config_option_not_updatable_at_runtime',
+                component='cluster_configuration')
+
+        # Update config option
         availSections = ['global', 'mon', 'mgr', 'osd', 'mds', 'client']
 
         for section in availSections:
@@ -60,3 +66,10 @@ class ClusterConfiguration(RESTController):
         for name, value in options.items():
             CephService.send_command('mon', 'config set', who=value['section'],
                                      name=name, value=str(value['value']))
+
+    def _get_config_option(self, name):
+        for option in mgr.get('config_options')['options']:
+            if option['name'] == name:
+                return self._append_config_option_values([option])[0]
+
+        raise cherrypy.HTTPError(404)

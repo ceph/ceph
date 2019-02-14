@@ -3599,8 +3599,8 @@
           <context context-type="sourcefile">app/ceph/cluster/configuration/configuration-details/configuration-details.component.html</context>
           <context context-type="linenumber">82</context>
         </context-group>
-      </trans-unit><trans-unit id="4180e8c1a344da14bdef061df596a4457bbb8d6c" datatype="html">
-        <source>Can be updated at runtime</source>
+      </trans-unit><trans-unit id="39f2fb094e9b2eda13163fa3f3a31594cf9c1307" datatype="html">
+        <source>Can be updated at runtime (editable)</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/configuration/configuration-details/configuration-details.component.html</context>
           <context context-type="linenumber">87</context>
@@ -4749,6 +4749,13 @@
       </trans-unit>
       <trans-unit id="9951bb3983c7dba6fde013e05c922e4fe1a44367" datatype="html">
         <source>Current value</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/cluster/configuration/configuration.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="4a01c175f90dd92b432f4a4a199d2c7bb9d997ff" datatype="html">
+        <source>Editable</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/configuration/configuration.component.ts</context>
           <context context-type="linenumber">1</context>
