@@ -142,7 +142,7 @@ def crush_rule_osds(node_buckets, rule):
                 if node_id >= 0:
                     osds.add(node_id)
                 else:
-                    for desc_node in nodes_by_id[node_id]:
+                    for desc_node in nodes_by_id[node_id]['items']:
                         # Short circuit another iteration to find the emit
                         # and assume anything we've done a chooseleaf on
                         # is going to be part of the selected set of osds
