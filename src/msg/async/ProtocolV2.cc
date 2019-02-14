@@ -46,17 +46,6 @@ const uint64_t msgr2_frame_assumed =
 
 using CtPtr = Ct<ProtocolV2> *;
 
-// NOTE: I guess this will be moved outside the ProtocolV2 soon.
-// https://stackoverflow.com/q/48819797
-static std::uint16_t ceph_crc16c(
-  std::uint16_t crc,
-  unsigned char const* const data,
-  const std::size_t  length)
-{
-  return ceph_crc32c(crc, data, length);
-}
-
-
 void ProtocolV2::run_continuation(CtPtr continuation) {
   try {
     CONTINUATION_RUN(continuation)
@@ -138,10 +127,10 @@ struct preamble_block_t {
   __u8 num_segments;
 
   std::array<ProtocolV2::segment_t, MAX_NUM_SEGMENTS> segments;
-  __u8 _reserved[4];
+  __u8 _reserved[2];
 
-  // CRC16 for this single preamble block.
-  __le16 crc;
+  // CRC32 for this single preamble block.
+  __le32 crc;
 } __attribute__((packed));
 static_assert(sizeof(preamble_block_t) % CRYPTO_BLOCK_SIZE == 0);
 static_assert(std::is_standard_layout<preamble_block_t>::value);
@@ -180,7 +169,7 @@ protected:
       std::copy(std::cbegin(main_segments), std::cend(main_segments),
 		std::begin(main_preamble.segments));
 
-      main_preamble.crc = ceph_crc16c(0,
+      main_preamble.crc = ceph_crc32c(0,
 	reinterpret_cast<unsigned char*>(&main_preamble),
 	sizeof(main_preamble) - sizeof(main_preamble.crc));
 
@@ -200,7 +189,7 @@ protected:
       std::copy(std::cbegin(extra_segments), std::cend(extra_segments),
 	        std::begin(extra_preamble.segments));
 
-      extra_preamble.crc = ceph_crc16c(0,
+      extra_preamble.crc = ceph_crc32c(0,
 	reinterpret_cast<unsigned char*>(&extra_preamble),
 	sizeof(extra_preamble));
 
@@ -1475,7 +1464,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
     }
 
     // TODO: move this ugliness into dedicated procedure
-    const auto rx_crc = ceph_crc16c(0,
+    const auto rx_crc = ceph_crc32c(0,
       reinterpret_cast<const unsigned char*>(&main_preamble),
       sizeof(main_preamble) - sizeof(main_preamble.crc));
     if (rx_crc != main_preamble.crc) {
