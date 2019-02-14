@@ -493,6 +493,10 @@ static void encode_addrvec_pvec_as_addr(const T& m, bufferlist& bl, uint64_t f)
   }
 }
 
+/* for a description of osdmap incremental versions, and when they were
+ * introduced, please refer to
+ *    doc/dev/osd_internals/osdmap_versions.txt
+ */
 void OSDMap::Incremental::encode(bufferlist& bl, uint64_t features) const
 {
   using ceph::encode;
@@ -742,6 +746,10 @@ void OSDMap::Incremental::decode_classic(bufferlist::const_iterator &p)
     decode(new_hb_front_up, p);
 }
 
+/* for a description of osdmap incremental versions, and when they were
+ * introduced, please refer to
+ *    doc/dev/osd_internals/osdmap_versions.txt
+ */
 void OSDMap::Incremental::decode(bufferlist::const_iterator& bl)
 {
   using ceph::decode;
@@ -2659,6 +2667,10 @@ void OSDMap::encode_classic(bufferlist& bl, uint64_t features) const
   encode(osd_addrs->hb_front_addrs, bl, features);
 }
 
+/* for a description of osdmap versions, and when they were introduced, please
+ * refer to
+ *    doc/dev/osd_internals/osdmap_versions.txt
+ */
 void OSDMap::encode(bufferlist& bl, uint64_t features) const
 {
   using ceph::encode;
@@ -2847,6 +2859,10 @@ void OSDMap::encode(bufferlist& bl, uint64_t features) const
   crc_defined = true;
 }
 
+/* for a description of osdmap versions, and when they were introduced, please
+ * refer to
+ *    doc/dev/osd_internals/osdmap_versions.txt
+ */
 void OSDMap::decode(bufferlist& bl)
 {
   auto p = bl.cbegin();
@@ -3027,6 +3043,8 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
 
     decode(*pg_temp, bl);
     decode(*primary_temp, bl);
+    // dates back to firefly. version increased from 2 to 3 still in firefly.
+    // do we really still need to keep this around? even for old clients?
     if (struct_v >= 2) {
       osd_primary_affinity.reset(new mempool::osdmap::vector<__u32>);
       decode(*osd_primary_affinity, bl);
@@ -3041,11 +3059,16 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
     decode(cbl, bl);
     auto cblp = cbl.cbegin();
     crush->decode(cblp);
+    // added in firefly; version increased in luminous, so it affects
+    // giant, hammer, infernallis, jewel, and kraken. probably should be left
+    // alone until we require clients to be all luminous?
     if (struct_v >= 3) {
       decode(erasure_code_profiles, bl);
     } else {
       erasure_code_profiles.clear();
     }
+    // version increased from 3 to 4 still in luminous, so same as above
+    // applies.
     if (struct_v >= 4) {
       decode(pg_upmap, bl);
       decode(pg_upmap_items, bl);
@@ -3053,13 +3076,17 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
       pg_upmap.clear();
       pg_upmap_items.clear();
     }
+    // again, version increased from 5 to 6 still in luminous, so above
+    // applies.
     if (struct_v >= 6) {
       decode(crush_version, bl);
     }
+    // version increase from 6 to 7 in mimic
     if (struct_v >= 7) {
       decode(new_removed_snaps, bl);
       decode(new_purged_snaps, bl);
     }
+    // version increase from 7 to 8, 8 to 9, in nautilus.
     if (struct_v >= 9) {
       decode(last_up_change, bl);
       decode(last_in_change, bl);
@@ -3078,6 +3105,7 @@ void OSDMap::decode(bufferlist::const_iterator& bl)
     decode(*osd_uuid, bl);
     decode(osd_xinfo, bl);
     decode(osd_addrs->hb_front_addrs, bl);
+    // 
     if (struct_v >= 2) {
       decode(nearfull_ratio, bl);
       decode(full_ratio, bl);
