@@ -7,7 +7,9 @@
 
 #define dout_subsys ceph_subsys_mon
 #include "common/debug.h"
+#include "common/Clock.h"
 #include "common/Formatter.h"
+#include "global/global_context.h"
 #include "include/ceph_features.h"
 #include "include/stringify.h"
 
