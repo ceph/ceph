@@ -123,8 +123,10 @@ using segment_t = ProtocolV2::segment_t;
 // V2 preamble consists of one or more preamble blocks depending on
 // the number of segments a particular frame needs. Each block holds
 // up to 2 segments and has its own CRC.
+//
+// XXX: currently the multi-segment facility is NOT implemented.
 struct preamble_block_t {
-  static constexpr std::size_t MAX_NUM_SEGMENTS = 2;
+  static constexpr std::size_t MAX_NUM_SEGMENTS = 4;
 
   // ProtocolV2::Tag. For multi-segmented frames the value is the same
   // between subsequent preamble blocks.
@@ -136,15 +138,16 @@ struct preamble_block_t {
   __u8 num_segments;
 
   std::array<ProtocolV2::segment_t, MAX_NUM_SEGMENTS> segments;
+  __u8 _reserved[4];
 
   // CRC16 for this single preamble block.
   __le16 crc;
 } __attribute__((packed));
-static_assert(sizeof(preamble_block_t) == CRYPTO_BLOCK_SIZE);
+static_assert(sizeof(preamble_block_t) % CRYPTO_BLOCK_SIZE == 0);
 static_assert(std::is_standard_layout<preamble_block_t>::value);
 
 
-static constexpr uint32_t FRAME_PREAMBLE_SIZE = CRYPTO_BLOCK_SIZE;
+static constexpr uint32_t FRAME_PREAMBLE_SIZE = sizeof(preamble_block_t);
 
 template <class T>
 struct Frame {
@@ -210,7 +213,9 @@ public:
   Frame() : preamble_filler(payload.append_hole(FRAME_PREAMBLE_SIZE)) {}
 
   ceph::bufferlist &get_buffer() {
-    fill_preamble({ segment_t{ payload.length() - FRAME_PREAMBLE_SIZE, 1} }, {});
+    fill_preamble({
+      segment_t{ payload.length() - FRAME_PREAMBLE_SIZE, 1 }
+    }, {});
     return payload;
   }
 
