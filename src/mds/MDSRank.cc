@@ -727,25 +727,26 @@ void MDSRankDispatcher::tick()
   sessionmap.update_average_session_age();
 
   if (is_active() || is_stopping()) {
-    server->recall_client_state(nullptr, Server::RecallFlags::ENFORCE_MAX);
-    mdcache->trim();
-    mdcache->trim_client_leases();
-    mdcache->check_memory_usage();
     mdlog->trim();  // NOT during recovery!
+  }
+
+  // ...
+  if (is_clientreplay() || is_active() || is_stopping()) {
+    mdcache->trim_client_leases();
+    mdcache->trim();
+    mdcache->check_memory_usage();
+
+    server->recall_client_state(nullptr, Server::RecallFlags::ENFORCE_MAX);
+
+    server->find_idle_sessions();
+    server->evict_cap_revoke_non_responders();
+    locker->tick();
   }
 
   // log
   if (logger) {
     logger->set(l_mds_subtrees, mdcache->num_subtrees());
-
     mdcache->log_stat();
-  }
-
-  // ...
-  if (is_clientreplay() || is_active() || is_stopping()) {
-    server->find_idle_sessions();
-    server->evict_cap_revoke_non_responders();
-    locker->tick();
   }
 
   if (is_reconnect())
