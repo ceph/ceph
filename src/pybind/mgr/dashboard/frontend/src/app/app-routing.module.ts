@@ -33,6 +33,8 @@ import { SsoNotFoundComponent } from './core/auth/sso/sso-not-found/sso-not-foun
 import { UserFormComponent } from './core/auth/user-form/user-form.component';
 import { UserListComponent } from './core/auth/user-list/user-list.component';
 import { ForbiddenComponent } from './core/forbidden/forbidden.component';
+import { MgrModulesListComponent } from './core/mgr-modules/mgr-modules-list/mgr-modules-list.component';
+import { TelemetryComponent } from './core/mgr-modules/telemetry/telemetry.component';
 import { NotFoundComponent } from './core/not-found/not-found.component';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
@@ -127,6 +129,17 @@ const routes: Routes = [
     data: {
       breadcrumbs: PerformanceCounterBreadcrumbsResolver
     }
+  },
+  // Mgr modules
+  {
+    path: 'mgr-modules',
+    canActivate: [AuthGuardService],
+    canActivateChild: [AuthGuardService],
+    data: { breadcrumbs: 'Cluster/Manager Modules' },
+    children: [
+      { path: '', component: MgrModulesListComponent },
+      { path: 'edit/telemetry', component: TelemetryComponent, data: { breadcrumbs: 'Telemetry' } }
+    ]
   },
   // Pools
   {

@@ -402,6 +402,21 @@ class DashboardTestCase(MgrTestCase):
         j = json.loads(out)
         return [mon['name'] for mon in j['monmap']['mons']]
 
+    @classmethod
+    def find_object_in_list(cls, key, value, iterable):
+        """
+        Get the first occurrence of an object within a list with
+        the specified key/value.
+        :param key: The name of the key.
+        :param value: The value to search for.
+        :param iterable: The list to process.
+        :return: Returns the found object or None.
+        """
+        for obj in iterable:
+            if key in obj and obj[key] == value:
+                return obj
+        return None
+
 
 class JLeaf(namedtuple('JLeaf', ['typ', 'none'])):
     def __new__(cls, typ, none=False):

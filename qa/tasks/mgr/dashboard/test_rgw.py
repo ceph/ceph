@@ -7,7 +7,6 @@ import six
 
 from .helper import DashboardTestCase, JObj, JList, JLeaf
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -32,23 +31,22 @@ class RgwTestCase(DashboardTestCase):
         # Create a test user?
         if cls.create_test_user:
             cls._radosgw_admin_cmd([
-                'user', 'create', '--uid', 'teuth-test-user',
-                '--display-name', 'teuth-test-user'
+                'user', 'create', '--uid', 'teuth-test-user', '--display-name',
+                'teuth-test-user'
             ])
             cls._radosgw_admin_cmd([
-                'caps', 'add', '--uid', 'teuth-test-user',
-                '--caps', 'metadata=write'
+                'caps', 'add', '--uid', 'teuth-test-user', '--caps',
+                'metadata=write'
             ])
             cls._radosgw_admin_cmd([
-                'subuser', 'create', '--uid', 'teuth-test-user',
-                '--subuser', 'teuth-test-subuser', '--access',
-                'full', '--key-type', 's3', '--access-key',
-                'xyz123'
+                'subuser', 'create', '--uid', 'teuth-test-user', '--subuser',
+                'teuth-test-subuser', '--access', 'full', '--key-type', 's3',
+                '--access-key', 'xyz123'
             ])
             cls._radosgw_admin_cmd([
-                'subuser', 'create', '--uid', 'teuth-test-user',
-                '--subuser', 'teuth-test-subuser2', '--access',
-                'full', '--key-type', 'swift'
+                'subuser', 'create', '--uid', 'teuth-test-user', '--subuser',
+                'teuth-test-subuser2', '--access', 'full', '--key-type',
+                'swift'
             ])
 
     @classmethod
@@ -62,17 +60,6 @@ class RgwTestCase(DashboardTestCase):
 
     def get_rgw_user(self, uid):
         return self._get('/api/rgw/user/{}'.format(uid))
-
-    def find_in_list(self, key, value, data):
-        """
-        Helper function to find an object with the specified key/value
-        in a list.
-        :param key: The name of the key.
-        :param value: The value to search for.
-        :param data: The list to process.
-        :return: Returns the found object or None.
-        """
-        return next(iter(filter(lambda x: x[key] == value, data)), None)
 
 
 class RgwApiCredentialsTest(RgwTestCase):
@@ -135,7 +122,8 @@ class RgwBucketTest(RgwTestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls._radosgw_admin_cmd(['user', 'rm', '--tenant', 'testx', '--uid=teuth-test-user'])
+        cls._radosgw_admin_cmd(
+            ['user', 'rm', '--tenant', 'testx', '--uid=teuth-test-user'])
         super(RgwBucketTest, cls).tearDownClass()
 
     def test_all(self):
@@ -230,8 +218,8 @@ class RgwBucketTest(RgwTestCase):
         self.assertIn('testx/teuth-test-bucket', data)
 
         # Get the bucket.
-        data = self._get('/api/rgw/bucket/{}'.format(urllib.quote_plus(
-            'testx/teuth-test-bucket')))
+        data = self._get('/api/rgw/bucket/{}'.format(
+            urllib.quote_plus('testx/teuth-test-bucket')))
         self.assertStatus(200)
         self.assertSchema(data, JObj(sub_elems={
             'owner': JLeaf(str),
@@ -246,21 +234,22 @@ class RgwBucketTest(RgwTestCase):
 
         # Update the bucket.
         self._put(
-            '/api/rgw/bucket/{}'.format(urllib.quote_plus('testx/teuth-test-bucket')),
+            '/api/rgw/bucket/{}'.format(
+                urllib.quote_plus('testx/teuth-test-bucket')),
             params={
                 'bucket_id': data['id'],
                 'uid': 'admin'
             })
         self.assertStatus(200)
-        data = self._get('/api/rgw/bucket/{}'.format(urllib.quote_plus(
-            'testx/teuth-test-bucket')))
+        data = self._get('/api/rgw/bucket/{}'.format(
+            urllib.quote_plus('testx/teuth-test-bucket')))
         self.assertStatus(200)
         self.assertIn('owner', data)
         self.assertEqual(data['owner'], 'admin')
 
         # Delete the bucket.
-        self._delete('/api/rgw/bucket/{}'.format(urllib.quote_plus(
-            'testx/teuth-test-bucket')))
+        self._delete('/api/rgw/bucket/{}'.format(
+            urllib.quote_plus('testx/teuth-test-bucket')))
         self.assertStatus(204)
         data = self._get('/api/rgw/bucket')
         self.assertStatus(200)
@@ -271,8 +260,9 @@ class RgwDaemonTest(DashboardTestCase):
 
     AUTH_ROLES = ['rgw-manager']
 
-
-    @DashboardTestCase.RunAs('test', 'test', [{'rgw': ['create', 'update', 'delete']}])
+    @DashboardTestCase.RunAs('test', 'test', [{
+        'rgw': ['create', 'update', 'delete']
+    }])
     def test_read_access_permissions(self):
         self._get('/api/rgw/daemon')
         self.assertStatus(403)
@@ -374,9 +364,7 @@ class RgwUserTest(RgwTestCase):
         # Update the user.
         self._put(
             '/api/rgw/user/teuth-test-user',
-            params={
-                'display_name': 'new name'
-            })
+            params={'display_name': 'new name'})
         self.assertStatus(200)
         data = self.jsonBody()
         self._assert_user_data(data)
@@ -396,10 +384,12 @@ class RgwUserTest(RgwTestCase):
 
     def test_create_get_update_delete_w_tenant(self):
         # Create a new user.
-        self._post('/api/rgw/user', params={
-            'uid': 'test01$teuth-test-user',
-            'display_name': 'display name'
-        })
+        self._post(
+            '/api/rgw/user',
+            params={
+                'uid': 'test01$teuth-test-user',
+                'display_name': 'display name'
+            })
         self.assertStatus(201)
         data = self.jsonBody()
         self._assert_user_data(data)
@@ -417,9 +407,7 @@ class RgwUserTest(RgwTestCase):
         # Update the user.
         self._put(
             '/api/rgw/user/test01$teuth-test-user',
-            params={
-                'display_name': 'new name'
-            })
+            params={'display_name': 'new name'})
         self.assertStatus(200)
         data = self.jsonBody()
         self._assert_user_data(data)
@@ -504,7 +492,7 @@ class RgwUserKeyTest(RgwTestCase):
         data = self.jsonBody()
         self.assertStatus(201)
         self.assertGreaterEqual(len(data), 3)
-        key = self.find_in_list('access_key', 'abc987', data)
+        key = self.find_object_in_list('access_key', 'abc987', data)
         self.assertIsInstance(key, object)
         self.assertEqual(key['secret_key'], 'aaabbbccc')
 
@@ -520,7 +508,7 @@ class RgwUserKeyTest(RgwTestCase):
         data = self.jsonBody()
         self.assertStatus(201)
         self.assertGreaterEqual(len(data), 2)
-        key = self.find_in_list('secret_key', 'xxxyyyzzz', data)
+        key = self.find_object_in_list('secret_key', 'xxxyyyzzz', data)
         self.assertIsInstance(key, object)
 
     def test_delete_s3(self):
@@ -624,14 +612,15 @@ class RgwUserSubuserTest(RgwTestCase):
             })
         self.assertStatus(201)
         data = self.jsonBody()
-        subuser = self.find_in_list('id', 'teuth-test-user:tux', data)
+        subuser = self.find_object_in_list('id', 'teuth-test-user:tux', data)
         self.assertIsInstance(subuser, object)
         self.assertEqual(subuser['permissions'], 'read-write')
 
         # Get the user data to validate the keys.
         data = self.get_rgw_user('teuth-test-user')
         self.assertStatus(200)
-        key = self.find_in_list('user', 'teuth-test-user:tux', data['swift_keys'])
+        key = self.find_object_in_list('user', 'teuth-test-user:tux',
+                                       data['swift_keys'])
         self.assertIsInstance(key, object)
 
     def test_create_s3(self):
@@ -646,14 +635,15 @@ class RgwUserSubuserTest(RgwTestCase):
             })
         self.assertStatus(201)
         data = self.jsonBody()
-        subuser = self.find_in_list('id', 'teuth-test-user:hugo', data)
+        subuser = self.find_object_in_list('id', 'teuth-test-user:hugo', data)
         self.assertIsInstance(subuser, object)
         self.assertEqual(subuser['permissions'], 'write')
 
         # Get the user data to validate the keys.
         data = self.get_rgw_user('teuth-test-user')
         self.assertStatus(200)
-        key = self.find_in_list('user', 'teuth-test-user:hugo', data['keys'])
+        key = self.find_object_in_list('user', 'teuth-test-user:hugo',
+                                       data['keys'])
         self.assertIsInstance(key, object)
         self.assertEqual(key['secret_key'], 'xxx')
 
@@ -665,8 +655,8 @@ class RgwUserSubuserTest(RgwTestCase):
         # Get the user data to check that the keys don't exist anymore.
         data = self.get_rgw_user('teuth-test-user')
         self.assertStatus(200)
-        key = self.find_in_list('user', 'teuth-test-user:teuth-test-subuser2',
-                                data['swift_keys'])
+        key = self.find_object_in_list(
+            'user', 'teuth-test-user:teuth-test-subuser2', data['swift_keys'])
         self.assertIsNone(key)
 
     def test_delete_wo_purge(self):
@@ -678,6 +668,6 @@ class RgwUserSubuserTest(RgwTestCase):
         # Get the user data to check whether they keys still exist.
         data = self.get_rgw_user('teuth-test-user')
         self.assertStatus(200)
-        key = self.find_in_list('user', 'teuth-test-user:teuth-test-subuser',
-                                data['keys'])
+        key = self.find_object_in_list(
+            'user', 'teuth-test-user:teuth-test-subuser', data['keys'])
         self.assertIsInstance(key, object)
