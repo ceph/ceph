@@ -209,6 +209,8 @@ public:
   void decode_payload(bufferlist::const_iterator &ti) {}
 };
 
+struct do_not_encode_tag_t {};
+
 template <class C, typename... Args>
 struct PayloadFrame : public Frame<C> {
 protected:
@@ -269,7 +271,8 @@ public:
     (_encode_payload_each(args), ...);
   }
 
-  PayloadFrame() = default;
+  PayloadFrame(do_not_encode_tag_t) {}
+
   PayloadFrame(char *payload, uint32_t length) {
     this->decode_frame(payload, length);
   }
@@ -364,7 +367,7 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
   }
 
   SignedEncryptedFrame(ProtocolV2 &protocol, char *payload, uint32_t length)
-      : PayloadFrame<T, Args...>() {
+      : PayloadFrame<T, Args...>(do_not_encode_tag_t{}) {
     ceph::bufferlist bl;
     bl.push_back(buffer::create_static(length, payload));
 
@@ -439,8 +442,9 @@ struct RetryGlobalFrame
   inline uint64_t &global_seq() { return get_val<0>(); }
 };
 
-struct WaitFrame : public Frame<WaitFrame> {
+struct WaitFrame : public SignedEncryptedFrame<WaitFrame> {
   static const ProtocolV2::Tag tag = ProtocolV2::Tag::WAIT;
+  using SignedEncryptedFrame::SignedEncryptedFrame;
 };
 
 struct ReconnectOkFrame
@@ -539,7 +543,7 @@ struct MessageHeaderFrame
   }
 
   MessageHeaderFrame(ProtocolV2 &protocol, char *payload, uint32_t length)
-      : PayloadFrame<MessageHeaderFrame, ceph_msg_header2>() {
+      : PayloadFrame<MessageHeaderFrame, ceph_msg_header2>(do_not_encode_tag_t{}) {
     ceph::bufferlist bl;
     bl.push_back(buffer::create_static(length, payload));
 
@@ -2761,7 +2765,7 @@ CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
     ldout(cct, 1) << __func__
                   << " existing racing replace happened while replacing."
                   << " existing=" << existing << dendl;
-    WaitFrame wait;
+    WaitFrame wait(*this);
     return WRITE(wait.get_buffer(), "wait", read_frame);
   }
 
@@ -2829,7 +2833,7 @@ CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
 		// has something to send to us.
     existing->send_keepalive();
     existing->lock.lock();
-    WaitFrame wait;
+    WaitFrame wait(*this);
     bufferlist &bl = wait.get_buffer();
     return WRITE(bl, "wait", read_frame);
   }
