@@ -55,6 +55,8 @@ PATH=$(pwd)/bin:$PATH
 # user's PATH does not get these directories by default (e.g., tumbleweed)
 PATH=$PATH:/sbin:/usr/sbin
 
+export LD_LIBRARY_PATH="$(pwd)/lib"
+
 # TODO: Use getops
 dryrun=false
 if [[ "$1" = "--dry-run" ]]; then
