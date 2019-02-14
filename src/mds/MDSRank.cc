@@ -326,10 +326,13 @@ private:
 
     caps_recalled += count;
     if ((throttled || count > 0) && (recall_timeout == 0 || duration < recall_timeout)) {
-      auto timer = new FunctionContext([this](int _) {
-        recall_client_state();
-      });
-      mds->timer.add_event_after(1.0, timer);
+      C_ContextTimeout *ctx = new C_ContextTimeout(
+        mds, 1, new FunctionContext([this](int r) {
+          recall_client_state();
+      }));
+      ctx->start_timer();
+      gather->set_finisher(new MDSInternalContextWrapper(mds, ctx));
+      gather->activate();
     } else {
       if (!gather->has_subs()) {
         delete gather;
