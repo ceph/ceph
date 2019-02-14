@@ -188,8 +188,6 @@ public:
     stray_index = (stray_index+1)%NUM_STRAY;
   }
 
-  void activate_stray_manager();
-
   /**
    * Call this when you know that a CDentry is ready to be passed
    * on to StrayManager (i.e. this is a stray you've just created)
