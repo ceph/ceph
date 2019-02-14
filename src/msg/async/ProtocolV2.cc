@@ -2343,6 +2343,7 @@ CtPtr ProtocolV2::send_client_ident() {
 
   ldout(cct, 5) << __func__ << " sending identification: "
                 << "addrs=" << messenger->get_myaddrs()
+		<< " target=" << connection->target_addr
                 << " gid=" << messenger->get_myname().num()
                 << " global_seq=" << global_seq
                 << " features_supported=" << std::hex
