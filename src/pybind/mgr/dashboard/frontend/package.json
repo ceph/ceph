@@ -58,7 +58,7 @@
     "@ngx-translate/i18n-polyfill": "1.0.0",
     "@swimlane/ngx-datatable": "14.0.0",
     "awesome-bootstrap-checkbox": "0.3.7",
-    "bootstrap": "3.4.0",
+    "bootstrap": "3.4.1",
     "chart.js": "2.7.3",
     "core-js": "2.6.1",
     "detect-browser": "^3.0.1",
