@@ -14,9 +14,13 @@ roles:
   - osd.0
   - osd.1
 - - mon.b
-  - mon.c
+  - mgr.y
   - osd.2
   - osd.3
+- - mon.c
+  - mds.b
+  - osd.4
+  - osd.5
 - - client.0
   - client.1
   - client.2
@@ -32,6 +36,7 @@ overrides:
     - \(POOL_APP_NOT_ENABLED\)
     - \(SLOW_OPS\)
     - overall HEALTH_
+    - \(MON_MSGR2_NOT_ENABLED\)
     conf:
       global:
         enable experimental unrecoverable data corrupting features: "*"
