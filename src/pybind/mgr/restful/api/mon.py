@@ -23,7 +23,7 @@ class MonName(RestController):
 
         if len(mon) != 1:
             response.status = 500
-            return {'message': 'Failed to identify the monitor node "%s"' % self.name}
+            return {'message': 'Failed to identify the monitor node "{}"'.format(self.name)}
 
         return mon[0]
 
