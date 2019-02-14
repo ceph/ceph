@@ -120,24 +120,28 @@ static constexpr uint8_t CRYPTO_BLOCK_SIZE { 16 };
 
 using segment_t = ProtocolV2::segment_t;
 
-struct preamble_main_t {
+// V2 preamble consists of one or more preamble blocks depending on
+// the number of segments a particular frame needs. Each block holds
+// up to 2 segments and has its own CRC.
+struct preamble_block_t {
   static constexpr std::size_t MAX_NUM_SEGMENTS = 2;
 
-  __le16 crc;
+  // ProtocolV2::Tag. For multi-segmented frames the value is the same
+  // between subsequent preamble blocks.
   __u8 tag;
-  __u8 num_segments;
-  std::array<ProtocolV2::segment_t, MAX_NUM_SEGMENTS> segments;
-} __attribute__((packed));
-static_assert(sizeof(preamble_main_t) == CRYPTO_BLOCK_SIZE);
-static_assert(std::is_standard_layout<preamble_main_t>::value);
 
-struct preamble_extra_t {
-  static constexpr std::size_t MAX_NUM_SEGMENTS = 2;
+  // Number of segments to go in entire frame. First preable block has
+  // set this to just #segments, second #segments - MAX_NUM_SEGMENTS,
+  // third to #segments - MAX_NUM_SEGMENTS and so on.
+  __u8 num_segments;
+
   std::array<ProtocolV2::segment_t, MAX_NUM_SEGMENTS> segments;
-  std::array<__u8, 4> always_padding;
+
+  // CRC16 for this single preamble block.
+  __le16 crc;
 } __attribute__((packed));
-static_assert(sizeof(preamble_extra_t) == CRYPTO_BLOCK_SIZE);
-static_assert(std::is_standard_layout<preamble_extra_t>::value);
+static_assert(sizeof(preamble_block_t) == CRYPTO_BLOCK_SIZE);
+static_assert(std::is_standard_layout<preamble_block_t>::value);
 
 
 static constexpr uint32_t FRAME_PREAMBLE_SIZE = CRYPTO_BLOCK_SIZE;
@@ -149,51 +153,54 @@ protected:
   ceph::bufferlist::contiguous_filler preamble_filler;
 
   void fill_preamble(
+    // TODO: get rid of this distinction
     const std::initializer_list<segment_t> main_segments,
     const std::initializer_list<segment_t> extra_segments)
   {
     ceph_assert(
-      std::size(main_segments) <= preamble_main_t::MAX_NUM_SEGMENTS);
-    ceph_assert(
-      std::size(extra_segments) <= preamble_extra_t::MAX_NUM_SEGMENTS);
+      std::size(main_segments) <= preamble_block_t::MAX_NUM_SEGMENTS);
 
     // Craft the main preamble. It's always present regardless of the number
     // of segments message is composed from. This doesn't apply to extra one
     // as it's optional -- if there is up to 2 segments, we'll never transmit
     // preamble_extra_t;
-    preamble_main_t main_preamble;
-    // TODO: we might fill/pad with pseudo-random data.
-    ::memset(&main_preamble, 0, sizeof(main_preamble));
+    {
+      preamble_block_t main_preamble;
+      // TODO: we might fill/pad with pseudo-random data.
+      ::memset(&main_preamble, 0, sizeof(main_preamble));
 
-    main_preamble.num_segments = \
-      std::size(main_segments) + std::size(extra_segments);
-    main_preamble.tag = static_cast<__u8>(T::tag);
-    std::copy(std::cbegin(main_segments), std::cend(main_segments),
-	      std::begin(main_preamble.segments));
-    main_preamble.crc = \
-      ceph_crc16c(0, reinterpret_cast<unsigned char*>(&main_preamble) + sizeof(main_preamble.crc),
-		  sizeof(main_preamble) - sizeof(main_preamble.crc));
+      main_preamble.num_segments = \
+        std::size(main_segments) + std::size(extra_segments);
+      main_preamble.tag = static_cast<__u8>(T::tag);
+      ceph_assert(main_preamble.tag != 0);
 
-    ceph_assert(main_preamble.tag != 0);
+      std::copy(std::cbegin(main_segments), std::cend(main_segments),
+		std::begin(main_preamble.segments));
 
-    if (std::empty(extra_segments)) {
+      main_preamble.crc = ceph_crc16c(0,
+	reinterpret_cast<unsigned char*>(&main_preamble),
+	sizeof(main_preamble) - sizeof(main_preamble.crc));
+
       preamble_filler.copy_in(sizeof(main_preamble),
 			      reinterpret_cast<const char*>(&main_preamble));
-    } else {
-      preamble_extra_t extra_preamble;
+    }
+
+    // the extra preamble block
+    if (!std::empty(extra_segments)) {
+      preamble_block_t extra_preamble;
       // TODO: we might fill/pad with pseudo-random data.
       ::memset(&extra_preamble, 0, sizeof(extra_preamble));
 
+      extra_preamble.num_segments = std::size(extra_segments);
+      extra_preamble.tag = static_cast<__u8>(T::tag);
+
       std::copy(std::cbegin(extra_segments), std::cend(extra_segments),
 	        std::begin(extra_preamble.segments));
-      // TODO: we might want to make the extra crc separated from main's one
-      main_preamble.crc = \
-        ceph_crc16c(main_preamble.crc,
-		    reinterpret_cast<unsigned char*>(&extra_preamble),
-		    sizeof(extra_preamble));
 
-      preamble_filler.copy_in(sizeof(main_preamble),
-			      reinterpret_cast<const char*>(&main_preamble));
+      extra_preamble.crc = ceph_crc16c(0,
+	reinterpret_cast<unsigned char*>(&extra_preamble),
+	sizeof(extra_preamble));
+
       preamble_filler.copy_in(sizeof(extra_preamble),
 			      reinterpret_cast<const char*>(&extra_preamble));
     }
@@ -1439,7 +1446,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
 
   {
     const auto& main_preamble = \
-      reinterpret_cast<preamble_main_t&>(*preamble.c_str());
+      reinterpret_cast<preamble_block_t&>(*preamble.c_str());
     next_tag = static_cast<Tag>(main_preamble.tag);
 
     // FIXME: makeshift solution
@@ -1464,7 +1471,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
 
     // TODO: move this ugliness into dedicated procedure
     const auto rx_crc = ceph_crc16c(0,
-      reinterpret_cast<const unsigned char*>(&main_preamble) + sizeof(main_preamble.crc),
+      reinterpret_cast<const unsigned char*>(&main_preamble),
       sizeof(main_preamble) - sizeof(main_preamble.crc));
     if (rx_crc != main_preamble.crc) {
       ldout(cct, 10) << __func__ << "crc mismatch for main preamble"
