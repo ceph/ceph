@@ -28,7 +28,7 @@ class Protocol {
   virtual void start_connect(const entity_addr_t& peer_addr,
                              const entity_type_t& peer_type) = 0;
 
-  virtual void start_accept(seastar::foreign_ptr<std::unique_ptr<Socket>>&& socket,
+  virtual void start_accept(SocketFRef&& socket,
                             const entity_addr_t& peer_addr) = 0;
 
  protected:
@@ -52,7 +52,7 @@ class Protocol {
   Dispatcher &dispatcher;
   SocketConnection &conn;
 
-  seastar::foreign_ptr<std::unique_ptr<Socket>> socket;
+  SocketFRef socket;
   seastar::gate pending_dispatch;
 
   // write_state is changed with state atomically, indicating the write

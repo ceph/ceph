@@ -4,11 +4,15 @@
 #pragma once
 
 #include <seastar/core/reactor.hh>
+#include <seastar/core/sharded.hh>
 #include <seastar/net/packet.hh>
 
 #include "include/buffer.h"
 
 namespace ceph::net {
+
+class Socket;
+using SocketFRef = seastar::foreign_ptr<std::unique_ptr<Socket>>;
 
 class Socket
 {
