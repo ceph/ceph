@@ -26,6 +26,7 @@ using auth_proto_t = int;
 namespace ceph::net {
 
 using msgr_tag_t = uint8_t;
+using stop_t = seastar::stop_iteration;
 
 class Connection;
 using ConnectionRef = seastar::shared_ptr<Connection>;
