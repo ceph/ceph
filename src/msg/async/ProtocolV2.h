@@ -4,6 +4,8 @@
 #ifndef _MSG_ASYNC_PROTOCOL_V2_
 #define _MSG_ASYNC_PROTOCOL_V2_
 
+#include <boost/container/static_vector.hpp>
+
 #include "Protocol.h"
 #include "crypto_onwire.h"
 
@@ -102,6 +104,24 @@ private:
   Ct<ProtocolV2> *bannerExchangeCallback;
 
   uint32_t next_payload_len;
+
+public:
+  struct segment_t {
+    __le32 length;
+    __le16 alignment;
+  } __attribute__((packed));
+
+private:
+  static constexpr std::size_t MAX_NUM_SEGMENTS = 4;
+  // segment descriptors are stored in reversed order. This is because
+  // vectors don't support ::pop_front.  We might want to exchange
+  // the container to slightly tuned one in the future.
+  boost::container::static_vector<segment_t,
+				  MAX_NUM_SEGMENTS> rx_segments_todo_rev;
+  boost::container::static_vector<ceph::bufferlist,
+				  MAX_NUM_SEGMENTS> rx_segments_data;
+
+
   Tag next_tag;
   ceph_msg_header2 current_header;
   utime_t backoff;  // backoff time
@@ -148,7 +168,7 @@ private:
 
   CONTINUATION_DECL(ProtocolV2, read_frame);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_preamble_main);
-  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_frame_payload);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_frame_segment);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_header);
   CONTINUATION_DECL(ProtocolV2, throttle_message);
   CONTINUATION_DECL(ProtocolV2, throttle_bytes);
@@ -162,6 +182,8 @@ private:
   Ct<ProtocolV2> *read_frame();
   Ct<ProtocolV2> *handle_read_frame_preamble_main(char *buffer, int r);
   Ct<ProtocolV2> *handle_read_frame_dispatch();
+  Ct<ProtocolV2> *read_frame_segment();
+  Ct<ProtocolV2> *handle_frame_segment(char *buffer, int r);
   Ct<ProtocolV2> *handle_frame_payload(char *buffer, int r);
 
   Ct<ProtocolV2> *ready();
