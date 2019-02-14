@@ -57,6 +57,7 @@ export class RgwUserListComponent {
         name: this.i18n('Suspended'),
         prop: 'suspended',
         flexGrow: 1,
+        cellClass: 'text-center',
         cellTransformation: CellTemplate.checkIcon
       },
       {
