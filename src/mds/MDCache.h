@@ -1078,7 +1078,6 @@ protected:
   void scan_stray_dir(dirfrag_t next=dirfrag_t());
   StrayManager stray_manager;
   friend struct C_MDC_RetryScanStray;
-  friend class C_IO_MDC_FetchedBacktrace;
 
   // == messages ==
  public:
