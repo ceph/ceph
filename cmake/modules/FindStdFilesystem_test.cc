@@ -9,5 +9,6 @@ namespace fs = std::experimental::filesystem;
 #endif
 
 int main() {
-  [[maybe_unused]] fs::path path("/");
+    fs::create_directory("sandbox");
+    fs::remove_all("sandbox");
 }
