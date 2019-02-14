@@ -1387,7 +1387,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
   ceph::bufferlist preamble;
   preamble.push_back(buffer::create_static(FRAME_PREAMBLE_SIZE, buffer));
 
-  ldout(cct, 30) << __func__ << " preamble before decrypt\n";
+  ldout(cct, 30) << __func__ << " preamble\n";
   preamble.hexdump(*_dout);
   *_dout << dendl;
 
@@ -1398,6 +1398,9 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
     ldout(cct, 10) << __func__ << " got encrypted preamble."
                    << " after decrypt premable.length()=" << preamble.length()
                    << dendl;
+    ldout(cct, 30) << __func__ << " preamble after decrypt\n";
+    preamble.hexdump(*_dout);
+    *_dout << dendl;
   }
 
   {
