@@ -221,6 +221,8 @@ class Salt(Task):
         super(Salt, self).end()
         log.debug("beginning of end method")
         self.sm.gather_logs('salt')
+        self.sm.gather_logs('zypp')
+        self.sm.gather_logfile('zypper.log')
         log.debug("end of end method")
 
     def teardown(self):
