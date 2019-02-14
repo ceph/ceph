@@ -113,20 +113,19 @@ public:
   std::vector<ModuleCommand> get_py_commands() const;
 
   /**
-   * module_name **must** exist, but does not have to be loaded
-   * or runnable.
+   * Get the specified module. The module does not have to be
+   * loaded or runnable.
+   *
+   * Returns an empty reference if it does not exist.
    */
   PyModuleRef get_module(const std::string &module_name)
   {
     std::lock_guard l(lock);
-    return modules.at(module_name);
-  }
-
-  bool module_exists(const std::string &module_name) const
-  {
-    std::lock_guard l(lock);
-    auto mod_iter = modules.find(module_name);
-    return mod_iter != modules.end();
+    auto module_iter = modules.find(module_name);
+    if (module_iter == modules.end()) {
+        return {};
+    }
+    return module_iter->second;
   }
 
   /**
