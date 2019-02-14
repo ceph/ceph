@@ -4,14 +4,19 @@ meta:
 upgrade-sequence:
    sequential:
    - ceph.restart:
-       daemons: [mon.a, mon.b, mon.c, mgr.x]
+       daemons: [mon.a, mon.b, mon.c, mgr.x, mgr.y]
        mon-health-to-clog: false
+       wait-for-healthy: false
+   - exec:
+       mon.a:
+         - ceph config set global mon_warn_on_msgr2_not_enabled false
+   - ceph.healthy:
    - ceph.restart:
-       daemons: [osd.0, osd.1, osd.2, osd.3]
+       daemons: [osd.0, osd.1, osd.2, osd.3, osd.4, osd.5]
        wait-for-healthy: false
        wait-for-osds-up: true
    - ceph.restart:
-       daemons: [mds.a]
+       daemons: [mds.a, mds.b]
        wait-for-healthy: false
        wait-for-osds-up: true
    - print: "**** done ceph.restart all"
