@@ -303,10 +303,12 @@ void ObjectRecorder::handle_append_flushed(uint64_t tid, int r) {
       // all remaining unsent appends should be redirected to new object
       m_append_buffers.splice(m_append_buffers.begin(), m_pending_buffers);
       notify_handler_unlock();
-    } else {
+    } else if (!m_pending_buffers.empty()) {
       m_aio_scheduled = true;
       m_lock->Unlock();
       send_appends_aio();
+    } else {
+      m_lock->Unlock();
     }
   } else {
     m_lock->Unlock();
