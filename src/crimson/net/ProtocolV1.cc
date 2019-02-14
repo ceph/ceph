@@ -533,7 +533,7 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
     });
 }
 
-void ProtocolV1::start_accept(seastar::foreign_ptr<std::unique_ptr<Socket>>&& sock,
+void ProtocolV1::start_accept(SocketFRef&& sock,
                               const entity_addr_t& _peer_addr)
 {
   ceph_assert(state == state_t::none);
