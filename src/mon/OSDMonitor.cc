@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <boost/algorithm/string.hpp>
+#include <experimental/iterator>
 #include <locale>
 #include <sstream>
 
@@ -2792,43 +2793,33 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 
   ceph_assert(m->get_orig_source_inst().name.is_osd());
 
-  // check if osd has required features to boot
-  if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS &&
-      !HAVE_FEATURE(m->osd_features, SERVER_LUMINOUS)) {
-    mon->clog->info() << "disallowing boot of OSD "
-		      << m->get_orig_source_inst()
-		      << " because the osdmap requires"
-		      << " CEPH_FEATURE_SERVER_LUMINOUS"
-		      << " but the osd lacks CEPH_FEATURE_SERVER_LUMINOUS";
-    goto ignore;
-  }
+  // force all osds to have gone through luminous prior to upgrade to nautilus
+  {
+    vector<string> missing;
+    if (!HAVE_FEATURE(m->osd_features, SERVER_LUMINOUS)) {
+      missing.push_back("CEPH_FEATURE_SERVER_LUMINOUS");
+    }
+    if (!HAVE_FEATURE(m->osd_features, SERVER_JEWEL)) {
+      missing.push_back("CEPH_FEATURE_SERVER_JEWEL");
+    }
+    if (!HAVE_FEATURE(m->osd_features, SERVER_KRAKEN)) {
+      missing.push_back("CEPH_FEATURE_SERVER_KRAKEN");
+    }
+    if (!HAVE_FEATURE(m->osd_features, OSD_RECOVERY_DELETES)) {
+      missing.push_back("CEPH_FEATURE_OSD_RECOVERY_DELETES");
+    }
 
-  if (osdmap.require_osd_release >= CEPH_RELEASE_JEWEL &&
-      !(m->osd_features & CEPH_FEATURE_SERVER_JEWEL)) {
-    mon->clog->info() << "disallowing boot of OSD "
-		      << m->get_orig_source_inst()
-		      << " because the osdmap requires"
-		      << " CEPH_FEATURE_SERVER_JEWEL"
-		      << " but the osd lacks CEPH_FEATURE_SERVER_JEWEL";
-    goto ignore;
-  }
+    if (!missing.empty()) {
+      using std::experimental::make_ostream_joiner;
 
-  if (osdmap.require_osd_release >= CEPH_RELEASE_KRAKEN &&
-      !HAVE_FEATURE(m->osd_features, SERVER_KRAKEN)) {
-    mon->clog->info() << "disallowing boot of OSD "
-		      << m->get_orig_source_inst()
-		      << " because the osdmap requires"
-		      << " CEPH_FEATURE_SERVER_KRAKEN"
-		      << " but the osd lacks CEPH_FEATURE_SERVER_KRAKEN";
-    goto ignore;
-  }
+      stringstream ss;
+      copy(begin(missing), end(missing), make_ostream_joiner(ss, ";"));
 
-  if (osdmap.test_flag(CEPH_OSDMAP_RECOVERY_DELETES) &&
-      !(m->osd_features & CEPH_FEATURE_OSD_RECOVERY_DELETES)) {
-    mon->clog->info() << "disallowing boot of OSD "
-		      << m->get_orig_source_inst()
-		      << " because 'recovery_deletes' osdmap flag is set and OSD lacks the OSD_RECOVERY_DELETES feature";
-    goto ignore;
+      mon->clog->info() << "disallowing boot of OSD "
+			<< m->get_orig_source_inst()
+			<< " because the osd lacks " << ss.str();
+      goto ignore;
+    }
   }
 
   // make sure upgrades stop at nautilus
@@ -10184,24 +10175,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return prepare_set_flag(op, CEPH_OSDMAP_NOTIERAGENT);
     else if (key == "nosnaptrim")
       return prepare_set_flag(op, CEPH_OSDMAP_NOSNAPTRIM);
-    else if (key == "sortbitwise") {
-      return prepare_set_flag(op, CEPH_OSDMAP_SORTBITWISE);
-    } else if (key == "recovery_deletes") {
-      if (!osdmap.get_num_up_osds() && !sure) {
-        ss << "Not advisable to continue since no OSDs are up. Pass "
-           << "--yes-i-really-mean-it if you really wish to continue.";
-        err = -EPERM;
-        goto reply;
-      }
-      if (HAVE_FEATURE(osdmap.get_up_osd_features(), OSD_RECOVERY_DELETES)
-          || sure) {
-	return prepare_set_flag(op, CEPH_OSDMAP_RECOVERY_DELETES);
-      } else {
-	ss << "not all up OSDs have OSD_RECOVERY_DELETES feature";
-	err = -EPERM;
-	goto reply;
-      }
-    } else if (key == "pglog_hardlimit") {
+    else if (key == "pglog_hardlimit") {
       if (!osdmap.get_num_up_osds() && !sure) {
         ss << "Not advisable to continue since no OSDs are up. Pass "
            << "--yes-i-really-mean-it if you really wish to continue.";
@@ -10218,53 +10192,6 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	ss << "not all up OSDs have OSD_PGLOG_HARDLIMIT feature";
 	err = -EPERM;
 	goto reply;
-      }
-    } else if (key == "require_jewel_osds") {
-      if (!osdmap.get_num_up_osds() && !sure) {
-        ss << "Not advisable to continue since no OSDs are up. Pass "
-           << "--yes-i-really-mean-it if you really wish to continue.";
-        err = -EPERM;
-        goto reply;
-      }
-      if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
-	ss << "the sortbitwise flag must be set before require_jewel_osds";
-	err = -EPERM;
-	goto reply;
-      } else if (osdmap.require_osd_release >= CEPH_RELEASE_JEWEL) {
-	ss << "require_osd_release is already >= jewel";
-	err = 0;
-	goto reply;
-      } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_JEWEL)
-                 || sure) {
-	return prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_JEWEL);
-      } else {
-	ss << "not all up OSDs have CEPH_FEATURE_SERVER_JEWEL feature";
-	err = -EPERM;
-      }
-    } else if (key == "require_kraken_osds") {
-      if (!osdmap.get_num_up_osds() && !sure) {
-        ss << "Not advisable to continue since no OSDs are up. Pass "
-           << "--yes-i-really-mean-it if you really wish to continue.";
-        err = -EPERM;
-        goto reply;
-      }
-      if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
-	ss << "the sortbitwise flag must be set before require_kraken_osds";
-	err = -EPERM;
-	goto reply;
-      } else if (osdmap.require_osd_release >= CEPH_RELEASE_KRAKEN) {
-	ss << "require_osd_release is already >= kraken";
-	err = 0;
-	goto reply;
-      } else if (HAVE_FEATURE(osdmap.get_up_osd_features(), SERVER_KRAKEN)
-                 || sure) {
-	bool r = prepare_set_flag(op, CEPH_OSDMAP_REQUIRE_KRAKEN);
-	// ensure JEWEL is also set
-	pending_inc.new_flags |= CEPH_OSDMAP_REQUIRE_JEWEL;
-	return r;
-      } else {
-	ss << "not all up OSDs have CEPH_FEATURE_SERVER_KRAKEN feature";
-	err = -EPERM;
       }
     } else {
       ss << "unrecognized flag '" << key << "'";
@@ -10310,19 +10237,9 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cct, cmdmap, "release", release);
     bool sure = false;
     cmd_getval(cct, cmdmap, "yes_i_really_mean_it", sure);
-    if (!osdmap.test_flag(CEPH_OSDMAP_SORTBITWISE)) {
-      ss << "the sortbitwise flag must be set first";
-      err = -EPERM;
-      goto reply;
-    }
     int rel = ceph_release_from_name(release.c_str());
     if (rel <= 0) {
       ss << "unrecognized release " << release;
-      err = -EINVAL;
-      goto reply;
-    }
-    if (rel < CEPH_RELEASE_LUMINOUS) {
-      ss << "use this command only for luminous and later";
       err = -EINVAL;
       goto reply;
     }
