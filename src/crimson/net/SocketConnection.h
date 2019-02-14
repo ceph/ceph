@@ -18,12 +18,12 @@
 
 #include "msg/Policy.h"
 #include "Connection.h"
+#include "Socket.h"
 #include "crimson/thread/Throttle.h"
 
 namespace ceph::net {
 
 class Protocol;
-class Socket;
 class SocketMessenger;
 class SocketConnection;
 using SocketConnectionRef = seastar::shared_ptr<SocketConnection>;
@@ -92,7 +92,7 @@ class SocketConnection : public Connection {
                      const entity_type_t& peer_type);
   /// start a handshake from the server's perspective,
   /// only call when SocketConnection first construct
-  void start_accept(seastar::foreign_ptr<std::unique_ptr<Socket>>&& socket,
+  void start_accept(SocketFRef&& socket,
                     const entity_addr_t& peer_addr);
 
   seq_num_t rx_seq_num() const {
