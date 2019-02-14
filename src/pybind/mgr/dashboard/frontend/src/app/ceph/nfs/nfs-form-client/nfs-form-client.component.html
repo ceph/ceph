@@ -1,0 +1,104 @@
+<div class="form-group">
+  <label class="col-sm-3 control-label"
+         i18n>Clients</label>
+
+  <div class="col-sm-9"
+       [formGroup]="form"
+       #formDir="ngForm">
+    <span *ngIf="form.get('clients').value.length === 0"
+          class="form-control no-border text-muted">
+      <span class="text-muted"
+            i18n>Any client can access</span>
+    </span>
+
+    <ng-container formArrayName="clients">
+      <div *ngFor="let item of form.get('clients').value; let index = index; trackBy: trackByFn">
+        <div class="panel panel-default"
+             [formGroupName]="index">
+          <div class="panel-heading">
+            <h3 class="panel-title">{{ (index + 1) | ordinal }}
+              <span class="pull-right clickable"
+                    (click)="removeClient(index)"
+                    tooltip="Remove">&times;</span>
+            </h3>
+          </div>
+
+          <div class="panel-body">
+            <!-- Addresses -->
+            <div class="form-group"
+                 [ngClass]="{ 'has-error': showError(index, 'addresses', formDir) }">
+              <label i18n
+                     class="col-sm-3 control-label"
+                     for="addresses">Addresses</label>
+              <div class="col-sm-9">
+                <input type="text"
+                       class="form-control"
+                       name="addresses"
+                       id="addresses"
+                       formControlName="addresses"
+                       placeholder="192.168.0.10, 192.168.1.0/8">
+                <span class="help-block">
+                  <span *ngIf="showError(index, 'addresses', formDir, 'required')"
+                        i18n>Required field</span>
+
+                  <span *ngIf="showError(index, 'addresses', formDir, 'pattern')">
+                    <ng-container i18n>Must contain one or more comma-separated values</ng-container>
+                    <br>
+                    <ng-container i18n>For example:</ng-container> 192.168.0.10, 192.168.1.0/8
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            <!-- Access Type-->
+            <div class="form-group">
+              <label i18n
+                     class="col-sm-3 control-label"
+                     for="access_type">Access Type</label>
+              <div class="col-sm-9">
+                <select class="form-control"
+                        name="access_type"
+                        id="access_type"
+                        formControlName="access_type">
+                  <option [value]="form.getValue('access_type')">{{ getNoAccessTypeDescr() }}</option>
+                  <option *ngFor="let item of nfsAccessType"
+                          [value]="item.value">{{ item.value }}</option>
+                </select>
+                <span class="help-block"
+                      *ngIf="getValue(index, 'access_type')">
+                  {{ getAccessTypeHelp(index) }}
+                </span>
+              </div>
+            </div>
+
+            <!-- Squash -->
+            <div class="form-group">
+              <label i18n
+                     class="col-sm-3 control-label"
+                     for="squash">Squash</label>
+              <div class="col-sm-9">
+                <select class="form-control"
+                        name="squash"
+                        id="squash"
+                        formControlName="squash">
+                  <option [value]="form.getValue('squash')">{{ getNoSquashDescr() }}</option>
+                  <option *ngFor="let squash of nfsSquash"
+                          [value]="squash">{{ squash }}</option>
+                </select>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </ng-container>
+
+    <span class="form-control no-border">
+      <button class="btn btn-default btn-label pull-right"
+              (click)="addClient()">
+        <i class="fa fa-fw fa-plus"></i>
+        <ng-container i18n>Add clients</ng-container>
+      </button>
+    </span>
+    <hr>
+  </div>
+</div>
