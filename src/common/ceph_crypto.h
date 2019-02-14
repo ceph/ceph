@@ -35,7 +35,6 @@ extern "C" {
 
 namespace ceph {
   namespace crypto {
-    void assert_init();
     void init(CephContext *cct);
     void shutdown(bool shared=true);
   }
@@ -45,6 +44,9 @@ namespace ceph {
 namespace ceph {
   namespace crypto {
     namespace nss {
+      void init(CephContext *cct);
+      void shutdown(bool shared=true);
+
       class NSSDigest {
       private:
         PK11Context *ctx;
@@ -104,6 +106,9 @@ namespace ceph {
 namespace ceph {
   namespace crypto {
     namespace ssl {
+      void init(CephContext *cct);
+      void shutdown(bool shared=true);
+
       class OpenSSLDigest {
       private:
 	EVP_MD_CTX *mpContext;

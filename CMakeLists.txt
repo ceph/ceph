@@ -403,6 +403,12 @@ set(USE_NSS 1)
 set(USE_OPENSSL 1)
 set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES} OpenSSL::Crypto)
 
+option(WITH_OPENSSL_ASYNC "Enable Asynchronous OpenSSL operations" OFF)
+if(WITH_OPENSSL_ASYNC)
+  set(USE_OPENSSL_ASYNC 1)
+  find_package(OpenSSL 1.1 REQUIRED)
+endif()
+
 option(WITH_XIO "Enable XIO messaging" OFF)
 if(WITH_XIO)
   find_package(xio REQUIRED)
