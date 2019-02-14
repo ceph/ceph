@@ -457,7 +457,6 @@ exposes all these to the python modules.
 
 %package mgr-diskprediction-local
 Summary:        ceph-mgr diskprediction_local plugin
-BuildArch:	noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
@@ -470,7 +469,6 @@ disk failures using local algorithms and machine-learning databases.
 
 %package mgr-diskprediction-cloud
 Summary:        ceph-mgr diskprediction_cloud plugin
-BuildArch:	noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
@@ -481,7 +479,6 @@ disk failures using services in the Google cloud.
 
 %package mgr-rook
 Summary:        ceph-mgr rook plugin
-BuildArch:	noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
@@ -1440,6 +1437,7 @@ fi
 
 %files mgr
 %{_bindir}/ceph-mgr
+%dir %{_libdir}/ceph/mgr
 %{_libdir}/ceph/mgr/ansible
 %{_libdir}/ceph/mgr/balancer
 %{_libdir}/ceph/mgr/crash
