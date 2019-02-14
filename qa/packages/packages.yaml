@@ -37,6 +37,7 @@ ceph:
   - ceph-test
   - ceph
   - ceph-mgr
+  - ceph-mgr-dashboard
   - ceph-mgr-diskprediction-cloud
   - ceph-mgr-diskprediction-local
   - ceph-mgr-rook
