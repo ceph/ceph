@@ -67,7 +67,7 @@ std::unique_ptr<LogEvent> LogEvent::decode_event(bufferlist::const_iterator p)
 }
 
 
-std::string LogEvent::get_type_str() const
+std::string_view LogEvent::get_type_str() const
 {
   switch(_type) {
   case EVENT_SUBTREEMAP: return "SUBTREEMAP";

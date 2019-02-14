@@ -62,7 +62,7 @@ public:
   LogEvent& operator=(const LogEvent&) = delete;
   virtual ~LogEvent() {}
 
-  string get_type_str() const;
+  std::string_view get_type_str() const;
   static EventType str_to_type(std::string_view str);
   EventType get_type() const { return _type; }
   void set_type(EventType t) { _type = t; }
