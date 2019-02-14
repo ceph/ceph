@@ -98,10 +98,10 @@ PyObject *ActivePyModules::get_server_python(const std::string &hostname)
 
 PyObject *ActivePyModules::list_servers_python()
 {
+  PyFormatter f(false, true);
   PyThreadState *tstate = PyEval_SaveThread();
   dout(10) << " >" << dendl;
 
-  PyFormatter f(false, true);
   daemon_state.with_daemons_by_server([this, &f, &tstate]
       (const std::map<std::string, DaemonStateCollection> &all) {
     PyEval_RestoreThread(tstate);
