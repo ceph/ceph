@@ -1452,21 +1452,24 @@ function test_mon_osd()
     ceph osd pool cancel-force-backfill $pool_name
   done
 
-  for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norebalance norecover notieragent full
+  for f in noup nodown noin noout noscrub nodeep-scrub nobackfill \
+	  norebalance norecover notieragent full
   do
     ceph osd set $f
     ceph osd unset $f
   done
-  expect_false ceph osd unset sortbitwise  # cannot be unset
   expect_false ceph osd set bogus
   expect_false ceph osd unset bogus
+  for f in sortbitwise recover_deletes require_jewel_osds \
+	  require_kraken_osds
+  do
+	expect_false ceph osd set $f
+	expect_false ceph osd unset $f
+  done
   ceph osd require-osd-release nautilus
   # can't lower (or use new command for anything but jewel)
   expect_false ceph osd require-osd-release jewel
   # these are no-ops but should succeed.
-  ceph osd set require_jewel_osds
-  ceph osd set require_kraken_osds
-  expect_false ceph osd unset require_jewel_osds
 
   ceph osd set noup
   ceph osd down 0
