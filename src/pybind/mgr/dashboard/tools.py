@@ -879,3 +879,31 @@ def get_request_body_params(request):
         params.update(request.json.items())
 
     return params
+
+
+def find_object_in_list(key, value, iterable):
+    """
+    Get the first occurrence of an object within a list with
+    the specified key/value.
+
+    >>> find_object_in_list('name', 'bar', [{'name': 'foo'}, {'name': 'bar'}])
+    {'name': 'bar'}
+
+    >>> find_object_in_list('name', 'xyz', [{'name': 'foo'}, {'name': 'bar'}]) is None
+    True
+
+    >>> find_object_in_list('foo', 'bar', [{'xyz': 4815162342}]) is None
+    True
+
+    >>> find_object_in_list('foo', 'bar', []) is None
+    True
+
+    :param key: The name of the key.
+    :param value: The value to search for.
+    :param iterable: The list to process.
+    :return: Returns the found object or None.
+    """
+    for obj in iterable:
+        if key in obj and obj[key] == value:
+            return obj
+    return None

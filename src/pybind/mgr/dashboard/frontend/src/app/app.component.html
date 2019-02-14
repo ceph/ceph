@@ -1,6 +1,8 @@
-<cd-navigation *ngIf="!isLoginActive()"></cd-navigation>
-<div class="container-fluid"
-     [ngClass]="{'full-height':isLoginActive(), 'dashboard':isDashboardPage()} ">
-  <cd-breadcrumbs></cd-breadcrumbs>
-  <router-outlet></router-outlet>
-</div>
+<block-ui>
+  <cd-navigation *ngIf="!isLoginActive()"></cd-navigation>
+  <div class="container-fluid"
+       [ngClass]="{'full-height':isLoginActive(), 'dashboard':isDashboardPage()} ">
+    <cd-breadcrumbs></cd-breadcrumbs>
+    <router-outlet></router-outlet>
+  </div>
+<block-ui>
