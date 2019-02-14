@@ -142,8 +142,8 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
 
   // inject a discard operation into the journal
   inject_into_journal(ictx,
-                      librbd::journal::AioDiscardEvent(0, payload.size(),
-                                                       ictx->skip_partial_discard));
+                      librbd::journal::AioDiscardEvent(
+                        0, payload.size(), ictx->discard_granularity_bytes));
   close_image(ictx);
 
   // re-open the journal so that it replays the new entry
@@ -155,7 +155,7 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
                                 librbd::io::ReadResult{read_result}, 0);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
-  if (ictx->skip_partial_discard) {
+  if (ictx->discard_granularity_bytes > 0) {
     ASSERT_EQ(payload, read_payload);
   } else {
     ASSERT_EQ(std::string(read_payload.size(), '\0'), read_payload);
@@ -170,11 +170,11 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
 
   // replay several envents and check the commit position
   inject_into_journal(ictx,
-                      librbd::journal::AioDiscardEvent(0, payload.size(),
-                                                       ictx->skip_partial_discard));
+                      librbd::journal::AioDiscardEvent(
+                        0, payload.size(), ictx->discard_granularity_bytes));
   inject_into_journal(ictx,
-                      librbd::journal::AioDiscardEvent(0, payload.size(),
-                                                       ictx->skip_partial_discard));
+                      librbd::journal::AioDiscardEvent(
+                        0, payload.size(), ictx->discard_granularity_bytes));
   close_image(ictx);
 
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
@@ -186,7 +186,7 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
   // verify lock ordering constraints
   aio_comp = new librbd::io::AioCompletion();
   ictx->io_work_queue->aio_discard(aio_comp, 0, read_payload.size(),
-                                   ictx->skip_partial_discard);
+                                   ictx->discard_granularity_bytes);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
 }

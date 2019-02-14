@@ -182,7 +182,7 @@ namespace librbd {
     uint64_t readahead_disable_after_bytes;
     bool clone_copy_on_read;
     bool enable_alloc_hint;
-    bool skip_partial_discard;
+    uint32_t discard_granularity_bytes = 0;
     bool blkin_trace_all;
     uint64_t mirroring_replay_delay;
     uint64_t mtime_update_interval;

@@ -1291,7 +1291,7 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
   // process with delay
   EXPECT_CALL(mock_replay_entry, get_data());
   librbd::journal::EventEntry event_entry(
-    librbd::journal::AioDiscardEvent(123, 345, false), ceph_clock_now());
+    librbd::journal::AioDiscardEvent(123, 345, 0), ceph_clock_now());
   EXPECT_CALL(mock_local_replay, decode(_, _))
     .WillOnce(DoAll(SetArgPointee<1>(event_entry),
                     Return(0)));
