@@ -23,10 +23,13 @@ import sys
 import threading
 import uuid
 
-
 # Flags are from MonCommand.h
-FLAG_MGR = 8   # command is intended for mgr
-FLAG_POLL = 16 # command is intended to be ran continuously by the client
+FLAG_NOFORWARD = (1 << 0)
+FLAG_OBSOLETE = (1 << 1)
+FLAG_DEPRECATED = (1 << 2)
+FLAG_MGR = (1<<3)
+FLAG_POLL = (1 << 4)
+FLAG_HIDDEN = (1 << 5)
 
 KWARG_EQUALS = "--([^=]+)=(.+)"
 KWARG_SPACE = "--([^=]+)"
@@ -1129,6 +1132,9 @@ def validate_command(sigdict, args, verbose=False):
     best_match_cnt = 0
     bestcmds = []
     for cmd in sigdict.values():
+        flags = cmd.get('flags', 0)
+        if flags & FLAG_OBSOLETE:
+            continue
         sig = cmd['sig']
         matched = matchnum(args, sig, partial=True)
         if (matched >= math.floor(best_match_cnt) and
@@ -1193,7 +1199,8 @@ def validate_command(sigdict, args, verbose=False):
             print("Invalid command:", ex, file=sys.stderr)
             print(concise_sig(sig), ': ', cmd['help'], file=sys.stderr)
     else:
-        bestcmds = bestcmds[:10]
+        bestcmds = [c for c in bestcmds if not c.get('flags', 0) & (FLAG_DEPRECATED | FLAG_HIDDEN)]
+        bestcmds = bestcmds[:10] # top 10
         print('no valid command found; {0} closest matches:'.format(len(bestcmds)), file=sys.stderr)
         for cmd in bestcmds:
             print(concise_sig(cmd['sig']), file=sys.stderr)

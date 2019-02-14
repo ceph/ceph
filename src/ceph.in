@@ -38,13 +38,6 @@ CEPH_RELEASE = "@CEPH_RELEASE@"
 CEPH_RELEASE_NAME = "@CEPH_RELEASE_NAME@"
 CEPH_RELEASE_TYPE = "@CEPH_RELEASE_TYPE@"
 
-# Flags from src/mon/Monitor.h
-FLAG_NOFORWARD = (1 << 0)
-FLAG_OBSOLETE = (1 << 1)
-FLAG_DEPRECATED = (1 << 2)
-FLAG_POLL = (1 << 4)
-FLAG_HIDDEN = (1 << 5)
-
 # priorities from src/common/perf_counters.h
 PRIO_CRITICAL = 10
 PRIO_INTERESTING = 8
@@ -478,7 +471,7 @@ def format_help(cmddict, partial=None):
         if not cmd['help']:
             continue
         flags = cmd.get('flags', 0)
-        if flags & (FLAG_OBSOLETE | FLAG_DEPRECATED | FLAG_HIDDEN):
+        if flags & (argparse.FLAG_OBSOLETE | argparse.FLAG_DEPRECATED | argparse.FLAG_HIDDEN):
             continue
         concise = concise_sig(cmd['sig'])
         if partial and not concise.startswith(partial):
