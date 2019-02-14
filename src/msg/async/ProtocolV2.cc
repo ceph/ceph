@@ -1429,7 +1429,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
       ldout(cct, 10) << __func__ << "crc mismatch for main preamble"
 		     << " rx_crc=" << rx_crc
 		     << " tx_crc=" << main_preamble.crc << dendl;
-      _fault();
+      return _fault();
     }
   }
 
