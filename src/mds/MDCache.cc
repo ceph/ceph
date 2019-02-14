@@ -739,13 +739,14 @@ void MDCache::populate_mydir()
     }
   }
 
-  stray_manager.set_num_strays(num_strays);
-
   // okay!
   dout(10) << "populate_mydir done" << dendl;
   ceph_assert(!open);    
   open = true;
   mds->queue_waiters(waiting_for_open);
+
+  stray_manager.set_num_strays(num_strays);
+  stray_manager.activate();
 
   scan_stray_dir();
 }
@@ -12871,21 +12872,6 @@ void MDCache::register_perfcounters()
     g_ceph_context->get_perfcounters_collection()->add(logger.get());
     recovery_queue.set_logger(logger.get());
     stray_manager.set_logger(logger.get());
-}
-
-void MDCache::activate_stray_manager()
-{
-  if (open) {
-    stray_manager.activate();
-  } else {
-    wait_for_open(
-	new MDSInternalContextWrapper(mds,
-	  new FunctionContext([this](int r){
-	    stray_manager.activate();
-	    })
-	  )
-	);
-  }
 }
 
 /**

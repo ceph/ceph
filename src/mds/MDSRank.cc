@@ -1983,7 +1983,6 @@ void MDSRank::active_start()
   mdcache->start_files_to_recover();
 
   mdcache->reissue_all_caps();
-  mdcache->activate_stray_manager();
 
   finish_contexts(g_ceph_context, waiting_for_active);  // kick waiters
 }
