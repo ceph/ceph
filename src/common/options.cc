@@ -7074,6 +7074,22 @@ static std::vector<Option> get_rbd_options() {
     .set_default(true)
     .set_description("skip discard (zero) of unaligned extents within an object"),
 
+    Option("rbd_discard_granularity_bytes", Option::TYPE_UINT,
+           Option::LEVEL_ADVANCED)
+    .set_default(64_K)
+    .set_min_max(4_K, 32_M)
+    .set_validator([](std::string *value, std::string *error_message){
+        uint64_t f = strict_si_cast<uint64_t>(value->c_str(), error_message);
+        if (!error_message->empty()) {
+          return -EINVAL;
+        } else if (!isp2(f)) {
+          *error_message = "value must be a power of two";
+          return -EINVAL;
+        }
+        return 0;
+      })
+    .set_description("minimum aligned size of discard operations"),
+
     Option("rbd_enable_alloc_hint", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("when writing a object, it will issue a hint to osd backend to indicate the expected size object need"),

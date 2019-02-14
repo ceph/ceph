@@ -341,8 +341,6 @@ public:
     return OBJECT_EXISTS;
   }
 
-  void send() override;
-
 protected:
   bool is_no_op_for_nonexistent_object() const override {
     return (!this->has_parent());

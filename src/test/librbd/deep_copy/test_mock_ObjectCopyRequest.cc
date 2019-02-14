@@ -749,7 +749,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, WriteSnaps) {
 TEST_F(TestMockDeepCopyObjectCopyRequest, Trim) {
   ASSERT_EQ(0, m_src_image_ctx->operations->metadata_set(
               "conf_rbd_skip_partial_discard", "false"));
-  m_src_image_ctx->skip_partial_discard = false;
+  m_src_image_ctx->discard_granularity_bytes = 0;
 
   // scribble some data
   interval_set<uint64_t> one;
@@ -760,7 +760,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Trim) {
   uint64_t trim_offset = rand() % one.range_end();
   ASSERT_LE(0, m_src_image_ctx->io_work_queue->discard(
     trim_offset, one.range_end() - trim_offset,
-    m_src_image_ctx->skip_partial_discard));
+    m_src_image_ctx->discard_granularity_bytes));
   ASSERT_EQ(0, create_snap("copy"));
 
   librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
@@ -813,7 +813,7 @@ TEST_F(TestMockDeepCopyObjectCopyRequest, Remove) {
   // remove the object
   uint64_t object_size = 1 << m_src_image_ctx->order;
   ASSERT_LE(0, m_src_image_ctx->io_work_queue->discard(
-    0, object_size, m_src_image_ctx->skip_partial_discard));
+    0, object_size, m_src_image_ctx->discard_granularity_bytes));
   ASSERT_EQ(0, create_snap("copy"));
   librbd::MockTestImageCtx mock_src_image_ctx(*m_src_image_ctx);
   librbd::MockTestImageCtx mock_dst_image_ctx(*m_dst_image_ctx);

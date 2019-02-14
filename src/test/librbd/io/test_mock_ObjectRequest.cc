@@ -1024,37 +1024,6 @@ TEST_F(TestMockIoObjectRequest, DiscardNoOp) {
   ASSERT_EQ(0, ctx.wait());
 }
 
-TEST_F(TestMockIoObjectRequest, SkipPartialDiscard) {
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(m_image_name, &ictx));
-
-  MockTestImageCtx mock_image_ctx(*ictx);
-  expect_get_object_size(mock_image_ctx);
-
-  MockExclusiveLock mock_exclusive_lock;
-  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
-    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
-    expect_is_lock_owner(mock_exclusive_lock);
-  }
-
-  MockObjectMap mock_object_map;
-  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
-    mock_image_ctx.object_map = &mock_object_map;
-  }
-
-  expect_op_work_queue(mock_image_ctx);
-
-  InSequence seq;
-  expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 0, 0);
-
-  C_SaferCond ctx;
-  auto req = MockObjectDiscardRequest::create_discard(
-    &mock_image_ctx, ictx->get_object_name(0), 0, 0, 1, mock_image_ctx.snapc,
-    OBJECT_DISCARD_FLAG_SKIP_PARTIAL, {}, &ctx);
-  req->send();
-  ASSERT_EQ(0, ctx.wait());
-}
-
 TEST_F(TestMockIoObjectRequest, WriteSame) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));

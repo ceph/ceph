@@ -47,7 +47,9 @@ void scribble(librbd::ImageCtx *image_ctx, int num_ops, uint64_t max_size)
     uint64_t len = 1 + rand() % max_size;
 
     if (rand() % 4 == 0) {
-      ASSERT_EQ((int)len, image_ctx->io_work_queue->discard(off, len, image_ctx->skip_partial_discard));
+      ASSERT_EQ((int)len,
+                image_ctx->io_work_queue->discard(
+                  off, len, image_ctx->discard_granularity_bytes));
     } else {
       bufferlist bl;
       bl.append(std::string(len, '1'));
@@ -224,8 +226,9 @@ TEST_F(TestImageSync, Discard) {
 
   ASSERT_EQ(0, create_snap(m_remote_image_ctx, "snap", nullptr));
 
-  ASSERT_EQ((int)len - 2, m_remote_image_ctx->io_work_queue->discard(off + 1,
-                                                                     len - 2, m_remote_image_ctx->skip_partial_discard));
+  ASSERT_EQ((int)len - 2,
+            m_remote_image_ctx->io_work_queue->discard(
+              off + 1, len - 2, m_remote_image_ctx->discard_granularity_bytes));
   {
     RWLock::RLocker owner_locker(m_remote_image_ctx->owner_lock);
     ASSERT_EQ(0, flush(m_remote_image_ctx));

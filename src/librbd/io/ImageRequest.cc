@@ -19,6 +19,7 @@
 #include "common/perf_counters.h"
 #include "common/WorkQueue.h"
 #include "osdc/Striper.h"
+#include <algorithm>
 #include <functional>
 
 #define dout_subsys ceph_subsys_rbd
@@ -98,10 +99,10 @@ void ImageRequest<I>::aio_write(I *ictx, AioCompletion *c,
 template <typename I>
 void ImageRequest<I>::aio_discard(I *ictx, AioCompletion *c,
                                   Extents &&image_extents,
-                                  bool skip_partial_discard,
+                                  uint32_t discard_granularity_bytes,
 				  const ZTracer::Trace &parent_trace) {
   ImageDiscardRequest<I> req(*ictx, c, std::move(image_extents),
-                             skip_partial_discard, parent_trace);
+                             discard_granularity_bytes, parent_trace);
   req.send();
 }
 
@@ -376,7 +377,7 @@ void AbstractImageWriteRequest<I>::send_request() {
                   image_ctx.journal->is_journal_appending());
   }
 
-  int ret = validate_object_extents(object_extents);
+  int ret = prune_object_extents(&object_extents);
   if (ret < 0) {
     aio_comp->fail(ret);
     return;
@@ -497,7 +498,7 @@ uint64_t ImageDiscardRequest<I>::append_journal_event(bool synchronous) {
     journal::EventEntry event_entry(
       journal::AioDiscardEvent(extent.first,
                                extent.second,
-                               this->m_skip_partial_discard));
+                               this->m_discard_granularity_bytes));
     tid = image_ctx.journal->append_io_event(std::move(event_entry),
                                              extent.first, extent.second,
                                              synchronous, 0);
@@ -516,7 +517,8 @@ void ImageDiscardRequest<I>::send_image_cache_request() {
   for (auto &extent : this->m_image_extents) {
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
     image_ctx.image_cache->aio_discard(extent.first, extent.second,
-                                       this->m_skip_partial_discard, req_comp);
+                                       this->m_discard_granularity_bytes,
+                                       req_comp);
   }
 }
 
@@ -525,14 +527,11 @@ ObjectDispatchSpec *ImageDiscardRequest<I>::create_object_request(
     const ObjectExtent &object_extent, const ::SnapContext &snapc,
     uint64_t journal_tid, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
-  int discard_flags = OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE;
-  if (m_skip_partial_discard) {
-    discard_flags |=  OBJECT_DISCARD_FLAG_SKIP_PARTIAL;
-  }
   auto req = ObjectDispatchSpec::create_discard(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.oid.name,
     object_extent.objectno, object_extent.offset, object_extent.length, snapc,
-    discard_flags, journal_tid, this->m_trace, on_finish);
+    OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE, journal_tid, this->m_trace,
+    on_finish);
   return req;
 }
 
@@ -541,6 +540,59 @@ void ImageDiscardRequest<I>::update_stats(size_t length) {
   I &image_ctx = this->m_image_ctx;
   image_ctx.perfcounter->inc(l_librbd_discard);
   image_ctx.perfcounter->inc(l_librbd_discard_bytes, length);
+}
+
+template <typename I>
+int ImageDiscardRequest<I>::prune_object_extents(
+    ObjectExtents* object_extents) const {
+  if (m_discard_granularity_bytes == 0) {
+    return 0;
+  }
+
+  // Align the range to discard_granularity_bytes boundary and skip
+  // and discards that are too small to free up any space.
+  //
+  // discard_granularity_bytes >= object_size && tail truncation
+  // is a special case for filestore
+  bool prune_required = false;
+  auto object_size = this->m_image_ctx.layout.object_size;
+  auto discard_granularity_bytes = std::min<uint64_t>(
+    m_discard_granularity_bytes, object_size);
+  auto xform_lambda =
+    [discard_granularity_bytes, object_size, &prune_required]
+    (ObjectExtent& object_extent) {
+      auto& offset = object_extent.offset;
+      auto& length = object_extent.length;
+      auto next_offset = offset + length;
+
+      if ((discard_granularity_bytes < object_size) ||
+          (next_offset < object_size)) {
+        static_assert(sizeof(offset) == sizeof(discard_granularity_bytes));
+        offset = p2roundup(offset, discard_granularity_bytes);
+        next_offset = p2align(next_offset, discard_granularity_bytes);
+        if (offset >= next_offset) {
+          prune_required = true;
+          length = 0;
+        } else {
+          length = next_offset - offset;
+        }
+      }
+    };
+  std::for_each(object_extents->begin(), object_extents->end(),
+                xform_lambda);
+
+  if (prune_required) {
+    // one or more object extents were skipped
+    auto remove_lambda =
+      [](const ObjectExtent& object_extent) {
+        return (object_extent.length == 0);
+      };
+    object_extents->erase(
+      std::remove_if(object_extents->begin(), object_extents->end(),
+                     remove_lambda),
+      object_extents->end());
+  }
+  return 0;
 }
 
 template <typename I>
@@ -744,15 +796,15 @@ void ImageCompareAndWriteRequest<I>::update_stats(size_t length) {
 }
 
 template <typename I>
-int ImageCompareAndWriteRequest<I>::validate_object_extents(
-    const ObjectExtents &object_extents) const {
-  if (object_extents.size() > 1)
+int ImageCompareAndWriteRequest<I>::prune_object_extents(
+    ObjectExtents* object_extents) const {
+  if (object_extents->size() > 1)
     return -EINVAL;
 
   I &image_ctx = this->m_image_ctx;
   uint64_t sector_size = 512ULL;
   uint64_t su = image_ctx.layout.stripe_unit;
-  ObjectExtent object_extent = object_extents.front();
+  ObjectExtent object_extent = object_extents->front();
   if (object_extent.offset % sector_size + object_extent.length > sector_size ||
       (su != 0 && (object_extent.offset % su + object_extent.length > su)))
     return -EINVAL;

@@ -53,8 +53,8 @@ void ImageWriteback<I>::aio_write(Extents &&image_extents,
 
 template <typename I>
 void ImageWriteback<I>::aio_discard(uint64_t offset, uint64_t length,
-                                    bool skip_partial_discard,
-				    Context *on_finish) {
+				    uint32_t discard_granularity_bytes,
+                                    Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "offset=" << offset << ", "
                  << "length=" << length << ", "
@@ -63,7 +63,7 @@ void ImageWriteback<I>::aio_discard(uint64_t offset, uint64_t length,
   auto aio_comp = io::AioCompletion::create_and_start(on_finish, &m_image_ctx,
                                                       io::AIO_TYPE_DISCARD);
   io::ImageDiscardRequest<I> req(m_image_ctx, aio_comp, {{offset, length}},
-                                 skip_partial_discard, {});
+                                 discard_granularity_bytes, {});
   req.set_bypass_image_cache();
   req.send();
 }
