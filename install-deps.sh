@@ -299,15 +299,16 @@ else
                 fi
                 ;;
             centos|rhel|ol|virtuozzo)
+                MAJOR_VERSION="$(echo $VERSION_ID | cut -d. -f1)"
                 $SUDO yum install -y yum-utils
                 if test $ID = rhel ; then
-                    $SUDO yum-config-manager --enable rhel-$VERSION_ID-server-optional-rpms
+                    $SUDO yum-config-manager --enable rhel-$MAJOR_VERSION-server-optional-rpms
                 fi
-                $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$VERSION_ID/x86_64/
+                $SUDO yum-config-manager --add-repo https://dl.fedoraproject.org/pub/epel/$MAJOR_VERSION/x86_64/
                 $SUDO yum install --nogpgcheck -y epel-release
-                $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$VERSION_ID
+                $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
-                if test $ID = centos -a $VERSION_ID = 7 ; then
+                if test $ID = centos -a $MAJOR_VERSION = 7 ; then
 		    case $(uname -m) in
 			x86_64)
 			    $SUDO yum -y install centos-release-scl
