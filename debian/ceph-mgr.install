@@ -3,7 +3,6 @@ usr/bin/ceph-mgr
 usr/lib/ceph/mgr/ansible
 usr/lib/ceph/mgr/balancer
 usr/lib/ceph/mgr/crash
-usr/lib/ceph/mgr/dashboard
 usr/lib/ceph/mgr/deepsea
 usr/lib/ceph/mgr/devicehealth
 usr/lib/ceph/mgr/influx
