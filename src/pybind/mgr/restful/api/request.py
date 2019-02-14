@@ -23,7 +23,7 @@ class RequestId(RestController):
 
         if len(request) != 1:
             response.status = 500
-            return {'message': 'Unknown request id "%s"' % str(self.request_id)}
+            return {'message': 'Unknown request id "{}"'.format(self.request_id)}
 
         request = request[0]
         return request
