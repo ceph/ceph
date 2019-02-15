@@ -721,7 +721,7 @@ void ProtocolV2::reset_recv_state() {
                           current_header.data_len;
 
 #if 0
-  if (state > THROTTLE_MESSAGE && state <= READ_MESSAGE_FRONT &&
+  if (state > THROTTLE_MESSAGE && state <= THROTTLE_DONE &&
       connection->policy.throttler_messages) {
     ldout(cct, 10) << __func__ << " releasing " << 1
                    << " message to policy throttler "
@@ -730,7 +730,7 @@ void ProtocolV2::reset_recv_state() {
                    << dendl;
     connection->policy.throttler_messages->put();
   }
-  if (state > THROTTLE_BYTES && state <= READ_MESSAGE_FRONT) {
+  if (state > THROTTLE_BYTES && state <= THROTTLE_DONE) {
     if (connection->policy.throttler_bytes) {
       ldout(cct, 10) << __func__ << " releasing " << cur_msg_size
                      << " bytes to policy throttler "
@@ -739,7 +739,7 @@ void ProtocolV2::reset_recv_state() {
       connection->policy.throttler_bytes->put(cur_msg_size);
     }
   }
-  if (state > THROTTLE_DISPATCH_QUEUE && state <= READ_MESSAGE_FRONT) {
+  if (state > THROTTLE_DISPATCH_QUEUE && state <= THROTTLE_DONE) {
     ldout(cct, 10)
         << __func__ << " releasing " << cur_msg_size
         << " bytes to dispatch_queue throttler "
@@ -2089,8 +2089,8 @@ CtPtr ProtocolV2::throttle_dispatch_queue() {
   }
 
   throttle_stamp = ceph_clock_now();
+  state = THROTTLE_DONE;
 
-  state = READ_MESSAGE_FRONT;
   return read_message_data_prepare();
 }
 
