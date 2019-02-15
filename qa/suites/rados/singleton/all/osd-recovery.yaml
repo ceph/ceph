@@ -20,7 +20,6 @@ tasks:
       - \(OSD_
       - \(PG_
       - \(OBJECT_DEGRADED\)
-      - \(SLOW_OPS\)
       - \(REQUEST_SLOW\)
     conf:
       osd:
