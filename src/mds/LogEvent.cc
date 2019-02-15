@@ -41,12 +41,11 @@
 #define dout_context g_ceph_context
 
 
-LogEvent *LogEvent::decode(bufferlist& bl)
+std::unique_ptr<LogEvent> LogEvent::decode_event(bufferlist::const_iterator p)
 {
   // parse type, length
-  auto p = bl.cbegin();
   EventType type;
-  LogEvent *event = NULL;
+  std::unique_ptr<LogEvent> event;
   using ceph::decode;
   decode(type, p);
 
@@ -54,7 +53,7 @@ LogEvent *LogEvent::decode(bufferlist& bl)
     try {
       DECODE_START(1, p);
       decode(type, p);
-      event = decode_event(bl, p, type);
+      event = decode_event(p, type);
       DECODE_FINISH(p);
     }
     catch (const buffer::error &e) {
@@ -62,13 +61,13 @@ LogEvent *LogEvent::decode(bufferlist& bl)
       return NULL;
     }
   } else { // we are using classic encoding
-    event = decode_event(bl, p, type);
+    event = decode_event(p, type);
   }
   return event;
 }
 
 
-std::string LogEvent::get_type_str() const
+std::string_view LogEvent::get_type_str() const
 {
   switch(_type) {
   case EVENT_SUBTREEMAP: return "SUBTREEMAP";
@@ -126,43 +125,73 @@ LogEvent::EventType LogEvent::str_to_type(std::string_view str)
 }
 
 
-LogEvent *LogEvent::decode_event(bufferlist& bl, bufferlist::const_iterator& p, LogEvent::EventType type)
+std::unique_ptr<LogEvent> LogEvent::decode_event(bufferlist::const_iterator& p, LogEvent::EventType type)
 {
-  int length = bl.length() - p.get_off();
+  const auto length = p.get_remaining();
   generic_dout(15) << "decode_log_event type " << type << ", size " << length << dendl;
   
   // create event
-  LogEvent *le;
+  std::unique_ptr<LogEvent> le;
   switch (type) {
-  case EVENT_SUBTREEMAP: le = new ESubtreeMap; break;
+  case EVENT_SUBTREEMAP:
+    le = std::make_unique<ESubtreeMap>();
+    break;
   case EVENT_SUBTREEMAP_TEST: 
-    le = new ESubtreeMap;
+    le = std::make_unique<ESubtreeMap>();
     le->set_type(type);
     break;
-  case EVENT_EXPORT: le = new EExport; break;
-  case EVENT_IMPORTSTART: le = new EImportStart; break;
-  case EVENT_IMPORTFINISH: le = new EImportFinish; break;
-  case EVENT_FRAGMENT: le = new EFragment; break;
-
-  case EVENT_RESETJOURNAL: le = new EResetJournal; break;
-
-  case EVENT_SESSION: le = new ESession; break;
-  case EVENT_SESSIONS_OLD: le = new ESessions; (static_cast<ESessions *>(le))->mark_old_encoding(); break;
-  case EVENT_SESSIONS: le = new ESessions; break;
-
-  case EVENT_UPDATE: le = new EUpdate; break;
-  case EVENT_SLAVEUPDATE: le = new ESlaveUpdate; break;
-  case EVENT_OPEN: le = new EOpen; break;
-  case EVENT_COMMITTED: le = new ECommitted; break;
-
-  case EVENT_TABLECLIENT: le = new ETableClient; break;
-  case EVENT_TABLESERVER: le = new ETableServer; break;
-
-  case EVENT_NOOP: le = new ENoOp; break;
-
+  case EVENT_EXPORT:
+    le = std::make_unique<EExport>();
+    break;
+  case EVENT_IMPORTSTART:
+    le = std::make_unique<EImportStart>();
+    break;
+  case EVENT_IMPORTFINISH:
+    le = std::make_unique<EImportFinish>();
+    break;
+  case EVENT_FRAGMENT:
+    le = std::make_unique<EFragment>();
+    break;
+  case EVENT_RESETJOURNAL:
+    le = std::make_unique<EResetJournal>();
+    break;
+  case EVENT_SESSION:
+    le = std::make_unique<ESession>();
+    break;
+  case EVENT_SESSIONS_OLD:
+    {
+      auto e = std::make_unique<ESessions>();
+      e->mark_old_encoding();
+      le = std::move(e);
+    }
+    break;
+  case EVENT_SESSIONS:
+    le = std::make_unique<ESessions>();
+    break;
+  case EVENT_UPDATE:
+    le = std::make_unique<EUpdate>();
+    break;
+  case EVENT_SLAVEUPDATE:
+    le = std::make_unique<ESlaveUpdate>();
+    break;
+  case EVENT_OPEN:
+    le = std::make_unique<EOpen>();
+    break;
+  case EVENT_COMMITTED:
+    le = std::make_unique<ECommitted>();
+    break;
+  case EVENT_TABLECLIENT:
+    le = std::make_unique<ETableClient>();
+    break;
+  case EVENT_TABLESERVER:
+    le = std::make_unique<ETableServer>();
+    break;
+  case EVENT_NOOP:
+    le = std::make_unique<ENoOp>();
+    break;
   default:
     generic_dout(0) << "uh oh, unknown log event type " << type << " length " << length << dendl;
-    return NULL;
+    return nullptr;
   }
 
   // decode
@@ -171,8 +200,7 @@ LogEvent *LogEvent::decode_event(bufferlist& bl, bufferlist::const_iterator& p, 
   }
   catch (const buffer::error &e) {
     generic_dout(0) << "failed to decode LogEvent type " << type << dendl;
-    delete le;
-    return NULL;
+    return nullptr;
   }
 
   ceph_assert(p.end());
