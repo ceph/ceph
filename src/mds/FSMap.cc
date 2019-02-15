@@ -176,7 +176,8 @@ void FSMap::print_summary(Formatter *f, ostream *out) const
   }
 
   std::map<MDSMap::DaemonState,unsigned> by_state;
-  std::map<mds_role_t, std::string> by_rank;
+  std::map<mds_role_t, std::pair<MDSMap::DaemonState, std::string>> by_rank;
+  by_state[MDSMap::DaemonState::STATE_STANDBY] = standby_daemons.size();
   for (const auto& [gid, fscid] : mds_roles) {
     if (fscid == FS_CLUSTER_ID_NONE)
       continue;
@@ -195,8 +196,8 @@ void FSMap::print_summary(Formatter *f, ostream *out) const
       f->dump_string("status", s);
       f->dump_unsigned("gid", gid);
       f->close_section();
-    } else {
-      by_rank[mds_role_t(fscid, info.rank)] = info.name + "=" + s;
+    } else if (info.state != MDSMap::DaemonState::STATE_STANDBY_REPLAY) {
+      by_rank[mds_role_t(fscid, info.rank)] = std::make_pair(info.state, info.name + "=" + s);
     }
     by_state[info.state]++;
   }
@@ -212,34 +213,33 @@ void FSMap::print_summary(Formatter *f, ostream *out) const
           const auto &fs_name = filesystems.at(role.fscid)->mds_map.fs_name;
           CachedStackStringStream css;
           *css << fs_name << ":" << role.rank;
-          pretty.emplace(std::piecewise_construct, std::forward_as_tuple(css->strv()), std::forward_as_tuple(status));
+          pretty.emplace(std::piecewise_construct, std::forward_as_tuple(css->strv()), std::forward_as_tuple(status.second));
+          --by_state[status.first]; /* already printed! */
         }
         *out << " " << pretty;
       } else {
         // Omit FSCID in output when only one filesystem exists
         std::map<mds_rank_t, std::string> shortened;
         for (const auto& [role,status] : by_rank) {
-          shortened[role.rank] = status;
+          shortened[role.rank] = status.second;
+          --by_state[status.first]; /* already printed! */
         }
         *out << " " << shortened;
       }
-    } else {
-      for (const auto& [state, count] : by_state) {
+    }
+    for (const auto& [state, count] : by_state) {
+      if (count > 0) {
         auto s = std::string_view(ceph_mds_state_name(state));
         *out << " " << count << " " << s;
       }
     }
   }
 
-  {
-    auto state = MDSMap::DaemonState::STATE_STANDBY;
-    auto name = ceph_mds_state_name(state);
+  if (f) {
+    const auto state = MDSMap::DaemonState::STATE_STANDBY;
+    auto&& name = ceph_mds_state_name(state);
     auto count = standby_daemons.size();
-    if (f) {
-      f->dump_unsigned(name, count);
-    } else {
-      *out << ", " << count << " " << name;
-    }
+    f->dump_unsigned(name, count);
   }
 
   size_t failed = 0;
