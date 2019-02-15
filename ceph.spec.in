@@ -448,6 +448,7 @@ exposes all these to the python modules.
 
 %package mgr-dashboard
 Summary:        Ceph Dashboard
+BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
@@ -474,6 +475,7 @@ detailed feature overview.
 
 %package mgr-diskprediction-local
 Summary:        ceph-mgr diskprediction_local plugin
+BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
@@ -486,6 +488,7 @@ disk failures using local algorithms and machine-learning databases.
 
 %package mgr-diskprediction-cloud
 Summary:        ceph-mgr diskprediction_cloud plugin
+BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
@@ -495,6 +498,7 @@ ceph-mgr-diskprediction-cloud is a ceph-mgr plugin that tries to predict
 disk failures using services in the Google cloud.
 
 %package mgr-rook
+BuildArch:      noarch
 Summary:        ceph-mgr rook plugin
 %if 0%{?suse_version}
 Group:          System/Filesystems
