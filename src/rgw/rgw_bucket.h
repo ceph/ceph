@@ -511,6 +511,7 @@ class RGWDataChangesLog {
   std::atomic<bool> down_flag = { false };
 
   struct ChangeStatus {
+    std::shared_ptr<const RGWBucketSyncPolicy> sync_policy;
     real_time cur_expiration;
     real_time cur_sent;
     bool pending = false;
@@ -550,7 +551,7 @@ public:
 
   int choose_oid(const rgw_bucket_shard& bs);
   const std::string& get_oid(int shard_id) const { return oids[shard_id]; }
-  int add_entry(const rgw_bucket& bucket, int shard_id);
+  int add_entry(const RGWBucketInfo& bucket_info, int shard_id);
   int get_log_shard_id(rgw_bucket& bucket, int shard_id);
   int renew_entries();
   int list_entries(int shard, const real_time& start_time, const real_time& end_time, int max_entries,
