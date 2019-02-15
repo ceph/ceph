@@ -168,7 +168,7 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
     return;
   }
 
-  ENCODE_START(6, 6, blist);
+  ENCODE_START(7, 6, blist);
   encode_raw(fsid, blist);
   encode(epoch, blist);
   encode(last_changed, blist);
@@ -177,13 +177,14 @@ void MonMap::encode(bufferlist& blist, uint64_t con_features) const
   encode(optional_features, blist);
   encode(mon_info, blist, con_features);
   encode(ranks, blist);
+  encode(min_mon_release, blist);
   ENCODE_FINISH(blist);
 }
 
 void MonMap::decode(bufferlist::const_iterator& p)
 {
   map<string,entity_addr_t> mon_addr;
-  DECODE_START_LEGACY_COMPAT_LEN_16(6, 3, 3, p);
+  DECODE_START_LEGACY_COMPAT_LEN_16(7, 3, 3, p);
   decode_raw(fsid, p);
   decode(epoch, p);
   if (struct_v == 1) {
@@ -219,6 +220,11 @@ void MonMap::decode(bufferlist::const_iterator& p)
     calc_legacy_ranks();
   } else {
     decode(ranks, p);
+  }
+  if (struct_v >= 7) {
+    decode(min_mon_release, p);
+  } else {
+    min_mon_release = infer_ceph_release_from_mon_features(persistent_features);
   }
   calc_addr_mons();
   DECODE_FINISH(p);
@@ -306,6 +312,8 @@ void MonMap::print(ostream& out) const
   out << "fsid " << fsid << "\n";
   out << "last_changed " << last_changed << "\n";
   out << "created " << created << "\n";
+  out << "min_mon_release " << (int)min_mon_release
+      << " (" << ceph_release_name(min_mon_release) << ")\n";
   unsigned i = 0;
   for (vector<string>::const_iterator p = ranks.begin();
        p != ranks.end();
@@ -320,6 +328,8 @@ void MonMap::dump(Formatter *f) const
   f->dump_stream("fsid") <<  fsid;
   f->dump_stream("modified") << last_changed;
   f->dump_stream("created") << created;
+  f->dump_unsigned("min_mon_release", min_mon_release);
+  f->dump_string("min_mon_release_name", ceph_release_name(min_mon_release));
   f->open_object_section("features");
   persistent_features.dump(f, "persistent");
   optional_features.dump(f, "optional");

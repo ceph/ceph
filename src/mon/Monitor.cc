@@ -1102,6 +1102,16 @@ void Monitor::bootstrap()
   }
   dout(10) << "monmap " << *monmap << dendl;
 
+  if (monmap->min_mon_release &&
+      monmap->min_mon_release + 2 < (int)ceph_release()) {
+    derr << "current monmap has min_mon_release "
+	 << ceph_release() << " (" << ceph_release_name(monmap->min_mon_release)
+	 << ") which is >2 releases older than me " << ceph_release()
+	 << " (" << ceph_release_name(ceph_release()) << "), stopping."
+	 << dendl;
+    exit(0);
+  }
+
   // note my rank
   int newrank = monmap->get_rank(messenger->get_myaddrs());
   if (newrank < 0 && rank >= 0) {
@@ -1157,13 +1167,15 @@ void Monitor::bootstrap()
   for (unsigned i = 0; i < monmap->size(); i++) {
     if ((int)i != rank)
       send_mon_message(
-	new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined),
+	new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined,
+		      ceph_release()),
 	i);
   }
   for (auto& av : extra_probe_peers) {
     if (av != messenger->get_myaddrs()) {
       messenger->send_to_mon(
-	new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined),
+	new MMonProbe(monmap->fsid, MMonProbe::OP_PROBE, name, has_ever_joined,
+		      ceph_release()),
 	av);
     }
   }
@@ -1801,9 +1813,10 @@ void Monitor::handle_probe(MonOpRequestRef op)
     break;
 
   case MMonProbe::OP_MISSING_FEATURES:
-    derr << __func__ << " missing features, have " << CEPH_FEATURES_ALL
+    derr << __func__ << " require release " << m->mon_release << " > "
+	 << ceph_release() << ", or missing features (have " << CEPH_FEATURES_ALL
 	 << ", required " << m->required_features
-	 << ", missing " << (m->required_features & ~CEPH_FEATURES_ALL)
+	 << ", missing " << (m->required_features & ~CEPH_FEATURES_ALL) << ")"
 	 << dendl;
     break;
   }
@@ -1816,11 +1829,12 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
   dout(10) << "handle_probe_probe " << m->get_source_inst() << *m
 	   << " features " << m->get_connection()->get_features() << dendl;
   uint64_t missing = required_features & ~m->get_connection()->get_features();
-  if (missing) {
-    dout(1) << " peer " << m->get_source_addr() << " missing features "
-	    << missing << dendl;
+  if (m->mon_release < monmap->min_mon_release || missing) {
+    dout(1) << " peer " << m->get_source_addr() << " release " << m->mon_release
+	    << " < min_mon_release " << monmap->min_mon_release
+	    << ", or missing features " << missing << dendl;
     MMonProbe *r = new MMonProbe(monmap->fsid, MMonProbe::OP_MISSING_FEATURES,
-				 name, has_ever_joined);
+				 name, has_ever_joined, monmap->min_mon_release);
     m->required_features = required_features;
     m->get_connection()->send_message(r);
     goto out;
@@ -1843,7 +1857,8 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
   }
   
   MMonProbe *r;
-  r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name, has_ever_joined);
+  r = new MMonProbe(monmap->fsid, MMonProbe::OP_REPLY, name, has_ever_joined,
+		    ceph_release());
   r->name = name;
   r->quorum = quorum;
   monmap->encode(r->monmap_bl, m->get_connection()->get_features());
@@ -2071,6 +2086,7 @@ void Monitor::win_standalone_election()
   win_election(elector.get_epoch(), q,
                CEPH_FEATURES_ALL,
                ceph::features::mon::get_supported(),
+	       ceph_release(),
 	       metadata);
 }
 
@@ -2099,11 +2115,13 @@ void Monitor::_finish_svc_election()
 
 void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
                            const mon_feature_t& mon_features,
+			   int min_mon_release,
 			   const map<int,Metadata>& metadata)
 {
   dout(10) << __func__ << " epoch " << epoch << " quorum " << active
 	   << " features " << features
            << " mon_features " << mon_features
+	   << " min_mon_release " << min_mon_release
            << dendl;
   ceph_assert(is_electing());
   state = STATE_LEADER;
@@ -2113,6 +2131,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
   quorum = active;
   quorum_con_features = features;
   quorum_mon_features = mon_features;
+  quorum_min_mon_release = min_mon_release;
   pending_metadata = metadata;
   outside_quorum.clear();
 
@@ -2183,7 +2202,8 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
 
 void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
                             uint64_t features,
-                            const mon_feature_t& mon_features)
+                            const mon_feature_t& mon_features,
+			    int min_mon_release)
 {
   state = STATE_PEON;
   leader_since = utime_t();
@@ -2193,9 +2213,11 @@ void Monitor::lose_election(epoch_t epoch, set<int> &q, int l,
   outside_quorum.clear();
   quorum_con_features = features;
   quorum_mon_features = mon_features;
+  quorum_min_mon_release = min_mon_release;
   dout(10) << "lose_election, epoch " << epoch << " leader is mon" << leader
 	   << " quorum is " << quorum << " features are " << quorum_con_features
            << " mon_features are " << quorum_mon_features
+	   << " min_mon_release " << min_mon_release
            << dendl;
 
   paxos->peon_init();

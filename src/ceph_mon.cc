@@ -561,6 +561,28 @@ int main(int argc, const char **argv)
   register_async_signal_handler(SIGHUP, sighup_handler);
 
   MonitorDBStore *store = new MonitorDBStore(g_conf()->mon_data);
+
+  // make sure we aren't upgrading too fast
+  {
+    string val;
+    int r = store->read_meta("min_mon_release", &val);
+    if (r >= 0 && val.size()) {
+      int min = atoi(val.c_str());
+      if (min &&
+	  min + 2 < (int)ceph_release()) {
+	derr << "recorded min_mon_release is " << min
+	     << " (" << ceph_release_name(min)
+	     << ") which is >2 releases older than installed "
+	     << ceph_release() << " (" << ceph_release_name(ceph_release())
+	     << "); you can only upgrade 2 releases at a time" << dendl;
+	derr << "you should first upgrade to "
+	     << (min + 1) << " (" << ceph_release_name(min + 1) << ") or "
+	     << (min + 2) << " (" << ceph_release_name(min + 2) << ")" << dendl;
+	prefork.exit(1);
+      }
+    }
+  }
+
   {
     ostringstream oss;
     err = store->open(oss);

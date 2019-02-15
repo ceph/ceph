@@ -95,6 +95,7 @@ void Elector::start()
   }
   electing_me = true;
   acked_me[mon->rank].cluster_features = CEPH_FEATURES_ALL;
+  acked_me[mon->rank].mon_release = ceph_release();
   acked_me[mon->rank].mon_features = ceph::features::mon::get_supported();
   mon->collect_metadata(&acked_me[mon->rank].metadata);
   leader_acked = -1;
@@ -105,6 +106,7 @@ void Elector::start()
     MMonElection *m =
       new MMonElection(MMonElection::OP_PROPOSE, epoch, mon->monmap);
     m->mon_features = ceph::features::mon::get_supported();
+    m->mon_release = ceph_release();
     mon->send_mon_message(m, i);
   }
   
@@ -125,6 +127,7 @@ void Elector::defer(int who)
   leader_acked = who;
   MMonElection *m = new MMonElection(MMonElection::OP_ACK, epoch, mon->monmap);
   m->mon_features = ceph::features::mon::get_supported();
+  m->mon_release = ceph_release();
   mon->collect_metadata(&m->metadata);
 
   mon->send_mon_message(m, who);
@@ -195,6 +198,7 @@ void Elector::victory()
   mon_feature_t mon_features = ceph::features::mon::get_supported();
   set<int> quorum;
   map<int,Metadata> metadata;
+  int min_mon_release = -1;
   for (map<int, elector_info_t>::iterator p = acked_me.begin();
        p != acked_me.end();
        ++p) {
@@ -202,6 +206,9 @@ void Elector::victory()
     cluster_features &= p->second.cluster_features;
     mon_features &= p->second.mon_features;
     metadata[p->first] = p->second.metadata;
+    if (min_mon_release < 0 || p->second.mon_release < min_mon_release) {
+      min_mon_release = p->second.mon_release;
+    }
   }
 
   cancel_timer();
@@ -220,12 +227,14 @@ void Elector::victory()
     m->quorum_features = cluster_features;
     m->mon_features = mon_features;
     m->sharing_bl = mon->get_local_commands_bl(mon_features);
+    m->mon_release = min_mon_release;
     mon->send_mon_message(m, *p);
   }
 
   // tell monitor
   mon->win_election(epoch, quorum,
-                    cluster_features, mon_features, metadata);
+                    cluster_features, mon_features, min_mon_release,
+		    metadata);
 }
 
 
@@ -250,6 +259,12 @@ void Elector::handle_propose(MonOpRequestRef op)
       required_features) {
     dout(5) << " ignoring propose from mon" << from
 	    << " without required features" << dendl;
+    nak_old_peer(op);
+    return;
+  } else if (mon->monmap->min_mon_release > m->mon_release) {
+    dout(5) << " ignoring propose from mon" << from
+	    << " release " << m->mon_release
+	    << " < min_mon_release " << mon->monmap->min_mon_release << dendl;
     nak_old_peer(op);
     return;
   } else if (!m->mon_features.contains_all(required_mon_features)) {
@@ -336,6 +351,7 @@ void Elector::handle_ack(MonOpRequestRef op)
     // thanks
     acked_me[from].cluster_features = m->get_connection()->get_features();
     acked_me[from].mon_features = m->mon_features;
+    acked_me[from].mon_release = m->mon_release;
     acked_me[from].metadata = m->metadata;
     dout(5) << " so far i have {";
     for (map<int, elector_info_t>::const_iterator p = acked_me.begin();
@@ -388,7 +404,7 @@ void Elector::handle_victory(MonOpRequestRef op)
 
   // they win
   mon->lose_election(epoch, m->quorum, from,
-                     m->quorum_features, m->mon_features);
+                     m->quorum_features, m->mon_features, m->mon_release);
 
   // cancel my timer
   cancel_timer();
@@ -409,16 +425,16 @@ void Elector::nak_old_peer(MonOpRequestRef op)
   uint64_t required_features = mon->get_required_features();
   mon_feature_t required_mon_features = mon->get_required_mon_features();
   dout(10) << "sending nak to peer " << m->get_source()
-    << " that only supports " << supported_features
-    << " " << m->mon_features
-    << " of the required " << required_features
-    << " " << required_mon_features
-    << dendl;
-
+	   << " supports " << supported_features << " " << m->mon_features
+	   << ", required " << required_features << " " << required_mon_features
+	   << ", release " << m->mon_release
+	   << " vs required " << mon->monmap->min_mon_release
+	   << dendl;
   MMonElection *reply = new MMonElection(MMonElection::OP_NAK, m->epoch,
                                          mon->monmap);
   reply->quorum_features = required_features;
   reply->mon_features = required_mon_features;
+  reply->mon_release = mon->monmap->min_mon_release;
   mon->features.encode(reply->sharing_bl);
   m->get_connection()->send_message(reply);
 }
@@ -430,20 +446,25 @@ void Elector::handle_nak(MonOpRequestRef op)
   dout(1) << "handle_nak from " << m->get_source()
 	  << " quorum_features " << m->quorum_features
           << " " << m->mon_features
+	  << " min_mon_release " << m->mon_release
           << dendl;
 
-  CompatSet other;
-  auto bi = m->sharing_bl.cbegin();
-  other.decode(bi);
-  CompatSet diff = Monitor::get_supported_features().unsupported(other);
+  if (m->mon_release > ceph_release()) {
+    derr << "Shutting down because I am release " << ceph_release()
+	 << " < min_mon_release " << m->mon_release << dendl;
+  } else {
+    CompatSet other;
+    auto bi = m->sharing_bl.cbegin();
+    other.decode(bi);
+    CompatSet diff = Monitor::get_supported_features().unsupported(other);
 
-  mon_feature_t mon_supported = ceph::features::mon::get_supported();
-  // all features in 'm->mon_features' not in 'mon_supported'
-  mon_feature_t mon_diff = m->mon_features.diff(mon_supported);
+    mon_feature_t mon_supported = ceph::features::mon::get_supported();
+    // all features in 'm->mon_features' not in 'mon_supported'
+    mon_feature_t mon_diff = m->mon_features.diff(mon_supported);
 
-  derr << "Shutting down because I do not support required monitor features: { "
-       << diff << " } " << mon_diff << dendl;
-
+    derr << "Shutting down because I lack required monitor features: { "
+	 << diff << " } " << mon_diff << dendl;
+  }
   exit(0);
   // the end!
 }

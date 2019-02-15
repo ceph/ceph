@@ -25,7 +25,7 @@ public:
   friend factory;
 
 private:
-  static constexpr int HEAD_VERSION = 7;
+  static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 5;
 
 public:
@@ -50,6 +50,7 @@ public:
   set<int32_t> quorum;
   uint64_t quorum_features;
   mon_feature_t mon_features;
+  uint8_t mon_release = 0;
   bufferlist sharing_bl;
   map<string,string> metadata;
   
@@ -75,7 +76,8 @@ private:
 public:  
   std::string_view get_type_name() const override { return "election"; }
   void print(ostream& out) const override {
-    out << "election(" << fsid << " " << get_opname(op) << " " << epoch << ")";
+    out << "election(" << fsid << " " << get_opname(op)
+	<< " rel " << (int)mon_release << " e" << epoch << ")";
   }
   
   void encode_payload(uint64_t features) override {
@@ -99,6 +101,7 @@ public:
     encode(sharing_bl, payload);
     encode(mon_features, payload);
     encode(metadata, payload);
+    encode(mon_release, payload);
   }
   void decode_payload() override {
     auto p = payload.cbegin();
@@ -118,6 +121,10 @@ public:
       decode(mon_features, p);
     if (header.version >= 7)
       decode(metadata, p);
+    if (header.version >= 8)
+      decode(mon_release, p);
+    else
+      mon_release = infer_ceph_release_from_mon_features(mon_features);
   }
   
 };
