@@ -65,6 +65,27 @@ class ClusterConfigurationTest(DashboardTestCase):
         self._clear_all_values_for_config_option(config_name)
         self._reset_original_values(config_name, orig_value)
 
+    def test_create_cant_update_at_runtime(self):
+        config_name = 'clog_to_syslog'  # not updatable
+        config_value = [{'section': 'global', 'value': 'true'}]
+        orig_value = self._get_config_by_name(config_name)
+
+        # try to set config option and check if it fails
+        self._post('/api/cluster_conf', {
+            'name': config_name,
+            'value': config_value
+        })
+        self.assertStatus(400)
+        self.assertError(code='config_option_not_updatable_at_runtime',
+                         component='cluster_configuration',
+                         detail='Config option {} is/are not updatable at runtime'.format(
+                             config_name))
+
+        # check if config option value is still the original one
+        result = self._wait_for_expected_get_result(self._get_config_by_name, config_name,
+                                                    orig_value)
+        self.assertEqual(result, orig_value)
+
     def test_create_two_values(self):
         config_name = 'debug_ms'
         orig_value = self._get_config_by_name(config_name)
