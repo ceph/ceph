@@ -34,14 +34,10 @@
 %bcond_with ceph_test_package
 %bcond_with cephfs_java
 %bcond_without lowmem_builder
-%if 0%{?is_opensuse}
-%bcond_without lttng
-%else
 %ifarch x86_64 aarch64
 %bcond_without lttng
 %else
 %bcond_with lttng
-%endif
 %endif
 %endif
 
