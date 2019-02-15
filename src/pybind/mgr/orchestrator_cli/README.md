@@ -9,7 +9,7 @@ framework and the `test_orchestrator` backend.
 
 ``source`` the script and run the tests manually::
 
-    $ source ../dashboard/run-backend-api-tests.sh
+    $ pushd ../dashboard ; source ./run-backend-api-tests.sh ; popd
     $ run_teuthology_tests tasks.mgr.test_orchestrator_cli
     $ cleanup_teuthology  
 
