@@ -146,6 +146,8 @@ namespace rgw {
 	    /* restore attributes */
 	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
+            rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
+            rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL)));
 	    if (ux_key && ux_attrs) {
               DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
               if (get<0>(dar) || get<1>(dar)) {
@@ -180,6 +182,8 @@ namespace rgw {
 	    /* restore attributes */
 	    auto ux_key = req.get_attr(RGW_ATTR_UNIX_KEY1);
 	    auto ux_attrs = req.get_attr(RGW_ATTR_UNIX1);
+            rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
+            rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL)));
 	    if (ux_key && ux_attrs) {
               DecodeAttrsResult dar = rgw_fh->decode_attrs(ux_key, ux_attrs);
               if (get<0>(dar) || get<1>(dar)) {
@@ -653,6 +657,10 @@ namespace rgw {
 	}
         if (st)
           (void) rgw_fh->stat(st);
+
+        rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
+        rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL))); 
+
 	get<0>(mkr) = rgw_fh;
 	rgw_fh->mtx.unlock();
       } else
@@ -685,6 +693,8 @@ namespace rgw {
   {
     int rc, rc2;
     buffer::list ux_key, ux_attrs;
+    buffer::list etag = rgw_fh->get_etag();
+    buffer::list acls = rgw_fh->get_acls();
 
     lock_guard guard(rgw_fh->mtx);
 
@@ -714,6 +724,8 @@ namespace rgw {
     /* save attrs */
     req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
     req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
+    req.emplace_attr(RGW_ATTR_ETAG, std::move(etag));
+    req.emplace_attr(RGW_ATTR_ACL, std::move(acls));
 
     rc = rgwlib.get_fe()->execute_req(&req);
     rc2 = req.get_ret();
