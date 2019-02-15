@@ -246,8 +246,6 @@ private:
 
   EntityName entity_name;
 
-  entity_addr_t my_addr;
-
   mutable Mutex monc_lock;
   SafeTimer timer;
   Finisher finisher;
@@ -465,10 +463,6 @@ public:
       session_established_context.reset(cb);
     }
     _reopen_session();
-  }
-
-  entity_addr_t get_my_addr() const {
-    return my_addr;
   }
 
   const uuid_d& get_fsid() const {
