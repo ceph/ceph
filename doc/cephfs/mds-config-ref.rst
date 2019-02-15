@@ -145,13 +145,6 @@
 :Default: ``true``
 
 
-``mds use tmap``
-
-:Description: Use trivialmap for directory updates.
-:Type:  Boolean
-:Default: ``true``
-
-
 ``mds default dir hash``
 
 :Description: The function to use for hashing files across directory fragments.
@@ -279,7 +272,7 @@
 
 ``mds bal fragment interval``
 
-:Description: The delay (in seconds) between a fragment being elegible for split
+:Description: The delay (in seconds) between a fragment being eligible for split
               or merge and executing the fragmentation change.
 :Type:  32-bit Integer
 :Default: ``5``

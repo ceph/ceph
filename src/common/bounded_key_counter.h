@@ -22,7 +22,7 @@
 #include <tuple>
 #include <vector>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 /**
  * BoundedKeyCounter
@@ -158,7 +158,7 @@ class BoundedKeyCounter {
       sorted.assign(const_pointer_iterator{counters.cbegin()},
                     const_pointer_iterator{counters.cend()});
       // entire range is unsorted
-      assert(sorted_position == sorted.begin());
+      ceph_assert(sorted_position == sorted.begin());
     }
 
     const size_t sorted_count = get_num_sorted();

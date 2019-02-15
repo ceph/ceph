@@ -5,13 +5,14 @@ meta:
    restart : osd.0,1,2,3,4,5
 tasks:
 - install.upgrade:
-    osd.0:
+    mon.a:
+    mon.b:
 - print: "**** done install.upgrade osd.0"
 - ceph.restart:
-    daemons: [mon.a, mon.b, mon.c]
+    daemons: [mon.a, mon.b]
     wait-for-healthy: false
     mon-health-to-clog: false
 - ceph.restart:
-    daemons: [osd.0, osd.1, osd.2]
+    daemons: [osd.0, osd.1, osd.2, osd.3, osd.4, osd.5, osd.6, osd.7]
     wait-for-healthy: false
-- print: "**** done ceph.restart 1st half"
+- print: "**** done ceph.restart 1st 2/3s"

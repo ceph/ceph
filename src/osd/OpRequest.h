@@ -16,7 +16,6 @@
 
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
-#include "common/mClockCommon.h"
 
 /**
  * The OpRequest takes in a Message* and takes over a single reference
@@ -28,15 +27,15 @@ struct OpRequest : public TrackedOp {
   // rmw flags
   int rmw_flags;
 
-  bool check_rmw(int flag);
-  bool may_read();
-  bool may_write();
-  bool may_cache();
-  bool rwordered_forced();
-  bool rwordered();
+  bool check_rmw(int flag) const ;
+  bool may_read() const;
+  bool may_write() const;
+  bool may_cache() const;
+  bool rwordered_forced() const;
+  bool rwordered() const;
   bool includes_pg_op();
-  bool need_read_cap();
-  bool need_write_cap();
+  bool need_read_cap() const;
+  bool need_write_cap() const;
   bool need_promote();
   bool need_skip_handle_cache();
   bool need_skip_promote();
@@ -111,7 +110,6 @@ public:
   epoch_t min_epoch = 0;      ///< min epoch needed to handle this msg
 
   bool hitset_inserted;
-  dmc::PhaseType qos_resp;
   const Message *get_req() const { return request; }
   Message *get_nonconst_req() { return request; }
 
@@ -123,7 +121,7 @@ public:
     }
   }
 
-  const char *state_string() const override {
+  std::string_view state_string() const override {
     switch(latest_flag_point) {
     case flag_queued_for_pg: return "queued for pg";
     case flag_reached_pg: return "reached pg";

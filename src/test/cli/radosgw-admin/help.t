@@ -33,11 +33,12 @@
     bi list                    list raw bucket index entries
     bi purge                   purge bucket index entries
     object rm                  remove object
+    object put                 put object
     object stat                stat an object for its metadata
     object unlink              unlink object from bucket index
     object rewrite             rewrite the specified object
     objects expire             run expired objects cleanup
-    period delete              delete a period
+    period rm                  remove a period
     period get                 get period info
     period get-current         get current period info
     period pull                pull a period
@@ -53,7 +54,7 @@
     global quota enable        enable a global quota
     global quota disable       disable a global quota
     realm create               create a new realm
-    realm delete               delete a realm
+    realm rm                   remove a realm
     realm get                  show realm info
     realm get-default          get default realm name
     realm list                 list realms
@@ -65,11 +66,11 @@
     zonegroup add              add a zone to a zonegroup
     zonegroup create           create a new zone group info
     zonegroup default          set default zone group
-    zonegroup delete           delete a zone group info
+    zonegroup rm               remove a zone group info
     zonegroup get              show zone group info
     zonegroup modify           modify an existing zonegroup
     zonegroup set              set zone group info (requires infile)
-    zonegroup remove           remove a zone from a zonegroup
+    zonegroup rm               remove a zone from a zonegroup
     zonegroup rename           rename a zone group
     zonegroup list             list all zone groups set on this cluster
     zonegroup placement list   list zonegroup's placement targets
@@ -78,7 +79,7 @@
     zonegroup placement rm     remove a placement target from a zonegroup
     zonegroup placement default  set a zonegroup's default placement target
     zone create                create a new zone
-    zone delete                delete a zone
+    zone rm                    remove a zone
     zone get                   show zone cluster params
     zone modify                modify an existing zone
     zone set                   set zone cluster params (requires infile)
@@ -104,13 +105,15 @@
                                (NOTE: required to specify formatting of date
                                to "YYYY-MM-DD-hh")
     log rm                     remove log object
-    usage show                 show usage (by user, date range)
-    usage trim                 trim usage (by user, date range)
+    usage show                 show usage (by user, by bucket, date range)
+    usage trim                 trim usage (by user, by bucket, date range)
+    usage clear                reset all the usage stats for the cluster
     gc list                    dump expired garbage collection objects (specify
                                --include-all to list all entries, including unexpired)
     gc process                 manually process garbage (specify
                                --include-all to process all entries, including unexpired)
     lc list                    list all bucket lifecycle progress
+    lc get                     get a lifecycle bucket configuration
     lc process                 manually process lifecycle
     metadata get               get metadata info
     metadata put               put metadata info
@@ -125,33 +128,33 @@
     datalog list               list data log
     datalog trim               trim data log
     datalog status             read data log status
-    opstate list               list stateful operations entries (use client_id,
-                               op_id, object)
-    opstate set                set state on an entry (use client_id, op_id, object, state)
-    opstate renew              renew state on an entry (use client_id, op_id, object)
-    opstate rm                 remove entry (use client_id, op_id, object)
-    replicalog get             get replica metadata log entry
-    replicalog update          update replica metadata log entry
-    replicalog delete          delete replica metadata log entry
     orphans find               init and run search for leaked rados objects (use job-id, pool)
     orphans finish             clean up search for leaked rados objects
     orphans list-jobs          list the current job-ids for orphans search
     role create                create a AWS role for use with STS
-    role delete                delete a role
+    role rm                    remove a role
     role get                   get a role
     role list                  list roles with specified path prefix
     role modify                modify the assume role policy of an existing role
     role-policy put            add/update permission policy to role
     role-policy list           list policies attached to a role
     role-policy get            get the specified inline policy document embedded with the given role
-    role-policy delete         delete policy attached to a role
+    role-policy rm             remove policy attached to a role
     reshard add                schedule a resharding of a bucket
     reshard list               list all bucket resharding or scheduled to be resharded
     reshard status             read bucket resharding status
     reshard process            process of scheduled reshard jobs
     reshard cancel             cancel resharding a bucket
+    reshard stale-instances list list stale-instances from bucket resharding
+    reshard stale-instances rm   cleanup stale-instances from bucket resharding
     sync error list            list sync error
     sync error trim            trim sync error
+    mfa create                 create a new MFA TOTP token
+    mfa list                   list MFA TOTP tokens
+    mfa get                    show MFA TOTP token
+    mfa remove                 delete MFA TOTP token
+    mfa check                  check MFA TOTP token
+    mfa resync                 re-sync MFA TOTP token
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
@@ -170,6 +173,7 @@
      --max-buckets             max number of buckets for a user
      --admin                   set the admin flag on the user
      --system                  set the system flag on the user
+     --op-mask                 set the op mask on the user
      --bucket=<bucket>         Specify the bucket name. Also used by the quota command.
      --pool=<pool>             Specify the pool name. Also used to scan for leaked rados objects.
      --object=<object>         object name
@@ -177,14 +181,16 @@
      --start-date=<date>       start date in the format yyyy-mm-dd
      --end-date=<date>         end date in the format yyyy-mm-dd
      --bucket-id=<bucket-id>   bucket id
-     --shard-id=<shard-id>     optional for mdlog list
+     --shard-id=<shard-id>     optional for: 
+                                 mdlog list
+                                 data sync status
                                required for: 
                                  mdlog trim
-                                 replica mdlog get/delete
-                                 replica datalog get/delete
+     --max-entries=<entries>   max entries for listing operations
      --metadata-key=<key>      key to retrieve metadata from with metadata get
      --remote=<remote>         zone or zonegroup id of remote gateway
      --period=<id>             period id
+     --url=<url>               url for pushing/pulling period/realm
      --epoch=<number>          period epoch
      --commit                  commit the period during 'period update'
      --staging                 get staging period info
@@ -205,6 +211,7 @@
      --read-only               set zone as read-only (when adding to zonegroup)
      --redirect-zone           specify zone id to redirect when response is 404 (not found)
      --placement-id            placement id for zonegroup placement commands
+     --storage-class           storage class for zonegroup placement commands
      --tags=<list>             list of tags for zonegroup placement add and modify commands
      --tags-add=<list>         list of tags to add for zonegroup placement modify command
      --tags-rm=<list>          list of tags to remove for zonegroup placement modify command
@@ -238,15 +245,12 @@
                                (NOTE: required to delete a non-empty bucket)
      --sync-stats              option to 'user stats', update user stats with current
                                stats reported by user's buckets indexes
+     --reset-stats             option to 'user stats', reset stats in accordance with user buckets
      --show-log-entries=<flag> enable/disable dump of log entries on log show
      --show-log-sum=<flag>     enable/disable dump of log summation on log show
      --skip-zero-entries       log show only dumps entries that don't have zero value
                                in one of the numeric field
      --infile=<file>           specify a file to read in when setting data
-     --state=<state>           specify a state for the opstate set command
-     --replica-log-type=<logtypestr>
-                               replica log type (metadata, data, bucket), required for
-                               replica log operations
      --categories=<list>       comma separated list of categories, used in usage show
      --caps=<caps>             list of caps (e.g., "usage=read, write; user=read")
      --yes-i-really-mean-it    required for certain operations
@@ -260,6 +264,8 @@
      --min-rewrite-size        min object size for bucket rewrite (default 4M)
      --max-rewrite-size        max object size for bucket rewrite (default ULLONG_MAX)
      --min-rewrite-stripe-size min stripe size for object rewrite (default 0)
+     --trim-delay-ms           time interval in msec to limit the frequency of sync error log entries trimming operations,
+                               the trimming process will sleep the specified msec for every 1000 entries trimmed
   
   <date> := "YYYY-MM-DD[ hh:mm:ss]"
   
@@ -285,14 +291,20 @@
      --policy-doc              permission policy document
      --path-prefix             path prefix for filtering roles
   
+  MFA options:
+     --totp-serial             a string that represents the ID of a TOTP token
+     --totp-seed               the secret seed that is used to calculate the TOTP
+     --totp-seconds            the time resolution that is being used for TOTP generation
+     --totp-window             the number of TOTP tokens that are checked before and after the current token when validating token
+     --totp-pin                the valid value of a TOTP token at a certain time
+  
     --conf/-c FILE    read configuration from the given configuration file
-    --id/-i ID        set ID portion of my name
+    --id ID           set ID portion of my name
     --name/-n TYPE.ID set name
     --cluster NAME    set cluster name (default: ceph)
     --setuser USER    set uid to user or uid (and gid to user's gid)
     --setgroup GROUP  set gid to group or gid
     --version         show version and quit
   
-  [1]
 
 

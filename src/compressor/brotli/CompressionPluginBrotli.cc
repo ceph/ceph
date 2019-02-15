@@ -1,8 +1,8 @@
 #include "acconfig.h"
 #include "ceph_ver.h"
 #include "CompressionPluginBrotli.h"
+#include "common/ceph_context.h"
 
-#ifndef BUILDING_FOR_EMBEDDED
 
 const char *__ceph_plugin_version()
 {
@@ -17,4 +17,3 @@ int __ceph_plugin_init(CephContext *cct,
   return instance->add(type, name, new CompressionPluginBrotli(cct));
 }
 
-#endif // !BUILDING_FOR_EMBEDDED

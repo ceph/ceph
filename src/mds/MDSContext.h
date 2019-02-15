@@ -16,10 +16,15 @@
 #ifndef MDS_CONTEXT_H
 #define MDS_CONTEXT_H
 
+#include <vector>
+#include <deque>
+
 #include "include/Context.h"
+#include "include/elist.h"
+#include "include/spinlock.h"
+#include "common/ceph_time.h"
 
 class MDSRank;
-
 
 /**
  * Completion which has access to a reference to the global MDS instance.
@@ -30,55 +35,85 @@ class MDSRank;
  */
 class MDSContext : public Context
 {
-protected:
+public:
+template<template<typename> class A>
+  using vec_alloc = std::vector<MDSContext*, A<MDSContext*>>;
+  using vec = vec_alloc<std::allocator>;
+
+template<template<typename> class A>
+  using que_alloc = std::deque<MDSContext*, A<MDSContext*>>;
+  using que = que_alloc<std::allocator>;
+
+  void complete(int r) override;
   virtual MDSRank *get_mds() = 0;
 };
 
-
-/**
- * A context which must be called with the big MDS lock held.  Subclass
- * this with a get_mds implementation.
+/* Children of this could have used multiple inheritance with MDSHolder and
+ * MDSContext but then get_mds() would be ambiguous.
  */
-class MDSInternalContextBase : public MDSContext
+template<class T>
+class MDSHolder : public T
 {
 public:
-    void complete(int r) override;
+  MDSRank* get_mds() override {
+    return mds;
+  }
+
+protected:
+  MDSHolder() = delete;
+  MDSHolder(MDSRank* mds) : mds(mds) {
+    ceph_assert(mds != nullptr);
+  }
+
+  MDSRank* mds;
 };
 
 /**
  * General purpose, lets you pass in an MDS pointer.
  */
-class MDSInternalContext : public MDSInternalContextBase
+class MDSInternalContext : public MDSHolder<MDSContext>
 {
-protected:
-  MDSRank *mds;
-  MDSRank* get_mds() override;
-
 public:
-  explicit MDSInternalContext(MDSRank *mds_) : mds(mds_) {
-    assert(mds != NULL);
-  }
+  MDSInternalContext() = delete;
+
+protected:
+  explicit MDSInternalContext(MDSRank *mds_) : MDSHolder(mds_) {}
 };
 
 /**
  * Wrap a regular Context up as an Internal context. Useful
  * if you're trying to work with one of our more generic frameworks.
  */
-class MDSInternalContextWrapper : public MDSInternalContextBase
+class MDSInternalContextWrapper : public MDSInternalContext
 {
 protected:
-  MDSRank *mds;
-  Context *fin;
-  MDSRank *get_mds() override;
-public:
-  MDSInternalContextWrapper(MDSRank *m, Context *c) : mds(m), fin(c) {}
+  Context *fin = nullptr;
   void finish(int r) override;
+public:
+  MDSInternalContextWrapper(MDSRank *m, Context *c) : MDSInternalContext(m), fin(c) {}
 };
 
 class MDSIOContextBase : public MDSContext
 {
 public:
+  MDSIOContextBase(bool track=true);
+  virtual ~MDSIOContextBase();
+  MDSIOContextBase(const MDSIOContextBase&) = delete;
+  MDSIOContextBase& operator=(const MDSIOContextBase&) = delete;
+
   void complete(int r) override;
+
+  virtual void print(ostream& out) const = 0;
+
+  static bool check_ios_in_flight(ceph::coarse_mono_time cutoff,
+				  std::string& slow_count,
+				  ceph::coarse_mono_time& oldest);
+private:
+  ceph::coarse_mono_time created_at;
+  elist<MDSIOContextBase*>::item list_item;
+
+  static elist<MDSIOContextBase*> ctx_list;
+  static ceph::spinlock ctx_list_lock;
 };
 
 /**
@@ -89,74 +124,73 @@ public:
 class MDSLogContextBase : public MDSIOContextBase
 {
 protected:
-  uint64_t write_pos;
+  uint64_t write_pos = 0;
 public:
-  MDSLogContextBase() : write_pos(0) {}
+  MDSLogContextBase() = default;
   void complete(int r) final;
   void set_write_pos(uint64_t wp) { write_pos = wp; }
   virtual void pre_finish(int r) {}
+  void print(ostream& out) const override {
+    out << "log_event(" << write_pos << ")";
+  }
 };
 
 /**
  * Completion for an I/O operation, takes big MDSRank lock
  * before executing finish function.
  */
-class MDSIOContext : public MDSIOContextBase
+class MDSIOContext : public MDSHolder<MDSIOContextBase>
 {
-protected:
-  MDSRank *mds;
-  MDSRank* get_mds() override;
-
 public:
-  explicit MDSIOContext(MDSRank *mds_) : mds(mds_) {
-    assert(mds != NULL);
-  }
+  explicit MDSIOContext(MDSRank *mds_) : MDSHolder(mds_) {}
 };
 
 /**
  * Wrap a regular Context up as an IO Context. Useful
  * if you're trying to work with one of our more generic frameworks.
  */
-class MDSIOContextWrapper : public MDSIOContextBase
+class MDSIOContextWrapper : public MDSHolder<MDSIOContextBase>
 {
 protected:
-  MDSRank *mds;
   Context *fin;
-  MDSRank *get_mds() override;
 public:
-  MDSIOContextWrapper(MDSRank *m, Context *c) : mds(m), fin(c) {}
+  MDSIOContextWrapper(MDSRank *m, Context *c) : MDSHolder(m), fin(c) {}
   void finish(int r) override;
+  void print(ostream& out) const override {
+    out << "io_context_wrapper(" << fin << ")";
+  }
 };
 
 /**
- * No-op for callers expecting MDSInternalContextBase
+ * No-op for callers expecting MDSInternalContext
  */
-class C_MDSInternalNoop final : public MDSInternalContextBase
+class C_MDSInternalNoop : public MDSContext
 {
-  MDSRank* get_mds() override {ceph_abort();}
 public:
   void finish(int r) override {}
   void complete(int r) override { delete this; }
+protected:
+  MDSRank* get_mds() override final {ceph_abort();}
 };
 
 
 /**
- * This class is used where you have an MDSInternalContextBase but
+ * This class is used where you have an MDSInternalContext but
  * you sometimes want to call it back from an I/O completion.
  */
 class C_IO_Wrapper : public MDSIOContext
 {
 protected:
   bool async;
-  MDSInternalContextBase *wrapped;
+  MDSContext *wrapped;
   void finish(int r) override {
     wrapped->complete(r);
     wrapped = nullptr;
   }
 public:
-  C_IO_Wrapper(MDSRank *mds_, MDSInternalContextBase *wrapped_) :
+  C_IO_Wrapper(MDSRank *mds_, MDSContext *wrapped_) :
     MDSIOContext(mds_), async(true), wrapped(wrapped_) {
-    assert(wrapped != NULL);
+    ceph_assert(wrapped != NULL);
   }
 
   ~C_IO_Wrapper() override {
@@ -166,28 +200,14 @@ public:
     }
   }
   void complete(int r) final;
+  void print(ostream& out) const override {
+    out << "io_wrapper(" << wrapped << ")";
+  }
 };
 
+using MDSGather = C_GatherBase<MDSContext, C_MDSInternalNoop>;
+using MDSGatherBuilder = C_GatherBuilderBase<MDSContext, MDSGather>;
 
-/**
- * Gather needs a default-constructable class
- */
-class MDSInternalContextGather : public MDSInternalContextBase
-{
-protected:
-  MDSRank *get_mds() override;
-};
-
-
-class MDSGather : public C_GatherBase<MDSInternalContextBase, MDSInternalContextGather>
-{
-public:
-  MDSGather(CephContext *cct, MDSInternalContextBase *onfinish) : C_GatherBase<MDSInternalContextBase, MDSInternalContextGather>(cct, onfinish) {}
-protected:
-  MDSRank *get_mds() override {return NULL;}
-};
-
-
-typedef C_GatherBuilderBase<MDSInternalContextBase, MDSGather> MDSGatherBuilder;
+using MDSContextFactory = ContextFactory<MDSContext>;
 
 #endif  // MDS_CONTEXT_H

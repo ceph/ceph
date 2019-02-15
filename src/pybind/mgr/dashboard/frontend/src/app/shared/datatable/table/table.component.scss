@@ -1,0 +1,282 @@
+@import '../../../../defaults';
+
+.dataTables_wrapper {
+  margin-bottom: 25px;
+  .separator {
+    height: 30px;
+    border-left: 1px solid $color-table-seperator-border;
+    padding-left: 5px;
+    margin-left: 5px;
+    display: inline-block;
+    vertical-align: middle;
+  }
+  .widget-toolbar {
+    display: inline-block;
+    float: right;
+    width: auto;
+    height: 30px;
+    line-height: 28px;
+    position: relative;
+    border-left: 1px solid $color-table-seperator-border;
+    cursor: pointer;
+    padding: 0 8px;
+    text-align: center;
+  }
+  .dropdown-menu {
+    white-space: nowrap;
+    & > li {
+      cursor: pointer;
+      & > label {
+        width: 100%;
+        margin-bottom: 0;
+        padding-left: 20px;
+        padding-right: 20px;
+        cursor: pointer;
+        &:hover {
+          background-color: $color-table-dropdown-bg;
+        }
+        & > input {
+          cursor: pointer;
+        }
+      }
+    }
+  }
+  th.oadatatablecheckbox {
+    width: 16px;
+  }
+  .dataTables_length > input {
+    line-height: 25px;
+    text-align: right;
+  }
+}
+.dataTables_header {
+  background-color: $color-table-header-bg;
+  border: 1px solid $color-table-header-border;
+  border-bottom: none;
+  padding: 5px;
+  position: relative;
+  .oadatatableactions {
+    float: left;
+  }
+  ::ng-deep .table-filters {
+    float: right;
+    border-left: 1px solid $color-table-seperator-border;
+    padding-left: 8px;
+  }
+  ::ng-deep .table-filters label {
+    margin-right: 4px;
+  }
+  .form-group {
+    padding-left: 8px;
+  }
+  .input-group {
+    float: right;
+    border-left: 1px solid $color-table-input-border;
+    padding-left: 8px;
+    padding-right: 8px;
+    width: 40%;
+    max-width: 250px;
+    .form-control {
+      height: 30px;
+    }
+    .clear-input {
+      height: 30px;
+      i {
+        vertical-align: text-top;
+      }
+    }
+  }
+  .input-group.dataTables_paginate {
+    width: 8%;
+    min-width: 85px;
+    padding-right: 8px;
+  }
+}
+
+::ng-deep .oadatatable {
+  border: 1px solid $color-table-header-border;
+  margin-bottom: 0;
+  max-width: none !important;
+  .progress-linear {
+    display: block;
+    position: relative;
+    width: 100%;
+    height: 5px;
+    padding: 0;
+    margin: 0;
+    .container {
+      background-color: $color-table-active-row;
+      .bar {
+        left: 0;
+        height: 100%;
+        width: 100%;
+        position: absolute;
+        overflow: hidden;
+        background-color: $color-table-active-row;
+      }
+      .bar:before {
+        display: block;
+        position: absolute;
+        content: '';
+        left: -200px;
+        width: 200px;
+        height: 100%;
+        background-color: $color-table-progress-bar-active;
+        animation: progress-loading 3s linear infinite;
+      }
+    }
+  }
+  .datatable-header {
+    background-clip: padding-box;
+    background-color: $color-table-datatable-header;
+    background-image: -webkit-linear-gradient(
+      top,
+      $color-table-gradient-1 0,
+      $color-table-gradient-2 100%
+    );
+    background-image: -o-linear-gradient(
+      top,
+      $color-table-gradient-1 0,
+      $color-table-gradient-2 100%
+    );
+    background-image: linear-gradient(
+      to bottom,
+      $color-table-gradient-1 0,
+      $color-table-gradient-2 100%
+    );
+    background-repeat: repeat-x;
+    filter: progid:DXImageTransform.Microsoft.gradient(startColorstr='#fffafafa', endColorstr='#ffededed', GradientType=0);
+    .sort-asc,
+    .sort-desc {
+      color: $color-table-sort;
+    }
+    .datatable-header-cell {
+      @include table-cell;
+      text-align: left;
+      font-weight: bold;
+      .datatable-header-cell-label {
+        &:after {
+          font-family: ForkAwesome;
+          font-weight: 400;
+          height: 9px;
+          left: 10px;
+          line-height: 12px;
+          position: relative;
+          vertical-align: baseline;
+          width: 12px;
+        }
+      }
+      &.sortable {
+        .datatable-header-cell-label:after {
+          content: ' \f0dc';
+        }
+        &.sort-active {
+          &.sort-asc .datatable-header-cell-label:after {
+            content: ' \f160';
+          }
+          &.sort-desc .datatable-header-cell-label:after {
+            content: ' \f161';
+          }
+        }
+      }
+      &:first-child {
+        border-left: none;
+      }
+    }
+  }
+  .datatable-body {
+    .empty-row {
+      background-color: $color-table-empty-row;
+      text-align: center;
+      font-weight: bold;
+      font-style: italic;
+      padding-top: 5px;
+      padding-bottom: 5px;
+    }
+    .datatable-body-row {
+      .label {
+        font-size: 0.9em;
+      }
+      &.clickable:hover .datatable-row-group {
+        background-color: $color-table-hover-row;
+        transition-property: background;
+        transition-duration: 0.3s;
+        transition-timing-function: linear;
+      }
+      &.datatable-row-even {
+        background-color: $color-table-even-row-bg;
+      }
+      &.datatable-row-odd {
+        background-color: $color-table-odd-row-bg;
+      }
+      &.active,
+      &.active:hover {
+        background-color: $color-table-active-row-hover;
+      }
+      .datatable-body-cell {
+        @include table-cell;
+        &:first-child {
+          border-left: none;
+        }
+        .datatable-body-cell-label {
+          display: block;
+        }
+      }
+    }
+  }
+  .datatable-footer {
+    .selected-count,
+    .page-count {
+      font-style: italic;
+      padding-left: 5px;
+    }
+    .datatable-pager .pager {
+      margin-right: 5px !important;
+      & li:not(:first-child) {
+        /** Add space between buttons */
+        margin-left: 3px;
+      }
+      & li > a,
+      & li > span {
+        border-radius: 3px;
+      }
+      .pages {
+        & > a,
+        & > span {
+          display: inline-block;
+          padding: 5px 10px;
+          margin-bottom: 5px;
+          border: none;
+        }
+        a:hover {
+          background-color: $color-table-active-row;
+        }
+        &.active > a {
+          background-color: $color-table-active-row-hover;
+        }
+      }
+    }
+  }
+}
+
+@keyframes progress-loading {
+  from {
+    left: -200px;
+    width: 15%;
+  }
+  50% {
+    width: 30%;
+  }
+  70% {
+    width: 70%;
+  }
+  80% {
+    left: 50%;
+  }
+  95% {
+    left: 120%;
+  }
+  to {
+    left: 100%;
+  }
+}

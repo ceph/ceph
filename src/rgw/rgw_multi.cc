@@ -12,6 +12,8 @@
 #include "rgw_multi.h"
 #include "rgw_op.h"
 
+#include "services/svc_sys_obj.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 
@@ -82,7 +84,6 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
 {
   map<string, bufferlist> parts_map;
   map<string, bufferlist>::iterator iter;
-  bufferlist header;
 
   rgw_obj obj;
   obj.init_ns(bucket_info.bucket, meta_oid, RGW_OBJ_NS_MULTIPART);
@@ -97,6 +98,10 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
 
   parts.clear();
 
+
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(raw_obj);
+
   if (sorted_omap) {
     string p;
     p = "part.";
@@ -105,9 +110,9 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
     snprintf(buf, sizeof(buf), "%08d", marker);
     p.append(buf);
 
-    ret = store->omap_get_vals(raw_obj, header, p, num_parts + 1, parts_map);
+    ret = sysobj.omap().get_vals(p, num_parts + 1, &parts_map, nullptr);
   } else {
-    ret = store->omap_get_all(raw_obj, header, parts_map);
+    ret = sysobj.omap().get_all(&parts_map);
   }
   if (ret < 0)
     return ret;
@@ -119,10 +124,10 @@ int list_multipart_parts(RGWRados *store, RGWBucketInfo& bucket_info, CephContex
 
   for (i = 0, iter = parts_map.begin(); (i < num_parts || !sorted_omap) && iter != parts_map.end(); ++iter, ++i) {
     bufferlist& bl = iter->second;
-    bufferlist::iterator bli = bl.begin();
+    auto bli = bl.cbegin();
     RGWUploadPartInfo info;
     try {
-      ::decode(info, bli);
+      decode(info, bli);
     } catch (buffer::error& err) {
       ldout(cct, 0) << "ERROR: could not part info, caught buffer::error" << dendl;
       return -EIO;
@@ -199,7 +204,7 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
     ret = list_multipart_parts(store, bucket_info, cct, mp_obj.get_upload_id(), mp_obj.get_meta(), 1000,
       marker, obj_parts, &marker, &truncated);
     if (ret < 0)
-      return ret;
+      return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
     for (auto obj_iter = obj_parts.begin(); obj_iter != obj_parts.end(); ++obj_iter) {
       RGWUploadPartInfo& obj_part = obj_iter->second;
       rgw_obj obj;
@@ -229,7 +234,7 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
   ret = store->send_chain_to_gc(chain, mp_obj.get_upload_id() , false);  // do it async
   if (ret < 0) {
     ldout(cct, 5) << "gc->send_chain() returned " << ret << dendl;
-    return ret;
+    return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
   }
   RGWRados::Object del_target(store, bucket_info, *obj_ctx, meta_obj);
   RGWRados::Object::Delete del_op(&del_target);
@@ -242,7 +247,7 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
 
   // and also remove the metadata obj
   ret = del_op.delete_obj();
-  return ret == -ENOENT?-ERR_NO_SUCH_UPLOAD:ret;
+  return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
 }
 
 int list_bucket_multiparts(RGWRados *store, RGWBucketInfo& bucket_info,
@@ -285,7 +290,7 @@ int abort_bucket_multiparts(RGWRados *store, CephContext *cct, RGWBucketInfo& bu
         if (!mp.from_meta(key.name))
           continue;
         ret = abort_multipart_upload(store, cct, &obj_ctx, bucket_info, mp);
-        if (ret < 0) {
+        if (ret < 0 && ret != -ENOENT && ret != -ERR_NO_SUCH_UPLOAD) {
           return ret;
         }
         num_deleted++;

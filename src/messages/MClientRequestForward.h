@@ -18,30 +18,32 @@
 
 #include "msg/Message.h"
 
-class MClientRequestForward : public Message {
+class MClientRequestForward : public MessageInstance<MClientRequestForward> {
+public:
+  friend factory;
+private:
   int32_t dest_mds;
   int32_t num_fwd;
   bool client_must_resend;
 
- public:
+protected:
   MClientRequestForward()
-    : Message(CEPH_MSG_CLIENT_REQUEST_FORWARD),
+    : MessageInstance(CEPH_MSG_CLIENT_REQUEST_FORWARD),
       dest_mds(-1), num_fwd(-1), client_must_resend(false) {}
   MClientRequestForward(ceph_tid_t t, int dm, int nf, bool cmr) :
-    Message(CEPH_MSG_CLIENT_REQUEST_FORWARD),
+    MessageInstance(CEPH_MSG_CLIENT_REQUEST_FORWARD),
     dest_mds(dm), num_fwd(nf), client_must_resend(cmr) {
-    assert(client_must_resend);
+    ceph_assert(client_must_resend);
     header.tid = t;
   }
-private:
   ~MClientRequestForward() override {}
 
 public:
-  int get_dest_mds() { return dest_mds; }
-  int get_num_fwd() { return num_fwd; }
-  bool must_resend() { return client_must_resend; }
+  int get_dest_mds() const { return dest_mds; }
+  int get_num_fwd() const { return num_fwd; }
+  bool must_resend() const { return client_must_resend; }
 
-  const char *get_type_name() const override { return "client_request_forward"; }
+  std::string_view get_type_name() const override { return "client_request_forward"; }
   void print(ostream& o) const override {
     o << "client_request_forward(" << get_tid()
       << " to mds." << dest_mds
@@ -51,16 +53,17 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(dest_mds, payload);
-    ::encode(num_fwd, payload);
-    ::encode(client_must_resend, payload);
+    using ceph::encode;
+    encode(dest_mds, payload);
+    encode(num_fwd, payload);
+    encode(client_must_resend, payload);
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(dest_mds, p);
-    ::decode(num_fwd, p);
-    ::decode(client_must_resend, p);
+    auto p = payload.cbegin();
+    decode(dest_mds, p);
+    decode(num_fwd, p);
+    decode(client_must_resend, p);
   }
 };
 

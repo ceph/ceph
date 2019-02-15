@@ -18,7 +18,7 @@ namespace librbd {
 namespace {
 
 struct MockTestImageCtx : public librbd::MockImageCtx {
-  MockTestImageCtx(librbd::ImageCtx &image_ctx)
+  explicit MockTestImageCtx(librbd::ImageCtx &image_ctx)
     : librbd::MockImageCtx(image_ctx) {
   }
 };
@@ -35,9 +35,9 @@ public:
 
   static SetHeadRequest* create(librbd::MockTestImageCtx *image_ctx,
                                 uint64_t size,
-                                const librbd::ParentSpec &parent_spec,
+                                const cls::rbd::ParentImageSpec &parent_spec,
                                 uint64_t parent_overlap, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -56,10 +56,10 @@ struct SnapshotCreateRequest<librbd::MockTestImageCtx> {
                                        const std::string &snap_name,
                                        const cls::rbd::SnapshotNamespace &snap_namespace,
                                        uint64_t size,
-                                       const librbd::ParentSpec &parent_spec,
+                                       const cls::rbd::ParentImageSpec &parent_spec,
                                        uint64_t parent_overlap,
                                        Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -138,13 +138,17 @@ public:
       .WillRepeatedly(WithArg<0>(Invoke([&mock_image_ctx](uint64_t features) {
               return (mock_image_ctx.features & features) != 0;
             })));
+    EXPECT_CALL(mock_image_ctx, test_features(_))
+      .WillRepeatedly(WithArg<0>(Invoke([&mock_image_ctx](uint64_t features) {
+              return (mock_image_ctx.features & features) != 0;
+            })));
   }
 
   void expect_start_op(librbd::MockExclusiveLock &mock_exclusive_lock) {
     if ((m_src_image_ctx->features & RBD_FEATURE_EXCLUSIVE_LOCK) == 0) {
       return;
     }
-    EXPECT_CALL(mock_exclusive_lock, start_op()).WillOnce(
+    EXPECT_CALL(mock_exclusive_lock, start_op(_)).WillOnce(
       ReturnNew<FunctionContext>([](int) {}));
   }
 
@@ -207,7 +211,7 @@ public:
 
   void expect_set_head(MockSetHeadRequest &mock_set_head_request, int r) {
     EXPECT_CALL(mock_set_head_request, send())
-      .WillOnce(Invoke([this, &mock_set_head_request, r]() {
+      .WillOnce(Invoke([&mock_set_head_request, r]() {
             mock_set_head_request.on_finish->complete(r);
           }));
   }
@@ -223,8 +227,8 @@ public:
       librbd::MockTestImageCtx &mock_dst_image_ctx, Context *on_finish,
       librados::snap_t snap_id_end = CEPH_NOSNAP) {
     return new MockSnapshotCopyRequest(&mock_src_image_ctx, &mock_dst_image_ctx,
-                                       snap_id_end, m_work_queue, &m_snap_seqs,
-                                       on_finish);
+                                       snap_id_end, false, m_work_queue,
+                                       &m_snap_seqs, on_finish);
   }
 
   int create_snap(librbd::ImageCtx *image_ctx, const std::string &snap_name,

@@ -47,7 +47,7 @@ to be created and all objects from the previous pool moved to the new.
 The most important parameters of the profile are *K*, *M* and
 *crush-failure-domain* because they define the storage overhead and
 the data durability. For instance, if the desired architecture must
-sustain the loss of two racks with a storage overhead of 40% overhead,
+sustain the loss of two racks with a storage overhead of 67% overhead,
 the following profile can be defined::
 
     $ ceph osd erasure-code-profile set myprofile \
@@ -121,7 +121,7 @@ By default, erasure coded pools only work with uses like RGW that
 perform full object writes and appends.
 
 Since Luminous, partial writes for an erasure coded pool may be
-enabled with a per-pool setting. This lets RBD and Cephfs store their
+enabled with a per-pool setting. This lets RBD and CephFS store their
 data in an erasure coded pool::
 
     ceph osd pool set ec_pool allow_ec_overwrites true
@@ -132,14 +132,14 @@ during deep-scrub. In addition to being unsafe, using filestore with
 ec overwrites yields low performance compared to bluestore.
 
 Erasure coded pools do not support omap, so to use them with RBD and
-Cephfs you must instruct them to store their data in an ec pool, and
+CephFS you must instruct them to store their data in an ec pool, and
 their metadata in a replicated pool. For RBD, this means using the
 erasure coded pool as the ``--data-pool`` during image creation::
 
     rbd create --size 1G --data-pool ec_pool replicated_pool/image_name
 
-For Cephfs, using an erasure coded pool means setting that pool in
-a `file layout <../../../cephfs/file-layouts>`_.
+For CephFS, an erasure coded pool can be set as the default data pool during
+file system creation or via `file layouts <../../../cephfs/file-layouts>`_.
 
 
 Erasure coded pool and cache tiering
@@ -193,3 +193,4 @@ Table of content
 	erasure-code-isa
 	erasure-code-lrc
 	erasure-code-shec
+	erasure-code-clay

@@ -17,23 +17,22 @@
  
 #include <stdlib.h>
 #include <ostream>
+#include <string_view>
 
-#include <boost/intrusive_ptr.hpp>
 #include <boost/intrusive/list.hpp>
-// Because intrusive_ptr clobbers our assert...
-#include "include/assert.h"
 
-#include "include/types.h"
-#include "include/buffer.h"
-#include "common/Throttle.h"
-#include "common/zipkin_trace.h"
-#include "msg_types.h"
-
+#include "include/Context.h"
 #include "common/RefCountedObj.h"
-#include "msg/Connection.h"
-
-#include "common/debug.h"
+#include "common/ThrottleInterface.h"
 #include "common/config.h"
+#include "common/debug.h"
+#include "common/zipkin_trace.h"
+#include "include/ceph_assert.h" // Because intrusive_ptr clobbers our assert...
+#include "include/buffer.h"
+#include "include/types.h"
+#include "msg/Connection.h"
+#include "msg/MessageRef.h"
+#include "msg_types.h"
 
 // monitor internal
 #define MSG_MON_SCRUB              64
@@ -58,6 +57,9 @@
 #define MSG_FORWARD                46
 
 #define MSG_PAXOS                  40
+
+#define MSG_CONFIG           62
+#define MSG_GET_CONFIG       63
 
 
 // osd internal
@@ -122,6 +124,10 @@
 #define MSG_OSD_REP_SCRUBMAP    117
 #define MSG_OSD_PG_RECOVERY_DELETE 118
 #define MSG_OSD_PG_RECOVERY_DELETE_REPLY 119
+#define MSG_OSD_PG_CREATE2      120
+#define MSG_OSD_SCRUB2          121
+
+#define MSG_OSD_PG_READY_TO_MERGE 122
 
 // *** MDS ***
 
@@ -147,7 +153,8 @@
 #define MSG_MDS_FINDINOREPLY       0x20e
 #define MSG_MDS_OPENINO            0x20f
 #define MSG_MDS_OPENINOREPLY       0x210
-
+#define MSG_MDS_SNAPUPDATE         0x211
+#define MSG_MDS_FRAGMENTNOTIFYACK  0x212
 #define MSG_MDS_LOCK               0x300
 #define MSG_MDS_INODEFILECAPS      0x301
 
@@ -172,7 +179,7 @@
 
 // *** generic ***
 #define MSG_TIMECHECK             0x600
-//#define MSG_MON_HEALTH            0x601  // remove post-luminous
+#define MSG_MON_HEALTH            0x601
 
 // *** Message::encode() crcflags bits ***
 #define MSG_CRC_DATA           (1 << 0)
@@ -188,6 +195,7 @@
 #define MSG_NOP                   0x607
 
 #define MSG_MON_HEALTH_CHECKS     0x608
+#define MSG_TIMECHECK2            0x609
 
 // *** ceph-mgr <-> OSD/MDS daemons ***
 #define MSG_MGR_OPEN              0x700
@@ -205,6 +213,8 @@
 // *** cephmgr -> ceph-mon
 #define MSG_MON_MGR_REPORT        0x706
 #define MSG_SERVICE_MAP           0x707
+
+#define MSG_MGR_CLOSE             0x708
 
 // ======================================================
 
@@ -250,10 +260,13 @@ protected:
   bi::list_member_hook<> dispatch_q;
 
 public:
+  using ref = MessageRef;
+  using const_ref = MessageConstRef;
+
   // zipkin tracing
   ZTracer::Trace trace;
   void encode_trace(bufferlist &bl, uint64_t features) const;
-  void decode_trace(bufferlist::iterator &p, bool create = false);
+  void decode_trace(bufferlist::const_iterator &p, bool create = false);
 
   class CompletionHook : public Context {
   protected:
@@ -274,10 +287,10 @@ protected:
 
   // release our size in bytes back to this throttler when our payload
   // is adjusted or when we are destroyed.
-  Throttle *byte_throttler = nullptr;
+  ThrottleInterface *byte_throttler = nullptr;
 
   // release a count back to this throttler when we are destroyed
-  Throttle *msg_throttler = nullptr;
+  ThrottleInterface *msg_throttler = nullptr;
 
   // keep track of how big this message was when we reserved space in
   // the msgr dispatch_throttler, so that we can properly release it
@@ -324,10 +337,12 @@ public:
   }
   CompletionHook* get_completion_hook() { return completion_hook; }
   void set_completion_hook(CompletionHook *hook) { completion_hook = hook; }
-  void set_byte_throttler(Throttle *t) { byte_throttler = t; }
-  Throttle *get_byte_throttler() { return byte_throttler; }
-  void set_message_throttler(Throttle *t) { msg_throttler = t; }
-  Throttle *get_message_throttler() { return msg_throttler; }
+  void set_byte_throttler(ThrottleInterface *t) {
+    byte_throttler = t;
+  }
+  void set_message_throttler(ThrottleInterface *t) {
+    msg_throttler = t;
+  }
 
   void set_dispatch_throttle_size(uint64_t s) { dispatch_throttle_size = s; }
   uint64_t get_dispatch_throttle_size() const { return dispatch_throttle_size; }
@@ -373,6 +388,7 @@ public:
 
   bool empty_payload() const { return payload.length() == 0; }
   bufferlist& get_payload() { return payload; }
+  const bufferlist& get_payload() const { return payload; }
   void set_payload(bufferlist& bl) {
     if (byte_throttler)
       byte_throttler->put(payload.length());
@@ -458,6 +474,11 @@ public:
       return connection->get_peer_addr();
     return entity_addr_t();
   }
+  entity_addrvec_t get_source_addrs() const {
+    if (connection)
+      return connection->get_peer_addrs();
+    return entity_addrvec_t();
+  }
 
   // forwarded?
   entity_inst_t get_orig_source_inst() const {
@@ -469,11 +490,14 @@ public:
   entity_addr_t get_orig_source_addr() const {
     return get_source_addr();
   }
+  entity_addrvec_t get_orig_source_addrs() const {
+    return get_source_addrs();
+  }
 
   // virtual bits
   virtual void decode_payload() = 0;
   virtual void encode_payload(uint64_t features) = 0;
-  virtual const char *get_type_name() const = 0;
+  virtual std::string_view get_type_name() const = 0;
   virtual void print(ostream& out) const {
     out << get_type_name() << " magic: " << magic;
   }
@@ -482,7 +506,6 @@ public:
 
   void encode(uint64_t features, int crcflags);
 };
-typedef boost::intrusive_ptr<Message> MessageRef;
 
 extern Message *decode_message(CephContext *cct, int crcflags,
 			       ceph_msg_header &header,
@@ -498,6 +521,57 @@ inline ostream& operator<<(ostream& out, const Message& m) {
 
 extern void encode_message(Message *m, uint64_t features, bufferlist& bl);
 extern Message *decode_message(CephContext *cct, int crcflags,
-                               bufferlist::iterator& bl);
+                               bufferlist::const_iterator& bl);
+
+template <class MessageType>
+class MessageFactory {
+public:
+template<typename... Args>
+  static typename MessageType::ref build(Args&&... args) {
+    return typename MessageType::ref(new MessageType(std::forward<Args>(args)...), false);
+  }
+};
+
+template<class T, class M = Message>
+class MessageSubType : public M {
+public:
+  typedef boost::intrusive_ptr<T> ref;
+  typedef boost::intrusive_ptr<T const> const_ref;
+
+  static auto msgref_cast(typename M::ref const& m) {
+    return boost::static_pointer_cast<typename T::const_ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
+  }
+  static auto msgref_cast(typename M::const_ref const& m) {
+    return boost::static_pointer_cast<typename T::ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
+  }
+
+protected:
+template<typename... Args>
+  MessageSubType(Args&&... args) : M(std::forward<Args>(args)...) {}
+  virtual ~MessageSubType() override {}
+};
+
+
+template<class T, class M = Message>
+class MessageInstance : public MessageSubType<T, M> {
+public:
+  using factory = MessageFactory<T>;
+
+  template<typename... Args>
+  static auto create(Args&&... args) {
+    return MessageFactory<T>::build(std::forward<Args>(args)...);
+  }
+  static auto msgref_cast(typename Message::ref const& m) {
+    return boost::static_pointer_cast<typename T::ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
+  }
+  static auto msgref_cast(typename Message::const_ref const& m) {
+    return boost::static_pointer_cast<typename T::const_ref::element_type, typename std::remove_reference<decltype(m)>::type::element_type>(m);
+  }
+
+protected:
+template<typename... Args>
+  MessageInstance(Args&&... args) : MessageSubType<T,M>(std::forward<Args>(args)...) {}
+  virtual ~MessageInstance() override {}
+};
 
 #endif

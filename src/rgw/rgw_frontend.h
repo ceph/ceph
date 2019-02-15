@@ -14,22 +14,27 @@
 #include "rgw_civetweb.h"
 #include "rgw_civetweb_log.h"
 #include "civetweb/civetweb.h"
-
 #include "rgw_auth_registry.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+namespace rgw::dmclock {
+  class SyncScheduler;
+  class ClientConfig;
+  class SchedulerCtx;
+}
+
 class RGWFrontendConfig {
   std::string config;
-  std::map<std::string, std::string> config_map;
+  std::multimap<std::string, std::string> config_map;
   std::string framework;
 
   int parse_config(const std::string& config,
-                   std::map<std::string, std::string>& config_map);
+                   std::multimap<std::string, std::string>& config_map);
 
 public:
-  RGWFrontendConfig(const std::string& config)
+  explicit RGWFrontendConfig(const std::string& config)
     : config(config) {
   }
 
@@ -54,7 +59,7 @@ public:
     return config;
   }
 
-  std::map<std::string, std::string>& get_config_map() {
+  std::multimap<std::string, std::string>& get_config_map() {
     return config_map;
   }
 
@@ -85,7 +90,7 @@ struct RGWMongooseEnv : public RGWProcessEnv {
   static constexpr bool prioritize_write = true;
   RWLock mutex;
 
-  RGWMongooseEnv(const RGWProcessEnv &env)
+  explicit RGWMongooseEnv(const RGWProcessEnv &env)
     : RGWProcessEnv(env),
       mutex("RGWCivetWebFrontend", false, true, prioritize_write) {
   }
@@ -97,21 +102,22 @@ class RGWCivetWebFrontend : public RGWFrontend {
   struct mg_context* ctx;
   RGWMongooseEnv env;
 
-  void set_conf_default(std::map<std::string, std::string>& m,
+  std::unique_ptr<rgw::dmclock::SyncScheduler> scheduler;
+  std::unique_ptr<rgw::dmclock::ClientConfig> client_config;
+
+  void set_conf_default(std::multimap<std::string, std::string>& m,
                         const std::string& key,
 			const std::string& def_val) {
     if (m.find(key) == std::end(m)) {
-      m[key] = def_val;
+      m.emplace(key, def_val);
     }
   }
 
+  CephContext* cct() const { return env.store->ctx(); }
 public:
   RGWCivetWebFrontend(RGWProcessEnv& env,
-                      RGWFrontendConfig* conf)
-    : conf(conf),
-      ctx(nullptr),
-      env(env) {
-  }
+                      RGWFrontendConfig *conf,
+		      rgw::dmclock::SchedulerCtx& sched_ctx);
 
   int init() override {
     return 0;
@@ -163,7 +169,7 @@ public:
   }
 
   int run() override {
-    assert(pprocess); /* should have initialized by init() */
+    ceph_assert(pprocess); /* should have initialized by init() */
     thread = new RGWProcessControlThread(pprocess);
     thread->create("rgw_frontend");
     return 0;
@@ -194,7 +200,7 @@ public:
 
   int init() override {
     pprocess = new RGWFCGXProcess(g_ceph_context, &env,
-				  g_conf->rgw_thread_pool_size, conf);
+				  g_conf()->rgw_thread_pool_size, conf);
     return 0;
   }
 }; /* RGWFCGXFrontend */
@@ -206,7 +212,7 @@ public:
 
   int init() override {
     int num_threads;
-    conf->get_val("num_threads", g_conf->rgw_thread_pool_size, &num_threads);
+    conf->get_val("num_threads", g_conf()->rgw_thread_pool_size, &num_threads);
     RGWLoadGenProcess *pp = new RGWLoadGenProcess(g_ceph_context, &env,
 						  num_threads, conf);
 

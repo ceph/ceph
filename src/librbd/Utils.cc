@@ -10,10 +10,12 @@
 #include "include/rbd/features.h"
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/Features.h"
+#include <random>
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd: "
+#define dout_prefix *_dout << "librbd::util::" << __func__ << ": "
 
 namespace librbd {
 namespace util {
@@ -50,7 +52,9 @@ std::string generate_image_id(librados::IoCtx &ioctx) {
   librados::Rados rados(ioctx);
 
   uint64_t bid = rados.get_instance_id();
-  uint32_t extra = rand() % 0xFFFFFFFF;
+  std::mt19937 generator{std::random_device{}()};
+  std::uniform_int_distribution<uint32_t> distribution{0, 0xFFFFFFFF};
+  uint32_t extra = distribution(generator);
 
   ostringstream bid_ss;
   bid_ss << std::hex << bid << std::hex << extra;
@@ -66,9 +70,10 @@ std::string generate_image_id(librados::IoCtx &ioctx) {
 
 uint64_t get_rbd_default_features(CephContext* cct)
 {
-  auto str_val = cct->_conf->get_val<std::string>("rbd_default_features");
-  return boost::lexical_cast<uint64_t>(str_val);
+  auto value = cct->_conf.get_val<std::string>("rbd_default_features");
+  return librbd::rbd_features_from_string(value, nullptr);
 }
+
 
 bool calc_sparse_extent(const bufferptr &bp,
                         size_t sparse_size,
@@ -111,6 +116,29 @@ bool is_metadata_config_override(const std::string& metadata_key,
     return true;
   }
   return false;
+}
+
+int create_ioctx(librados::IoCtx& src_io_ctx, const std::string& pool_desc,
+                 int64_t pool_id,
+                 const std::optional<std::string>& pool_namespace,
+                 librados::IoCtx* dst_io_ctx) {
+  auto cct = (CephContext *)src_io_ctx.cct();
+
+  librados::Rados rados(src_io_ctx);
+  int r = rados.ioctx_create2(pool_id, *dst_io_ctx);
+  if (r == -ENOENT) {
+    lderr(cct) << pool_desc << " pool " << pool_id << " no longer exists"
+               << dendl;
+    return r;
+  } else if (r < 0) {
+    lderr(cct) << "error accessing " << pool_desc << " pool " << pool_id
+               << dendl;
+    return r;
+  }
+
+  dst_io_ctx->set_namespace(
+    pool_namespace ? *pool_namespace : src_io_ctx.get_namespace());
+  return 0;
 }
 
 } // namespace util

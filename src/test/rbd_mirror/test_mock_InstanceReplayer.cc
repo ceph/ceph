@@ -69,18 +69,18 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
     InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
     RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
     const std::string &global_image_id) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->global_image_id = global_image_id;
     return s_instance;
   }
 
   ImageReplayer() {
-    assert(s_instance == nullptr);
+    ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
   virtual ~ImageReplayer() {
-    assert(s_instance == this);
+    ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
 
@@ -143,7 +143,7 @@ public:
     EXPECT_CALL(*mock_threads.timer, add_event_after(_, _))
       .WillOnce(DoAll(
         WithArg<1>(Invoke([this, &mock_threads, timer_ctx](Context *ctx) {
-          assert(mock_threads.timer_lock.is_locked());
+          ceph_assert(mock_threads.timer_lock.is_locked());
           if (timer_ctx != nullptr) {
             *timer_ctx = ctx;
             mock_threads.timer_cond.SignalOne();
@@ -189,7 +189,6 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
 
   C_SaferCond on_acquire;
   EXPECT_CALL(mock_image_replayer, add_peer("peer_uuid", _));
-  EXPECT_CALL(mock_image_replayer, set_finished(false));
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, is_blacklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(false));
@@ -259,7 +258,6 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
 
   C_SaferCond on_acquire;
   EXPECT_CALL(mock_image_replayer, add_peer("peer_uuid", _));
-  EXPECT_CALL(mock_image_replayer, set_finished(false));
   EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
   EXPECT_CALL(mock_image_replayer, is_blacklisted()).WillOnce(Return(false));
   EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(false));
@@ -306,5 +304,63 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
   ASSERT_TRUE(timer_ctx2 != nullptr);
   delete timer_ctx2;
 }
+
+TEST_F(TestMockInstanceReplayer, Reacquire) {
+  MockThreads mock_threads(m_threads);
+  MockServiceDaemon mock_service_daemon;
+  MockInstanceWatcher mock_instance_watcher;
+  MockImageReplayer mock_image_replayer;
+  MockInstanceReplayer instance_replayer(
+    &mock_threads, &mock_service_daemon,
+    rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
+    "local_mirror_uuid", m_local_io_ctx.get_id());
+  std::string global_image_id("global_image_id");
+
+  EXPECT_CALL(mock_image_replayer, get_global_image_id())
+    .WillRepeatedly(ReturnRef(global_image_id));
+
+  InSequence seq;
+  expect_work_queue(mock_threads);
+  Context *timer_ctx = nullptr;
+  expect_add_event_after(mock_threads, &timer_ctx);
+  instance_replayer.init();
+  instance_replayer.add_peer("peer_uuid", m_remote_io_ctx);
+
+  // Acquire
+
+  EXPECT_CALL(mock_image_replayer, add_peer("peer_uuid", _));
+  EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
+  EXPECT_CALL(mock_image_replayer, is_blacklisted()).WillOnce(Return(false));
+  EXPECT_CALL(mock_image_replayer, is_finished()).WillOnce(Return(false));
+  EXPECT_CALL(mock_image_replayer, start(nullptr, false));
+  expect_work_queue(mock_threads);
+
+  C_SaferCond on_acquire1;
+  instance_replayer.acquire_image(&mock_instance_watcher, global_image_id,
+                                  &on_acquire1);
+  ASSERT_EQ(0, on_acquire1.wait());
+
+  // Re-acquire
+  EXPECT_CALL(mock_image_replayer, set_finished(false));
+  EXPECT_CALL(mock_image_replayer, restart());
+  expect_work_queue(mock_threads);
+
+  C_SaferCond on_acquire2;
+  instance_replayer.acquire_image(&mock_instance_watcher, global_image_id,
+                                  &on_acquire2);
+  ASSERT_EQ(0, on_acquire2.wait());
+
+  expect_work_queue(mock_threads);
+  expect_cancel_event(mock_threads, true);
+  EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
+  expect_work_queue(mock_threads);
+  expect_work_queue(mock_threads);
+  EXPECT_CALL(mock_image_replayer, is_stopped()).WillOnce(Return(true));
+  EXPECT_CALL(mock_image_replayer, destroy());
+  instance_replayer.shut_down();
+  ASSERT_TRUE(timer_ctx != nullptr);
+  delete timer_ctx;
+}
+
 } // namespace mirror
 } // namespace rbd

@@ -43,6 +43,10 @@ Options
 
    Interact with the given pool. Required by most commands.
 
+.. option:: --namespace namespace-name
+
+   Use a pre-defined image namespace within a pool
+
 .. option:: --no-progress
 
    Do not output progress information (goes to standard error by
@@ -193,13 +197,75 @@ Commands
   The parent snapshot must be protected (see `rbd snap protect`).
   This requires image format 2.
 
+:command:`config global get` *config-entity* *key*
+  Get a global-level configuration override.
+
+:command:`config global list` [--format plain | json | xml] [--pretty-format] *config-entity*
+  List global-level configuration overrides.
+
+:command:`config global set` *config-entity* *key* *value*
+  Set a global-level configuration override.
+
+:command:`config global remove` *config-entity* *key*
+  Remove a global-level configuration override.
+
+:command:`config image get` *image-spec* *key*
+  Get an image-level configuration override.
+
+:command:`config image list` [--format plain | json | xml] [--pretty-format] *image-spec*
+  List image-level configuration overrides.
+
+:command:`config image set` *image-spec* *key* *value*
+  Set an image-level configuration override.
+
+:command:`config image remove` *image-spec* *key*
+  Remove an image-level configuration override.
+
+:command:`config pool get` *pool-name* *key*
+  Get a pool-level configuration override.
+
+:command:`config pool list` [--format plain | json | xml] [--pretty-format] *pool-name*
+  List pool-level configuration overrides.
+
+:command:`config pool set` *pool-name* *key* *value*
+  Set a pool-level configuration override.
+
+:command:`config pool remove` *pool-name* *key*
+  Remove a pool-level configuration override.
+
 :command:`cp` (*src-image-spec* | *src-snap-spec*) *dest-image-spec*
   Copy the content of a src-image into the newly created dest-image.
   dest-image will have the same size, object size, and image format as src-image.
 
-:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--image-feature *feature-name*]... [--image-shared] *image-spec*
+:command:`create` (-s | --size *size-in-M/G/T*) [--image-format *format-id*] [--object-size *size-in-B/K/M*] [--stripe-unit *size-in-B/K/M* --stripe-count *num*] [--thick-provision] [--no-progress] [--image-feature *feature-name*]... [--image-shared] *image-spec*
   Will create a new rbd image. You must also specify the size via --size.  The
   --stripe-unit and --stripe-count arguments are optional, but must be used together.
+  If the --thick-provision is enabled, it will fully allocate storage for
+  the image at creation time. It will take a long time to do.
+  Note: thick provisioning requires zeroing the contents of the entire image.
+
+:command:`deep cp` (*src-image-spec* | *src-snap-spec*) *dest-image-spec*
+  Deep copy the content of a src-image into the newly created dest-image.
+  Dest-image will have the same size, object size, image format, and snapshots as src-image.
+
+:command:`device list` [-t | --device-type *device-type*] [--format plain | json | xml] --pretty-format
+  Show the rbd images that are mapped via the rbd kernel module
+  (default) or other supported device.
+
+:command:`device map` [-t | --device-type *device-type*] [--read-only] [--exclusive] [-o | --options *device-options*] *image-spec* | *snap-spec*
+  Map the specified image to a block device via the rbd kernel module
+  (default) or other supported device (*nbd* on Linux or *ggate* on
+  FreeBSD).
+
+  The --options argument is a comma separated list of device type
+  specific options (opt1,opt2=val,...).
+
+:command:`device unmap` [-t | --device-type *device-type*] [-o | --options *device-options*] *image-spec* | *snap-spec* | *device-path*
+  Unmap the block device that was mapped via the rbd kernel module
+  (default) or other supported device.
+
+  The --options argument is a comma separated list of device type
+  specific options (opt1,opt2=val,...).
 
 :command:`diff` [--from-snap *snap-name*] [--whole-object] *image-spec* | *snap-spec*
   Dump a list of byte extents in the image that have changed since the specified start
@@ -245,22 +311,40 @@ Commands
   This requires image format 2.
 
 :command:`group create` *group-spec*
-  Create a consistency group.
+  Create a group.
 
 :command:`group image add` *group-spec* *image-spec*
-  Add an image to a consistency group.
+  Add an image to a group.
 
 :command:`group image list` *group-spec*
-  List images in a consistency group.
+  List images in a group.
 
 :command:`group image remove` *group-spec* *image-spec*
-  Remove an image from a consistency group.
+  Remove an image from a group.
 
 :command:`group ls` [-p | --pool *pool-name*]
-  List rbd consistency groups.
+  List rbd groups.
+
+:command:`group rename` *src-group-spec* *dest-group-spec*
+  Rename a group.  Note: rename across pools is not supported.
 
 :command:`group rm` *group-spec*
-  Delete a consistency group.
+  Delete a group.
+
+:command:`group snap create` *group-snap-spec*
+  Make a snapshot of a group.
+
+:command:`group snap list` *group-spec*
+  List snapshots of a group.
+
+:command:`group snap rm` *group-snap-spec*
+  Remove a snapshot from a group.
+
+:command:`group snap rename` *group-snap-spec* *snap-name*
+  Rename group's snapshot.
+
+:command:`group snap rollback` *group-snap-spec*
+  Rollback group to snapshot.
 
 :command:`image-meta get` *image-spec* *key*
   Get metadata value with the key.
@@ -302,7 +386,7 @@ Commands
   Flag image journal client as disconnected.
 
 :command:`journal export` [--verbose] [--no-error] *src-journal-spec* *path-name*
-  Export image journal to path (use - for stdout). It can be make a bakcup
+  Export image journal to path (use - for stdout). It can be make a backup
   of the image journal especially before attempting dangerous operations.
 
   Note that this command may not always work if the journal is badly corrupted.
@@ -343,9 +427,6 @@ Commands
   -l, also show snapshots, and use longer-format output including
   size, parent (if clone), format, etc.
 
-:command:`map` [-o | --options *krbd-options* ] [--read-only] *image-spec* | *snap-spec*
-  Map the specified image to a block device via the rbd kernel module.
-
 :command:`merge-diff` *first-diff-path* *second-diff-path* *merged-diff-path*
   Merge two continuous incremental diffs of an image into one single diff. The
   first diff's end snapshot must be equal with the second diff's start snapshot.
@@ -353,6 +434,29 @@ Commands
   enables multiple diff files to be merged using something like
   'rbd merge-diff first second - | rbd merge-diff - third result'. Note this command
   currently only support the source incremental diff with stripe_count == 1
+
+:command:`migration abort` *image-spec*
+  Cancel image migration. This step may be run after successful or
+  failed migration prepare or migration execute steps and returns the
+  image to its initial (before migration) state. All modifications to
+  the destination image are lost.
+
+:command:`migration commit` *image-spec*
+  Commit image migration. This step is run after a successful migration
+  prepare and migration execute steps and removes the source image data.
+
+:command:`migration execute` *image-spec*
+  Execute image migration. This step is run after a successful migration
+  prepare step and copies image data to the destination.
+
+:command:`migration prepare` [--order *order*] [--object-size *object-size*] [--image-feature *image-feature*] [--image-shared] [--stripe-unit *stripe-unit*] [--stripe-count *stripe-count*] [--data-pool *data-pool*] *src-image-spec* [*dest-image-spec*]
+  Prepare image migration. This is the first step when migrating an
+  image, i.e. changing the image location, format or other
+  parameters that can't be changed dynamically. The destination can
+  match the source, and in this case *dest-image-spec* can be omitted.
+  After this step the source image is set as a parent of the
+  destination image, and the image is accessible in copy-on-write mode
+  by its destination spec.
 
 :command:`mirror image demote` *image-spec*
   Demote a primary image to non-primary for RBD mirroring.
@@ -433,14 +537,14 @@ Commands
 :command:`mv` *src-image-spec* *dest-image-spec*
   Rename an image.  Note: rename across pools is not supported.
 
-:command:`nbd ls`
-  Show the list of used nbd devices via the rbd-nbd tool.
+:command:`namespace create` *pool-name* *namespace-name*
+  Create a new image namespace within the pool.
 
-:command:`nbd map` [--device *device-path*] [--read-only] *image-spec* | *snap-spec*
-  Map the specified image to a block device via the rbd-nbd tool.
+:command:`namespace list` *pool-name*
+  List image namespaces defined within the pool.
 
-:command:`nbd unmap` *device-path*
-  Unmap the block device that was mapped via the rbd-nbd tool.
+:command:`namespace remove` *pool-name* *namespace-name*
+  Remove an empty image namespace from the pool.
 
 :command:`object-map check` *image-spec* | *snap-spec*
   Verify the object map is correct.
@@ -460,9 +564,6 @@ Commands
 :command:`rm` *image-spec*
   Delete an rbd image (including all data blocks). If the image has
   snapshots, this fails and nothing is deleted.
-
-:command:`showmapped`
-  Show the rbd images that are mapped via the rbd kernel module.
 
 :command:`snap create` *snap-spec*
   Create a new snapshot. Requires the snapshot name parameter specified.
@@ -487,7 +588,7 @@ Commands
   This requires image format 2.
 
 :command:`snap purge` *image-spec*
-  Remove all snapshots from an image.
+  Remove all unprotected snapshots from an image.
 
 :command:`snap rename` *src-snap-spec* *dest-snap-spec*
   Rename a snapshot. Note: rename across pools and images is not supported.
@@ -516,6 +617,9 @@ Commands
   Move an image to the trash. Images, even ones actively in-use by 
   clones, can be moved to the trash and deleted at a later time.
 
+:command:`trash purge` [*pool-name*]
+  Remove all expired images from trash.
+
 :command:`trash restore` *image-id*  
   Restore an image from trash.
 
@@ -524,27 +628,25 @@ Commands
   you can not removed it unless use force. But an actively in-use by clones 
   or has snapshots can not be removed.
 
-:command:`unmap` [-o | --options *krbd-options* ] *image-spec* | *snap-spec* | *device-path*
-  Unmap the block device that was mapped via the rbd kernel module.
-
 :command:`watch` *image-spec*
   Watch events on image.
 
 Image, snap, group and journal specs
 ====================================
 
-| *image-spec*   is [*pool-name*/]\ *image-name*
-| *snap-spec*    is [*pool-name*/]\ *image-name*\ @\ *snap-name*
-| *group-spec*   is [*pool-name*/]\ *group-name*
-| *journal-spec* is [*pool-name*/]\ *journal-name*
+| *image-spec*      is [*pool-name*/[*namespace-name*/]]\ *image-name*
+| *snap-spec*       is [*pool-name*/[*namespace-name*/]]\ *image-name*\ @\ *snap-name*
+| *group-spec*      is [*pool-name*/[*namespace-name*/]]\ *group-name*
+| *group-snap-spec* is [*pool-name*/[*namespace-name*/]]\ *group-name*\ @\ *snap-name*
+| *journal-spec*    is [*pool-name*/[*namespace-name*/]]\ *journal-name*
 
-The default for *pool-name* is "rbd".  If an image name contains a slash
-character ('/'), *pool-name* is required.
+The default for *pool-name* is "rbd" and *namespace-name* is "". If an image
+name contains a slash character ('/'), *pool-name* is required.
 
 The *journal-name* is *image-id*.
 
-You may specify each name individually, using --pool, --image and --snap
-options, but this is discouraged in favor of the above spec syntax.
+You may specify each name individually, using --pool, --namespace, --image, and
+--snap options, but this is discouraged in favor of the above spec syntax.
 
 Striping
 ========
@@ -585,7 +687,7 @@ Most of these options are useful mainly for debugging and benchmarking.  The
 default values are set in the kernel and may therefore depend on the version of
 the running kernel.
 
-Per client instance `rbd map` options:
+Per client instance `rbd device map` options:
 
 * fsid=aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee - FSID that should be assumed by
   the client.
@@ -615,16 +717,16 @@ Per client instance `rbd map` options:
 
 * nocephx_sign_messages - Disable message signing (since 4.4).
 
-* mount_timeout=x - A timeout on various steps in `rbd map` and `rbd unmap`
-  sequences (default is 60 seconds).  In particular, since 4.2 this can be used
-  to ensure that `rbd unmap` eventually times out when there is no network
-  connection to a cluster.
+* mount_timeout=x - A timeout on various steps in `rbd device map` and
+  `rbd device unmap` sequences (default is 60 seconds).  In particular,
+  since 4.2 this can be used to ensure that `rbd device unmap` eventually
+  times out when there is no network connection to a cluster.
 
 * osdkeepalive=x - OSD keepalive timeout (default is 5 seconds).
 
 * osd_idle_ttl=x - OSD idle TTL (default is 60 seconds).
 
-Per mapping (block device) `rbd map` options:
+Per mapping (block device) `rbd device map` options:
 
 * rw - Map the image read-write (default).
 
@@ -637,7 +739,26 @@ Per mapping (block device) `rbd map` options:
 
 * exclusive - Disable automatic exclusive lock transitions (since 4.12).
 
-`rbd unmap` options:
+* lock_timeout=x - A timeout on waiting for the acquisition of exclusive lock
+  (since 4.17, default is 0 seconds, meaning no timeout).
+
+* notrim - Turn off discard and write zeroes offload support to avoid
+  deprovisioning a fully provisioned image (since 4.17). When enabled, discard
+  requests will fail with -EOPNOTSUPP, write zeroes requests will fall back to
+  manually zeroing.
+
+* abort_on_full - Fail write requests with -ENOSPC when the cluster is full or
+  the data pool reaches its quota (since 5.0).  The default behaviour is to
+  block until the full condition is cleared.
+
+* alloc_size - Minimum allocation unit of the underlying OSD object store
+  backend (since 5.1, default is 64K bytes).  This is used to round off and
+  drop discards that are too small.  For bluestore, the recommended setting is
+  bluestore_min_alloc_size (typically 64K for hard disk drives and 16K for
+  solid-state drives).  For filestore with filestore_punch_hole = false, the
+  recommended setting is image object size (typically 4M).
+
+`rbd device unmap` options:
 
 * force - Force the unmapping of a block device that is open (since 4.9).  The
   driver will wait for running requests to complete and then unmap; requests
@@ -677,15 +798,15 @@ To delete a snapshot::
 
 To map an image via the kernel with cephx enabled::
 
-       rbd map mypool/myimage --id admin --keyfile secretfile
+       rbd device map mypool/myimage --id admin --keyfile secretfile
 
 To map an image via the kernel with different cluster name other than default *ceph*::
 
-       rbd map mypool/myimage --cluster cluster-name
+       rbd device map mypool/myimage --cluster cluster-name
 
 To unmap an image::
 
-       rbd unmap /dev/rbd0
+       rbd device unmap /dev/rbd0
 
 To create an image and a clone from it::
 
@@ -716,9 +837,9 @@ To list images from trash::
 
        rbd trash ls mypool
 
-To defer delete an image (use *--delay* to set delay-time, default is 0)::
+To defer delete an image (use *--expires-at* to set expiration time, default is now)::
 
-       rbd trash mv mypool/myimage
+       rbd trash mv mypool/myimage --expires-at "tomorrow"
 
 To delete an image from trash (be careful!)::
 

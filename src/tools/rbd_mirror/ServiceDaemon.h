@@ -5,7 +5,7 @@
 #define CEPH_RBD_MIRROR_SERVICE_DAEMON_H
 
 #include "common/Mutex.h"
-#include "tools/rbd_mirror/types.h"
+#include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/service_daemon/Types.h"
 #include <map>
 #include <string>

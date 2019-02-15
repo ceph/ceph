@@ -11,6 +11,7 @@
  * Foundation.  See file COPYING.
  *
  */
+#include <stdarg.h>
 
 #include "auth/Auth.h"
 #include "common/ceph_argparse.h"
@@ -200,21 +201,40 @@ void ceph_arg_value_type(const char * nextargstr, bool *bool_option, bool *bool_
   return;
 }
 
-bool parse_ip_port_vec(const char *s, vector<entity_addr_t>& vec)
+
+bool parse_ip_port_vec(const char *s, vector<entity_addrvec_t>& vec, int type)
 {
-  const char *p = s;
-  const char *end = p + strlen(p);
-  while (p < end) {
-    entity_addr_t a;
-    //cout << " parse at '" << p << "'" << std::endl;
-    if (!a.parse(p, &p)) {
-      //dout(0) << " failed to parse address '" << p << "'" << dendl;
-      return false;
+  // first split by [ ;], which are not valid for an addrvec
+  list<string> items;
+  get_str_list(s, " ;", items);
+
+  for (auto& i : items) {
+    const char *s = i.c_str();
+    while (*s) {
+      const char *end;
+
+      // try parsing as an addr
+      entity_addr_t a;
+      if (a.parse(s, &end, type)) {
+	vec.push_back(entity_addrvec_t(a));
+	s = end;
+	if (*s == ',') {
+	  ++s;
+	}
+	continue;
+      }
+
+      // ok, try parsing as an addrvec
+      entity_addrvec_t av;
+      if (!av.parse(s, &end)) {
+	return false;
+      }
+      vec.push_back(av);
+      s = end;
+      if (*s == ',') {
+	++s;
+      }
     }
-    //cout << " got " << a << ", rest is '" << p << "'" << std::endl;
-    vec.push_back(a);
-    while (*p == ',' || *p == ' ' || *p == ';')
-      p++;
   }
   return true;
 }
@@ -521,34 +541,49 @@ CephInitParameters ceph_argparse_early_args
 
 static void generic_usage(bool is_server)
 {
-  cout << "\
-  --conf/-c FILE    read configuration from the given configuration file\n\
-  --id/-i ID        set ID portion of my name\n\
-  --name/-n TYPE.ID set name\n\
-  --cluster NAME    set cluster name (default: ceph)\n\
-  --setuser USER    set uid to user or uid (and gid to user's gid)\n\
-  --setgroup GROUP  set gid to group or gid\n\
-  --version         show version and quit\n\
-" << std::endl;
+  cout <<
+    "  --conf/-c FILE    read configuration from the given configuration file" << std::endl <<
+    (is_server ?
+    "  --id/-i ID        set ID portion of my name" :
+    "  --id ID           set ID portion of my name") << std::endl <<
+    "  --name/-n TYPE.ID set name" << std::endl <<
+    "  --cluster NAME    set cluster name (default: ceph)" << std::endl <<
+    "  --setuser USER    set uid to user or uid (and gid to user's gid)" << std::endl <<
+    "  --setgroup GROUP  set gid to group or gid" << std::endl <<
+    "  --version         show version and quit" << std::endl
+    << std::endl;
 
   if (is_server) {
-    cout << "\
-  -d                run in foreground, log to stderr.\n\
-  -f                run in foreground, log to usual location.\n";
-    cout << "\
-  --debug_ms N      set message debug level (e.g. 1)\n";
+    cout <<
+      "  -d                run in foreground, log to stderr" << std::endl <<
+      "  -f                run in foreground, log to usual location" << std::endl <<
+      std::endl <<
+      "  --debug_ms N      set message debug level (e.g. 1)" << std::endl;
   }
 
   cout.flush();
 }
 
+bool ceph_argparse_need_usage(const std::vector<const char*>& args)
+{
+  if (args.empty()) {
+    return true;
+  }
+  for (auto a : args) {
+    if (strcmp(a, "-h") == 0 ||
+	strcmp(a, "--help") == 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void generic_server_usage()
 {
   generic_usage(true);
-  exit(1);
 }
+
 void generic_client_usage()
 {
   generic_usage(false);
-  exit(1);
 }

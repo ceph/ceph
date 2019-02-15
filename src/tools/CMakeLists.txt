@@ -4,9 +4,16 @@ set(rados_srcs
   rados/RadosImport.cc
   rados/PoolDump.cc
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
-  ${PROJECT_SOURCE_DIR}/src/common/obj_bencher.cc)
+  ${PROJECT_SOURCE_DIR}/src/common/obj_bencher.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc)
 add_executable(rados ${rados_srcs})
-target_link_libraries(rados librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS} radosstriper)
+
+target_link_libraries(rados librados-cxx global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
+if(WITH_LIBRADOSSTRIPER)
+  target_link_libraries(rados radosstriper)
+else()
+  target_link_libraries(rados cls_lock_client)
+endif()
 install(TARGETS rados DESTINATION bin)
 
 if(WITH_TESTS)
@@ -15,12 +22,17 @@ target_link_libraries(ceph_scratchtool librados global)
 install(TARGETS ceph_scratchtool DESTINATION bin)
 
 add_executable(ceph_scratchtoolpp scratchtoolpp.cc)
-target_link_libraries(ceph_scratchtoolpp librados global)
+target_link_libraries(ceph_scratchtoolpp librados-cxx global)
 install(TARGETS ceph_scratchtoolpp DESTINATION bin)
 
 add_executable(ceph_radosacl radosacl.cc)
-target_link_libraries(ceph_radosacl librados global)
+target_link_libraries(ceph_radosacl librados-cxx global)
 install(TARGETS ceph_radosacl DESTINATION bin)
+
+install(PROGRAMS
+  ceph-monstore-update-crush.sh
+  DESTINATION ${CMAKE_INSTALL_LIBDIR}/ceph)
+endif(WITH_TESTS)
 
 add_executable(ceph-osdomap-tool ceph_osdomap_tool.cc)
 target_link_libraries(ceph-osdomap-tool os global Boost::program_options)
@@ -31,10 +43,6 @@ add_executable(ceph-monstore-tool
   ../mgr/mgr_commands.cc)
 target_link_libraries(ceph-monstore-tool os global Boost::program_options)
 install(TARGETS ceph-monstore-tool DESTINATION bin)
-install(PROGRAMS
-  ceph-monstore-update-crush.sh
-  DESTINATION ${CMAKE_INSTALL_LIBDIR}/ceph)
-endif(WITH_TESTS)
 
 add_executable(ceph-objectstore-tool
   ceph_objectstore_tool.cc
@@ -42,7 +50,7 @@ add_executable(ceph-objectstore-tool
   RadosDump.cc)
 target_link_libraries(ceph-objectstore-tool osd os global Boost::program_options ${CMAKE_DL_LIBS})
 if(WITH_FUSE)
-  target_link_libraries(ceph-objectstore-tool fuse)
+  target_link_libraries(ceph-objectstore-tool ${FUSE_LIBRARIES})
 endif(WITH_FUSE)
 install(TARGETS ceph-objectstore-tool DESTINATION bin)
 
@@ -54,7 +62,9 @@ if(WITH_TESTS)
 endif(WITH_TESTS)
 endif(WITH_LIBCEPHFS)
 
-add_executable(ceph-kvstore-tool ceph_kvstore_tool.cc)
+add_executable(ceph-kvstore-tool
+  kvstore_tool.cc
+  ceph_kvstore_tool.cc)
 target_link_libraries(ceph-kvstore-tool os global)
 install(TARGETS ceph-kvstore-tool DESTINATION bin)
 
@@ -104,3 +114,5 @@ if(WITH_RBD)
     add_subdirectory(rbd_ggate)
   endif()
 endif(WITH_RBD)
+
+add_subdirectory(ceph-dencoder)

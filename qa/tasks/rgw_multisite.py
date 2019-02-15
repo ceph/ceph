@@ -236,7 +236,7 @@ def extract_clusters_and_gateways(ctx, role_endpoints):
     """ create cluster and gateway instances for all of the radosgw roles """
     clusters = {}
     gateways = {}
-    for role, (host, port) in role_endpoints.iteritems():
+    for role, endpoint in role_endpoints.iteritems():
         cluster_name, daemon_type, client_id = misc.split_role(role)
         # find or create the cluster by name
         cluster = clusters.get(cluster_name)
@@ -249,7 +249,8 @@ def extract_clusters_and_gateways(ctx, role_endpoints):
             raise ConfigError('no daemon for role=%s cluster=%s type=rgw id=%s' % \
                               (role, cluster_name, client_id))
         (remote,) = ctx.cluster.only(role).remotes.keys()
-        gateways[role] = Gateway(role, remote, daemon, host, port, cluster)
+        gateways[role] = Gateway(role, remote, daemon, endpoint.hostname,
+                endpoint.port, cluster)
     return clusters, gateways
 
 def create_realm(cluster, config):
@@ -407,7 +408,7 @@ def create_zone_pools(ctx, zone):
     gateway = zone.gateways[0]
     cluster = zone.cluster
     for pool_config in zone.data.get('placement_pools', []):
-        pool_name = pool_config['val']['data_pool']
+        pool_name = pool_config['val']['storage_classes']['STANDARD']['data_pool']
         if ctx.rgw.ec_data_pool:
             create_ec_pool(gateway.remote, pool_name, zone.name, 64,
                            ctx.rgw.erasure_code_profile, cluster.name, 'rgw')

@@ -16,52 +16,76 @@
 #ifndef MDS_AUTH_CAPS_H
 #define MDS_AUTH_CAPS_H
 
-#include <vector>
-#include <string>
 #include <sstream>
+#include <string>
+#include <string_view>
+#include <vector>
+
 #include "include/types.h"
 #include "common/debug.h"
 
 // unix-style capabilities
 enum {
-  MAY_READ = 1,
-  MAY_WRITE = 2,
-  MAY_EXECUTE = 4,
-  MAY_CHOWN = 16,
-  MAY_CHGRP = 32,
-  MAY_SET_VXATTR = 64,
+  MAY_READ	= (1 << 0),
+  MAY_WRITE 	= (1 << 1),
+  MAY_EXECUTE	= (1 << 2),
+  MAY_CHOWN	= (1 << 4),
+  MAY_CHGRP	= (1 << 5),
+  MAY_SET_VXATTR = (1 << 6),
+  MAY_SNAPSHOT	= (1 << 7),
 };
 
 class CephContext;
 
 // what we can do
 struct MDSCapSpec {
-  bool read, write, any;
+  static const unsigned ALL		= (1 << 0);
+  static const unsigned READ		= (1 << 1);
+  static const unsigned WRITE		= (1 << 2);
+  // if the capability permits setting vxattrs (layout, quota, etc)
+  static const unsigned SET_VXATTR	= (1 << 3);
+  // if the capability permits mksnap/rmsnap
+  static const unsigned SNAPSHOT	= (1 << 4);
 
-  // True if the capability permits setting vxattrs (layout, quota, etc)
-  bool set_vxattr;
+  static const unsigned RW		= (READ|WRITE);
+  static const unsigned RWP		= (READ|WRITE|SET_VXATTR);
+  static const unsigned RWS		= (READ|WRITE|SNAPSHOT);
+  static const unsigned RWPS		= (READ|WRITE|SET_VXATTR|SNAPSHOT);
 
-  MDSCapSpec() : read(false), write(false), any(false), set_vxattr(false) {}
-  MDSCapSpec(bool r, bool w, bool a, bool lop)
-    : read(r), write(w), any(a), set_vxattr(lop) {}
+  MDSCapSpec() = default;
+  MDSCapSpec(unsigned _caps) : caps(_caps) {
+    if (caps & ALL)
+      caps |= RWPS;
+  }
 
   bool allow_all() const {
-    return any;
+    return (caps & ALL);
+  }
+  bool allow_read() const {
+    return (caps & READ);
+  }
+  bool allow_write() const {
+    return (caps & WRITE);
   }
 
   bool allows(bool r, bool w) const {
-    if (any)
+    if (allow_all())
       return true;
-    if (r && !read)
+    if (r && !allow_read())
       return false;
-    if (w && !write)
+    if (w && !allow_write())
       return false;
     return true;
   }
 
-  bool allows_set_vxattr() const {
-    return set_vxattr;
+  bool allow_snapshot() const {
+    return (caps & SNAPSHOT);
   }
+  bool allow_set_vxattr() const {
+    return (caps & SET_VXATTR);
+  }
+private:
+  unsigned caps = 0;
 };
 
 // conditions before we are allowed to do it
@@ -74,11 +98,11 @@ struct MDSCapMatch {
 
   MDSCapMatch() : uid(MDS_AUTH_UID_ANY) {}
   MDSCapMatch(int64_t uid_, std::vector<gid_t>& gids_) : uid(uid_), gids(gids_) {}
-  explicit MDSCapMatch(std::string path_)
+  explicit MDSCapMatch(const std::string &path_)
     : uid(MDS_AUTH_UID_ANY), path(path_) {
     normalize_path();
   }
-  MDSCapMatch(std::string path_, int64_t uid_, std::vector<gid_t>& gids_)
+  MDSCapMatch(const std::string& path_, int64_t uid_, std::vector<gid_t>& gids_)
     : uid(uid_), gids(gids_), path(path_) {
     normalize_path();
   }
@@ -91,7 +115,7 @@ struct MDSCapMatch {
   }
 
   // check whether this grant matches against a given file and caller uid:gid
-  bool match(const std::string &target_path,
+  bool match(std::string_view target_path,
 	     const int caller_uid,
 	     const int caller_gid,
 	     const vector<uint64_t> *caller_gid_list) const;
@@ -102,40 +126,58 @@ struct MDSCapMatch {
    *
    * @param target_path filesystem path without leading '/'
    */
-  bool match_path(const std::string &target_path) const;
+  bool match_path(std::string_view target_path) const;
 };
 
 struct MDSCapGrant {
   MDSCapSpec spec;
   MDSCapMatch match;
 
-  MDSCapGrant(const MDSCapSpec &spec_, const MDSCapMatch &match_)
-    : spec(spec_), match(match_) {}
+  std::string network;
+
+  entity_addr_t network_parsed;
+  unsigned network_prefix = 0;
+  bool network_valid = true;
+
+  MDSCapGrant(const MDSCapSpec &spec_, const MDSCapMatch &match_,
+	      boost::optional<std::string> n)
+    : spec(spec_), match(match_) {
+    if (n) {
+      network = *n;
+      parse_network();
+    }
+  }
   MDSCapGrant() {}
+
+  void parse_network();
 };
 
 class MDSAuthCaps
 {
-  CephContext *cct;
+  CephContext *cct = nullptr;
   std::vector<MDSCapGrant> grants;
 
 public:
-  explicit MDSAuthCaps(CephContext *cct_=NULL)
-    : cct(cct_) { }
+  MDSAuthCaps() = default;
+  explicit MDSAuthCaps(CephContext *cct_) : cct(cct_) {}
 
   // this ctor is used by spirit/phoenix; doesn't need cct.
-  explicit MDSAuthCaps(const std::vector<MDSCapGrant> &grants_)
-    : cct(NULL), grants(grants_) { }
+  explicit MDSAuthCaps(const std::vector<MDSCapGrant>& grants_) : grants(grants_) {}
+
+  void clear() {
+    grants.clear();
+  }
 
   void set_allow_all();
-  bool parse(CephContext *cct, const std::string &str, std::ostream *err);
+  bool parse(CephContext *cct, std::string_view str, std::ostream *err);
 
   bool allow_all() const;
-  bool is_capable(const std::string &inode_path,
+  bool is_capable(std::string_view inode_path,
 		  uid_t inode_uid, gid_t inode_gid, unsigned inode_mode,
 		  uid_t uid, gid_t gid, const vector<uint64_t> *caller_gid_list,
-		  unsigned mask, uid_t new_uid, gid_t new_gid) const;
-  bool path_capable(const std::string &inode_path) const;
+		  unsigned mask, uid_t new_uid, gid_t new_gid,
+		  const entity_addr_t& addr) const;
+  bool path_capable(std::string_view inode_path) const;
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 };

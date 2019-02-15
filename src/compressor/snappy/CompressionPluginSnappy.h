@@ -31,7 +31,7 @@ public:
                       std::ostream *ss) override
   {
     if (compressor == 0) {
-      SnappyCompressor *interface = new SnappyCompressor();
+      SnappyCompressor *interface = new SnappyCompressor(cct);
       compressor = CompressorRef(interface);
     }
     *cs = compressor;

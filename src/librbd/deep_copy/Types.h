@@ -5,6 +5,7 @@
 #define CEPH_LIBRBD_DEEP_COPY_TYPES_H
 
 #include "include/int_types.h"
+#include "include/rados/librados.hpp"
 #include <boost/optional.hpp>
 
 namespace librbd {

@@ -3,7 +3,7 @@ Writeback Throttle
 ==================
 
 Previously, the filestore had a problem when handling large numbers of
-small ios.  We throttle dirty data implicitely via the journal, but
+small ios.  We throttle dirty data implicitly via the journal, but
 a large number of inodes can be dirtied without filling the journal
 resulting in a very long sync time when the sync finally does happen.
 The flusher was not an adequate solution to this problem since it
@@ -18,7 +18,7 @@ See src/os/WBThrottle.h, src/osd/WBThrottle.cc
 
 To track the open FDs through the writeback process, there is now an
 fdcache to cache open fds.  lfn_open now returns a cached FDRef which
-implicitely closes the fd once all references have expired.
+implicitly closes the fd once all references have expired.
 
 Filestore syncs have a sideeffect of flushing all outstanding objects
 in the wbthrottle.

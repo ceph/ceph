@@ -51,3 +51,8 @@ tasks:
       - sleep 10
       - ceph osd unset noup
 - ceph.healthy:
+      wait-for-healthy: false # only wait for osds up and pgs clean, ignore misplaced
+- exec:
+    osd.0:
+      - ceph osd in 0
+- ceph.healthy:

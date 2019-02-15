@@ -93,18 +93,18 @@ void test_obj(const string& name, const string& ns, const string& instance)
   encode_json("obj1", obj1, formatter);
 
   bufferlist bl;
-  ::encode(obj1, bl);
+  encode(obj1, bl);
 
   rgw_obj obj2;
-  ::decode(obj2, bl);
+  decode(obj2, bl);
   check_parsed_correctly(obj2, name, ns, instance);
 
   encode_json("obj2", obj2, formatter);
 
   rgw_obj obj3(o);
   bufferlist bl3;
-  ::encode(obj3, bl3);
-  ::decode(obj3, bl3);
+  encode(obj3, bl3);
+  decode(obj3, bl3);
   encode_json("obj3", obj3, formatter);
 
   if (!instance.empty()) {
@@ -200,7 +200,7 @@ TEST(TestRGWObj, obj_to_raw) {
   for (auto name : { "myobj", "_myobj", "_myobj_"}) {
     for (auto inst : { "", "inst"}) {
       for (auto ns : { "", "ns"}) {
-        test_obj_to_raw(env, b, name, inst, ns, env.zonegroup.default_placement);
+        test_obj_to_raw(env, b, name, inst, ns, env.zonegroup.default_placement.name);
         test_obj_to_raw(env, eb, name, inst, ns, string());
       }
     }
@@ -227,17 +227,17 @@ TEST(TestRGWObj, old_to_raw) {
 
         bufferlist bl;
 
-        ::encode(old, bl);
+        encode(old, bl);
 
         rgw_obj new_obj;
         rgw_raw_obj raw_obj;
 
         try {
-          bufferlist::iterator iter = bl.begin();
-          ::decode(new_obj, iter);
+          auto iter = bl.cbegin();
+          decode(new_obj, iter);
 
           iter = bl.begin();
-          ::decode(raw_obj, iter);
+          decode(raw_obj, iter);
         } catch (buffer::error& err) {
           ASSERT_TRUE(false);
         }
@@ -247,15 +247,15 @@ TEST(TestRGWObj, old_to_raw) {
         rgw_obj new_obj2;
         rgw_raw_obj raw_obj2;
 
-        ::encode(new_obj, bl);
+        encode(new_obj, bl);
 
         dump(f, "raw_obj", raw_obj);
         dump(f, "new_obj", new_obj);
         cout << "raw=" << raw_obj << std::endl;
 
         try {
-          bufferlist::iterator iter = bl.begin();
-          ::decode(new_obj2, iter);
+          auto iter = bl.cbegin();
+          decode(new_obj2, iter);
 
           /*
             can't decode raw obj here, because we didn't encode an old versioned
@@ -263,9 +263,9 @@ TEST(TestRGWObj, old_to_raw) {
            */
 
           bl.clear();
-          ::encode(raw_obj, bl);
+          encode(raw_obj, bl);
           iter = bl.begin();
-          ::decode(raw_obj2, iter);
+          decode(raw_obj2, iter);
         } catch (buffer::error& err) {
           ASSERT_TRUE(false);
         }

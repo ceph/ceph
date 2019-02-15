@@ -1,0 +1,47 @@
+<cd-iscsi-tabs></cd-iscsi-tabs>
+
+<cd-info-panel *ngIf="available === false"
+               title="iSCSI Targets not available"
+               i18n-title>
+  <ng-container i18n>Please consult the <a href="{{docsUrl}}"
+       target="_blank">documentation</a>
+    on how to configure and enable the iSCSI Targets management functionality.</ng-container>
+
+  <ng-container *ngIf="status">
+    <br>
+    <span i18n>Available information:</span>
+    <pre>{{ status }}</pre>
+  </ng-container>
+</cd-info-panel>
+
+<cd-table #table
+          *ngIf="available === true"
+          [data]="targets"
+          columnMode="flex"
+          [columns]="columns"
+          identifier="target_iqn"
+          forceIdentifier="true"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)">
+  <div class="table-actions btn-toolbar">
+    <cd-table-actions class="btn-group"
+                      [permission]="permissions.iscsi"
+                      [selection]="selection"
+                      [tableActions]="tableActions">
+    </cd-table-actions>
+
+    <button class="btn btn-sm btn-default btn-label"
+            type="button"
+            (click)="configureDiscoveryAuth()">
+      <i class="fa fa-fw fa-key-modern"
+         aria-hidden="true">
+      </i>
+      <ng-container i18n>Set discovery authentication</ng-container>
+    </button>
+  </div>
+
+  <cd-iscsi-target-details cdTableDetail
+                           *ngIf="selection.hasSingleSelection"
+                           [selection]="selection"
+                           [settings]="settings"></cd-iscsi-target-details>
+</cd-table>

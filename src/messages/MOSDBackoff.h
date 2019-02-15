@@ -19,8 +19,10 @@
 #include "MOSDFastDispatchOp.h"
 #include "osd/osd_types.h"
 
-class MOSDBackoff : public MOSDFastDispatchOp {
+class MOSDBackoff : public MessageInstance<MOSDBackoff, MOSDFastDispatchOp> {
 public:
+  friend factory;
+
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -38,10 +40,10 @@ public:
   }
 
   MOSDBackoff()
-    : MOSDFastDispatchOp(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION) {}
+    : MessageInstance(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION) {}
   MOSDBackoff(spg_t pgid_, epoch_t ep, uint8_t op_, uint64_t id_,
 	      hobject_t begin_, hobject_t end_)
-    : MOSDFastDispatchOp(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(CEPH_MSG_OSD_BACKOFF, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid_),
       map_epoch(ep),
       op(op_),
@@ -50,25 +52,26 @@ public:
       end(end_) { }
 
   void encode_payload(uint64_t features) override {
-    ::encode(pgid, payload);
-    ::encode(map_epoch, payload);
-    ::encode(op, payload);
-    ::encode(id, payload);
-    ::encode(begin, payload);
-    ::encode(end, payload);
+    using ceph::encode;
+    encode(pgid, payload);
+    encode(map_epoch, payload);
+    encode(op, payload);
+    encode(id, payload);
+    encode(begin, payload);
+    encode(end, payload);
   }
 
   void decode_payload() override {
-    auto p = payload.begin();
-    ::decode(pgid, p);
-    ::decode(map_epoch, p);
-    ::decode(op, p);
-    ::decode(id, p);
-    ::decode(begin, p);
-    ::decode(end, p);
+    auto p = payload.cbegin();
+    decode(pgid, p);
+    decode(map_epoch, p);
+    decode(op, p);
+    decode(id, p);
+    decode(begin, p);
+    decode(end, p);
   }
 
-  const char *get_type_name() const override { return "osd_backoff"; }
+  std::string_view get_type_name() const override { return "osd_backoff"; }
 
   void print(ostream& out) const override {
     out << "osd_backoff(" << pgid << " " << ceph_osd_backoff_op_name(op)

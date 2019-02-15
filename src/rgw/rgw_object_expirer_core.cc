@@ -29,8 +29,9 @@
 #include "rgw_log.h"
 #include "rgw_formats.h"
 #include "rgw_usage.h"
-#include "rgw_replica_log.h"
 #include "rgw_object_expirer_core.h"
+
+#include "services/svc_sys_obj.h"
 
 #include "cls/lock/cls_lock_client.h"
 
@@ -44,7 +45,7 @@ int RGWObjectExpirer::init_bucket_info(const string& tenant_name,
                                        const string& bucket_id,
                                        RGWBucketInfo& bucket_info)
 {
-  RGWObjectCtx obj_ctx(store);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
   /*
    * XXX Here's where it gets tricky. We went to all the trouble of

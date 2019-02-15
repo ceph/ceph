@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <list>
 #include <map>
 #include <string>
@@ -28,6 +31,7 @@ map<string, int> operator_map = {
   { "<",   3 },
   { "<=",  3 },
   { "==",  3 },
+  { "!=",  3 },
   { ">=",  3 },
   { ">",   3 },
 };
@@ -127,7 +131,7 @@ class ESQueryNode_Bool : public ESQueryNode {
   ESQueryNode *first{nullptr};
   ESQueryNode *second{nullptr};
 public:
-  ESQueryNode_Bool(ESQueryCompiler *compiler) : ESQueryNode(compiler) {}
+  explicit ESQueryNode_Bool(ESQueryCompiler *compiler) : ESQueryNode(compiler) {}
   ESQueryNode_Bool(ESQueryCompiler *compiler, const string& _op, ESQueryNode *_first, ESQueryNode *_second) :ESQueryNode(compiler), op(_op), first(_first), second(_second) {}
   bool init(ESQueryStack *s, ESQueryNode **pnode, string *perr) override {
     bool valid = s->pop(&op);
@@ -148,7 +152,7 @@ public:
     delete second;
   }
 
-  void dump(Formatter *f) const {
+  void dump(Formatter *f) const override {
     f->open_object_section("bool");
     const char *section = (op == "and" ? "must" : "should");
     f->open_array_section(section);
@@ -177,7 +181,7 @@ public:
     val = str_val;
     return true;
   }
-  void encode_json(const string& field, Formatter *f) const {
+  void encode_json(const string& field, Formatter *f) const override {
     ::encode_json(field.c_str(), val.c_str(), f);
   }
 };
@@ -195,7 +199,7 @@ public:
     }
     return true;
   }
-  void encode_json(const string& field, Formatter *f) const {
+  void encode_json(const string& field, Formatter *f) const override {
     ::encode_json(field.c_str(), val, f);
   }
 };
@@ -211,7 +215,7 @@ public:
     }
     return true;
   }
-  void encode_json(const string& field, Formatter *f) const {
+  void encode_json(const string& field, Formatter *f) const override {
     string s;
     rgw_to_iso8601(val, &s);
     ::encode_json(field.c_str(), s, f);
@@ -274,12 +278,12 @@ public:
     allow_restricted = allow;
   }
 
-  virtual void dump(Formatter *f) const = 0;
+  virtual void dump(Formatter *f) const override = 0;
 };
 
 class ESQueryNode_Op_Equal : public ESQueryNode_Op {
 public:
-  ESQueryNode_Op_Equal(ESQueryCompiler *compiler) : ESQueryNode_Op(compiler) {}
+  explicit ESQueryNode_Op_Equal(ESQueryCompiler *compiler) : ESQueryNode_Op(compiler) {}
   ESQueryNode_Op_Equal(ESQueryCompiler *compiler, const string& f, const string& v) : ESQueryNode_Op(compiler) {
     op = "==";
     field = f;
@@ -293,9 +297,36 @@ public:
     return do_init(pnode, perr);
   }
 
-  virtual void dump(Formatter *f) const {
+  virtual void dump(Formatter *f) const override {
     f->open_object_section("term");
     val->encode_json(field, f);
+    f->close_section();
+  }
+};
+
+class ESQueryNode_Op_NotEqual : public ESQueryNode_Op {
+public:
+  explicit ESQueryNode_Op_NotEqual(ESQueryCompiler *compiler) : ESQueryNode_Op(compiler) {}
+  ESQueryNode_Op_NotEqual(ESQueryCompiler *compiler, const string& f, const string& v) : ESQueryNode_Op(compiler) {
+    op = "!=";
+    field = f;
+    str_val = v;
+  }
+
+  bool init(ESQueryStack *s, ESQueryNode **pnode, string *perr) override {
+    if (op.empty()) {
+      return ESQueryNode_Op::init(s, pnode, perr);
+    }
+    return do_init(pnode, perr);
+  }
+
+  virtual void dump(Formatter *f) const override {
+    f->open_object_section("bool");
+    f->open_object_section("must_not");
+    f->open_object_section("term");
+    val->encode_json(field, f);
+    f->close_section();
+    f->close_section();
     f->close_section();
   }
 };
@@ -305,7 +336,7 @@ class ESQueryNode_Op_Range : public ESQueryNode_Op {
 public:
   ESQueryNode_Op_Range(ESQueryCompiler *compiler, const string& rs) : ESQueryNode_Op(compiler), range_str(rs) {}
 
-  virtual void dump(Formatter *f) const {
+  virtual void dump(Formatter *f) const override {
     f->open_object_section("range");
     f->open_object_section(field.c_str());
     val->encode_json(range_str, f);
@@ -332,7 +363,7 @@ public:
     delete next;
   }
 
-  virtual void dump(Formatter *f) const {
+  virtual void dump(Formatter *f) const override {
     f->open_object_section("nested");
     string s = string("meta.custom-") + type_str();
     encode_json("path", s.c_str(), f);
@@ -353,7 +384,7 @@ public:
   }
 
   string type_str() const;
-  string get_custom_leaf_field_name() {
+  string get_custom_leaf_field_name() override {
     return string("meta.custom-") + type_str() + ".value";
   }
 };
@@ -437,6 +468,8 @@ static bool alloc_node(ESQueryCompiler *compiler, ESQueryStack *s, ESQueryNode *
     node = new ESQueryNode_Bool(compiler);
   } else if (op == "==") {
     node = new ESQueryNode_Op_Equal(compiler);
+  } else if (op == "!=") {
+    node = new ESQueryNode_Op_NotEqual(compiler);
   } else {
     static map<string, string> range_op_map = {
       { "<", "lt"},
@@ -469,6 +502,7 @@ bool is_key_char(char c)
     case ')':
     case '<':
     case '>':
+    case '!':
     case '@':
     case ',':
     case ';':
@@ -492,6 +526,7 @@ bool is_key_char(char c)
 static bool is_op_char(char c)
 {
   switch (c) {
+    case '!':
     case '<':
     case '=':
     case '>':
@@ -533,7 +568,7 @@ bool ESInfixQueryParser::parse_condition() {
    * condition: <key> <operator> <val>
    *
    * whereas key: needs to conform to http header field restrictions
-   *         operator: one of the following: < <= == >= >
+   *         operator: one of the following: < <= == != >= >
    *         val: ascii, terminated by either space or ')' (or end of string)
    */
 

@@ -37,7 +37,7 @@ automatically replace laggy daemons with standbys if any are available.
 Message: insufficient standby daemons available
 Description: One or more file systems are configured to have a certain number
 of standby daemons available (including daemons in standby-replay) but the
-cluster does not have enough standby daemons. The standby deamons not in replay
+cluster does not have enough standby daemons. The standby daemons not in replay
 count towards any file system (i.e. they may overlap). This warning can
 configured by setting ``ceph fs set <fs> standby_count_wanted <count>``.  Use
 zero for ``count`` to disable.
@@ -79,8 +79,10 @@ its cache (to stay within ``mds_cache_size`` or ``mds_cache_memory_limit``), it
 sends messages to clients to shrink their caches too.  If the client is
 unresponsive or buggy, this can prevent the MDS from properly staying within
 its cache limits and it may eventually run out of memory and crash.  This
-message appears if a client has taken more than ``mds_recall_state_timeout``
-(default 60s) to comply.
+message appears if a client has failed to release more than
+``mds_recall_warning_threshold`` capabilities (decaying with a half-life of
+``mds_recall_max_decay_rate``) within the last
+``mds_recall_warning_decay_rate`` second.
 
 Message: "Client *name* failing to advance its oldest client/flush tid"
 Code: MDS_HEALTH_CLIENT_OLDEST_TID, MDS_HEALTH_CLIENT_OLDEST_TID_MANY

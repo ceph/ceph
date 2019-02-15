@@ -12,7 +12,7 @@
 #include "rgw_op.h"
 #include "rgw_rest.h"
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "common/WorkQueue.h"
 #include "common/Throttle.h"
@@ -27,6 +27,10 @@
 #define dout_context g_ceph_context
 
 extern void signal_shutdown();
+
+namespace rgw::dmclock {
+  class Scheduler;
+}
 
 struct RGWProcessEnv {
   RGWRados *store;
@@ -98,7 +102,7 @@ protected:
     void _dump_queue();
 
     void _clear() override {
-      assert(process->m_req_queue.empty());
+      ceph_assert(process->m_req_queue.empty());
     }
   } req_wq;
 
@@ -117,8 +121,8 @@ public:
       conf(conf),
       sock_fd(-1),
       uri_prefix(pe->uri_prefix),
-      req_wq(this, g_conf->rgw_op_thread_timeout,
-	     g_conf->rgw_op_thread_suicide_timeout, &m_tp) {
+      req_wq(this, g_conf()->rgw_op_thread_timeout,
+	     g_conf()->rgw_op_thread_suicide_timeout, &m_tp) {
   }
   
   virtual ~RGWProcess() = default;
@@ -166,7 +170,7 @@ public:
 class RGWProcessControlThread : public Thread {
   RGWProcess *pprocess;
 public:
-  RGWProcessControlThread(RGWProcess *_pprocess) : pprocess(_pprocess) {}
+  explicit RGWProcessControlThread(RGWProcess *_pprocess) : pprocess(_pprocess) {}
 
   void *entry() override {
     pprocess->run();
@@ -188,7 +192,6 @@ public:
 
   void set_access_key(RGWAccessKey& key) { access_key = key; }
 };
-
 /* process stream request */
 extern int process_request(RGWRados* store,
                            RGWREST* rest,
@@ -197,6 +200,8 @@ extern int process_request(RGWRados* store,
                            const rgw_auth_registry_t& auth_registry,
                            RGWRestfulIO* client_io,
                            OpsLogSocket* olog,
+                           optional_yield y,
+                           rgw::dmclock::Scheduler *scheduler,
                            int* http_ret = nullptr);
 
 extern int rgw_process_authenticated(RGWHandler_REST* handler,

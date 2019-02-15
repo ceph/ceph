@@ -44,7 +44,8 @@ int wait_for_healthy(rados_t *cluster)
     rados_buffer_free(outbuf);
 
     json_spirit::mValue root;
-    assert(json_spirit::read(out, root));
+    [[maybe_unused]] bool json_parse_success = json_spirit::read(out, root);
+    ceph_assert(json_parse_success);
     json_spirit::mObject root_obj = root.get_obj();
     json_spirit::mObject pgmap = root_obj["pgmap"].get_obj();
     json_spirit::mArray pgs_by_state = pgmap["pgs_by_state"].get_array();
@@ -101,34 +102,65 @@ int rados_pool_set(
   return ret;
 }
 
+struct pool_op_error : std::exception {
+  string msg;
+  pool_op_error(const std::string& pool_name,
+		const std::string& func_name,
+		int err) {
+    std::ostringstream oss;
+    oss << func_name << "(" << pool_name << ") failed with error " << err;
+    msg = oss.str();
+  }
+  const char* what() const noexcept override {
+    return msg.c_str();
+  }
+};
+
+template<typename Func>
+std::string with_healthy_cluster(rados_t* cluster,
+				 const std::string& pool_name,
+				 Func&& func)
+{
+  try {
+    // Wait for 'creating/backfilling' to clear
+    if (int r = wait_for_healthy(cluster); r != 0) {
+      throw pool_op_error{pool_name, "wait_for_healthy", r};
+    }
+    func();
+    // Wait for 'creating/backfilling' to clear
+    if (int r = wait_for_healthy(cluster); r != 0) {
+      throw pool_op_error{pool_name, "wait_for_healthy", r};
+    }
+  } catch (const pool_op_error& e) {
+    rados_shutdown(*cluster);
+    return e.what();
+  }
+  return "";
+}
 }
 
 std::string set_pg_num(
     rados_t *cluster, const std::string &pool_name, uint32_t pg_num)
 {
-  // Wait for 'creating' to clear
-  int r = wait_for_healthy(cluster);
-  if (r != 0) {
-    goto err;
-  }
+  return with_healthy_cluster(cluster, pool_name, [&] {
+    // Adjust pg_num
+      if (int r = rados_pool_set(cluster, pool_name, "pg_num",
+				 stringify(pg_num));
+	  r != 0) {
+	throw pool_op_error{pool_name, "set_pg_num", r};
+      }
+  });
+}
 
-  // Adjust pg_num
-  r = rados_pool_set(cluster, pool_name, "pg_num", stringify(pg_num));
-  if (r != 0) {
-    goto err;
-  }
-
-  // Wait for 'creating' to clear
-  r = wait_for_healthy(cluster);
-  if (r != 0) {
-    goto err;
-  }
-
-  return "";
-
-err:
-  rados_shutdown(*cluster);
-  std::ostringstream oss;
-  oss << __func__ << "(" << pool_name << ") failed with error " << r;
-  return oss.str();
+std::string set_pgp_num(
+    rados_t *cluster, const std::string &pool_name, uint32_t pgp_num)
+{
+  return with_healthy_cluster(cluster, pool_name, [&] {
+    // Adjust pgp_num
+    if (int r = rados_pool_set(cluster, pool_name, "pgp_num",
+			       stringify(pgp_num));
+	r != 0) {
+      throw pool_op_error{pool_name, "set_pgp_num", r};
+    }
+  });
 }

@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include <errno.h>
 #include <stdlib.h>
 
@@ -6,6 +9,8 @@
 #include "rgw_torrent.h"
 #include "include/str_list.h"
 #include "include/rados/librados.hpp"
+
+#include "services/svc_sys_obj.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -58,27 +63,21 @@ int seed::get_torrent_file(RGWRados::Object::Read &read_op,
   }
 
   string oid, key;
-  map<string, bufferlist> m;
-  set<string> obj_key;
   get_obj_bucket_and_oid_loc(obj, oid, key);
-  ldout(s->cct, 0) << "NOTICE: head obj oid= " << oid << dendl;
+  ldout(s->cct, 20) << "NOTICE: head obj oid= " << oid << dendl;
 
-  obj_key.insert(RGW_OBJ_TORRENT);
-  const int op_ret = read_op.state.io_ctx.omap_get_vals_by_keys(oid, obj_key, &m);
-  if (op_ret < 0)
-  {
-    ldout(s->cct, 0) << "ERROR: failed to omap_get_vals_by_keys op_ret = "
-                     << op_ret << dendl;
-    return op_ret;
+  const set<string> obj_key{RGW_OBJ_TORRENT};
+  map<string, bufferlist> m;
+  const int r = read_op.state.cur_ioctx->omap_get_vals_by_keys(oid, obj_key, &m);
+  if (r < 0) {
+    ldout(s->cct, 0) << "ERROR: omap_get_vals_by_keys failed: " << r << dendl;
+    return r;
   }
-
-  map<string, bufferlist>::iterator iter;
-  for (iter = m.begin(); iter != m.end(); ++iter)
-  {
-    bufferlist bl_tmp = iter->second;
-    char *pbuff = bl_tmp.c_str();
-    bl.append(pbuff, bl_tmp.length());
+  if (m.size() != 1) {
+    ldout(s->cct, 0) << "ERROR: omap key " RGW_OBJ_TORRENT " not found" << dendl;
+    return -EINVAL;
   }
+  bl.append(std::move(m.begin()->second));
   dencode.bencode_end(bl);
 
   bl_data = bl;
@@ -156,8 +155,8 @@ void seed::sha1(SHA1 *h, bufferlist &bl, off_t bl_len)
   for (off_t i = 0; i < num; i++)
   {
     memset(sha, 0x00, sizeof(sha));
-    h->Update((::byte *)pstr, info.piece_length);
-    h->Final((::byte *)sha);
+    h->Update((unsigned char *)pstr, info.piece_length);
+    h->Final((unsigned char *)sha);
     set_info_pieces(sha);
     pstr += info.piece_length;
   }
@@ -166,8 +165,8 @@ void seed::sha1(SHA1 *h, bufferlist &bl, off_t bl_len)
   if (0 != remain)
   {
     memset(sha, 0x00, sizeof(sha));
-    h->Update((::byte *)pstr, remain);
-    h->Final((::byte *)sha);
+    h->Update((unsigned char *)pstr, remain);
+    h->Final((unsigned char *)sha);
     set_info_pieces(sha);
   }
 }
@@ -175,12 +174,12 @@ void seed::sha1(SHA1 *h, bufferlist &bl, off_t bl_len)
 int seed::get_params()
 {
   is_torrent = true;
-  info.piece_length = g_conf->rgw_torrent_sha_unit;
-  create_by = g_conf->rgw_torrent_createby;
-  encoding = g_conf->rgw_torrent_encoding;
-  origin = g_conf->rgw_torrent_origin;
-  comment = g_conf->rgw_torrent_comment;
-  announce = g_conf->rgw_torrent_tracker;
+  info.piece_length = g_conf()->rgw_torrent_sha_unit;
+  create_by = g_conf()->rgw_torrent_createby;
+  encoding = g_conf()->rgw_torrent_encoding;
+  origin = g_conf()->rgw_torrent_origin;
+  comment = g_conf()->rgw_torrent_comment;
+  announce = g_conf()->rgw_torrent_tracker;
 
   /* tracker and tracker list is empty, set announce to origin */
   if (announce.empty() && !origin.empty())
@@ -248,7 +247,10 @@ int seed::save_torrent_file()
   rgw_raw_obj raw_obj;
   store->obj_to_raw(s->bucket_info.placement_rule, obj, &raw_obj);
 
-  op_ret = store->omap_set(raw_obj, key, bl);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(raw_obj);
+
+  op_ret = sysobj.omap().set(key, bl);
   if (op_ret < 0)
   {
     ldout(s->cct, 0) << "ERROR: failed to omap_set() op_ret = " << op_ret << dendl;

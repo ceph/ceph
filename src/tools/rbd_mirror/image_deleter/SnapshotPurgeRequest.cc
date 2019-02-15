@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "tools/rbd_mirror/image_deleter/SnapshotPurgeRequest.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "librbd/ExclusiveLock.h"
 #include "librbd/ImageCtx.h"
@@ -41,7 +42,7 @@ void SnapshotPurgeRequest<I>::open_image() {
   Context *ctx = create_context_callback<
     SnapshotPurgeRequest<I>, &SnapshotPurgeRequest<I>::handle_open_image>(
       this);
-  m_image_ctx->state->open(true, ctx);
+  m_image_ctx->state->open(librbd::OPEN_FLAG_SKIP_OPEN_PARENT, ctx);
 }
 
 template <typename I>
@@ -150,10 +151,10 @@ void SnapshotPurgeRequest<I>::snap_unprotect() {
            << "snap_namespace=" << m_snap_namespace << ", "
            << "snap_name=" << m_snap_name << dendl;
 
-  auto finish_op_ctx = start_lock_op();
+  auto finish_op_ctx = start_lock_op(&r);
   if (finish_op_ctx == nullptr) {
     derr << "lost exclusive lock" << dendl;
-    m_ret_val = -EROFS;
+    m_ret_val = r;
     close_image();
     return;
   }
@@ -204,10 +205,11 @@ void SnapshotPurgeRequest<I>::snap_remove() {
            << "snap_namespace=" << m_snap_namespace << ", "
            << "snap_name=" << m_snap_name << dendl;
 
-  auto finish_op_ctx = start_lock_op();
+  int r;
+  auto finish_op_ctx = start_lock_op(&r);
   if (finish_op_ctx == nullptr) {
     derr << "lost exclusive lock" << dendl;
-    m_ret_val = -EROFS;
+    m_ret_val = r;
     close_image();
     return;
   }
@@ -225,7 +227,12 @@ template <typename I>
 void SnapshotPurgeRequest<I>::handle_snap_remove(int r) {
   dout(10) << "r=" << r << dendl;
 
-  if (r < 0) {
+  if (r == -EBUSY) {
+    dout(10) << "snapshot in-use" << dendl;
+    m_ret_val = r;
+    close_image();
+    return;
+  } else if (r < 0) {
     derr << "failed to remove snapshot: " << cpp_strerror(r) << dendl;
     m_ret_val = r;
     close_image();
@@ -271,9 +278,9 @@ void SnapshotPurgeRequest<I>::finish(int r) {
 }
 
 template <typename I>
-Context *SnapshotPurgeRequest<I>::start_lock_op() {
+Context *SnapshotPurgeRequest<I>::start_lock_op(int* r) {
   RWLock::RLocker owner_locker(m_image_ctx->owner_lock);
-  return m_image_ctx->exclusive_lock->start_op();
+  return m_image_ctx->exclusive_lock->start_op(r);
 }
 
 } // namespace image_deleter

@@ -115,7 +115,7 @@ static int test_coverage_replay(cls_method_context_t hctx, bufferlist *in, buffe
   return 0;
 }
 
-void __cls_init()
+CLS_INIT(sdk)
 {
   CLS_LOG(0, "loading cls_sdk");
 

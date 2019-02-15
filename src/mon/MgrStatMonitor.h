@@ -13,10 +13,12 @@ class MgrStatMonitor : public PaxosService {
   version_t version = 0;
   PGMapDigest digest;
   ServiceMap service_map;
+  std::map<std::string,ProgressEvent> progress_events;
 
   // pending commit
   PGMapDigest pending_digest;
   health_check_map_t pending_health_checks;
+  std::map<std::string,ProgressEvent> pending_progress_events;
   bufferlist pending_service_map_bl;
 
 public:
@@ -64,6 +66,10 @@ public:
     return service_map;
   }
 
+  const std::map<std::string,ProgressEvent>& get_progress_events() {
+    return progress_events;
+  }
+
   // pg stat access
   const pool_stat_t* get_pool_stat(int64_t poolid) const {
     auto i = digest.pg_pool_sum.find(poolid);
@@ -89,10 +95,10 @@ public:
     digest.dump(f);
     f->dump_object("servicemap", get_service_map());
   }
-  void dump_fs_stats(stringstream *ss,
+  void dump_cluster_stats(stringstream *ss,
 		     Formatter *f,
 		     bool verbose) const {
-    digest.dump_fs_stats(ss, f, verbose);
+    digest.dump_cluster_stats(ss, f, verbose);
   }
   void dump_pool_stats(const OSDMap& osdm, stringstream *ss, Formatter *f,
 		       bool verbose) const {

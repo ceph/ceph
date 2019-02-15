@@ -18,23 +18,20 @@
 #include "common/LogClient.h"
 #include "mgr/Gil.h"
 
+#include "PyModule.h"
+
 /**
  * Implement the pattern of calling serve() on a module in a thread,
  * until shutdown() is called.
  */
 class PyModuleRunner
 {
+public:
+  // Info about the module we're going to run
+  PyModuleRef py_module;
+
 protected:
-  const std::string module_name;
-
-  // Passed in by whoever loaded our python module and looked up
-  // the symbols in it.
-  PyObject *pClass = nullptr;
-
-  // Passed in by whoever created our subinterpreter for us
-  SafeThreadState pMyThreadState = nullptr;
-
-  // Populated when we construct our instance of pClass in load()
+  // Populated by descendent class
   PyObject *pClassInstance = nullptr;
 
   LogChannelRef clog;
@@ -44,38 +41,44 @@ protected:
     PyModuleRunner *mod;
 
   public:
-    PyModuleRunnerThread(PyModuleRunner *mod_)
+    explicit PyModuleRunnerThread(PyModuleRunner *mod_)
       : mod(mod_) {}
 
     void *entry() override;
   };
+
+  std::string thread_name;
 
 public:
   int serve();
   void shutdown();
   void log(int level, const std::string &record);
 
+  const char *get_thread_name() const
+  {
+    return thread_name.c_str();
+  }
+
   PyModuleRunner(
-      const std::string &module_name_,
-      PyObject *pClass_,
-      const SafeThreadState &pMyThreadState_,
+      const PyModuleRef &py_module_,
       LogChannelRef clog_)
     : 
-      module_name(module_name_),
-      pClass(pClass_), pMyThreadState(pMyThreadState_),
+      py_module(py_module_),
       clog(clog_),
       thread(this)
   {
-    assert(pClass != nullptr);
-    assert(pMyThreadState.ts != nullptr);
-    assert(!module_name.empty());
+    // Shortened name for use as thread name, because thread names
+    // required to be <16 chars
+    thread_name = py_module->get_name().substr(0, 15);
+
+    ceph_assert(py_module != nullptr);
   }
 
   ~PyModuleRunner();
 
   PyModuleRunnerThread thread;
 
-  std::string const &get_name() const { return module_name; }
+  std::string const &get_name() const { return py_module->get_name(); }
 };
 
 

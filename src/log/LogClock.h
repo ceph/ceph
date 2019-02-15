@@ -9,7 +9,7 @@
 #include <ctime>
 #include <sys/time.h>
 
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/ceph_time.h"
 
 namespace ceph {

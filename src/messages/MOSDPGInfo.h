@@ -19,9 +19,12 @@
 #include "msg/Message.h"
 #include "osd/osd_types.h"
 
-class MOSDPGInfo : public Message {
-  static const int HEAD_VERSION = 5;
-  static const int COMPAT_VERSION = 5;
+class MOSDPGInfo : public MessageInstance<MOSDPGInfo> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 5;
+  static constexpr int COMPAT_VERSION = 5;
 
   epoch_t epoch = 0;
 
@@ -31,11 +34,11 @@ public:
   epoch_t get_epoch() const { return epoch; }
 
   MOSDPGInfo()
-    : Message(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION) {
+    : MessageInstance(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION) {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
   MOSDPGInfo(version_t mv)
-    : Message(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION),
       epoch(mv) {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
@@ -43,7 +46,7 @@ private:
   ~MOSDPGInfo() override {}
 
 public:
-  const char *get_type_name() const override { return "pg_info"; }
+  std::string_view get_type_name() const override { return "pg_info"; }
   void print(ostream& out) const override {
     out << "pg_info(";
     for (auto i = pg_list.begin();
@@ -58,13 +61,14 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(epoch, payload);
-    ::encode(pg_list, payload);
+    using ceph::encode;
+    encode(epoch, payload);
+    encode(pg_list, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(epoch, p);
-    ::decode(pg_list, p);
+    auto p = payload.cbegin();
+    decode(epoch, p);
+    decode(pg_list, p);
   }
 };
 

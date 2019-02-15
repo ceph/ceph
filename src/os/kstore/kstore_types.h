@@ -31,7 +31,7 @@ struct kstore_cnode_t {
   explicit kstore_cnode_t(int b=0) : bits(b) {}
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<kstore_cnode_t*>& o);
 };
@@ -59,7 +59,7 @@ struct kstore_onode_t {
       alloc_hint_flags(0) {}
 
   void encode(bufferlist& bl) const;
-  void decode(bufferlist::iterator& p);
+  void decode(bufferlist::const_iterator& p);
   void dump(Formatter *f) const;
   static void generate_test_instances(list<kstore_onode_t*>& o);
 };

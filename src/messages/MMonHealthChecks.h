@@ -7,18 +7,20 @@
 #include "messages/PaxosServiceMessage.h"
 #include "mon/health_check.h"
 
-struct MMonHealthChecks : public PaxosServiceMessage
-{
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+class MMonHealthChecks : public MessageInstance<MMonHealthChecks, PaxosServiceMessage> {
+public:
+  friend factory;
+
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   health_check_map_t health_checks;
 
   MMonHealthChecks()
-    : PaxosServiceMessage(MSG_MON_HEALTH_CHECKS, HEAD_VERSION, COMPAT_VERSION) {
+    : MessageInstance(MSG_MON_HEALTH_CHECKS, HEAD_VERSION, COMPAT_VERSION) {
   }
   MMonHealthChecks(health_check_map_t& m)
-    : PaxosServiceMessage(MSG_MON_HEALTH_CHECKS, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_MON_HEALTH_CHECKS, HEAD_VERSION, COMPAT_VERSION),
       health_checks(m) {
   }
 
@@ -26,20 +28,21 @@ private:
   ~MMonHealthChecks() override { }
 
 public:
-  const char *get_type_name() const override { return "mon_health_checks"; }
+  std::string_view get_type_name() const override { return "mon_health_checks"; }
   void print(ostream &o) const override {
     o << "mon_health_checks(" << health_checks.checks.size() << " checks)";
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(health_checks, p);
+    decode(health_checks, p);
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(health_checks, payload);
+    encode(health_checks, payload);
   }
 
 };

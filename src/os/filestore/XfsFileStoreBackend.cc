@@ -25,7 +25,7 @@
 
 #include "common/errno.h"
 #include "common/linux_version.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "include/compat.h"
 
 #define dout_context cct()
@@ -144,6 +144,6 @@ int XfsFileStoreBackend::set_alloc_hint(int fd, uint64_t hint)
   if (!m_has_extsize)
     return -EOPNOTSUPP;
 
-  assert(hint < UINT_MAX);
+  ceph_assert(hint < UINT_MAX);
   return set_extsize(fd, hint);
 }

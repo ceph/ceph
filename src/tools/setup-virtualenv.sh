@@ -15,10 +15,50 @@
 # GNU Library Public License for more details.
 #
 
+SCRIPTNAME="$(basename $0)"
+PYTHON_BINARY="python2.7"
+if [ `uname` == FreeBSD ]; then
+    GETOPT="/usr/local/bin/getopt"
+else
+    GETOPT=getopt
+fi
+
+function usage {
+    echo
+    echo "$SCRIPTNAME - automate setup of Python virtual environment"
+    echo "    (for use in building Ceph)"
+    echo
+    echo "Usage:"
+    echo "    $SCRIPTNAME [--python=PYTHON_BINARY] TARGET_DIRECTORY"
+    echo
+    echo "    PYTHON_BINARY defaults to \"$PYTHON_BINARY\""
+    echo "    TARGET_DIRECTORY will be created if it doesn't exist,"
+    echo "        and completely destroyed and re-created if it does!"
+    echo
+    exit 1
+}
+
+TEMP=$($GETOPT --options "h" --long "help,python:" --name "$SCRIPTNAME" -- "$@")
+test $? != 0 && usage
+eval set -- "$TEMP"
+
+while true ; do
+    case "$1" in
+        -h|--help) usage ;;  # does not return
+        --python) PYTHON_BINARY="$2" ; shift ; shift ;;
+        --) shift ; break ;;
+        *) echo "Internal error" ; exit 1 ;;
+    esac
+done
+
 DIR=$1
+if [ -z "$DIR" ] ; then
+    echo "$SCRIPTNAME: need a directory path, but none was provided"
+    usage
+fi
 rm -fr $DIR
 mkdir -p $DIR
-virtualenv --python python2.7 $DIR
+virtualenv --python $PYTHON_BINARY $DIR
 . $DIR/bin/activate
 
 if pip --help | grep -q disable-pip-version-check; then
@@ -31,9 +71,6 @@ fi
 # when using wheel packages
 pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install --upgrade 'pip >= 6.1'
 
-# workaround of https://github.com/pypa/setuptools/issues/1042
-pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install --upgrade "setuptools < 36"
-
 if pip --help | grep -q disable-pip-version-check; then
     DISABLE_PIP_VERSION_CHECK=--disable-pip-version-check
 else
@@ -44,7 +81,10 @@ if test -d wheelhouse ; then
     export NO_INDEX=--no-index
 fi
 
-pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse 'tox >=1.9'
+pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --find-links=file://$(pwd)/wheelhouse 'tox >=2.9.1'
 if test -f requirements.txt ; then
-    pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --use-wheel --find-links=file://$(pwd)/wheelhouse -r requirements.txt
+    if ! test -f wheelhouse/md5 || ! md5sum -c wheelhouse/md5 > /dev/null; then
+        NO_INDEX=''
+    fi
+    pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --find-links=file://$(pwd)/wheelhouse -r requirements.txt
 fi

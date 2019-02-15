@@ -349,7 +349,7 @@ Request Parameters
 :Required: Yes
 
 A tenant name may also specified as a part of ``uid``, by following the syntax
-``tenant$user``, refer to `Multitenancy`_ for more details.
+``tenant$user``, refer to :ref:`Multitenancy <rgw-multitenancy>` for more details.
 
 ``display-name``
 
@@ -1221,7 +1221,7 @@ Get Bucket Info
 ===============
 
 Get information about a subset of the existing buckets. If ``uid`` is specified
-without ``bucket`` then all buckets beloning to the user will be returned. If
+without ``bucket`` then all buckets belonging to the user will be returned. If
 ``bucket`` alone is specified, information for that particular bucket will be
 retrieved.
 
@@ -1862,7 +1862,8 @@ Valid parameters for quotas include:
   the maximum number of objects. A negative value disables this setting.
 
 - **Maximum Size:** The ``max-size`` option allows you to specify a quota
-  for the maximum number of bytes. A negative value disables this setting.
+  for the maximum number of bytes. The ``max-size-kb`` option allows you
+  to specify it in KiB. A negative value disables this setting.
 
 - **Quota Type:** The ``quota-type`` option sets the scope for the quota.
   The options are ``bucket`` and ``user``.
@@ -1977,7 +1978,6 @@ Binding libraries
 
 .. _Admin Guide: ../admin
 .. _Quota Management: ../admin#quota-management
-.. _Multitenancy: ./multitenancy
 .. _QuentinPerez/go-radosgw: https://github.com/QuentinPerez/go-radosgw
 .. _twonote/radosgw-admin4j: https://github.com/twonote/radosgw-admin4j
 .. _UMIACS/rgwadmin: https://github.com/UMIACS/rgwadmin

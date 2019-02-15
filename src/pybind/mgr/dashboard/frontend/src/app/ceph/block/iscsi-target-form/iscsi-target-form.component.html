@@ -1,0 +1,549 @@
+<div class="col-sm-12 col-lg-6">
+  <form name="targetForm"
+        class="form-horizontal"
+        #formDir="ngForm"
+        [formGroup]="targetForm"
+        novalidate
+        *ngIf="targetForm">
+    <div class="panel panel-default">
+      <div class="panel-heading">
+        <h3 class="panel-title"
+            i18n>{isEdit, select, 1 {Edit} other {Add}} target</h3>
+      </div>
+
+      <div class="panel-body">
+        <!-- Target IQN -->
+        <div class="form-group"
+             [ngClass]="{'has-error': targetForm.showError('target_iqn', formDir)}">
+          <label class="control-label col-sm-3"
+                 for="target_iqn">
+            <ng-container i18n>Target IQN</ng-container>
+            <span class="required"></span>
+          </label>
+          <div class="col-sm-9">
+            <div class="input-group">
+              <input class="form-control"
+                     type="text"
+                     id="target_iqn"
+                     name="target_iqn"
+                     formControlName="target_iqn" />
+              <span class="input-group-btn">
+                <button class="btn btn-default"
+                        id="ecp-info-button"
+                        type="button"
+                        (click)="targetSettingsModal()">
+                  <i class="fa fa-cogs fa-fw"
+                     aria-hidden="true"></i>
+                </button>
+              </span>
+            </div>
+
+            <span class="help-block"
+                  *ngIf="targetForm.showError('target_iqn', formDir, 'required')"
+                  i18n>This field is required.</span>
+
+            <span class="help-block"
+                  *ngIf="targetForm.showError('target_iqn', formDir, 'pattern')"
+                  i18n>IQN has wrong pattern.</span>
+
+            <span class="help-block"
+                  *ngIf="targetForm.showError('target_iqn', formDir, 'iqn')">
+              <ng-container i18n>An IQN has the following notation 'iqn.$year-$month.$reversedAddress:$definedName'</ng-container>
+              <br>
+              <ng-container i18n>For example: iqn.2016-06.org.dashboard:storage:disk.sn-a8675309</ng-container>
+              <br>
+              <a target="_blank"
+                 href="https://en.wikipedia.org/wiki/ISCSI#Addressing"
+                 i18n>More information</a>
+            </span>
+
+            <span class="help-block"
+                  *ngIf="hasAdvancedSettings(targetForm.getValue('target_controls'))"
+                  i18n>This target has modified advanced settings.</span>
+            <hr />
+          </div>
+        </div>
+
+        <!-- Portals -->
+        <div class="form-group"
+             [ngClass]="{'has-error': targetForm.showError('portals', formDir)}">
+          <label class="control-label col-sm-3"
+                 for="portals">
+            <ng-container i18n>Portals</ng-container>
+            <span class="required"></span>
+          </label>
+          <div class="col-sm-9">
+
+            <ng-container *ngFor="let portal of portals.value; let i = index">
+              <div class="input-group cd-mb">
+                <input class="form-control"
+                       type="text"
+                       [value]="portal"
+                       disabled />
+                <span class="input-group-btn">
+                  <button class="btn btn-default"
+                          type="button"
+                          (click)="removePortal(i, portal)">
+                    <i class="fa fa-remove fa-fw"
+                       aria-hidden="true"></i>
+                  </button>
+                </span>
+              </div>
+            </ng-container>
+
+            <span class="help-block"
+                  *ngIf="targetForm.showError('portals', formDir, 'minGateways')"
+                  i18n>At least {{ minimum_gateways }} gateways are required.</span>
+
+            <div class="row">
+              <div class="col-md-12">
+                <cd-select [data]="portals.value"
+                           [options]="portalsSelections"
+                           [messages]="messages.portals"
+                           (selection)="onPortalSelection($event)"
+                           elemClass="btn btn-default pull-right">
+                  <i class="fa fa-fw fa-plus"></i>
+                  <ng-container i18n>Add portal</ng-container>
+                </cd-select>
+              </div>
+            </div>
+
+            <hr />
+          </div>
+        </div>
+
+        <!-- Images -->
+        <div class="form-group"
+             [ngClass]="{'has-error': targetForm.showError('disks', formDir)}">
+          <label class="control-label col-sm-3"
+                 for="disks"
+                 i18n>Images</label>
+          <div class="col-sm-9">
+            <ng-container *ngFor="let image of targetForm.getValue('disks'); let i = index">
+              <div class="input-group cd-mb">
+                <input class="form-control"
+                       type="text"
+                       [value]="image"
+                       disabled />
+                <span class="input-group-btn">
+                  <button class="btn btn-default"
+                          type="button"
+                          (click)="imageSettingsModal(image)">
+                    <i class="fa fa-cogs fa-fw"
+                       aria-hidden="true"></i>
+                  </button>
+                  <button class="btn btn-default"
+                          type="button"
+                          (click)="removeImage(i, image)">
+                    <i class="fa fa-remove fa-fw"
+                       aria-hidden="true"></i>
+                  </button>
+                </span>
+
+              </div>
+              <span class="help-block"
+                    *ngIf="hasAdvancedSettings(imagesSettings[image])"
+                    i18n>This image has modified settings.</span>
+            </ng-container>
+
+            <span class="help-block"
+                  *ngIf="targetForm.showError('disks', formDir, 'required')"
+                  i18n>At least 1 image is required.</span>
+
+            <div class="row">
+              <div class="col-md-12">
+                <cd-select [data]="disks.value"
+                           [options]="imagesSelections"
+                           [messages]="messages.images"
+                           (selection)="onImageSelection($event)"
+                           elemClass="btn btn-default pull-right">
+                  <i class="fa fa-fw fa-plus"></i>
+                  <ng-container i18n>Add image</ng-container>
+                </cd-select>
+              </div>
+            </div>
+
+            <hr />
+          </div>
+        </div>
+
+        <!-- Initiators -->
+        <div class="form-group">
+          <label class="control-label col-sm-3"
+                 for="initiators"
+                 i18n>Initiators</label>
+          <div class="col-sm-9"
+               formArrayName="initiators">
+            <div class="panel panel-default"
+                 *ngFor="let initiator of initiators.controls; let ii = index"
+                 [formGroupName]="ii">
+              <div class="panel-heading">
+                <ng-container i18n>Initiator</ng-container>: {{ initiator.getValue('client_iqn') }}
+                <button type="button"
+                        class="close"
+                        (click)="removeInitiator(ii)">
+                  <i class="fa fa-remove fa-fw"></i>
+                </button>
+              </div>
+              <div class="panel-body">
+                <!-- Initiator: Name -->
+                <div class="form-group"
+                     [ngClass]="{'has-error': initiator.showError('client_iqn', formDir)}">
+                  <label class="control-label col-sm-3"
+                         for="client_iqn">
+                    <ng-container i18n>Client IQN</ng-container>
+                    <span class="required"></span>
+                  </label>
+                  <div class="col-sm-9">
+                    <input class="form-control"
+                           type="text"
+                           formControlName="client_iqn"
+                           (blur)="updatedInitiatorSelector()">
+
+                    <span class="help-block"
+                          *ngIf="initiator.showError('client_iqn', formDir, 'notUnique')"
+                          i18n>Initiator IQN needs to be unique.</span>
+
+                    <span class="help-block"
+                          *ngIf="initiator.showError('client_iqn', formDir, 'required')"
+                          i18n>This field is required.</span>
+
+                    <span class="help-block"
+                          *ngIf="initiator.showError('client_iqn', formDir, 'pattern')"
+                          i18n>IQN has wrong pattern.</span>
+                  </div>
+                </div>
+
+                <ng-container formGroupName="auth">
+                  <!-- Initiator: User -->
+                  <div class="form-group"
+                       [ngClass]="{'has-error': initiator.showError('user', formDir)}">
+                    <label class="control-label col-sm-3"
+                           for="user"
+                           i18n>User</label>
+                    <div class="col-sm-9">
+                      <input id="user"
+                             class="form-control"
+                             formControlName="user"
+                             type="text">
+                      <span class="help-block"
+                            *ngIf="initiator.showError('user', formDir, 'required')"
+                            i18n>This field is required.</span>
+
+                      <span class="help-block"
+                            *ngIf="initiator.showError('user', formDir, 'pattern')"
+                            i18n>Usernames must have a length of 8 to 64 characters and
+                        can only contain letters, '.', '@', '-', '_' or ':'.</span>
+                    </div>
+                  </div>
+
+                  <!-- Initiator: Password -->
+                  <div class="form-group"
+                       [ngClass]="{'has-error': initiator.showError('password', formDir)}">
+                    <label class="control-label col-sm-3"
+                           for="password"
+                           i18n>Password</label>
+                    <div class="col-sm-9">
+                      <div class="input-group">
+                        <input id="password"
+                               class="form-control"
+                               formControlName="password"
+                               type="password">
+
+                        <span class="input-group-btn">
+                          <button type="button"
+                                  class="btn btn-default"
+                                  cdPasswordButton="password">
+                          </button>
+                          <button type="button"
+                                  class="btn btn-default"
+                                  cdCopy2ClipboardButton="password">
+                          </button>
+                        </span>
+                      </div>
+                      <span class="help-block"
+                            *ngIf="initiator.showError('password', formDir, 'required')"
+                            i18n>This field is required.</span>
+
+                      <span class="help-block"
+                            *ngIf="initiator.showError('password', formDir, 'pattern')"
+                            i18n>Passwords must have a length of 12 to 16 characters
+                        and can only contain letters, '@', '-' or '_'.</span>
+                    </div>
+                  </div>
+
+
+                  <!-- Initiator: mutual_user -->
+                  <div class="form-group"
+                       [ngClass]="{'has-error': initiator.showError('mutual_user', formDir)}">
+                    <label class="control-label col-sm-3"
+                           for="mutual_user">
+                      <ng-container i18n>Mutual User</ng-container>
+                    </label>
+                    <div class="col-sm-9">
+                      <input id="mutual_user"
+                             class="form-control"
+                             formControlName="mutual_user"
+                             type="text">
+
+                      <span class="help-block"
+                            *ngIf="initiator.showError('mutual_user', formDir, 'required')"
+                            i18n>This field is required.</span>
+
+                      <span class="help-block"
+                            *ngIf="initiator.showError('mutual_user', formDir, 'pattern')"
+                            i18n>Usernames must have a length of 8 to 64 characters and
+                        can only contain letters, '.', '@', '-', '_' or ':'.</span>
+                    </div>
+                  </div>
+
+                  <!-- Initiator: mutual_password -->
+                  <div class="form-group"
+                       [ngClass]="{'has-error': initiator.showError('mutual_password', formDir)}">
+                    <label class="control-label col-sm-3"
+                           for="mutual_password"
+                           i18n>Mutual Password</label>
+                    <div class="col-sm-9">
+                      <div class="input-group">
+                        <input id="mutual_password"
+                               class="form-control"
+                               formControlName="mutual_password"
+                               type="mutual_password">
+
+                        <span class="input-group-btn">
+                          <button type="button"
+                                  class="btn btn-default"
+                                  cdPasswordButton="mutual_password">
+                          </button>
+                          <button type="button"
+                                  class="btn btn-default"
+                                  cdCopy2ClipboardButton="mutual_password">
+                          </button>
+                        </span>
+                      </div>
+                      <span class="help-block"
+                            *ngIf="initiator.showError('mutual_password', formDir, 'required')"
+                            i18n>This field is required.</span>
+
+                      <span class="help-block"
+                            *ngIf="initiator.showError('mutual_password', formDir, 'pattern')"
+                            i18n>Passwords must have a length of 12 to 16 characters and
+                        can only contain letters, '@', '-' or '_'.</span>
+                    </div>
+                  </div>
+                </ng-container>
+
+                <!-- Initiator: Images -->
+                <div class="form-group"
+                     [ngClass]="{'has-error': initiator.showError('luns', formDir)}">
+                  <label class="control-label col-sm-3"
+                         for="luns"
+                         i18n>Images</label>
+                  <div class="col-sm-9">
+                    <ng-container *ngFor="let image of initiator.getValue('luns'); let li = index">
+                      <div class="input-group cd-mb">
+                        <input class="form-control"
+                               type="text"
+                               [value]="image"
+                               disabled />
+                        <span class="input-group-btn">
+                          <button class="btn btn-default"
+                                  type="button"
+                                  (click)="removeInitiatorImage(initiator, li, ii, image)">
+                            <i class="fa fa-remove fa-fw"
+                               aria-hidden="true"></i>
+                          </button>
+                        </span>
+                      </div>
+                    </ng-container>
+
+                    <span *ngIf="initiator.getValue('cdIsInGroup')"
+                          i18n>Initiator belongs to a group. Images will be configure in the group.</span>
+
+                    <div class="row"
+                         *ngIf="!initiator.getValue('cdIsInGroup')">
+                      <div class="col-md-12">
+                        <cd-select [data]="initiator.getValue('luns')"
+                                   [options]="imagesInitiatorSelections[ii]"
+                                   [messages]="messages.initiatorImage"
+                                   elemClass="btn btn-default pull-right">
+                          <i class="fa fa-fw fa-plus"></i>
+                          <ng-container i18n>Add image</ng-container>
+                        </cd-select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-12">
+                <span class="text-muted"
+                      *ngIf="initiators.controls.length === 0"
+                      i18n>No items added.</span>
+
+                <button (click)="addInitiator(); false"
+                        class="btn btn-default pull-right">
+                  <i class="fa fa-fw fa-plus"></i>
+                  <ng-container i18n>Add initiator</ng-container>
+                </button>
+              </div>
+            </div>
+
+            <hr />
+          </div>
+        </div>
+
+        <!-- Groups -->
+        <div class="form-group"
+             [ngClass]="{'has-error': targetForm.showError('groups', formDir)}">
+          <label class="control-label col-sm-3"
+                 for="initiators"
+                 i18n>Groups</label>
+          <div class="col-sm-9"
+               formArrayName="groups">
+            <div class="panel panel-default"
+                 *ngFor="let group of groups.controls; let gi = index"
+                 [formGroupName]="gi">
+              <div class="panel-heading">
+                <ng-container i18n>Group</ng-container>: {{ group.getValue('group_id') }}
+                <button type="button"
+                        class="close"
+                        (click)="groups.removeAt(gi)">
+                  <i class="fa fa-remove fa-fw"></i>
+                </button>
+              </div>
+              <div class="panel-body">
+                <!-- Group: group_id -->
+                <div class="form-group">
+                  <label class="control-label col-sm-3"
+                         for="group_id">
+                    <ng-container i18n>Name</ng-container>
+                    <span class="required"></span>
+                  </label>
+                  <div class="col-sm-9">
+                    <input class="form-control"
+                           type="text"
+                           formControlName="group_id">
+                  </div>
+                </div>
+
+                <!-- Group: members -->
+                <div class="form-group"
+                     [ngClass]="{'has-error': group.showError('members', formDir)}">
+                  <label class="control-label col-sm-3"
+                         for="members">
+                    <ng-container i18n>Initiators</ng-container>
+                  </label>
+                  <div class="col-sm-9">
+                    <ng-container *ngFor="let member of group.getValue('members'); let i = index">
+                      <div class="input-group cd-mb">
+                        <input class="form-control"
+                               type="text"
+                               [value]="member"
+                               disabled />
+                        <span class="input-group-btn">
+                          <button class="btn btn-default"
+                                  type="button"
+                                  (click)="removeGroupInitiator(group, i, gi)">
+                            <i class="fa fa-remove fa-fw"
+                               aria-hidden="true"></i>
+                          </button>
+                        </span>
+                      </div>
+                    </ng-container>
+
+                    <div class="row">
+                      <div class="col-md-12">
+                        <cd-select [data]="group.getValue('members')"
+                                   [options]="groupMembersSelections[gi]"
+                                   [messages]="messages.groupInitiator"
+                                   (selection)="onGroupMemberSelection($event)"
+                                   elemClass="btn btn-default pull-right">
+                          <i class="fa fa-fw fa-plus"></i>
+                          <ng-container i18n>Add initiator</ng-container>
+                        </cd-select>
+                      </div>
+                    </div>
+
+                    <hr />
+                  </div>
+                </div>
+
+                <!-- Group: disks -->
+                <div class="form-group"
+                     [ngClass]="{'has-error': group.showError('disks', formDir)}">
+                  <label class="control-label col-sm-3"
+                         for="disks">
+                    <ng-container i18n>Images</ng-container>
+                  </label>
+                  <div class="col-sm-9">
+                    <ng-container *ngFor="let disk of group.getValue('disks'); let i = index">
+                      <div class="input-group cd-mb">
+                        <input class="form-control"
+                               type="text"
+                               [value]="disk"
+                               disabled />
+                        <span class="input-group-btn">
+                          <button class="btn btn-default"
+                                  type="button"
+                                  (click)="removeGroupDisk(group, i, gi)">
+                            <i class="fa fa-remove fa-fw"
+                               aria-hidden="true"></i>
+                          </button>
+                        </span>
+                      </div>
+                    </ng-container>
+
+                    <div class="row">
+                      <div class="col-md-12">
+                        <cd-select [data]="group.getValue('disks')"
+                                   [options]="groupDiskSelections[gi]"
+                                   [messages]="messages.initiatorImage"
+                                   elemClass="btn btn-default pull-right">
+                          <i class="fa fa-fw fa-plus"></i>
+                          <ng-container i18n>Add image</ng-container>
+                        </cd-select>
+                      </div>
+                    </div>
+
+                    <hr />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div class="row">
+              <div class="col-md-12">
+                <span class="text-muted"
+                      *ngIf="groups.controls.length === 0"
+                      i18n>No items added.</span>
+
+                <button (click)="addGroup(); false"
+                        class="btn btn-default pull-right">
+                  <i class="fa fa-fw fa-plus"></i>
+                  <ng-container i18n>Add group</ng-container>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <div class="panel-footer">
+        <div class="button-group text-right">
+          <cd-submit-button [form]="formDir"
+                            type="button"
+                            (submitAction)="submit()"
+                            i18n>Submit</cd-submit-button>
+
+          <button type="button"
+                  class="btn btn-sm btn-default"
+                  routerLink="/block/iscsi/targets"
+                  i18n>Back</button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>

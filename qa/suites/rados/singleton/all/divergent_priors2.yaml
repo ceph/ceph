@@ -19,9 +19,6 @@ overrides:
       - \(PG_
       - \(OBJECT_
       - \(POOL_APP_NOT_ENABLED\)
-    conf:
-      osd:
-        debug osd: 5
 
 tasks:
 - install:

@@ -17,7 +17,7 @@
  *
  *     http://www.ssrc.ucsc.edu/Papers/weil-sc06.pdf
  *
- * LGPL2
+ * LGPL2.1
  */
 
 
@@ -258,7 +258,7 @@ struct crush_weight_set {
  * When crush_do_rule() chooses the Nth item from a straw2 bucket, the
  * replacement weights found at __weight_set[N]__ are used instead of
  * the weights from __item_weights__. If __N__ is greater than
- * __weight_set_size__, the weights found at __weight_set_size-1__ are
+ * __weight_set_positions__, the weights found at __weight_set_positions-1__ are
  * used instead. For instance if __weight_set__ is:
  *
  *    [ [ 0x10000, 0x20000 ],   // position 0
@@ -274,7 +274,7 @@ struct crush_choose_arg {
   __s32 *ids;                           /*!< values to use instead of items */
   __u32 ids_size;                       /*!< size of the __ids__ array */
   struct crush_weight_set *weight_set;  /*!< weight replacements for a given position */
-  __u32 weight_set_size;                /*!< size of the __weight_set__ array */
+  __u32 weight_set_positions;           /*!< size of the __weight_set__ array */
 };
 
 /** @ingroup API

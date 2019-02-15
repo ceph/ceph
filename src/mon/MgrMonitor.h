@@ -31,6 +31,9 @@ class MgrMonitor: public PaxosService
   std::map<std::string, bufferlist> pending_metadata;
   std::set<std::string>             pending_metadata_rm;
 
+  std::map<std::string,Option> mgr_module_options;
+  std::list<std::string> misc_option_strings;
+
   utime_t first_seen_inactive;
 
   std::map<uint64_t, ceph::coarse_mono_clock::time_point> last_beacon;
@@ -57,6 +60,8 @@ class MgrMonitor: public PaxosService
   Context *digest_event = nullptr;
   void cancel_timer();
 
+  std::vector<health_check_map_t> prev_health_checks;
+
   bool check_caps(MonOpRequestRef op, const uuid_d& fsid);
 
   health_status_t should_warn_about_mgr_down();
@@ -76,13 +81,18 @@ public:
 
   const MgrMap &get_map() const { return map; }
 
+  const Option *find_module_option(const string& name);
+
   bool in_use() const { return map.epoch > 0; }
 
   version_t get_trim_to() const override;
 
+  void prime_mgr_client();
+
   void create_initial() override;
   void get_store_prefixes(std::set<string>& s) const override;
   void update_from_paxos(bool *need_bootstrap) override;
+  void post_paxos_update() override;
   void create_pending() override;
   void encode_pending(MonitorDBStore::TransactionRef t) override;
 
@@ -111,8 +121,9 @@ public:
   const std::vector<MonCommand> &get_command_descs() const;
 
   int load_metadata(const string& name, std::map<string, string>& m,
-		    ostream *err);
+		    ostream *err) const;
   int dump_metadata(const string& name, Formatter *f, ostream *err);
+  void print_nodes(Formatter *f) const;
   void count_metadata(const string& field, Formatter *f);
   void count_metadata(const string& field, std::map<string,int> *out);
 

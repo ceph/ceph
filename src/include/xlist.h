@@ -15,47 +15,51 @@
 #ifndef CEPH_XLIST_H
 #define CEPH_XLIST_H
 
-#include "include/assert.h"
 #include <iterator>
 #include <cstdlib>
 #include <ostream>
 
+#include "include/ceph_assert.h"
+
 template<typename T>
 class xlist {
 public:
-  struct item {
-    T _item;
-    item *_prev, *_next;
-    xlist *_list;
-    
-    item(T i) : _item(i), _prev(0), _next(0), _list(0) {}
+  class item {
+  public:
+    item(T i) : _item(i) {}
     ~item() { 
-      assert(!is_on_list());
-      //remove_myself();
+      ceph_assert(!is_on_list());
     }
 
     item(const item& other) = delete;
+    item(item&& other) = delete;
     const item& operator= (const item& right) = delete;
+    item& operator= (item&& right) = delete;
 
-    
     xlist* get_list() { return _list; }
     bool is_on_list() const { return _list ? true:false; }
     bool remove_myself() {
       if (_list) {
 	_list->remove(this);
-	assert(_list == 0);
+	ceph_assert(_list == 0);
 	return true;
       } else
 	return false;
     }
     void move_to_front() {
-      assert(_list);
+      ceph_assert(_list);
       _list->push_front(this);
     }
     void move_to_back() {
-      assert(_list);
+      ceph_assert(_list);
       _list->push_back(this);
     }
+
+  private:
+    friend xlist;
+    T _item;
+    item *_prev = nullptr, *_next = nullptr;
+    xlist *_list = nullptr;
   };
 
   typedef item* value_type;
@@ -74,24 +78,24 @@ public:
 
   xlist() : _front(0), _back(0), _size(0) {}
   ~xlist() { 
-    assert(_size == 0);
-    assert(_front == 0);
-    assert(_back == 0);
+    ceph_assert(_size == 0);
+    ceph_assert(_front == 0);
+    ceph_assert(_back == 0);
   }
 
   size_t size() const {
-    assert((bool)_front == (bool)_size);
+    ceph_assert((bool)_front == (bool)_size);
     return _size;
   }
   bool empty() const { 
-    assert((bool)_front == (bool)_size);
+    ceph_assert((bool)_front == (bool)_size);
     return _front == 0; 
   }
 
   void clear() {
     while (_front)
       remove(_front);
-    assert((bool)_front == (bool)_size);
+    ceph_assert((bool)_front == (bool)_size);
   }
 
   void push_front(item *i) {
@@ -123,7 +127,7 @@ public:
     _size++;
   }
   void remove(item *i) {
-    assert(i->_list == this);
+    ceph_assert(i->_list == this);
     
     if (i->_prev)
       i->_prev->_next = i->_next;
@@ -137,7 +141,7 @@ public:
 
     i->_list = 0;
     i->_next = i->_prev = 0;
-    assert((bool)_front == (bool)_size);
+    ceph_assert((bool)_front == (bool)_size);
   }
 
   T front() { return static_cast<T>(_front->_item); }
@@ -147,11 +151,11 @@ public:
   const T back() const { return static_cast<const T>(_back->_item); }
 
   void pop_front() {
-    assert(!empty());
+    ceph_assert(!empty());
     remove(_front);
   }
   void pop_back() {
-    assert(!empty());
+    ceph_assert(!empty());
     remove(_back);
   }
 
@@ -162,8 +166,8 @@ public:
     iterator(item *i = 0) : cur(i) {}
     T operator*() { return static_cast<T>(cur->_item); }
     iterator& operator++() {
-      assert(cur);
-      assert(cur->_list);
+      ceph_assert(cur);
+      ceph_assert(cur->_list);
       cur = cur->_next;
       return *this;
     }
@@ -186,8 +190,8 @@ public:
     const_iterator(item *i = 0) : cur(i) {}
     const T operator*() { return static_cast<const T>(cur->_item); }
     const_iterator& operator++() {
-      assert(cur);
-      assert(cur->_list);
+      ceph_assert(cur);
+      ceph_assert(cur->_list);
       cur = cur->_next;
       return *this;
     }

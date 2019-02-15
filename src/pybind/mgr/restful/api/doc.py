@@ -1,7 +1,7 @@
 from pecan import expose
 from pecan.rest import RestController
 
-from restful import module
+from restful import context
 
 import restful
 
@@ -12,4 +12,4 @@ class Doc(RestController):
         """
         Show documentation information
         """
-        return module.instance.get_doc_api(restful.api.Root)
+        return context.instance.get_doc_api(restful.api.Root)

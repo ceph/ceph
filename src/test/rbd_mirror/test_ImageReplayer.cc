@@ -34,13 +34,13 @@
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
-#include "tools/rbd_mirror/types.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/ServiceDaemon.h"
 #include "tools/rbd_mirror/Threads.h"
+#include "tools/rbd_mirror/Types.h"
 
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
 using rbd::mirror::RadosRef;
@@ -85,7 +85,8 @@ public:
     EXPECT_EQ("", connect_cluster_pp(*m_local_cluster.get()));
     EXPECT_EQ(0, m_local_cluster->conf_set("rbd_cache", "false"));
     EXPECT_EQ(0, m_local_cluster->conf_set("rbd_mirror_journal_poll_age", "1"));
-
+    EXPECT_EQ(0, m_local_cluster->conf_set("rbd_mirror_journal_commit_age",
+                                           "0.1"));
     m_local_pool_name = get_temp_pool_name();
     EXPECT_EQ(0, m_local_cluster->pool_create(m_local_pool_name.c_str()));
     EXPECT_EQ(0, m_local_cluster->ioctx_create(m_local_pool_name.c_str(),
@@ -215,7 +216,7 @@ public:
   {
     librbd::ImageCtx *ictx = new librbd::ImageCtx(image_name.c_str(),
 						  "", "", ioctx, readonly);
-    EXPECT_EQ(0, ictx->state->open(false));
+    EXPECT_EQ(0, ictx->state->open(0));
     *ictxp = ictx;
   }
 
@@ -298,10 +299,6 @@ public:
     cls::journal::ObjectPosition mirror_position;
 
     for (int i = 0; i < 100; i++) {
-      printf("m_replayer->flush()\n");
-      C_SaferCond cond;
-      m_replayer->flush(&cond);
-      ASSERT_EQ(0, cond.wait());
       get_commit_positions(&master_position, &mirror_position);
       if (master_position == mirror_position) {
 	break;
@@ -394,6 +391,7 @@ public:
   C_WatchCtx *m_watch_ctx;
   uint64_t m_watch_handle;
   char m_test_data[TEST_IO_SIZE + 1];
+  std::string m_journal_commit_age;
 };
 
 int TestImageReplayer::_image_number;
@@ -796,7 +794,7 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_SingleEpoch) {
   ASSERT_EQ(0, ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
 					      "foo"));
   ASSERT_EQ(0, librbd::cls_client::add_child(&ictx->md_ctx, RBD_CHILDREN,
-                                             {ictx->md_ctx.get_id(),
+                                             {ictx->md_ctx.get_id(), "",
                                               ictx->id,
 					      ictx->snap_ids[{cls::rbd::UserSnapshotNamespace(), "foo"}]},
                                              "dummy child id"));
@@ -849,7 +847,7 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_MultiEpoch) {
   ASSERT_EQ(0, ictx->operations->snap_protect(cls::rbd::UserSnapshotNamespace(),
 					      "foo"));
   ASSERT_EQ(0, librbd::cls_client::add_child(&ictx->md_ctx, RBD_CHILDREN,
-                                             {ictx->md_ctx.get_id(),
+                                             {ictx->md_ctx.get_id(), "",
                                               ictx->id,
 					      ictx->snap_ids[{cls::rbd::UserSnapshotNamespace(),
 							      "foo"}]},

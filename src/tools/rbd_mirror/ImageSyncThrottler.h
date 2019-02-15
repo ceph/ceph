@@ -13,6 +13,7 @@
 #include "common/Mutex.h"
 #include "common/config_obs.h"
 
+class CephContext;
 class Context;
 
 namespace ceph { class Formatter; }
@@ -24,14 +25,14 @@ namespace mirror {
 template <typename ImageCtxT = librbd::ImageCtx>
 class ImageSyncThrottler : public md_config_obs_t {
 public:
-  static ImageSyncThrottler *create() {
-    return new ImageSyncThrottler();
+  static ImageSyncThrottler *create(CephContext *cct) {
+    return new ImageSyncThrottler(cct);
   }
   void destroy() {
     delete this;
   }
 
-  ImageSyncThrottler();
+  ImageSyncThrottler(CephContext *cct);
   ~ImageSyncThrottler() override;
 
   void set_max_concurrent_syncs(uint32_t max);
@@ -43,13 +44,14 @@ public:
   void print_status(Formatter *f, std::stringstream *ss);
 
 private:
+  CephContext *m_cct;
   Mutex m_lock;
   uint32_t m_max_concurrent_syncs;
   std::list<std::pair<std::string, Context *>> m_queue;
   std::set<std::string> m_inflight_ops;
 
   const char **get_tracked_conf_keys() const override;
-  void handle_conf_change(const struct md_config_t *conf,
+  void handle_conf_change(const ConfigProxy& conf,
                           const std::set<std::string> &changed) override;
 };
 

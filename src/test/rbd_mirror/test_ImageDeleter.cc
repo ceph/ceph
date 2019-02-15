@@ -19,13 +19,14 @@
 #include "tools/rbd_mirror/ImageDeleter.h"
 #include "tools/rbd_mirror/ServiceDaemon.h"
 #include "tools/rbd_mirror/Threads.h"
-#include "tools/rbd_mirror/types.h"
+#include "tools/rbd_mirror/Types.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "librbd/Journal.h"
 #include "librbd/internal.h"
 #include "librbd/Utils.h"
+#include "librbd/api/Image.h"
 #include "librbd/api/Mirror.h"
 #include "librbd/journal/DisabledPolicy.h"
 #include "test/rbd_mirror/test_fixture.h"
@@ -65,7 +66,8 @@ public:
 
     m_local_image_id = librbd::util::generate_image_id(m_local_io_ctx);
     librbd::ImageOptions image_opts;
-    image_opts.set(RBD_IMAGE_OPTION_FEATURES, RBD_FEATURES_ALL);
+    image_opts.set(RBD_IMAGE_OPTION_FEATURES,
+                   (RBD_FEATURES_ALL & ~RBD_FEATURES_IMPLICIT_ENABLE));
     EXPECT_EQ(0, librbd::create(m_local_io_ctx, m_image_name, m_local_image_id,
                                 1 << 20, image_opts, GLOBAL_IMAGE_ID,
                                 m_remote_mirror_uuid, true));
@@ -110,7 +112,8 @@ public:
       promote_image();
     }
     NoOpProgressContext ctx;
-    int r = remove(m_local_io_ctx, m_image_name, "", ctx, force);
+    int r = librbd::api::Image<>::remove(m_local_io_ctx, m_image_name, "", ctx,
+                                         force);
     EXPECT_EQ(1, r == 0 || r == -ENOENT);
   }
 
@@ -120,7 +123,7 @@ public:
     if (!ictx) {
       ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                           false);
-      r = ictx->state->open(false);
+      r = ictx->state->open(0);
       close = (r == 0);
     }
 
@@ -141,7 +144,7 @@ public:
     if (!ictx) {
       ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                           false);
-      EXPECT_EQ(0, ictx->state->open(false));
+      EXPECT_EQ(0, ictx->state->open(0));
       close = true;
     }
 
@@ -155,7 +158,7 @@ public:
   void create_snapshot(std::string snap_name="snap1", bool protect=false) {
     ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                   false);
-    EXPECT_EQ(0, ictx->state->open(false));
+    EXPECT_EQ(0, ictx->state->open(0));
     {
       RWLock::WLocker snap_locker(ictx->snap_lock);
       ictx->set_journal_policy(new librbd::journal::DisabledPolicy());
@@ -175,7 +178,7 @@ public:
   std::string create_clone() {
     ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                   false);
-    EXPECT_EQ(0, ictx->state->open(false));
+    EXPECT_EQ(0, ictx->state->open(0));
     {
       RWLock::WLocker snap_locker(ictx->snap_lock);
       ictx->set_journal_policy(new librbd::journal::DisabledPolicy());
@@ -185,15 +188,16 @@ public:
                    cls::rbd::UserSnapshotNamespace(), "snap1"));
     EXPECT_EQ(0, ictx->operations->snap_protect(
                    cls::rbd::UserSnapshotNamespace(), "snap1"));
-    EXPECT_EQ(0, librbd::snap_set(ictx, cls::rbd::UserSnapshotNamespace(),
-                                  "snap1"));
+    EXPECT_EQ(0, librbd::api::Image<>::snap_set(
+                   ictx, cls::rbd::UserSnapshotNamespace(), "snap1"));
 
     std::string clone_id = librbd::util::generate_image_id(m_local_io_ctx);
     librbd::ImageOptions clone_opts;
     clone_opts.set(RBD_IMAGE_OPTION_FEATURES, ictx->features);
-    EXPECT_EQ(0, librbd::clone(ictx, m_local_io_ctx, "clone1", clone_id,
-                               clone_opts, GLOBAL_CLONE_IMAGE_ID,
-                               m_remote_mirror_uuid));
+    EXPECT_EQ(0, librbd::clone(m_local_io_ctx, m_local_image_id.c_str(),
+                               nullptr, "snap1", m_local_io_ctx,
+                               clone_id.c_str(), "clone1", clone_opts,
+                               GLOBAL_CLONE_IMAGE_ID, m_remote_mirror_uuid));
 
     cls::rbd::MirrorImage mirror_image(
       GLOBAL_CLONE_IMAGE_ID, MirrorImageState::MIRROR_IMAGE_STATE_ENABLED);
@@ -206,7 +210,7 @@ public:
   void check_image_deleted() {
     ImageCtx *ictx = new ImageCtx("", m_local_image_id, "", m_local_io_ctx,
                                   false);
-    EXPECT_EQ(-ENOENT, ictx->state->open(false));
+    EXPECT_EQ(-ENOENT, ictx->state->open(0));
 
     cls::rbd::MirrorImage mirror_image;
     EXPECT_EQ(-ENOENT, cls_client::mirror_image_get(&m_local_io_ctx,

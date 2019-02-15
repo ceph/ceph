@@ -12,17 +12,19 @@
  * 
  */
 
-#include "common/OutputDataSocket.h"
-#include "common/errno.h"
-#include "common/pipe.h"
-#include "common/safe_io.h"
-#include "include/compat.h"
-
 #include <poll.h>
 #include <sys/un.h>
+#include <unistd.h>
+
+#include "common/OutputDataSocket.h"
+#include "common/errno.h"
+#include "common/debug.h"
+#include "common/safe_io.h"
+#include "include/compat.h"
+#include "include/sock_compat.h"
 
 // re-include our assert to clobber the system one; fix dout:
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_asok
 #undef dout_prefix
@@ -91,8 +93,7 @@ OutputDataSocket::OutputDataSocket(CephContext *cct, uint64_t _backlog)
     m_shutdown_rd_fd(-1),
     m_shutdown_wr_fd(-1),
     going_down(false),
-    data_size(0),
-    m_lock("OutputDataSocket::m_lock")
+    data_size(0)
 {
 }
 
@@ -117,10 +118,10 @@ OutputDataSocket::~OutputDataSocket()
 std::string OutputDataSocket::create_shutdown_pipe(int *pipe_rd, int *pipe_wr)
 {
   int pipefd[2];
-  int ret = pipe_cloexec(pipefd);
-  if (ret < 0) {
+  if (pipe_cloexec(pipefd) < 0) {
+    int e = errno;
     ostringstream oss;
-    oss << "OutputDataSocket::create_shutdown_pipe error: " << cpp_strerror(ret);
+    oss << "OutputDataSocket::create_shutdown_pipe error: " << cpp_strerror(e);
     return oss.str();
   }
   
@@ -142,20 +143,12 @@ std::string OutputDataSocket::bind_and_listen(const std::string &sock_path, int 
 	<< (sizeof(address.sun_path) - 1);
     return oss.str();
   }
-  int sock_fd = socket(PF_UNIX, SOCK_STREAM, 0);
+  int sock_fd = socket_cloexec(PF_UNIX, SOCK_STREAM, 0);
   if (sock_fd < 0) {
     int err = errno;
     ostringstream oss;
     oss << "OutputDataSocket::bind_and_listen: "
 	<< "failed to create socket: " << cpp_strerror(err);
-    return oss.str();
-  }
-  int r = fcntl(sock_fd, F_SETFD, FD_CLOEXEC);
-  if (r < 0) {
-    r = errno;
-    VOID_TEMP_FAILURE_RETRY(::close(sock_fd));
-    ostringstream oss;
-    oss << "OutputDataSocket::bind_and_listen: failed to fcntl on socket: " << cpp_strerror(r);
     return oss.str();
   }
   memset(&address, 0, sizeof(struct sockaddr_un));
@@ -241,15 +234,15 @@ bool OutputDataSocket::do_accept()
   struct sockaddr_un address;
   socklen_t address_length = sizeof(address);
   ldout(m_cct, 30) << "OutputDataSocket: calling accept" << dendl;
-  int connection_fd = accept(m_sock_fd, (struct sockaddr*) &address,
+  int connection_fd = accept_cloexec(m_sock_fd, (struct sockaddr*) &address,
 			     &address_length);
-  ldout(m_cct, 30) << "OutputDataSocket: finished accept" << dendl;
   if (connection_fd < 0) {
     int err = errno;
     lderr(m_cct) << "OutputDataSocket: do_accept error: '"
 			   << cpp_strerror(err) << dendl;
     return false;
   }
+  ldout(m_cct, 30) << "OutputDataSocket: finished accept" << dendl;
 
   handle_connection(connection_fd);
   close_connection(connection_fd);
@@ -261,9 +254,9 @@ void OutputDataSocket::handle_connection(int fd)
 {
   bufferlist bl;
 
-  m_lock.Lock();
+  m_lock.lock();
   init_connection(bl);
-  m_lock.Unlock();
+  m_lock.unlock();
 
   if (bl.length()) {
     /* need to special case the connection init buffer output, as it needs
@@ -282,26 +275,26 @@ void OutputDataSocket::handle_connection(int fd)
     return;
 
   do {
-    m_lock.Lock();
-    cond.Wait(m_lock);
-
-    if (going_down) {
-      m_lock.Unlock();
-      break;
+    {
+      std::unique_lock l(m_lock);
+      if (!going_down) {
+	cond.wait(l);
+      }
+      if (going_down) {
+	break;
+      }
     }
-    m_lock.Unlock();
-
     ret = dump_data(fd);
   } while (ret >= 0);
 }
 
 int OutputDataSocket::dump_data(int fd)
 {
-  m_lock.Lock(); 
+  m_lock.lock();
   list<bufferlist> l = std::move(data);
   data.clear();
   data_size = 0;
-  m_lock.Unlock();
+  m_lock.unlock();
 
   for (list<bufferlist>::iterator iter = l.begin(); iter != l.end(); ++iter) {
     bufferlist& bl = *iter;
@@ -360,10 +353,10 @@ bool OutputDataSocket::init(const std::string &path)
 
 void OutputDataSocket::shutdown()
 {
-  m_lock.Lock();
+  m_lock.lock();
   going_down = true;
-  cond.Signal();
-  m_lock.Unlock();
+  cond.notify_all();
+  m_lock.unlock();
 
   if (m_shutdown_wr_fd < 0)
     return;
@@ -389,7 +382,7 @@ void OutputDataSocket::shutdown()
 
 void OutputDataSocket::append_output(bufferlist& bl)
 {
-  Mutex::Locker l(m_lock);
+  std::lock_guard l(m_lock);
 
   if (data_size + bl.length() > data_max_backlog) {
     ldout(m_cct, 20) << "dropping data output, max backlog reached" << dendl;
@@ -398,5 +391,5 @@ void OutputDataSocket::append_output(bufferlist& bl)
 
   data_size += bl.length();
 
-  cond.Signal();
+  cond.notify_all();
 }

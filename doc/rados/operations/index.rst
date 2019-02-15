@@ -37,6 +37,7 @@ CRUSH algorithm.
 	erasure-code
 	cache-tiering
 	placement-groups
+	balancer
 	upmap
 	crush-map
 	crush-map-edits
@@ -59,6 +60,7 @@ with new hardware.
 
 	add-or-rm-osds
 	add-or-rm-mons
+	devices
 	bluestore-migration
 	Command Reference <control>
 

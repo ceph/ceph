@@ -6,7 +6,7 @@
 
 #include <string>
 #include <boost/algorithm/string.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "include/types.h"
 #include "rgw_common.h"
@@ -37,11 +37,13 @@ struct RGWUID
   void encode(bufferlist& bl) const {
     string s;
     user_id.to_str(s);
-    ::encode(s, bl);
+    using ceph::encode;
+    encode(s, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     string s;
-    ::decode(s, bl);
+    using ceph::decode;
+    decode(s, bl);
     user_id.from_str(s);
   }
 };
@@ -178,6 +180,8 @@ struct RGWUserAdminOpState {
   std::string key; // secret key
   int32_t key_type;
 
+  std::set<string> mfa_ids;
+
   // operation attributes
   bool existing_user;
   bool existing_key;
@@ -207,6 +211,7 @@ struct RGWUserAdminOpState {
   bool found_by_uid; 
   bool found_by_email;  
   bool found_by_key;
+  bool mfa_ids_specified;
  
   // req parameters
   bool populated;
@@ -221,7 +226,11 @@ struct RGWUserAdminOpState {
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
 
-  void set_access_key(std::string& access_key) {
+  // req parameters for listing user
+  std::string marker;
+  uint32_t max_entries;
+
+  void set_access_key(const std::string& access_key) {
     if (access_key.empty())
       return;
 
@@ -231,7 +240,7 @@ struct RGWUserAdminOpState {
     key_op = true;
   }
 
-  void set_secret_key(std::string& secret_key) {
+  void set_secret_key(const std::string& secret_key) {
     if (secret_key.empty())
       return;
 
@@ -255,7 +264,7 @@ struct RGWUserAdminOpState {
     user_email_specified = true;
   }
 
-  void set_display_name(std::string& name) {
+  void set_display_name(const std::string& name) {
     if (name.empty())
       return;
 
@@ -284,7 +293,7 @@ struct RGWUserAdminOpState {
     subuser_specified = true;
   }
 
-  void set_caps(std::string& _caps) {
+  void set_caps(const std::string& _caps) {
     if (_caps.empty())
       return;
 
@@ -387,6 +396,11 @@ struct RGWUserAdminOpState {
     user_quota_specified = true;
   }
 
+  void set_mfa_ids(const std::set<string>& ids) {
+    mfa_ids = ids;
+    mfa_ids_specified = true;
+  }
+
   bool is_populated() { return populated; }
   bool is_initialized() { return initialized; }
   bool has_existing_user() { return existing_user; }
@@ -423,6 +437,7 @@ struct RGWUserAdminOpState {
   uint32_t get_op_mask() { return op_mask; }
   RGWQuotaInfo& get_bucket_quota() { return bucket_quota; }
   RGWQuotaInfo& get_user_quota() { return user_quota; }
+  set<string>& get_mfa_ids() { return mfa_ids; }
 
   rgw_user& get_user_id() { return user_id; }
   std::string get_subuser() { return subuser; }
@@ -522,6 +537,9 @@ struct RGWUserAdminOpState {
     found_by_uid = false;
     found_by_email = false;
     found_by_key = false;
+    mfa_ids_specified = false;
+    max_entries = 1000;
+    marker = "";
   }
 };
 
@@ -687,16 +705,22 @@ public:
   /* info from an already populated RGWUser */
   int info (RGWUserInfo& fetched_info, std::string *err_msg = NULL);
 
+  /* list the existing users */
+  int list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
+
   friend class RGWAccessKeyPool;
   friend class RGWSubUserPool;
   friend class RGWUserCapPool;
 };
 
-/* Wrapers for admin API functionality */
+/* Wrappers for admin API functionality */
 
 class RGWUserAdminOp_User
 {
 public:
+  static int list(RGWRados *store,
+                  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
+
   static int info(RGWRados *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 

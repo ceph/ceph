@@ -18,7 +18,7 @@
 #include "include/Context.h"
 #include "Client.h"
 #include "barrier.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #undef dout_prefix
 #define dout_prefix *_dout << "client." << whoami << " "
@@ -85,14 +85,14 @@ BarrierContext::BarrierContext(Client *c, uint64_t ino) :
 
 void BarrierContext::write_nobarrier(C_Block_Sync &cbs)
 {
-  Mutex::Locker locker(lock);
+  std::lock_guard locker(lock);
   cbs.state = CBlockSync_State_Unclaimed;
   outstanding_writes.push_back(cbs);
 }
 
 void BarrierContext::write_barrier(C_Block_Sync &cbs)
 {
-  Mutex::Locker locker(lock);
+  std::lock_guard locker(lock);
   barrier_interval &iv = cbs.iv;
 
   { /* find blocking commit--intrusive no help here */
@@ -117,7 +117,7 @@ void BarrierContext::write_barrier(C_Block_Sync &cbs)
 
 void BarrierContext::commit_barrier(barrier_interval &civ)
 {
-    Mutex::Locker locker(lock);
+    std::lock_guard locker(lock);
 
     /* we commit outstanding writes--if none exist, we don't care */
     if (outstanding_writes.size() == 0)
@@ -159,7 +159,7 @@ void BarrierContext::commit_barrier(barrier_interval &civ)
 
 void BarrierContext::complete(C_Block_Sync &cbs)
 {
-    Mutex::Locker locker(lock);
+    std::lock_guard locker(lock);
     BlockSyncList::iterator iter =
       BlockSyncList::s_iterator_to(cbs);
 

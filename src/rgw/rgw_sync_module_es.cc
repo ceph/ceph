@@ -1,3 +1,7 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
+#include "rgw_b64.h"
 #include "rgw_common.h"
 #include "rgw_coroutine.h"
 #include "rgw_sync_module.h"
@@ -8,6 +12,9 @@
 #include "rgw_cr_rest.h"
 #include "rgw_op.h"
 #include "rgw_es_query.h"
+#include "rgw_zone.h"
+
+#include "services/svc_zone.h"
 
 #include "include/str_list.h"
 
@@ -103,6 +110,55 @@ public:
 #define ES_NUM_SHARDS_DEFAULT 16
 #define ES_NUM_REPLICAS_DEFAULT 1
 
+using ESVersion = std::pair<int,int>;
+static constexpr ESVersion ES_V5{5,0};
+
+struct ESInfo {
+  std::string name;
+  std::string cluster_name;
+  std::string cluster_uuid;
+  ESVersion version;
+
+  void decode_json(JSONObj *obj);
+
+  std::string get_version_str(){
+    return std::to_string(version.first) + "." + std::to_string(version.second);
+  }
+};
+
+// simple wrapper structure to wrap the es version nested type
+struct es_version_decoder {
+  ESVersion version;
+
+  int parse_version(const std::string& s) {
+    int major, minor;
+    int ret = sscanf(s.c_str(), "%d.%d", &major, &minor);
+    if (ret < 0) {
+      return ret;
+    }
+    version = std::make_pair(major,minor);
+    return 0;
+  }
+
+  void decode_json(JSONObj *obj) {
+    std::string s;
+    JSONDecoder::decode_json("number",s,obj);
+    if (parse_version(s) < 0)
+      throw JSONDecoder::err("Failed to parse ElasticVersion");
+  }
+};
+
+
+void ESInfo::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("cluster_name", cluster_name, obj);
+  JSONDecoder::decode_json("cluster_uuid", cluster_uuid, obj);
+  es_version_decoder esv;
+  JSONDecoder::decode_json("version", esv, obj);
+  version = std::move(esv.version);
+}
+
 struct ElasticConfig {
   uint64_t sync_instance{0};
   string id;
@@ -114,23 +170,30 @@ struct ElasticConfig {
   ItemList allow_owners;
   uint32_t num_shards{0};
   uint32_t num_replicas{0};
+  std::map <string,string> default_headers = {{ "Content-Type", "application/json" }};
 
-  void init(CephContext *cct, const map<string, string, ltstr_nocase>& config) {
-    string elastic_endpoint = rgw_conf_get(config, "endpoint", "");
+  void init(CephContext *cct, const JSONFormattable& config) {
+    string elastic_endpoint = config["endpoint"];
     id = string("elastic:") + elastic_endpoint;
     conn.reset(new RGWRESTConn(cct, nullptr, id, { elastic_endpoint }));
-    explicit_custom_meta = rgw_conf_get_bool(config, "explicit_custom_meta", true);
-    index_buckets.init(rgw_conf_get(config, "index_buckets_list", ""), true); /* approve all buckets by default */
-    allow_owners.init(rgw_conf_get(config, "approved_owners_list", ""), true); /* approve all bucket owners by default */
-    override_index_path = rgw_conf_get(config, "override_index_path", "");
-    num_shards = rgw_conf_get_int(config, "num_shards", ES_NUM_SHARDS_DEFAULT);
+    explicit_custom_meta = config["explicit_custom_meta"](true);
+    index_buckets.init(config["index_buckets_list"], true); /* approve all buckets by default */
+    allow_owners.init(config["approved_owners_list"], true); /* approve all bucket owners by default */
+    override_index_path = config["override_index_path"];
+    num_shards = config["num_shards"](ES_NUM_SHARDS_DEFAULT);
     if (num_shards < ES_NUM_SHARDS_MIN) {
       num_shards = ES_NUM_SHARDS_MIN;
     }
-    num_replicas = rgw_conf_get_int(config, "num_replicas", ES_NUM_REPLICAS_DEFAULT);
+    num_replicas = config["num_replicas"](ES_NUM_REPLICAS_DEFAULT);
+    if (string user = config["username"], pw = config["password"];
+        !user.empty() && !pw.empty()) {
+      auto auth_string = user + ":" + pw;
+      default_headers.emplace("AUTHORIZATION", "Basic " + rgw::to_base64(auth_string));
+    }
+
   }
 
-  void init_instance(RGWRealm& realm, uint64_t instance_id) {
+  void init_instance(const RGWRealm& realm, uint64_t instance_id) {
     sync_instance = instance_id;
 
     if (!override_index_path.empty()) {
@@ -148,8 +211,12 @@ struct ElasticConfig {
     return index_path;
   }
 
+  map<string, string>& get_request_headers() {
+    return default_headers;
+  }
+
   string get_obj_path(const RGWBucketInfo& bucket_info, const rgw_obj_key& key) {
-    return index_path +  "/object/" + bucket_info.bucket.bucket_id + ":" + key.name + ":" + (key.instance.empty() ? "null" : key.instance);
+    return index_path +  "/object/" + url_encode(bucket_info.bucket.bucket_id + ":" + key.name + ":" + (key.instance.empty() ? "null" : key.instance));
   }
 
   bool should_handle_operation(RGWBucketInfo& bucket_info) {
@@ -160,58 +227,146 @@ struct ElasticConfig {
 
 using ElasticConfigRef = std::shared_ptr<ElasticConfig>;
 
-struct es_dump_type {
-  const char *type;
-  const char *format;
-  bool analyzed;
+static const char *es_type_to_str(const ESType& t) {
+  switch (t) {
+  case ESType::String: return "string";
+  case ESType::Text: return "text";
+  case ESType::Keyword: return "keyword";
+  case ESType::Long: return "long";
+  case ESType::Integer: return "integer";
+  case ESType::Short: return "short";
+  case ESType::Byte: return "byte";
+  case ESType::Double: return "double";
+  case ESType::Float: return "float";
+  case ESType::Half_Float: return "half_float";
+  case ESType::Scaled_Float: return "scaled_float";
+  case ESType::Date: return "date";
+  case ESType::Boolean: return "boolean";
+  case ESType::Integer_Range: return "integer_range";
+  case ESType::Float_Range: return "float_range";
+  case ESType::Double_Range: return "date_range";
+  case ESType::Date_Range: return "date_range";
+  case ESType::Geo_Point: return "geo_point";
+  case ESType::Ip: return "ip";
+  default:
+    return "<unknown>";
+  }
+}
 
-  es_dump_type(const char *t, const char *f = nullptr, bool a = false) : type(t), format(f), analyzed(a) {}
+struct es_type_v2 {
+  ESType estype;
+  const char *format{nullptr};
+  std::optional<bool> analyzed;
+
+  es_type_v2(ESType et) : estype(et) {}
 
   void dump(Formatter *f) const {
-    encode_json("type", type, f);
+    const char *type_str = es_type_to_str(estype);
+    encode_json("type", type_str, f);
     if (format) {
       encode_json("format", format, f);
     }
-    if (!analyzed && strcmp(type, "string") == 0) {
-      encode_json("index", "not_analyzed", f);
+
+    auto is_analyzed = analyzed;
+
+    if (estype == ESType::String &&
+        !is_analyzed) {
+      is_analyzed = false;
+    }
+
+    if (is_analyzed) {
+      encode_json("index", (is_analyzed.value() ? "analyzed" : "not_analyzed"), f);
     }
   }
 };
 
+struct es_type_v5 {
+  ESType estype;
+  const char *format{nullptr};
+  std::optional<bool> analyzed;
+  std::optional<bool> index;
+
+  es_type_v5(ESType et) : estype(et) {}
+
+  void dump(Formatter *f) const {
+    ESType new_estype;
+    if (estype != ESType::String) {
+      new_estype = estype;
+    } else {
+      bool is_analyzed = analyzed.value_or(false);
+      new_estype = (is_analyzed ? ESType::Text : ESType::Keyword);
+      /* index = true; ... Not setting index=true, because that's the default,
+       * and dumping a boolean value *might* be a problem when backporting this
+       * because value might get quoted
+       */
+    }
+
+    const char *type_str = es_type_to_str(new_estype);
+    encode_json("type", type_str, f);
+    if (format) {
+      encode_json("format", format, f);
+    }
+    if (index) {
+      encode_json("index", index.value(), f);
+    }
+  }
+};
+
+template <class T>
+struct es_type : public T {
+  es_type(T t) : T(t) {}
+  es_type& set_format(const char *f) {
+    T::format = f;
+    return *this;
+  }
+
+  es_type& set_analyzed(bool a) {
+    T::analyzed = a;
+    return *this;
+  }
+};
+
+template <class T>
 struct es_index_mappings {
-  void dump_custom(Formatter *f, const char *section, const char *type, const char *format) const {
+  ESType string_type {ESType::String};
+
+  es_type<T> est(ESType t) const {
+    return es_type<T>(t);
+  }
+
+  void dump_custom(const char *section, ESType type, const char *format, Formatter *f) const {
     f->open_object_section(section);
     ::encode_json("type", "nested", f);
     f->open_object_section("properties");
-    encode_json("name", es_dump_type("string"), f);
-    encode_json("value", es_dump_type(type, format), f);
+    encode_json("name", est(string_type), f);
+    encode_json("value", est(type).set_format(format), f);
     f->close_section(); // entry
     f->close_section(); // custom-string
   }
+
   void dump(Formatter *f) const {
     f->open_object_section("object");
     f->open_object_section("properties");
-    encode_json("bucket", es_dump_type("string"), f);
-    encode_json("name", es_dump_type("string"), f);
-    encode_json("instance", es_dump_type("string"), f);
-    encode_json("versioned_epoch", es_dump_type("long"), f);
+    encode_json("bucket", est(string_type), f);
+    encode_json("name", est(string_type), f);
+    encode_json("instance", est(string_type), f);
+    encode_json("versioned_epoch", est(ESType::Long), f);
     f->open_object_section("meta");
     f->open_object_section("properties");
-    encode_json("cache_control", es_dump_type("string"), f);
-    encode_json("content_disposition", es_dump_type("string"), f);
-    encode_json("content_encoding", es_dump_type("string"), f);
-    encode_json("content_language", es_dump_type("string"), f);
-    encode_json("content_type", es_dump_type("string"), f);
-    encode_json("etag", es_dump_type("string"), f);
-    encode_json("expires", es_dump_type("string"), f);
-    f->open_object_section("mtime");
-    ::encode_json("type", "date", f);
-    ::encode_json("format", "strict_date_optional_time||epoch_millis", f);
-    f->close_section(); // mtime
-    encode_json("size", es_dump_type("long"), f);
-    dump_custom(f, "custom-string", "string", nullptr);
-    dump_custom(f, "custom-int", "long", nullptr);
-    dump_custom(f, "custom-date", "date", "strict_date_optional_time||epoch_millis");
+    encode_json("cache_control", est(string_type), f);
+    encode_json("content_disposition", est(string_type), f);
+    encode_json("content_encoding", est(string_type), f);
+    encode_json("content_language", est(string_type), f);
+    encode_json("content_type", est(string_type), f);
+    encode_json("storage_class", est(string_type), f);
+    encode_json("etag", est(string_type), f);
+    encode_json("expires", est(string_type), f);
+    encode_json("mtime", est(ESType::Date)
+                         .set_format("strict_date_optional_time||epoch_millis"), f);
+    encode_json("size", est(ESType::Long), f);
+    dump_custom("custom-string", string_type, nullptr, f);
+    dump_custom("custom-int", ESType::Long, nullptr, f);
+    dump_custom("custom-date", ESType::Date, "strict_date_optional_time||epoch_millis", f);
     f->close_section(); // properties
     f->close_section(); // meta
     f->close_section(); // properties
@@ -231,17 +386,47 @@ struct es_index_settings {
   }
 };
 
-struct es_index_config {
-  es_index_settings settings;
-  es_index_mappings mappings;
+struct es_index_config_base {
+  virtual ~es_index_config_base() {}
+  virtual void dump(Formatter *f) const = 0;
+};
 
-  es_index_config(es_index_settings& _s, es_index_mappings& _m) : settings(_s), mappings(_m) {}
+template <class T>
+struct es_index_config : public es_index_config_base {
+  es_index_settings settings;
+  es_index_mappings<T> mappings;
+
+  es_index_config(es_index_settings& _s) : settings(_s) {}
 
   void dump(Formatter *f) const {
     encode_json("settings", settings, f);
     encode_json("mappings", mappings, f);
   }
 };
+
+static bool is_sys_attr(const std::string& attr_name){
+  static constexpr std::initializer_list<const char*> rgw_sys_attrs =
+                                                         {RGW_ATTR_PG_VER,
+                                                          RGW_ATTR_SOURCE_ZONE,
+                                                          RGW_ATTR_ID_TAG,
+                                                          RGW_ATTR_TEMPURL_KEY1,
+                                                          RGW_ATTR_TEMPURL_KEY2,
+                                                          RGW_ATTR_UNIX1,
+                                                          RGW_ATTR_UNIX_KEY1
+  };
+
+  return std::find(rgw_sys_attrs.begin(), rgw_sys_attrs.end(), attr_name) != rgw_sys_attrs.end();
+}
+
+static size_t attr_len(const bufferlist& val)
+{
+  size_t len = val.length();
+  if (len && val[len - 1] == '\0') {
+    --len;
+  }
+
+  return len;
+}
 
 struct es_obj_metadata {
   CephContext *cct;
@@ -267,27 +452,34 @@ struct es_obj_metadata {
 
     for (auto i : attrs) {
       const string& attr_name = i.first;
-      string name;
       bufferlist& val = i.second;
 
-      if (attr_name.compare(0, sizeof(RGW_ATTR_PREFIX) - 1, RGW_ATTR_PREFIX) != 0) {
+      if (!boost::algorithm::starts_with(attr_name, RGW_ATTR_PREFIX)) {
         continue;
       }
 
-      if (attr_name.compare(0, sizeof(RGW_ATTR_META_PREFIX) - 1, RGW_ATTR_META_PREFIX) == 0) {
-        name = attr_name.substr(sizeof(RGW_ATTR_META_PREFIX) - 1);
-        custom_meta[name] = string(val.c_str(), (val.length() > 0 ? val.length() - 1 : 0));
+      if (boost::algorithm::starts_with(attr_name, RGW_ATTR_META_PREFIX)) {
+        custom_meta.emplace(attr_name.substr(sizeof(RGW_ATTR_META_PREFIX) - 1),
+                            string(val.c_str(), attr_len(val)));
         continue;
       }
 
-      name = attr_name.substr(sizeof(RGW_ATTR_PREFIX) - 1);
+      if (boost::algorithm::starts_with(attr_name, RGW_ATTR_CRYPT_PREFIX)) {
+        continue;
+      }
 
-      if (name == "acl") {
+      if (boost::algorithm::starts_with(attr_name, RGW_ATTR_OLH_PREFIX)) {
+        // skip versioned object olh info
+        continue;
+      }
+
+      if (attr_name == RGW_ATTR_ACL) {
         try {
-          auto i = val.begin();
-          ::decode(policy, i);
+          auto i = val.cbegin();
+          decode(policy, i);
         } catch (buffer::error& err) {
           ldout(cct, 0) << "ERROR: failed to decode acl for " << bucket_info.bucket << "/" << key << dendl;
+          continue;
         }
 
         const RGWAccessControlList& acl = policy.get_acl();
@@ -303,20 +495,39 @@ struct es_obj_metadata {
             }
           }
         }
-      } else if (name == "x-amz-tagging") {
-        auto tags_bl = val.begin();
-        ::decode(obj_tags, tags_bl);
+      } else if (attr_name == RGW_ATTR_TAGS) {
+        try {
+          auto tags_bl = val.cbegin();
+          decode(obj_tags, tags_bl);
+        } catch (buffer::error& err) {
+          ldout(cct,0) << "ERROR: failed to decode obj tags for "
+                       << bucket_info.bucket << "/" << key << dendl;
+          continue;
+        }
+      } else if (attr_name == RGW_ATTR_COMPRESSION) {
+        RGWCompressionInfo cs_info;
+        try {
+          auto vals_bl = val.cbegin();
+          decode(cs_info, vals_bl);
+        } catch (buffer::error& err) {
+          ldout(cct,0) << "ERROR: failed to decode compression attr for "
+                       << bucket_info.bucket << "/" << key << dendl;
+          continue;
+        }
+        out_attrs.emplace("compression",std::move(cs_info.compression_type));
       } else {
-        if (name != "pg_ver" &&
-            name != "source_zone" &&
-            name != "idtag") {
-          out_attrs[name] = string(val.c_str(), (val.length() > 0 ? val.length() - 1 : 0));
+        if (!is_sys_attr(attr_name)) {
+          out_attrs.emplace(attr_name.substr(sizeof(RGW_ATTR_PREFIX) - 1),
+                            std::string(val.c_str(), attr_len(val)));
         }
       }
     }
     ::encode_json("bucket", bucket_info.bucket.name, f);
     ::encode_json("name", key.name, f);
-    ::encode_json("instance", key.instance, f);
+    string instance = key.instance;
+    if (instance.empty())
+      instance = "null";
+    ::encode_json("instance", instance, f);
     ::encode_json("versioned_epoch", versioned_epoch, f);
     ::encode_json("owner", policy.get_owner(), f);
     ::encode_json("permissions", permissions, f);
@@ -418,6 +629,28 @@ struct es_obj_metadata {
 class RGWElasticInitConfigCBCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   ElasticConfigRef conf;
+  ESInfo es_info;
+
+  struct _err_response {
+    struct err_reason {
+      vector<err_reason> root_cause;
+      string type;
+      string reason;
+      string index;
+
+      void decode_json(JSONObj *obj) {
+        JSONDecoder::decode_json("root_cause", root_cause, obj);
+        JSONDecoder::decode_json("type", type, obj);
+        JSONDecoder::decode_json("reason", reason, obj);
+        JSONDecoder::decode_json("index", index, obj);
+      }
+    } error;
+
+    void decode_json(JSONObj *obj) {
+      JSONDecoder::decode_json("error", error, obj);
+    }
+  } err_response;
+
 public:
   RGWElasticInitConfigCBCR(RGWDataSyncEnv *_sync_env,
                           ElasticConfigRef _conf) : RGWCoroutine(_sync_env->cct),
@@ -426,21 +659,46 @@ public:
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 0) << ": init elasticsearch config zone=" << sync_env->source_zone << dendl;
-      yield {
-        string path = conf->get_index_path();
-
-        es_index_settings settings(conf->num_replicas, conf->num_shards);
-        es_index_mappings mappings;
-
-        es_index_config index_conf(settings, mappings);
-
-        call(new RGWPutRESTResourceCR<es_index_config, int>(sync_env->cct, conf->conn.get(),
-                                                              sync_env->http_manager,
-                                                              path, nullptr /* params */,
-                                                              index_conf, nullptr /* result */));
-      }
+      yield call(new RGWReadRESTResourceCR<ESInfo> (sync_env->cct,
+                                                    conf->conn.get(),
+                                                    sync_env->http_manager,
+                                                    "/", nullptr /*params*/,
+                                                    &(conf->default_headers),
+                                                    &es_info));
       if (retcode < 0) {
         return set_cr_error(retcode);
+      }
+
+      yield {
+        string path = conf->get_index_path();
+        ldout(sync_env->cct, 5) << "got elastic version=" << es_info.get_version_str() << dendl;
+
+        es_index_settings settings(conf->num_replicas, conf->num_shards);
+
+        std::unique_ptr<es_index_config_base> index_conf;
+
+        if (es_info.version >= ES_V5) {
+          ldout(sync_env->cct, 0) << "elasticsearch: index mapping: version >= 5" << dendl;
+          index_conf.reset(new es_index_config<es_type_v5>(settings));
+        } else {
+          ldout(sync_env->cct, 0) << "elasticsearch: index mapping: version < 5" << dendl;
+          index_conf.reset(new es_index_config<es_type_v2>(settings));
+        }
+        call(new RGWPutRESTResourceCR<es_index_config_base, int, _err_response> (sync_env->cct,
+                                                             conf->conn.get(),
+                                                             sync_env->http_manager,
+                                                             path, nullptr /*params*/,
+                                                             &(conf->default_headers),
+                                                             *index_conf, nullptr, &err_response));
+      }
+      if (retcode < 0) {
+        ldout(sync_env->cct, 0) << "elasticsearch: failed to initialize index: response.type=" << err_response.error.type << " response.reason=" << err_response.error.reason << dendl;
+
+        if (err_response.error.type != "index_already_exists_exception") {
+          return set_cr_error(retcode);
+        }
+
+        ldout(sync_env->cct, 0) << "elasticsearch: index already exists, assuming external initialization" << dendl;
       }
       return set_cr_done();
     }
@@ -460,8 +718,9 @@ public:
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 10) << ": stat of remote obj: z=" << sync_env->source_zone
-                               << " b=" << bucket_info.bucket << " k=" << key << " size=" << size << " mtime=" << mtime
-                               << " attrs=" << attrs << dendl;
+                               << " b=" << bucket_info.bucket << " k=" << key
+                               << " size=" << size << " mtime=" << mtime << dendl;
+
       yield {
         string path = conf->get_obj_path(bucket_info, key);
         es_obj_metadata doc(sync_env->cct, conf, bucket_info, key, mtime, size, attrs, versioned_epoch);
@@ -469,6 +728,7 @@ public:
         call(new RGWPutRESTResourceCR<es_obj_metadata, int>(sync_env->cct, conf->conn.get(),
                                                             sync_env->http_manager,
                                                             path, nullptr /* params */,
+                                                            &(conf->default_headers),
                                                             doc, nullptr /* result */));
 
       }
@@ -534,26 +794,26 @@ public:
 class RGWElasticDataSyncModule : public RGWDataSyncModule {
   ElasticConfigRef conf;
 public:
-  RGWElasticDataSyncModule(CephContext *cct, const map<string, string, ltstr_nocase>& config) : conf(std::make_shared<ElasticConfig>()) {
+  RGWElasticDataSyncModule(CephContext *cct, const JSONFormattable& config) : conf(std::make_shared<ElasticConfig>()) {
     conf->init(cct, config);
   }
   ~RGWElasticDataSyncModule() override {}
 
   void init(RGWDataSyncEnv *sync_env, uint64_t instance_id) override {
-    conf->init_instance(sync_env->store->get_realm(), instance_id);
+    conf->init_instance(sync_env->store->svc.zone->get_realm(), instance_id);
   }
 
   RGWCoroutine *init_sync(RGWDataSyncEnv *sync_env) override {
     ldout(sync_env->cct, 5) << conf->id << ": init" << dendl;
     return new RGWElasticInitConfigCBCR(sync_env, conf);
   }
-  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
-    ldout(sync_env->cct, 10) << conf->id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
+  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override {
+    ldout(sync_env->cct, 10) << conf->id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
     if (!conf->should_handle_operation(bucket_info)) {
       ldout(sync_env->cct, 10) << conf->id << ": skipping operation (bucket not approved)" << dendl;
       return nullptr;
     }
-    return new RGWElasticHandleRemoteObjCR(sync_env, bucket_info, key, conf, versioned_epoch);
+    return new RGWElasticHandleRemoteObjCR(sync_env, bucket_info, key, conf, versioned_epoch.value_or(0));
   }
   RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
     /* versioned and versioned epoch params are useless in the elasticsearch backend case */
@@ -578,9 +838,13 @@ public:
   string get_index_path() {
     return conf->get_index_path();
   }
+
+  map<string, string>& get_request_headers() {
+    return conf->get_request_headers();
+  }
 };
 
-RGWElasticSyncModuleInstance::RGWElasticSyncModuleInstance(CephContext *cct, const map<string, string, ltstr_nocase>& config)
+RGWElasticSyncModuleInstance::RGWElasticSyncModuleInstance(CephContext *cct, const JSONFormattable& config)
 {
   data_handler = std::unique_ptr<RGWElasticDataSyncModule>(new RGWElasticDataSyncModule(cct, config));
 }
@@ -599,6 +863,10 @@ string RGWElasticSyncModuleInstance::get_index_path() {
   return data_handler->get_index_path();
 }
 
+map<string, string>& RGWElasticSyncModuleInstance::get_request_headers() {
+  return data_handler->get_request_headers();
+}
+
 RGWRESTMgr *RGWElasticSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMgr *orig) {
   if (dialect != RGW_REST_S3) {
     return orig;
@@ -607,12 +875,8 @@ RGWRESTMgr *RGWElasticSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMg
   return new RGWRESTMgr_MDSearch_S3();
 }
 
-int RGWElasticSyncModule::create_instance(CephContext *cct, map<string, string, ltstr_nocase>& config, RGWSyncModuleInstanceRef *instance) {
-  string endpoint;
-  auto i = config.find("endpoint");
-  if (i != config.end()) {
-    endpoint = i->second;
-  }
+int RGWElasticSyncModule::create_instance(CephContext *cct, const JSONFormattable& config, RGWSyncModuleInstanceRef *instance) {
+  string endpoint = config["endpoint"];
   instance->reset(new RGWElasticSyncModuleInstance(cct, config));
   return 0;
 }

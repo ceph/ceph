@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef RGW_META_SYNC_STATUS_H
 #define RGW_META_SYNC_STATUS_H
 
@@ -19,20 +22,20 @@ struct rgw_meta_sync_info {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
-    ::encode(state, bl);
-    ::encode(num_shards, bl);
-    ::encode(period, bl);
-    ::encode(realm_epoch, bl);
+    encode(state, bl);
+    encode(num_shards, bl);
+    encode(period, bl);
+    encode(realm_epoch, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(state, bl);
-    ::decode(num_shards, bl);
+    decode(state, bl);
+    decode(num_shards, bl);
     if (struct_v >= 2) {
-      ::decode(period, bl);
-      ::decode(realm_epoch, bl);
+      decode(period, bl);
+      decode(realm_epoch, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -62,26 +65,26 @@ struct rgw_meta_sync_marker {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 1, bl);
-    ::encode(state, bl);
-    ::encode(marker, bl);
-    ::encode(next_step_marker, bl);
-    ::encode(total_entries, bl);
-    ::encode(pos, bl);
-    ::encode(timestamp, bl);
-    ::encode(realm_epoch, bl);
+    encode(state, bl);
+    encode(marker, bl);
+    encode(next_step_marker, bl);
+    encode(total_entries, bl);
+    encode(pos, bl);
+    encode(timestamp, bl);
+    encode(realm_epoch, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
-    ::decode(state, bl);
-    ::decode(marker, bl);
-    ::decode(next_step_marker, bl);
-    ::decode(total_entries, bl);
-    ::decode(pos, bl);
-    ::decode(timestamp, bl);
+    decode(state, bl);
+    decode(marker, bl);
+    decode(next_step_marker, bl);
+    decode(total_entries, bl);
+    decode(pos, bl);
+    decode(timestamp, bl);
     if (struct_v >= 2) {
-      ::decode(realm_epoch, bl);
+      decode(realm_epoch, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -100,15 +103,15 @@ struct rgw_meta_sync_status {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(sync_info, bl);
-    ::encode(sync_markers, bl);
+    encode(sync_info, bl);
+    encode(sync_markers, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
      DECODE_START(1, bl);
-    ::decode(sync_info, bl);
-    ::decode(sync_markers, bl);
+     decode(sync_info, bl);
+     decode(sync_markers, bl);
      DECODE_FINISH(bl);
   }
 

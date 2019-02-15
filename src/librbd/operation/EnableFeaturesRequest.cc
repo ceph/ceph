@@ -38,7 +38,7 @@ template <typename I>
 void EnableFeaturesRequest<I>::send_op() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   ldout(cct, 20) << this << " " << __func__ << ": features=" << m_features
 		 << dendl;
@@ -49,7 +49,7 @@ template <typename I>
 bool EnableFeaturesRequest<I>::should_complete(int r) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 20) << this << " " << __func__ << "r=" << r << dendl;
+  ldout(cct, 20) << this << " " << __func__ << " r=" << r << dendl;
 
   if (r < 0) {
     lderr(cct) << "encountered error: " << cpp_strerror(r) << dendl;
@@ -135,7 +135,7 @@ void EnableFeaturesRequest<I>::send_get_mirror_mode() {
     create_rados_callback<klass, &klass::handle_get_mirror_mode>(this);
   m_out_bl.clear();
   int r = image_ctx.md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 
@@ -147,7 +147,7 @@ Context *EnableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
 
   cls::rbd::MirrorMode mirror_mode = cls::rbd::MIRROR_MODE_DISABLED;
   if (*result == 0) {
-    bufferlist::iterator it = m_out_bl.begin();
+    auto it = m_out_bl.cbegin();
     *result = cls_client::mirror_mode_get_finish(&it, &mirror_mode);
   } else if (*result == -ENOENT) {
     *result = 0;
@@ -189,12 +189,6 @@ Context *EnableFeaturesRequest<I>::handle_get_mirror_mode(int *result) {
       m_features_mask |= RBD_FEATURE_EXCLUSIVE_LOCK;
     }
     if ((m_features & RBD_FEATURE_FAST_DIFF) != 0) {
-      if ((m_new_features & RBD_FEATURE_OBJECT_MAP) == 0) {
-	lderr(cct) << "cannot enable fast-diff. object-map must be "
-                      "enabled before enabling fast-diff." << dendl;
-	*result = -EINVAL;
-	break;
-      }
       m_enable_flags |= RBD_FLAG_FAST_DIFF_INVALID;
       m_features_mask |= (RBD_FEATURE_OBJECT_MAP | RBD_FEATURE_EXCLUSIVE_LOCK);
     }
@@ -234,8 +228,10 @@ void EnableFeaturesRequest<I>::send_create_journal() {
     &EnableFeaturesRequest<I>::handle_create_journal>(this);
 
   journal::CreateRequest<I> *req = journal::CreateRequest<I>::create(
-    image_ctx.md_ctx, image_ctx.id, image_ctx.journal_order,
-    image_ctx.journal_splay_width, image_ctx.journal_pool,
+    image_ctx.md_ctx, image_ctx.id,
+    image_ctx.config.template get_val<uint64_t>("rbd_journal_order"),
+    image_ctx.config.template get_val<uint64_t>("rbd_journal_splay_width"),
+    image_ctx.config.template get_val<std::string>("rbd_journal_pool"),
     cls::journal::Tag::TAG_CLASS_NEW, tag_data,
     librbd::Journal<>::IMAGE_CLIENT_ID, image_ctx.op_work_queue, ctx);
 
@@ -342,7 +338,7 @@ void EnableFeaturesRequest<I>::send_set_features() {
   librados::AioCompletion *comp =
     create_rados_callback<klass, &klass::handle_set_features>(this);
   int r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, comp, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   comp->release();
 }
 

@@ -39,6 +39,7 @@ one with a physical device may look similar to::
           data uuid                 SlEgHe-jX1H-QBQk-Sce0-RUls-8KlY-g8HgcZ
           journal device            /dev/journals/journal1
           data device               /dev/test_group/data-lv2
+          devices                   /dev/sda
 
       [data]    /dev/test_group/data-lv2
 
@@ -50,6 +51,7 @@ one with a physical device may look similar to::
           data uuid                 SlEgHe-jX1H-QBQk-Sce0-RUls-8KlY-g8HgcZ
           journal device            /dev/journals/journal1
           data device               /dev/test_group/data-lv2
+          devices                   /dev/sdb
 
     ====== osd.0 =======
 
@@ -63,10 +65,17 @@ one with a physical device may look similar to::
           data uuid                 TUpfel-Q5ZT-eFph-bdGW-SiNW-l0ag-f5kh00
           journal device            /dev/sdd1
           data device               /dev/test_group/data-lv1
+          devices                   /dev/sdc
 
       [journal]    /dev/sdd1
 
           PARTUUID                  cd72bd28-002a-48da-bdf6-d5b993e84f3f
+
+
+For logical volumes the ``devices`` key is populated with the physical devices
+associated with the logical volume. Since LVM allows multiple physical devices
+to be part of a logical volume, the value will be comma separated when using
+``pretty``, but an array when using ``json``.
 
 .. note:: Tags are displayed in a readable format. The ``osd id`` key is stored
           as a ``ceph.osd_id`` tag. For more information on lvm tag conventions
@@ -96,6 +105,7 @@ can be listed in the following way::
           data uuid                 SlEgHe-jX1H-QBQk-Sce0-RUls-8KlY-g8HgcZ
           journal device            /dev/journals/journal1
           data device               /dev/test_group/data-lv2
+          devices                   /dev/sdc
 
 
 .. note:: Tags are displayed in a readable format. The ``osd id`` key is stored
@@ -134,6 +144,7 @@ output (note how tags aren't modified)::
     {
         "0": [
             {
+                "devices": ["/dev/sda"],
                 "lv_name": "data-lv1",
                 "lv_path": "/dev/test_group/data-lv1",
                 "lv_tags": "ceph.cluster_fsid=ce454d91-d748-4751-a318-ff7f7aa18ffd,ceph.data_device=/dev/test_group/data-lv1,ceph.data_uuid=TUpfel-Q5ZT-eFph-bdGW-SiNW-l0ag-f5kh00,ceph.journal_device=/dev/sdd1,ceph.journal_uuid=cd72bd28-002a-48da-bdf6-d5b993e84f3f,ceph.osd_fsid=943949f0-ce37-47ca-a33c-3413d46ee9ec,ceph.osd_id=0,ceph.type=data",

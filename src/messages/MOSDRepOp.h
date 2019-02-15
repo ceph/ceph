@@ -22,10 +22,12 @@
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
  */
 
-class MOSDRepOp : public MOSDFastDispatchOp {
-
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+class MOSDRepOp : public MessageInstance<MOSDRepOp, MOSDFastDispatchOp> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
   epoch_t map_epoch, min_epoch;
@@ -35,8 +37,8 @@ public:
 
   spg_t pgid;
 
-  bufferlist::iterator p;
-  // Decoding flags. Decoding is only needed for messages catched by pipe reader.
+  bufferlist::const_iterator p;
+  // Decoding flags. Decoding is only needed for messages caught by pipe reader.
   bool final_decode_needed;
 
   // subop
@@ -78,73 +80,74 @@ public:
   }
 
   void decode_payload() override {
-    p = payload.begin();
-    // splitted to partial and final
-    ::decode(map_epoch, p);
+    p = payload.cbegin();
+    // split to partial and final
+    decode(map_epoch, p);
     if (header.version >= 2) {
-      ::decode(min_epoch, p);
+      decode(min_epoch, p);
       decode_trace(p);
     } else {
       min_epoch = map_epoch;
     }
-    ::decode(reqid, p);
-    ::decode(pgid, p);
+    decode(reqid, p);
+    decode(pgid, p);
   }
 
   void finish_decode() {
     if (!final_decode_needed)
       return; // Message is already final decoded
-    ::decode(poid, p);
+    decode(poid, p);
 
-    ::decode(acks_wanted, p);
-    ::decode(version, p);
-    ::decode(logbl, p);
-    ::decode(pg_stats, p);
-    ::decode(pg_trim_to, p);
+    decode(acks_wanted, p);
+    decode(version, p);
+    decode(logbl, p);
+    decode(pg_stats, p);
+    decode(pg_trim_to, p);
 
 
-    ::decode(new_temp_oid, p);
-    ::decode(discard_temp_oid, p);
+    decode(new_temp_oid, p);
+    decode(discard_temp_oid, p);
 
-    ::decode(from, p);
-    ::decode(updated_hit_set_history, p);
-    ::decode(pg_roll_forward_to, p);
+    decode(from, p);
+    decode(updated_hit_set_history, p);
+    decode(pg_roll_forward_to, p);
     final_decode_needed = false;
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(map_epoch, payload);
+    using ceph::encode;
+    encode(map_epoch, payload);
     if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       header.version = HEAD_VERSION;
-      ::encode(min_epoch, payload);
+      encode(min_epoch, payload);
       encode_trace(payload, features);
     } else {
       header.version = 1;
     }
-    ::encode(reqid, payload);
-    ::encode(pgid, payload);
-    ::encode(poid, payload);
+    encode(reqid, payload);
+    encode(pgid, payload);
+    encode(poid, payload);
 
-    ::encode(acks_wanted, payload);
-    ::encode(version, payload);
-    ::encode(logbl, payload);
-    ::encode(pg_stats, payload);
-    ::encode(pg_trim_to, payload);
-    ::encode(new_temp_oid, payload);
-    ::encode(discard_temp_oid, payload);
-    ::encode(from, payload);
-    ::encode(updated_hit_set_history, payload);
-    ::encode(pg_roll_forward_to, payload);
+    encode(acks_wanted, payload);
+    encode(version, payload);
+    encode(logbl, payload);
+    encode(pg_stats, payload);
+    encode(pg_trim_to, payload);
+    encode(new_temp_oid, payload);
+    encode(discard_temp_oid, payload);
+    encode(from, payload);
+    encode(updated_hit_set_history, payload);
+    encode(pg_roll_forward_to, payload);
   }
 
   MOSDRepOp()
-    : MOSDFastDispatchOp(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0),
       final_decode_needed(true), acks_wanted (0) {}
   MOSDRepOp(osd_reqid_t r, pg_shard_t from,
 	    spg_t p, const hobject_t& po, int aw,
 	    epoch_t mape, epoch_t min_epoch, ceph_tid_t rtid, eversion_t v)
-    : MOSDFastDispatchOp(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(mape),
       min_epoch(min_epoch),
       reqid(r),
@@ -160,7 +163,7 @@ private:
   ~MOSDRepOp() override {}
 
 public:
-  const char *get_type_name() const override { return "osd_repop"; }
+  std::string_view get_type_name() const override { return "osd_repop"; }
   void print(ostream& out) const override {
     out << "osd_repop(" << reqid
 	<< " " << pgid << " e" << map_epoch << "/" << min_epoch;

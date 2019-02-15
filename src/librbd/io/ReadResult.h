@@ -24,58 +24,31 @@ struct AioCompletion;
 template <typename> struct ObjectReadRequest;
 
 class ReadResult {
-private:
-  struct C_ReadRequest : public Context {
+public:
+  struct C_ImageReadRequest : public Context {
     AioCompletion *aio_completion;
+    Extents image_extents;
     bufferlist bl;
 
-    C_ReadRequest(AioCompletion *aio_completion);
-
-    void finish(int r) override;
-  };
-
-public:
-
-  struct C_ImageReadRequest : public C_ReadRequest {
-    Extents image_extents;
-
     C_ImageReadRequest(AioCompletion *aio_completion,
-                       const Extents image_extents)
-      : C_ReadRequest(aio_completion), image_extents(image_extents) {
-    }
+                       const Extents image_extents);
 
     void finish(int r) override;
   };
 
-  struct C_SparseReadRequestBase : public C_ReadRequest {
-    bool ignore_enoent;
-
-    C_SparseReadRequestBase(AioCompletion *aio_completion, bool ignore_enoent)
-      : C_ReadRequest(aio_completion), ignore_enoent(ignore_enoent) {
-    }
-
-    using C_ReadRequest::finish;
-    void finish(ExtentMap &extent_map, const Extents &buffer_extents,
-                uint64_t offset, size_t length, bufferlist &bl, int r);
-  };
-
-  template <typename ImageCtxT = ImageCtx>
-  struct C_SparseReadRequest : public C_SparseReadRequestBase {
-    ObjectReadRequest<ImageCtxT> *request = nullptr;
+  struct C_ObjectReadRequest : public Context {
+    AioCompletion *aio_completion;
+    uint64_t object_off;
+    uint64_t object_len;
     Extents buffer_extents;
 
-    C_SparseReadRequest(AioCompletion *aio_completion, Extents&& buffer_extents,
-                        bool ignore_enoent)
-      : C_SparseReadRequestBase(aio_completion, ignore_enoent),
-        buffer_extents(std::move(buffer_extents)) {
-    }
+    bufferlist bl;
+    ExtentMap extent_map;
 
-    void finish(int r) override {
-      C_SparseReadRequestBase::finish(request->get_extent_map(), buffer_extents,
-                                      request->get_offset(),
-                                      request->get_length(), request->data(),
-                                      r);
-    }
+    C_ObjectReadRequest(AioCompletion *aio_completion, uint64_t object_off,
+                        uint64_t object_len, Extents&& buffer_extents);
+
+    void finish(int r) override;
   };
 
   ReadResult();

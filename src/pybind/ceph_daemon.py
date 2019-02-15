@@ -15,7 +15,10 @@ import json
 import socket
 import struct
 import time
-from collections import OrderedDict
+try:
+    from collections.abc import OrderedDict
+except ImportError:
+    from collections import OrderedDict
 from fcntl import ioctl
 from fnmatch import fnmatch
 from prettytable import PrettyTable, HEADER
@@ -184,9 +187,11 @@ class DaemonWatcher(object):
         Format a number without units, so as to fit into `width` characters, substituting
         an appropriate unit suffix.
         """
-        units = [' ', 'k', 'M', 'G', 'T', 'P']
+        units = [' ', 'k', 'M', 'G', 'T', 'P', 'E', 'Z']
         unit = 0
         while len("%s" % (int(n) // (1000**unit))) > width - 1:
+            if unit >= len(units) - 1:
+                break;
             unit += 1
 
         if unit > 0:

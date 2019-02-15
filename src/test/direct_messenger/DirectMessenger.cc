@@ -235,7 +235,7 @@ void DirectMessenger::mark_down(const entity_addr_t& addr)
   ConnectionRef conn;
   if (addr == peer_inst.addr) {
     conn = peer_connection;
-  } else if (addr == get_myaddr()) {
+  } else if (addr == get_myaddr_legacy()) {
     conn = loopback_connection;
   }
   if (conn) {

@@ -15,9 +15,11 @@
 #ifndef CEPH_MTIMECHECK_H
 #define CEPH_MTIMECHECK_H
 
-struct MTimeCheck : public Message
-{
-  static const int HEAD_VERSION = 1;
+class MTimeCheck : public MessageInstance<MTimeCheck> {
+public:
+  friend factory;
+
+  static constexpr int HEAD_VERSION = 1;
 
   enum {
     OP_PING = 1,
@@ -33,9 +35,9 @@ struct MTimeCheck : public Message
   map<entity_inst_t, double> skews;
   map<entity_inst_t, double> latencies;
 
-  MTimeCheck() : Message(MSG_TIMECHECK, HEAD_VERSION) { }
+  MTimeCheck() : MessageInstance(MSG_TIMECHECK, HEAD_VERSION) { }
   MTimeCheck(int op) :
-    Message(MSG_TIMECHECK, HEAD_VERSION),
+    MessageInstance(MSG_TIMECHECK, HEAD_VERSION),
     op(op)
   { }
 
@@ -43,7 +45,7 @@ private:
   ~MTimeCheck() override { }
 
 public:
-  const char *get_type_name() const override { return "time_check"; }
+  std::string_view get_type_name() const override { return "time_check"; }
   const char *get_op_name() const {
     switch (op) {
     case OP_PING: return "ping";
@@ -65,22 +67,23 @@ public:
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(op, p);
-    ::decode(epoch, p);
-    ::decode(round, p);
-    ::decode(timestamp, p);
-    ::decode(skews, p);
-    ::decode(latencies, p);
+    auto p = payload.cbegin();
+    decode(op, p);
+    decode(epoch, p);
+    decode(round, p);
+    decode(timestamp, p);
+    decode(skews, p);
+    decode(latencies, p);
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(op, payload);
-    ::encode(epoch, payload);
-    ::encode(round, payload);
-    ::encode(timestamp, payload);
-    ::encode(skews, payload, features);
-    ::encode(latencies, payload, features);
+    using ceph::encode;
+    encode(op, payload);
+    encode(epoch, payload);
+    encode(round, payload);
+    encode(timestamp, payload);
+    encode(skews, payload, features);
+    encode(latencies, payload, features);
   }
 };
 

@@ -159,10 +159,10 @@ bool CrushWrapper::has_incompat_choose_args() const
   crush_choose_arg_map arg_map = choose_args.begin()->second;
   for (__u32 i = 0; i < arg_map.size; i++) {
     crush_choose_arg *arg = &arg_map.args[i];
-    if (arg->weight_set_size == 0 &&
+    if (arg->weight_set_positions == 0 &&
 	arg->ids_size == 0)
 	continue;
-    if (arg->weight_set_size != 1)
+    if (arg->weight_set_positions != 1)
       return true;
     if (arg->ids_size != 0)
       return true;
@@ -275,7 +275,7 @@ int CrushWrapper::rename_rule(const string& srcname,
   }
   int rule_id = get_rule_id(srcname);
   auto it = rule_name_map.find(rule_id);
-  assert(it != rule_name_map.end());
+  ceph_assert(it != rule_name_map.end());
   it->second = dstname;
   if (have_rmaps) {
     rule_name_rmap.erase(srcname);
@@ -294,6 +294,19 @@ void CrushWrapper::find_takes(set<int> *roots) const
       if (r->steps[j].op == CRUSH_RULE_TAKE)
 	roots->insert(r->steps[j].arg1);
     }
+  }
+}
+
+void CrushWrapper::find_takes_by_rule(int rule, set<int> *roots) const
+{
+  if (rule < 0 || rule >= (int)crush->max_rules)
+    return;
+  crush_rule *r = crush->rules[rule];
+  if (!r)
+    return;
+  for (unsigned i = 0; i < r->len; i++) {
+    if (r->steps[i].op == CRUSH_RULE_TAKE)
+      roots->insert(r->steps[i].arg1);
   }
 }
 
@@ -344,6 +357,7 @@ bool CrushWrapper::_maybe_remove_last_instance(CephContext *cct, int item, bool 
     if (class_bucket.count(item) != 0)
       class_bucket.erase(item);
     class_remove_item(item);
+    update_choose_args(cct);
   }
   if ((item >= 0 || !unlink_only) && name_map.count(item)) {
     ldout(cct, 5) << "_maybe_remove_last_instance removing name for item " << item << dendl;
@@ -386,7 +400,71 @@ int CrushWrapper::remove_root(int item)
   if (class_bucket.count(item) != 0)
     class_bucket.erase(item);
   class_remove_item(item);
+  update_choose_args(nullptr);
   return 0;
+}
+
+void CrushWrapper::update_choose_args(CephContext *cct)
+{
+  for (auto& i : choose_args) {
+    crush_choose_arg_map &arg_map = i.second;
+    unsigned positions = get_choose_args_positions(arg_map);
+    for (int j = 0; j < crush->max_buckets; ++j) {
+      crush_bucket *b = crush->buckets[j];
+      auto& carg = arg_map.args[j];
+      // strip out choose_args for any buckets that no longer exist
+      if (!b || b->alg != CRUSH_BUCKET_STRAW2) {
+	if (carg.ids) {
+	  if (cct)
+	    ldout(cct,0) << __func__ << " removing " << i.first << " bucket "
+			 << (-1-j) << " ids" << dendl;
+	  free(carg.ids);
+	  carg.ids = 0;
+	  carg.ids_size = 0;
+	}
+	if (carg.weight_set) {
+	  if (cct)
+	    ldout(cct,0) << __func__ << " removing " << i.first << " bucket "
+			 << (-1-j) << " weight_sets" << dendl;
+	  for (unsigned p = 0; p < carg.weight_set_positions; ++p) {
+	    free(carg.weight_set[p].weights);
+	  }
+	  free(carg.weight_set);
+	  carg.weight_set = 0;
+	  carg.weight_set_positions = 0;
+	}
+	continue;
+      }
+      if (carg.weight_set_positions == 0) {
+	continue;	// skip it
+      }
+      if (carg.weight_set_positions != positions) {
+	if (cct)
+	  lderr(cct) << __func__ << " " << i.first << " bucket "
+		     << (-1-j) << " positions " << carg.weight_set_positions
+		     << " -> " << positions << dendl;
+	continue;	// wth... skip!
+      }
+      // mis-sized weight_sets?  this shouldn't ever happen.
+      for (unsigned p = 0; p < positions; ++p) {
+	if (carg.weight_set[p].size != b->size) {
+	  if (cct)
+	    lderr(cct) << __func__ << " fixing " << i.first << " bucket "
+		       << (-1-j) << " position " << p
+		       << " size " << carg.weight_set[p].size << " -> "
+		       << b->size << dendl;
+	  auto old_ws = carg.weight_set[p];
+	  carg.weight_set[p].size = b->size;
+	  carg.weight_set[p].weights = (__u32*)calloc(b->size, sizeof(__u32));
+	  auto max = std::min<unsigned>(old_ws.size, b->size);
+	  for (unsigned k = 0; k < max; ++k) {
+	    carg.weight_set[p].weights[k] = old_ws.weights[k];
+	  }
+	  free(old_ws.weights);
+	}
+      }
+    }
+  }
 }
 
 int CrushWrapper::remove_item(CephContext *cct, int item, bool unlink_only)
@@ -651,7 +729,7 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, const map<string,s
       return false;
     }
 
-    assert(bucket_exists(id));
+    ceph_assert(bucket_exists(id));
     crush_bucket *b = get_bucket(id);
 
     // see if item exists in this bucket
@@ -666,7 +744,7 @@ bool CrushWrapper::check_item_loc(CephContext *cct, int item, const map<string,s
     return false;
   }
   
-  ldout(cct, 1) << "check_item_loc item " << item << " loc " << loc << dendl;
+  ldout(cct, 2) << __func__ << " item " << item << " loc " << loc << dendl;
   return false;
 }
 
@@ -682,6 +760,18 @@ map<string, string> CrushWrapper::get_full_location(int id) const
       std::inserter(full_location, full_location.begin()));
 
   return full_location;
+}
+
+int CrushWrapper::get_full_location(const string& name,
+				    map<string,string> *ploc)
+{
+  build_rmaps();
+  auto p = name_rmap.find(name);
+  if (p == name_rmap.end()) {
+    return -ENOENT;
+  }
+  *ploc = get_full_location(p->second);
+  return 0;
 }
 
 int CrushWrapper::get_full_location_ordered(int id, vector<pair<string, string> >& path) const
@@ -768,9 +858,119 @@ int CrushWrapper::get_children(int id, list<int> *children) const
   return b->size;
 }
 
+void CrushWrapper::get_children_of_type(int id,
+                                        int type,
+					vector<int> *children,
+					bool exclude_shadow) const
+{
+  if (id >= 0) {
+    if (type == 0) {
+      // want leaf?
+      children->push_back(id);
+    }
+    return;
+  }
+  auto b = get_bucket(id);
+  if (IS_ERR(b)) {
+    return;
+  }
+  if (b->type < type) {
+    // give up
+    return;
+  } else if (b->type == type) {
+    if (!is_shadow_item(b->id) || !exclude_shadow) {
+      children->push_back(b->id);
+    }
+    return;
+  }
+  for (unsigned n = 0; n < b->size; n++) {
+    get_children_of_type(b->items[n], type, children, exclude_shadow);
+  }
+}
+
+int CrushWrapper::verify_upmap(CephContext *cct,
+                               int rule_id,
+                               int pool_size,
+                               const vector<int>& up)
+{
+  auto rule = get_rule(rule_id);
+  if (IS_ERR(rule) || !rule) {
+    lderr(cct) << __func__ << " rule " << rule_id << " does not exist"
+               << dendl;
+    return -ENOENT;
+  }
+  for (unsigned step = 0; step < rule->len; ++step) {
+    auto curstep = &rule->steps[step];
+    ldout(cct, 10) << __func__ << " step " << step << dendl;
+    switch (curstep->op) {
+    case CRUSH_RULE_CHOOSELEAF_FIRSTN:
+    case CRUSH_RULE_CHOOSELEAF_INDEP:
+      {
+        int type = curstep->arg2;
+        if (type == 0) // osd
+          break;
+        map<int, set<int>> osds_by_parent; // parent_of_desired_type -> osds
+        for (auto osd : up) {
+          auto parent = get_parent_of_type(osd, type, rule_id);
+          if (parent < 0) {
+            osds_by_parent[parent].insert(osd);
+          } else {
+            ldout(cct, 1) << __func__ << " unable to get parent of osd." << osd
+                          << ", skipping for now"
+                          << dendl;
+          }
+        }
+        for (auto i : osds_by_parent) {
+          if (i.second.size() > 1) {
+            lderr(cct) << __func__ << " multiple osds " << i.second
+                       << " come from same failure domain " << i.first
+                       << dendl;
+            return -EINVAL;
+          }
+        }
+      }
+      break;
+
+    case CRUSH_RULE_CHOOSE_FIRSTN:
+    case CRUSH_RULE_CHOOSE_INDEP:
+      {
+        int numrep = curstep->arg1;
+        int type = curstep->arg2;
+        if (type == 0) // osd
+          break;
+        if (numrep <= 0)
+          numrep += pool_size;
+        set<int> parents_of_type;
+        for (auto osd : up) {
+          auto parent = get_parent_of_type(osd, type, rule_id);
+          if (parent < 0) {
+            parents_of_type.insert(parent);
+          } else {
+            ldout(cct, 1) << __func__ << " unable to get parent of osd." << osd
+                          << ", skipping for now"
+                          << dendl;
+          }
+        }
+        if ((int)parents_of_type.size() > numrep) {
+          lderr(cct) << __func__ << " number of buckets "
+                     << parents_of_type.size() << " exceeds desired " << numrep
+                     << dendl;
+          return -EINVAL;
+        }
+      }
+      break;
+
+    default:
+      // ignore
+      break;
+    }
+  }
+  return 0;
+}
+
 int CrushWrapper::_get_leaves(int id, list<int> *leaves) const
 {
-  assert(leaves);
+  ceph_assert(leaves);
 
   // Already leaf?
   if (id >= 0) {
@@ -800,7 +1000,7 @@ int CrushWrapper::_get_leaves(int id, list<int> *leaves) const
 
 int CrushWrapper::get_leaves(const string &name, set<int> *leaves) const
 {
-  assert(leaves);
+  ceph_assert(leaves);
   leaves->clear();
 
   if (!name_exists(name)) {
@@ -923,8 +1123,8 @@ int CrushWrapper::insert_item(
 
     ldout(cct, 5) << "insert_item adding " << cur << " weight " << weight
 		  << " to bucket " << id << dendl;
-    int r = bucket_add_item(b, cur, 0);
-    assert (!r);
+    [[maybe_unused]] int r = bucket_add_item(b, cur, 0);
+    ceph_assert(!r);
     break;
   }
 
@@ -979,7 +1179,7 @@ int CrushWrapper::detach_bucket(CephContext *cct, int item)
     return (-EINVAL);
 
   // check that the bucket that we want to detach exists
-  assert(bucket_exists(item));
+  ceph_assert(bucket_exists(item));
 
   // get the bucket's weight
   crush_bucket *b = get_bucket(item);
@@ -1017,8 +1217,8 @@ int CrushWrapper::detach_bucket(CephContext *cct, int item)
 
   bool successful_detach = !(check_item_loc(cct, item, test_location,
 					    &test_weight));
-  assert(successful_detach);
-  assert(test_weight == 0);
+  ceph_assert(successful_detach);
+  ceph_assert(test_weight == 0);
 
   return bucket_weight;
 }
@@ -1063,21 +1263,21 @@ int CrushWrapper::swap_bucket(CephContext *cct, int src, int dst)
     tmp[item] = itemw;
     bucket_remove_item(a, item);
   }
-  assert(a->size == 0);
-  assert(b->size == bs);
+  ceph_assert(a->size == 0);
+  ceph_assert(b->size == bs);
   for (unsigned i = 0; i < bs; ++i) {
     int item = b->items[0];
     int itemw = crush_get_bucket_item_weight(b, 0);
     bucket_remove_item(b, item);
     bucket_add_item(a, item, itemw);
   }
-  assert(a->size == bs);
-  assert(b->size == 0);
+  ceph_assert(a->size == bs);
+  ceph_assert(b->size == 0);
   for (auto t : tmp) {
     bucket_add_item(b, t.first, t.second);
   }
-  assert(a->size == bs);
-  assert(b->size == as);
+  ceph_assert(a->size == bs);
+  ceph_assert(b->size == as);
 
   // swap names
   swap_names(src, dst);
@@ -1356,15 +1556,79 @@ int CrushWrapper::get_immediate_parent_id(int id, int *parent) const
   return -ENOENT;
 }
 
-int CrushWrapper::get_parent_of_type(int item, int type) const
+int CrushWrapper::get_parent_of_type(int item, int type, int rule) const
 {
-  do {
-    int r = get_immediate_parent_id(item, &item);
-    if (r < 0) {
-      return 0;
+  if (rule < 0) {
+    // no rule specified
+    do {
+      int r = get_immediate_parent_id(item, &item);
+      if (r < 0) {
+        return 0;
+      }
+    } while (get_bucket_type(item) != type);
+    return item;
+  }
+  set<int> roots;
+  find_takes_by_rule(rule, &roots);
+  for (auto root : roots) {
+    vector<int> candidates;
+    get_children_of_type(root, type, &candidates, false);
+    for (auto candidate : candidates) {
+      if (subtree_contains(candidate, item)) {
+	// note that here we assure that no two different buckets
+	// from a single crush rule will share a same device,
+	// which should generally be true.
+        return candidate;
+      }
     }
-  } while (get_bucket_type(item) != type);
-  return item;
+  }
+  return 0; // not found
+}
+
+void CrushWrapper::get_subtree_of_type(int type, vector<int> *subtrees)
+{
+  set<int> roots;
+  find_roots(&roots);
+  for (auto r: roots) {
+    crush_bucket *b = get_bucket(r);
+    if (IS_ERR(b))
+      continue;
+    get_children_of_type(b->id, type, subtrees);
+  }
+}
+
+bool CrushWrapper::class_is_in_use(int class_id, ostream *ss)
+{
+  list<unsigned> rules;
+  for (unsigned i = 0; i < crush->max_rules; ++i) {
+    crush_rule *r = crush->rules[i];
+    if (!r)
+      continue;
+    for (unsigned j = 0; j < r->len; ++j) {
+      if (r->steps[j].op == CRUSH_RULE_TAKE) {
+        int root = r->steps[j].arg1;
+        for (auto &p : class_bucket) {
+          auto& q = p.second;
+          if (q.count(class_id) && q[class_id] == root) {
+            rules.push_back(i);
+          }
+        }
+      }
+    }
+  }
+  if (rules.empty()) {
+    return false;
+  }
+  if (ss) {
+    ostringstream os;
+    for (auto &p: rules) {
+      os << "'" << get_rule_name(p) <<"',";
+    }
+    string out(os.str());
+    out.resize(out.size() - 1); // drop last ','
+    *ss << "still referenced by crush_rule(s): " << out;
+  }
+  return true;
 }
 
 int CrushWrapper::rename_class(const string& srcname, const string& dstname)
@@ -1377,16 +1641,16 @@ int CrushWrapper::rename_class(const string& srcname, const string& dstname)
     return -EEXIST;
 
   int class_id = i->second;
-  assert(class_name.count(class_id));
+  ceph_assert(class_name.count(class_id));
   // rename any shadow buckets of old class name
   for (auto &it: class_map) {
     if (it.first < 0 && it.second == class_id) {
         string old_name = get_item_name(it.first);
         size_t pos = old_name.find("~");
-        assert(pos != string::npos);
+        ceph_assert(pos != string::npos);
         string name_no_class = old_name.substr(0, pos);
         string old_class_name = old_name.substr(pos + 1);
-        assert(old_class_name == srcname);
+        ceph_assert(old_class_name == srcname);
         string new_name = name_no_class + "~" + dstname;
         // we do not use set_item_name
         // because the name is intentionally invalid
@@ -1416,7 +1680,7 @@ int CrushWrapper::populate_classes(
   // accumulate weight values for each carg and bucket as we go. because it is
   // depth first, we will have the nested bucket weights we need when we
   // finish constructing the containing buckets.
-  map<int,map<int,vector<int>>> cmap_item_weight; // cargs -> bno -> weights
+  map<int,map<int,vector<int>>> cmap_item_weight; // cargs -> bno -> [bucket weight for each position]
   set<int> roots;
   find_nonshadow_roots(&roots);
   for (auto &r : roots) {
@@ -1472,21 +1736,403 @@ int32_t CrushWrapper::_alloc_class_id() const {
       }
     }
   } while (class_id != start);
-  assert(0 == "no available class id");
+  ceph_abort_msg("no available class id");
+}
+
+int CrushWrapper::set_subtree_class(
+  const string& subtree,
+  const string& new_class)
+{
+  if (!name_exists(subtree)) {
+    return -ENOENT;
+  }
+
+  int new_class_id = get_or_create_class_id(new_class);
+  int id = get_item_id(subtree);
+  list<int> q = { id };
+  while (!q.empty()) {
+    int id = q.front();
+    q.pop_front();
+    crush_bucket *b = get_bucket(id);
+    if (IS_ERR(b)) {
+      return PTR_ERR(b);
+    }
+    for (unsigned i = 0; i < b->size; ++i) {
+      int item = b->items[i];
+      if (item >= 0) {
+	class_map[item] = new_class_id;
+      } else {
+	q.push_back(item);
+      }
+    }
+  }
+  return 0;
+}
+
+int CrushWrapper::reclassify(
+  CephContext *cct,
+  ostream& out,
+  const map<string,string>& classify_root,
+  const map<string,pair<string,string>>& classify_bucket
+  )
+{
+  map<int,string> reclassified_bucket; // orig_id -> class
+
+  // classify_root
+  for (auto& i : classify_root) {
+    string root = i.first;
+    if (!name_exists(root)) {
+      out << "root " << root << " does not exist" << std::endl;
+      return -EINVAL;
+    }
+    int root_id = get_item_id(root);
+    string new_class = i.second;
+    int new_class_id = get_or_create_class_id(new_class);
+    out << "classify_root " << root << " (" << root_id
+	<< ") as " << new_class << std::endl;
+
+    // validate rules
+    for (unsigned j = 0; j < crush->max_rules; j++) {
+      if (crush->rules[j]) {
+	auto rule = crush->rules[j];
+	for (unsigned k = 0; k < rule->len; ++k) {
+	  if (rule->steps[k].op == CRUSH_RULE_TAKE) {
+	    int step_item = get_rule_arg1(j, k);
+	    int original_item;
+	    int c;
+	    int res = split_id_class(step_item, &original_item, &c);
+	    if (res < 0)
+	      return res;
+	    if (c >= 0) {
+	      if (original_item == root_id) {
+		out << "  rule " << j << " includes take on root "
+		    << root << " class " << c << std::endl;
+		return -EINVAL;
+	      }
+	    }
+	  }
+	}
+      }
+    }
+
+    // rebuild new buckets for root
+    //cout << "before class_bucket: " << class_bucket << std::endl;
+    map<int,int> renumber;
+    list<int> q;
+    q.push_back(root_id);
+    while (!q.empty()) {
+      int id = q.front();
+      q.pop_front();
+      crush_bucket *bucket = get_bucket(id);
+      if (IS_ERR(bucket)) {
+	out << "cannot find bucket " << id
+	    << ": " << cpp_strerror(PTR_ERR(bucket)) << std::endl;
+	return PTR_ERR(bucket);
+      }
+
+      // move bucket
+      int new_id = get_new_bucket_id();
+      out << "  renumbering bucket " << id << " -> " << new_id << std::endl;
+      renumber[id] = new_id;
+      crush->buckets[-1-new_id] = bucket;
+      bucket->id = new_id;
+      crush->buckets[-1-id] = crush_make_bucket(crush,
+						bucket->alg,
+						bucket->hash,
+						bucket->type,
+						0, NULL, NULL);
+      crush->buckets[-1-id]->id = id;
+      for (auto& i : choose_args) {
+	i.second.args[-1-new_id] = i.second.args[-1-id];
+	memset(&i.second.args[-1-id], 0, sizeof(i.second.args[0]));
+      }
+      class_bucket.erase(id);
+      class_bucket[new_id][new_class_id] = id;
+      name_map[new_id] = string(get_item_name(id));
+      name_map[id] = string(get_item_name(id)) + "~" + new_class;
+
+      for (unsigned j = 0; j < bucket->size; ++j) {
+	if (bucket->items[j] < 0) {
+	  q.push_front(bucket->items[j]);
+	} else {
+	  // we don't reclassify the device here; if the users wants that,
+	  // they can pass --set-subtree-class separately.
+	}
+      }
+    }
+    //cout << "mid class_bucket: " << class_bucket << std::endl;
+
+    for (int i = 0; i < crush->max_buckets; ++i) {
+      crush_bucket *b = crush->buckets[i];
+      if (!b) {
+	continue;
+      }
+      for (unsigned j = 0; j < b->size; ++j) {
+	if (renumber.count(b->items[j])) {
+	  b->items[j] = renumber[b->items[j]];
+	}
+      }
+    }
+
+    int r = rebuild_roots_with_classes();
+    if (r < 0) {
+      out << "failed to rebuild_roots_with_classes: " << cpp_strerror(r)
+	  << std::endl;
+      return r;
+    }
+    //cout << "final class_bucket: " << class_bucket << std::endl;
+  }
+
+  // classify_bucket
+  map<int,int> send_to;  // source bucket -> dest bucket
+  map<int,map<int,int>> new_class_bucket;
+  map<int,string> new_bucket_names;
+  map<int,map<string,string>> new_buckets;
+  map<string,int> new_bucket_by_name;
+  for (auto& i : classify_bucket) {
+    const string& match = i.first;  // prefix% or %suffix
+    const string& new_class = i.second.first;
+    const string& default_parent = i.second.second;
+    if (!name_exists(default_parent)) {
+      out << "default parent " << default_parent << " does not exist"
+	  << std::endl;
+      return -EINVAL;
+    }
+    int default_parent_id = get_item_id(default_parent);
+    crush_bucket *default_parent_bucket = get_bucket(default_parent_id);
+    assert(default_parent_bucket);
+    string default_parent_type_name = get_type_name(default_parent_bucket->type);
+
+    out << "classify_bucket " << match << " as " << new_class
+	<< " default bucket " << default_parent
+	<< " (" << default_parent_type_name << ")" << std::endl;
+
+    int new_class_id = get_or_create_class_id(new_class);
+    for (int j = 0; j < crush->max_buckets; ++j) {
+      crush_bucket *b = crush->buckets[j];
+      if (!b || is_shadow_item(b->id)) {
+	continue;
+      }
+      string name = get_item_name(b->id);
+      if (name.length() < match.length()) {
+	continue;
+      }
+      string basename;
+      if (match[0] == '%') {
+	if (match.substr(1) != name.substr(name.size() - match.size() + 1)) {
+	  continue;
+	}
+	basename = name.substr(0, name.size() - match.size() + 1);
+      } else if (match[match.size() - 1] == '%') {
+	if (match.substr(0, match.size() - 1) !=
+	    name.substr(0, match.size() - 1)) {
+	  continue;
+	}
+	basename = name.substr(match.size() - 1);
+      } else if (match == name) {
+	basename = default_parent;
+      } else {
+	continue;
+      }
+      cout << "match " << match << " to " << name << " basename " << basename
+	   << std::endl;
+      // look up or create basename bucket
+      int base_id;
+      if (name_exists(basename)) {
+	base_id = get_item_id(basename);
+	cout << "  have base " << base_id << std::endl;
+      } else if (new_bucket_by_name.count(basename)) {
+	base_id = new_bucket_by_name[basename];
+	cout << "  already creating base " << base_id << std::endl;
+      } else {
+	base_id = get_new_bucket_id();
+	crush->buckets[-1-base_id] = crush_make_bucket(crush,
+						       b->alg,
+						       b->hash,
+						       b->type,
+						       0, NULL, NULL);
+	crush->buckets[-1-base_id]->id = base_id;
+	name_map[base_id] = basename;
+	new_bucket_by_name[basename] = base_id;
+	cout << "  created base " << base_id << std::endl;
+
+	new_buckets[base_id][default_parent_type_name] = default_parent;
+      }
+      send_to[b->id] = base_id;
+      new_class_bucket[base_id][new_class_id] = b->id;
+      new_bucket_names[b->id] = basename + "~" + get_class_name(new_class_id);
+
+      // make sure devices are classified
+      for (unsigned i = 0; i < b->size; ++i) {
+	int item = b->items[i];
+	if (item >= 0) {
+	  class_map[item] = new_class_id;
+	}
+      }
+    }
+  }
+
+  // no name_exists() works below,
+  have_rmaps = false;
+
+  // copy items around
+  //cout << "send_to " << send_to << std::endl;
+  set<int> roots;
+  find_roots(&roots);
+  for (auto& i : send_to) {
+    crush_bucket *from = get_bucket(i.first);
+    crush_bucket *to = get_bucket(i.second);
+    cout << "moving items from " << from->id << " (" << get_item_name(from->id)
+	 << ") to " << to->id << " (" << get_item_name(to->id) << ")"
+	 << std::endl;
+    for (unsigned j = 0; j < from->size; ++j) {
+      int item = from->items[j];
+      int r;
+      map<string,string> to_loc;
+      to_loc[get_type_name(to->type)] = get_item_name(to->id);
+      if (item >= 0) {
+	if (subtree_contains(to->id, item)) {
+	  continue;
+	}
+	map<string,string> from_loc;
+	from_loc[get_type_name(from->type)] = get_item_name(from->id);
+	auto w = get_item_weightf_in_loc(item, from_loc);
+	r = insert_item(cct, item,
+			w,
+			get_item_name(item),
+			to_loc);
+      } else {
+	if (!send_to.count(item)) {
+	  lderr(cct) << "item " << item << " in bucket " << from->id
+	       << " is not also a reclassified bucket" << dendl;
+	  return -EINVAL;
+	}
+	int newitem = send_to[item];
+	if (subtree_contains(to->id, newitem)) {
+	  continue;
+	}
+	r = link_bucket(cct, newitem, to_loc);
+      }
+      if (r != 0) {
+	cout << __func__ << " err from insert_item: " << cpp_strerror(r)
+	     << std::endl;
+	return r;
+      }
+    }
+  }
+
+  // make sure new buckets have parents
+  for (auto& i : new_buckets) {
+    int parent;
+    if (get_immediate_parent_id(i.first, &parent) < 0) {
+      cout << "new bucket " << i.first << " missing parent, adding at "
+	   << i.second << std::endl;
+      int r = link_bucket(cct, i.first, i.second);
+      if (r != 0) {
+	cout << __func__ << " err from insert_item: " << cpp_strerror(r)
+	     << std::endl;
+	return r;
+      }
+    }
+  }
+
+  // set class mappings
+  //cout << "pre class_bucket: " << class_bucket << std::endl;
+  for (auto& i : new_class_bucket) {
+    for (auto& j : i.second) {
+      class_bucket[i.first][j.first] = j.second;
+    }
+
+  }
+  //cout << "post class_bucket: " << class_bucket << std::endl;
+  for (auto& i : new_bucket_names) {
+    name_map[i.first] = i.second;
+  }
+
+  int r = rebuild_roots_with_classes();
+  if (r < 0) {
+    out << "failed to rebuild_roots_with_classes: " << cpp_strerror(r)
+	<< std::endl;
+    return r;
+  }
+  //cout << "final class_bucket: " << class_bucket << std::endl;
+
+  return 0;
+}
+
+int CrushWrapper::get_new_bucket_id()
+{
+  int id = -1;
+  while (crush->buckets[-1-id] &&
+	 -1-id < crush->max_buckets) {
+    id--;
+  }
+  if (-1-id == crush->max_buckets) {
+    ++crush->max_buckets;
+    crush->buckets = (struct crush_bucket**)realloc(
+      crush->buckets,
+      sizeof(crush->buckets[0]) * crush->max_buckets);
+    for (auto& i : choose_args) {
+      assert(i.second.size == (__u32)crush->max_buckets - 1);
+      ++i.second.size;
+      i.second.args = (struct crush_choose_arg*)realloc(
+	i.second.args,
+	sizeof(i.second.args[0]) * i.second.size);
+    }
+  }
+  return id;
 }
 
 void CrushWrapper::reweight(CephContext *cct)
 {
   set<int> roots;
-  find_roots(&roots);
-  for (set<int>::iterator p = roots.begin(); p != roots.end(); ++p) {
-    if (*p >= 0)
+  find_nonshadow_roots(&roots);
+  for (auto id : roots) {
+    if (id >= 0)
       continue;
-    crush_bucket *b = get_bucket(*p);
-    ldout(cct, 5) << "reweight bucket " << *p << dendl;
+    crush_bucket *b = get_bucket(id);
+    ldout(cct, 5) << "reweight root bucket " << id << dendl;
     int r = crush_reweight_bucket(crush, b);
-    assert(r == 0);
+    ceph_assert(r == 0);
+
+    for (auto& i : choose_args) {
+      //cout << "carg " << i.first << std::endl;
+      vector<uint32_t> w;  // discard top-level weights
+      reweight_bucket(b, i.second, &w);
+    }
   }
+  int r = rebuild_roots_with_classes();
+  ceph_assert(r == 0);
+}
+
+void CrushWrapper::reweight_bucket(
+  crush_bucket *b,
+  crush_choose_arg_map& arg_map,
+  vector<uint32_t> *weightv)
+{
+  int idx = -1 - b->id;
+  unsigned npos = arg_map.args[idx].weight_set_positions;
+  //cout << __func__ << " " << b->id << " npos " << npos << std::endl;
+  weightv->resize(npos);
+  for (unsigned i = 0; i < b->size; ++i) {
+    int item = b->items[i];
+    if (item >= 0) {
+      for (unsigned pos = 0; pos < npos; ++pos) {
+	(*weightv)[pos] += arg_map.args[idx].weight_set->weights[i];
+      }
+    } else {
+      vector<uint32_t> subw(npos);
+      crush_bucket *sub = get_bucket(item);
+      assert(sub);
+      reweight_bucket(sub, arg_map, &subw);
+      for (unsigned pos = 0; pos < npos; ++pos) {
+	(*weightv)[pos] += subw[pos];
+	// strash the real bucket weight as the weights for this reference
+	arg_map.args[idx].weight_set->weights[i] = subw[pos];
+      }
+    }
+  }
+  //cout << __func__ << " finish " << b->id << " " << *weightv << std::endl;
 }
 
 int CrushWrapper::add_simple_rule_at(
@@ -1563,7 +2209,7 @@ int CrushWrapper::add_simple_rule_at(
   int max_rep = mode == "firstn" ? 10 : 20;
   //set the ruleset the same as rule_id(rno)
   crush_rule *rule = crush_make_rule(steps, rno, rule_type, min_rep, max_rep);
-  assert(rule);
+  ceph_assert(rule);
   int step = 0;
   if (mode == "indep") {
     crush_rule_set_step(rule, step++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 5, 0);
@@ -1617,7 +2263,7 @@ float CrushWrapper::_get_take_weight_osd_map(int root,
     int bno = q.front();
     q.pop_front();
     crush_bucket *b = crush->buckets[-1-bno];
-    assert(b);
+    ceph_assert(b);
     for (unsigned j=0; j<b->size; ++j) {
       int item_id = b->items[j];
       if (item_id >= 0) { //it's an OSD
@@ -1707,11 +2353,11 @@ int CrushWrapper::bucket_adjust_item_weight(CephContext *cct, crush_bucket *buck
     for (position = 0; position < bucket->size; position++)
       if (bucket->items[position] == item)
 	break;
-    assert(position != bucket->size);
+    ceph_assert(position != bucket->size);
     for (auto &w : choose_args) {
       crush_choose_arg_map &arg_map = w.second;
       crush_choose_arg *arg = &arg_map.args[-1-bucket->id];
-      for (__u32 j = 0; j < arg->weight_set_size; j++) {
+      for (__u32 j = 0; j < arg->weight_set_positions; j++) {
 	crush_weight_set *weight_set = &arg->weight_set[j];
 	weight_set->weights[position] = weight;
       }
@@ -1731,34 +2377,34 @@ int CrushWrapper::add_bucket(
   }
   crush_bucket *b = crush_make_bucket(crush, alg, hash, type, size, items,
 				      weights);
-  assert(b);
-  assert(idout);
+  ceph_assert(b);
+  ceph_assert(idout);
   int r = crush_add_bucket(crush, bucketno, b, idout);
   int pos = -1 - *idout;
   for (auto& p : choose_args) {
     crush_choose_arg_map& cmap = p.second;
     if (cmap.args) {
       if ((int)cmap.size <= pos) {
-	cmap.args = (crush_choose_arg*)realloc(
+	cmap.args = static_cast<crush_choose_arg*>(realloc(
 	  cmap.args,
-	  sizeof(crush_choose_arg) * (pos + 1));
-        assert(cmap.args);
+	  sizeof(crush_choose_arg) * (pos + 1)));
+        ceph_assert(cmap.args);
 	memset(&cmap.args[cmap.size], 0,
 	       sizeof(crush_choose_arg) * (pos + 1 - cmap.size));
 	cmap.size = pos + 1;
       }
     } else {
-      cmap.args = (crush_choose_arg*)calloc(sizeof(crush_choose_arg),
-					    pos + 1);
-      assert(cmap.args);
+      cmap.args = static_cast<crush_choose_arg*>(calloc(sizeof(crush_choose_arg),
+						 pos + 1));
+      ceph_assert(cmap.args);
       cmap.size = pos + 1;
     }
     if (size > 0) {
       int positions = get_choose_args_positions(cmap);
       crush_choose_arg& carg = cmap.args[pos];
-      carg.weight_set = (crush_weight_set*)calloc(sizeof(crush_weight_set),
-						  size);
-      carg.weight_set_size = positions;
+      carg.weight_set = static_cast<crush_weight_set*>(calloc(sizeof(crush_weight_set),
+						  size));
+      carg.weight_set_positions = positions;
       for (int ppos = 0; ppos < positions; ++ppos) {
 	carg.weight_set[ppos].weights = (__u32*)calloc(sizeof(__u32), size);
 	carg.weight_set[ppos].size = size;
@@ -1781,17 +2427,17 @@ int CrushWrapper::bucket_add_item(crush_bucket *bucket, int item, int weight)
   for (auto &w : choose_args) {
     crush_choose_arg_map &arg_map = w.second;
     crush_choose_arg *arg = &arg_map.args[-1-bucket->id];
-    for (__u32 j = 0; j < arg->weight_set_size; j++) {
+    for (__u32 j = 0; j < arg->weight_set_positions; j++) {
       crush_weight_set *weight_set = &arg->weight_set[j];
       weight_set->weights = (__u32*)realloc(weight_set->weights,
 					    new_size * sizeof(__u32));
-      assert(weight_set->size + 1 == new_size);
+      ceph_assert(weight_set->size + 1 == new_size);
       weight_set->weights[weight_set->size] = weight;
       weight_set->size = new_size;
     }
     if (arg->ids_size) {
       arg->ids = (__s32 *)realloc(arg->ids, new_size * sizeof(__s32));
-      assert(arg->ids_size + 1 == new_size);
+      ceph_assert(arg->ids_size + 1 == new_size);
       arg->ids[arg->ids_size] = item;
       arg->ids_size = new_size;
     }
@@ -1806,7 +2452,7 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
   for (position = 0; position < bucket->size; position++)
     if (bucket->items[position] == item)
       break;
-  assert(position != bucket->size);
+  ceph_assert(position != bucket->size);
   int r = crush_bucket_remove_item(crush, bucket, item);
   if (r < 0) {
     return r;
@@ -1814,26 +2460,28 @@ int CrushWrapper::bucket_remove_item(crush_bucket *bucket, int item)
   for (auto &w : choose_args) {
     crush_choose_arg_map &arg_map = w.second;
     crush_choose_arg *arg = &arg_map.args[-1-bucket->id];
-    for (__u32 j = 0; j < arg->weight_set_size; j++) {
+    for (__u32 j = 0; j < arg->weight_set_positions; j++) {
       crush_weight_set *weight_set = &arg->weight_set[j];
-      assert(weight_set->size - 1 == new_size);
+      ceph_assert(weight_set->size - 1 == new_size);
       for (__u32 k = position; k < new_size; k++)
 	weight_set->weights[k] = weight_set->weights[k+1];
       if (new_size) {
 	weight_set->weights = (__u32*)realloc(weight_set->weights,
 					      new_size * sizeof(__u32));
       } else {
+        free(weight_set->weights);
 	weight_set->weights = NULL;
       }
       weight_set->size = new_size;
     }
     if (arg->ids_size) {
-      assert(arg->ids_size - 1 == new_size);
+      ceph_assert(arg->ids_size - 1 == new_size);
       for (__u32 k = position; k < new_size; k++)
 	arg->ids[k] = arg->ids[k+1];
       if (new_size) {
 	arg->ids = (__s32 *)realloc(arg->ids, new_size * sizeof(__s32));
       } else {
+        free(arg->ids);
 	arg->ids = NULL;
       }
       arg->ids_size = new_size;
@@ -1857,12 +2505,12 @@ int CrushWrapper::update_device_class(int id,
                                       const string& name,
                                       ostream *ss)
 {
-  assert(item_exists(id));
+  ceph_assert(item_exists(id));
   auto old_class_name = get_item_class(id);
   if (old_class_name && old_class_name != class_name) {
     *ss << "osd." << id << " has already bound to class '" << old_class_name
         << "', can not reset class to '" << class_name  << "'; "
-        << "use 'ceph osd crush rm-device-class <osd>' to "
+        << "use 'ceph osd crush rm-device-class <id>' to "
         << "remove old class first";
     return -EBUSY;
   }
@@ -1874,7 +2522,7 @@ int CrushWrapper::update_device_class(int id,
   }
 
   if (class_map.count(id) != 0 && class_map[id] == class_id) {
-    *ss << name << " already set to class " << class_name;
+    *ss << name << " already set to class " << class_name << ". ";
     return 0;
   }
 
@@ -1888,7 +2536,7 @@ int CrushWrapper::update_device_class(int id,
 
 int CrushWrapper::remove_device_class(CephContext *cct, int id, ostream *ss)
 {
-  assert(ss);
+  ceph_assert(ss);
   const char *name = get_item_name(id);
   if (!name) {
     *ss << "osd." << id << " does not have a name";
@@ -1931,13 +2579,13 @@ int CrushWrapper::device_class_clone(
   }
 
   crush_bucket *original = get_bucket(original_id);
-  assert(!IS_ERR(original));
+  ceph_assert(!IS_ERR(original));
   crush_bucket *copy = crush_make_bucket(crush,
 					 original->alg,
 					 original->hash,
 					 original->type,
 					 0, NULL, NULL);
-  assert(copy);
+  ceph_assert(copy);
 
   vector<unsigned> item_orig_pos;  // new item pos -> orig item pos
   for (unsigned i = 0; i < original->size; i++) {
@@ -1959,7 +2607,7 @@ int CrushWrapper::device_class_clone(
       if (res < 0)
 	return res;
       crush_bucket *child_copy = get_bucket(child_copy_id);
-      assert(!IS_ERR(child_copy));
+      ceph_assert(!IS_ERR(child_copy));
       res = crush_bucket_add_item(crush, copy, child_copy_id,
 				  child_copy->weight);
       if (res)
@@ -1967,7 +2615,7 @@ int CrushWrapper::device_class_clone(
     }
     item_orig_pos.push_back(i);
   }
-  assert(item_orig_pos.size() == copy->size);
+  ceph_assert(item_orig_pos.size() == copy->size);
 
   int bno = 0;
   if (old_class_bucket.count(original_id) &&
@@ -1985,7 +2633,7 @@ int CrushWrapper::device_class_clone(
   int res = crush_add_bucket(crush, bno, copy, clone);
   if (res)
     return res;
-  assert(!bno || bno == *clone);
+  ceph_assert(!bno || bno == *clone);
 
   res = set_item_class(*clone, device_class);
   if (res < 0)
@@ -2002,9 +2650,9 @@ int CrushWrapper::device_class_clone(
     crush_choose_arg_map& cmap = w.second;
     if (-1-bno >= (int)cmap.size) {
       unsigned new_size = -1-bno + 1;
-      cmap.args = (crush_choose_arg*)realloc(cmap.args,
-					     new_size * sizeof(cmap.args[0]));
-      assert(cmap.args);
+      cmap.args = static_cast<crush_choose_arg*>(realloc(cmap.args,
+					     new_size * sizeof(cmap.args[0])));
+      ceph_assert(cmap.args);
       memset(cmap.args + cmap.size, 0,
 	     (new_size - cmap.size) * sizeof(cmap.args[0]));
       cmap.size = new_size;
@@ -2012,21 +2660,23 @@ int CrushWrapper::device_class_clone(
     auto& o = cmap.args[-1-original_id];
     auto& n = cmap.args[-1-bno];
     n.ids_size = 0; // FIXME: implement me someday
-    n.weight_set_size = o.weight_set_size;
-    n.weight_set = (crush_weight_set*)calloc(
-      n.weight_set_size, sizeof(crush_weight_set));
-    for (size_t s = 0; s < n.weight_set_size; ++s) {
+    n.weight_set_positions = o.weight_set_positions;
+    n.weight_set = static_cast<crush_weight_set*>(calloc(
+      n.weight_set_positions, sizeof(crush_weight_set)));
+    for (size_t s = 0; s < n.weight_set_positions; ++s) {
       n.weight_set[s].size = copy->size;
       n.weight_set[s].weights = (__u32*)calloc(copy->size, sizeof(__u32));
     }
-    for (size_t s = 0; s < n.weight_set_size; ++s) {
-      vector<int> bucket_weights(n.weight_set_size);
+    for (size_t s = 0; s < n.weight_set_positions; ++s) {
+      vector<int> bucket_weights(n.weight_set_positions);
       for (size_t i = 0; i < copy->size; ++i) {
 	int item = copy->items[i];
 	if (item >= 0) {
 	  n.weight_set[s].weights[i] = o.weight_set[s].weights[item_orig_pos[i]];
-	} else {
+	} else if ((*cmap_item_weight)[w.first].count(item)) {
 	  n.weight_set[s].weights[i] = (*cmap_item_weight)[w.first][item][s];
+	} else {
+	  n.weight_set[s].weights[i] = 0;
 	}
 	bucket_weights[s] += n.weight_set[s].weights[i];
       }
@@ -2038,7 +2688,7 @@ int CrushWrapper::device_class_clone(
 
 int CrushWrapper::get_rules_by_class(const string &class_name, set<int> *rules)
 {
-  assert(rules);
+  ceph_assert(rules);
   rules->clear();
   if (!class_exists(class_name)) {
     return -ENOENT;
@@ -2070,7 +2720,7 @@ int CrushWrapper::get_rules_by_class(const string &class_name, set<int> *rules)
 // return rules that might reference the given osd
 int CrushWrapper::get_rules_by_osd(int osd, set<int> *rules)
 {
-  assert(rules);
+  ceph_assert(rules);
   rules->clear();
   if (osd < 0) {
     return -EINVAL;
@@ -2089,7 +2739,7 @@ int CrushWrapper::get_rules_by_osd(int osd, set<int> *rules)
         }
         bool match = false;
         for (auto &o: unordered) {
-          assert(o >= 0);
+          ceph_assert(o >= 0);
           if (o == osd) {
             match = true;
             break;
@@ -2159,21 +2809,22 @@ int CrushWrapper::rebuild_roots_with_classes()
 
 void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
 {
-  assert(crush);
+  using ceph::encode;
+  ceph_assert(crush);
 
   __u32 magic = CRUSH_MAGIC;
-  ::encode(magic, bl);
+  encode(magic, bl);
 
-  ::encode(crush->max_buckets, bl);
-  ::encode(crush->max_rules, bl);
-  ::encode(crush->max_devices, bl);
+  encode(crush->max_buckets, bl);
+  encode(crush->max_rules, bl);
+  encode(crush->max_devices, bl);
 
   bool encode_compat_choose_args = false;
   crush_choose_arg_map arg_map;
   memset(&arg_map, '\0', sizeof(arg_map));
   if (has_choose_args() &&
       !HAVE_FEATURE(features, CRUSH_CHOOSE_ARGS)) {
-    assert(!has_incompat_choose_args());
+    ceph_assert(!has_incompat_choose_args());
     encode_compat_choose_args = true;
     arg_map = choose_args.begin()->second;
   }
@@ -2182,41 +2833,41 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
   for (int i=0; i<crush->max_buckets; i++) {
     __u32 alg = 0;
     if (crush->buckets[i]) alg = crush->buckets[i]->alg;
-    ::encode(alg, bl);
+    encode(alg, bl);
     if (!alg)
       continue;
 
-    ::encode(crush->buckets[i]->id, bl);
-    ::encode(crush->buckets[i]->type, bl);
-    ::encode(crush->buckets[i]->alg, bl);
-    ::encode(crush->buckets[i]->hash, bl);
-    ::encode(crush->buckets[i]->weight, bl);
-    ::encode(crush->buckets[i]->size, bl);
+    encode(crush->buckets[i]->id, bl);
+    encode(crush->buckets[i]->type, bl);
+    encode(crush->buckets[i]->alg, bl);
+    encode(crush->buckets[i]->hash, bl);
+    encode(crush->buckets[i]->weight, bl);
+    encode(crush->buckets[i]->size, bl);
     for (unsigned j=0; j<crush->buckets[i]->size; j++)
-      ::encode(crush->buckets[i]->items[j], bl);
+      encode(crush->buckets[i]->items[j], bl);
 
     switch (crush->buckets[i]->alg) {
     case CRUSH_BUCKET_UNIFORM:
-      ::encode((reinterpret_cast<crush_bucket_uniform*>(crush->buckets[i]))->item_weight, bl);
+      encode((reinterpret_cast<crush_bucket_uniform*>(crush->buckets[i]))->item_weight, bl);
       break;
 
     case CRUSH_BUCKET_LIST:
       for (unsigned j=0; j<crush->buckets[i]->size; j++) {
-	::encode((reinterpret_cast<crush_bucket_list*>(crush->buckets[i]))->item_weights[j], bl);
-	::encode((reinterpret_cast<crush_bucket_list*>(crush->buckets[i]))->sum_weights[j], bl);
+	encode((reinterpret_cast<crush_bucket_list*>(crush->buckets[i]))->item_weights[j], bl);
+	encode((reinterpret_cast<crush_bucket_list*>(crush->buckets[i]))->sum_weights[j], bl);
       }
       break;
 
     case CRUSH_BUCKET_TREE:
-      ::encode((reinterpret_cast<crush_bucket_tree*>(crush->buckets[i]))->num_nodes, bl);
+      encode((reinterpret_cast<crush_bucket_tree*>(crush->buckets[i]))->num_nodes, bl);
       for (unsigned j=0; j<(reinterpret_cast<crush_bucket_tree*>(crush->buckets[i]))->num_nodes; j++)
-	::encode((reinterpret_cast<crush_bucket_tree*>(crush->buckets[i]))->node_weights[j], bl);
+	encode((reinterpret_cast<crush_bucket_tree*>(crush->buckets[i]))->node_weights[j], bl);
       break;
 
     case CRUSH_BUCKET_STRAW:
       for (unsigned j=0; j<crush->buckets[i]->size; j++) {
-	::encode((reinterpret_cast<crush_bucket_straw*>(crush->buckets[i]))->item_weights[j], bl);
-	::encode((reinterpret_cast<crush_bucket_straw*>(crush->buckets[i]))->straws[j], bl);
+	encode((reinterpret_cast<crush_bucket_straw*>(crush->buckets[i]))->item_weights[j], bl);
+	encode((reinterpret_cast<crush_bucket_straw*>(crush->buckets[i]))->straws[j], bl);
       }
       break;
 
@@ -2224,13 +2875,13 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
       {
 	__u32 *weights;
 	if (encode_compat_choose_args &&
-	    arg_map.args[i].weight_set_size > 0) {
+	    arg_map.args[i].weight_set_positions > 0) {
 	  weights = arg_map.args[i].weight_set[0].weights;
 	} else {
 	  weights = (reinterpret_cast<crush_bucket_straw2*>(crush->buckets[i]))->item_weights;
 	}
 	for (unsigned j=0; j<crush->buckets[i]->size; j++) {
-	  ::encode(weights[j], bl);
+	  encode(weights[j], bl);
 	}
       }
       break;
@@ -2244,106 +2895,107 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
   // rules
   for (unsigned i=0; i<crush->max_rules; i++) {
     __u32 yes = crush->rules[i] ? 1:0;
-    ::encode(yes, bl);
+    encode(yes, bl);
     if (!yes)
       continue;
 
-    ::encode(crush->rules[i]->len, bl);
-    ::encode(crush->rules[i]->mask, bl);
+    encode(crush->rules[i]->len, bl);
+    encode(crush->rules[i]->mask, bl);
     for (unsigned j=0; j<crush->rules[i]->len; j++)
-      ::encode(crush->rules[i]->steps[j], bl);
+      encode(crush->rules[i]->steps[j], bl);
   }
 
   // name info
-  ::encode(type_map, bl);
-  ::encode(name_map, bl);
-  ::encode(rule_name_map, bl);
+  encode(type_map, bl);
+  encode(name_map, bl);
+  encode(rule_name_map, bl);
 
   // tunables
-  ::encode(crush->choose_local_tries, bl);
-  ::encode(crush->choose_local_fallback_tries, bl);
-  ::encode(crush->choose_total_tries, bl);
-  ::encode(crush->chooseleaf_descend_once, bl);
-  ::encode(crush->chooseleaf_vary_r, bl);
-  ::encode(crush->straw_calc_version, bl);
-  ::encode(crush->allowed_bucket_algs, bl);
+  encode(crush->choose_local_tries, bl);
+  encode(crush->choose_local_fallback_tries, bl);
+  encode(crush->choose_total_tries, bl);
+  encode(crush->chooseleaf_descend_once, bl);
+  encode(crush->chooseleaf_vary_r, bl);
+  encode(crush->straw_calc_version, bl);
+  encode(crush->allowed_bucket_algs, bl);
   if (features & CEPH_FEATURE_CRUSH_TUNABLES5) {
-    ::encode(crush->chooseleaf_stable, bl);
+    encode(crush->chooseleaf_stable, bl);
   }
 
   if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
     // device classes
-    ::encode(class_map, bl);
-    ::encode(class_name, bl);
-    ::encode(class_bucket, bl);
+    encode(class_map, bl);
+    encode(class_name, bl);
+    encode(class_bucket, bl);
 
     // choose args
     __u32 size = (__u32)choose_args.size();
-    ::encode(size, bl);
+    encode(size, bl);
     for (auto c : choose_args) {
-      ::encode(c.first, bl);
+      encode(c.first, bl);
       crush_choose_arg_map arg_map = c.second;
       size = 0;
       for (__u32 i = 0; i < arg_map.size; i++) {
 	crush_choose_arg *arg = &arg_map.args[i];
-	if (arg->weight_set_size == 0 &&
+	if (arg->weight_set_positions == 0 &&
 	    arg->ids_size == 0)
 	  continue;
 	size++;
       }
-      ::encode(size, bl);
+      encode(size, bl);
       for (__u32 i = 0; i < arg_map.size; i++) {
 	crush_choose_arg *arg = &arg_map.args[i];
-	if (arg->weight_set_size == 0 &&
+	if (arg->weight_set_positions == 0 &&
 	    arg->ids_size == 0)
 	  continue;
-	::encode(i, bl);
-	::encode(arg->weight_set_size, bl);
-	for (__u32 j = 0; j < arg->weight_set_size; j++) {
+	encode(i, bl);
+	encode(arg->weight_set_positions, bl);
+	for (__u32 j = 0; j < arg->weight_set_positions; j++) {
 	  crush_weight_set *weight_set = &arg->weight_set[j];
-	  ::encode(weight_set->size, bl);
+	  encode(weight_set->size, bl);
 	  for (__u32 k = 0; k < weight_set->size; k++)
-	    ::encode(weight_set->weights[k], bl);
+	    encode(weight_set->weights[k], bl);
 	}
-	::encode(arg->ids_size, bl);
+	encode(arg->ids_size, bl);
 	for (__u32 j = 0; j < arg->ids_size; j++)
-	  ::encode(arg->ids[j], bl);
+	  encode(arg->ids[j], bl);
       }
     }
   }
 }
 
-static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::iterator& blp)
+static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::const_iterator& blp)
 {
   m.clear();
   __u32 n;
-  ::decode(n, blp);
+  decode(n, blp);
   while (n--) {
     __s32 key;
-    ::decode(key, blp);
+    decode(key, blp);
 
     __u32 strlen;
-    ::decode(strlen, blp);
+    decode(strlen, blp);
     if (strlen == 0) {
       // der, key was actually 64-bits!
-      ::decode(strlen, blp);
+      decode(strlen, blp);
     }
-    ::decode_nohead(strlen, m[key], blp);
+    decode_nohead(strlen, m[key], blp);
   }
 }
 
-void CrushWrapper::decode(bufferlist::iterator& blp)
+void CrushWrapper::decode(bufferlist::const_iterator& blp)
 {
+  using ceph::decode;
   create();
 
   __u32 magic;
-  ::decode(magic, blp);
+  decode(magic, blp);
   if (magic != CRUSH_MAGIC)
     throw buffer::malformed_input("bad magic number");
 
-  ::decode(crush->max_buckets, blp);
-  ::decode(crush->max_rules, blp);
-  ::decode(crush->max_devices, blp);
+  decode(crush->max_buckets, blp);
+  decode(crush->max_rules, blp);
+  decode(crush->max_devices, blp);
 
   // legacy tunables, unless we decode something newer
   set_tunables_legacy();
@@ -2359,19 +3011,19 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
     crush->rules = (crush_rule**)calloc(1, crush->max_rules * sizeof(crush_rule*));
     for (unsigned i = 0; i < crush->max_rules; ++i) {
       __u32 yes;
-      ::decode(yes, blp);
+      decode(yes, blp);
       if (!yes) {
 	crush->rules[i] = NULL;
 	continue;
       }
 
       __u32 len;
-      ::decode(len, blp);
+      decode(len, blp);
       crush->rules[i] = reinterpret_cast<crush_rule*>(calloc(1, crush_rule_size(len)));
       crush->rules[i]->len = len;
-      ::decode(crush->rules[i]->mask, blp);
+      decode(crush->rules[i]->mask, blp);
       for (unsigned j=0; j<crush->rules[i]->len; j++)
-	::decode(crush->rules[i]->steps[j], blp);
+	decode(crush->rules[i]->steps[j], blp);
     }
 
     // name info
@@ -2384,73 +3036,74 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
 
     // tunables
     if (!blp.end()) {
-      ::decode(crush->choose_local_tries, blp);
-      ::decode(crush->choose_local_fallback_tries, blp);
-      ::decode(crush->choose_total_tries, blp);
+      decode(crush->choose_local_tries, blp);
+      decode(crush->choose_local_fallback_tries, blp);
+      decode(crush->choose_total_tries, blp);
     }
     if (!blp.end()) {
-      ::decode(crush->chooseleaf_descend_once, blp);
+      decode(crush->chooseleaf_descend_once, blp);
     }
     if (!blp.end()) {
-      ::decode(crush->chooseleaf_vary_r, blp);
+      decode(crush->chooseleaf_vary_r, blp);
     }
     if (!blp.end()) {
-      ::decode(crush->straw_calc_version, blp);
+      decode(crush->straw_calc_version, blp);
     }
     if (!blp.end()) {
-      ::decode(crush->allowed_bucket_algs, blp);
+      decode(crush->allowed_bucket_algs, blp);
     }
     if (!blp.end()) {
-      ::decode(crush->chooseleaf_stable, blp);
+      decode(crush->chooseleaf_stable, blp);
     }
     if (!blp.end()) {
-      ::decode(class_map, blp);
-      ::decode(class_name, blp);
+      decode(class_map, blp);
+      decode(class_name, blp);
       for (auto &c : class_name)
 	class_rname[c.second] = c.first;
-      ::decode(class_bucket, blp);
+      decode(class_bucket, blp);
     }
     if (!blp.end()) {
       __u32 choose_args_size;
-      ::decode(choose_args_size, blp);
+      decode(choose_args_size, blp);
       for (__u32 i = 0; i < choose_args_size; i++) {
         typename decltype(choose_args)::key_type choose_args_index;
-	::decode(choose_args_index, blp);
+	decode(choose_args_index, blp);
 	crush_choose_arg_map arg_map;
 	arg_map.size = crush->max_buckets;
-	arg_map.args = (crush_choose_arg*)calloc(
-	  arg_map.size, sizeof(crush_choose_arg));
+	arg_map.args = static_cast<crush_choose_arg*>(calloc(
+	  arg_map.size, sizeof(crush_choose_arg)));
 	__u32 size;
-	::decode(size, blp);
+	decode(size, blp);
 	for (__u32 j = 0; j < size; j++) {
 	  __u32 bucket_index;
-	  ::decode(bucket_index, blp);
-	  assert(bucket_index < arg_map.size);
+	  decode(bucket_index, blp);
+	  ceph_assert(bucket_index < arg_map.size);
 	  crush_choose_arg *arg = &arg_map.args[bucket_index];
-	  ::decode(arg->weight_set_size, blp);
-	  if (arg->weight_set_size) {
-	    arg->weight_set = (crush_weight_set*)calloc(
-	      arg->weight_set_size, sizeof(crush_weight_set));
-	    for (__u32 k = 0; k < arg->weight_set_size; k++) {
+	  decode(arg->weight_set_positions, blp);
+	  if (arg->weight_set_positions) {
+	    arg->weight_set = static_cast<crush_weight_set*>(calloc(
+	      arg->weight_set_positions, sizeof(crush_weight_set)));
+	    for (__u32 k = 0; k < arg->weight_set_positions; k++) {
 	      crush_weight_set *weight_set = &arg->weight_set[k];
-	      ::decode(weight_set->size, blp);
+	      decode(weight_set->size, blp);
 	      weight_set->weights = (__u32*)calloc(
 		weight_set->size, sizeof(__u32));
 	      for (__u32 l = 0; l < weight_set->size; l++)
-		::decode(weight_set->weights[l], blp);
+		decode(weight_set->weights[l], blp);
 	    }
 	  }
-	  ::decode(arg->ids_size, blp);
+	  decode(arg->ids_size, blp);
 	  if (arg->ids_size) {
-	    assert(arg->ids_size == crush->buckets[bucket_index]->size);
+	    ceph_assert(arg->ids_size == crush->buckets[bucket_index]->size);
 	    arg->ids = (__s32 *)calloc(arg->ids_size, sizeof(__s32));
 	    for (__u32 k = 0; k < arg->ids_size; k++)
-	      ::decode(arg->ids[k], blp);
+	      decode(arg->ids[k], blp);
 	  }
 	}
 	choose_args[choose_args_index] = arg_map;
       }
     }
+    update_choose_args(nullptr); // in case we decode a legacy "corrupted" map
     finalize();
   }
   catch (...) {
@@ -2459,10 +3112,11 @@ void CrushWrapper::decode(bufferlist::iterator& blp)
   }
 }
 
-void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator &blp)
+void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::const_iterator &blp)
 {
+  using ceph::decode;
   __u32 alg;
-  ::decode(alg, blp);
+  decode(alg, blp);
   if (!alg) {
     *bptr = NULL;
     return;
@@ -2495,21 +3149,21 @@ void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator
   crush_bucket *bucket = reinterpret_cast<crush_bucket*>(calloc(1, size));
   *bptr = bucket;
     
-  ::decode(bucket->id, blp);
-  ::decode(bucket->type, blp);
-  ::decode(bucket->alg, blp);
-  ::decode(bucket->hash, blp);
-  ::decode(bucket->weight, blp);
-  ::decode(bucket->size, blp);
+  decode(bucket->id, blp);
+  decode(bucket->type, blp);
+  decode(bucket->alg, blp);
+  decode(bucket->hash, blp);
+  decode(bucket->weight, blp);
+  decode(bucket->size, blp);
 
   bucket->items = (__s32*)calloc(1, bucket->size * sizeof(__s32));
   for (unsigned j = 0; j < bucket->size; ++j) {
-    ::decode(bucket->items[j], blp);
+    decode(bucket->items[j], blp);
   }
 
   switch (bucket->alg) {
   case CRUSH_BUCKET_UNIFORM:
-    ::decode((reinterpret_cast<crush_bucket_uniform*>(bucket))->item_weight, blp);
+    decode((reinterpret_cast<crush_bucket_uniform*>(bucket))->item_weight, blp);
     break;
 
   case CRUSH_BUCKET_LIST: {
@@ -2518,18 +3172,18 @@ void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator
     cbl->sum_weights = (__u32*)calloc(1, bucket->size * sizeof(__u32));
 
     for (unsigned j = 0; j < bucket->size; ++j) {
-      ::decode(cbl->item_weights[j], blp);
-      ::decode(cbl->sum_weights[j], blp);
+      decode(cbl->item_weights[j], blp);
+      decode(cbl->sum_weights[j], blp);
     }
     break;
   }
 
   case CRUSH_BUCKET_TREE: {
     crush_bucket_tree* cbt = reinterpret_cast<crush_bucket_tree*>(bucket);
-    ::decode(cbt->num_nodes, blp);
+    decode(cbt->num_nodes, blp);
     cbt->node_weights = (__u32*)calloc(1, cbt->num_nodes * sizeof(__u32));
     for (unsigned j=0; j<cbt->num_nodes; j++) {
-      ::decode(cbt->node_weights[j], blp);
+      decode(cbt->node_weights[j], blp);
     }
     break;
   }
@@ -2539,8 +3193,8 @@ void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator
     cbs->straws = (__u32*)calloc(1, bucket->size * sizeof(__u32));
     cbs->item_weights = (__u32*)calloc(1, bucket->size * sizeof(__u32));
     for (unsigned j = 0; j < bucket->size; ++j) {
-      ::decode(cbs->item_weights[j], blp);
-      ::decode(cbs->straws[j], blp);
+      decode(cbs->item_weights[j], blp);
+      decode(cbs->straws[j], blp);
     }
     break;
   }
@@ -2549,7 +3203,7 @@ void CrushWrapper::decode_crush_bucket(crush_bucket** bptr, bufferlist::iterator
     crush_bucket_straw2* cbs = reinterpret_cast<crush_bucket_straw2*>(bucket);
     cbs->item_weights = (__u32*)calloc(1, bucket->size * sizeof(__u32));
     for (unsigned j = 0; j < bucket->size; ++j) {
-      ::decode(cbs->item_weights[j], blp);
+      decode(cbs->item_weights[j], blp);
     }
     break;
   }
@@ -2692,7 +3346,7 @@ void CrushWrapper::dump_tree(
   Formatter *f,
   const CrushTreeDumper::name_map_t& weight_set_names) const
 {
-  assert(f);
+  ceph_assert(f);
   TreeDumper(this, weight_set_names).dump(f);
 }
 
@@ -2744,15 +3398,15 @@ void CrushWrapper::dump_choose_args(Formatter *f) const
     f->open_array_section(stringify(c.first).c_str());
     for (__u32 i = 0; i < arg_map.size; i++) {
       crush_choose_arg *arg = &arg_map.args[i];
-      if (arg->weight_set_size == 0 &&
+      if (arg->weight_set_positions == 0 &&
 	  arg->ids_size == 0)
 	continue;
       f->open_object_section("choose_args");
       int bucket_index = i;
       f->dump_int("bucket_id", -1-bucket_index);
-      if (arg->weight_set_size > 0) {
+      if (arg->weight_set_positions > 0) {
 	f->open_array_section("weight_set");
-	for (__u32 j = 0; j < arg->weight_set_size; j++) {
+	for (__u32 j = 0; j < arg->weight_set_positions; j++) {
 	  f->open_array_section("weights");
 	  __u32 *weights = arg->weight_set[j].weights;
 	  __u32 size = arg->weight_set[j].size;
@@ -2920,7 +3574,7 @@ protected:
 	if (b &&
 	    bidx < (int)cmap.size &&
 	    cmap.args[bidx].weight_set &&
-	    cmap.args[bidx].weight_set_size >= 1) {
+	    cmap.args[bidx].weight_set_positions >= 1) {
 	  int pos;
 	  for (pos = 0;
 	       pos < (int)cmap.args[bidx].weight_set[0].size &&
@@ -2968,7 +3622,19 @@ public:
     f->open_array_section("nodes");
     Parent::dump(f);
     f->close_section();
+
+    // There is no stray bucket whose id is a negative number, so just get
+    // the max_id and iterate from 0 to max_id to dump stray osds.
     f->open_array_section("stray");
+    int32_t max_id = -1;
+    if (!crush->name_map.empty()) {
+      max_id = crush->name_map.rbegin()->first;
+    }
+    for (int32_t i = 0; i <= max_id; i++) {
+      if (crush->item_exists(i) && !is_touched(i) && should_dump(i)) {
+        dump_item(CrushTreeDumper::Item(i, 0, 0, 0), f);
+      }
+    }
     f->close_section();
   }
 };
@@ -3004,7 +3670,7 @@ void CrushWrapper::generate_test_instances(list<CrushWrapper*>& o)
  */
 int CrushWrapper::get_osd_pool_default_crush_replicated_ruleset(CephContext *cct)
 {
-  int crush_ruleset = cct->_conf->get_val<int64_t>("osd_pool_default_crush_rule");
+  int crush_ruleset = cct->_conf.get_val<int64_t>("osd_pool_default_crush_rule");
   if (crush_ruleset < 0) {
     crush_ruleset = find_first_ruleset(pg_pool_t::TYPE_REPLICATED);
   } else if (!ruleset_exists(crush_ruleset)) {
@@ -3073,7 +3739,7 @@ int CrushWrapper::_choose_type_stack(
   ldout(cct, 10) << __func__ << " cumulative_fanout " << cumulative_fanout
 		 << dendl;
 
-  // identify underful targets for each intermediate level.
+  // identify underfull targets for each intermediate level.
   // this serves two purposes:
   //   1. we can tell when we are selecting a bucket that does not have any underfull
   //      devices beneath it.  that means that if the current input includes an overfull
@@ -3105,6 +3771,10 @@ int CrushWrapper::_choose_type_stack(
 		   << " w " << w << dendl;
     vector<int> o;
     auto tmpi = i;
+    if (i == orig.end()) {
+      ldout(cct, 10) << __func__ << " end of orig, break 0" << dendl;
+      break;
+    }
     for (auto from : w) {
       ldout(cct, 10) << " from " << from << dendl;
       // identify leaves under each choice.  we use this to check whether any of these
@@ -3148,6 +3818,7 @@ int CrushWrapper::_choose_type_stack(
 	      ldout(cct, 10) << __func__ << " pos " << pos << " replace "
 			     << *i << " -> " << item << dendl;
 	      replaced = true;
+              ceph_assert(i != orig.end());
 	      ++i;
 	      break;
 	    }
@@ -3155,6 +3826,7 @@ int CrushWrapper::_choose_type_stack(
 	  if (!replaced) {
 	    ldout(cct, 10) << __func__ << " pos " << pos << " keep " << *i
 			   << dendl;
+            ceph_assert(i != orig.end());
 	    o.push_back(*i);
 	    ++i;
 	  }
@@ -3173,6 +3845,7 @@ int CrushWrapper::_choose_type_stack(
 	    for (auto osd : leaves[pos]) {
 	      if (overfull.count(osd)) {
 		any_overfull = true;
+               break;
 	      }
 	    }
 	    if (any_overfull) {
@@ -3231,7 +3904,7 @@ int CrushWrapper::try_remap_rule(
 {
   const crush_map *map = crush;
   const crush_rule *rule = get_rule(ruleno);
-  assert(rule);
+  ceph_assert(rule);
 
   ldout(cct, 10) << __func__ << " ruleno " << ruleno
 		<< " numrep " << maxout << " overfull " << overfull
@@ -3269,7 +3942,8 @@ int CrushWrapper::try_remap_rule(
 	if (numrep <= 0)
 	  numrep += maxout;
 	type_stack.push_back(make_pair(type, numrep));
-	type_stack.push_back(make_pair(0, 1));
+        if (type > 0)
+	  type_stack.push_back(make_pair(0, 1));
 	int r = _choose_type_stack(cct, type_stack, overfull, underfull, orig,
 				   i, used, &w);
 	if (r < 0)
@@ -3334,16 +4008,25 @@ int CrushWrapper::_choose_args_adjust_item_weight_in_bucket(
   }
   crush_choose_arg *carg = &cmap.args[bidx];
   if (carg->weight_set == NULL) {
-    if (ss)
-      *ss << "no weight-set for bucket " << b->id;
-    ldout(cct, 10) << __func__ << "  no weight_set for bucket " << b->id
-		   << dendl;
-    return 0;
+    // create a weight-set for this bucket and populate it with the
+    // bucket weights
+    unsigned positions = get_choose_args_positions(cmap);
+    carg->weight_set_positions = positions;
+    carg->weight_set = static_cast<crush_weight_set*>(
+      calloc(sizeof(crush_weight_set), positions));
+    for (unsigned p = 0; p < positions; ++p) {
+      carg->weight_set[p].size = b->size;
+      carg->weight_set[p].weights = (__u32*)calloc(b->size, sizeof(__u32));
+      for (unsigned i = 0; i < b->size; ++i) {
+	carg->weight_set[p].weights[i] = crush_get_bucket_item_weight(b, i);
+      }
+    }
+    changed++;
   }
-  if (carg->weight_set_size != weight.size()) {
+  if (carg->weight_set_positions != weight.size()) {
     if (ss)
-      *ss << "weight_set_size != " << weight.size() << " for bucket " << b->id;
-    ldout(cct, 10) << __func__ << "  weight_set_size != " << weight.size()
+      *ss << "weight_set_positions != " << weight.size() << " for bucket " << b->id;
+    ldout(cct, 10) << __func__ << "  weight_set_positions != " << weight.size()
 		   << " for bucket " << b->id << dendl;
     return 0;
   }

@@ -8,32 +8,29 @@ Devices
 BlueStore manages either one, two, or (in certain cases) three storage
 devices.
 
-In the simplest case, BlueStore consumes a single (primary) storage
-device.  The storage device is normally partitioned into two parts:
+In the simplest case, BlueStore consumes a single (primary) storage device.
+The storage device is normally used as a whole, occupying the full device that
+is managed directly by BlueStore. This *primary device* is normally identified
+by a ``block`` symlink in the data directory.
 
-#. A small partition is formatted with XFS and contains basic metadata
-   for the OSD.  This *data directory* includes information about the
-   OSD (its identifier, which cluster it belongs to, and its private
-   keyring).
-
-#. The rest of the device is normally a large partition occupying the
-   rest of the device that is managed directly by BlueStore contains
-   all of the actual data.  This *primary device* is normally identifed
-   by a ``block`` symlink in data directory.
+The data directory is a ``tmpfs`` mount which gets populated (at boot time, or
+when ``ceph-volume`` activates it) with all the common OSD files that hold
+information about the OSD, like: its identifier, which cluster it belongs to,
+and its private keyring.
 
 It is also possible to deploy BlueStore across two additional devices:
 
-* A *WAL device* can be used for BlueStore's internal journal or
-  write-ahead log.  It is identified by the ``block.wal`` symlink in
-  the data directory.  It is only useful to use a WAL device if the
-  device is faster than the primary device (e.g., when it is on an SSD
-  and the primary device is an HDD).
-* A *DB device* can be used for storing BlueStore's internal metadata.
-  BlueStore (or rather, the embedded RocksDB) will put as much
-  metadata as it can on the DB device to improve performance.  If the
-  DB device fills up, metadata will spill back onto the primary device
-  (where it would have been otherwise).  Again, it is only helpful to
-  provision a DB device if it is faster than the primary device.
+* A *WAL device* (identified as ``block.wal`` in the data directory) can be
+  used for BlueStore's internal journal or write-ahead log. It is only useful
+  to use a WAL device if the device is faster than the primary device (e.g.,
+  when it is on an SSD and the primary device is an HDD).
+* A *DB device* (identified as ``block.db`` in the data directory) can be used
+  for storing BlueStore's internal metadata.  BlueStore (or rather, the
+  embedded RocksDB) will put as much metadata as it can on the DB device to
+  improve performance.  If the DB device fills up, metadata will spill back
+  onto the primary device (where it would have been otherwise).  Again, it is
+  only helpful to provision a DB device if it is faster than the primary
+  device.
 
 If there is only a small amount of fast storage available (e.g., less
 than a gigabyte), we recommend using it as a WAL device.  If there is
@@ -41,7 +38,7 @@ more, provisioning a DB device makes more sense.  The BlueStore
 journal will always be placed on the fastest device available, so
 using a DB device will provide the same benefit that the WAL device
 would while *also* allowing additional metadata to be stored there (if
-it will fix).
+it will fit).
 
 A single-device BlueStore OSD can be provisioned with::
 
@@ -54,8 +51,164 @@ To specify a WAL device and/or DB device, ::
 .. note:: --data can be a Logical Volume using the vg/lv notation. Other
           devices can be existing logical volumes or GPT partitions
 
-Cache size
-==========
+Provisioning strategies
+-----------------------
+Although there are multiple ways to deploy a Bluestore OSD (unlike Filestore
+which had 1) here are two common use cases that should help clarify the
+initial deployment strategy:
+
+.. _bluestore-single-type-device-config:
+
+**block (data) only**
+^^^^^^^^^^^^^^^^^^^^^
+If all the devices are the same type, for example all are spinning drives, and
+there are no fast devices to combine these, it makes sense to just deploy with
+block only and not try to separate ``block.db`` or ``block.wal``. The
+:ref:`ceph-volume-lvm` call for a single ``/dev/sda`` device would look like::
+
+    ceph-volume lvm create --bluestore --data /dev/sda
+
+If logical volumes have already been created for each device (1 LV using 100%
+of the device), then the :ref:`ceph-volume-lvm` call for an lv named
+``ceph-vg/block-lv`` would look like::
+
+    ceph-volume lvm create --bluestore --data ceph-vg/block-lv
+
+.. _bluestore-mixed-device-config:
+
+**block and block.db**
+^^^^^^^^^^^^^^^^^^^^^^
+If there is a mix of fast and slow devices (spinning and solid state),
+it is recommended to place ``block.db`` on the faster device while ``block``
+(data) lives on the slower (spinning drive). Sizing for ``block.db`` should be
+as large as possible to avoid performance penalties otherwise. The
+``ceph-volume`` tool is currently not able to create these automatically, so
+the volume groups and logical volumes need to be created manually.
+
+For the below example, lets assume 4 spinning drives (sda, sdb, sdc, and sdd)
+and 1 solid state drive (sdx). First create the volume groups::
+
+    $ vgcreate ceph-block-0 /dev/sda
+    $ vgcreate ceph-block-1 /dev/sdb
+    $ vgcreate ceph-block-2 /dev/sdc
+    $ vgcreate ceph-block-3 /dev/sdd
+
+Now create the logical volumes for ``block``::
+
+    $ lvcreate -l 100%FREE -n block-0 ceph-block-0
+    $ lvcreate -l 100%FREE -n block-1 ceph-block-1
+    $ lvcreate -l 100%FREE -n block-2 ceph-block-2
+    $ lvcreate -l 100%FREE -n block-3 ceph-block-3
+
+We are creating 4 OSDs for the four slow spinning devices, so assuming a 200GB
+SSD in ``/dev/sdx`` we will create 4 logical volumes, each of 50GB::
+
+    $ vgcreate ceph-db-0 /dev/sdx
+    $ lvcreate -L 50GB -n db-0 ceph-db-0
+    $ lvcreate -L 50GB -n db-1 ceph-db-0
+    $ lvcreate -L 50GB -n db-2 ceph-db-0
+    $ lvcreate -L 50GB -n db-3 ceph-db-0
+
+Finally, create the 4 OSDs with ``ceph-volume``::
+
+    $ ceph-volume lvm create --bluestore --data ceph-block-0/block-0 --block.db ceph-db-0/db-0
+    $ ceph-volume lvm create --bluestore --data ceph-block-1/block-1 --block.db ceph-db-0/db-1
+    $ ceph-volume lvm create --bluestore --data ceph-block-2/block-2 --block.db ceph-db-0/db-2
+    $ ceph-volume lvm create --bluestore --data ceph-block-3/block-3 --block.db ceph-db-0/db-3
+
+These operations should end up creating 4 OSDs, with ``block`` on the slower
+spinning drives and a 50GB logical volume for each coming from the solid state
+drive.
+
+Sizing
+======
+When using a :ref:`mixed spinning and solid drive setup
+<bluestore-mixed-device-config>` it is important to make a large-enough
+``block.db`` logical volume for Bluestore. Generally, ``block.db`` should have
+*as large as possible* logical volumes.
+
+It is recommended that the ``block.db`` size isn't smaller than 4% of
+``block``. For example, if the ``block`` size is 1TB, then ``block.db``
+shouldn't be less than 40GB.
+
+If *not* using a mix of fast and slow devices, it isn't required to create
+separate logical volumes for ``block.db`` (or ``block.wal``). Bluestore will
+automatically manage these within the space of ``block``.
+
+
+Automatic Cache Sizing
+======================
+
+Bluestore can be configured to automatically resize it's caches when tc_malloc
+is configured as the memory allocator and the ``bluestore_cache_autotune``
+setting is enabled.  This option is currently enabled by default.  Bluestore
+will attempt to keep OSD heap memory usage under a designated target size via
+the ``osd_memory_target`` configuration option.  This is a best effort
+algorithm and caches will not shrink smaller than the amount specified by
+``osd_memory_cache_min``.  Cache ratios will be chosen based on a hierarchy
+of priorities.  If priority information is not availabe, the
+``bluestore_cache_meta_ratio`` and ``bluestore_cache_kv_ratio`` options are
+used as fallbacks.
+
+``bluestore_cache_autotune``
+
+:Description: Automatically tune the ratios assigned to different bluestore caches while respecting minimum values.
+:Type: Boolean
+:Required: Yes
+:Default: ``True``
+
+``osd_memory_target``
+
+:Description: When tcmalloc is available and cache autotuning is enabled, try to keep this many bytes mapped in memory. Note: This may not exactly match the RSS memory usage of the process.  While the total amount of heap memory mapped by the process should generally stay close to this target, there is no guarantee that the kernel will actually reclaim  memory that has been unmapped.  During initial developement, it was found that some kernels result in the OSD's RSS Memory exceeding the mapped memory by up to 20%.  It is hypothesised however, that the kernel generally may be more aggressive about reclaiming unmapped memory when there is a high amount of memory pressure.  Your mileage may vary.
+:Type: Unsigned Integer
+:Required: Yes
+:Default: ``4294967296``
+
+``bluestore_cache_autotune_chunk_size``
+
+:Description: The chunk size in bytes to allocate to caches when cache autotune is enabled.  When the autotuner assigns memory to different caches, it will allocate memory in chunks.  This is done to avoid evictions when there are minor fluctuations in the heap size or autotuned cache ratios.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``33554432``
+
+``bluestore_cache_autotune_interval``
+
+:Description: The number of seconds to wait between rebalances when cache autotune is enabled.  This setting changes how quickly the ratios of the difference caches are recomputed.  Note:  Setting the interval too small can result in high CPU usage and lower performance.
+:Type: Float
+:Required: No
+:Default: ``5``
+
+``osd_memory_base``
+
+:Description: When tcmalloc and cache autotuning is enabled, estimate the minimum amount of memory in bytes the OSD will need.  This is used to help the autotuner estimate the expected aggregate memory consumption of the caches.
+:Type: Unsigned Interger
+:Required: No
+:Default: ``805306368``
+
+``osd_memory_expected_fragmentation``
+
+:Description: When tcmalloc and cache autotuning is enabled, estimate the percent of memory fragmentation.  This is used to help the autotuner estimate the expected aggregate memory consumption of the caches.
+:Type: Float
+:Required: No
+:Default: ``0.15``
+
+``osd_memory_cache_min``
+
+:Description: When tcmalloc and cache autotuning is enabled, set the minimum amount of memory used for caches. Note: Setting this value too low can result in significant cache thrashing.
+:Type: Unsigned Integer
+:Required: No
+:Default: ``134217728``
+
+``osd_memory_cache_resize_interval``
+
+:Description: When tcmalloc and cache autotuning is enabled, wait this many seconds between resizing caches.  This setting changes the total amount of memory available for bluestore to use for caching.  Note: Setting the interval too small can result in memory allocator thrashing and lower performance.
+:Type: Float
+:Required: No
+:Default: ``1``
+
+
+Manual Cache Sizing
+===================
 
 The amount of memory consumed by each OSD for BlueStore's cache is
 determined by the ``bluestore_cache_size`` configuration option.  If
@@ -178,9 +331,9 @@ of the *compression mode* and any hints associated with a write
 operation.  The modes are:
 
 * **none**: Never compress data.
-* **passive**: Do not compress data unless the write operation as a
+* **passive**: Do not compress data unless the write operation has a
   *compressible* hint set.
-* **aggressive**: Compress data unless the write operation as an
+* **aggressive**: Compress data unless the write operation has an
   *incompressible* hint set.
 * **force**: Try to compress data no matter what.
 
@@ -301,16 +454,31 @@ set with::
 SPDK Usage
 ==================
 
-If you want to use SPDK driver for NVME SSD, you need to specify NVMe serial
-number here with "spdk:" prefix for ``bluestore_block_path``.
+If you want to use SPDK driver for NVME SSD, you need to ready your system.
+Please refer to `SPDK document`__ for more details.
 
-For example, users can find the serial number with::
+.. __: http://www.spdk.io/doc/getting_started.html#getting_started_examples
 
-  $ lspci -vvv -d 8086:0953 | grep "Device Serial Number"
+SPDK offers a script to configure the device automatically. Users can run the
+script as root::
+
+  $ sudo src/spdk/scripts/setup.sh
+
+Then you need to specify NVMe device's device selector here with "spdk:" prefix for
+``bluestore_block_path``.
+
+For example, users can find the device selector of an Intel PCIe SSD with::
+
+  $ lspci -mm -n -D -d 8086:0953
+
+The device selector always has the form of ``DDDD:BB:DD.FF`` or ``DDDD.BB.DD.FF``.
 
 and then set::
 
-  bluestore block path = spdk:...
+  bluestore block path = spdk:0000:01:00.0
+
+Where ``0000:01:00.0`` is the device selector found in the output of ``lspci``
+command above.
 
 If you want to run multiple SPDK instances per node, you must specify the
 amount of dpdk memory size in MB each instance will use, to make sure each

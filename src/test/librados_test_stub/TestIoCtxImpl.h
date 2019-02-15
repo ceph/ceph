@@ -61,6 +61,14 @@ public:
   virtual int64_t get_id();
   virtual uint64_t get_last_version();
   virtual std::string get_pool_name();
+
+  inline void set_namespace(const std::string& namespace_name) {
+    m_namespace_name = namespace_name;
+  }
+  inline std::string get_namespace() const {
+    return m_namespace_name;
+  }
+
   snap_t get_snap_read() const {
     return m_snap_seq;
   }
@@ -82,7 +90,8 @@ public:
   virtual int aio_operate_read(const std::string& oid, TestObjectOperationImpl &ops,
                                AioCompletionImpl *c, int flags,
                                bufferlist *pbl);
-  virtual int aio_remove(const std::string& oid, AioCompletionImpl *c) = 0;
+  virtual int aio_remove(const std::string& oid, AioCompletionImpl *c,
+                         int flags = 0) = 0;
   virtual int aio_watch(const std::string& o, AioCompletionImpl *c,
                         uint64_t *handle, librados::WatchCtx2 *ctx);
   virtual int aio_unwatch(uint64_t handle, AioCompletionImpl *c);
@@ -188,6 +197,8 @@ private:
   TestRadosClient *m_client;
   int64_t m_pool_id = 0;
   std::string m_pool_name;
+  std::string m_namespace_name;
+
   snap_t m_snap_seq = 0;
   SnapContext m_snapc;
   std::atomic<uint64_t> m_refcount = { 0 };

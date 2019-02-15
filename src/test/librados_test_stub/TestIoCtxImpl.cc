@@ -6,7 +6,7 @@
 #include "test/librados_test_stub/TestRadosClient.h"
 #include "test/librados_test_stub/TestWatchNotify.h"
 #include "librados/AioCompletionImpl.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "common/Finisher.h"
 #include "common/valgrind.h"
 #include "objclass/objclass.h"
@@ -32,6 +32,7 @@ TestIoCtxImpl::TestIoCtxImpl(const TestIoCtxImpl& rhs)
   : m_client(rhs.m_client),
     m_pool_id(rhs.m_pool_id),
     m_pool_name(rhs.m_pool_name),
+    m_namespace_name(rhs.m_namespace_name),
     m_snap_seq(rhs.m_snap_seq)
 {
   m_client->get();
@@ -39,7 +40,7 @@ TestIoCtxImpl::TestIoCtxImpl(const TestIoCtxImpl& rhs)
 }
 
 TestIoCtxImpl::~TestIoCtxImpl() {
-  assert(m_pending_ops == 0);
+  ceph_assert(m_pending_ops == 0);
 }
 
 void TestObjectOperationImpl::get() {
@@ -98,8 +99,8 @@ void TestIoCtxImpl::aio_notify(const std::string& oid, AioCompletionImpl *c,
   m_pending_ops++;
   c->get();
   C_AioNotify *ctx = new C_AioNotify(this, c);
-  m_client->get_watch_notify()->aio_notify(m_client, oid, bl, timeout_ms, pbl,
-                                           ctx);
+  m_client->get_watch_notify()->aio_notify(m_client, m_pool_id, get_namespace(),
+                                           oid, bl, timeout_ms, pbl, ctx);
 }
 
 int TestIoCtxImpl::aio_operate(const std::string& oid, TestObjectOperationImpl &ops,
@@ -135,8 +136,10 @@ int TestIoCtxImpl::aio_watch(const std::string& o, AioCompletionImpl *c,
   if (m_client->is_blacklisted()) {
     m_client->get_aio_finisher()->queue(ctx, -EBLACKLISTED);
   } else {
-    m_client->get_watch_notify()->aio_watch(m_client, o, get_instance_id(),
-                                            handle, watch_ctx, ctx);
+    m_client->get_watch_notify()->aio_watch(m_client, m_pool_id,
+                                            get_namespace(), o,
+                                            get_instance_id(), handle, nullptr,
+                                            watch_ctx, ctx);
   }
   return 0;
 }
@@ -176,7 +179,8 @@ int TestIoCtxImpl::list_watchers(const std::string& o,
     return -EBLACKLISTED;
   }
 
-  return m_client->get_watch_notify()->list_watchers(o, out_watchers);
+  return m_client->get_watch_notify()->list_watchers(m_pool_id, get_namespace(),
+                                                     o, out_watchers);
 }
 
 int TestIoCtxImpl::notify(const std::string& o, bufferlist& bl,
@@ -185,12 +189,15 @@ int TestIoCtxImpl::notify(const std::string& o, bufferlist& bl,
     return -EBLACKLISTED;
   }
 
-  return m_client->get_watch_notify()->notify(m_client, o, bl, timeout_ms, pbl);
+  return m_client->get_watch_notify()->notify(m_client, m_pool_id,
+                                              get_namespace(), o, bl,
+                                              timeout_ms, pbl);
 }
 
 void TestIoCtxImpl::notify_ack(const std::string& o, uint64_t notify_id,
                                uint64_t handle, bufferlist& bl) {
-  m_client->get_watch_notify()->notify_ack(m_client, o, notify_id, handle,
+  m_client->get_watch_notify()->notify_ack(m_client, m_pool_id, get_namespace(),
+                                           o, notify_id, handle,
                                            m_client->get_instance_id(), bl);
 }
 
@@ -283,21 +290,21 @@ int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
     if (r < 0) {
       return r;
     }
-    bufferlist::iterator iter = inbl.begin();
-    ::decode(tmap_header, iter);
-    ::decode(tmap, iter);
+    auto iter = inbl.cbegin();
+    decode(tmap_header, iter);
+    decode(tmap, iter);
   }
 
   __u8 c;
   std::string key;
   bufferlist value;
-  bufferlist::iterator iter = cmdbl.begin();
-  ::decode(c, iter);
-  ::decode(key, iter);
+  auto iter = cmdbl.cbegin();
+  decode(c, iter);
+  decode(key, iter);
 
   switch (c) {
     case CEPH_OSD_TMAP_SET:
-      ::decode(value, iter);
+      decode(value, iter);
       tmap[key] = value;
       break;
     case CEPH_OSD_TMAP_RM:
@@ -311,8 +318,8 @@ int TestIoCtxImpl::tmap_update(const std::string& oid, bufferlist& cmdbl) {
   }
 
   bufferlist out;
-  ::encode(tmap_header, out);
-  ::encode(tmap, out);
+  encode(tmap_header, out);
+  encode(tmap, out);
   r = write_full(oid, out, m_snapc);
   return r;
 }
@@ -331,8 +338,10 @@ int TestIoCtxImpl::watch(const std::string& o, uint64_t *handle,
     return -EBLACKLISTED;
   }
 
-  return m_client->get_watch_notify()->watch(m_client, o, get_instance_id(),
-                                             handle, ctx, ctx2);
+  return m_client->get_watch_notify()->watch(m_client, m_pool_id,
+                                             get_namespace(), o,
+                                             get_instance_id(), handle, ctx,
+                                             ctx2);
 }
 
 int TestIoCtxImpl::execute_operation(const std::string& oid,
@@ -341,7 +350,7 @@ int TestIoCtxImpl::execute_operation(const std::string& oid,
     return -EBLACKLISTED;
   }
 
-  TestRadosClient::Transaction transaction(m_client, oid);
+  TestRadosClient::Transaction transaction(m_client, get_namespace(), oid);
   return operation(this, oid);
 }
 
@@ -353,7 +362,7 @@ int TestIoCtxImpl::execute_aio_operations(const std::string& oid,
   if (m_client->is_blacklisted()) {
     ret = -EBLACKLISTED;
   } else {
-    TestRadosClient::Transaction transaction(m_client, oid);
+    TestRadosClient::Transaction transaction(m_client, get_namespace(), oid);
     for (ObjectOperations::iterator it = ops->ops.begin();
          it != ops->ops.end(); ++it) {
       ret = (*it)(this, oid, pbl, snapc);

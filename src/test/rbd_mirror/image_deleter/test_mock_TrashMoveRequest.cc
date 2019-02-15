@@ -27,7 +27,7 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
                                   const std::string &image_id,
                                   const char *snap, librados::IoCtx& p,
                                   bool read_only) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
@@ -50,7 +50,7 @@ struct Journal<librbd::MockTestImageCtx> {
                             std::string *mirror_uuid,
                             ContextWQ *work_queue,
                             Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->get_tag_owner(image_id, mirror_uuid, on_finish);
   }
 
@@ -70,7 +70,7 @@ struct TrashWatcher<MockTestImageCtx> {
   static void notify_image_added(librados::IoCtx&, const std::string& image_id,
                                  const cls::rbd::TrashImageSpec& spec,
                                  Context *ctx) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->notify_image_added(image_id, spec, ctx);
   }
 
@@ -97,7 +97,7 @@ struct ResetRequest<MockTestImageCtx> {
                               const std::string &client_id,
                               const std::string &mirror_uuid,
                               ContextWQ *op_work_queue, Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -126,7 +126,7 @@ struct MoveRequest<MockTestImageCtx> {
                              const std::string& image_id,
                              const cls::rbd::TrashImageSpec& trash_image_spec,
                              Context* on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->construct(image_id, trash_image_spec);
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -178,7 +178,7 @@ public:
 
   void expect_mirror_image_get_image_id(const std::string& image_id, int r) {
     bufferlist bl;
-    ::encode(image_id, bl);
+    encode(image_id, bl);
 
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_get_image_id"), _, _, _))
@@ -243,8 +243,8 @@ public:
     mirror_image.state = mirror_image_state;
 
     bufferlist bl;
-    ::encode(image_id, bl);
-    ::encode(mirror_image, bl);
+    encode(image_id, bl);
+    encode(mirror_image, bl);
 
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"),
@@ -692,7 +692,7 @@ TEST_F(TestMockImageDeleterTrashMoveRequest, CloseImageError) {
 TEST_F(TestMockImageDeleterTrashMoveRequest, DelayedDelation) {
   librbd::MockTestImageCtx mock_image_ctx(*m_local_image_ctx);
   librbd::MockExclusiveLock mock_exclusive_lock;
-  mock_image_ctx.mirroring_delete_delay = 600;
+  mock_image_ctx.config.set_val("rbd_mirroring_delete_delay", "600");
   mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
 
   InSequence seq;

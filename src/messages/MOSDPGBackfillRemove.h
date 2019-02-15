@@ -21,10 +21,12 @@
  * instruct non-primary to remove some objects during backfill
  */
 
-struct MOSDPGBackfillRemove : public MOSDFastDispatchOp {
+class MOSDPGBackfillRemove : public MessageInstance<MOSDPGBackfillRemove, MOSDFastDispatchOp> {
+public:
+  friend factory;
 
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 1;
+  static constexpr int COMPAT_VERSION = 1;
 
   spg_t pgid;            ///< target spg_t
   epoch_t map_epoch = 0;
@@ -38,11 +40,11 @@ struct MOSDPGBackfillRemove : public MOSDFastDispatchOp {
   }
 
   MOSDPGBackfillRemove()
-    : MOSDFastDispatchOp(MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
+    : MessageInstance(MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
 			COMPAT_VERSION) {}
 
   MOSDPGBackfillRemove(spg_t pgid, epoch_t map_epoch)
-    : MOSDFastDispatchOp(MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
+    : MessageInstance(MSG_OSD_PG_BACKFILL_REMOVE, HEAD_VERSION,
 			 COMPAT_VERSION),
       pgid(pgid),
       map_epoch(map_epoch) {}
@@ -51,22 +53,23 @@ private:
   ~MOSDPGBackfillRemove() {}
 
 public:
-  const char *get_type_name() const { return "backfill_remove"; }
-  void print(ostream& out) const {
+  std::string_view get_type_name() const override { return "backfill_remove"; }
+  void print(ostream& out) const override {
     out << "backfill_remove(" << pgid << " e" << map_epoch
 	<< " " << ls << ")";
   }
 
-  void encode_payload(uint64_t features) {
-    ::encode(pgid, payload);
-    ::encode(map_epoch, payload);
-    ::encode(ls, payload);
+  void encode_payload(uint64_t features) override {
+    using ceph::encode;
+    encode(pgid, payload);
+    encode(map_epoch, payload);
+    encode(ls, payload);
   }
-  void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(pgid, p);
-    ::decode(map_epoch, p);
-    ::decode(ls, p);
+  void decode_payload() override {
+    auto p = payload.cbegin();
+    decode(pgid, p);
+    decode(map_epoch, p);
+    decode(ls, p);
   }
 };
 

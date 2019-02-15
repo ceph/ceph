@@ -173,6 +173,11 @@ non-ssl connections are hosted by a single rgw instance. For eg::
  [client.rgw.gateway-node1]
  rgw_frontends = civetweb port=80+443s ssl_certificate=/etc/ceph/private/keyandcert.pem
 
+Additional Civetweb Configuration Options 
+----------------------------------------- 
+Some additional configuration options can be adjusted for the embedded Civetweb web server 
+in the **Ceph Object Gateway** section of the ``ceph.conf`` file. 
+A list of supported options, including an example, can be found in the `HTTP Frontends`_. 
 
 Migrating from Apache to Civetweb
 ---------------------------------
@@ -264,7 +269,7 @@ system-wide value. You can also set it for each instance in your Ceph
 configuration file.
 
 Once you have changed your bucket sharding configuration in your Ceph
-configuration file, restart your gateway. On Red Hat Enteprise Linux execute::
+configuration file, restart your gateway. On Red Hat Enterprise Linux execute::
 
  sudo systemctl restart ceph-radosgw.service
 
@@ -375,7 +380,6 @@ The output of the command will be something like the following::
 	 "email": "",
 	 "suspended": 0,
 	 "max_buckets": 1000,
-	 "auid": 0,
 	 "subusers": [],
 	 "keys": [{
 		 "user": "testuser",
@@ -436,7 +440,6 @@ The output will be something like the following::
 	 "email": "",
 	 "suspended": 0,
 	 "max_buckets": 1000,
-	 "auid": 0,
 	 "subusers": [{
 		 "id": "testuser:swift",
 		 "permissions": "full-control"
@@ -480,7 +483,6 @@ The output will be something like the following::
 	 "email": "",
 	 "suspended": 0,
 	 "max_buckets": 1000,
-	 "auid": 0,
 	 "subusers": [{
 		 "id": "testuser:swift",
 		 "permissions": "full-control"
@@ -593,7 +595,7 @@ On Debian-based distributions::
 
 To test swift access, execute the following::
 
- swift -A http://{IP ADDRESS}:{port}/auth/1.0 -U testuser:swift -K '{swift_secret_key}' list
+ swift -V 1 -A http://{IP ADDRESS}:{port}/auth -U testuser:swift -K '{swift_secret_key}' list
 
 Replace ``{IP ADDRESS}`` with the public IP address of the gateway server and
 ``{swift_secret_key}`` with its value from the output of ``radosgw-admin key
@@ -603,10 +605,11 @@ don't replace the port, it will default to port ``80``.
 
 For example::
 
- swift -A http://10.19.143.116:7480/auth/1.0 -U testuser:swift -K '244+fz2gSqoHwR3lYtSbIyomyPHf3i7rgSJrF/IA' list
+ swift -V 1 -A http://10.19.143.116:7480/auth -U testuser:swift -K '244+fz2gSqoHwR3lYtSbIyomyPHf3i7rgSJrF/IA' list
 
 The output should be::
 
  my-new-bucket
 
 .. _Preflight:  ../../start/quick-start-preflight
+.. _HTTP Frontends: ../../radosgw/frontends

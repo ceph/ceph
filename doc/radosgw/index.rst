@@ -1,3 +1,5 @@
+.. _object-gateway:
+
 =====================
  Ceph Object Gateway
 =====================
@@ -37,6 +39,7 @@ you may write data with one API and retrieve it with the other.
    :maxdepth: 1
 
    Manual Install w/Civetweb <../../install/install-ceph-gateway>
+   HTTP Frontends <frontends>
    Multisite Configuration <multisite>
    Configuring Pools <pools>
    Config Reference <config-ref>
@@ -48,13 +51,18 @@ you may write data with one API and retrieve it with the other.
    Export over NFS <nfs>
    OpenStack Keystone Integration <keystone>
    OpenStack Barbican Integration <barbican>
+   Open Policy Agent Integration <opa>
    Multi-tenancy <multitenancy>
    Compression <compression>
    LDAP Authentication <ldap-auth>
    Server-Side Encryption <encryption>
    Bucket Policy <bucketpolicy>
    Dynamic bucket index resharding <dynamicresharding>
+   Multi factor authentication <mfa>
+   Sync Modules <sync-modules>
    Data Layout in RADOS <layout>
+   STS Lite <STSLite>
+   Role <role>
    troubleshooting
    Manpage radosgw <../../man/8/radosgw>
    Manpage radosgw-admin <../../man/8/radosgw-admin>

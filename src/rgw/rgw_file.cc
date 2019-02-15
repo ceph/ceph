@@ -23,9 +23,10 @@
 #include "rgw_auth_s3.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
-
+#include "rgw_zone.h"
 #include "rgw_file.h"
 #include "rgw_lib_frontend.h"
+#include "common/errno.h"
 
 #include <atomic>
 
@@ -201,8 +202,6 @@ namespace rgw {
 	  if (req.matched) {
 	    /* we need rgw object's key name equal to file name, if
 	     * not return NULL */
-#if 0 /* original behavior which motivated FLAG_EXACT_MATCH
-       * no longer reproduces */
 	    if ((flags & RGWFileHandle::FLAG_EXACT_MATCH) &&
 		!req.exact_matched) {
 	      lsubdout(get_context(), rgw, 15)
@@ -211,7 +210,6 @@ namespace rgw {
 		<< path << dendl;
 	      goto done;
 	    }
-#endif
 	    fhr = lookup_fh(parent, path,
 			    RGWFileHandle::FLAG_CREATE|
 			    ((req.is_dir) ?
@@ -255,6 +253,29 @@ namespace rgw {
     int rc = rgwlib.get_fe()->execute_req(&req);
     if ((rc == 0) &&
 	(req.get_ret() == 0)) {
+      lock_guard guard(rgw_fh->mtx);
+      rgw_fh->set_atime(real_clock::to_timespec(real_clock::now()));
+      *bytes_read = req.nread;
+    }
+
+    return rc;
+  }
+
+  int RGWLibFS::readlink(RGWFileHandle* rgw_fh, uint64_t offset, size_t length,
+                     size_t* bytes_read, void* buffer, uint32_t flags)
+  {
+    if (! rgw_fh->is_link())
+      return -EINVAL;
+
+    if (rgw_fh->deleted())
+      return -ESTALE;
+
+    RGWReadRequest req(get_context(), get_user(), rgw_fh, offset, length,
+                       buffer);
+
+    int rc = rgwlib.get_fe()->execute_req(&req);
+    if ((rc == 0) &&
+        (req.get_ret() == 0)) {
       lock_guard(rgw_fh->mtx);
       rgw_fh->set_atime(real_clock::to_timespec(real_clock::now()));
       *bytes_read = req.nread;
@@ -484,7 +505,7 @@ namespace rgw {
       }
       goto out;
       default:
-	abort();
+	ceph_abort();
       } /* switch */
     } /* ix */
   unlock:
@@ -663,9 +684,110 @@ namespace rgw {
     }
 
     get<1>(mkr) = rc;
+   
+    /* case like : quota exceed will be considered as fail too*/
+    if(rc2 < 0)
+       get<1>(mkr) = rc2;
 
     return mkr;
   } /* RGWLibFS::create */
+
+  MkObjResult RGWLibFS::symlink(RGWFileHandle* parent, const char *name,
+            const char* link_path, struct stat *st, uint32_t mask, uint32_t flags)
+  {
+    int rc, rc2;
+
+    using std::get;
+
+    rgw_file_handle *lfh;
+    rc = rgw_lookup(get_fs(), parent->get_fh(), name, &lfh, 
+                    RGW_LOOKUP_FLAG_NONE);
+    if (! rc) {
+      /* conflict! */
+      rc = rgw_fh_rele(get_fs(), lfh, RGW_FH_RELE_FLAG_NONE);
+      return MkObjResult{nullptr, -EEXIST};
+    }
+
+    MkObjResult mkr{nullptr, -EINVAL};
+    LookupFHResult fhr;
+    RGWFileHandle* rgw_fh = nullptr;
+    buffer::list ux_key, ux_attrs;
+
+    fhr = lookup_fh(parent, name,
+      RGWFileHandle::FLAG_CREATE|
+      RGWFileHandle::FLAG_SYMBOLIC_LINK|
+      RGWFileHandle::FLAG_LOCK);
+    rgw_fh = get<0>(fhr);
+    if (rgw_fh) {
+      rgw_fh->create_stat(st, mask);
+      rgw_fh->set_times(real_clock::now());
+      /* save attrs */
+      rgw_fh->encode_attrs(ux_key, ux_attrs);
+      if (st)
+        rgw_fh->stat(st);
+      get<0>(mkr) = rgw_fh;
+    } else {
+      get<1>(mkr) = -EIO;
+      return mkr;
+    }
+
+    /* need valid S3 name (characters, length <= 1024, etc) */
+    rc = valid_fs_object_name(name);
+    if (rc != 0) {
+      rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
+      fh_cache.remove(rgw_fh->fh.fh_hk.object, rgw_fh,
+        RGWFileHandle::FHCache::FLAG_LOCK);
+      rgw_fh->mtx.unlock();
+      unref(rgw_fh);
+      get<0>(mkr) = nullptr;
+      get<1>(mkr) = rc;
+      return mkr;
+    }
+
+    string obj_name = std::string(name);
+    /* create an object representing the directory */
+    buffer::list bl;
+
+    /* XXXX */
+#if 0
+    bl.push_back(
+      buffer::create_static(len, static_cast<char*>(buffer)));
+#else
+
+    bl.push_back(
+      buffer::copy(link_path, strlen(link_path)));
+#endif
+
+    RGWPutObjRequest req(get_context(), get_user(), parent->bucket_name(),
+                         obj_name, bl);
+
+    /* save attrs */
+    req.emplace_attr(RGW_ATTR_UNIX_KEY1, std::move(ux_key));
+    req.emplace_attr(RGW_ATTR_UNIX1, std::move(ux_attrs));
+
+    rc = rgwlib.get_fe()->execute_req(&req);
+    rc2 = req.get_ret();
+    if (! ((rc == 0) &&
+        (rc2 == 0))) {
+      /* op failed */
+      rgw_fh->flags |= RGWFileHandle::FLAG_DELETED;
+      rgw_fh->mtx.unlock(); /* !LOCKED */
+      unref(rgw_fh);
+      get<0>(mkr) = nullptr;
+      /* fixup rc */
+      if (!rc)
+        rc = rc2;
+    } else {
+      real_time t = real_clock::now();
+      parent->set_mtime(real_clock::to_timespec(t));
+      parent->set_ctime(real_clock::to_timespec(t));
+      rgw_fh->mtx.unlock(); /* !LOCKED */
+    }
+
+    get<1>(mkr) = rc;
+
+    return mkr;
+  } /* RGWLibFS::symlink */
 
   int RGWLibFS::getattr(RGWFileHandle* rgw_fh, struct stat* st)
   {
@@ -789,7 +911,7 @@ namespace rgw {
     {
       RGWLibFS* fs;
     public:
-      ObjUnref(RGWLibFS* _fs) : fs(_fs) {}
+      explicit ObjUnref(RGWLibFS* _fs) : fs(_fs) {}
       void operator()(RGWFileHandle* fh) const {
 	lsubdout(fs->get_context(), rgw, 5)
 	  << __func__
@@ -954,7 +1076,8 @@ namespace rgw {
   }
 
   RGWFileHandle::~RGWFileHandle() {
-    /* in the non-delete case, handle may still be in handle table */
+    /* !recycle case, handle may STILL be in handle table, BUT
+     * the partition lock is not held in this path */
     if (fh_hook.is_linked()) {
       fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_LOCK);
     }
@@ -974,26 +1097,28 @@ namespace rgw {
   void RGWFileHandle::encode_attrs(ceph::buffer::list& ux_key1,
 				   ceph::buffer::list& ux_attrs1)
   {
+    using ceph::encode;
     fh_key fhk(this->fh.fh_hk);
-    rgw::encode(fhk, ux_key1);
-    rgw::encode(*this, ux_attrs1);
+    encode(fhk, ux_key1);
+    encode(*this, ux_attrs1);
   } /* RGWFileHandle::encode_attrs */
 
   DecodeAttrsResult RGWFileHandle::decode_attrs(const ceph::buffer::list* ux_key1,
                                                 const ceph::buffer::list* ux_attrs1)
   {
+    using ceph::decode;
     DecodeAttrsResult dar { false, false };
     fh_key fhk;
-    auto bl_iter_key1  = const_cast<buffer::list*>(ux_key1)->begin();
-    rgw::decode(fhk, bl_iter_key1);
+    auto bl_iter_key1 = ux_key1->cbegin();
+    decode(fhk, bl_iter_key1);
     if (fhk.version >= 2) {
-      assert(this->fh.fh_hk == fhk.fh_hk);
+      ceph_assert(this->fh.fh_hk == fhk.fh_hk);
     } else {
       get<0>(dar) = true;
     }
 
-    auto bl_iter_unix1 = const_cast<buffer::list*>(ux_attrs1)->begin();
-    rgw::decode(*this, bl_iter_unix1);
+    auto bl_iter_unix1 = ux_attrs1->cbegin();
+    decode(*this, bl_iter_unix1);
     if (this->state.version < 2) {
       get<1>(dar) = true;
     }
@@ -1005,9 +1130,11 @@ namespace rgw {
     lsubdout(fs->get_context(), rgw, 17)
       << __func__ << " " << *this
       << dendl;
-    /* remove if still in fh_cache */
+    /* in the non-delete case, handle may still be in handle table */
     if (fh_hook.is_linked()) {
-      fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_LOCK);
+      /* in this case, we are being called from a context which holds
+       * the partition lock */
+      fs->fh_cache.remove(fh.fh_hk.object, this, FHCache::FLAG_NONE);
     }
     return true;
   } /* RGWFileHandle::reclaim */
@@ -1284,15 +1411,16 @@ namespace rgw {
     struct req_state* s = get_state();
 
     auto compression_type =
-      get_store()->get_zone_params().get_compression_type(
+      get_store()->svc.zone->get_zone_params().get_compression_type(
 	s->bucket_info.placement_rule);
 
     /* not obviously supportable */
-    assert(! dlo_manifest);
-    assert(! slo_info);
+    ceph_assert(! dlo_manifest);
+    ceph_assert(! slo_info);
 
     perfcounter->inc(l_rgw_put);
     op_ret = -EINVAL;
+    rgw_obj obj{s->bucket, s->object};
 
     if (s->object.empty()) {
       ldout(s->cct, 0) << __func__ << " called on empty object" << dendl;
@@ -1312,26 +1440,40 @@ namespace rgw {
     /* early quota check skipped--we don't have size yet */
     /* skipping user-supplied etag--we might have one in future, but
      * like data it and other attrs would arrive after open */
-    processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-				 &multipart);
-    op_ret = processor->prepare(get_store(), NULL);
+
+    aio.emplace(s->cct->_conf->rgw_put_obj_min_window_size);
+
+    if (s->bucket_info.versioning_enabled()) {
+      if (!version_id.empty()) {
+        obj.key.set_instance(version_id);
+      } else {
+        get_store()->gen_rand_obj_instance_name(&obj);
+        version_id = obj.key.instance;
+      }
+    }
+    processor.emplace(&*aio, get_store(), s->bucket_info,
+                      &s->dest_placement,
+                      s->bucket_owner.get_id(),
+                      *static_cast<RGWObjectCtx *>(s->obj_ctx),
+                      obj, olh_epoch, s->req_id);
+
+    op_ret = processor->prepare();
     if (op_ret < 0) {
       ldout(s->cct, 20) << "processor->prepare() returned ret=" << op_ret
 			<< dendl;
       goto done;
     }
-
-    filter = processor;
+    filter = &*processor;
     if (compression_type != "none") {
       plugin = Compressor::create(s->cct, compression_type);
-    if (! plugin) {
-      ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
-                       << compression_type << dendl;
-    } else {
-      compressor.emplace(s->cct, plugin, filter);
-      filter = &*compressor;
+      if (! plugin) {
+        ldout(s->cct, 1) << "Cannot load plugin for rgw_compression_type "
+                         << compression_type << dendl;
+      } else {
+        compressor.emplace(s->cct, plugin, filter);
+        filter = &*compressor;
+      }
     }
-  }
 
   done:
     return op_ret;
@@ -1351,60 +1493,20 @@ namespace rgw {
       return -EIO;
     }
 
+    op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
+                                      user_quota, bucket_quota, real_ofs, true);
+    /* max_size exceed */
+    if (op_ret < 0)
+      return -EIO;
+
     size_t len = data.length();
     if (! len)
       return 0;
 
-    /* XXX we are currently synchronous--supplied data buffers cannot
-     * be used after the caller returns  */
-    bool need_to_wait = true;
-    bufferlist orig_data;
-
-    if (need_to_wait) {
-      orig_data = data;
-    }
-    hash.Update((const ::byte *)data.c_str(), data.length());
-    op_ret = put_data_and_throttle(filter, data, ofs, need_to_wait);
+    hash.Update((const unsigned char *)data.c_str(), data.length());
+    op_ret = filter->process(std::move(data), ofs);
     if (op_ret < 0) {
-      if (!need_to_wait || op_ret != -EEXIST) {
-	ldout(s->cct, 20) << "processor->thottle_data() returned ret="
-			  << op_ret << dendl;
-	goto done;
-      }
-
-      ldout(s->cct, 5) << "NOTICE: processor->throttle_data() returned -EEXIST, need to restart write" << dendl;
-
-      /* restore original data */
-      data.swap(orig_data);
-
-      /* restart processing with different oid suffix */
-      dispose_processor(processor);
-      processor = select_processor(*static_cast<RGWObjectCtx *>(s->obj_ctx),
-				   &multipart);
-      filter = processor;
-
-      string oid_rand;
-      char buf[33];
-      gen_rand_alphanumeric(get_store()->ctx(), buf, sizeof(buf) - 1);
-      oid_rand.append(buf);
-
-      op_ret = processor->prepare(get_store(), &oid_rand);
-      if (op_ret < 0) {
-	ldout(s->cct, 0) << "ERROR: processor->prepare() returned "
-			 << op_ret << dendl;
-	goto done;
-      }
-
-      /* restore compression filter, if any */
-      if (compressor) {
-	compressor.emplace(s->cct, plugin, filter);
-	filter = &*compressor;
-      }
-
-      op_ret = put_data_and_throttle(filter, data, ofs, false);
-      if (op_ret < 0) {
-	goto done;
-      }
+      goto done;
     }
     bytes_written += len;
 
@@ -1428,8 +1530,15 @@ namespace rgw {
     s->obj_size = bytes_written;
     perfcounter->inc(l_rgw_put_b, s->obj_size);
 
+    // flush data in filters
+    op_ret = filter->process({}, s->obj_size);
+    if (op_ret < 0) {
+      goto done;
+    }
+
     op_ret = get_store()->check_quota(s->bucket_owner.get_id(), s->bucket,
-				      user_quota, bucket_quota, s->obj_size);
+				      user_quota, bucket_quota, s->obj_size, true);
+    /* max_size exceed */
     if (op_ret < 0) {
       goto done;
     }
@@ -1448,7 +1557,7 @@ namespace rgw {
       cs_info.compression_type = plugin->get_type_name();
       cs_info.orig_size = s->obj_size;
       cs_info.blocks = std::move(compressor->get_compression_blocks());
-      ::encode(cs_info, tmp);
+      encode(cs_info, tmp);
       attrs[RGW_ATTR_COMPRESSION] = tmp;
       ldout(s->cct, 20) << "storing " << RGW_ATTR_COMPRESSION
 			<< " with type=" << cs_info.compression_type
@@ -1492,13 +1601,14 @@ namespace rgw {
      * processing any input from user in order to prohibit overwriting. */
     if (unlikely(!! slo_info)) {
       buffer::list slo_userindicator_bl;
-      ::encode("True", slo_userindicator_bl);
+      using ceph::encode;
+      encode("True", slo_userindicator_bl);
       emplace_attr(RGW_ATTR_SLO_UINDICATOR, std::move(slo_userindicator_bl));
     }
 
     op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
                                  (delete_at ? *delete_at : real_time()),
-				 if_match, if_nomatch);
+                                if_match, if_nomatch, nullptr, nullptr, nullptr);
     if (op_ret != 0) {
       /* revert attr updates */
       rgw_fh->set_mtime(omtime);
@@ -1507,9 +1617,7 @@ namespace rgw {
     }
 
   done:
-    dispose_processor(processor);
-    perfcounter->tinc(l_rgw_put_lat,
-		      (ceph_clock_now() - s->time));
+    perfcounter->tinc(l_rgw_put_lat, s->time_elapsed());
     return op_ret;
   } /* exec_finish */
 
@@ -1540,7 +1648,7 @@ void rgwfile_version(int *major, int *minor, int *extra)
   /* stash access data for "mount" */
   RGWLibFS* new_fs = new RGWLibFS(static_cast<CephContext*>(rgw), uid, acc_key,
 				  sec_key, "/");
-  assert(new_fs);
+  ceph_assert(new_fs);
 
   rc = new_fs->authorize(rgwlib.get_store());
   if (rc != 0) {
@@ -1571,7 +1679,7 @@ int rgw_mount2(librgw_t rgw, const char *uid, const char *acc_key,
   /* stash access data for "mount" */
   RGWLibFS* new_fs = new RGWLibFS(static_cast<CephContext*>(rgw), uid, acc_key,
 				  sec_key, root);
-  assert(new_fs);
+  ceph_assert(new_fs);
 
   rc = new_fs->authorize(rgwlib.get_store());
   if (rc != 0) {
@@ -1622,16 +1730,25 @@ int rgw_statfs(struct rgw_fs *rgw_fs,
 	       struct rgw_statvfs *vfs_st, uint32_t flags)
 {
   RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  struct rados_cluster_stat_t stats;
 
-  /* XXX for now, just publish a huge capacity and
-   * limited utiliztion */
-  vfs_st->f_bsize = 1024*1024 /* 1M */;
-  vfs_st->f_frsize = 1024;    /* minimal allocation unit (who cares) */
-  vfs_st->f_blocks = UINT64_MAX;
-  vfs_st->f_bfree = UINT64_MAX;
-  vfs_st->f_bavail = UINT64_MAX;
-  vfs_st->f_files = 1024; /* object count, do we have an est? */
-  vfs_st->f_ffree = UINT64_MAX;
+  RGWGetClusterStatReq req(fs->get_context(), fs->get_user(), stats);
+  int rc = rgwlib.get_fe()->execute_req(&req);
+  if (rc < 0) {
+    lderr(fs->get_context()) << "ERROR: getting total cluster usage"
+                             << cpp_strerror(-rc) << dendl;
+    return rc;
+  }
+
+  //Set block size to 1M.
+  constexpr uint32_t CEPH_BLOCK_SHIFT = 20;
+  vfs_st->f_bsize = 1 << CEPH_BLOCK_SHIFT;
+  vfs_st->f_frsize = 1 << CEPH_BLOCK_SHIFT;
+  vfs_st->f_blocks = stats.kb >> (CEPH_BLOCK_SHIFT - 10);
+  vfs_st->f_bfree = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
+  vfs_st->f_bavail = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
+  vfs_st->f_files = stats.num_objects;
+  vfs_st->f_ffree = -1;
   vfs_st->f_fsid[0] = fs->get_fsid();
   vfs_st->f_fsid[1] = fs->get_fsid();
   vfs_st->f_flag = 0;
@@ -1667,6 +1784,35 @@ int rgw_create(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
 
   return get<1>(fhr);
 } /* rgw_create */
+
+/*
+  create a symbolic link
+ */
+int rgw_symlink(struct rgw_fs *rgw_fs, struct rgw_file_handle *parent_fh,
+        const char *name, const char *link_path, struct stat *st, uint32_t mask,
+        struct rgw_file_handle **fh, uint32_t posix_flags,
+        uint32_t flags)
+{
+  using std::get;
+
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  RGWFileHandle* parent = get_rgwfh(parent_fh);
+
+  if ((! parent) ||
+      (parent->is_root()) ||
+      (parent->is_file())) {
+    /* bad parent */
+    return -EINVAL;
+  }
+
+  MkObjResult fhr = fs->symlink(parent, name, link_path, st, mask, flags);
+  RGWFileHandle *nfh = get<0>(fhr); // nullptr if !success
+
+  if (nfh)
+    *fh = nfh->get_fh();
+
+  return get<1>(fhr);
+} /* rgw_symlink */
 
 /*
   create a new directory
@@ -1760,7 +1906,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
     if (unlikely((strcmp(path, "..") == 0))) {
       rgw_fh = parent;
       lsubdout(fs->get_context(), rgw, 17)
-	<< __func__ << "BANG"<< *rgw_fh
+	<< __func__ << " BANG"<< *rgw_fh
 	<< dendl;
       fs->ref(rgw_fh);
     } else {
@@ -1867,7 +2013,7 @@ int rgw_open(struct rgw_fs *rgw_fs,
 {
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
-  /* XXX 
+  /* XXX
    * need to track specific opens--at least read opens and
    * a write open;  we need to know when a write open is returned,
    * that closes a write transaction
@@ -1938,7 +2084,7 @@ int rgw_readdir2(struct rgw_fs *rgw_fs,
 
   lsubdout(parent->get_fs()->get_context(), rgw, 15)
     << __func__
-    << " offset=" << name
+    << " offset=" << ((name) ? name : "(nil)")
     << dendl;
 
   if ((! name) &&
@@ -1980,6 +2126,20 @@ int rgw_read(struct rgw_fs *rgw_fs,
   RGWFileHandle* rgw_fh = get_rgwfh(fh);
 
   return fs->read(rgw_fh, offset, length, bytes_read, buffer, flags);
+}
+
+/*
+   read symbolic link
+*/
+int rgw_readlink(struct rgw_fs *rgw_fs,
+	     struct rgw_file_handle *fh, uint64_t offset,
+	     size_t length, size_t *bytes_read, void *buffer,
+	     uint32_t flags)
+{
+  RGWLibFS *fs = static_cast<RGWLibFS*>(rgw_fs->fs_private);
+  RGWFileHandle* rgw_fh = get_rgwfh(fh);
+
+  return fs->readlink(rgw_fh, offset, length, bytes_read, buffer, flags);
 }
 
 /*
@@ -2027,7 +2187,7 @@ public:
 
   struct rgw_vio* get_vio() { return vio; }
 
-  const std::list<buffer::ptr>& buffers() { return bl.buffers(); }
+  const auto& buffers() { return bl.buffers(); }
 
   unsigned /* XXX */ length() { return bl.length(); }
 

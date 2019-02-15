@@ -1,0 +1,35 @@
+<div class="col-sm-6 col-lg-6">
+  <legend i18n>iSCSI Topology</legend>
+  <tree [tree]="tree"
+        (nodeSelected)="onNodeSelected($event)">
+    <ng-template let-node>
+      <span class="node-name"
+            [innerHTML]="node.value"></span>
+      <span>&nbsp;</span>
+
+      <span class="label"
+            [ngClass]="{'label-success': ['in', 'up'].includes(node.status), 'label-danger': ['down', 'out'].includes(node.status)}">
+        {{ node.status }}
+      </span>
+    </ng-template>
+  </tree>
+</div>
+
+<div class="col-sm-6 col-lg-6 metadata"
+     *ngIf="data">
+  <legend>{{ title }}</legend>
+
+  <cd-table #detailTable
+            [data]="data"
+            columnMode="flex"
+            [columns]="columns"
+            [limit]="0">
+  </cd-table>
+</div>
+
+<ng-template #highlightTpl
+             let-row="row"
+             let-value="value">
+  <span *ngIf="row.default === undefined || row.default === row.current">{{ value }}</span>
+  <strong *ngIf="row.default !== undefined && row.default !== row.current">{{ value }}</strong>
+</ng-template>

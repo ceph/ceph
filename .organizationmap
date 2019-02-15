@@ -98,6 +98,8 @@ Debian GNU/Linux <contact@debian.org> Thorsten Glaser <tg@mirbsd.de>
 Deutsche Telekom <contact@telekom.de> Daniel Gollub <d.gollub@telekom.de>
 Deutsche Telekom <contact@telekom.de> Danny Al-Gaaf <danny.al-gaaf@bisect.de>
 Deutsche Telekom <contact@telekom.de> Thomas Bechtold <t.bechtold@telekom.de>
+DiDi <contact@didichuxing.com> Xin Yuan <mychoxin@gmail.com>
+DiDi <contact@didichuxing.com> Yichao Li <liyichao.good@gmail.com>
 DiDi <contact@didichuxing.com> Li Wang <laurence.liwang@gmail.com>
 DigitalOcean <contact@digitalocean.com> Adam Wolfe Gordon <awg@digitalocean.com>
 DigitalOcean <contact@digitalocean.com> Vaibhav Bhembre <vaibhav@digitalocean.com>
@@ -366,6 +368,7 @@ Red Hat <contact@redhat.com> Adam C. Emerson <aemerson@redhat.com>
 Red Hat <contact@redhat.com> Alexander Chuzhoy <achuzhoy@redhat.com>
 Red Hat <contact@redhat.com> Alexandre Marangone <amarango@redhat.com>
 Red Hat <contact@redhat.com> Alex Elder <aelder@redhat.com>
+Red Hat <contact@redhat.com> Alfonso Martínez <almartin@redhat.com>
 Red Hat <contact@redhat.com> Alfredo Deza <adeza@redhat.com>
 Red Hat <contact@redhat.com> Ali Maredia <amaredia@redhat.com>
 Red Hat <contact@redhat.com> Amit Kumar <amitkuma@redhat.com>
@@ -383,6 +386,7 @@ Red Hat <contact@redhat.com> Dan Mick <dmick@redhat.com>
 Red Hat <contact@redhat.com> David Galloway <dgallowa@redhat.com>
 Red Hat <contact@redhat.com> David Zafman <dzafman@redhat.com>
 Red Hat <contact@redhat.com> Douglas Fuller <dfuller@redhat.com>
+Red Hat <contact@redhat.com> Ernesto Puerta <epuertat@redhat.com>
 Red Hat <contact@redhat.com> Erwan Velu <erwan@redhat.com>
 Red Hat <contact@redhat.com> Federico Simoncelli <fsimonce@redhat.com>
 Red Hat <contact@redhat.com> Frank Filz <ffilz@redhat.com>
@@ -408,6 +412,7 @@ Red Hat <contact@redhat.com> John Wilkins <jwilkins@redhat.com>
 Red Hat <contact@redhat.com> Jos Collin <jcollin@redhat.com>
 Red Hat <contact@redhat.com> Josh Durgin <jdurgin@redhat.com>
 Red Hat <contact@redhat.com> JuanJose 'JJ' Galvez <jgalvez@redhat.com>
+Red Hat <contact@redhat.com> Kanika Murarka <kmurarka@redhat.com>
 Red Hat <contact@redhat.com> Kefu Chai <kchai@redhat.com>
 Red Hat <contact@redhat.com> Ken Dreyer <kdreyer@redhat.com>
 Red Hat <contact@redhat.com> Loic Dachary <ldachary@redhat.com>
@@ -426,6 +431,7 @@ Red Hat <contact@redhat.com> Noah Watkins <nwatkins@redhat.com>
 Red Hat <contact@redhat.com> Orit Wasserman <owasserm@redhat.com>
 Red Hat <contact@redhat.com> Patrick Donnelly <pdonnell@redhat.com>
 Red Hat <contact@redhat.com> Patrick McGarry <pmcgarry@redhat.com>
+Red Hat <contact@redhat.com> Paul Cuzner <pcuzner@redhat.com>
 Red Hat <contact@redhat.com> Pete Zaitcev <zaitcev@redhat.com>
 Red Hat <contact@redhat.com> Petr Lautrbach <plautrba@redhat.com>
 Red Hat <contact@redhat.com> Petr Machata <pmachata@redhat.com>
@@ -482,6 +488,18 @@ SanDisk <contact@sandisk.com> Sushma Gurram <sushma.gurram@sandisk.com>
 SanDisk <contact@sandisk.com> Tomy Cheru <tomy.cheru@sandisk.com>
 SanDisk <contact@sandisk.com> Varada Kari <varada.kari@sandisk.com>
 SanDisk <contact@sandisk.com> Vishal Kanaujia <Vishal.Kanaujia@sandisk.com>
+Sangfor <contact-sds@sangfor.com.cn> Xiaocheng Wang <wangxiaocheng@sangfor.com.cn>
+Sangfor <contact-sds@sangfor.com.cn> Tao Ning <ningtao@sangfor.com.cn>
+Sangfor <contact-sds@sangfor.com.cn> Xiaofei Cui <cuixiaofei@sangfor.com.cn>
+Sangfor <contact-sds@sangfor.com.cn> Ye Tian <tianye@sangfor.com.cn>
+Sangfor <contact-sds@sangfor.com.cn> Zengran Zhang <zhangzengran@sangfor.com.cn>
+Sangfor <contact-sds@sangfor.com.cn> Zhen Zeng <zengzhen@sangfor.com.cn>
+Sangfor <contact-sds@sangfor.com.cn> Kuanlong Li <likuanlong@sangfor.com.cn>
+Sangfor <contact-sds@sangfor.com.cn> Shuai Yong<yongshuai@sangfor.com.cn>
+Sangfor <contact-sds@sangfor.com.cn> Fang Yuxiang <fangyuxiang@sangfor.com.cn>
+Sangfor <contact-sds@sangfor.com.cn> Min Chen <chenmin@sangfor.com.cn>
+Sangfor <contact-sds@sangfor.com.cn> Jinling Zhao <zhaojinling@sangfor.com.cn>
+Sangfor <contact-sds@sangfor.com.cn> Junhui Tang <tangjunhui@sangfor.com.cn>
 SAP <contact@sap.com> Marc Koderer <marc@koderer.com>
 Science & Technology Facilities Council <contact@stfc.ac.uk> George Ryall <george.ryall@stfc.ac.uk>
 SendFaster <contact@sendfaster.com> Christopher O'Connell <jwriteclub@gmail.com>
@@ -497,22 +515,33 @@ SUSE <contact@suse.com> David Disseldorp <ddiss@suse.de>
 SUSE <contact@suse.com> Dirk Mueller <dmueller@suse.com>
 SUSE <contact@suse.com> Hannes Reinecke <hare@suse.de>
 SUSE <contact@suse.com> Holger Macht <hmacht@suse.de>
-SUSE <contact@sise.com> Igor Fedotov <ifedotov@suse.com>
+SUSE <contact@suse.com> Igor Fedotov <ifedotov@suse.com>
 SUSE <contact@suse.com> Jan Fajerski <jfajerski@suse.com>
 SUSE <contact@suse.com> Jesse Williamson <jesse.williamson@suse.com>
 SUSE <contact@suse.com> João Eduardo Luís <joao@suse.de>
+SUSE <contact@suse.com> Kai Wagner <kwagner@suse.com>
 SUSE <contact@suse.com> Karl Eichwalder <ke@suse.de>
 SUSE <contact@suse.com> Karol Mroz <kmroz@suse.com>
 SUSE <contact@suse.com> Kapil Sharma <ksharma@suse.com>
+SUSE <contact@suse.com> Laura Paduano <lpaduano@suse.com>
+SUSE <contact@suse.com> Lenz Grimmer <lgrimmer@suse.com>
 SUSE <contact@suse.com> Mohamad Gebai <mgebai@suse.com>
 SUSE <contact@suse.com> Michal Koutný <mkoutny@suse.com>
 SUSE <contact@suse.com> Mykola Golub <mgolub@suse.com>
 SUSE <contact@suse.com> Nathan Cutler <ncutler@suse.com>
 SUSE <contact@suse.com> Owen Synge <osynge@suse.com>
+SUSE <contact@suse.com> Patrick Nawracay <pnawracay@suse.com>
 SUSE <contact@suse.com> Ricardo Dias <rdias@suse.com>
+SUSE <contact@suse.com> Ricardo Marques <rimarques@suse.com>
+SUSE <contact@suse.com> Sebastian Krah <skrah@suse.com>
+SUSE <contact@suse.com> Sebastian Wagner <swagner@suse.com>
+SUSE <contact@suse.com> Stephan Müller <smueller@suse.com>
 SUSE <contact@suse.com> Sven Seeberg <sseebergelverfeldt@suse.com>
+SUSE <contact@suse.com> Tatjana Dehler <tdehler@suse.com>
 SUSE <contact@suse.com> Thorsten Behrens <tbehrens@suse.com>
+SUSE <contact@suse.com> Tiago Melo <tmelo@suse.com>
 SUSE <contact@suse.com> Tim Serong <tserong@suse.com>
+SUSE <contact@suse.com> Volker Theile <vtheile@suse.com>
 SWITCH <contact@switch.ch> Jens-Christian Fischer <jens-christian.fischer@switch.ch>
 SWITCH <contact@switch.ch> Simon Leinen <simon.leinen@switch.ch>
 T2Cloud <contact@t2cloud.net> Leo Zhang <nguzcf@gmail.com>

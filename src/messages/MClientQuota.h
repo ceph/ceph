@@ -3,47 +3,49 @@
 
 #include "msg/Message.h"
 
-struct MClientQuota : public Message {
+class MClientQuota : public MessageInstance<MClientQuota> {
+public:
+  friend factory;
+
   inodeno_t ino;
   nest_info_t rstat;
   quota_info_t quota;
 
+protected:
   MClientQuota() :
-    Message(CEPH_MSG_CLIENT_QUOTA),
+    MessageInstance(CEPH_MSG_CLIENT_QUOTA),
     ino(0)
-  {
-    memset(&rstat, 0, sizeof(rstat));
-    memset(&quota, 0, sizeof(quota));
-  }
-private:
+  {}
   ~MClientQuota() override {}
 
 public:
-  const char *get_type_name() const override { return "client_quota"; }
+  std::string_view get_type_name() const override { return "client_quota"; }
   void print(ostream& out) const override {
     out << "client_quota(";
     out << " [" << ino << "] ";
-    out << rstat;
+    out << rstat << " ";
+    out << quota;
     out << ")";
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(ino, payload);
-    ::encode(rstat.rctime, payload);
-    ::encode(rstat.rbytes, payload);
-    ::encode(rstat.rfiles, payload);
-    ::encode(rstat.rsubdirs, payload);
-    ::encode(quota, payload);
+    using ceph::encode;
+    encode(ino, payload);
+    encode(rstat.rctime, payload);
+    encode(rstat.rbytes, payload);
+    encode(rstat.rfiles, payload);
+    encode(rstat.rsubdirs, payload);
+    encode(quota, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(ino, p);
-    ::decode(rstat.rctime, p);
-    ::decode(rstat.rbytes, p);
-    ::decode(rstat.rfiles, p);
-    ::decode(rstat.rsubdirs, p);
-    ::decode(quota, p);
-    assert(p.end());
+    auto p = payload.cbegin();
+    decode(ino, p);
+    decode(rstat.rctime, p);
+    decode(rstat.rbytes, p);
+    decode(rstat.rfiles, p);
+    decode(rstat.rsubdirs, p);
+    decode(quota, p);
+    ceph_assert(p.end());
   }
 };
 

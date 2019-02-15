@@ -19,8 +19,10 @@ class CephContext;
 
 class AuthNoneSessionHandler  : public AuthSessionHandler {
 public:
-  AuthNoneSessionHandler(CephContext *cct_, CryptoKey session_key)
-    : AuthSessionHandler(cct_, CEPH_AUTH_NONE, session_key) {}
+  AuthNoneSessionHandler(CephContext *cct_,
+			 const CryptoKey& session_key,
+			 const std::string& connection_secret)
+    : AuthSessionHandler(cct_, CEPH_AUTH_NONE, session_key, connection_secret) {}
   ~AuthNoneSessionHandler() override {}
   
   bool no_security() override {

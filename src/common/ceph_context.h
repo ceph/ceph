@@ -15,26 +15,34 @@
 #ifndef CEPH_CEPHCONTEXT_H
 #define CEPH_CEPHCONTEXT_H
 
-#include <set>
+#include <atomic>
+#include <map>
 #include <memory>
 #include <mutex>
-#include <atomic>
+#include <set>
+#include <string>
+#include <string_view>
+#include <typeinfo>
+#include <typeindex>
 
-#include <boost/noncopyable.hpp>
+#include "include/any.h"
 
 #include "common/cmdparse.h"
 #include "common/code_environment.h"
-
+#ifdef WITH_SEASTAR
+#include "crimson/common/config_proxy.h"
+#include "crimson/common/perf_counters_collection.h"
+#else
+#include "common/config_proxy.h"
 #include "include/spinlock.h"
+#include "common/perf_counters_collection.h"
+#endif
+
 
 #include "crush/CrushLocation.h"
 
 class AdminSocket;
 class CephContextServiceThread;
-class PerfCountersCollection;
-class PerfCounters;
-class md_config_obs_t;
-struct md_config_t;
 class CephContextHook;
 class CephContextObs;
 class CryptoHandler;
@@ -48,6 +56,29 @@ namespace ceph {
   }
 }
 
+#ifdef WITH_SEASTAR
+class CephContext {
+public:
+  CephContext();
+  CephContext(uint32_t,
+	      code_environment_t=CODE_ENVIRONMENT_UTILITY,
+	      int = 0)
+    : CephContext{}
+  {}
+  ~CephContext();
+
+  uint32_t get_module_type() const;
+  CryptoRandom* random() const;
+  PerfCountersCollectionImpl* get_perfcounters_collection();
+  ceph::common::ConfigProxy& _conf;
+  ceph::common::PerfCountersCollection& _perf_counters_collection;
+  CephContext* get();
+  void put();
+private:
+  std::unique_ptr<CryptoRandom> _crypto_random;
+  unsigned nref;
+};
+#else
 /* A CephContext represents the context held by a single library user.
  * There can be multiple CephContexts in the same process.
  *
@@ -61,6 +92,13 @@ public:
               enum code_environment_t code_env=CODE_ENVIRONMENT_UTILITY,
               int init_flags_ = 0);
 
+  CephContext(const CephContext&) = delete;
+  CephContext& operator =(const CephContext&) = delete;
+  CephContext(CephContext&&) = delete;
+  CephContext& operator =(CephContext&&) = delete;
+
+  bool _finished = false;
+
   // ref count!
 private:
   ~CephContext();
@@ -72,11 +110,14 @@ public:
   }
   void put();
 
-  md_config_t *_conf;
+  ConfigProxy _conf;
   ceph::logging::Log *_log;
 
   /* init ceph::crypto */
   void init_crypto();
+
+  /// shutdown crypto (should match init_crypto calls)
+  void shutdown_crypto();
 
   /* Start the Ceph Context's service thread */
   void start_service_thread();
@@ -98,22 +139,6 @@ public:
   }
 
   /**
-   * Enable the performance counter, currently we only have counter for the
-   * number of total/unhealthy workers.
-   */
-  void enable_perf_counter();
-
-  /**
-   * Disable the performance counter.
-   */
-  void disable_perf_counter();
-
-  /**
-   * Refresh perf counter values.
-   */
-  void refresh_perf_values();
-
-  /**
    * Get the admin socket associated with this CephContext.
    *
    * Currently there is always an admin socket object,
@@ -126,23 +151,35 @@ public:
   /**
    * process an admin socket command
    */
-  void do_command(std::string command, cmdmap_t& cmdmap, std::string format,
-		  ceph::bufferlist *out);
+  void do_command(std::string_view command, const cmdmap_t& cmdmap,
+		  std::string_view format, ceph::bufferlist *out);
 
-  template<typename T>
-  void lookup_or_create_singleton_object(T*& p, const std::string &name) {
-    std::lock_guard<ceph::spinlock> lg(_associated_objs_lock);
+  static constexpr std::size_t largest_singleton = 8 * 72;
 
-    if (!_associated_objs.count(name)) {
-      p = new T(this);
-      _associated_objs[name] = new TypedSingletonWrapper<T>(p);
-    } else {
-      TypedSingletonWrapper<T> *wrapper =
-        dynamic_cast<TypedSingletonWrapper<T> *>(_associated_objs[name]);
-      assert(wrapper != NULL);
-      p = wrapper->singleton;
+  template<typename T, typename... Args>
+  T& lookup_or_create_singleton_object(std::string_view name,
+				       bool drop_on_fork,
+				       Args&&... args) {
+    static_assert(sizeof(T) <= largest_singleton,
+		  "Please increase largest singleton.");
+    std::lock_guard lg(associated_objs_lock);
+    std::type_index type = typeid(T);
+
+    auto i = associated_objs.find(std::make_pair(name, type));
+    if (i == associated_objs.cend()) {
+      if (drop_on_fork) {
+	associated_objs_drop_on_fork.insert(std::string(name));
+      }
+      i = associated_objs.emplace_hint(
+	i,
+	std::piecewise_construct,
+	std::forward_as_tuple(name, type),
+	std::forward_as_tuple(std::in_place_type<T>,
+			      std::forward<Args>(args)...));
     }
+    return ceph::any_cast<T&>(i->second);
   }
+
   /**
    * get a crypto handler
    */
@@ -170,7 +207,7 @@ public:
     return _set_gid;
   }
 
-  void set_uid_gid_strings(std::string u, std::string g) {
+  void set_uid_gid_strings(const std::string &u, const std::string &g) {
     _set_uid_string = u;
     _set_gid_string = g;
   }
@@ -189,40 +226,15 @@ public:
   };
 
   void register_fork_watcher(ForkWatcher *w) {
-    std::lock_guard<ceph::spinlock> lg(_fork_watchers_lock);
+    std::lock_guard lg(_fork_watchers_lock);
     _fork_watchers.push_back(w);
   }
 
-  void notify_pre_fork() {
-    std::lock_guard<ceph::spinlock> lg(_fork_watchers_lock);
-    for (auto &&t : _fork_watchers)
-      t->handle_pre_fork();
-  }
-
-  void notify_post_fork() {
-    ceph::spin_unlock(&_fork_watchers_lock);
-    for (auto &&t : _fork_watchers)
-      t->handle_post_fork();
-  }
+  void notify_pre_fork();
+  void notify_post_fork();
 
 private:
-  struct SingletonWrapper : boost::noncopyable {
-    virtual ~SingletonWrapper() {}
-  };
 
-  template <typename T>
-  struct TypedSingletonWrapper : public SingletonWrapper {
-    TypedSingletonWrapper(T *p) : singleton(p) {
-    }
-    ~TypedSingletonWrapper() override {
-      delete singleton;
-    }
-
-    T *singleton;
-  };
-
-  CephContext(const CephContext &rhs);
-  CephContext &operator=(const CephContext &rhs);
 
   /* Stop and join the Ceph Context's service thread */
   void join_service_thread();
@@ -236,12 +248,14 @@ private:
   std::string _set_uid_string;
   std::string _set_gid_string;
 
-  bool _crypto_inited;
+  int _crypto_inited;
 
   /* libcommon service thread.
    * SIGHUP wakes this thread, which then reopens logfiles */
   friend class CephContextServiceThread;
   CephContextServiceThread *_service_thread;
+
+  using md_config_obs_t = ceph::md_config_obs_impl<ConfigProxy>;
 
   md_config_obs_t *_log_obs;
 
@@ -260,8 +274,22 @@ private:
 
   ceph::HeartbeatMap *_heartbeat_map;
 
-  ceph::spinlock _associated_objs_lock;
-  std::map<std::string, SingletonWrapper*> _associated_objs;
+  ceph::spinlock associated_objs_lock;
+
+  struct associated_objs_cmp {
+    using is_transparent = std::true_type;
+    template<typename T, typename U>
+    bool operator ()(const std::pair<T, std::type_index>& l,
+		     const std::pair<U, std::type_index>& r) const noexcept {
+      return ((l.first < r.first)  ||
+	      (l.first == r.first && l.second < r.second));
+    }
+  };
+
+  std::map<std::pair<std::string, std::type_index>,
+	   ceph::immobile_any<largest_singleton>,
+	   associated_objs_cmp> associated_objs;
+  std::set<std::string> associated_objs_drop_on_fork;
 
   ceph::spinlock _fork_watchers_lock;
   std::vector<ForkWatcher*> _fork_watchers;
@@ -290,10 +318,33 @@ private:
     l_cct_unhealthy_workers,
     l_cct_last
   };
-  PerfCounters *_cct_perf;
-  ceph::spinlock _cct_perf_lock;
+  enum {
+    l_mempool_first = 873222,
+    l_mempool_bytes,
+    l_mempool_items,
+    l_mempool_last
+  };
+  PerfCounters *_cct_perf = nullptr;
+  PerfCounters* _mempool_perf = nullptr;
+  std::vector<std::string> _mempool_perf_names, _mempool_perf_descriptions;
+
+  /**
+   * Enable the performance counters.
+   */
+  void _enable_perf_counter();
+
+  /**
+   * Disable the performance counter.
+   */
+  void _disable_perf_counter();
+
+  /**
+   * Refresh perf counter values.
+   */
+  void _refresh_perf_values();
 
   friend class CephContextObs;
 };
+#endif	// WITH_SEASTAR
 
 #endif

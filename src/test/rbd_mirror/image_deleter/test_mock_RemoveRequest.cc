@@ -39,7 +39,7 @@ struct RemoveRequest<librbd::MockTestImageCtx> {
                                librbd::ProgressContext &progress_ctx,
                                ContextWQ *work_queue,
                                Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     EXPECT_TRUE(image_name.empty());
     EXPECT_TRUE(force);
     EXPECT_TRUE(remove_from_trash);
@@ -73,7 +73,7 @@ struct SnapshotPurgeRequest<librbd::MockTestImageCtx> {
   static SnapshotPurgeRequest *create(librados::IoCtx &io_ctx,
                                       const std::string &image_id,
                                       Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->construct(image_id);
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -116,7 +116,7 @@ public:
   void expect_get_snapcontext(const std::string& image_id,
                               const ::SnapContext &snapc, int r) {
     bufferlist bl;
-    ::encode(snapc, bl);
+    encode(snapc, bl);
 
     EXPECT_CALL(get_mock_io_ctx(m_local_io_ctx),
                 exec(librbd::util::header_name(image_id), _, StrEq("rbd"),
@@ -249,4 +249,3 @@ TEST_F(TestMockImageDeleterRemoveRequest, RemoveError) {
 } // namespace image_deleter
 } // namespace mirror
 } // namespace rbd
-

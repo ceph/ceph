@@ -21,6 +21,89 @@ that are defined by ceph-mgr python modules.
 Definitions
 ===========
 
+Monitor
+-------
+
+MON_DOWN
+________
+
+One or more monitor daemons is currently down.  The cluster requires a
+majority (more than 1/2) of the monitors in order to function.  When
+one or more monitors are down, clients may have a harder time forming
+their initial connection to the cluster as they may need to try more
+addresses before they reach an operating monitor.
+
+The down monitor daemon should generally be restarted as soon as
+possible to reduce the risk of a subsequen monitor failure leading to
+a service outage.
+
+MON_CLOCK_SKEW
+______________
+
+The clocks on the hosts running the ceph-mon monitor daemons are not
+sufficiently well synchronized.  This health alert is raised if the
+cluster detects a clock skew greater than ``mon_clock_drift_allowed``.
+
+This is best resolved by synchronizing the clocks using a tool like
+``ntpd`` or ``chrony``.
+
+If it is impractical to keep the clocks closely synchronized, the
+``mon_clock_drift_allowed`` threshold can also be increased, but this
+value must stay significantly below the ``mon_lease`` interval in
+order for monitor cluster to function properly.
+
+MON_MSGR2_NOT_ENABLED
+_____________________
+
+The ``ms_bind_msgr2`` option is enabled but one or more monitors is
+not configured to bind to a v2 port in the cluster's monmap.  This
+means that features specific to the msgr2 protocol (e.g., encryption)
+are not available on some or all connections.
+
+In most cases this can be corrected by issuing the command::
+
+  ceph mon enable-msgr2
+
+That command will change any monitor configured for the old default
+port 6789 to continue to listen for v1 connections on 6789 and also
+listen for v2 connections on the new default 3300 port.
+
+If a monitor is configured to listen for v1 connections on a non-standard port (not 6789), then the monmap will need to be modified manually.
+
+
+
+Manager
+-------
+
+MGR_MODULE_DEPENDENCY
+_____________________
+
+An enabled manager module is failing its dependency check.  This health check
+should come with an explanatory message from the module about the problem.
+
+For example, a module might report that a required package is not installed:
+install the required package and restart your manager daemons.
+
+This health check is only applied to enabled modules.  If a module is
+not enabled, you can see whether it is reporting dependency issues in
+the output of `ceph module ls`.
+
+
+MGR_MODULE_ERROR
+________________
+
+A manager module has experienced an unexpected error.  Typically,
+this means an unhandled exception was raised from the module's `serve`
+function.  The human readable description of the error may be obscurely
+worded if the exception did not provide a useful description of itself.
+
+This health check may indicate a bug: please open a Ceph bug report if you
+think you have encountered a bug.
+
+If you believe the error is transient, you may restart your manager
+daemon(s), or use `ceph mgr fail` on the active daemon to prompt
+a failover to another daemon.
+
 
 OSDs
 ----
@@ -219,6 +302,72 @@ You can either raise the pool quota with::
 or delete some existing data to reduce utilization.
 
 
+Device health
+-------------
+
+DEVICE_HEALTH
+_____________
+
+One or more devices is expected to fail soon, where the warning
+threshold is controlled by the ``mgr/devicehealth/warn_threshold``
+config option.
+
+This warning only applies to OSDs that are currently marked "in", so
+the expected response to this failure is to mark the device "out" so
+that data is migrated off of the device, and then to remove the
+hardware from the system.  Note that the marking out is normally done
+automatically if ``mgr/devicehealth/self_heal`` is enabled based on
+the ``mgr/devicehealth/mark_out_threshold``.
+
+Device health can be checked with::
+
+  ceph device info <device-id>
+
+Device life expectancy is set by a prediction model run by
+the mgr or an by external tool via the command::
+
+  ceph device set-life-expectancy <device-id> <from> <to>
+
+You can change the stored life expectancy manually, but that usually
+doesn't accomplish anything as whatever tool originally set it will
+probably set it again, and changing the stored value does not affect
+the actual health of the hardware device.
+
+DEVICE_HEALTH_IN_USE
+____________________
+
+One or more devices is expected to fail soon and has been marked "out"
+of the cluster based on ``mgr/devicehealth/mark_out_threshold``, but it
+is still participating in one more PGs.  This may be because it was
+only recently marked "out" and data is still migrating, or because data
+cannot be migrated off for some reason (e.g., the cluster is nearly
+full, or the CRUSH hierarchy is such that there isn't another suitable
+OSD to migrate the data too).
+
+This message can be silenced by disabling the self heal behavior
+(setting ``mgr/devicehealth/self_heal`` to false), by adjusting the
+``mgr/devicehealth/mark_out_threshold``, or by addressing what is
+preventing data from being migrated off of the ailing device.
+
+DEVICE_HEALTH_TOOMANY
+_____________________
+
+Too many devices is expected to fail soon and the
+``mgr/devicehealth/self_heal`` behavior is enabled, such that marking
+out all of the ailing devices would exceed the clusters
+``mon_osd_min_in_ratio`` ratio that prevents too many OSDs from being
+automatically marked "out".
+
+This generally indicates that too many devices in your cluster are
+expected to fail soon and you should take action to add newer
+(healthier) devices before too many devices fail and data is lost.
+
+The health message can also be silenced by adjusting parameters like
+``mon_osd_min_in_ratio`` or ``mgr/devicehealth/mark_out_threshold``,
+but be warned that this will increase the likelihood of unrecoverable
+data loss in the cluster.
+
+
 Data health (pools & placement groups)
 --------------------------------------
 
@@ -237,7 +386,7 @@ Detailed information about which PGs are affected is available from::
   ceph health detail
 
 In most cases the root cause is that one or more OSDs is currently
-down; see the dicussion for ``OSD_DOWN`` above.
+down; see the discussion for ``OSD_DOWN`` above.
 
 The state of specific problematic PGs can be queried with::
 
@@ -294,9 +443,28 @@ OSD_SCRUB_ERRORS
 ________________
 
 Recent OSD scrubs have uncovered inconsistencies. This error is generally
-paired with *PG_DAMANGED* (see above).
+paired with *PG_DAMAGED* (see above).
 
 See :doc:`pg-repair` for more information.
+
+LARGE_OMAP_OBJECTS
+__________________
+
+One or more pools contain large omap objects as determined by
+``osd_deep_scrub_large_omap_object_key_threshold`` (threshold for number of keys
+to determine a large omap object) or
+``osd_deep_scrub_large_omap_object_value_sum_threshold`` (the threshold for
+summed size (bytes) of all key values to determine a large omap object) or both.
+More information on the object name, key count, and size in bytes can be found
+by searching the cluster log for 'Large omap object found'. Large omap objects
+can be caused by RGW bucket index objects that do not have automatic resharding
+enabled. Please see :ref:`RGW Dynamic Bucket Index Resharding
+<rgw_dynamic_bucket_index_resharding>` for more information on resharding.
+
+The thresholds can be adjusted with::
+
+  ceph config set osd osd_deep_scrub_large_omap_object_key_threshold <keys>
+  ceph config set osd osd_deep_scrub_large_omap_object_value_sum_threshold <bytes>
 
 CACHE_POOL_NEAR_FULL
 ____________________
@@ -321,8 +489,8 @@ ___________
 
 The number of PGs in use in the cluster is below the configurable
 threshold of ``mon_pg_warn_min_per_osd`` PGs per OSD.  This can lead
-to suboptimizal distribution and balance of data across the OSDs in
-the cluster, and similar reduce overall performance.
+to suboptimal distribution and balance of data across the OSDs in
+the cluster, and similarly reduce overall performance.
 
 This may be an expected condition if data pools have not yet been
 created.
@@ -330,6 +498,33 @@ created.
 The PG count for existing pools can be increased or new pools can be created.
 Please refer to :ref:`choosing-number-of-placement-groups` for more
 information.
+
+POOL_TOO_FEW_PGS
+________________
+
+One or more pools should probably have more PGs, based on the amount
+of data that is currently stored in the pool.  This can lead to
+suboptimal distribution and balance of data across the OSDs in the
+cluster, and similarly reduce overall performance.  This warning is
+generated if the ``pg_autoscale_mode`` property on the pool is set to
+``warn``.
+
+To disable the warning, you can disable auto-scaling of PGs for the
+pool entirely with::
+
+  ceph osd pool set <pool-name> pg_autoscale_mode off
+
+To allow the cluster to automatically adjust the number of PGs,::
+
+  ceph osd pool set <pool-name> pg_autoscale_mode on
+
+You can also manually set the number of PGs for the pool to the
+recommended amount with::
+
+  ceph osd pool set <pool-name> pg_num <new-pg-num>
+
+Please refer to :ref:`choosing-number-of-placement-groups` and
+:ref:`pg-autoscaler` for more information.
 
 TOO_MANY_PGS
 ____________
@@ -352,6 +547,63 @@ so marking "out" OSDs "in" (if there are any) can also help::
 
 Please refer to :ref:`choosing-number-of-placement-groups` for more
 information.
+
+POOL_TOO_MANY_PGS
+_________________
+
+One or more pools should probably have more PGs, based on the amount
+of data that is currently stored in the pool.  This can lead to higher
+memory utilization for OSD daemons, slower peering after cluster state
+changes (like OSD restarts, additions, or removals), and higher load
+on the Manager and Monitor daemons.  This warning is generated if the
+``pg_autoscale_mode`` property on the pool is set to ``warn``.
+
+To disable the warning, you can disable auto-scaling of PGs for the
+pool entirely with::
+
+  ceph osd pool set <pool-name> pg_autoscale_mode off
+
+To allow the cluster to automatically adjust the number of PGs,::
+
+  ceph osd pool set <pool-name> pg_autoscale_mode on
+
+You can also manually set the number of PGs for the pool to the
+recommended amount with::
+
+  ceph osd pool set <pool-name> pg_num <new-pg-num>
+
+Please refer to :ref:`choosing-number-of-placement-groups` and
+:ref:`pg-autoscaler` for more information.
+
+POOL_TARGET_SIZE_RATIO_OVERCOMMITTED
+____________________________________
+
+One or more pools have a ``target_size_ratio`` property set to
+estimate the expected size of the pool as a fraction of total storage,
+but the value(s) exceed the total available storage (either by
+themselves or in combination with other pools' actual usage).
+
+This is usually an indication that the ``target_size_ratio`` value for
+the pool is too large and should be reduced or set to zero with::
+
+  ceph osd pool set <pool-name> target_size_ratio 0
+
+For more information, see :ref:`specifying_pool_target_size`.
+
+POOL_TARGET_SIZE_BYTES_OVERCOMMITTED
+____________________________________
+
+One or more pools have a ``target_size_bytes`` property set to
+estimate the expected size of the pool,
+but the value(s) exceed the total available storage (either by
+themselves or in combination with other pools' actual usage).
+
+This is usually an indication that the ``target_size_bytes`` value for
+the pool is too large and should be reduced or set to zero with::
+
+  ceph osd pool set <pool-name> target_size_bytes 0
+
+For more information, see :ref:`specifying_pool_target_size`.
 
 SMALLER_PGP_NUM
 _______________
@@ -384,6 +636,7 @@ not contain as much data have too many PGs.  See the discussion of
 
 The threshold can be raised to silence the health warning by adjusting
 the ``mon_pg_warn_max_object_skew`` config option on the monitors.
+
 
 POOL_APP_NOT_ENABLED
 ____________________
@@ -488,8 +741,8 @@ _______________
 
 One or more PGs has not been scrubbed recently.  PGs are normally
 scrubbed every ``mon_scrub_interval`` seconds, and this warning
-triggers when ``mon_warn_not_scrubbed`` such intervals have elapsed
-without a scrub.
+triggers when ``mon_warn_pg_not_scrubbed_ratio`` percentage of interval has elapsed
+without a scrub since it was due.
 
 PGs will not scrub if they are not flagged as *clean*, which may
 happen if they are misplaced or degraded (see *PG_AVAILABILITY* and
@@ -504,8 +757,8 @@ ____________________
 
 One or more PGs has not been deep scrubbed recently.  PGs are normally
 scrubbed every ``osd_deep_mon_scrub_interval`` seconds, and this warning
-triggers when ``mon_warn_not_deep_scrubbed`` such intervals have elapsed
-without a scrub.
+triggers when ``mon_warn_pg_not_deep_scrubbed_ratio`` percentage of interval has elapsed
+without a scrub since it was due.
 
 PGs will not (deep) scrub if they are not flagged as *clean*, which may
 happen if they are misplaced or degraded (see *PG_AVAILABILITY* and

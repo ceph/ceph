@@ -18,8 +18,6 @@
 
 #include "MOSDFastDispatchOp.h"
 
-#include "os/ObjectStore.h"
-
 /*
  * OSD Client Subop reply
  *
@@ -28,9 +26,12 @@
  *
  */
 
-class MOSDRepOpReply : public MOSDFastDispatchOp {
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+class MOSDRepOpReply : public MessageInstance<MOSDRepOpReply, MOSDFastDispatchOp> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 public:
   epoch_t map_epoch, min_epoch;
 
@@ -46,8 +47,8 @@ public:
   // piggybacked osd state
   eversion_t last_complete_ondisk;
 
-  bufferlist::iterator p;
-  // Decoding flags. Decoding is only needed for messages catched by pipe reader.
+  bufferlist::const_iterator p;
+  // Decoding flags. Decoding is only needed for messages caught by pipe reader.
   bool final_decode_needed;
 
   epoch_t get_map_epoch() const override {
@@ -61,43 +62,44 @@ public:
   }
 
   void decode_payload() override {
-    p = payload.begin();
-    ::decode(map_epoch, p);
+    p = payload.cbegin();
+    decode(map_epoch, p);
     if (header.version >= 2) {
-      ::decode(min_epoch, p);
+      decode(min_epoch, p);
       decode_trace(p);
     } else {
       min_epoch = map_epoch;
     }
-    ::decode(reqid, p);
-    ::decode(pgid, p);
+    decode(reqid, p);
+    decode(pgid, p);
   }
 
   void finish_decode() {
     if (!final_decode_needed)
       return; // Message is already final decoded
-    ::decode(ack_type, p);
-    ::decode(result, p);
-    ::decode(last_complete_ondisk, p);
+    decode(ack_type, p);
+    decode(result, p);
+    decode(last_complete_ondisk, p);
 
-    ::decode(from, p);
+    decode(from, p);
     final_decode_needed = false;
   }
   void encode_payload(uint64_t features) override {
-    ::encode(map_epoch, payload);
+    using ceph::encode;
+    encode(map_epoch, payload);
     if (HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       header.version = HEAD_VERSION;
-      ::encode(min_epoch, payload);
+      encode(min_epoch, payload);
       encode_trace(payload, features);
     } else {
       header.version = 1;
     }
-    ::encode(reqid, payload);
-    ::encode(pgid, payload);
-    ::encode(ack_type, payload);
-    ::encode(result, payload);
-    ::encode(last_complete_ondisk, payload);
-    ::encode(from, payload);
+    encode(reqid, payload);
+    encode(pgid, payload);
+    encode(ack_type, payload);
+    encode(result, payload);
+    encode(last_complete_ondisk, payload);
+    encode(from, payload);
   }
 
   spg_t get_pg() { return pgid; }
@@ -115,7 +117,7 @@ public:
   MOSDRepOpReply(
     const MOSDRepOp *req, pg_shard_t from, int result_, epoch_t e, epoch_t mine,
     int at) :
-    MOSDFastDispatchOp(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    MessageInstance(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
     map_epoch(e),
     min_epoch(mine),
     reqid(req->reqid),
@@ -127,7 +129,7 @@ public:
     set_tid(req->get_tid());
   }
   MOSDRepOpReply() 
-    : MOSDFastDispatchOp(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_REPOPREPLY, HEAD_VERSION, COMPAT_VERSION),
       map_epoch(0),
       min_epoch(0),
       ack_type(0), result(0),
@@ -136,7 +138,7 @@ private:
   ~MOSDRepOpReply() override {}
 
 public:
-  const char *get_type_name() const override { return "osd_repop_reply"; }
+  std::string_view get_type_name() const override { return "osd_repop_reply"; }
 
   void print(ostream& out) const override {
     out << "osd_repop_reply(" << reqid

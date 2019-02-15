@@ -19,7 +19,7 @@ namespace librbd {
 namespace {
 
 struct MockTestImageCtx : public librbd::MockImageCtx {
-  MockTestImageCtx(librbd::ImageCtx &image_ctx)
+  explicit MockTestImageCtx(librbd::ImageCtx &image_ctx)
     : librbd::MockImageCtx(image_ctx) {
   }
 };
@@ -45,10 +45,10 @@ public:
       librbd::MockTestImageCtx *src_image_ctx,
       librbd::MockTestImageCtx *dst_image_ctx,
       librados::snap_t snap_id_start, librados::snap_t snap_id_end,
-      const librbd::deep_copy::ObjectNumber &object_number,
+      bool flatten, const librbd::deep_copy::ObjectNumber &object_number,
       ContextWQ *work_queue, SnapSeqs *snap_seqs, ProgressContext *prog_ctx,
       Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -98,7 +98,7 @@ public:
                                         journal::MockJournaler *journaler,
                                         librbd::journal::MirrorPeerClientMeta *client_meta,
                                         Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -121,7 +121,7 @@ public:
                                        journal::MockJournaler *journaler,
                                        librbd::journal::MirrorPeerClientMeta *client_meta,
                                        Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     s_instance->sync_complete = sync_complete;
     return s_instance;
@@ -168,14 +168,6 @@ public:
   void expect_get_snap_id(librbd::MockTestImageCtx &mock_image_ctx) {
     EXPECT_CALL(mock_image_ctx, get_snap_id(_, _))
       .WillOnce(Return(123));
-  }
-
-  void expect_snap_set(librbd::MockTestImageCtx &mock_image_ctx,
-                       const std::string &snap_name, int r) {
-    EXPECT_CALL(*mock_image_ctx.state, snap_set(_, StrEq(snap_name), _))
-      .WillOnce(WithArg<2>(Invoke([this, r](Context *on_finish) {
-          m_threads->work_queue->queue(on_finish, r);
-        })));
   }
 
   void expect_notify_sync_request(MockInstanceWatcher &mock_instance_watcher,

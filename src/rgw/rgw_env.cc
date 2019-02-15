@@ -6,7 +6,7 @@
 
 #include <string>
 #include <map>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "rgw_crypt_sanitize.h"
 
 #define dout_context g_ceph_context

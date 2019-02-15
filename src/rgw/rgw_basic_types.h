@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_BASIC_TYPES_H
 #define CEPH_RGW_BASIC_TYPES_H
 
@@ -27,14 +28,14 @@ struct rgw_user {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(tenant, bl);
-    ::encode(id, bl);
+    encode(tenant, bl);
+    encode(id, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(tenant, bl);
-    ::decode(id, bl);
+    decode(tenant, bl);
+    decode(id, bl);
     DECODE_FINISH(bl);
   }
 
@@ -115,15 +116,19 @@ WRITE_CLASS_ENCODER(rgw_user)
 namespace rgw {
 namespace auth {
 class Principal {
-  enum types { User, Role, Tenant, Wildcard };
+  enum types { User, Role, Tenant, Wildcard, OidcProvider };
   types t;
   rgw_user u;
+  string idp_url;
 
-  Principal(types t)
+  explicit Principal(types t)
     : t(t) {}
 
   Principal(types t, std::string&& n, std::string i)
     : t(t), u(std::move(n), std::move(i)) {}
+
+  Principal(string&& idp_url)
+    : t(OidcProvider), idp_url(std::move(idp_url)) {}
 
 public:
 
@@ -143,6 +148,10 @@ public:
     return Principal(Tenant, std::move(t), {});
   }
 
+  static Principal oidc_provider(string&& idp_url) {
+    return Principal(std::move(idp_url));
+  }
+
   bool is_wildcard() const {
     return t == Wildcard;
   }
@@ -159,12 +168,20 @@ public:
     return t == Tenant;
   }
 
+  bool is_oidc_provider() const {
+    return t == OidcProvider;
+  }
+
   const std::string& get_tenant() const {
     return u.tenant;
   }
 
   const std::string& get_id() const {
     return u.id;
+  }
+
+  const string& get_idp_url() const {
+    return idp_url;
   }
 
   bool operator ==(const Principal& o) const {

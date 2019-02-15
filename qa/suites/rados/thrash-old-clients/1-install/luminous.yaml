@@ -1,0 +1,14 @@
+tasks:
+- install:
+    branch: luminous
+    exclude_packages:
+      - librados3
+      - ceph-mgr-dashboard
+      - ceph-mgr-diskprediction-local
+      - ceph-mgr-diskprediction-cloud
+      - ceph-mgr-rook
+    extra_packages: ['librados2']
+- install.upgrade:
+    mon.a:
+    mon.b:
+    mon.c:

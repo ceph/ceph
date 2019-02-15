@@ -20,12 +20,11 @@ set(rbd_mirror_internal
   PoolWatcher.cc
   ServiceDaemon.cc
   Threads.cc
-  types.cc
+  Types.cc
   image_deleter/RemoveRequest.cc
   image_deleter/SnapshotPurgeRequest.cc
   image_deleter/TrashMoveRequest.cc
   image_deleter/TrashWatcher.cc
-  image_map/Action.cc
   image_map/LoadRequest.cc
   image_map/Policy.cc
   image_map/SimplePolicy.cc
@@ -42,6 +41,7 @@ set(rbd_mirror_internal
   image_replayer/PrepareLocalImageRequest.cc
   image_replayer/PrepareRemoteImageRequest.cc
   image_replayer/ReplayStatusFormatter.cc
+  image_replayer/Utils.cc
   image_sync/SyncPointCreateRequest.cc
   image_sync/SyncPointPruneRequest.cc
   pool_watcher/RefreshImagesRequest.cc
@@ -59,7 +59,7 @@ target_link_libraries(rbd-mirror
   rbd_internal
   rbd_types
   journal
-  librados
+  librados-cxx
   osdc
   cls_rbd_client
   cls_lock_client

@@ -16,6 +16,8 @@
 #ifndef SCRUB_HEADER_H_
 #define SCRUB_HEADER_H_
 
+#include <string_view>
+
 class CInode;
 
 /**
@@ -24,12 +26,12 @@ class CInode;
  */
 class ScrubHeader {
 public:
-  ScrubHeader(const std::string &tag_, bool force_, bool recursive_,
-              bool repair_, Formatter *f_)
-      : tag(tag_), force(force_), recursive(recursive_), repair(repair_),
-        formatter(f_), origin(nullptr)
+  ScrubHeader(std::string_view tag_, bool is_tag_internal_, bool force_,
+              bool recursive_, bool repair_, Formatter *f_)
+    : tag(tag_), is_tag_internal(is_tag_internal_), force(force_),
+      recursive(recursive_), repair(repair_), formatter(f_), origin(nullptr)
   {
-    assert(formatter != nullptr);
+    ceph_assert(formatter != nullptr);
   }
 
   // Set after construction because it won't be known until we've
@@ -39,8 +41,9 @@ public:
   bool get_recursive() const { return recursive; }
   bool get_repair() const { return repair; }
   bool get_force() const { return force; }
-  const CInode *get_origin() const { return origin; }
-  const std::string &get_tag() const { return tag; }
+  bool is_internal_tag() const { return is_tag_internal; }
+  CInode *get_origin() const { return origin; }
+  std::string_view get_tag() const { return tag; }
   Formatter &get_formatter() const { return *formatter; }
 
   bool get_repaired() const { return repaired; }
@@ -48,6 +51,7 @@ public:
 
 protected:
   const std::string tag;
+  bool is_tag_internal;
   const bool force;
   const bool recursive;
   const bool repair;
@@ -57,8 +61,8 @@ protected:
   bool repaired = false;  // May be set during scrub if repairs happened
 };
 
-typedef ceph::shared_ptr<ScrubHeader> ScrubHeaderRef;
-typedef ceph::shared_ptr<const ScrubHeader> ScrubHeaderRefConst;
+typedef std::shared_ptr<ScrubHeader> ScrubHeaderRef;
+typedef std::shared_ptr<const ScrubHeader> ScrubHeaderRefConst;
 
 #endif // SCRUB_HEADER_H_
 

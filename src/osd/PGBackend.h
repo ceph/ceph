@@ -35,7 +35,7 @@ struct inconsistent_obj_wrapper;
 //forward declaration
 class OSDMap;
 class PGLog;
-typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
+typedef std::shared_ptr<const OSDMap> OSDMapRef;
 
  /**
   * PGBackend
@@ -132,6 +132,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 					eversion_t v,
 					Context *on_complete) = 0;
 
+
      /**
       * Bless a context
       *
@@ -140,6 +141,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
       */
      virtual Context *bless_context(Context *c) = 0;
      virtual GenContext<ThreadPool::TPHandle&> *bless_gencontext(
+       GenContext<ThreadPool::TPHandle&> *c) = 0;
+     virtual GenContext<ThreadPool::TPHandle&> *bless_unlocked_gencontext(
        GenContext<ThreadPool::TPHandle&> *c) = 0;
 
      virtual void send_message(int to_osd, Message *m) = 0;
@@ -151,20 +154,20 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        vector<ObjectStore::Transaction>& tls,
        OpRequestRef op = OpRequestRef()
        ) = 0;
-     virtual epoch_t get_epoch() const = 0;
      virtual epoch_t get_interval_start_epoch() const = 0;
      virtual epoch_t get_last_peering_reset_epoch() const = 0;
 
-     virtual const set<pg_shard_t> &get_actingbackfill_shards() const = 0;
+     virtual const set<pg_shard_t> &get_acting_recovery_backfill_shards() const = 0;
      virtual const set<pg_shard_t> &get_acting_shards() const = 0;
      virtual const set<pg_shard_t> &get_backfill_shards() const = 0;
 
-     virtual std::string gen_dbg_prefix() const = 0;
+     virtual std::ostream& gen_dbg_prefix(std::ostream& out) const = 0;
 
      virtual const map<hobject_t, set<pg_shard_t>> &get_missing_loc_shards()
        const = 0;
 
      virtual const pg_missing_tracker_t &get_local_missing() const = 0;
+     virtual void add_local_next_event(const pg_log_entry_t& e) = 0;
      virtual const map<pg_shard_t, pg_missing_t> &get_shard_missing()
        const = 0;
      virtual boost::optional<const pg_missing_const_i &> maybe_get_shard_missing(
@@ -183,7 +186,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      }
      virtual const pg_missing_const_i &get_shard_missing(pg_shard_t peer) const {
        auto m = maybe_get_shard_missing(peer);
-       assert(m);
+       ceph_assert(m);
        return *m;
      }
 
@@ -194,14 +197,15 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        } else {
 	 map<pg_shard_t, pg_info_t>::const_iterator i =
 	   get_shard_info().find(peer);
-	 assert(i != get_shard_info().end());
+	 ceph_assert(i != get_shard_info().end());
 	 return i->second;
        }
      }
 
      virtual const PGLog &get_log() const = 0;
      virtual bool pgb_is_primary() const = 0;
-     virtual OSDMapRef pgb_get_osdmap() const = 0;
+     virtual const OSDMapRef& pgb_get_osdmap() const = 0;
+     virtual epoch_t pgb_get_osdmap_epoch() const = 0;
      virtual const pg_info_t &get_info() const = 0;
      virtual const pg_pool_t &get_pool() const = 0;
 
@@ -230,7 +234,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
        const eversion_t &trim_to,
        const eversion_t &roll_forward_to,
        bool transaction_applied,
-       ObjectStore::Transaction &t) = 0;
+       ObjectStore::Transaction &t,
+       bool async = false) = 0;
 
      virtual void pgb_set_object_snap_mapping(
        const hobject_t &soid,
@@ -265,8 +270,6 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual spg_t primary_spg_t() const = 0;
      virtual pg_shard_t primary_shard() const = 0;
 
-     virtual uint64_t min_peer_features() const = 0;
-
      virtual hobject_t get_temp_recovery_object(const hobject_t& target,
 						eversion_t version) = 0;
 
@@ -286,15 +289,21 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      virtual LogClientTemp clog_error() = 0;
      virtual LogClientTemp clog_warn() = 0;
 
-     virtual bool check_failsafe_full(ostream &ss) = 0;
+     virtual bool check_failsafe_full() = 0;
 
      virtual bool check_osdmap_full(const set<pg_shard_t> &missing_on) = 0;
 
+     virtual bool pg_is_remote_backfilling() = 0;
+     virtual void pg_add_local_num_bytes(int64_t num_bytes) = 0;
+     virtual void pg_sub_local_num_bytes(int64_t num_bytes) = 0;
+     virtual void pg_add_num_bytes(int64_t num_bytes) = 0;
+     virtual void pg_sub_num_bytes(int64_t num_bytes) = 0;
+     virtual bool maybe_preempt_replica_scrub(const hobject_t& oid) = 0;
      virtual ~Listener() {}
    };
    Listener *parent;
    Listener *get_parent() const { return parent; }
-   PGBackend(CephContext* cct, Listener *l, ObjectStore *store, coll_t coll,
+   PGBackend(CephContext* cct, Listener *l, ObjectStore *store, const coll_t &coll,
 	     ObjectStore::CollectionHandle &ch) :
      cct(cct),
      store(store),
@@ -302,11 +311,12 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      ch(ch),
      parent(l) {}
    bool is_primary() const { return get_parent()->pgb_is_primary(); }
-   OSDMapRef get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
+   const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
+   epoch_t get_osdmap_epoch() const { return get_parent()->pgb_get_osdmap_epoch(); }
    const pg_info_t &get_info() { return get_parent()->get_info(); }
 
-   std::string gen_prefix() const {
-     return parent->gen_dbg_prefix();
+   std::ostream& gen_prefix(std::ostream& out) const {
+     return parent->gen_dbg_prefix(out);
    }
 
    /**
@@ -399,6 +409,8 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
    virtual IsPGRecoverablePredicate *get_is_recoverable_predicate() const = 0;
    virtual IsPGReadablePredicate *get_is_readable_predicate() const = 0;
+   virtual int get_ec_data_chunk_count() const { return 0; };
+   virtual int get_ec_stripe_chunk_size() const { return 0; };
 
    virtual void dump_recovery_info(Formatter *f) const = 0;
 
@@ -436,8 +448,6 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      const vector<pg_log_entry_t> &log_entries, ///< [in] log entries for t
      /// [in] hitset history (if updated with this transaction)
      boost::optional<pg_hit_set_history_t> &hset_history,
-     Context *on_local_applied_sync,      ///< [in] called when applied locally
-     Context *on_all_applied,             ///< [in] called when all acked
      Context *on_all_commit,              ///< [in] called when all commit
      ceph_tid_t tid,                      ///< [in] tid
      osd_reqid_t reqid,                   ///< [in] reqid
@@ -530,7 +540,6 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
    int objects_list_range(
      const hobject_t &start,
      const hobject_t &end,
-     snapid_t seq,
      vector<hobject_t> *ls,
      vector<ghobject_t> *gen_obs=0);
 
@@ -557,9 +566,9 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      Context *on_complete, bool fast_read = false) = 0;
 
    virtual bool auto_repair_supported() const = 0;
-   void be_scan_list(
-     ScrubMap &map, const vector<hobject_t> &ls, bool deep, uint32_t seed,
-     ThreadPool::TPHandle &handle);
+   int be_scan_list(
+     ScrubMap &map,
+     ScrubMapBuilder &pos);
    bool be_compare_scrub_objects(
      pg_shard_t auth_shard,
      const ScrubMap::object &auth,
@@ -567,13 +576,16 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      const ScrubMap::object &candidate,
      shard_info_wrapper& shard_error,
      inconsistent_obj_wrapper &result,
-     ostream &errorstream);
+     ostream &errorstream,
+     bool has_snapset);
    map<pg_shard_t, ScrubMap *>::const_iterator be_select_auth_object(
      const hobject_t &obj,
      const map<pg_shard_t,ScrubMap*> &maps,
      object_info_t *auth_oi,
      map<pg_shard_t, shard_info_wrapper> &shard_map,
-     inconsistent_obj_wrapper &object_error);
+     bool &digest_match,
+     spg_t pgid,
+     ostream &errorstream);
    void be_compare_scrubmaps(
      const map<pg_shard_t,ScrubMap*> &maps,
      const set<hobject_t> &master_set,
@@ -590,12 +602,11 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
      ostream &errorstream);
    virtual uint64_t be_get_ondisk_size(
      uint64_t logical_size) = 0;
-   virtual void be_deep_scrub(
-     const hobject_t &poid,
-     uint32_t seed,
-     ScrubMap::object &o,
-     ThreadPool::TPHandle &handle,
-     ScrubMap* const map = nullptr) = 0;
+   virtual int be_deep_scrub(
+     const hobject_t &oid,
+     ScrubMap &map,
+     ScrubMapBuilder &pos,
+     ScrubMap::object &o) = 0;
    void be_large_omap_check(
      const map<pg_shard_t,ScrubMap*> &maps,
      const set<hobject_t> &master_set,
@@ -604,7 +615,7 @@ typedef ceph::shared_ptr<const OSDMap> OSDMapRef;
 
    static PGBackend *build_pg_backend(
      const pg_pool_t &pool,
-     const OSDMapRef curmap,
+     const map<string,string>& profile,
      Listener *l,
      coll_t coll,
      ObjectStore::CollectionHandle &ch,

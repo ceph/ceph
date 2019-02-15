@@ -16,9 +16,11 @@
 #define COMMON_CEPH_TIME_H
 
 #include <chrono>
+#include <iostream>
+#include <string>
+#include <sys/time.h>
 
-#include "include/assert.h"
-#include "include/encoding.h"
+#include "include/ceph_assert.h"
 
 #if defined(__APPLE__)
 #include <sys/_types/_timespec.h>
@@ -82,6 +84,10 @@ namespace ceph {
 
       static bool is_zero(const time_point& t) {
 	return (t == time_point::min());
+      }
+
+      static time_point zero() {
+        return time_point::min();
       }
 
       // Allow conversion to/from any clock with the same interface as
@@ -175,6 +181,14 @@ namespace ceph {
 	return from_timespec(ts);
       }
 
+      static bool is_zero(const time_point& t) {
+	return (t == time_point::min());
+      }
+
+      static time_point zero() {
+	return time_point::min();
+      }
+
       static time_t to_time_t(const time_point& t) noexcept {
 	return duration_cast<seconds>(t.time_since_epoch()).count();
       }
@@ -237,6 +251,14 @@ namespace ceph {
 	return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
       }
 
+      static bool is_zero(const time_point& t) {
+        return (t == time_point::min());
+      }
+
+      static time_point zero() {
+        return time_point::min();
+      }
+
       // A monotonic clock's timepoints are only meaningful to the
       // computer on which they were generated. Thus having an
       // optional skew is meaningless.
@@ -265,6 +287,14 @@ namespace ceph {
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 #endif
 	return time_point(seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec));
+      }
+
+      static bool is_zero(const time_point& t) {
+        return (t == time_point::min());
+      }
+
+      static time_point zero() {
+        return time_point::min();
       }
     };
 
@@ -445,66 +475,34 @@ namespace ceph {
   // time_point + duration to assert on overflow, but I don't think we
   // should.
 
+
+inline timespan abs(signedspan z) {
+  return z > signedspan::zero() ?
+    std::chrono::duration_cast<timespan>(z) :
+    timespan(-z.count());
+}
+inline timespan to_timespan(signedspan z) {
+  ceph_assert(z >= signedspan::zero());
+  return std::chrono::duration_cast<timespan>(z);
+}
+
+std::string timespan_str(timespan t);
+std::string exact_timespan_str(timespan t);
+std::chrono::seconds parse_timespan(const std::string& s);
+
+// detects presence of Clock::to_timespec() and from_timespec()
+template <typename Clock, typename = std::void_t<>>
+struct converts_to_timespec : std::false_type {};
+
+template <typename Clock>
+struct converts_to_timespec<Clock, std::void_t<decltype(
+    Clock::from_timespec(Clock::to_timespec(
+        std::declval<typename Clock::time_point>()))
+  )>> : std::true_type {};
+
+template <typename Clock>
+constexpr bool converts_to_timespec_v = converts_to_timespec<Clock>::value;
+
 } // namespace ceph
-
-// We need these definitions to be able to hande ::encode/::decode on
-// time points.
-
-template<typename Clock, typename Duration>
-void encode(const std::chrono::time_point<Clock, Duration>& t,
-	    ceph::bufferlist &bl) {
-  auto ts = Clock::to_timespec(t);
-  // A 32 bit count of seconds causes me vast unhappiness.
-  uint32_t s = ts.tv_sec;
-  uint32_t ns = ts.tv_nsec;
-  ::encode(s, bl);
-  ::encode(ns, bl);
-}
-
-template<typename Clock, typename Duration>
-void decode(std::chrono::time_point<Clock, Duration>& t,
-	    bufferlist::iterator& p) {
-  uint32_t s;
-  uint32_t ns;
-  ::decode(s, p);
-  ::decode(ns, p);
-  struct timespec ts = {
-    static_cast<time_t>(s),
-    static_cast<long int>(ns)};
-
-  t = Clock::from_timespec(ts);
-}
-
-// C++ Overload Resolution requires that our encode/decode functions
-// be defined in the same namespace as the type. So we need this
-// to handle things like ::encode(std::vector<ceph::real_time // > >)
-
-namespace std {
-  namespace chrono {
-    template<typename Clock, typename Duration>
-    void encode(const time_point<Clock, Duration>& t,
-		ceph::bufferlist &bl) {
-      ::encode(t, bl);
-    }
-
-    template<typename Clock, typename Duration>
-    void decode(time_point<Clock, Duration>& t, bufferlist::iterator &p) {
-      ::decode(t, p);
-    }
-  } // namespace chrono
-
-  // An overload of our own
-  namespace {
-    inline timespan abs(signedspan z) {
-      return z > signedspan::zero() ?
-	std::chrono::duration_cast<timespan>(z) :
-	timespan(-z.count());
-    }
-    inline timespan to_timespan(signedspan z) {
-      ceph_assert(z >= signedspan::zero());
-      return std::chrono::duration_cast<timespan>(z);
-    }
-  }
-} // namespace std
 
 #endif // COMMON_CEPH_TIME_H

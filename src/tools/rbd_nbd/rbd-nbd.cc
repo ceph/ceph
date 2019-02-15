@@ -74,6 +74,7 @@ struct Config {
   bool set_max_part = false;
 
   std::string poolname;
+  std::string nsname;
   std::string imgname;
   std::string snapname;
   std::string devpath;
@@ -132,7 +133,7 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
 
 static void handle_signal(int signum)
 {
-  assert(signum == SIGINT || signum == SIGTERM);
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
   dout(20) << __func__ << ": " << "sending NBD_DISCONNECT" << dendl;
   if (ioctl(nbd, NBD_DISCONNECT) < 0) {
@@ -202,7 +203,7 @@ private:
   void io_finish(IOContext *ctx)
   {
     Mutex::Locker l(lock);
-    assert(ctx->item.is_on_list());
+    ceph_assert(ctx->item.is_on_list());
     ctx->item.remove_myself();
     io_finished.push_back(&ctx->item);
     cond.Signal();
@@ -225,13 +226,13 @@ private:
 
   void wait_clean()
   {
-    assert(!reader_thread.is_started());
+    ceph_assert(!reader_thread.is_started());
     Mutex::Locker l(lock);
     while(!io_pending.empty())
       cond.Wait(lock);
 
     while(!io_finished.empty()) {
-      ceph::unique_ptr<IOContext> free_ctx(io_finished.front());
+      std::unique_ptr<IOContext> free_ctx(io_finished.front());
       io_finished.pop_front();
     }
   }
@@ -274,7 +275,7 @@ private:
   void reader_entry()
   {
     while (!terminated) {
-      ceph::unique_ptr<IOContext> ctx(new IOContext());
+      std::unique_ptr<IOContext> ctx(new IOContext());
       ctx->server = this;
 
       dout(20) << __func__ << ": waiting for nbd request" << dendl;
@@ -350,7 +351,7 @@ private:
   {
     while (!terminated) {
       dout(20) << __func__ << ": waiting for io request" << dendl;
-      ceph::unique_ptr<IOContext> ctx(wait_io_finish());
+      std::unique_ptr<IOContext> ctx(wait_io_finish());
       if (!ctx) {
 	dout(20) << __func__ << ": no io requests, terminating" << dendl;
         return;
@@ -448,12 +449,12 @@ std::ostream &operator<<(std::ostream &os, const NBDServer::IOContext &ctx) {
     os << " TRIM ";
     break;
   default:
-    os << " UNKNOW(" << ctx.command << ") ";
+    os << " UNKNOWN(" << ctx.command << ") ";
     break;
   }
 
   os << ctx.request.from << "~" << ctx.request.len << " "
-     << ntohl(ctx.reply.error) << "]";
+     << std::dec << ntohl(ctx.reply.error) << "]";
 
   return os;
 }
@@ -665,12 +666,19 @@ static int do_map(int argc, const char *argv[], Config *cfg)
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage();
+    exit(0);
+  }
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                          CODE_ENVIRONMENT_DAEMON,
                          CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
-  g_ceph_context->_conf->set_val_or_die("pid_file", "");
+  g_ceph_context->_conf.set_val_or_die("pid_file", "");
 
   if (global_init_prefork(g_ceph_context) >= 0) {
     std::string err;
@@ -679,14 +687,13 @@ static int do_map(int argc, const char *argv[], Config *cfg)
       cerr << err << std::endl;
       return r;
     }
-
     if (forker.is_parent()) {
-      global_init_postfork_start(g_ceph_context);
       if (forker.parent_wait(err) != 0) {
         return -ENXIO;
       }
       return 0;
     }
+    global_init_postfork_start(g_ceph_context);
   }
 
   common_init_finish(g_ceph_context);
@@ -696,6 +703,43 @@ static int do_map(int argc, const char *argv[], Config *cfg)
     r = -errno;
     goto close_ret;
   }
+
+  r = rados.init_with_context(g_ceph_context);
+  if (r < 0)
+    goto close_fd;
+
+  r = rados.connect();
+  if (r < 0)
+    goto close_fd;
+
+  r = rados.ioctx_create(cfg->poolname.c_str(), io_ctx);
+  if (r < 0)
+    goto close_fd;
+
+  io_ctx.set_namespace(cfg->nsname);
+
+  r = rbd.open(io_ctx, image, cfg->imgname.c_str());
+  if (r < 0)
+    goto close_fd;
+
+  if (cfg->exclusive) {
+    r = image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE);
+    if (r < 0) {
+      cerr << "rbd-nbd: failed to acquire exclusive lock: " << cpp_strerror(r)
+           << std::endl;
+      goto close_fd;
+    }
+  }
+
+  if (!cfg->snapname.empty()) {
+    r = image.snap_set(cfg->snapname.c_str());
+    if (r < 0)
+      goto close_fd;
+  }
+
+  r = image.stat(info, sizeof(info));
+  if (r < 0)
+    goto close_fd;
 
   if (cfg->devpath.empty()) {
     char dev[64];
@@ -765,41 +809,6 @@ static int do_map(int argc, const char *argv[], Config *cfg)
     read_only = 1;
   }
 
-  r = rados.init_with_context(g_ceph_context);
-  if (r < 0)
-    goto close_nbd;
-
-  r = rados.connect();
-  if (r < 0)
-    goto close_nbd;
-
-  r = rados.ioctx_create(cfg->poolname.c_str(), io_ctx);
-  if (r < 0)
-    goto close_nbd;
-
-  r = rbd.open(io_ctx, image, cfg->imgname.c_str());
-  if (r < 0)
-    goto close_nbd;
-
-  if (cfg->exclusive) {
-    r = image.lock_acquire(RBD_LOCK_MODE_EXCLUSIVE);
-    if (r < 0) {
-      cerr << "rbd-nbd: failed to acquire exclusive lock: " << cpp_strerror(r)
-           << std::endl;
-      goto close_nbd;
-    }
-  }
-
-  if (!cfg->snapname.empty()) {
-    r = image.snap_set(cfg->snapname.c_str());
-    if (r < 0)
-      goto close_nbd;
-  }
-
-  r = image.stat(info, sizeof(info));
-  if (r < 0)
-    goto close_nbd;
-
   r = ioctl(nbd, NBD_SET_BLKSIZE, RBD_NBD_BLKSIZE);
   if (r < 0) {
     r = -errno;
@@ -808,8 +817,8 @@ static int do_map(int argc, const char *argv[], Config *cfg)
 
   if (info.size > ULONG_MAX) {
     r = -EFBIG;
-    cerr << "rbd-nbd: image is too large (" << prettybyte_t(info.size)
-         << ", max is " << prettybyte_t(ULONG_MAX) << ")" << std::endl;
+    cerr << "rbd-nbd: image is too large (" << byte_u_t(info.size)
+         << ", max is " << byte_u_t(ULONG_MAX) << ")" << std::endl;
     goto close_nbd;
   }
 
@@ -854,10 +863,9 @@ static int do_map(int argc, const char *argv[], Config *cfg)
 
     cout << cfg->devpath << std::endl;
 
-    if (g_conf->daemonize) {
-      forker.daemonize();
-      global_init_postfork_start(g_ceph_context);
+    if (g_conf()->daemonize) {
       global_init_postfork_finish(g_ceph_context);
+      forker.daemonize();
     }
 
     {
@@ -879,7 +887,7 @@ static int do_map(int argc, const char *argv[], Config *cfg)
     }
 
     r = image.update_unwatch(handle);
-    assert(r == 0);
+    ceph_assert(r == 0);
   }
 
 close_nbd:
@@ -923,7 +931,7 @@ static int do_unmap(const std::string &devpath)
 
 static int parse_imgpath(const std::string &imgpath, Config *cfg,
                          std::ostream *err_msg) {
-  std::regex pattern("^(?:([^/@]+)/)?([^/@]+)(?:@([^/@]+))?$");
+  std::regex pattern("^(?:([^/]+)/(?:([^/@]+)/)?)?([^@]+)(?:@([^/@]+))?$");
   std::smatch match;
   if (!std::regex_match(imgpath, match, pattern)) {
     std::cerr << "rbd-nbd: invalid spec '" << imgpath << "'" << std::endl;
@@ -934,10 +942,14 @@ static int parse_imgpath(const std::string &imgpath, Config *cfg,
     cfg->poolname = match[1];
   }
 
-  cfg->imgname = match[2];
+  if (match[2].matched) {
+    cfg->nsname = match[2];
+  }
 
-  if (match[3].matched)
-    cfg->snapname = match[3];
+  cfg->imgname = match[3];
+
+  if (match[4].matched)
+    cfg->snapname = match[4];
 
   return 0;
 }
@@ -962,6 +974,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
   } else {
     tbl.define_column("id", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("pool", TextTable::LEFT, TextTable::LEFT);
+    tbl.define_column("namespace", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("image", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("snap", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("device", TextTable::LEFT, TextTable::LEFT);
@@ -975,6 +988,7 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
       f->open_object_section("device");
       f->dump_int("id", pid);
       f->dump_string("pool", cfg.poolname);
+      f->dump_string("namespace", cfg.nsname);
       f->dump_string("image", cfg.imgname);
       f->dump_string("snap", cfg.snapname);
       f->dump_string("device", cfg.devpath);
@@ -984,8 +998,8 @@ static int do_list_mapped_devices(const std::string &format, bool pretty_format)
       if (cfg.snapname.empty()) {
         cfg.snapname = "-";
       }
-      tbl << pid << cfg.poolname << cfg.imgname << cfg.snapname << cfg.devpath
-          << TextTable::endrow;
+      tbl << pid << cfg.poolname << cfg.nsname << cfg.imgname << cfg.snapname
+          << cfg.devpath << TextTable::endrow;
     }
   }
 
@@ -1021,9 +1035,9 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
   CephInitParameters iparams = ceph_argparse_early_args(
           args, CEPH_ENTITY_TYPE_CLIENT, &cluster, &conf_file_list);
 
-  md_config_t config;
-  config.name = iparams.name;
-  config.cluster = cluster;
+  ConfigProxy config{false};
+  config->name = iparams.name;
+  config->cluster = cluster;
 
   if (!conf_file_list.empty()) {
     config.parse_config_files(conf_file_list.c_str(), nullptr, 0);
@@ -1159,12 +1173,11 @@ static int rbd_nbd(int argc, const char *argv[])
   r = parse_args(args, &err_msg, &cmd, &cfg);
   if (r == HELP_INFO) {
     usage();
-    ceph_abort();
+    return 0;
   } else if (r == VERSION_INFO) {
     std::cout << pretty_version_to_str() << std::endl;
     return 0;
-  }
-  else if (r < 0) {
+  } else if (r < 0) {
     cerr << err_msg.str() << std::endl;
     return r;
   }
@@ -1192,7 +1205,6 @@ static int rbd_nbd(int argc, const char *argv[])
       break;
     default:
       usage();
-      ceph_abort();
       break;
   }
 

@@ -87,7 +87,7 @@ private:
   void send_wait_for_ops();
   void handle_wait_for_ops(int r);
 
-  void send_invalidate_cache(bool purge_on_error);
+  void send_invalidate_cache();
   void handle_invalidate_cache(int r);
 
   void send_flush_notifies();

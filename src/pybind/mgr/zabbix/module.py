@@ -32,6 +32,8 @@ class ZabbixSender(object):
         cmd = [self.sender, '-z', self.host, '-p', str(self.port), '-s',
                hostname, '-vv', '-i', '-']
 
+        self.log.debug('Executing: %s', cmd)
+
         proc = Popen(cmd, stdin=PIPE, stdout=PIPE, stderr=PIPE)
 
         for key, value in data.items():
@@ -50,13 +52,35 @@ class Module(MgrModule):
     config = dict()
     ceph_health_mapping = {'HEALTH_OK': 0, 'HEALTH_WARN': 1, 'HEALTH_ERR': 2}
 
-    config_keys = {
-        'zabbix_sender': '/usr/bin/zabbix_sender',
-        'zabbix_host': None,
-        'zabbix_port': 10051,
-        'identifier': "",
-        'interval': 60
-    }
+    @property
+    def config_keys(self):
+        return dict((o['name'], o.get('default', None))
+                for o in self.MODULE_OPTIONS)
+
+    MODULE_OPTIONS = [
+            {
+                'name': 'zabbix_sender',
+                'default': '/usr/bin/zabbix_sender'
+            },
+            {
+                'name': 'zabbix_host',
+                'default': None
+            },
+            {
+                'name': 'zabbix_port',
+                'type': 'int',
+                'default': 10051
+            },
+            {
+                'name': 'identifier',
+                'default': ""
+            },
+            {
+                'name': 'interval',
+                'type': 'secs',
+                'default': 60
+            }
+    ]
 
     COMMANDS = [
         {
@@ -75,11 +99,6 @@ class Module(MgrModule):
             "desc": "Force sending data to Zabbix",
             "perm": "rw"
         },
-        {
-            "cmd": "zabbix self-test",
-            "desc": "Run a self-test on the Zabbix module",
-            "perm": "r"
-        }
     ]
 
     def __init__(self, *args, **kwargs):
@@ -91,7 +110,7 @@ class Module(MgrModule):
         self.log.debug('Found Ceph fsid %s', self.fsid)
 
         for key, default in self.config_keys.items():
-            self.set_config_option(key, self.get_config(key, default))
+            self.set_config_option(key, self.get_module_option(key, default))
 
     def set_config_option(self, option, value):
         if option not in self.config_keys.keys():
@@ -113,6 +132,30 @@ class Module(MgrModule):
         self.config[option] = value
         return True
 
+    def get_pg_stats(self):
+        stats = dict()
+
+        pg_states = ['active', 'peering', 'clean', 'scrubbing', 'undersized',
+                     'backfilling', 'recovering', 'degraded', 'inconsistent',
+                     'remapped', 'backfill_toofull', 'wait_backfill',
+                     'recovery_wait']
+
+        for state in pg_states:
+            stats['num_pg_{0}'.format(state)] = 0
+
+        pg_status = self.get('pg_status')
+
+        stats['num_pg'] = pg_status['num_pgs']
+
+        for state in pg_status['pgs_by_state']:
+            states = state['state_name'].split('+')
+            for s in pg_states:
+                key = 'num_pg_{0}'.format(s)
+                if s in states:
+                    stats[key] += state['count']
+
+        return stats
+
     def get_data(self):
         data = dict()
 
@@ -128,7 +171,6 @@ class Module(MgrModule):
 
         df = self.get('df')
         data['num_pools'] = len(df['pools'])
-        data['total_objects'] = df['stats']['total_objects']
         data['total_used_bytes'] = df['stats']['total_used_bytes']
         data['total_bytes'] = df['stats']['total_bytes']
         data['total_avail_bytes'] = df['stats']['total_avail_bytes']
@@ -170,41 +212,41 @@ class Module(MgrModule):
         data['num_osd_in'] = num_in
 
         osd_fill = list()
-        osd_apply_latency = list()
-        osd_commit_latency = list()
+        osd_pgs = list()
+        osd_apply_latency_ns = list()
+        osd_commit_latency_ns = list()
 
         osd_stats = self.get('osd_stats')
         for osd in osd_stats['osd_stats']:
             if osd['kb'] == 0:
                 continue
             osd_fill.append((float(osd['kb_used']) / float(osd['kb'])) * 100)
-            osd_apply_latency.append(osd['perf_stat']['apply_latency_ms'])
-            osd_commit_latency.append(osd['perf_stat']['commit_latency_ms'])
+            osd_pgs.append(osd['num_pgs'])
+            osd_apply_latency_ns.append(osd['perf_stat']['apply_latency_ns'])
+            osd_commit_latency_ns.append(osd['perf_stat']['commit_latency_ns'])
 
         try:
             data['osd_max_fill'] = max(osd_fill)
             data['osd_min_fill'] = min(osd_fill)
             data['osd_avg_fill'] = avg(osd_fill)
+            data['osd_max_pgs'] = max(osd_pgs)
+            data['osd_min_pgs'] = min(osd_pgs)
+            data['osd_avg_pgs'] = avg(osd_pgs)
         except ValueError:
             pass
 
         try:
-            data['osd_latency_apply_max'] = max(osd_apply_latency)
-            data['osd_latency_apply_min'] = min(osd_apply_latency)
-            data['osd_latency_apply_avg'] = avg(osd_apply_latency)
+            data['osd_latency_apply_max'] = max(osd_apply_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_apply_min'] = min(osd_apply_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_apply_avg'] = avg(osd_apply_latency_ns) / 1000000.0 # ns -> ms
 
-            data['osd_latency_commit_max'] = max(osd_commit_latency)
-            data['osd_latency_commit_min'] = min(osd_commit_latency)
-            data['osd_latency_commit_avg'] = avg(osd_commit_latency)
+            data['osd_latency_commit_max'] = max(osd_commit_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_commit_min'] = min(osd_commit_latency_ns) / 1000000.0 # ns -> ms
+            data['osd_latency_commit_avg'] = avg(osd_commit_latency_ns) / 1000000.0 # ns -> ms
         except ValueError:
             pass
 
-        pg_summary = self.get('pg_summary')
-        num_pg = 0
-        for state, num in pg_summary['all'].items():
-            num_pg += num
-
-        data['num_pg'] = num_pg
+        data.update(self.get_pg_stats())
 
         return data
 
@@ -218,6 +260,13 @@ class Module(MgrModule):
         if not self.config['zabbix_host']:
             self.log.error('Zabbix server not set, please configure using: '
                            'ceph zabbix config-set zabbix_host <zabbix_host>')
+            self.set_health_checks({
+                'MGR_ZABBIX_NO_SERVER': {
+                    'severity': 'warning',
+                    'summary': 'No Zabbix server configured',
+                    'detail': ['Configuration value zabbix_host not configured']
+                }
+            })
             return
 
         try:
@@ -231,13 +280,21 @@ class Module(MgrModule):
                                   self.config['zabbix_port'], self.log)
 
             zabbix.send(identifier, data)
+            self.set_health_checks(dict())
             return True
         except Exception as exc:
             self.log.error('Exception when sending: %s', exc)
+            self.set_health_checks({
+                'MGR_ZABBIX_SEND_FAILED': {
+                    'severity': 'warning',
+                    'summary': 'Failed to send data to Zabbix',
+                    'detail': [str(exc)]
+                }
+            })
 
         return False
 
-    def handle_command(self, command):
+    def handle_command(self, inbuf, command):
         if command['prefix'] == 'zabbix config-show':
             return 0, json.dumps(self.config), ''
         elif command['prefix'] == 'zabbix config-set':
@@ -248,7 +305,7 @@ class Module(MgrModule):
 
             self.log.debug('Setting configuration option %s to %s', key, value)
             if self.set_config_option(key, value):
-                self.set_config(key, value)
+                self.set_module_option(key, value)
                 return 0, 'Configuration option {0} updated'.format(key), ''
 
             return 1,\
@@ -259,9 +316,6 @@ class Module(MgrModule):
                 return 0, 'Sending data to Zabbix', ''
 
             return 1, 'Failed to send data to Zabbix', ''
-        elif command['prefix'] == 'zabbix self-test':
-            self.self_test()
-            return 0, 'Self-test succeeded', ''
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))

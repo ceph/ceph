@@ -1,0 +1,41 @@
+<tabset>
+  <tab i18n-heading heading="Pools List">
+    <cd-view-cache *ngFor="let viewCacheStatus of viewCacheStatusList"
+                   [status]="viewCacheStatus.status"
+                   [statusFor]="viewCacheStatus.statusFor"></cd-view-cache>
+
+    <cd-table #table
+              [data]="pools"
+              [columns]="columns"
+              selectionType="single"
+              (updateSelection)="updateSelection($event)">
+      <cd-table-actions class="table-actions"
+                        [permission]="permissions.pool"
+                        [selection]="selection"
+                        [tableActions]="tableActions">
+      </cd-table-actions>
+      <cd-pool-details cdTableDetail
+                       [selection]="selection"
+                       [permissions]="permissions"
+                       [cacheTiers]="selectionCacheTiers">
+      </cd-pool-details>
+    </cd-table>
+
+    <ng-template #poolUsageTpl
+                 let-row="row">
+      <cd-usage-bar *ngIf="row.stats?.max_avail?.latest"
+                    [totalBytes]="row.stats.bytes_used.latest + row.stats.max_avail.latest"
+                    [usedBytes]="row.stats.bytes_used.latest">
+      </cd-usage-bar>
+    </ng-template>
+  </tab>
+
+  <tab i18n-heading
+       *ngIf="permissions.grafana.read"
+       heading="Overall Performance">
+    <cd-grafana [grafanaPath]="'ceph-pools-overview?'"
+                uid="z99hzWtmk"
+                grafanaStyle="two">
+    </cd-grafana>
+  </tab>
+</tabset>

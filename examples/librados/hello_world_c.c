@@ -34,9 +34,8 @@ int main(int argc, const char **argv)
       printf("couldn't initialize rados! error %d\n", ret);
       ret = EXIT_FAILURE;
       goto out;
-    } else {
-      printf("we just set up a rados cluster object\n");
     }
+    printf("we just set up a rados cluster object\n");
   }
 
   /*
@@ -51,22 +50,22 @@ int main(int argc, const char **argv)
       printf("failed to parse config options! error %d\n", ret);
       ret = EXIT_FAILURE;
       goto out;
-    } else {
-      printf("we just parsed our config options\n");
-      // We also want to apply the config file if the user specified
-      // one, and conf_parse_argv won't do that for us.
-      int i;
-      for (i = 0; i < argc; ++i) {
-  	if ((strcmp(argv[i], "-c") == 0) || (strcmp(argv[i], "--conf") == 0)) {
-  	  ret = rados_conf_read_file(rados, argv[i+1]);
-  	  if (ret < 0) {
-  	    // This could fail if the config file is malformed, but it'd be hard.
-	    printf("failed to parse config file %s! error %d\n", argv[i+1], ret);
-  	    ret = EXIT_FAILURE;
-  	    goto out;
-  	  }
-  	  break;
-  	}
+    }
+
+    printf("we just parsed our config options\n");
+    // We also want to apply the config file if the user specified
+    // one, and conf_parse_argv won't do that for us.
+    int i;
+    for (i = 0; i < argc; ++i) {
+      if ((strcmp(argv[i], "-c") == 0) || (strcmp(argv[i], "--conf") == 0)) {
+        ret = rados_conf_read_file(rados, argv[i+1]);
+        if (ret < 0) {
+          // This could fail if the config file is malformed, but it'd be hard.
+          printf("failed to parse config file %s! error %d\n", argv[i+1], ret);
+          ret = EXIT_FAILURE;
+          goto out;
+        }
+        break;
       }
     }
   }
@@ -80,9 +79,8 @@ int main(int argc, const char **argv)
       printf("couldn't connect to cluster! error %d\n", ret);
       ret = EXIT_FAILURE;
       goto out;
-    } else {
-      printf("we just connected to the rados cluster\n");
     }
+    printf("we just connected to the rados cluster\n");
   }
 
   /*
@@ -96,9 +94,8 @@ int main(int argc, const char **argv)
     if (ret < 0) {
       printf("couldn't create pool! error %d\n", ret);
       return EXIT_FAILURE;
-    } else {
-      printf("we just created a new pool named %s\n", pool_name);
     }
+    printf("we just created a new pool named %s\n", pool_name);
     pool_created = 1;
   }
 
@@ -111,9 +108,8 @@ int main(int argc, const char **argv)
       printf("couldn't set up ioctx! error %d\n", ret);
       ret = EXIT_FAILURE;
       goto out;
-    } else {
-      printf("we just created an ioctx for our pool\n");
     }
+    printf("we just created an ioctx for our pool\n");
   }
 
   /*
@@ -130,9 +126,8 @@ int main(int argc, const char **argv)
       printf("couldn't write object! error %d\n", ret);
       ret = EXIT_FAILURE;
       goto out;
-    } else {
-      printf("we just wrote new object %s, with contents '%s'\n", object_name, hello);
     }
+    printf("we just wrote new object %s, with contents '%s'\n", object_name, hello);
   }
 
   /*
@@ -157,9 +152,9 @@ int main(int argc, const char **argv)
       ret = EXIT_FAILURE;
       free(read_buf);
       goto out;
-    } else {
-      printf("we just created a new completion\n");
     }
+    printf("we just created a new completion\n");
+
     // send off the request.
     ret = rados_aio_read(io_ctx, object_name, read_completion, read_buf, read_len, 0);
     if (ret < 0) {
@@ -178,10 +173,9 @@ int main(int argc, const char **argv)
       free(read_buf);
       rados_aio_release(read_completion);
       goto out;
-    } else {
-      read_buf[ret] = 0; // null-terminate the string
-      printf("we read our object %s, and got back %d bytes with contents\n%s\n", object_name, ret, read_buf);
     }
+    read_buf[ret] = 0; // null-terminate the string
+    printf("we read our object %s, and got back %d bytes with contents\n%s\n", object_name, ret, read_buf);
 
     free(read_buf);
     rados_aio_release(read_completion);
@@ -197,9 +191,8 @@ int main(int argc, const char **argv)
       printf("failed to set xattr version entry! error %d\n", ret);
       ret = EXIT_FAILURE;
       goto out;
-    } else {
-      printf("we set the xattr 'version' on our object!\n");
     }
+    printf("we set the xattr 'version' on our object!\n");
   }
 
   /*
@@ -224,9 +217,8 @@ int main(int argc, const char **argv)
       ret = EXIT_FAILURE;
       rados_release_write_op(write_op);
       goto out;
-    } else {
-      printf("we overwrote our object %s with contents\n%s\n", object_name, content);
     }
+    printf("we overwrote our object %s with contents\n%s\n", object_name, content);
     rados_release_write_op(write_op);
   }
 
@@ -281,9 +273,8 @@ int main(int argc, const char **argv)
       ret = EXIT_FAILURE;
       rados_release_write_op(update_op);
       goto out;
-    } else {
-      printf("we overwrote our object %s following an xattr test with contents\n%s\n", object_name, content);
     }
+    printf("we overwrote our object %s following an xattr test with contents\n%s\n", object_name, content);
     rados_release_write_op(update_op);
   }
 

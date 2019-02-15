@@ -22,6 +22,13 @@ if [ -e CMakeCache.txt ]; then
   [ -z "$CEPH_BIN" ] && CEPH_BIN=bin
 fi
 
+if [ -n "$VSTART_DEST" ]; then
+  CEPH_CONF_PATH=$VSTART_DEST
+else
+  CEPH_CONF_PATH="$PWD"
+fi
+conf_fn="$CEPH_CONF_PATH/ceph.conf"
+
 MYUID=$(id -u)
 MYNAME=$(id -nu)
 
@@ -73,8 +80,8 @@ while [ $# -ge 1 ]; do
 done
 
 if [ $stop_all -eq 1 ]; then
-    if "${CEPH_BIN}"/rbd showmapped >/dev/null 2>&1; then
-        "${CEPH_BIN}"/rbd showmapped | tail -n +2 |
+    if "${CEPH_BIN}"/rbd device list -c $conf_fn >/dev/null 2>&1; then
+        "${CEPH_BIN}"/rbd device list -c $conf_fn | tail -n +2 |
         while read DEV; do
             # While it is currently possible to create an rbd image with
             # whitespace chars in its name, krbd will refuse mapping such
@@ -82,10 +89,10 @@ if [ $stop_all -eq 1 ]; then
             # same goes for whitespace chars in names of the pools that
             # contain rbd images).
             DEV="$(echo "${DEV}" | tr -s '[:space:]' | awk '{ print $5 }')"
-            sudo "${CEPH_BIN}"/rbd unmap "${DEV}"
+            sudo "${CEPH_BIN}"/rbd device unmap "${DEV}" -c $conf_fn
         done
 
-        if [ -n "$("${CEPH_BIN}"/rbd showmapped)" ]; then
+        if [ -n "$("${CEPH_BIN}"/rbd device list -c $conf_fn)" ]; then
             echo "WARNING: Some rbd images are still mapped!" >&2
         fi
     fi
@@ -102,7 +109,7 @@ if [ $stop_all -eq 1 ]; then
     pkill -u $MYUID -f valgrind.bin.\*ceph-mon
     $SUDO pkill -u $MYUID -f valgrind.bin.\*ceph-osd
     pkill -u $MYUID -f valgrind.bin.\*ceph-mds
-    asok_dir=`dirname $("${CEPH_BIN}"/ceph-conf --show-config-value admin_socket)`
+    asok_dir=`dirname $("${CEPH_BIN}"/ceph-conf -c ${conf_fn} --show-config-value admin_socket)`
     rm -rf "${asok_dir}"
 else
     [ $stop_mon -eq 1 ] && do_killall ceph-mon

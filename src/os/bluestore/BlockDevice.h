@@ -27,21 +27,49 @@
 #include <vector>
 
 #include "acconfig.h"
-#ifdef HAVE_LIBAIO
-#include "aio.h"
-#endif
-#include "include/assert.h"
-#include "include/buffer.h"
+#include "common/ceph_mutex.h"
 
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
+#include "ceph_aio.h"
+#endif
+#include "include/ceph_assert.h"
+#include "include/buffer.h"
+#include "include/interval_set.h"
 #define SPDK_PREFIX "spdk:"
+
+#if defined(__linux__)
+#if !defined(F_SET_FILE_RW_HINT)
+#define F_LINUX_SPECIFIC_BASE 1024
+#define F_SET_FILE_RW_HINT         (F_LINUX_SPECIFIC_BASE + 14)
+#endif
+// These values match Linux definition
+// https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/tree/include/uapi/linux/fcntl.h#n56
+#define  WRITE_LIFE_NOT_SET  	0 	// No hint information set
+#define  WRITE_LIFE_NONE  	1       // No hints about write life time
+#define  WRITE_LIFE_SHORT  	2       // Data written has a short life time
+#define  WRITE_LIFE_MEDIUM  	3    	// Data written has a medium life time
+#define  WRITE_LIFE_LONG  	4       // Data written has a long life time
+#define  WRITE_LIFE_EXTREME  	5     	// Data written has an extremely long life time
+#define  WRITE_LIFE_MAX  	6
+#else
+// On systems don't have WRITE_LIFE_* only use one FD 
+// And all files are created equal
+#define  WRITE_LIFE_NOT_SET  	0 	// No hint information set
+#define  WRITE_LIFE_NONE  	0       // No hints about write life time
+#define  WRITE_LIFE_SHORT  	0       // Data written has a short life time
+#define  WRITE_LIFE_MEDIUM  	0    	// Data written has a medium life time
+#define  WRITE_LIFE_LONG  	0       // Data written has a long life time
+#define  WRITE_LIFE_EXTREME  	0    	// Data written has an extremely long life time
+#define  WRITE_LIFE_MAX  	1
+#endif
 
 class CephContext;
 
 /// track in-flight io
 struct IOContext {
 private:
-  std::mutex lock;
-  std::condition_variable cond;
+  ceph::mutex lock = ceph::make_mutex("IOContext::lock");
+  ceph::condition_variable cond;
   int r = 0;
 
 public:
@@ -53,7 +81,7 @@ public:
   std::atomic_int total_nseg = {0};
 #endif
 
-#ifdef HAVE_LIBAIO
+#if defined(HAVE_LIBAIO) || defined(HAVE_POSIXAIO)
   std::list<aio_t> pending_aios;    ///< not yet submitted
   std::list<aio_t> running_aios;    ///< submitting or submitted
 #endif
@@ -77,18 +105,16 @@ public:
   uint64_t get_num_ios() const;
 
   void try_aio_wake() {
-    if (num_running == 1) {
+    assert(num_running >= 1);
+
+    std::lock_guard l(lock);
+    if (num_running.fetch_sub(1) == 1) {
 
       // we might have some pending IOs submitted after the check
       // as there is no lock protection for aio_submit.
       // Hence we might have false conditional trigger.
       // aio_wait has to handle that hence do not care here.
-      std::lock_guard<std::mutex> l(lock);
       cond.notify_all();
-      --num_running;
-      assert(num_running >= 0);
-    } else {
-      --num_running;
     }
   }
 
@@ -107,14 +133,16 @@ public:
   CephContext* cct;
   typedef void (*aio_callback_t)(void *handle, void *aio);
 private:
-  std::mutex ioc_reap_lock;
+  ceph::mutex ioc_reap_lock = ceph::make_mutex("BlockDevice::ioc_reap_lock");
   std::vector<IOContext*> ioc_reap_queue;
   std::atomic_int ioc_reap_count = {0};
 
 protected:
   uint64_t size;
   uint64_t block_size;
+  bool support_discard = false;
   bool rotational = true;
+  bool lock_exclusive = true;
 
 public:
   aio_callback_t aio_callback;
@@ -129,14 +157,23 @@ public:
   virtual ~BlockDevice() = default;
 
   static BlockDevice *create(
-    CephContext* cct, const std::string& path, aio_callback_t cb, void *cbpriv);
+    CephContext* cct, const std::string& path, aio_callback_t cb, void *cbpriv, aio_callback_t d_cb, void *d_cbpriv);
   virtual bool supported_bdev_label() { return true; }
   virtual bool is_rotational() { return rotational; }
 
   virtual void aio_submit(IOContext *ioc) = 0;
 
+  void set_no_exclusive_lock() {
+    lock_exclusive = false;
+  }
+  
   uint64_t get_size() const { return size; }
   uint64_t get_block_size() const { return block_size; }
+
+  /// hook to provide utilization of thinly-provisioned device
+  virtual bool get_thin_utilization(uint64_t *total, uint64_t *avail) const {
+    return false;
+  }
 
   virtual int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const = 0;
 
@@ -149,6 +186,9 @@ public:
       ls->insert(s);
     }
     return 0;
+  }
+  virtual int get_numa_node(int *node) const {
+    return -EOPNOTSUPP;
   }
 
   virtual int read(
@@ -165,7 +205,8 @@ public:
   virtual int write(
     uint64_t off,
     bufferlist& bl,
-    bool buffered) = 0;
+    bool buffered,
+    int write_hint = WRITE_LIFE_NOT_SET) = 0;
 
   virtual int aio_read(
     uint64_t off,
@@ -176,8 +217,12 @@ public:
     uint64_t off,
     bufferlist& bl,
     IOContext *ioc,
-    bool buffered) = 0;
+    bool buffered,
+    int write_hint = WRITE_LIFE_NOT_SET) = 0;
   virtual int flush() = 0;
+  virtual int discard(uint64_t offset, uint64_t len) { return 0; }
+  virtual int queue_discard(interval_set<uint64_t> &to_release) { return -1; }
+  virtual void discard_drain() { return; }
 
   void queue_reap_ioc(IOContext *ioc);
   void reap_ioc();

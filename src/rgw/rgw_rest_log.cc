@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -11,6 +12,7 @@
  * Foundation. See file COPYING.
  *
  */
+
 #include "common/ceph_json.h"
 #include "common/strtol.h"
 #include "rgw_rest.h"
@@ -21,8 +23,12 @@
 #include "rgw_sync.h"
 #include "rgw_data_sync.h"
 #include "rgw_common.h"
+#include "rgw_zone.h"
+
+#include "services/svc_zone.h"
+
 #include "common/errno.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define LOG_CLASS_LIST_MAX_ENTRIES (1000)
@@ -86,7 +92,7 @@ void RGWOp_MDLog_List::execute() {
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = store->get_current_period_id();
+    period = store->svc.zone->get_current_period_id();
     if (period.empty()) {
       ldout(s->cct, 5) << "Missing period id" << dendl;
       http_ret = -EINVAL;
@@ -164,7 +170,7 @@ void RGWOp_MDLog_ShardInfo::execute() {
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = store->get_current_period_id();
+    period = store->svc.zone->get_current_period_id();
 
     if (period.empty()) {
       ldout(s->cct, 5) << "Missing period id" << dendl;
@@ -223,7 +229,7 @@ void RGWOp_MDLog_Delete::execute() {
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = store->get_current_period_id();
+    period = store->svc.zone->get_current_period_id();
 
     if (period.empty()) {
       ldout(s->cct, 5) << "Missing period id" << dendl;
@@ -250,7 +256,7 @@ void RGWOp_MDLog_Lock::execute() {
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = store->get_current_period_id();
+    period = store->svc.zone->get_current_period_id();
   }
 
   if (period.empty() ||
@@ -298,7 +304,7 @@ void RGWOp_MDLog_Unlock::execute() {
 
   if (period.empty()) {
     ldout(s->cct, 5) << "Missing period id trying to use current" << dendl;
-    period = store->get_current_period_id();
+    period = store->svc.zone->get_current_period_id();
   }
 
   if (period.empty() ||
@@ -323,20 +329,21 @@ void RGWOp_MDLog_Unlock::execute() {
 }
 
 void RGWOp_MDLog_Notify::execute() {
-  char *data;
-  int len = 0;
 #define LARGE_ENOUGH_BUF (128 * 1024)
-  int r = rgw_rest_read_all_input(s, &data, &len, LARGE_ENOUGH_BUF);
+
+  int r = 0;
+  bufferlist data;
+  std::tie(r, data) = rgw_rest_read_all_input(s, LARGE_ENOUGH_BUF);
   if (r < 0) {
     http_ret = r;
     return;
   }
 
-  ldout(s->cct, 20) << __func__ << "(): read data: " << string(data, len) << dendl;
+  char* buf = data.c_str();
+  ldout(s->cct, 20) << __func__ << "(): read data: " << buf << dendl;
 
   JSONParser p;
-  r = p.parse(data, len);
-  free(data);
+  r = p.parse(buf, data.length());
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: failed to parse JSON" << dendl;
     http_ret = r;
@@ -352,7 +359,7 @@ void RGWOp_MDLog_Notify::execute() {
     return;
   }
 
-  if (store->ctx()->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+  if (store->ctx()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     for (set<int>::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
       ldout(s->cct, 20) << __func__ << "(): updated shard=" << *iter << dendl;
     }
@@ -372,8 +379,6 @@ void RGWOp_BILog_List::execute() {
   RGWBucketInfo bucket_info;
   unsigned max_entries;
 
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-
   if (bucket_name.empty() && bucket_instance.empty()) {
     dout(5) << "ERROR: neither bucket nor bucket instance specified" << dendl;
     http_ret = -EINVAL;
@@ -387,13 +392,13 @@ void RGWOp_BILog_List::execute() {
   }
 
   if (!bucket_instance.empty()) {
-    http_ret = store->get_bucket_instance_info(obj_ctx, bucket_instance, bucket_info, NULL, NULL);
+    http_ret = store->get_bucket_instance_info(*s->sysobj_ctx, bucket_instance, bucket_info, NULL, NULL);
     if (http_ret < 0) {
       dout(5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
       return;
     }
   } else { /* !bucket_name.empty() */
-    http_ret = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, NULL);
+    http_ret = store->get_bucket_info(*s->sysobj_ctx, tenant_name, bucket_name, bucket_info, NULL, NULL);
     if (http_ret < 0) {
       dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return;
@@ -465,8 +470,6 @@ void RGWOp_BILog_Info::execute() {
          bucket_instance = s->info.args.get("bucket-instance");
   RGWBucketInfo bucket_info;
 
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-
   if (bucket_name.empty() && bucket_instance.empty()) {
     dout(5) << "ERROR: neither bucket nor bucket instance specified" << dendl;
     http_ret = -EINVAL;
@@ -480,13 +483,13 @@ void RGWOp_BILog_Info::execute() {
   }
 
   if (!bucket_instance.empty()) {
-    http_ret = store->get_bucket_instance_info(obj_ctx, bucket_instance, bucket_info, NULL, NULL);
+    http_ret = store->get_bucket_instance_info(*s->sysobj_ctx, bucket_instance, bucket_info, NULL, NULL);
     if (http_ret < 0) {
       dout(5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
       return;
     }
   } else { /* !bucket_name.empty() */
-    http_ret = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, NULL);
+    http_ret = store->get_bucket_info(*s->sysobj_ctx, tenant_name, bucket_name, bucket_info, NULL, NULL);
     if (http_ret < 0) {
       dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return;
@@ -527,8 +530,6 @@ void RGWOp_BILog_Delete::execute() {
 
   RGWBucketInfo bucket_info;
 
-  RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
-
   http_ret = 0;
   if ((bucket_name.empty() && bucket_instance.empty()) ||
       end_marker.empty()) {
@@ -544,13 +545,13 @@ void RGWOp_BILog_Delete::execute() {
   }
 
   if (!bucket_instance.empty()) {
-    http_ret = store->get_bucket_instance_info(obj_ctx, bucket_instance, bucket_info, NULL, NULL);
+    http_ret = store->get_bucket_instance_info(*s->sysobj_ctx, bucket_instance, bucket_info, NULL, NULL);
     if (http_ret < 0) {
       dout(5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
       return;
     }
   } else { /* !bucket_name.empty() */
-    http_ret = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, NULL);
+    http_ret = store->get_bucket_info(*s->sysobj_ctx, tenant_name, bucket_name, bucket_info, NULL, NULL);
     if (http_ret < 0) {
       dout(5) << "could not get bucket info for bucket=" << bucket_name << dendl;
       return;
@@ -753,20 +754,21 @@ void RGWOp_DATALog_Unlock::execute() {
 
 void RGWOp_DATALog_Notify::execute() {
   string  source_zone = s->info.args.get("source-zone");
-  char *data;
-  int len = 0;
 #define LARGE_ENOUGH_BUF (128 * 1024)
-  int r = rgw_rest_read_all_input(s, &data, &len, LARGE_ENOUGH_BUF);
+
+  int r = 0;
+  bufferlist data;
+  std::tie(r, data) = rgw_rest_read_all_input(s, LARGE_ENOUGH_BUF);
   if (r < 0) {
     http_ret = r;
     return;
   }
 
-  ldout(s->cct, 20) << __func__ << "(): read data: " << string(data, len) << dendl;
+  char* buf = data.c_str();
+  ldout(s->cct, 20) << __func__ << "(): read data: " << buf << dendl;
 
   JSONParser p;
-  r = p.parse(data, len);
-  free(data);
+  r = p.parse(buf, data.length());
   if (r < 0) {
     ldout(s->cct, 0) << "ERROR: failed to parse JSON" << dendl;
     http_ret = r;
@@ -782,7 +784,7 @@ void RGWOp_DATALog_Notify::execute() {
     return;
   }
 
-  if (store->ctx()->_conf->subsys.should_gather(ceph_subsys_rgw, 20)) {
+  if (store->ctx()->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
     for (map<int, set<string> >::iterator iter = updated_shards.begin(); iter != updated_shards.end(); ++iter) {
       ldout(s->cct, 20) << __func__ << "(): updated shard=" << iter->first << dendl;
       set<string>& keys = iter->second;
@@ -846,7 +848,7 @@ public:
   }
   void execute() override;
   void send_response() override;
-  const string name() override { return "get_metadata_log_status"; }
+  const char* name() const override { return "get_metadata_log_status"; }
 };
 
 void RGWOp_MDLog_Status::execute()
@@ -884,7 +886,7 @@ public:
   }
   void execute() override;
   void send_response() override;
-  const string name() override { return "get_bucket_index_log_status"; }
+  const char* name() const override { return "get_bucket_index_log_status"; }
 };
 
 void RGWOp_BILog_Status::execute()
@@ -906,7 +908,15 @@ void RGWOp_BILog_Status::execute()
     return;
   }
 
-  http_ret = rgw_bucket_sync_status(store, source_zone, bucket, &status);
+  // read the bucket instance info for num_shards
+  auto ctx = store->svc.sysobj->init_obj_ctx();
+  RGWBucketInfo info;
+  http_ret = store->get_bucket_instance_info(ctx, bucket, info, nullptr, nullptr);
+  if (http_ret < 0) {
+    ldout(s->cct, 4) << "failed to read bucket info: " << cpp_strerror(http_ret) << dendl;
+    return;
+  }
+  http_ret = rgw_bucket_sync_status(this, store, source_zone, info, &status);
 }
 
 void RGWOp_BILog_Status::send_response()
@@ -933,7 +943,7 @@ public:
   }
   void execute() override ;
   void send_response() override;
-  const string name() override { return "get_data_changes_log_status"; }
+  const char* name() const override { return "get_data_changes_log_status"; }
 };
 
 void RGWOp_DATALog_Status::execute()

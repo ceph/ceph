@@ -29,7 +29,7 @@ def setup_test():
     except Exception:
         root_dir_handler = rgwfs.mkdir(root_handler, b"bucket", 0)
 
-    def cb(name, offset):
+    def cb(name, offset, flags):
         names.append(name)
     rgwfs.readdir(root_dir_handler, cb, 0, 0)
     for name in names:

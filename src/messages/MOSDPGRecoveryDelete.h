@@ -10,10 +10,12 @@
  * instruct non-primary to remove some objects during recovery
  */
 
-struct MOSDPGRecoveryDelete : public MOSDFastDispatchOp {
+class MOSDPGRecoveryDelete : public MessageInstance<MOSDPGRecoveryDelete, MOSDFastDispatchOp> {
+public:
+  friend factory;
 
-  static const int HEAD_VERSION = 2;
-  static const int COMPAT_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
   pg_shard_t from;
   spg_t pgid;            ///< target spg_t
@@ -43,12 +45,12 @@ public:
   }
 
   MOSDPGRecoveryDelete()
-    : MOSDFastDispatchOp(MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
+    : MessageInstance(MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
 			 COMPAT_VERSION), cost(0) {}
 
   MOSDPGRecoveryDelete(pg_shard_t from, spg_t pgid, epoch_t map_epoch,
 		       epoch_t min_epoch)
-    : MOSDFastDispatchOp(MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
+    : MessageInstance(MSG_OSD_PG_RECOVERY_DELETE, HEAD_VERSION,
 			 COMPAT_VERSION),
       from(from),
       pgid(pgid),
@@ -60,28 +62,29 @@ private:
   ~MOSDPGRecoveryDelete() {}
 
 public:
-  const char *get_type_name() const { return "recovery_delete"; }
+  std::string_view get_type_name() const { return "recovery_delete"; }
   void print(ostream& out) const {
     out << "MOSDPGRecoveryDelete(" << pgid << " e" << map_epoch << ","
 	<< min_epoch << " " << objects << ")";
   }
 
   void encode_payload(uint64_t features) {
-    ::encode(from, payload);
-    ::encode(pgid, payload);
-    ::encode(map_epoch, payload);
-    ::encode(min_epoch, payload);
-    ::encode(cost, payload);
-    ::encode(objects, payload);
+    using ceph::encode;
+    encode(from, payload);
+    encode(pgid, payload);
+    encode(map_epoch, payload);
+    encode(min_epoch, payload);
+    encode(cost, payload);
+    encode(objects, payload);
   }
   void decode_payload() {
-    bufferlist::iterator p = payload.begin();
-    ::decode(from, p);
-    ::decode(pgid, p);
-    ::decode(map_epoch, p);
-    ::decode(min_epoch, p);
-    ::decode(cost, p);
-    ::decode(objects, p);
+    auto p = payload.cbegin();
+    decode(from, p);
+    decode(pgid, p);
+    decode(map_epoch, p);
+    decode(min_epoch, p);
+    decode(cost, p);
+    decode(objects, p);
   }
 };
 

@@ -18,7 +18,6 @@
 #include <stdint.h>
 
 #include "common/TrackedOp.h"
-#include "include/memory.h"
 #include "mon/Session.h"
 #include "msg/Message.h"
 
@@ -42,7 +41,7 @@ struct MonOpRequest : public TrackedOp {
   void mark_svc_event(const string &service, const string &event) {
     string s = service;
     s.append(":").append(event);
-    mark_event_string(s);
+    mark_event(s);
   }
 
   void mark_logmon_event(const string &event) {
@@ -80,7 +79,7 @@ struct MonOpRequest : public TrackedOp {
 private:
   Message *request;
   utime_t dequeued_time;
-  MonSession *session;
+  RefCountedPtr session;
   ConnectionRef con;
   bool forwarded_to_leader;
   op_type_t op_type;
@@ -90,20 +89,14 @@ private:
       req->get_recv_stamp().is_zero() ?
       ceph_clock_now() : req->get_recv_stamp()),
     request(req),
-    session(NULL),
     con(NULL),
     forwarded_to_leader(false),
     op_type(OP_TYPE_NONE)
   {
-    mark_event("header_read", request->get_recv_stamp());
-    mark_event("throttled", request->get_throttle_stamp());
-    mark_event("all_read", request->get_recv_complete_stamp());
-    mark_event("dispatched", request->get_dispatch_stamp());
-
     if (req) {
       con = req->get_connection();
       if (con) {
-        session = static_cast<MonSession*>(con->get_priv());
+        session = con->get_priv();
       }
     }
   }
@@ -111,7 +104,7 @@ private:
   void _dump(Formatter *f) const override {
     {
       f->open_array_section("events");
-      Mutex::Locker l(lock);
+      std::lock_guard l(lock);
       for (auto& i : events) {
 	f->dump_object("event", i);
       }
@@ -133,15 +126,10 @@ protected:
 public:
   ~MonOpRequest() override {
     request->put();
-    // certain ops may not have a session (e.g., AUTH or PING)
-    if (session)
-      session->put();
   }
 
   MonSession *get_session() const {
-    if (!session)
-      return NULL;
-    return session;
+    return static_cast<MonSession*>(session.get());
   }
 
   template<class T>
@@ -158,16 +146,7 @@ public:
   ConnectionRef get_connection() { return con; }
 
   void set_session(MonSession *s) {
-    if (session) {
-      // we will be rewriting the existing session; drop the ref.
-      session->put();
-    }
-
-    if (s == NULL) {
-      session = NULL;
-    } else {
-      session = static_cast<MonSession*>(s->get());
-    }
+    session.reset(s);
   }
 
   bool is_src_mon() const {
@@ -238,7 +217,7 @@ struct C_MonOp : public Context
 
   void mark_op_event(const string &event) {
     if (op)
-      op->mark_event_string(event);
+      op->mark_event(event);
   }
 
   virtual void _finish(int r) = 0;

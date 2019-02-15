@@ -15,9 +15,16 @@
 #ifndef CEPH_MCACHEEXPIRE_H
 #define CEPH_MCACHEEXPIRE_H
 
+#include <string_view>
+
+#include "msg/Message.h"
+
 #include "mds/mdstypes.h"
 
-class MCacheExpire : public Message {
+class MCacheExpire : public MessageInstance<MCacheExpire> {
+public:
+  friend factory;
+private:
   __s32 from;
 
 public:
@@ -30,45 +37,45 @@ public:
     map<dirfrag_t, uint32_t> dirs;
     map<dirfrag_t, map<pair<string,snapid_t>,uint32_t> > dentries;
 
-    void merge(realm& o) {
+    void merge(const realm& o) {
       inodes.insert(o.inodes.begin(), o.inodes.end());
       dirs.insert(o.dirs.begin(), o.dirs.end());
-      for (map<dirfrag_t,map<pair<string,snapid_t>,uint32_t> >::iterator p = o.dentries.begin();
-	   p != o.dentries.end();
-	   ++p) {
-	if (dentries.count(p->first) == 0)
-	  dentries[p->first] = p->second;
-	else
-	  dentries[p->first].insert(p->second.begin(), p->second.end());
+      for (const auto &p : o.dentries) {
+        auto em = dentries.emplace(std::piecewise_construct, std::forward_as_tuple(p.first), std::forward_as_tuple(p.second));
+        if (!em.second) {
+	  em.first->second.insert(p.second.begin(), p.second.end());
+        }
       }
     }
 
     void encode(bufferlist &bl) const {
-      ::encode(inodes, bl);
-      ::encode(dirs, bl);
-      ::encode(dentries, bl);
+      using ceph::encode;
+      encode(inodes, bl);
+      encode(dirs, bl);
+      encode(dentries, bl);
     }
-    void decode(bufferlist::iterator &bl) {
-      ::decode(inodes, bl);
-      ::decode(dirs, bl);
-      ::decode(dentries, bl);
+    void decode(bufferlist::const_iterator &bl) {
+      using ceph::decode;
+      decode(inodes, bl);
+      decode(dirs, bl);
+      decode(dentries, bl);
     }
   };
   WRITE_CLASS_ENCODER(realm)
 
   map<dirfrag_t, realm> realms;
 
-  int get_from() { return from; }
+  int get_from() const { return from; }
 
-  MCacheExpire() : Message(MSG_MDS_CACHEEXPIRE), from(-1) {}
+protected:
+  MCacheExpire() : MessageInstance(MSG_MDS_CACHEEXPIRE), from(-1) {}
   MCacheExpire(int f) : 
-    Message(MSG_MDS_CACHEEXPIRE),
+    MessageInstance(MSG_MDS_CACHEEXPIRE),
     from(f) { }
-private:
   ~MCacheExpire() override {}
 
 public:
-  const char *get_type_name() const override { return "cache_expire";}
+  std::string_view get_type_name() const override { return "cache_expire";}
   
   void add_inode(dirfrag_t r, vinodeno_t vino, unsigned nonce) {
     realms[r].inodes[vino] = nonce;
@@ -76,26 +83,28 @@ public:
   void add_dir(dirfrag_t r, dirfrag_t df, unsigned nonce) {
     realms[r].dirs[df] = nonce;
   }
-  void add_dentry(dirfrag_t r, dirfrag_t df, const string& dn, snapid_t last, unsigned nonce) {
+  void add_dentry(dirfrag_t r, dirfrag_t df, std::string_view dn, snapid_t last, unsigned nonce) {
     realms[r].dentries[df][pair<string,snapid_t>(dn,last)] = nonce;
   }
 
-  void add_realm(dirfrag_t df, realm& r) {
-    if (realms.count(df) == 0)
-      realms[df] = r;
-    else
-      realms[df].merge(r);
+  void add_realm(dirfrag_t df, const realm& r) {
+    auto em = realms.emplace(std::piecewise_construct, std::forward_as_tuple(df), std::forward_as_tuple(r));
+    if (!em.second) {
+      em.first->second.merge(r);
+    }
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(from, p);
-    ::decode(realms, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(from, p);
+    decode(realms, p);
   }
     
   void encode_payload(uint64_t features) override {
-    ::encode(from, payload);
-    ::encode(realms, payload);
+    using ceph::encode;
+    encode(from, payload);
+    encode(realms, payload);
   }
 };
 

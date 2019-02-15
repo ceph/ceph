@@ -35,7 +35,7 @@
 #include "gtest/gtest.h"
 
 #include "common/config.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "messages/MMonProbe.h"
 #include "messages/MRoute.h"
@@ -80,20 +80,20 @@ public:
   int init_messenger() {
     dout(1) << __func__ << dendl;
 
-    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf->get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
+    std::string public_msgr_type = cct->_conf->ms_public_type.empty() ? cct->_conf.get_val<std::string>("ms_type") : cct->_conf->ms_public_type;
     msg = Messenger::create(cct, public_msgr_type, entity_name_t::CLIENT(-1),
                             "test-mon-msg", 0, 0);
-    assert(msg != NULL);
+    ceph_assert(msg != NULL);
     msg->set_default_policy(Messenger::Policy::lossy_client(0));
     dout(0) << __func__ << " starting messenger at "
-            << msg->get_myaddr() << dendl;
+            << msg->get_myaddrs() << dendl;
     msg->start();
     return 0;
   }
 
   int init_monc() {
     dout(1) << __func__ << dendl;
-    assert(msg != NULL);
+    ceph_assert(msg != NULL);
     int err = monc.build_initial_monmap();
     if (err < 0) {
       derr << __func__ << " error building monmap: "
@@ -301,7 +301,6 @@ TEST_F(MonMsgTest, MRouteTest)
   Message *payload = new MGenericMessage(CEPH_MSG_SHUTDOWN);
   MRoute *m = new MRoute;
   m->msg = payload;
-  m->dest = msg->get_myinst();
   Message *r = send_wait_reply(m, CEPH_MSG_SHUTDOWN);
   // we want an error
   ASSERT_NE(IS_ERR(r), 0);
@@ -315,7 +314,7 @@ TEST_F(MonMsgTest, MRouteTest)
 TEST_F(MonMsgTest, MMonJoin)
 {
   Message *m = new MMonJoin(get_monmap()->fsid, string("client"),
-                            msg->get_myaddr());
+                            msg->get_myaddrs());
   send_wait_reply(m, MSG_MON_PAXOS, 10.0);
 
   int r = monc.get_monmap();
@@ -330,9 +329,9 @@ int main(int argc, char *argv[])
 
   auto cct = global_init(nullptr, args,
 			 CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
-			 0);
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
   ::testing::InitGoogleTest(&argc, argv);
 
   return RUN_ALL_TESTS();

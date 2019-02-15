@@ -17,26 +17,30 @@
 
 #include "messages/PaxosServiceMessage.h"
 
-struct MMonGlobalID : public PaxosServiceMessage {
+class MMonGlobalID : public MessageInstance<MMonGlobalID, PaxosServiceMessage> {
+public:
+  friend factory;
+
   uint64_t old_max_id;
-  MMonGlobalID() : PaxosServiceMessage(MSG_MON_GLOBAL_ID, 0), old_max_id(0) { }
+  MMonGlobalID() : MessageInstance(MSG_MON_GLOBAL_ID, 0), old_max_id(0) { }
 private:
   ~MMonGlobalID() override {}
 
 public:
-  const char *get_type_name() const override { return "global_id"; }
+  std::string_view get_type_name() const override { return "global_id"; }
   void print(ostream& out) const override {
     out << "global_id  (" << old_max_id << ")";
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(old_max_id, p);
+    decode(old_max_id, p);
   }
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(old_max_id, payload);
+    encode(old_max_id, payload);
   }
 };
 

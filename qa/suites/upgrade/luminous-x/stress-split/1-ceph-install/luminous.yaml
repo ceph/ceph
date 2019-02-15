@@ -3,6 +3,13 @@ meta:
 tasks:
 - install:
     branch: luminous
+    exclude_packages:
+      - librados3
+      - ceph-mgr-dashboard
+      - ceph-mgr-diskprediction-local
+      - ceph-mgr-diskprediction-cloud
+      - ceph-mgr-rook
+    extra_packages: ['librados2']
 - print: "**** done install luminous"
 - ceph:
 - exec:

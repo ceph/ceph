@@ -9,10 +9,11 @@
 #include "common/WorkQueue.h"
 #include <boost/shared_ptr.hpp>
 #include <gmock/gmock.h>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 namespace librados {
 class TestRadosClient;
+class MockTestMemCluster;
 class MockTestMemIoCtxImpl;
 class MockTestMemRadosClient;
 }
@@ -57,6 +58,8 @@ public:
   void TearDown() override;
 
   void expect_test_features(librbd::MockImageCtx &mock_image_ctx);
+
+  librados::MockTestMemCluster& get_mock_cluster();
 
 private:
   static TestClusterRef s_test_cluster;

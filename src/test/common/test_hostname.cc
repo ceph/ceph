@@ -44,12 +44,24 @@ std::string exec(const char* cmd) {
 
 TEST(Hostname, full) {
   std::string hn = ceph_get_hostname();
-  ASSERT_EQ(hn, exec("hostname")) ;
-
-	
+  if (const char *nn = getenv("NODE_NAME")) {
+    // we are in a container
+    std::cout << "we are in a container on " << nn << ", reporting " << hn
+	      << std::endl;
+    ASSERT_EQ(hn, nn);
+  } else {
+    ASSERT_EQ(hn, exec("hostname")) ;
+  }
 }
 
 TEST(Hostname, short) {
   std::string shn = ceph_get_short_hostname();
-  ASSERT_EQ(shn, exec("hostname -s")) ;
+  if (const char *nn = getenv("NODE_NAME")) {
+    // we are in a container
+    std::cout << "we are in a container on " << nn << ", reporting short " << shn
+	 << ", skipping test because env var may or may not be short form"
+	      << std::endl;
+  } else {
+    ASSERT_EQ(shn, exec("hostname -s")) ;
+  }
 }

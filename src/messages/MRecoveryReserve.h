@@ -16,10 +16,14 @@
 #define CEPH_MRECOVERY_H
 
 #include "msg/Message.h"
+#include "messages/MOSDPeeringOp.h"
 
-class MRecoveryReserve : public Message {
-  static const int HEAD_VERSION = 3;
-  static const int COMPAT_VERSION = 2;
+class MRecoveryReserve : public MessageInstance<MRecoveryReserve, MOSDPeeringOp> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 2;
 public:
   spg_t pgid;
   epoch_t query_epoch;
@@ -32,59 +36,94 @@ public:
   uint32_t type;
   uint32_t priority = 0;
 
+  spg_t get_spg() const {
+    return pgid;
+  }
+  epoch_t get_map_epoch() const {
+    return query_epoch;
+  }
+  epoch_t get_min_epoch() const {
+    return query_epoch;
+  }
+
+  PGPeeringEvent *get_event() override {
+    switch (type) {
+    case REQUEST:
+      return new PGPeeringEvent(
+	query_epoch,
+	query_epoch,
+	RequestRecoveryPrio(priority));
+    case GRANT:
+      return new PGPeeringEvent(
+	query_epoch,
+	query_epoch,
+	RemoteRecoveryReserved());
+    case RELEASE:
+      return new PGPeeringEvent(
+	query_epoch,
+	query_epoch,
+	RecoveryDone());
+    case REVOKE:
+      return new PGPeeringEvent(
+	query_epoch,
+	query_epoch,
+	DeferRecovery(0.0));
+    default:
+      ceph_abort();
+    }
+  }
+
   MRecoveryReserve()
-    : Message(MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       query_epoch(0), type(-1) {}
   MRecoveryReserve(int type,
 		   spg_t pgid,
 		   epoch_t query_epoch,
 		   unsigned prio = 0)
-    : Message(MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_OSD_RECOVERY_RESERVE, HEAD_VERSION, COMPAT_VERSION),
       pgid(pgid), query_epoch(query_epoch),
       type(type), priority(prio) {}
 
-  const char *get_type_name() const override {
+  std::string_view get_type_name() const override {
     return "MRecoveryReserve";
   }
 
-  void print(ostream& out) const override {
-    out << "MRecoveryReserve(" << pgid;
+  void inner_print(ostream& out) const override {
     switch (type) {
     case REQUEST:
-      out << " REQUEST";
+      out << "REQUEST";
       break;
     case GRANT:
-      out << " GRANT";
+      out << "GRANT";
       break;
     case RELEASE:
-      out << " RELEASE";
+      out << "RELEASE";
       break;
     case REVOKE:
-      out << " REVOKE";
+      out << "REVOKE";
       break;
     }
-    out << " e" << query_epoch << ")";
-    if (type == REQUEST) out << ", prio: " << priority;
-    return;
+    if (type == REQUEST) out << " prio: " << priority;
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(pgid.pgid, p);
-    ::decode(query_epoch, p);
-    ::decode(type, p);
-    ::decode(pgid.shard, p);
+    auto p = payload.cbegin();
+    decode(pgid.pgid, p);
+    decode(query_epoch, p);
+    decode(type, p);
+    decode(pgid.shard, p);
     if (header.version >= 3) {
-      ::decode(priority, p);
+      decode(priority, p);
     }
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(pgid.pgid, payload);
-    ::encode(query_epoch, payload);
-    ::encode(type, payload);
-    ::encode(pgid.shard, payload);
-    ::encode(priority, payload);
+    using ceph::encode;
+    encode(pgid.pgid, payload);
+    encode(query_epoch, payload);
+    encode(type, payload);
+    encode(pgid.shard, payload);
+    encode(priority, payload);
   }
 };
 

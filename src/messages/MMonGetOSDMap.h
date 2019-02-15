@@ -19,13 +19,17 @@
 
 #include "include/types.h"
 
-class MMonGetOSDMap : public PaxosServiceMessage {
+class MMonGetOSDMap : public MessageInstance<MMonGetOSDMap, PaxosServiceMessage> {
+public:
+  friend factory;
+private:
+
   epoch_t full_first, full_last;
   epoch_t inc_first, inc_last;
 
 public:
   MMonGetOSDMap()
-    : PaxosServiceMessage(CEPH_MSG_MON_GET_OSDMAP, 0),
+    : MessageInstance(CEPH_MSG_MON_GET_OSDMAP, 0),
       full_first(0),
       full_last(0),
       inc_first(0),
@@ -35,12 +39,12 @@ private:
 
 public:
   void request_full(epoch_t first, epoch_t last) {
-    assert(last >= first);
+    ceph_assert(last >= first);
     full_first = first;
     full_last = last;
   }
   void request_inc(epoch_t first, epoch_t last) {
-    assert(last >= first);
+    ceph_assert(last >= first);
     inc_first = first;
     inc_last = last;
   }
@@ -57,7 +61,7 @@ public:
     return inc_last;
   }
 
-  const char *get_type_name() const override { return "mon_get_osdmap"; }
+  std::string_view get_type_name() const override { return "mon_get_osdmap"; }
   void print(ostream& out) const override {
     out << "mon_get_osdmap(";
     if (full_first && full_last)
@@ -68,19 +72,21 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(full_first, payload);
-    ::encode(full_last, payload);
-    ::encode(inc_first, payload);
-    ::encode(inc_last, payload);
+    encode(full_first, payload);
+    encode(full_last, payload);
+    encode(inc_first, payload);
+    encode(inc_last, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    using ceph::decode;
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(full_first, p);
-    ::decode(full_last, p);
-    ::decode(inc_first, p);
-    ::decode(inc_last, p);
+    decode(full_first, p);
+    decode(full_last, p);
+    decode(inc_first, p);
+    decode(inc_last, p);
   }
 };
 

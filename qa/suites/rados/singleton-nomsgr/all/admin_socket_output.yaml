@@ -10,10 +10,10 @@ overrides:
       - MDS in read-only mode
       - force file system read-only
       - overall HEALTH_
-      - (OSDMAP_FLAGS)
-      - (OSD_FULL)
-      - (MDS_READ_ONLY)
-      - (POOL_FULL)
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_FULL\)
+      - \(MDS_READ_ONLY\)
+      - \(POOL_FULL\)
 tasks:
 - install:
 - ceph:

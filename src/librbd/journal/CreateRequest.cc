@@ -3,7 +3,7 @@
 
 #include "common/dout.h"
 #include "common/errno.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 #include "librbd/Utils.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
@@ -72,6 +72,7 @@ void CreateRequest<I>::get_pool_id() {
     complete(r);
     return;
   }
+  data_ioctx.set_namespace(m_ioctx.get_namespace());
 
   m_pool_id = data_ioctx.get_id();
   create_journal();
@@ -112,7 +113,7 @@ void CreateRequest<I>::allocate_journal_tag() {
   using klass = CreateRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_journal_tag>(this);
 
-  ::encode(m_tag_data, m_bl);
+  encode(m_tag_data, m_bl);
   m_journaler->allocate_tag(m_tag_class, m_bl, &m_tag, ctx);
 }
 
@@ -135,7 +136,7 @@ void CreateRequest<I>::register_client() {
   ldout(m_cct, 20) << this << " " << __func__ << dendl;
 
   m_bl.clear();
-  ::encode(ClientData{ImageClientMeta{m_tag.tag_class}}, m_bl);
+  encode(ClientData{ImageClientMeta{m_tag.tag_class}}, m_bl);
 
   using klass = CreateRequest<I>;
   Context *ctx = create_context_callback<klass, &klass::handle_register_client>(this);

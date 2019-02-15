@@ -64,7 +64,7 @@ bool RenameRequest<I>::should_complete(int r) {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << ": state=" << m_state << ", "
                 << "r=" << r << dendl;
-  r = filter_state_return_code(r);
+  r = filter_return_code(r);
   if (r < 0) {
     if (r == -EEXIST) {
       ldout(cct, 1) << "image already exists" << dendl;
@@ -100,7 +100,7 @@ bool RenameRequest<I>::should_complete(int r) {
 }
 
 template <typename I>
-int RenameRequest<I>::filter_state_return_code(int r) {
+int RenameRequest<I>::filter_return_code(int r) const {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
 
@@ -135,7 +135,7 @@ void RenameRequest<I>::send_read_source_header() {
   librados::AioCompletion *rados_completion = this->create_callback_completion();
   int r = image_ctx.md_ctx.aio_operate(m_source_oid, rados_completion, &op,
                                        &m_header_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -152,7 +152,7 @@ void RenameRequest<I>::send_write_destination_header() {
 
   librados::AioCompletion *rados_completion = this->create_callback_completion();
   int r = image_ctx.md_ctx.aio_operate(m_dest_oid, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -167,11 +167,11 @@ void RenameRequest<I>::send_update_directory() {
   if (image_ctx.old_format) {
     bufferlist cmd_bl;
     bufferlist empty_bl;
-    ::encode(static_cast<__u8>(CEPH_OSD_TMAP_SET), cmd_bl);
-    ::encode(m_dest_name, cmd_bl);
-    ::encode(empty_bl, cmd_bl);
-    ::encode(static_cast<__u8>(CEPH_OSD_TMAP_RM), cmd_bl);
-    ::encode(image_ctx.name, cmd_bl);
+    encode(static_cast<__u8>(CEPH_OSD_TMAP_SET), cmd_bl);
+    encode(m_dest_name, cmd_bl);
+    encode(empty_bl, cmd_bl);
+    encode(static_cast<__u8>(CEPH_OSD_TMAP_RM), cmd_bl);
+    encode(image_ctx.name, cmd_bl);
     op.tmap_update(cmd_bl);
   } else {
     cls_client::dir_rename_image(&op, image_ctx.name, m_dest_name,
@@ -180,7 +180,7 @@ void RenameRequest<I>::send_update_directory() {
 
   librados::AioCompletion *rados_completion = this->create_callback_completion();
   int r = image_ctx.md_ctx.aio_operate(RBD_DIRECTORY, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 
@@ -196,7 +196,7 @@ void RenameRequest<I>::send_remove_source_header() {
 
   librados::AioCompletion *rados_completion = this->create_callback_completion();
   int r = image_ctx.md_ctx.aio_operate(m_source_oid, rados_completion, &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
 }
 

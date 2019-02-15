@@ -4,16 +4,15 @@
 #include <list>
 #include <set>
 #include <string>
+#include <string_view>
 #include <vector>
-#include <boost/utility/string_view.hpp>
-
 
 namespace ceph {
 
 /// Split a string using the given delimiters, passing each piece as a
-/// (non-null-terminated) boost::string_view to the callback.
-template <typename Func> // where Func(boost::string_view) is a valid call
-void for_each_substr(boost::string_view s, const char *delims, Func&& f)
+/// (non-null-terminated) std::string_view to the callback.
+template <typename Func> // where Func(std::string_view) is a valid call
+void for_each_substr(std::string_view s, const char *delims, Func&& f)
 {
   auto pos = s.find_first_not_of(delims);
   while (pos != s.npos) {
@@ -87,12 +86,21 @@ extern void get_str_set(const std::string& str,
  * @param [in] delims characters used to split **str**
  * @param [out] str_list Set modified containing str after it has been split
 **/
-extern void get_str_set(const std::string& str,
-                        const char *delims,
-			std::set<std::string>& str_list);
+template<class Compare = std::less<std::string> >
+void get_str_set(const std::string& str,
+                 const char *delims,
+                 std::set<std::string, Compare>& str_list)
+{
+  str_list.clear();
+  for_each_substr(str, delims, [&str_list] (auto token) {
+                  str_list.emplace(token.begin(), token.end());
+                  });
+}
 
 std::set<std::string> get_str_set(const std::string& str,
                                   const char *delims = ";,= \t");
+
+
 
 /**
  * Return a String containing the vector **v** joined with **sep**

@@ -14,7 +14,6 @@
 #include <map>
 #include <string>
 #include <memory>
-#include "include/memory.h"
 #include <boost/scoped_ptr.hpp>
 #include "include/encoding.h"
 #include "include/btree_map.h"
@@ -23,6 +22,17 @@
 
 using std::string;
 #define KEY_DELIM '\0' 
+
+class PerfCounters;
+
+enum {
+  l_memdb_first = 34440,
+  l_memdb_gets,
+  l_memdb_txns,
+  l_memdb_get_latency,
+  l_memdb_submit_latency,
+  l_memdb_last,
+};
 
 class MemDB : public KeyValueDB
 {
@@ -38,6 +48,7 @@ class MemDB : public KeyValueDB
   mdb_map_t m_map;
 
   CephContext *m_cct;
+  PerfCounters *logger;
   void* m_priv;
   string m_options;
   string m_db_path;
@@ -56,7 +67,7 @@ class MemDB : public KeyValueDB
 public:
   MemDB(CephContext *c, const string &path, void *p) :
     m_total_bytes(0), m_allocated_bytes(0), m_using_btree(false),
-    m_cct(c), m_priv(p), m_db_path(path), iterator_seq_no(1)
+    m_cct(c), logger(NULL), m_priv(p), m_db_path(path), iterator_seq_no(1)
   {
     //Nothing as of now
   }
@@ -65,7 +76,7 @@ public:
   int set_merge_operator(const std::string& prefix,
          std::shared_ptr<MergeOperator> mop) override;
 
-  std::shared_ptr<MergeOperator> _find_merge_op(std::string prefix);
+  std::shared_ptr<MergeOperator> _find_merge_op(const std::string &prefix);
 
   static
   int _test_init(const string& dir) { return 0; };
@@ -98,7 +109,7 @@ public:
     void clear() {
       ops.clear();
     }
-    MDBTransactionImpl(MemDB* _db) :m_db(_db)
+    explicit MDBTransactionImpl(MemDB* _db) :m_db(_db)
     {
       ops.clear();
     }
@@ -197,7 +208,7 @@ public:
     buf->reset();
     buf->total = m_total_bytes;
     buf->allocated = m_allocated_bytes;
-    buf->stored = m_total_bytes;
+    buf->data_stored = m_total_bytes;
     return 0;
   }
 

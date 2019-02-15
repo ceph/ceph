@@ -4,6 +4,7 @@
 #include "include/rados/librados.hpp"
 #include "global/global_context.h"
 #include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 #include <iostream>
 #include <string>
@@ -16,6 +17,7 @@ extern void register_test_image_watcher();
 extern void register_test_internal();
 extern void register_test_journal_entries();
 extern void register_test_journal_replay();
+extern void register_test_migration();
 extern void register_test_mirroring();
 extern void register_test_mirroring_watcher();
 extern void register_test_object_map();
@@ -24,6 +26,8 @@ extern void register_test_operations();
 
 int main(int argc, char **argv)
 {
+  setenv("RBD_FORCE_ALLOW_V1","1",1);
+
   register_test_librbd();
 #ifdef TEST_LIBRBD_INTERNALS
   register_test_deep_copy();
@@ -32,6 +36,7 @@ int main(int argc, char **argv)
   register_test_internal();
   register_test_journal_entries();
   register_test_journal_replay();
+  register_test_migration();
   register_test_mirroring();
   register_test_mirroring_watcher();
   register_test_object_map();

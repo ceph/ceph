@@ -1,6 +1,9 @@
+overrides:
+  ceph:
+    log-whitelist:
+    - \(MON_DOWN\)
+
 tasks:
-- install:
-- ceph:
 - mon_thrash:
     revive_delay: 20
     thrash_delay: 1

@@ -69,7 +69,7 @@ public:
   /**
    * set the method that gets called before each ObjectWriteOperation.
    * If waite_time is set and the method passed involves waiting, it will wait
-   * for that many miliseconds.
+   * for that many milliseconds.
    */
   virtual void set_inject(injection_t inject, int wait_time) = 0;
 

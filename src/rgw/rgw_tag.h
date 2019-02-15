@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef RGW_TAG_H
 #define RGW_TAG_H
 
@@ -18,13 +21,13 @@ class RGWObjTags
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(tag_map, bl);
+    encode(tag_map, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator &bl) {
+  void decode(bufferlist::const_iterator &bl) {
     DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, bl);
-    ::decode(tag_map,bl);
+    decode(tag_map,bl);
     DECODE_FINISH(bl);
   }
 

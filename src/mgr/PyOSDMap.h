@@ -5,7 +5,7 @@
 
 #include <string>
 
-#include "Python.h"
+#include "PythonCompat.h"
 
 
 

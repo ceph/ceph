@@ -8,7 +8,7 @@
 #define dout_subsys ceph_subsys_rgw
 
 
-int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cache_entry_info *cache_info)
+int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cache_entry_info *cache_info)
 {
   RWLock::RLocker l(lock);
 
@@ -17,11 +17,26 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cac
   }
 
   auto iter = cache_map.find(name);
-  if (iter == cache_map.end() ||
-      (expiry.count() &&
-       (ceph::coarse_mono_clock::now() - iter->second.info.time_added) > expiry)) {
+  if (iter == cache_map.end()) {
     ldout(cct, 10) << "cache get: name=" << name << " : miss" << dendl;
     if (perfcounter)
+      perfcounter->inc(l_rgw_cache_miss);
+    return -ENOENT;
+  }
+  if (expiry.count() &&
+       (ceph::coarse_mono_clock::now() - iter->second.info.time_added) > expiry) {
+    ldout(cct, 10) << "cache get: name=" << name << " : expiry miss" << dendl;
+    lock.unlock();
+    lock.get_write();
+    // check that wasn't already removed by other thread
+    iter = cache_map.find(name);
+    if (iter != cache_map.end()) {
+      for (auto &kv : iter->second.chained_entries)
+        kv.first->invalidate(kv.second);
+      remove_lru(name, iter->second.lru_iter);
+      cache_map.erase(iter);
+    }
+    if(perfcounter)
       perfcounter->inc(l_rgw_cache_miss);
     return -ENOENT;
   }
@@ -114,7 +129,7 @@ bool ObjectCache::chain_cache_entry(std::initializer_list<rgw_cache_entry_info*>
   return true;
 }
 
-void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info *cache_info)
+void ObjectCache::put(const string& name, ObjectCacheInfo& info, rgw_cache_entry_info *cache_info)
 {
   RWLock::WLocker l(lock);
 
@@ -124,14 +139,13 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info 
 
   ldout(cct, 10) << "cache put: name=" << name << " info.flags=0x"
                  << std::hex << info.flags << std::dec << dendl;
-  auto iter = cache_map.find(name);
-  if (iter == cache_map.end()) {
-    ObjectCacheEntry entry;
-    entry.lru_iter = lru.end();
-    cache_map.insert(pair<string, ObjectCacheEntry>(name, entry));
-    iter = cache_map.find(name);
-  }
+
+  auto [iter, inserted] = cache_map.emplace(name, ObjectCacheEntry{});
   ObjectCacheEntry& entry = iter->second;
+  entry.info.time_added = ceph::coarse_mono_clock::now();
+  if (inserted) {
+    entry.lru_iter = lru.end();
+  }
   ObjectCacheInfo& target = entry.info;
 
   invalidate_lru(entry);
@@ -187,17 +201,17 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info 
     target.version = info.version;
 }
 
-void ObjectCache::remove(string& name)
+bool ObjectCache::remove(const string& name)
 {
   RWLock::WLocker l(lock);
 
   if (!enabled) {
-    return;
+    return false;
   }
 
   auto iter = cache_map.find(name);
   if (iter == cache_map.end())
-    return;
+    return false;
 
   ldout(cct, 10) << "removing " << name << " from cache" << dendl;
   ObjectCacheEntry& entry = iter->second;
@@ -208,9 +222,10 @@ void ObjectCache::remove(string& name)
 
   remove_lru(name, iter->second.lru_iter);
   cache_map.erase(iter);
+  return true;
 }
 
-void ObjectCache::touch_lru(string& name, ObjectCacheEntry& entry,
+void ObjectCache::touch_lru(const string& name, ObjectCacheEntry& entry,
 			    std::list<string>::iterator& lru_iter)
 {
   while (lru_size > (size_t)cct->_conf->rgw_cache_lru_size) {
@@ -250,7 +265,7 @@ void ObjectCache::touch_lru(string& name, ObjectCacheEntry& entry,
   entry.lru_promotion_ts = lru_counter;
 }
 
-void ObjectCache::remove_lru(string& name,
+void ObjectCache::remove_lru(const string& name,
 			     std::list<string>::iterator& lru_iter)
 {
   if (lru_iter == lru.end())
@@ -305,5 +320,25 @@ void ObjectCache::do_invalidate_all()
 void ObjectCache::chain_cache(RGWChainedCache *cache) {
   RWLock::WLocker l(lock);
   chained_cache.push_back(cache);
+}
+
+void ObjectCache::unchain_cache(RGWChainedCache *cache) {
+  RWLock::WLocker l(lock);
+
+  auto iter = chained_cache.begin();
+  for (; iter != chained_cache.end(); ++iter) {
+    if (cache == *iter) {
+      chained_cache.erase(iter);
+      cache->unregistered();
+      return;
+    }
+  }
+}
+
+ObjectCache::~ObjectCache()
+{
+  for (auto cache : chained_cache) {
+    cache->unregistered();
+  }
 }
 

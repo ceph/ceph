@@ -1,9 +1,8 @@
-#include "include/rados/librados.h"
-#include "test/librados/test.h"
-
-#include "gtest/gtest.h"
 #include <errno.h>
 #include <vector>
+#include "gtest/gtest.h"
+#include "include/rados/librados.h"
+#include "test/librados/test.h"
 
 #define POOL_LIST_BUF_SZ 32768
 
@@ -98,16 +97,6 @@ TEST(LibRadosPools, PoolCreateWithCrushRule) {
 			    pool2_name.c_str(), 0));
   ASSERT_EQ(0, rados_pool_delete(cluster, pool2_name.c_str()));
 
-  std::string pool3_name = get_temp_pool_name();
-  ASSERT_EQ(0, rados_pool_create_with_all(cluster, pool3_name.c_str(),
-					  456ull, 0));
-  rados_ioctx_t ioctx;
-  ASSERT_EQ(0, rados_ioctx_create(cluster, pool3_name.c_str(), &ioctx));
-  uint64_t auid;
-  ASSERT_EQ(0, rados_ioctx_pool_get_auid(ioctx, &auid));
-  ASSERT_EQ(456ull, auid);
-  ASSERT_EQ(0, rados_pool_delete(cluster, pool3_name.c_str()));
-  rados_ioctx_destroy(ioctx);
   ASSERT_EQ(0, destroy_one_pool(pool_name, &cluster));
 }
 
@@ -136,8 +125,8 @@ TEST(LibRadosPools, PoolGetBaseTier) {
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
 
   cmdstr = "{\"prefix\": \"osd tier cache-mode\", \"pool\": \"" +
-     tier_pool_name + "\", \"mode\":\"readonly\", \"sure\": " +
-    "\"--yes-i-really-mean-it\"}";
+     tier_pool_name + "\", \"mode\":\"readonly\"," +
+    " \"yes_i_really_mean_it\": true}";
   cmd[0] = (char *)cmdstr.c_str();
   ASSERT_EQ(0, rados_mon_command(cluster, (const char **)cmd, 1, "", 0, NULL, 0, NULL, 0));
 
