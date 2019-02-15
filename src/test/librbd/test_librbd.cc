@@ -228,7 +228,7 @@ public:
     *passed = ((flags & RBD_FLAG_OBJECT_MAP_INVALID) == 0);
   }
 
-  std::string get_temp_image_name() {
+  static std::string get_temp_image_name() {
     ++_image_number;
     return "image" + stringify(_image_number);
   }
