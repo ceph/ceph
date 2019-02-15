@@ -622,6 +622,8 @@ bool PyModule::is_option(const std::string &option_name)
 PyObject *PyModule::get_typed_option_value(const std::string& name,
 					   const std::string& value)
 {
+  // we don't need to hold a lock here because these MODULE_OPTIONS
+  // are set up exactly once during startup.
   auto p = options.find(name);
   if (p != options.end()) {
     switch (p->second.type) {
