@@ -395,9 +395,7 @@ ceph_get_module_option_ex(BaseMgrModule *self, PyObject *args)
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
-  PyThreadState *tstate = PyEval_SaveThread();
   auto pResult = self->py_modules->get_typed_config(module, what);
-  PyEval_RestoreThread(tstate);
   return pResult;
 }
 

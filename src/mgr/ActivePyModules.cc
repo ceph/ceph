@@ -529,19 +529,20 @@ PyObject *ActivePyModules::get_typed_config(
   const std::string &module_name,
   const std::string &key) const
 {
+  PyThreadState *tstate = PyEval_SaveThread();
   std::string value;
   bool found = get_config(module_name, key, &value);
   if (found) {
     PyModuleRef module = py_module_registry.get_module(module_name);
+    PyEval_RestoreThread(tstate);
     if (!module) {
         derr << "Module '" << module_name << "' is not available" << dendl;
         Py_RETURN_NONE;
     }
-
     dout(10) << __func__ << " " << key << " found: " << value << dendl;
     return module->get_typed_option_value(key, value);
   }
-
+  PyEval_RestoreThread(tstate);
   dout(4) << __func__ << " " << key << " not found " << dendl;
   Py_RETURN_NONE;
 }
