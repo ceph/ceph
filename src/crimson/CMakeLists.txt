@@ -96,7 +96,8 @@ add_library(crimson-common STATIC
 
 target_compile_definitions(crimson-common PRIVATE
   "CEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
-  "CEPH_PKGLIBDIR=\"${CMAKE_INSTALL_FULL_PKGLIBDIR}\"")
+  "CEPH_PKGLIBDIR=\"${CMAKE_INSTALL_FULL_PKGLIBDIR}\""
+  "CEPH_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
 
 target_link_libraries(crimson-common
   PUBLIC
