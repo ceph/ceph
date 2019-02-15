@@ -271,10 +271,6 @@ int MonClient::ping_monitor(const string &mon_id, string *result_reply)
 
 bool MonClient::ms_dispatch(Message *m)
 {
-#warning fixme, my_addr should be entity_addrvec_t my_addrs
-  if (my_addr == entity_addr_t())
-    my_addr = messenger->get_myaddr_legacy();
-
   // we only care about these message types
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
