@@ -104,10 +104,10 @@ PyObject *ActivePyModules::get_server_python(const std::string &hostname)
 
 PyObject *ActivePyModules::list_servers_python()
 {
+  PyFormatter f(false, true);
   PyThreadState *tstate = PyEval_SaveThread();
   dout(10) << " >" << dendl;
 
-  PyFormatter f(false, true);
   daemon_state.with_daemons_by_server([this, &f, &tstate]
       (const std::map<std::string, DaemonStateCollection> &all) {
     PyEval_RestoreThread(tstate);
@@ -299,10 +299,10 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     );
     return f.get();
   } else if (what == "devices") {
-    f.open_array_section("devices");
     daemon_state.with_devices2(
-      [&tstate]() {
+      [&tstate, &f]() {
 	PyEval_RestoreThread(tstate);
+	f.open_array_section("devices");
       },
       [&f] (const DeviceState& dev) {
 	f.dump_object("device", dev);
@@ -529,19 +529,20 @@ PyObject *ActivePyModules::get_typed_config(
   const std::string &module_name,
   const std::string &key) const
 {
+  PyThreadState *tstate = PyEval_SaveThread();
   std::string value;
   bool found = get_config(module_name, key, &value);
   if (found) {
     PyModuleRef module = py_module_registry.get_module(module_name);
+    PyEval_RestoreThread(tstate);
     if (!module) {
         derr << "Module '" << module_name << "' is not available" << dendl;
         Py_RETURN_NONE;
     }
-
     dout(10) << __func__ << " " << key << " found: " << value << dendl;
     return module->get_typed_option_value(key, value);
   }
-
+  PyEval_RestoreThread(tstate);
   dout(4) << __func__ << " " << key << " not found " << dendl;
   Py_RETURN_NONE;
 }
