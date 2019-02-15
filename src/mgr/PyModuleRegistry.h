@@ -151,7 +151,9 @@ public:
   void get_health_checks(health_check_map_t *checks);
 
   void get_progress_events(map<std::string,ProgressEvent> *events) {
-    return active_modules->get_progress_events(events);
+    if (active_modules) {
+      active_modules->get_progress_events(events);
+    }
   }
 
   // FIXME: breaking interface so that I don't have to go rewrite all
