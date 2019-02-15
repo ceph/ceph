@@ -1,5 +1,5 @@
 add_custom_target(crypto_plugins)
-set(crypto_plugin_dir ${CMAKE_INSTALL_PKGLIBDIR}/crypto)
+set(crypto_plugin_dir ${CEPH_INSTALL_PKGLIBDIR}/crypto)
 
 add_subdirectory(openssl)
 

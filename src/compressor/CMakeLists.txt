@@ -8,7 +8,7 @@ add_library(compressor_objs OBJECT ${compressor_srcs})
 
 ## compressor plugins
 
-set(compressor_plugin_dir ${CMAKE_INSTALL_PKGLIBDIR}/compressor)
+set(compressor_plugin_dir ${CEPH_INSTALL_PKGLIBDIR}/compressor)
 
 add_subdirectory(snappy)
 add_subdirectory(zlib)
