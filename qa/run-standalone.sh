@@ -38,7 +38,7 @@ fi
 
 function cleanup() {
     if [ -n "$precore" ]; then
-        sudo sysctl -w ${KERNCORE}=${precore}
+        sudo sysctl -w "${KERNCORE}=${precore}"
     fi
 }
 
@@ -81,7 +81,7 @@ precore="$(sysctl -n $KERNCORE)"
 if [ "$precore" = "$COREPATTERN" ]; then
     precore=""
 else
-    sudo sysctl -w ${KERNCORE}=${COREPATTERN}
+    sudo sysctl -w "${KERNCORE}=${COREPATTERN}"
 fi
 # Clean out any cores in core target directory (currently .)
 if ls $(dirname $(sysctl -n $KERNCORE)) | grep -q '^core\|core$' ; then
