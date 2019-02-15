@@ -154,7 +154,7 @@ seastar::future<> SocketMessenger::do_start(Dispatcher *disp)
 #warning fixme
             // we currently do dangerous i/o from a Connection core, different from the Socket core.
             container().invoke_on(shard, [sock = std::move(socket), peer_addr, this](auto& msgr) mutable {
-                SocketConnectionRef conn = seastar::make_shared<SocketConnection>(msgr, *msgr.dispatcher);
+                SocketConnectionRef conn = seastar::make_shared<SocketConnection>(msgr, *msgr.dispatcher, false);
                 conn->start_accept(std::move(sock), peer_addr);
               });
           });
@@ -175,7 +175,7 @@ SocketMessenger::do_connect(const entity_addr_t& peer_addr, const entity_type_t&
   if (auto found = lookup_conn(peer_addr); found) {
     return seastar::make_foreign(found->shared_from_this());
   }
-  SocketConnectionRef conn = seastar::make_shared<SocketConnection>(*this, *dispatcher);
+  SocketConnectionRef conn = seastar::make_shared<SocketConnection>(*this, *dispatcher, false);
   conn->start_connect(peer_addr, peer_type);
   return seastar::make_foreign(conn->shared_from_this());
 }

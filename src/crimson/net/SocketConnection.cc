@@ -27,11 +27,17 @@ namespace {
 }
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
-                                   Dispatcher& dispatcher)
+                                   Dispatcher& dispatcher,
+                                   bool is_msgr2)
   : messenger(messenger)
 {
   ceph_assert(&messenger.container().local() == &messenger);
-  protocol = std::make_unique<ProtocolV1>(dispatcher, *this, messenger);
+  if (is_msgr2) {
+    // TODO: ProtocolV2
+    ceph_assert(false);
+  } else {
+    protocol = std::make_unique<ProtocolV1>(dispatcher, *this, messenger);
+  }
 }
 
 SocketConnection::~SocketConnection() {}
