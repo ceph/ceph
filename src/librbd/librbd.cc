@@ -574,7 +574,7 @@ namespace librbd {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, remove_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name);
     librbd::NoOpProgressContext prog_ctx;
-    int r = librbd::api::Image<>::remove(io_ctx, name, "", prog_ctx);
+    int r = librbd::api::Image<>::remove(io_ctx, name, prog_ctx);
     tracepoint(librbd, remove_exit, r);
     return r;
   }
@@ -584,7 +584,7 @@ namespace librbd {
   {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, remove_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name);
-    int r = librbd::api::Image<>::remove(io_ctx, name, "", pctx);
+    int r = librbd::api::Image<>::remove(io_ctx, name, pctx);
     tracepoint(librbd, remove_exit, r);
     return r;
   }
@@ -594,7 +594,7 @@ namespace librbd {
     tracepoint(librbd, trash_move_enter, io_ctx.get_pool_name().c_str(),
                io_ctx.get_id(), name);
     int r = librbd::api::Trash<>::move(io_ctx, RBD_TRASH_IMAGE_SOURCE_USER,
-                                       name, delay);
+                                       name, delay, false);
     tracepoint(librbd, trash_move_exit, r);
     return r;
   }
@@ -3145,7 +3145,7 @@ extern "C" int rbd_remove(rados_ioctx_t p, const char *name)
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   tracepoint(librbd, remove_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name);
   librbd::NoOpProgressContext prog_ctx;
-  int r = librbd::api::Image<>::remove(io_ctx, name, "", prog_ctx);
+  int r = librbd::api::Image<>::remove(io_ctx, name, prog_ctx);
   tracepoint(librbd, remove_exit, r);
   return r;
 }
@@ -3158,7 +3158,7 @@ extern "C" int rbd_remove_with_progress(rados_ioctx_t p, const char *name,
   TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
   tracepoint(librbd, remove_enter, io_ctx.get_pool_name().c_str(), io_ctx.get_id(), name);
   librbd::CProgressContext prog_ctx(cb, cbdata);
-  int r = librbd::api::Image<>::remove(io_ctx, name, "", prog_ctx);
+  int r = librbd::api::Image<>::remove(io_ctx, name, prog_ctx);
   tracepoint(librbd, remove_exit, r);
   return r;
 }
@@ -3171,7 +3171,7 @@ extern "C" int rbd_trash_move(rados_ioctx_t p, const char *name,
   tracepoint(librbd, trash_move_enter, io_ctx.get_pool_name().c_str(),
              io_ctx.get_id(), name);
   int r = librbd::api::Trash<>::move(io_ctx, RBD_TRASH_IMAGE_SOURCE_USER, name,
-                                     delay);
+                                     delay, false);
   tracepoint(librbd, trash_move_exit, r);
   return r;
 }

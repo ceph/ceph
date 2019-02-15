@@ -97,23 +97,21 @@ public:
     ASSERT_EQ(0, ctx.wait());
   }
 
-  void remove_image(bool force=false) {
-    if (!force) {
-      cls::rbd::MirrorImage mirror_image;
-      int r = cls_client::mirror_image_get(&m_local_io_ctx, m_local_image_id,
-                                           &mirror_image);
-      EXPECT_EQ(1, r == 0 || r == -ENOENT);
-      if (r != -ENOENT) {
-        mirror_image.state = MirrorImageState::MIRROR_IMAGE_STATE_ENABLED;
-        EXPECT_EQ(0, cls_client::mirror_image_set(&m_local_io_ctx,
-                                                  m_local_image_id,
-                                                  mirror_image));
-      }
-      promote_image();
+  void remove_image() {
+    cls::rbd::MirrorImage mirror_image;
+    int r = cls_client::mirror_image_get(&m_local_io_ctx, m_local_image_id,
+                                         &mirror_image);
+    EXPECT_EQ(1, r == 0 || r == -ENOENT);
+    if (r != -ENOENT) {
+      mirror_image.state = MirrorImageState::MIRROR_IMAGE_STATE_ENABLED;
+      EXPECT_EQ(0, cls_client::mirror_image_set(&m_local_io_ctx,
+                                                m_local_image_id,
+                                                mirror_image));
     }
+    promote_image();
+
     NoOpProgressContext ctx;
-    int r = librbd::api::Image<>::remove(m_local_io_ctx, m_image_name, "", ctx,
-                                         force);
+    r = librbd::api::Image<>::remove(m_local_io_ctx, m_image_name, ctx);
     EXPECT_EQ(1, r == 0 || r == -ENOENT);
   }
 
