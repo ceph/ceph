@@ -78,13 +78,6 @@ public:
     expect_list_watchers(mock_image_ctx, RBD_MIRRORING, watchers, r);
   }
 
-  void expect_mirror_image_get(MockImageCtx &mock_image_ctx, int r) {
-    EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
-                exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_image_get"),
-                     _, _, _))
-      .WillOnce(Return(r));
-  }
-
   void expect_get_watch_handle(MockImageWatcher &mock_watcher,
                                uint64_t watch_handle) {
     EXPECT_CALL(mock_watcher, get_watch_handle())
@@ -198,7 +191,6 @@ TEST_F(TestMockListWatchersRequest, FilterOutMirrorInstance) {
   InSequence seq;
   expect_list_image_watchers(mock_image_ctx,
                              {watcher("a", 123), watcher("b", 456)}, 0);
-  expect_mirror_image_get(mock_image_ctx, 0);
   expect_list_mirror_watchers(mock_image_ctx, {watcher("b", 789)}, 0);
   expect_get_watch_handle(*mock_image_ctx.image_watcher, 123);
 
