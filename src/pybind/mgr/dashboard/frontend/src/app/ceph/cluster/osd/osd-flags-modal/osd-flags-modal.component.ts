@@ -138,11 +138,7 @@ export class OsdFlagsModalComponent implements OnInit {
 
     this.osdService.updateFlags(newFlags).subscribe(
       () => {
-        this.notificationService.show(
-          NotificationType.success,
-          this.i18n('OSD Flags were updated successfully.'),
-          this.i18n('OSD Flags')
-        );
+        this.notificationService.show(NotificationType.success, this.i18n('Updated OSD Flags'));
         this.bsModalRef.hide();
       },
       () => {

@@ -4255,15 +4255,8 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="bfd67d01ffc87759d7f29ecb67e64ec6c1672fdd" datatype="html">
-        <source>Discovery authentication was updated.</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="8414a5cb9d71cc1b21b10e4a9d1f2dad558f3361" datatype="html">
-        <source>Discovery authentication</source>
+      <trans-unit id="e5e7d62e942083a59b0b31f54e17cd7958186052" datatype="html">
+        <source>Updated discovery authentication</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.ts</context>
           <context context-type="linenumber">1</context>
@@ -4813,15 +4806,8 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="cdb623df78c6ed1fdd9e6dc35f83d6dbea75ebfa" datatype="html">
-        <source>Config option <x id="INTERPOLATION" equiv-text="{{name}}"/> has been updated.</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/cluster/configuration/configuration-form/configuration-form.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="a773d21a875b944ba7b067f348398cfd5e9550cc" datatype="html">
-        <source>Update config option</source>
+      <trans-unit id="1cdc60cfc09c257625768f3d2082816cdef27279" datatype="html">
+        <source>Updated config option <x id="INTERPOLATION" equiv-text="{{name}}"/></source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/configuration/configuration-form/configuration-form.component.ts</context>
           <context context-type="linenumber">1</context>
@@ -5048,15 +5034,8 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="0182a66735272f5c540a0c65ff3f5a7913ac1b74" datatype="html">
-        <source>OSD Flags were updated successfully.</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-flags-modal/osd-flags-modal.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="fbfecb196a0896028638e21655c6fed6a1f91dc0" datatype="html">
-        <source>OSD Flags</source>
+      <trans-unit id="3c384e2e80c6b5eb24861fbf4225b69486cff4a3" datatype="html">
+        <source>Updated OSD Flags</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-flags-modal/osd-flags-modal.component.ts</context>
           <context context-type="linenumber">1</context>
@@ -5301,15 +5280,8 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
-      <trans-unit id="92a8cbd0b31b1a5a64fe3a3245437ecf14b6d74d" datatype="html">
-        <source>OSD recovery speed priority &quot;<x id="INTERPOLATION" equiv-text="{{value}}"/>&quot; was set successfully.</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-recv-speed-modal/osd-recv-speed-modal.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="87241d8eb7bf0d14756f27febe8d0a84015627db" datatype="html">
-        <source>OSD recovery speed priority</source>
+      <trans-unit id="89553524f4e7db5c437b07dcfdc7b831d56ded1a" datatype="html">
+        <source>Updated OSD recovery speed priority &quot;<x id="INTERPOLATION" equiv-text="{{value}}"/>&quot;</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/cluster/osd/osd-recv-speed-modal/osd-recv-speed-modal.component.ts</context>
           <context context-type="linenumber">1</context>
