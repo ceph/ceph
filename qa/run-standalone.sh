@@ -77,11 +77,6 @@ count=0
 errors=0
 userargs=""
 precore="$(sysctl -n $KERNCORE)"
-
-if [[ "${precore:0:1}" = "|" ]]; then
-  precore="${precore:1}"
-fi
-
 # If corepattern already set, avoid having to use sudo
 if [ "$precore" = "$COREPATTERN" ]; then
     precore=""
