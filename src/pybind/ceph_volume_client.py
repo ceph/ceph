@@ -244,13 +244,15 @@ class CephFSVolumeClient(object):
     DEFAULT_NS_PREFIX = "fsvolumens_"
 
     def __init__(self, auth_id=None, conf_path=None, cluster_name=None,
-                 volume_prefix=None, pool_ns_prefix=None, rados=None):
+                 volume_prefix=None, pool_ns_prefix=None, rados=None,
+                 fs_name=None):
         """
         Either set all three of ``auth_id``, ``conf_path`` and
         ``cluster_name`` (rados constructed on connect), or
         set ``rados`` (existing rados instance).
         """
         self.fs = None
+        self.fs_name = fs_name
         self.connected = False
 
         self.conf_path = conf_path
@@ -474,7 +476,7 @@ class CephFSVolumeClient(object):
             self.evict(premount_evict)
             log.debug("Premount eviction of {0} completes".format(premount_evict))
         log.debug("CephFS mounting...")
-        self.fs.mount()
+        self.fs.mount(filesystem_name=self.fs_name)
         log.debug("Connection to cephfs complete")
 
         # Recover from partial auth updates due to a previous
