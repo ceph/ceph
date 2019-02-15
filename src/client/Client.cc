@@ -2781,7 +2781,10 @@ void Client::send_reconnect(MetaSession *session)
   //make sure unsafe requests get saved
   resend_unsafe_requests(session);
 
+  early_kick_flushing_caps(session);
+
   auto m = MClientReconnect::create();
+  bool allow_multi = session->mds_features.test(CEPHFS_FEATURE_MULTI_RECONNECT);
 
   // i have an open session.
   ceph::unordered_set<inodeno_t> did_snaprealm;
@@ -2791,6 +2794,14 @@ void Client::send_reconnect(MetaSession *session)
     Inode *in = p->second;
     auto it = in->caps.find(mds);
     if (it != in->caps.end()) {
+      if (allow_multi &&
+	  m->get_approx_size() >= (std::numeric_limits<int>::max() >> 1)) {
+	m->mark_more();
+	session->con->send_message2(std::move(m));
+
+	m = MClientReconnect::create();
+      }
+
       Cap &cap = it->second;
       ldout(cct, 10) << " caps on " << p->first
 	       << " " << ccap_string(cap.issued)
@@ -2834,8 +2845,8 @@ void Client::send_reconnect(MetaSession *session)
     }
   }
 
-  early_kick_flushing_caps(session);
-
+  if (!allow_multi)
+    m->set_encoding_version(0); // use connection features to choose encoding
   session->con->send_message2(std::move(m));
 
   mount_cond.Signal();
@@ -4462,7 +4473,8 @@ void Client::early_kick_flushing_caps(MetaSession *session)
 
   for (xlist<Inode*>::iterator p = session->flushing_caps.begin(); !p.end(); ++p) {
     Inode *in = *p;
-    ceph_assert(in->auth_cap);
+    Cap *cap = in->auth_cap;
+    ceph_assert(cap);
 
     // if flushing caps were revoked, we re-send the cap flush in client reconnect
     // stage. This guarantees that MDS processes the cap flush message before issuing
@@ -4474,6 +4486,13 @@ void Client::early_kick_flushing_caps(MetaSession *session)
 		   << " to mds." << session->mds_num << dendl;
 
     session->early_flushing_caps.insert(in);
+
+    // send_reconnect() also will reset these sequence numbers. make sure
+    // sequence numbers in cap flush message match later reconnect message.
+    cap->seq = 0;
+    cap->issue_seq = 0;
+    cap->mseq = 0;
+    cap->issued = cap->implemented;
 
     if (in->cap_snaps.size())
       flush_snaps(in, true);
