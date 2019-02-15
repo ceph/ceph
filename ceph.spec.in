@@ -51,7 +51,7 @@
 %else
 %bcond_with libradosstriper
 %endif
-%ifarch x86_64 aarch64
+%ifarch x86_64 aarch64 ppc64le
 %bcond_without lttng
 %else
 %bcond_with lttng
