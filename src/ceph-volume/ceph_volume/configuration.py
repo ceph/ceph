@@ -37,20 +37,26 @@ def load_ceph_conf_path(cluster_name='ceph'):
     conf.cluster = cluster_name
 
 
-def load(abspath=None):
+def load(abspath=None, args={}):
     if abspath is None:
         abspath = conf.path
 
     if not os.path.exists(abspath):
         raise exceptions.ConfigurationError(abspath=abspath)
 
-    parser = Conf()
+    cli_overrides = {}
+    for attr in ['mon_host', 'mon_dns_serv_name', 'keyring']:
+        if hasattr(args, attr):
+            cli_overrides[attr] = getattr(args, attr)
+
+
+    parser = Conf(cli_overrides)
 
     try:
         ceph_file = open(abspath)
         trimmed_conf = _TrimIndentFile(ceph_file)
         with contextlib.closing(ceph_file):
-            parser.readfp(trimmed_conf)
+            parser.read_file(trimmed_conf)
             conf.ceph = parser
             return parser
     except configparser.ParsingError as error:
@@ -64,6 +70,10 @@ class Conf(configparser.SafeConfigParser):
     Subclasses from SafeConfigParser to give a few helpers for Ceph
     configuration.
     """
+
+    def __init__(self, cli_overrides = {}):
+        super().__init__()
+        self.cli_overrides = cli_overrides
 
     def read_path(self, path):
         self.path = path
@@ -86,11 +96,9 @@ class Conf(configparser.SafeConfigParser):
         in a ``cfg`` object but returning None if not found. Avoids the need
         to be doing try/except {ConfigParser Exceptions} every time.
         """
+        # TODO: maybe we need to implement get() as well to pass vars
         self.is_valid()
-        try:
-            return self.get(section, key)
-        except (configparser.NoSectionError, configparser.NoOptionError):
-            return default
+        return self.get(section, key, vars=self.cli_overrides, fallback=default)
 
     def get_list(self, section, key, default=None, split=','):
         """

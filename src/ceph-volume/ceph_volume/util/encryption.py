@@ -2,7 +2,7 @@ import base64
 import os
 import logging
 from ceph_volume import process, conf
-from ceph_volume.util import constants, system
+from ceph_volume.util import constants, system, ceph_cli
 from ceph_volume.util.device import Device
 from .prepare import write_keyring
 from .disk import lsblk, device_family, get_part_entry_type
@@ -122,16 +122,14 @@ def get_dmcrypt_key(osd_id, osd_fsid, lockbox_keyring=None):
     name = 'client.osd-lockbox.%s' % osd_fsid
     config_key = 'dm-crypt/osd/%s/luks' % osd_fsid
 
+    cmd = [
+        'config-key',
+        'get',
+        config_key
+    ]
+
     stdout, stderr, returncode = process.call(
-        [
-            'ceph',
-            '--cluster', conf.cluster,
-            '--name', name,
-            '--keyring', lockbox_keyring,
-            'config-key',
-            'get',
-            config_key
-        ],
+        ceph_cli.get_cmd(cmd, name, lockbox_keyring),
         show_command=True
     )
     if returncode != 0:

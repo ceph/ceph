@@ -8,7 +8,7 @@ import os
 import logging
 import json
 from ceph_volume import process, conf, __release__, terminal
-from ceph_volume.util import system, constants, str_to_int, disk
+from ceph_volume.util import system, constants, str_to_int, disk, ceph_cli
 
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
@@ -149,10 +149,6 @@ def create_id(fsid, json_secrets, osd_id=None):
     """
     bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
     cmd = [
-        'ceph',
-        '--cluster', conf.cluster,
-        '--name', 'client.bootstrap-osd',
-        '--keyring', bootstrap_keyring,
         '-i', '-',
         'osd', 'new', fsid
     ]
@@ -162,7 +158,7 @@ def create_id(fsid, json_secrets, osd_id=None):
         else:
             raise RuntimeError("The osd ID {} is already in use or does not exist.".format(osd_id))
     stdout, stderr, returncode = process.call(
-        cmd,
+        ceph_cli.get_cmd(cmd, 'client.bootstrap-osd', bootstrap_keyring),
         stdin=json_secrets,
         show_command=True
     )
@@ -181,16 +177,13 @@ def osd_id_available(osd_id):
     if osd_id is None:
         return False
     bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
+    cmd = [
+        'osd',
+        'tree',
+        '-f', 'json',
+    ]
     stdout, stderr, returncode = process.call(
-        [
-            'ceph',
-            '--cluster', conf.cluster,
-            '--name', 'client.bootstrap-osd',
-            '--keyring', bootstrap_keyring,
-            'osd',
-            'tree',
-            '-f', 'json',
-        ],
+        ceph_cli.get_cmd(cmd, 'client.bootstrap-osd', bootstrap_keyring),
         show_command=True
     )
     if returncode != 0:
@@ -364,13 +357,9 @@ def get_monmap(osd_id):
     bootstrap_keyring = '/var/lib/ceph/bootstrap-osd/%s.keyring' % conf.cluster
     monmap_destination = os.path.join(path, 'activate.monmap')
 
-    process.run([
-        'ceph',
-        '--cluster', conf.cluster,
-        '--name', 'client.bootstrap-osd',
-        '--keyring', bootstrap_keyring,
-        'mon', 'getmap', '-o', monmap_destination
-    ])
+    cmd = ['mon', 'getmap', '-o', monmap_destination]
+    process.run(ceph_cli.get_cmd(cmd, 'client.bootstrap-osd',
+                                 bootstrap_keyring))
 
 
 def osd_mkfs_bluestore(osd_id, fsid, keyring=None, wal=False, db=False):

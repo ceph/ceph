@@ -115,3 +115,20 @@ class TestLoad(object):
             conf.write(tabbed_conf)
         result = configuration.load(conf_path)
         assert result.get('global', commented) == ''
+
+    def test_load_with_cli_overrides(self, tmpdir, factory):
+        conf_path = os.path.join(str(tmpdir), 'ceph.conf')
+        with open(conf_path, 'w') as conf:
+            conf.write(tabbed_conf)
+        args = factory(mon_host='mon1')
+        cfg = configuration.load(conf_path, args)
+        cfg.is_valid = lambda: True
+        assert cfg.get_safe('global', 'mon_host') == 'mon1'
+
+    def test_load_without_cli_overrides(self, tmpdir, factory):
+        conf_path = os.path.join(str(tmpdir), 'ceph.conf')
+        with open(conf_path, 'w') as conf:
+            conf.write(tabbed_conf)
+        cfg = configuration.load(conf_path)
+        cfg.is_valid = lambda: True
+        assert cfg.get_safe('global', 'mon_host') == None

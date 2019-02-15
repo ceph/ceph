@@ -126,6 +126,18 @@ Ceph Conf: {ceph_path}
             default='/var/log/ceph/',
             help='Change the log path (defaults to /var/log/ceph)',
         )
+        parser.add_argument(
+            '--mon-host',
+            help='List of monitors for the cluster',
+        )
+        parser.add_argument(
+            '--mon-dns-serv-name',
+            help='The name of the DNS SRV record to check to identify the cluster monitors via DNS',
+        )
+        parser.add_argument(
+            '--keyring',
+            help='Authentication credentials to use to authenticate with the monitor',
+        )
         args = parser.parse_args(main_args)
         conf.log_path = args.log_path
         if os.path.isdir(conf.log_path):
@@ -137,7 +149,7 @@ Ceph Conf: {ceph_path}
         # them
         configuration.load_ceph_conf_path(cluster_name=args.cluster)
         try:
-            conf.ceph = configuration.load(conf.path)
+            conf.ceph = configuration.load(conf.path, args)
         except exceptions.ConfigurationError as error:
             # we warn only here, because it is possible that the configuration
             # file is not needed, or that it will be loaded by some other means
