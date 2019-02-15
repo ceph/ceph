@@ -146,18 +146,14 @@ seastar::future<> SocketMessenger::do_start(Dispatcher *disp)
   // start listening if bind() was called
   if (listener) {
     seastar::keep_doing([this] {
-        return listener->accept()
-          .then([this] (seastar::connected_socket socket,
-                        seastar::socket_address paddr) {
-            // allocate the connection
-            entity_addr_t peer_addr;
-            peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
+        return Socket::accept(*listener)
+          .then([this] (SocketFRef socket,
+                        entity_addr_t peer_addr) {
             auto shard = locate_shard(peer_addr);
+            // don't wait before accepting another
 #warning fixme
             // we currently do dangerous i/o from a Connection core, different from the Socket core.
-            auto sock = seastar::make_foreign(std::make_unique<Socket>(std::move(socket)));
-            // don't wait before accepting another
-            container().invoke_on(shard, [sock = std::move(sock), peer_addr, this](auto& msgr) mutable {
+            container().invoke_on(shard, [sock = std::move(socket), peer_addr, this](auto& msgr) mutable {
                 SocketConnectionRef conn = seastar::make_shared<SocketConnection>(msgr, *msgr.dispatcher);
                 conn->start_accept(std::move(sock), peer_addr);
               });
