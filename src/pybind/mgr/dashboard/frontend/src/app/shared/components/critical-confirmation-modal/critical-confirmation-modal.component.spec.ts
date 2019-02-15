@@ -17,9 +17,7 @@ export class MockModule {}
 
 @Component({
   template: `
-    <button type="button"
-        class="btn btn-sm btn-primary"
-        (click)="openCtrlDriven()">
+    <button type="button" class="btn btn-sm btn-primary" (click)="openCtrlDriven()">
       <i class="fa fa-fw fa-times"></i>Deletion Ctrl-Test
       <ng-template #ctrlDescription>
         The spinner is handled by the controller if you have use the modal as ViewChild in order to
@@ -27,9 +25,7 @@ export class MockModule {}
       </ng-template>
     </button>
 
-    <button type="button"
-            class="btn btn-sm btn-primary"
-            (click)="openModalDriven()">
+    <button type="button" class="btn btn-sm btn-primary" (click)="openModalDriven()">
       <i class="fa fa-fw fa-times"></i>Deletion Modal-Test
       <ng-template #modalDescription>
         The spinner is handled by the modal if your given deletion function returns a Observable.

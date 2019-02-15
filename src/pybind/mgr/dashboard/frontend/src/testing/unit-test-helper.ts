@@ -27,7 +27,8 @@ export function configureTestBed(configuration, useOldMethod?) {
         TestBed.resetTestingModule = () => TestBed;
       })()
         .then(done)
-        .catch(done.fail));
+        .catch(done.fail)
+    );
     afterAll(() => {
       TestBed.resetTestingModule = resetTestingModule;
     });
