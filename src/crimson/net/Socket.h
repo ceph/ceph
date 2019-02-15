@@ -8,6 +8,7 @@
 #include <seastar/net/packet.hh>
 
 #include "include/buffer.h"
+#include "msg/msg_types.h"
 
 namespace ceph::net {
 
@@ -27,13 +28,35 @@ class Socket
     size_t remaining;
   } r;
 
- public:
   explicit Socket(seastar::connected_socket&& _socket)
     : sid{seastar::engine().cpu_id()},
       socket(std::move(_socket)),
       in(socket.input()),
       out(socket.output()) {}
+
+ public:
   Socket(Socket&& o) = delete;
+
+  static seastar::future<SocketFRef>
+  connect(const entity_addr_t& peer_addr) {
+    return seastar::connect(peer_addr.in4_addr())
+      .then([] (seastar::connected_socket socket) {
+        return seastar::make_foreign(std::unique_ptr<Socket>(new Socket(std::move(socket))));
+      });
+  }
+
+  static seastar::future<SocketFRef, entity_addr_t>
+  accept(seastar::server_socket& listener) {
+    return listener.accept()
+      .then([] (seastar::connected_socket socket,
+                seastar::socket_address paddr) {
+        entity_addr_t peer_addr;
+        peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
+        return seastar::make_ready_future<SocketFRef, entity_addr_t>(
+            seastar::make_foreign(std::unique_ptr<Socket>(new Socket(std::move(socket)))),
+            peer_addr);
+      });
+  }
 
   /// read the requested number of bytes into a bufferlist
   seastar::future<bufferlist> read(size_t bytes);

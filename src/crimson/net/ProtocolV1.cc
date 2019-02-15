@@ -296,14 +296,16 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
   messenger.register_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   seastar::with_gate(pending_dispatch, [this] {
-      return seastar::connect(conn.peer_addr.in4_addr())
-        .then([this](seastar::connected_socket fd) {
+      return Socket::connect(conn.peer_addr)
+        .then([this](SocketFRef sock) {
+          socket = std::move(sock);
           if (state == state_t::closing) {
-            fd.shutdown_input();
-            fd.shutdown_output();
-            throw std::system_error(make_error_code(error::connection_aborted));
+            return socket->close().then([] {
+              throw std::system_error(make_error_code(error::connection_aborted));
+            });
           }
-          socket = seastar::make_foreign(std::make_unique<Socket>(std::move(fd)));
+          return seastar::now();
+        }).then([this] {
           // read server's handshake header
           return socket->read(server_header_size);
         }).then([this] (bufferlist headerbl) {
