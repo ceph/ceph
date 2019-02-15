@@ -159,6 +159,7 @@ button.btn.btn-label > i.fa {
 /* Dropdown */
 .dropdown-menu {
   min-width: 50px;
+  z-index: 999999;
 }
 .dropdown-menu > li > a {
   color: $color-dropdown-menu;
