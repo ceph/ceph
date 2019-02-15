@@ -1510,11 +1510,17 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
   }
   // send something
   bufferlist bl;
-  if (!get_inc_map_bl(m->newest_map, bl)) {
+  if (get_inc_map_bl(m->newest_map, bl)) {
+    m->incremental_maps[m->newest_map].claim(bl);
+  } else {
     derr << __func__ << " unable to load latest map " << m->newest_map << dendl;
-    ceph_abort();
+    if (!get_map_bl(m->newest_map, bl)) {
+      derr << __func__ << " unable to load latest full map " << m->newest_map
+	   << dendl;
+      ceph_abort();
+    }
+    m->maps[m->newest_map].claim(bl);
   }
-  m->incremental_maps[m->newest_map].claim(bl);
   return m;
 }
 
