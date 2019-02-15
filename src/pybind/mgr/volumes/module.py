@@ -210,7 +210,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         # TODO: validate that subvol size fits in volume size
 
-        with CephFSVolumeClient(rados=self.rados) as vc:
+        with CephFSVolumeClient(rados=self.rados, fs_name=vol_name) as vc:
             # TODO: support real subvolume groups rather than just
             # always having them 1:1 with subvolumes.
             vp = VolumePath(sub_name, sub_name)
@@ -229,7 +229,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
 
         vol_fscid = fs['id']
 
-        with CephFSVolumeClient(rados=self.rados) as vc:
+        with CephFSVolumeClient(rados=self.rados, fs_name=vol_name) as vc:
             # TODO: support real subvolume groups rather than just
             # always having them 1:1 with subvolumes.
             vp = VolumePath(sub_name, sub_name)
