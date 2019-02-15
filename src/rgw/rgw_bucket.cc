@@ -26,6 +26,7 @@
 #include "rgw_string.h"
 #include "rgw_multi.h"
 #include "rgw_op.h"
+#include "rgw_bucket_sync.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
@@ -2178,9 +2179,13 @@ int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
   return choose_oid(bs);
 }
 
-int RGWDataChangesLog::add_entry(const rgw_bucket& bucket, int shard_id) {
-  if (!svc.zone->need_to_log_data())
+int RGWDataChangesLog::add_entry(const RGWBucketInfo& bucket_info, int shard_id) {
+  if (!svc.zone->need_to_log_data() &&
+      (!bucket_info.sync_policy || !bucket_info.sync_policy->zone_is_source(svc.zone->zone_id()))) {
     return 0;
+  }
+
+  auto& bucket = bucket_info.bucket;
 
   if (observer) {
     observer->on_bucket_changed(bucket.get_key());
