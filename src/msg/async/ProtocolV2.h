@@ -107,6 +107,7 @@ private:
 
 public:
   struct segment_t {
+    static constexpr __le16 DEFERRED_ALLOCATION { 0x0000 };
     __le32 length;
     __le16 alignment;
   } __attribute__((packed));
@@ -168,13 +169,10 @@ private:
 
   CONTINUATION_DECL(ProtocolV2, read_frame);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_preamble_main);
-  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_frame_segment);
-  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_header);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_segment);
   CONTINUATION_DECL(ProtocolV2, throttle_message);
   CONTINUATION_DECL(ProtocolV2, throttle_bytes);
   CONTINUATION_DECL(ProtocolV2, throttle_dispatch_queue);
-  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_front);
-  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_middle);
   CONTINUATION_DECL(ProtocolV2, read_message_data);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_data);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_extra_bytes);
@@ -183,20 +181,15 @@ private:
   Ct<ProtocolV2> *handle_read_frame_preamble_main(char *buffer, int r);
   Ct<ProtocolV2> *handle_read_frame_dispatch();
   Ct<ProtocolV2> *read_frame_segment();
-  Ct<ProtocolV2> *handle_frame_segment(char *buffer, int r);
-  Ct<ProtocolV2> *handle_frame_payload(char *buffer, int r);
+  Ct<ProtocolV2> *handle_read_frame_segment(char *buffer, int r);
+  Ct<ProtocolV2> *handle_frame_payload();
 
   Ct<ProtocolV2> *ready();
 
   Ct<ProtocolV2> *handle_message();
-  Ct<ProtocolV2> *handle_message_header(char *buffer, int r);
   Ct<ProtocolV2> *throttle_message();
   Ct<ProtocolV2> *throttle_bytes();
   Ct<ProtocolV2> *throttle_dispatch_queue();
-  Ct<ProtocolV2> *read_message_front();
-  Ct<ProtocolV2> *handle_message_front(char *buffer, int r);
-  Ct<ProtocolV2> *read_message_middle();
-  Ct<ProtocolV2> *handle_message_middle(char *buffer, int r);
   Ct<ProtocolV2> *read_message_data_prepare();
   Ct<ProtocolV2> *read_message_data();
   Ct<ProtocolV2> *handle_message_data(char *buffer, int r);
