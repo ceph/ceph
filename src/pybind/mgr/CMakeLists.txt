@@ -7,7 +7,7 @@ add_subdirectory(orchestrator_cli)
 # OPTION(mgr_module_path, OPT_STR, CEPH_PKGLIBDIR "/mgr")
 install(DIRECTORY
   ${CMAKE_CURRENT_SOURCE_DIR}
-  DESTINATION ${CMAKE_INSTALL_PKGLIBDIR}
+  DESTINATION ${CEPH_INSTALL_DATADIR}
   REGEX "CMakeLists.txt" EXCLUDE
   REGEX "\\.gitignore" EXCLUDE
   REGEX "hello/.*" EXCLUDE
