@@ -7062,11 +7062,15 @@ void OSD::maybe_share_map(
   last_sent_epoch = session->last_sent_epoch;
   session->sent_epoch_lock.unlock();
 
+  // assume the peer has the newer of the op's sent_epoch and what
+  // we think we sent them.
+  epoch_t from = std::max(last_sent_epoch, op->sent_epoch);
+
   const Message *m = op->get_req();
   service.share_map(
     m->get_source(),
     m->get_connection().get(),
-    op->sent_epoch,
+    from,
     osdmap,
     session ? &last_sent_epoch : NULL);
 
