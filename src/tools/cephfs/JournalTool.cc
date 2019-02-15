@@ -452,7 +452,7 @@ int JournalTool::main_event(std::vector<const char*> &argv)
     std::set<inodeno_t> consumed_inos;
     for (JournalScanner::EventMap::iterator i = js.events.begin();
          i != js.events.end(); ++i) {
-      LogEvent *le = i->second.log_event;
+      auto& le = i->second.log_event;
       EMetaBlob const *mb = le->get_metablob();
       if (mb) {
         int scav_r = recover_dentries(*mb, dry_run, &consumed_inos);

@@ -1177,13 +1177,13 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
     ceph_assert(r);
 
     // Update segment_pos_rewrite
-    LogEvent *le = LogEvent::decode(bl);
+    auto le = LogEvent::decode_event(bl.cbegin());
     if (le) {
       bool modified = false;
 
       if (le->get_type() == EVENT_SUBTREEMAP ||
           le->get_type() == EVENT_RESETJOURNAL) {
-        ESubtreeMap *sle = dynamic_cast<ESubtreeMap*>(le);
+        auto sle = dynamic_cast<ESubtreeMap*>(le.get());
         if (sle == NULL || sle->event_seq == 0) {
           // A non-explicit event seq: the effective sequence number 
           // of this segment is it's position in the old journal and
@@ -1207,11 +1207,10 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
       // (expire_pos is just an optimization so it's safe to eliminate it)
       if (le->get_type() == EVENT_SUBTREEMAP
           || le->get_type() == EVENT_SUBTREEMAP_TEST) {
-        ESubtreeMap *sle = dynamic_cast<ESubtreeMap*>(le);
-        ceph_assert(sle != NULL);
+        auto& sle = dynamic_cast<ESubtreeMap&>(*le);
         dout(20) << __func__ << " zeroing expire_pos in subtreemap event at "
-          << le_pos << " seq=" << sle->event_seq << dendl;
-        sle->expire_pos = 0;
+          << le_pos << " seq=" << sle.event_seq << dendl;
+        sle.expire_pos = 0;
         modified = true;
       }
 
@@ -1219,8 +1218,6 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
         bl.clear();
         le->encode_with_header(bl, mds->mdsmap->get_up_features());
       }
-
-      delete le;
     } else {
       // Failure from LogEvent::decode, our job is to change the journal wrapper,
       // not validate the contents, so pass it through.
@@ -1385,7 +1382,7 @@ void MDLog::_replay_thread()
     ceph_assert(r);
     
     // unpack event
-    LogEvent *le = LogEvent::decode(bl);
+    auto le = LogEvent::decode_event(bl.cbegin());
     if (!le) {
       dout(0) << "_replay " << pos << "~" << bl.length() << " / " << journaler->get_write_pos() 
 	      << " -- unable to decode event" << dendl;
@@ -1410,7 +1407,7 @@ void MDLog::_replay_thread()
     // new segment?
     if (le->get_type() == EVENT_SUBTREEMAP ||
 	le->get_type() == EVENT_RESETJOURNAL) {
-      ESubtreeMap *sle = dynamic_cast<ESubtreeMap*>(le);
+      auto sle = dynamic_cast<ESubtreeMap*>(le.get());
       if (sle && sle->event_seq > 0)
 	event_seq = sle->event_seq;
       else
@@ -1442,7 +1439,6 @@ void MDLog::_replay_thread()
         le->replay(mds);
       }
     }
-    delete le;
 
     logger->set(l_mdl_rdpos, pos);
   }

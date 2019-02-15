@@ -276,15 +276,15 @@ int JournalScanner::scan_events()
         }
         bool valid_entry = true;
         if (is_mdlog) {
-          LogEvent *le = LogEvent::decode(le_bl);
+          auto le = LogEvent::decode_event(le_bl.cbegin());
 
           if (le) {
             dout(10) << "Valid entry at 0x" << std::hex << read_offset << std::dec << dendl;
 
             if (le->get_type() == EVENT_SUBTREEMAP
                 || le->get_type() == EVENT_SUBTREEMAP_TEST) {
-              ESubtreeMap *sle = dynamic_cast<ESubtreeMap*>(le);
-              if (sle->expire_pos > read_offset) {
+              auto&& sle = dynamic_cast<ESubtreeMap&>(*le);
+              if (sle.expire_pos > read_offset) {
                 errors.insert(std::make_pair(
                       read_offset, EventError(
                         -ERANGE,
@@ -293,22 +293,18 @@ int JournalScanner::scan_events()
             }
 
             if (filter.apply(read_offset, *le)) {
-              events[read_offset] = EventRecord(le, consumed);
-            } else {
-              delete le;
+              events.insert_or_assign(read_offset, EventRecord(std::move(le), consumed));
             }
           } else {
             valid_entry = false;
           }
         } else if (type == "purge_queue"){
-           PurgeItem* pi = new PurgeItem();
+           auto pi = std::make_unique<PurgeItem>();
            try {
              auto q = le_bl.cbegin();
              pi->decode(q);
 	     if (filter.apply(read_offset, *pi)) {
-	       events[read_offset] = EventRecord(pi, consumed);
-	     } else {
-	       delete pi;
+	       events.insert_or_assign(read_offset, EventRecord(std::move(pi), consumed));
 	     }
            } catch (const buffer::error &err) {
              valid_entry = false;
@@ -351,12 +347,6 @@ JournalScanner::~JournalScanner()
     header = NULL;
   }
   dout(4) << events.size() << " events" << dendl;
-  for (EventMap::iterator i = events.begin(); i != events.end(); ++i) {
-    if (i->second.log_event)
-      delete i->second.log_event;
-    else if (i->second.pi)
-      delete i->second.pi;
-  }
   events.clear();
 }
 
