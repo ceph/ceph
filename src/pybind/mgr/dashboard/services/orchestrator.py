@@ -6,7 +6,7 @@ import time
 from .. import mgr, logger
 
 
-class NoOrchesrtatorConfiguredException(Exception):
+class NoOrchestratorConfiguredException(Exception):
     pass
 
 
@@ -22,7 +22,7 @@ class OrchClient(object):
     def _call(self, method, *args, **kwargs):
         _backend = mgr.get_module_option_ex("orchestrator_cli", "orchestrator")
         if not _backend:
-            raise NoOrchesrtatorConfiguredException()
+            raise NoOrchestratorConfiguredException()
         return mgr.remote(_backend, method, *args, **kwargs)
 
     def _wait(self, completions):
