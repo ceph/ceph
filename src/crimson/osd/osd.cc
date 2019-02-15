@@ -108,6 +108,12 @@ namespace {
     if (int r = ::pick_addresses(&cct, what, &addrs, -1); r < 0) {
       throw std::runtime_error("failed to pick address");
     }
+    // TODO: v2: ::pick_addresses() returns v2 addresses, but crimson-msgr does
+    // not support v2 yet. remove following set_type() once v2 support is ready.
+    for (auto addr : addrs.v) {
+      addr.set_type(addr.TYPE_LEGACY);
+      logger().info("picked address {}", addr);
+    }
     return addrs;
   }
 }
