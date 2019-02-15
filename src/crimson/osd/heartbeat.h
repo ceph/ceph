@@ -63,6 +63,8 @@ private:
   /// add enough reporters for fast failure detection
   void add_reporter_peers(int whoami);
 
+  seastar::future<> start_messenger(ceph::net::Messenger* msgr,
+				    const entity_addrvec_t& addrs);
 private:
   const int whoami;
   const uint32_t nonce;
