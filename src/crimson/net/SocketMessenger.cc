@@ -54,12 +54,12 @@ seastar::future<> SocketMessenger::set_myaddrs(const entity_addrvec_t& addrs)
 
 seastar::future<> SocketMessenger::bind(const entity_addrvec_t& addrs)
 {
-  ceph_assert(addrs.legacy_addr().get_family() == AF_INET);
+  ceph_assert(addrs.front().get_family() == AF_INET);
   auto my_addrs = addrs;
   for (auto& addr : my_addrs.v) {
     addr.nonce = nonce;
   }
-  logger().info("listening on {}", my_addrs.legacy_addr().in4_addr());
+  logger().info("listening on {}", my_addrs.front().in4_addr());
   return container().invoke_on_all([my_addrs](auto& msgr) {
       msgr.do_bind(my_addrs);
     });
@@ -69,7 +69,7 @@ seastar::future<>
 SocketMessenger::try_bind(const entity_addrvec_t& addrs,
                           uint32_t min_port, uint32_t max_port)
 {
-  auto addr = addrs.legacy_or_front_addr();
+  auto addr = addrs.front();
   if (addr.get_port() != 0) {
     return bind(addrs);
   }
@@ -133,7 +133,7 @@ void SocketMessenger::do_bind(const entity_addrvec_t& addrs)
   Messenger::set_myaddrs(addrs);
 
   // TODO: v2: listen on multiple addresses
-  seastar::socket_address address(addrs.legacy_addr().in4_addr());
+  seastar::socket_address address(addrs.front().in4_addr());
   seastar::listen_options lo;
   lo.reuse_address = true;
   listener = seastar::listen(address, lo);
