@@ -1489,13 +1489,18 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
   }
   for (epoch_t e = since + 1; e <= to; ++e) {
     bufferlist bl;
-    if (!get_inc_map_bl(e, bl)) {
+    if (get_inc_map_bl(e, bl)) {
+      m->incremental_maps[e].claim(bl);
+    } else {
       derr << __func__ << " missing incremental map " << e << dendl;
-      goto panic;
+      if (!get_map_bl(e, bl)) {
+	derr << __func__ << " also missing full map " << e << dendl;
+	goto panic;
+      }
+      m->maps[e].claim(bl);
     }
     max--;
     max_bytes -= bl.length();
-    m->incremental_maps[e].claim(bl);
     if (max <= 0 || max_bytes <= 0) {
       break;
     }
