@@ -29,13 +29,7 @@
 
   $ monmaptool --feature-set foo /tmp/test.monmap.1234
   unknown features name 'foo' or unable to parse value: Expected option value to be integer, got 'foo'
-   usage: [--print] [--create [--clobber][--fsid uuid]]
-          [--enable-all-features]
-          [--generate] [--set-initial-members]
-          [--add name 1.2.3.4:567] [--rm name]
-          [--feature-list [plain|parseable]]
-          [--feature-set <value> [--optional|--persistent]]
-          [--feature-unset <value> [--optional|--persistent]] <mapfilename>
+  monmaptool -h for usage
   [1]
 
   $ monmaptool --feature-set kraken --feature-set 64 --optional --feature-set 32 --persistent /tmp/test.monmap.1234

@@ -547,6 +547,23 @@ namespace ceph {
   }
 }
 
+static inline int infer_ceph_release_from_mon_features(mon_feature_t f)
+{
+  if (f.contains_all(ceph::features::mon::FEATURE_NAUTILUS)) {
+    return CEPH_RELEASE_NAUTILUS;
+  }
+  if (f.contains_all(ceph::features::mon::FEATURE_MIMIC)) {
+    return CEPH_RELEASE_MIMIC;
+  }
+  if (f.contains_all(ceph::features::mon::FEATURE_LUMINOUS)) {
+    return CEPH_RELEASE_LUMINOUS;
+  }
+  if (f.contains_all(ceph::features::mon::FEATURE_KRAKEN)) {
+    return CEPH_RELEASE_KRAKEN;
+  }
+  return 0;
+}
+
 static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
   mon_feature_t f(b);
 

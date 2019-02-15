@@ -23,15 +23,21 @@
 
 void usage()
 {
-  cout << " usage: [--print] [--create [--clobber][--fsid uuid]]\n"
+  cout << "usage: monmaptool [--print] [--create [--clobber] [--fsid uuid]]\n"
        << "        [--enable-all-features]\n"
        << "        [--generate] [--set-initial-members]\n"
        << "        [--add name 1.2.3.4:567] [--rm name]\n"
        << "        [--feature-list [plain|parseable]]\n"
        << "        [--feature-set <value> [--optional|--persistent]]\n"
-       << "        [--feature-unset <value> [--optional|--persistent]] "
-       << "<mapfilename>"
+       << "        [--feature-unset <value> [--optional|--persistent]]\n"
+       << "        [--set-min-mon-release <release-major-number>]\n"
+       << "        <mapfilename>"
        << std::endl;
+}
+
+void helpful_exit()
+{
+  cerr << "monmaptool -h for usage" << std::endl;
   exit(1);
 }
 
@@ -188,6 +194,7 @@ int main(int argc, const char **argv)
   bool show_features = false;
   bool generate = false;
   bool filter = false;
+  int min_mon_release = -1;
   map<string,entity_addr_t> add;
   map<string,entity_addrvec_t> addv;
   list<string> rm;
@@ -213,11 +220,14 @@ int main(int argc, const char **argv)
       generate = true;
     } else if (ceph_argparse_flag(args, i, "--set-initial-members", (char*)NULL)) {
       filter = true;
+    } else if (ceph_argparse_witharg(args, i, &val, "--set-min-mon-release",
+				     (char*)NULL)) {
+      min_mon_release = atoi(val.c_str());
     } else if (ceph_argparse_flag(args, i, "--add", (char*)NULL)) {
       string name = *i;
       i = args.erase(i);
       if (i == args.end())
-	usage();
+	helpful_exit();
       entity_addr_t addr;
       if (!addr.parse(*i)) {
 	cerr << me << ": invalid ip:port '" << *i << "'" << std::endl;
@@ -230,7 +240,7 @@ int main(int argc, const char **argv)
       string name = *i;
       i = args.erase(i);
       if (i == args.end())
-	usage();
+	helpful_exit();
       entity_addrvec_t addrs;
       if (!addrs.parse(*i)) {
 	cerr << me << ": invalid ip:port '" << *i << "'" << std::endl;
@@ -257,7 +267,7 @@ int main(int argc, const char **argv)
         f.type = feature_op_t::type_t::PARSEABLE;
       } else if (format != "plain") {
         cerr << "invalid format type for list: '" << val << "'" << std::endl;
-        usage();
+        helpful_exit();
       }
 
       features.push_back(f);
@@ -267,7 +277,7 @@ int main(int argc, const char **argv)
       // parse value
       feature_op_t f(feature_op_t::op_t::OP_SET);
       if (!f.parse_value(val, &cerr)) {
-        usage();
+        helpful_exit();
       }
       features.push_back(f);
 
@@ -276,17 +286,17 @@ int main(int argc, const char **argv)
       // parse value
       feature_op_t f(feature_op_t::op_t::OP_UNSET);
       if (!f.parse_value(val, &cerr)) {
-        usage();
+        helpful_exit();
       }
       features.push_back(f);
     } else if (ceph_argparse_flag(args, i, "--optional", (char*)NULL)) {
       if (features.empty()) {
-        usage();
+        helpful_exit();
       }
       features.back().set_optional();
     } else if (ceph_argparse_flag(args, i, "--persistent", (char*)NULL)) {
       if (features.empty()) {
-        usage();
+        helpful_exit();
       }
       features.back().set_persistent();
     } else {
@@ -295,11 +305,11 @@ int main(int argc, const char **argv)
   }
   if (args.empty()) {
     cerr << me << ": must specify monmap filename" << std::endl;
-    usage();
+    helpful_exit();
   }
   else if (args.size() > 1) {
     cerr << me << ": too many arguments" << std::endl;
-    usage();
+    helpful_exit();
   }
   fn = args[0];
   
@@ -349,6 +359,12 @@ int main(int argc, const char **argv)
       return r;
   }
 
+  if (min_mon_release >= 0) {
+    monmap.min_mon_release = min_mon_release;
+    cout << "setting min_mon_release = " << min_mon_release << std::endl;
+    modified = true;
+  }
+
   if (filter) {
     // apply initial members
     list<string> initial_members;
@@ -375,7 +391,7 @@ int main(int argc, const char **argv)
     entity_addrvec_t addrs;
     if (monmap.contains(p.first)) {
       cerr << me << ": map already contains mon." << p.first << std::endl;
-      usage();
+      helpful_exit();
     }
     if (addr.get_port() == 0) {
       if (monmap.persistent_features.contains_all(
@@ -403,18 +419,18 @@ int main(int argc, const char **argv)
     }
     if (monmap.contains(addrs)) {
       cerr << me << ": map already contains " << addrs << std::endl;
-      usage();
+      helpful_exit();
     }
     monmap.add(p.first, addrs);
   }
   for (auto& p : addv) {
     if (monmap.contains(p.first)) {
       cerr << me << ": map already contains mon." << p.first << std::endl;
-      usage();
+      helpful_exit();
     }
     if (monmap.contains(p.second)) {
       cerr << me << ": map already contains " << p.second << std::endl;
-      usage();
+      helpful_exit();
     }
     monmap.add(p.first, p.second);
   }
@@ -422,7 +438,7 @@ int main(int argc, const char **argv)
     cout << me << ": removing " << p << std::endl;
     if (!monmap.contains(p)) {
       cerr << me << ": map does not contain " << p << std::endl;
-      usage();
+      helpful_exit();
     }
     monmap.remove(p);
   }
@@ -431,8 +447,10 @@ int main(int argc, const char **argv)
     modified = true;
   }
 
-  if (!print && !modified && !show_features)
-    usage();
+  if (!print && !modified && !show_features) {
+    cerr << "no action specified" << std::endl;
+    helpful_exit();
+  }
 
   if (print) 
     monmap.print(cout);

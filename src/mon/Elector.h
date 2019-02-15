@@ -47,8 +47,9 @@ class Elector {
    * a pair, which would be weird, a struct to keep them seems appropriate.
    */
   struct elector_info_t {
-    uint64_t cluster_features;
+    uint64_t cluster_features = 0;
     mon_feature_t mon_features;
+    int mon_release = 0;
     map<string,string> metadata;
   };
 
