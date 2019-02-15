@@ -181,6 +181,54 @@ class ClusterConfigurationTest(DashboardTestCase):
             self._clear_all_values_for_config_option(config_name)
             self._reset_original_values(config_name, orig_values[config_name])
 
+    def test_bulk_set_cant_update_at_runtime(self):
+        config_options = {
+            'clog_to_syslog': {'section': 'global', 'value': 'true'},  # not updatable
+            'clog_to_graylog': {'section': 'global', 'value': 'true'}  # not updatable
+        }
+        orig_values = dict()
+
+        for config_name in config_options:
+            orig_values[config_name] = self._get_config_by_name(config_name)
+
+        # try to set config options and see if it fails
+        self._put('/api/cluster_conf', {'options': config_options})
+        self.assertStatus(400)
+        self.assertError(code='config_option_not_updatable_at_runtime',
+                         component='cluster_configuration',
+                         detail='Config option {} is/are not updatable at runtime'.format(
+                             ', '.join(config_options.keys())))
+
+        # check if config option values are still the original ones
+        for config_name, value in orig_values.items():
+            result = self._wait_for_expected_get_result(self._get_config_by_name, config_name,
+                                                        value)
+            self.assertEqual(result, value)
+
+    def test_bulk_set_cant_update_at_runtime_partial(self):
+        config_options = {
+            'clog_to_syslog': {'section': 'global', 'value': 'true'},  # not updatable
+            'log_to_stderr': {'section': 'global', 'value': 'true'}  # updatable
+        }
+        orig_values = dict()
+
+        for config_name in config_options:
+            orig_values[config_name] = self._get_config_by_name(config_name)
+
+        # try to set config options and see if it fails
+        self._put('/api/cluster_conf', {'options': config_options})
+        self.assertStatus(400)
+        self.assertError(code='config_option_not_updatable_at_runtime',
+                         component='cluster_configuration',
+                         detail='Config option {} is/are not updatable at runtime'.format(
+                             'clog_to_syslog'))
+
+        # check if config option values are still the original ones
+        for config_name, value in orig_values.items():
+            result = self._wait_for_expected_get_result(self._get_config_by_name, config_name,
+                                                        value)
+            self.assertEqual(result, value)
+
     def _validate_single(self, data):
         self.assertIn('name', data)
         self.assertIn('daemon_default', data)

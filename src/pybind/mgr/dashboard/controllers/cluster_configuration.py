@@ -40,12 +40,7 @@ class ClusterConfiguration(RESTController):
 
     def create(self, name, value):
         # Check if config option is updateable at runtime
-        config_option = self._get_config_option(name)
-        if not config_option['can_update_at_runtime']:
-            raise DashboardException(
-                msg='Config option {} is not updatable at runtime'.format(name),
-                code='config_option_not_updatable_at_runtime',
-                component='cluster_configuration')
+        self._updateable_at_runtime([name])
 
         # Update config option
         availSections = ['global', 'mon', 'mgr', 'osd', 'mds', 'client']
@@ -63,6 +58,8 @@ class ClusterConfiguration(RESTController):
                 CephService.send_command('mon', 'config rm', who=section, name=name)
 
     def bulk_set(self, options):
+        self._updateable_at_runtime(options.keys())
+
         for name, value in options.items():
             CephService.send_command('mon', 'config set', who=value['section'],
                                      name=name, value=str(value['value']))
@@ -73,3 +70,18 @@ class ClusterConfiguration(RESTController):
                 return self._append_config_option_values([option])[0]
 
         raise cherrypy.HTTPError(404)
+
+    def _updateable_at_runtime(self, config_option_names):
+        not_updateable = []
+
+        for name in config_option_names:
+            config_option = self._get_config_option(name)
+            if not config_option['can_update_at_runtime']:
+                not_updateable.append(name)
+
+        if not_updateable:
+            raise DashboardException(
+                msg='Config option {} is/are not updatable at runtime'.format(
+                    ', '.join(not_updateable)),
+                code='config_option_not_updatable_at_runtime',
+                component='cluster_configuration')
