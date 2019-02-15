@@ -116,6 +116,33 @@ namespace {
     }
     return addrs;
   }
+  std::pair<entity_addrvec_t, bool>
+  replace_unknown_addrs(entity_addrvec_t maybe_unknowns,
+                        const entity_addrvec_t& knowns) {
+    bool changed = false;
+    auto maybe_replace = [&](entity_addr_t addr) {
+      if (!addr.is_blank_ip()) {
+        return addr;
+      }
+      for (auto& b : knowns.v) {
+        if (addr.get_family() == b.get_family()) {
+          auto a = b;
+          a.set_nonce(addr.get_nonce());
+          a.set_type(addr.get_type());
+          a.set_port(addr.get_port());
+          changed = true;
+          return a;
+        }
+      }
+      throw std::runtime_error("failed to replace unknown address");
+    };
+    entity_addrvec_t replaced;
+    std::transform(maybe_unknowns.v.begin(),
+                   maybe_unknowns.v.end(),
+                   std::back_inserter(replaced.v),
+                   maybe_replace);
+    return {replaced, changed};
+  }
 }
 
 seastar::future<> OSD::start()
@@ -179,6 +206,11 @@ seastar::future<> OSD::start()
     monc->sub_want("osdmap", 0, 0);
     return monc->renew_subs();
   }).then([this] {
+    if (auto [addrs, changed] =
+        replace_unknown_addrs(cluster_msgr->get_myaddrs(),
+                              public_msgr->get_myaddrs()); changed) {
+      cluster_msgr->set_myaddrs(addrs);
+    }
     return heartbeat->start(public_msgr->get_myaddrs(),
                             cluster_msgr->get_myaddrs());
   }).then([this] {
