@@ -718,17 +718,14 @@ TEST_F(TestMirroring, RemoveBootstrapped)
   ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_POOL));
 
   uint64_t features = RBD_FEATURE_EXCLUSIVE_LOCK | RBD_FEATURE_JOURNALING;
-  //uint64_t features = 0;
   int order = 20;
   ASSERT_EQ(0, m_rbd.create2(m_ioctx, image_name.c_str(), 4096, features,
                              &order));
   librbd::Image image;
   ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
-  std::string image_id;
-  ASSERT_EQ(0, image.get_id(&image_id));
 
   librbd::NoOpProgressContext no_op;
-  ASSERT_EQ(-EBUSY, librbd::api::Image<>::remove(m_ioctx, "", image_id, no_op));
+  ASSERT_EQ(-EBUSY, librbd::api::Image<>::remove(m_ioctx, image_name, no_op));
 
   // simulate the image is open by rbd-mirror bootstrap
   uint64_t handle;
@@ -749,7 +746,7 @@ TEST_F(TestMirroring, RemoveBootstrapped)
   ASSERT_EQ(0, m_ioctx.create(RBD_MIRRORING, false));
   ASSERT_EQ(0, m_ioctx.watch2(RBD_MIRRORING, &handle, &watcher));
   // now remove should succeed
-  ASSERT_EQ(0, librbd::api::Image<>::remove(m_ioctx, "", image_id, no_op));
+  ASSERT_EQ(0, librbd::api::Image<>::remove(m_ioctx, image_name, no_op));
   ASSERT_EQ(0, m_ioctx.unwatch2(handle));
   ASSERT_TRUE(watcher.m_notified);
   ASSERT_EQ(0, image.close());

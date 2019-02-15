@@ -1138,7 +1138,7 @@ int Migration<I>::v2_unlink_src_image() {
   }
 
   int r = Trash<I>::move(m_src_io_ctx, RBD_TRASH_IMAGE_SOURCE_MIGRATION,
-                         m_src_image_ctx->name, 0);
+                         m_src_image_ctx->name, 0, false);
   if (r < 0) {
     lderr(m_cct) << "failed moving image to trash: " << cpp_strerror(r)
                  << dendl;

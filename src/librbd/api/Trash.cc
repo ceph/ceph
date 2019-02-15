@@ -15,7 +15,7 @@
 #include "librbd/TrashWatcher.h"
 #include "librbd/Utils.h"
 #include "librbd/api/DiffIterate.h"
-#include "librbd/api/Image.h"
+#include "librbd/image/RemoveRequest.h"
 #include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/trash/MoveRequest.h"
@@ -118,29 +118,19 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
 } // anonymous namespace
 
 template <typename I>
-int Trash<I>::move_by_id(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
-                   const std::string &image_id, const std::string &image_name,
+int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
+                   const std::string &image_name, const std::string &image_id,
                    uint64_t delay, bool check_for_watchers) {
+  ceph_assert(!image_name.empty() && !image_id.empty());
   CephContext *cct((CephContext *)io_ctx.cct());
-  ldout(cct, 20) << &io_ctx << " " << (image_id.empty() ? image_name : image_id)
+  ldout(cct, 20) << &io_ctx << " name=" << image_name << ", id=" << image_id
                  << dendl;
 
-  ImageCtx *ictx = new ImageCtx((image_id.empty() ? image_name : ""),
-                                image_id, nullptr, io_ctx, false);
+  auto ictx = new I("", image_id, nullptr, io_ctx, false);
   int r = ictx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT);
 
   if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to open image: " << cpp_strerror(r) << dendl;
-    return r;
-  } else if (ictx->old_format) {
-    ldout(cct, 10) << "cannot move v1 image to trash" << dendl;
-    ictx->state->close();
-    return -EOPNOTSUPP;
-  }
-
-  std::string id = ictx->id;
-
-  if (id.empty()) {
     return r;
   }
 
@@ -164,17 +154,14 @@ int Trash<I>::move_by_id(librados::IoCtx &io_ctx, rbd_trash_image_source_t sourc
     }
     ictx->owner_lock.put_read();
 
+    ictx->snap_lock.get_read();
     if (!ictx->migration_info.empty()) {
       lderr(cct) << "cannot move migrating image to trash" << dendl;
+      ictx->snap_lock.put_read();
       ictx->state->close();
       return -EINVAL;
     }
-
-    r = disable_mirroring<I>(ictx);
-    if (r < 0) {
-      ictx->state->close();
-      return r;
-    }
+    ictx->snap_lock.put_read();
 
     if (check_for_watchers) {
       std::list<obj_watch_t> t_watchers;
@@ -197,6 +184,12 @@ int Trash<I>::move_by_id(librados::IoCtx &io_ctx, rbd_trash_image_source_t sourc
       }
     }
 
+    r = disable_mirroring<I>(ictx);
+    if (r < 0) {
+      ictx->state->close();
+      return r;
+    }
+
     ictx->state->close();
   }
 
@@ -209,13 +202,13 @@ int Trash<I>::move_by_id(librados::IoCtx &io_ctx, rbd_trash_image_source_t sourc
 
   trash_image_spec.state = cls::rbd::TRASH_IMAGE_STATE_MOVING;
   C_SaferCond ctx;
-  auto req = trash::MoveRequest<I>::create(io_ctx, id, trash_image_spec,
+  auto req = trash::MoveRequest<I>::create(io_ctx, image_id, trash_image_spec,
                                            &ctx);
   req->send();
 
   r = ctx.wait();
   trash_image_spec.state = cls::rbd::TRASH_IMAGE_STATE_NORMAL;
-  int ret = cls_client::trash_state_set(&io_ctx, id,
+  int ret = cls_client::trash_state_set(&io_ctx, image_id,
                                         trash_image_spec.state,
                                         cls::rbd::TRASH_IMAGE_STATE_MOVING);
   if (ret < 0 && ret != -EOPNOTSUPP) {
@@ -228,7 +221,7 @@ int Trash<I>::move_by_id(librados::IoCtx &io_ctx, rbd_trash_image_source_t sourc
   }
 
   C_SaferCond notify_ctx;
-  TrashWatcher<I>::notify_image_added(io_ctx, id, trash_image_spec,
+  TrashWatcher<I>::notify_image_added(io_ctx, image_id, trash_image_spec,
                                       &notify_ctx);
   r = notify_ctx.wait();
   if (r < 0) {
@@ -244,20 +237,31 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
                    const std::string &image_name, uint64_t delay,
                    bool check_for_watchers) {
   CephContext *cct((CephContext *)io_ctx.cct());
-  ldout(cct, 20) << &io_ctx << " " << image_name
-                 << dendl;
+  ldout(cct, 20) << &io_ctx << " name=" << image_name << dendl;
 
   // try to get image id from the directory
   std::string image_id;
   int r = cls_client::dir_get_id(&io_ctx, RBD_DIRECTORY, image_name,
                                  &image_id);
-  if (r < 0 && r != -ENOENT) {
+  if (r == -ENOENT) {
+    r = io_ctx.stat(util::old_header_name(image_name), nullptr, nullptr);
+    if (r == 0) {
+      // cannot move V1 image to trash
+      ldout(cct, 10) << "cannot move v1 image to trash" << dendl;
+      return -EOPNOTSUPP;
+    }
+
+    // image doesn't exist -- perhaps already in the trash since removing
+    // from the directory is the last step
+    return -ENOENT;
+  } else if (r < 0) {
     lderr(cct) << "failed to retrieve image id: " << cpp_strerror(r) << dendl;
     return r;
   }
 
-  return Trash<I>::move_by_id(io_ctx, source, image_id, image_name, delay,
-                              check_for_watchers);
+  ceph_assert(!image_name.empty() && !image_id.empty());
+  return Trash<I>::move(io_ctx, source, image_name, image_id, delay,
+                        check_for_watchers);
 }
 
 template <typename I>
@@ -328,7 +332,7 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
   ldout(cct, 20) << &io_ctx << dendl;
 
   std::vector<librbd::trash_image_info_t> trash_entries;
-  int r = librbd::api::Trash<>::list(io_ctx, trash_entries);
+  int r = librbd::api::Trash<I>::list(io_ctx, trash_entries);
   if (r < 0) {
     return r;
   }
@@ -422,7 +426,7 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
                                           (pool_percent_used - threshold));
 
         for (const auto &it : img->second) {
-          auto ictx = new ImageCtx("", it, nullptr, io_ctx, false);
+          auto ictx = new I("", it, nullptr, io_ctx, false);
           r = ictx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT);
           if (r == -ENOENT) {
             continue;
@@ -479,7 +483,7 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
   NoOpProgressContext remove_pctx;
   uint64_t list_size = to_be_removed.size(), i = 0;
   for (const auto &entry_id : to_be_removed) {
-    r = librbd::api::Trash<>::remove(io_ctx, entry_id, true, remove_pctx);
+    r = librbd::api::Trash<I>::remove(io_ctx, entry_id, true, remove_pctx);
     if (r < 0) {
       if (r == -ENOTEMPTY) {
         ldout(cct, 5) << "image has snapshots - these must be deleted "
@@ -540,7 +544,16 @@ int Trash<I>::remove(IoCtx &io_ctx, const std::string &image_id, bool force,
     return r;
   }
 
-  r = Image<I>::remove(io_ctx, "", image_id, prog_ctx, false, true);
+  ThreadPool *thread_pool;
+  ContextWQ *op_work_queue;
+  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+
+  C_SaferCond cond;
+  auto req = librbd::image::RemoveRequest<I>::create(
+    io_ctx, "", image_id, force, true, prog_ctx, op_work_queue, &cond);
+  req->send();
+
+  r = cond.wait();
   if (r < 0) {
     lderr(cct) << "error removing image " << image_id
                << ", which is pending deletion" << dendl;

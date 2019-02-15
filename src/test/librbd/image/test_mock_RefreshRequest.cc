@@ -672,7 +672,6 @@ TEST_F(TestMockImageRefreshRequest, SuccessChild) {
   librbd::ImageCtx *ictx;
   librbd::ImageCtx *ictx2 = nullptr;
   std::string clone_name = get_temp_image_name();
-  std::string image_id;
 
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, snap_create(*ictx, "snap"));
@@ -683,7 +682,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessChild) {
     }
 
     librbd::NoOpProgressContext no_op;
-    ASSERT_EQ(0, librbd::api::Image<>::remove(m_ioctx, "", image_id, no_op));
+    ASSERT_EQ(0, librbd::api::Image<>::remove(m_ioctx, clone_name, no_op));
     ASSERT_EQ(0, ictx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(), "snap"));
   };
 
@@ -692,7 +691,6 @@ TEST_F(TestMockImageRefreshRequest, SuccessChild) {
                              clone_name.c_str(), ictx->features, &order, 0, 0));
 
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
-  image_id = ictx2->id;
 
   MockRefreshImageCtx mock_image_ctx(*ictx2);
   MockRefreshParentRequest *mock_refresh_parent_request = new MockRefreshParentRequest();
@@ -727,7 +725,6 @@ TEST_F(TestMockImageRefreshRequest, SuccessChildDontOpenParent) {
 
   librbd::ImageCtx *ictx;
   librbd::ImageCtx *ictx2 = nullptr;
-  std::string image_id;
   std::string clone_name = get_temp_image_name();
 
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
@@ -739,7 +736,7 @@ TEST_F(TestMockImageRefreshRequest, SuccessChildDontOpenParent) {
     }
 
     librbd::NoOpProgressContext no_op;
-    ASSERT_EQ(0, librbd::api::Image<>::remove(m_ioctx, "", image_id, no_op));
+    ASSERT_EQ(0, librbd::api::Image<>::remove(m_ioctx, clone_name, no_op));
     ASSERT_EQ(0, ictx->operations->snap_unprotect(cls::rbd::UserSnapshotNamespace(), "snap"));
   };
 
@@ -748,7 +745,6 @@ TEST_F(TestMockImageRefreshRequest, SuccessChildDontOpenParent) {
                              clone_name.c_str(), ictx->features, &order, 0, 0));
 
   ASSERT_EQ(0, open_image(clone_name, &ictx2));
-  image_id = ictx2->id;
 
   MockRefreshImageCtx mock_image_ctx(*ictx2);
   MockExclusiveLock mock_exclusive_lock;
