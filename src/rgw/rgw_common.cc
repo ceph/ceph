@@ -27,6 +27,7 @@
 #include "common/strtol.h"
 #include "include/str_list.h"
 #include "rgw_crypt_sanitize.h"
+#include "rgw_bucket_sync.h"
 
 #include <sstream>
 
@@ -1937,4 +1938,149 @@ string camelcase_dash_http_attr(const string& orig)
     }
   }
   return string(buf);
+}
+
+RGWBucketInfo::RGWBucketInfo()
+{
+}
+
+RGWBucketInfo::~RGWBucketInfo()
+{
+}
+
+void RGWBucketInfo::encode(bufferlist& bl) const {
+  ENCODE_START(21, 4, bl);
+  encode(bucket, bl);
+  encode(owner.id, bl);
+  encode(flags, bl);
+  encode(zonegroup, bl);
+  uint64_t ct = real_clock::to_time_t(creation_time);
+  encode(ct, bl);
+  encode(placement_rule, bl);
+  encode(has_instance_obj, bl);
+  encode(quota, bl);
+  encode(num_shards, bl);
+  encode(bucket_index_shard_hash_type, bl);
+  encode(requester_pays, bl);
+  encode(owner.tenant, bl);
+  encode(has_website, bl);
+  if (has_website) {
+    encode(website_conf, bl);
+  }
+  encode((uint32_t)index_type, bl);
+  encode(swift_versioning, bl);
+  if (swift_versioning) {
+    encode(swift_ver_location, bl);
+  }
+  encode(creation_time, bl);
+  encode(mdsearch_config, bl);
+  encode(reshard_status, bl);
+  encode(new_bucket_instance_id, bl);
+  if (obj_lock_enabled()) {
+    encode(obj_lock, bl);
+  }
+  bool has_sync_policy = !empty_sync_policy();
+  encode(has_sync_policy, bl);
+  if (has_sync_policy) {
+    encode(*sync_policy, bl);
+  }
+  ENCODE_FINISH(bl);
+}
+
+void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
+  DECODE_START_LEGACY_COMPAT_LEN_32(21, 4, 4, bl);
+  decode(bucket, bl);
+  if (struct_v >= 2) {
+    string s;
+    decode(s, bl);
+    owner.from_str(s);
+  }
+  if (struct_v >= 3)
+    decode(flags, bl);
+  if (struct_v >= 5)
+    decode(zonegroup, bl);
+  if (struct_v >= 6) {
+    uint64_t ct;
+    decode(ct, bl);
+    if (struct_v < 17)
+      creation_time = ceph::real_clock::from_time_t((time_t)ct);
+  }
+  if (struct_v >= 7)
+    decode(placement_rule, bl);
+  if (struct_v >= 8)
+    decode(has_instance_obj, bl);
+  if (struct_v >= 9)
+    decode(quota, bl);
+  if (struct_v >= 10)
+    decode(num_shards, bl);
+  if (struct_v >= 11)
+    decode(bucket_index_shard_hash_type, bl);
+  if (struct_v >= 12)
+    decode(requester_pays, bl);
+  if (struct_v >= 13)
+    decode(owner.tenant, bl);
+  if (struct_v >= 14) {
+    decode(has_website, bl);
+    if (has_website) {
+      decode(website_conf, bl);
+    } else {
+      website_conf = RGWBucketWebsiteConf();
+    }
+  }
+  if (struct_v >= 15) {
+    uint32_t it;
+    decode(it, bl);
+    index_type = (RGWBucketIndexType)it;
+  } else {
+    index_type = RGWBIType_Normal;
+  }
+  swift_versioning = false;
+  swift_ver_location.clear();
+  if (struct_v >= 16) {
+    decode(swift_versioning, bl);
+    if (swift_versioning) {
+      decode(swift_ver_location, bl);
+    }
+  }
+  if (struct_v >= 17) {
+    decode(creation_time, bl);
+  }
+  if (struct_v >= 18) {
+    decode(mdsearch_config, bl);
+  }
+  if (struct_v >= 19) {
+    decode(reshard_status, bl);
+    decode(new_bucket_instance_id, bl);
+  }
+  if (struct_v >= 20 && obj_lock_enabled()) {
+    decode(obj_lock, bl);
+  }
+  if (struct_v >= 21) {
+    bool has_sync_policy;
+    decode(has_sync_policy, bl);
+    if (has_sync_policy) {
+      auto policy = make_shared<RGWBucketSyncPolicy>();
+      decode(*policy, bl);
+      sync_policy = std::const_pointer_cast<const RGWBucketSyncPolicy>(policy);
+    } else {
+      sync_policy.reset();
+    }
+  }
+  
+  DECODE_FINISH(bl);
+}
+
+void RGWBucketInfo::set_sync_policy(RGWBucketSyncPolicy&& policy)
+{
+  auto shared_policy = make_shared<RGWBucketSyncPolicy>(policy);
+  sync_policy = std::const_pointer_cast<const RGWBucketSyncPolicy>(shared_policy);
+}
+
+bool RGWBucketInfo::empty_sync_policy() const
+{
+  if (!sync_policy) {
+    return true;
+  }
+
+  return sync_policy->empty();
 }

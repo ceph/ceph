@@ -15,6 +15,7 @@
 #include "rgw_data_sync.h"
 #include "rgw_sync.h"
 #include "rgw_orphan.h"
+#include "rgw_bucket_sync.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -827,6 +828,46 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   int rs;
   JSONDecoder::decode_json("reshard_status", rs, obj);
   reshard_status = (cls_rgw_reshard_status)rs;
+}
+
+void RGWBucketSyncPolicy::rule::dump(Formatter *f) const
+{
+  encode_json("zone_id", zone_id, f);
+  encode_json("dest_bucket", dest_bucket, f);
+  encode_json("source_obj_prefix", source_obj_prefix, f);
+  encode_json("dest_obj_prefix", dest_obj_prefix, f);
+}
+
+void RGWBucketSyncPolicy::rule::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("zone_id", zone_id, obj);
+  JSONDecoder::decode_json("dest_bucket", dest_bucket, obj);
+  JSONDecoder::decode_json("source_obj_prefix", source_obj_prefix, obj);
+  JSONDecoder::decode_json("dest_obj_prefix", dest_obj_prefix, obj);
+}
+
+void RGWBucketSyncPolicy::target::dump(Formatter *f) const
+{
+  encode_json("target_zone_id", target_zone_id, f);
+  encode_json("rules", rules, f);
+}
+
+void RGWBucketSyncPolicy::target::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("target_zone_id", target_zone_id, obj);
+  JSONDecoder::decode_json("rules", rules, obj);
+}
+
+void RGWBucketSyncPolicy::dump(Formatter *f) const
+{
+  encode_json("bucket", bucket, f);
+  encode_json("targets", targets, f);
+}
+
+void RGWBucketSyncPolicy::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("bucket", bucket, obj);
+  JSONDecoder::decode_json("targets", targets, obj);
 }
 
 void rgw_obj_key::dump(Formatter *f) const
