@@ -50,6 +50,21 @@ public:
     timespec ts = ceph::real_clock::to_timespec(when);
     return _wait_until(lock.mutex(), &ts);
   }
+  template<class Rep, class Period, class Pred>
+  bool wait_for(
+    std::unique_lock<mutex_debug>& lock,
+    const std::chrono::duration<Rep, Period>& awhile,
+    Pred pred) {
+    ceph::real_time when{ceph::real_clock::now()};
+    when += awhile;
+    timespec ts = ceph::real_clock::to_timespec(when);
+    while (!pred()) {
+      if ( _wait_until(lock.mutex(), &ts) == std::cv_status::timeout) {
+        return pred();
+      }
+    }
+    return true;
+  }
   void notify_one();
   void notify_all(bool sloppy = false);
 private:
