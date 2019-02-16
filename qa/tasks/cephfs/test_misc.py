@@ -240,9 +240,13 @@ class TestCacheDrop(CephFSTestCase):
                                                     "cache", "drop")
         return json.loads(result)
 
-    def _setup(self):
+    def _setup(self, max_caps=20, threshold=400):
         # create some files
         self.mount_a.create_n_files("dc-dir/dc-file", 1000, sync=True)
+
+        # Reduce this so the MDS doesn't rkcall the maximum for simple tests
+        self.fs.rank_asok(['config', 'set', 'mds_recall_max_caps', str(max_caps)])
+        self.fs.rank_asok(['config', 'set', 'mds_recall_max_decay_threshold', str(threshold)])
 
     def test_drop_cache_command(self):
         """
