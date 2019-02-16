@@ -1433,7 +1433,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
   preamble.hexdump(*_dout);
   *_dout << dendl;
 
-  if (auth_meta->is_mode_secure()) {
+  if (session_stream_handlers.rx) {
     ceph_assert(session_stream_handlers.rx);
     session_stream_handlers.rx->reset_rx_handler();
     preamble = session_stream_handlers.rx->authenticated_decrypt_update(
