@@ -1,18 +1,14 @@
 meta:
 - desc: |
-   install upgrade ceph/-x on one node only
-   1st half
-   restart : osd.0,1,2,3
+   install upgrade ceph/-x on 2/3 of cluster
+   restart : mons, osd 0-7
 tasks:
 - install.upgrade:
-    osd.0:
-- print: "**** done install.upgrade osd.0"
+    mon.a:
+    mon.b:
+    mon.c:
+- print: "**** done install.upgrade first 3 nodes"
 - ceph.restart:
-    daemons: [mon.a,mon.b,mon.c,mgr.x,osd.0,osd.1,osd.2,osd.3]
+    daemons: [mon.a,mon.b,mon.c,mgr.x,osd.0,osd.1,osd.2,osd.3,osd.4,osd.5,osd.6,osd.7]
     mon-health-to-clog: false
-- print: "**** done ceph.restart 1st half"
-- exec:
-    osd.0:
-      - ceph osd set pglog_hardlimit && exit 1 || true
-      - ceph osd dump --format=json-pretty | grep "flags"
-- print: "**** try to set pglog_hardlimit, should not succeed"
+- print: "**** done ceph.restart all mons and 2/3 of osds"
