@@ -244,6 +244,10 @@ class TestCacheDrop(CephFSTestCase):
         # create some files
         self.mount_a.create_n_files("dc-dir/dc-file", 1000)
 
+        # Reduce this so the MDS doesn't recall the maximum for simple tests
+        self.fs.rank_asok(['config', 'set', 'mds_recall_max_caps', "20"])
+        self.fs.rank_asok(['config', 'set', 'mds_recall_max_decay_threshold', "40"])
+
     def test_drop_cache_command(self):
         """
         Basic test for checking drop cache command.
