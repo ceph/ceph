@@ -127,7 +127,8 @@ add_library(common-common-objs OBJECT
 # for options.cc
 target_compile_definitions(common-common-objs PRIVATE
   "CEPH_LIBDIR=\"${CMAKE_INSTALL_FULL_LIBDIR}\""
-  "CEPH_PKGLIBDIR=\"${CMAKE_INSTALL_FULL_PKGLIBDIR}\"")
+  "CEPH_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
+  "CEPH_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
 
 set(common_mountcephfs_srcs
   armor.c
