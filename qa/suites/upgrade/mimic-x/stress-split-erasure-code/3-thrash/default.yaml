@@ -22,4 +22,5 @@ stress-tasks:
     chance_thrash_pg_upmap: 0
     chance_thrash_pg_upmap_items: 0
     chance_force_recovery: 0
+    aggressive_pg_num_changes: false
 - print: "**** done thrashosds 3-thrash"

@@ -1,9 +1,9 @@
 tasks:
 - install.upgrade:
-    osd.4:
+    osd.8:
     client.0:
 - ceph.restart:
-    daemons: [osd.4, osd.5, osd.6, osd.7]
+    daemons: [osd.8, osd.9, osd.10, osd.11]
     wait-for-healthy: false
     wait-for-osds-up: true
 - exec:
