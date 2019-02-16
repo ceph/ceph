@@ -67,11 +67,11 @@ public:
   int get_zonegroup(const string& id, RGWZoneGroup& zonegroup) const;
   const RGWZone& get_zone() const;
 
-  const string& zone_name();
-  const string& zone_id();
+  const string& zone_name() const;
+  const string& zone_id() const;
   uint32_t get_zone_short_id() const;
 
-  const string& get_current_period_id();
+  const string& get_current_period_id() const;
   bool has_zonegroup_api(const std::string& api) const;
 
   bool zone_is_writeable();

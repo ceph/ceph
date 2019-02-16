@@ -2180,8 +2180,7 @@ int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
 }
 
 int RGWDataChangesLog::add_entry(const RGWBucketInfo& bucket_info, int shard_id) {
-  if (!svc.zone->need_to_log_data() &&
-      (!bucket_info.sync_policy || !bucket_info.sync_policy->zone_is_source(svc.zone->zone_id()))) {
+  if (!bucket_info.bucket_datasync_enabled(svc.zone)) {
     return 0;
   }
 

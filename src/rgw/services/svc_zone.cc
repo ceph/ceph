@@ -819,7 +819,7 @@ const RGWPeriod& RGWSI_Zone::get_current_period() const
   return *current_period;
 }
 
-const string& RGWSI_Zone::get_current_period_id()
+const string& RGWSI_Zone::get_current_period_id() const
 {
   return current_period->get_id();
 }
@@ -851,11 +851,11 @@ uint32_t RGWSI_Zone::get_zone_short_id() const
   return zone_short_id;
 }
 
-const string& RGWSI_Zone::zone_name()
+const string& RGWSI_Zone::zone_name() const
 {
   return get_zone_params().get_name();
 }
-const string& RGWSI_Zone::zone_id()
+const string& RGWSI_Zone::zone_id() const
 {
   return get_zone_params().get_id();
 }
