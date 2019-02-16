@@ -867,20 +867,31 @@ class Module(MgrModule):
             detail = 'No pools available'
             self.log.info(detail)
             return -errno.ENOENT, detail
-        # shuffle pool list so they all get equal (in)attention
-        random.shuffle(pools)
-        self.log.info('pools %s' % pools)
 
         inc = plan.inc
         total_did = 0
         left = max_iterations
-        pools_with_pg_merge = [p['pool_name'] for p in self.get_osdmap().dump().get('pools', [])
+        osdmap_dump = self.get_osdmap().dump()
+        pools_with_pg_merge = [p['pool_name'] for p in osdmap_dump.get('pools', [])
                                if p['pg_num'] > p['pg_num_target']]
+        crush_rule_by_pool_name = dict((p['pool_name'], p['crush_rule']) for p in osdmap_dump.get('pools', []))
+        pools_by_crush_rule = {} # group pools by crush_rule
         for pool in pools:
+            if pool not in crush_rule_by_pool_name:
+                self.log.info('pool %s does not exist' % pool)
+                continue
             if pool in pools_with_pg_merge:
                 self.log.info('pool %s has pending PG(s) for merging, skipping for now' % pool)
                 continue
-            did = ms.osdmap.calc_pg_upmaps(inc, max_deviation, left, [pool])
+            crush_rule = crush_rule_by_pool_name[pool]
+            if crush_rule not in pools_by_crush_rule:
+                pools_by_crush_rule[crush_rule] = []
+            pools_by_crush_rule[crush_rule].append(pool)
+        classified_pools = pools_by_crush_rule.values()
+        # shuffle so all pools get equal (in)attention
+        random.shuffle(classified_pools)
+        for it in classified_pools:
+            did = ms.osdmap.calc_pg_upmaps(inc, max_deviation, left, it)
             total_did += did
             left -= did
             if left <= 0:
