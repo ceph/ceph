@@ -139,9 +139,18 @@ INDICATIONS = [
     re.compile("(Tested-by: .+ <[\w@.-]+>)", re.IGNORECASE),
 ]
 
+# find containing git dir
+git_dir = GITDIR
+max_levels = 6
+while not os.path.exists(git_dir + '/.git'):
+    git_dir += '/..'
+    max_levels -= 1
+    if max_levels < 0:
+        break
+
 CONTRIBUTORS = {}
 NEW_CONTRIBUTORS = {}
-with codecs.open(".githubmap", encoding='utf-8') as f:
+with codecs.open(git_dir + "/.githubmap", encoding='utf-8') as f:
     comment = re.compile("\s*#")
     patt = re.compile("([\w-]+)\s+(.*)")
     for line in f:
@@ -300,7 +309,7 @@ def build_branch(args):
         if new_new_contributors:
             # Check out the PR, add a commit adding to .githubmap
             log.info("adding new contributors to githubmap in merge commit")
-            with open(".githubmap", "a") as f:
+            with open(git_dir + "/.githubmap", "a") as f:
                 for c in new_new_contributors:
                     f.write("%s %s\n" % (c, new_new_contributors[c]))
             G.index.add([".githubmap"])
@@ -348,7 +357,7 @@ def main():
     parser.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', default=False, help='name of the branch for merge messages')
     parser.add_argument('--base', dest='base', action='store', default=default_base, help='base for branch')
     parser.add_argument('--base-path', dest='base_path', action='store', default=BASE_PATH, help='base for branch')
-    parser.add_argument('--git-dir', dest='git', action='store', default=GITDIR, help='git directory')
+    parser.add_argument('--git-dir', dest='git', action='store', default=git_dir, help='git directory')
     parser.add_argument('--label', dest='label', action='store', default=default_label, help='label PRs for testing')
     parser.add_argument('--pr-label', dest='pr_label', action='store', help='label PRs for testing')
     parser.add_argument('prs', metavar="PR", type=int, nargs='*', help='Pull Requests to merge')
