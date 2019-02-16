@@ -122,12 +122,12 @@ class PgRecoveryEvent(Event):
     Always call update() immediately after construction.
     """
 
-    def __init__(self, message, refs, which_pgs, evactuate_osds):
+    def __init__(self, message, refs, which_pgs, evacuate_osds):
         super(PgRecoveryEvent, self).__init__(message, refs)
 
         self._pgs = which_pgs
 
-        self._evacuate_osds = evactuate_osds
+        self._evacuate_osds = evacuate_osds
 
         self._original_pg_count = len(self._pgs)
 
@@ -358,7 +358,7 @@ class Module(MgrModule):
             "Rebalancing after osd.{0} marked out".format(osd_id),
             refs=[("osd", osd_id)],
             which_pgs=affected_pgs,
-            evactuate_osds=[osd_id]
+            evacuate_osds=[osd_id]
         )
         ev.pg_update(self.get("pg_dump"), self.log)
         self._events[ev.id] = ev
