@@ -313,6 +313,15 @@ private:
     Context *timer_task = nullptr;
   };
 
+  auto do_trim() {
+    auto [throttled, count] = mdcache->trim(UINT64_MAX);
+    dout(10) << __func__
+             << (throttled ? " (throttled)" : "")
+             << " trimmed " << count << " caps" << dendl;
+    dentries_trimmed += count;
+    return std::make_pair(throttled, count);
+  }
+
   void recall_client_state() {
     dout(20) << __func__ << dendl;
     auto now = mono_clock::now();
@@ -333,6 +342,8 @@ private:
       ctx->start_timer();
       gather->set_finisher(new MDSInternalContextWrapper(mds, ctx));
       gather->activate();
+      mdlog->flush(); /* use down-time to incrementally flush log */
+      do_trim(); /* use down-time to incrementally trim cache */
     } else {
       if (!gather->has_subs()) {
         delete gather;
@@ -401,11 +412,7 @@ private:
   void trim_cache() {
     dout(20) << __func__ << dendl;
 
-    auto [throttled, count] = mdcache->trim(UINT64_MAX);
-    dout(10) << __func__
-             << (throttled ? " (throttled)" : "")
-             << " trimmed " << count << " caps" << dendl;
-    dentries_trimmed += count;
+    auto [throttled, count] = do_trim();
     if (throttled && count > 0) {
       auto timer = new FunctionContext([this](int _) {
         trim_cache();
