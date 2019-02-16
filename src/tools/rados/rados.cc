@@ -3090,6 +3090,12 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       return 1;
     }
 
+    if (rados.get_pool_is_selfmanaged_snaps_mode(pool_name)) {
+      cerr << "can't create snapshot: pool " << pool_name
+           << " is in selfmanaged snaps mode" << std::endl;
+      return 1;
+    }
+
     ret = io_ctx.snap_create(nargs[1]);
     if (ret < 0) {
       cerr << "error creating pool " << pool_name << " snapshot " << nargs[1]
