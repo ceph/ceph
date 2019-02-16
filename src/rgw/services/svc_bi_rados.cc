@@ -411,12 +411,15 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const RGWBucketInfo& bucket_info
 int RGWSI_BucketIndex_RADOS::handle_overwrite(const RGWBucketInfo& info,
                                               const RGWBucketInfo& orig_info)
 {
-  if (orig_info.datasync_flag_enabled() != info.datasync_flag_enabled()) {
+  bool new_sync_enabled = info.bucket_datasync_enabled(svc.zone);
+  bool old_sync_enabled = orig_info.bucket_datasync_enabled(svc.zone);
+
+  if (old_sync_enabled != new_sync_enabled) {
     int shards_num = info.num_shards? info.num_shards : 1;
     int shard_id = info.num_shards? 0 : -1;
 
     int ret;
-    if (!info.datasync_flag_enabled()) {
+    if (!new_sync_enabled) {
       ret = svc.bilog->log_stop(info, -1);
     } else {
       ret = svc.bilog->log_start(info, -1);

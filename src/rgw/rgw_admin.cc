@@ -2285,7 +2285,7 @@ static int bucket_sync_status(rgw::sal::RGWRadosStore *store, const RGWBucketInf
   out << indented{width, "zone"} << zone.id << " (" << zone.name << ")\n";
   out << indented{width, "bucket"} << info.bucket << "\n\n";
 
-  if (!info.datasync_flag_enabled()) {
+  if (!info.bucket_datasync_enabled()) {
     out << "Sync is disabled for bucket " << info.bucket.name << '\n';
     return 0;
   }
