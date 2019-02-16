@@ -23,7 +23,22 @@ ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
                 << ").";
 }
 
+// We require these features from any peer, period, in order to encode
+// a entity_addrvec_t.
 const uint64_t msgr2_required = CEPH_FEATUREMASK_MSG_ADDR2;
+
+// We additionally assume the peer has the below features *purely for
+// the purpose of encoding the frames themselves*.  The only complex
+// types in the frames are entity_addr_t and entity_addrvec_t, and we
+// specifically want the peer to understand the (new in nautilus)
+// TYPE_ANY.  We treat narrow this assumption to frames because we
+// expect there may be future clients (the kernel) that understand
+// msgr v2 and understand this encoding but don't necessarily have
+// everything else that SERVER_NAUTILUS implies.  Yes, a fresh feature
+// bit would be a cleaner approach, but those are scarce these days.
+const uint64_t msgr2_frame_assumed =
+		   msgr2_required |
+		   CEPH_FEATUREMASK_SERVER_NAUTILUS;
 
 using CtPtr = Ct<ProtocolV2> *;
 
@@ -210,7 +225,8 @@ public:
   }
 
   PayloadFrame(ProtocolV2 *protocol, const Args &... args)
-      : protocol(protocol), features(protocol->connection_features) {
+      : protocol(protocol),
+	features(protocol->connection_features | msgr2_frame_assumed) {
     (_encode_payload_each(args), ...);
   }
 
