@@ -5148,7 +5148,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("mgr_module_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default(CEPH_PKGLIBDIR "/mgr")
+    .set_default(CEPH_DATADIR "/mgr")
     .add_service("mgr")
     .set_description("Filesystem path to manager modules."),
 

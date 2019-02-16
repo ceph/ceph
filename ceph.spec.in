@@ -448,6 +448,7 @@ exposes all these to the python modules.
 
 %package mgr-dashboard
 Summary:        Ceph Dashboard
+BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
@@ -474,6 +475,7 @@ detailed feature overview.
 
 %package mgr-diskprediction-local
 Summary:        ceph-mgr diskprediction_local plugin
+BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
@@ -486,6 +488,7 @@ disk failures using local algorithms and machine-learning databases.
 
 %package mgr-diskprediction-cloud
 Summary:        ceph-mgr diskprediction_cloud plugin
+BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
@@ -495,6 +498,7 @@ ceph-mgr-diskprediction-cloud is a ceph-mgr plugin that tries to predict
 disk failures using services in the Google cloud.
 
 %package mgr-rook
+BuildArch:      noarch
 Summary:        ceph-mgr rook plugin
 %if 0%{?suse_version}
 Group:          System/Filesystems
@@ -1454,33 +1458,33 @@ fi
 
 %files mgr
 %{_bindir}/ceph-mgr
-%dir %{_libdir}/ceph/mgr
-%{_libdir}/ceph/mgr/ansible
-%{_libdir}/ceph/mgr/balancer
-%{_libdir}/ceph/mgr/crash
-%{_libdir}/ceph/mgr/deepsea
-%{_libdir}/ceph/mgr/devicehealth
-%{_libdir}/ceph/mgr/influx
-%{_libdir}/ceph/mgr/insights
-%{_libdir}/ceph/mgr/iostat
-%{_libdir}/ceph/mgr/localpool
-%{_libdir}/ceph/mgr/mgr_module.*
-%{_libdir}/ceph/mgr/mgr_util.*
-%{_libdir}/ceph/mgr/orchestrator_cli
-%{_libdir}/ceph/mgr/orchestrator.*
-%{_libdir}/ceph/mgr/osd_perf_query
-%{_libdir}/ceph/mgr/pg_autoscaler
-%{_libdir}/ceph/mgr/progress
-%{_libdir}/ceph/mgr/prometheus
-%{_libdir}/ceph/mgr/rbd_support
-%{_libdir}/ceph/mgr/restful
-%{_libdir}/ceph/mgr/selftest
-%{_libdir}/ceph/mgr/status
-%{_libdir}/ceph/mgr/telegraf
-%{_libdir}/ceph/mgr/telemetry
-%{_libdir}/ceph/mgr/test_orchestrator
-%{_libdir}/ceph/mgr/volumes
-%{_libdir}/ceph/mgr/zabbix
+%dir %{_datadir}/ceph/mgr
+%{_datadir}/ceph/mgr/ansible
+%{_datadir}/ceph/mgr/balancer
+%{_datadir}/ceph/mgr/crash
+%{_datadir}/ceph/mgr/deepsea
+%{_datadir}/ceph/mgr/devicehealth
+%{_datadir}/ceph/mgr/influx
+%{_datadir}/ceph/mgr/insights
+%{_datadir}/ceph/mgr/iostat
+%{_datadir}/ceph/mgr/localpool
+%{_datadir}/ceph/mgr/mgr_module.*
+%{_datadir}/ceph/mgr/mgr_util.*
+%{_datadir}/ceph/mgr/orchestrator_cli
+%{_datadir}/ceph/mgr/orchestrator.*
+%{_datadir}/ceph/mgr/osd_perf_query
+%{_datadir}/ceph/mgr/pg_autoscaler
+%{_datadir}/ceph/mgr/progress
+%{_datadir}/ceph/mgr/prometheus
+%{_datadir}/ceph/mgr/rbd_support
+%{_datadir}/ceph/mgr/restful
+%{_datadir}/ceph/mgr/selftest
+%{_datadir}/ceph/mgr/status
+%{_datadir}/ceph/mgr/telegraf
+%{_datadir}/ceph/mgr/telemetry
+%{_datadir}/ceph/mgr/test_orchestrator
+%{_datadir}/ceph/mgr/volumes
+%{_datadir}/ceph/mgr/zabbix
 %{_unitdir}/ceph-mgr@.service
 %{_unitdir}/ceph-mgr.target
 %attr(750,ceph,ceph) %dir %{_localstatedir}/lib/ceph/mgr
@@ -1528,7 +1532,7 @@ if [ $FIRST_ARG -ge 1 ] ; then
 fi
 
 %files mgr-dashboard
-%{_libdir}/ceph/mgr/dashboard
+%{_datadir}/ceph/mgr/dashboard
 
 %post mgr-dashboard
 if [ $1 -eq 1 ] ; then
@@ -1541,7 +1545,7 @@ if [ $1 -eq 1 ] ; then
 fi
 
 %files mgr-diskprediction-local
-%{_libdir}/ceph/mgr/diskprediction_local
+%{_datadir}/ceph/mgr/diskprediction_local
 
 %post mgr-diskprediction-local
 if [ $1 -eq 1 ] ; then
@@ -1554,7 +1558,7 @@ if [ $1 -eq 1 ] ; then
 fi
 
 %files mgr-diskprediction-cloud
-%{_libdir}/ceph/mgr/diskprediction_cloud
+%{_datadir}/ceph/mgr/diskprediction_cloud
 
 %post mgr-diskprediction-cloud
 if [ $1 -eq 1 ] ; then
@@ -1567,7 +1571,7 @@ if [ $1 -eq 1 ] ; then
 fi
 
 %files mgr-rook
-%{_libdir}/ceph/mgr/rook
+%{_datadir}/ceph/mgr/rook
 
 %post mgr-rook
 if [ $1 -eq 1 ] ; then
