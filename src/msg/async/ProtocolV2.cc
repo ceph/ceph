@@ -84,7 +84,8 @@ if(connection->interceptor) { \
 #define INTERCEPT(S)
 #endif
 
-static void alloc_aligned_buffer(bufferlist &data, unsigned len, unsigned off) {
+static void alloc_aligned_buffer(bufferlist &data, unsigned len, unsigned off)
+{
   // create a buffer to read into that matches the data alignment
   unsigned alloc_len = 0;
   unsigned left = len;
@@ -111,7 +112,7 @@ using segment_t = ProtocolV2::segment_t;
 
 // V2 preamble consists of one or more preamble blocks depending on
 // the number of segments a particular frame needs. Each block holds
-// up to 2 segments and has its own CRC.
+// up to MAX_NUM_SEGMENTS segments and has its own CRC.
 //
 // XXX: currently the multi-segment facility is NOT implemented.
 struct preamble_block_t {
