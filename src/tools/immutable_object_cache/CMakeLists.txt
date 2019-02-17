@@ -5,7 +5,6 @@ set(ceph_immutable_object_cache_files
   CacheClient.cc
   CacheSession.cc
   SimplePolicy.cc
-  Utils.cc
   Types.cc
   )
 add_library(ceph_immutable_object_cache_lib STATIC ${ceph_immutable_object_cache_files})
