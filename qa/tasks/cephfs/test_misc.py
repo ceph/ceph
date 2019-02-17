@@ -246,7 +246,7 @@ class TestCacheDrop(CephFSTestCase):
 
         # Reduce this so the MDS doesn't recall the maximum for simple tests
         self.fs.rank_asok(['config', 'set', 'mds_recall_max_caps', "20"])
-        self.fs.rank_asok(['config', 'set', 'mds_recall_max_decay_threshold', "40"])
+        self.fs.rank_asok(['config', 'set', 'mds_recall_max_decay_threshold', "500"])
 
     def test_drop_cache_command(self):
         """
@@ -258,6 +258,9 @@ class TestCacheDrop(CephFSTestCase):
         result = self._run_drop_cache_cmd()
         self.assertTrue(result['client_recall']['return_code'] == 0)
         self.assertTrue(result['flush_journal']['return_code'] == 0)
+        # It should take at least 10 seconds
+        # self.assertTrue(result['duration'] > 10)
+        # self.assertGreaterEqual(result['trim_cache']['trimmed], 500)
 
     def test_drop_cache_command_timeout(self):
         """
