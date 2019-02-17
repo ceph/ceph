@@ -211,6 +211,27 @@ static int cls_rc_write_or_get(cls_method_context_t hctx, bufferlist *in, buffer
   return 0;
 }
 
+
+static int cls_rc_has_chunk(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  auto in_iter = in->cbegin();
+  string fp_oid;
+  bufferlist indata, outdata;
+  try {
+    decode (fp_oid, in_iter);
+  }
+  catch (buffer::error& e) {
+    return -EINVAL;
+  }
+  CLS_LOG(10, " fp_oid: %s \n", fp_oid.c_str());
+
+  bool ret = cls_has_chunk(hctx, fp_oid);
+  if (ret) {
+    return 0;
+  }
+  return -ENOENT;
+}
+
 CLS_INIT(cas)
 {
   CLS_LOG(1, "Loaded cas class!");
@@ -221,6 +242,7 @@ CLS_INIT(cas)
   cls_method_handle_t h_chunk_refcount_put;
   cls_method_handle_t h_chunk_refcount_set;
   cls_method_handle_t h_chunk_refcount_read;
+  cls_method_handle_t h_chunk_has_chunk;
 
   cls_register("cas", &h_class);
 
@@ -235,6 +257,8 @@ CLS_INIT(cas)
 			  &h_chunk_refcount_read);
   cls_register_cxx_method(h_class, "cas_write_or_get", CLS_METHOD_RD | CLS_METHOD_WR, cls_rc_write_or_get, 
 			  &h_cas_write_or_get);
+  cls_register_cxx_method(h_class, "has_chunk", CLS_METHOD_RD, cls_rc_has_chunk, 
+	      &h_chunk_has_chunk);
 
   return;
 }

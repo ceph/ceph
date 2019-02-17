@@ -17,5 +17,6 @@ usr/bin/ceph_rgw_multiparser
 usr/bin/ceph_scratchtool
 usr/bin/ceph_scratchtoolpp
 usr/bin/ceph_test_*
+usr/bin/cephdeduptool
 usr/lib/ceph/ceph-monstore-update-crush.sh
 usr/share/java/libcephfs-test.jar
