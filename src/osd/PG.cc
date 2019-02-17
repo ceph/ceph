@@ -152,7 +152,9 @@ void PGStateHistory::dump(Formatter* f) const {
 
 void PG::get(const char* tag)
 {
-  ref++;
+  int after = ref++;
+  lgeneric_subdout(cct, refs, 1) << "PG::get " << this << " "
+				 << (after - 1) << " -> " << after << dendl;
 #ifdef PG_DEBUG_REFS
   std::lock_guard l(_ref_id_lock);
   _tag_counts[tag]++;
@@ -172,7 +174,10 @@ void PG::put(const char* tag)
     }
   }
 #endif
-  if (--ref== 0)
+  int after = --ref;
+  lgeneric_subdout(cct, refs, 1) << "PG::put " << this << " "
+				 << (after + 1) << " -> " << after << dendl;
+  if (after == 0)
     delete this;
 }
 
