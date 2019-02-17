@@ -150,6 +150,10 @@ AsyncConnection::~AsyncConnection()
   ceph_assert(!delay_state);
 }
 
+int AsyncConnection::get_con_mode() const {
+  return protocol->get_con_mode();
+}
+
 void AsyncConnection::maybe_start_delay_thread()
 {
   if (!delay_state) {
