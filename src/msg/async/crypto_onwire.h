@@ -78,6 +78,11 @@ class RxHandler {
 public:
   virtual ~RxHandler() = default;
 
+  // Transmitter can append extra bytes of ciphertext at the -final step.
+  // This method return how much was added, and thus let client translate
+  // plaintext size into ciphertext size to grab from wire.
+  virtual std::uint32_t get_extra_size_at_final() = 0;
+
   // Instance of RxHandler must be reset before doing any decrypt-update
   // step. This applies also to situation when decrypt-final was already
   // called and another round of update-...-update-final will take place.
