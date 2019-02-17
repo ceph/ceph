@@ -179,6 +179,9 @@ public:
     memset(&nonce, 0, sizeof(nonce));
   }
 
+  std::uint32_t get_extra_size_at_final() override {
+    return AESGCM_TAG_LEN;
+  }
   void reset_rx_handler() override;
   ceph::bufferlist authenticated_decrypt_update(
     ceph::bufferlist&& ciphertext,

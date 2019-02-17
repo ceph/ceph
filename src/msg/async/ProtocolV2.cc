@@ -368,29 +368,35 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
   }
 
   SignedEncryptedFrame(ProtocolV2 &protocol, const Args &... args)
-      : PayloadFrame<T, Args...>(args...) {
-    ceph_assert(protocol.session_stream_handlers.tx);
-
-    protocol.session_stream_handlers.tx->reset_tx_handler({
-      this->payload.length()
-    });
-
-    auto exp_size = this->payload.length() + 16;
+      : PayloadFrame<T, Args...>(args...)
+  {
     // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart
     // from auth tag size
     this->fill_preamble({
-      segment_t{ this->payload.length() + 16 - FRAME_PREAMBLE_SIZE, 16 }
+      segment_t{ this->payload.length() - FRAME_PREAMBLE_SIZE, 16 }
     }, {});
 
-    protocol.session_stream_handlers.tx->authenticated_encrypt_update(
-      std::move(this->payload));
-    this->payload = \
-      protocol.session_stream_handlers.tx->authenticated_encrypt_final();
-    ceph_assert(exp_size == this->payload.length());
+    if (protocol.session_stream_handlers.tx) {
+      ceph_assert(protocol.session_stream_handlers.tx);
+      protocol.session_stream_handlers.tx->reset_tx_handler({
+	this->payload.length()
+      });
+
+      protocol.session_stream_handlers.tx->authenticated_encrypt_update(
+	std::move(this->payload));
+      this->payload = \
+	protocol.session_stream_handlers.tx->authenticated_encrypt_final();
+    }
   }
 
   SignedEncryptedFrame(ProtocolV2 &protocol, char *payload, uint32_t length)
-      : PayloadFrame<T, Args...>(do_not_encode_tag_t{}) {
+      : PayloadFrame<T, Args...>(do_not_encode_tag_t{})
+  {
+    if (!protocol.session_stream_handlers.rx) {
+      this->decode_frame(payload, length);
+      return;
+    }
+
     ceph::bufferlist bl;
     bl.push_back(buffer::create_static(length, payload));
 
@@ -551,7 +557,7 @@ struct MessageHeaderFrame
       segment_t{ this->payload.length() - FRAME_PREAMBLE_SIZE, 8 },
       segment_t{ front_len, 8 },
       segment_t{ middle_len, 8 },
-      segment_t{ data_len + 16, segment_t::DEFERRED_ALLOCATION },
+      segment_t{ data_len, segment_t::DEFERRED_ALLOCATION },
     }, {});
   }
 
@@ -1470,6 +1476,13 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
 		     << dendl;
       rx_segments_todo_rev.emplace_back(main_preamble.segments[idx]);
       next_payload_len += main_preamble.segments[idx].length;
+    }
+
+    if (session_stream_handlers.rx) {
+      rx_segments_todo_rev.front().length += \
+	session_stream_handlers.rx->get_extra_size_at_final();
+      next_payload_len += \
+	session_stream_handlers.rx->get_extra_size_at_final();
     }
 
     // TODO: move this ugliness into dedicated procedure
