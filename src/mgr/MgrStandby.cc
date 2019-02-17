@@ -216,8 +216,8 @@ void MgrStandby::send_beacon()
   dout(10) << "sending beacon as gid " << monc.get_global_id() << dendl;
 
   map<string,string> metadata;
-#warning fixme, report addrs instead
   metadata["addr"] = client_messenger->get_myaddr_legacy().ip_only_to_str();
+  metadata["addrs"] = stringify(client_messenger->get_myaddrs());
   collect_sys_info(&metadata, g_ceph_context);
 
   MMgrBeacon *m = new MMgrBeacon(monc.get_fsid(),
