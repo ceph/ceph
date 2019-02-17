@@ -19,20 +19,29 @@
 #include <seastar/core/future.hh>
 
 #include "Fwd.h"
+#include "crimson/osd/session.h"
 
 namespace ceph::net {
 
 using seq_num_t = uint64_t;
-
+using SharedPtr = seastar::shared_ptr<seastar::shared_ptr_count_base>;
 class Connection : public boost::intrusive_ref_counter<Connection,
 						       boost::thread_unsafe_counter> {
- protected:
+  SessionRef priv;
+protected:
   entity_addr_t peer_addr;
   peer_type_t peer_type = -1;
 
  public:
   Connection() {}
   virtual ~Connection() {}
+
+  void set_priv(const SessionRef& o) {
+    priv = o;
+  }
+  SessionRef get_priv() {
+    return priv;
+  }
 
   virtual Messenger* get_messenger() const = 0;
   const entity_addr_t& get_peer_addr() const { return peer_addr; }

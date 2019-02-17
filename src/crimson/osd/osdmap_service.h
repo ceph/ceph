@@ -16,4 +16,7 @@ public:
   get_map(epoch_t e) = 0;
   /// get the latest map
   virtual seastar::lw_shared_ptr<OSDMap> get_map() const = 0;
+  virtual void pre_publish_map(seastar::lw_shared_ptr<OSDMap>)  = 0;
+  virtual seastar::lw_shared_ptr<OSDMap> get_nextmap_reserved() = 0;
+  virtual void release_map(seastar::lw_shared_ptr<OSDMap> osdmap) = 0;
 };

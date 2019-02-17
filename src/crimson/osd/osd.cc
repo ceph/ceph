@@ -2,11 +2,17 @@
 
 #include <boost/range/join.hpp>
 
+#include "include/ceph_assert.h"
 #include "common/pick_address.h"
+#include "common/Clock.h"
+#include "crimson/net/Connection.h"
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDMap.h"
-#include "crimson/net/Connection.h"
+#include "messages/MOSDOp.h"
+//#include "messages/MOSDOpReply.h"
+//#include "messages/MOSDRepOp.h"
+//#include "messages/MOSDRepOpReply.h"
 #include "crimson/net/SocketMessenger.h"
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_object.h"
@@ -16,7 +22,11 @@
 #include "crimson/osd/osd_meta.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_meta.h"
+#include "crimson/osd/op_request.h"
+#include "crimson/osd/session.h"
+#include "crimson/osd/opqueue_item.h"
 
+#include <seastar/core/future-util.hh>
 namespace {
   seastar::logger& logger() {
     return ceph::get_logger(ceph_subsys_osd);
@@ -40,6 +50,7 @@ OSD::OSD(int id, uint32_t nonce)
     public_msgr{new ceph::net::SocketMessenger{entity_name_t::OSD(whoami),
                                                "client", nonce}},
     monc{*public_msgr},
+    op_prio_cutoff(64),
     heartbeat{new Heartbeat{whoami, nonce, *this, monc}},
     heartbeat_timer{[this] { update_heartbeat_peers(); }}
 {
@@ -297,10 +308,29 @@ seastar::future<> OSD::ms_dispatch(ceph::net::ConnectionRef conn, MessageRef m)
   }
 
   switch (m->get_type()) {
+  case MSG_COMMAND:
+  case MSG_MON_COMMAND:
+  case MSG_OSD_FORCE_RECOVERY:
+  case MSG_OSD_SCRUB:
+  case MSG_OSD_SCRUB2:
+  case MSG_OSD_PG_CREATE:
+  case MSG_OSD_PG_CREATE2:
+  case MSG_OSD_PG_QUERY:
+  case MSG_OSD_PG_NOTIFY:
+  case MSG_OSD_PG_INFO:
+  case MSG_OSD_PG_REMOVE:
+  case MSG_OSD_PG_LOG:
+  case MSG_OSD_PG_TRIM:
+  case MSG_OSD_BACKFILL_RESERVE:
+  case MSG_OSD_RECOVERY_RESERVE:
+  case CEPH_MSG_PING:
+    logger().info("ms_dispatch discarding {}", *m);
+    return seastar::now();
+
   case CEPH_MSG_OSD_MAP:
     return handle_osd_map(conn, boost::static_pointer_cast<MOSDMap>(m));
   default:
-    return seastar::now();
+    return handle_osd_op(conn, m);
   }
 }
 
@@ -604,3 +634,197 @@ void OSD::update_heartbeat_peers()
   }
   // TODO: remove down OSD
 }
+seastar::future<> OSD::handle_osd_op(ceph::net::ConnectionRef conn,
+                                    MessageRef m)
+{
+  OpRef op(new OpRequest(m.get()));
+  op->sent_epoch = static_cast<MOSDFastDispatchOp*>(m.get())->get_map_epoch();
+  op->min_epoch = static_cast<MOSDFastDispatchOp*>(m.get())->get_min_epoch();
+  ceph_assert(op->min_epoch <= op->sent_epoch); // sanity check!
+
+  return do_op_enqueue(conn,op,m).then([this]{
+    return do_op_dequeue();
+  });
+  //return seastar::now();
+}
+
+void OSD::enqueue_op(spg_t pg, OpRef op, epoch_t epoch)
+{
+  const utime_t stamp = op->get_req()->get_recv_stamp();
+  const utime_t latency = ceph_clock_now() - stamp;
+  const unsigned priority = op->get_req()->get_priority();
+  const int cost = op->get_req()->get_cost();
+  const uint64_t owner = op->get_req()->get_source().num();
+  auto item = OpQueueItem(
+      unique_ptr<OpQueueItem::OpQueueable>(new PGOpItem(pg, std::move(op))),
+      cost, priority, stamp, owner, epoch);
+
+  uint32_t shard_index = pg.hash_to_shard(num_shards);
+  if (shard_index != sdata->shard_id) {
+     return;
+     //send the op to other osd shard.
+  }
+  else { //pg belong to this osd shard
+    unsigned priority = item.get_priority();
+    unsigned cost = item.get_cost();
+
+    if (priority >= op_prio_cutoff)
+      sdata->pqueue->enqueue_strict(
+        item.get_owner(), priority, std::move(item));
+    else
+      sdata->pqueue->enqueue(
+        item.get_owner(), priority, cost, std::move(item));
+  }
+
+  return;
+}
+void OSD::dispatch_session_waiting(SessionRef session, seastar::lw_shared_ptr<OSDMap> osdmap)
+{
+  auto i = session->waiting_on_map.begin();
+  while (i != session->waiting_on_map.end()) {
+    OpRef op = &(*i);
+    const MOSDFastDispatchOp *m = static_cast<const MOSDFastDispatchOp*>(
+      op->get_req());
+    if (m->get_min_epoch() > osdmap->get_epoch()) {
+      break;
+    }
+    session->waiting_on_map.erase(i++);
+
+    spg_t pgid;
+    if (m->get_type() == CEPH_MSG_OSD_OP) {
+      pg_t actual_pgid = osdmap->raw_pg_to_pg(
+        static_cast<const MOSDOp*>(m)->get_pg());
+      if (!osdmap->get_primary_shard(actual_pgid, &pgid)) {
+        continue;
+      }
+    } else {
+      pgid = m->get_spg();
+    }
+    enqueue_op(pgid, std::move(op), m->get_map_epoch());
+  }
+
+  if (session->waiting_on_map.empty()) {
+    clear_session_waiting_on_map(session);
+  } else {
+    register_session_waiting_on_map(session);
+  }
+
+  return;
+}
+
+seastar::future<> OSD::do_op_enqueue(ceph::net::ConnectionRef conn, OpRef op, MessageRef m)
+{
+  if (m->get_connection()->has_features(CEPH_FEATUREMASK_RESEND_ON_SPLIT) ||
+    m->get_type() != CEPH_MSG_OSD_OP) {
+    // queue it directly
+    enqueue_op(
+      static_cast<MOSDFastDispatchOp*>(m.get())->get_spg(),
+      std::move(op),
+      static_cast<MOSDFastDispatchOp*>(m.get())->get_map_epoch());
+  } else {
+    // legacy client, and this is an MOSDOp (the *only* fast dispatch
+    // message that didn't have an explicit spg_t); we need to map
+    // them to an spg_t while preserving delivery order.
+    auto priv = conn->get_priv();
+    if (auto session = static_cast<SessionRef>(priv.get()); session) {
+      session->waiting_on_map.push_back(*op);
+      seastar::lw_shared_ptr<OSDMap> nextmap = get_nextmap_reserved();
+      dispatch_session_waiting(session, nextmap);
+      release_map(nextmap);
+    }
+  }
+
+
+  return seastar::now();
+}
+seastar::future<bool> OSD::handle_pg_missing()
+{
+  return seastar::make_ready_future<bool>(true);
+}
+seastar::future<>OSD::do_op_dequeue()
+{
+  static bool dequeue_inprocess = false;
+
+  if (dequeue_inprocess)
+    return seastar::now();
+
+  list<Context *> oncommits;
+  if (!sdata->context_queue.empty()) {
+    sdata->context_queue.swap(oncommits);
+  }
+  if (sdata->pqueue->empty()) {
+    return handle_oncommits(oncommits);
+  }
+  if (state.is_stopping()) {
+    return seastar::now();    // OSD shutdown, discard.
+  }
+
+  return seastar::do_until([this]{return sdata->pqueue->empty();},[&,this]{
+    OpQueueItem item = sdata->pqueue->dequeue();
+    const auto token = item.get_ordering_token();
+    auto r = sdata->pg_slots.emplace(token, nullptr);
+    if (r.second) {
+      r.first->second = make_unique<OSDShardPGSlot>();
+    }
+    OSDShardPGSlot *slot = r.first->second.get();
+    slot->to_process.push_back(std::move(item));
+    return seastar::now();
+  }).then([&,this]{
+    return seastar::parallel_for_each(sdata->pg_slots.begin(),sdata->pg_slots.end(),[&,this](auto pg_slot){
+      OSDShardPGSlot *slot =  pg_slot.second->get();
+      const auto token = pg_slot.first;
+      PGRef pg = slot->pg;
+      return seastar::do_until([&slot,this]{return slot->to_process.empty();}, [&,this]{
+        auto qi = std::move(slot->to_process.front());
+        slot->to_process.pop_front();
+   
+        bool stop = true;
+        if (!pg) stop =false;
+        return seastar::do_until ([&stop,this] {return stop;},[&,this]{
+          return handle_pg_missing();  //implement later;
+        }).then([&,this](bool go_on){
+          if (!go_on)
+            return seastar::now;
+           
+          if(qi.is_peering()){
+            if (qi.get_map_epoch() > osdmap->get_epoch()) {
+              _add_slot_waiter(token, slot, std::move(qi));
+              return handle_oncommits(oncommits);
+             }
+          }
+          return dequeue_op(std::move(qi), pg);
+        });
+      });
+    });
+  }).then([&,this]{
+    return  handle_oncommits(oncommits);
+  }).finally([]{
+    dequeue_inprocess = false;
+    return seastar::now();
+  });
+    
+}
+seastar::future<PGRef> handle_pg_create_info(const OSDMapRef& osdmap, const PGCreateInfo *info)
+{
+  return seastar::make_ready_future<PGRef>(nullptr);
+}
+seastar::future<>OSD::maybe_share_map(OpRef op)
+{
+  //implement later
+  return seastar::now();
+}
+seastar::future<>OSD::dequeue_op(OpQueueItem qi, PGRef pg)
+{
+  return seastar::with_lock(pg->sm, [&] {
+    auto op = qi.maybe_get_op();
+   
+    return maybe_share_map(op).then([&,this]{
+      if (pg->is_deleting())
+        return seastar::now();
+
+      return  pg->do_request(op);
+      //return seastar::now();
+    });
+  });
+}
+

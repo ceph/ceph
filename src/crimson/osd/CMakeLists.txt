@@ -5,6 +5,7 @@ add_executable(crimson-osd
   osd.cc
   osd_meta.cc
   pg.cc
-  pg_meta.cc)
+  pg_meta.cc
+  op_request.cc)
 target_link_libraries(crimson-osd
   crimson-common crimson-os crimson)
