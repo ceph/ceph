@@ -1605,7 +1605,9 @@ std::pair<bool, uint64_t> Server::recall_client_state(MDSGatherBuilder* gather, 
            * session threshold for the session's cap recall throttle.
            */
           dout(15) << "  2*session_release < session_recall"
-                      " (2*" << session_release << " < " << session_recall << ");"
+                      " (2*" << session_release << " < " << session_recall << ") &&"
+                      " 2*session_recall < recall_max_decay_threshold"
+                      " (2*" << session_recall << " > " << recall_max_decay_threshold << ")"
                       " Skipping because we are unlikely to get more released." << dendl;
           continue;
         } else if (recall < recall_max_caps && 2*recall < session_recall) {
