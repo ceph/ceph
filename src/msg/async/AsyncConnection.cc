@@ -123,6 +123,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
     msgr2(m2), state_offset(0),
     worker(w), center(&w->center),read_buffer(nullptr)
 {
+  this->interceptor = m->interceptor;
   read_handler = new C_handle_read(this);
   write_handler = new C_handle_write(this);
   write_callback_handler = new C_handle_write_callback(this);

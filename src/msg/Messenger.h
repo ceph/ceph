@@ -49,6 +49,20 @@ class Timer;
 class AuthClient;
 class AuthServer;
 
+struct Interceptor {
+  std::mutex lock;
+  std::condition_variable cond_var;
+
+  enum ACTION : uint32_t {
+    CONTINUE = 0,
+    FAIL,
+    STOP
+  };
+
+  virtual ~Interceptor() {}
+  virtual ACTION intercept(Connection *conn, uint32_t step) = 0;
+};
+
 class Messenger {
 private:
   std::deque<Dispatcher*> dispatchers;
@@ -75,6 +89,7 @@ protected:
 public:
   AuthClient *auth_client = 0;
   AuthServer *auth_server = 0;
+  Interceptor *interceptor = nullptr;
 
   /**
    * Various Messenger conditional config/type flags to allow
