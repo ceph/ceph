@@ -181,7 +181,7 @@ describe('OsdListComponent', () => {
       const modalClass = CriticalConfirmationModalComponent;
       mockSafeToDestroy();
       expectOpensModal('Mark Lost', modalClass);
-      expectOpensModal('Remove', modalClass);
+      expectOpensModal('Purge', modalClass);
       expectOpensModal('Destroy', modalClass);
     });
   });
@@ -216,7 +216,7 @@ describe('OsdListComponent', () => {
     it('calls the corresponding service methods in critical confirmation modals', () => {
       mockSafeToDestroy();
       expectOsdServiceMethodCalled('Mark Lost', 'markLost');
-      expectOsdServiceMethodCalled('Remove', 'remove');
+      expectOsdServiceMethodCalled('Purge', 'purge');
       expectOsdServiceMethodCalled('Destroy', 'destroy');
     });
   });
