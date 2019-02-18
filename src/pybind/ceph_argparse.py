@@ -24,12 +24,13 @@ import threading
 import uuid
 
 # Flags are from MonCommand.h
-FLAG_NOFORWARD = (1 << 0)
-FLAG_OBSOLETE = (1 << 1)
-FLAG_DEPRECATED = (1 << 2)
-FLAG_MGR = (1<<3)
-FLAG_POLL = (1 << 4)
-FLAG_HIDDEN = (1 << 5)
+class Flag:
+    NOFORWARD = (1 << 0)
+    OBSOLETE = (1 << 1)
+    DEPRECATED = (1 << 2)
+    MGR = (1<<3)
+    POLL = (1 << 4)
+    HIDDEN = (1 << 5)
 
 KWARG_EQUALS = "--([^=]+)=(.+)"
 KWARG_SPACE = "--([^=]+)"
@@ -1095,10 +1096,10 @@ def validate(args, signature, flags=0, partial=False):
             print(save_exception[0], 'not valid: ', save_exception[1], file=sys.stderr)
         raise ArgumentError("unused arguments: " + str(myargs))
 
-    if flags & FLAG_MGR:
+    if flags & Flag.MGR:
         d['target'] = ('mgr','')
 
-    if flags & FLAG_POLL:
+    if flags & Flag.POLL:
         d['poll'] = True
 
     # Finally, success
@@ -1133,7 +1134,7 @@ def validate_command(sigdict, args, verbose=False):
     bestcmds = []
     for cmd in sigdict.values():
         flags = cmd.get('flags', 0)
-        if flags & FLAG_OBSOLETE:
+        if flags & Flag.OBSOLETE:
             continue
         sig = cmd['sig']
         matched = matchnum(args, sig, partial=True)
@@ -1199,7 +1200,8 @@ def validate_command(sigdict, args, verbose=False):
             print("Invalid command:", ex, file=sys.stderr)
             print(concise_sig(sig), ': ', cmd['help'], file=sys.stderr)
     else:
-        bestcmds = [c for c in bestcmds if not c.get('flags', 0) & (FLAG_DEPRECATED | FLAG_HIDDEN)]
+        bestcmds = [c for c in bestcmds
+                    if not c.get('flags', 0) & (Flag.DEPRECATED | Flag.HIDDEN)]
         bestcmds = bestcmds[:10] # top 10
         print('no valid command found; {0} closest matches:'.format(len(bestcmds)), file=sys.stderr)
         for cmd in bestcmds:
