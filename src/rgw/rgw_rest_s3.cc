@@ -708,15 +708,15 @@ int RGWListBucket_ObjStore_S3v2::get_params()
   list_versions = s->info.args.exists("versions");
   prefix = s->info.args.get("prefix");
   startAfter = s->info.args.get("start-after");
+  marker = s->info.args.get("ContinuationToken");
   if(marker.empty()) marker = startAfter;
-  else marker = s->info.args.get("ContinuationToken");
-
+  
    // non-standard
   s->info.args.get_bool("allow-unordered", &allow_unordered, false);
 
-   delimiter = s->info.args.get("delimiter");
+  delimiter = s->info.args.get("delimiter");
 
-   max_keys = s->info.args.get("max-keys");
+  max_keys = s->info.args.get("max-keys");
   op_ret = parse_max_keys();
   if (op_ret < 0) {
     return op_ret;
