@@ -93,8 +93,8 @@ class OsdTest(DashboardTestCase):
         # Destroy
         self._post('/api/osd/5/destroy')
         self.assertStatus(200)
-        # Remove
-        self._post('/api/osd/5/remove')
+        # Purge
+        self._post('/api/osd/5/purge')
         self.assertStatus(200)
 
     def test_safe_to_destroy(self):
