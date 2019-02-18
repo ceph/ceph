@@ -22,7 +22,9 @@ Foundation.  See file COPYING.
 from __future__ import print_function
 from time import sleep
 import codecs
+import grp
 import os
+import pwd
 import sys
 import subprocess
 import time
@@ -273,7 +275,10 @@ def parse_cmdargs(args=None, target=''):
                         help='input file, or "-" for stdin')
     parser.add_argument('-o', '--out-file', dest='output_file',
                         help='output file, or "-" for stdout')
-
+    parser.add_argument('--setuser', dest='setuser',
+                        help='set user file permission')
+    parser.add_argument('--setgroup', dest='setgroup',
+                        help='set group file permission')
     parser.add_argument('--id', '--user', dest='client_id',
                         help='client id for authentication')
     parser.add_argument('--name', '-n', dest='client_name',
@@ -1086,6 +1091,20 @@ def main():
         except Exception as e:
             print('Can\'t open output file {0}: {1}'.format(parsed_args.output_file, e), file=sys.stderr)
             return 1
+        if parsed_args.setuser:
+            try:
+                ownerid = pwd.getpwnam(parsed_args.setuser).pw_uid
+                os.fchown(outf.fileno(), ownerid, -1)
+            except OSError as e:
+                print('Failed to change user ownership of {0} to {1}: {2}'.format(outf, parsed_args.setuser, e))
+                return 1
+        if parsed_args.setgroup:
+            try:
+                groupid = grp.getgrnam(parsed_args.setgroup).gr_gid
+                os.fchown(outf.fileno(), -1, groupid)
+            except OSError as e:
+                print('Failed to change group ownership of {0} to {1}: {2}'.format(outf, parsed_args.setgroup, e))
+                return 1
 
     # -s behaves like a command (ceph status).
     if parsed_args.status:
