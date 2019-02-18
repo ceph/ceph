@@ -138,11 +138,10 @@ import signal
 import string
 import subprocess
 
-import ceph_argparse
 from ceph_argparse import \
     concise_sig, descsort_key, parse_json_funcsigs, \
     validate_command, find_cmd_target, \
-    json_command, run_in_thread
+    json_command, run_in_thread, Flag
 
 from ceph_daemon import admin_socket, DaemonWatcher, Termsize
 
@@ -472,7 +471,7 @@ def format_help(cmddict, partial=None):
         if not cmd['help']:
             continue
         flags = cmd.get('flags', 0)
-        if flags & (ceph_argparse.FLAG_OBSOLETE | ceph_argparse.FLAG_DEPRECATED | ceph_argparse.FLAG_HIDDEN):
+        if flags & (Flag.OBSOLETE | Flag.DEPRECATED | Flag.HIDDEN):
             continue
         concise = concise_sig(cmd['sig'])
         if partial and not concise.startswith(partial):
