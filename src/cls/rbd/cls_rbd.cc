@@ -77,6 +77,33 @@ uint64_t get_encode_features(cls_method_context_t hctx) {
   return features;
 }
 
+bool calc_sparse_extent(const bufferptr &bp, size_t sparse_size,
+                        uint64_t length, size_t *write_offset,
+                        size_t *write_length, size_t *offset) {
+  size_t extent_size;
+  if (*offset + sparse_size > length) {
+    extent_size = length - *offset;
+  } else {
+    extent_size = sparse_size;
+  }
+
+  bufferptr extent(bp, *offset, extent_size);
+  *offset += extent_size;
+
+  bool extent_is_zero = extent.is_zero();
+  if (!extent_is_zero) {
+    *write_length += extent_size;
+  }
+  if (extent_is_zero && *write_length == 0) {
+    *write_offset += extent_size;
+  }
+
+  if ((extent_is_zero || *offset == length) && *write_length != 0) {
+    return true;
+  }
+  return false;
+}
+
 } // anonymous namespace
 
 static int snap_read_header(cls_method_context_t hctx, bufferlist& bl)
@@ -7273,6 +7300,100 @@ int namespace_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
   return 0;
 }
 
+/**
+ *  Reclaim space for zeroed extents
+ *
+ * Input:
+ * @param sparse_size minimal zeroed block to sparse
+ * @param remove_empty boolean, true if the object should be removed if empty
+ *
+ * Output:
+ * @returns -ENOENT if the object does not exist or has been removed
+ * @returns 0 on success, negative error code on failure
+ */
+int sparsify(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  size_t sparse_size;
+  bool remove_empty;
+  try {
+    auto iter = in->cbegin();
+    decode(sparse_size, iter);
+    decode(remove_empty, iter);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  int r = check_exists(hctx);
+  if (r < 0) {
+    return r;
+  }
+
+  bufferlist bl;
+  r = cls_cxx_read(hctx, 0, 0, &bl);
+  if (r < 0) {
+    CLS_ERR("failed to read data off of disk: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  if (bl.is_zero()) {
+    if (remove_empty) {
+      CLS_LOG(20, "remove");
+      r = cls_cxx_remove(hctx);
+      if (r < 0) {
+        CLS_ERR("remove failed: %s", cpp_strerror(r).c_str());
+        return r;
+      }
+    } else if (bl.length() > 0) {
+      CLS_LOG(20, "truncate");
+      bufferlist write_bl;
+      r = cls_cxx_replace(hctx, 0, 0, &write_bl);
+      if (r < 0) {
+        CLS_ERR("truncate failed: %s", cpp_strerror(r).c_str());
+        return r;
+      }
+    } else {
+      CLS_LOG(20, "skip empty");
+    }
+    return 0;
+  }
+
+  bl.rebuild(buffer::ptr_node::create(bl.length()));
+  size_t write_offset = 0;
+  size_t write_length = 0;
+  size_t offset = 0;
+  size_t length = bl.length();
+  const auto& ptr = bl.front();
+  bool replace = true;
+  while (offset < length) {
+    if (calc_sparse_extent(ptr, sparse_size, length, &write_offset,
+                           &write_length, &offset)) {
+      if (write_offset == 0 && write_length == length) {
+        CLS_LOG(20, "nothing to do");
+        return 0;
+      }
+      CLS_LOG(20, "write%s %" PRIu64 "~%" PRIu64, (replace ? "(replace)" : ""),
+              write_offset, write_length);
+      bufferlist write_bl;
+      write_bl.push_back(buffer::ptr_node::create(ptr, write_offset,
+                                                  write_length));
+      if (replace) {
+        r = cls_cxx_replace(hctx, write_offset, write_length, &write_bl);
+        replace = false;
+      } else {
+        r = cls_cxx_write(hctx, write_offset, write_length, &write_bl);
+      }
+      if (r < 0) {
+        CLS_ERR("write failed: %s", cpp_strerror(r).c_str());
+        return r;
+      }
+      write_offset = offset;
+      write_length = 0;
+    }
+  }
+
+  return 0;
+}
+
 CLS_INIT(rbd)
 {
   CLS_LOG(20, "Loaded rbd class!");
@@ -7315,7 +7436,6 @@ CLS_INIT(rbd)
   cls_method_handle_t h_snapshot_rename;
   cls_method_handle_t h_snapshot_trash_add;
   cls_method_handle_t h_get_all_features;
-  cls_method_handle_t h_copyup;
   cls_method_handle_t h_get_id;
   cls_method_handle_t h_set_id;
   cls_method_handle_t h_set_modify_timestamp;
@@ -7347,7 +7467,6 @@ CLS_INIT(rbd)
   cls_method_handle_t h_migration_set_state;
   cls_method_handle_t h_migration_get;
   cls_method_handle_t h_migration_remove;
-  cls_method_handle_t h_assert_snapc_seq;
   cls_method_handle_t h_old_snapshots_list;
   cls_method_handle_t h_old_snapshot_add;
   cls_method_handle_t h_old_snapshot_remove;
@@ -7402,6 +7521,9 @@ CLS_INIT(rbd)
   cls_method_handle_t h_namespace_add;
   cls_method_handle_t h_namespace_remove;
   cls_method_handle_t h_namespace_list;
+  cls_method_handle_t h_copyup;
+  cls_method_handle_t h_assert_snapc_seq;
+  cls_method_handle_t h_sparsify;
 
   cls_register("rbd", &h_class);
   cls_register_cxx_method(h_class, "create",
@@ -7451,9 +7573,6 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "get_all_features",
 			  CLS_METHOD_RD,
 			  get_all_features, &h_get_all_features);
-  cls_register_cxx_method(h_class, "copyup",
-			  CLS_METHOD_RD | CLS_METHOD_WR,
-			  copyup, &h_copyup);
 
   // NOTE: deprecate v1 parent APIs after mimic EOLed
   cls_register_cxx_method(h_class, "get_parent",
@@ -7549,10 +7668,6 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "migration_remove",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           migration_remove, &h_migration_remove);
-  cls_register_cxx_method(h_class, "assert_snapc_seq",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
-                          assert_snapc_seq,
-                          &h_assert_snapc_seq);
 
   cls_register_cxx_method(h_class, "set_modify_timestamp",
 	            	  CLS_METHOD_RD | CLS_METHOD_WR,
@@ -7792,4 +7907,16 @@ CLS_INIT(rbd)
                           namespace_remove, &h_namespace_remove);
   cls_register_cxx_method(h_class, "namespace_list", CLS_METHOD_RD,
                           namespace_list, &h_namespace_list);
+
+  /* data object methods */
+  cls_register_cxx_method(h_class, "copyup",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  copyup, &h_copyup);
+  cls_register_cxx_method(h_class, "assert_snapc_seq",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          assert_snapc_seq,
+                          &h_assert_snapc_seq);
+  cls_register_cxx_method(h_class, "sparsify",
+			  CLS_METHOD_RD | CLS_METHOD_WR,
+			  sparsify, &h_sparsify);
 }

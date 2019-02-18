@@ -655,6 +655,13 @@ void IoCtx::snap_set_read(snap_t seq) {
   ctx->set_snap_read(seq);
 }
 
+int IoCtx::sparse_read(const std::string& oid, std::map<uint64_t,uint64_t>& m,
+                       bufferlist& bl, size_t len, uint64_t off) {
+  TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
+  return ctx->execute_operation(
+    oid, boost::bind(&TestIoCtxImpl::sparse_read, _1, _2, off, len, &m, &bl));
+}
+
 int IoCtx::stat(const std::string& oid, uint64_t *psize, time_t *pmtime) {
   TestIoCtxImpl *ctx = reinterpret_cast<TestIoCtxImpl*>(io_ctx_impl);
   return ctx->execute_operation(
@@ -1364,6 +1371,17 @@ int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *inbl) {
   librados::TestClassHandler::MethodContext *ctx =
     reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
   return ctx->io_ctx_impl->write_full(ctx->oid, *inbl, ctx->snapc);
+}
+
+int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len,
+                    bufferlist *inbl) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  int r = ctx->io_ctx_impl->truncate(ctx->oid, 0, ctx->snapc);
+  if (r < 0) {
+    return r;
+  }
+  return ctx->io_ctx_impl->write(ctx->oid, *inbl, len, ofs, ctx->snapc);
 }
 
 int cls_cxx_list_watchers(cls_method_context_t hctx,

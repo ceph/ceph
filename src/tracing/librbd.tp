@@ -1501,6 +1501,28 @@ TRACEPOINT_EVENT(librbd, flatten_exit,
     )
 )
 
+TRACEPOINT_EVENT(librbd, sparsify_enter,
+    TP_ARGS(
+        void*, imagectx,
+        const char*, name,
+        size_t, sparse_size,
+        const char*, id),
+    TP_FIELDS(
+        ctf_integer_hex(void*, imagectx, imagectx)
+        ctf_string(name, name)
+        ctf_integer(size_t, sparse_size, sparse_size)
+        ctf_string(id, id)
+    )
+)
+
+TRACEPOINT_EVENT(librbd, sparsify_exit,
+    TP_ARGS(
+        int, retval),
+    TP_FIELDS(
+        ctf_integer(int, retval, retval)
+    )
+)
+
 TRACEPOINT_EVENT(librbd, snap_create_enter,
     TP_ARGS(
         void*, imagectx,
