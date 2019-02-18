@@ -4112,6 +4112,11 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("bdev_log_op_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("log operation details if it's slower than this age (seconds)"),
+
+
     Option("bluefs_alloc_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_M)
     .set_description(""),
@@ -4714,6 +4719,11 @@ std::vector<Option> get_global_options() {
     Option("bluestore_warn_on_bluefs_spillover", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("Enable health indication on bluefs slow device usage"),
+
+    Option("bluestore_log_op_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("log operation if it's slower than this age (seconds)"),
+
     // -----------------------------------------
     // kstore
 
