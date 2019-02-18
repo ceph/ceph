@@ -128,6 +128,7 @@ set(librbd_internal_srcs
   operation/SnapshotRollbackRequest.cc
   operation/SnapshotUnprotectRequest.cc
   operation/SnapshotLimitRequest.cc
+  operation/SparsifyRequest.cc
   operation/TrimRequest.cc
   trash/MoveRequest.cc
   watcher/Notifier.cc

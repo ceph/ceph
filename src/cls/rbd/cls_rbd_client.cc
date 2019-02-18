@@ -2783,5 +2783,23 @@ int namespace_list(librados::IoCtx *ioctx,
   return namespace_list_finish(&iter, entries);
 }
 
+void sparsify(librados::ObjectWriteOperation *op, size_t sparse_size,
+              bool remove_empty)
+{
+  bufferlist bl;
+  encode(sparse_size, bl);
+  encode(remove_empty, bl);
+  op->exec("rbd", "sparsify", bl);
+}
+
+int sparsify(librados::IoCtx *ioctx, const std::string &oid, size_t sparse_size,
+             bool remove_empty)
+{
+  librados::ObjectWriteOperation op;
+  sparsify(&op, sparse_size, remove_empty);
+
+  return ioctx->operate(oid, &op);
+}
+
 } // namespace cls_client
 } // namespace librbd

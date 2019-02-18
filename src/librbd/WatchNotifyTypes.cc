@@ -292,6 +292,23 @@ void UpdateFeaturesPayload::dump(Formatter *f) const {
   f->dump_bool("enabled", enabled);
 }
 
+void SparsifyPayload::encode(bufferlist &bl) const {
+  using ceph::encode;
+  AsyncRequestPayloadBase::encode(bl);
+  encode(sparse_size, bl);
+}
+
+void SparsifyPayload::decode(__u8 version, bufferlist::const_iterator &iter) {
+  using ceph::decode;
+  AsyncRequestPayloadBase::decode(version, iter);
+  decode(sparse_size, iter);
+}
+
+void SparsifyPayload::dump(Formatter *f) const {
+  AsyncRequestPayloadBase::dump(f);
+  f->dump_unsigned("sparse_size", sparse_size);
+}
+
 void UnknownPayload::encode(bufferlist &bl) const {
   ceph_abort();
 }
@@ -371,6 +388,9 @@ void NotifyMessage::decode(bufferlist::const_iterator& iter) {
   case NOTIFY_OP_MIGRATE:
     payload = MigratePayload();
     break;
+  case NOTIFY_OP_SPARSIFY:
+    payload = SparsifyPayload();
+    break;
   default:
     payload = UnknownPayload();
     break;
@@ -406,6 +426,7 @@ void NotifyMessage::generate_test_instances(std::list<NotifyMessage *> &o) {
   o.push_back(new NotifyMessage(RenamePayload("foo")));
   o.push_back(new NotifyMessage(UpdateFeaturesPayload(1, true)));
   o.push_back(new NotifyMessage(MigratePayload(AsyncRequestId(ClientId(0, 1), 2))));
+  o.push_back(new NotifyMessage(SparsifyPayload(AsyncRequestId(ClientId(0, 1), 2), 1)));
 }
 
 void ResponseMessage::encode(bufferlist& bl) const {
@@ -483,6 +504,9 @@ std::ostream &operator<<(std::ostream &out,
     break;
   case NOTIFY_OP_MIGRATE:
     out << "Migrate";
+    break;
+  case NOTIFY_OP_SPARSIFY:
+    out << "Sparsify";
     break;
   default:
     out << "Unknown (" << static_cast<uint32_t>(op) << ")";

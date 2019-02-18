@@ -469,6 +469,9 @@ public:
 
   int flatten();
   int flatten_with_progress(ProgressContext &prog_ctx);
+
+  int sparsify(size_t sparse_size);
+  int sparsify_with_progress(size_t sparse_size, ProgressContext &prog_ctx);
   /**
    * Returns a pair of poolname, imagename for each clone
    * of this image at the currently set snapshot.

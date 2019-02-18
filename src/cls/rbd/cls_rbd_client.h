@@ -183,9 +183,6 @@ int get_all_features_finish(bufferlist::const_iterator *it,
 int get_all_features(librados::IoCtx *ioctx, const std::string &oid,
                      uint64_t *all_features);
 
-int copyup(librados::IoCtx *ioctx, const std::string &oid,
-           bufferlist data);
-
 /// NOTE: remove protection after clone v1 is retired
 void get_protection_status_start(librados::ObjectReadOperation *op,
                                  snapid_t snap_id);
@@ -292,13 +289,6 @@ int migration_get(librados::IoCtx *ioctx, const std::string &oid,
                   cls::rbd::MigrationSpec *migration_spec);
 int migration_remove(librados::IoCtx *ioctx, const std::string &oid);
 void migration_remove(librados::ObjectWriteOperation *op);
-
-int assert_snapc_seq(librados::IoCtx *ioctx, const std::string &oid,
-                     uint64_t snapc_seq,
-                     cls::rbd::AssertSnapcSeqState state);
-void assert_snapc_seq(librados::ObjectWriteOperation *op,
-                      uint64_t snapc_seq,
-                      cls::rbd::AssertSnapcSeqState state);
 
 // operations on rbd_id objects
 void get_id_start(librados::ObjectReadOperation *op);
@@ -603,6 +593,22 @@ int namespace_list_finish(bufferlist::const_iterator *it,
 int namespace_list(librados::IoCtx *ioctx,
                    const std::string &start, uint64_t max_return,
                    std::list<std::string> *entries);
+
+// operations on data objects
+int assert_snapc_seq(librados::IoCtx *ioctx, const std::string &oid,
+                     uint64_t snapc_seq,
+                     cls::rbd::AssertSnapcSeqState state);
+void assert_snapc_seq(librados::ObjectWriteOperation *op,
+                      uint64_t snapc_seq,
+                      cls::rbd::AssertSnapcSeqState state);
+
+int copyup(librados::IoCtx *ioctx, const std::string &oid,
+           bufferlist data);
+
+void sparsify(librados::ObjectWriteOperation *op, size_t sparse_size,
+              bool remove_empty);
+int sparsify(librados::IoCtx *ioctx, const std::string &oid, size_t sparse_size,
+             bool remove_empty);
 
 } // namespace cls_client
 } // namespace librbd

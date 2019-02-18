@@ -65,6 +65,28 @@ static char *random_buf(size_t len)
   return b;
 }
 
+static bool is_sparse_read_supported(librados::IoCtx &ioctx,
+                                     const std::string &oid) {
+  EXPECT_EQ(0, ioctx.create(oid, true));
+  bufferlist inbl;
+  inbl.append(std::string(1, 'X'));
+  EXPECT_EQ(0, ioctx.write(oid, inbl, inbl.length(), 1));
+  EXPECT_EQ(0, ioctx.write(oid, inbl, inbl.length(), 3));
+
+  std::map<uint64_t, uint64_t> m;
+  bufferlist outbl;
+  int r = ioctx.sparse_read(oid, m, outbl, 4, 0);
+  ioctx.remove(oid);
+
+  int expected_r = 2;
+  std::map<uint64_t, uint64_t> expected_m = {{1, 1}, {3, 1}};
+  bufferlist expected_outbl;
+  expected_outbl.append(std::string(2, 'X'));
+
+  return (r == expected_r && m == expected_m &&
+          outbl.contents_equal(expected_outbl));
+}
+
 class TestClsRbd : public ::testing::Test {
 public:
 
@@ -3008,4 +3030,111 @@ TEST_F(TestClsRbd, assert_snapc_seq)
                              cls::rbd::ASSERT_SNAPC_SEQ_LE_SNAPSET_SEQ));
 
   ASSERT_EQ(0, ioctx.selfmanaged_snap_remove(snapc_seq));
+}
+
+TEST_F(TestClsRbd, sparsify)
+{
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  string oid = get_temp_image_name();
+  ioctx.remove(oid);
+
+  bool sparse_read_supported = is_sparse_read_supported(ioctx, oid);
+
+  // test sparsify on a non-existent object
+
+  ASSERT_EQ(-ENOENT, sparsify(&ioctx, oid, 16, false));
+  uint64_t size;
+  ASSERT_EQ(-ENOENT, ioctx.stat(oid, &size, NULL));
+  ASSERT_EQ(-ENOENT, sparsify(&ioctx, oid, 16, true));
+  ASSERT_EQ(-ENOENT, ioctx.stat(oid, &size, NULL));
+
+  // test sparsify on an empty object
+
+  ASSERT_EQ(0, ioctx.create(oid, true));
+  ASSERT_EQ(0, sparsify(&ioctx, oid, 16, false));
+  ASSERT_EQ(0, sparsify(&ioctx, oid, 16, true));
+  ASSERT_EQ(-ENOENT, sparsify(&ioctx, oid, 16, false));
+
+  // test sparsify on a zeroed object
+
+  bufferlist inbl;
+  inbl.append(std::string(4096, '\0'));
+  ASSERT_EQ(0, ioctx.write(oid, inbl, inbl.length(), 0));
+  ASSERT_EQ(0, sparsify(&ioctx, oid, 16, false));
+  std::map<uint64_t, uint64_t> m;
+  bufferlist outbl;
+  std::map<uint64_t, uint64_t> expected_m = {{0, 0}};
+  bufferlist expected_outbl;
+  if (sparse_read_supported) {
+    expected_m = {};
+  }
+  ASSERT_EQ((int)expected_m.size(),
+            ioctx.sparse_read(oid, m, outbl, inbl.length(), 0));
+  ASSERT_EQ(m, expected_m);
+  ASSERT_EQ(0, sparsify(&ioctx, oid, 16, true));
+  ASSERT_EQ(-ENOENT, sparsify(&ioctx, oid, 16, true));
+  ASSERT_EQ(0, ioctx.write(oid, inbl, inbl.length(), 0));
+  ASSERT_EQ(0, sparsify(&ioctx, oid, 16, true));
+  ASSERT_EQ(-ENOENT, sparsify(&ioctx, oid, 16, true));
+
+  // test sparsify on an object with zeroes
+
+  inbl.append(std::string(4096, '1'));
+  inbl.append(std::string(4096, '\0'));
+  inbl.append(std::string(4096, '2'));
+  inbl.append(std::string(4096, '\0'));
+  ASSERT_EQ(0, ioctx.write(oid, inbl, inbl.length(), 0));
+
+  // try to sparsify with sparse_size too large
+
+  ASSERT_EQ(0, sparsify(&ioctx, oid, inbl.length(), true));
+  expected_m = {{0, inbl.length()}};
+  expected_outbl = inbl;
+  ASSERT_EQ((int)expected_m.size(),
+            ioctx.sparse_read(oid, m, outbl, inbl.length(), 0));
+  ASSERT_EQ(m, expected_m);
+  ASSERT_TRUE(outbl.contents_equal(expected_outbl));
+
+  // sparsify with small sparse_size
+
+  ASSERT_EQ(0, sparsify(&ioctx, oid, 16, true));
+  outbl.clear();
+  ASSERT_EQ((int)(inbl.length() - 4096),
+            ioctx.read(oid, outbl, inbl.length(), 0));
+  outbl.append(std::string(4096, '\0'));
+  ASSERT_TRUE(outbl.contents_equal(expected_outbl));
+  if (sparse_read_supported) {
+    expected_m = {{4096 * 1, 4096}, {4096 * 3, 4096}};
+    expected_outbl.clear();
+    expected_outbl.append(std::string(4096, '1'));
+    expected_outbl.append(std::string(4096, '2'));
+  } else {
+    expected_m = {{0, 4 * 4096}};
+    expected_outbl.clear();
+    expected_outbl.append(std::string(4096, '\0'));
+    expected_outbl.append(std::string(4096, '1'));
+    expected_outbl.append(std::string(4096, '\0'));
+    expected_outbl.append(std::string(4096, '2'));
+  }
+  m.clear();
+  outbl.clear();
+  ASSERT_EQ((int)expected_m.size(),
+            ioctx.sparse_read(oid, m, outbl, inbl.length(), 0));
+  ASSERT_EQ(m, expected_m);
+  ASSERT_TRUE(outbl.contents_equal(expected_outbl));
+
+  // test it is the same after yet another sparsify
+
+  ASSERT_EQ(0, sparsify(&ioctx, oid, 16, true));
+  m.clear();
+  outbl.clear();
+  ASSERT_EQ((int)expected_m.size(),
+            ioctx.sparse_read(oid, m, outbl, inbl.length(), 0));
+  ASSERT_EQ(m, expected_m);
+  ASSERT_TRUE(outbl.contents_equal(expected_outbl));
+
+  ASSERT_EQ(0, ioctx.remove(oid));
+  ioctx.close();
 }
