@@ -27,7 +27,7 @@ std::string parse_rgw_ldap_bindpw(CephContext* ctx)
       memset(bindpw, 0, 1024);
       int pwlen = safe_read_file("" /* base */, ldap_secret.c_str(),
 				 bindpw, 1023);
-    if (pwlen) {
+    if (pwlen > 0) {
       ldap_bindpw = bindpw;
       boost::algorithm::trim(ldap_bindpw);
       if (ldap_bindpw.back() == '\n')
