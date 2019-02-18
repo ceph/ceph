@@ -2883,10 +2883,12 @@ CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
 
   exproto->client_cookie = client_cookie;
 
-  exproto->peer_name = peer_name;
+  if (!reconnecting) {
+    exproto->peer_name = peer_name;
+    exproto->connection_features = connection_features;
+    existing->set_features(connection_features);
+  }
   exproto->peer_global_seq = peer_global_seq;
-  exproto->connection_features = connection_features;
-  existing->set_features(connection_features);
 
   auto temp_cs = std::move(connection->cs);
   EventCenter *new_center = connection->center;
