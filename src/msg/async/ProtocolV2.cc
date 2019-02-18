@@ -19,7 +19,9 @@
 ostream &ProtocolV2::_conn_prefix(std::ostream *_dout) {
   return *_dout << "--2- " << messenger->get_myaddrs() << " >> "
                 << *connection->peer_addrs << " conn(" << connection << " "
-                << this << " :" << connection->port
+                << this
+		<< " " << ceph_con_mode_name(auth_meta->con_mode)
+		<< " :" << connection->port
                 << " s=" << get_state_name(state) << " pgs=" << peer_global_seq
                 << " cs=" << connect_seq << " l=" << connection->policy.lossy
                 << " rx=" << session_stream_handlers.rx.get()
