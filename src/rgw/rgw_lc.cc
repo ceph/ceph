@@ -126,14 +126,8 @@ bool RGWLifecycleConfiguration::_add_rule(const LCRule& rule)
   if (rule.get_filter().has_tags()){
     op.obj_tags = rule.get_filter().get_tags();
   }
-
-  /* prefix is optional, update prefix map only if prefix...exists */
-  if (!prefix.empty()) {
-    auto ret = prefix_map.emplace(std::move(prefix), std::move(op));
-    return ret.second;
-  }
-
-  return true;
+  auto ret = prefix_map.emplace(std::move(prefix), std::move(op));
+  return ret.second;
 }
 
 int RGWLifecycleConfiguration::check_and_add_rule(const LCRule& rule)
