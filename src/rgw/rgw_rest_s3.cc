@@ -723,7 +723,8 @@ int RGWListBucket_ObjStore_S3v2::get_params()
   }
 
    encoding_type = s->info.args.get("encoding-type");
-   s->info.args.get_bool("fetch-owner", &fetchOwner,true) dump_owner(s, s->user->user_id, s->user->display_name);
+   fetchOwner = s->info.args.get_bool("fetch-owner"); 
+   if(fetchOwner == true)dump_owner(s, s->user->user_id, s->user->display_name);
 
   //fetchOwner = RGWHTTPArgs::get_bool("fetch-owner");
   //if(fetchOwner ==true) dump_owner(s, s->user->user_id, s->user->display_name);
