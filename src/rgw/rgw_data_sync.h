@@ -79,7 +79,7 @@ struct rgw_data_sync_info {
       state = StateInit;
     }
     JSONDecoder::decode_json("num_shards", num_shards, obj);
-    JSONDecoder::decode_json("instance_id", num_shards, obj);
+    JSONDecoder::decode_json("instance_id", instance_id, obj);
   }
   static void generate_test_instances(std::list<rgw_data_sync_info*>& o);
 
