@@ -129,6 +129,34 @@ const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
  */
 #define EXTENT_SHARD_KEY_SUFFIX 'x'
 
+// FIXME minor: make a BlueStore method once we have effecient way to
+// map idx to counter nickname
+#define LOG_LATENCY_I(logger, cct, idx, v, info) { \
+  ceph::timespan lat = v; \
+  logger->tinc(idx, lat); \
+  if (cct->_conf->bluestore_log_op_age > 0.0 && \
+      lat >= make_timespan(cct->_conf->bluestore_log_op_age)) { \
+    dout(0) << __func__ << " slow operation observed for " #idx \
+      << ", latency = " << lat \
+      << info \
+      << dendl; \
+  } \
+}
+
+#define LOG_LATENCY_FN(logger, cct, idx, v, fn) { \
+  ceph::timespan lat = v; \
+  logger->tinc(idx, lat); \
+  if (cct->_conf->bluestore_log_op_age > 0.0 && \
+      lat >= make_timespan(cct->_conf->bluestore_log_op_age)) { \
+    dout(0) << __func__ << " slow operation observed for " #idx \
+      << ", latency = " << lat \
+      << fn(lat) \
+      << dendl; \
+  } \
+}
+
+#define LOG_LATENCY(logger, cct, idx, v) LOG_LATENCY_I(logger, cct, idx, v, "")
+
 /*
  * string encoding in the key
  *
@@ -8253,7 +8281,7 @@ int BlueStore::read(
     RWLock::RLocker l(c->lock);
     auto start1 = mono_clock::now();
     OnodeRef o = c->get_onode(oid, false);
-    logger->tinc(l_bluestore_read_onode_meta_lat, mono_clock::now() - start1);
+    LOG_LATENCY(logger, cct, l_bluestore_read_onode_meta_lat, mono_clock::now() - start1);
     if (!o || !o->exists) {
       r = -ENOENT;
       goto out;
@@ -8282,7 +8310,7 @@ int BlueStore::read(
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
-  logger->tinc(l_bluestore_read_lat, mono_clock::now() - start);
+  LOG_LATENCY(logger, cct, l_bluestore_read_lat, mono_clock::now() - start);
   return r;
 }
 
@@ -8374,7 +8402,7 @@ int BlueStore::_do_read(
 
   auto start = mono_clock::now();
   o->extent_map.fault_range(db, offset, length);
-  logger->tinc(l_bluestore_read_onode_meta_lat, mono_clock::now() - start);
+  LOG_LATENCY(logger, cct, l_bluestore_read_onode_meta_lat, mono_clock::now() - start);
   _dump_onode(o);
 
   ready_regions_t ready_regions;
@@ -8556,7 +8584,10 @@ int BlueStore::_do_read(
       }
     }
   }
+
+  int64_t num_ios = length;
   if (ioc.has_pending_aios()) {
+    num_ios = -ioc.get_num_ios();
     bdev->aio_submit(&ioc);
     dout(20) << __func__ << " waiting for aio" << dendl;
     ioc.aio_wait();
@@ -8566,7 +8597,10 @@ int BlueStore::_do_read(
       return -EIO;
     }
   }
-  logger->tinc(l_bluestore_read_wait_aio_lat, mono_clock::now() - start);
+  LOG_LATENCY_FN(logger, cct, l_bluestore_read_wait_aio_lat,
+    mono_clock::now() - start,
+    [&](auto lat) { return ", num_ios = " + stringify(num_ios); }
+  );
 
   // enumerate and decompress desired blobs
   auto p = compressed_blob_bls.begin();
@@ -8712,7 +8746,7 @@ int BlueStore::_verify_csum(OnodeRef& o,
       derr << __func__ << " failed with exit code: " << cpp_strerror(r) << dendl;
     }
   }
-  logger->tinc(l_bluestore_csum_lat, mono_clock::now() - start);
+  LOG_LATENCY(logger, cct, l_bluestore_csum_lat, mono_clock::now() - start);
   if (cct->_conf->bluestore_ignore_data_csum) {
     return 0;
   }
@@ -8747,7 +8781,7 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
       r = -EIO;
     }
   }
-  logger->tinc(l_bluestore_decompress_lat, mono_clock::now() - start);
+  LOG_LATENCY(logger, cct, l_bluestore_decompress_lat, mono_clock::now() - start);
   return r;
 }
 
@@ -9641,7 +9675,15 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       // ** fall-thru **
 
     case TransContext::STATE_AIO_WAIT:
-      txc->log_state_latency(logger, l_bluestore_state_aio_wait_lat);
+      {
+	utime_t lat = txc->log_state_latency(logger, l_bluestore_state_aio_wait_lat);
+	if (lat >= cct->_conf->bluestore_log_op_age) {
+	  dout(0) << __func__ << " slow aio_wait, txc = " << txc
+		  << ", latency = " << lat
+		  << dendl;
+	}
+      }
+
       _txc_finish_io(txc);  // may trigger blocked txc's too
       return;
 
@@ -9894,7 +9936,13 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
     }
   }
   txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
-  logger->tinc(l_bluestore_commit_lat, ceph_clock_now() - txc->start);
+  LOG_LATENCY_FN(logger, cct, 
+              l_bluestore_commit_lat,
+              ceph::make_timespan(ceph_clock_now() - txc->start),
+	      [&](auto lat) {
+		return ", txc = " + stringify(txc);
+              }
+  );
 }
 
 void BlueStore::_txc_finish(TransContext *txc)
@@ -10399,9 +10447,9 @@ void BlueStore::_kv_sync_thread()
 	  << " in " << dur
 	  << " (" << dur_flush << " flush + " << dur_kv << " kv commit)"
 	  << dendl;
-	logger->tinc(l_bluestore_kv_flush_lat, dur_flush);
-	logger->tinc(l_bluestore_kv_commit_lat, dur_kv);
-	logger->tinc(l_bluestore_kv_sync_lat, dur);
+	LOG_LATENCY(logger, cct, l_bluestore_kv_flush_lat, dur_flush);
+	LOG_LATENCY(logger, cct, l_bluestore_kv_commit_lat, dur_kv);
+	LOG_LATENCY(logger, cct, l_bluestore_kv_sync_lat, dur);
       }
 
       if (bluefs) {
@@ -10482,7 +10530,7 @@ void BlueStore::_kv_finalize_thread()
       logger->set(l_bluestore_fragmentation,
 	  (uint64_t)(alloc->get_fragmentation(min_alloc_size) * 1000));
 
-      logger->tinc(l_bluestore_kv_final_lat, mono_clock::now() - start);
+      LOG_LATENCY(logger, cct, l_bluestore_kv_final_lat, mono_clock::now() - start);
 
       l.lock();
     }
@@ -10810,8 +10858,8 @@ int BlueStore::queue_transactions(
     }
   }
 
-  logger->tinc(l_bluestore_submit_lat, mono_clock::now() - start);
-  logger->tinc(l_bluestore_throttle_lat, tend - tstart);
+  LOG_LATENCY(logger, cct, l_bluestore_submit_lat, mono_clock::now() - start);
+  LOG_LATENCY(logger, cct, l_bluestore_throttle_lat, tend - tstart);
   return 0;
 }
 
@@ -11880,7 +11928,7 @@ int BlueStore::_do_alloc_write(
 	logger->inc(l_bluestore_compress_rejected_count);
 	need += wi.blob_length;
       }
-      logger->tinc(l_bluestore_compress_lat,
+      LOG_LATENCY(logger, cct, l_bluestore_compress_lat,
                   mono_clock::now() - start);
     } else {
       need += wi.blob_length;
