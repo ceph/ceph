@@ -3307,6 +3307,7 @@ bool OSDMonitor::preprocess_remove_snaps(MonOpRequestRef op)
 
   // check privilege, ignore if failed
   MonSession *session = m->get_session();
+  mon->no_reply(op);
   if (!session)
     goto ignore;
   if (!session->caps.is_capable(
