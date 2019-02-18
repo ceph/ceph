@@ -461,13 +461,16 @@ Requires:       python%{_python_buildid}-cherrypy
 Requires:       python%{_python_buildid}-jwt
 Requires:       python%{_python_buildid}-routes
 Requires:       python%{_python_buildid}-werkzeug
-Requires:       pyOpenSSL%{_python_buildid}
 %endif
 %if 0%{?suse_version}
 Requires:       python%{_python_buildid}-CherryPy
 Requires:       python%{_python_buildid}-PyJWT
 Requires:       python%{_python_buildid}-Routes
 Requires:       python%{_python_buildid}-Werkzeug
+%endif
+%if 0%{?rhel} == 7
+Requires:       pyOpenSSL
+%else
 Requires:       python%{_python_buildid}-pyOpenSSL
 %endif
 %description mgr-dashboard
