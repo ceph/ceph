@@ -128,6 +128,7 @@ if [ `uname` = FreeBSD ]; then
 else
     objectstore="bluestore"
 fi
+ceph_osd=ceph-osd
 rgw_frontend="beast"
 rgw_compression=""
 lockdep=${LOCKDEP:-1}
@@ -193,6 +194,7 @@ usage=$usage"\t--bluestore-spdk <vendor>:<device>: enable SPDK and specify the P
 usage=$usage"\t--msgr1: use msgr1 only\n"
 usage=$usage"\t--msgr2: use msgr2 only\n"
 usage=$usage"\t--msgr21: use msgr2 and msgr1\n"
+usage=$usage"\t--crimson: use crimson-osd instead of ceph-osd\n"
 
 usage_exit() {
 	printf "$usage"
@@ -227,6 +229,9 @@ case $1 in
     --short )
 	    short=1
 	    ;;
+    --crimson )
+        ceph_osd=crimson-osd
+        ;;
     --msgr1 )
 	msgr="1"
 	;;
@@ -754,7 +759,7 @@ EOF
 	    echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $CEPH_DEV_DIR/osd$osd/new.json
             ceph_adm osd new $uuid -i $CEPH_DEV_DIR/osd$osd/new.json
 	    rm $CEPH_DEV_DIR/osd$osd/new.json
-            $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
+            $SUDO $CEPH_BIN/$ceph_osd -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
 	    cat > $key_fn<<EOF
@@ -765,7 +770,7 @@ EOF
             ceph_adm -i "$key_fn" auth add osd.$osd osd "allow *" mon "allow profile osd" mgr "allow profile osd"
         fi
         echo start osd.$osd
-        run 'osd' $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS $COSD_ARGS
+        run 'osd' $SUDO $CEPH_BIN/$ceph_osd -i $osd $ARGS $COSD_ARGS
     done
 }
 
