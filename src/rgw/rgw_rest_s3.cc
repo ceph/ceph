@@ -990,7 +990,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
   s->formatter->dump_string("KeyCount",objs.size());  
   //s->formatter->dump_string("ContinuationToken",token);
   //Return NextContinuationToken
-  s->formatter->dump_int("StartAfter", StartAfter);
+  s->formatter->dump_int("StartAfter", startAfter);
 
     s->formatter->close_section();
       }
