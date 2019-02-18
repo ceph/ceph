@@ -723,7 +723,7 @@ int RGWListBucket_ObjStore_S3v2::get_params()
   }
 
    encoding_type = s->info.args.get("encoding-type");
-  fetchOwner =s->info.args.get("fetch-owner");
+  fetchOwner = RGWHTTPArgs::get_bool("fetch-owner");
   if(fetchOwner ==true) dump_owner(s, s->user->user_id, s->user->display_name);
   if (s->system_request) {
     s->info.args.get_bool("objs-container", &objs_container, false);
@@ -989,7 +989,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
      pref_iter != common_prefixes.end(); ++pref_iter) {
   s->formatter->open_array_section("CommonPrefixes");
   s->formatter->dump_string("Prefix", pref_iter->first);
-  s->formatter->dump_string("KeyCount",objs.size());  
+  s->formatter->dump_int("KeyCount",objs.size());  
   //s->formatter->dump_string("ContinuationToken",token);
   //Return NextContinuationToken
   s->formatter->dump_int("StartAfter", startAfter);

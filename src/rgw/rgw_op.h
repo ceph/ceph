@@ -777,7 +777,7 @@ protected:
   rgw_obj_key marker; 
   rgw_obj_key next_marker; 
   rgw_obj_key end_marker;
-  string StartAfter;
+  string startAfter;
   string prefix;
   string max_keys;
   string delimiter;
