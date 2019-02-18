@@ -601,6 +601,9 @@ class Size(object):
     def __str__(self):
         return "%s" % self._get_best_format()
 
+    def __format__(self, spec):
+        return str(self._get_best_format()).__format__(spec)
+
     def __lt__(self, other):
         return self._b < other._b
 
