@@ -222,6 +222,22 @@ class Module(MgrModule):
             'runtime': True,
         },
         {
+            'name': 'begin_weekday',
+            'type': 'uint',
+            'default': 0,
+            'desc': 'Restrict automatic balancing to this day of the week or later',
+            'long_desc': '0 or 7 = Sunday, 1 = Monday, etc.',
+            'runtime': True,
+        },
+        {
+            'name': 'end_weekday',
+            'type': 'uint',
+            'default': 7,
+            'desc': 'Restrict automatic balancing to days of the week earlier than this',
+            'long_desc': '0 or 7 = Sunday, 1 = Monday, etc.',
+            'runtime': True,
+        },
+        {
             'name': 'crush_compat_max_iterations',
             'type': 'uint',
             'default': 25,
@@ -542,24 +558,45 @@ class Module(MgrModule):
         self.run = False
         self.event.set()
 
-    def time_in_interval(self, tod, begin, end):
-        if begin <= end:
-            return tod >= begin and tod < end
+    def time_permit(self):
+        local_time = time.localtime()
+        time_of_day = time.strftime('%H%M', local_time)
+        weekday = local_time.tm_wday
+        permit = False
+
+        begin_time = self.get_module_option('begin_time')
+        end_time = self.get_module_option('end_time')
+        if begin_time <= end_time:
+            permit = begin_time <= time_of_day < end_time
         else:
-            return tod >= begin or tod < end
+            permit = time_of_day >= begin_time or time_of_day < end_time
+        if not permit:
+            self.log.debug("should run between %s - %s, now %s, skipping",
+                           begin_time, end_time, time_of_day)
+            return False
+
+        begin_weekday = self.get_module_option('begin_weekday')
+        end_weekday = self.get_module_option('end_weekday')
+        if begin_weekday <= end_weekday:
+            permit = begin_weekday <= weekday < end_weekday
+        else:
+            permit = weekday >= begin_weekday or weekday < end_weekday
+        if not permit:
+            self.log.debug("should run between weekday %d - %d, now %d, skipping",
+                           begin_weekday, end_weekday, weekday)
+            return False
+
+        return True
 
     def serve(self):
         self.log.info('Starting')
         while self.run:
             self.active = self.get_module_option('active')
-            begin_time = self.get_module_option('begin_time')
-            end_time = self.get_module_option('end_time')
-            timeofday = time.strftime('%H%M', time.localtime())
-            self.log.debug('Waking up [%s, scheduled for %s-%s, now %s]',
-                           "active" if self.active else "inactive",
-                           begin_time, end_time, timeofday)
             sleep_interval = self.get_module_option('sleep_interval')
-            if self.active and self.time_in_interval(timeofday, begin_time, end_time):
+            self.log.debug('Waking up [%s, now %s]',
+                           "active" if self.active else "inactive",
+                           time.strftime(TIME_FORMAT, time.localtime()))
+            if self.active and self.time_permit():
                 self.log.debug('Running')
                 name = 'auto_%s' % time.strftime(TIME_FORMAT, time.gmtime())
                 osdmap = self.get_osdmap()
