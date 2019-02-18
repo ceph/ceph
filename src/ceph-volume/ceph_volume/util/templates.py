@@ -23,7 +23,7 @@ Total OSDs: {total_osds}
 def filtered_devices(devices):
     string = """
 Filtered Devices:"""
-    for device, info in devices.iteritems():
+    for device, info in devices.items():
         string += """
   %s""" % device
 
