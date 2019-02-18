@@ -3101,12 +3101,17 @@ int OSD::init()
   service.max_oldest_map = superblock.oldest_map;
 
   for (auto& shard : shards) {
+    // put PGs in a temporary set because we may modify pg_slots
+    // unordered_map below.
+    set<PGRef> pgs;
     for (auto& i : shard->pg_slots) {
       PGRef pg = i.second->pg;
       if (!pg) {
 	continue;
       }
-
+      pgs.insert(pg);
+    }
+    for (auto pg : pgs) {
       pg->lock();
       set<pair<spg_t,epoch_t>> new_children;
       set<pair<spg_t,epoch_t>> merge_pgs;
