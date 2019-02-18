@@ -723,8 +723,10 @@ int RGWListBucket_ObjStore_S3v2::get_params()
   }
 
    encoding_type = s->info.args.get("encoding-type");
-  fetchOwner = RGWHTTPArgs::get_bool("fetch-owner");
-  if(fetchOwner ==true) dump_owner(s, s->user->user_id, s->user->display_name);
+   s->info.args.get_bool("fetch-owner", &fetchOwner,true) dump_owner(s, s->user->user_id, s->user->display_name);
+
+  //fetchOwner = RGWHTTPArgs::get_bool("fetch-owner");
+  //if(fetchOwner ==true) dump_owner(s, s->user->user_id, s->user->display_name);
   if (s->system_request) {
     s->info.args.get_bool("objs-container", &objs_container, false);
     const char *shard_id_str = s->info.env->get("HTTP_RGWX_SHARD_ID");
