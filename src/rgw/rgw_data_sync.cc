@@ -3604,6 +3604,14 @@ int DataLogTrimCR::operate()
   return 0;
 }
 
+RGWCoroutine* create_admin_data_log_trim_cr(RGWRados *store,
+                                            RGWHTTPManager *http,
+                                            int num_shards,
+                                            std::vector<std::string>& markers)
+{
+  return new DataLogTrimCR(store, http, num_shards, markers);
+}
+
 class DataLogTrimPollCR : public RGWCoroutine {
   RGWRados *store;
   RGWHTTPManager *http;
