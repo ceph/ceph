@@ -92,6 +92,7 @@ int KernelDevice::open(const string& p)
     goto out_fail;
   }
 
+#if defined(F_SET_FILE_RW_HINT)
   for (i = WRITE_LIFE_NONE; i < WRITE_LIFE_MAX; i++) {
     if (fcntl(fd_directs[i], F_SET_FILE_RW_HINT, &i) < 0) {
       r = -errno;
@@ -106,6 +107,7 @@ int KernelDevice::open(const string& p)
     enable_wrt = false;
     dout(0) << "ioctl(F_SET_FILE_RW_HINT) on " << path << " failed: " << cpp_strerror(r) << dendl;
   }
+#endif
 
   dio = true;
   aio = cct->_conf->bdev_aio;
