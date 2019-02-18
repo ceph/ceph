@@ -1589,7 +1589,7 @@ public:
     }
 #endif
 
-    void log_state_latency(PerfCounters *logger, int state) {
+    utime_t log_state_latency(PerfCounters *logger, int state) {
       utime_t lat, now = ceph_clock_now();
       lat = now - last_stamp;
       logger->tinc(state, lat);
@@ -1600,6 +1600,7 @@ public:
       }
 #endif
       last_stamp = now;
+      return lat;
     }
 
     CollectionRef ch;
