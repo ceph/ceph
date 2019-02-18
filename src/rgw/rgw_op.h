@@ -774,7 +774,9 @@ class RGWListBucketv2 : public RGWOp {
 protected:
   RGWBucketEnt bucket;
   string fetchOwner;
-  string token;
+  rgw_obj_key marker; 
+  rgw_obj_key next_marker; 
+  rgw_obj_key end_marker;
   string StartAfter;
   string prefix;
   string max_keys;

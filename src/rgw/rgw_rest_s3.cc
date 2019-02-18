@@ -707,8 +707,10 @@ int RGWListBucket_ObjStore_S3v2::get_params()
   if(s->info.args.get("ContinuationToken").empty()) return 0;
   list_versions = s->info.args.exists("versions");
   prefix = s->info.args.get("prefix");
-  token = s->info.args.get("ContinuationToken");
   startAfter = s->info.args.get("start-after");
+  if(marker.empty()) marker = startAfter;
+  else marker = s->info.args.get("ContinuationToken");
+
    // non-standard
   s->info.args.get_bool("allow-unordered", &allow_unordered, false);
 
