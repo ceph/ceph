@@ -249,6 +249,24 @@ void AuthRegistry::get_supported_modes(
   }
 }
 
+uint32_t AuthRegistry::pick_mode(
+  int peer_type,
+  uint32_t auth_method,
+  const std::vector<uint32_t>& preferred_modes)
+{
+  std::vector<uint32_t> allowed_modes;
+  get_supported_modes(peer_type, auth_method, &allowed_modes);
+  for (auto mode : preferred_modes) {
+    if (std::find(allowed_modes.begin(), allowed_modes.end(), mode)
+	!= allowed_modes.end()) {
+      return mode;
+    }
+  }
+  ldout(cct,1) << "failed to pick con mode from client's " << preferred_modes
+	       << " and our " << allowed_modes << dendl;
+  return CEPH_CON_MODE_UNKNOWN;
+}
+
 AuthAuthorizeHandler *AuthRegistry::get_handler(int peer_type, int method)
 {
   std::scoped_lock l{lock};

@@ -33,6 +33,14 @@ public:
     auth_registry.get_supported_modes(peer_type, auth_method, modes);
   }
 
+  /// Get support connection modes for the given peer type and auth method
+  virtual uint32_t pick_con_mode(
+    int peer_type,
+    uint32_t auth_method,
+    const std::vector<uint32_t>& preferred_modes) {
+    return auth_registry.pick_mode(peer_type, auth_method, preferred_modes);
+  }
+
   /// return an AuthAuthorizeHandler for the given peer type and auth method
   AuthAuthorizeHandler *get_auth_authorize_handler(
     int peer_type,

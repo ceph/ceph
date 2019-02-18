@@ -56,6 +56,10 @@ public:
 			   uint32_t auth_method,
 			   std::vector<uint32_t> *modes);
 
+  uint32_t pick_mode(int peer_type,
+		     uint32_t auth_method,
+		     const std::vector<uint32_t>& preferred_modes);
+
   AuthAuthorizeHandler *get_handler(int peer_type, int method);
 
   const char** get_tracked_conf_keys() const override;
