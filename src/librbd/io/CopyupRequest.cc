@@ -145,12 +145,10 @@ bool CopyupRequest<I>::send_copyup() {
     // this is a CoW request, a second request will be created for the
     // actual modification.
     m_pending_copyups++;
-
     ldout(m_ictx->cct, 20) << "copyup with empty snapshot context" << dendl;
-    librados::AioCompletion *comp = util::create_rados_callback(this);
 
-    m_data_ctx.dup(m_ictx->data_ctx);
-    r = m_data_ctx.aio_operate(
+    librados::AioCompletion *comp = util::create_rados_callback(this);
+    r = m_ictx->data_ctx.aio_operate(
       m_oid, comp, &copyup_op, 0, snaps,
       (m_trace.valid() ? m_trace.get_info() : nullptr));
     ceph_assert(r == 0);
