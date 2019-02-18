@@ -77,7 +77,8 @@ private:
   uint64_t peer_required_features;
   std::shared_ptr<AuthSessionHandler> session_security;
 
-  uint64_t cookie;
+  uint64_t client_cookie;
+  uint64_t server_cookie;
   uint64_t global_seq;
   uint64_t connect_seq;
   uint64_t peer_global_seq;
@@ -223,7 +224,7 @@ private:
   Ct<ProtocolV2> *send_client_ident();
   Ct<ProtocolV2> *send_reconnect();
   Ct<ProtocolV2> *handle_ident_missing_features(char *payload, uint32_t length);
-  Ct<ProtocolV2> *handle_session_reset();
+  Ct<ProtocolV2> *handle_session_reset(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_session_retry(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_session_retry_global(char *payload, uint32_t length);
   Ct<ProtocolV2> *handle_wait();
