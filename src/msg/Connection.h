@@ -37,6 +37,7 @@
 // abstract Connection, for keeping per-connection state
 
 class Messenger;
+class Interceptor;
 
 struct Connection : public RefCountedObject {
   mutable Mutex lock;
@@ -60,6 +61,8 @@ public:
   AuthCapsInfo peer_caps_info;
   EntityName peer_name;
   uint64_t peer_global_id = 0;
+
+  Interceptor *interceptor;
 
   friend class boost::intrusive_ptr<Connection>;
   friend class PipeConnection;
