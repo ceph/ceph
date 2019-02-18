@@ -9167,7 +9167,7 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
   uint32_t current_shard;
   if (shard_id >= 0) {
     current_shard = shard_id;
-  } else if (my_start.empty()) {
+  } else if (my_start.empty() || my_start.name.compare("_multipart_") == 0) {
     current_shard = 0u;
   } else {
     current_shard =
