@@ -103,6 +103,8 @@ void AuthRegistry::_refresh_config()
 		   &mon_cluster_modes);
   _parse_mode_list(cct->_conf.get_val<string>("ms_mon_service_mode"),
 		   &mon_service_modes);
+  _parse_mode_list(cct->_conf.get_val<string>("ms_mon_client_mode"),
+		   &mon_client_modes);
   _parse_mode_list(cct->_conf.get_val<string>("ms_cluster_mode"),
 		   &cluster_modes);
   _parse_mode_list(cct->_conf.get_val<string>("ms_service_mode"),
@@ -115,8 +117,9 @@ void AuthRegistry::_refresh_config()
 		<< " client_methods " << client_methods
 		<< dendl;
   ldout(cct,10) << __func__ << " mon_cluster_modes " << mon_cluster_modes
-		<< " mon_service_mdoes " << mon_service_modes
-		<< " cluster_modes " << cluster_modes
+		<< " mon_service_modes " << mon_service_modes
+		<< " mon_client_modes " << mon_client_modes
+		<< "; cluster_modes " << cluster_modes
 		<< " service_modes " << service_modes
 		<< " client_modes " << client_modes
 		<< dendl;
@@ -163,7 +166,13 @@ void AuthRegistry::get_supported_methods(
       *methods = client_methods;
     }
     if (modes) {
-      *modes = client_modes;
+      switch (peer_type) {
+      case CEPH_ENTITY_TYPE_MON:
+	*modes = mon_client_modes;
+	break;
+      default:
+	*modes = client_modes;
+      }
     }
     return;
   case CEPH_ENTITY_TYPE_MON:

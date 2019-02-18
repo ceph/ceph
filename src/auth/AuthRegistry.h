@@ -28,6 +28,7 @@ class AuthRegistry : public md_config_obs_t {
   // CEPH_CON_MODE_*
   std::vector<uint32_t> mon_cluster_modes;
   std::vector<uint32_t> mon_service_modes;
+  std::vector<uint32_t> mon_client_modes;
   std::vector<uint32_t> cluster_modes;
   std::vector<uint32_t> service_modes;
   std::vector<uint32_t> client_modes;
