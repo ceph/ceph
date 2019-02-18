@@ -282,7 +282,7 @@ bool CopyupRequest<I>::should_complete(int *r) {
   ldout(cct, 20) << "oid " << m_oid
                  << ", r " << *r << dendl;
 
-  uint64_t pending_copyups;
+  unsigned pending_copyups;
   switch (m_state) {
   case STATE_READ_FROM_PARENT:
     ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
