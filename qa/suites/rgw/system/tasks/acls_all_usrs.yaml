@@ -2,8 +2,9 @@ tasks:
 - ssh-keys: null
 - ceph-ansible: null
 - rgw-system-test:
-    test-name: test_acls_all_usrs
-    test_dir_version: v1
+    test: test_acls_all_usrs
+    test_version: v1
+    clients: ['client.0']
     config:
        bucket_count: 25
        user_count: 2

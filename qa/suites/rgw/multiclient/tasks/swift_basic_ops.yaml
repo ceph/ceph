@@ -1,0 +1,45 @@
+# swift basic ops: create container, upload object, download object, delete object and delete container.
+tasks:
+  - ssh-keys: null
+  - ceph-ansible: null
+  - parallel:
+      - rgw-system-test:
+          test: swift_basic_ops
+          script: test_swift_basic_ops.py
+          client: [client.0]
+          config:
+           container_count: 10
+           objects_count: 10
+           objects_size_range:
+            min: 50
+            max: 60
+      - rgw-system-test:
+          test: swift_basic_ops
+          script: test_swift_basic_ops.py
+          client: [client.1]
+          config:
+           container_count: 10
+           objects_count: 10
+           objects_size_range:
+            min: 50
+            max: 60
+      - rgw-system-test:
+          test: swift_basic_ops
+          script: test_swift_basic_ops.py
+          client: [client.2]
+          config:
+            container_count: 10
+            objects_count: 10
+            objects_size_range:
+              min: 50
+              max: 60
+      - rgw-system-test:
+          test: swift_basic_ops
+          script: test_swift_basic_ops.py
+          client: [client.3]
+          config:
+            container_count: 10
+            objects_count: 10
+            objects_size_range:
+              min: 50
+              max: 60

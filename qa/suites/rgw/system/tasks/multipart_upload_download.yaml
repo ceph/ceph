@@ -2,8 +2,9 @@ tasks:
 - ssh-keys: null
 - ceph-ansible: null
 - rgw-system-test:
-    test-name: test_multipart_upload_download
-    test_dir_version: v1
+    test: test_multipart_upload_download
+    test_version: v1
+    clients: ['client.0']
     config:
        objects_count: 1
        user_count: 1

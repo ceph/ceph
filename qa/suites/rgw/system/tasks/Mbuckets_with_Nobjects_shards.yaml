@@ -2,8 +2,9 @@ tasks:
 - ssh-keys: null
 - ceph-ansible: null
 - rgw-system-test:
-    test-name: test_Mbuckets_with_Nobjects_shards
-    test_dir_version: v1
+    test: test_Mbuckets_with_Nobjects_shards
+    test_version: v1
+    clients: ['client.0']
     config:
       shards: 100
       max_objects: 24   # max objects per bucket.

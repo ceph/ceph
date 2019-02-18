@@ -1,0 +1,94 @@
+# tests s3 objects upload, download and deleting of buckets and objects
+# non-multipart upload
+tasks:
+  - ssh-keys: null
+  - ceph-ansible: null
+  - parallel:
+      - rgw-system-test:
+          test: Mbuckets_with_Nobjects
+          script: test_Mbuckets_with_Nobjects.py
+          clients: [client.0]
+          config:
+            user_count: 5
+            bucket_count: 5
+            objects_count: 10
+            objects_size_range:
+              min: 100
+              max: 200
+            test_ops:
+              create_bucket: true
+              create_object: true
+              download_object: true
+              delete_bucket_object: true
+              sharding:
+                enable: false
+                max_shards: 0
+              compression:
+                enable: false
+                type: zlib
+      - rgw-system-test:
+          test: Mbuckets_with_Nobjects
+          script: test_Mbuckets_with_Nobjects.py
+          clients: [client.1]
+          config:
+            user_count: 5
+            bucket_count: 5
+            objects_count: 10
+            objects_size_range:
+              min: 100
+              max: 200
+            test_ops:
+              create_bucket: true
+              create_object: true
+              download_object: true
+              delete_bucket_object: true
+              sharding:
+                enable: false
+                max_shards: 0
+              compression:
+                enable: false
+                type: zlib
+      - rgw-system-test:
+          test: Mbuckets_with_Nobjects
+          script: test_Mbuckets_with_Nobjects.py
+          clients: [client.2]
+          config:
+            user_count: 5
+            bucket_count: 5
+            objects_count: 10
+            objects_size_range:
+              min: 100
+              max: 200
+            test_ops:
+              create_bucket: true
+              create_object: true
+              download_object: true
+              delete_bucket_object: true
+              sharding:
+                enable: false
+                max_shards: 0
+              compression:
+                enable: false
+                type: zlib
+      - rgw-system-test:
+          test: Mbuckets_with_Nobjects
+          script: test_Mbuckets_with_Nobjects.py
+          clients: [client.3]
+          config:
+            user_count: 5
+            bucket_count: 5
+            objects_count: 10
+            objects_size_range:
+              min: 100
+              max: 200
+            test_ops:
+              create_bucket: true
+              create_object: true
+              download_object: true
+              delete_bucket_object: true
+              sharding:
+                enable: false
+                max_shards: 0
+              compression:
+                enable: false
+                type: zlib
