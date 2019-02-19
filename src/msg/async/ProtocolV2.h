@@ -117,13 +117,21 @@ public:
     __le16 alignment;
   } __attribute__((packed));
 
+  struct onwire_segment_t {
+    // crypto-processed segment can be expanded on-wire because of:
+    //  * padding to achieve CRYPTO_BLOCK_SIZE alignment,
+    //  * authentication tag. It's appended at the end of message.
+    //    See RxHandler::get_extra_size_at_final().
+    __le32 onwire_length;
+
+    struct segment_t logical;
+  } __attribute__((packed));
+
 private:
   static constexpr std::size_t MAX_NUM_SEGMENTS = 4;
-  // segment descriptors are stored in reversed order. This is because
-  // vectors don't support ::pop_front.  We might want to exchange
-  // the container to slightly tuned one in the future.
-  boost::container::static_vector<segment_t,
-				  MAX_NUM_SEGMENTS> rx_segments_todo_rev;
+
+  boost::container::static_vector<onwire_segment_t,
+				  MAX_NUM_SEGMENTS> rx_segments_desc;
   boost::container::static_vector<ceph::bufferlist,
 				  MAX_NUM_SEGMENTS> rx_segments_data;
 
@@ -269,6 +277,8 @@ private:
   Ct<ProtocolV2> *send_server_ident();
   Ct<ProtocolV2> *send_reconnect_ok();
   Ct<ProtocolV2> *server_ready();
+
+  uint32_t get_onwire_size(uint32_t logical_size) const;
 };
 
 #endif /* _MSG_ASYNC_PROTOCOL_V2_ */
