@@ -17,6 +17,7 @@ import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
 import { PrometheusListComponent } from './ceph/cluster/prometheus/prometheus-list/prometheus-list.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
+import { Nfs501Component } from './ceph/nfs/nfs-501/nfs-501.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
 import { NfsListComponent } from './ceph/nfs/nfs-list/nfs-list.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
@@ -309,10 +310,22 @@ const routes: Routes = [
   },
   // NFS
   {
+    path: 'nfs/501/:message',
+    component: Nfs501Component,
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'NFS' }
+  },
+  {
     path: 'nfs',
     canActivate: [AuthGuardService],
-    canActivateChild: [AuthGuardService],
-    data: { breadcrumbs: 'NFS' },
+    canActivateChild: [AuthGuardService, ModuleStatusGuardService],
+    data: {
+      moduleStatusGuardConfig: {
+        apiPath: 'nfs-ganesha',
+        redirectTo: 'nfs/501'
+      },
+      breadcrumbs: 'NFS'
+    },
     children: [
       { path: '', component: NfsListComponent },
       { path: 'add', component: NfsFormComponent, data: { breadcrumbs: 'Add' } },
