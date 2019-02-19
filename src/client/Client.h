@@ -1163,6 +1163,15 @@ private:
   size_t _vxattrcb_dir_rsubdirs(Inode *in, char *val, size_t size);
   size_t _vxattrcb_dir_rbytes(Inode *in, char *val, size_t size);
   size_t _vxattrcb_dir_rctime(Inode *in, char *val, size_t size);
+  size_t _vxattrs_calcu_name_size(const VXattr *vxattrs);
+  bool _vxattrcb_worm_exists(Inode *in);
+  size_t _vxattrcb_worm(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_worm_state(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_worm_retention_period(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_worm_auto_commit_period(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_worm_max_retention_period(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_worm_min_retention_period(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_worm_exp_time(Inode *in, char *val, size_t size);
 
   bool _vxattrcb_dir_pin_exists(Inode *in);
   size_t _vxattrcb_dir_pin(Inode *in, char *val, size_t size);

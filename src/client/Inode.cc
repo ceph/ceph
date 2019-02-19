@@ -82,6 +82,9 @@ ostream& operator<<(ostream &out, const Inode &in)
   if (in.quota.is_enable())
     out << " " << in.quota;
 
+  if (in.worm.is_enable())
+    out << " " << in.worm;
+
   out << ' ' << &in << ")";
   return out;
 }

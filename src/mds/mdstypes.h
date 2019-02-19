@@ -459,7 +459,7 @@ struct worm_info_t {
   }
 
   bool is_reten_period_ulimit() const {
-     return (worm_state & WORM_RETEN_PERIOD_ULIMIT) == WORM_RETEN_PERIOD_ULIMIT;
+     return (worm_state & WORM_RETEN_PERIOD_UNLIMIT) == WORM_RETEN_PERIOD_UNLIMIT;
   }
   
 };
@@ -467,7 +467,7 @@ struct worm_info_t {
 WRITE_CLASS_ENCODER(worm_info_t)
 
 inline std::ostream& operator<<(std::ostream &out, const worm_info_t &worm){
-  return out << "state(" << worm.worm_state << ")," <<
+  return out << "worm state(" << worm.worm_state << ")," <<
           "retention_period(" << worm.retention_period << ")," <<
           "auto_commit_period(" << worm.auto_commit_period << ")" <<
           "min_retention_period(" << worm.min_retention_period << ")" <<
@@ -612,6 +612,8 @@ struct inode_t {
   nest_info_t accounted_rstat; // protected by parent's nestlock
 
   quota_info_t quota;
+  
+  worm_info_t worm;
 
   mds_rank_t export_pin = MDS_RANK_NONE;
  
@@ -734,7 +736,7 @@ private:
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(15, 6, bl);
+  ENCODE_START(16, 6, bl);
 
   encode(ino, bl);
   encode(rdev, bl);
@@ -786,13 +788,15 @@ void inode_t<Allocator>::encode(bufferlist &bl, uint64_t features) const
 
   encode(export_pin, bl);
 
+  encode(worm, bl);
+
   ENCODE_FINISH(bl);
 }
 
 template<template<typename> class Allocator>
 void inode_t<Allocator>::decode(bufferlist::const_iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(15, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(16, 6, 6, p);
 
   decode(ino, p);
   decode(rdev, p);
@@ -879,6 +883,10 @@ void inode_t<Allocator>::decode(bufferlist::const_iterator &p)
     decode(export_pin, p);
   } else {
     export_pin = MDS_RANK_NONE;
+  }
+
+  if (struct_v >= 16) {
+    decode(worm, p);
   }
 
   DECODE_FINISH(p);

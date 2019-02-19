@@ -870,6 +870,10 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
     update_inode_file_size(in, issued, st->size, st->truncate_seq, st->truncate_size);
   }
 
+  if (new_version || (st->cap.flags & CEPH_CAP_FLAG_AUTH)) {
+    in->worm = st->worm;
+  }
+
   if (in->is_dir()) {
     if (new_version || (new_issued & CEPH_CAP_FILE_SHARED)) {
       in->dirstat = st->dirstat;
@@ -11707,6 +11711,53 @@ size_t Client::_vxattrcb_quota_max_files(Inode *in, char *val, size_t size)
   return snprintf(val, size, "%lld", (long long int)in->quota.max_files);
 }
 
+bool Client::_vxattrcb_worm_exists(Inode *in)
+{
+  return in->worm.is_enable();
+}
+size_t Client::_vxattrcb_worm(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size,
+                  "worm_state=%u auto_commit_period=%u retention_period=%u min_retention_period=%u max_retention_period=%u exp_time=%u.%u",
+                  in->worm.worm_state,
+                  in->worm.auto_commit_period,
+                  in->worm.retention_period,
+                  in->worm.min_retention_period,
+                  in->worm.max_retention_period,
+                  in->worm.exp_time.tv.tv_sec,
+                  in->worm.exp_time.tv.tv_nsec);
+}
+
+size_t Client::_vxattrcb_worm_state(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%u", in->worm.worm_state);
+}
+
+size_t Client::_vxattrcb_worm_retention_period(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%u", in->worm.retention_period);
+}
+size_t Client::_vxattrcb_worm_auto_commit_period(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%u", in->worm.auto_commit_period);
+}
+
+size_t Client::_vxattrcb_worm_max_retention_period(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%u", in->worm.min_retention_period);
+}
+
+size_t Client::_vxattrcb_worm_min_retention_period(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%u", in->worm.max_retention_period);
+}
+
+size_t Client::_vxattrcb_worm_exp_time(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%u.%u", in->worm.exp_time.tv.tv_sec,
+      in->worm.exp_time.tv.tv_nsec);
+}
+
 bool Client::_vxattrcb_layout_exists(Inode *in)
 {
   return in->layout != file_layout_t();
@@ -11849,6 +11900,16 @@ size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size)
   flags: 0,                                                     \
 }
 
+#define XATTR_WORM_FIELD(_type, _name)		                \
+{								\
+  name: CEPH_XATTR_NAME(_type, _name),			        \
+  getxattr_cb: &Client::_vxattrcb_ ## _type ## _ ## _name,	\
+  readonly: false,						\
+  hidden: true,							\
+  exists_cb: &Client::_vxattrcb_worm_exists,			\
+  flags: 0,                                                     \
+}
+
 const Client::VXattr Client::_dir_vxattrs[] = {
   {
     name: "ceph.dir.layout",
@@ -11893,6 +11954,20 @@ const Client::VXattr Client::_dir_vxattrs[] = {
     exists_cb: &Client::_vxattrcb_snap_btime_exists,
     flags: 0,
   },
+  {  
+    name: "ceph.worm",
+    getxattr_cb: &Client::_vxattrcb_worm,
+    readonly: false,
+    hidden: true,
+    exists_cb: &Client::_vxattrcb_worm_exists,
+    flags: 0,
+  },
+  XATTR_WORM_FIELD(worm, state),
+  XATTR_WORM_FIELD(worm, retention_period),
+  XATTR_WORM_FIELD(worm, auto_commit_period),
+  XATTR_WORM_FIELD(worm, min_retention_period),
+  XATTR_WORM_FIELD(worm, max_retention_period),
+  XATTR_WORM_FIELD(worm, exp_time),
   { name: "" }     /* Required table terminator */
 };
 
@@ -11916,6 +11991,19 @@ const Client::VXattr Client::_file_vxattrs[] = {
     exists_cb: &Client::_vxattrcb_snap_btime_exists,
     flags: 0,
   },
+  {  
+    name: "ceph.worm",
+    getxattr_cb: &Client::_vxattrcb_worm,
+    readonly: false,
+    hidden: true,
+    exists_cb: &Client::_vxattrcb_worm_exists,
+    flags: 0,
+  },
+  XATTR_WORM_FIELD(worm, state),
+  XATTR_WORM_FIELD(worm, retention_period),
+  XATTR_WORM_FIELD(worm, auto_commit_period),
+  XATTR_WORM_FIELD(worm, min_retention_period),
+  XATTR_WORM_FIELD(worm, max_retention_period),
   { name: "" }     /* Required table terminator */
 };
 

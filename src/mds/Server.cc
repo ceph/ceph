@@ -5166,6 +5166,111 @@ void Server::create_quota_realm(CInode *in)
   mds->send_message_mds(req, in->authority().first);
 }
 
+int Server::parse_worm_vxattr(MDRequestRef& mdr, CInode *cur, string name, string value, worm_info_t *worm)
+{
+  dout(20) << "parse_worm_vxattr name " << name << " value '" << value << "'" << dendl;
+  try {
+    if (name == "worm") {
+      string::iterator begin = value.begin();
+      string::iterator end = value.end();
+      keys_and_values<string::iterator> p;    // create instance of parser
+      std::map<string, string> m;             // map to receive results
+      if (!qi::parse(begin, end, p, m)) {     // returns true if successful
+        return -EINVAL;
+      }
+      string left(begin, end);
+      dout(10) << " parsed " << m << " left '" << left << "'" << dendl;
+      if (begin != end)
+        return -EINVAL;
+      for (map<string,string>::iterator q = m.begin(); q != m.end(); ++q) {
+        int r = parse_worm_vxattr(mdr, cur, string("worm.") + q->first, q->second, worm);
+        if (r < 0)
+          return r;
+      }
+    } else if (name == "worm.enable") {            
+      if(worm->is_enable()) {
+        return 0;
+      }
+
+      if (!cur->is_dir()) { 
+        return -EINVAL;
+      }
+
+      if (_dir_is_nonempty_unlocked(mdr, cur)) {
+        return -ENOTEMPTY;
+      }
+      
+      uint32_t q = boost::lexical_cast<uint32_t>(value);
+      if(q != WORM_ENABLE) {
+        return -EINVAL;
+      }
+     
+      worm->worm_state |= WORM_ENABLE | WORM_IS_ROOT;
+      worm->auto_commit_period = g_conf().get_val<uint64_t>("mds_worm_commit_period"); 
+      worm->retention_period = g_conf().get_val<uint64_t>("mds_worm_retention_period");
+      worm->min_retention_period = g_conf().get_val<uint64_t>("mds_worm_min_retention_period");
+      worm->max_retention_period = g_conf().get_val<uint64_t>("mds_worm_max_retention_period");
+    } else if (name == "worm.auto_commit_period") {
+      uint32_t q = boost::lexical_cast<uint32_t>(value);
+      if (q == 0 || (worm->is_enable() && !(worm->is_root()))) {
+        return -EINVAL;
+      }
+
+      if (!worm->is_enable()){
+         parse_worm_vxattr(mdr, cur, "worm.enable", "1", worm);
+      }
+      
+      worm->auto_commit_period = q;
+    } else if (name == "worm.retention_period") {
+      uint32_t q = boost::lexical_cast<uint32_t>(value);
+      if (worm->is_enable() && !worm->is_root())
+        return -EINVAL;
+
+      if (!worm->is_enable()){
+         parse_worm_vxattr(mdr, cur, "worm.enable", "1", worm);
+      }
+
+      if (q == 0xffffffff) {                    // retetion period ulimit
+         worm->worm_state |= WORM_RETEN_PERIOD_UNLIMIT;
+      }
+      worm->retention_period = q;
+    } else if (name == "worm.min_retention_period") {
+      uint32_t q = boost::lexical_cast<uint32_t>(value);
+      if ((worm->is_enable() && !worm->is_root())|| (q > MAX_MIN_RETEN_PERIOD && q != 0xffffffff)){
+        return -EINVAL;
+      }
+      
+      if (!worm->is_enable()){
+         parse_worm_vxattr(mdr, cur, "worm.enable", "1", worm);
+      }
+      
+      worm->min_retention_period = q;
+    } else if (name == "worm.max_retention_period") {
+      uint32_t q = boost::lexical_cast<uint32_t>(value);
+      if ((worm->is_enable() && !worm->is_root())|| (q > MIN_MAX_RETEN_PERIOD && q != 0xffffffff)){
+        return -EINVAL;
+      }
+
+      if (!worm->is_enable()){
+         parse_worm_vxattr(mdr, cur, "worm.enable", "1", worm);
+      }
+      
+      worm->max_retention_period = q;
+    } else if (name == "worm.state") {
+      uint32_t q = boost::lexical_cast<uint32_t>(value);
+      worm->worm_state = q;
+    } else {
+      dout(10) << " unknown worm vxattr " << name << dendl;
+      return -EINVAL;
+    }
+  } catch (boost::bad_lexical_cast const&) {
+    dout(10) << "bad vxattr value, unable to parse int for " << name << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
+
 /*
  * Verify that the file layout attribute carried by client
  * is well-formatted.
@@ -5368,6 +5473,30 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     auto &pi = cur->project_inode();
     cur->set_export_pin(rank);
     pip = &pi.inode;
+  } else if (name.compare(0, 9, "ceph.worm") == 0) { 
+    worm_info_t worm = cur->get_projected_inode()->worm;
+
+    rest = name.substr(name.find("worm"));
+    int r = parse_worm_vxattr(mdr, cur, rest, value, &worm);
+    if (r >= 0 && !worm.is_valid()) {
+      dout(10) << "bad worm" << dendl;
+      r = -EINVAL;
+    }
+
+    if (r < 0) {
+      respond_to_request(mdr, r);
+      return;
+    }
+
+    lov.add_xlock(&cur->policylock);
+    if (!mds->locker->acquire_locks(mdr, lov))
+      return;
+
+    auto &pi = cur->project_inode();
+    pi.inode.worm = worm;
+
+    mdr->no_early_reply = true;
+    pip = &pi.inode;    
   } else {
     dout(10) << " unknown vxattr " << name << dendl;
     respond_to_request(mdr, -EINVAL);

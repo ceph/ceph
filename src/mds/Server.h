@@ -241,6 +241,7 @@ public:
 
   int parse_quota_vxattr(string name, string value, quota_info_t *quota);
   void create_quota_realm(CInode *in);
+  int parse_worm_vxattr(MDRequestRef& mdr, CInode *cur,string name, string value, worm_info_t *worm);
   int parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
 			  file_layout_t *layout, bool validate=true);
   int check_layout_vxattr(MDRequestRef& mdr,

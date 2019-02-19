@@ -183,6 +183,8 @@ struct Inode {
   unsigned flags;
 
   quota_info_t quota;
+ 
+  worm_info_t worm;
 
   bool is_complete_and_ordered() {
     static const unsigned wants = I_COMPLETE | I_DIR_ORDERED;
@@ -285,6 +287,7 @@ struct Inode {
       _ref(0), ll_ref(0), dir_pin(MDS_RANK_NONE)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
+    memset(&worm, 0, sizeof(worm));
   }
   ~Inode();
 
