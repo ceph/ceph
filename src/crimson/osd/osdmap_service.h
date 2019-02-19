@@ -3,7 +3,7 @@
 
 #pragma once
 
-#include <seastar/core/shared_ptr.hh>
+#include <boost/smart_ptr/local_shared_ptr.hpp>
 
 #include "include/types.h"
 
@@ -11,9 +11,9 @@ class OSDMap;
 
 class OSDMapService {
 public:
+  using cached_map_t = boost::local_shared_ptr<OSDMap>;
   virtual ~OSDMapService() = default;
-  virtual seastar::future<seastar::lw_shared_ptr<OSDMap>>
-  get_map(epoch_t e) = 0;
+  virtual seastar::future<cached_map_t> get_map(epoch_t e) = 0;
   /// get the latest map
-  virtual seastar::lw_shared_ptr<OSDMap> get_map() const = 0;
+  virtual cached_map_t get_map() const = 0;
 };

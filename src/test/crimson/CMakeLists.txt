@@ -37,3 +37,8 @@ add_executable(unittest_seastar_perfcounters
 add_ceph_unittest(unittest_seastar_perfcounters)
 target_link_libraries(unittest_seastar_perfcounters crimson)
 
+add_executable(unittest_seastar_lru
+  test_lru.cc)
+add_ceph_unittest(unittest_seastar_lru)
+target_link_libraries(unittest_seastar_lru crimson GTest::Main)
+
