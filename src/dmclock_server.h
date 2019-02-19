@@ -1256,7 +1256,7 @@ namespace crimson {
       template<IndIntruHeapData ClientRec::*C1,typename C2>
       void delete_from_heap(ClientRecRef& client,
 			    c::IndIntruHeap<ClientRecRef,ClientRec,C1,C2,B>& heap) {
-	auto i = heap.rfind(client);
+	auto i = heap.at(client);
 	heap.remove(i);
       }
 
