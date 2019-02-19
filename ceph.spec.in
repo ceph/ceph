@@ -1204,6 +1204,9 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd-mirror
 # create __pycache__ directories and their contents
 %py3_compile %{buildroot}%{python3_sitelib}
 %endif
+%if 0%{?rhel} == 8
+%py_byte_compile %{__python3} %{buildroot}%{python3_sitelib}
+%endif
 
 %clean
 rm -rf %{buildroot}
