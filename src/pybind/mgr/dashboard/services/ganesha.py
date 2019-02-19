@@ -232,11 +232,11 @@ class GaneshaConfParser(object):
             try:
                 return int(raw_value)
             except ValueError:
-                if raw_value == "true":  # pylint: disable=no-else-return
+                if raw_value == "true":
                     return True
-                elif raw_value == "false":
+                if raw_value == "false":
                     return False
-                elif raw_value.find('"') == 0:
+                if raw_value.find('"') == 0:
                     return raw_value[1:-1]
                 return raw_value
         else:
@@ -300,12 +300,12 @@ class GaneshaConfParser(object):
     @staticmethod
     def write_block_body(block, depth=0):
         def format_val(key, val):
-            if isinstance(val, list):  # pylint: disable=no-else-return
+            if isinstance(val, list):
                 return ', '.join([format_val(key, v) for v in val])
-            elif isinstance(val, bool):
+            if isinstance(val, bool):
                 return str(val).lower()
-            elif isinstance(val, int) or (block['block_name'] == 'CLIENT'
-                                          and key == 'clients'):
+            if isinstance(val, int) or (block['block_name'] == 'CLIENT'
+                                        and key == 'clients'):
                 return '{}'.format(val)
             return '"{}"'.format(val)
 
@@ -364,9 +364,9 @@ class FSal(object):
 
     @staticmethod
     def from_fsal_block(fsal_block):
-        if fsal_block['name'] == "CEPH":  # pylint: disable=no-else-return
+        if fsal_block['name'] == "CEPH":
             return CephFSFSal.from_fsal_block(fsal_block)
-        elif fsal_block['name'] == 'RGW':
+        if fsal_block['name'] == 'RGW':
             return RGWFSal.from_fsal_block(fsal_block)
         return None
 
@@ -375,9 +375,9 @@ class FSal(object):
 
     @staticmethod
     def from_dict(fsal_dict):
-        if fsal_dict['name'] == "CEPH":  # pylint: disable=no-else-return
+        if fsal_dict['name'] == "CEPH":
             return CephFSFSal.from_dict(fsal_dict)
-        elif fsal_dict['name'] == 'RGW':
+        if fsal_dict['name'] == 'RGW':
             return RGWFSal.from_dict(fsal_dict)
         return None
 
@@ -833,24 +833,23 @@ class GaneshaConf(object):
     def format_squash(cls, squash):
         if squash is None:
             return None
-        # pylint: disable=no-else-return
         if squash.lower() in ["no_root_squash", "noidsquash", "none"]:
             return "no_root_squash"
-        elif squash.lower() in ["rootid", "root_id_squash", "rootidsquash"]:
+        if squash.lower() in ["rootid", "root_id_squash", "rootidsquash"]:
             return "root_id_squash"
-        elif squash.lower() in ["root", "root_squash", "rootsquash"]:
+        if squash.lower() in ["root", "root_squash", "rootsquash"]:
             return "root_squash"
-        elif squash.lower() in ["all", "all_squash", "allsquash",
-                                "all_anonymous", "allanonymous"]:
+        if squash.lower() in ["all", "all_squash", "allsquash",
+                              "all_anonymous", "allanonymous"]:
             return "all_squash"
         logger.error("[NFS] could not parse squash value: %s", squash)
         raise NFSException("'{}' is an invalid squash option".format(squash))
 
     @classmethod
     def format_protocol(cls, protocol):
-        if str(protocol) in ["NFSV3", "3", "V3", "NFS3"]:  # pylint: disable=no-else-return
+        if str(protocol) in ["NFSV3", "3", "V3", "NFS3"]:
             return 3
-        elif str(protocol) in ["NFSV4", "4", "V4", "NFS4"]:
+        if str(protocol) in ["NFSV4", "4", "V4", "NFS4"]:
             return 4
         logger.error("[NFS] could not parse protocol value: %s", protocol)
         raise NFSException("'{}' is an invalid NFS protocol version identifier"
