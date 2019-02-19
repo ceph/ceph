@@ -158,7 +158,8 @@ void librados::ObjectOperation::cmpext(uint64_t off,
                                        int *prval)
 {
   ::ObjectOperation *o = &impl->o;
-  o->cmpext(off, cmp_bl, prval);
+  bufferlist c = cmp_bl;
+  o->cmpext(off, c, prval);
 }
 
 void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, const bufferlist& v)
