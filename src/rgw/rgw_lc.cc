@@ -127,8 +127,8 @@ bool RGWLifecycleConfiguration::_add_rule(const LCRule& rule)
   if (rule.get_filter().has_tags()){
     op.obj_tags = rule.get_filter().get_tags();
   }
-  auto ret = prefix_map.emplace(std::move(prefix), std::move(op));
-  return ret.second;
+  prefix_map.emplace(std::move(prefix), std::move(op));
+  return true;
 }
 
 int RGWLifecycleConfiguration::check_and_add_rule(const LCRule& rule)
@@ -334,7 +334,8 @@ static bool obj_has_expired(CephContext *cct, ceph::real_time mtime, int days, c
   return (timediff >= cmp);
 }
 
-int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map)
+int RGWLC::handle_multipart_expiration(
+  RGWRados::Bucket *target, const multimap<string, lc_op>& prefix_map)
 {
   MultipartMetaFilter mp_filter;
   vector<rgw_bucket_dir_entry> objs;
@@ -983,7 +984,12 @@ int RGWLC::bucket_lc_process(string& shard_id)
       return -1;
     }
 
-  map<string, lc_op>& prefix_map = config.get_prefix_map();
+  multimap<string, lc_op>& prefix_map = config.get_prefix_map();
+
+  ldpp_dout(this, 10) << __func__ <<  "() prefix_map size="
+		      << prefix_map.size()
+		      << dendl;
+
   rgw_obj_key pre_marker;
   rgw_obj_key next_marker;
   for(auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
