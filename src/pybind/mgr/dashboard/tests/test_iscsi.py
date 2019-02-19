@@ -480,8 +480,8 @@ class IscsiClientMock(object):
             "portal_ip_address": ip_address[0]
         }
 
-    def create_disk(self, image_id, backstore):
-        pool, image = image_id.split('.')
+    def create_disk(self, pool, image, backstore):
+        image_id = '{}/{}'.format(pool, image)
         self.config['disks'][image_id] = {
             "pool": pool,
             "image": image,
@@ -494,7 +494,8 @@ class IscsiClientMock(object):
         target_config['disks'].append(image_id)
         self.config['disks'][image_id]['owner'] = list(target_config['portals'].keys())[0]
 
-    def reconfigure_disk(self, image_id, controls):
+    def reconfigure_disk(self, pool, image, controls):
+        image_id = '{}/{}'.format(pool, image)
         self.config['disks'][image_id]['controls'] = controls
 
     def create_client(self, target_iqn, client_iqn):
@@ -540,7 +541,8 @@ class IscsiClientMock(object):
         target_config['disks'].remove(image_id)
         del self.config['disks'][image_id]['owner']
 
-    def delete_disk(self, image_id):
+    def delete_disk(self, pool, image):
+        image_id = '{}/{}'.format(pool, image)
         del self.config['disks'][image_id]
 
     def delete_target(self, target_iqn):

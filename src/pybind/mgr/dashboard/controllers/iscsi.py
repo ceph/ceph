@@ -214,7 +214,8 @@ class IscsiTarget(RESTController):
                                                          new_disks, image_id):
                 IscsiClient.instance(gateway_name=gateway_name).delete_target_lun(target_iqn,
                                                                                   image_id)
-                IscsiClient.instance(gateway_name=gateway_name).delete_disk(image_id)
+                pool, image = image_id.split('/', 1)
+                IscsiClient.instance(gateway_name=gateway_name).delete_disk(pool, image)
             TaskManager.current_task().inc_progress(task_progress_inc)
         if IscsiTarget._target_deletion_required(target, new_target_iqn, new_target_controls,
                                                  new_portals):
@@ -396,16 +397,19 @@ class IscsiTarget(RESTController):
             for disk in disks:
                 pool = disk['pool']
                 image = disk['image']
-                image_id = '{}.{}'.format(pool, image)
+                image_id = '{}/{}'.format(pool, image)
                 if image_id not in config['disks']:
                     backstore = disk['backstore']
-                    IscsiClient.instance(gateway_name=gateway_name).create_disk(image_id, backstore)
+                    IscsiClient.instance(gateway_name=gateway_name).create_disk(pool,
+                                                                                image,
+                                                                                backstore)
                 if not target_config or image_id not in target_config['disks']:
                     IscsiClient.instance(gateway_name=gateway_name).create_target_lun(target_iqn,
                                                                                       image_id)
                     controls = disk['controls']
                     if controls:
-                        IscsiClient.instance(gateway_name=gateway_name).reconfigure_disk(image_id,
+                        IscsiClient.instance(gateway_name=gateway_name).reconfigure_disk(pool,
+                                                                                         image,
                                                                                          controls)
                 TaskManager.current_task().inc_progress(task_progress_inc)
             for client in clients:
@@ -416,7 +420,7 @@ class IscsiTarget(RESTController):
                     for lun in client['luns']:
                         pool = lun['pool']
                         image = lun['image']
-                        image_id = '{}.{}'.format(pool, image)
+                        image_id = '{}/{}'.format(pool, image)
                         IscsiClient.instance(gateway_name=gateway_name).create_client_lun(
                             target_iqn, client_iqn, image_id)
                     user = client['auth']['user']
@@ -433,7 +437,7 @@ class IscsiTarget(RESTController):
                 members = group['members']
                 image_ids = []
                 for disk in group['disks']:
-                    image_ids.append('{}.{}'.format(disk['pool'], disk['image']))
+                    image_ids.append('{}/{}'.format(disk['pool'], disk['image']))
                 if not target_config or group_id not in target_config['groups']:
                     IscsiClient.instance(gateway_name=gateway_name).create_group(
                         target_iqn, group_id, members, image_ids)
@@ -480,7 +484,7 @@ class IscsiTarget(RESTController):
         for client_iqn, client_config in target_config['clients'].items():
             luns = []
             for client_lun in client_config['luns'].keys():
-                pool, image = client_lun.split('.', 1)
+                pool, image = client_lun.split('/', 1)
                 lun = {
                     'pool': pool,
                     'image': image
@@ -510,7 +514,7 @@ class IscsiTarget(RESTController):
         for group_id, group_config in target_config['groups'].items():
             group_disks = []
             for group_disk_key, _ in group_config['disks'].items():
-                pool, image = group_disk_key.split('.', 1)
+                pool, image = group_disk_key.split('/', 1)
                 group_disk = {
                     'pool': pool,
                     'image': image
