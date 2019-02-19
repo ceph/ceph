@@ -1,3 +1,5 @@
+import { RbdConfigurationEntry } from '../../../shared/models/configuration';
+
 export class RbdFormCopyRequestModel {
   dest_pool_name: string;
   dest_image_name: string;
@@ -7,4 +9,5 @@ export class RbdFormCopyRequestModel {
   stripe_unit: number;
   stripe_count: number;
   data_pool: string;
+  configuration: RbdConfigurationEntry[];
 }

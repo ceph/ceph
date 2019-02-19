@@ -358,3 +358,20 @@ uib-accordion .panel-title,
 .block-ui-wrapper {
   background: $color-transparent-black !important;
 }
+
+h3.page-header {
+  margin-left: 1em;
+  margin-top: 1em;
+  border-color: #f0f0f0;
+}
+
+.tooltip-wide .tooltip-inner {
+  width: 400px;
+}
+
+.tooltip-inner {
+  background-color: white;
+  border: 1px solid grey;
+  color: #333;
+  font-size: 1.1em;
+}

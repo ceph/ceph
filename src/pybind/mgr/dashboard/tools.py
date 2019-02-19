@@ -876,7 +876,10 @@ def get_request_body_params(request):
     if content_type in ['application/json', 'text/javascript']:
         if not hasattr(request, 'json'):
             raise cherrypy.HTTPError(400, 'Expected JSON body')
-        params.update(request.json.items())
+        if isinstance(request.json, str):
+            params.update(json.loads(request.json))
+        else:
+            params.update(request.json)
 
     return params
 

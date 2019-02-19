@@ -283,24 +283,25 @@
             </div>
           </div>
 
-          <!-- Applications -->
-          <div class="form-group">
-            <label i18n
-                   class="col-sm-3 control-label"
-                   for="applications">Applications</label>
-            <div class="col-sm-9">
-              <span class="form-control no-border full-height">
-                <cd-select-badges id="applications"
-                                  [customBadges]="true"
-                                  [customBadgeValidators]="data.applications.validators"
-                                  [messages]="data.applications.messages"
-                                  [data]="data.applications.selected"
-                                  [options]="data.applications.available"
-                                  [selectionLimit]="4">
-                </cd-select-badges>
-              </span>
-            </div>
+        </div>
+        <!-- Applications -->
+        <div class="form-group">
+          <label i18n
+                 class="col-sm-3 control-label"
+                 for="applications">Applications</label>
+          <div class="col-sm-9">
+            <span class="form-control no-border full-height">
+              <cd-select-badges id="applications"
+                                [customBadges]="true"
+                                [customBadgeValidators]="data.applications.validators"
+                                [messages]="data.applications.messages"
+                                [data]="data.applications.selected"
+                                [options]="data.applications.available"
+                                [selectionLimit]="4">
+              </cd-select-badges>
+            </span>
           </div>
+        </div>
 
           <!-- Compression -->
           <div *ngIf="info.is_all_bluestore"
@@ -427,9 +428,14 @@
             </div>
           </div>
 
+        <!-- Pool configuration -->
+        <div [hidden]="form.get('poolType').value !== 'replicated' || data.applications.selected.indexOf('rbd') === -1">
+          <cd-rbd-configuration-form [form]="form"
+                                     [initializeData]="initializeConfigData"
+                                     (changes)="currentConfigurationValues = $event()">
+          </cd-rbd-configuration-form>
         </div>
       </div>
-
       <div class="panel-footer">
         <div class="button-group text-right">
           <cd-submit-button [form]="formDir"
@@ -443,6 +449,8 @@
                   routerLink="/pool">Back</button>
         </div>
       </div>
+
     </div>
+
   </form>
 </div>
