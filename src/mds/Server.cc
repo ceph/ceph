@@ -1582,9 +1582,14 @@ std::pair<bool, uint64_t> Server::recall_client_state(MDSGatherBuilder* gather, 
       uint64_t recall = std::min<uint64_t>(recall_max_caps, num_caps-newlim);
       newlim = num_caps-recall;
       const uint64_t session_recall_throttle = session->get_recall_caps_throttle();
+      const uint64_t session_recall_throttle2o = session->get_recall_caps_throttle2o();
       const uint64_t global_recall_throttle = recall_throttle.get();
       if (session_recall_throttle+recall > recall_max_decay_threshold) {
         dout(15) << "  session recall threshold (" << recall_max_decay_threshold << ") hit at " << session_recall_throttle << "; skipping!" << dendl;
+        throttled = true;
+        continue;
+      } else if (session_recall_throttle2o+recall > recall_max_caps*2) {
+        dout(15) << "  session recall 2nd-order threshold (" << 2*recall_max_caps << ") hit at " << session_recall_throttle2o << "; skipping!" << dendl;
         throttled = true;
         continue;
       } else if (global_recall_throttle+recall > recall_global_max_decay_threshold) {
