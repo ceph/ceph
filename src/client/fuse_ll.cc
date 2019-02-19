@@ -651,6 +651,44 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg, st
       fuse_reply_ioctl(req, 0, &l, sizeof(struct ceph_ioctl_layout));
     }
     break;
+    #if defined(__linux__)
+    case FS_IOC_GETFLAGS:{
+       int attr = 0;
+       Fh *fh = (Fh*)fi->fh;
+       const struct fuse_ctx *ctx = fuse_req_ctx(req);
+       UserPerm perms(ctx->uid, ctx->gid);
+       get_fuse_groups(perms, req);
+       int ret = cfuse->client->ll_get_flags(fh, perms);
+       if (!ret) {
+         attr |= FS_IMMUTABLE_FL;
+       }
+       
+       fuse_reply_ioctl(req, 0, &attr, sizeof(attr));
+    }
+    break;
+    case FS_IOC_SETFLAGS: {
+      auto flags = (int *)in_buf;
+      
+      if (*flags & (~FS_IMMUTABLE_FL)) {
+        fuse_reply_err(req, EOPNOTSUPP);
+        return;
+      }
+
+      if (*flags & FS_IMMUTABLE_FL) {
+        Fh *fh = (Fh*)fi->fh;
+        const struct fuse_ctx *ctx = fuse_req_ctx(req);
+        UserPerm perms(ctx->uid, ctx->gid);
+        get_fuse_groups(perms, req);
+        int ret = cfuse->client->ll_set_flags(fh, perms);
+        if (ret) {
+          fuse_reply_err(req, -ret);
+          return;
+        }
+      }
+      fuse_reply_ioctl(req, 0, NULL, 0);
+    }
+    break;
+    #endif
     default:
       fuse_reply_err(req, EINVAL);
   }

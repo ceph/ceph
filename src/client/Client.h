@@ -77,7 +77,6 @@ enum {
   l_c_last,
 };
 
-
 class MDSCommandOp : public CommandOp
 {
   public:
@@ -738,6 +737,12 @@ public:
 
   bool use_faked_inos() { return _use_faked_inos; }
   vinodeno_t map_faked_ino(ino_t ino);
+
+  int ll_set_flags(Fh *fh, const UserPerm& perms);
+  int ll_set_flags(Inode *in, const UserPerm& perms);
+
+  int ll_get_flags(Fh *fh, const UserPerm& perms);
+  int ll_get_flags(Inode *in, const UserPerm& perms);
 
   //notify the mds to flush the mdlog
   void flush_mdlog_sync();

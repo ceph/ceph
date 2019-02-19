@@ -6982,7 +6982,6 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
     if (mask & (CEPH_SETATTR_MTIME|CEPH_SETATTR_ATIME)) {
       if (mask & CEPH_SETATTR_MTIME)
         in->mtime = utime_t(stx->stx_mtime);
-      
       if (mask & CEPH_SETATTR_ATIME)
         in->atime = utime_t(stx->stx_atime);
       in->ctime = ceph_clock_now();
@@ -7010,9 +7009,11 @@ force_request:
   if (mask & CEPH_SETATTR_KILL_SGUID) {
     req->inode_drop |= CEPH_CAP_AUTH_SHARED;
   }
+
   if (mask & CEPH_SETATTR_MODE) {
     req->head.args.setattr.mode = stx->stx_mode;
     req->inode_drop |= CEPH_CAP_AUTH_SHARED;
+
     ldout(cct,10) << "changing mode to " << stx->stx_mode << dendl;
   }
   if (mask & CEPH_SETATTR_UID) {
@@ -7039,6 +7040,7 @@ force_request:
     req->inode_drop |= CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_RD |
       CEPH_CAP_FILE_WR;
   }
+
   if (mask & CEPH_SETATTR_SIZE) {
     if ((unsigned long)stx->stx_size < mdsmap->get_max_filesize()) {
       req->head.args.setattr.size = stx->stx_size;
@@ -13111,6 +13113,61 @@ int Client::ll_file_layout(Inode *in, file_layout_t *layout)
 int Client::ll_file_layout(Fh *fh, file_layout_t *layout)
 {
   return ll_file_layout(fh->inode.get(), layout);
+}
+
+int Client::ll_set_flags(Inode *in, const UserPerm& perms)
+{ 
+   std::lock_guard lock(client_lock);
+   int res = 0;
+   
+   if(!in->worm.is_enable()) {
+     return -EOPNOTSUPP;
+   }
+   
+   if (in->worm.is_retain()) {
+     return res;
+   }
+   
+   if (in->worm.is_enable() && !in->worm.is_retain()) {
+     uint32_t worm_state = (in->worm.worm_state | WORM_RETAIN) & (~WORM_EXPIRE);
+     utime_t exp_time;  
+     if (in->worm.is_reten_period_ulimit()) {
+        exp_time.tv.tv_sec = 4294967295;
+        exp_time.tv.tv_nsec = 0;
+     } else {  
+       exp_time.tv.tv_sec = in->mtime.sec() + in->worm.retention_period;
+       exp_time.tv.tv_nsec = in->mtime.nsec();
+     } 
+     char buf[64];
+     snprintf(buf, sizeof(buf), "state=%u exp_time=%u_%u", worm_state, exp_time.tv.tv_sec, exp_time.tv.tv_nsec);
+     res = _do_setxattr(in, "ceph.worm", &buf, std::strlen(buf), 0, perms);
+     if (res) {
+       ldout(cct, 3) << "set worm info return:" << res << dendl;
+     }
+   }
+
+   return res;
+}
+
+int Client::ll_set_flags(Fh *fh, const UserPerm& perms)
+{ 
+  return ll_set_flags(fh->inode.get(), perms);
+}
+
+int Client::ll_get_flags(Inode *in, const UserPerm& perms)
+{ 
+  std::lock_guard lock(client_lock);
+  
+  int res = worm_state_transition(in, perms, 0);
+  if (res != -EROFS) {
+    return -EINVAL;
+  }
+  return 0;
+}
+
+int Client::ll_get_flags(Fh *fh, const UserPerm& perms)
+{ 
+  return ll_get_flags(fh->inode.get(), perms);
 }
 
 /* Currently we cannot take advantage of redundancy in reads, since we
