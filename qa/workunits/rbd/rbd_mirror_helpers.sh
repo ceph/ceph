@@ -263,13 +263,14 @@ setup_pools()
     else
       mon_map_file=${TEMPDIR}/${remote_cluster}.monmap
       ceph --cluster ${remote_cluster} mon getmap > ${mon_map_file}
-      mon_addr=$(monmaptool --print ${mon_map_file} | grep -E 'mon\.' | head -n 1 | sed -E 's/^[0-9]+: ([^/]+).+$/\1/')
+      mon_addr=$(monmaptool --print ${mon_map_file} | grep -E 'mon\.' |
+        head -n 1 | sed -E 's/^[0-9]+: ([^ ]+).+$/\1/' | sed -E 's/\/[0-9]+//g')
 
       admin_key_file=${TEMPDIR}/${remote_cluster}.client.${CEPH_ID}.key
       CEPH_ARGS='' ceph --cluster ${remote_cluster} auth get-key client.${CEPH_ID} > ${admin_key_file}
 
       rbd --cluster ${cluster} mirror pool peer add ${POOL} client.${CEPH_ID}@${remote_cluster}-DNE \
-          --remote-mon-host ${mon_addr} --remote-key-file ${admin_key_file}
+          --remote-mon-host "${mon_addr}" --remote-key-file ${admin_key_file}
 
       uuid=$(rbd --cluster ${cluster} mirror pool peer add ${PARENT_POOL} client.${CEPH_ID}@${remote_cluster}-DNE)
       rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} mon-host ${mon_addr}
