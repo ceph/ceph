@@ -166,7 +166,7 @@ int trash_search(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
                  const std::string &image_name, std::string *image_id) {
   std::vector<trash_image_info_t> entries;
 
-  int r = Trash<>::list(io_ctx, entries);
+  int r = Trash<>::list(io_ctx, entries, false);
   if (r < 0) {
     return r;
   }

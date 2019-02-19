@@ -281,6 +281,12 @@ int Pool<I>::get_stats(librados::IoCtx& io_ctx, StatOptions* stat_options) {
   uint64_t* max_provisioned_bytes;
   uint64_t* snapshot_count;
 
+  std::vector<trash_image_info_t> trash_entries;
+  int r = Trash<I>::list(io_ctx, trash_entries, false);
+  if (r < 0 && r != -EOPNOTSUPP) {
+    return r;
+  }
+
   get_pool_stat_option_value<I>(
     stat_options, RBD_POOL_STAT_OPTION_IMAGES, &image_count);
   get_pool_stat_option_value<I>(
@@ -300,9 +306,14 @@ int Pool<I>::get_stats(librados::IoCtx& io_ctx, StatOptions* stat_options) {
     }
 
     std::vector<std::string> image_ids;
-    image_ids.reserve(images.size());
+    image_ids.reserve(images.size() + trash_entries.size());
     for (auto& it : images) {
       image_ids.push_back(std::move(it.second));
+    }
+    for (auto& it : trash_entries) {
+      if (it.source == RBD_TRASH_IMAGE_SOURCE_REMOVING) {
+        image_ids.push_back(std::move(it.id));
+      }
     }
 
     r = get_pool_stats<I>(io_ctx, config, image_ids, image_count,
@@ -325,15 +336,13 @@ int Pool<I>::get_stats(librados::IoCtx& io_ctx, StatOptions* stat_options) {
     stat_options, RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS, &snapshot_count);
   if (image_count != nullptr || provisioned_bytes != nullptr ||
       max_provisioned_bytes != nullptr || snapshot_count != nullptr) {
-    std::vector<trash_image_info_t> trash_entries;
-    int r = Trash<I>::list(io_ctx, trash_entries);
-    if (r < 0 && r != -EOPNOTSUPP) {
-      return r;
-    }
 
     std::vector<std::string> image_ids;
     image_ids.reserve(trash_entries.size());
     for (auto& it : trash_entries) {
+      if (it.source == RBD_TRASH_IMAGE_SOURCE_REMOVING) {
+        continue;
+      }
       image_ids.push_back(std::move(it.id));
     }
 

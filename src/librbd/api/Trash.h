@@ -30,7 +30,8 @@ struct Trash {
   static int get(librados::IoCtx &io_ctx, const std::string &id,
                  trash_image_info_t *info);
   static int list(librados::IoCtx &io_ctx,
-                  std::vector<trash_image_info_t> &entries);
+                  std::vector<trash_image_info_t> &entries,
+                  bool exclude_user_remove_source);
   static int purge(IoCtx& io_ctx, time_t expire_ts,
                    float threshold, ProgressContext& pctx);
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id,

@@ -93,7 +93,7 @@ int Image<I>::list_images(librados::IoCtx& io_ctx,
       return r;
     }
 
-    // old format images are in a tmap
+    // V1 format images are in a tmap
     if (bl.length()) {
       auto p = bl.cbegin();
       bufferlist header;
@@ -106,6 +106,7 @@ int Image<I>::list_images(librados::IoCtx& io_ctx,
     }
   }
 
+  // V2 format images
   std::map<std::string, std::string> image_names_to_ids;
   r = list_images_v2(io_ctx, &image_names_to_ids);
   if (r < 0) {
@@ -116,6 +117,22 @@ int Image<I>::list_images(librados::IoCtx& io_ctx,
   for (const auto& img_pair : image_names_to_ids) {
     images->push_back({.id = img_pair.second,
                        .name = img_pair.first});
+  }
+
+  // include V2 images in a partially removed state
+  std::vector<librbd::trash_image_info_t> trash_images;
+  r = Trash<I>::list(io_ctx, trash_images, false);
+  if (r < 0 && r != -EOPNOTSUPP) {
+    lderr(cct) << "error listing trash images: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  for (const auto& trash_image : trash_images) {
+    if (trash_image.source == RBD_TRASH_IMAGE_SOURCE_REMOVING) {
+      images->push_back({.id = trash_image.id,
+                         .name = trash_image.name});
+
+    }
   }
 
   return 0;
@@ -438,7 +455,7 @@ int Image<I>::list_descendants(
       }
 
       std::vector<librbd::trash_image_info_t> trash_images;
-      r = Trash<I>::list(child_io_ctx, trash_images);
+      r = Trash<I>::list(child_io_ctx, trash_images, false);
       if (r < 0 && r != -EOPNOTSUPP) {
         lderr(cct) << "error listing trash images: " << cpp_strerror(r)
                    << dendl;
@@ -446,7 +463,10 @@ int Image<I>::list_descendants(
       }
 
       for (auto& it : trash_images) {
-        child_image_id_to_info[it.id] = {it.name, true};
+        child_image_id_to_info.insert({
+          it.id,
+          {it.name,
+           it.source == RBD_TRASH_IMAGE_SOURCE_REMOVING ? false : true}});
       }
     }
 
@@ -689,13 +709,13 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
   if (r == -ENOENT) {
     // check if it already exists in trash from an aborted trash remove attempt
     std::vector<trash_image_info_t> trash_entries;
-    r = Trash<I>::list(io_ctx, trash_entries);
+    r = Trash<I>::list(io_ctx, trash_entries, false);
     if (r < 0) {
       return r;
     } else if (r >= 0) {
       for (auto& entry : trash_entries) {
         if (entry.name == image_name &&
-            entry.source == RBD_TRASH_IMAGE_SOURCE_REMOVE) {
+            entry.source == RBD_TRASH_IMAGE_SOURCE_REMOVING) {
           return Trash<I>::remove(io_ctx, entry.id, true, prog_ctx);
         }
       }
@@ -712,7 +732,8 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
     ConfigProxy config(cct->_conf);
     Config<I>::apply_pool_overrides(io_ctx, &config);
 
-    rbd_trash_image_source_t trash_image_source = RBD_TRASH_IMAGE_SOURCE_REMOVE;
+    rbd_trash_image_source_t trash_image_source =
+      RBD_TRASH_IMAGE_SOURCE_REMOVING;
     uint64_t expire_seconds = 0;
     bool check_watchers = true;
     if (config.get_val<bool>("rbd_move_to_trash_on_remove")) {
@@ -726,7 +747,7 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
     r = Trash<I>::move(io_ctx, trash_image_source, image_name, image_id,
                        expire_seconds, check_watchers);
     if (r >= 0) {
-      if (trash_image_source == RBD_TRASH_IMAGE_SOURCE_REMOVE) {
+      if (trash_image_source == RBD_TRASH_IMAGE_SOURCE_REMOVING) {
         // proceed with attempting to immediately remove the image
         r = Trash<I>::remove(io_ctx, image_id, true, prog_ctx);
       }

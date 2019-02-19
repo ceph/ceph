@@ -266,8 +266,8 @@ int do_list(librbd::RBD &rbd, librados::IoCtx& io_ctx, bool long_flag,
       case RBD_TRASH_IMAGE_SOURCE_MIGRATION:
         del_source = "MIGRATION";
         break;
-      case RBD_TRASH_IMAGE_SOURCE_REMOVE:
-        del_source = "REMOVE";
+      case RBD_TRASH_IMAGE_SOURCE_REMOVING:
+        del_source = "REMOVING";
         break;
     }
 

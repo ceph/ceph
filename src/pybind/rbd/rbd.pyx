@@ -188,7 +188,7 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_TRASH_IMAGE_SOURCE_USER "RBD_TRASH_IMAGE_SOURCE_USER",
         _RBD_TRASH_IMAGE_SOURCE_MIRRORING "RBD_TRASH_IMAGE_SOURCE_MIRRORING",
         _RBD_TRASH_IMAGE_SOURCE_MIGRATION "RBD_TRASH_IMAGE_SOURCE_MIGRATION"
-        _RBD_TRASH_IMAGE_SOURCE_REMOVE "RBD_TRASH_IMAGE_SOURCE_REMOVE"
+        _RBD_TRASH_IMAGE_SOURCE_REMOVING "RBD_TRASH_IMAGE_SOURCE_REMOVING"
 
     ctypedef struct rbd_trash_image_info_t:
         char *id
@@ -1341,7 +1341,7 @@ class RBD(object):
         if ret != 0:
             raise make_ex(ret, 'error retrieving image from trash')
 
-        __source_string = ['USER', 'MIRRORING', 'MIGRATION']
+        __source_string = ['USER', 'MIRRORING', 'MIGRATION', 'REMOVING']
         info = {
             'id'          : decode_cstr(c_info.id),
             'name'        : decode_cstr(c_info.name),
