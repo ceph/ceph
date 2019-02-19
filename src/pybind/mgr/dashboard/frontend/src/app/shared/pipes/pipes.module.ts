@@ -18,6 +18,7 @@ import { MillisecondsPipe } from './milliseconds.pipe';
 import { OrdinalPipe } from './ordinal.pipe';
 import { RelativeDatePipe } from './relative-date.pipe';
 import { RoundPipe } from './round.pipe';
+import { UpperFirstPipe } from './upper-first.pipe';
 
 @NgModule({
   imports: [CommonModule],
@@ -38,7 +39,8 @@ import { RoundPipe } from './round.pipe';
     RoundPipe,
     OrdinalPipe,
     MillisecondsPipe,
-    IopsPipe
+    IopsPipe,
+    UpperFirstPipe
   ],
   exports: [
     DimlessBinaryPipe,
@@ -57,7 +59,8 @@ import { RoundPipe } from './round.pipe';
     RoundPipe,
     OrdinalPipe,
     MillisecondsPipe,
-    IopsPipe
+    IopsPipe,
+    UpperFirstPipe
   ],
   providers: [
     DatePipe,
@@ -74,7 +77,8 @@ import { RoundPipe } from './round.pipe';
     EncodeUriPipe,
     OrdinalPipe,
     IopsPipe,
-    MillisecondsPipe
+    MillisecondsPipe,
+    UpperFirstPipe
   ]
 })
 export class PipesModule {}
