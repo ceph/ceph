@@ -3826,7 +3826,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
    * note: encoding matches MClientReply::InodeStat
    */
   if (session->info.has_feature(CEPHFS_FEATURE_REPLY_ENCODING)) {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(oi->ino, bl);
     encode(snapid, bl);
     encode(oi->rdev, bl);
@@ -3869,6 +3869,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(any_i->change_attr, bl);
     encode(file_i->export_pin, bl);
     encode(snap_btime, bl);
+    encode(policy_i->worm, bl);
     ENCODE_FINISH(bl);
   }
   else {
@@ -3924,6 +3925,11 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     if (conn->has_feature(CEPH_FEATURE_FS_BTIME)) {
       encode(any_i->btime, bl);
       encode(any_i->change_attr, bl);
+    }
+
+    if (session->get_connection()->has_feature(CEPH_FEATURE_MDS_WORM)){
+      mempool_inode *policy_i = ppolicy ? pi : oi;
+      encode(policy_i->worm, bl);
     }
   }
 

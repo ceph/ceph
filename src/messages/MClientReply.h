@@ -133,6 +133,8 @@ struct InodeStat {
   version_t inline_version;
 
   quota_info_t quota;
+  
+  worm_info_t worm;
 
   mds_rank_t dir_pin;
 
@@ -145,7 +147,7 @@ struct InodeStat {
   void decode(bufferlist::const_iterator &p, const uint64_t features) {
     using ceph::decode;
     if (features == (uint64_t)-1) {
-      DECODE_START(2, p);
+      DECODE_START(3, p);
       decode(vino.ino, p);
       decode(vino.snapid, p);
       decode(rdev, p);
@@ -193,6 +195,11 @@ struct InodeStat {
       if (struct_v >= 3) {
         decode(snap_btime, p);
       } // else remains zero
+      if (struct_v >= 4) {
+        decode(worm, p);
+      } else {
+        worm = worm_info_t();
+      }
       DECODE_FINISH(p);
     }
     else {
@@ -255,6 +262,12 @@ struct InodeStat {
       } else {
         btime = utime_t();
         change_attr = 0;
+      }
+      
+      if (features & CEPH_FEATURE_MDS_WORM) {
+        decode(worm, p);
+      } else {
+        worm = worm_info_t();
       }
     }
   }

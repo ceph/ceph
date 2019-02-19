@@ -1202,6 +1202,7 @@ private:
   int _lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
   bool _ll_forget(Inode *in, uint64_t count);
 
+  int worm_state_transition(Inode *in, const UserPerm& perms, int op); 
 
   uint32_t deleg_timeout = 0;
 

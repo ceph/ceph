@@ -3148,6 +3148,20 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
   dout(10) << oct << " dir mode 0" << diri->inode.mode << " new mode 0" << mode << dec << dendl;
 
+  dout(10) << diri->inode.worm << dendl;
+  
+  if(diri->inode.worm.is_enable()) {
+    if (diri->inode.worm.is_reten_period_ulimit()){
+      in->inode.worm.worm_state = WORM_ENABLE | WORM_RETEN_PERIOD_UNLIMIT;
+    } else {
+      in->inode.worm.worm_state = WORM_ENABLE;
+    }
+    in->inode.worm.auto_commit_period = diri->inode.worm.auto_commit_period;
+    in->inode.worm.retention_period = diri->inode.worm.retention_period;   
+    in->inode.worm.min_retention_period = diri->inode.worm.min_retention_period;  
+    in->inode.worm.max_retention_period = diri->inode.worm.max_retention_period; 
+  }
+  
   if (diri->inode.mode & S_ISGID) {
     dout(10) << " dir is sticky" << dendl;
     in->inode.gid = diri->inode.gid;
@@ -5259,6 +5273,18 @@ int Server::parse_worm_vxattr(MDRequestRef& mdr, CInode *cur, string name, strin
     } else if (name == "worm.state") {
       uint32_t q = boost::lexical_cast<uint32_t>(value);
       worm->worm_state = q;
+    } else if(name == "worm.exp_time") {
+      if (!worm->is_enable() || !cur->is_file()) {
+        return -EINVAL;
+      }
+
+      size_t pos = value.find('_');
+
+      if (pos == string::npos)
+        return -EINVAL;
+
+      worm->exp_time.tv.tv_sec  = boost::lexical_cast<uint32_t>(value.substr(0,pos));
+      worm->exp_time.tv.tv_nsec = boost::lexical_cast<uint32_t>(value.substr(pos + 1));
     } else {
       dout(10) << " unknown worm vxattr " << name << dendl;
       return -EINVAL;
@@ -6119,7 +6145,6 @@ void Server::handle_client_link(MDRequestRef& mdr)
   else 
     _link_remote(mdr, true, dn, targeti);
 }
-
 
 class C_MDS_link_local_finish : public ServerLogContext {
   CDentry *dn;

@@ -346,6 +346,7 @@ public:
   void evict_cap_revoke_non_responders();
   void handle_conf_change(const std::set<std::string>& changed);
 
+
 private:
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
   void flush_session(Session *session, MDSGatherBuilder *gather);

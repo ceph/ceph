@@ -6871,6 +6871,14 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   if (in->snapid != CEPH_NOSNAP) {
     return -EROFS;
   }
+
+  if (in->worm.is_enable()) {
+    int res = worm_state_transition(in, perms, CEPH_MDS_OP_SETATTR);
+    if (res) {
+      return res;
+    }
+  }
+  
   if ((mask & CEPH_SETATTR_SIZE) &&
       (unsigned long)stx->stx_size > in->size &&
       is_quota_bytes_exceeded(in, (unsigned long)stx->stx_size - in->size,
@@ -8748,6 +8756,14 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
     return -EROFS;
   }
 
+  int result = 0;
+  if (in->is_file() && (flags & (O_WRONLY | O_RDWR | O_TRUNC | O_APPEND))&& in->worm.is_enable()) {
+    result = worm_state_transition(in, perms, CEPH_MDS_OP_OPEN);
+    if (result) {
+      return result;
+    }
+  }
+
   // use normalized flags to generate cmode
   int cflags = ceph_flags_sys2wire(flags);
   if (cct->_conf.get_val<bool>("client_force_lazyio"))
@@ -8755,7 +8771,6 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
 
   int cmode = ceph_flags_to_mode(cflags);
   int want = ceph_caps_for_mode(cmode);
-  int result = 0;
 
   in->get_open_ref(cmode);  // make note of pending open, since it effects _wanted_ caps.
 
@@ -9460,7 +9475,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   }
 
   ceph_assert(in->snapid == CEPH_NOSNAP);
-
+ 
   // was Fh opened as writeable?
   if ((f->mode & CEPH_FILE_MODE_WR) == 0)
     return -EBADF;
@@ -11690,6 +11705,73 @@ int Client::ll_removexattr(Inode *in, const char *name, const UserPerm& perms)
   return _removexattr(in, name, perms);
 }
 
+/*
+ A worm file has three state£º
+ normal state£º the initial state of a file. in this state, the worm file is mutable and deletable¡£
+ retained state: in this state, the worm file is immutable or undeletable.
+ expired state: in this state, the worm like as the normal file, it is mutable and deletable 
+                 (the worm file is immutable but deletable in some other storage).
+ A worm file make transition between these three states:
+ In normal state, the worm file will trans to retained state if the file's mtime > auto_commit_period.
+ In retained state, the worm file will trans to expired state after worm expire time.
+ In expire state, do nothing.
+*/
+int Client::worm_state_transition(Inode *in, const UserPerm& perms, int op)
+{
+  int res = 0;
+  if (in->worm.is_expire()) {
+    return res;
+  }
+
+  utime_t now = ceph_clock_now();
+
+  ldout(cct, 10) << "worm_state_transition "  << "(" << now << ":" <<in->mtime << ")" << dendl;
+
+  if (!in->worm.is_retain() && (now.tv.tv_sec > (in->mtime.sec() + in->worm.auto_commit_period))) {
+    uint32_t worm_state = in->worm.worm_state | WORM_RETAIN;
+    utime_t exp_time;
+    if (in->worm.is_reten_period_ulimit()) {
+      exp_time.tv.tv_sec = 4294967295;
+      exp_time.tv.tv_nsec = 0;
+    } else {
+      exp_time.tv.tv_sec = in->mtime.sec() + in->worm.retention_period + in->worm.auto_commit_period;
+      exp_time.tv.tv_nsec = in->mtime.nsec();
+    }
+
+    char buf[64];
+    snprintf(buf, sizeof(buf), "state=%u exp_time=%u_%u", worm_state, exp_time.tv.tv_sec, exp_time.tv.tv_nsec);
+    res = _do_setxattr(in, "ceph.worm", &buf, std::strlen(buf), 0, perms);
+    if (res) {
+      ldout(cct, 3) << "set worm info return:" << res << dendl;
+      return res;
+    }
+  }
+
+  if (in->worm.is_retain()) {
+    if (in->worm.is_reten_period_ulimit()) {
+      return -EROFS;
+    }
+
+    if (now >= in->worm.exp_time) {
+      if(op == CEPH_MDS_OP_UNLINK) {
+        return res;
+      }
+
+      uint32_t worm_state = (in->worm.worm_state | WORM_EXPIRE) & (~WORM_RETAIN);
+      char buf[12];
+      snprintf(buf, sizeof(buf), "%u", worm_state);
+      res = _do_setxattr(in, "ceph.worm.state", &buf, std::strlen(buf), 0, perms);
+      if (res){
+        ldout(cct, 3) << "set worm state (" << worm_state << ") return:"<< res << dendl;
+        return res;
+      }
+    } else {
+      return -EROFS;
+    }
+  }
+  return res;
+}
+
 bool Client::_vxattrcb_quota_exists(Inode *in)
 {
   return in->quota.is_enable() &&
@@ -12433,6 +12515,13 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
   if (is_quota_files_exceeded(dir, perms)) {
     return -EDQUOT;
   }
+  
+  if (dir->worm.is_enable()) {
+    int res = worm_state_transition(dir, perms, CEPH_MDS_OP_SYMLINK);
+    if (res) {
+      return res;
+    }
+  }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SYMLINK);
 
@@ -12573,6 +12662,14 @@ int Client::_unlink(Inode *dir, const char *name, const UserPerm& perm)
     goto fail;
 
   in = otherin.get();
+
+  if (in->worm.is_enable()) {
+    res = worm_state_transition(in, perm, CEPH_MDS_OP_UNLINK);
+    if (res) {
+      return res;
+    }
+  }
+  
   req->set_other_inode(in);
   in->break_all_delegs();
   req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
@@ -12758,6 +12855,13 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
     oldinode->break_all_delegs();
     req->set_old_inode(oldinode);
     req->old_inode_drop = CEPH_CAP_LINK_SHARED;
+    
+    if (oldinode->worm.is_enable()) {
+      res = worm_state_transition(oldinode, perm, op);
+      if (res) {
+        goto fail;
+      }
+    }
 
     res = _lookup(todir, toname, 0, &otherin, perm);
     switch (res) {
@@ -12766,6 +12870,13 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
 	Inode *in = otherin.get();
 	req->set_other_inode(in);
 	in->break_all_delegs();
+	
+        if (in->worm.is_enable()) {
+          res = worm_state_transition(in, perm, op);
+          if (res) {
+            goto fail;
+          }
+        }
       }
       req->other_inode_drop = CEPH_CAP_LINK_SHARED | CEPH_CAP_LINK_EXCL;
       break;
