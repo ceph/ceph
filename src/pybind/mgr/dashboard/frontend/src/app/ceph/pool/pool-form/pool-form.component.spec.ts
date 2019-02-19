@@ -83,7 +83,11 @@ describe('PoolFormComponent', () => {
     return rule;
   };
 
-  const testSubmit = (pool: any, taskName: string, poolServiceMethod: 'create' | 'update') => {
+  const expectValidSubmit = (
+    pool: any,
+    taskName: string,
+    poolServiceMethod: 'create' | 'update'
+  ) => {
     spyOn(poolService, poolServiceMethod).and.stub();
     const taskWrapper = TestBed.get(TaskWrapperService);
     spyOn(taskWrapper, 'wrapTaskAroundCall').and.callThrough();
@@ -840,7 +844,7 @@ describe('PoolFormComponent', () => {
       });
     };
     const testCreate = (pool) => {
-      testSubmit(pool, 'pool/create', 'create');
+      expectValidSubmit(pool, 'pool/create', 'create');
     };
 
     beforeEach(() => {
@@ -891,6 +895,27 @@ describe('PoolFormComponent', () => {
           pool_type: 'erasure',
           pg_num: 32,
           flags: ['ec_overwrites']
+        });
+      });
+
+      it('with rbd qos settings', () => {
+        setMultipleValues({
+          name: 'replicatedRbdQos',
+          poolType: 'replicated',
+          size: 2,
+          pgNum: 32
+        });
+        component.currentConfigurationValues = {
+          rbd_qos_bps_limit: 55
+        };
+        testCreate({
+          pool: 'replicatedRbdQos',
+          pool_type: 'replicated',
+          size: 2,
+          pg_num: 32,
+          configuration: {
+            rbd_qos_bps_limit: 55
+          }
         });
       });
     });
@@ -974,6 +999,7 @@ describe('PoolFormComponent', () => {
       pool.options.compression_required_ratio = 0.8;
       pool.flags_names = 'someFlag1,someFlag2';
       pool.application_metadata = ['rbd', 'rgw'];
+
       createCrushRule({ name: 'someRule' });
       spyOn(poolService, 'get').and.callFake(() => of(pool));
     });
@@ -1044,7 +1070,7 @@ describe('PoolFormComponent', () => {
         it(`always provides the application metadata array with submit even if it's empty`, () => {
           expect(form.get('mode').dirty).toBe(false);
           component.data.applications.selected = [];
-          testSubmit(
+          expectValidSubmit(
             {
               application_metadata: [],
               pool: 'somePoolName'
@@ -1058,7 +1084,7 @@ describe('PoolFormComponent', () => {
           formHelper.setValue('minBlobSize', '').markAsDirty();
           formHelper.setValue('maxBlobSize', '').markAsDirty();
           formHelper.setValue('ratio', '').markAsDirty();
-          testSubmit(
+          expectValidSubmit(
             {
               application_metadata: ['rbd', 'rgw'],
               compression_max_blob_size: 0,
@@ -1073,7 +1099,7 @@ describe('PoolFormComponent', () => {
 
         it(`will unset mode not used anymore`, () => {
           formHelper.setValue('mode', 'none').markAsDirty();
-          testSubmit(
+          expectValidSubmit(
             {
               application_metadata: ['rbd', 'rgw'],
               compression_mode: 'unset',
@@ -1084,6 +1110,31 @@ describe('PoolFormComponent', () => {
           );
         });
       });
+    });
+  });
+
+  describe('test pool configuration component', () => {
+    it('is visible for replicated pools with rbd application', () => {
+      const poolType = component.form.get('poolType');
+      poolType.markAsDirty();
+      poolType.setValue('replicated');
+      component.data.applications.selected = ['rbd'];
+      fixture.detectChanges();
+      expect(
+        fixture.debugElement.query(By.css('cd-rbd-configuration-form')).nativeElement.parentElement
+          .hidden
+      ).toBe(false);
+    });
+
+    it('is invisible for erasure coded pools', () => {
+      const poolType = component.form.get('poolType');
+      poolType.markAsDirty();
+      poolType.setValue('erasure');
+      fixture.detectChanges();
+      expect(
+        fixture.debugElement.query(By.css('cd-rbd-configuration-form')).nativeElement.parentElement
+          .hidden
+      ).toBe(true);
     });
   });
 });

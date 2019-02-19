@@ -9,11 +9,12 @@ import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { PoolService } from '../../../shared/api/pool.service';
-import { DeletionModalComponent } from '../../../shared/components/deletion-modal/deletion-modal.component';
+import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
 import { SharedModule } from '../../../shared/shared.module';
+import { RbdConfigurationListComponent } from '../../block/rbd-configuration-list/rbd-configuration-list.component';
 import { PgCategoryService } from '../../shared/pg-category.service';
 import { Pool } from '../pool';
 import { PoolDetailsComponent } from '../pool-details/pool-details.component';
@@ -39,7 +40,7 @@ describe('PoolListComponent', () => {
   };
 
   configureTestBed({
-    declarations: [PoolListComponent, PoolDetailsComponent],
+    declarations: [PoolListComponent, PoolDetailsComponent, RbdConfigurationListComponent],
     imports: [
       SharedModule,
       ToastModule.forRoot(),
@@ -72,7 +73,7 @@ describe('PoolListComponent', () => {
 
     const callDeletion = () => {
       component.deletePoolModal();
-      const deletion: DeletionModalComponent = component.modalRef.content;
+      const deletion: CriticalConfirmationModalComponent = component.modalRef.content;
       deletion.submitActionObservable();
     };
 

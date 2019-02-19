@@ -1,7 +1,8 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+import { RbdConfigurationService } from '../services/rbd-configuration.service';
 import { RbdService } from './rbd.service';
 
 describe('RbdService', () => {
@@ -9,7 +10,7 @@ describe('RbdService', () => {
   let httpTesting: HttpTestingController;
 
   configureTestBed({
-    providers: [RbdService],
+    providers: [RbdService, RbdConfigurationService, i18nProviders],
     imports: [HttpClientTestingModule]
   });
 

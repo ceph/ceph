@@ -1,7 +1,9 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
-import { configureTestBed } from '../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+import { RbdConfigurationSourceField } from '../models/configuration';
+import { RbdConfigurationService } from '../services/rbd-configuration.service';
 import { PoolService } from './pool.service';
 
 describe('PoolService', () => {
@@ -10,7 +12,7 @@ describe('PoolService', () => {
   const apiPath = 'api/pool';
 
   configureTestBed({
-    providers: [PoolService],
+    providers: [PoolService, RbdConfigurationService, i18nProviders],
     imports: [HttpClientTestingModule]
   });
 
@@ -78,5 +80,44 @@ describe('PoolService', () => {
     req.flush(['foo', 'bar']);
     tick();
     expect(result).toEqual(['foo', 'bar']);
+  }));
+
+  it('should test injection of data from getConfiguration()', fakeAsync(() => {
+    const pool = 'foo';
+    let value;
+    service.getConfiguration(pool).subscribe((next) => (value = next));
+    const req = httpTesting.expectOne(`${apiPath}/${pool}/configuration`);
+    expect(req.request.method).toBe('GET');
+    req.flush([
+      {
+        name: 'rbd_qos_bps_limit',
+        value: '60',
+        source: RbdConfigurationSourceField.global
+      },
+      {
+        name: 'rbd_qos_iops_limit',
+        value: '0',
+        source: RbdConfigurationSourceField.global
+      }
+    ]);
+    tick();
+    expect(value).toEqual([
+      {
+        description: 'The desired limit of IO bytes per second.',
+        displayName: 'BPS Limit',
+        name: 'rbd_qos_bps_limit',
+        source: RbdConfigurationSourceField.global,
+        type: 0,
+        value: '60'
+      },
+      {
+        description: 'The desired limit of IO operations per second.',
+        displayName: 'IOPS Limit',
+        name: 'rbd_qos_iops_limit',
+        source: RbdConfigurationSourceField.global,
+        type: 1,
+        value: '0'
+      }
+    ]);
   }));
 });

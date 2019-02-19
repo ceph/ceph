@@ -34,6 +34,9 @@ export class PoolListComponent implements OnInit {
   @ViewChild('poolUsageTpl')
   poolUsageTpl: TemplateRef<any>;
 
+  @ViewChild('poolConfigurationSourceTpl')
+  poolConfigurationSourceTpl: TemplateRef<any>;
+
   pools: Pool[] = [];
   columns: CdTableColumn[];
   selection = new CdTableSelection();

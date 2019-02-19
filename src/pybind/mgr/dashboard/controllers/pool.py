@@ -8,6 +8,7 @@ from . import ApiController, RESTController, Endpoint, ReadPermission, Task
 from .. import mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
+from ..services.rbd import RbdConfiguration
 from ..services.exception import handle_send_command_error
 from ..tools import str_to_bool
 
@@ -67,7 +68,9 @@ class Pool(RESTController):
 
     def get(self, pool_name, attrs=None, stats=False):
         # type: (str, str, bool) -> dict
-        return self._get(pool_name, attrs, stats)
+        pool = self._get(pool_name, attrs, stats)
+        pool['configuration'] = RbdConfiguration(pool_name).list()
+        return pool
 
     @pool_task('delete', ['{pool_name}'])
     @handle_send_command_error('pool')
@@ -76,19 +79,20 @@ class Pool(RESTController):
                                         yes_i_really_really_mean_it=True)
 
     @pool_task('edit', ['{pool_name}'])
-    def set(self, pool_name, flags=None, application_metadata=None, **kwargs):
+    def set(self, pool_name, flags=None, application_metadata=None, configuration=None, **kwargs):
         self._set_pool_values(pool_name, application_metadata, flags, True, kwargs)
+        RbdConfiguration(pool_name).set_configuration(configuration)
 
     @pool_task('create', {'pool_name': '{pool}'})
     @handle_send_command_error('pool')
     def create(self, pool, pg_num, pool_type, erasure_code_profile=None, flags=None,
-               application_metadata=None, rule_name=None, **kwargs):
+               application_metadata=None, rule_name=None, configuration=None, **kwargs):
         ecp = erasure_code_profile if erasure_code_profile else None
         CephService.send_command('mon', 'osd pool create', pool=pool, pg_num=int(pg_num),
                                  pgp_num=int(pg_num), pool_type=pool_type, erasure_code_profile=ecp,
                                  rule=rule_name)
-
         self._set_pool_values(pool, application_metadata, flags, False, kwargs)
+        RbdConfiguration(pool).set_configuration(configuration)
 
     def _set_pool_values(self, pool, application_metadata, flags, update_existing, kwargs):
         update_name = False
@@ -137,10 +141,17 @@ class Pool(RESTController):
                 reset_arg(arg, '0')
             reset_arg('compression_algorithm', 'unset')
 
+    @RESTController.Resource()
+    @ReadPermission
+    def configuration(self, pool_name):
+        return RbdConfiguration(pool_name).list()
+
     @Endpoint()
     @ReadPermission
-    def _info(self):
+    def _info(self, pool_name=''):
+        # type: (str) -> dict
         """Used by the create-pool dialog"""
+
         def rules(pool_type):
             return [r
                     for r in mgr.get('osd_map_crush')['rules']
@@ -155,7 +166,7 @@ class Pool(RESTController):
                     for o in mgr.get('config_options')['options']
                     if o['name'] == conf_name][0]
 
-        return {
+        result = {
             "pool_names": [p['pool_name'] for p in self._pool_list()],
             "crush_rules_replicated": rules(1),
             "crush_rules_erasure": rules(3),
@@ -165,3 +176,8 @@ class Pool(RESTController):
             "compression_algorithms": compression_enum('bluestore_compression_algorithm'),
             "compression_modes": compression_enum('bluestore_compression_mode'),
         }
+
+        if pool_name:
+            result['pool_options'] = RbdConfiguration(pool_name).list()
+
+        return result

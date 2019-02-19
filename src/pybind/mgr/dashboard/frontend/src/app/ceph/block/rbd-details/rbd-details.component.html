@@ -121,4 +121,19 @@
                           [poolName]="selectedItem.pool_name"
                           [rbdName]="selectedItem.name"></cd-rbd-snapshot-list>
   </tab>
+  <tab i18n-heading
+       heading="Configuration">
+    <cd-rbd-configuration-table [data]="selectedItem['configuration']"></cd-rbd-configuration-table>
+  </tab>
 </tabset>
+
+<ng-template
+  #poolConfigurationSourceTpl
+  let-row="row"
+  let-value="value">
+  <ng-container *ngIf="+value; else global">
+    <strong i18n i18n-tooltip tooltip="This setting overrides the global value">Image</strong>
+  </ng-container>
+  <ng-template #global><span i18n i18n-tooltip tooltip="This is the global value. No value for this option has been set for this image.">Global</span></ng-template>
+</ng-template>
+

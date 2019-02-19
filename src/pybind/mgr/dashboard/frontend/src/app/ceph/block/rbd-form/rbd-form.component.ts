@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, EventEmitter, OnInit } from '@angular/core';
 import { FormControl, ValidatorFn, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -9,6 +9,10 @@ import { Observable } from 'rxjs';
 import { PoolService } from '../../../shared/api/pool.service';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
+import {
+  RbdConfigurationEntry,
+  RbdConfigurationSourceField
+} from '../../../shared/models/configuration';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { Permission } from '../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
@@ -37,6 +41,10 @@ export class RbdFormComponent implements OnInit {
   objectMapFormControl: FormControl;
   journalingFormControl: FormControl;
   fastDiffFormControl: FormControl;
+  getDirtyConfigurationValues: (
+    includeLocalField?: boolean,
+    localField?: RbdConfigurationSourceField
+  ) => RbdConfigurationEntry[];
 
   pools: Array<string> = null;
   allPools: Array<string> = null;
@@ -44,6 +52,10 @@ export class RbdFormComponent implements OnInit {
   allDataPools: Array<string> = null;
   features: any;
   featuresList = [];
+  initializeConfigData = new EventEmitter<{
+    initialData: RbdConfigurationEntry[];
+    sourceType: RbdConfigurationSourceField;
+  }>();
 
   pool: string;
 
@@ -430,6 +442,12 @@ export class RbdFormComponent implements OnInit {
       .get('stripingUnit')
       .setValue(this.dimlessBinaryPipe.transform(response.stripe_unit));
     this.rbdForm.get('stripingCount').setValue(response.stripe_count);
+
+    /* Configuration */
+    this.initializeConfigData.emit({
+      initialData: this.response.configuration,
+      sourceType: RbdConfigurationSourceField.image
+    });
   }
 
   createRequest() {
@@ -443,9 +461,15 @@ export class RbdFormComponent implements OnInit {
         request.features.push(feature.key);
       }
     });
+
+    /* Striping */
     request.stripe_unit = this.formatter.toBytes(this.rbdForm.getValue('stripingUnit'));
     request.stripe_count = this.rbdForm.getValue('stripingCount');
     request.data_pool = this.rbdForm.getValue('dataPool');
+
+    /* Configuration */
+    request.configuration = this.getDirtyConfigurationValues();
+
     return request;
   }
 
@@ -469,6 +493,9 @@ export class RbdFormComponent implements OnInit {
         request.features.push(feature.key);
       }
     });
+
+    request.configuration = this.getDirtyConfigurationValues();
+
     return request;
   }
 
@@ -482,9 +509,18 @@ export class RbdFormComponent implements OnInit {
         request.features.push(feature.key);
       }
     });
+
+    /* Striping */
     request.stripe_unit = this.formatter.toBytes(this.rbdForm.getValue('stripingUnit'));
     request.stripe_count = this.rbdForm.getValue('stripingCount');
     request.data_pool = this.rbdForm.getValue('dataPool');
+
+    /* Configuration */
+    request.configuration = this.getDirtyConfigurationValues(
+      true,
+      RbdConfigurationSourceField.image
+    );
+
     return request;
   }
 
@@ -530,14 +566,24 @@ export class RbdFormComponent implements OnInit {
         request.features.push(feature.key);
       }
     });
+
+    /* Striping */
     request.stripe_unit = this.formatter.toBytes(this.rbdForm.getValue('stripingUnit'));
     request.stripe_count = this.rbdForm.getValue('stripingCount');
     request.data_pool = this.rbdForm.getValue('dataPool');
+
+    /* Configuration */
+    request.configuration = this.getDirtyConfigurationValues(
+      true,
+      RbdConfigurationSourceField.image
+    );
+
     return request;
   }
 
   copyAction(): Observable<any> {
     const request = this.copyRequest();
+
     return this.taskWrapper.wrapTaskAroundCall({
       task: new FinishedTask('rbd/copy', {
         src_pool_name: this.response.pool_name,
@@ -551,6 +597,7 @@ export class RbdFormComponent implements OnInit {
 
   submit() {
     let action: Observable<any>;
+
     if (this.mode === this.rbdFormMode.editing) {
       action = this.editAction();
     } else if (this.mode === this.rbdFormMode.cloning) {
@@ -560,6 +607,7 @@ export class RbdFormComponent implements OnInit {
     } else {
       action = this.createAction();
     }
+
     action.subscribe(
       undefined,
       () => this.rbdForm.setErrors({ cdSubmitButton: true }),
