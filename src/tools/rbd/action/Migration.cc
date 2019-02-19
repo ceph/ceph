@@ -62,10 +62,75 @@ static int do_abort(librados::IoCtx& io_ctx, const std::string &image_name,
 }
 
 static int do_commit(librados::IoCtx& io_ctx, const std::string &image_name,
-                     bool no_progress) {
+                     bool force, bool no_progress) {
+  librbd::image_migration_status_t migration_status;
+  int r = librbd::RBD().migration_status(io_ctx, image_name.c_str(),
+                                         &migration_status,
+                                         sizeof(migration_status));
+  if (r < 0) {
+    std::cerr << "rbd: getting migration status failed: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
+
+  librados::IoCtx dst_io_ctx;
+  r = librados::Rados(io_ctx).ioctx_create2(migration_status.dest_pool_id, dst_io_ctx);
+  if (r < 0) {
+    std::cerr << "rbd: accessing source pool id="
+              << migration_status.dest_pool_id << " failed: "
+              << cpp_strerror(r) << std::endl;
+    return r;
+  }
+
+  r = utils::set_namespace(migration_status.dest_pool_namespace, &dst_io_ctx);
+  if (r < 0) {
+    return r;
+  }
+
+  librbd::Image image;
+  r = utils::open_image_by_id(dst_io_ctx, migration_status.dest_image_id,
+                              true, &image);
+  if (r < 0) {
+    return r;
+  }
+
+  std::vector<librbd::linked_image_spec_t> children;
+  r = image.list_descendants(&children);
+  if (r < 0) {
+    std::cerr << "rbd: listing descendants failed: " << cpp_strerror(r)
+              << std::endl;
+    return r;
+  }
+
+  if (children.size() > 0) {
+    std::cerr << "rbd: the image has "
+              << (children.size() == 1 ? "a descendant" : "descendants") << ": "
+              << std::endl;
+    for (auto& child : children) {
+      std::cerr << "  " << child.pool_name << "/";
+      if (!child.pool_namespace.empty()) {
+        std::cerr << child.pool_namespace << "/";
+      }
+      std::cerr << child.image_name;
+      if (child.trash) {
+        std::cerr << " (trash " << child.image_id << ")";
+      }
+      std::cerr << std::endl;
+    }
+    std::cerr << "Warning: in-use, read-only descendant images"
+              << " will not detect the parent update." << std::endl;
+    if (force) {
+      std::cerr << "Proceeding anyway due to force flag set." << std::endl;
+    } else {
+      std::cerr << "Ensure no descendant images are opened read-only"
+                << " and run again with force flag." << std::endl;
+      return -EBUSY;
+    }
+  }
+
   utils::ProgressContext pc("Commit image migration", no_progress);
-  int r = librbd::RBD().migration_commit_with_progress(io_ctx,
-                                                       image_name.c_str(), pc);
+  r = librbd::RBD().migration_commit_with_progress(io_ctx, image_name.c_str(),
+                                                   pc);
   if (r < 0) {
     pc.fail();
     std::cerr << "rbd: committing migration failed: " << cpp_strerror(r)
@@ -217,6 +282,8 @@ void get_commit_arguments(po::options_description *positional,
                           po::options_description *options) {
   at::add_image_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   at::add_no_progress_option(options);
+  options->add_options()
+      ("force", po::bool_switch(), "proceed even if the image has children");
 }
 
 int execute_commit(const po::variables_map &vm,
@@ -241,7 +308,8 @@ int execute_commit(const po::variables_map &vm,
   }
   io_ctx.set_osdmap_full_try();
 
-  r = do_commit(io_ctx, image_name, vm[at::NO_PROGRESS].as<bool>());
+  r = do_commit(io_ctx, image_name, vm["force"].as<bool>(),
+                vm[at::NO_PROGRESS].as<bool>());
   if (r < 0) {
     return r;
   }

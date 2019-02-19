@@ -586,7 +586,8 @@ int write(cls_method_context_t hctx, const std::string& snap_key,
 
 namespace parent {
 
-int attach(cls_method_context_t hctx, cls_rbd_parent parent) {
+int attach(cls_method_context_t hctx, cls_rbd_parent parent,
+           bool reattach) {
   int r = check_exists(hctx);
   if (r < 0) {
     CLS_LOG(20, "cls_rbd::image::parent::attach: child doesn't exist");
@@ -621,7 +622,8 @@ int attach(cls_method_context_t hctx, cls_rbd_parent parent) {
 
   if (r == 0 &&
       (on_disk_parent.head_overlap ||
-       on_disk_parent_without_overlap != parent)) {
+       on_disk_parent_without_overlap != parent) &&
+      !reattach) {
     CLS_LOG(20, "cls_rbd::parent::attach: existing legacy parent "
                 "pool=%" PRIi64 ", ns=%s, id=%s, snapid=%" PRIu64 ", "
                 "overlap=%" PRIu64,
@@ -1679,7 +1681,7 @@ int set_parent(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     return -EINVAL;
   }
 
-  int r = image::parent::attach(hctx, parent);
+  int r = image::parent::attach(hctx, parent, false);
   if (r < 0) {
     return r;
   }
@@ -1816,17 +1818,22 @@ int parent_overlap_get(cls_method_context_t hctx, bufferlist *in,
 int parent_attach(cls_method_context_t hctx, bufferlist *in, bufferlist *out) {
   cls::rbd::ParentImageSpec parent_image_spec;
   uint64_t parent_overlap;
+  bool reattach = false;
 
   auto iter = in->cbegin();
   try {
     decode(parent_image_spec, iter);
     decode(parent_overlap, iter);
+    if (!iter.end()) {
+      decode(reattach, iter);
+    }
   } catch (const buffer::error &err) {
     CLS_LOG(20, "cls_rbd::parent_attach: invalid decode");
     return -EINVAL;
   }
 
-  int r = image::parent::attach(hctx, {parent_image_spec, parent_overlap});
+  int r = image::parent::attach(hctx, {parent_image_spec, parent_overlap},
+                                reattach);
   if (r < 0) {
     return r;
   }

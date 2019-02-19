@@ -7729,6 +7729,41 @@ TEST_F(TestLibRBD, ImageSpec) {
       .trash = false
     }
   };
+  ASSERT_EQ(expected_children, children);
+
+  children.clear();
+  ASSERT_EQ(0, parent_image.list_descendants(&children));
+  ASSERT_EQ(expected_children, children);
+
+  ASSERT_EQ(0, clone_image.snap_create("snap"));
+  ASSERT_EQ(0, clone_image.snap_protect("snap"));
+
+  auto grand_clone_name = this->get_temp_image_name();
+  ASSERT_EQ(0, rbd.clone(ioctx, clone_name.c_str(), "snap", ioctx,
+                         grand_clone_name.c_str(), features, &order));
+  librbd::Image grand_clone_image;
+  ASSERT_EQ(0, rbd.open(ioctx, grand_clone_image, grand_clone_name.c_str(),
+                        nullptr));
+  std::string grand_clone_id;
+  ASSERT_EQ(0, grand_clone_image.get_id(&grand_clone_id));
+
+  children.clear();
+  ASSERT_EQ(0, parent_image.list_children3(&children));
+  ASSERT_EQ(expected_children, children);
+
+  children.clear();
+  ASSERT_EQ(0, parent_image.list_descendants(&children));
+  expected_children.push_back(
+    {
+      .pool_id = ioctx.get_id(),
+      .pool_name = ioctx.get_pool_name(),
+      .pool_namespace = ioctx.get_namespace(),
+      .image_id = grand_clone_id,
+      .image_name = grand_clone_name,
+      .trash = false
+    }
+  );
+  ASSERT_EQ(expected_children, children);
 }
 
 // poorman's ceph_assert()

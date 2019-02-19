@@ -60,7 +60,7 @@ void add_journal_spec_options(po::options_description *pos,
   pos->add_options()
     ((get_name_prefix(modifier) + JOURNAL_SPEC).c_str(),
      (get_description_prefix(modifier) + "journal specification\n" +
-      "(example: [<pool-name>/[<namespace-name>/]]<journal-name>)").c_str());
+      "(example: [<pool-name>/[<namespace>/]]<journal-name>)").c_str());
   add_pool_option(opt, modifier);
   add_namespace_option(opt, modifier);
   add_image_option(opt, modifier);
