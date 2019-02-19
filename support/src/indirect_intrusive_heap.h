@@ -68,11 +68,11 @@ namespace crimson {
     class Iterator {
       friend IndIntruHeap<I, T, heap_info, C, K>;
 
-      IndIntruHeap<I, T, heap_info, C, K>& heap;
+      IndIntruHeap<I, T, heap_info, C, K>* heap;
       HeapIndex                            index;
 
       Iterator(IndIntruHeap<I, T, heap_info, C, K>& _heap, HeapIndex _index) :
-	heap(_heap),
+	heap(&_heap),
 	index(_index)
       {
 	// empty
@@ -106,14 +106,14 @@ namespace crimson {
       }
 
       Iterator& operator++() {
-	if (index <= heap.count) {
+	if (index <= heap->count) {
 	  ++index;
 	}
 	return *this;
       }
 
       bool operator==(const Iterator& other) const {
-	return &heap == &other.heap && index == other.index;
+	return heap == other.heap && index == other.index;
       }
 
       bool operator!=(const Iterator& other) const {
@@ -121,11 +121,11 @@ namespace crimson {
       }
 
       T& operator*() {
-	return *heap.data[index];
+	return *heap->data[index];
       }
 
       T* operator->() {
-	return &(*heap.data[index]);
+	return &(*heap->data[index]);
       }
 
 #if 0
@@ -140,12 +140,12 @@ namespace crimson {
     class ConstIterator {
       friend IndIntruHeap<I, T, heap_info, C, K>;
 
-      const IndIntruHeap<I, T, heap_info, C, K>& heap;
+      const IndIntruHeap<I, T, heap_info, C, K>* heap;
       HeapIndex                                  index;
 
       ConstIterator(const IndIntruHeap<I, T, heap_info, C, K>& _heap,
 		    HeapIndex _index) :
-	heap(_heap),
+	heap(&_heap),
 	index(_index)
       {
 	// empty
@@ -179,14 +179,14 @@ namespace crimson {
       }
 
       ConstIterator& operator++() {
-	if (index <= heap.count) {
+	if (index <= heap->count) {
 	  ++index;
 	}
 	return *this;
       }
 
       bool operator==(const ConstIterator& other) const {
-	return &heap == &other.heap && index == other.index;
+	return heap == other.heap && index == other.index;
       }
 
       bool operator!=(const ConstIterator& other) const {
@@ -194,11 +194,11 @@ namespace crimson {
       }
 
       const T& operator*() {
-	return *heap.data[index];
+	return *heap->data[index];
       }
 
       const T* operator->() {
-	return &(*heap.data[index]);
+	return &(*heap->data[index]);
       }
     }; // class ConstIterator
 
