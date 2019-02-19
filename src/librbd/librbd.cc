@@ -607,7 +607,7 @@ namespace librbd {
     TracepointProvider::initialize<tracepoint_traits>(get_cct(io_ctx));
     tracepoint(librbd, trash_list_enter,
                io_ctx.get_pool_name().c_str(), io_ctx.get_id());
-    int r = librbd::api::Trash<>::list(io_ctx, entries);
+    int r = librbd::api::Trash<>::list(io_ctx, entries, true);
 #ifdef WITH_LTTNG
     if (r >= 0) {
       for (const auto& entry : entries) {
@@ -3206,7 +3206,7 @@ extern "C" int rbd_trash_list(rados_ioctx_t p, rbd_trash_image_info_t *entries,
   memset(entries, 0, sizeof(*entries) * *num_entries);
 
   vector<librbd::trash_image_info_t> cpp_entries;
-  int r = librbd::api::Trash<>::list(io_ctx, cpp_entries);
+  int r = librbd::api::Trash<>::list(io_ctx, cpp_entries, true);
   if (r < 0) {
     tracepoint(librbd, trash_list_exit, r, *num_entries);
     return r;

@@ -288,7 +288,8 @@ int Trash<I>::get(IoCtx &io_ctx, const std::string &id,
 }
 
 template <typename I>
-int Trash<I>::list(IoCtx &io_ctx, vector<trash_image_info_t> &entries) {
+int Trash<I>::list(IoCtx &io_ctx, vector<trash_image_info_t> &entries,
+                   bool exclude_user_remove_source) {
   CephContext *cct((CephContext *)io_ctx.cct());
   ldout(cct, 20) << "trash_list " << &io_ctx << dendl;
 
@@ -314,6 +315,10 @@ int Trash<I>::list(IoCtx &io_ctx, vector<trash_image_info_t> &entries) {
     for (const auto &entry : trash_entries) {
       rbd_trash_image_source_t source =
           static_cast<rbd_trash_image_source_t>(entry.second.source);
+      if (exclude_user_remove_source &&
+          source == RBD_TRASH_IMAGE_SOURCE_REMOVING) {
+        continue;
+      }
       entries.push_back({entry.first, entry.second.name, source,
                          entry.second.deletion_time.sec(),
                          entry.second.deferment_end_time.sec()});
@@ -332,7 +337,7 @@ int Trash<I>::purge(IoCtx& io_ctx, time_t expire_ts,
   ldout(cct, 20) << &io_ctx << dendl;
 
   std::vector<librbd::trash_image_info_t> trash_entries;
-  int r = librbd::api::Trash<I>::list(io_ctx, trash_entries);
+  int r = librbd::api::Trash<I>::list(io_ctx, trash_entries, true);
   if (r < 0) {
     return r;
   }
