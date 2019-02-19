@@ -63,6 +63,7 @@
 #include "messages/MFSMapUser.h"
 #include "messages/MMDSMap.h"
 #include "messages/MOSDMap.h"
+#include "messages/MClientWorm.h"
 
 #include "mds/flock.h"
 #include "mds/cephfs_features.h"
@@ -2625,6 +2626,10 @@ bool Client::ms_dispatch2(const MessageRef &m)
   case CEPH_MSG_CLIENT_QUOTA:
     handle_quota(ref_cast<MClientQuota>(m));
     break;
+    
+  case CEPH_MSG_CLIENT_WORM:
+    handle_worm(ref_cast<MClientWorm>(m));
+    break;
 
   default:
     return false;
@@ -4820,6 +4825,29 @@ void Client::handle_quota(const MConstRef<MClientQuota>& m)
     if (in) {
       in->quota = m->quota;
       in->rstat = m->rstat;
+    }
+  }
+}
+
+void Client::handle_worm(const MConstRef<MClientWorm>& m)
+{
+  mds_rank_t mds = mds_rank_t(m->get_source().num());
+  MetaSession *session = _get_mds_session(mds, m->get_connection().get());
+  if (!session) {
+    return;
+  }
+
+  got_mds_push(session);
+
+  ldout(cct, 10) << __func__ << " " << *m << " from mds." << mds << dendl;
+
+  vinodeno_t vino(m->ino, CEPH_NOSNAP);
+  if (inode_map.count(vino)) {
+    Inode *in = NULL;
+    in = inode_map[vino];
+
+    if (in) {
+      in->worm = m->worm;
     }
   }
 }

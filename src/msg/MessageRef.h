@@ -43,6 +43,7 @@ class MClientRequestForward;
 class MClientRequest;
 class MClientSession;
 class MClientSnap;
+class MClientWorm;
 class MCommand;
 class MCommandReply;
 class MConfig;

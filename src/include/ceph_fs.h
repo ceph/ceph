@@ -135,6 +135,7 @@ extern const char *ceph_con_mode_name(int con_mode);
 #define CEPH_MSG_CLIENT_SNAP            0x312
 #define CEPH_MSG_CLIENT_CAPRELEASE      0x313
 #define CEPH_MSG_CLIENT_QUOTA           0x314
+#define CEPH_MSG_CLIENT_WORM            0x315
 
 /* pool ops */
 #define CEPH_MSG_POOLOP_REPLY           48

@@ -660,6 +660,7 @@ public:
 			      vector<snapid_t>& snaps);
 
   void handle_quota(const MConstRef<MClientQuota>& m);
+  void handle_worm(const MConstRef<MClientWorm>& m);
   void handle_snap(const MConstRef<MClientSnap>& m);
   void handle_caps(const MConstRef<MClientCaps>& m);
   void handle_cap_import(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
@@ -1168,7 +1169,6 @@ private:
   size_t _vxattrcb_dir_rsubdirs(Inode *in, char *val, size_t size);
   size_t _vxattrcb_dir_rbytes(Inode *in, char *val, size_t size);
   size_t _vxattrcb_dir_rctime(Inode *in, char *val, size_t size);
-  size_t _vxattrs_calcu_name_size(const VXattr *vxattrs);
   bool _vxattrcb_worm_exists(Inode *in);
   size_t _vxattrcb_worm(Inode *in, char *val, size_t size);
   size_t _vxattrcb_worm_state(Inode *in, char *val, size_t size);

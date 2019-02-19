@@ -50,7 +50,7 @@
 #include "messages/MMDSResolveAck.h"
 #include "messages/MMDSSlaveRequest.h"
 #include "messages/MMDSSnapUpdate.h"
-
+#include "messages/MClientWorm.h"
 
 #include "osdc/Filer.h"
 #include "CInode.h"
@@ -454,6 +454,7 @@ public:
 				   snapid_t ofirst, snapid_t last, 
 				   CInode *pin, bool cow_head);
   void broadcast_quota_to_client(CInode *in, client_t exclude_ct = -1, bool quota_change = false);
+  void broadcast_worm_to_client(CInode *in, client_t exclude_ct = -1);
   void predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 				CInode *in, CDir *parent,
 				int flags, int linkunlink=0,

@@ -123,6 +123,7 @@
 #include "messages/MClientLease.h"
 #include "messages/MClientSnap.h"
 #include "messages/MClientQuota.h"
+#include "messages/MClientWorm.h"
 
 #include "messages/MMDSSlaveRequest.h"
 
@@ -654,6 +655,10 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case CEPH_MSG_CLIENT_QUOTA:
     m = make_message<MClientQuota>();
+    break;
+    
+  case CEPH_MSG_CLIENT_WORM:
+    m = make_message<MClientWorm>();
     break;
 
     // mds

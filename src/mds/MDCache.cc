@@ -2028,6 +2028,28 @@ update:
   }
 }
 
+void MDCache::broadcast_worm_to_client(CInode *in, client_t exclude_ct)
+{
+  if (!in->is_auth() || in->is_frozen())
+    return;
+
+  auto i = in->get_projected_inode();
+
+  for (auto &p : in->client_caps) {
+    Session *session = mds->get_session(p.first);
+    if (!session || !session->get_connection() ||
+       !session->get_connection()->has_feature(CEPH_FEATURE_MDS_WORM))
+      continue;
+
+    if (exclude_ct >= 0 && exclude_ct != p.first) {
+      auto msg = make_message<MClientWorm>();
+      msg->ino = in->ino();
+      msg->worm = i->worm;
+      mds->send_message_client_counted(msg, session->get_connection());
+    }
+  }
+}
+
 /*
  * NOTE: we _have_ to delay the scatter if we are called during a
  * rejoin, because we can't twiddle locks between when the

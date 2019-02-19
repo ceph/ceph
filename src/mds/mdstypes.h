@@ -402,7 +402,7 @@ inline std::ostream& operator<<(std::ostream &out, const vinodeno_t &vino) {
 struct worm_info_t {
   uint32_t worm_state;
   uint32_t auto_commit_period;
-  uint32_t retention_period ;
+  uint32_t retention_period;
   uint32_t min_retention_period;
   uint32_t max_retention_period;
   utime_t  exp_time;

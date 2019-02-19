@@ -5522,7 +5522,10 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     pi.inode.worm = worm;
 
     mdr->no_early_reply = true;
-    pip = &pi.inode;    
+    pip = &pi.inode;
+
+    client_t exclude_ct = mdr->get_client();
+    mdcache->broadcast_worm_to_client(cur, exclude_ct);
   } else {
     dout(10) << " unknown vxattr " << name << dendl;
     respond_to_request(mdr, -EINVAL);
