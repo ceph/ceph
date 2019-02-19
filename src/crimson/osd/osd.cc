@@ -1,6 +1,7 @@
 #include "osd.h"
 
 #include <boost/range/join.hpp>
+#include <boost/smart_ptr/make_local_shared.hpp>
 
 #include "common/pick_address.h"
 #include "messages/MOSDBeacon.h"
@@ -35,8 +36,12 @@ using ceph::os::CyanStore;
 
 OSD::OSD(int id, uint32_t nonce)
   : whoami{id},
-    nonce{nonce}
-{}
+    nonce{nonce},
+    beacon_timer{[this] { send_beacon(); }},
+    heartbeat_timer{[this] { update_heartbeat_peers(); }}
+{
+  osdmaps[0] = boost::make_local_shared<OSDMap>();
+}
 
 OSD::~OSD() = default;
 
@@ -136,7 +141,6 @@ seastar::future<> OSD::start()
     }
     dispatchers.push_front(this);
     dispatchers.push_front(monc.get());
-    osdmaps[0] = seastar::make_lw_shared<OSDMap>();
 
     const auto data_path = local_conf().get_val<std::string>("osd_data");
     store = std::make_unique<ceph::os::CyanStore>(data_path);
@@ -148,7 +152,7 @@ seastar::future<> OSD::start()
   }).then([this](OSDSuperblock&& sb) {
     superblock = std::move(sb);
     return get_map(superblock.current_epoch);
-  }).then([this](seastar::lw_shared_ptr<OSDMap> map) {
+  }).then([this](cached_map_t&& map) {
     osdmap = std::move(map);
     return load_pgs();
   }).then([this] {
@@ -172,8 +176,6 @@ seastar::future<> OSD::start()
     return heartbeat->start(public_msgr->get_myaddrs(),
                             cluster_msgr->get_myaddrs());
   }).then([this] {
-    beacon_timer.set_callback([this] { send_beacon(); });
-    heartbeat_timer.set_callback([this] { update_heartbeat_peers(); });
     return start_boot();
   });
 }
@@ -339,23 +341,22 @@ seastar::future<> OSD::ms_handle_remote_reset(ceph::net::ConnectionRef conn)
   return seastar::now();
 }
 
-seastar::lw_shared_ptr<OSDMap> OSD::get_map() const
+OSD::cached_map_t OSD::get_map() const
 {
   return osdmap;
 }
 
-seastar::future<seastar::lw_shared_ptr<OSDMap>> OSD::get_map(epoch_t e)
+seastar::future<OSD::cached_map_t> OSD::get_map(epoch_t e)
 {
   // TODO: use LRU cache for managing osdmap, fallback to disk if we have to
-  if (auto found = osdmaps.find(e); found != osdmaps.end()) {
-    return seastar::make_ready_future<seastar::lw_shared_ptr<OSDMap>>(
-      found->second);
+  if (auto found = osdmaps.find(e); found) {
+    return seastar::make_ready_future<cached_map_t>(std::move(found));
   } else {
     return load_map_bl(e).then([e, this](bufferlist bl) {
-      auto osdmap = seastar::make_lw_shared<OSDMap>();
+      auto osdmap = std::make_unique<OSDMap>();
       osdmap->decode(bl);
-      osdmaps.emplace(e, osdmap);
-      return seastar::make_ready_future<decltype(osdmap)>(std::move(osdmap));
+      return seastar::make_ready_future<cached_map_t>(
+        osdmaps.insert(e, std::move(osdmap)));
     });
   }
 }
@@ -364,13 +365,13 @@ void OSD::store_map_bl(ceph::os::Transaction& t,
                        epoch_t e, bufferlist&& bl)
 {
   meta_coll->store_map(t, e, bl);
-  map_bl_cache[e] = std::move(bl);
+  map_bl_cache.insert(e, std::move(bl));
 }
 
 seastar::future<bufferlist> OSD::load_map_bl(epoch_t e)
 {
-  if (auto found = map_bl_cache.find(e); found != map_bl_cache.end()) {
-    return seastar::make_ready_future<bufferlist>(found->second);
+  if (std::optional<bufferlist> found = map_bl_cache.find(e); found) {
+    return seastar::make_ready_future<bufferlist>(*found);
   } else {
     return meta_coll->load_map(e);
   }
@@ -383,11 +384,11 @@ seastar::future<> OSD::store_maps(ceph::os::Transaction& t,
                               boost::counting_iterator<epoch_t>(m->get_last() + 1),
                               [&t, m, this](epoch_t e) {
     if (auto p = m->maps.find(e); p != m->maps.end()) {
-      auto o = seastar::make_lw_shared<OSDMap>();
+      auto o = std::make_unique<OSDMap>();
       o->decode(p->second);
       logger().info("store_maps osdmap.{}", e);
       store_map_bl(t, e, std::move(std::move(p->second)));
-      osdmaps.emplace(e, std::move(o));
+      osdmaps.insert(e, std::move(o));
       return seastar::now();
     } else if (auto p = m->incremental_maps.find(e);
                p != m->incremental_maps.end()) {
@@ -396,13 +397,13 @@ seastar::future<> OSD::store_maps(ceph::os::Transaction& t,
       inc.decode(i);
       return load_map_bl(e - 1)
         .then([&t, e, inc=std::move(inc), this](bufferlist bl) {
-          auto o = seastar::make_lw_shared<OSDMap>();
+          auto o = std::make_unique<OSDMap>();
           o->decode(bl);
           o->apply_incremental(inc);
           bufferlist fbl;
           o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
           store_map_bl(t, e, std::move(fbl));
-          osdmaps.emplace(e, std::move(o));
+          osdmaps.insert(e, std::move(o));
           return seastar::now();
       });
     } else {
@@ -497,8 +498,8 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
   // advance through the new maps
   return seastar::parallel_for_each(boost::irange(first, last + 1),
                                     [this](epoch_t cur) {
-    return get_map(cur).then([this](seastar::lw_shared_ptr<OSDMap> o) {
-      osdmap = o;
+    return get_map(cur).then([this](cached_map_t&& o) {
+      osdmap = std::move(o);
       if (up_epoch != 0 &&
           osdmap->is_up(whoami) &&
           osdmap->get_addrs(whoami) == public_msgr->get_myaddrs()) {
