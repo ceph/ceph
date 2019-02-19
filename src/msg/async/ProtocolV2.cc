@@ -978,6 +978,10 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
 			     m->get_middle().length(),
 			     m->get_data().length());
 
+  ceph_assert(m->get_payload().length() == header.front_len);
+  ceph_assert(m->get_middle().length() == header.middle_len);
+  ceph_assert(m->get_data().length() == header.data_len);
+
   if (auth_meta->is_mode_secure()) {
     ceph_assert(session_stream_handlers.tx);
 
@@ -999,15 +1003,15 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
     // TODO: switch TxHandler from `bl&&` to `const bl&`.
     if (m->get_payload().length()) {
       session_stream_handlers.tx->authenticated_encrypt_update(
-	ceph::bufferlist(m->get_payload()));
+	m->get_payload());
     }
     if (m->get_middle().length()) {
       session_stream_handlers.tx->authenticated_encrypt_update(
-	ceph::bufferlist(m->get_middle()));
+	m->get_middle());
     }
     if (m->get_data().length()) {
       session_stream_handlers.tx->authenticated_encrypt_update(
-	ceph::bufferlist(m->get_data()));
+	m->get_data());
     }
 
     auto cipherbl = session_stream_handlers.tx->authenticated_encrypt_final();
