@@ -351,24 +351,6 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def add_mon(self, node_name):
-        # type: (str) -> WriteCompletion
-        """
-        We operate on a node rather than a particular device: it is
-        assumed/expected that proper SSD storage is already available
-        and accessible in /var.
-
-        :param node_name:
-        """
-        raise NotImplementedError()
-
-    def remove_mon(self, node_name):
-        # type: (str) -> WriteCompletion
-        """
-        :param node_name: Remove MON from that host.
-        """
-        raise NotImplementedError()
-
     def upgrade_start(self, upgrade_spec):
         # type: (UpgradeSpec) -> WriteCompletion
         raise NotImplementedError()
