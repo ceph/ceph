@@ -63,10 +63,6 @@ public:
   void reset_tx_handler(
     std::initializer_list<std::uint32_t> update_size_sequence) override;
 
-  ceph::bufferlist::contiguous_filler reserve(const std::uint32_t size) override {
-    return buffer.append_hole(size);
-  }
-
   void authenticated_encrypt_update(const ceph::bufferlist& plaintext) override;
   ceph::bufferlist authenticated_encrypt_final() override;
 };

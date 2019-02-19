@@ -59,10 +59,6 @@ struct TxHandler {
   virtual void reset_tx_handler(
     std::initializer_list<std::uint32_t> update_size_sequence) = 0;
 
-  // Reserve n bytes in the bufferlist being crafted by TxHandler.
-  // TODO: this will be dropped altogether with new frame format
-  virtual ceph::bufferlist::contiguous_filler reserve(std::uint32_t) = 0;
-
   // Perform encryption. Client gives full ownership right to provided
   // bufferlist. The method MUST NOT be called after _final() if there
   // was no call to _reset().
