@@ -583,9 +583,9 @@ int RGWAsyncFetchRemoteObj::_send_request()
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->getRados()->instance_id());
   map<string, bufferlist> attrs;
 
-  rgw_obj src_obj(bucket_info.bucket, key);
+  rgw_obj src_obj(src_bucket, key);
 
-  rgw_obj dest_obj(bucket_info.bucket, dest_key.value_or(key));
+  rgw_obj dest_obj(dest_bucket_info.bucket, dest_key.value_or(key));
 
   std::optional<uint64_t> bytes_transferred;
   int r = store->getRados()->fetch_remote_obj(obj_ctx,
@@ -594,8 +594,8 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        source_zone,
                        dest_obj,
                        src_obj,
-                       bucket_info, /* dest */
-                       bucket_info, /* source */
+                       dest_bucket_info, /* dest */
+                       nullptr, /* source */
 		       dest_placement_rule,
                        NULL, /* real_time* src_mtime, */
                        NULL, /* real_time* mtime, */
@@ -641,16 +641,14 @@ int RGWAsyncStatRemoteObj::_send_request()
   char buf[16];
   snprintf(buf, sizeof(buf), ".%lld", (long long)store->getRados()->instance_id());
 
-  rgw_obj src_obj(bucket_info.bucket, key);
-
-  rgw_obj dest_obj(src_obj);
+  rgw_obj src_obj(src_bucket, key);
 
   int r = store->getRados()->stat_remote_obj(obj_ctx,
                        rgw_user(user_id),
                        nullptr, /* req_info */
                        source_zone,
                        src_obj,
-                       bucket_info, /* source */
+                       nullptr, /* source */
                        pmtime, /* real_time* src_mtime, */
                        psize, /* uint64_t * */
                        nullptr, /* const real_time* mod_ptr, */

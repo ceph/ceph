@@ -1548,6 +1548,7 @@ int decode_attr(map<string, bufferlist>& attrs, const char *attr_name, T *result
 
 // maybe use Fetch Remote Obj instead?
 class RGWAWSHandleRemoteObjCBCR: public RGWStatRemoteObjCBCR {
+  rgw_bucket_sync_pipe sync_pipe;
   AWSSyncInstanceEnv& instance;
 
   uint64_t versioned_epoch{0};
@@ -1576,10 +1577,11 @@ class RGWAWSHandleRemoteObjCBCR: public RGWStatRemoteObjCBCR {
 
 public:
   RGWAWSHandleRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
-                            RGWBucketInfo& _bucket_info,
+                            rgw_bucket_sync_pipe& _sync_pipe,
                             rgw_obj_key& _key,
                             AWSSyncInstanceEnv& _instance,
-                            uint64_t _versioned_epoch) : RGWStatRemoteObjCBCR(_sync_env, _bucket_info, _key),
+                            uint64_t _versioned_epoch) : RGWStatRemoteObjCBCR(_sync_env, _sync_pipe.source_bs.bucket, _key),
+                                                         sync_pipe(_sync_pipe),
                                                          instance(_instance), versioned_epoch(_versioned_epoch)
   {}
 
@@ -1599,7 +1601,7 @@ public:
         }
       }
       ldout(sync_env->cct, 4) << "AWS: download begin: z=" << sync_env->source_zone
-                              << " b=" << bucket_info.bucket << " k=" << key << " size=" << size
+                              << " b=" << src_bucket << " k=" << key << " size=" << size
                               << " mtime=" << mtime << " etag=" << etag
                               << " zone_short_id=" << src_zone_short_id << " pg_ver=" << src_pg_ver
                               << dendl;
@@ -1610,8 +1612,8 @@ public:
         return set_cr_error(-EINVAL);
       }
 
-      instance.get_profile(bucket_info.bucket, &target);
-      instance.conf.get_target(target, bucket_info, key, &target_bucket_name, &target_obj_name);
+      instance.get_profile(sync_pipe.source_bs.bucket, &target);
+      instance.conf.get_target(target, sync_pipe.dest_bucket_info, key, &target_bucket_name, &target_obj_name);
 
       if (bucket_created.find(target_bucket_name) == bucket_created.end()){
         yield {
@@ -1651,7 +1653,7 @@ public:
       }
 
       yield {
-        rgw_obj src_obj(bucket_info.bucket, key);
+        rgw_obj src_obj(src_bucket, key);
 
         /* init output */
         rgw_bucket target_bucket;
@@ -1695,43 +1697,45 @@ public:
 };
 
 class RGWAWSHandleRemoteObjCR : public RGWCallStatRemoteObjCR {
+  rgw_bucket_sync_pipe sync_pipe;
   AWSSyncInstanceEnv& instance;
   uint64_t versioned_epoch;
 public:
   RGWAWSHandleRemoteObjCR(RGWDataSyncEnv *_sync_env,
-                              RGWBucketInfo& _bucket_info, rgw_obj_key& _key,
-                              AWSSyncInstanceEnv& _instance, uint64_t _versioned_epoch) : RGWCallStatRemoteObjCR(_sync_env, _bucket_info, _key),
+                              rgw_bucket_sync_pipe& _sync_pipe, rgw_obj_key& _key,
+                              AWSSyncInstanceEnv& _instance, uint64_t _versioned_epoch) : RGWCallStatRemoteObjCR(_sync_env, _sync_pipe.source_bs.bucket, _key),
+                                                          sync_pipe(_sync_pipe),
                                                           instance(_instance), versioned_epoch(_versioned_epoch) {
   }
 
   ~RGWAWSHandleRemoteObjCR() {}
 
   RGWStatRemoteObjCBCR *allocate_callback() override {
-    return new RGWAWSHandleRemoteObjCBCR(sync_env, bucket_info, key, instance, versioned_epoch);
+    return new RGWAWSHandleRemoteObjCBCR(sync_env, sync_pipe, key, instance, versioned_epoch);
   }
 };
 
 class RGWAWSRemoveRemoteObjCBCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env{nullptr};
   std::shared_ptr<AWSSyncConfig_Profile> target;
-  RGWBucketInfo bucket_info;
+  rgw_bucket_sync_pipe sync_pipe;
   rgw_obj_key key;
   ceph::real_time mtime;
   AWSSyncInstanceEnv& instance;
   int ret{0};
 public:
   RGWAWSRemoveRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
-                          RGWBucketInfo& _bucket_info, rgw_obj_key& _key, const ceph::real_time& _mtime,
+                          rgw_bucket_sync_pipe& _sync_pipe, rgw_obj_key& _key, const ceph::real_time& _mtime,
                           AWSSyncInstanceEnv& _instance) : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
-                                                        bucket_info(_bucket_info), key(_key),
+                                                        sync_pipe(_sync_pipe), key(_key),
                                                         mtime(_mtime), instance(_instance) {}
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 0) << ": remove remote obj: z=" << sync_env->source_zone
-                              << " b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << dendl;
+                              << " b=" <<sync_pipe.source_bs.bucket << " k=" << key << " mtime=" << mtime << dendl;
       yield {
-        instance.get_profile(bucket_info.bucket, &target);
-        string path =  instance.conf.get_path(target, bucket_info, key);
+        instance.get_profile(sync_pipe.source_bs.bucket, &target);
+        string path =  instance.conf.get_path(target, sync_pipe.dest_bucket_info, key);
         ldout(sync_env->cct, 0) << "AWS: removing aws object at" << path << dendl;
 
         call(new RGWDeleteRESTResourceCR(sync_env->cct, target->conn.get(),
@@ -1764,21 +1768,21 @@ public:
 
   ~RGWAWSDataSyncModule() {}
 
-  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key,
+  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
                             std::optional<uint64_t> versioned_epoch,
                             rgw_zone_set *zones_trace) override {
-    ldout(sync_env->cct, 0) << instance.id << ": sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
-    return new RGWAWSHandleRemoteObjCR(sync_env, bucket_info, key, instance, versioned_epoch.value_or(0));
+    ldout(sync_env->cct, 0) << instance.id << ": sync_object: b=" << sync_pipe.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
+    return new RGWAWSHandleRemoteObjCR(sync_env, sync_pipe, key, instance, versioned_epoch.value_or(0));
   }
-  RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch,
+  RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch,
                               rgw_zone_set *zones_trace) override {
-    ldout(sync_env->cct, 0) <<"rm_object: b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
-    return new RGWAWSRemoveRemoteObjCBCR(sync_env, bucket_info, key, mtime, instance);
+    ldout(sync_env->cct, 0) <<"rm_object: b=" << sync_pipe.source_bs.bucket << " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
+    return new RGWAWSRemoveRemoteObjCBCR(sync_env, sync_pipe, key, mtime, instance);
   }
-  RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
+  RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch,
                                      rgw_zone_set *zones_trace) override {
-    ldout(sync_env->cct, 0) <<"AWS Not implemented: create_delete_marker: b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime
+    ldout(sync_env->cct, 0) <<"AWS Not implemented: create_delete_marker: b=" << sync_pipe.source_bs.bucket << " k=" << key << " mtime=" << mtime
                             << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
     return NULL;
   }
