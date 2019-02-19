@@ -73,6 +73,13 @@
 #define MDS_TRAVERSE_DISCOVER      2    // skips permissions checks etc.
 #define MDS_TRAVERSE_DISCOVERXLOCK 3    // succeeds on (foreign?) null, xlocked dentries.
 
+#define WORM_ENABLE  1     // worm feature enbale
+#define WORM_IS_ROOT 2     // worm root dir
+#define WORM_RETAIN  4     // the worm file is in retained state
+#define WORM_EXPIRE  8     // the worm file is in expired state
+#define WORM_RETEN_PERIOD_UNLIMIT 16  //the worm file retention period is unlimit
+#define MAX_MIN_RETEN_PERIOD 946080000 // 30 years
+#define MIN_MAX_RETEN_PERIOD 2207520000 // 70 years
 
 typedef int32_t mds_rank_t;
 constexpr mds_rank_t MDS_RANK_NONE = -1;
@@ -375,6 +382,97 @@ inline std::ostream& operator<<(std::ostream &out, const vinodeno_t &vino) {
   else if (vino.snapid)
     out << '.' << vino.snapid;
   return out;
+}
+
+/*
+ * worm_info_t: worm state and configurable policy that guide WORM behavior
+ * worm_state:
+ *   1: worm enable
+ *   2: the dir is root worm dir
+ *   4: the worm file is in retain state
+ *   8: the worm file is in expire state
+ *   16: the worm file retention period is unlimit
+ * auto_commit_period: a worm file will get into retain state if it untouched in auto_commit_period
+ * retention_period: default retention period
+ * min_retention_period: min retention period user can config on a worm file
+ * max_retention_period: max retention period user can config on a worm file
+ * exp_time: a time at which the worm file transfer from retain state to expire state
+ */
+
+struct worm_info_t {
+  uint32_t worm_state;
+  uint32_t auto_commit_period;
+  uint32_t retention_period ;
+  uint32_t min_retention_period;
+  uint32_t max_retention_period;
+  utime_t  exp_time;
+
+  worm_info_t() {
+    worm_state = 0;
+    auto_commit_period = 0;
+    retention_period = 0;
+    min_retention_period = 0;
+    max_retention_period = 0;
+    exp_time = utime_t();
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(worm_state, bl);
+    encode(auto_commit_period, bl);
+    encode(retention_period, bl);
+    encode(min_retention_period, bl);
+    encode(max_retention_period, bl);
+    encode(exp_time, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(worm_state, bl);
+    decode(auto_commit_period, bl);
+    decode(retention_period, bl);
+    decode(min_retention_period, bl);
+    decode(max_retention_period, bl);
+    decode(exp_time, bl);
+    DECODE_FINISH(bl);
+  }
+
+  bool is_valid() const {
+    return (auto_commit_period > 0 && retention_period >= min_retention_period
+           && retention_period <= max_retention_period && min_retention_period <= max_retention_period);
+  }
+
+  bool is_root() const {
+    return (worm_state & WORM_IS_ROOT) == WORM_IS_ROOT;
+  }
+
+  bool is_enable() const {
+    return (worm_state & WORM_ENABLE) == WORM_ENABLE;
+  }
+
+  bool is_expire() const {
+    return (worm_state & WORM_EXPIRE) == WORM_EXPIRE;
+  }
+
+  bool is_retain() const {
+    return (worm_state & WORM_RETAIN) == WORM_RETAIN;
+  }
+
+  bool is_reten_period_ulimit() const {
+     return (worm_state & WORM_RETEN_PERIOD_ULIMIT) == WORM_RETEN_PERIOD_ULIMIT;
+  }
+  
+};
+
+WRITE_CLASS_ENCODER(worm_info_t)
+
+inline std::ostream& operator<<(std::ostream &out, const worm_info_t &worm){
+  return out << "state(" << worm.worm_state << ")," <<
+          "retention_period(" << worm.retention_period << ")," <<
+          "auto_commit_period(" << worm.auto_commit_period << ")" <<
+          "min_retention_period(" << worm.min_retention_period << ")" <<
+          "max_retention_period(" << worm.max_retention_period << ")" <<
+          "exp_time(" << worm.exp_time << ")";;
 }
 
 

@@ -332,6 +332,11 @@ constexpr unsigned long long operator"" _hr (unsigned long long hr) {
 constexpr unsigned long long operator"" _day (unsigned long long day) {
   return day * 60 * 60 * 24;
 }
+
+constexpr unsigned long long operator"" _year (unsigned long long year) {
+  return year * 60 * 60 * 24 * 365;
+}
+
 constexpr unsigned long long operator"" _K (unsigned long long n) {
   return n << 10;
 }
@@ -8190,6 +8195,25 @@ std::vector<Option> get_mds_options() {
      .set_default(2.0)
      .set_description("task status update interval to manager")
      .set_long_description("interval (in seconds) for sending mds task status to ceph manager"),
+    
+    Option("mds_worm_commit_period", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+     .set_default(2_hr)
+     .set_min_max(1_min, 30_day)
+     .set_description("default auto commit period for worm feature"),
+
+    Option("mds_worm_retention_period", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+     .set_default(1_hr)
+     .set_description("default retention period for worm feature,this value must between mds_worm_min_retention_period and mds_worm_max_retention_period"),
+
+    Option("mds_worm_min_retention_period", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+     .set_default(1_hr)
+     .set_min_max(1_min, 30_year)
+     .set_description("min retention period for worm feature"),
+
+    Option("mds_worm_max_retention_period", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+     .set_default(30_year)
+     .set_min_max(1_hr, 70_year)
+     .set_description("max retention period for worm feature"),
   });
 }
 
