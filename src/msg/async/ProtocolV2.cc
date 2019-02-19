@@ -206,7 +206,8 @@ public:
 
   ceph::bufferlist &get_buffer() {
     fill_preamble({
-      segment_t{ payload.length() - FRAME_PREAMBLE_SIZE, 1 }
+      segment_t{ payload.length() - FRAME_PREAMBLE_SIZE,
+		 segment_t::DEFAULT_ALIGNMENT }
     }, {});
     return payload;
   }
@@ -376,7 +377,8 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
     // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart
     // from auth tag size
     this->fill_preamble({
-      segment_t{ this->payload.length() - FRAME_PREAMBLE_SIZE, 16 }
+      segment_t{ this->payload.length() - FRAME_PREAMBLE_SIZE,
+		 segment_t::DEFAULT_ALIGNMENT }
     }, {});
 
     if (protocol.session_stream_handlers.tx) {
@@ -405,7 +407,7 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
 
     ceph::bufferlist plain_bl = \
       protocol.session_stream_handlers.rx->authenticated_decrypt_update_final(
-        std::move(bl), 8);
+        std::move(bl), ProtocolV2::segment_t::DEFAULT_ALIGNMENT);
     ceph_assert(plain_bl.length() + 16 == length);
     this->decode_frame(plain_bl.c_str(), plain_bl.length());
   }
@@ -557,9 +559,10 @@ struct MessageHeaderFrame
   {
     // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart from auth tag size
     fill_preamble({
-      segment_t{ this->payload.length() - FRAME_PREAMBLE_SIZE, 8 },
-      segment_t{ front_len, 8 },
-      segment_t{ middle_len, 8 },
+      segment_t{ this->payload.length() - FRAME_PREAMBLE_SIZE,
+		 segment_t::DEFAULT_ALIGNMENT },
+      segment_t{ front_len, segment_t::DEFAULT_ALIGNMENT },
+      segment_t{ middle_len, segment_t::DEFAULT_ALIGNMENT },
       segment_t{ data_len, segment_t::DEFERRED_ALLOCATION },
     }, {});
   }
