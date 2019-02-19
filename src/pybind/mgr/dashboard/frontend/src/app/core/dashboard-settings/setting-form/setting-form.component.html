@@ -1,0 +1,54 @@
+<div class="col-sm-12 col-lg-6">
+  <h1 *ngIf="loading"
+      class="jumbotron">
+    <i [ngClass]="[icons.spinner, icons.pulse, icons.large]"
+       class="text-primary"></i>
+    <ng-container i18n>Loading...</ng-container>
+  </h1>
+  <form *ngIf="!loading"
+        name="settingForm"
+        #formDir="ngForm"
+        [formGroup]="settingForm"
+        novalidate>
+    <div class="card">
+      <div i18n="form title|Example: Edit Grafana Setting@@formTitle"
+           class="card-header">{{ actionForm | titlecase }} setting</div>
+      <div class="card-body">
+        <!-- Name -->
+        <div class="form-group row" *ngFor="let x of obj">
+          <label
+                 class="col-form-label col-sm-3">
+            <ng-container i18n>{{ x.label }}</ng-container>
+            <span class="required"></span>
+          </label>
+          <div class="col-sm-9">
+            <input *ngIf="x.type !== 'select'"
+                   class="form-control"
+                   [type]="x.type"
+                   [id]="x.id"
+                   [formControlName]="x.id"
+                   [readonly]="x.readonly"
+                   [value]="x.value">
+            <select *ngIf="x.type === 'select'"
+                    class="form-control"
+                    [id]="x.id"
+                    [name]="x.id"
+                    [formControlName]="x.id">
+              <option *ngFor="let time of x.options"
+                      [ngValue]="time.value">{{ time.name }}
+              </option>
+            </select>
+          </div>
+        </div>
+      </div>
+      <div class="card-footer">
+        <div class="button-group text-right">
+          <cd-submit-button [form]="settingForm"
+                            (submitAction)="submit()"
+                            i18n>{{ actionButton | titlecase }} Setting</cd-submit-button>
+          <cd-back-button></cd-back-button>
+        </div>
+      </div>
+    </div>
+  </form>
+</div>

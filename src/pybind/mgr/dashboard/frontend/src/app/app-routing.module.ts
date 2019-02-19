@@ -23,6 +23,8 @@ import { NfsListComponent } from './ceph/nfs/nfs-list/nfs-list.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
 import { LoginComponent } from './core/auth/login/login.component';
 import { SsoNotFoundComponent } from './core/auth/sso/sso-not-found/sso-not-found.component';
+import { SettingFormComponent } from './core/dashboard-settings/setting-form/setting-form.component';
+import { SettingsViewComponent } from './core/dashboard-settings/settings-view/settings-view.component';
 import { ForbiddenComponent } from './core/forbidden/forbidden.component';
 import { NotFoundComponent } from './core/not-found/not-found.component';
 import { ActionLabels, URLVerbs } from './shared/constants/app.constants';
@@ -65,7 +67,19 @@ const routes: Routes = [
   // Dashboard
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
   { path: 'dashboard', component: DashboardComponent, canActivate: [AuthGuardService] },
-  // Cluster
+  {
+    path: 'settings',
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'Settings' },
+    children: [
+      { path: '', component: SettingsViewComponent },
+      {
+        path: 'edit/:name',
+        component: SettingFormComponent,
+        data: { breadcrumbs: 'Edit' }
+      }
+    ]
+  },
   {
     path: 'hosts',
     component: HostsComponent,
