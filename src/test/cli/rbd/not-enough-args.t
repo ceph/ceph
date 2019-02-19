@@ -22,9 +22,6 @@
   $ rbd children
   rbd: image name was not specified
   [22]
-  $ rbd children foo
-  rbd: snapshot name was not specified
-  [22]
   $ rbd flatten
   rbd: image name was not specified
   [22]

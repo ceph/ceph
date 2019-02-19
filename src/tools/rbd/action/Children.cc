@@ -17,11 +17,16 @@ namespace at = argument_types;
 namespace po = boost::program_options;
 
 int do_list_children(librados::IoCtx &io_ctx, librbd::Image &image,
-                     bool all_flag, Formatter *f)
+                     bool all_flag, bool descendants_flag, Formatter *f)
 {
   std::vector<librbd::linked_image_spec_t> children;
   librbd::RBD rbd;
-  int r = image.list_children3(&children);
+  int r;
+  if (descendants_flag) {
+    r = image.list_descendants(&children);
+  } else {
+    r = image.list_children3(&children);
+  }
   if (r < 0)
     return r;
 
@@ -69,20 +74,21 @@ int do_list_children(librados::IoCtx &io_ctx, librbd::Image &image,
 
 void get_arguments(po::options_description *positional,
                    po::options_description *options) {
-  at::add_snap_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  at::add_image_or_snap_spec_options(positional, options,
+                                     at::ARGUMENT_MODIFIER_NONE);
   at::add_snap_id_option(options);
   options->add_options()
-    ("all,a", po::bool_switch(), "list all children of snapshot (include trash)");
+    ("all,a", po::bool_switch(), "list all children (include trash)");
+  options->add_options()
+    ("descendants", po::bool_switch(), "include all descendants");
   at::add_format_options(options);
 }
 
 int execute(const po::variables_map &vm,
             const std::vector<std::string> &ceph_global_init_args) {
   uint64_t snap_id = LIBRADOS_SNAP_HEAD;
-  auto snap_presence = utils::SNAPSHOT_PRESENCE_REQUIRED;
   if (vm.count(at::SNAPSHOT_ID)) {
     snap_id = vm[at::SNAPSHOT_ID].as<uint64_t>();
-    snap_presence = utils::SNAPSHOT_PRESENCE_PERMITTED;
   }
 
   size_t arg_index = 0;
@@ -92,7 +98,8 @@ int execute(const po::variables_map &vm,
   std::string snap_name;
   int r = utils::get_pool_image_snapshot_names(
     vm, at::ARGUMENT_MODIFIER_NONE, &arg_index, &pool_name, &namespace_name,
-    &image_name, &snap_name, true, snap_presence, utils::SPEC_VALIDATION_NONE);
+    &image_name, &snap_name, true, utils::SNAPSHOT_PRESENCE_PERMITTED,
+    utils::SPEC_VALIDATION_NONE);
   if (r < 0) {
     return r;
   }
@@ -118,9 +125,9 @@ int execute(const po::variables_map &vm,
     return r;
   }
 
-  if (snap_id == LIBRADOS_SNAP_HEAD) {
+  if (!snap_name.empty()) {
     r = image.snap_set(snap_name.c_str());
-  } else {
+  } else if (snap_id != LIBRADOS_SNAP_HEAD) {
     r = image.snap_set_by_id(snap_id);
   }
   if (r == -ENOENT) {
@@ -132,7 +139,8 @@ int execute(const po::variables_map &vm,
     return r;
   }
 
-  r = do_list_children(io_ctx, image, vm["all"].as<bool>(), formatter.get());
+  r = do_list_children(io_ctx, image, vm["all"].as<bool>(),
+                       vm["descendants"].as<bool>(), formatter.get());
   if (r < 0) {
     std::cerr << "rbd: listing children failed: " << cpp_strerror(r)
               << std::endl;
@@ -142,8 +150,8 @@ int execute(const po::variables_map &vm,
 }
 
 Shell::Action action(
-  {"children"}, {}, "Display children of snapshot.", "", &get_arguments,
-  &execute);
+  {"children"}, {}, "Display children of an image or its snapshot.", "",
+  &get_arguments, &execute);
 
 } // namespace children
 } // namespace action

@@ -456,6 +456,9 @@ cdef extern from "rbd/librbd.h" nogil:
                                void *cbdata)
     int rbd_list_children3(rbd_image_t image, rbd_linked_image_spec_t *children,
                            size_t *max_children)
+    int rbd_list_descendants(rbd_image_t image,
+                             rbd_linked_image_spec_t *descendants,
+                             size_t *max_descendants)
 
     ssize_t rbd_list_lockers(rbd_image_t image, int *exclusive,
                              char *tag, size_t *tag_len,
@@ -3774,11 +3777,19 @@ written." % (self.name, ret, length))
 
     def list_children2(self):
         """
-        Iterate over the children of a snapshot.
+        Iterate over the children of the image or its snapshot.
 
         :returns: :class:`ChildIterator`
         """
         return ChildIterator(self)
+
+    def list_descendants(self):
+        """
+        Iterate over the descendants of the image.
+
+        :returns: :class:`ChildIterator`
+        """
+        return ChildIterator(self, True)
 
     def list_lockers(self):
         """
@@ -4694,7 +4705,7 @@ cdef class TrashIterator(object):
 
 cdef class ChildIterator(object):
     """
-    Iterator over child info for a snapshot.
+    Iterator over child info for the image or its snapshot.
 
     Yields a dictionary containing information about a child.
 
@@ -4715,15 +4726,21 @@ cdef class ChildIterator(object):
     cdef size_t num_children
     cdef object image
 
-    def __init__(self, Image image):
+    def __init__(self, Image image, descendants=False):
         self.image = image
         self.children = NULL
         self.num_children = 10
         while True:
             self.children = <rbd_linked_image_spec_t*>realloc_chk(
                 self.children, self.num_children * sizeof(rbd_linked_image_spec_t))
-            with nogil:
-                ret = rbd_list_children3(image.image, self.children, &self.num_children)
+            if descendants:
+                with nogil:
+                    ret = rbd_list_descendants(image.image, self.children,
+                                               &self.num_children)
+            else:
+                with nogil:
+                    ret = rbd_list_children3(image.image, self.children,
+                                             &self.num_children)
             if ret >= 0:
                 break
             elif ret != -errno.ERANGE:

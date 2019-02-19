@@ -65,23 +65,12 @@ private:
    * OPEN CHILD * * * * * * * * * * > REMOVE CHILD
    *    |                                 ^
    *    v                                 |
-   * SET PARENT * * * * * * * * * * > CLOSE CHILD
+   * ATTACH PARENT  * * * * * * * * > CLOSE CHILD
    *    |                               ^
-   *    |\--------\                     *
-   *    |         |                     *
-   *    |         v (clone v2 disabled) *
-   *    |     V1 ADD CHILD  * * * * * * ^
-   *    |         |                     *
-   *    |         v                     *
-   *    |     V1 VALIDATE PROTECTED * * ^
-   *    |         |                     *
-   *    v         |                     *
-   * V2 SET CLONE * * * * * * * * * * * ^
-   *    |         |                     *
-   *    v         |                     *
-   * V2 ATTACH CHILD  * * * * * * * * * *
-   *    |         |                     *
-   *    v         v                     *
+   *    v                               *
+   * ATTACH CHILD * * * * * * * * * * * *
+   *    |                               *
+   *    v                               *
    * GET PARENT META  * * * * * * * * * ^
    *    |                               *
    *    v (skip if not needed)          *
@@ -154,17 +143,8 @@ private:
   void attach_parent();
   void handle_attach_parent(int r);
 
-  void v2_set_op_feature();
-  void handle_v2_set_op_feature(int r);
-
-  void v2_child_attach();
-  void handle_v2_child_attach(int r);
-
-  void v1_add_child();
-  void handle_v1_add_child(int r);
-
-  void v1_refresh();
-  void handle_v1_refresh(int r);
+  void attach_child();
+  void handle_attach_child(int r);
 
   void metadata_list();
   void handle_metadata_list(int r);

@@ -555,6 +555,7 @@ test_clone_v2() {
     rbd clone --rbd-default-clone-format=1 test1@1 test4
 
     rbd children test1@1 | sort | tr '\n' ' ' | grep -E "test2.*test3.*test4"
+    rbd children --descendants test1 | sort | tr '\n' ' ' | grep -E "test2.*test3.*test4"
 
     rbd remove test4
     rbd snap unprotect test1@1
@@ -753,6 +754,50 @@ test_migration() {
     expect_fail rbd trash rm $ID
     expect_fail rbd trash restore $ID
     rbd migration abort test1
+
+    # Migrate parent
+    rbd remove test1
+    dd if=/dev/urandom bs=1M count=1 | rbd --image-format 2 import - test1
+    md5sum=$(rbd export test1 - | md5sum)
+    rbd snap create test1@snap1
+    rbd snap protect test1@snap1
+    rbd snap create test1@snap2
+    rbd clone test1@snap1 clone_v1 --rbd_default_clone_format=1
+    rbd clone test1@snap2 clone_v2 --rbd_default_clone_format=2
+    rbd info clone_v1 | fgrep 'parent: rbd/test1@snap1'
+    rbd info clone_v2 | fgrep 'parent: rbd/test1@snap2'
+    rbd info clone_v2 |grep 'op_features: clone-child'
+    test "$(rbd export clone_v1 - | md5sum)" = "${md5sum}"
+    test "$(rbd export clone_v2 - | md5sum)" = "${md5sum}"
+    test "$(rbd children test1@snap1)" = "rbd/clone_v1"
+    test "$(rbd children test1@snap2)" = "rbd/clone_v2"
+    rbd migration prepare test1 rbd2/test2
+    rbd info clone_v1 | fgrep 'parent: rbd2/test2@snap1'
+    rbd info clone_v2 | fgrep 'parent: rbd2/test2@snap2'
+    rbd info clone_v2 | fgrep 'op_features: clone-child'
+    test "$(rbd children rbd2/test2@snap1)" = "rbd/clone_v1"
+    test "$(rbd children rbd2/test2@snap2)" = "rbd/clone_v2"
+    rbd migration execute test1
+    expect_fail rbd migration commit test1
+    rbd migration commit test1 --force
+    test "$(rbd export clone_v1 - | md5sum)" = "${md5sum}"
+    test "$(rbd export clone_v2 - | md5sum)" = "${md5sum}"
+    rbd migration prepare rbd2/test2 test1
+    rbd info clone_v1 | fgrep 'parent: rbd/test1@snap1'
+    rbd info clone_v2 | fgrep 'parent: rbd/test1@snap2'
+    rbd info clone_v2 | fgrep 'op_features: clone-child'
+    test "$(rbd children test1@snap1)" = "rbd/clone_v1"
+    test "$(rbd children test1@snap2)" = "rbd/clone_v2"
+    rbd migration execute test1
+    expect_fail rbd migration commit test1
+    rbd migration commit test1 --force
+    test "$(rbd export clone_v1 - | md5sum)" = "${md5sum}"
+    test "$(rbd export clone_v2 - | md5sum)" = "${md5sum}"
+    rbd remove clone_v1
+    rbd remove clone_v2
+    rbd snap unprotect test1@snap1
+    rbd snap purge test1
+    rbd rm test1
 
     for format in 1 2; do
         # Abort migration after successful prepare

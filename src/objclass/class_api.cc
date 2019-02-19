@@ -713,7 +713,8 @@ void cls_cxx_subop_version(cls_method_context_t hctx, string *s)
 
 int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq) {
   PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
-  if (!ctx->new_obs.exists) {
+  if (!ctx->new_obs.exists || (ctx->new_obs.oi.is_whiteout() &&
+                               ctx->obc->ssc->snapset.clones.empty())) {
     return -ENOENT;
   }
   *snap_seq = ctx->obc->ssc->snapset.seq;

@@ -7,11 +7,11 @@
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 #include "librbd/ImageState.h"
+#include "librbd/image/AttachChildRequest.h"
 #include "librbd/image/AttachParentRequest.h"
 #include "librbd/image/CloneRequest.h"
 #include "librbd/image/CreateRequest.h"
 #include "librbd/image/RemoveRequest.h"
-#include "librbd/image/RefreshRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -342,7 +342,7 @@ void CloneRequest<I>::attach_parent() {
   auto ctx = create_context_callback<
     CloneRequest<I>, &CloneRequest<I>::handle_attach_parent>(this);
   auto req = AttachParentRequest<I>::create(
-    *m_imctx, m_pspec, m_size, ctx);
+    *m_imctx, m_pspec, m_size, false, ctx);
   req->send();
 }
 
@@ -357,128 +357,28 @@ void CloneRequest<I>::handle_attach_parent(int r) {
     return;
   }
 
-  v2_set_op_feature();
+  attach_child();
 }
 
 template <typename I>
-void CloneRequest<I>::v2_set_op_feature() {
-  if (m_clone_format == 1) {
-    v1_add_child();
-    return;
-  }
-
+void CloneRequest<I>::attach_child() {
   ldout(m_cct, 15) << dendl;
 
-  librados::ObjectWriteOperation op;
-  cls_client::op_features_set(&op, RBD_OPERATION_FEATURE_CLONE_CHILD,
-                              RBD_OPERATION_FEATURE_CLONE_CHILD);
-
-  auto aio_comp = create_rados_callback<
-    CloneRequest<I>, &CloneRequest<I>::handle_v2_set_op_feature>(this);
-  int r = m_ioctx.aio_operate(m_imctx->header_oid, aio_comp, &op);
-  ceph_assert(r == 0);
-  aio_comp->release();
-}
-
-template <typename I>
-void CloneRequest<I>::handle_v2_set_op_feature(int r) {
-  ldout(m_cct, 15) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_cct) << "failed to enable clone v2: " << cpp_strerror(r) << dendl;
-    m_r_saved = r;
-    close_child();
-    return;
-  }
-
-  v2_child_attach();
-}
-
-template <typename I>
-void CloneRequest<I>::v2_child_attach() {
-  ldout(m_cct, 15) << dendl;
-
-  librados::ObjectWriteOperation op;
-  cls_client::child_attach(&op, m_parent_image_ctx->snap_id,
-                           {m_imctx->md_ctx.get_id(),
-                            m_imctx->md_ctx.get_namespace(),
-                            m_imctx->id});
-
-  auto aio_comp = create_rados_callback<
-    CloneRequest<I>, &CloneRequest<I>::handle_v2_child_attach>(this);
-  int r = m_parent_image_ctx->md_ctx.aio_operate(m_parent_image_ctx->header_oid, aio_comp, &op);
-  ceph_assert(r == 0);
-  aio_comp->release();
-}
-
-template <typename I>
-void CloneRequest<I>::handle_v2_child_attach(int r) {
-  ldout(m_cct, 15) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_cct) << "failed to attach child image: " << cpp_strerror(r)
-                 << dendl;
-    m_r_saved = r;
-    close_child();
-    return;
-  }
-
-  metadata_list();
-}
-
-template <typename I>
-void CloneRequest<I>::v1_add_child() {
-  ldout(m_cct, 15) << dendl;
-
-  librados::ObjectWriteOperation op;
-  cls_client::add_child(&op, m_pspec, m_id);
-
-  using klass = CloneRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_v1_add_child>(this);
-  int r = m_ioctx.aio_operate(RBD_CHILDREN, comp, &op);
-  ceph_assert(r == 0);
-  comp->release();
-}
-
-template <typename I>
-void CloneRequest<I>::handle_v1_add_child(int r) {
-  ldout(m_cct, 15) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_cct) << "couldn't add child: " << cpp_strerror(r) << dendl;
-    m_r_saved = r;
-    close_child();
-    return;
-  }
-
-  v1_refresh();
-}
-
-template <typename I>
-void CloneRequest<I>::v1_refresh() {
-  ldout(m_cct, 15) << dendl;
-
-  using klass = CloneRequest<I>;
-  RefreshRequest<I> *req = RefreshRequest<I>::create(
-    *m_imctx, false, false,
-    create_context_callback<klass, &klass::handle_v1_refresh>(this));
+  auto ctx = create_context_callback<
+    CloneRequest<I>, &CloneRequest<I>::handle_attach_child>(this);
+  auto req = AttachChildRequest<I>::create(
+    m_imctx, m_parent_image_ctx, m_parent_image_ctx->snap_id, nullptr, 0,
+    m_clone_format, ctx);
   req->send();
 }
 
 template <typename I>
-void CloneRequest<I>::handle_v1_refresh(int r) {
+void CloneRequest<I>::handle_attach_child(int r) {
   ldout(m_cct, 15) << "r=" << r << dendl;
 
-  bool snap_protected = false;
-  if (r == 0) {
-    m_parent_image_ctx->snap_lock.get_read();
-    r = m_parent_image_ctx->is_snap_protected(m_parent_image_ctx->snap_id, &snap_protected);
-    m_parent_image_ctx->snap_lock.put_read();
-  }
-
-  if (r < 0 || !snap_protected) {
-    m_r_saved = -EINVAL;
+  if (r < 0) {
+    lderr(m_cct) << "failed to attach parent: " << cpp_strerror(r) << dendl;
+    m_r_saved = r;
     close_child();
     return;
   }

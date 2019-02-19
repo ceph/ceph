@@ -855,7 +855,8 @@ TEST_F(TestClsRbd, parents_v2)
   ASSERT_EQ(-ENOENT, parent_get(&ioctx, oid, &parent_image_spec));
   ASSERT_EQ(-ENOENT, parent_overlap_get(&ioctx, oid, CEPH_NOSNAP,
                                         &parent_overlap));
-  ASSERT_EQ(-ENOENT, parent_attach(&ioctx, oid, parent_image_spec, 0ULL));
+  ASSERT_EQ(-ENOENT, parent_attach(&ioctx, oid, parent_image_spec, 0ULL,
+                                   false));
   ASSERT_EQ(-ENOENT, parent_detach(&ioctx, oid));
 
   // no layering support should fail
@@ -865,7 +866,7 @@ TEST_F(TestClsRbd, parents_v2)
   ASSERT_FALSE(parent_image_spec.exists());
   ASSERT_EQ(0, parent_overlap_get(&ioctx, oid, CEPH_NOSNAP, &parent_overlap));
   ASSERT_EQ(std::nullopt, parent_overlap);
-  ASSERT_EQ(-ENOEXEC, parent_attach(&ioctx, oid, parent_image_spec, 0ULL));
+  ASSERT_EQ(-ENOEXEC, parent_attach(&ioctx, oid, parent_image_spec, 0ULL, false));
   ASSERT_EQ(-ENOEXEC, parent_detach(&ioctx, oid));
 
   // layering support available -- no pool namespaces
@@ -877,14 +878,17 @@ TEST_F(TestClsRbd, parents_v2)
   ASSERT_FALSE(parent_image_spec.exists());
   ASSERT_EQ(0, parent_overlap_get(&ioctx, oid, CEPH_NOSNAP, &parent_overlap));
   ASSERT_EQ(std::nullopt, parent_overlap);
-  ASSERT_EQ(-EINVAL, parent_attach(&ioctx, oid, parent_image_spec, 0ULL));
+  ASSERT_EQ(-EINVAL, parent_attach(&ioctx, oid, parent_image_spec, 0ULL, false));
   ASSERT_EQ(-ENOENT, parent_detach(&ioctx, oid));
 
   parent_image_spec = {1, "", "parent", 2};
   parent_overlap = (33 << 20) + 1;
-  ASSERT_EQ(0, parent_attach(&ioctx, oid, parent_image_spec, *parent_overlap));
+  ASSERT_EQ(0, parent_attach(&ioctx, oid, parent_image_spec, *parent_overlap,
+                             false));
   ASSERT_EQ(-EEXIST, parent_attach(&ioctx, oid, parent_image_spec,
-                                   *parent_overlap));
+                                   *parent_overlap, false));
+  ASSERT_EQ(0, parent_attach(&ioctx, oid, parent_image_spec, *parent_overlap,
+                             true));
   --(*parent_overlap);
 
   cls::rbd::ParentImageSpec on_disk_parent_image_spec;
@@ -925,9 +929,12 @@ TEST_F(TestClsRbd, parents_v2)
   // clone across pool namespaces
   parent_image_spec.pool_namespace = "ns";
   parent_overlap = 31 << 20;
-  ASSERT_EQ(0, parent_attach(&ioctx, oid, parent_image_spec, *parent_overlap));
+  ASSERT_EQ(0, parent_attach(&ioctx, oid, parent_image_spec, *parent_overlap,
+                             false));
   ASSERT_EQ(-EEXIST, parent_attach(&ioctx, oid, parent_image_spec,
-                                   *parent_overlap));
+                                   *parent_overlap, false));
+  ASSERT_EQ(0, parent_attach(&ioctx, oid, parent_image_spec, *parent_overlap,
+                             true));
 
   ASSERT_EQ(0, parent_get(&ioctx, oid, &on_disk_parent_image_spec));
   ASSERT_EQ(parent_image_spec, on_disk_parent_image_spec);

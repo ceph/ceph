@@ -111,10 +111,10 @@ int parent_overlap_get(librados::IoCtx* ioctx, const std::string &oid,
 
 void parent_attach(librados::ObjectWriteOperation* op,
                    const cls::rbd::ParentImageSpec& parent_image_spec,
-                   uint64_t parent_overlap);
+                   uint64_t parent_overlap, bool reattach);
 int parent_attach(librados::IoCtx *ioctx, const std::string &oid,
                   const cls::rbd::ParentImageSpec& parent_image_spec,
-                  uint64_t parent_overlap);
+                  uint64_t parent_overlap, bool reattach);
 
 void parent_detach(librados::ObjectWriteOperation* op);
 int parent_detach(librados::IoCtx *ioctx, const std::string &oid);
