@@ -2779,17 +2779,6 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
     // remapped in concert with each other...
     info.history = sources.begin()->second->info.history;
 
-    // if the past_intervals start is later than last_epoch_clean, it implies
-    // the source repeered again but the target didn't.  avoid the discrepancy
-    // but adjusting the interval start backwards to match.
-    auto pib = past_intervals.get_bounds();
-    if (info.history.last_epoch_clean < pib.first) {
-      dout(10) << __func__ << " last_epoch_clean "
-	       << info.history.last_epoch_clean << " < past_interval start "
-	       << pib.first << ", adjusting start backwards" << dendl;
-      past_intervals.adjust_start_backwards(info.history.last_epoch_clean);
-    }
-
     // we use the pg_num_dec_last_epoch_clean we got from the caller, which is
     // the epoch that was clean according to the target pg whe it requested
     // the mon decrement pg_num.
@@ -2805,6 +2794,20 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
 	     << " from pool last_dec_*, source pg history was "
 	     << sources.begin()->second->info.history
 	     << dendl;
+
+    // if the past_intervals start is later than last_epoch_clean, it
+    // implies the source repeered again but the target didn't, or
+    // that the source became clean in a later epoch than the target.
+    // avoid the discrepancy but adjusting the interval start
+    // backwards to match so that check_past_interval_bounds() will
+    // not complain.
+    auto pib = past_intervals.get_bounds();
+    if (info.history.last_epoch_clean < pib.first) {
+      dout(10) << __func__ << " last_epoch_clean "
+	       << info.history.last_epoch_clean << " < past_interval start "
+	       << pib.first << ", adjusting start backwards" << dendl;
+      past_intervals.adjust_start_backwards(info.history.last_epoch_clean);
+    }
   }
 
   dirty_info = true;
