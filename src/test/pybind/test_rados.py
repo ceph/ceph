@@ -10,6 +10,7 @@ import threading
 import json
 import errno
 import os
+import re
 import sys
 
 # Are we running Python 2.x
@@ -240,7 +241,7 @@ class TestRados(object):
 
     def test_get_fsid(self):
         fsid = self.rados.get_fsid()
-        eq(len(fsid), 36)
+        assert re.match('[0-9a-f\-]{36}', fsid, re.I)
 
     def test_blacklist_add(self):
         self.rados.blacklist_add("1.2.3.4/123", 1)
