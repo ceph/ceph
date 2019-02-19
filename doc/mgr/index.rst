@@ -45,3 +45,4 @@ sensible.
     DeepSea plugin <deepsea>
     Insights plugin <insights>
     Ansible plugin <ansible>
+    SSH orchestrator <ssh>
