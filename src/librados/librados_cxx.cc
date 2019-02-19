@@ -115,11 +115,12 @@ void librados::ObjectOperation::set_op_flags2(int flags)
 }
 
 void librados::ObjectOperation::cmpext(uint64_t off,
-                                       bufferlist &cmp_bl,
+                                       const bufferlist &cmp_bl,
                                        int *prval)
 {
   ::ObjectOperation *o = &impl->o;
-  o->cmpext(off, cmp_bl, prval);
+  bufferlist c = cmp_bl;
+  o->cmpext(off, c, prval);
 }
 
 void librados::ObjectOperation::cmpxattr(const char *name, uint8_t op, const bufferlist& v)
