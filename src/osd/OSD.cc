@@ -3306,6 +3306,7 @@ int OSD::shutdown()
   op_shardedwq.drain();
   {
     finished.clear(); // zap waiters (bleh, this is messy)
+    waiting_for_osdmap.clear();
   }
 
   // unregister commands
