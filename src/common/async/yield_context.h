@@ -26,8 +26,9 @@ struct yield_context;
 }
 
 #else // HAVE_BOOST_CONTEXT
-
+#ifndef BOOST_COROUTINES_NO_DEPRECATION_WARNING
 #define BOOST_COROUTINES_NO_DEPRECATION_WARNING
+#endif
 #include <boost/asio/spawn.hpp>
 
 #endif // HAVE_BOOST_CONTEXT
