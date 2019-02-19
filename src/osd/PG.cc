@@ -2779,13 +2779,10 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
     // remapped in concert with each other...
     info.history = sources.begin()->second->info.history;
 
-    // we use the pg_num_dec_last_epoch_clean we got from the caller, which is
-    // the epoch that was clean according to the target pg whe it requested
-    // the mon decrement pg_num.
+    // we use the pg_num_dec_last_epoch_{started,clean} we got from
+    // the caller, which are the epochs that were reported by the PGs were
+    // found to be ready for merge.
     info.history.last_epoch_clean = dec_last_epoch_clean;
-
-    // use last_epoch_clean value for last_epoch_started, though--we must be
-    // conservative here to avoid breaking peering, calc_acting, etc.
     info.history.last_epoch_started = dec_last_epoch_started;
     info.last_epoch_started = dec_last_epoch_started;
     dout(10) << __func__
