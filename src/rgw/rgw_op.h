@@ -739,6 +739,7 @@ protected:
   rgw_obj_key next_marker; 
   rgw_obj_key end_marker;
   string max_keys;
+  string startAfter;
   string delimiter;
   string encoding_type;
   bool list_versions;
@@ -770,46 +771,6 @@ public:
   virtual bool need_container_stats() { return false; }
 };
 
-class RGWListBucketv2 : public RGWOp {
-protected:
-  RGWBucketEnt bucket;
-  string fetchOwner;
-  rgw_obj_key marker; 
-  rgw_obj_key next_marker; 
-  rgw_obj_key end_marker;
-  string startAfter;
-  string prefix;
-  string max_keys;
-  string delimiter;
-  string encoding_type;
-  bool list_versions;
-  int max;
-  vector<rgw_bucket_dir_entry> objs;
-  map<string, bool> common_prefixes;
-
-   int default_max;
-  bool is_truncated;
-  bool allow_unordered;
-
-   int shard_id;
-
-   int parse_max_keys();
-
- public:
-  RGWListBucketv2() : list_versions(false), max(0),
-                    default_max(0), is_truncated(false),
-        allow_unordered(false), shard_id(-1) {}
-  int verify_permission() override;
-  void pre_exec() override;
-  void execute() override;
-
-   virtual int get_params() = 0;
-  void send_response() override = 0;
-  const char* name() const override { return "list_bucket"; }
-  RGWOpType get_type() override { return RGW_OP_LIST_BUCKET; }
-  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
-  virtual bool need_container_stats() { return false; }
-};
 
 class RGWGetBucketLogging : public RGWOp {
 public:

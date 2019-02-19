@@ -723,7 +723,7 @@ int RGWListBucket_ObjStore_S3v2::get_params()
   }
 
    encoding_type = s->info.args.get("encoding-type");
-   fetchOwner = s->info.args.get_bool("fetch-owner"); 
+   s->info.args.get_bool("fetch-owner", &fetchOwner, false); 
    if(fetchOwner == true)dump_owner(s, s->user->user_id, s->user->display_name);
 
   //fetchOwner = RGWHTTPArgs::get_bool("fetch-owner");
@@ -995,7 +995,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
   s->formatter->dump_int("KeyCount",objs.size());  
   //s->formatter->dump_string("ContinuationToken",token);
   //Return NextContinuationToken
-  s->formatter->dump_int("StartAfter", startAfter);
+  s->formatter->dump_string("StartAfter", startAfter);
 
     s->formatter->close_section();
       }
