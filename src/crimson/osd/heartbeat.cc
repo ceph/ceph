@@ -53,24 +53,37 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
                                    seastar::engine().cpu_id())
         .then([this, front_addrs] (auto msgr) {
           front_msgr = msgr;
-          return front_msgr->try_bind(front_addrs,
-                                      local_conf()->ms_bind_port_min,
-                                      local_conf()->ms_bind_port_max);
-        }).then([this] { return front_msgr->start(this); }),
+          return start_messenger(front_msgr, front_addrs);
+        }),
       ceph::net::Messenger::create(entity_name_t::OSD(whoami),
                                    "hb_back",
                                    nonce,
                                    seastar::engine().cpu_id())
         .then([this, back_addrs] (auto msgr) {
           back_msgr = msgr;
-          return back_msgr->try_bind(back_addrs,
-                                     local_conf()->ms_bind_port_min,
-                                     local_conf()->ms_bind_port_max);
-        }).then([this] { return back_msgr->start(this); }))
+          return start_messenger(back_msgr, back_addrs);
+        }))
     .then([this] {
       timer.arm_periodic(
         std::chrono::seconds(local_conf()->osd_heartbeat_interval));
     });
+}
+
+seastar::future<>
+Heartbeat::start_messenger(ceph::net::Messenger* msgr,
+                           const entity_addrvec_t& addrs)
+{
+  if (local_conf()->ms_crc_data) {
+    msgr->set_crc_data();
+  }
+  if (local_conf()->ms_crc_header) {
+    msgr->set_crc_header();
+  }
+  return msgr->try_bind(addrs,
+                        local_conf()->ms_bind_port_min,
+                        local_conf()->ms_bind_port_max).then([msgr, this] {
+    return msgr->start(this);
+  });
 }
 
 seastar::future<> Heartbeat::stop()
