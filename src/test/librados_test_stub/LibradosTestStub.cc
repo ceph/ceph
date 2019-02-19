@@ -811,7 +811,8 @@ size_t ObjectOperation::size() {
   return o->ops.size();
 }
 
-void ObjectOperation::cmpext(uint64_t off, bufferlist& cmp_bl, int *prval) {
+void ObjectOperation::cmpext(uint64_t off, const bufferlist& cmp_bl,
+                             int *prval) {
   TestObjectOperationImpl *o = reinterpret_cast<TestObjectOperationImpl*>(impl);
   ObjectOperationTestImpl op = boost::bind(&TestIoCtxImpl::cmpext, _1, _2, off, cmp_bl);
   if (prval != NULL) {
