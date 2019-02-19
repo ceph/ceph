@@ -107,7 +107,12 @@ private:
 
 public:
   struct segment_t {
+    // TODO: this will be dropped with support for `allocation policies`.
+    // We need them because of the rx_buffers zero-copy optimization.
     static constexpr __le16 DEFERRED_ALLOCATION { 0x0000 };
+
+    static constexpr __le16 DEFAULT_ALIGNMENT = sizeof(void*);
+
     __le32 length;
     __le16 alignment;
   } __attribute__((packed));
