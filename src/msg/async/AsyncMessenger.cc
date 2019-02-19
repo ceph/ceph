@@ -644,10 +644,12 @@ int AsyncMessenger::send_to(Message *m, int type, const entity_addrvec_t& addrs)
   FUNCTRACE(cct);
   ceph_assert(m);
 
+#if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
   if (m->get_type() == CEPH_MSG_OSD_OP)
     OID_EVENT_TRACE(((MOSDOp *)m)->get_oid().name.c_str(), "SEND_MSG_OSD_OP");
   else if (m->get_type() == CEPH_MSG_OSD_OPREPLY)
     OID_EVENT_TRACE(((MOSDOpReply *)m)->get_oid().name.c_str(), "SEND_MSG_OSD_OP_REPLY");
+#endif
 
   ldout(cct, 1) << __func__ << "--> " << ceph_entity_type_name(type) << " "
       << addrs << " -- " << *m << " -- ?+"
