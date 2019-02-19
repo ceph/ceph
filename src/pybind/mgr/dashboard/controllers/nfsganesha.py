@@ -7,7 +7,7 @@ import cherrypy
 import cephfs
 
 from . import ApiController, RESTController, UiApiController, BaseController, \
-              Endpoint, Task
+              Endpoint, Task, ReadPermission
 from .. import logger
 from ..security import Scope
 from ..services.cephfs import CephFS
@@ -24,6 +24,22 @@ def NfsTask(name, metadata, wait_for):
                     partial(serialize_dashboard_exception,
                             include_http_status=True))(func)
     return composed_decorator
+
+
+@ApiController('/nfs-ganesha', Scope.NFS_GANESHA)
+class NFSGanesha(RESTController):
+
+    @Endpoint()
+    @ReadPermission
+    def status(self):
+        status = {'available': True, 'message': None}
+        try:
+            Ganesha.get_ganesha_clusters()
+        except NFSException as e:
+            status['message'] = str(e)
+            status['available'] = False
+
+        return status
 
 
 @ApiController('/nfs-ganesha/export', Scope.NFS_GANESHA)

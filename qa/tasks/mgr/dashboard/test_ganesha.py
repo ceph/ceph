@@ -147,3 +147,23 @@ class GaneshaTest(DashboardTestCase):
 
         export2 = self._get("/api/nfs-ganesha/export/cluster2/2")
         self.assertDictEqual(export2, data2)
+
+    def test_invalid_status(self):
+        self._ceph_cmd(['dashboard', 'set-ganesha-clusters-rados-pool-namespace', ''])
+
+        data = self._get('/api/nfs-ganesha/status')
+        self.assertStatus(200)
+        self.assertIn('available', data)
+        self.assertIn('message', data)
+        self.assertFalse(data['available'])
+        self.assertIn('Ganesha config location is not configured. Please set the GANESHA_RADOS_POOL_NAMESPACE setting.',
+                      data['message'])
+
+        self._ceph_cmd(['dashboard', 'set-ganesha-clusters-rados-pool-namespace', 'cluster1:ganesha/ganesha1,cluster2:ganesha/ganesha2'])
+
+    def test_valid_status(self):
+        data = self._get('/api/nfs-ganesha/status')
+        self.assertStatus(200)
+        self.assertIn('available', data)
+        self.assertIn('message', data)
+        self.assertTrue(data['available'])
