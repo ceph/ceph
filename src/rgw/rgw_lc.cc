@@ -1552,6 +1552,16 @@ std::string s3_expiration_header(
       return hdr;
   } /* catch */
 
+  /* dump tags at debug level 16 */
+  RGWObjTags::tag_map_t obj_tag_map = obj_tagset.get_tags();
+  if (cct->_conf->subsys.should_gather(ceph_subsys_rgw, 16)) {
+    for (const auto& elt : obj_tag_map) {
+      ldout(cct, 16) << __func__
+		     <<  "() key=" << elt.first << " val=" << elt.second
+		     << dendl;
+    }
+  }
+
   boost::optional<ceph::real_time> expiration_date;
   boost::optional<std::string> rule_id;
 
@@ -1596,7 +1606,6 @@ std::string s3_expiration_header(
     if (filter.has_tags()) {
       bool tag_match = true;
       const RGWObjTags& rule_tagset = filter.get_tags();
-      RGWObjTags::tag_map_t obj_tag_map = obj_tagset.get_tags();
       for (auto& tag : rule_tagset.get_tags()) {
 	if (obj_tag_map.find(tag.first) == obj_tag_map.end()) {
 	  tag_match = false;
