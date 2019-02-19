@@ -2881,9 +2881,8 @@ CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
   }
   exproto->reset_recv_state();
 
-  exproto->client_cookie = client_cookie;
-
   if (!reconnecting) {
+    exproto->client_cookie = client_cookie;
     exproto->peer_name = peer_name;
     exproto->connection_features = connection_features;
     existing->set_features(connection_features);
