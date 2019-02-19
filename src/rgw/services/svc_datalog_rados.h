@@ -58,7 +58,7 @@ public:
 
   int get_info(int shard_id, RGWDataChangesLogInfo *info);
 
-  int add_entry(const rgw_bucket& bucket, int shard_id);
+  int add_entry(const RGWBucketInfo& bucket_info, int shard_id);
   int list_entries(int shard, const real_time& start_time, const real_time& end_time, int max_entries,
 		   list<rgw_data_change_log_entry>& entries,
 		   const string& marker,

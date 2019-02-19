@@ -989,8 +989,7 @@ std::ostream& operator<<(std::ostream& out, const bucket_shard_str& rhs) {
 
 class RGWRunBucketSyncCoroutine : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
-  rgw_bucket_shard bs;
-  RGWBucketInfo bucket_info;
+  rgw_bucket_sync_pipe sync_pipe;
   rgw_bucket_shard_sync_info sync_status;
   RGWMetaSyncEnv meta_sync_env;
 
@@ -1003,10 +1002,11 @@ class RGWRunBucketSyncCoroutine : public RGWCoroutine {
 
 public:
   RGWRunBucketSyncCoroutine(RGWDataSyncEnv *_sync_env, const rgw_bucket_shard& bs, const RGWSyncTraceNodeRef& _tn_parent)
-    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(bs),
-      status_oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs)),
+    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+      status_oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, sync_pipe)),
       tn(sync_env->sync_tracer->add_node(_tn_parent, "bucket",
                                          SSTR(bucket_shard_str{bs}))) {
+    sync_pipe.source_bs = bs;
   }
   ~RGWRunBucketSyncCoroutine() override {
     if (lease_cr) {
@@ -1689,9 +1689,9 @@ class RGWDefaultDataSyncModule : public RGWDataSyncModule {
 public:
   RGWDefaultDataSyncModule() {}
 
-  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override;
-  RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
-  RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
+  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override;
+  RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
+  RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
 };
 
@@ -1713,27 +1713,27 @@ int RGWDefaultSyncModule::create_instance(CephContext *cct, const JSONFormattabl
   return 0;
 }
 
-RGWCoroutine *RGWDefaultDataSyncModule::sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace)
+RGWCoroutine *RGWDefaultDataSyncModule::sync_object(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace)
 {
-  return new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone, bucket_info,
-				 std::nullopt,
+  return new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone, sync_pipe.source_bs.bucket,
+				 std::nullopt, sync_pipe.dest_bucket_info,
                                  key, std::nullopt, versioned_epoch,
                                  true, zones_trace, sync_env->counters, sync_env->dpp);
 }
 
-RGWCoroutine *RGWDefaultDataSyncModule::remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key,
+RGWCoroutine *RGWDefaultDataSyncModule::remove_object(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
                                                       real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
 {
   return new RGWRemoveObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone,
-                            bucket_info, key, versioned, versioned_epoch,
+                            sync_pipe.dest_bucket_info, key, versioned, versioned_epoch,
                             NULL, NULL, false, &mtime, zones_trace);
 }
 
-RGWCoroutine *RGWDefaultDataSyncModule::create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
+RGWCoroutine *RGWDefaultDataSyncModule::create_delete_marker(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                                              rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
 {
   return new RGWRemoveObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone,
-                            bucket_info, key, versioned, versioned_epoch,
+                            sync_pipe.dest_bucket_info, key, versioned, versioned_epoch,
                             &owner.id, &owner.display_name, true, &mtime, zones_trace);
 }
 
@@ -1741,9 +1741,9 @@ class RGWArchiveDataSyncModule : public RGWDefaultDataSyncModule {
 public:
   RGWArchiveDataSyncModule() {}
 
-  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override;
-  RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
-  RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
+  RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override;
+  RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
+  RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
 };
 
@@ -1768,14 +1768,14 @@ int RGWArchiveSyncModule::create_instance(CephContext *cct, const JSONFormattabl
   return 0;
 }
 
-RGWCoroutine *RGWArchiveDataSyncModule::sync_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace)
+RGWCoroutine *RGWArchiveDataSyncModule::sync_object(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace)
 {
-  ldout(sync_env->cct, 5) << "SYNC_ARCHIVE: sync_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
-  if (!bucket_info.versioned() ||
-     (bucket_info.flags & BUCKET_VERSIONS_SUSPENDED)) {
+  ldout(sync_env->cct, 5) << "SYNC_ARCHIVE: sync_object: b=" << sync_pipe.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
+  if (!sync_pipe.dest_bucket_info.versioned() ||
+     (sync_pipe.dest_bucket_info.flags & BUCKET_VERSIONS_SUSPENDED)) {
       ldout(sync_env->cct, 0) << "SYNC_ARCHIVE: sync_object: enabling object versioning for archive bucket" << dendl;
-      bucket_info.flags = (bucket_info.flags & ~BUCKET_VERSIONS_SUSPENDED) | BUCKET_VERSIONED;
-      int op_ret = sync_env->store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), NULL);
+      sync_pipe.dest_bucket_info.flags = (sync_pipe.dest_bucket_info.flags & ~BUCKET_VERSIONS_SUSPENDED) | BUCKET_VERSIONED;
+      int op_ret = sync_env->store->getRados()->put_bucket_instance_info(sync_pipe.dest_bucket_info, false, real_time(), NULL);
       if (op_ret < 0) {
          ldout(sync_env->cct, 0) << "SYNC_ARCHIVE: sync_object: error versioning archive bucket" << dendl;
          return NULL;
@@ -1793,25 +1793,25 @@ RGWCoroutine *RGWArchiveDataSyncModule::sync_object(RGWDataSyncEnv *sync_env, RG
   }
 
   return new RGWFetchRemoteObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone,
-                                 bucket_info, std::nullopt,
+                                 sync_pipe.source_bs.bucket, std::nullopt, sync_pipe.dest_bucket_info,
                                  key, dest_key, versioned_epoch,
                                  true, zones_trace, nullptr, sync_env->dpp);
 }
 
-RGWCoroutine *RGWArchiveDataSyncModule::remove_object(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key,
+RGWCoroutine *RGWArchiveDataSyncModule::remove_object(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
                                                      real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
 {
-  ldout(sync_env->cct, 0) << "SYNC_ARCHIVE: remove_object: b=" << bucket_info.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
+  ldout(sync_env->cct, 0) << "SYNC_ARCHIVE: remove_object: b=" << sync_pipe.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch << dendl;
   return NULL;
 }
 
-RGWCoroutine *RGWArchiveDataSyncModule::create_delete_marker(RGWDataSyncEnv *sync_env, RGWBucketInfo& bucket_info, rgw_obj_key& key, real_time& mtime,
+RGWCoroutine *RGWArchiveDataSyncModule::create_delete_marker(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                                             rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace)
 {
-  ldout(sync_env->cct, 0) << "SYNC_ARCHIVE: create_delete_marker: b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime
+  ldout(sync_env->cct, 0) << "SYNC_ARCHIVE: create_delete_marker: b=" << sync_pipe.source_bs.bucket << " k=" << key << " mtime=" << mtime
 	                            << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
   return new RGWRemoveObjCR(sync_env->async_rados, sync_env->store, sync_env->source_zone,
-                            bucket_info, key, versioned, versioned_epoch,
+                            sync_pipe.dest_bucket_info, key, versioned, versioned_epoch,
                             &owner.id, &owner.display_name, true, &mtime, zones_trace);
 }
 
@@ -2039,7 +2039,7 @@ public:
 class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
 
-  rgw_bucket_shard bs;
+  const rgw_bucket_sync_pipe& sync_pipe;
   const string sync_status_oid;
 
   rgw_bucket_shard_sync_info& status;
@@ -2047,17 +2047,18 @@ class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
   rgw_bucket_index_marker_info info;
 public:
   RGWInitBucketShardSyncStatusCoroutine(RGWDataSyncEnv *_sync_env,
-                                        const rgw_bucket_shard& bs,
+                                        const rgw_bucket_sync_pipe& _sync_pipe,
                                         rgw_bucket_shard_sync_info& _status)
-    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(bs),
-      sync_status_oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs)),
+    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+      sync_pipe(_sync_pipe),
+      sync_status_oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, _sync_pipe)),
       status(_status)
   {}
 
   int operate() override {
     reenter(this) {
       /* fetch current position in logs */
-      yield call(new RGWReadRemoteBucketIndexLogInfoCR(sync_env, bs, &info));
+      yield call(new RGWReadRemoteBucketIndexLogInfoCR(sync_env, sync_pipe.source_bs, &info));
       if (retcode < 0 && retcode != -ENOENT) {
         ldout(cct, 0) << "ERROR: failed to fetch bucket index status" << dendl;
         return set_cr_error(retcode);
@@ -2096,7 +2097,10 @@ public:
 
 RGWCoroutine *RGWRemoteBucketLog::init_sync_status_cr()
 {
-  return new RGWInitBucketShardSyncStatusCoroutine(&sync_env, bs, init_status);
+#warning FIXME
+  rgw_bucket_sync_pipe sync_pipe;
+  sync_pipe.source_bs = bs;
+  return new RGWInitBucketShardSyncStatusCoroutine(&sync_env, sync_pipe, init_status);
 }
 
 #define BUCKET_SYNC_ATTR_PREFIX RGW_ATTR_PREFIX "bucket-sync."
@@ -2166,10 +2170,10 @@ class RGWReadBucketSyncStatusCoroutine : public RGWCoroutine {
   map<string, bufferlist> attrs;
 public:
   RGWReadBucketSyncStatusCoroutine(RGWDataSyncEnv *_sync_env,
-                                   const rgw_bucket_shard& bs,
+                                   const rgw_bucket_sync_pipe& sync_pipe,
                                    rgw_bucket_shard_sync_info *_status)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
-      oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs)),
+      oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, sync_pipe)),
       status(_status) {}
   int operate() override;
 };
@@ -2366,7 +2370,10 @@ int RGWRemoteDataLog::read_shard_status(int shard_id, set<string>& pending_bucke
 
 RGWCoroutine *RGWRemoteBucketLog::read_sync_status_cr(rgw_bucket_shard_sync_info *sync_status)
 {
-  return new RGWReadBucketSyncStatusCoroutine(&sync_env, bs, sync_status);
+#warning FIXME
+  rgw_bucket_sync_pipe sync_pipe;
+  sync_pipe.source_bs = bs;
+  return new RGWReadBucketSyncStatusCoroutine(&sync_env, sync_pipe, sync_status);
 }
 
 RGWBucketSyncStatusManager::RGWBucketSyncStatusManager(rgw::sal::RGWRadosStore *_store, const string& _source_zone,
@@ -2693,8 +2700,8 @@ template <class T, class K>
 class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
 
-  RGWBucketInfo *bucket_info;
-  const rgw_bucket_shard& bs;
+  rgw_bucket_sync_pipe& sync_pipe;
+  rgw_bucket_shard& bs;
 
   rgw_obj_key key;
   bool versioned;
@@ -2720,8 +2727,7 @@ class RGWBucketSyncSingleEntryCR : public RGWCoroutine {
   RGWSyncTraceNodeRef tn;
 public:
   RGWBucketSyncSingleEntryCR(RGWDataSyncEnv *_sync_env,
-                             RGWBucketInfo *_bucket_info,
-                             const rgw_bucket_shard& bs,
+                             rgw_bucket_sync_pipe& _sync_pipe,
                              const rgw_obj_key& _key, bool _versioned,
                              std::optional<uint64_t> _versioned_epoch,
                              real_time& _timestamp,
@@ -2730,7 +2736,7 @@ public:
 		             const T& _entry_marker, RGWSyncShardMarkerTrack<T, K> *_marker_tracker, rgw_zone_set& _zones_trace,
                              RGWSyncTraceNodeRef& _tn_parent) : RGWCoroutine(_sync_env->cct),
 						      sync_env(_sync_env),
-                                                      bucket_info(_bucket_info), bs(bs),
+                                                      sync_pipe(_sync_pipe), bs(_sync_pipe.source_bs),
                                                       key(_key), versioned(_versioned), versioned_epoch(_versioned_epoch),
                                                       owner(_owner),
                                                       timestamp(_timestamp), op(_op),
@@ -2777,25 +2783,25 @@ public:
           } else if (op == CLS_RGW_OP_ADD ||
                      op == CLS_RGW_OP_LINK_OLH) {
             set_status("syncing obj");
-            tn->log(5, SSTR("bucket sync: sync obj: " << sync_env->source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch.value_or(0) << "]"));
-            call(data_sync_module->sync_object(sync_env, *bucket_info, key, versioned_epoch, &zones_trace));
+            tn->log(5, SSTR("bucket sync: sync obj: " << sync_env->source_zone << "/" << bs.bucket << "/" << key << "[" << versioned_epoch.value_or(0) << "]"));
+            call(data_sync_module->sync_object(sync_env, sync_pipe, key, versioned_epoch, &zones_trace));
           } else if (op == CLS_RGW_OP_DEL || op == CLS_RGW_OP_UNLINK_INSTANCE) {
             set_status("removing obj");
             if (op == CLS_RGW_OP_UNLINK_INSTANCE) {
               versioned = true;
             }
-            tn->log(10, SSTR("removing obj: " << sync_env->source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch.value_or(0) << "]"));
-            call(data_sync_module->remove_object(sync_env, *bucket_info, key, timestamp, versioned, versioned_epoch.value_or(0), &zones_trace));
+            tn->log(10, SSTR("removing obj: " << sync_env->source_zone << "/" << bs.bucket << "/" << key << "[" << versioned_epoch.value_or(0) << "]"));
+            call(data_sync_module->remove_object(sync_env, sync_pipe, key, timestamp, versioned, versioned_epoch.value_or(0), &zones_trace));
             // our copy of the object is more recent, continue as if it succeeded
             if (retcode == -ERR_PRECONDITION_FAILED) {
               retcode = 0;
             }
           } else if (op == CLS_RGW_OP_LINK_OLH_DM) {
             set_status("creating delete marker");
-            tn->log(10, SSTR("creating delete marker: obj: " << sync_env->source_zone << "/" << bucket_info->bucket << "/" << key << "[" << versioned_epoch.value_or(0) << "]"));
-            call(data_sync_module->create_delete_marker(sync_env, *bucket_info, key, timestamp, owner, versioned, versioned_epoch.value_or(0), &zones_trace));
+            tn->log(10, SSTR("creating delete marker: obj: " << sync_env->source_zone << "/" << bs.bucket << "/" << key << "[" << versioned_epoch.value_or(0) << "]"));
+            call(data_sync_module->create_delete_marker(sync_env, sync_pipe, key, timestamp, owner, versioned, versioned_epoch.value_or(0), &zones_trace));
           }
-          tn->set_resource_name(SSTR(bucket_str_noinstance(bucket_info->bucket) << "/" << key));
+          tn->set_resource_name(SSTR(bucket_str_noinstance(bs.bucket) << "/" << key));
         }
       } while (marker_tracker->need_retry(key));
       {
@@ -2837,8 +2843,8 @@ done:
 
 class RGWBucketShardFullSyncCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
-  const rgw_bucket_shard& bs;
-  RGWBucketInfo *bucket_info;
+  rgw_bucket_sync_pipe& sync_pipe;
+  rgw_bucket_shard& bs;
   boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
   bucket_list_result list_result;
   list<bucket_list_entry>::iterator entries_iter;
@@ -2857,14 +2863,15 @@ class RGWBucketShardFullSyncCR : public RGWCoroutine {
 
   RGWSyncTraceNodeRef tn;
 public:
-  RGWBucketShardFullSyncCR(RGWDataSyncEnv *_sync_env, const rgw_bucket_shard& bs,
-                           RGWBucketInfo *_bucket_info,
+  RGWBucketShardFullSyncCR(RGWDataSyncEnv *_sync_env,
+                           rgw_bucket_sync_pipe& _sync_pipe,
                            const std::string& status_oid,
                            RGWContinuousLeaseCR *lease_cr,
                            rgw_bucket_shard_sync_info& sync_info,
                            RGWSyncTraceNodeRef tn_parent)
-    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(bs),
-      bucket_info(_bucket_info), lease_cr(lease_cr), sync_info(sync_info),
+    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+      sync_pipe(_sync_pipe), bs(_sync_pipe.source_bs),
+      lease_cr(lease_cr), sync_info(sync_info),
       marker_tracker(sync_env, status_oid, sync_info.full_marker),
       status_oid(status_oid),
       tn(sync_env->sync_tracer->add_node(tn_parent, "full_sync",
@@ -2915,7 +2922,7 @@ int RGWBucketShardFullSyncCR::operate()
           tn->log(0, SSTR("ERROR: cannot start syncing " << entry->key << ". Duplicate entry?"));
         } else {
           using SyncCR = RGWBucketSyncSingleEntryCR<rgw_obj_key, rgw_obj_key>;
-          yield spawn(new SyncCR(sync_env, bucket_info, bs, entry->key,
+          yield spawn(new SyncCR(sync_env, sync_pipe, entry->key,
                                  false, /* versioned, only matters for object removal */
                                  entry->versioned_epoch, entry->mtime,
                                  entry->owner, entry->get_modify_op(), CLS_RGW_STATE_COMPLETE,
@@ -2987,8 +2994,8 @@ static bool has_olh_epoch(RGWModifyOp op) {
 
 class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
-  const rgw_bucket_shard& bs;
-  RGWBucketInfo *bucket_info;
+  rgw_bucket_sync_pipe& sync_pipe;
+  rgw_bucket_shard& bs;
   boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
   list<rgw_bi_log_entry> list_result;
   list<rgw_bi_log_entry>::iterator entries_iter, entries_end;
@@ -3009,14 +3016,14 @@ class RGWBucketShardIncrementalSyncCR : public RGWCoroutine {
   RGWSyncTraceNodeRef tn;
 public:
   RGWBucketShardIncrementalSyncCR(RGWDataSyncEnv *_sync_env,
-                                  const rgw_bucket_shard& bs,
-                                  RGWBucketInfo *_bucket_info,
+                                  rgw_bucket_sync_pipe& _sync_pipe,
                                   const std::string& status_oid,
                                   RGWContinuousLeaseCR *lease_cr,
                                   rgw_bucket_shard_sync_info& sync_info,
                                   RGWSyncTraceNodeRef& _tn_parent)
-    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(bs),
-      bucket_info(_bucket_info), lease_cr(lease_cr), sync_info(sync_info),
+    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
+      sync_pipe(_sync_pipe), bs(_sync_pipe.source_bs),
+      lease_cr(lease_cr), sync_info(sync_info),
       marker_tracker(sync_env, status_oid, sync_info.inc_marker),
       status_oid(status_oid), zone_id(_sync_env->store->svc()->zone->get_zone().id),
       tn(sync_env->sync_tracer->add_node(_tn_parent, "inc_sync",
@@ -3196,7 +3203,7 @@ int RGWBucketShardIncrementalSyncCR::operate()
             }
             tn->log(20, SSTR("entry->timestamp=" << entry->timestamp));
             using SyncCR = RGWBucketSyncSingleEntryCR<string, rgw_obj_key>;
-            spawn(new SyncCR(sync_env, bucket_info, bs, key,
+            spawn(new SyncCR(sync_env, sync_pipe, key,
                              entry->is_versioned(), versioned_epoch,
                              entry->timestamp, owner, entry->op, entry->state,
                              cur_id, &marker_tracker, entry->zones_trace, tn),
@@ -3282,7 +3289,7 @@ int RGWRunBucketSyncCoroutine::operate()
     }
 
     tn->log(10, "took lease");
-    yield call(new RGWReadBucketSyncStatusCoroutine(sync_env, bs, &sync_status));
+    yield call(new RGWReadBucketSyncStatusCoroutine(sync_env, sync_pipe, &sync_status));
     if (retcode < 0 && retcode != -ENOENT) {
       tn->log(0, "ERROR: failed to read sync status for bucket");
       lease_cr->go_down();
@@ -3292,12 +3299,12 @@ int RGWRunBucketSyncCoroutine::operate()
 
     tn->log(20, SSTR("sync status for bucket: " << sync_status.state));
 
-    yield call(new RGWGetBucketInstanceInfoCR(sync_env->async_rados, sync_env->store, bs.bucket, &bucket_info));
+    yield call(new RGWGetBucketInstanceInfoCR(sync_env->async_rados, sync_env->store, sync_pipe.source_bs.bucket, &sync_pipe.dest_bucket_info));
     if (retcode == -ENOENT) {
       /* bucket instance info has not been synced in yet, fetch it now */
       yield {
         tn->log(10, SSTR("no local info for bucket:" << ": fetching metadata"));
-        string raw_key = string("bucket.instance:") + bs.bucket.get_key();
+        string raw_key = string("bucket.instance:") + sync_pipe.source_bs.bucket.get_key();
 
         meta_sync_env.init(sync_env->dpp, cct, sync_env->store, sync_env->store->svc()->zone->get_master_conn(), sync_env->async_rados,
                            sync_env->http_manager, sync_env->error_logger, sync_env->sync_tracer);
@@ -3309,16 +3316,16 @@ int RGWRunBucketSyncCoroutine::operate()
                                           tn));
       }
       if (retcode < 0) {
-        tn->log(0, SSTR("ERROR: failed to fetch bucket instance info for " << bucket_str{bs.bucket}));
+        tn->log(0, SSTR("ERROR: failed to fetch bucket instance info for " << bucket_str{sync_pipe.source_bs.bucket}));
         lease_cr->go_down();
         drain_all();
         return set_cr_error(retcode);
       }
 
-      yield call(new RGWGetBucketInstanceInfoCR(sync_env->async_rados, sync_env->store, bs.bucket, &bucket_info));
+      yield call(new RGWGetBucketInstanceInfoCR(sync_env->async_rados, sync_env->store, sync_pipe.source_bs.bucket, &sync_pipe.dest_bucket_info));
     }
     if (retcode < 0) {
-      tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{bs.bucket}));
+      tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pipe.source_bs.bucket}));
       lease_cr->go_down();
       drain_all();
       return set_cr_error(retcode);
@@ -3326,7 +3333,7 @@ int RGWRunBucketSyncCoroutine::operate()
 
     do {
       if (sync_status.state == rgw_bucket_shard_sync_info::StateInit) {
-        yield call(new RGWInitBucketShardSyncStatusCoroutine(sync_env, bs, sync_status));
+        yield call(new RGWInitBucketShardSyncStatusCoroutine(sync_env, sync_pipe, sync_status));
         if (retcode == -ENOENT) {
           tn->log(0, "bucket sync disabled");
           lease_cr->abort(); // deleted lease object, abort/wakeup instead of unlock
@@ -3344,7 +3351,7 @@ int RGWRunBucketSyncCoroutine::operate()
       }
 
       if (sync_status.state == rgw_bucket_shard_sync_info::StateFullSync) {
-        yield call(new RGWBucketShardFullSyncCR(sync_env, bs, &bucket_info,
+        yield call(new RGWBucketShardFullSyncCR(sync_env, sync_pipe,
                                                 status_oid, lease_cr.get(),
                                                 sync_status, tn));
         if (retcode < 0) {
@@ -3356,7 +3363,7 @@ int RGWRunBucketSyncCoroutine::operate()
       }
 
       if (sync_status.state == rgw_bucket_shard_sync_info::StateIncrementalSync) {
-        yield call(new RGWBucketShardIncrementalSyncCR(sync_env, bs, &bucket_info,
+        yield call(new RGWBucketShardIncrementalSyncCR(sync_env, sync_pipe,
                                                        status_oid, lease_cr.get(),
                                                        sync_status, tn));
         if (retcode < 0) {
@@ -3507,14 +3514,15 @@ std::ostream& RGWBucketSyncStatusManager::gen_prefix(std::ostream& out) const
 }
 
 string RGWBucketSyncStatusManager::status_oid(const string& source_zone,
-                                              const rgw_bucket_shard& bs)
+                                              const rgw_bucket_sync_pipe& sync_pipe)
 {
-  return bucket_status_oid_prefix + "." + source_zone + ":" + bs.get_key();
+  return bucket_status_oid_prefix + "." + source_zone + ":" + sync_pipe.source_bs.get_key();
 }
 
 string RGWBucketSyncStatusManager::obj_status_oid(const string& source_zone,
                                                   const rgw_obj& obj)
 {
+#warning FIXME
   return object_status_oid_prefix + "." + source_zone + ":" + obj.bucket.get_key() + ":" +
          obj.key.name + ":" + obj.key.instance;
 }
@@ -3525,6 +3533,8 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
   RGWDataSyncEnv *const env;
   const int num_shards;
   rgw_bucket_shard bs;
+#warning change this
+  rgw_bucket_sync_pipe sync_pipe;
 
   using Vector = std::vector<rgw_bucket_shard_sync_info>;
   Vector::iterator i, end;
@@ -3543,7 +3553,8 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
     if (i == end) {
       return false;
     }
-    spawn(new RGWReadBucketSyncStatusCoroutine(env, bs, &*i), false);
+    sync_pipe.source_bs = bs;
+    spawn(new RGWReadBucketSyncStatusCoroutine(env, sync_pipe, &*i), false);
     ++i;
     ++bs.shard_id;
     return true;
