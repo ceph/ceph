@@ -565,7 +565,7 @@ class Module(MgrModule):
     def time_permit(self):
         local_time = time.localtime()
         time_of_day = time.strftime('%H%M', local_time)
-        weekday = local_time.tm_wday
+        weekday = (local_time.tm_wday + 1) % 7 # be compatible with C
         permit = False
 
         begin_time = self.get_module_option('begin_time')
