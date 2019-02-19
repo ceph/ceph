@@ -281,7 +281,7 @@ def bucket_sync_status(target_zone, source_zone, bucket_name):
 def data_source_log_status(source_zone):
     source_cluster = source_zone.cluster
     cmd = ['datalog', 'status'] + source_zone.zone_args()
-    datalog_status_json, retcode = source_cluster.rgw_admin(cmd, read_only=True)
+    datalog_status_json, retcode = source_cluster.admin(cmd, read_only=True)
     datalog_status = json.loads(datalog_status_json.decode('utf-8'))
 
     markers = {i: s['marker'] for i, s in enumerate(datalog_status)}
@@ -346,7 +346,7 @@ def compare_bucket_status(target_zone, source_zone, bucket_name, log_status, syn
 
     return True
 
-def zone_data_checkpoint(target_zone, source_zone_conn):
+def zone_data_checkpoint(target_zone, source_zone):
     if target_zone == source_zone:
         return
 
