@@ -11,7 +11,6 @@
 
 #include <experimental/iterator>
 
-#include <boost/regex.hpp>
 #include "rapidjson/reader.h"
 
 #include "rgw_auth.h"
@@ -27,10 +26,7 @@ using std::find;
 using std::int64_t;
 using std::move;
 using std::pair;
-using std::regex;
-using std::regex_match;
 using std::size_t;
-using std::smatch;
 using std::string;
 using std::stringstream;
 using std::ostream;
