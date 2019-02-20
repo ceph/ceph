@@ -492,45 +492,52 @@ bool AuthMonitor::prepare_update(MonOpRequestRef op)
     return false;
   }
 }
-
-uint64_t AuthMonitor::assign_global_id(bool should_increase_max)
+void AuthMonitor::_set_mon_num_rank(int num, int rank)
 {
-  int total_mon = mon->monmap->size();
-  dout(10) << "AuthMonitor::assign_global_id mon=" << mon->rank
-	   << "/" << total_mon
-	   << " last_allocated=" << last_allocated_id
-	   << " max_global_id=" <<  max_global_id << dendl;
+  dout(10) << __func__ << " num " << num << " rank " << rank << dendl;
+  ceph_assert(ceph_mutex_is_locked(mon->auth_lock));
+  mon_num = num;
+  mon_rank = rank;
+}
 
-  uint64_t next_global_id = last_allocated_id + 1;
-  int remainder = next_global_id % total_mon;
-  if (remainder)
-    remainder = total_mon - remainder;
-  next_global_id += remainder + mon->rank;
-  dout(10) << "next_global_id should be " << next_global_id << dendl;
-
-  // if we can't bump the max, bail out now on an out-of-bounds gid
-  if (next_global_id > max_global_id &&
-      (!mon->is_leader() || !should_increase_max)) {
+uint64_t AuthMonitor::_assign_global_id()
+{
+  ceph_assert(ceph_mutex_is_locked(mon->auth_lock));
+  if (num_mon < 1 || rank < 0) {
+    dout(10) << __func__ << " inactive (num_mon " << num_mon
+	     << " rank " << rank << ")" << dendl;
     return 0;
   }
 
-  // can we return a gid?
-  bool return_next = (next_global_id <= max_global_id);
+  uint64_t id = last_allocated_id + 1;
+  int remainder = id % mon_num;
+  if (remainder) {
+    remainder = mon_num - remainder;
+  }
+  id += remainder + mon_rank;
 
-  // bump the max?
+  if (id >= max_global_id) {
+    dout(10) << __func__ << " failed (max " << max_global_id << ")" << dendl;
+    return 0;
+  }
+
+  last_allocated_id = id;
+  dout(10) << __func__ << " " << id << " (max " << max_global_id << ")"
+	   << dendl;
+  return id;
+}
+
+uint64_t AuthMonitor::assign_global_id(bool should_increase_max)
+{
   if (mon->is_leader() &&
+      should_increase_max &&
       should_increase_max_global_id()) {
     increase_max_global_id();
   }
 
-  if (return_next) {
-    last_allocated_id = next_global_id;
-    return next_global_id;
-  } else {
-    return 0;
-  }
+  std::lock_guard l(mon->auth_lock);
+  return _assign_global_id();
 }
-
 
 bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
 {
