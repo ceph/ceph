@@ -9,7 +9,7 @@ import * as _ from 'lodash';
 export class OsdSummaryPipe implements PipeTransform {
   constructor(private i18n: I18n) {}
 
-  transform(value: any, args?: any): any {
+  transform(value: any): any {
     if (!value) {
       return '';
     }

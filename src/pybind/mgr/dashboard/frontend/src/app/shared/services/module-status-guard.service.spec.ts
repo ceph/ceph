@@ -29,7 +29,7 @@ describe('ModuleStatusGuardService', () => {
     let result: boolean;
     spyOn(httpClient, 'get').and.returnValue(observableOf(getResult));
     ngZone.run(() => {
-      service.canActivateChild(route, null).subscribe((resp) => {
+      service.canActivateChild(route).subscribe((resp) => {
         result = resp;
       });
     });

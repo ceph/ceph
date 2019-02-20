@@ -18,7 +18,7 @@ describe('ApiInterceptorService', () => {
   let router: Router;
   const url = 'api/xyz';
 
-  const httpError = (error, errorOpts, done = (resp) => {}) => {
+  const httpError = (error, errorOpts, done = (_resp) => {}) => {
     httpClient.get(url).subscribe(
       () => {},
       (resp) => {

@@ -9,7 +9,7 @@ import * as _ from 'lodash';
 export class MdsSummaryPipe implements PipeTransform {
   constructor(private i18n: I18n) {}
 
-  transform(value: any, args?: any): any {
+  transform(value: any): any {
     if (!value) {
       return '';
     }
@@ -19,7 +19,7 @@ export class MdsSummaryPipe implements PipeTransform {
     let standbys = 0;
     let active = 0;
     let standbyReplay = 0;
-    _.each(value.standbys, (s, i) => {
+    _.each(value.standbys, () => {
       standbys += 1;
     });
 
@@ -29,8 +29,8 @@ export class MdsSummaryPipe implements PipeTransform {
     } else if (value.filesystems.length === 0) {
       contentLine1 = this.i18n('no filesystems');
     } else {
-      _.each(value.filesystems, (fs, i) => {
-        _.each(fs.mdsmap.info, (mds, j) => {
+      _.each(value.filesystems, (fs) => {
+        _.each(fs.mdsmap.info, (mds) => {
           if (mds.state === 'up:standby-replay') {
             standbyReplay += 1;
           } else {

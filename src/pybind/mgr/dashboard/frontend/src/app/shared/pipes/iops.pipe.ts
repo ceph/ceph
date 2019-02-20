@@ -4,7 +4,7 @@ import { Pipe, PipeTransform } from '@angular/core';
   name: 'iops'
 })
 export class IopsPipe implements PipeTransform {
-  transform(value: any, args?: any): any {
+  transform(value: any): any {
     return `${value} IOPS`;
   }
 }

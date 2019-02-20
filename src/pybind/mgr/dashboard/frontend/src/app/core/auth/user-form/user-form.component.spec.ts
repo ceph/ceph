@@ -193,7 +193,7 @@ describe('UserFormComponent', () => {
     it('should alert if user is removing needed role permission', () => {
       spyOn(TestBed.get(AuthStorageService), 'getUsername').and.callFake(() => user.username);
       let modalBodyTpl = null;
-      spyOn(modalService, 'show').and.callFake((content, config) => {
+      spyOn(modalService, 'show').and.callFake((_content, config) => {
         modalBodyTpl = config.initialState.bodyTpl;
       });
       formHelper.setValue('roles', ['read-only']);
