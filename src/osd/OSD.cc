@@ -2402,8 +2402,8 @@ int OSD::set_numa_affinity()
 	  numa_node = front_node;
 	}
       } else {
-	derr << __func__ << " objectstore and network numa nodes to not match"
-	     << dendl;
+	dout(1) << __func__ << " objectstore and network numa nodes do not match"
+		<< dendl;
       }
     }
   } else {
