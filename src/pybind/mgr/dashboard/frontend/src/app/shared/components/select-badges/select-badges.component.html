@@ -5,7 +5,8 @@
            [selectionLimit]="selectionLimit"
            [customBadges]="customBadges"
            [customBadgeValidators]="customBadgeValidators"
-           elemClass="margin-right-sm select-menu-edit">
+           elemClass="margin-right-sm select-menu-edit"
+           (selection)="selection.emit($event)">
   <i class="fa fa-fw fa-pencil"></i>
 </cd-select>
 

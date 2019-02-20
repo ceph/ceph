@@ -1,4 +1,4 @@
-import { Component, Input, ViewChild } from '@angular/core';
+import { Component, EventEmitter, Input, Output, ViewChild } from '@angular/core';
 import { ValidatorFn } from '@angular/forms';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
@@ -25,6 +25,9 @@ export class SelectBadgesComponent {
   customBadges = false;
   @Input()
   customBadgeValidators: ValidatorFn[] = [];
+
+  @Output()
+  selection = new EventEmitter();
 
   @ViewChild('cdSelect')
   cdSelect;
