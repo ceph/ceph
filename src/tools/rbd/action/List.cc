@@ -255,10 +255,9 @@ int do_list(const std::string &pool_name, const std::string& namespace_name,
 	  r = comp->completion->get_return_value();
 	  comp->completion->release();
 	  if (r < 0) {
-	    if (r != -ENOENT) {
-	      std::cerr << "rbd: error opening " << i->name << ": "
-                        << cpp_strerror(r) << std::endl;
-	    }
+	    std::cerr << "rbd: error opening " << comp->name << ": "
+                      << cpp_strerror(r) << std::endl;
+
 	    // in any event, continue to next image
 	    comp->state = STATE_IDLE;
 	    continue;
@@ -324,7 +323,7 @@ int execute(const po::variables_map &vm,
               g_conf().get_val<uint64_t>("rbd_concurrent_management_ops"),
               formatter.get());
   if (r < 0) {
-    std::cerr << "rbd: listing images failed : " << cpp_strerror(r)
+    std::cerr << "rbd: listing images failed: " << cpp_strerror(r)
               << std::endl;
     return r;
   }
