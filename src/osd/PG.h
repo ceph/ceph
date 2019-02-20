@@ -1241,19 +1241,25 @@ public:
   // but we don't let local_num_bytes go negative.
   void add_local_num_bytes(int64_t num_bytes) {
     if (num_bytes) {
-      int64_t prev = local_num_bytes.fetch_add(num_bytes);
-      ceph_assert(prev >= 0);
-      if (num_bytes < 0 && prev < -num_bytes) {
-        local_num_bytes.store(0);
-      }
+      int64_t prev_bytes = local_num_bytes.load();
+      int64_t new_bytes;
+      do {
+        new_bytes = prev_bytes + num_bytes;
+        if (new_bytes < 0)
+          new_bytes = 0;
+      } while(!local_num_bytes.compare_exchange_weak(prev_bytes, new_bytes));
     }
   }
   void sub_local_num_bytes(int64_t num_bytes) {
     ceph_assert(num_bytes >= 0);
     if (num_bytes) {
-      if (local_num_bytes.fetch_sub(num_bytes) < num_bytes) {
-        local_num_bytes.store(0);
-      }
+      int64_t prev_bytes = local_num_bytes.load();
+      int64_t new_bytes;
+      do {
+        new_bytes = prev_bytes - num_bytes;
+        if (new_bytes < 0)
+          new_bytes = 0;
+      } while(!local_num_bytes.compare_exchange_weak(prev_bytes, new_bytes));
     }
   }
   // The value of num_bytes could be negative,
