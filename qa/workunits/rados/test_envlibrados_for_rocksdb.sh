@@ -73,8 +73,6 @@ git clone https://github.com/facebook/rocksdb.git --depth 1
 
 # compile code
 cd rocksdb
-patch -p1 <$(dirname $0)/0001-cmake-add-Findrados.cmake-and-use-it.patch
-
 mkdir build && cd build && cmake -DWITH_LIBRADOS=ON -DWITH_SNAPPY=ON -DWITH_GFLAGS=OFF -DFAIL_ON_WARNINGS=OFF ..
 make rocksdb_env_librados_test -j8
 
