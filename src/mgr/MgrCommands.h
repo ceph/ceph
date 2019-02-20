@@ -77,6 +77,18 @@ COMMAND("osd pool stats " \
         "name=pool_name,type=CephPoolname,req=false",
         "obtain stats from all pools, or from specified pool",
         "osd", "r")
+COMMAND("osd pool scrub " \
+        "name=who,type=CephPoolname,n=N", \
+        "initiate scrub on pool <who>", \
+        "osd", "rw")
+COMMAND("osd pool deep-scrub " \
+        "name=who,type=CephPoolname,n=N", \
+        "initiate deep-scrub on pool <who>", \
+        "osd", "rw")
+COMMAND("osd pool repair " \
+        "name=who,type=CephPoolname,n=N", \
+        "initiate repair on pool <who>", \
+        "osd", "rw")
 COMMAND("osd reweight-by-utilization " \
 	"name=oload,type=CephInt,req=false " \
 	"name=max_change,type=CephFloat,req=false "			\

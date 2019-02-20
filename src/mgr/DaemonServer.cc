@@ -1087,6 +1087,73 @@ bool DaemonServer::_handle_command(
     }
     cmdctx->reply(0, ss);
     return true;
+  } else if (prefix == "osd pool scrub" ||
+             prefix == "osd pool deep-scrub" ||
+             prefix == "osd pool repair") {
+    vector<string> pool_names;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "who", pool_names);
+    if (pool_names.empty()) {
+      ss << "must specify one or more pool names";
+      cmdctx->reply(-EINVAL, ss);
+      return true;
+    }
+    epoch_t epoch;
+    map<int32_t, vector<pg_t>> pgs_by_primary; // legacy
+    map<int32_t, vector<spg_t>> spgs_by_primary;
+    cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+      epoch = osdmap.get_epoch();
+      for (auto& pool_name : pool_names) {
+        auto pool_id = osdmap.lookup_pg_pool_name(pool_name);
+        if (pool_id < 0) {
+          ss << "unrecognized pool '" << pool_name << "'";
+          r = -ENOENT;
+          return;
+        }
+        auto pool_pg_num = osdmap.get_pg_num(pool_id);
+        for (int i = 0; i < pool_pg_num; i++) {
+          pg_t pg(i, pool_id);
+          int primary;
+          spg_t spg;
+          auto got = osdmap.get_primary_shard(pg, &primary, &spg);
+          if (!got)
+            continue;
+          pgs_by_primary[primary].push_back(pg);
+          spgs_by_primary[primary].push_back(spg);
+        }
+      }
+    });
+    if (r < 0) {
+      cmdctx->reply(r, ss);
+      return true;
+    }
+    for (auto& it : spgs_by_primary) {
+      auto primary = it.first;
+      auto p = osd_cons.find(primary);
+      if (p == osd_cons.end()) {
+        ss << "osd." << primary << " is not currently connected";
+        cmdctx->reply(-EAGAIN, ss);
+        return true;
+      }
+      for (auto& con : p->second) {
+        if (HAVE_FEATURE(con->get_features(), SERVER_MIMIC)) {
+          con->send_message(new MOSDScrub2(monc->get_fsid(),
+                                           epoch,
+                                           it.second,
+                                           prefix == "osd pool repair",
+                                           prefix == "osd pool deep-scrub"));
+        } else {
+          // legacy
+          auto q = pgs_by_primary.find(primary);
+          ceph_assert(q != pgs_by_primary.end());
+          con->send_message(new MOSDScrub(monc->get_fsid(),
+                                          q->second,
+                                          prefix == "osd pool repair",
+                                          prefix == "osd pool deep-scrub"));
+        }
+      }
+    }
+    cmdctx->reply(0, "");
+    return true;
   } else if (prefix == "osd reweight-by-pg" ||
 	     prefix == "osd reweight-by-utilization" ||
 	     prefix == "osd test-reweight-by-pg" ||
