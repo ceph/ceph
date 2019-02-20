@@ -95,12 +95,11 @@ private:
   bool m_flatten;
   ceph::bufferlist m_copyup_data;
   std::vector<AbstractObjectWriteRequest<ImageCtxT> *> m_pending_requests;
-  std::atomic<unsigned> m_pending_copyups { 0 };
+  unsigned m_pending_copyups = 0;
 
   AsyncOperation m_async_op;
 
   std::vector<uint64_t> m_snap_ids;
-  librados::IoCtx m_data_ctx; // for empty SnapContext
 
   Mutex m_lock;
 
