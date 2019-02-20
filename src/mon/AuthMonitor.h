@@ -103,6 +103,9 @@ private:
   uint64_t max_global_id;
   uint64_t last_allocated_id;
 
+  // these are protected by mon->auth_lock
+  int mon_num = 0, mon_rank = 0;
+
   bool _upgrade_format_to_dumpling();
   bool _upgrade_format_to_luminous();
   bool _upgrade_format_to_mimic();
@@ -144,8 +147,10 @@ private:
   bool prepare_global_id(MonOpRequestRef op);
   bool should_increase_max_global_id();
   void increase_max_global_id();
-public:
   uint64_t assign_global_id(bool should_increase_max);
+public:
+  void _set_mon_num_rank(int num, int rank); ///< called under mon->auth_lock
+
 private:
   // propose pending update to peers
   void encode_pending(MonitorDBStore::TransactionRef t) override;

@@ -969,6 +969,11 @@ void Monitor::shutdown()
 
   wait_for_paxos_write();
 
+  {
+    std::lock_guard l(auth_lock);
+    authmon()->_set_mon_num_rank(0, 0);
+  }
+
   state = STATE_SHUTDOWN;
 
   lock.Unlock();
@@ -1241,6 +1246,12 @@ bool Monitor::_add_bootstrap_peer_hint(std::string_view cmd,
 void Monitor::_reset()
 {
   dout(10) << __func__ << dendl;
+
+  // disable authentication
+  {
+    std::lock_guard l(auth_lock);
+    authmon()->_set_mon_num_rank(0, 0);
+  }
 
   cancel_probe_timeout();
   timecheck_finish();
@@ -2285,6 +2296,12 @@ void Monitor::finish_election()
   resend_routed_requests();
   update_logger();
   register_cluster_logger();
+
+  // enable authentication
+  {
+    std::lock_guard l(auth_lock);
+    authmon()->_set_mon_num_rank(monmap->size(), rank);
+  }
 
   // am i named properly?
   string cur_name = monmap->get_name(messenger->get_myaddrs());
@@ -6199,7 +6216,7 @@ int Monitor::handle_auth_request(
     // is not necessary.
 
     if (!con->peer_global_id) {
-      con->peer_global_id = authmon()->assign_global_id(false);
+      con->peer_global_id = authmon()->_assign_global_id();
       if (!con->peer_global_id) {
 	dout(1) << __func__ << " failed to assign global_id" << dendl;
 	delete auth_handler;
