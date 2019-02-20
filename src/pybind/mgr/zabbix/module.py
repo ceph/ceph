@@ -269,30 +269,35 @@ class Module(MgrModule):
             })
             return
 
-        try:
+        servers = self.config['zabbix_host'].split(",")
+        result = True
+
+        for server in servers:
+            zabbix_host, sep, zabbix_port = server.partition(':')
+            zabbix_port = zabbix_port if sep == ':' else self.config['zabbix_port']
+
             self.log.info(
-                'Sending data to Zabbix server %s as host/identifier %s',
-                self.config['zabbix_host'], identifier)
+                'Sending data to Zabbix server %s, port %s as host/identifier %s',
+                zabbix_host, zabbix_port, identifier)
             self.log.debug(data)
 
-            zabbix = ZabbixSender(self.config['zabbix_sender'],
-                                  self.config['zabbix_host'],
-                                  self.config['zabbix_port'], self.log)
+            try:
+                zabbix = ZabbixSender(self.config['zabbix_sender'],
+                                      zabbix_host,
+                                      zabbix_port, self.log)
+                zabbix.send(identifier, data)
+            except Exception as exc:
+                self.log.error('Exception when sending: %s', exc)
+                self.set_health_checks({
+                    'MGR_ZABBIX_SEND_FAILED': {
+                        'severity': 'warning',
+                        'summary': 'Failed to send data to Zabbix',
+                        'detail': [str(exc)]
+                    }
+                })
 
-            zabbix.send(identifier, data)
-            self.set_health_checks(dict())
-            return True
-        except Exception as exc:
-            self.log.error('Exception when sending: %s', exc)
-            self.set_health_checks({
-                'MGR_ZABBIX_SEND_FAILED': {
-                    'severity': 'warning',
-                    'summary': 'Failed to send data to Zabbix',
-                    'detail': [str(exc)]
-                }
-            })
-
-        return False
+        self.set_health_checks(dict())
+        return result
 
     def handle_command(self, inbuf, command):
         if command['prefix'] == 'zabbix config-show':
