@@ -1542,11 +1542,18 @@ bool DaemonServer::_handle_command(
     cmdctx->reply(0, ss);
     return true;
   } else if (prefix == "pg force-recovery" ||
-  	       prefix == "pg force-backfill" ||
-  	       prefix == "pg cancel-force-recovery" ||
-  	       prefix == "pg cancel-force-backfill") {
-    string forceop = prefix.substr(3, string::npos);
-    list<pg_t> parsed_pgs;
+  	     prefix == "pg force-backfill" ||
+  	     prefix == "pg cancel-force-recovery" ||
+  	     prefix == "pg cancel-force-backfill" ||
+             prefix == "osd pool force-recovery" ||
+             prefix == "osd pool force-backfill" ||
+             prefix == "osd pool cancel-force-recovery" ||
+             prefix == "osd pool cancel-force-backfill") {
+    vector<string> vs;
+    get_str_vec(prefix, vs);
+    auto& granularity = vs.front();
+    auto& forceop = vs.back();
+    vector<pg_t> pgs;
 
     // figure out actual op just once
     int actual_op = 0;
@@ -1560,89 +1567,109 @@ bool DaemonServer::_handle_command(
       actual_op = OFR_RECOVERY | OFR_CANCEL;
     }
 
-    // covnert pg names to pgs, discard any invalid ones while at it
-    {
-      // we don't want to keep pgidstr and pgidstr_nodup forever
-      vector<string> pgidstr;
-      // get pgids to process and prune duplicates
-      cmd_getval(g_ceph_context, cmdctx->cmdmap, "pgid", pgidstr);
-      set<string> pgidstr_nodup(pgidstr.begin(), pgidstr.end());
-      if (pgidstr.size() != pgidstr_nodup.size()) {
-	// move elements only when there were duplicates, as this
-	// reorders them
-	pgidstr.resize(pgidstr_nodup.size());
-	auto it = pgidstr_nodup.begin();
-	for (size_t i = 0 ; i < pgidstr_nodup.size(); i++) {
-	  pgidstr[i] = std::move(*it++);
-	}
+    set<pg_t> candidates; // deduped
+    if (granularity == "pg") {
+      // covnert pg names to pgs, discard any invalid ones while at it
+      vector<string> pgids;
+      cmd_getval(g_ceph_context, cmdctx->cmdmap, "pgid", pgids);
+      for (auto& i : pgids) {
+        pg_t pgid;
+        if (!pgid.parse(i.c_str())) {
+          ss << "invlaid pgid '" << i << "'; ";
+          r = -EINVAL;
+          continue;
+        }
+        candidates.insert(pgid);
       }
-
-      cluster_state.with_pgmap([&](const PGMap& pg_map) {
-	for (auto& pstr : pgidstr) {
-	  pg_t parsed_pg;
-	  if (!parsed_pg.parse(pstr.c_str())) {
-	    ss << "invalid pgid '" << pstr << "'; ";
-	    r = -EINVAL;
-	  } else {
-	    auto workit = pg_map.pg_stat.find(parsed_pg);
-	    if (workit == pg_map.pg_stat.end()) {
-	      ss << "pg " << pstr << " does not exist; ";
-	      r = -ENOENT;
-	    } else {
-	      pg_stat_t workpg = workit->second;
-
-	      // discard pgs for which user requests are pointless
-	      switch (actual_op)
-	      {
-		case OFR_RECOVERY:
-		  if ((workpg.state & (PG_STATE_DEGRADED | PG_STATE_RECOVERY_WAIT | PG_STATE_RECOVERING)) == 0) {
-		    // don't return error, user script may be racing with cluster. not fatal.
-		    ss << "pg " << pstr << " doesn't require recovery; ";
-		    continue;
-		  } else  if (workpg.state & PG_STATE_FORCED_RECOVERY) {
-		    ss << "pg " << pstr << " recovery already forced; ";
-		    // return error, as it may be a bug in user script
-		    r = -EINVAL;
-		    continue;
-		  }
-		  break;
-		case OFR_BACKFILL:
-		  if ((workpg.state & (PG_STATE_DEGRADED | PG_STATE_BACKFILL_WAIT | PG_STATE_BACKFILLING)) == 0) {
-		    ss << "pg " << pstr << " doesn't require backfilling; ";
-		    continue;
-		  } else  if (workpg.state & PG_STATE_FORCED_BACKFILL) {
-		    ss << "pg " << pstr << " backfill already forced; ";
-		    r = -EINVAL;
-		    continue;
-		  }
-		  break;
-		case OFR_BACKFILL | OFR_CANCEL:
-		  if ((workpg.state & PG_STATE_FORCED_BACKFILL) == 0) {
-		    ss << "pg " << pstr << " backfill not forced; ";
-		    continue;
-		  }
-		  break;
-		case OFR_RECOVERY | OFR_CANCEL:
-		  if ((workpg.state & PG_STATE_FORCED_RECOVERY) == 0) {
-		    ss << "pg " << pstr << " recovery not forced; ";
-		    continue;
-		  }
-		  break;
-		default:
-		  ceph_abort_msg("actual_op value is not supported");
-	      }
-
-	      parsed_pgs.push_back(std::move(parsed_pg));
-	    }
-	  }
-	}
+    } else {
+      // per pool
+      vector<string> pool_names;
+      cmd_getval(g_ceph_context, cmdctx->cmdmap, "who", pool_names);
+      if (pool_names.empty()) {
+        ss << "must specify one or more pool names";
+        cmdctx->reply(-EINVAL, ss);
+        return true;
+      }
+      cluster_state.with_osdmap([&](const OSDMap& osdmap) {
+        for (auto& pool_name : pool_names) {
+          auto pool_id = osdmap.lookup_pg_pool_name(pool_name);
+          if (pool_id < 0) {
+            ss << "unrecognized pool '" << pool_name << "'";
+            r = -ENOENT;
+            return;
+          }
+          auto pool_pg_num = osdmap.get_pg_num(pool_id);
+          for (int i = 0; i < pool_pg_num; i++)
+            candidates.insert({(unsigned int)i, (uint64_t)pool_id});
+        }
       });
+      if (r < 0) {
+        cmdctx->reply(r, ss);
+        return true;
+      }
     }
+
+    cluster_state.with_pgmap([&](const PGMap& pg_map) {
+      for (auto& i : candidates) {
+	auto it = pg_map.pg_stat.find(i);
+	if (it == pg_map.pg_stat.end()) {
+	  ss << "pg " << i << " does not exist; ";
+	  r = -ENOENT;
+          continue;
+	}
+        auto state = it->second.state;
+	// discard pgs for which user requests are pointless
+	switch (actual_op) {
+        case OFR_RECOVERY:
+          if ((state & (PG_STATE_DEGRADED |
+                        PG_STATE_RECOVERY_WAIT |
+                        PG_STATE_RECOVERING)) == 0) {
+            // don't return error, user script may be racing with cluster.
+            // not fatal.
+            ss << "pg " << i << " doesn't require recovery; ";
+            continue;
+          } else  if (state & PG_STATE_FORCED_RECOVERY) {
+            ss << "pg " << i << " recovery already forced; ";
+            // return error, as it may be a bug in user script
+            r = -EINVAL;
+            continue;
+          }
+          break;
+        case OFR_BACKFILL:
+          if ((state & (PG_STATE_DEGRADED |
+                        PG_STATE_BACKFILL_WAIT |
+                        PG_STATE_BACKFILLING)) == 0) {
+            ss << "pg " << i << " doesn't require backfilling; ";
+            continue;
+          } else if (state & PG_STATE_FORCED_BACKFILL) {
+            ss << "pg " << i << " backfill already forced; ";
+            r = -EINVAL;
+            continue;
+          }
+          break;
+        case OFR_BACKFILL | OFR_CANCEL:
+          if ((state & PG_STATE_FORCED_BACKFILL) == 0) {
+            ss << "pg " << i << " backfill not forced; ";
+            continue;
+          }
+          break;
+        case OFR_RECOVERY | OFR_CANCEL:
+          if ((state & PG_STATE_FORCED_RECOVERY) == 0) {
+            ss << "pg " << i << " recovery not forced; ";
+            continue;
+          }
+          break;
+        default:
+          ceph_abort_msg("actual_op value is not supported");
+        }
+	pgs.push_back(i);
+      } // for
+    });
 
     // respond with error only when no pgs are correct
     // yes, in case of mixed errors, only the last one will be emitted,
     // but the message presented will be fine
-    if (parsed_pgs.size() != 0) {
+    if (pgs.size() != 0) {
       // clear error to not confuse users/scripts
       r = 0;
     }
@@ -1652,7 +1679,7 @@ bool DaemonServer::_handle_command(
     cluster_state.with_osdmap([&](const OSDMap& osdmap) {
 	// group pgs to process by osd
 	map<int, vector<spg_t>> osdpgs;
-	for (auto& pgid : parsed_pgs) {
+	for (auto& pgid : pgs) {
 	  int primary;
 	  spg_t spg;
 	  if (osdmap.get_primary_shard(pgid, &primary, &spg)) {
