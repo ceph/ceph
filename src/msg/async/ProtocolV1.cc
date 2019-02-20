@@ -1138,7 +1138,6 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
     if (messenger->crcflags & MSG_CRC_HEADER) {
       old_footer.front_crc = footer.front_crc;
       old_footer.middle_crc = footer.middle_crc;
-      old_footer.data_crc = footer.data_crc;
     } else {
       old_footer.front_crc = old_footer.middle_crc = 0;
     }
