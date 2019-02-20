@@ -182,6 +182,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
                const char *if_match, const char *if_nomatch,
                const std::string *user_data,
                rgw_zone_set *zones_trace, bool *canceled) override;
+
 };
 
 
@@ -242,9 +243,10 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
 
   public:
     AppendObjectProcessor(Aio *aio, RGWRados *store, const RGWBucketInfo& bucket_info,
+                          const rgw_placement_rule *ptail_placement_rule,
                           const rgw_user& owner, RGWObjectCtx& obj_ctx,const rgw_obj& head_obj,
                           const std::string& unique_tag, uint64_t position, uint64_t *cur_accounted_size)
-            : ManifestObjectProcessor(aio, store, bucket_info, owner, obj_ctx, head_obj),
+            : ManifestObjectProcessor(aio, store, bucket_info, ptail_placement_rule, owner, obj_ctx, head_obj),
               position(position), cur_size(0), cur_accounted_size(cur_accounted_size),
               unique_tag(unique_tag), cur_manifest(nullptr)
     {}

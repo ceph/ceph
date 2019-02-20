@@ -108,6 +108,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_DELETE_CONFLICT, {409, "DeleteConflict"}},
     { ERR_POSITION_NOT_EQUAL_TO_LENGTH, {409, "PositionNotEqualToLength"}},
     { ERR_OBJECT_NOT_APPENDABLE, {409, "ObjectNotAppendable"}},
+    { ERR_INVALID_BUCKET_STATE, {409, "InvalidBucketState"}},
     { ERR_INVALID_SECRET_KEY, {400, "InvalidSecretKey"}},
     { ERR_INVALID_KEY_TYPE, {400, "InvalidKeyType"}},
     { ERR_INVALID_CAP, {400, "InvalidCapability"}},

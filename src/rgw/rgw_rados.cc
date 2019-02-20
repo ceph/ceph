@@ -4431,6 +4431,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     }
   }
 
+  //erase the append attr
+  cb.get_attrs().erase(RGW_ATTR_APPEND_PART_NUM);
+
   if (source_zone.empty()) {
     set_copy_attrs(cb.get_attrs(), attrs, attrs_mod);
   } else {
