@@ -2782,13 +2782,35 @@ CtPtr ProtocolV2::handle_reconnect(char *payload, uint32_t length) {
     return WRITE(retry.get_buffer(), "session retry", read_frame);
   }
 
-  if (exproto->connect_seq >= reconnect.connect_seq()) {
+  if (exproto->connect_seq > reconnect.connect_seq()) {
     ldout(cct, 5) << __func__
                   << " stale connect_seq scs=" << exproto->connect_seq
                   << " ccs=" << reconnect.connect_seq()
                   << " , ask client to retry" << dendl;
     RetryFrame retry(this, exproto->connect_seq);
     return WRITE(retry.get_buffer(), "session retry", read_frame);
+  }
+
+  if (exproto->connect_seq == reconnect.connect_seq()) {
+    // reconnect race: both peers are sending reconnect messages
+    if (existing->peer_addrs->msgr2_addr() >
+            messenger->get_myaddrs().msgr2_addr() &&
+        !existing->policy.server) {
+      // the existing connection wins
+      ldout(cct, 1)
+          << __func__
+          << " reconnect race detected, this connection loses to existing="
+          << existing << dendl;
+
+      WaitFrame wait;
+      return WRITE(wait.get_buffer(), "wait", read_frame);
+    } else {
+      // this connection wins
+      ldout(cct, 1) << __func__
+                    << " reconnect race detected, replacing existing="
+                    << existing << " socket by this connection's socket"
+                    << dendl;
+    }
   }
 
   ldout(cct, 1) << __func__ << " reconnect to existing=" << existing << dendl;
