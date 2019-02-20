@@ -20,6 +20,17 @@ static void to_vector(const interval_set<uint64_t> &set,
   }
 }
 
+// see PrimaryLogPG::finish_extent_cmp()
+static int cmpext_compare(const bufferlist &bl, const bufferlist &read_bl) {
+  for (uint64_t idx = 0; idx < bl.length(); ++idx) {
+    char read_byte = (idx < read_bl.length() ? read_bl[idx] : 0);
+    if (bl[idx] != read_byte) {
+      return -MAX_ERRNO - idx;
+    }
+  }
+  return 0;
+}
+
 namespace librados {
 
 TestMemIoCtxImpl::TestMemIoCtxImpl() {
@@ -636,32 +647,30 @@ int TestMemIoCtxImpl::writesame(const std::string& oid, bufferlist& bl, size_t l
 
 int TestMemIoCtxImpl::cmpext(const std::string& oid, uint64_t off,
                              bufferlist& cmp_bl) {
-  if (get_snap_read() != CEPH_NOSNAP) {
-    return -EROFS;
-  } else if (m_client->is_blacklisted()) {
+  if (m_client->is_blacklisted()) {
     return -EBLACKLISTED;
   }
 
-  if (cmp_bl.length() == 0) {
-    return -EINVAL;
-  }
+  bufferlist read_bl;
+  uint64_t len = cmp_bl.length();
 
   TestMemCluster::SharedFile file;
   {
-    RWLock::WLocker l(m_pool->file_lock);
-    file = get_file(oid, true, get_snap_context());
+    RWLock::RLocker l(m_pool->file_lock);
+    file = get_file(oid, false, get_snap_context());
+    if (file == NULL) {
+      return cmpext_compare(cmp_bl, read_bl);
+    }
   }
 
   RWLock::RLocker l(file->lock);
-  size_t len = cmp_bl.length();
-  ensure_minimum_length(off + len, &file->data);
-  if (len > 0 && off <= len) {
-    for (uint64_t p = off; p < len; p++)  {
-      if (file->data[p] != cmp_bl[p])
-        return -MAX_ERRNO - p;
-    }
+  if (off >= file->data.length()) {
+    len = 0;
+  } else if (off + len > file->data.length()) {
+    len = file->data.length() - off;
   }
-  return 0;
+  read_bl.substr_of(file->data, off, len);
+  return cmpext_compare(cmp_bl, read_bl);
 }
 
 int TestMemIoCtxImpl::xattr_get(const std::string& oid,
