@@ -41,6 +41,7 @@ ceph:
   - ceph-mgr-diskprediction-cloud
   - ceph-mgr-diskprediction-local
   - ceph-mgr-rook
+  - ceph-mgr-ssh
   - ceph-fuse
   - cephfs-java
   - libcephfs_jni1
