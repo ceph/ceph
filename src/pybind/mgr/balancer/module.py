@@ -225,6 +225,8 @@ class Module(MgrModule):
             'name': 'begin_weekday',
             'type': 'uint',
             'default': 0,
+            'min': 0,
+            'max': 7,
             'desc': 'Restrict automatic balancing to this day of the week or later',
             'long_desc': '0 or 7 = Sunday, 1 = Monday, etc.',
             'runtime': True,
@@ -233,6 +235,8 @@ class Module(MgrModule):
             'name': 'end_weekday',
             'type': 'uint',
             'default': 7,
+            'min': 0,
+            'max': 7,
             'desc': 'Restrict automatic balancing to days of the week earlier than this',
             'long_desc': '0 or 7 = Sunday, 1 = Monday, etc.',
             'runtime': True,
@@ -241,8 +245,8 @@ class Module(MgrModule):
             'name': 'crush_compat_max_iterations',
             'type': 'uint',
             'default': 25,
-            'min': '1',
-            'max': '250',
+            'min': 1,
+            'max': 250,
             'desc': 'maximum number of iterations to attempt optimization',
             'runtime': True,
         },
@@ -258,8 +262,8 @@ class Module(MgrModule):
             'name': 'crush_compat_step',
             'type': 'float',
             'default': .5,
-            'min': '.001',
-            'max': '.999',
+            'min': .001,
+            'max': .999,
             'desc': 'aggressiveness of optimization',
             'long_desc': '.99 is very aggressive, .01 is less aggressive',
             'runtime': True,
@@ -561,7 +565,7 @@ class Module(MgrModule):
     def time_permit(self):
         local_time = time.localtime()
         time_of_day = time.strftime('%H%M', local_time)
-        weekday = local_time.tm_wday
+        weekday = (local_time.tm_wday + 1) % 7 # be compatible with C
         permit = False
 
         begin_time = self.get_module_option('begin_time')
