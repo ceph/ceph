@@ -82,7 +82,9 @@ export class RbdListComponent implements OnInit {
     this.permission = this.authStorageService.getPermissions().rbdImage;
     const getImageUri = () =>
       this.selection.first() &&
-      `${encodeURI(this.selection.first().pool_name)}/${encodeURI(this.selection.first().name)}`;
+      `${encodeURIComponent(this.selection.first().pool_name)}/${encodeURIComponent(
+        this.selection.first().name
+      )}`;
     const addAction: CdTableAction = {
       permission: 'create',
       icon: 'fa-plus',

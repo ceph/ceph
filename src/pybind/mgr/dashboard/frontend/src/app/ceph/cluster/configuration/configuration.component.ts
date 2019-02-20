@@ -87,7 +87,7 @@ export class ConfigurationComponent implements OnInit {
   ) {
     this.permission = this.authStorageService.getPermissions().configOpt;
     const getConfigOptUri = () =>
-      this.selection.first() && `${encodeURI(this.selection.first().name)}`;
+      this.selection.first() && `${encodeURIComponent(this.selection.first().name)}`;
     const editAction: CdTableAction = {
       permission: 'update',
       icon: 'fa-pencil',

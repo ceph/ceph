@@ -84,9 +84,9 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     actions.unprotect.click = () => this.toggleProtection();
     const getImageUri = () =>
       this.selection.first() &&
-      `${encodeURI(this.poolName)}/${encodeURI(this.rbdName)}/${encodeURI(
-        this.selection.first().name
-      )}`;
+      `${encodeURIComponent(this.poolName)}/${encodeURIComponent(
+        this.rbdName
+      )}/${encodeURIComponent(this.selection.first().name)}`;
     actions.clone.routerLink = () => `/block/rbd/clone/${getImageUri()}`;
     actions.copy.routerLink = () => `/block/rbd/copy/${getImageUri()}`;
     actions.rollback.click = () => this.rollbackModal();
