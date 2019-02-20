@@ -21,7 +21,7 @@ cloneimg1:
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   c800000
-  $ blkdiscard -l 100M $DEV
+  $ fallocate -z -l 100M $DEV
   $ hexdump $DEV
   0000000 0000 0000 0000 0000 0000 0000 0000 0000
   *
@@ -50,7 +50,7 @@ min((100M % 28M) / 512K, 7) = 7 objects in the last object set
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   c800000
-  $ blkdiscard -l 100M $DEV
+  $ fallocate -z -l 100M $DEV
   $ hexdump $DEV
   0000000 0000 0000 0000 0000 0000 0000 0000 0000
   *
@@ -79,7 +79,7 @@ min((100M % 92M) / 512K, 23) = 16 objects in the last object set
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   c800000
-  $ blkdiscard -l 100M $DEV
+  $ fallocate -z -l 100M $DEV
   $ hexdump $DEV
   0000000 0000 0000 0000 0000 0000 0000 0000 0000
   *
@@ -108,7 +108,7 @@ min((100M % 260M) / 512K, 65) = 65 objects in the last object set
   0000000 cdcd cdcd cdcd cdcd cdcd cdcd cdcd cdcd
   *
   c800000
-  $ blkdiscard -l 100M $DEV
+  $ fallocate -z -l 100M $DEV
   $ hexdump $DEV
   0000000 0000 0000 0000 0000 0000 0000 0000 0000
   *
