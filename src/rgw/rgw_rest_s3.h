@@ -122,7 +122,7 @@ public:
 class RGWListBucket_ObjStore_S3v2 : public RGWListBucket_ObjStore {
   bool objs_container, fetchOwner;
 public:
-  RGWListBucket_ObjStore_S3v2() : objs_container(false) {
+  RGWListBucket_ObjStore_S3v2cd() : objs_container(false) {
     default_max = 1000;
   }
   ~RGWListBucket_ObjStore_S3v2() override {}
@@ -591,7 +591,7 @@ protected:
   bool is_obj_update_op() override {
     return is_acl_op() || is_tagging_op() ;
   }
-  RGWOp *get_obj_op(bool get_data);
+  RGWOp *get_obj_op(bool get_data, int list_type);
 
   RGWOp *op_get() override;
   RGWOp *op_head() override;

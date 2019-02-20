@@ -3244,12 +3244,21 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
   return NULL;
 }
 
-RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data)
+RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data, int list_type)
 {
   // Non-website mode
   if (get_data) {
-    return new RGWListBucket_ObjStore_S3;
-  } else {
+    if(list_type == 1)
+    {
+      return new RGWListBucket_ObjStore_S3;
+    }
+    else if(list_type == 2)
+    {
+      return new RGWListBucket_ObjStore_S3v2;
+    }
+    
+  } 
+  else {
     return new RGWStatBucket_ObjStore_S3;
   }
 }
