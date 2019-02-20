@@ -235,6 +235,21 @@ TEST_F(LibRadosIoPP, ReadOpPP) {
       ASSERT_EQ(0, memcmp(read_bl1.c_str(), buf, sizeof(buf)));
       ASSERT_EQ(0, memcmp(read_bl2.c_str(), buf, sizeof(buf)));
   }
+
+  // read into a preallocated buffer with a cached crc
+  {
+      bufferlist op_bl;
+      op_bl.append(std::string(sizeof(buf), 'x'));
+      ASSERT_NE(op_bl.crc32c(0), bl.crc32c(0));  // cache 'x' crc
+
+      ObjectReadOperation op;
+      op.read(0, sizeof(buf), NULL, NULL);
+      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+
+      ASSERT_EQ(sizeof(buf), op_bl.length());
+      ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
+      ASSERT_EQ(op_bl.crc32c(0), bl.crc32c(0));
+  }
 }
 
 TEST_F(LibRadosIoPP, SparseReadOpPP) {
@@ -798,6 +813,21 @@ TEST_F(LibRadosIoECPP, ReadOpPP) {
       ASSERT_EQ(0, rval2);
       ASSERT_EQ(0, memcmp(read_bl1.c_str(), buf, sizeof(buf)));
       ASSERT_EQ(0, memcmp(read_bl2.c_str(), buf, sizeof(buf)));
+  }
+
+  // read into a preallocated buffer with a cached crc
+  {
+      bufferlist op_bl;
+      op_bl.append(std::string(sizeof(buf), 'x'));
+      ASSERT_NE(op_bl.crc32c(0), bl.crc32c(0));  // cache 'x' crc
+
+      ObjectReadOperation op;
+      op.read(0, sizeof(buf), NULL, NULL);
+      ASSERT_EQ(0, ioctx.operate("foo", &op, &op_bl));
+
+      ASSERT_EQ(sizeof(buf), op_bl.length());
+      ASSERT_EQ(0, memcmp(op_bl.c_str(), buf, sizeof(buf)));
+      ASSERT_EQ(op_bl.crc32c(0), bl.crc32c(0));
   }
 }
 

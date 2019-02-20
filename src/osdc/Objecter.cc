@@ -3269,6 +3269,7 @@ void Objecter::_send_op(Op *op, MOSDOp *m)
   if (op->outbl &&
       op->ontimeout == 0 &&  // only post rx_buffer if no timeout; see #9582
       op->outbl->length()) {
+    op->outbl->invalidate_crc();  // messenger writes through c_str()
     ldout(cct, 20) << " posting rx buffer for " << op->tid << " on " << con
 		   << dendl;
     op->con = con;
