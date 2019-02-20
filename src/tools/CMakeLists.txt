@@ -100,10 +100,12 @@ add_executable(ceph-authtool ${ceph_authtool_srcs})
 target_link_libraries(ceph-authtool global ${EXTRALIBS} ${CRYPTO_LIBS})
 install(TARGETS ceph-authtool DESTINATION bin)
 
+if(WITH_TESTS)
 set(cephdeduptool_srcs ceph_dedup_tool.cc)
 add_executable(cephdeduptool ${cephdeduptool_srcs})
 target_link_libraries(cephdeduptool librados-cxx global cls_cas_client)
 install(TARGETS cephdeduptool DESTINATION bin)
+endif(WITH_TESTS)
 
 if(WITH_CEPHFS)
   add_subdirectory(cephfs)
