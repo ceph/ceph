@@ -3085,6 +3085,12 @@ int RGWRunBucketSyncCoroutine::operate()
     do {
       if (sync_status.state == rgw_bucket_shard_sync_info::StateInit) {
         yield call(new RGWInitBucketShardSyncStatusCoroutine(sync_env, bs, sync_status));
+        if (retcode == -ENOENT) {
+          ldout(sync_env->cct, 0) << "bucket sync disabled" << dendl;
+          lease_cr->abort(); // deleted lease object, abort instead of unlock
+          drain_all();
+          return set_cr_done();
+        }
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: init sync on " << bucket_shard_str{bs}
               << " failed, retcode=" << retcode << dendl;
