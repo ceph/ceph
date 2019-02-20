@@ -47,7 +47,7 @@ int RGWCallStatRemoteObjCR::operate() {
                                   bucket_info, key, &mtime, &size, &etag, &attrs, &headers));
     }
     if (retcode < 0) {
-      ldout(sync_env->cct, 0) << "RGWStatRemoteObjCR() returned " << retcode << dendl;
+      ldout(sync_env->cct, 10) << "RGWStatRemoteObjCR() returned " << retcode << dendl;
       return set_cr_error(retcode);
     }
     ldout(sync_env->cct, 20) << "stat of remote obj: z=" << sync_env->source_zone
@@ -61,7 +61,7 @@ int RGWCallStatRemoteObjCR::operate() {
       }
     }
     if (retcode < 0) {
-      ldout(sync_env->cct, 0) << "RGWStatRemoteObjCR() callback returned " << retcode << dendl;
+      ldout(sync_env->cct, 10) << "RGWStatRemoteObjCR() callback returned " << retcode << dendl;
       return set_cr_error(retcode);
     }
     return set_cr_done();

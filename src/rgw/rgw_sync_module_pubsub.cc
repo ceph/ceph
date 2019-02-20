@@ -10,6 +10,8 @@
 #include "rgw_cr_tools.h"
 #include "rgw_op.h"
 #include "rgw_pubsub.h"
+#include "rgw_pubsub_push.h"
+#include "rgw_perf_counters.h"
 
 #include <boost/asio/yield.hpp>
 
@@ -44,6 +46,7 @@ config:
             "name": <subscription-name>,
             "topic": <topic>,
             "push_endpoint": <endpoint>,
+            "args:" <arg list>.            # any push endpoint specific args (include all args)
             "data_bucket": <bucket>,       # override name of bucket where subscription data will be store
             "data_oid_prefix": <prefix>    # set prefix for subscription data object ids
         },
@@ -77,6 +80,7 @@ config:
             "name": <subscription-name>,
             "topic": <topic>,
             "push_endpoint": <endpoint>,
+            "args:" <arg list>.            # any push endpoint specific args (include all args)
             "data_bucket": <bucket>,       # override name of bucket where subscription data will be store
             "data_oid_prefix": <prefix>    # set prefix for subscription data object ids
         },
@@ -86,26 +90,47 @@ config:
 
 */
 
+// utility function to convert the args list from string format 
+// (ampresend separated with equal sign) to prased structure
+RGWHTTPArgs string_to_args(const std::string& str_args) {
+  RGWHTTPArgs args;
+  args.set(str_args);
+  args.parse();
+  return args;
+}
+
 struct PSSubConfig { /* subscription config */
   string name;
   string topic;
-  string push_endpoint;
+  string push_endpoint_name;
+  string push_endpoint_args;
+  RGWPubSubEndpoint::Ptr push_endpoint;
 
   string data_bucket_name;
   string data_oid_prefix;
 
-  void from_user_conf(const rgw_pubsub_sub_config& uc) {
+  void from_user_conf(CephContext *cct, const rgw_pubsub_sub_config& uc) {
     name = uc.name;
     topic = uc.topic;
-    push_endpoint = uc.dest.push_endpoint;
+    push_endpoint_name = uc.dest.push_endpoint;
     data_bucket_name = uc.dest.bucket_name;
     data_oid_prefix = uc.dest.oid_prefix;
+    if (push_endpoint_name != "") {
+      push_endpoint_args = uc.dest.push_endpoint_args;
+      try {
+        push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args));
+      } catch (const RGWPubSubEndpoint::configuration_error& e) {
+          ldout(cct, 0) << "ERROR: failed to create push endpoint: " 
+            << push_endpoint_name << " due to: " << e.what() << dendl;
+      }
+    }
   }
 
   void dump(Formatter *f) const {
     encode_json("name", name, f);
     encode_json("topic", topic, f);
-    encode_json("push_endpoint", push_endpoint, f);
+    encode_json("push_endpoint", push_endpoint_name, f);
+    encode_json("args", push_endpoint_args, f);
     encode_json("data_bucket_name", data_bucket_name, f);
     encode_json("data_oid_prefix", data_oid_prefix, f);
   }
@@ -115,10 +140,19 @@ struct PSSubConfig { /* subscription config */
             const string& default_oid_prefix) {
     name = config["name"];
     topic = config["topic"];
-    push_endpoint = config["push_endpoint"];
+    push_endpoint_name = config["push_endpoint"];
     string default_bucket_name = data_bucket_prefix + name;
     data_bucket_name = config["data_bucket"](default_bucket_name.c_str());
     data_oid_prefix = config["data_oid_prefix"](default_oid_prefix.c_str());
+    if (!push_endpoint_name.empty()) {
+      push_endpoint_args = config["push_endpoint_args"];
+      try {
+        push_endpoint = RGWPubSubEndpoint::create(push_endpoint_name, topic, string_to_args(push_endpoint_args));
+      } catch (const RGWPubSubEndpoint::configuration_error& e) {
+        ldout(cct, 0) << "ERROR: failed to create push endpoint: " 
+          << push_endpoint_name << " due to: " << e.what() << dendl;
+      }
+    }
   }
 };
 
@@ -432,12 +466,12 @@ struct PSEnv {
 using PSEnvRef = std::shared_ptr<PSEnv>;
 
 class PSEvent {
-  EventRef event;
+  const EventRef event;
 
 public:
-  PSEvent(EventRef& _event) : event(_event) {}
+  PSEvent(const EventRef& _event) : event(_event) {}
 
-  void format(bufferlist *bl) {
+  void format(bufferlist *bl) const {
     bl->append(json_str("event", *event));
   }
 
@@ -445,7 +479,7 @@ public:
     encode(*event, bl);
   }
 
-  const string& id() {
+  const string& id() const {
     return event->id;
   }
 };
@@ -547,9 +581,8 @@ using PSSubscriptionRef = std::shared_ptr<PSSubscription>;
 
 class PSSubscription {
   class InitCR;
-  class StoreEventCR;
   friend class InitCR;
-  friend class StoreEventCR;
+  friend class RGWPSHandleObjEventCR;
 
   RGWDataSyncEnv *sync_env;
   PSEnvRef env;
@@ -564,7 +597,6 @@ class PSSubscription {
     string path;
   } push;
 
-  class InitCR;
   InitCR *init_cr{nullptr};
 
   class InitBucketLifecycleCR : public RGWCoroutine {
@@ -643,35 +675,6 @@ class PSSubscription {
     PSSubConfigRef& sub_conf;
     int i;
 
-    bool split_endpoint(const string& push_endpoint, string *addr, string *path) {
-      if (push_endpoint.size() < 9) { /* http://x/ */
-        return false;
-      }
-      size_t pos = push_endpoint.find(':');
-      if (pos == string::npos || pos >= push_endpoint.size() - 1) {
-        return false;
-      }
-
-      string protocol = push_endpoint.substr(0, pos);
-      string s = push_endpoint.substr(pos + 1);
-
-      if (s.size() < 4) { /* //x/ */
-        return false;
-      }
-
-      size_t slash_pos = s.find('/', 2);
-      if (slash_pos == string::npos) {
-        return false;
-      }
-
-      pos += slash_pos;
-
-      *addr = push_endpoint.substr(0, pos + 1);
-      *path = push_endpoint.substr(pos + 1);
-
-      return true;
-    }
-
   public:
     InitCR(RGWDataSyncEnv *_sync_env,
            PSSubscriptionRef& _sub) : RGWSingletonCR<bool>(_sync_env->cct),
@@ -715,17 +718,6 @@ class PSSubscription {
               return set_cr_error(retcode);
             }
 
-            if (!sub_conf->push_endpoint.empty()) {
-              string remote_id = string("pubsub:sub:") + sub->get_bucket_info_result->bucket_info.owner.to_str() + ":" + sub_conf->name;
-              string addr;
-              if (split_endpoint(sub_conf->push_endpoint, &addr, &sub->push.path)) {
-                list<string> endpoints{addr};
-                sub->push.conn = std::make_shared<RGWRESTConn>(sync_env->cct, sync_env->store->svc.zone, remote_id, endpoints);
-              } else {
-                ldout(sync_env->cct, 20) << "failed to split push endpoint: " << sub_conf->push_endpoint << dendl;
-              }
-            }
-
             return set_cr_done();
           }
 
@@ -753,32 +745,25 @@ class PSSubscription {
     }
   };
 
-  using PushCR = RGWPostRESTResourceCR<rgw_pubsub_event, int>;
-
   class StoreEventCR : public RGWCoroutine {
-    RGWDataSyncEnv *sync_env;
-    PSSubscriptionRef sub;
-    EventRef event;
-    PSEvent pse;
-    PSConfigRef& conf;
-    PSSubConfigRef& sub_conf;
-    rgw_object_simple_put_params put_obj;
-    string oid_prefix;
-    int i;
+    RGWDataSyncEnv* const sync_env;
+    const PSSubscriptionRef sub;
+    const PSEvent pse;
+    const string oid_prefix;
+
   public:
-    StoreEventCR(RGWDataSyncEnv *_sync_env,
-                 PSSubscriptionRef& _sub,
-                 EventRef& _event) : RGWCoroutine(_sync_env->cct),
+    StoreEventCR(RGWDataSyncEnv* const _sync_env,
+                 const PSSubscriptionRef& _sub,
+                 const EventRef& _event) : RGWCoroutine(_sync_env->cct),
                                      sync_env(_sync_env),
                                      sub(_sub),
-                                     event(_event),
                                      pse(_event),
-                                     conf(sub->env->conf),
-                                     sub_conf(sub->sub_conf) {
-      oid_prefix = sub->sub_conf->data_oid_prefix;
+                                     oid_prefix(sub->sub_conf->data_oid_prefix) {
     }
 
     int operate() override {
+      // TODO: in case of "push-only" subscription no need to store event
+      rgw_object_simple_put_params put_obj;
       reenter(this) {
 
         put_obj.bucket = sub->bucket;
@@ -798,23 +783,49 @@ class PSSubscription {
                                             sync_env->store,
                                             put_obj));
         if (retcode < 0) {
-          ldout(sync_env->cct, 0) << "ERROR: failed to store event: " << put_obj.bucket << "/" << put_obj.key << " ret=" << retcode << dendl;
+          ldout(sync_env->cct, 10) << "ERROR: failed to store event: " << put_obj.bucket << "/" << put_obj.key << " ret=" << retcode << dendl;
+          if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_fail);
+          return set_cr_error(retcode);
+        } else {
+          ldout(sync_env->cct, 20) << "event stored: " << put_obj.bucket << "/" << put_obj.key << dendl;
+          if (perfcounter) perfcounter->inc(l_rgw_pubsub_store_ok);
+        }
+
+        return set_cr_done();
+      }
+      return 0;
+    }
+  };
+
+  class PushEventCR : public RGWCoroutine {
+    RGWDataSyncEnv* const sync_env;
+    const EventRef event;
+    const PSSubConfigRef& sub_conf;
+
+  public:
+    PushEventCR(RGWDataSyncEnv* const _sync_env,
+                 const PSSubscriptionRef& _sub,
+                 const EventRef& _event) : RGWCoroutine(_sync_env->cct),
+                                     sync_env(_sync_env),
+                                     event(_event),
+                                     sub_conf(_sub->sub_conf) {
+    }
+
+    int operate() override {
+      reenter(this) {
+        ceph_assert(sub_conf->push_endpoint);
+        yield call(sub_conf->push_endpoint->send_to_completion_async(*event.get(), sync_env));
+      
+        if (retcode < 0) {
+          ldout(sync_env->cct, 10) << "ERROR: failed to push event: " << event->id <<
+            " to endpoint: " << sub_conf->push_endpoint_name << " ret=" << retcode << dendl;
+          if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
           return set_cr_error(retcode);
         }
-
-        if (sub->push.conn) {
-          yield {
-            rgw_http_param_pair params[] = {
-              { nullptr, nullptr }
-            };
-
-            call(new PushCR(sync_env->cct, sub->push.conn.get(),
-                            sync_env->http_manager,
-                            sub->push.path,
-                            params, *event, nullptr));
-          }
-        }
-
+        
+        ldout(sync_env->cct, 10) << "event: " << event->id <<
+          " pushed to endpoint: " << sub_conf->push_endpoint_name << dendl;
+        if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
         return set_cr_done();
       }
       return 0;
@@ -835,7 +846,7 @@ public:
                                       env(_env),
                                       sub_conf(std::make_shared<PSSubConfig>()),
                                       data_access(std::make_shared<RGWDataAccess>(sync_env->store)) {
-    sub_conf->from_user_conf(user_sub_conf);
+    sub_conf->from_user_conf(sync_env->cct, user_sub_conf);
   }
   virtual ~PSSubscription() {
     if (init_cr) {
@@ -857,10 +868,13 @@ public:
     return init_cr->execute(caller);
   }
 
-  static RGWCoroutine *store_event_cr(RGWDataSyncEnv *sync_env, PSSubscriptionRef& sub, EventRef& event) {
+  static RGWCoroutine *store_event_cr(RGWDataSyncEnv* const sync_env, const PSSubscriptionRef& sub, const EventRef& event) {
     return new StoreEventCR(sync_env, sub, event);
   }
 
+  static RGWCoroutine *push_event_cr(RGWDataSyncEnv* const sync_env, const PSSubscriptionRef& sub, const EventRef& event) {
+    return new PushEventCR(sync_env, sub, event);
+  }
   friend class InitCR;
 };
 
@@ -904,7 +918,7 @@ class PSManager
       reenter(this) {
         if (owner.empty()) {
           if (!conf->find_sub(sub_name, &sub_conf)) {
-            ldout(sync_env->cct, 0) << "ERROR: could not find subscription config: name=" << sub_name << dendl;
+            ldout(sync_env->cct, 10) << "ERROR: could not find subscription config: name=" << sub_name << dendl;
             mgr->remove_get_sub(owner, sub_name);
             return set_cr_error(-ENOENT);
           }
@@ -931,7 +945,7 @@ class PSManager
 
         yield (*ref)->call_init_cr(this);
         if (retcode < 0) {
-          ldout(sync_env->cct, 0) << "ERROR: failed to init subscription" << dendl;
+          ldout(sync_env->cct, 10) << "ERROR: failed to init subscription" << dendl;
           mgr->remove_get_sub(owner, sub_name);
           return set_cr_error(retcode);
         }
@@ -992,7 +1006,8 @@ public:
     return std::shared_ptr<PSManager>(new PSManager(_sync_env, _env));
   }
 
-  static int call_get_subscription_cr(RGWDataSyncEnv *sync_env, PSManagerRef& mgr, RGWCoroutine *caller, const rgw_user& owner, const string& sub_name, PSSubscriptionRef *ref) {
+  static int call_get_subscription_cr(RGWDataSyncEnv *sync_env, PSManagerRef& mgr, 
+      RGWCoroutine *caller, const rgw_user& owner, const string& sub_name, PSSubscriptionRef *ref) {
     if (mgr->find_sub_instance(owner, sub_name, ref)) {
       /* found it! nothing to execute */
       ldout(sync_env->cct, 20) << __func__ << "(): found sub instance" << dendl;
@@ -1141,33 +1156,37 @@ public:
   }
 };
 
-class RGWPSHandleObjEvent : public RGWCoroutine {
-  RGWDataSyncEnv *sync_env;
-  PSEnvRef env;
-  std::array<rgw_user, 2> owners;
-  rgw_user& owner;
-  rgw_user& no_owner;
-  std::array<rgw_user, 2>::iterator oiter;
-  EventRef event;
-
-  vector<PSTopicConfigRef>::iterator titer;
-  set<string>::iterator siter;
+class RGWPSHandleObjEventCR : public RGWCoroutine {
+  RGWDataSyncEnv* const sync_env;
+  const PSEnvRef env;
+  const rgw_user& owner;
+  const EventRef event;
+  const TopicsRef topics;
+  const std::array<rgw_user, 2> owners;
+  bool has_subscriptions;
+  bool event_handled;
+  bool sub_conf_found;
   PSSubscriptionRef sub;
-  TopicsRef topics;
+  std::array<rgw_user, 2>::const_iterator oiter;
+  vector<PSTopicConfigRef>::const_iterator titer;
+  set<string>::const_iterator siter;
+  int last_sub_conf_error;
+
 public:
-  RGWPSHandleObjEvent(RGWDataSyncEnv *_sync_env,
-                      PSEnvRef _env,
+  RGWPSHandleObjEventCR(RGWDataSyncEnv* const _sync_env,
+                      const PSEnvRef _env,
                       const rgw_user& _owner,
-                      EventRef& _event,
-                      TopicsRef& _topics) : RGWCoroutine(_sync_env->cct),
+                      const EventRef& _event,
+                      const TopicsRef& _topics) : RGWCoroutine(_sync_env->cct),
                                           sync_env(_sync_env),
                                           env(_env),
-                                          owner(owners[0]),
-                                          no_owner(owners[1]),
+                                          owner(_owner),
                                           event(_event),
-                                          topics(_topics) {
-    owner = _owner;
-  }
+                                          topics(_topics),
+                                          owners({owner, rgw_user{}}),
+                                          has_subscriptions(false),
+                                          event_handled(false) {}
+
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 10) << ": handle event: obj: z=" << sync_env->source_zone
@@ -1175,34 +1194,61 @@ public:
                                << " owner=" << owner << dendl;
 
       ldout(sync_env->cct, 20) << "pubsub: " << topics->size() << " topics found for path" << dendl;
+      
+      if (topics->empty()) {
+        // if event has no topics - no further processing is needed
+        return set_cr_done();
+      }
+
+      if (perfcounter) perfcounter->inc(l_rgw_pubsub_event_triggered);
 
       for (titer = topics->begin(); titer != topics->end(); ++titer) {
-        ldout(sync_env->cct, 10) << ": notification for " << event->source << ": topic=" << (*titer)->name << ", has " << (*titer)->subs.size() << " subscriptions" << dendl;
+        ldout(sync_env->cct, 10) << ": notification for " << event->source << ": topic=" << 
+          (*titer)->name << ", has " << (*titer)->subs.size() << " subscriptions" << dendl;
 
         for (siter = (*titer)->subs.begin(); siter != (*titer)->subs.end(); ++siter) {
           ldout(sync_env->cct, 10) << ": subscription: " << *siter << dendl;
-
+          has_subscriptions = true;
+          sub_conf_found = false;
           for (oiter = owners.begin(); oiter != owners.end(); ++oiter) {
             /*
              * once for the global subscriptions, once for the user specific subscriptions
              */
             yield PSManager::call_get_subscription_cr(sync_env, env->manager, this, *oiter, *siter, &sub);
             if (retcode < 0) {
-              ldout(sync_env->cct, 10) << "ERROR: failed to find subscription config for subscription=" << *siter << " owner=" << *oiter << " ret=" << retcode << dendl;
+              last_sub_conf_error = retcode;
               continue;
             }
+            sub_conf_found = true;
 
             ldout(sync_env->cct, 20) << "storing event for subscription=" << *siter << " owner=" << *oiter << " ret=" << retcode << dendl;
             yield call(PSSubscription::store_event_cr(sync_env, sub, event));
             if (retcode < 0) {
               ldout(sync_env->cct, 10) << "ERROR: failed to store event for subscription=" << *siter << " ret=" << retcode << dendl;
-              continue;
+            } else {
+              event_handled = true;
+            }
+            if (sub->sub_conf->push_endpoint) {
+                ldout(sync_env->cct, 20) << "push event for subscription=" << *siter << " owner=" << *oiter << " ret=" << retcode << dendl;
+              yield call(PSSubscription::push_event_cr(sync_env, sub, event));
+              if (retcode < 0) {
+                ldout(sync_env->cct, 10) << "ERROR: failed to push event for subscription=" << *siter << " ret=" << retcode << dendl;
+              } else {
+                event_handled = true;
+              }
             }
           }
-
-          /* FIXME: add push notification */
-
+          if (!sub_conf_found) {
+            // could not find conf for subscription at user or global levels
+            ldout(sync_env->cct, 10) << "ERROR: failed to find subscription config for subscription=" << *siter 
+              << " ret=" << last_sub_conf_error << dendl;
+          }
         }
+      }
+      if (has_subscriptions && !event_handled) {
+        // event is considered "lost" of it has subscriptions on any of its topics
+        // but it was not stored in, or pushed to, any of them
+        if (perfcounter) perfcounter->inc(l_rgw_pubsub_event_lost);
       }
       if (retcode < 0) {
         return set_cr_error(retcode);
@@ -1250,7 +1296,7 @@ public:
                        EVENT_NAME_OBJECT_CREATE, &event);
       }
 
-      yield call(new RGWPSHandleObjEvent(sync_env, env, bucket_info.owner, event, topics));
+      yield call(new RGWPSHandleObjEventCR(sync_env, env, bucket_info.owner, event, topics));
       if (retcode < 0) {
         return set_cr_error(retcode);
       }
@@ -1366,7 +1412,7 @@ public:
                        event_name, &event);
       }
 
-      yield call(new RGWPSHandleObjEvent(sync_env, env, owner, event, topics));
+      yield call(new RGWPSHandleObjEventCR(sync_env, env, owner, event, topics));
       if (retcode < 0) {
         return set_cr_error(retcode);
       }

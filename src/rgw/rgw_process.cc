@@ -15,6 +15,7 @@
 #include "rgw_loadgen.h"
 #include "rgw_client_io.h"
 #include "rgw_opa.h"
+#include "rgw_perf_counters.h"
 
 #include "services/svc_zone_utils.h"
 
@@ -55,6 +56,31 @@ auto schedule_request(Scheduler *scheduler, req_state *s, RGWOp *op)
                                      s->yield);
 }
 
+bool RGWProcess::RGWWQ::_enqueue(RGWRequest* req) {
+  process->m_req_queue.push_back(req);
+  perfcounter->inc(l_rgw_qlen);
+  dout(20) << "enqueued request req=" << hex << req << dec << dendl;
+  _dump_queue();
+  return true;
+}
+
+RGWRequest* RGWProcess::RGWWQ::_dequeue() {
+  if (process->m_req_queue.empty())
+    return NULL;
+  RGWRequest *req = process->m_req_queue.front();
+  process->m_req_queue.pop_front();
+  dout(20) << "dequeued request req=" << hex << req << dec << dendl;
+  _dump_queue();
+  perfcounter->inc(l_rgw_qlen, -1);
+  return req;
+}
+
+void RGWProcess::RGWWQ::_process(RGWRequest *req, ThreadPool::TPHandle &) {
+  perfcounter->inc(l_rgw_qactive);
+  process->handle_request(req);
+  process->req_throttle.put(1);
+  perfcounter->inc(l_rgw_qactive, -1);
+}
 
 int rgw_process_authenticated(RGWHandler_REST * const handler,
                               RGWOp *& op,
