@@ -29,6 +29,8 @@ export class IscsiTargetFormComponent implements OnInit {
   minimum_gateways = 1;
   target_default_controls: any;
   disk_default_controls: any;
+  backstores: string[];
+  default_backstore: string;
 
   isEdit = false;
   target_iqn: string;
@@ -129,6 +131,8 @@ export class IscsiTargetFormComponent implements OnInit {
       this.minimum_gateways = data[3].config.minimum_gateways;
       this.target_default_controls = data[3].target_default_controls;
       this.disk_default_controls = data[3].disk_default_controls;
+      this.backstores = data[3].backstores;
+      this.default_backstore = data[3].default_backstore;
 
       this.createForm();
 
@@ -178,7 +182,11 @@ export class IscsiTargetFormComponent implements OnInit {
     _.forEach(res.disks, (disk) => {
       const id = `${disk.pool}/${disk.image}`;
       disks.push(id);
-      this.imagesSettings[id] = disk.controls;
+      this.imagesSettings[id] = {
+        backstore: disk.backstore
+      };
+      this.imagesSettings[id][disk.backstore] = disk.controls;
+
       this.onImageSelection({ option: { name: id, selected: true } });
     });
     this.targetForm.patchValue({
@@ -268,7 +276,10 @@ export class IscsiTargetFormComponent implements OnInit {
 
     if (option.selected) {
       if (!this.imagesSettings[option.name]) {
-        this.imagesSettings[option.name] = {};
+        this.imagesSettings[option.name] = {
+          backstore: this.default_backstore
+        };
+        this.imagesSettings[option.name][this.default_backstore] = {};
       }
 
       _.forEach(this.imagesInitiatorSelections, (selections, i) => {
@@ -507,10 +518,12 @@ export class IscsiTargetFormComponent implements OnInit {
     // Disks
     formValue.disks.forEach((disk) => {
       const imageSplit = disk.split('/');
+      const backstore = this.imagesSettings[disk].backstore;
       request.disks.push({
         pool: imageSplit[0],
         image: imageSplit[1],
-        controls: this.imagesSettings[disk]
+        backstore: backstore,
+        controls: this.imagesSettings[disk][backstore]
       });
     });
 
@@ -607,7 +620,8 @@ export class IscsiTargetFormComponent implements OnInit {
     const initialState = {
       imagesSettings: this.imagesSettings,
       image: image,
-      disk_default_controls: this.disk_default_controls
+      disk_default_controls: this.disk_default_controls,
+      backstores: this.backstores
     };
 
     this.modalRef = this.modalService.show(IscsiTargetImageSettingsModalComponent, {

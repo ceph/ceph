@@ -20,15 +20,21 @@ describe('IscsiTargetFormComponent', () => {
   const SETTINGS = {
     config: { minimum_gateways: 2 },
     disk_default_controls: {
-      hw_max_sectors: 1024,
-      osd_op_timeout: 30,
-      qfull_timeout: 5
+      'backstore:1': {
+        hw_max_sectors: 1024,
+        osd_op_timeout: 30
+      },
+      'backstore:2': {
+        qfull_timeout: 5
+      }
     },
     target_default_controls: {
       cmdsn_depth: 128,
       dataout_timeout: 20,
       immediate_data: 'Yes'
-    }
+    },
+    backstores: ['backstore:1', 'backstore:2'],
+    default_backstore: 'backstore:1'
   };
 
   const LIST_TARGET = [
@@ -177,7 +183,12 @@ describe('IscsiTargetFormComponent', () => {
   it('should prepare data when selecting an image', () => {
     expect(component.imagesSettings).toEqual({});
     component.onImageSelection({ option: { name: 'rbd/disk_1', selected: true } });
-    expect(component.imagesSettings).toEqual({ 'rbd/disk_1': {} });
+    expect(component.imagesSettings).toEqual({
+      'rbd/disk_1': {
+        backstore: 'backstore:1',
+        'backstore:1': {}
+      }
+    });
   });
 
   it('should clean data when removing an image', () => {
@@ -197,7 +208,12 @@ describe('IscsiTargetFormComponent', () => {
     component.onImageSelection({ option: { name: 'rbd/disk_1', selected: false } });
 
     expect(component.groups.controls[0].value).toEqual({ disks: [], group_id: 'foo', members: [] });
-    expect(component.imagesSettings).toEqual({ 'rbd/disk_1': {} });
+    expect(component.imagesSettings).toEqual({
+      'rbd/disk_1': {
+        backstore: 'backstore:1',
+        'backstore:1': {}
+      }
+    });
   });
 
   describe('should test initiators', () => {
@@ -332,7 +348,7 @@ describe('IscsiTargetFormComponent', () => {
             luns: []
           }
         ],
-        disks: [{ controls: {}, image: 'disk_1', pool: 'rbd' }],
+        disks: [{ backstore: 'backstore:1', controls: {}, image: 'disk_1', pool: 'rbd' }],
         groups: [
           { disks: [{ image: 'disk_1', pool: 'rbd' }], group_id: 'foo', members: ['iqn.initiator'] }
         ],
@@ -360,9 +376,13 @@ describe('IscsiTargetFormComponent', () => {
             luns: []
           }
         ],
-        disks: [{ controls: {}, image: 'disk_1', pool: 'rbd' }],
+        disks: [{ backstore: 'backstore:1', controls: {}, image: 'disk_1', pool: 'rbd' }],
         groups: [
-          { disks: [{ image: 'disk_1', pool: 'rbd' }], group_id: 'foo', members: ['iqn.initiator'] }
+          {
+            disks: [{ image: 'disk_1', pool: 'rbd' }],
+            group_id: 'foo',
+            members: ['iqn.initiator']
+          }
         ],
         portals: [
           { host: 'node1', ip: '192.168.100.201' },

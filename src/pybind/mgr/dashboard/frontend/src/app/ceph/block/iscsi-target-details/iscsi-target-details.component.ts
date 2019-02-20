@@ -100,7 +100,11 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
     const disks = [];
     _.forEach(this.selectedItem.disks, (disk) => {
       const id = 'disk_' + disk.pool + '_' + disk.image;
-      this.metadata[id] = disk.controls;
+      this.metadata[id] = {
+        controls: disk.controls,
+        backstore: disk.backstore
+      };
+
       disks.push({
         value: `${disk.pool}/${disk.image}`,
         id: id
@@ -235,12 +239,17 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
         });
       } else if (e.node.id.toString().startsWith('disk_')) {
         this.columns[2].isHidden = false;
-        this.data = _.map(this.settings.disk_default_controls, (value, key) => {
+        this.data = _.map(this.settings.disk_default_controls[tempData.backstore], (value, key) => {
           return {
             displayName: key,
             default: value,
-            current: tempData[key] || value
+            current: !_.isUndefined(tempData.controls[key]) ? tempData.controls[key] : value
           };
+        });
+        this.data.push({
+          displayName: 'backstore',
+          default: this.settings.default_backstore,
+          current: tempData.backstore
         });
       } else {
         this.columns[2].isHidden = true;
