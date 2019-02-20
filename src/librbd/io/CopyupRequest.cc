@@ -118,12 +118,6 @@ void CopyupRequest<I>::complete_requests(int r) {
 
 template <typename I>
 bool CopyupRequest<I>::send_copyup() {
-  bool copy_on_read = m_pending_requests.empty();
-  bool add_copyup_op = !m_copyup_data.is_zero();
-  if (!add_copyup_op) {
-    m_copyup_data.clear();
-  }
-
   ldout(m_ictx->cct, 20) << "oid " << m_oid << dendl;
   m_state = STATE_COPYUP;
 
@@ -133,14 +127,17 @@ bool CopyupRequest<I>::send_copyup() {
 
   std::vector<librados::snap_t> snaps;
 
+  bool copy_on_read = m_pending_requests.empty();
+  bool deep_copyup = !snapc.snaps.empty() && !m_copyup_data.is_zero();
+  if (m_copyup_data.is_zero()) {
+    m_copyup_data.clear();
+  }
+
   Mutex::Locker locker(m_lock);
   int r;
-  if (copy_on_read || (!snapc.snaps.empty() && add_copyup_op)) {
-
+  if (copy_on_read || deep_copyup) {
     librados::ObjectWriteOperation copyup_op;
     copyup_op.exec("rbd", "copyup", m_copyup_data);
-    m_copyup_data.clear();
-
     ObjectRequest<I>::add_write_hint(*m_ictx, &copyup_op);
 
     // send only the copyup request with a blank snapshot context so that
@@ -148,12 +145,10 @@ bool CopyupRequest<I>::send_copyup() {
     // this is a CoW request, a second request will be created for the
     // actual modification.
     m_pending_copyups++;
-
     ldout(m_ictx->cct, 20) << "copyup with empty snapshot context" << dendl;
-    librados::AioCompletion *comp = util::create_rados_callback(this);
 
-    m_data_ctx.dup(m_ictx->data_ctx);
-    r = m_data_ctx.aio_operate(
+    librados::AioCompletion *comp = util::create_rados_callback(this);
+    r = m_ictx->data_ctx.aio_operate(
       m_oid, comp, &copyup_op, 0, snaps,
       (m_trace.valid() ? m_trace.get_info() : nullptr));
     ceph_assert(r == 0);
@@ -162,16 +157,29 @@ bool CopyupRequest<I>::send_copyup() {
 
   if (!copy_on_read) {
     librados::ObjectWriteOperation write_op;
-    write_op.exec("rbd", "copyup", m_copyup_data);
+    if (!deep_copyup) {
+      write_op.exec("rbd", "copyup", m_copyup_data);
+      ObjectRequest<I>::add_write_hint(*m_ictx, &write_op);
+    }
 
     // merge all pending write ops into this single RADOS op
-    ObjectRequest<I>::add_write_hint(*m_ictx, &write_op);
     for (auto req : m_pending_requests) {
       ldout(m_ictx->cct, 20) << "add_copyup_ops " << req << dendl;
       req->add_copyup_ops(&write_op);
     }
 
+    // compare-and-write doesn't add any write ops (copyup+cmpext+write
+    // can't be executed in the same RADOS op because, unless the object
+    // was already present in the clone, cmpext wouldn't see it)
+    if (!write_op.size()) {
+      return false;
+    }
+
     m_pending_copyups++;
+    ldout(m_ictx->cct, 20) << (!deep_copyup && write_op.size() > 2 ?
+                               "copyup + ops" : !deep_copyup ?
+                                                "copyup" : "ops")
+                           << " with current snapshot context" << dendl;
 
     snaps.insert(snaps.end(), snapc.snaps.begin(), snapc.snaps.end());
     librados::AioCompletion *comp = util::create_rados_callback(this);
@@ -274,7 +282,7 @@ bool CopyupRequest<I>::should_complete(int *r) {
   ldout(cct, 20) << "oid " << m_oid
                  << ", r " << *r << dendl;
 
-  uint64_t pending_copyups;
+  unsigned pending_copyups;
   switch (m_state) {
   case STATE_READ_FROM_PARENT:
     ldout(cct, 20) << "READ_FROM_PARENT" << dendl;
