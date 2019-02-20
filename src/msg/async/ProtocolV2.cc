@@ -1432,12 +1432,15 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
 
   if (session_stream_handlers.rx) {
     ceph_assert(session_stream_handlers.rx);
+
     session_stream_handlers.rx->reset_rx_handler();
     preamble = session_stream_handlers.rx->authenticated_decrypt_update(
-      std::move(preamble), 8);
+      std::move(preamble), segment_t::DEFAULT_ALIGNMENT);
+
     ldout(cct, 10) << __func__ << " got encrypted preamble."
                    << " after decrypt premable.length()=" << preamble.length()
                    << dendl;
+
     ldout(cct, 30) << __func__ << " preamble after decrypt\n";
     preamble.hexdump(*_dout);
     *_dout << dendl;
@@ -1697,7 +1700,8 @@ CtPtr ProtocolV2::handle_message() {
 
     rx_segments_data[0] = \
       session_stream_handlers.rx->authenticated_decrypt_update(
-	std::move(rx_segments_data[0]), 8);
+	std::move(rx_segments_data[0]),
+	segment_t::DEFAULT_ALIGNMENT);
   }
   MessageHeaderFrame header_frame(std::move(rx_segments_data[0]));
   ceph_msg_header2 &header = header_frame.header();
@@ -1865,18 +1869,18 @@ CtPtr ProtocolV2::handle_message_complete() {
 
     if (front.length()) {
       front = session_stream_handlers.rx->authenticated_decrypt_update(
-        std::move(front), 8);
+        std::move(front), segment_t::DEFAULT_ALIGNMENT);
     }
     if (middle.length()) {
       middle = session_stream_handlers.rx->authenticated_decrypt_update(
-        std::move(middle), 8);
+        std::move(middle), segment_t::DEFAULT_ALIGNMENT);
     }
     if (data.length()) {
       data = session_stream_handlers.rx->authenticated_decrypt_update(
-        std::move(data), 8);
+        std::move(data), segment_t::DEFAULT_ALIGNMENT);
     }
     session_stream_handlers.rx->authenticated_decrypt_update_final(
-      std::move(extra), 8);
+      std::move(extra), segment_t::DEFAULT_ALIGNMENT);
   }
 
   Message *message = decode_message(cct, messenger->crcflags, header, footer,
