@@ -256,6 +256,7 @@ an established session.
     __le64 features supported (CEPH_FEATURE_* bitmask)
     __le64 features required (CEPH_FEATURE_* bitmask)
     __le64 flags (CEPH_MSG_CONNECT_* bitmask)
+    __le64 cookie
 
   - client will send first, server will reply with same.  if this is a
     new session, the client and server can proceed to the message exchange.
@@ -270,6 +271,8 @@ an established session.
     shouldn't break any existing functionality.  implementation will
     likely want to mask this against what the authenticated credential
     allows.
+  - cookie is the client coookie used to identify a session, and can be used
+    to reconnect to an existing session.
   - we've dropped the 'protocol_version' field from msgr1
 
 * TAG_IDENT_MISSING_FEATURES (server->client): complain about a TAG_IDENT
@@ -288,20 +291,17 @@ an established session.
     __le64 flags (CEPH_MSG_CONNECT_* bitmask)
     __le64 cookie
 
-  - The cookie can be used by the client if it is later disconnected and wants to
-    reconnect and resume the session.
+  - The server cookie can be used by the client if it is later disconnected
+    and wants to reconnect and resume the session.
 
 * TAG_RECONNECT (client->server): reconnect to an established session::
 
     __le32 num_addrs
     entity_addr_t * num_addrs
-    entity_addr_t target entity addr
-    __le64 cookie
-    __le64 id (of name.id, e.g., osd.123 -> 123)
+    __le64 client_cookie
+    __le64 server_cookie
     __le64 global_seq
     __le64 connect_seq
-    __le64 supported_features
-    __le64 required_features
     __le64 msg_seq (the last msg seq received)
 
 * TAG_RECONNECT_OK (server->client): acknowledge a reconnect attempt::
@@ -320,6 +320,140 @@ an established session.
   - Indicates that the server is already connecting to the client, and
     that direction should win the race.  The client should wait for that
     connection to complete.
+
+* TAG_RESET_SESSION (server only): ask client to reset session::
+
+      __u8 full
+
+  - full flag indicates whether peer should do a full reset, i.e., drop
+    message queue.
+
+
+Example of failure scenarios:
+
+* First client's client_ident message is lost, and then client reconnects.
+
+.. ditaa:: +---------+           +--------+
+           | Client  |           | Server |
+           +---------+           +--------+
+                |                     |
+    c_cookie(a) | client_ident(a)     |
+                |-------------X       |
+                |                     |
+                | client_ident(a)     |
+                |-------------------->|
+                |<--------------------|
+                |     server_ident(b) | s_cookie(b)
+                |                     |
+                | session established |
+                |                     |
+
+
+* Server's server_ident message is lost, and then client reconnects.
+
+.. ditaa:: +---------+           +--------+
+           | Client  |           | Server |
+           +---------+           +--------+
+                |                     |
+    c_cookie(a) | client_ident(a)     |
+                |-------------------->|
+                |        X------------|
+                |     server_ident(b) | s_cookie(b)
+                |                     |
+                |                     |
+                | client_ident(a)     |
+                |-------------------->|
+                |<--------------------|
+                |     server_ident(c) | s_cookie(c)
+                |                     |
+                | session established |
+                |                     |
+
+
+* Server's server_ident message is lost, and then server reconnects.
+
+.. ditaa:: +---------+           +--------+
+           | Client  |           | Server |
+           +---------+           +--------+
+                |                     |
+    c_cookie(a) | client_ident(a)     |
+                |-------------------->|
+                |        X------------|
+                |     server_ident(b) | s_cookie(b)
+                |                     |
+                |                     |
+                |     reconnect(a, b) |
+                |<--------------------|
+                |-------------------->|
+                | reset_session(F)    |
+                |                     |
+                |     client_ident(a) | c_cookie(a)
+                |<--------------------|
+                |-------------------->|
+    s_cookie(c) | server_ident(c)     |
+                |                     |
+
+
+* Connection failure after session is established, and then client reconnects.
+
+.. ditaa:: +---------+           +--------+
+           | Client  |           | Server |
+           +---------+           +--------+
+                |                     |
+    c_cookie(a) | session established | s_cookie(b)
+                |<------------------->|
+                |        X------------|
+                |                     |
+                | reconnect(a, b)     |
+                |-------------------->|
+                |<--------------------|
+                |        reconnect_ok |
+                |                     |
+
+
+* Connection failure after session is established because server reseted,
+  and then client reconnects.
+
+.. ditaa:: +---------+           +--------+
+           | Client  |           | Server |
+           +---------+           +--------+
+                |                     |
+    c_cookie(a) | session established | s_cookie(b)
+                |<------------------->|
+                |        X------------| reset
+                |                     |
+                | reconnect(a, b)     |
+                |-------------------->|
+                |<--------------------|
+                |  reset_session(RC*) |
+                |                     |
+    c_cookie(c) | client_ident(c)     |
+                |-------------------->|
+                |<--------------------|
+                |     server_ident(d) | s_cookie(d)
+                |                     |
+
+RC* means that the reset session full flag depends on the policy.resetcheck
+of the connection.
+
+
+* Connection failure after session is established because client reseted,
+  and then client reconnects.
+
+.. ditaa:: +---------+           +--------+
+           | Client  |           | Server |
+           +---------+           +--------+
+                |                     |
+    c_cookie(a) | session established | s_cookie(b)
+                |<------------------->|
+          reset |        X------------|
+                |                     |
+    c_cookie(c) | client_ident(c)     |
+                |-------------------->|
+                |<--------------------| reset if policy.resetcheck
+                |     server_ident(d) | s_cookie(d)
+                |                     |
+
 
 Message exchange
 ----------------
