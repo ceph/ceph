@@ -9,7 +9,8 @@ import time
 import fnmatch
 
 try:
-    from typing import TypeVar, Generic, List, Optional, Union, Tuple
+    from typing import TypeVar, Generic, List, Optional, Union, Tuple, Type
+
     T = TypeVar('T')
     G = Generic[T]
 except ImportError:
@@ -95,8 +96,8 @@ class _Completion(G):
         raise NotImplementedError()
 
 
-def raise_if_exception(c):
-    # type: (_Completion) -> None
+def get_exception_from_completion(c):
+    # type: (_Completion) -> Optional[Type[Exception]]
     """
     :raises OrchestratorError: Some user error or a config error.
     :raises Exception: Some internal error
@@ -116,7 +117,15 @@ def raise_if_exception(c):
         return my_obj
 
     if c.exception is not None:
-        raise copy_to_this_subinterpreter(c.exception)
+        return copy_to_this_subinterpreter(c.exception)
+    return None
+
+
+def raise_if_exception(c):
+    # type: (_Completion) -> None
+    e = get_exception_from_completion(c)
+    if e is not None:
+        raise e
 
 
 class ReadCompletion(_Completion):
@@ -240,6 +249,7 @@ class Orchestrator(object):
         return None, None
 
     def wait(self, completions):
+        # type: (List[_Completion]) -> bool
         """
         Given a list of Completion instances, progress any which are
         incomplete.  Return a true if everything is done.
@@ -285,7 +295,7 @@ class Orchestrator(object):
         return self.get_inventory()
 
     def get_inventory(self, node_filter=None, refresh=False):
-        # type: (InventoryFilter, bool) -> ReadCompletion[List[InventoryNode]]
+        # type: (Optional[InventoryFilter], bool) -> ReadCompletion[List[InventoryNode]]
         """
         Returns something that was created by `ceph-volume inventory`.
 
@@ -601,7 +611,7 @@ class DriveGroupSpec(object):
     def __init__(self, host_pattern, data_devices=None, db_devices=None, wal_devices=None, journal_devices=None,
                  data_directories=None, osds_per_device=None, objectstore='bluestore', encrypted=False,
                  db_slots=None, wal_slots=None):
-        # type: (str, Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[List[str]], int, str, bool, int, int) -> ()
+        # type: (str, Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[List[str]], int, str, bool, int, int) -> None
 
         # concept of applying a drive group to a (set) of hosts is tightly
         # linked to the drive group itself
@@ -892,6 +902,9 @@ class OrchestratorClientMixin(Orchestrator):
         :raises NoOrchestrator:
         :raises ImportError: no `orchestrator_cli` module or backend not found.
         """
+        if not completions:
+            return
+
         while not self.wait(completions):
             if any(c.should_wait for c in completions):
                 time.sleep(5)

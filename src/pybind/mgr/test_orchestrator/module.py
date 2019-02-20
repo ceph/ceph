@@ -68,7 +68,7 @@ def deferred_write(message):
         @functools.wraps(f)
         def inner(*args, **kwargs):
             return TestWriteCompletion(lambda: f(*args, **kwargs),
-                                       '{}, args={}, kwargs={}'.format(message, args, kwargs))
+                                       '{}, args={}, kwargs={}'.format(message, args[1:], kwargs))
         return inner
     return wrapper
 

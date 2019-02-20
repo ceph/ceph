@@ -61,6 +61,17 @@ class TestOrchestratorCli(MgrTestCase):
         self.assertIsInstance(json.loads(ret), list)
         self.assertIn("ceph-mgr", ret)
 
+    def test_service_ls_json_wait(self):
+        ret = self._orch_cmd("wait")
+        self.assertFalse(len(ret))
+
+        ret = self._orch_cmd("service", "ls", "--format=json", "--wait=false")
+        self.assertIn('queued.', ret)
+
+        ret = self._orch_cmd("wait")
+        ret = ret.split("<read op>")[1]
+        self.assertIsInstance(json.loads(ret.strip()), list)
+        self.assertIn("ceph-mgr", ret)
 
     def test_service_action(self):
         self._orch_cmd("service", "reload", "mds", "cephfs")
