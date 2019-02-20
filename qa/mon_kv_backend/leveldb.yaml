@@ -1,5 +1,0 @@
-overrides:
-  ceph:
-    conf:
-      mon:
-        mon keyvaluedb: leveldb
