@@ -122,7 +122,7 @@ public:
 class RGWListBucket_ObjStore_S3v2 : public RGWListBucket_ObjStore {
   bool objs_container, fetchOwner;
 public:
-  RGWListBucket_ObjStore_S3v2cd() : objs_container(false) {
+  RGWListBucket_ObjStore_S3v2() : objs_container(false) {
     default_max = 1000;
   }
   ~RGWListBucket_ObjStore_S3v2() override {}
