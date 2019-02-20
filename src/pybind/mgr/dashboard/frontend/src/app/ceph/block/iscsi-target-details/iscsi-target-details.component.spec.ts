@@ -24,20 +24,35 @@ describe('IscsiTargetDetailsComponent', () => {
     component.settings = {
       config: { minimum_gateways: 2 },
       disk_default_controls: {
-        hw_max_sectors: 1024,
-        max_data_area_mb: 8
+        'backstore:1': {
+          hw_max_sectors: 1024,
+          max_data_area_mb: 8
+        },
+        'backstore:2': {
+          hw_max_sectors: 1024,
+          max_data_area_mb: 8
+        }
       },
       target_default_controls: {
         cmdsn_depth: 128,
         dataout_timeout: 20
-      }
+      },
+      backstores: ['backstore:1', 'backstore:2'],
+      default_backstore: 'backstore:1'
     };
     component.selection = new CdTableSelection();
     component.selection.selected = [
       {
         target_iqn: 'iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw',
         portals: [{ host: 'node1', ip: '192.168.100.201' }],
-        disks: [{ pool: 'rbd', image: 'disk_1', controls: { hw_max_sectors: 1 } }],
+        disks: [
+          {
+            pool: 'rbd',
+            image: 'disk_1',
+            backstore: 'backstore:1',
+            controls: { hw_max_sectors: 1 }
+          }
+        ],
         clients: [
           {
             client_iqn: 'iqn.1994-05.com.redhat:rh7-client',
@@ -74,7 +89,7 @@ describe('IscsiTargetDetailsComponent', () => {
     expect(component.data).toBeUndefined();
     expect(component.metadata).toEqual({
       'client_iqn.1994-05.com.redhat:rh7-client': { user: 'myiscsiusername' },
-      disk_rbd_disk_1: { hw_max_sectors: 1 },
+      disk_rbd_disk_1: { backstore: 'backstore:1', controls: { hw_max_sectors: 1 } },
       root: { dataout_timeout: 2 }
     });
     expect(component.tree).toEqual({
@@ -153,7 +168,8 @@ describe('IscsiTargetDetailsComponent', () => {
       component.onNodeSelected(node);
       expect(component.data).toEqual([
         { current: 1, default: 1024, displayName: 'hw_max_sectors' },
-        { current: 8, default: 8, displayName: 'max_data_area_mb' }
+        { current: 8, default: 8, displayName: 'max_data_area_mb' },
+        { current: 'backstore:1', default: 'backstore:1', displayName: 'backstore' }
       ]);
     });
 

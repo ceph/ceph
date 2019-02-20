@@ -1,6 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { ReactiveFormsModule } from '@angular/forms';
+import { FormsModule } from '@angular/forms';
 
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
@@ -14,7 +14,7 @@ describe('IscsiTargetImageSettingsModalComponent', () => {
 
   configureTestBed({
     declarations: [IscsiTargetImageSettingsModalComponent],
-    imports: [SharedModule, ReactiveFormsModule, HttpClientTestingModule],
+    imports: [SharedModule, FormsModule, HttpClientTestingModule],
     providers: [BsModalRef, i18nProviders]
   });
 
@@ -22,12 +22,19 @@ describe('IscsiTargetImageSettingsModalComponent', () => {
     fixture = TestBed.createComponent(IscsiTargetImageSettingsModalComponent);
     component = fixture.componentInstance;
 
-    component.imagesSettings = { 'rbd/disk_1': {} };
+    component.imagesSettings = { 'rbd/disk_1': { backstore: 'backstore:1', 'backstore:1': {} } };
     component.image = 'rbd/disk_1';
     component.disk_default_controls = {
-      foo: 1,
-      bar: 2
+      'backstore:1': {
+        foo: 1,
+        bar: 2
+      },
+      'backstore:2': {
+        baz: 3
+      }
     };
+    component.backstores = ['backstore:1', 'backstore:2'];
+
     component.ngOnInit();
     fixture.detectChanges();
   });
@@ -36,20 +43,26 @@ describe('IscsiTargetImageSettingsModalComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should fill the settingsForm', () => {
-    expect(component.settingsForm.value).toEqual({
-      foo: null,
-      bar: null
+  it('should fill the model', () => {
+    expect(component.model).toEqual({
+      backstore: 'backstore:1',
+      'backstore:1': {},
+      'backstore:2': {}
     });
   });
 
   it('should save changes to imagesSettings', () => {
-    component.settingsForm.patchValue({ foo: 1234 });
-    expect(component.imagesSettings).toEqual({ 'rbd/disk_1': {} });
+    component.model['backstore:1'] = { foo: 1234 };
+    expect(component.imagesSettings).toEqual({
+      'rbd/disk_1': { backstore: 'backstore:1', 'backstore:1': {} }
+    });
     component.save();
     expect(component.imagesSettings).toEqual({
       'rbd/disk_1': {
-        foo: 1234
+        backstore: 'backstore:1',
+        'backstore:1': {
+          foo: 1234
+        }
       }
     });
   });
