@@ -127,14 +127,27 @@ public:
     struct segment_t logical;
   } __attribute__((packed));
 
-private:
   static constexpr std::size_t MAX_NUM_SEGMENTS = 4;
+
+  struct SegmentIndex {
+    struct Msg {
+      static constexpr std::size_t HEADER = 0;
+      static constexpr std::size_t FRONT = 1;
+      static constexpr std::size_t MIDDLE = 2;
+      static constexpr std::size_t DATA = 3;
+    };
+
+    struct Frame {
+      static constexpr std::size_t PAYLOAD = 0;
+    };
+  };
 
   boost::container::static_vector<onwire_segment_t,
 				  MAX_NUM_SEGMENTS> rx_segments_desc;
   boost::container::static_vector<ceph::bufferlist,
 				  MAX_NUM_SEGMENTS> rx_segments_data;
 
+private:
 
   Tag next_tag;
   ceph_msg_header2 current_header;
