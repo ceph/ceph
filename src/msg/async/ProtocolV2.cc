@@ -385,7 +385,8 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
     ceph::bufferlist plain_bl = \
       protocol.session_stream_handlers.rx->authenticated_decrypt_update_final(
         std::move(bl), ProtocolV2::segment_t::DEFAULT_ALIGNMENT);
-    ceph_assert(plain_bl.length() + 16 == length);
+    ceph_assert(plain_bl.length() == length - \
+       protocol.session_stream_handlers.rx->get_extra_size_at_final());
     this->decode_frame(plain_bl.c_str(), plain_bl.length());
   }
 };
