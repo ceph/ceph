@@ -750,6 +750,12 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
       if (trash_image_source == RBD_TRASH_IMAGE_SOURCE_REMOVING) {
         // proceed with attempting to immediately remove the image
         r = Trash<I>::remove(io_ctx, image_id, true, prog_ctx);
+
+        if (r == -ENOTEMPTY || r == -EBUSY || r == -EMLINK) {
+          // best-effort try to restore the image if the removal
+          // failed for possible expected reasons
+          Trash<I>::restore(io_ctx, trash_image_source, image_id, image_name);
+        }
       }
       return r;
     } else if (r < 0 && r != -EOPNOTSUPP) {
