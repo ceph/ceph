@@ -163,7 +163,7 @@ export class RbdFormComponent implements OnInit {
       {
         parent: new FormControl(''),
         name: new FormControl('', {
-          validators: [Validators.required]
+          validators: [Validators.required, Validators.pattern(/^[^@/]+?$/)]
         }),
         pool: new FormControl(null, {
           validators: [Validators.required]
@@ -243,14 +243,16 @@ export class RbdFormComponent implements OnInit {
           const dataPools = [];
           for (const pool of resp) {
             if (_.indexOf(pool.application_metadata, 'rbd') !== -1) {
-              if (pool.type === 'replicated') {
-                pools.push(pool);
-                dataPools.push(pool);
-              } else if (
-                pool.type === 'erasure' &&
-                pool.flags_names.indexOf('ec_overwrites') !== -1
-              ) {
-                dataPools.push(pool);
+              if (!pool.pool_name.includes('/')) {
+                if (pool.type === 'replicated') {
+                  pools.push(pool);
+                  dataPools.push(pool);
+                } else if (
+                  pool.type === 'erasure' &&
+                  pool.flags_names.indexOf('ec_overwrites') !== -1
+                ) {
+                  dataPools.push(pool);
+                }
               }
             }
           }
