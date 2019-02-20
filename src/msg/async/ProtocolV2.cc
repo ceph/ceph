@@ -707,11 +707,6 @@ void ProtocolV2::reset_recv_state() {
   connection->pendingReadLen.reset();
   connection->writeCallback.reset();
 
-  uint32_t cur_msg_size = \
-    rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length + \
-    rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length + \
-    rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
-
   if (state > THROTTLE_MESSAGE && state <= THROTTLE_DONE &&
       connection->policy.throttler_messages) {
     ldout(cct, 10) << __func__ << " releasing " << 1
@@ -723,6 +718,11 @@ void ProtocolV2::reset_recv_state() {
   }
   if (state > THROTTLE_BYTES && state <= THROTTLE_DONE) {
     if (connection->policy.throttler_bytes) {
+      const uint32_t cur_msg_size = \
+	rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length + \
+	rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length + \
+	rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+
       ldout(cct, 10) << __func__ << " releasing " << cur_msg_size
                      << " bytes to policy throttler "
                      << connection->policy.throttler_bytes->get_current() << "/"
@@ -731,6 +731,11 @@ void ProtocolV2::reset_recv_state() {
     }
   }
   if (state > THROTTLE_DISPATCH_QUEUE && state <= THROTTLE_DONE) {
+    const uint32_t cur_msg_size = \
+      rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length + \
+      rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length + \
+      rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+
     ldout(cct, 10)
         << __func__ << " releasing " << cur_msg_size
         << " bytes to dispatch_queue throttler "
