@@ -247,13 +247,13 @@ This is an overview of the current implementation status of the orchestrators.
  host add                            ⚪         ⚪       ⚪         ✔️
  host ls                             ⚪         ⚪       ⚪         ✔️
  host rm                             ⚪         ⚪       ⚪         ✔️
- mgr update                          ⚪         ⚪       ⚪         ⚪
- mon update                          ⚪         ⚪       ⚪         ⚪
- osd create                          ✔️         ✔️       ⚪         ⚪
+ mgr update                          ⚪         ⚪       ⚪         ✔️
+ mon update                          ⚪         ⚪       ⚪         ✔️
+ osd create                          ✔️         ✔️       ⚪         ✔️
  osd device {ident,fault}-{on,off}   ⚪         ⚪       ⚪         ⚪
  osd rm                              ✔️         ⚪       ⚪         ⚪
  device {ident,fault}-(on,off}       ⚪         ⚪       ⚪         ⚪
- device ls                           ✔️         ✔️       ✔️         ⚪
+ device ls                           ✔️         ✔️       ✔️         ✔️
  service ls                          ⚪         ✔️       ✔️         ⚪
  service status                      ⚪         ✔️       ✔️         ⚪
  service-instance status             ⚪         ⚪       ⚪         ⚪
