@@ -54,7 +54,7 @@ def init_multi(_realm, _user, _config=None):
 def get_realm():
     return realm
 
-log = logging.getLogger(__name__)
+log = logging.getLogger('rgw_multi.tests')
 
 num_buckets = 0
 run_prefix=''.join(random.choice(string.ascii_lowercase) for _ in range(6))
@@ -281,7 +281,7 @@ def bucket_sync_status(target_zone, source_zone, bucket_name):
 def data_source_log_status(source_zone):
     source_cluster = source_zone.cluster
     cmd = ['datalog', 'status'] + source_zone.zone_args()
-    datalog_status_json, retcode = source_cluster.rgw_admin(cmd, read_only=True)
+    datalog_status_json, retcode = source_cluster.admin(cmd, read_only=True)
     datalog_status = json.loads(datalog_status_json.decode('utf-8'))
 
     markers = {i: s['marker'] for i, s in enumerate(datalog_status)}
@@ -346,7 +346,7 @@ def compare_bucket_status(target_zone, source_zone, bucket_name, log_status, syn
 
     return True
 
-def zone_data_checkpoint(target_zone, source_zone_conn):
+def zone_data_checkpoint(target_zone, source_zone):
     if target_zone == source_zone:
         return
 
@@ -399,7 +399,8 @@ def zonegroup_bucket_checkpoint(zonegroup_conns, bucket_name):
             log.debug('bucket checkpoint: source=%s target=%s bucket=%s', source_conn.zone.name, target_conn.zone.name, bucket_name)
             zone_bucket_checkpoint(target_conn.zone, source_conn.zone, bucket_name)
     for source_conn, target_conn in combinations(zonegroup_conns.zones, 2):
-        target_conn.check_bucket_eq(source_conn, bucket_name)
+        if target_conn.zone.has_buckets():
+            target_conn.check_bucket_eq(source_conn, bucket_name)
 
 def set_master_zone(zone):
     zone.modify(zone.cluster, ['--master'])
@@ -581,7 +582,8 @@ def new_key(zone, bucket_name, obj_name):
     return b.new_key(obj_name)
 
 def check_bucket_eq(zone_conn1, zone_conn2, bucket):
-    return zone_conn2.check_bucket_eq(zone_conn1, bucket.name)
+    if zone_conn2.zone.has_buckets():
+        zone_conn2.check_bucket_eq(zone_conn1, bucket.name)
 
 def test_object_sync():
     zonegroup = realm.master_zonegroup()
@@ -879,7 +881,7 @@ def test_multi_period_incremental_sync():
             continue
         bucket_name = gen_bucket_name()
         log.info('create bucket zone=%s name=%s', zone_conn.name, bucket_name)
-        bucket = zone_conn.conn.create_bucket(bucket_name)
+        zone_conn.conn.create_bucket(bucket_name)
         buckets.append(bucket_name)
 
     # restart zone 3 gateway and wait for sync
@@ -893,7 +895,8 @@ def test_multi_period_incremental_sync():
                 if source_conn.zone == target_conn.zone:
                     continue
 
-                target_conn.check_bucket_eq(source_conn, bucket_name)
+                if target_conn.zone.has_buckets():
+                    target_conn.check_bucket_eq(source_conn, bucket_name)
 
     # verify that mdlogs are not empty and match for each period
     for period in mdlog_periods:
