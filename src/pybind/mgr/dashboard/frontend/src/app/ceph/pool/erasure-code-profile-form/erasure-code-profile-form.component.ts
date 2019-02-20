@@ -239,7 +239,7 @@ export class ErasureCodeProfileFormComponent implements OnInit {
       })
       .subscribe(
         undefined,
-        (resp) => {
+        () => {
           this.form.setErrors({ cdSubmitButton: true });
         },
         () => {

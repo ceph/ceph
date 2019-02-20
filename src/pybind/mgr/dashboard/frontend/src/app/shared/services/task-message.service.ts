@@ -293,24 +293,24 @@ export class TaskMessageService {
     'rbd/mirroring/pool/edit': this.newTaskMessage(
       this.commonOperations.update,
       this.rbd_mirroring.pool,
-      (metadata) => ({
+      () => ({
         16: this.i18n('Cannot disable mirroring because it contains a peer.')
       })
     ),
     'rbd/mirroring/peer/add': this.newTaskMessage(
       this.commonOperations.create,
       this.rbd_mirroring.pool_peer,
-      (metadata) => ({})
+      () => ({})
     ),
     'rbd/mirroring/peer/edit': this.newTaskMessage(
       this.commonOperations.update,
       this.rbd_mirroring.pool_peer,
-      (metadata) => ({})
+      () => ({})
     ),
     'rbd/mirroring/peer/delete': this.newTaskMessage(
       this.commonOperations.delete,
       this.rbd_mirroring.pool_peer,
-      (metadata) => ({})
+      () => ({})
     ),
     // iSCSI target tasks
     'iscsi/target/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>

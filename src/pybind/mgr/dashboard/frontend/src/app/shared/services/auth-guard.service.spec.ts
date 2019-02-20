@@ -35,13 +35,13 @@ describe('AuthGuardService', () => {
 
   it('should allow the user if loggedIn', () => {
     spyOn(authStorageService, 'isLoggedIn').and.returnValue(true);
-    expect(service.canActivate(null, null)).toBe(true);
+    expect(service.canActivate()).toBe(true);
   });
 
   it('should prevent user if not loggedIn and redirect to login page', fakeAsync(() => {
     const router = TestBed.get(Router);
     ngZone.run(() => {
-      expect(service.canActivate(null, null)).toBe(false);
+      expect(service.canActivate()).toBe(false);
     });
     tick();
     expect(router.url).toBe('/login');

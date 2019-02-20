@@ -160,7 +160,8 @@ describe('OsdListComponent', () => {
     const expectOpensModal = (actionName: string, modalClass): void => {
       openActionModal(actionName);
 
-      expect(modalServiceShowSpy.calls.any()).toBe(true, 'modalService.show called');
+      // @TODO: check why tsc is complaining when passing 'expectationFailOutput' param.
+      expect(modalServiceShowSpy.calls.any()).toBeTruthy();
       expect(modalServiceShowSpy.calls.first().args[0]).toBe(modalClass);
 
       modalServiceShowSpy.calls.reset();

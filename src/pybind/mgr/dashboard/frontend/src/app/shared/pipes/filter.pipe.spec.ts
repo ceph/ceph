@@ -44,7 +44,7 @@ describe('FilterPipe', () => {
     const filters = [
       {
         value: '',
-        applyFilter: (row, val) => {
+        applyFilter: () => {
           return false;
         }
       }

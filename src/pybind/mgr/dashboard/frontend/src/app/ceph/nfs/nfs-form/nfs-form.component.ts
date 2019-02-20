@@ -109,20 +109,15 @@ export class NfsFormComponent implements OnInit {
   }
 
   getData(promises) {
-    forkJoin(promises).subscribe(
-      (data: any[]) => {
-        this.resolveDaemons(data[0]);
-        this.resolvefsals(data[1]);
-        this.resolveClients(data[2]);
-        this.resolveFilesystems(data[3]);
-        if (data[4]) {
-          this.resolveModel(data[4]);
-        }
-      },
-      (error) => {
-        // this.error = error;
+    forkJoin(promises).subscribe((data: any[]) => {
+      this.resolveDaemons(data[0]);
+      this.resolvefsals(data[1]);
+      this.resolveClients(data[2]);
+      this.resolveFilesystems(data[3]);
+      if (data[4]) {
+        this.resolveModel(data[4]);
       }
-    );
+    });
   }
 
   createForm() {

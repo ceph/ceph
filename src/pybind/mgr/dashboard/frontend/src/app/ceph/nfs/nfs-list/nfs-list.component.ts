@@ -149,7 +149,7 @@ export class NfsListComponent implements OnInit, OnDestroy {
           this.builders
         );
       },
-      (error) => {
+      () => {
         this.onFetchError();
       }
     );

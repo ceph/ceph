@@ -1,4 +1,3 @@
-import { SimpleChange } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -59,7 +58,7 @@ describe('RbdConfigurationListComponent', () => {
     } as RbdConfigurationEntry;
 
     component.data = [fakeOption, realOption];
-    component.ngOnChanges({ name: new SimpleChange(null, null, null) });
+    component.ngOnChanges();
 
     expect(component.data.length).toBe(1);
     expect(component.data.pop()).toBe(realOption);

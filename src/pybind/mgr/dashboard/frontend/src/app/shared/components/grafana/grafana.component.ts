@@ -216,7 +216,7 @@ export class GrafanaComponent implements OnInit, OnChanges {
     this.grafanaSrc = this.sanitizer.bypassSecurityTrustResourceUrl(this.url);
   }
 
-  onTimepickerChange(event) {
+  onTimepickerChange() {
     if (this.grafanaExist) {
       this.getFrame();
     }
@@ -229,7 +229,7 @@ export class GrafanaComponent implements OnInit, OnChanges {
     }
   }
 
-  ngOnChanges(changes) {
+  ngOnChanges() {
     if (this.grafanaExist) {
       this.getFrame();
     }

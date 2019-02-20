@@ -206,7 +206,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     this.rbdService
       .protectSnapshot(this.poolName, this.rbdName, snapshotName, !isProtected)
       .toPromise()
-      .then((resp) => {
+      .then(() => {
         const executingTask = new ExecutingTask();
         executingTask.name = finishedTask.name;
         executingTask.metadata = finishedTask.metadata;
@@ -247,7 +247,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
           }
         );
       })
-      .catch((resp) => {
+      .catch(() => {
         this.modalRef.content.stopLoadingSpinner();
       });
   }

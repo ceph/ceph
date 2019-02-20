@@ -6,7 +6,7 @@ import * as _ from 'lodash';
   name: 'empty'
 })
 export class EmptyPipe implements PipeTransform {
-  transform(value: any, args?: any): any {
+  transform(value: any): any {
     return _.isUndefined(value) || _.isNull(value) ? '-' : value;
   }
 }

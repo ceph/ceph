@@ -16,7 +16,8 @@ describe('RbdMirroringService', () => {
       image_error: [],
       image_syncing: [],
       image_ready: []
-    }
+    },
+    executing_tasks: [{}]
   };
 
   configureTestBed(

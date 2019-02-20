@@ -91,7 +91,7 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
     this.useData();
   }
 
-  ngOnChanges(changes) {
+  ngOnChanges() {
     this.useData();
   }
 

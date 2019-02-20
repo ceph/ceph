@@ -333,7 +333,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     return _.isEmpty(css) ? undefined : css;
   }
 
-  ngOnChanges(changes) {
+  ngOnChanges() {
     this.useData();
   }
 

@@ -86,7 +86,7 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
         {
           name: this.i18n('Usage'),
           cellTemplate: this.poolUsageTpl,
-          comparator: (valueA, valueB, rowA, rowB, sortDirection) => {
+          comparator: (_valueA, _valueB, rowA, rowB) => {
             const valA = rowA.used / rowA.avail;
             const valB = rowB.used / rowB.avail;
 
@@ -124,7 +124,7 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
     });
 
     this.cephfsService.getMdsCounters(this.id).subscribe((data) => {
-      _.each(this.mdsCounters, (value, key) => {
+      _.each(this.mdsCounters, (_value, key) => {
         if (data[key] === undefined) {
           delete this.mdsCounters[key];
         }
@@ -137,7 +137,7 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
     });
   }
 
-  trackByFn(index, item) {
+  trackByFn(_index, item) {
     return item.name;
   }
 }

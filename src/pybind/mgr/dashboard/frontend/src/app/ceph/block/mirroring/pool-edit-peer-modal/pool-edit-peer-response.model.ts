@@ -3,4 +3,5 @@ export class PoolEditPeerResponseModel {
   client_id: string;
   mon_host: string;
   key: string;
+  uuid: string;
 }

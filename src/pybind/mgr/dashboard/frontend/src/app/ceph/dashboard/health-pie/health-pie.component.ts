@@ -183,7 +183,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
   }
 
   private hideSlices() {
-    _.forEach(this.chartConfig.dataset[0].data, (slice, sliceIndex) => {
+    _.forEach(this.chartConfig.dataset[0].data, (_slice, sliceIndex) => {
       if (this.hiddenSlices[sliceIndex]) {
         this.chartConfig.dataset[0].data[sliceIndex] = undefined;
       }

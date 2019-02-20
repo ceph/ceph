@@ -4,7 +4,7 @@ import { Pipe, PipeTransform } from '@angular/core';
   name: 'mirrorHealthColor'
 })
 export class MirrorHealthColorPipe implements PipeTransform {
-  transform(value: any, args?: any): any {
+  transform(value: any): any {
     if (value === 'warning') {
       return 'label label-warning';
     } else if (value === 'error') {

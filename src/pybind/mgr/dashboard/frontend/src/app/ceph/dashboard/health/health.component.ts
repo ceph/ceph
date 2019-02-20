@@ -52,7 +52,7 @@ export class HealthComponent implements OnInit, OnDestroy {
     });
   }
 
-  prepareReadWriteRatio(chart, data) {
+  prepareReadWriteRatio(chart) {
     const ratioLabels = [];
     const ratioData = [];
 

@@ -15,19 +15,13 @@ describe('OsdScrubModalComponent', () => {
 
   const fakeService = {
     list: () => {
-      return new Promise(function(resolve, reject) {
-        return {};
-      });
+      return new Promise(() => {});
     },
-    scrub: (data: any) => {
-      return new Promise(function(resolve, reject) {
-        return {};
-      });
+    scrub: () => {
+      return new Promise(() => {});
     },
-    scrub_many: (data: any) => {
-      return new Promise(function(resolve, reject) {
-        return {};
-      });
+    scrub_many: () => {
+      return new Promise(() => {});
     }
   };
 
