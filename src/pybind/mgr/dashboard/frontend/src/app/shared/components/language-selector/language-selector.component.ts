@@ -1,5 +1,7 @@
 import { Component, Input, OnInit } from '@angular/core';
 
+import { defineLocale, deLocale, ptBrLocale } from 'ngx-bootstrap/chronos';
+
 import { LocaleHelper } from '../../../locale.helper';
 import { SupportedLanguages } from './supported-languages.enum';
 
@@ -14,6 +16,12 @@ export class LanguageSelectorComponent implements OnInit {
 
   supportedLanguages = SupportedLanguages;
   selectedLanguage: string;
+
+  constructor() {
+    // These locals are needed for ngx related localizations
+    defineLocale('pt', ptBrLocale);
+    defineLocale('de', deLocale);
+  }
 
   ngOnInit() {
     this.selectedLanguage = LocaleHelper.getLocale();

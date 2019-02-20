@@ -5,6 +5,7 @@ import { RouterModule } from '@angular/router';
 
 import { TreeModule } from 'ng2-tree';
 import { AlertModule } from 'ngx-bootstrap/alert';
+import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -27,7 +28,11 @@ import { OsdPerformanceHistogramComponent } from './osd/osd-performance-histogra
 import { OsdRecvSpeedModalComponent } from './osd/osd-recv-speed-modal/osd-recv-speed-modal.component';
 import { OsdReweightModalComponent } from './osd/osd-reweight-modal/osd-reweight-modal.component';
 import { OsdScrubModalComponent } from './osd/osd-scrub-modal/osd-scrub-modal.component';
+import { PrometheusFormComponent } from './prometheus/prometheus-form/prometheus-form.component';
 import { PrometheusListComponent } from './prometheus/prometheus-list/prometheus-list.component';
+import { PrometheusTabsComponent } from './prometheus/prometheus-tabs/prometheus-tabs.component';
+import { SilenceMatcherModalComponent } from './prometheus/silence-matcher-modal/silence-matcher-modal.component';
+import { SilencesListComponent } from './prometheus/silences-list/silences-list.component';
 
 @NgModule({
   entryComponents: [
@@ -35,7 +40,8 @@ import { PrometheusListComponent } from './prometheus/prometheus-list/prometheus
     OsdScrubModalComponent,
     OsdFlagsModalComponent,
     OsdRecvSpeedModalComponent,
-    OsdReweightModalComponent
+    OsdReweightModalComponent,
+    SilenceMatcherModalComponent
   ],
   imports: [
     CommonModule,
@@ -46,6 +52,7 @@ import { PrometheusListComponent } from './prometheus/prometheus-list/prometheus
     FormsModule,
     ReactiveFormsModule,
     BsDropdownModule.forRoot(),
+    BsDatepickerModule.forRoot(),
     ModalModule.forRoot(),
     AlertModule.forRoot(),
     TooltipModule.forRoot(),
@@ -67,7 +74,11 @@ import { PrometheusListComponent } from './prometheus/prometheus-list/prometheus
     CrushmapComponent,
     LogsComponent,
     PrometheusListComponent,
-    OsdRecvSpeedModalComponent
+    OsdRecvSpeedModalComponent,
+    PrometheusFormComponent,
+    SilencesListComponent,
+    PrometheusTabsComponent,
+    SilenceMatcherModalComponent
   ]
 })
 export class ClusterModule {}

@@ -8,6 +8,9 @@ describe('SettingsService', () => {
   let service: SettingsService;
   let httpTesting: HttpTestingController;
 
+  const exampleUrl = 'api/settings/something';
+  const exampleValue = 'http://localhost:3000';
+
   configureTestBed(
     {
       providers: [SettingsService],
@@ -60,8 +63,6 @@ describe('SettingsService', () => {
   });
 
   describe('isSettingConfigured', () => {
-    const exampleUrl = 'api/settings/something';
-    const exampleValue = 'http://localhost:3000';
     let increment: number;
 
     const testConfig = (url, value) => {
@@ -111,5 +112,11 @@ describe('SettingsService', () => {
       httpTesting.expectNone(exampleUrl);
       expect(increment).toBe(2);
     }));
+  });
+
+  it('should disable a set setting', () => {
+    service['settings'] = { [exampleUrl]: exampleValue };
+    service.disableSetting(exampleUrl);
+    expect(service['settings']).toEqual({ [exampleUrl]: '' });
   });
 });

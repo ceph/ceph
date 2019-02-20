@@ -15,13 +15,23 @@ export class SettingsService {
   ifSettingConfigured(url: string, fn: (value?: string) => void): void {
     const setting = this.settings[url];
     if (setting === undefined) {
-      this.http.get(url).subscribe((data: any) => {
-        this.settings[url] = this.getSettingsValue(data);
-        this.ifSettingConfigured(url, fn);
-      });
+      this.http.get(url).subscribe(
+        (data: any) => {
+          this.settings[url] = this.getSettingsValue(data);
+          this.ifSettingConfigured(url, fn);
+        },
+        (resp) => {
+          this.settings[url] = '';
+        }
+      );
     } else if (setting !== '') {
       fn(setting);
     }
+  }
+
+  // Easiest way to stop reloading external content that can't be reached
+  disableSetting(url) {
+    this.settings[url] = '';
   }
 
   private getSettingsValue(data: any): string {

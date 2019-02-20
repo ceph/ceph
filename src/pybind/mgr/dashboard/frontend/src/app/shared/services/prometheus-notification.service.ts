@@ -13,6 +13,7 @@ import { ServicesModule } from './services.module';
 })
 export class PrometheusNotificationService {
   private notifications: PrometheusNotification[];
+  private backendFailure = false;
 
   constructor(
     private alertFormatter: PrometheusAlertFormatter,
@@ -22,10 +23,16 @@ export class PrometheusNotificationService {
   }
 
   refresh() {
+    if (this.backendFailure) {
+      return;
+    }
     const last = this.getLastNotification();
     this.prometheusService
       .getNotificationSince(last)
-      .subscribe((notifications) => this.handleNotifications(notifications));
+      .subscribe(
+        (notifications) => this.handleNotifications(notifications),
+        () => (this.backendFailure = true)
+      );
   }
 
   private getLastNotification() {

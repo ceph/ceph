@@ -1,0 +1,87 @@
+<div class="modal-header">
+  <h4 class="modal-title pull-left"
+      i18n>Matcher</h4>
+  <button type="button"
+          class="close pull-right"
+          aria-label="Close"
+          (click)="bsModalRef.hide()">
+    <span aria-hidden="true">&times;</span>
+  </button>
+</div>
+
+<form class="form-horizontal"
+      #formDir="ngForm"
+      [formGroup]="form"
+      novalidate>
+
+  <!-- Modal body -->
+  <div class="modal-body">
+
+    <!-- Name -->
+    <div class="form-group"
+         [ngClass]="{'has-error': form.showError('name', formDir)}">
+      <label class="control-label col-sm-3"
+             for="name"
+             i18n>Name
+        <span class="required"></span>
+      </label>
+      <div class="col-sm-9">
+        <input id="name"
+               class="form-control"
+               type="text"
+               formControlName="name">
+        <span *ngIf="form.showError('name', formDir, 'required')"
+              class="help-block"
+              i18n>This field is required!</span>
+      </div>
+    </div>
+
+    <!-- Value -->
+    <div class="form-group"
+         [ngClass]="{'has-error': form.showError('value', formDir)}">
+      <label class="control-label col-sm-3"
+             for="value"
+             i18n>Prometheus expression
+        <span class="required"></span>
+      </label>
+      <div class="col-sm-9">
+        <input id="value"
+               class="form-control"
+               type="text"
+               formControlName="value">
+        <span *ngIf="form.showError('value', formDir, 'required')"
+              class="help-block"
+              i18n>This field is required!</span>
+      </div>
+    </div>
+
+    <!-- isRegex -->
+    <div class="form-group">
+      <div class="col-sm-offset-3 col-sm-9">
+        <div class="input-group">
+          <div class="checkbox checkbox-primary">
+            <input id="is-regex"
+                   type="checkbox"
+                   formControlName="isRegex">
+            <label for="is-regex"
+                   i18n>Use regular expression</label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Modal footer -->
+  <div class="modal-footer">
+    <cd-submit-button (submitAction)="onSubmit()"
+                      [form]="form">
+      <ng-container i18n>{editing, select, 1 {Update} other {Add}}</ng-container>
+    </cd-submit-button>
+    <button class="btn btn-sm btn-default"
+            type="button"
+            (click)="bsModalRef.hide()"
+            i18n>Close</button>
+  </div>
+</form>
+

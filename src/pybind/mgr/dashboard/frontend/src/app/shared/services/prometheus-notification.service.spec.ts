@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
 
 import { ToastModule } from 'ng2-toastr';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
 import {
   configureTestBed,
@@ -25,6 +25,7 @@ describe('PrometheusNotificationService', () => {
   let prometheusService: PrometheusService;
   let prometheus: PrometheusHelper;
   let shown: CdNotificationConfig[];
+  let getNotificationSinceMock: Function;
 
   configureTestBed({
     imports: [ToastModule.forRoot(), SharedModule, HttpClientTestingModule],
@@ -45,7 +46,8 @@ describe('PrometheusNotificationService', () => {
     spyOn(window, 'setTimeout').and.callFake((fn: Function) => fn());
 
     prometheusService = TestBed.get(PrometheusService);
-    spyOn(prometheusService, 'getNotificationSince').and.callFake(() => of(notifications));
+    getNotificationSinceMock = () => of(notifications);
+    spyOn(prometheusService, 'getNotificationSince').and.callFake(() => getNotificationSinceMock());
 
     notifications = [prometheus.createNotification()];
   });
@@ -84,6 +86,16 @@ describe('PrometheusNotificationService', () => {
   it('notifies not on the first call', () => {
     service.refresh();
     expect(notificationService.show).not.toHaveBeenCalled();
+  });
+
+  it('notifies should not call the api again if it failed once', () => {
+    getNotificationSinceMock = () => throwError(new Error('Test error'));
+    service.refresh();
+    expect(prometheusService.getNotificationSince).toHaveBeenCalledTimes(1);
+    expect(service['backendFailure']).toBe(true);
+    service.refresh();
+    expect(prometheusService.getNotificationSince).toHaveBeenCalledTimes(1);
+    service['backendFailure'] = false;
   });
 
   describe('looks of fired notifications', () => {

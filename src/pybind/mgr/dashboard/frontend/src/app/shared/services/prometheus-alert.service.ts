@@ -12,7 +12,6 @@ import { ServicesModule } from './services.module';
 })
 export class PrometheusAlertService {
   private canAlertsBeNotified = false;
-  private connected = true;
   alerts: PrometheusAlert[] = [];
 
   constructor(
@@ -21,20 +20,15 @@ export class PrometheusAlertService {
   ) {}
 
   refresh() {
-    this.prometheusService.ifAlertmanagerConfigured((url) => {
-      if (this.connected) {
-        this.prometheusService.list().subscribe(
-          (alerts) => this.handleAlerts(alerts),
-          (resp) => {
-            const errorMsg = `Please check if <a target="_blank" href="${url}">Prometheus Alertmanager</a> is still running`;
-            resp['application'] = 'Prometheus';
-            if (resp.status === 500) {
-              this.connected = false;
-              resp.error.detail = errorMsg;
-            }
+    this.prometheusService.ifAlertmanagerConfigured(() => {
+      this.prometheusService.list().subscribe(
+        (alerts) => this.handleAlerts(alerts),
+        (resp) => {
+          if (resp.status === 404 || resp.status === 500) {
+            this.prometheusService.disableAlertmanagerConfig();
           }
-        );
-      }
+        }
+      );
     });
   }
 

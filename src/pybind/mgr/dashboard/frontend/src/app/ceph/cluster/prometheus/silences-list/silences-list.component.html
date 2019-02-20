@@ -1,12 +1,18 @@
 <cd-prometheus-tabs></cd-prometheus-tabs>
 
-<cd-table [data]="prometheusAlertService.alerts"
+<cd-table [data]="silences"
           [columns]="columns"
-          identifier="fingerprint"
           [forceIdentifier]="true"
           [customCss]="customCss"
+          [sorts]="sorts"
           selectionType="single"
+          (fetchData)="refresh()"
           (updateSelection)="updateSelection($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
   <tabset cdTableDetail *ngIf="selection.hasSingleSelection">
     <tab i18n-heading
          heading="Details">
@@ -21,8 +27,3 @@
   </tabset>
 </cd-table>
 
-<ng-template #externalLinkTpl
-             let-row="row"
-             let-value="value">
-  <a [href]="value" target="_blank"><i class="fa fa-line-chart"></i> Source</a>
-</ng-template>
