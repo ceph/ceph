@@ -260,7 +260,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">449</context>
+          <context context-type="linenumber">461</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
@@ -1076,7 +1076,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">342</context>
+          <context context-type="linenumber">343</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
@@ -2400,13 +2400,13 @@
         <source>Compression</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">309</context>
+          <context context-type="linenumber">310</context>
         </context-group>
       </trans-unit><trans-unit id="37e10df2d9c0c25ef04ac112c9c9a7723e8efae0" datatype="html">
         <source>Mode</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">315</context>
+          <context context-type="linenumber">316</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/mirroring/pool-edit-mode-modal/pool-edit-mode-modal.component.html</context>
@@ -2416,89 +2416,101 @@
         <source>Algorithm</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">334</context>
+          <context context-type="linenumber">335</context>
         </context-group>
       </trans-unit><trans-unit id="4903231d42089325a28892c0fde1aed46b733ae6" datatype="html">
         <source>-- No erasure compression algorithm available --</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">345</context>
+          <context context-type="linenumber">346</context>
         </context-group>
       </trans-unit><trans-unit id="5d68ddb254275f8f44221e9ad6d8ceeb59ca46a6" datatype="html">
         <source>Minimum blob size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">359</context>
+          <context context-type="linenumber">360</context>
         </context-group>
       </trans-unit><trans-unit id="fb2f176df80647137cbb02bbeb29e5dec707a400" datatype="html">
         <source>e.g., 128KiB</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">368</context>
+          <context context-type="linenumber">369</context>
         </context-group>
       </trans-unit><trans-unit id="1b7f6e53a4521c6eb3ced4c007fdd4cf80bb7707" datatype="html">
         <source>Value should be greater than 0</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">373</context>
+          <context context-type="linenumber">374</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">398</context>
+          <context context-type="linenumber">399</context>
         </context-group>
       </trans-unit><trans-unit id="54be22af9625a595ee5d70917ee1fb116be7c4be" datatype="html">
         <source>Value should be greater than the maximum blob size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">376</context>
+          <context context-type="linenumber">377</context>
         </context-group>
       </trans-unit><trans-unit id="151efb127a9a4dd25259a0b2055442318a141f5b" datatype="html">
         <source>Maximum blob size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">385</context>
+          <context context-type="linenumber">386</context>
         </context-group>
       </trans-unit><trans-unit id="0c656f0e346bbadf46eb1a5d20d0307a3bd20ba8" datatype="html">
         <source>e.g., 512KiB</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">393</context>
+          <context context-type="linenumber">394</context>
         </context-group>
       </trans-unit><trans-unit id="0a65a24eee8a026f3b1113fe9e157e9a0dd69486" datatype="html">
         <source>Value should be greater than the minimum blob size</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">401</context>
+          <context context-type="linenumber">402</context>
         </context-group>
       </trans-unit><trans-unit id="261ba09c4a59de83f48f52a23fd328da37e61ff4" datatype="html">
         <source>Ratio</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">410</context>
+          <context context-type="linenumber">411</context>
         </context-group>
       </trans-unit><trans-unit id="c1430457a9c3c66366e51d76bf10396014c576be" datatype="html">
         <source>Compression ratio</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">421</context>
+          <context context-type="linenumber">422</context>
         </context-group>
       </trans-unit><trans-unit id="ae5ce6de352cde949998fb10754459c3a4eb183b" datatype="html">
         <source>Value should be between 0.0 and 1.0</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">424</context>
+          <context context-type="linenumber">425</context>
+        </context-group>
+      </trans-unit><trans-unit id="4b673e771a3f6b056837b22ef19a825386046095" datatype="html">
+        <source>It&apos;s not possible to create an RBD pool with &apos;/&apos; in the name.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
+          <context context-type="linenumber">445</context>
+        </context-group>
+      </trans-unit><trans-unit id="a9c02674c6e4936562d1146e1ecf0c4240dfcf96" datatype="html">
+        <source>Please change the name or remove &apos;rbd&apos; from the applications list.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
+          <context context-type="linenumber">447</context>
         </context-group>
       </trans-unit><trans-unit id="c6d3131ce5386154504dc91b5ad08855d85881d3" datatype="html">
         <source><x id="ICU" equiv-text="{editing, select, 1 {...} other {...}}"/> pool</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">444</context>
+          <context context-type="linenumber">456</context>
         </context-group>
       </trans-unit><trans-unit id="e2b15aacc2f17a9c3276895eeeaadd342ab26555" datatype="html">
         <source>{VAR_SELECT, select, 1 {Edit} other {Create} }</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/pool-form/pool-form.component.html</context>
-          <context context-type="linenumber">444</context>
+          <context context-type="linenumber">456</context>
         </context-group>
       </trans-unit><trans-unit id="1d8a7c8aea58294a3c57c23af0468ddf0ba0c9c7" datatype="html">
         <source>Pools List</source>

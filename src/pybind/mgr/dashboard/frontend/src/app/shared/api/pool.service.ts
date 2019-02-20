@@ -31,7 +31,9 @@ export class PoolService {
       name = pool.pool;
       delete pool.pool;
     }
-    return this.http.put(`${this.apiPath}/${name}`, pool, { observe: 'response' });
+    return this.http.put(`${this.apiPath}/${encodeURIComponent(name)}`, pool, {
+      observe: 'response'
+    });
   }
 
   delete(name) {

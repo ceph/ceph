@@ -297,7 +297,8 @@
                                 [messages]="data.applications.messages"
                                 [data]="data.applications.selected"
                                 [options]="data.applications.available"
-                                [selectionLimit]="4">
+                                [selectionLimit]="4"
+                                (selection)="appSelection()">
               </cd-select-badges>
             </span>
           </div>
@@ -434,6 +435,17 @@
                                      [initializeData]="initializeConfigData"
                                      (changes)="currentConfigurationValues = $event()">
           </cd-rbd-configuration-form>
+        </div>
+
+        <div class="form-group has-error">
+          <div class="col-sm-offset-3 col-sm-9"
+               *ngIf="form.hasError('rbdPool')">
+            <br>
+            <span class="help-block"
+                  i18n>It's not possible to create an RBD pool with '/' in the name.</span>
+            <span class="help-block"
+                  i18n>Please change the name or remove 'rbd' from the applications list.</span>
+          </div>
         </div>
       </div>
       <div class="panel-footer">
