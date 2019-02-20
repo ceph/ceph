@@ -564,6 +564,10 @@ or mismatched, and their contents are consistent.  Assuming the replicas all
 match, a final semantic sweep ensures that all of the snapshot-related object
 metadata is consistent. Errors are reported via logs.
 
+To scrub all placement groups from a specific pool, execute the following::
+
+        ceph osd pool scrub {pool-name}
+
 Prioritize backfill/recovery of a Placement Group(s)
 ====================================================
 
@@ -594,6 +598,32 @@ group, only those that are still queued.
 
 The "force" flag is cleared automatically after recovery or backfill of group
 is done.
+
+Similarly, you may use the following commands to force Ceph to perform recovery
+or backfill on all placement groups from a specified pool first::
+
+        ceph osd pool force-recovery {pool-name}
+        ceph osd pool force-backfill {pool-name}
+
+or::
+
+        ceph osd pool cancel-force-recovery {pool-name}
+        ceph osd pool cancel-force-backfill {pool-name}
+
+to restore to the default recovery or backfill priority if you change your mind.
+
+Note that these commands could possibly break the ordering of Ceph's internal
+priority computations, so use them with caution!
+Especially, if you have multiple pools that are currently sharing the same
+underlying OSDs, and some particular pools hold data more important than others,
+we recommend you use the following command to re-arrange all pools's
+recovery/backfill priority in a better order::
+
+        ceph osd pool set {pool-name} recovery_priority {value}
+
+For example, if you have 10 pools you could make the most important one priority 10,
+next 9, etc. Or you could leave most pools alone and have say 3 important pools
+all priority 1 or priorities 3, 2, 1 respectively.
 
 Revert Lost
 ===========
