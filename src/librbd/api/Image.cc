@@ -735,17 +735,15 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
     rbd_trash_image_source_t trash_image_source =
       RBD_TRASH_IMAGE_SOURCE_REMOVING;
     uint64_t expire_seconds = 0;
-    bool check_watchers = true;
     if (config.get_val<bool>("rbd_move_to_trash_on_remove")) {
       // keep the image in the trash upon remove requests
       trash_image_source = RBD_TRASH_IMAGE_SOURCE_USER;
       expire_seconds = config.get_val<uint64_t>(
         "rbd_move_to_trash_on_remove_expire_seconds");
-      check_watchers = false;
     }
 
     r = Trash<I>::move(io_ctx, trash_image_source, image_name, image_id,
-                       expire_seconds, check_watchers);
+                       expire_seconds);
     if (r >= 0) {
       if (trash_image_source == RBD_TRASH_IMAGE_SOURCE_REMOVING) {
         // proceed with attempting to immediately remove the image

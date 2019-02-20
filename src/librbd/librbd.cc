@@ -594,7 +594,7 @@ namespace librbd {
     tracepoint(librbd, trash_move_enter, io_ctx.get_pool_name().c_str(),
                io_ctx.get_id(), name);
     int r = librbd::api::Trash<>::move(io_ctx, RBD_TRASH_IMAGE_SOURCE_USER,
-                                       name, delay, false);
+                                       name, delay);
     tracepoint(librbd, trash_move_exit, r);
     return r;
   }
@@ -3171,7 +3171,7 @@ extern "C" int rbd_trash_move(rados_ioctx_t p, const char *name,
   tracepoint(librbd, trash_move_enter, io_ctx.get_pool_name().c_str(),
              io_ctx.get_id(), name);
   int r = librbd::api::Trash<>::move(io_ctx, RBD_TRASH_IMAGE_SOURCE_USER, name,
-                                     delay, false);
+                                     delay);
   tracepoint(librbd, trash_move_exit, r);
   return r;
 }
