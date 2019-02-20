@@ -15,6 +15,7 @@
  */
 
 #include <poll.h>
+#include <errno.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 
@@ -284,7 +285,7 @@ void RDMADispatcher::polling()
         r = 0;
         perf_logger->set(l_msgr_rdma_polling, 0);
         while (!done && r == 0) {
-          r = poll(channel_poll, 2, 100);
+          r = TEMP_FAILURE_RETRY(poll(channel_poll, 2, 100));
           if (r < 0) {
             r = -errno;
             lderr(cct) << __func__ << " poll failed " << r << dendl;
