@@ -13027,6 +13027,11 @@ int Client::_link(Inode *in, Inode *dir, const char *newname, const UserPerm& pe
     return -EDQUOT;
   }
 
+  if (dir->worm.is_enable() || in->worm.is_enable()) {
+    ldout(cct, 8) << "_link" << "worm feature doesn't support link " << dendl;
+    return -EPERM;
+  }
+
   in->break_all_delegs();
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LINK);
 
