@@ -3630,9 +3630,9 @@ void RGWPutObj::execute()
   // create the object processor
   rgw::AioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
-  constexpr auto max_processor_size = std::max(sizeof(MultipartObjectProcessor),
+  constexpr auto max_processor_size = std::max({sizeof(MultipartObjectProcessor),
                                                sizeof(AtomicObjectProcessor),
-                                               sizeof(AppendObjectProcessor));
+                                               sizeof(AppendObjectProcessor)});
   ceph::static_ptr<ObjectProcessor, max_processor_size> processor;
 
   rgw_placement_rule *pdest_placement;
@@ -3657,8 +3657,13 @@ void RGWPutObj::execute()
         s->owner.get_id(), obj_ctx, obj,
         multipart_upload_id, multipart_part_num, multipart_part_str);
   } else if(append) {
+    if (s->bucket_info.versioned()) {
+      op_ret = -ERR_INVALID_BUCKET_STATE;
+      return;
+    }
+    pdest_placement = &s->dest_placement;
     processor.emplace<AppendObjectProcessor>(
-            &aio, store, s->bucket_info, s->bucket_owner.get_id(),obj_ctx, obj,
+            &aio, store, s->bucket_info, pdest_placement, s->bucket_owner.get_id(),obj_ctx, obj,
             s->req_id, position, &cur_accounted_size);
   } else {
     if (s->bucket_info.versioning_enabled()) {

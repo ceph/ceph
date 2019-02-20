@@ -408,7 +408,8 @@ Append Object
 Append data to an object. You must have write permissions on the bucket to perform this operation.
 It is used to upload files in appending mode. The type of the objects created by the Append Object
 operation is Appendable Object, and the type of the objects uploaded with the Put Object operation is Normal Object.
-**Append Object can't be used if bucket versioning is enabled.**
+**Append Object can't be used if bucket versioning is enabled or suspende.**
+**Synced object will become normal in multisite, but you can still append to the original object.**
 
 
 Syntax
@@ -454,3 +455,6 @@ The following HTTP response may be returned:
 +---------------+----------------------------+---------------------------------------------------+
 | **409**       | ObjectNotAppendable        | Specified object can not be appended              |
 +---------------+----------------------------+---------------------------------------------------+
+| **409**       | InvalidBucketstate         | Bucket versioning is enabled or suspended         |
++---------------+----------------------------+---------------------------------------------------+
+
