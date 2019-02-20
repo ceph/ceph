@@ -43,20 +43,25 @@ struct rgw_pubsub_sub_dest {
   string bucket_name;
   string oid_prefix;
   string push_endpoint;
+  string push_endpoint_args;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(bucket_name, bl);
     encode(oid_prefix, bl);
     encode(push_endpoint, bl);
+    encode(push_endpoint_args, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(bucket_name, bl);
     decode(oid_prefix, bl);
     decode(push_endpoint, bl);
+    if (struct_v >= 2) {
+        decode(push_endpoint_args, bl);
+    }
     DECODE_FINISH(bl);
   }
 

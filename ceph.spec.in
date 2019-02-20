@@ -187,6 +187,7 @@ BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
+BuildRequires:  librabbitmq-devel
 %if 0%{with make_check}
 BuildRequires:	python%{_python_buildid}-bcrypt
 BuildRequires:	python%{_python_buildid}-coverage

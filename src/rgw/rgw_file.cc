@@ -26,6 +26,7 @@
 #include "rgw_zone.h"
 #include "rgw_file.h"
 #include "rgw_lib_frontend.h"
+#include "rgw_perf_counters.h"
 #include "common/errno.h"
 
 #include <atomic>

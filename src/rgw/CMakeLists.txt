@@ -3,13 +3,13 @@ add_executable(ceph_rgw_jsonparser
   rgw_jsonparser.cc)
 target_link_libraries(ceph_rgw_jsonparser
   rgw_a
-  global)
+  global rabbitmq)
 
 add_executable(ceph_rgw_multiparser
   rgw_multiparser.cc)
 target_link_libraries(ceph_rgw_multiparser
   rgw_a
-  global)
+  global rabbitmq)
 
 install(TARGETS
   ceph_rgw_jsonparser
@@ -89,6 +89,8 @@ set(librgw_common_srcs
   rgw_sync_module_es_rest.cc
   rgw_sync_module_log.cc
   rgw_sync_module_pubsub.cc
+  rgw_pubsub_push.cc
+  rgw_amqp.cc
   rgw_sync_module_pubsub_rest.cc
   rgw_sync_log_trim.cc
   rgw_sync_trace.cc
@@ -132,7 +134,8 @@ set(librgw_common_srcs
   rgw_rest_user_policy.cc
   rgw_zone.cc
   rgw_sts.cc
-  rgw_rest_sts.cc)
+  rgw_rest_sts.cc
+  rgw_perf_counters.cc)
 
 add_library(rgw_common OBJECT ${librgw_common_srcs})
 
@@ -229,7 +232,7 @@ endif()
 
 add_library(radosgw_a STATIC ${radosgw_srcs}
   $<TARGET_OBJECTS:civetweb_common_objs>)
-target_link_libraries(radosgw_a PRIVATE rgw_a)
+target_link_libraries(radosgw_a PRIVATE rgw_a rabbitmq)
 if(WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL)
   # used by rgw_asio_frontend.cc
   target_link_libraries(radosgw_a PRIVATE OpenSSL::SSL)
@@ -255,7 +258,7 @@ target_link_libraries(radosgw-admin rgw_a librados
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES} rabbitmq)
 install(TARGETS radosgw-admin DESTINATION bin)
 
 set(radosgw_es_srcs
@@ -266,7 +269,7 @@ target_link_libraries(radosgw-es rgw_a librados
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES} rabbitmq)
 install(TARGETS radosgw-es DESTINATION bin)
 
 set(radosgw_token_srcs
@@ -284,7 +287,7 @@ target_link_libraries(radosgw-object-expirer rgw_a librados
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} rabbitmq)
 install(TARGETS radosgw-object-expirer DESTINATION bin)
 
 set(librgw_srcs
@@ -307,7 +310,8 @@ target_link_libraries(rgw
   global
   ${LIB_RESOLV}
   ${CURL_LIBRARIES}
-  ${EXPAT_LIBRARIES})
+  ${EXPAT_LIBRARIES}
+  rabbitmq)
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)
 install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -337,7 +341,7 @@ target_link_libraries(rgw_admin_user PRIVATE
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES}
   dmclock::dmclock
-  )
+  rabbitmq)
 set_target_properties(rgw_admin_user PROPERTIES OUTPUT_NAME rgw_admin_user VERSION 1.0.0
   SOVERSION 0)
 install(TARGETS rgw_admin_user DESTINATION ${CMAKE_INSTALL_LIBDIR})

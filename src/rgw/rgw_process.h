@@ -63,13 +63,7 @@ protected:
       : ThreadPool::WorkQueue<RGWRequest>("RGWWQ", timeout, suicide_timeout,
 					  tp), process(p) {}
 
-    bool _enqueue(RGWRequest* req) override {
-      process->m_req_queue.push_back(req);
-      perfcounter->inc(l_rgw_qlen);
-      dout(20) << "enqueued request req=" << hex << req << dec << dendl;
-      _dump_queue();
-      return true;
-    }
+    bool _enqueue(RGWRequest* req) override;
 
     void _dequeue(RGWRequest* req) override {
       ceph_abort();
@@ -79,25 +73,11 @@ protected:
       return process->m_req_queue.empty();
     }
 
-    RGWRequest* _dequeue() override {
-      if (process->m_req_queue.empty())
-	return NULL;
-      RGWRequest *req = process->m_req_queue.front();
-      process->m_req_queue.pop_front();
-      dout(20) << "dequeued request req=" << hex << req << dec << dendl;
-      _dump_queue();
-      perfcounter->inc(l_rgw_qlen, -1);
-      return req;
-    }
+    RGWRequest* _dequeue() override;
 
     using ThreadPool::WorkQueue<RGWRequest>::_process;
 
-    void _process(RGWRequest *req, ThreadPool::TPHandle &) override  {
-      perfcounter->inc(l_rgw_qactive);
-      process->handle_request(req);
-      process->req_throttle.put(1);
-      perfcounter->inc(l_rgw_qactive, -1);
-    }
+    void _process(RGWRequest *req, ThreadPool::TPHandle &) override;
 
     void _dump_queue();
 
