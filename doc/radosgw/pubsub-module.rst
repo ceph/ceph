@@ -169,12 +169,12 @@ This will create a publisher for a specific bucket into a topic.
 
 ::
 
-   PUT /notifications/<bucket>?topic=<topic-name>[&events=<event>[,<event>]]
+   PUT /notifications/bucket/<bucket>?topic=<topic-name>[&events=<event>[,<event>]]
 
 
 Request Params:
  - topic-name: name of topic
- - event: event type (string)
+ - event: event type (string), one of: OBJECT_CREATE, OBJECT_DELETE 
 
 
 
@@ -185,7 +185,7 @@ Delete publisher from a specific bucket into a specific topic.
 
 ::
 
-   DELETE /notifications/<bucket>?topic=<topic-name>
+   DELETE /notifications/bucket/<bucket>?topic=<topic-name>
 
 Request Params:
  - topic-name: name of topic
