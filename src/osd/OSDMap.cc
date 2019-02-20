@@ -4641,6 +4641,7 @@ int OSDMap::calc_pg_upmaps(
       // look for remaps we can un-remap
       vector<pair<pg_t,
         mempool::osdmap::vector<pair<int32_t,int32_t>>>> candidates;
+      candidates.reserve(tmp.pg_upmap_items.size());
       for (auto& i : tmp.pg_upmap_items) {
         if (to_skip.count(i.first))
           continue;
