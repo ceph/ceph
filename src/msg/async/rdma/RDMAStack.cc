@@ -283,9 +283,14 @@ void RDMADispatcher::polling()
         channel_poll[1].revents = 0;
         r = 0;
         perf_logger->set(l_msgr_rdma_polling, 0);
-        while (!done && r == 0) {
+        while (!done) {
           r = poll(channel_poll, 2, 100);
-          if (r < 0) {
+          if (r > 0) {
+            break;
+          } else if (r < 0) {
+            if (errno == EINTR) {
+              continue;
+            }
             r = -errno;
             lderr(cct) << __func__ << " poll failed " << r << dendl;
             ceph_abort();
