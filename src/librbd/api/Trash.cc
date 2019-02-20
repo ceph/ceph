@@ -120,7 +120,7 @@ int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
 template <typename I>
 int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
                    const std::string &image_name, const std::string &image_id,
-                   uint64_t delay, bool check_for_watchers) {
+                   uint64_t delay) {
   ceph_assert(!image_name.empty() && !image_id.empty());
   CephContext *cct((CephContext *)io_ctx.cct());
   ldout(cct, 20) << &io_ctx << " name=" << image_name << ", id=" << image_id
@@ -162,27 +162,6 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
       return -EINVAL;
     }
     ictx->snap_lock.put_read();
-
-    if (check_for_watchers) {
-      std::list<obj_watch_t> t_watchers;
-      int flags = librbd::image::LIST_WATCHERS_FILTER_OUT_MY_INSTANCE |
-                  librbd::image::LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES;
-      C_SaferCond t_on_list_watchers;
-      auto list_req = librbd::image::ListWatchersRequest<I>::create(
-          *ictx, flags, &t_watchers, &t_on_list_watchers);
-      list_req->send();
-      r = t_on_list_watchers.wait();
-      if (r < 0) {
-        lderr(cct) << "failed listing watchers:" << cpp_strerror(r) << dendl;
-        ictx->state->close();
-        return r;
-      }
-      if (!t_watchers.empty()) {
-        lderr(cct) << "image has watchers - not moving" << dendl;
-        ictx->state->close();
-        return -EBUSY;
-      }
-    }
 
     r = disable_mirroring<I>(ictx);
     if (r < 0) {
@@ -234,8 +213,7 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
 
 template <typename I>
 int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
-                   const std::string &image_name, uint64_t delay,
-                   bool check_for_watchers) {
+                   const std::string &image_name, uint64_t delay) {
   CephContext *cct((CephContext *)io_ctx.cct());
   ldout(cct, 20) << &io_ctx << " name=" << image_name << dendl;
 
@@ -260,8 +238,7 @@ int Trash<I>::move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
   }
 
   ceph_assert(!image_name.empty() && !image_id.empty());
-  return Trash<I>::move(io_ctx, source, image_name, image_id, delay,
-                        check_for_watchers);
+  return Trash<I>::move(io_ctx, source, image_name, image_id, delay);
 }
 
 template <typename I>

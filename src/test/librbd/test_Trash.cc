@@ -63,9 +63,9 @@ TEST_F(TestTrash, UserRemovingSource) {
   ASSERT_EQ(0, image.close());
 
   ASSERT_EQ(0, api::Trash<>::move(m_ioctx, RBD_TRASH_IMAGE_SOURCE_USER,
-                                  image_name1, image_id1, 0, false));
+                                  image_name1, image_id1, 0));
   ASSERT_EQ(0, api::Trash<>::move(m_ioctx, RBD_TRASH_IMAGE_SOURCE_REMOVING,
-                                  image_name2, image_id2, 0, true));
+                                  image_name2, image_id2, 0));
 
   TrashEntries trash_entries{compare_lambda};
   TrashEntries expected_trash_entries{compare_lambda};
