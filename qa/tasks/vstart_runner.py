@@ -236,10 +236,16 @@ class LocalRemote(object):
 
     def run(self, args, check_status=True, wait=True,
             stdout=None, stderr=None, cwd=None, stdin=None,
-            logger=None, label=None, env=None, timeout=None):
+            logger=None, label=None, env=None, timeout=None, omit_sudo=True):
+        try:
+            if args[args.index('sudo') + 1] in ['-u', 'passwd', 'chown']:
+                omit_sudo = False
+        except ValueError:
+            pass
 
         # We don't need no stinkin' sudo
-        args = [a for a in args if a != "sudo"]
+        if omit_sudo:
+            args = [a for a in args if a != "sudo"]
 
         # We have to use shell=True if any run.Raw was present, e.g. &&
         shell = any([a for a in args if isinstance(a, Raw)])
@@ -418,12 +424,13 @@ class LocalFuseMount(FuseMount):
         # to avoid assumptions about daemons' pwd
         return os.path.abspath("./client.{0}.keyring".format(self.client_id))
 
-    def run_shell(self, args, wait=True, check_status=True):
+    def run_shell(self, args, wait=True, check_status=True, omit_sudo=True):
         # FIXME maybe should add a pwd arg to teuthology.orchestra so that
         # the "cd foo && bar" shenanigans isn't needed to begin with and
         # then we wouldn't have to special case this
         return self.client_remote.run(args, wait=wait, cwd=self.mountpoint,
-                                      check_status=check_status)
+                                      check_status=check_status,
+                                      omit_sudo=omit_sudo)
 
     def setupfs(self, name=None):
         if name is None and self.fs is not None:
