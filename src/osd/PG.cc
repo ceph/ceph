@@ -1766,7 +1766,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   want_acting.clear();
   acting_recovery_backfill = want_acting_backfill;
   dout(10) << "acting_recovery_backfill is " << acting_recovery_backfill << dendl;
-  ceph_assert(backfill_targets.empty() || backfill_targets == want_backfill);
+  ceph_assert(backfill_targets.empty());
   if (backfill_targets.empty()) {
     // Caller is GetInfo
     backfill_targets = want_backfill;
