@@ -317,10 +317,10 @@ class Module(MgrModule):
         assert self.get_module_option_ex("dashboard", "password", "foobar") == "foobar"
 
         # Option type is not defined => return as string.
-        self.set_module_option_ex("dashboard", "server_port", 8080)
-        value = self.get_module_option_ex("dashboard", "server_port")
+        self.set_module_option_ex("selftest", "rwoption1", 1234)
+        value = self.get_module_option_ex("selftest", "rwoption1")
         assert isinstance(value, str)
-        assert value == "8080"
+        assert value == "1234"
 
         # Option type is defined => return as integer.
         self.set_module_option_ex("telemetry", "interval", 60)
