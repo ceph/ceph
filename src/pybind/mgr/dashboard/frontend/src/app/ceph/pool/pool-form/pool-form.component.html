@@ -87,8 +87,7 @@
                      min="1"
                      type="number"
                      (focus)="externalPgChange = false"
-                     (keyup)="pgKeyUp($event)"
-                     (blur)="pgUpdate()"
+                     (blur)="alignPgs()"
                      required>
               <span class="help-block"
                     *ngIf="form.showError('pgNum', formDir, 'required')"
