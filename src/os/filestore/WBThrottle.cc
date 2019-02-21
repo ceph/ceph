@@ -5,6 +5,7 @@
 
 #include "os/filestore/WBThrottle.h"
 #include "common/perf_counters.h"
+#include "common/errno.h"
 
 WBThrottle::WBThrottle(CephContext *cct) :
   cur_ios(0), cur_size(0),
@@ -166,10 +167,14 @@ void *WBThrottle::entry()
     logger->inc(l_wbthrottle_inodes_wb);
     lock.Unlock();
 #if defined(HAVE_FDATASYNC)
-    ::fdatasync(**wb.get<1>());
+    int r = ::fdatasync(**wb.get<1>());
 #else
-    ::fsync(**wb.get<1>());
+    int r = ::fsync(**wb.get<1>());
 #endif
+    if (r < 0) {
+      lderr(cct) << "WBThrottle fsync failed: " << cpp_strerror(errno) << dendl;
+      ceph_abort();
+    }
 #ifdef HAVE_POSIX_FADVISE
     if (cct->_conf->filestore_fadvise && wb.get<2>().nocache) {
       int fa_r = posix_fadvise(**wb.get<1>(), 0, 0, POSIX_FADV_DONTNEED);
