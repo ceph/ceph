@@ -966,9 +966,8 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
 
   ceph_msg_header2 header2{header.seq,        header.tid,
                            header.type,       header.priority,
-                           header.version,    header.front_len,
-                           header.middle_len, 0,
-                           header.data_len,   header.data_off,
+                           header.version,
+                           0,                 header.data_off,
                            ack_seq,           footer.front_crc,
                            footer.middle_crc, footer.data_crc,
                            footer.flags,      header.compat_version,
@@ -984,11 +983,6 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
 			     m->get_payload().length(),
 			     m->get_middle().length(),
 			     m->get_data().length());
-
-  ceph_assert(m->get_payload().length() == header.front_len);
-  ceph_assert(m->get_middle().length() == header.middle_len);
-  ceph_assert(m->get_data().length() == header.data_len);
-
   if (auth_meta->is_mode_secure()) {
     ceph_assert(session_stream_handlers.tx);
 
@@ -1036,8 +1030,7 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
   m->trace.event("async writing message");
   ldout(cct, 20) << __func__ << " sending m=" << m << " seq=" << m->get_seq()
                  << " src=" << entity_name_t(messenger->get_myname())
-                 << " front=" << header2.front_len
-                 << " data=" << header2.data_len << " off=" << header2.data_off
+                 << " off=" << header2.data_off
                  << dendl;
   ssize_t total_send_size = connection->outcoming_bl.length();
   ssize_t rc = connection->_try_send(more);
@@ -1721,8 +1714,6 @@ CtPtr ProtocolV2::handle_message() {
   ldout(cct, 20) << __func__
 		 << " got envelope type=" << header.type
 		 << " src " << peer_name
-		 << " front=" << header.front_len
-                 << " data=" << header.data_len
 		 << " off " << header.data_off
                  << dendl;
 
@@ -1749,14 +1740,10 @@ CtPtr ProtocolV2::handle_message() {
   current_header = header;
 
   // front
-  ceph_assert(current_header.front_len == \
-    rx_segments_data[SegmentIndex::Msg::FRONT].length());
   ceph_assert(!front.length());
   front = std::move(rx_segments_data[SegmentIndex::Msg::FRONT]);
 
   // middle
-  ceph_assert(current_header.middle_len == \
-    rx_segments_data[SegmentIndex::Msg::MIDDLE].length());
   ceph_assert(!middle.length());
   middle = std::move(rx_segments_data[SegmentIndex::Msg::MIDDLE]);
 
@@ -1768,8 +1755,10 @@ CtPtr ProtocolV2::handle_message() {
 
 CtPtr ProtocolV2::read_message_data_prepare() {
   ldout(cct, 20) << __func__ << dendl;
-  unsigned data_len = le32_to_cpu(current_header.data_len);
-  unsigned data_off = le32_to_cpu(current_header.data_off);
+
+  const auto data_len = \
+    rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+  const unsigned data_off = le32_to_cpu(current_header.data_off);
 
   if (data_len) {
     // get a buffer
@@ -1807,7 +1796,7 @@ CtPtr ProtocolV2::read_message_data() {
     return READB(read_len, bp.c_str(), handle_message_data);
   }
 
-  next_payload_len -= current_header.data_len;
+  next_payload_len -= rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
   if (next_payload_len) {
     // if we still have more bytes to read is because we signed or encrypted
     // the message payload
@@ -1862,14 +1851,21 @@ CtPtr ProtocolV2::handle_message_complete() {
 		<< " + " << data.length()
 		<< " byte message" << dendl;
 
+  const auto front_len = \
+    rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length;
+  const auto middle_len = \
+    rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length;
+  const auto data_len = \
+    rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+
   ceph_msg_header header{current_header.seq,
                          current_header.tid,
                          current_header.type,
                          current_header.priority,
                          current_header.version,
-                         current_header.front_len,
-                         current_header.middle_len,
-                         current_header.data_len,
+                         front_len,
+                         middle_len,
+                         data_len,
                          current_header.data_off,
                          peer_name,
                          current_header.compat_version,
@@ -1915,8 +1911,10 @@ CtPtr ProtocolV2::handle_message_complete() {
   message->set_byte_throttler(connection->policy.throttler_bytes);
   message->set_message_throttler(connection->policy.throttler_messages);
 
-  uint32_t cur_msg_size = current_header.front_len + current_header.middle_len +
-                          current_header.data_len;
+  const uint32_t cur_msg_size = \
+    rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length + \
+    rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length + \
+    rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
 
   // store reservation size in message, so we don't get confused
   // by messages entering the dispatch queue through other paths.
