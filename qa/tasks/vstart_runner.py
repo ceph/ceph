@@ -237,6 +237,9 @@ class LocalRemote(object):
     def run(self, args, check_status=True, wait=True,
             stdout=None, stderr=None, cwd=None, stdin=None,
             logger=None, label=None, env=None, timeout=None, omit_sudo=True):
+        if str(type(args)).find('str') != -1:
+            args = args.split()
+
         try:
             if args[args.index('sudo') + 1] in ['-u', 'passwd', 'chown']:
                 omit_sudo = False
