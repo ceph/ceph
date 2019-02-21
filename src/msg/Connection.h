@@ -38,6 +38,10 @@
 
 class Messenger;
 
+#ifdef UNIT_TESTS_BUILT
+class Interceptor;
+#endif
+
 struct Connection : public RefCountedObject {
   mutable Mutex lock;
   Messenger *msgr;
@@ -60,6 +64,10 @@ public:
   AuthCapsInfo peer_caps_info;
   EntityName peer_name;
   uint64_t peer_global_id = 0;
+
+#ifdef UNIT_TESTS_BUILT
+  Interceptor *interceptor;
+#endif
 
   friend class boost::intrusive_ptr<Connection>;
   friend class PipeConnection;
