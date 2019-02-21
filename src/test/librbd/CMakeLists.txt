@@ -65,6 +65,7 @@ set(unittest_librbd_srcs
   image/test_mock_DetachChildRequest.cc
   image/test_mock_DetachParentRequest.cc
   image/test_mock_ListWatchersRequest.cc
+  image/test_mock_PreRemoveRequest.cc
   image/test_mock_RefreshRequest.cc
   image/test_mock_RemoveRequest.cc
   io/test_mock_ImageRequest.cc
