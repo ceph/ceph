@@ -9,7 +9,7 @@ from requests.exceptions import ConnectionError
 
 from ..ansible_runner_svc import Client, PlayBookExecution, ExecutionStatusCode, \
                                 LOGIN_URL, API_URL, PLAYBOOK_EXEC_URL, \
-                                PLAYBOOK_EVENTS
+                                PLAYBOOK_EVENTS, AnsibleRunnerServiceError
 
 
 SERVER_URL = "ars:5001"
@@ -77,11 +77,11 @@ def mock_get_pb(mock_server, playbook_name, return_code):
     return PlayBookExecution(ars_client, playbook_name, logger,
                              result_pattern = "RESULTS")
 
-class  ARSclientTest(unittest.TestCase):
+class ARSclientTest(unittest.TestCase):
 
     def test_server_not_reachable(self):
 
-        with self.assertRaises(ConnectionError):
+        with self.assertRaises(AnsibleRunnerServiceError):
             ars_client = Client(SERVER_URL, USER, PASSWORD,
                                 CERTIFICATE, logger)
 
@@ -114,6 +114,26 @@ class  ARSclientTest(unittest.TestCase):
             self.assertTrue(ars_client.is_operative(),
                             "Operative attribute expected to be True")
 
+    def test_server_http_delete(self):
+
+        with requests_mock.Mocker() as mock_server:
+
+            mock_login(mock_server)
+
+            ars_client = Client(SERVER_URL, USER, PASSWORD,
+                                CERTIFICATE, logger)
+
+            url = "https://%s/test" % (SERVER_URL)
+            mock_server.register_uri("DELETE",
+                        url,
+                        json={ "status": "OK",
+                               "msg": "",
+                               "data": {}},
+                        status_code=201)
+
+            response = ars_client.http_delete("test")
+            self.assertTrue(response.status_code == 201)
+
 class PlayBookExecutionTests(unittest.TestCase):
 
 
@@ -139,10 +159,11 @@ class PlayBookExecutionTests(unittest.TestCase):
 
             test_pb = mock_get_pb(mock_server, "unknown_playbook", 404)
 
-            test_pb.launch()
+            with self.assertRaises(AnsibleRunnerServiceError):
+                test_pb.launch()
 
-            self.assertEqual(test_pb.play_uuid, "",
-                            "Playbook uuid not empty")
+            #self.assertEqual(test_pb.play_uuid, "",
+            #                "Playbook uuid not empty")
 
     def test_playbook_not_launched(self):
         """Check right status code when Playbook execution has not been launched
