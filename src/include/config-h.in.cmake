@@ -351,4 +351,7 @@
 /* Define if seastar is available. */
 #cmakedefine HAVE_SEASTAR
 
+/* Define if unit tests are built. */
+#cmakedefine UNIT_TESTS_BUILT
+
 #endif /* CONFIG_H */

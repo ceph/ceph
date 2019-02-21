@@ -96,6 +96,23 @@ const int SIGNATURE_BLOCK_SIZE = CEPH_CRYPTO_HMACSHA256_DIGESTSIZE;
 
 #define READB(L, B, C) read(CONTINUATION(C), L, B)
 
+#ifdef UNIT_TESTS_BUILT
+
+#define INTERCEPT(S) { \
+if(connection->interceptor) { \
+  auto a = connection->interceptor->intercept(connection, (S)); \
+  if (a == Interceptor::ACTION::FAIL) { \
+    return _fault(); \
+  } else if (a == Interceptor::ACTION::STOP) { \
+    stop(); \
+    connection->dispatch_queue->queue_reset(connection); \
+    return nullptr; \
+  }}}
+  
+#else
+#define INTERCEPT(S)
+#endif
+
 static void alloc_aligned_buffer(bufferlist &data, unsigned len, unsigned off) {
   // create a buffer to read into that matches the data alignment
   unsigned alloc_len = 0;
@@ -1254,6 +1271,8 @@ CtPtr ProtocolV2::_banner_exchange(CtPtr callback) {
   encode((uint16_t)banner_payload.length(), bl, 0);
   bl.claim_append(banner_payload);
 
+  INTERCEPT(state == CONNECTING ? 3 : 4);
+
   return WRITE(bl, "banner", _wait_for_peer_banner);
 }
 
@@ -1299,6 +1318,9 @@ CtPtr ProtocolV2::_handle_peer_banner(char *buffer, int r) {
                                      // temp_buffer size as well
 
   next_payload_len = payload_len;
+
+  INTERCEPT(state == CONNECTING ? 5 : 6);
+
   return READ(next_payload_len, _handle_peer_banner_payload);
 }
 
@@ -1358,6 +1380,9 @@ CtPtr ProtocolV2::_handle_peer_banner_payload(char *buffer, int r) {
   }
 
   HelloFrame hello(this, messenger->get_mytype(), connection->target_addr);
+
+  INTERCEPT(state == CONNECTING ? 7 : 8);
+
   return WRITE(hello.get_buffer(), "hello frame", read_frame);
 }
 
@@ -1556,6 +1581,8 @@ CtPtr ProtocolV2::ready() {
                 << server_cookie << std::dec << " in_seq=" << in_seq
                 << " out_seq=" << out_seq << dendl;
 
+  INTERCEPT(15);
+
   return CONTINUE(read_frame);
 }
 
@@ -1604,6 +1631,8 @@ CtPtr ProtocolV2::handle_message_header(char *buffer, int r) {
       return _fault();
     }
   }
+
+  INTERCEPT(16);
 
   // Reset state
   data_buf.clear();
@@ -1913,6 +1942,8 @@ CtPtr ProtocolV2::handle_message_complete() {
     return _fault();
   }
 
+  INTERCEPT(17);
+
   message->set_byte_throttler(connection->policy.throttler_bytes);
   message->set_message_throttler(connection->policy.throttler_messages);
 
@@ -2083,6 +2114,9 @@ CtPtr ProtocolV2::handle_message_ack(char *payload, uint32_t length) {
 
 CtPtr ProtocolV2::start_client_banner_exchange() {
   ldout(cct, 20) << __func__ << dendl;
+
+  INTERCEPT(1);
+
   state = CONNECTING;
 
   global_seq = messenger->get_global_seq();
@@ -2122,6 +2156,9 @@ CtPtr ProtocolV2::send_auth_request(std::vector<uint32_t> &allowed_methods) {
     connection->dispatch_queue->queue_reset(connection);
     return nullptr;
   }
+
+  INTERCEPT(9);
+
   AuthRequestFrame frame(auth_meta->auth_method, preferred_modes, bl);
   return WRITE(frame.get_buffer(), "auth request", read_frame);
 }
@@ -2279,8 +2316,9 @@ CtPtr ProtocolV2::send_client_ident() {
                 << " flags=" << flags
                 << " cookie=" << client_cookie << std::dec << dendl;
 
-  bufferlist &bl = client_ident.get_buffer();
-  return WRITE(bl, "client ident", read_frame);
+  INTERCEPT(11);
+
+  return WRITE(client_ident.get_buffer(), "client ident", read_frame);
 }
 
 CtPtr ProtocolV2::send_reconnect() {
@@ -2298,6 +2336,9 @@ CtPtr ProtocolV2::send_reconnect() {
                 << server_cookie << std::dec
                 << " gs=" << global_seq << " cs=" << connect_seq
                 << " ms=" << in_seq << dendl;
+
+  INTERCEPT(13);
+
   return WRITE(reconnect.get_buffer(), "reconnect", read_frame);
 }
 
@@ -2441,6 +2482,9 @@ CtPtr ProtocolV2::handle_server_ident(char *payload, uint32_t length) {
 
 CtPtr ProtocolV2::start_server_banner_exchange() {
   ldout(cct, 20) << __func__ << dendl;
+
+  INTERCEPT(2);
+
   state = ACCEPTING;
 
   return _banner_exchange(CONTINUATION(post_server_banner_exchange));
@@ -2521,6 +2565,8 @@ CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
     return _fault();
   }
   if (r == 1) {
+    INTERCEPT(10);
+
     AuthDoneFrame auth_done(connection->peer_global_id, auth_meta->con_mode,
 			    reply);
     return WRITE(auth_done.get_buffer(), "auth done", read_frame);
@@ -2736,16 +2782,41 @@ CtPtr ProtocolV2::handle_reconnect(char *payload, uint32_t length) {
                   << " cgs=" << reconnect.global_seq()
                   << ", ask client to retry global" << dendl;
     RetryGlobalFrame retry(this, exproto->peer_global_seq);
+
+    INTERCEPT(18);
+
     return WRITE(retry.get_buffer(), "session retry", read_frame);
   }
 
-  if (exproto->connect_seq >= reconnect.connect_seq()) {
+  if (exproto->connect_seq > reconnect.connect_seq()) {
     ldout(cct, 5) << __func__
                   << " stale connect_seq scs=" << exproto->connect_seq
                   << " ccs=" << reconnect.connect_seq()
                   << " , ask client to retry" << dendl;
     RetryFrame retry(this, exproto->connect_seq);
     return WRITE(retry.get_buffer(), "session retry", read_frame);
+  }
+
+  if (exproto->connect_seq == reconnect.connect_seq()) {
+    // reconnect race: both peers are sending reconnect messages
+    if (existing->peer_addrs->msgr2_addr() >
+            messenger->get_myaddrs().msgr2_addr() &&
+        !existing->policy.server) {
+      // the existing connection wins
+      ldout(cct, 1)
+          << __func__
+          << " reconnect race detected, this connection loses to existing="
+          << existing << dendl;
+
+      WaitFrame wait;
+      return WRITE(wait.get_buffer(), "wait", read_frame);
+    } else {
+      // this connection wins
+      ldout(cct, 1) << __func__
+                    << " reconnect race detected, replacing existing="
+                    << existing << " socket by this connection's socket"
+                    << dendl;
+    }
   }
 
   ldout(cct, 1) << __func__ << " reconnect to existing=" << existing << dendl;
@@ -3044,8 +3115,9 @@ CtPtr ProtocolV2::send_server_ident() {
   connection->dispatch_queue->queue_accept(connection);
   messenger->ms_deliver_handle_fast_accept(connection);
 
-  bufferlist &bl = server_ident.get_buffer();
-  return WRITE(bl, "server ident", server_ready);
+  INTERCEPT(12);
+
+  return WRITE(server_ident.get_buffer(), "server ident", server_ready);
 }
 
 CtPtr ProtocolV2::server_ready() {
@@ -3098,6 +3170,7 @@ CtPtr ProtocolV2::send_reconnect_ok() {
   connection->dispatch_queue->queue_accept(connection);
   messenger->ms_deliver_handle_fast_accept(connection);
 
-  bufferlist &bl = reconnect_ok.get_buffer();
-  return WRITE(bl, "reconnect ok", server_ready);
+  INTERCEPT(14);
+
+  return WRITE(reconnect_ok.get_buffer(), "reconnect ok", server_ready);
 }
