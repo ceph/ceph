@@ -152,7 +152,7 @@ void PGStateHistory::dump(Formatter* f) const {
 
 void PG::get(const char* tag)
 {
-  int after = ref++;
+  int after = ++ref;
   lgeneric_subdout(cct, refs, 1) << "PG::get " << this << " "
 				 << (after - 1) << " -> " << after << dendl;
 #ifdef PG_DEBUG_REFS
