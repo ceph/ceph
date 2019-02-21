@@ -3244,8 +3244,9 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
   return NULL;
 }
 
-RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data, int list_type)
+RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data)
 {
+   int list_type = s->info.args.get_int("list_type", &list_type, 1);
   // Non-website mode
   if (get_data) {
     if(list_type == 1)

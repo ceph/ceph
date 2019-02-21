@@ -591,7 +591,7 @@ protected:
   bool is_obj_update_op() override {
     return is_acl_op() || is_tagging_op() ;
   }
-  RGWOp *get_obj_op(bool get_data, int list_type);
+  RGWOp *get_obj_op(bool get_data);
 
   RGWOp *op_get() override;
   RGWOp *op_head() override;
