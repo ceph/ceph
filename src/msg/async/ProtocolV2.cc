@@ -957,6 +957,10 @@ void ProtocolV2::handle_message_ack(uint64_t seq) {
   if (connection->policy.lossy) {  // lossy connections don't keep sent messages
     return;
   }
+  if (phase != Phase::OPEN) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return;
+  }
 
   ldout(cct, 15) << __func__ << " seq=" << seq << dendl;
 
@@ -1365,7 +1369,10 @@ CtPtr ProtocolV2::_handle_peer_banner_payload(char *buffer, int r) {
 }
 
 CtPtr ProtocolV2::handle_hello(char *payload, uint32_t length) {
-  ldout(cct, 20) << __func__ << " payload_len=" << std::dec << length << dendl;
+  if (phase != Phase::HELLO) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
 
   HelloFrame hello(payload, length);
 
@@ -1563,6 +1570,10 @@ CtPtr ProtocolV2::ready() {
 }
 
 CtPtr ProtocolV2::handle_message() {
+  if (phase != Phase::OPEN) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
   ldout(cct, 20) << __func__ << dendl;
 
   ceph_assert(state == READY);
@@ -2044,6 +2055,10 @@ CtPtr ProtocolV2::handle_message_complete() {
 
 CtPtr ProtocolV2::handle_keepalive2(char *payload, uint32_t length) {
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
+  if (phase != Phase::OPEN) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
 
   KeepAliveFrame keepalive_frame(this, payload, length);
 
@@ -2066,6 +2081,10 @@ CtPtr ProtocolV2::handle_keepalive2(char *payload, uint32_t length) {
 
 CtPtr ProtocolV2::handle_keepalive2_ack(char *payload, uint32_t length) {
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
+  if (phase != Phase::OPEN) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
 
   KeepAliveFrameAck keepalive_ack_frame(this, payload, length);
   connection->set_last_keepalive_ack(keepalive_ack_frame.timestamp());
@@ -2076,6 +2095,10 @@ CtPtr ProtocolV2::handle_keepalive2_ack(char *payload, uint32_t length) {
 
 CtPtr ProtocolV2::handle_message_ack(char *payload, uint32_t length) {
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
+  if (phase != Phase::OPEN) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
 
   AckFrame ack(this, payload, length);
   handle_message_ack(ack.seq());
@@ -2160,6 +2183,10 @@ CtPtr ProtocolV2::handle_auth_bad_method(char *payload, uint32_t length) {
 
 CtPtr ProtocolV2::handle_auth_reply_more(char *payload, uint32_t length)
 {
+  if (phase != Phase::AUTH_CLIENT) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
   AuthReplyMoreFrame auth_more(payload, length);
   ldout(cct, 5) << __func__
@@ -2187,6 +2214,10 @@ CtPtr ProtocolV2::handle_auth_reply_more(char *payload, uint32_t length)
 }
 
 CtPtr ProtocolV2::handle_auth_done(char *payload, uint32_t length) {
+  if (phase != Phase::AUTH_CLIENT) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
 
   AuthDoneFrame auth_done(payload, length);
@@ -2309,6 +2340,10 @@ CtPtr ProtocolV2::send_reconnect() {
 
 CtPtr ProtocolV2::handle_ident_missing_features(char *payload,
                                                 uint32_t length) {
+  if (phase != Phase::SESSION_CLIENT) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
 
   IdentMissingFeaturesFrame ident_missing(this, payload, length);
@@ -2320,6 +2355,10 @@ CtPtr ProtocolV2::handle_ident_missing_features(char *payload,
 }
 
 CtPtr ProtocolV2::handle_session_reset() {
+  if (phase != Phase::SESSION_CLIENT) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
   ldout(cct, 20) << __func__ << dendl;
 
   ldout(cct, 1) << __func__ << " received session reset" << dendl;
@@ -2329,6 +2368,10 @@ CtPtr ProtocolV2::handle_session_reset() {
 }
 
 CtPtr ProtocolV2::handle_session_retry(char *payload, uint32_t length) {
+  if (phase != Phase::SESSION_CLIENT) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
 
   RetryFrame retry(this, payload, length);
@@ -2342,6 +2385,10 @@ CtPtr ProtocolV2::handle_session_retry(char *payload, uint32_t length) {
 }
 
 CtPtr ProtocolV2::handle_session_retry_global(char *payload, uint32_t length) {
+  if (phase != Phase::SESSION_CLIENT) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
 
   RetryGlobalFrame retry(this, payload, length);
@@ -2355,13 +2402,22 @@ CtPtr ProtocolV2::handle_session_retry_global(char *payload, uint32_t length) {
 }
 
 CtPtr ProtocolV2::handle_wait() {
+  if (phase != Phase::SESSION_CLIENT) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
   ldout(cct, 20) << __func__ << dendl;
   ldout(cct, 1) << __func__ << " received WAIT (connection race)" << dendl;
   state = WAIT;
+  phase = Phase::CLOSED;
   return _fault();
 }
 
 CtPtr ProtocolV2::handle_reconnect_ok(char *payload, uint32_t length) {
+  if (phase != Phase::SESSION_CLIENT) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
 
   ReconnectOkFrame reconnect_ok(this, payload, length);
@@ -2387,6 +2443,10 @@ CtPtr ProtocolV2::handle_reconnect_ok(char *payload, uint32_t length) {
 }
 
 CtPtr ProtocolV2::handle_server_ident(char *payload, uint32_t length) {
+  if (phase != Phase::SESSION_CLIENT) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
 
   ServerIdentFrame server_ident(this, payload, length);
@@ -2453,6 +2513,10 @@ CtPtr ProtocolV2::post_server_banner_exchange() {
 }
 
 CtPtr ProtocolV2::handle_auth_request(char *payload, uint32_t length) {
+  if (phase != Phase::AUTH_SERVER) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
   AuthRequestFrame request(payload, length);
   ldout(cct, 10) << __func__ << " AuthRequest(method=" << request.method()
 		 << ", preferred_modes=" << request.preferred_modes()
@@ -2535,12 +2599,20 @@ CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
 
 CtPtr ProtocolV2::handle_auth_request_more(char *payload, uint32_t length)
 {
+  if (phase != Phase::AUTH_SERVER) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
   AuthRequestMoreFrame auth_more(payload, length);
   return _handle_auth_request(auth_more.auth_payload(), true);
 }
 
 CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {
+  if (phase != Phase::SESSION_SERVER) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
   ldout(cct, 20) << __func__ << " payload_len=" << std::dec << length << dendl;
 
   ClientIdentFrame client_ident(this, payload, length);
@@ -2625,6 +2697,10 @@ CtPtr ProtocolV2::handle_client_ident(char *payload, uint32_t length) {
 }
 
 CtPtr ProtocolV2::handle_reconnect(char *payload, uint32_t length) {
+  if (phase != Phase::SESSION_SERVER) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
   ldout(cct, 20) << __func__ << " payload_len=" << std::dec << length << dendl;
 
   ReconnectFrame reconnect(this, payload, length);
