@@ -182,6 +182,16 @@ describe('ApiInterceptorService', () => {
       expect(notificationService.save).not.toHaveBeenCalled();
     }));
 
+    it('should be able to use preventDefault with 400 errors', fakeAsync(() => {
+      httpError(
+        { task: { name: 'someName', metadata: { component: 'someComponent' } } },
+        { status: 400 },
+        (resp) => resp.preventDefault()
+      );
+      tick(10);
+      expect(notificationService.save).not.toHaveBeenCalled();
+    }));
+
     it('should prevent the default behaviour by status code', fakeAsync(() => {
       httpError(undefined, { status: 500 }, (resp) => resp.ignoreStatusCode(500));
       tick(10);
