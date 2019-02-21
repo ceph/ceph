@@ -38,8 +38,7 @@ class AuthRegistry : public md_config_obs_t {
   void _refresh_config();
 
 public:
-  AuthRegistry(CephContext *cct) : cct(cct) {
-  }
+  AuthRegistry(CephContext *cct);
   ~AuthRegistry();
 
   void refresh_config() {
