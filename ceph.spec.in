@@ -158,7 +158,6 @@ BuildRequires:	gperftools-devel >= 2.6.1
 BuildRequires:	gperftools-devel >= 2.4
 %endif
 %endif
-BuildRequires:  jq
 BuildRequires:	leveldb-devel > 1.2
 BuildRequires:	libaio-devel
 BuildRequires:	libblkid-devel >= 2.17
@@ -188,6 +187,7 @@ BuildRequires:	xmlstarlet
 BuildRequires:	yasm
 BuildRequires:  librabbitmq-devel
 %if 0%{with make_check}
+BuildRequires:  jq
 BuildRequires:	python%{_python_buildid}-bcrypt
 BuildRequires:	python%{_python_buildid}-coverage
 BuildRequires:	python%{_python_buildid}-nose
@@ -196,6 +196,12 @@ BuildRequires:	python%{_python_buildid}-requests
 BuildRequires:	python%{_python_buildid}-six
 BuildRequires:	python%{_python_buildid}-tox
 BuildRequires:	python%{_python_buildid}-virtualenv
+%if 0%{?fedora} || 0%{?rhel}
+BuildRequires:  pyOpenSSL%{_python_buildid}
+%endif
+%if 0%{?suse_version}
+BuildRequires:  python%{_python_buildid}-pyOpenSSL
+%endif
 BuildRequires:	socat
 %endif
 %if 0%{with seastar}
