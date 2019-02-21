@@ -450,6 +450,19 @@ class LocalFuseMount(FuseMount):
                                       check_status=check_status, stdin=stdin,
                                       omit_sudo=False)
 
+    def run_as_root(self, args, wait=True, stdin=None, check_status=True):
+        # FIXME maybe should add a pwd arg to teuthology.orchestra so that
+        # the "cd foo && bar" shenanigans isn't needed to begin with and
+        # then we wouldn't have to special case this
+        if isinstance(args, str):
+            args = 'sudo ' + args
+        if isinstance(args, list):
+            args.insert(0, 'sudo')
+
+        return self.client_remote.run(args, wait=wait, cwd=self.mountpoint,
+                                      check_status=check_status,
+                                      omit_sudo=False)
+
     def setupfs(self, name=None):
         if name is None and self.fs is not None:
             # Previous mount existed, reuse the old name
