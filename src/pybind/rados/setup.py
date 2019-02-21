@@ -199,7 +199,9 @@ setup(
                 libraries=["rados"] + flags['ldflags']['l'],
                 extra_compile_args=flags['cflags']['extras'] + flags['ldflags']['extras'],
             )
-        ], build_dir=os.environ.get("CYTHON_BUILD_DIR", None)
+        ],
+        compiler_directives={'language_level': sys.version_info.major},
+        build_dir=os.environ.get("CYTHON_BUILD_DIR", None)
     ),
     classifiers=[
         'Intended Audience :: Developers',
