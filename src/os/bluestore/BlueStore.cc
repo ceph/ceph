@@ -5559,7 +5559,7 @@ int64_t BlueStore::_get_bluefs_size_delta(uint64_t bluefs_free, uint64_t bluefs_
   }
   ceph_assert((int64_t)gift >= 0);
   ceph_assert((int64_t)reclaim >= 0);
-  return gift > 0 ? (int64_t)gift : (int64_t)reclaim;
+  return gift > 0 ? (int64_t)gift : -(int64_t)reclaim;
 }
 
 int BlueStore::_balance_bluefs_freespace()
