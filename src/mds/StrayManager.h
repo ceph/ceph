@@ -117,7 +117,7 @@ class StrayManager
    * @returns true if the dentry will be purged (caller should never
    *          take more refs after this happens), else false.
    */
-  bool _eval_stray(CDentry *dn, bool delay=false);
+  bool _eval_stray(CDentry *dn);
 
   void _eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn);
 
@@ -127,21 +127,19 @@ class StrayManager
   void set_logger(PerfCounters *l) {logger = l;}
   void activate();
 
-  bool eval_stray(CDentry *dn, bool delay=false);
+  bool eval_stray(CDentry *dn);
 
   void set_num_strays(uint64_t num);
   uint64_t get_num_strays() const { return num_strays; }
 
   /**
-   * Where eval_stray was previously invoked with delay=true, call
-   * eval_stray again for any dentries that were put on the
-   * delayed_eval_stray list as a result of the original call.
-   *
-   * Used so that various places can call eval_stray(delay=true) during
-   * an operation to identify dentries of interest, and then call
-   * this function later during trim in order to do the final
-   * evaluation (and resulting actions) while not in the middle of another
-   * metadata operation.
+   * Queue dentry for later evaluation. (evaluate it while not in the
+   * middle of another metadata operation)
+   */
+  void queue_delayed(CDentry *dn);
+
+  /**
+   * Eval strays in the delayed_eval_stray list
    */
   void advance_delayed();
 

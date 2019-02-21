@@ -739,13 +739,14 @@ void MDCache::populate_mydir()
     }
   }
 
-  stray_manager.set_num_strays(num_strays);
-
   // okay!
   dout(10) << "populate_mydir done" << dendl;
   ceph_assert(!open);    
   open = true;
   mds->queue_waiters(waiting_for_open);
+
+  stray_manager.set_num_strays(num_strays);
+  stray_manager.activate();
 
   scan_stray_dir();
 }
@@ -7530,7 +7531,7 @@ void MDCache::dentry_remove_replica(CDentry *dn, mds_rank_t from, set<SimpleLock
     gather_locks.insert(&dn->lock);
 
   // Replicated strays might now be elegible for purge
-  CDentry::linkage_t *dnl = dn->get_linkage();
+  CDentry::linkage_t *dnl = dn->get_projected_linkage();
   if (dnl->is_primary()) {
     maybe_eval_stray(dnl->get_inode());
   }
@@ -12894,21 +12895,6 @@ void MDCache::register_perfcounters()
     stray_manager.set_logger(logger.get());
 }
 
-void MDCache::activate_stray_manager()
-{
-  if (open) {
-    stray_manager.activate();
-  } else {
-    wait_for_open(
-	new MDSInternalContextWrapper(mds,
-	  new FunctionContext([this](int r){
-	    stray_manager.activate();
-	    })
-	  )
-	);
-  }
-}
-
 /**
  * Call this when putting references to an inode/dentry or
  * when attempting to trim it.
@@ -12935,9 +12921,11 @@ void MDCache::maybe_eval_stray(CInode *in, bool delay) {
     return;
   }
 
-  if (dn->get_projected_linkage()->is_primary() &&
-      dn->get_dir()->get_inode()->is_stray()) {
-    stray_manager.eval_stray(dn, delay);
+  if (dn->get_dir()->get_inode()->is_stray()) {
+    if (delay)
+      stray_manager.queue_delayed(dn);
+    else
+      stray_manager.eval_stray(dn);
   }
 }
 
