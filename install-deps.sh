@@ -272,7 +272,6 @@ else
         echo "Using apt-get to install dependencies"
         $SUDO apt-get install -y devscripts equivs
         $SUDO apt-get install -y dpkg-dev
-        $SUDO apt-get install -y librabbitmq-dev
         case "$VERSION" in
             *Trusty*)
                 ensure_decent_gcc_on_ubuntu 7 trusty
