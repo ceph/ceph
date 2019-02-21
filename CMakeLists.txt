@@ -576,6 +576,7 @@ option(ENABLE_COVERAGE "Coverage is enabled" OFF)
 option(PG_DEBUG_REFS "PG Ref debugging is enabled" OFF)
 
 option(WITH_TESTS "enable the build of ceph-test package scripts/binaries" ON)
+set("UNIT_TESTS_BUILT", ${WITH_TESTS})
 set(CEPH_TEST_TIMEOUT 3600 CACHE STRING 
   "Maximum time before a CTest gets killed" )
 
