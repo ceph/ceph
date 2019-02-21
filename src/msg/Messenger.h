@@ -49,6 +49,8 @@ class Timer;
 class AuthClient;
 class AuthServer;
 
+#ifdef UNIT_TESTS_BUILT
+
 struct Interceptor {
   std::mutex lock;
   std::condition_variable cond_var;
@@ -62,6 +64,8 @@ struct Interceptor {
   virtual ~Interceptor() {}
   virtual ACTION intercept(Connection *conn, uint32_t step) = 0;
 };
+
+#endif
 
 class Messenger {
 private:
@@ -89,7 +93,10 @@ protected:
 public:
   AuthClient *auth_client = 0;
   AuthServer *auth_server = 0;
+
+#ifdef UNIT_TESTS_BUILT
   Interceptor *interceptor = nullptr;
+#endif
 
   /**
    * Various Messenger conditional config/type flags to allow
