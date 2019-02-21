@@ -191,7 +191,7 @@ private:
   Ct<ProtocolV2> *_wait_for_peer_banner();
   Ct<ProtocolV2> *_handle_peer_banner(char *buffer, int r);
   Ct<ProtocolV2> *_handle_peer_banner_payload(char *buffer, int r);
-  Ct<ProtocolV2> *handle_hello(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_hello(ceph::bufferlist &payload);
 
   CONTINUATION_DECL(ProtocolV2, read_frame);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_preamble_main);
@@ -222,10 +222,10 @@ private:
   Ct<ProtocolV2> *handle_message_extra_bytes(char *buffer, int r);
   Ct<ProtocolV2> *handle_message_complete();
 
-  Ct<ProtocolV2> *handle_keepalive2(char *payload, uint32_t length);
-  Ct<ProtocolV2> *handle_keepalive2_ack(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_keepalive2(ceph::bufferlist &payload);
+  Ct<ProtocolV2> *handle_keepalive2_ack(ceph::bufferlist &payload);
 
-  Ct<ProtocolV2> *handle_message_ack(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_message_ack(ceph::bufferlist &payload);
 
 public:
   uint64_t connection_features;
@@ -257,18 +257,18 @@ private:
     return send_auth_request(empty);
   }
   Ct<ProtocolV2> *send_auth_request(std::vector<uint32_t> &allowed_methods);
-  Ct<ProtocolV2> *handle_auth_bad_method(char *payload, uint32_t length);
-  Ct<ProtocolV2> *handle_auth_reply_more(char *payload, uint32_t length);
-  Ct<ProtocolV2> *handle_auth_done(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_auth_bad_method(ceph::bufferlist &payload);
+  Ct<ProtocolV2> *handle_auth_reply_more(ceph::bufferlist &payload);
+  Ct<ProtocolV2> *handle_auth_done(ceph::bufferlist &payload);
   Ct<ProtocolV2> *send_client_ident();
   Ct<ProtocolV2> *send_reconnect();
-  Ct<ProtocolV2> *handle_ident_missing_features(char *payload, uint32_t length);
-  Ct<ProtocolV2> *handle_session_reset(char *payload, uint32_t length);
-  Ct<ProtocolV2> *handle_session_retry(char *payload, uint32_t length);
-  Ct<ProtocolV2> *handle_session_retry_global(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_ident_missing_features(ceph::bufferlist &payload);
+  Ct<ProtocolV2> *handle_session_reset(ceph::bufferlist &payload);
+  Ct<ProtocolV2> *handle_session_retry(ceph::bufferlist &payload);
+  Ct<ProtocolV2> *handle_session_retry_global(ceph::bufferlist &payload);
   Ct<ProtocolV2> *handle_wait();
-  Ct<ProtocolV2> *handle_reconnect_ok(char *payload, uint32_t length);
-  Ct<ProtocolV2> *handle_server_ident(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_reconnect_ok(ceph::bufferlist &payload);
+  Ct<ProtocolV2> *handle_server_ident(ceph::bufferlist &payload);
 
   // Server Protocol
   CONTINUATION_DECL(ProtocolV2, start_server_banner_exchange);
@@ -277,13 +277,13 @@ private:
 
   Ct<ProtocolV2> *start_server_banner_exchange();
   Ct<ProtocolV2> *post_server_banner_exchange();
-  Ct<ProtocolV2> *handle_auth_request(char *payload, uint32_t length);
-  Ct<ProtocolV2> *handle_auth_request_more(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_auth_request(ceph::bufferlist &payload);
+  Ct<ProtocolV2> *handle_auth_request_more(ceph::bufferlist &payload);
   Ct<ProtocolV2> *_handle_auth_request(bufferlist& auth_payload, bool more);
   Ct<ProtocolV2> *_auth_bad_method(int r);
-  Ct<ProtocolV2> *handle_client_ident(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_client_ident(ceph::bufferlist &payload);
   Ct<ProtocolV2> *handle_ident_missing_features_write(int r);
-  Ct<ProtocolV2> *handle_reconnect(char *payload, uint32_t length);
+  Ct<ProtocolV2> *handle_reconnect(ceph::bufferlist &payload);
   Ct<ProtocolV2> *handle_existing_connection(AsyncConnectionRef existing);
   Ct<ProtocolV2> *reuse_connection(AsyncConnectionRef existing,
                                    ProtocolV2 *exproto);
