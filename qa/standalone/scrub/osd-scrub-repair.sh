@@ -194,7 +194,7 @@ function create_ec_pool() {
     local pool_name=$1
     local allow_overwrites=$2
 
-    ceph osd erasure-code-profile set myprofile crush-failure-domain=osd $3 $4 $5 $6 $7 || return 1
+    ceph osd erasure-code-profile set myprofile crush-failure-domain=osd "$@" || return 1
 
     create_pool "$poolname" 1 1 erasure myprofile || return 1
 
