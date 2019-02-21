@@ -37,7 +37,10 @@
 // abstract Connection, for keeping per-connection state
 
 class Messenger;
+
+#ifdef UNIT_TESTS_BUILT
 class Interceptor;
+#endif
 
 struct Connection : public RefCountedObject {
   mutable Mutex lock;
@@ -62,7 +65,9 @@ public:
   EntityName peer_name;
   uint64_t peer_global_id = 0;
 
+#ifdef UNIT_TESTS_BUILT
   Interceptor *interceptor;
+#endif
 
   friend class boost::intrusive_ptr<Connection>;
   friend class PipeConnection;

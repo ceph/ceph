@@ -96,6 +96,8 @@ const int SIGNATURE_BLOCK_SIZE = CEPH_CRYPTO_HMACSHA256_DIGESTSIZE;
 
 #define READB(L, B, C) read(CONTINUATION(C), L, B)
 
+#ifdef UNIT_TESTS_BUILT
+
 #define INTERCEPT(S) { \
 if(connection->interceptor) { \
   auto a = connection->interceptor->intercept(connection, (S)); \
@@ -106,6 +108,10 @@ if(connection->interceptor) { \
     connection->dispatch_queue->queue_reset(connection); \
     return nullptr; \
   }}}
+  
+#else
+#define INTERCEPT(S)
+#endif
 
 static void alloc_aligned_buffer(bufferlist &data, unsigned len, unsigned off) {
   // create a buffer to read into that matches the data alignment
