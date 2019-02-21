@@ -250,7 +250,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
         security/oath-toolkit \
         sysutils/flock \
         sysutils/fusefs-libs \
-        net/rabbitmq-c-devel \
 
 	# Now use pip to install some extra python modules
 	pip install pecan
