@@ -1768,7 +1768,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   dout(10) << "acting_recovery_backfill is " << acting_recovery_backfill << dendl;
   ceph_assert(backfill_targets.empty());
   if (backfill_targets.empty()) {
-    // Caller is GetInfo
+    // Caller is GetLog
     backfill_targets = want_backfill;
   }
   // Adding !needs_recovery() to let the async_recovery_targets reset after recovery is complete
