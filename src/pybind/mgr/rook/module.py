@@ -404,6 +404,12 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         # type: (orchestrator.DriveGroupSpec, List[str]) -> RookWriteCompletion
 
         assert len(drive_group.hosts(all_hosts)) == 1
+        targets = []
+        if drive_group.data_devices:
+            targets += drive_group.data_devices.paths
+        if drive_group.data_directories:
+            targets += drive_group.data_directories
+
         if not self.rook_cluster.node_exists(drive_group.hosts(all_hosts)[0]):
             raise RuntimeError("Node '{0}' is not in the Kubernetes "
                                "cluster".format(drive_group.hosts(all_hosts)))
@@ -438,7 +444,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                     continue
 
                 metadata = self.get_metadata('osd', "%s" % osd_id)
-                if metadata and metadata['devices'] in drive_group.data_devices.paths:
+                if metadata and metadata['devices'] in targets:
                     found.append(osd_id)
                 else:
                     self.log.info("ignoring osd {0} {1}".format(
@@ -449,6 +455,5 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return RookWriteCompletion(execute, is_complete,
                                    "Creating OSD on {0}:{1}".format(
-                                       drive_group.hosts(all_hosts)[0],
-                                       drive_group.data_devices.paths
+                                       drive_group.hosts(all_hosts)[0], targets
                                    ))
