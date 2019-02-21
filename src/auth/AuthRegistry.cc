@@ -16,6 +16,20 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "AuthRegistry(" << this << ") "
 
+AuthRegistry::AuthRegistry(CephContext *cct)
+  : cct(cct)
+{
+  cct->_conf.add_observer(this);
+}
+
+AuthRegistry::~AuthRegistry()
+{
+  cct->_conf.remove_observer(this);
+  for (auto i : authorize_handlers) {
+    delete i.second;
+  }
+}
+
 const char** AuthRegistry::get_tracked_conf_keys() const
 {
   static const char *keys[] = {
@@ -23,6 +37,12 @@ const char** AuthRegistry::get_tracked_conf_keys() const
     "auth_client_required",
     "auth_cluster_required",
     "auth_service_required",
+    "ms_mon_cluster_mode",
+    "ms_mon_service_mode",
+    "ms_mon_client_mode",
+    "ms_cluster_mode",
+    "ms_service_mode",
+    "ms_client_mode",
     "keyring",
     NULL
   };
@@ -338,9 +358,3 @@ AuthAuthorizeHandler *AuthRegistry::get_handler(int peer_type, int method)
   return ah;
 }
 
-AuthRegistry::~AuthRegistry()
-{
-  for (auto i : authorize_handlers) {
-    delete i.second;
-  }
-}
