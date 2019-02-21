@@ -96,9 +96,9 @@ int main(int argc, const char **argv)
   shutdown_async_signal_handler();
 
   g_ceph_context->get_perfcounters_collection()->remove(g_perf_counters);
-  delete g_perf_counters;
 
   delete mirror;
+  delete g_perf_counters;
 
   return r < 0 ? EXIT_SUCCESS : EXIT_FAILURE;
 }
