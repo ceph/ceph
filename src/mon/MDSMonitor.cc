@@ -1915,9 +1915,10 @@ bool MDSMonitor::maybe_promote_standby(FSMap &fsmap, std::shared_ptr<Filesystem>
 	do_propose = true;
       }
     }
-  } else {
+  } else if (!fs->mds_map.is_degraded()) {
     // There were no failures to replace, so try using any available standbys
-    // as standby-replay daemons.
+    // as standby-replay daemons. Don't do this when the cluster is degraded
+    // as a standby-replay daemon may try to read a journal being migrated.
 
     // Take a copy of the standby GIDs so that we can iterate over
     // them while perhaps-modifying standby_daemons during the loop
