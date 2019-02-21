@@ -3,7 +3,7 @@ add_executable(ceph_test_cls_refcount
   test_cls_refcount.cc
   )
 target_link_libraries(ceph_test_cls_refcount
-  librados-cxx
+  librados
   cls_refcount_client
   global
   ${UNITTEST_LIBS}

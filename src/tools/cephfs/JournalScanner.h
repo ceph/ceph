@@ -14,12 +14,10 @@
 #ifndef JOURNAL_SCANNER_H
 #define JOURNAL_SCANNER_H
 
+#include "include/rados/librados_fwd.hpp"
+
 // For Journaler::Header, can't forward-declare nested classes
 #include <osdc/Journaler.h>
-
-namespace librados {
-  class IoCtx;
-}
 
 #include "JournalFilter.h"
 

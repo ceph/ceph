@@ -1,7 +1,7 @@
 add_executable(ceph_test_cls_log
   test_cls_log.cc)
 target_link_libraries(ceph_test_cls_log
-  librados-cxx
+  librados
   cls_log_client
   global
   radostest-cxx

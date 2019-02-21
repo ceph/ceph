@@ -3,6 +3,6 @@ usr/include/rados/buffer_fwd.h
 usr/include/rados/crc32c.h
 usr/include/rados/inline_memory.h
 usr/include/rados/librados.hpp
+usr/include/rados/librados_fwd.hpp
 usr/include/rados/page.h
 usr/include/rados/rados_types.hpp
-usr/lib/libradospp.so

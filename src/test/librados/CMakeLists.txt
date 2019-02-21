@@ -28,7 +28,7 @@ target_link_libraries(ceph_test_rados_api_cmd
 add_executable(ceph_test_rados_api_cmd_pp
   cmd_cxx.cc)
 target_link_libraries(ceph_test_rados_api_cmd_pp
-  librados-cxx ${UNITTEST_LIBS} radostest-cxx)
+  librados ${UNITTEST_LIBS} radostest-cxx)
 
 add_executable(ceph_test_rados_api_io
   io.cc)
@@ -37,7 +37,7 @@ target_link_libraries(ceph_test_rados_api_io
 add_executable(ceph_test_rados_api_io_pp
   io_cxx.cc)
 target_link_libraries(ceph_test_rados_api_io_pp
-  librados-cxx ${UNITTEST_LIBS} radostest-cxx)
+  librados ${UNITTEST_LIBS} radostest-cxx)
 
 add_executable(ceph_test_rados_api_c_write_operations
   c_write_operations.cc)
@@ -56,11 +56,11 @@ target_link_libraries(ceph_test_rados_api_aio
 add_executable(ceph_test_rados_api_aio_pp
   aio_cxx.cc)
 target_link_libraries(ceph_test_rados_api_aio_pp
-  librados-cxx ${UNITTEST_LIBS} radostest-cxx)
+  librados ${UNITTEST_LIBS} radostest-cxx)
 
 add_executable(ceph_test_rados_api_asio asio.cc)
 target_link_libraries(ceph_test_rados_api_asio global
-  librados-cxx ${UNITTEST_LIBS})
+  librados ${UNITTEST_LIBS})
 if(WITH_BOOST_CONTEXT)
   target_link_libraries(ceph_test_rados_api_asio Boost::coroutine Boost::context)
 endif()
@@ -83,7 +83,7 @@ target_link_libraries(ceph_test_rados_api_stat
 add_executable(ceph_test_rados_api_stat_pp
   stat_cxx.cc)
 target_link_libraries(ceph_test_rados_api_stat_pp
-  librados-cxx ${UNITTEST_LIBS} radostest-cxx)
+  librados ${UNITTEST_LIBS} radostest-cxx)
 
 add_executable(ceph_test_rados_api_watch_notify
   watch_notify.cc)
@@ -92,12 +92,12 @@ target_link_libraries(ceph_test_rados_api_watch_notify
 add_executable(ceph_test_rados_api_watch_notify_pp
   watch_notify_cxx.cc)
 target_link_libraries(ceph_test_rados_api_watch_notify_pp
-  librados-cxx ${UNITTEST_LIBS} radostest-cxx)
+  librados ${UNITTEST_LIBS} radostest-cxx)
 
 add_executable(ceph_test_rados_api_cls
   cls.cc)
 target_link_libraries(ceph_test_rados_api_cls
-  librados-cxx ${UNITTEST_LIBS} radostest-cxx)
+  librados ${UNITTEST_LIBS} radostest-cxx)
 
 add_executable(ceph_test_rados_api_misc
   misc.cc
@@ -108,7 +108,7 @@ add_executable(ceph_test_rados_api_misc_pp
   misc_cxx.cc
   $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(ceph_test_rados_api_misc_pp
-  librados-cxx global ${UNITTEST_LIBS} radostest-cxx)
+  librados global ${UNITTEST_LIBS} radostest-cxx)
 
 add_executable(ceph_test_rados_api_lock
   lock.cc)
@@ -117,7 +117,7 @@ target_link_libraries(ceph_test_rados_api_lock
 add_executable(ceph_test_rados_api_lock_pp
   lock_cxx.cc)
 target_link_libraries(ceph_test_rados_api_lock_pp
-  librados-cxx ${UNITTEST_LIBS} radostest-cxx)
+  librados ${UNITTEST_LIBS} radostest-cxx)
 
 add_executable(ceph_test_rados_api_service
   service.cc)
@@ -126,13 +126,13 @@ target_link_libraries(ceph_test_rados_api_service
 add_executable(ceph_test_rados_api_service_pp
   service_cxx.cc)
 target_link_libraries(ceph_test_rados_api_service_pp
-  librados-cxx global ${UNITTEST_LIBS} radostest-cxx)
+  librados global ${UNITTEST_LIBS} radostest-cxx)
 
 add_executable(ceph_test_rados_api_tier_pp
   tier_cxx.cc
   $<TARGET_OBJECTS:unit-main>)
 target_link_libraries(ceph_test_rados_api_tier_pp
-  librados-cxx global ${UNITTEST_LIBS} Boost::system radostest-cxx)
+  librados global ${UNITTEST_LIBS} Boost::system radostest-cxx)
 
 add_executable(ceph_test_rados_api_snapshots
   snapshots.cc)
@@ -141,7 +141,7 @@ target_link_libraries(ceph_test_rados_api_snapshots
 add_executable(ceph_test_rados_api_snapshots_pp
   snapshots_cxx.cc)
 target_link_libraries(ceph_test_rados_api_snapshots_pp
-  librados-cxx ${UNITTEST_LIBS} radostest-cxx)
+  librados ${UNITTEST_LIBS} radostest-cxx)
 
 install(TARGETS
   ceph_test_rados_api_aio

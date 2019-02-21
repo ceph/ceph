@@ -40,8 +40,6 @@ inline std::ostream& operator<<(std::ostream& out, const struct ListObjectImpl& 
   return out;
 }
 
-struct ObjListCtx;
-
 class NObjectIteratorImpl {
   public:
     NObjectIteratorImpl() {}
@@ -56,10 +54,6 @@ class NObjectIteratorImpl {
     NObjectIteratorImpl &operator++(); // Preincrement
     NObjectIteratorImpl operator++(int); // Postincrement
     const ListObject *get_listobjectp() { return &cur_obj; }
-    friend class IoCtx;
-    friend struct ListObjectImpl;
-    //friend class ListObject;
-    friend class NObjectIterator;
 
     /// get current hash position of the iterator, rounded to the current pg
     uint32_t get_pg_hash_position() const;
@@ -75,7 +69,6 @@ class NObjectIteratorImpl {
 
     void set_filter(const bufferlist &bl);
 
-  private:
     NObjectIteratorImpl(ObjListCtx *ctx_);
     void get_next();
     std::shared_ptr < ObjListCtx > ctx;

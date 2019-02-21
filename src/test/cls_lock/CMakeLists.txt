@@ -3,7 +3,7 @@ add_executable(ceph_test_cls_lock
   )
 target_link_libraries(ceph_test_cls_lock
   cls_lock_client
-  librados-cxx
+  librados
   global
   ${UNITTEST_LIBS}
   ${BLKID_LIBRARIES}

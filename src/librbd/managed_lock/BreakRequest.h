@@ -5,7 +5,8 @@
 #define CEPH_LIBRBD_MANAGED_LOCK_BREAK_REQUEST_H
 
 #include "include/int_types.h"
-#include "include/buffer.h"
+#include "include/buffer_fwd.h"
+#include "include/rados/librados_fwd.hpp"
 #include "msg/msg_types.h"
 #include <list>
 #include <string>
@@ -15,8 +16,6 @@
 class Context;
 class ContextWQ;
 class obj_watch_t;
-
-namespace librados { class IoCtx; }
 
 namespace librbd {
 

@@ -62,11 +62,7 @@
 
 #include "inline_memory.h"
 
-#if __GNUC__ >= 4
-  #define CEPH_BUFFER_API  __attribute__ ((visibility ("default")))
-#else
-  #define CEPH_BUFFER_API
-#endif
+#define CEPH_BUFFER_API
 
 #if defined(HAVE_XIO)
 struct xio_reg_mem;
@@ -192,6 +188,8 @@ namespace buffer CEPH_BUFFER_API {
 #if defined(HAVE_XIO)
   raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
 #endif
+
+inline namespace v14_2_0 {
 
   /*
    * a buffer pointer.  references (a subsequence of) a raw buffer.
@@ -1246,6 +1244,8 @@ namespace buffer CEPH_BUFFER_API {
     static list static_from_cstring(char* c);
     static list static_from_string(std::string& s);
   };
+
+} // inline namespace v14_2_0
 
   /*
    * efficient hash of one or more bufferlists

@@ -4,12 +4,11 @@
 #ifndef CEPH_RBD_MIRROR_DAEMON_SERVICE_INFO_H
 #define CEPH_RBD_MIRROR_DAEMON_SERVICE_INFO_H
 
+#include "include/rados/librados_fwd.hpp"
 #include "tools/rbd/ArgumentTypes.h"
 
 #include <string>
 #include <map>
-
-namespace librados { class IoCtx; }
 
 namespace rbd {
 
