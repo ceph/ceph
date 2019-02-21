@@ -33,12 +33,35 @@ function install_seastar_deps {
 }
 
 function munge_ceph_spec_in {
-    # http://rpm.org/user_doc/conditional_builds.html
+    local for_make_check=$1
+    shift
     local OUTFILE=$1
-    sed -e 's/@//g' -e 's/%bcond_with make_check/%bcond_without make_check/g' < ceph.spec.in > $OUTFILE
+    sed -e 's/@//g' < ceph.spec.in > $OUTFILE
+    # http://rpm.org/user_doc/conditional_builds.html
     if [ $WITH_SEASTAR ]; then
         sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
     fi
+    if $for_make_check; then
+        sed -i -e 's/%bcond_with make_check/%bcond_without make_check/g' $OUTFILE
+    fi
+}
+
+function munge_debian_control {
+    local version=$1
+    shift
+    local for_make_check=$1
+    shift
+    local control=$1
+    case "$version" in
+        *squeeze*|*wheezy*)
+	    control="/tmp/control.$$"
+	    grep -v babeltrace debian/control > $control
+	    ;;
+    esac
+    if $for_make_check; then
+        sed -i 's/^# Make-Check[[:space:]]/             /g' $control
+    fi
+    echo $control
 }
 
 function ensure_decent_gcc_on_ubuntu {
@@ -234,6 +257,15 @@ if [ x$(uname)x = xFreeBSDx ]; then
 
     exit
 else
+    for_make_check=false
+    if tty -s; then
+        # interactive
+        for_make_check=true
+    elif [ $FOR_MAKE_CHECK ]; then
+        for_make_check=true
+    else
+        for_make_check=false
+    fi
     source /etc/os-release
     case $ID in
     debian|ubuntu|devuan)
@@ -263,11 +295,9 @@ else
         touch $DIR/status
 
 	backports=""
-	control="debian/control"
+	control=$(munge_debian_control "$VERSION" "$for_make_check" "debian/control")
         case "$VERSION" in
             *squeeze*|*wheezy*)
-		control="/tmp/control.$$"
-		grep -v babeltrace debian/control > $control
                 backports="-t $codename-backports"
                 ;;
         esac
@@ -278,7 +308,7 @@ else
 	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps --install --remove --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	install_seastar_deps
-	if [ -n "$backports" ] ; then rm $control; fi
+	if [ "$control" != "debian/control" ] ; then rm $control; fi
 	$SUDO apt-get install -y libxmlsec1 libxmlsec1-nss libxmlsec1-openssl libxmlsec1-dev
         ;;
     centos|fedora|rhel|ol|virtuozzo)
@@ -329,7 +359,7 @@ else
                 fi
                 ;;
         esac
-        munge_ceph_spec_in $DIR/ceph.spec
+        munge_ceph_spec_in $for_make_check $DIR/ceph.spec
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
 	if [ -n "$dts_ver" ]; then
@@ -343,7 +373,7 @@ else
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
         $SUDO $zypp_install systemd-rpm-macros
-        munge_ceph_spec_in $DIR/ceph.spec
+        munge_ceph_spec_in $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         $SUDO $zypp_install libxmlsec1-1 libxmlsec1-nss1 libxmlsec1-openssl1 xmlsec1-devel xmlsec1-openssl-devel
         ;;
