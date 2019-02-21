@@ -7,6 +7,10 @@
   operations that dump journal information to file will now dump to per-rank
   suffixed dump files. Importing journal information from dump files is
   disallowed if operation is targetted for all ranks.
+* In 12.2.9 and earlier releases, keyring caps were not checked for validity,
+  so the caps string could be anything. As of 12.2.10, caps strings are
+  validated and providing a keyring with an invalid caps string to, e.g.,
+  "ceph auth add" will result in an error.
 
 >= 12.1.2
 ---------

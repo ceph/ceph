@@ -21,6 +21,7 @@ set(lib_mon_srcs
   PGMonitor.cc
   PGMap.cc
   ConfigKeyService.cc
+  ../mds/MDSAuthCaps.cc
   ../mgr/mgr_commands.cc
   ../osd/OSDCap.cc)
 add_library(mon STATIC
