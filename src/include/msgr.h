@@ -199,10 +199,7 @@ struct ceph_msg_header2 {
 	__le16 priority;  /* priority.  higher value == higher priority */
 	__le16 version;   /* version of message encoding */
 
-	__le32 front_len; /* bytes in main payload */
-	__le32 middle_len;/* bytes in middle payload */
 	__le32 data_pre_padding_len;
-	__le32 data_len;  /* bytes of data payload */
 	__le16 data_off;  /* sender: include full offset;
 			     receiver: mask against ~PAGE_MASK */
 
