@@ -61,7 +61,7 @@ target_link_libraries(unittest_rbd_mirror
   cls_lock_client
   cls_journal_client
   rbd_types
-  librados-cxx
+  librados
   osdc
   global
   radostest-cxx
@@ -81,7 +81,7 @@ target_link_libraries(ceph_test_rbd_mirror
   cls_rbd_client
   cls_journal_client
   rbd_types
-  librados-cxx
+  librados
   radostest-cxx
   ${UNITTEST_LIBS}
   )
@@ -89,7 +89,7 @@ target_link_libraries(ceph_test_rbd_mirror
 add_executable(ceph_test_rbd_mirror_random_write
   random_write.cc)
 target_link_libraries(ceph_test_rbd_mirror_random_write
-  librbd librados-cxx global)
+  librbd librados global)
 
 install(TARGETS
   ceph_test_rbd_mirror

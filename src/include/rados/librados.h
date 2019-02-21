@@ -85,11 +85,7 @@ enum {
   LIBRADOS_OP_FLAG_FADVISE_FUA        = 0x80,
 };
 
-#if __GNUC__ >= 4
-  #define CEPH_RADOS_API  __attribute__ ((visibility ("default")))
-#else
-  #define CEPH_RADOS_API
-#endif
+#define CEPH_RADOS_API
 
 /**
  * @name xattr comparison operations

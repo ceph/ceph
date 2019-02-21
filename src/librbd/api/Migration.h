@@ -5,16 +5,11 @@
 #define CEPH_LIBRBD_API_MIGRATION_H
 
 #include "include/int_types.h"
+#include "include/rados/librados_fwd.hpp"
 #include "include/rbd/librbd.hpp"
 #include "cls/rbd/cls_rbd_types.h"
 
 #include <vector>
-
-namespace librados {
-
-class IoCtx;
-
-}
 
 namespace librbd {
 

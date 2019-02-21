@@ -11,7 +11,6 @@
 
 struct CephContext;
 struct Context;
-namespace librados { struct IoCtx; }
 
 namespace librbd {
 

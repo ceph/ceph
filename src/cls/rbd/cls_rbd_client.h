@@ -9,14 +9,9 @@
 #include "common/bit_vector.hpp"
 #include "common/snap_types.h"
 #include "include/types.h"
+#include "include/rados/librados_fwd.hpp"
 
 class Context;
-namespace librados {
-  class IoCtx;
-  class ObjectOperation;
-  class ObjectReadOperation;
-  class ObjectWriteOperation;
-}
 
 namespace librbd {
 namespace cls_client {

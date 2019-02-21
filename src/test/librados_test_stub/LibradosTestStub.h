@@ -4,11 +4,11 @@
 #ifndef LIBRADOS_TEST_STUB_H
 #define LIBRADOS_TEST_STUB_H
 
+#include "include/rados/librados_fwd.hpp"
 #include <boost/shared_ptr.hpp>
 
 namespace librados {
 
-class IoCtx;
 class MockTestMemIoCtxImpl;
 class TestCluster;
 
