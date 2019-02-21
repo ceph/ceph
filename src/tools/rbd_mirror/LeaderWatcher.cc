@@ -1093,7 +1093,9 @@ template <typename I>
 void LeaderWatcher<I>::handle_rewatch_complete(int r) {
   dout(5) << "r=" << r << dendl;
 
-  m_leader_lock->reacquire_lock(nullptr);
+  if (r != -EBLACKLISTED) {
+    m_leader_lock->reacquire_lock(nullptr);
+  }
 }
 
 template <typename I>
