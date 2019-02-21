@@ -488,11 +488,13 @@ ProtocolV2::~ProtocolV2() {
 void ProtocolV2::connect() {
   ldout(cct, 1) << __func__ << dendl;
   state = START_CONNECT;
+  phase = Phase::HELLO;
 }
 
 void ProtocolV2::accept() {
   ldout(cct, 1) << __func__ << dendl;
   state = START_ACCEPT;
+  phase = Phase::HELLO;
 }
 
 bool ProtocolV2::is_connected() { return can_write; }
@@ -562,6 +564,7 @@ void ProtocolV2::stop() {
 
   can_write = false;
   state = CLOSED;
+  phase = Phase::CLOSED;
 }
 
 void ProtocolV2::fault() { _fault(); }
@@ -695,12 +698,14 @@ CtPtr ProtocolV2::_fault() {
     ldout(cct, 1) << __func__ << " with nothing to send, going to standby"
                   << dendl;
     state = STANDBY;
+    phase = Phase::CLOSED;
     connection->write_lock.unlock();
     return nullptr;
   }
   if (connection->policy.server) {
     ldout(cct, 1) << __func__ << " server, going to standby, even though i have stuff queued" << dendl;
     state = STANDBY;
+    phase = Phase::CLOSED;
     connection->write_lock.unlock();
     return nullptr;
   }
@@ -715,11 +720,13 @@ CtPtr ProtocolV2::_fault() {
     if (connection->policy.server) {
       ldout(cct, 1) << __func__ << " server, going to standby" << dendl;
       state = STANDBY;
+      phase = Phase::CLOSED;
     } else {
       ldout(cct, 1) << __func__ << " initiating reconnect" << dendl;
       connect_seq++;
       global_seq = messenger->get_global_seq();
       state = START_CONNECT;
+      phase = Phase::HELLO;
       connection->state = AsyncConnection::STATE_CONNECTING;
     }
     backoff = utime_t();
@@ -737,6 +744,7 @@ CtPtr ProtocolV2::_fault() {
 
     global_seq = messenger->get_global_seq();
     state = START_CONNECT;
+    phase = Phase::HELLO;
     connection->state = AsyncConnection::STATE_CONNECTING;
     ldout(cct, 1) << __func__ << " waiting " << backoff << dendl;
     // woke up again;
@@ -1377,6 +1385,7 @@ CtPtr ProtocolV2::handle_hello(char *payload, uint32_t length) {
                    << " policy.standby=" << connection->policy.standby
                    << " policy.resetcheck=" << connection->policy.resetcheck
                    << dendl;
+    phase = Phase::AUTH_SERVER;
   } else {
     if (connection->get_peer_type() != hello.entity_type()) {
       ldout(cct, 1) << __func__ << " connection peer type does not match what"
@@ -1545,6 +1554,7 @@ CtPtr ProtocolV2::ready() {
   connection->maybe_start_delay_thread();
 
   state = READY;
+  phase = Phase::OPEN;
   ldout(cct, 1) << __func__ << " entity=" << peer_name << " cookie=" << std::hex
                 << cookie << std::dec << " in_seq=" << in_seq
                 << " out_seq=" << out_seq << dendl;
@@ -2115,13 +2125,17 @@ CtPtr ProtocolV2::send_auth_request(std::vector<uint32_t> &allowed_methods) {
     connection->dispatch_queue->queue_reset(connection);
     return nullptr;
   }
+  phase = Phase::AUTH_CLIENT;
   AuthRequestFrame frame(auth_meta->auth_method, preferred_modes, bl);
   return WRITE(frame.get_buffer(), "auth request", read_frame);
 }
 
 CtPtr ProtocolV2::handle_auth_bad_method(char *payload, uint32_t length) {
+  if (phase != Phase::AUTH_CLIENT) {
+    lderr(cct) << __func__ << " unexpected frame in phase " << phase << dendl;
+    return _fault();
+  }
   ldout(cct, 20) << __func__ << " payload_len=" << length << dendl;
-
   AuthBadMethodFrame bad_method(payload, length);
   ldout(cct, 1) << __func__ << " method=" << bad_method.method()
 		<< " result " << cpp_strerror(bad_method.result())
@@ -2200,6 +2214,8 @@ CtPtr ProtocolV2::handle_auth_done(char *payload, uint32_t length) {
       cct, auth_meta->auth_method, auth_meta->session_key,
       auth_meta->connection_secret,
       CEPH_FEATURE_MSG_AUTH | CEPH_FEATURE_CEPHX_V2));
+
+  phase = Phase::SESSION_CLIENT;
 
   if (!cookie) {
     ceph_assert(connect_seq == 0);
@@ -2502,6 +2518,7 @@ CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
     return _fault();
   }
   if (r == 1) {
+    phase = Phase::SESSION_SERVER;
     AuthDoneFrame auth_done(connection->peer_global_id, auth_meta->con_mode,
 			    reply);
     return WRITE(auth_done.get_buffer(), "auth done", read_frame);
@@ -3037,6 +3054,8 @@ CtPtr ProtocolV2::send_server_ident() {
   connection->dispatch_queue->queue_accept(connection);
   messenger->ms_deliver_handle_fast_accept(connection);
 
+  phase = Phase::OPEN;
+
   bufferlist &bl = server_ident.get_buffer();
   return WRITE(bl, "server ident", server_ready);
 }
@@ -3090,6 +3109,8 @@ CtPtr ProtocolV2::send_reconnect_ok() {
   // notify
   connection->dispatch_queue->queue_accept(connection);
   messenger->ms_deliver_handle_fast_accept(connection);
+
+  phase = Phase::OPEN;
 
   bufferlist &bl = reconnect_ok.get_buffer();
   return WRITE(bl, "reconnect ok", server_ready);

@@ -46,6 +46,29 @@ private:
   }
 
 public:
+  enum class Phase : int {
+    CLOSED,
+    HELLO,
+    AUTH_SERVER,
+    AUTH_CLIENT,
+    SESSION_SERVER,
+    SESSION_CLIENT,
+    OPEN,
+  };
+
+  static const char *get_phase_name(Phase p) {
+    switch (p) {
+    case Phase::CLOSED: return "CLOSED";
+    case Phase::HELLO: return "HELLO";
+    case Phase::AUTH_SERVER: return "AUTH_SERVER";
+    case Phase::AUTH_CLIENT: return "AUTH_CLIENT";
+    case Phase::SESSION_SERVER: return "SESSION_SERVER";
+    case Phase::SESSION_CLIENT: return "SESSION_CLIENT";
+    case Phase::OPEN: return "OPEN";
+    default: return "unknown";
+    }
+  }
+
   enum class Tag : uint32_t {
     HELLO = 1,
     AUTH_REQUEST,
@@ -74,6 +97,7 @@ private:
   entity_name_t peer_name;
   char *temp_buffer;
   State state;
+  Phase phase;
   uint64_t peer_required_features;
   std::shared_ptr<AuthSessionHandler> session_security;
 
@@ -251,5 +275,9 @@ private:
   Ct<ProtocolV2> *send_reconnect_ok();
   Ct<ProtocolV2> *server_ready();
 };
+
+static inline ostream& operator<<(ostream& out, const ProtocolV2::Phase& p) {
+  return out << ProtocolV2::get_phase_name(p);
+}
 
 #endif /* _MSG_ASYNC_PROTOCOL_V2_ */
