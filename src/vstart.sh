@@ -128,7 +128,7 @@ if [ `uname` = FreeBSD ]; then
 else
     objectstore="bluestore"
 fi
-rgw_frontend="civetweb"
+rgw_frontend="beast"
 rgw_compression=""
 lockdep=${LOCKDEP:-1}
 spdk_enabled=0 #disable SPDK by default
