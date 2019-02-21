@@ -269,7 +269,7 @@ ceph::bufferlist AES128GCM_OnWireRxHandler::authenticated_decrypt_update_final(
 		     << " plainbl.length()=" << plainbl.length()
 		     << " final_len=" << final_len
 		     << dendl;
-      throw std::runtime_error("EVP_DecryptFinal_ex failed");
+      throw MsgAuthError();
     } else {
       ceph_assert_always(final_len == 0);
       ceph_assert_always(plainbl.length() + final_len + AESGCM_TAG_LEN == cnt_len);

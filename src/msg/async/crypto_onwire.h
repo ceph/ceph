@@ -39,6 +39,12 @@ class always_aligned_t {
 
 namespace ceph::crypto::onwire {
 
+struct MsgAuthError : public std::runtime_error {
+  MsgAuthError()
+    : runtime_error("message signature mismatch") {
+  }
+};
+
 struct TxHandler {
   virtual ~TxHandler() = default;
 
@@ -110,7 +116,6 @@ struct rxtx_t {
     const class AuthConnectionMeta& auth_meta,
     bool crossed);
 };
-
 
 } // namespace ceph::crypto::onwire
 
