@@ -15,8 +15,9 @@
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
 #include "librbd/api/Trash.h"
-#include "librbd/image/RemoveRequest.h"
 #include "librbd/image/CloneRequest.h"
+#include "librbd/image/RemoveRequest.h"
+#include "librbd/image/PreRemoveRequest.h"
 #include <boost/scope_exit.hpp>
 
 #define dout_subsys ceph_subsys_rbd
@@ -56,6 +57,22 @@ bool compare(const librbd::linked_image_spec_t& lhs,
   return false;
 }
 
+template <typename I>
+int pre_remove_image(librados::IoCtx& io_ctx, const std::string& image_id) {
+  I *image_ctx = I::create("", image_id, nullptr, io_ctx, false);
+  int r = image_ctx->state->open(OPEN_FLAG_SKIP_OPEN_PARENT);
+  if (r < 0) {
+    return r;
+  }
+
+  C_SaferCond ctx;
+  auto req = image::PreRemoveRequest<I>::create(image_ctx, false, &ctx);
+  req->send();
+
+  r = ctx.wait();
+  image_ctx->state->close();
+  return r;
+}
 
 } // anonymous namespace
 
@@ -740,6 +757,13 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
       trash_image_source = RBD_TRASH_IMAGE_SOURCE_USER;
       expire_seconds = config.get_val<uint64_t>(
         "rbd_move_to_trash_on_remove_expire_seconds");
+    } else {
+      // attempt to pre-validate the removal before moving to trash and
+      // removing
+      r = pre_remove_image<I>(io_ctx, image_id);
+      if (r < 0 && r != -ENOENT) {
+        return r;
+      }
     }
 
     r = Trash<I>::move(io_ctx, trash_image_source, image_name, image_id,
@@ -759,6 +783,8 @@ int Image<I>::remove(IoCtx& io_ctx, const std::string &image_name,
     } else if (r < 0 && r != -EOPNOTSUPP) {
       return r;
     }
+
+    // fall-through if trash isn't supported
   }
 
   ThreadPool *thread_pool;
