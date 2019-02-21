@@ -1,7 +1,10 @@
-# amqp mock library
-set(amqp_mock_src
-  amqp_mock.cc amqp_url.c)
-add_library(amqp_mock STATIC ${amqp_mock_src})
+
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  # amqp mock library
+  set(amqp_mock_src
+    amqp_mock.cc amqp_url.c)
+  add_library(amqp_mock STATIC ${amqp_mock_src})
+endif()
 
 #unittest_rgw_bencode
 add_executable(unittest_rgw_bencode test_rgw_bencode.cc)
@@ -143,9 +146,8 @@ if(WITH_BOOST_CONTEXT)
   target_link_libraries(unittest_rgw_dmclock_scheduler Boost::coroutine Boost::context)
 endif()
 
-# unittest_rgw_amqp
-add_executable(unittest_rgw_amqp test_rgw_amqp.cc)
-add_ceph_unittest(unittest_rgw_amqp)
-
-target_link_libraries(unittest_rgw_amqp rgw_a amqp_mock)
-
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  add_executable(unittest_rgw_amqp test_rgw_amqp.cc)
+  add_ceph_unittest(unittest_rgw_amqp)
+  target_link_libraries(unittest_rgw_amqp rgw_a amqp_mock)
+endif()
