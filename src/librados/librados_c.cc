@@ -43,8 +43,13 @@
 
 #define LIBRADOS_C_API_BASE(fn)               \
   asm(".symver _" #fn "_base, " #fn "@")
+#if defined(__FreeBSD__)
+#define LIBRADOS_C_API_BASE_DEFAULT(fn)       \
+  asm(".symver _" #fn ", " #fn "@")
+#else
 #define LIBRADOS_C_API_BASE_DEFAULT(fn)       \
   asm(".symver _" #fn ", " #fn "@@")
+#endif
 #define LIBRADOS_C_API_DEFAULT(fn, ver)       \
   asm(".symver _" #fn ", " #fn "@@LIBRADOS_" #ver)
 

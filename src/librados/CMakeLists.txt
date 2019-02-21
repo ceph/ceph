@@ -19,8 +19,13 @@ if(ENABLE_SHARED)
   if(NOT APPLE)
     set_property(TARGET librados APPEND_STRING PROPERTY
       LINK_FLAGS " -Wl,--exclude-libs,ALL")
-    set_property(TARGET librados APPEND_STRING PROPERTY
-      LINK_FLAGS " -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/librados.map")
+    if(FREEBSD)
+      set_property(TARGET librados APPEND_STRING PROPERTY
+        LINK_FLAGS " -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/librados-fbsd.map")
+    else()
+      set_property(TARGET librados APPEND_STRING PROPERTY
+        LINK_FLAGS " -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/librados.map")
+    endif()
   endif()
   if(WITH_STATIC_LIBSTDCXX)
     set_property(TARGET librados APPEND_STRING PROPERTY
