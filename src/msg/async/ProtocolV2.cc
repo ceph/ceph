@@ -1458,11 +1458,26 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
     // everything through ::decode is unnecessary.
     const auto& main_preamble = \
       reinterpret_cast<preamble_block_t&>(*preamble.c_str());
-    next_tag = static_cast<Tag>(main_preamble.tag);
 
-    // FIXME: makeshift solution
-    ceph_assert_always(main_preamble.num_segments == 1 ||
-      main_preamble.num_segments == 4);
+    // verify preamble's CRC before any further processing
+    const auto rx_crc = ceph_crc32c(0,
+      reinterpret_cast<const unsigned char*>(&main_preamble),
+      sizeof(main_preamble) - sizeof(main_preamble.crc));
+    if (rx_crc != main_preamble.crc) {
+      ldout(cct, 10) << __func__ << " crc mismatch for main preamble"
+		     << " rx_crc=" << rx_crc
+		     << " tx_crc=" << main_preamble.crc << dendl;
+      return _fault();
+    }
+
+    // currently we do support only 4 or 1 segments
+    if (main_preamble.num_segments != 1 && main_preamble.num_segments != 4) {
+      ldout(cct, 10) << __func__ << " unsupported num_segments="
+		     << " tx_crc=" << main_preamble.num_segments << dendl;
+      return _fault();
+    }
+
+    next_tag = static_cast<Tag>(main_preamble.tag);
 
     rx_segments_desc.clear();
     rx_segments_data.clear();
@@ -1491,17 +1506,6 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
 	session_stream_handlers.rx->get_extra_size_at_final();
       next_payload_len += \
 	session_stream_handlers.rx->get_extra_size_at_final();
-    }
-
-    // TODO: move this ugliness into dedicated procedure
-    const auto rx_crc = ceph_crc32c(0,
-      reinterpret_cast<const unsigned char*>(&main_preamble),
-      sizeof(main_preamble) - sizeof(main_preamble.crc));
-    if (rx_crc != main_preamble.crc) {
-      ldout(cct, 10) << __func__ << "crc mismatch for main preamble"
-		     << " rx_crc=" << rx_crc
-		     << " tx_crc=" << main_preamble.crc << dendl;
-      return _fault();
     }
   }
 
