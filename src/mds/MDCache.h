@@ -188,8 +188,6 @@ public:
     stray_index = (stray_index+1)%NUM_STRAY;
   }
 
-  void activate_stray_manager();
-
   /**
    * Call this when you know that a CDentry is ready to be passed
    * on to StrayManager (i.e. this is a stray you've just created)
@@ -1083,7 +1081,6 @@ protected:
   void scan_stray_dir(dirfrag_t next=dirfrag_t());
   StrayManager stray_manager;
   friend struct C_MDC_RetryScanStray;
-  friend class C_IO_MDC_FetchedBacktrace;
 
   // == messages ==
  public:
