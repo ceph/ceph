@@ -2127,7 +2127,6 @@ void AsyncConnection::fault()
     } else {
       ldout(async_msgr->cct, 0) << __func__ << " initiating reconnect" << dendl;
       connect_seq++;
-      global_seq = async_msgr->get_global_seq();
       state = STATE_CONNECTING;
     }
     backoff = utime_t();
@@ -2143,7 +2142,6 @@ void AsyncConnection::fault()
         backoff.set_from_double(async_msgr->cct->_conf->ms_max_backoff);
     }
 
-    global_seq = async_msgr->get_global_seq();
     state = STATE_CONNECTING;
     ldout(async_msgr->cct, 10) << __func__ << " waiting " << backoff << dendl;
     // woke up again;
