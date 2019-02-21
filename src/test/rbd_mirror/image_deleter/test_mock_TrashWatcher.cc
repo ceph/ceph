@@ -291,6 +291,44 @@ TEST_F(TestMockImageDeleterTrashWatcher, Notify) {
   ASSERT_EQ(0, when_shut_down(mock_trash_watcher));
 }
 
+TEST_F(TestMockImageDeleterTrashWatcher, CreateBlacklist) {
+  MockThreads mock_threads(m_threads);
+  expect_work_queue(mock_threads);
+
+  InSequence seq;
+  expect_create_trash(m_local_io_ctx, -EBLACKLISTED);
+
+  MockListener mock_listener;
+  MockTrashWatcher mock_trash_watcher(m_local_io_ctx, &mock_threads,
+                                      mock_listener);
+  C_SaferCond ctx;
+  mock_trash_watcher.init(&ctx);
+  ASSERT_EQ(-EBLACKLISTED, ctx.wait());
+
+  MockLibrbdTrashWatcher mock_librbd_trash_watcher;
+  expect_trash_watcher_unregister(mock_librbd_trash_watcher, 0);
+  ASSERT_EQ(0, when_shut_down(mock_trash_watcher));
+}
+
+TEST_F(TestMockImageDeleterTrashWatcher, CreateDNE) {
+  MockThreads mock_threads(m_threads);
+  expect_work_queue(mock_threads);
+
+  InSequence seq;
+  expect_create_trash(m_local_io_ctx, -ENOENT);
+
+  MockListener mock_listener;
+  MockTrashWatcher mock_trash_watcher(m_local_io_ctx, &mock_threads,
+                                      mock_listener);
+  C_SaferCond ctx;
+  mock_trash_watcher.init(&ctx);
+  ASSERT_EQ(-ENOENT, ctx.wait());
+
+  MockLibrbdTrashWatcher mock_librbd_trash_watcher;
+  expect_trash_watcher_unregister(mock_librbd_trash_watcher, 0);
+  ASSERT_EQ(0, when_shut_down(mock_trash_watcher));
+}
+
 TEST_F(TestMockImageDeleterTrashWatcher, CreateError) {
   MockThreads mock_threads(m_threads);
   expect_work_queue(mock_threads);

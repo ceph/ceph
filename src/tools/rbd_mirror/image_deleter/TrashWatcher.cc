@@ -134,7 +134,18 @@ void TrashWatcher<I>::handle_create_trash(int r) {
     ceph_assert(m_trash_list_in_progress);
   }
 
-  if (r < 0 && r != -EEXIST) {
+  Context* on_init_finish = nullptr;
+  if (r == -EBLACKLISTED || r == -ENOENT) {
+    if (r == -EBLACKLISTED) {
+      dout(0) << "detected client is blacklisted" << dendl;
+    } else {
+      dout(0) << "detected pool no longer exists" << dendl;
+    }
+
+    Mutex::Locker locker(m_lock);
+    std::swap(on_init_finish, m_on_init_finish);
+    m_trash_list_in_progress = false;
+  } else if (r < 0 && r != -EEXIST) {
     derr << "failed to create trash object: " << cpp_strerror(r) << dendl;
     {
       Mutex::Locker locker(m_lock);
@@ -147,6 +158,9 @@ void TrashWatcher<I>::handle_create_trash(int r) {
   }
 
   m_async_op_tracker.finish_op();
+  if (on_init_finish != nullptr) {
+    on_init_finish->complete(r);
+  }
 }
 
 template <typename I>
