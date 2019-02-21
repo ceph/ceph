@@ -5,10 +5,3 @@ tasks:
     test: test_multipart_upload_cancel
     test_version: v1
     clients: ['client.0']
-    config:
-       objects_count: 1
-       user_count: 1
-       bucket_count: 1
-       break_at_part_no: 70
-       min_file_size: 800
-       max_file_size: 1000

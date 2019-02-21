@@ -5,9 +5,3 @@ tasks:
     test: test_acls_copy_obj
     test_version: v1
     clients: ['client.0']
-    config:
-       user_count: 2
-       bucket_count: 25
-       objects_count: 25
-       min_file_size: 50
-       max_file_size: 60

@@ -8,7 +8,7 @@ tasks:
       config:
         user_count: 5
         bucket_count: 5
-        objects_count: 20
+        objects_count: 10
         objects_size_range:
           min: 100
           max: 200
@@ -18,8 +18,8 @@ tasks:
           download_object: true
           delete_bucket_object: true
           sharding:
-            enable: false
-            max_shards: 0
+            enable: true
+            max_shards: 32
           compression:
             enable: false
             type: zlib
