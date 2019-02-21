@@ -34,12 +34,14 @@
 %bcond_without cephfs_java
 %bcond_without lttng
 %bcond_without libradosstriper
+%bcond_without amqp_endpoint
 %global _remote_tarball_prefix https://download.ceph.com/tarballs/
 %endif
 %if 0%{?suse_version}
 %bcond_with selinux
 %bcond_with ceph_test_package
 %bcond_with cephfs_java
+%bcond_with amqp_endpoint
 #Compat macro for new _fillupdir macro introduced in Nov 2017
 %if ! %{defined _fillupdir}
 %global _fillupdir /var/adm/fillup-templates
@@ -1143,6 +1145,11 @@ ${CMAKE} .. \
     -DWITH_LIBRADOSSTRIPER=ON \
 %else
     -DWITH_LIBRADOSSTRIPER=OFF \
+%endif
+%if 0%{with amqp_endpoint}
+    -DWITH_RADOSGW_AMQP_ENDPOINT=ON \
+%else
+    -DWITH_RADOSGW_AMQP_ENDPOINT=OFF \
 %endif
     -DBOOST_J=$CEPH_SMP_NCPUS \
     -DWITH_GRAFANA=ON
