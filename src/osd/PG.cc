@@ -682,12 +682,10 @@ bool PG::MissingLoc::add_source_info(
 			 << ")" << dendl;
       continue;
     }
-    if (oinfo.last_complete < need) {
-      if (omissing.is_missing(soid)) {
-	ldout(pg->cct, 10) << "search_for_missing " << soid << " " << need
-			   << " also missing on osd." << fromosd << dendl;
-	continue;
-      }
+    if (omissing.is_missing(soid)) {
+      ldout(pg->cct, 10) << "search_for_missing " << soid << " " << need
+			 << " also missing on osd." << fromosd << dendl;
+      continue;
     }
 
     ldout(pg->cct, 10) << "search_for_missing " << soid << " " << need
