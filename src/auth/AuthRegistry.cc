@@ -46,6 +46,7 @@ void AuthRegistry::_parse_method_list(const string& s,
   if (sup_list.empty()) {
     lderr(cct) << "WARNING: empty auth protocol list" << dendl;
   }
+  v->clear();
   for (auto& i : sup_list) {
     ldout(cct, 5) << "adding auth protocol: " << i << dendl;
     if (i == "cephx") {
@@ -72,6 +73,7 @@ void AuthRegistry::_parse_mode_list(const string& s,
   if (sup_list.empty()) {
     lderr(cct) << "WARNING: empty auth protocol list" << dendl;
   }
+  v->clear();
   for (auto& i : sup_list) {
     ldout(cct, 5) << "adding con mode: " << i << dendl;
     if (i == "crc") {
@@ -158,6 +160,12 @@ void AuthRegistry::get_supported_methods(
   std::vector<uint32_t> *methods,
   std::vector<uint32_t> *modes)
 {
+  if (methods) {
+    methods->clear();
+  }
+  if (modes) {
+    modes->clear();
+  }
   std::scoped_lock l(lock);
   switch (cct->get_module_type()) {
   case CEPH_ENTITY_TYPE_CLIENT:
@@ -248,6 +256,7 @@ void AuthRegistry::get_supported_modes(
   get_supported_methods(peer_type, nullptr, &s);
   if (auth_method == CEPH_AUTH_NONE) {
     // filter out all but crc for AUTH_NONE
+    modes->clear();
     for (auto mode : s) {
       if (mode == CEPH_CON_MODE_CRC) {
 	modes->push_back(mode);
