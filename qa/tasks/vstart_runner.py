@@ -459,12 +459,12 @@ class LocalFuseMount(FuseMount):
         # to avoid assumptions about daemons' pwd
         return os.path.abspath("./client.{0}.keyring".format(self.client_id))
 
-    def run_shell(self, args, wait=True, check_status=True, omit_sudo=True):
+    def run_shell(self, args, wait=True, stdin=None, check_status=True, omit_sudo=True):
         # FIXME maybe should add a pwd arg to teuthology.orchestra so that
         # the "cd foo && bar" shenanigans isn't needed to begin with and
         # then we wouldn't have to special case this
         return self.client_remote.run(args, wait=wait, cwd=self.mountpoint,
-                                      check_status=check_status,
+                                      stdin=stdin, check_status=check_status,
                                       omit_sudo=omit_sudo)
 
     def run_as_user(self, args, user, wait=True, stdin=None, check_status=True):
