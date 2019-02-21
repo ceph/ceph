@@ -4,13 +4,16 @@ ceph-mgr Ansible orchestrator module
 The external Orchestrator is the Ansible runner service (RESTful https service)
 """
 
+import types
 import json
+import requests
+
 
 from mgr_module import MgrModule
 import orchestrator
 
 from .ansible_runner_svc import Client, PlayBookExecution, ExecutionStatusCode,\
-                               EVENT_DATA_URL
+                               EVENT_DATA_URL, AnsibleRunnerServiceError
 
 # Time to clean the completions list
 WAIT_PERIOD = 10
@@ -29,7 +32,18 @@ ADD_OSD_PLAYBOOK = "add-osd.yml"
 # Used in the remove_osds method
 REMOVE_OSD_PLAYBOOK = "shrink-osd.yml"
 
+# Default name for the inventory group for hosts managed by the Orchestrator
+ORCHESTRATOR_GROUP = "orchestrator"
 
+# URLs for Ansible Runner Operations
+# Add or remove host in one group
+URL_ADD_RM_HOSTS = "api/v1/hosts/{host_name}/groups/{inventory_group}"
+
+# Retrieve the groups where the host is included in.
+URL_GET_HOST_GROUPS = "api/v1/hosts/{host_name}"
+
+# Manage groups
+URL_MANAGE_GROUP = "api/v1/groups/{group_name}"
 
 class AnsibleReadOperation(orchestrator.ReadCompletion):
     """ A read operation means to obtain information from the cluster.
@@ -37,7 +51,7 @@ class AnsibleReadOperation(orchestrator.ReadCompletion):
 
     def __init__(self, client, playbook, logger, result_pattern,
                  params,
-                 querystr_dict={}):
+                 querystr_dict=None):
         super(AnsibleReadOperation, self).__init__()
 
         # Private attributes
@@ -69,6 +83,9 @@ class AnsibleReadOperation(orchestrator.ReadCompletion):
                                               result_pattern,
                                               params,
                                               querystr_dict)
+
+    def __str__(self):
+         return "Playbook {playbook_name}".format(playbook_name = self.playbook)
 
     @property
     def is_complete(self):
@@ -105,8 +122,11 @@ class AnsibleReadOperation(orchestrator.ReadCompletion):
     def execute_playbook(self):
         """Launch the execution of the playbook with the parameters configured
         """
-
-        self.pb_execution.launch()
+        try:
+            self.pb_execution.launch()
+        except AnsibleRunnerServiceError:
+            self._status = ExecutionStatusCode.ERROR
+            raise
 
     def update_result(self):
         """Output of the read operation
@@ -146,13 +166,14 @@ class AnsibleChangeOperation(orchestrator.WriteCompletion):
     def __init__(self):
         super(AnsibleChangeOperation, self).__init__()
 
-        self.error = False
+        self._status = ExecutionStatusCode.NOT_LAUNCHED
+        self._result = None
+
     @property
     def status(self):
         """Return the status code of the operation
         """
-        #TODO
-        return 0
+        raise NotImplementedError()
 
     @property
     def is_persistent(self):
@@ -162,12 +183,12 @@ class AnsibleChangeOperation(orchestrator.WriteCompletion):
         had been written to a manifest, but that the update
         had not necessarily been pushed out to the cluster.
 
-        In the case of Ansible is always False.
-        because a initiated playbook execution will need always to be
-        relaunched if it fails.
+        :return Boolean: True if the execution of the Ansible Playbook or the
+                         operation over the Ansible Runner Service has finished
         """
 
-        return False
+        return self._status in [ExecutionStatusCode.SUCCESS,
+                                ExecutionStatusCode.ERROR]
 
     @property
     def is_effective(self):
@@ -178,19 +199,96 @@ class AnsibleChangeOperation(orchestrator.WriteCompletion):
         In the case of Ansible, this will be True if the playbooks has been
         executed succesfully.
 
-        :return Boolean: if the playbook has been executed succesfully
+        :return Boolean: if the playbook/ARS operation has been executed
+                         succesfully
         """
 
-        return self.status == ExecutionStatusCode.SUCCESS
+        return self._status == ExecutionStatusCode.SUCCESS
 
     @property
     def is_errored(self):
-        return self.error
+        return self._status == ExecutionStatusCode.ERROR
 
     @property
-    def is_complete(self):
-        return self.is_errored or (self.is_persistent and self.is_effective)
+    def result(self):
+        return self._result
 
+class HttpOperation(object):
+
+    def __init__(self, url, http_operation, payload="", query_string="{}"):
+        """ A class to ease the management of http operations
+        """
+        self.url = url
+        self.http_operation = http_operation
+        self.payload = payload
+        self.query_string = query_string
+        self.response = None
+
+class ARSChangeOperation(AnsibleChangeOperation):
+    """Execute one or more Ansible Runner Service Operations that implies
+    a change in the cluster
+    """
+    def __init__(self, client, logger, operations):
+        """
+        :param client         : Ansible Runner Service Client
+        :param logger         : The object used to log messages
+        :param operations     : A list of http_operation objects
+        :param payload        : dict with http request payload
+        """
+        super(ARSChangeOperation, self).__init__()
+
+        assert operations, "At least one operation is needed"
+        self.ar_client = client
+        self.log = logger
+        self.operations = operations
+
+        self.process_output = None
+
+    def __str__(self):
+             # Use the last operation as the main
+             return "Ansible Runner Service: {operation} {url}".format(
+                operation = self.operations[-1].http_operation,
+                url = self.operations[-1].url)
+
+    @property
+    def status(self):
+        """Execute the Ansible Runner Service operations and update the status
+        and result of the underlying Completion object.
+        """
+
+        for op in self.operations:
+            # Execute the right kind of http request
+            try:
+                if op.http_operation == "post":
+                    response = self.ar_client.http_post(op.url, op.payload, op.query_string)
+                elif op.http_operation == "delete":
+                    response = self.ar_client.http_delete(op.url)
+                elif op.http_operation == "get":
+                    response = self.ar_client.http_get(op.url)
+
+                # Any problem executing the secuence of operations will
+                # produce an errored completion object.
+                if response.status_code != requests.codes.ok:
+                    self._status = ExecutionStatusCode.ERROR
+                    self._result = response.text
+                    return self._status
+
+            # Any kind of error communicating with ARS or preventing
+            # to have a right http response
+            except AnsibleRunnerServiceError as ex:
+                self._status = ExecutionStatusCode.ERROR
+                self._result = str(ex)
+                return self._status
+
+        # If this point is reached, all the operations has been succesfuly
+        # executed, and the final result is updated
+        self._status = ExecutionStatusCode.SUCCESS
+        if self.process_output:
+            self._result = self.process_output(response.text)
+        else:
+            self._result = response.text
+
+        return self._status
 
 class Module(MgrModule, orchestrator.Orchestrator):
     """An Orchestrator that uses <Ansible Runner Service> to perform operations
@@ -229,7 +327,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         # Check progress and update status in each operation
         # Access completion.status property do the trick
         for operation in completions:
-            self.log.info("playbook <%s> status:%s", operation.playbook, operation.status)
+            self.log.info("<%s> status:%s", operation, operation.status)
 
         completions = filter(lambda x: not x.is_complete, completions)
 
@@ -253,7 +351,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
                                     password = self.get_module_option('password', ''),
                                     verify_server = self.get_module_option('verify_server', True),
                                     logger = self.log)
-        except Exception:
+        except AnsibleRunnerServiceError:
             self.log.exception("Ansible Runner Service not available. "
                           "Check external server status/TLS identity or "
                           "connection options. If configuration options changed"
@@ -346,6 +444,78 @@ class Module(MgrModule, orchestrator.Orchestrator):
         self._launch_operation(ansible_operation)
 
         return ansible_operation
+
+    def add_host(self, host):
+        """
+        Add a host to the Ansible Runner Service inventory in the "orchestrator"
+        group
+
+        :param host: hostname
+        :returns : orchestrator.WriteCompletion
+        """
+
+        url_group = URL_MANAGE_GROUP.format(group_name = ORCHESTRATOR_GROUP)
+
+        try:
+            # Create the orchestrator default group if not exist.
+            # If exists we ignore the error response
+            dummy_response = self.ar_client.http_post(url_group, "", {})
+
+            # Here, the default group exists so...
+            # Prepare the operation for adding the new host
+            add_url = URL_ADD_RM_HOSTS.format(host_name = host,
+                                              inventory_group = ORCHESTRATOR_GROUP)
+
+            operations =  [HttpOperation(add_url, "post")]
+
+        except AnsibleRunnerServiceError as ex:
+            # Problems with the external orchestrator.
+            # Prepare the operation to return the error in a Completion object.
+            self.log.exception("Error checking <orchestrator> group: %s", ex)
+            operations =  [HttpOperation(url_group, "post")]
+
+        return ARSChangeOperation(self.ar_client, self.log, operations)
+
+
+    def remove_host(self, host):
+        """
+        Remove a host from all the groups in the Ansible Runner Service
+        inventory.
+
+        :param host: hostname
+        :returns : orchestrator.WriteCompletion
+        """
+
+        operations = []
+        host_groups = []
+
+        try:
+            # Get the list of groups where the host is included
+            groups_url = URL_GET_HOST_GROUPS.format(host_name = host)
+            response = self.ar_client.http_get(groups_url)
+
+            if response.status_code == requests.codes.ok:
+                host_groups = json.loads(response.text)["data"]["groups"]
+
+        except AnsibleRunnerServiceError:
+            self.log.exception("Error retrieving host groups")
+
+        if not host_groups:
+            # Error retrieving the groups, prepare the completion object to
+            # execute the problematic operation just to provide the error
+            # to the caller
+            operations = [HttpOperation(groups_url, "get")]
+        else:
+            # Build the operations list
+            operations = list(map(lambda x:
+                                  HttpOperation(URL_ADD_RM_HOSTS.format(
+                                                    host_name = host,
+                                                    inventory_group = x),
+                                                "delete"),
+                                  host_groups))
+
+        return ARSChangeOperation(self.ar_client, self.log, operations)
+
 
     def _launch_operation(self, ansible_operation):
         """Launch the operation and add the operation to the completion objects
