@@ -597,6 +597,14 @@ add_executable(unittest_addrs
 add_ceph_unittest(unittest_addrs)
 target_link_libraries(unittest_addrs ceph-common)
 
+# unittest_auth
+add_executable(unittest_auth
+  test_auth.cc
+  $<TARGET_OBJECTS:unit-main>
+  )
+add_ceph_unittest(unittest_auth)
+target_link_libraries(unittest_auth global)
+
 # unittest_workqueue
 add_executable(unittest_workqueue
   test_workqueue.cc

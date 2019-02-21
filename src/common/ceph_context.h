@@ -128,6 +128,11 @@ public:
   /* Get the module type (client, mon, osd, mds, etc.) */
   uint32_t get_module_type() const;
 
+  // this is here only for testing purposes!
+  void _set_module_type(uint32_t t) {
+    _module_type = t;
+  }
+
   void set_init_flags(int flags);
   int get_init_flags() const;
 
