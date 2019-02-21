@@ -55,7 +55,7 @@ void ProtocolV2::run_continuation(CtPtr continuation) {
     lderr(cct) << __func__ << " failed decoding of frame header: " << e
                << dendl;
     _fault();
-  } catch (const SHA256SignatureError &e) {
+  } catch (const ceph::crypto::onwire::MsgAuthError &e) {
     lderr(cct) << __func__ << " " << e.what() << dendl;
     _fault();
   } catch (const DecryptionError &) {
@@ -1889,8 +1889,14 @@ CtPtr ProtocolV2::handle_message_complete() {
       data = session_stream_handlers.rx->authenticated_decrypt_update(
         std::move(data), segment_t::DEFAULT_ALIGNMENT);
     }
-    session_stream_handlers.rx->authenticated_decrypt_update_final(
-      std::move(extra), segment_t::DEFAULT_ALIGNMENT);
+    try {
+      session_stream_handlers.rx->authenticated_decrypt_update_final(
+	std::move(extra), segment_t::DEFAULT_ALIGNMENT);
+    } catch (ceph::crypto::onwire::MsgAuthError &e) {
+      ldout(cct, 5) << __func__ << " message authentication failed: "
+		    << e.what() << dendl;
+      return _fault();
+    }
   }
 
   Message *message = decode_message(cct, messenger->crcflags, header, footer,
