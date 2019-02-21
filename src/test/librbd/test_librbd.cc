@@ -7206,7 +7206,7 @@ TEST_F(TestLibRBD, Migration) {
   ASSERT_EQ(status.state, RBD_IMAGE_MIGRATION_STATE_PREPARED);
   rbd_migration_status_cleanup(&status);
 
-  ASSERT_EQ(-EINVAL, rbd_remove(ioctx, name.c_str()));
+  ASSERT_EQ(-EBUSY, rbd_remove(ioctx, name.c_str()));
   ASSERT_EQ(-EINVAL, rbd_trash_move(ioctx, name.c_str(), 0));
 
   ASSERT_EQ(0, rbd_migration_execute(ioctx, name.c_str()));
@@ -7223,7 +7223,7 @@ TEST_F(TestLibRBD, Migration) {
   ASSERT_EQ(0, rbd_migration_prepare(ioctx, name.c_str(), ioctx,
                                      new_name.c_str(), image_options));
 
-  ASSERT_EQ(-EINVAL, rbd_remove(ioctx, new_name.c_str()));
+  ASSERT_EQ(-EBUSY, rbd_remove(ioctx, new_name.c_str()));
   ASSERT_EQ(-EINVAL, rbd_trash_move(ioctx, new_name.c_str(), 0));
 
   ASSERT_EQ(0, rbd_migration_abort(ioctx, name.c_str()));
@@ -7269,7 +7269,7 @@ TEST_F(TestLibRBD, MigrationPP) {
   ASSERT_NE(status.dest_image_id, "");
   ASSERT_EQ(status.state, RBD_IMAGE_MIGRATION_STATE_PREPARED);
 
-  ASSERT_EQ(-EINVAL, rbd.remove(ioctx, name.c_str()));
+  ASSERT_EQ(-EBUSY, rbd.remove(ioctx, name.c_str()));
   ASSERT_EQ(-EINVAL, rbd.trash_move(ioctx, name.c_str(), 0));
 
   ASSERT_EQ(0, rbd.migration_execute(ioctx, name.c_str()));
@@ -7285,7 +7285,7 @@ TEST_F(TestLibRBD, MigrationPP) {
   ASSERT_EQ(0, rbd.migration_prepare(ioctx, name.c_str(), ioctx,
                                      new_name.c_str(), image_options));
 
-  ASSERT_EQ(-EINVAL, rbd.remove(ioctx, new_name.c_str()));
+  ASSERT_EQ(-EBUSY, rbd.remove(ioctx, new_name.c_str()));
   ASSERT_EQ(-EINVAL, rbd.trash_move(ioctx, new_name.c_str(), 0));
 
   ASSERT_EQ(0, rbd.migration_abort(ioctx, name.c_str()));
