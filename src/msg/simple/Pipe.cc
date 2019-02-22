@@ -1797,7 +1797,10 @@ void Pipe::reader()
         utime_t release;
         if (rand() % 10000 < msgr->cct->_conf->ms_inject_delay_probability * 10000.0) {
           release = m->get_recv_stamp();
-          release += msgr->cct->_conf->ms_inject_delay_max * (double)(rand() % 10000) / 10000.0;
+          release += ((msgr->cct->_conf->ms_inject_delay_max -
+		       msgr->cct->_conf->ms_inject_delay_min) *
+		      ((double)(rand() % 10000) / 10000.0)) +
+	             msgr->cct->_conf->ms_inject_delay_min;
           lsubdout(msgr->cct, ms, 1) << "queue_received will delay until " << release << " on " << m << " " << *m << dendl;
         }
         delay_thread->queue(release, m);

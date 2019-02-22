@@ -1431,8 +1431,11 @@ CtPtr ProtocolV2::handle_message() {
   if (connection->delay_state) {
     double delay_period = 0;
     if (rand() % 10000 < cct->_conf->ms_inject_delay_probability * 10000.0) {
-      delay_period =
-          cct->_conf->ms_inject_delay_max * (double)(rand() % 10000) / 10000.0;
+      delay_period = ((cct->_conf->ms_inject_delay_max -
+		       cct->_conf->ms_inject_delay_min) *
+		      (double)(rand() % 10000) / 10000.0) +
+	             cct->_conf->ms_inject_delay_min);
+          
       ldout(cct, 1) << "queue_received will delay after "
                     << (ceph_clock_now() + delay_period) << " on " << message
                     << " " << *message << dendl;

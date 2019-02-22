@@ -1031,6 +1031,10 @@ std::vector<Option> get_global_options() {
     .set_default("")
     .set_description("Message type to inject delays for"),
 
+    Option("ms_inject_delay_min", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description("Min delay to inject")
+
     Option("ms_inject_delay_max", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1)
     .set_description("Max delay to inject"),
