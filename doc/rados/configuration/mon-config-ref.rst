@@ -1189,17 +1189,6 @@ Miscellaneous
 :Type: Integer
 :Default: 4096
 
-
-``mon osd max split count``
-
-:Description: Largest number of PGs per "involved" OSD to let split create.
-              When we increase the ``pg_num`` of a pool, the placement groups
-              will be split on all OSDs serving that pool. We want to avoid
-              extreme multipliers on PG splits.
-:Type: Integer
-:Default: 300
-
-
 ``mon session timeout``
 
 :Description: Monitor will terminate inactive sessions stay idle over this
