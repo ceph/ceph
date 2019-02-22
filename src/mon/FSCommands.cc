@@ -588,6 +588,21 @@ public:
       {
         fs->mds_map.set_session_autoclose((uint32_t)n);
       });
+    } else if (var == "allow_standby_replay") {
+      bool allow = false;
+      int r = parse_bool(val, &allow, ss);
+      if (r != 0) {
+        return r;
+      }
+
+      auto f = [allow](auto& fs) {
+        if (allow) {
+          fs->mds_map.set_standby_replay_allowed();
+        } else {
+          fs->mds_map.clear_standby_replay_allowed();
+        }
+      };
+      fsmap.modify_filesystem(fs->fscid, std::move(f));
     } else if (var == "min_compat_client") {
       int vno = ceph_release_from_name(val.c_str());
       if (vno <= 0) {

@@ -242,6 +242,15 @@ public:
   bool allows_snaps() const { return test_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
   bool was_snaps_ever_allowed() const { return ever_allowed_features & CEPH_MDSMAP_ALLOW_SNAPS; }
 
+  void set_standby_replay_allowed() {
+    set_flag(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY);
+    ever_allowed_features |= CEPH_MDSMAP_ALLOW_STANDBY_REPLAY;
+    explicitly_allowed_features |= CEPH_MDSMAP_ALLOW_STANDBY_REPLAY;
+  }
+  void clear_standby_replay_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY); }
+  bool allows_standby_replay() const { return test_flag(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY); }
+  bool was_standby_replay_ever_allowed() const { return ever_allowed_features & CEPH_MDSMAP_ALLOW_STANDBY_REPLAY; }
+
   void set_multimds_snaps_allowed() {
     set_flag(CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS);
     ever_allowed_features |= CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS;
