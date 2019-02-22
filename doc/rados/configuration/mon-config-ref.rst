@@ -1193,7 +1193,7 @@ Miscellaneous
               will be splitted on all OSDs serving that pool. We want to avoid
               extreme multipliers on PG splits.
 :Type: Integer
-:Default: 300
+:Default: 32
 
 
 ``mon session timeout``
