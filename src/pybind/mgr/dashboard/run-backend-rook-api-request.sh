@@ -8,6 +8,9 @@ CURR_DIR=`pwd`
 K8S_NAMESPACE='rook-ceph'
 
 HOST=$(kubectl get pods -n $K8S_NAMESPACE -l "app=rook-ceph-mgr" -o json | jq .items[0].spec.nodeName | sed s/\"//g)
+if [ "$HOST" = "minikube" ]; then
+	HOST=$(minikube ip)
+fi
 PORT=$(kubectl get service -n $K8S_NAMESPACE rook-ceph-mgr-dashboard -o yaml | grep nodePort: | awk '{print $2}')
 API_URL="https://${HOST}:${PORT}"
 
