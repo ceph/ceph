@@ -23,7 +23,7 @@ public:
   virtual ~Policy(){};
   virtual cache_status_t lookup_object(std::string) = 0;
   virtual int evict_entry(std::string) = 0;
-  virtual void update_status(std::string, cache_status_t) = 0;
+  virtual void update_status(std::string, cache_status_t, uint64_t size=0) = 0;
   virtual cache_status_t get_status(std::string) = 0;
   virtual void get_evict_list(std::list<std::string>* obj_list) = 0;
 };
