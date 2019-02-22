@@ -116,6 +116,7 @@ public:
 
 private:
 
+  ceph::msgr::v2::Tag sent_tag;
   ceph::msgr::v2::Tag next_tag;
   ceph_msg_header2 current_header;
   utime_t backoff;  // backoff time
@@ -139,6 +140,9 @@ private:
   Ct<ProtocolV2> *write(const std::string &desc,
                         CONTINUATION_PARAM(next, ProtocolV2),
                         bufferlist &buffer);
+
+  uint64_t expected_tags(ceph::msgr::v2::Tag sent_tag,
+                         ceph::msgr::v2::Tag received_tag);
 
   void requeue_sent();
   uint64_t discard_requeued_up_to(uint64_t out_seq, uint64_t seq);
