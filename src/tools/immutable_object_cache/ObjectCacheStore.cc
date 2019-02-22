@@ -23,9 +23,12 @@ ObjectCacheStore::ObjectCacheStore(CephContext *cct)
   object_cache_max_size =
     m_cct->_conf.get_val<Option::size_t>("immutable_object_cache_max_size");
 
-  std::string cache_path =
+  m_cache_root_dir =
     m_cct->_conf.get_val<std::string>("immutable_object_cache_path");
-  m_cache_root_dir = cache_path + "/ceph_immutable_obj_cache/";
+
+  if (m_cache_root_dir.back() != '/') {
+    m_cache_root_dir += "/";
+  }
 
   //TODO(): allow to set cache level
   m_policy = new SimplePolicy(m_cct, object_cache_max_size, 0.1);
@@ -33,9 +36,6 @@ ObjectCacheStore::ObjectCacheStore(CephContext *cct)
 
 ObjectCacheStore::~ObjectCacheStore() {
   delete m_policy;
-  for (auto it: m_ioctx_map) {
-    delete it.second;
-  }
 }
 
 int ObjectCacheStore::init(bool reset) {
@@ -57,19 +57,22 @@ int ObjectCacheStore::init(bool reset) {
   if (reset) {
     std::error_code ec;
     if (efs::exists(m_cache_root_dir)) {
-      if (!efs::remove_all(m_cache_root_dir, ec)) {
-        lderr(m_cct) << "fail to remove old cache store: " << ec << dendl;
-	return -1;
+       int dir = m_dir_num - 1;
+       while (dir >= 0) {
+         if (!efs::remove_all(m_cache_root_dir + "/" + std::to_string(dir), ec)) {
+           lderr(m_cct) << "fail to remove old cache store: " << ec << dendl;
+	   return ec.value();
+         }
+         dir --;
+       }
+    } else {
+      if (!efs::create_directories(m_cache_root_dir, ec)) {
+        lderr(m_cct) << "fail to create cache store dir: " << ec << dendl;
+        return ec.value();
       }
     }
-
-    if (!efs::create_directories(m_cache_root_dir, ec)) {
-        lderr(m_cct) << "fail to create cache store dir: " << ec << dendl;
-	return -1;
-    }
   }
-
-  return ret;
+  return 0;
 }
 
 int ObjectCacheStore::shutdown() {
@@ -102,12 +105,11 @@ int ObjectCacheStore::do_promote(std::string pool_nspace,
   int ret = 0;
   std::string cache_file_name = std::move(get_cache_file_name(pool_nspace,
                                           pool_id, snap_id, object_name));
-  librados::IoCtx* ioctx = nullptr;
+  librados::IoCtx ioctx;
   {
     Mutex::Locker _locker(m_ioctx_map_lock);
     if (m_ioctx_map.find(pool_id) == m_ioctx_map.end()) {
-      ioctx = new librados::IoCtx();
-      ret = m_rados->ioctx_create2(pool_id, *ioctx);
+      ret = m_rados->ioctx_create2(pool_id, ioctx);
       if (ret < 0) {
         lderr(m_cct) << "fail to create ioctx" << dendl;
         return ret;
@@ -117,10 +119,9 @@ int ObjectCacheStore::do_promote(std::string pool_nspace,
       ioctx = m_ioctx_map[pool_id];
     }
   }
-  ceph_assert(ioctx != nullptr);
 
-  ioctx->set_namespace(pool_nspace);
-  ioctx->snap_set_read(snap_id);
+  ioctx.set_namespace(pool_nspace);
+  ioctx.snap_set_read(snap_id);
 
   librados::bufferlist* read_buf = new librados::bufferlist();
 
@@ -128,7 +129,7 @@ int ObjectCacheStore::do_promote(std::string pool_nspace,
       handle_promote_callback(ret, read_buf, cache_file_name);
    });
 
-   return promote_object(ioctx, object_name, read_buf, ctx);
+   return promote_object(&ioctx, object_name, read_buf, ctx);
 }
 
 int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
@@ -191,16 +192,16 @@ int ObjectCacheStore::lookup_object(std::string pool_nspace,
       if (pret < 0) {
         lderr(m_cct) << "fail to start promote" << dendl;
       }
-      return -1;
+      return pret;
     }
     case OBJ_CACHE_PROMOTED:
       target_cache_file_path = std::move(
         get_cache_file_path(cache_file_name));
       return 0;
     case OBJ_CACHE_SKIP:
-      return -1;
+      return pret;
     default:
-      lderr(m_cct) << "unrecognized object cache status." << dendl;
+      lderr(m_cct) << "unrecognized object cache status" << dendl;
       ceph_assert(0);
   }
 }
@@ -265,11 +266,10 @@ std::string ObjectCacheStore::get_cache_file_name(std::string pool_nspace,
 std::string ObjectCacheStore::get_cache_file_path(std::string cache_file_name) {
 
   std::string cache_file_dir = "";
-
   if (m_dir_num > 0) {
-    auto const pos = cache_file_name.find_last_of('.');
-    cache_file_dir = std::to_string(
-      stoul(cache_file_name.substr(pos+1)) % m_dir_num);
+    uint32_t crc = 0;
+    crc = ceph_crc32c(0, (unsigned char *)cache_file_name.c_str(), cache_file_name.length());
+    cache_file_dir = std::to_string(crc % m_dir_num);
   }
 
   return m_cache_root_dir + cache_file_dir + "/" + cache_file_name;
