@@ -337,10 +337,16 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
       // pool was deleted; grab final pg_pool_t off disk.
       return meta_coll->load_final_pool_info(pgid.pool());
     }
-  }).then([this](pg_pool_t&& pool, string&& name, ec_profile_t&& ec_profile) {
-    Ref<PG> pg{new PG{std::move(pool),
+  }).then([pgid, this](pg_pool_t&& pool,
+                       string&& name,
+                       ec_profile_t&& ec_profile) {
+    Ref<PG> pg{new PG{pgid,
+                      pg_shard_t{whoami, pgid.shard},
+                      std::move(pool),
                       std::move(name),
-                      std::move(ec_profile)}};
+                      std::move(ec_profile),
+                      osdmap,
+                      cluster_msgr}};
     return seastar::make_ready_future<Ref<PG>>(std::move(pg));
   });
 }
