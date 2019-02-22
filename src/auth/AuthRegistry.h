@@ -28,6 +28,7 @@ class AuthRegistry : public md_config_obs_t {
   // CEPH_CON_MODE_*
   std::vector<uint32_t> mon_cluster_modes;
   std::vector<uint32_t> mon_service_modes;
+  std::vector<uint32_t> mon_client_modes;
   std::vector<uint32_t> cluster_modes;
   std::vector<uint32_t> service_modes;
   std::vector<uint32_t> client_modes;
@@ -37,8 +38,7 @@ class AuthRegistry : public md_config_obs_t {
   void _refresh_config();
 
 public:
-  AuthRegistry(CephContext *cct) : cct(cct) {
-  }
+  AuthRegistry(CephContext *cct);
   ~AuthRegistry();
 
   void refresh_config() {
@@ -55,6 +55,10 @@ public:
   void get_supported_modes(int peer_type,
 			   uint32_t auth_method,
 			   std::vector<uint32_t> *modes);
+
+  uint32_t pick_mode(int peer_type,
+		     uint32_t auth_method,
+		     const std::vector<uint32_t>& preferred_modes);
 
   AuthAuthorizeHandler *get_handler(int peer_type, int method);
 
