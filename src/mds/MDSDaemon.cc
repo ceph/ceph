@@ -866,8 +866,6 @@ out:
   return r;
 }
 
-/* This function deletes the passed message before returning. */
-
 void MDSDaemon::handle_mds_map(const MMDSMap::const_ref &m)
 {
   version_t epoch = m->get_epoch();
