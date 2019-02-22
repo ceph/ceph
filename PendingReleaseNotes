@@ -70,3 +70,6 @@ notes (?))
   this flag *must not* be unset anymore. In luminous, this feature was
   introduced in 12.2.11. Users who are running 12.2.11, and want to
   continue to use this feauture, should upgrade to 13.2.5 or later.
+
+* This release also fixes a cve on civetweb, CVE-2019-3821 where ssl fds were
+  not closed in civetweb in case the initial negotiation fails.
