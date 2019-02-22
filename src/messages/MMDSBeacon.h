@@ -188,16 +188,16 @@ private:
   static constexpr int COMPAT_VERSION = 6;
 
   uuid_d fsid;
-  mds_gid_t global_id;
+  mds_gid_t global_id = MDS_GID_NONE;
   string name;
 
-  MDSMap::DaemonState state;
+  MDSMap::DaemonState state = MDSMap::STATE_NULL;
   version_t seq = 0;
 
-  mds_rank_t      standby_for_rank;
+  mds_rank_t      standby_for_rank = MDS_RANK_NONE;
   string          standby_for_name;
-  fs_cluster_id_t standby_for_fscid;
-  bool            standby_replay;
+  fs_cluster_id_t standby_for_fscid = FS_CLUSTER_ID_NONE;
+  bool            standby_replay = false;
 
   CompatSet compat;
 
@@ -205,21 +205,17 @@ private:
 
   map<string, string> sys_info;
 
-  uint64_t mds_features;
+  uint64_t mds_features = 0;
 
 protected:
-  MMDSBeacon()
-    : MessageInstance(MSG_MDS_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
-    global_id(0), state(MDSMap::STATE_NULL), standby_for_rank(MDS_RANK_NONE),
-    standby_for_fscid(FS_CLUSTER_ID_NONE), standby_replay(false),
-    mds_features(0) {
+  MMDSBeacon() : MessageInstance(MSG_MDS_BEACON, 0, HEAD_VERSION, COMPAT_VERSION)
+  {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
   MMDSBeacon(const uuid_d &f, mds_gid_t g, const string& n, epoch_t les, MDSMap::DaemonState st, version_t se, uint64_t feat) :
     MessageInstance(MSG_MDS_BEACON, les, HEAD_VERSION, COMPAT_VERSION),
     fsid(f), global_id(g), name(n), state(st), seq(se),
-    standby_for_rank(MDS_RANK_NONE), standby_for_fscid(FS_CLUSTER_ID_NONE),
-    standby_replay(false), mds_features(feat) {
+    mds_features(feat) {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
   ~MMDSBeacon() override {}
