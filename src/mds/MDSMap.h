@@ -100,27 +100,22 @@ public:
   } DaemonState;
 
   struct mds_info_t {
-    mds_gid_t global_id;
+    mds_gid_t global_id = MDS_GID_NONE;
     std::string name;
-    mds_rank_t rank;
-    int32_t inc;
-    MDSMap::DaemonState state;
-    version_t state_seq;
+    mds_rank_t rank = MDS_RANK_NONE;
+    int32_t inc = 0;
+    MDSMap::DaemonState state = STATE_STANDBY;
+    version_t state_seq = 0;
     entity_addrvec_t addrs;
     utime_t laggy_since;
-    mds_rank_t standby_for_rank;
+    mds_rank_t standby_for_rank = MDS_RANK_NONE;
     std::string standby_for_name;
-    fs_cluster_id_t standby_for_fscid;
-    bool standby_replay;
+    fs_cluster_id_t standby_for_fscid = FS_CLUSTER_ID_NONE;
+    bool standby_replay = false;
     std::set<mds_rank_t> export_targets;
     uint64_t mds_features = 0;
 
-    mds_info_t() : global_id(MDS_GID_NONE), rank(MDS_RANK_NONE), inc(0),
-                   state(STATE_STANDBY), state_seq(0),
-                   standby_for_rank(MDS_RANK_NONE),
-                   standby_for_fscid(FS_CLUSTER_ID_NONE),
-                   standby_replay(false)
-    { }
+    mds_info_t() = default;
 
     bool laggy() const { return !(laggy_since == utime_t()); }
     void clear_laggy() { laggy_since = utime_t(); }
