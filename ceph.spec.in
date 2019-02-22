@@ -255,8 +255,8 @@ BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  CUnit-devel
 BuildRequires:  redhat-lsb-core
+%if 0%{?rhel} == 7
 BuildRequires:	Cython
-%if 0%{?rhel}
 BuildRequires:	python34-devel
 BuildRequires:	python34-setuptools
 BuildRequires:	python34-Cython
@@ -463,13 +463,16 @@ Requires:       python%{_python_buildid}-cherrypy
 Requires:       python%{_python_buildid}-jwt
 Requires:       python%{_python_buildid}-routes
 Requires:       python%{_python_buildid}-werkzeug
-Requires:       pyOpenSSL%{_python_buildid}
 %endif
 %if 0%{?suse_version}
 Requires:       python%{_python_buildid}-CherryPy
 Requires:       python%{_python_buildid}-PyJWT
 Requires:       python%{_python_buildid}-Routes
 Requires:       python%{_python_buildid}-Werkzeug
+%endif
+%if 0%{?rhel} == 7
+Requires:       pyOpenSSL
+%else
 Requires:       python%{_python_buildid}-pyOpenSSL
 %endif
 %description mgr-dashboard
@@ -1207,6 +1210,9 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd-mirror
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
 %py3_compile %{buildroot}%{python3_sitelib}
+%endif
+%if 0%{?rhel} == 8
+%py_byte_compile %{__python3} %{buildroot}%{python3_sitelib}
 %endif
 
 %clean
