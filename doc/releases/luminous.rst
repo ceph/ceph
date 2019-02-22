@@ -23,6 +23,14 @@ Notable Changes
   stale-instances list` and `reshard stale-instances rm` should do the necessary
   cleanup.
 
+* `cephfs-journal-tool` makes rank argument (--rank) mandatory. Rank is
+  of format `filesystem:rank`, where `filesystem` is the CephFS filesystem
+  and `rank` is the MDS rank on which the operation is to be executed. To
+  operate on all ranks, use `all` or `*` as the rank specifier. Note that,
+  operations that dump journal information to file will now dump to per-rank
+  suffixed dump files. Importing journal information from dump files is
+  disallowed if operation is targetted for all ranks.
+
 * CVE-2018-14662: mon: limit caps allowed to access the config store
 
 * CVE-2018-16846: rgw: enforce bounds on max-keys/max-uploads/max-parts (`issue#35994 <http://tracker.ceph.com/issues/35994>`)
