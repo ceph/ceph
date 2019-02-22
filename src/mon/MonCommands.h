@@ -396,7 +396,7 @@ COMMAND("fs set " \
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
         "|allow_new_snaps|inline_data|cluster_down|allow_dirfrags|balancer" \
         "|standby_count_wanted|session_timeout|session_autoclose" \
-        "|down|joinable|min_compat_client " \
+        "|allow_standby_replay|down|joinable|min_compat_client " \
 	"name=val,type=CephString "					\
 	"name=yes_i_really_mean_it,type=CephBool,req=false",			\
 	"set fs parameter <var> to <val>", "mds", "rw")

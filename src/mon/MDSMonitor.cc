@@ -1879,6 +1879,30 @@ bool MDSMonitor::maybe_promote_standby(FSMap &fsmap, Filesystem& fs)
     }
   }
 
+  if (fs.mds_map.allows_standby_replay() && !fs.mds_map.is_degraded()) {
+    // There were no failures to replace, so try using any available standbys
+    // as standby-replay daemons. Don't do this when the cluster is degraded
+    // as a standby-replay daemon may try to read a journal being migrated.
+    for (;;) {
+      auto standby_gid = fsmap.get_available_standby();
+      if (standby_gid == MDS_GID_NONE) break;
+      dout(20) << "standby available mds." << standby_gid << dendl;
+      bool changed = false;
+      for (const auto& rank : fs.mds_map.in) {
+        dout(20) << "exmaining " << rank << dendl;
+        if (fs.mds_map.is_followable(rank)) {
+          dout(1) << "  setting mds." << standby_gid
+                  << " to follow mds rank " << rank << dendl;
+          fsmap.assign_standby_replay(standby_gid, fs.fscid, rank);
+          do_propose = true;
+          changed = true;
+          break;
+        }
+      }
+      if (!changed) break;
+    }
+  }
+
   return do_propose;
 }
 
