@@ -162,7 +162,8 @@ class IscsiTest(ControllerTestCase):
             {
                 "image": "lun3",
                 "pool": "rbd",
-                "controls": {}
+                "controls": {},
+                "backstore": "user:rbd"
             })
         update_request['clients'][0]['luns'].append({"image": "lun3", "pool": "rbd"})
         response = copy.deepcopy(iscsi_target_response)
@@ -171,7 +172,8 @@ class IscsiTest(ControllerTestCase):
             {
                 "image": "lun3",
                 "pool": "rbd",
-                "controls": {}
+                "controls": {},
+                "backstore": "user:rbd"
             })
         response['clients'][0]['luns'].append({"image": "lun3", "pool": "rbd"})
         self._update_iscsi_target(create_request, update_request, response)
@@ -306,8 +308,10 @@ iscsi_target_request = {
         {"ip": "192.168.100.203", "host": "node3"}
     ],
     "disks": [
-        {"image": "lun1", "pool": "rbd", "controls": {"max_data_area_mb": 128}},
-        {"image": "lun2", "pool": "rbd", "controls": {"max_data_area_mb": 128}}
+        {"image": "lun1", "pool": "rbd", "backstore": "user:rbd",
+         "controls": {"max_data_area_mb": 128}},
+        {"image": "lun2", "pool": "rbd", "backstore": "user:rbd",
+         "controls": {"max_data_area_mb": 128}}
     ],
     "clients": [
         {
@@ -348,8 +352,10 @@ iscsi_target_response = {
         {'host': 'node3', 'ip': '192.168.100.203'}
     ],
     'disks': [
-        {'pool': 'rbd', 'image': 'lun1', 'controls': {'max_data_area_mb': 128}},
-        {'pool': 'rbd', 'image': 'lun2', 'controls': {'max_data_area_mb': 128}}
+        {'pool': 'rbd', 'image': 'lun1', 'backstore': 'user:rbd',
+         'controls': {'max_data_area_mb': 128}},
+        {'pool': 'rbd', 'image': 'lun2', 'backstore': 'user:rbd',
+         'controls': {'max_data_area_mb': 128}}
     ],
     'clients': [
         {
@@ -417,14 +423,20 @@ class IscsiClientMock(object):
 
     def get_settings(self):
         return {
+            "backstores": [
+                "user:rbd"
+            ],
             "config": {
                 "minimum_gateways": 2
             },
+            "default_backstore": "user:rbd",
             "disk_default_controls": {
-                "hw_max_sectors": 1024,
-                "max_data_area_mb": 8,
-                "osd_op_timeout": 30,
-                "qfull_timeout": 5
+                "user:rbd": {
+                    "hw_max_sectors": 1024,
+                    "max_data_area_mb": 8,
+                    "osd_op_timeout": 30,
+                    "qfull_timeout": 5
+                }
             },
             "target_default_controls": {
                 "cmdsn_depth": 128,
@@ -463,11 +475,12 @@ class IscsiClientMock(object):
             "portal_ip_address": ip_address[0]
         }
 
-    def create_disk(self, image_id):
+    def create_disk(self, image_id, backstore):
         pool, image = image_id.split('.')
         self.config['disks'][image_id] = {
             "pool": pool,
             "image": image,
+            "backstore": backstore,
             "controls": {}
         }
 

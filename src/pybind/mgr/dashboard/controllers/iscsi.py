@@ -396,7 +396,8 @@ class IscsiTarget(RESTController):
                 image = disk['image']
                 image_id = '{}.{}'.format(pool, image)
                 if image_id not in config['disks']:
-                    IscsiClient.instance(gateway_name=gateway_name).create_disk(image_id)
+                    backstore = disk['backstore']
+                    IscsiClient.instance(gateway_name=gateway_name).create_disk(image_id, backstore)
                 if not target_config or image_id not in target_config['disks']:
                     IscsiClient.instance(gateway_name=gateway_name).create_target_lun(target_iqn,
                                                                                       image_id)
@@ -469,6 +470,7 @@ class IscsiTarget(RESTController):
                 'pool': disk_config['pool'],
                 'image': disk_config['image'],
                 'controls': disk_config['controls'],
+                'backstore': disk_config['backstore']
             }
             disks.append(disk)
         disks = IscsiTarget._sorted_disks(disks)

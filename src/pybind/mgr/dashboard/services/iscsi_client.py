@@ -91,10 +91,11 @@ class IscsiClient(RestClient):
         })
 
     @RestClient.api_put('/api/disk/{image_id}')
-    def create_disk(self, image_id, request=None):
+    def create_disk(self, image_id, backstore, request=None):
         logger.debug("iSCSI: Creating disk: %s", image_id)
         return request({
-            'mode': 'create'
+            'mode': 'create',
+            'backstore': backstore
         })
 
     @RestClient.api_delete('/api/disk/{image_id}')
