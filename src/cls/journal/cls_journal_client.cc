@@ -26,7 +26,7 @@ struct C_AioExec : public Context {
 
   static void rados_callback(rados_completion_t c, void *arg) {
     Context *ctx = reinterpret_cast<Context *>(arg);
-    ctx->complete(rados_aio_get_return_value(c));
+    ctx->complete(librados::AioCompletion{c}.get_return_value());
   }
 };
 
