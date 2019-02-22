@@ -363,8 +363,8 @@ class Infiniband {
   Device *device = NULL;
   ProtectionDomain *pd = NULL;
   DeviceList *device_list = nullptr;
-  void wire_gid_to_gid(const char *wgid, union ibv_gid *gid);
-  void gid_to_wire_gid(const union ibv_gid *gid, char wgid[]);
+  void wire_gid_to_gid(const char *wgid, IBSYNMsg* im);
+  void gid_to_wire_gid(const IBSYNMsg& im, char wgid[]);
   CephContext *cct;
   Mutex lock;
   bool initialized = false;
