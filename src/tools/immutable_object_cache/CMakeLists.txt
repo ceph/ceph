@@ -13,7 +13,7 @@ add_executable(ceph-immutable-object-cache
   main.cc)
 target_link_libraries(ceph-immutable-object-cache
   ceph_immutable_object_cache_lib
-  librados-cxx
+  librados
   stdc++fs
   global)
 install(TARGETS ceph-immutable-object-cache DESTINATION bin)
