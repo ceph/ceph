@@ -52,6 +52,10 @@ class Prometheus(PrometheusRESTController):
         return self.alert_proxy('GET', '/alerts', params)
 
     @RESTController.Collection(method='GET')
+    def rules(self, **params):
+        return self.prometheus_proxy('GET', '/rules', params)
+
+    @RESTController.Collection(method='GET')
     def query(self, **params):
         return self.prometheus_proxy('GET', '/query', params)
 

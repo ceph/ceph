@@ -12,7 +12,7 @@ import {
 import { PrometheusService } from '../api/prometheus.service';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
-import { PrometheusNotification } from '../models/prometheus-alerts';
+import { AlertmanagerNotification } from '../models/prometheus-alerts';
 import { SharedModule } from '../shared.module';
 import { NotificationService } from './notification.service';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
@@ -21,7 +21,7 @@ import { PrometheusNotificationService } from './prometheus-notification.service
 describe('PrometheusNotificationService', () => {
   let service: PrometheusNotificationService;
   let notificationService: NotificationService;
-  let notifications: PrometheusNotification[];
+  let notifications: AlertmanagerNotification[];
   let prometheusService: PrometheusService;
   let prometheus: PrometheusHelper;
   let shown: CdNotificationConfig[];

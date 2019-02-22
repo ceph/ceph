@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 
 import { Observable } from 'rxjs';
 
-import { PrometheusAlert, PrometheusNotification } from '../models/prometheus-alerts';
+import {AlertmanagerAlert, AlertmanagerNotification, PrometheusRule} from '../models/prometheus-alerts';
 import { PrometheusSilence } from '../models/prometheus-silence';
 import { ApiModule } from './api.module';
 import { SettingsService } from './settings.service';
@@ -36,12 +36,16 @@ export class PrometheusService {
     this.settingsService.disableSetting(this.settingsKey.prometheus);
   }
 
-  list(params = {}): Observable<PrometheusAlert[]> {
-    return this.http.get<PrometheusAlert[]>(this.baseURL, { params });
+  getAlerts(params = {}): Observable<AlertmanagerAlert[]> {
+    return this.http.get<AlertmanagerAlert[]>(this.baseURL, { params });
   }
 
-  listSilences(params = {}): Observable<PrometheusSilence[]> {
+  getSilences(params = {}): Observable<PrometheusSilence[]> {
     return this.http.get<PrometheusSilence[]>(`${this.baseURL}/silences`, { params });
+  }
+
+  getRules(params = {}): Observable<PrometheusRule[]> {
+    return this.http.get<PrometheusRule[]>(`${this.baseURL}/rules`, { params });
   }
 
   setSilence(silence: PrometheusSilence) {
@@ -52,8 +56,8 @@ export class PrometheusService {
     return this.http.delete(`${this.baseURL}/silence/${silenceId}`, { observe: 'response' });
   }
 
-  getNotificationSince(notification): Observable<PrometheusNotification[]> {
-    return this.http.post<PrometheusNotification[]>(
+  getNotificationSince(notification): Observable<AlertmanagerNotification[]> {
+    return this.http.post<AlertmanagerNotification[]>(
       `${this.baseURL}/get_notifications_since`,
       notification
     );

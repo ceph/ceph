@@ -12,7 +12,7 @@ import {
 import { PrometheusService } from '../api/prometheus.service';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
-import { PrometheusAlert } from '../models/prometheus-alerts';
+import { AlertmanagerAlert } from '../models/prometheus-alerts';
 import { SharedModule } from '../shared.module';
 import { NotificationService } from './notification.service';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
@@ -21,7 +21,7 @@ import { PrometheusAlertService } from './prometheus-alert.service';
 describe('PrometheusAlertService', () => {
   let service: PrometheusAlertService;
   let notificationService: NotificationService;
-  let alerts: PrometheusAlert[];
+  let alerts: AlertmanagerAlert[];
   let prometheusService: PrometheusService;
   let prometheus: PrometheusHelper;
 
@@ -77,7 +77,7 @@ describe('PrometheusAlertService', () => {
 
       prometheusService = TestBed.get(PrometheusService);
       spyOn(prometheusService, 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
-      spyOn(prometheusService, 'list').and.callFake(() => of(alerts));
+      spyOn(prometheusService, 'getAlerts').and.callFake(() => of(alerts));
 
       alerts = [prometheus.createAlert('alert0')];
       service.refresh();

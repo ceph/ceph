@@ -10,7 +10,8 @@ import {
   configureTestBed,
   FixtureHelper,
   FormHelper,
-  i18nProviders
+  i18nProviders,
+  PrometheusHelper
 } from '../../../../../testing/unit-test-helper';
 import { NotFoundComponent } from '../../../../core/not-found/not-found.component';
 import { PrometheusService } from '../../../../shared/api/prometheus.service';
@@ -19,11 +20,14 @@ import { Permission } from '../../../../shared/models/permissions';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { SharedModule } from '../../../../shared/shared.module';
 import { ClusterModule } from '../../cluster.module';
-import { PrometheusFormComponent } from './prometheus-form.component';
+import { SilenceFormComponent } from './silence-form.component';
+import { of } from 'rxjs';
 
 describe('PrometheusFormComponent', () => {
-  let component: PrometheusFormComponent;
-  let fixture: ComponentFixture<PrometheusFormComponent>;
+  let component: SilenceFormComponent;
+  let fixture: ComponentFixture<SilenceFormComponent>;
+  let prometheusService: PrometheusService;
+  let prometheus: PrometheusHelper;
   let router: Router;
   let formH: FormHelper;
   let fixtureH: FixtureHelper;
@@ -47,9 +51,20 @@ describe('PrometheusFormComponent', () => {
 
   beforeEach(() => {
     originalDate = Date;
+    prometheusService = TestBed.get(PrometheusService);
+    prometheus = new PrometheusHelper();
+    spyOn(prometheusService, 'getAlerts').and.callFake(() =>
+      of([prometheus.createAlert('alert0')])
+    );
+    spyOn(prometheusService, 'getRules').and.callFake(() =>
+      of(
+        prometheus.createRule('alert0', 'someSeverity', [null]),
+        prometheus.createRule('alert1', 'someOtherSeverity', [])
+      )
+    );
     spyOn(global, 'Date').and.callFake((sth) => (sth ? new originalDate(sth) : beginningDate));
     router = TestBed.get(Router);
-    fixture = TestBed.createComponent(PrometheusFormComponent);
+    fixture = TestBed.createComponent(SilenceFormComponent);
     fixtureH = new FixtureHelper(fixture);
     component = fixture.componentInstance;
     form = component.form;
@@ -339,12 +354,14 @@ describe('PrometheusFormComponent', () => {
       addMatcher('some name', 'some value', true);
       expect(form.errors).toEqual(null);
     });
+
+    it('should show which alerts and rules will be affected with one matcher', () => {})
+
+    it('should show which alerts and rules will be affected with multiple matchers', () => {})
   });
 
   describe('submit tests', () => {
-    let prometheusService: PrometheusService;
     beforeEach(() => {
-      prometheusService = TestBed.get(PrometheusService);
       spyOn(prometheusService, 'setSilence');
     });
 

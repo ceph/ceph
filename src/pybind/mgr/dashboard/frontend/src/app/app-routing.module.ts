@@ -15,8 +15,8 @@ import { HostsComponent } from './ceph/cluster/hosts/hosts.component';
 import { LogsComponent } from './ceph/cluster/logs/logs.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
-import { PrometheusFormComponent } from './ceph/cluster/prometheus/prometheus-form/prometheus-form.component';
-import { PrometheusListComponent } from './ceph/cluster/prometheus/prometheus-list/prometheus-list.component';
+import { SilenceFormComponent } from './ceph/cluster/prometheus/silence-form/silence-form.component';
+import { AlertListComponent } from './ceph/cluster/prometheus/alert-list/alert-list.component';
 import { SilencesListComponent } from './ceph/cluster/prometheus/silences-list/silences-list.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import { Nfs501Component } from './ceph/nfs/nfs-501/nfs-501.component';
@@ -123,7 +123,7 @@ const routes: Routes = [
   },
   {
     path: 'alerts',
-    component: PrometheusListComponent,
+    component: AlertListComponent,
     canActivate: [AuthGuardService],
     data: { breadcrumbs: 'Cluster/Alerts' }
   },
@@ -133,11 +133,11 @@ const routes: Routes = [
     data: { breadcrumbs: 'Cluster/Silences' },
     children: [
       { path: '', component: SilencesListComponent },
-      { path: 'add', component: PrometheusFormComponent, data: { breadcrumbs: 'Add' } },
-      { path: 'edit/:id', component: PrometheusFormComponent, data: { breadcrumbs: 'Edit' } },
+      { path: 'add', component: SilenceFormComponent, data: { breadcrumbs: 'Add' } },
+      { path: 'edit/:id', component: SilenceFormComponent, data: { breadcrumbs: 'Edit' } },
       {
         path: 'recreate/:id',
-        component: PrometheusFormComponent,
+        component: SilenceFormComponent,
         data: { breadcrumbs: 'Recreate' }
       }
     ]

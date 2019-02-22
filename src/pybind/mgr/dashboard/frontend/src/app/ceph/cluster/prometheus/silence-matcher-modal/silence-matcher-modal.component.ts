@@ -6,6 +6,7 @@ import { BsModalRef } from 'ngx-bootstrap/modal';
 import { CdFormBuilder } from '../../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { PrometheusSilenceMatcher } from '../../../../shared/models/prometheus-silence';
+import { AlertmanagerAlert, PrometheusRule } from '../../../../shared/models/prometheus-alerts';
 
 @Component({
   selector: 'cd-silence-matcher-modal',
@@ -20,9 +21,16 @@ export class SilenceMatcherModalComponent {
   @Output()
   submitAction = new EventEmitter();
 
+  nameAttributes = ['alertname', 'instance', 'job', 'severity'];
   form: CdFormGroup;
 
-  constructor(private formBuilder: CdFormBuilder, public bsModalRef: BsModalRef) {
+  alerts: AlertmanagerAlert[]; // Will be set by silence form
+  rules: PrometheusRule[]; // Will be set by silence form
+
+  constructor(
+    private formBuilder: CdFormBuilder,
+    public bsModalRef: BsModalRef
+  ) {
     this.createForm();
   }
 
@@ -36,15 +44,6 @@ export class SilenceMatcherModalComponent {
 
   preFillControls(matcher: PrometheusSilenceMatcher) {
     this.form.setValue(matcher);
-  }
-
-  checkPrometheusPromQlResults() {
-    // "node_load1 > 1 and node_load1 > 3"
-    // http://albatros-latitude-7480:9090/graph?g0.range_input=1h&g0.expr=node_load1%20%3E%201%20and%20node_load1%20%3E%203&g0.tab=1
-  }
-
-  generatePromQlURL(host: string, promQl: string) {
-    return host + '/api/v1/query?query=' + encodeURI(promQl);
   }
 
   onSubmit() {

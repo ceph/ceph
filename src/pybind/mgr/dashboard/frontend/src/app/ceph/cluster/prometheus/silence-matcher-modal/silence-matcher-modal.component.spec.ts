@@ -1,5 +1,5 @@
-import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
+import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
@@ -41,16 +41,15 @@ describe('SilenceMatcherModalComponent', () => {
     formH.expectValidChange('name', 'CPU 50% above usual load');
   });
 
+  it('should contain a alert name list based on rules from prometheus', () => {});
+
+  it('should contain a alert severity list based on rules from prometheus', () => {});
+
+  it('matches value with name against alert list', () => {});
+
   it('should have a value field', () => {
     formH.expectError('value', 'required');
     formH.expectValidChange('value', 'avg(cpu_load[5m]) > avg(cpu_load[1d]) * 1.5');
-  });
-
-  it('should generate the right url for Prometheus', () => {
-    const host = 'http://localhost:9090';
-    const value = 'node_load1 > 1 and node_load1 > 3';
-    const expected = host + '/api/v1/query?query=node_load1%20%3E%201%20and%20node_load1%20%3E%203';
-    expect(component.generatePromQlURL(host, value)).toBe(expected);
   });
 
   describe('verifying', () => {

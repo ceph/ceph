@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 import * as _ from 'lodash';
 
 import { PrometheusService } from '../api/prometheus.service';
-import { PrometheusAlert, PrometheusCustomAlert } from '../models/prometheus-alerts';
+import { AlertmanagerAlert, PrometheusCustomAlert } from '../models/prometheus-alerts';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
 import { ServicesModule } from './services.module';
 
@@ -12,7 +12,7 @@ import { ServicesModule } from './services.module';
 })
 export class PrometheusAlertService {
   private canAlertsBeNotified = false;
-  alerts: PrometheusAlert[] = [];
+  alerts: AlertmanagerAlert[] = [];
 
   constructor(
     private alertFormatter: PrometheusAlertFormatter,
@@ -21,7 +21,7 @@ export class PrometheusAlertService {
 
   refresh() {
     this.prometheusService.ifAlertmanagerConfigured(() => {
-      this.prometheusService.list().subscribe(
+      this.prometheusService.getAlerts().subscribe(
         (alerts) => this.handleAlerts(alerts),
         (resp) => {
           if ([404, 504].includes(resp.status)) {
@@ -32,7 +32,7 @@ export class PrometheusAlertService {
     });
   }
 
-  private handleAlerts(alerts: PrometheusAlert[]) {
+  private handleAlerts(alerts: AlertmanagerAlert[]) {
     if (this.canAlertsBeNotified) {
       this.notifyOnAlertChanges(alerts, this.alerts);
     }
@@ -40,7 +40,7 @@ export class PrometheusAlertService {
     this.canAlertsBeNotified = true;
   }
 
-  private notifyOnAlertChanges(alerts: PrometheusAlert[], oldAlerts: PrometheusAlert[]) {
+  private notifyOnAlertChanges(alerts: AlertmanagerAlert[], oldAlerts: AlertmanagerAlert[]) {
     const changedAlerts = this.getChangedAlerts(
       this.alertFormatter.convertToCustomAlerts(alerts),
       this.alertFormatter.convertToCustomAlerts(oldAlerts)

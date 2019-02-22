@@ -10,9 +10,10 @@ import { TableActionsComponent } from '../app/shared/datatable/table-actions/tab
 import { CdFormGroup } from '../app/shared/forms/cd-form-group';
 import { Permission } from '../app/shared/models/permissions';
 import {
-  PrometheusAlert,
-  PrometheusNotification,
-  PrometheusNotificationAlert
+  AlertmanagerAlert,
+  AlertmanagerNotification,
+  AlertmanagerNotificationAlert,
+  PrometheusRule
 } from '../app/shared/models/prometheus-alerts';
 import { _DEV_ } from '../unit-test-configuration';
 
@@ -218,22 +219,35 @@ export class FixtureHelper {
 }
 
 export class PrometheusHelper {
-  createAlert(name, state = 'active', timeMultiplier = 1) {
+  createRule(name, severity, alerts: any[]): PrometheusRule {
+    return {
+      name: name,
+      labels: {
+        severity: severity
+      },
+      alerts: alerts
+    } as PrometheusRule;
+  }
+
+  createAlert(name, state = 'active', timeMultiplier = 1): AlertmanagerAlert {
     return {
       fingerprint: name,
       status: { state },
       labels: {
-        alertname: name
+        alertname: name,
+        instance: 'someInstance',
+        job: 'someJob',
+        severity: 'someSeverity'
       },
       annotations: {
         summary: `${name} is ${state}`
       },
       generatorURL: `http://${name}`,
       startsAt: new Date(new Date('2022-02-22').getTime() * timeMultiplier).toString()
-    } as PrometheusAlert;
+    } as AlertmanagerAlert;
   }
 
-  createNotificationAlert(name, status = 'firing') {
+  createNotificationAlert(name, status = 'firing'): AlertmanagerNotificationAlert {
     return {
       status: status,
       labels: {
@@ -243,15 +257,15 @@ export class PrometheusHelper {
         summary: `${name} is ${status}`
       },
       generatorURL: `http://${name}`
-    } as PrometheusNotificationAlert;
+    } as AlertmanagerNotificationAlert;
   }
 
-  createNotification(alertNumber = 1, status = 'firing') {
+  createNotification(alertNumber = 1, status = 'firing'): AlertmanagerNotification {
     const alerts = [];
     for (let i = 0; i < alertNumber; i++) {
       alerts.push(this.createNotificationAlert('alert' + i, status));
     }
-    return { alerts, status } as PrometheusNotification;
+    return { alerts, status } as AlertmanagerNotification;
   }
 
   createLink(url) {

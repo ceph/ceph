@@ -8,11 +8,11 @@ import { TabsModule } from 'ngx-bootstrap/tabs';
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
 import { SharedModule } from '../../../../shared/shared.module';
 import { PrometheusTabsComponent } from '../prometheus-tabs/prometheus-tabs.component';
-import { PrometheusListComponent } from './prometheus-list.component';
+import { AlertListComponent } from './alert-list.component';
 
 describe('PrometheusListComponent', () => {
-  let component: PrometheusListComponent;
-  let fixture: ComponentFixture<PrometheusListComponent>;
+  let component: AlertListComponent;
+  let fixture: ComponentFixture<AlertListComponent>;
 
   configureTestBed({
     imports: [
@@ -22,12 +22,12 @@ describe('PrometheusListComponent', () => {
       ToastModule.forRoot(),
       SharedModule
     ],
-    declarations: [PrometheusListComponent, PrometheusTabsComponent],
+    declarations: [AlertListComponent, PrometheusTabsComponent],
     providers: [i18nProviders]
   });
 
   beforeEach(() => {
-    fixture = TestBed.createComponent(PrometheusListComponent);
+    fixture = TestBed.createComponent(AlertListComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
   });

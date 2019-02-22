@@ -131,7 +131,7 @@ export class SilencesListComponent implements OnInit {
   refresh() {
     this.prometheusService.ifAlertmanagerConfigured((url) => {
       if (this.connected) {
-        this.prometheusService.listSilences().subscribe(
+        this.prometheusService.getSilences().subscribe(
           (silences) => {
             this.silences = silences;
           },

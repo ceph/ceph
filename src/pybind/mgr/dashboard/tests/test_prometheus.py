@@ -26,6 +26,12 @@ class PrometheusControllerTest(ControllerTestCase):
 
     def test_query(self):
         with patch('requests.request') as mock_request:
+            self._get('/api/prometheus/rules')
+            mock_request.assert_called_with('GET', self.prometheus_host_api + '/rules',
+                                            json=None, params={})
+
+    def test_query(self):
+        with patch('requests.request') as mock_request:
             self._get('/api/prometheus/query?query=something')
             mock_request.assert_called_with('GET', self.prometheus_host_api + '/query',
                                             json=None, params={'query': 'something'})

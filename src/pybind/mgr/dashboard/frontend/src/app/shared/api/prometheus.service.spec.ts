@@ -28,13 +28,13 @@ describe('PrometheusService', () => {
   });
 
   it('should call list', () => {
-    service.list().subscribe();
+    service.getAlerts().subscribe();
     const req = httpTesting.expectOne('api/prometheus');
     expect(req.request.method).toBe('GET');
   });
 
   it('should call listSilences', () => {
-    service.listSilences().subscribe();
+    service.getSilences().subscribe();
     const req = httpTesting.expectOne('api/prometheus/silences');
     expect(req.request.method).toBe('GET');
   });
@@ -70,6 +70,12 @@ describe('PrometheusService', () => {
     service.getNotificationSince({}).subscribe();
     const req = httpTesting.expectOne('api/prometheus/get_notifications_since');
     expect(req.request.method).toBe('POST');
+  });
+
+  it('should call rules', () => {
+    service.getRules({}).subscribe();
+    const req = httpTesting.expectOne('api/prometheus/rules');
+    expect(req.request.method).toBe('GET');
   });
 
   describe('ifAlertmanagerConfigured', () => {

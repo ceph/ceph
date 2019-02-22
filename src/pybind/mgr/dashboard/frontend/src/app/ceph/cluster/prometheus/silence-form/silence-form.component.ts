@@ -17,13 +17,14 @@ import { Permission } from '../../../../shared/models/permissions';
 import { PrometheusSilenceMatcher } from '../../../../shared/models/prometheus-silence';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { SilenceMatcherModalComponent } from '../silence-matcher-modal/silence-matcher-modal.component';
+import { AlertmanagerAlert, PrometheusRule } from '../../../../shared/models/prometheus-alerts';
 
 @Component({
   selector: 'cd-prometheus-form',
-  templateUrl: './prometheus-form.component.html',
-  styleUrls: ['./prometheus-form.component.scss']
+  templateUrl: './silence-form.component.html',
+  styleUrls: ['./silence-form.component.scss']
 })
-export class PrometheusFormComponent implements OnInit {
+export class SilenceFormComponent implements OnInit {
   permission: Permission;
   form: CdFormGroup;
   edit = false;
@@ -51,6 +52,9 @@ export class PrometheusFormComponent implements OnInit {
     }
   ];
 
+  alerts: AlertmanagerAlert[];
+  rules: PrometheusRule[];
+
   constructor(
     private prometheusService: PrometheusService,
     private formBuilder: CdFormBuilder,
@@ -61,6 +65,7 @@ export class PrometheusFormComponent implements OnInit {
   ) {
     this.chooseMode();
     this.authenticate();
+    this.getData();
     this.createForm();
     this.setupDates();
   }
@@ -78,6 +83,13 @@ export class PrometheusFormComponent implements OnInit {
     ) {
       this.router.navigate(['/404']);
     }
+  }
+
+  private getData() {
+    this.prometheusService.ifPrometheusConfigured(() =>
+      this.prometheusService.getRules().subscribe((rules) => (this.rules = rules))
+    );
+    this.prometheusService.getAlerts().subscribe((alerts) => (this.alerts = alerts));
   }
 
   private createForm() {
@@ -181,6 +193,8 @@ export class PrometheusFormComponent implements OnInit {
   showMatcherModal(index?: number) {
     const modalRef = this.bsModalService.show(SilenceMatcherModalComponent);
     const modal = modalRef.content as SilenceMatcherModalComponent;
+    modal.alerts = this.alerts;
+    modal.rules = this.rules;
     if (_.isNumber(index)) {
       modal.preFillControls(this.matchers[index]);
     }

@@ -8,10 +8,10 @@ import { PrometheusAlertService } from '../../../../shared/services/prometheus-a
 
 @Component({
   selector: 'cd-prometheus-list',
-  templateUrl: './prometheus-list.component.html',
-  styleUrls: ['./prometheus-list.component.scss']
+  templateUrl: './alert-list.component.html',
+  styleUrls: ['./alert-list.component.scss']
 })
-export class PrometheusListComponent implements OnInit {
+export class AlertListComponent implements OnInit {
   @ViewChild('externalLinkTpl')
   externalLinkTpl: TemplateRef<any>;
   columns: CdTableColumn[];
