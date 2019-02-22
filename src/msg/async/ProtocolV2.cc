@@ -2506,22 +2506,10 @@ CtPtr ProtocolV2::handle_auth_request(char *payload, uint32_t length) {
                  << ", payload_len=" << request.auth_payload().length() << ")"
                  << dendl;
   auth_meta->auth_method = request.method();
-
-  // select a connection mode
-  auto& preferred_modes = request.preferred_modes();
-  std::vector<uint32_t> allowed_modes;
-  messenger->auth_server->get_supported_con_modes(
-    connection->get_peer_type(), auth_meta->auth_method, &allowed_modes);
-  for (auto mode : preferred_modes) {
-    if (std::find(allowed_modes.begin(), allowed_modes.end(), mode)
-	!= allowed_modes.end()) {
-      auth_meta->con_mode = mode;
-      break;
-    }
-  }
+  auth_meta->con_mode = messenger->auth_server->pick_con_mode(
+    connection->get_peer_type(), auth_meta->auth_method,
+    request.preferred_modes());
   if (auth_meta->con_mode == CEPH_CON_MODE_UNKNOWN) {
-    ldout(cct,1) << "failed to pick con mode from client's " << preferred_modes
-		 << " and our " << allowed_modes << dendl;
     return _auth_bad_method(-EOPNOTSUPP);
   }
   return _handle_auth_request(request.auth_payload(), false);
