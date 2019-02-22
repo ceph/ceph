@@ -1,5 +1,10 @@
-v14.1.0 Nautilus
-================
+v14.1.0 Nautilus (release candidate 1)
+======================================
+
+.. note: We expect to make a msgr2 protocol revision after this first
+   release candidate.  If you upgrade to v14.1.0 *and* enable msgr2,
+   you will need to restart all daemons after upgrading to v14.1.1 or
+   any other later nautilus release.
 
 .. note: These are draft notes for the first Nautilus release.
 
