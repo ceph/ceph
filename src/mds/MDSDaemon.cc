@@ -893,8 +893,7 @@ void MDSDaemon::handle_mds_map(const MMDSMap::const_ref &m)
 
   monc->sub_got("mdsmap", mdsmap->get_epoch());
 
-  // Calculate my effective rank (either my owned rank or my
-  // standby_for_rank if in standby replay)
+  // Calculate my effective rank (either my owned rank or the rank I'm following if STATE_STANDBY_REPLAY
   mds_rank_t whoami = mdsmap->get_rank_gid(mds_gid_t(monc->get_global_id()));
 
   // verify compatset
@@ -915,11 +914,6 @@ void MDSDaemon::handle_mds_map(const MMDSMap::const_ref &m)
       dout(10) << " peer mds gid " << p.first << " removed from map" << dendl;
       messenger->mark_down_addrs(p.second.addrs);
     }
-  }
-
-  if (whoami == MDS_RANK_NONE && 
-      new_state == MDSMap::STATE_STANDBY_REPLAY) {
-    whoami = mdsmap->get_mds_info_gid(mds_gid_t(monc->get_global_id())).standby_for_rank;
   }
 
   // see who i am
