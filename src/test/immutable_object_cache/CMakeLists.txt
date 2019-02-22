@@ -13,7 +13,7 @@ add_ceph_unittest(unittest_ceph_immutable_obj_cache)
 target_link_libraries(unittest_ceph_immutable_obj_cache
   ceph_immutable_object_cache_lib
   rados_test_stub
-  librados-cxx
+  librados
   global
   radostest-cxx
   stdc++fs
@@ -26,7 +26,7 @@ add_executable(ceph_test_immutable_obj_cache
   )
 
 target_link_libraries(ceph_test_immutable_obj_cache
-  librados-cxx
+  librados
   radostest-cxx
   ${UNITTEST_LIBS}
   )
