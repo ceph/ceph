@@ -428,6 +428,12 @@ These changes occurred between the Mimic and Nautilus releases.
   ``mds_recall_warning_decay_rate`` (default: 60s) sets the threshold
   for this warning.
 
+* The MDS mds_standby_for_*, mon_force_standby_active, and mds_standby_replay
+  configuration options have been obsoleted. Instead, the operator may now set
+  the new "allow_standby_replay" flag on the CephFS file system. This setting
+  causes standbys to become standby-replay for any available rank in the file
+  system.
+
 * The Telegraf module for the Manager allows for sending statistics to
   an Telegraf Agent over TCP, UDP or a UNIX Socket. Telegraf can then
   send the statistics to databases like InfluxDB, ElasticSearch, Graphite
