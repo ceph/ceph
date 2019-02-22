@@ -49,7 +49,7 @@ class ObjectCacheStore
 
     CephContext *m_cct;
     RadosRef m_rados;
-    std::map<uint64_t, librados::IoCtx*> m_ioctx_map;
+    std::map<uint64_t, librados::IoCtx> m_ioctx_map;
     Mutex m_ioctx_map_lock;
     Policy* m_policy;
     //TODO(): make this configurable

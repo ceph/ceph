@@ -82,7 +82,7 @@ public:
 TEST_F(TestObjectStore, test_1) {
   create_object_cache_store(1000);
 
-  std::string cache_path(test_cache_path + "/ceph_immutable_obj_cache/");
+  std::string cache_path(test_cache_path);
 
   efs::remove_all(test_cache_path);
 
