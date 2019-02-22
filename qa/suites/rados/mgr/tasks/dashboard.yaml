@@ -47,3 +47,4 @@ tasks:
         - tasks.mgr.dashboard.test_user
         - tasks.mgr.dashboard.test_erasure_code_profile
         - tasks.mgr.dashboard.test_mgr_module
+        - tasks.mgr.dashboard.test_ganesha
