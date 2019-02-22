@@ -1,4 +1,4 @@
-# cython: embedsignature=True
+# cython: embedsignature=True, c_string_type=str, c_string_encoding=ascii
 """
 This module is a thin wrapper around librados.
 
