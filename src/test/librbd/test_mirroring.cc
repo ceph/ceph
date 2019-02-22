@@ -23,6 +23,7 @@
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/journal/Types.h"
+#include "librbd/api/Image.h"
 #include "journal/Journaler.h"
 #include "journal/Settings.h"
 #include <boost/scope_exit.hpp>
@@ -294,8 +295,11 @@ public:
 
     std::string image_id;
     ASSERT_EQ(0, image.get_id(&image_id));
+    image.close();
 
     ASSERT_EQ(0, m_rbd.trash_move(m_ioctx, image_name.c_str(), 100));
+
+    ASSERT_EQ(0, m_rbd.open_by_id(m_ioctx, image, image_id.c_str(), NULL));
 
     librbd::mirror_image_info_t mirror_image;
     ASSERT_EQ(0, image.mirror_image_get_info(&mirror_image, sizeof(mirror_image)));
@@ -719,7 +723,9 @@ TEST_F(TestMirroring, RemoveBootstrapped)
                              &order));
   librbd::Image image;
   ASSERT_EQ(0, m_rbd.open(m_ioctx, image, image_name.c_str()));
-  ASSERT_EQ(-EBUSY, m_rbd.remove(m_ioctx, image_name.c_str()));
+
+  librbd::NoOpProgressContext no_op;
+  ASSERT_EQ(-EBUSY, librbd::api::Image<>::remove(m_ioctx, image_name, no_op));
 
   // simulate the image is open by rbd-mirror bootstrap
   uint64_t handle;
@@ -740,7 +746,7 @@ TEST_F(TestMirroring, RemoveBootstrapped)
   ASSERT_EQ(0, m_ioctx.create(RBD_MIRRORING, false));
   ASSERT_EQ(0, m_ioctx.watch2(RBD_MIRRORING, &handle, &watcher));
   // now remove should succeed
-  ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
+  ASSERT_EQ(0, librbd::api::Image<>::remove(m_ioctx, image_name, no_op));
   ASSERT_EQ(0, m_ioctx.unwatch2(handle));
   ASSERT_TRUE(watcher.m_notified);
   ASSERT_EQ(0, image.close());

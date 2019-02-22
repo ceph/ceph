@@ -559,6 +559,7 @@ enum TrashImageSource {
   TRASH_IMAGE_SOURCE_USER = 0,
   TRASH_IMAGE_SOURCE_MIRRORING = 1,
   TRASH_IMAGE_SOURCE_MIGRATION = 2,
+  TRASH_IMAGE_SOURCE_REMOVING = 3,
 };
 
 inline std::ostream& operator<<(std::ostream& os,
@@ -572,6 +573,9 @@ inline std::ostream& operator<<(std::ostream& os,
     break;
   case TRASH_IMAGE_SOURCE_MIGRATION:
     os << "migration";
+    break;
+  case TRASH_IMAGE_SOURCE_REMOVING:
+    os << "removing";
     break;
   default:
     os << "unknown (" << static_cast<uint32_t>(source) << ")";

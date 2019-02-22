@@ -69,12 +69,11 @@ void ListWatchersRequest<I>::handle_list_image_watchers(int r) {
     return;
   }
 
-  get_mirror_image();
+  list_mirror_watchers();
 }
 
 template<typename I>
-void ListWatchersRequest<I>::get_mirror_image() {
-  ldout(m_cct, 20) << dendl;
+void ListWatchersRequest<I>::list_mirror_watchers() {
   if ((m_object_watchers.empty()) ||
       (m_flags & LIST_WATCHERS_FILTER_OUT_MIRROR_INSTANCES) == 0 ||
       (m_image_ctx.features & RBD_FEATURE_JOURNALING) == 0) {
@@ -82,35 +81,6 @@ void ListWatchersRequest<I>::get_mirror_image() {
     return;
   }
 
-  librados::ObjectReadOperation op;
-  cls_client::mirror_image_get_start(&op, m_image_ctx.id);
-
-  using klass = ListWatchersRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_get_mirror_image>(this);
-  m_out_bl.clear();
-  int r = m_image_ctx.md_ctx.aio_operate(RBD_MIRRORING, comp, &op, &m_out_bl);
-  ceph_assert(r == 0);
-  comp->release();
-}
-
-template<typename I>
-void ListWatchersRequest<I>::handle_get_mirror_image(int r) {
-  ldout(m_cct, 20) << "r=" << r << dendl;
-
-  if (r == -ENOENT) {
-    finish(0);
-    return;
-  } else if (r < 0) {
-    ldout(m_cct, 1) << "error retrieving mirror image: " << cpp_strerror(r)
-                    << dendl;
-  }
-
-  list_mirror_watchers();
-}
-
-template<typename I>
-void ListWatchersRequest<I>::list_mirror_watchers() {
   ldout(m_cct, 20) << dendl;
 
   librados::ObjectReadOperation op;

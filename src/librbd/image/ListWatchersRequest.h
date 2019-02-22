@@ -42,9 +42,6 @@ private:
    * LIST_IMAGE_WATCHERS
    *    |
    *    v
-   * GET_MIRROR_IMAGE (skip if not needed)
-   *    |
-   *    v
    * LIST_MIRROR_WATCHERS (skip if not needed)
    *    |
    *    v
@@ -69,9 +66,6 @@ private:
 
   void list_image_watchers();
   void handle_list_image_watchers(int r);
-
-  void get_mirror_image();
-  void handle_get_mirror_image(int r);
 
   void list_mirror_watchers();
   void handle_list_mirror_watchers(int r);

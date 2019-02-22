@@ -18,6 +18,7 @@ set(librbd_test
   test_MirroringWatcher.cc
   test_ObjectMap.cc
   test_Operations.cc
+  test_Trash.cc
   journal/test_Entries.cc
   journal/test_Replay.cc)
 add_library(rbd_test STATIC ${librbd_test})
@@ -64,6 +65,7 @@ set(unittest_librbd_srcs
   image/test_mock_DetachChildRequest.cc
   image/test_mock_DetachParentRequest.cc
   image/test_mock_ListWatchersRequest.cc
+  image/test_mock_PreRemoveRequest.cc
   image/test_mock_RefreshRequest.cc
   image/test_mock_RemoveRequest.cc
   io/test_mock_ImageRequest.cc
