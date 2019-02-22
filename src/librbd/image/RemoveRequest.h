@@ -60,53 +60,41 @@ private:
    *       (skip if already opened) OPEN IMAGE------------------\
    *                                     |                      |
    *                                     v                      |
-   *	   error		   CHECK EXCLUSIVE LOCK---\     |
-   * /-------<-------\                   |                |     |
-   * |               |                   |            (acquired)|
-   * |               |                   v                |     |
-   * |               |           ACQUIRE EXCLUSIVE LOCK   |     |
-   * |               |               /   |                |     |
-   * |               |------<-------/    |                |     |
-   * |               |                   v                |     |
-   * |               |            VALIDATE IMAGE REMOVAL<-/     |
-   * |               |                /  |                      v
-   * |               \------<--------/   |   /------\ 		|
-   * |                                   v   v      |           |
-   * |                             REMOVE SNAPS ----/           |
-   * |                                   |                      |
-   * |                                   v                      |
-   * |                              TRIM IMAGE                  |
-   * |                                   |                      |
-   * v                                   v                      |
-   * |                              DETACH CHILD                |
-   * |                                   |                      |
-   * |                                   v                      v
-   * \--------->------------------>CLOSE IMAGE                  |
+   *                              PRE REMOVE IMAGE * * *        |
+   *                                     |             *        |
+   *                                     v             *        |
+   *                                TRIM IMAGE * * * * *        |
+   *                                     |             *        |
+   *                                     v             *        |
+   *                                DETACH CHILD       *        |
+   *                                     |             *        |
+   *                                     v             *        v
+   *                               CLOSE IMAGE < * * * *        |
    *                                     |                      |
-   * 	   error			 v			|
+   *                               error v                      |
    * /------<--------\              REMOVE HEADER<--------------/
-   * | 		     |  	      /  |
-   * |  	     |-------<-------/   |
+   * |               |                /  |
+   * |               |-------<-------/   |
    * |               |                   v
    * |               |              REMOVE JOURNAL
-   * | 		     |  	      /  |
-   * |  	     |-------<-------/   |
+   * |               |                /  |
+   * |               |-------<-------/   |
    * |               |                   v
-   * v		     ^          REMOVE OBJECTMAP
-   * | 		     |  	      /  |
-   * |  	     |-------<-------/   |
+   * v               ^          REMOVE OBJECTMAP
+   * |               |                /  |
+   * |               |-------<-------/   |
    * |               |                   v
-   * |		     |  	  REMOVE MIRROR IMAGE
-   * | 		     |  	      /  |
-   * |  	     |-------<-------/   |
+   * |               |    REMOVE MIRROR IMAGE
+   * |               |                /  |
+   * |               |-------<-------/   |
    * |               |                   v
    * |               |            REMOVE ID OBJECT
-   * | 		     |  	      /  |
-   * |  	     |-------<-------/   |
+   * |               |                /  |
+   * |               |-------<-------/   |
    * |               |                   v
    * |               |              REMOVE IMAGE
-   * | 		     |  	      /  |
-   * |  	     \-------<-------/   |
+   * |               |                /  |
+   * |               \-------<-------/   |
    * |                                   v
    * \------------------>------------<finish>
    *
@@ -159,25 +147,8 @@ private:
   void mirror_image_remove();
   void handle_mirror_image_remove(int r);
 
-  void check_exclusive_lock();
-
-  void acquire_exclusive_lock();
-  void handle_exclusive_lock(int r);
-  void handle_exclusive_lock_force(int r);
-
-  void validate_image_removal();
-  void check_image_snaps();
-
-  void list_image_watchers();
-  void handle_list_image_watchers(int r);
-
-  void check_image_watchers();
-
-  void check_group();
-  void handle_check_group(int r);
-
-  void remove_snapshot();
-  void handle_remove_snapshot(int r);
+  void pre_remove_image();
+  void handle_pre_remove_image(int r);
 
   void trim_image();
   void handle_trim_image(int r);

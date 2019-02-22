@@ -3377,6 +3377,7 @@ TEST_F(TestLibRBD, ListChildren)
 
   librados::IoCtx ioctx3;
   ASSERT_EQ(0, _rados.ioctx_create(pool_name2.c_str(), ioctx3));
+  ASSERT_EQ(0, rbd_close(image3));
   ASSERT_EQ(0, rbd.trash_move(ioctx3, child_name3.c_str(), 0));
   test_list_children(parent, 2, pool_name2.c_str(), child_name1.c_str(),
 		     pool_name1.c_str(), child_name2.c_str());
@@ -3420,7 +3421,6 @@ TEST_F(TestLibRBD, ListChildren)
                       child_id3, pool_name2.c_str(), child_name3.c_str(), false,
                       child_id4, pool_name2.c_str(), child_name4.c_str(), false);
 
-  ASSERT_EQ(0, rbd_close(image3));
   ASSERT_EQ(0, rbd_remove(ioctx2, child_name3.c_str()));
   test_list_children(parent, 2,
 		     pool_name1.c_str(), child_name2.c_str(),
@@ -3562,6 +3562,7 @@ TEST_F(TestLibRBD, ListChildrenTiered)
 
   librados::IoCtx ioctx3;
   ASSERT_EQ(0, _rados.ioctx_create(pool_name2.c_str(), ioctx3));
+  ASSERT_EQ(0, rbd_close(image3));
   ASSERT_EQ(0, rbd.trash_move(ioctx3, child_name3.c_str(), 0));
   test_list_children(parent, 2, pool_name2.c_str(), child_name1.c_str(),
 		     pool_name1.c_str(), child_name2.c_str());
@@ -3605,7 +3606,6 @@ TEST_F(TestLibRBD, ListChildrenTiered)
                      child_id3, pool_name2.c_str(), child_name3.c_str(), false,
                      child_id4, pool_name2.c_str(), child_name4.c_str(), false);
 
-  ASSERT_EQ(0, rbd_close(image3));
   ASSERT_EQ(0, rbd_remove(ioctx2, child_name3.c_str()));
   test_list_children(parent, 2,
 		     pool_name1.c_str(), child_name2.c_str(),

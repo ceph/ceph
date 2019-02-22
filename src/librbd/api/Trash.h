@@ -22,10 +22,14 @@ struct Trash {
 
   static int move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
                   const std::string &image_name, uint64_t delay);
+  static int move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
+                  const std::string &image_name, const std::string &image_id,
+                  uint64_t delay);
   static int get(librados::IoCtx &io_ctx, const std::string &id,
                  trash_image_info_t *info);
   static int list(librados::IoCtx &io_ctx,
-                  std::vector<trash_image_info_t> &entries);
+                  std::vector<trash_image_info_t> &entries,
+                  bool exclude_user_remove_source);
   static int purge(IoCtx& io_ctx, time_t expire_ts,
                    float threshold, ProgressContext& pctx);
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id,
