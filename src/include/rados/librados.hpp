@@ -191,6 +191,7 @@ inline namespace v14_2_0 {
 
   struct CEPH_RADOS_API AioCompletion {
     AioCompletion(AioCompletionImpl *pc_) : pc(pc_) {}
+    AioCompletion(rados_completion_t pc_);
     int set_complete_callback(void *cb_arg, callback_t cb);
     int set_safe_callback(void *cb_arg, callback_t cb);
     int wait_for_complete();

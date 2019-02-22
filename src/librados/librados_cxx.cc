@@ -921,6 +921,10 @@ void librados::PoolAsyncCompletion::PoolAsyncCompletion::release()
 }
 
 ///////////////////////////// AioCompletion //////////////////////////////
+librados::AioCompletion::AioCompletion(rados_completion_t pc_)
+  : pc{reinterpret_cast<AioCompletionImpl*>(pc_)}
+{}
+
 int librados::AioCompletion::AioCompletion::set_complete_callback(void *cb_arg, rados_callback_t cb)
 {
   AioCompletionImpl *c = (AioCompletionImpl *)pc;
