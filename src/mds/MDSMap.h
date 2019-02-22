@@ -108,10 +108,6 @@ public:
     version_t state_seq = 0;
     entity_addrvec_t addrs;
     utime_t laggy_since;
-    mds_rank_t standby_for_rank = MDS_RANK_NONE;
-    std::string standby_for_name;
-    fs_cluster_id_t standby_for_fscid = FS_CLUSTER_ID_NONE;
-    bool standby_replay = false;
     std::set<mds_rank_t> export_targets;
     uint64_t mds_features = 0;
 
@@ -536,13 +532,22 @@ public:
     return is_clientreplay(m) || is_active(m) || is_stopping(m);
   }
 
-  bool is_followable(mds_rank_t m) const {
-    return (is_resolve(m) ||
-	    is_replay(m) ||
-	    is_rejoin(m) ||
-	    is_clientreplay(m) ||
-	    is_active(m) ||
-	    is_stopping(m));
+  bool is_followable(mds_rank_t r) const {
+    bool has_followable_rank = false;
+    for (const auto& p : mds_info) {
+      auto& info = p.second;
+      if (info.rank == r) {
+        if (info.state == STATE_ACTIVE) {
+          has_followable_rank = true;
+        } else {
+          return false;
+        }
+      }
+      if (p.second.state == STATE_STANDBY_REPLAY) {
+        return false;
+      }
+    }
+    return has_followable_rank;
   }
 
   bool is_laggy_gid(mds_gid_t gid) const {

@@ -65,10 +65,6 @@ void Beacon::init(const MDSMap &mdsmap)
   std::unique_lock lock(mutex);
 
   _notify_mdsmap(mdsmap);
-  standby_for_rank = mds_rank_t(g_conf()->mds_standby_for_rank);
-  standby_for_name = g_conf()->mds_standby_for_name;
-  standby_for_fscid = fs_cluster_id_t(g_conf()->mds_standby_for_fscid);
-  standby_replay = g_conf()->mds_standby_replay;
 
   sender = std::thread([this]() {
     std::unique_lock<std::mutex> lock(mutex);
@@ -208,10 +204,6 @@ bool Beacon::_send()
       last_seq,
       CEPH_FEATURES_SUPPORTED_DEFAULT);
 
-  beacon->set_standby_for_rank(standby_for_rank);
-  beacon->set_standby_for_name(standby_for_name);
-  beacon->set_standby_for_fscid(standby_for_fscid);
-  beacon->set_standby_replay(standby_replay);
   beacon->set_health(health);
   beacon->set_compat(compat);
   // piggyback the sys info on beacon msg

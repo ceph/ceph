@@ -265,7 +265,7 @@ public:
    */
   void promote(
       mds_gid_t standby_gid,
-      const Filesystem::ref& filesystem,
+      Filesystem& filesystem,
       mds_rank_t assigned_rank);
 
   /**
@@ -325,11 +325,9 @@ public:
    * Mutator helper for Filesystem objects: expose a non-const
    * Filesystem pointer to `fn` and update epochs appropriately.
    */
-  void modify_filesystem(
-      const fs_cluster_id_t fscid,
-      std::function<void(Filesystem::ref)> fn)
+  void modify_filesystem(fs_cluster_id_t fscid, auto&& fn)
   {
-    auto fs = filesystems.at(fscid);
+    auto& fs = filesystems.at(fscid);
     fn(fs);
     fs->mds_map.epoch = epoch;
   }
@@ -338,20 +336,18 @@ public:
    * Apply a mutation to the mds_info_t structure for a particular
    * daemon (identified by GID), and make appropriate updates to epochs.
    */
-  void modify_daemon(
-      mds_gid_t who,
-      std::function<void(MDSMap::mds_info_t *info)> fn)
+  void modify_daemon(mds_gid_t who, auto&& fn)
   {
-    if (mds_roles.at(who) == FS_CLUSTER_ID_NONE) {
-      auto &info = standby_daemons.at(who);
-      fn(&info);
+    const auto& fscid = mds_roles.at(who);
+    if (fscid == FS_CLUSTER_ID_NONE) {
+      auto& info = standby_daemons.at(who);
+      fn(info);
       ceph_assert(info.state == MDSMap::STATE_STANDBY);
       standby_epochs[who] = epoch;
     } else {
-      const auto &fs = filesystems[mds_roles.at(who)];
-      auto &info = fs->mds_map.mds_info.at(who);
-      fn(&info);
-
+      auto& fs = filesystems.at(fscid);
+      auto& info = fs->mds_map.mds_info.at(who);
+      fn(info);
       fs->mds_map.epoch = epoch;
     }
   }
@@ -404,7 +400,7 @@ public:
   void update_export_targets(mds_gid_t who, const std::set<mds_rank_t> &targets)
   {
     auto fscid = mds_roles.at(who);
-    modify_filesystem(fscid, [who, &targets](auto fs) {
+    modify_filesystem(fscid, [who, &targets](auto&& fs) {
       fs->mds_map.mds_info.at(who).export_targets = targets;
     });
   }
@@ -458,12 +454,7 @@ public:
     return false;
   }
 
-  mds_gid_t find_standby_for(mds_role_t mds, std::string_view name) const;
-
-  mds_gid_t find_unused_for(mds_role_t mds, bool force_standby_active) const;
-
-  mds_gid_t find_replacement_for(mds_role_t mds, std::string_view name,
-                                 bool force_standby_active) const;
+  mds_gid_t find_replacement_for(mds_role_t mds, std::string_view name) const;
 
   void get_health(list<pair<health_status_t,std::string> >& summary,
 		  list<pair<health_status_t,std::string> > *detail) const;

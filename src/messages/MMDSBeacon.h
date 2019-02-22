@@ -194,11 +194,6 @@ private:
   MDSMap::DaemonState state = MDSMap::STATE_NULL;
   version_t seq = 0;
 
-  mds_rank_t      standby_for_rank = MDS_RANK_NONE;
-  string          standby_for_name;
-  fs_cluster_id_t standby_for_fscid = FS_CLUSTER_ID_NONE;
-  bool            standby_replay = false;
-
   CompatSet compat;
 
   MDSHealth health;
@@ -228,10 +223,6 @@ public:
   MDSMap::DaemonState get_state() const { return state; }
   version_t get_seq() const { return seq; }
   std::string_view get_type_name() const override { return "mdsbeacon"; }
-  mds_rank_t get_standby_for_rank() const { return standby_for_rank; }
-  const string& get_standby_for_name() const { return standby_for_name; }
-  const fs_cluster_id_t& get_standby_for_fscid() const { return standby_for_fscid; }
-  bool get_standby_replay() const { return standby_replay; }
   uint64_t get_mds_features() const { return mds_features; }
 
   CompatSet const& get_compat() const { return compat; }
@@ -239,12 +230,6 @@ public:
 
   MDSHealth const& get_health() const { return health; }
   void set_health(const MDSHealth &h) { health = h; }
-
-  void set_standby_for_rank(mds_rank_t r) { standby_for_rank = r; }
-  void set_standby_for_name(string& n) { standby_for_name = n; }
-  void set_standby_for_name(const char* c) { standby_for_name.assign(c); }
-  void set_standby_for_fscid(fs_cluster_id_t f) { standby_for_fscid = f; }
-  void set_standby_replay(bool r) { standby_replay = r; }
 
   const map<string, string>& get_sys_info() const { return sys_info; }
   void set_sys_info(const map<string, string>& i) { sys_info = i; }
@@ -262,16 +247,16 @@ public:
     encode((__u32)state, payload);
     encode(seq, payload);
     encode(name, payload);
-    encode(standby_for_rank, payload);
-    encode(standby_for_name, payload);
+    encode(MDS_RANK_NONE, payload);
+    encode(std::string(), payload);
     encode(compat, payload);
     encode(health, payload);
     if (state == MDSMap::STATE_BOOT) {
       encode(sys_info, payload);
     }
     encode(mds_features, payload);
-    encode(standby_for_fscid, payload);
-    encode(standby_replay, payload);
+    encode(FS_CLUSTER_ID_NONE, payload);
+    encode(false, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -282,23 +267,32 @@ public:
     decode((__u32&)state, p);
     decode(seq, p);
     decode(name, p);
-    decode(standby_for_rank, p);
-    decode(standby_for_name, p);
+    {
+      mds_rank_t standby_for_rank;
+      decode(standby_for_rank, p);
+    }
+    {
+      std::string standby_for_name;
+      decode(standby_for_name, p);
+    }
     decode(compat, p);
     decode(health, p);
     if (state == MDSMap::STATE_BOOT) {
       decode(sys_info, p);
     }
     decode(mds_features, p);
-    decode(standby_for_fscid, p);
+    {
+      fs_cluster_id_t standby_for_fscid;
+      decode(standby_for_fscid, p);
+    }
     if (header.version >= 7) {
+      bool standby_replay;
       decode(standby_replay, p);
     }
 
     if (header.version < 7  && state == MDSMap::STATE_STANDBY_REPLAY) {
       // Old MDS daemons request the state, instead of explicitly
       // advertising that they are configured as a replay daemon.
-      standby_replay = true;
       state = MDSMap::STATE_STANDBY;
     }
   }
