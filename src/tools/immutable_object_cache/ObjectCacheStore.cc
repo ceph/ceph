@@ -28,7 +28,7 @@ ObjectCacheStore::ObjectCacheStore(CephContext *cct)
   m_cache_root_dir = cache_path + "/ceph_immutable_obj_cache/";
 
   //TODO(): allow to set cache level
-  m_policy = new SimplePolicy(m_cct, object_cache_max_size/(4096*1024), 0.1);
+  m_policy = new SimplePolicy(m_cct, object_cache_max_size, 0.1);
 }
 
 ObjectCacheStore::~ObjectCacheStore() {
@@ -162,7 +162,7 @@ int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
 
   // update metadata
   ceph_assert(OBJ_CACHE_SKIP == m_policy->get_status(cache_file_name));
-  m_policy->update_status(cache_file_name, OBJ_CACHE_PROMOTED);
+  m_policy->update_status(cache_file_name, OBJ_CACHE_PROMOTED, ret);
   ceph_assert(OBJ_CACHE_PROMOTED == m_policy->get_status(cache_file_name));
 
   delete read_buf;

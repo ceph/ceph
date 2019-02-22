@@ -13,30 +13,24 @@
 namespace ceph {
 namespace immutable_obj_cache {
 
-SimplePolicy::SimplePolicy(CephContext *cct, uint64_t block_num,
+SimplePolicy::SimplePolicy(CephContext *cct, uint64_t cache_size,
                            float watermark)
-  : cct(cct), m_watermark(watermark), m_entry_count(block_num),
-    m_cache_map_lock("rbd::cache::SimplePolicy::m_cache_map_lock"),
-    m_free_list_lock("rbd::cache::SimplePolicy::m_free_list_lock") {
+  : cct(cct), m_watermark(watermark), m_max_cache_size(cache_size),
+    m_cache_map_lock("rbd::cache::SimplePolicy::m_cache_map_lock") {
   ldout(cct, 20) << dendl;
   m_max_inflight_ops = cct->_conf.get_val<uint64_t>("immutable_object_cache_max_inflight_ops");
-  for(uint64_t i = 0; i < m_entry_count; i++) {
-    m_free_list.push_back(new Entry());
-  }
+  m_cache_size = 0;
 }
 
 SimplePolicy::~SimplePolicy() {
   ldout(cct, 20) << dendl;
 
   for (auto it: m_cache_map) {
-    Entry* entry = reinterpret_cast<Entry*>(it.second);
+    Entry* entry = (it.second);
     delete entry;
   }
 
-  for(auto it : m_free_list) {
-    Entry* entry = it;
-    delete entry;
-  }
+
 }
 
 cache_status_t SimplePolicy::alloc_entry(std::string file_name) {
@@ -49,20 +43,16 @@ cache_status_t SimplePolicy::alloc_entry(std::string file_name) {
     ldout(cct, 20) << "object is under promoting: " << file_name << dendl;
     return OBJ_CACHE_SKIP;
   }
-  m_free_list_lock.lock();
 
-  if (m_free_list.size() && (inflight_ops < m_max_inflight_ops)) {
-    Entry* entry = m_free_list.front();
+  if ((m_cache_size < m_max_cache_size) && (inflight_ops < m_max_inflight_ops)) {
+    Entry* entry = new Entry();
     ceph_assert(entry != nullptr);
-    m_free_list.pop_front();
-    m_free_list_lock.unlock();
     m_cache_map[file_name] = entry;
     wlocker.unlock();
     update_status(file_name, OBJ_CACHE_SKIP);
     return OBJ_CACHE_NONE; // start promotion request
   }
 
-  m_free_list_lock.unlock();
   // if there's no free entry, return skip to read from rados
   return OBJ_CACHE_SKIP;
 }
@@ -90,7 +80,7 @@ cache_status_t SimplePolicy::lookup_object(std::string file_name) {
 }
 
 void SimplePolicy::update_status(std::string file_name,
-                                 cache_status_t new_status) {
+                                 cache_status_t new_status, uint64_t size) {
   ldout(cct, 20) << "update status for: " << file_name
                  << " new status = " << new_status << dendl;
 
@@ -116,6 +106,8 @@ void SimplePolicy::update_status(std::string file_name,
   if (entry->status == OBJ_CACHE_SKIP && new_status== OBJ_CACHE_PROMOTED) {
     m_promoted_lru.lru_insert_top(entry);
     entry->status = new_status;
+    entry->size = size;
+    m_cache_size += entry->size;
     inflight_ops--;
     return;
   }
@@ -125,10 +117,7 @@ void SimplePolicy::update_status(std::string file_name,
     // mark this entry as free
     entry->file_name = "";
     entry->status = new_status;
-    {
-      Mutex::Locker free_list_locker(m_free_list_lock);
-      m_free_list.push_back(entry);
-    }
+
     m_cache_map.erase(entry_it);
     inflight_ops--;
     return;
@@ -137,14 +126,14 @@ void SimplePolicy::update_status(std::string file_name,
   // to evict
   if (entry->status == OBJ_CACHE_PROMOTED && new_status== OBJ_CACHE_NONE) {
     // mark this entry as free
+    uint64_t size = entry->size;
     entry->file_name = "";
+    entry->size = 0;
     entry->status = new_status;
-    {
-      Mutex::Locker free_list_locker(m_free_list_lock);
-      m_free_list.push_back(entry);
-    }
+
     m_promoted_lru.lru_remove(entry);
     m_cache_map.erase(entry_it);
+    m_cache_size -= size;
     return;
   }
 
@@ -175,8 +164,8 @@ void SimplePolicy::get_evict_list(std::list<std::string>* obj_list) {
 
   RWLock::WLocker locker(m_cache_map_lock);
   // check free ratio, pop entries from LRU
-  if ((float)m_free_list.size() / m_entry_count < m_watermark) {
-    int evict_num = m_entry_count * 0.1; //TODO(): make this configurable
+  if ((double)m_cache_size / m_max_cache_size > (1 - m_watermark)) {
+    int evict_num = m_cache_map.size() * 0.1; //TODO(): make this configurable
     for (int i = 0; i < evict_num; i++) {
       Entry* entry = reinterpret_cast<Entry*>(m_promoted_lru.lru_expire());
       if (entry == nullptr) {
@@ -190,9 +179,8 @@ void SimplePolicy::get_evict_list(std::list<std::string>* obj_list) {
 }
 
 // for unit test
-uint64_t SimplePolicy::get_free_entry_num() {
-  Mutex::Locker free_list_locker(m_free_list_lock);
-  return m_free_list.size();
+uint64_t SimplePolicy::get_free_size() {
+  return m_max_cache_size - m_cache_size;
 }
 
 uint64_t SimplePolicy::get_promoting_entry_num() {
