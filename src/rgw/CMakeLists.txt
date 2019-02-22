@@ -90,7 +90,6 @@ set(librgw_common_srcs
   rgw_sync_module_log.cc
   rgw_sync_module_pubsub.cc
   rgw_pubsub_push.cc
-  rgw_amqp.cc
   rgw_sync_module_pubsub_rest.cc
   rgw_sync_log_trim.cc
   rgw_sync_trace.cc
@@ -136,6 +135,10 @@ set(librgw_common_srcs
   rgw_sts.cc
   rgw_rest_sts.cc
   rgw_perf_counters.cc)
+
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  list(APPEND librgw_common_srcs rgw_amqp.cc)
+endif()
 
 add_library(rgw_common OBJECT ${librgw_common_srcs})
 
@@ -194,6 +197,10 @@ add_dependencies(rgw_a civetweb_h)
 
 target_include_directories(rgw_a SYSTEM PUBLIC "../rapidjson/include")
 
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  find_package(RabbitMQ REQUIRED)
+endif()
+
 target_link_libraries(rgw_a
   PUBLIC dmclock::dmclock
   PRIVATE
@@ -232,10 +239,14 @@ endif()
 
 add_library(radosgw_a STATIC ${radosgw_srcs}
   $<TARGET_OBJECTS:civetweb_common_objs>)
-target_link_libraries(radosgw_a PRIVATE rgw_a rabbitmq)
+target_link_libraries(radosgw_a PRIVATE rgw_a)
 if(WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL)
   # used by rgw_asio_frontend.cc
   target_link_libraries(radosgw_a PRIVATE OpenSSL::SSL)
+endif()
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  # used by rgw_amqp.cc
+  target_link_libraries(radosgw_a PRIVATE RabbitMQ::RabbitMQ)
 endif()
 
 add_executable(radosgw rgw_main.cc)
@@ -258,7 +269,10 @@ target_link_libraries(radosgw-admin rgw_a librados
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES} rabbitmq)
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  target_link_libraries(radosgw-admin RabbitMQ::RabbitMQ)
+endif()
 install(TARGETS radosgw-admin DESTINATION bin)
 
 set(radosgw_es_srcs
@@ -269,7 +283,10 @@ target_link_libraries(radosgw-es rgw_a librados
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES} rabbitmq)
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  target_link_libraries(radosgw-es RabbitMQ::RabbitMQ)
+endif()
 install(TARGETS radosgw-es DESTINATION bin)
 
 set(radosgw_token_srcs
@@ -287,7 +304,10 @@ target_link_libraries(radosgw-object-expirer rgw_a librados
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
-  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} rabbitmq)
+  ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  target_link_libraries(radosgw-object-expirer RabbitMQ::RabbitMQ)
+endif()
 install(TARGETS radosgw-object-expirer DESTINATION bin)
 
 set(librgw_srcs
@@ -310,8 +330,10 @@ target_link_libraries(rgw
   global
   ${LIB_RESOLV}
   ${CURL_LIBRARIES}
-  ${EXPAT_LIBRARIES}
-  rabbitmq)
+  ${EXPAT_LIBRARIES})
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  target_link_libraries(rgw PRIVATE RabbitMQ::RabbitMQ)
+endif()
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)
 install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -340,11 +362,13 @@ target_link_libraries(rgw_admin_user PRIVATE
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES}
   ${OPENLDAP_LIBRARIES}
-  dmclock::dmclock
-  rabbitmq)
+  dmclock::dmclock)
 set_target_properties(rgw_admin_user PROPERTIES OUTPUT_NAME rgw_admin_user VERSION 1.0.0
   SOVERSION 0)
 install(TARGETS rgw_admin_user DESTINATION ${CMAKE_INSTALL_LIBDIR})
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  target_link_libraries(rgw_admin_user PRIVATE RabbitMQ::RabbitMQ)
+endif()
 if(WITH_BOOST_CONTEXT)
   target_link_libraries(rgw_admin_user PRIVATE Boost::coroutine Boost::context)
 endif()

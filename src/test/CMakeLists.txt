@@ -1,7 +1,7 @@
 include(AddCephTest)
 
 set(UNITTEST_LIBS GMock::Main GMock::GMock GTest::GTest ${CMAKE_THREAD_LIBS_INIT} 
-    ${GSSAPI_LIBRARIES} ${OPENLDAP_LIBRARIES} ${CMAKE_DL_LIBS} amqp_mock)
+    ${GSSAPI_LIBRARIES} ${OPENLDAP_LIBRARIES} ${CMAKE_DL_LIBS})
 
 add_library(unit-main OBJECT unit.cc)
 target_include_directories(unit-main PRIVATE
@@ -51,9 +51,13 @@ add_subdirectory(os)
 add_subdirectory(osd)
 add_subdirectory(osdc)
 add_subdirectory(pybind)
-if(${WITH_RADOSGW})
+if(WITH_RADOSGW)
+  set(rgw_libs rgw_a)
+  if(WITH_RADOSGW_AMQP_ENDPOINT)
+    list(APPEND rgw_libs amqp_mock)
+  endif()
   add_subdirectory(rgw)
-endif(${WITH_RADOSGW})
+endif(WITH_RADOSGW)
 if(WITH_RBD)
   add_subdirectory(rbd_mirror)
 endif(WITH_RBD)
@@ -183,7 +187,7 @@ if(${WITH_RADOSGW})
     )
   target_link_libraries(test_cors
     librados
-    rgw_a
+    ${rgw_libs}
     global
     ${BLKID_LIBRARIES}
     ${CURL_LIBRARIES}
@@ -197,7 +201,7 @@ if(${WITH_RADOSGW})
     )
   target_link_libraries(ceph_test_cls_rgw_meta
     librados
-    rgw_a
+    ${rgw_libs}
     global
     cls_version_client
     cls_log_client
@@ -223,7 +227,7 @@ if(${WITH_RADOSGW})
     )
   target_link_libraries(ceph_test_cls_rgw_log
     librados
-    rgw_a
+    ${rgw_libs}
     global
     cls_version_client
     cls_log_client

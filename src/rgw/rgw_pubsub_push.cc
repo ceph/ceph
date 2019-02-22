@@ -10,7 +10,10 @@
 #include "rgw_common.h"
 #include "rgw_data_sync.h"
 #include "rgw_pubsub.h"
+#include "acconfig.h"
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
 #include "rgw_amqp.h"
+#endif
 #include <boost/asio/yield.hpp>
 #include <boost/algorithm/string.hpp>
 #include <functional>
@@ -128,6 +131,7 @@ public:
   }
 };
 
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
 class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
   private:
     enum ack_level_t {
@@ -286,6 +290,7 @@ class RGWPubSubAMQPEndpoint : public RGWPubSubEndpoint {
 
 static const std::string AMQP_0_9_1("0-9-1");
 static const std::string AMQP_1_0("1-0");
+#endif	// ifdef WITH_RADOSGW_AMQP_ENDPOINT
 
 RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint, 
     const std::string& topic, 
@@ -299,6 +304,7 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
   const auto& schema = endpoint.substr(0,pos);
   if (schema == "http" || schema == "https") {
     return Ptr(new RGWPubSubHTTPEndpoint(endpoint, args));
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
   } else if (schema == "amqp") {
     bool exists;
     std::string version = args.get("amqp-version", &exists);
@@ -317,6 +323,7 @@ RGWPubSubEndpoint::Ptr RGWPubSubEndpoint::create(const std::string& endpoint,
   } else if (schema == "amqps") {
     throw configuration_error("amqps not supported");
     return nullptr;
+#endif
   }
 
   throw configuration_error("unknown schema " + schema);
