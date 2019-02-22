@@ -2391,17 +2391,12 @@ void MDSRankDispatcher::handle_mds_map(
     // might not include barriers from the previous incarnation of this MDS)
     set_osd_epoch_barrier(objecter->with_osdmap(
 			    std::mem_fn(&OSDMap::get_epoch)));
-  }
 
-  if (is_active()) {
+    /* Now check if we should hint to the OSD that a read may follow */
     bool found = false;
-    MDSMap::mds_info_t info = mdsmap->get_info(whoami);
-
-    for (map<mds_gid_t,MDSMap::mds_info_t>::const_iterator p = mdsmap->get_mds_info().begin();
-       p != mdsmap->get_mds_info().end();
-       ++p) {
-      if (p->second.state == MDSMap::STATE_STANDBY_REPLAY &&
-	  (p->second.standby_for_rank == whoami ||(info.name.length() && p->second.standby_for_name == info.name))) {
+    for (const auto& p : mdsmap->get_mds_info()) {
+      auto& info = p.second;
+      if (info.state == MDSMap::STATE_STANDBY_REPLAY && info.rank == whoami) {
 	found = true;
 	break;
       }

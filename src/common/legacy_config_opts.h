@@ -241,7 +241,6 @@ OPTION(mon_allow_pool_delete, OPT_BOOL) // allow pool deletion
 OPTION(mon_fake_pool_delete, OPT_BOOL)  // fake pool deletion (add _DELETED suffix)
 OPTION(mon_globalid_prealloc, OPT_U32)   // how many globalids to prealloc
 OPTION(mon_osd_report_timeout, OPT_INT)    // grace period before declaring unresponsive OSDs dead
-OPTION(mon_force_standby_active, OPT_BOOL) // should mons force standby-replay mds to be active
 OPTION(mon_warn_on_legacy_crush_tunables, OPT_BOOL) // warn if crush tunables are too old (older than mon_min_crush_required_version)
 OPTION(mon_crush_min_required_version, OPT_STR)
 OPTION(mon_warn_on_crush_straw_calc_version_zero, OPT_BOOL) // warn if crush straw_calc_version==0
@@ -475,10 +474,6 @@ OPTION(mds_inject_traceless_reply_probability, OPT_DOUBLE) /* percentage
 OPTION(mds_wipe_sessions, OPT_BOOL)
 OPTION(mds_wipe_ino_prealloc, OPT_BOOL)
 OPTION(mds_skip_ino, OPT_INT)
-OPTION(mds_standby_for_name, OPT_STR)
-OPTION(mds_standby_for_rank, OPT_INT)
-OPTION(mds_standby_for_fscid, OPT_INT)
-OPTION(mds_standby_replay, OPT_BOOL)
 OPTION(mds_enable_op_tracker, OPT_BOOL) // enable/disable MDS op tracking
 OPTION(mds_op_history_size, OPT_U32)    // Max number of completed ops to track
 OPTION(mds_op_history_duration, OPT_U32) // Oldest completed op to track

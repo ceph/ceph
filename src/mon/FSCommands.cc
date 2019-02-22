@@ -262,21 +262,20 @@ class FsNewHandler : public FileSystemCommandHandler
     mon->osdmon()->propose_pending();
 
     // All checks passed, go ahead and create.
-    auto fs = fsmap.create_filesystem(fs_name, metadata, data,
+    auto&& fs = fsmap.create_filesystem(fs_name, metadata, data,
         mon->get_quorum_con_features());
 
     ss << "new fs with metadata pool " << metadata << " and data pool " << data;
 
     // assign a standby to rank 0 to avoid health warnings
     std::string _name;
-    mds_gid_t gid = fsmap.find_replacement_for({fs->fscid, 0}, _name,
-        g_conf()->mon_force_standby_active);
+    mds_gid_t gid = fsmap.find_replacement_for({fs->fscid, 0}, _name);
 
     if (gid != MDS_GID_NONE) {
       const auto &info = fsmap.get_info_gid(gid);
       mon->clog->info() << info.human_name() << " assigned to filesystem "
           << fs_name << " as rank 0";
-      fsmap.promote(gid, fs, 0);
+      fsmap.promote(gid, *fs, 0);
     }
 
     return 0;

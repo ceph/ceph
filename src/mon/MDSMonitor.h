@@ -104,12 +104,9 @@ class MDSMonitor : public PaxosService, public PaxosFSMap {
   };
   map<mds_gid_t, beacon_info_t> last_beacon;
 
-  bool try_standby_replay(FSMap &fsmap, const MDSMap::mds_info_t& finfo,
-      const Filesystem &leader_fs, const MDSMap::mds_info_t& ainfo);
-
   std::list<std::shared_ptr<FileSystemCommandHandler> > handlers;
 
-  bool maybe_promote_standby(FSMap &fsmap, std::shared_ptr<Filesystem> &fs);
+  bool maybe_promote_standby(FSMap& fsmap, Filesystem& fs);
   bool maybe_resize_cluster(FSMap &fsmap, fs_cluster_id_t fscid);
   void maybe_replace_gid(FSMap &fsmap, mds_gid_t gid,
       const MDSMap::mds_info_t& info, bool *mds_propose, bool *osd_propose);
