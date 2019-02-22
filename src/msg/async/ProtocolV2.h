@@ -133,6 +133,9 @@ private:
 
   Ct<ProtocolV2> *read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
                        int len, char *buffer = nullptr);
+  template <class F>
+  Ct<ProtocolV2> *write(const std::string &desc,
+                        CONTINUATION_PARAM(next, ProtocolV2), F &frame);
   Ct<ProtocolV2> *write(const std::string &desc,
                         CONTINUATION_PARAM(next, ProtocolV2),
                         bufferlist &buffer);
