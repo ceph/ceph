@@ -23,6 +23,16 @@ Major Changes from Mimic
 
 - *RGW*:
 
+  * S3 lifecycle transition for tiering between storage classes.
+  * A new web frontend (Beast) has replaced civetweb as the default,
+    improving overall performance.
+  * A new publish/subscribe infrastructure allows RGW to feed events
+    to serverless frameworks like knative or data pipelies like Kafka.
+  * A range of authentication features, including STS federation using
+    OAuth2 and OpenID::connect and an OPA (Open Policy Agent)
+    authentication delegation prototype.
+  * The new archive zone federation feature enables full preservation
+    of all objects (including history) in a separate zone.
 
 - *CephFS*:
 
