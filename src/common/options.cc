@@ -6383,7 +6383,7 @@ std::vector<Option> get_rgw_options() {
         "contain the name of the bucket the operation happened on."),
 
     Option("rgw_frontends", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("civetweb port=7480")
+    .set_default("beast port=7480")
     .set_description("RGW frontends configuration")
     .set_long_description(
         "A comma delimited list of frontends configuration. Each configuration contains "
