@@ -120,7 +120,7 @@ public:
     bool laggy() const { return !(laggy_since == utime_t()); }
     void clear_laggy() { laggy_since = utime_t(); }
 
-    entity_addrvec_t get_addrs() const {
+    const entity_addrvec_t& get_addrs() const {
       return addrs;
     }
 
