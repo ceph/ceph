@@ -1,4 +1,4 @@
-# cython: embedsignature=True, c_string_type=str, c_string_encoding=ascii
+# cython: embedsignature=True
 """
 This module is a thin wrapper around librbd.
 
