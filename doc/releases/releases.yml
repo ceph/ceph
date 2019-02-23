@@ -11,7 +11,7 @@
 #
 # If a version might represent an actual number (e.g. 0.80) quote it.
 #
-# NOTE: When updating check the CEPH_RELEASES in the admin/apply-to-all-docs
+# NOTE: check the CEPH_RELEASES in the admin/releases on UPDATE
 releases:
   mimic:
     releases:
