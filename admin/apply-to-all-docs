@@ -22,8 +22,9 @@ fi
 
 COMMIT=$1
 
-
-# Uncomment for debug
+# Don't enable -e until after running all the potentially-erroring checks
+# for availability of commands
+set -e
 set -x
 
 ##### Idea:
@@ -47,6 +48,9 @@ do
 
     git checkout "$i"
     git checkout -b "${TGT_BRANCH}"
+
+    # Here error are expected due merge-conflicts
+    set +e
     git cherry-pick $COMMIT
     CHERRY_PICK_RESULT=$?
 
@@ -54,10 +58,11 @@ do
         read -p "WARNING: cherry-pick has failed (Continue?)\n"\
                 "(Press ^C to exit and resolve manually)"
     fi
+    set -e
 
     # NOTE: here you can write the auto-resolving actions if it is possible
-    git checkout master -- doc/releases/releases.yml
-    git cherry-pick --continue
+    # echo "please shell, resolve all automatically"
+    # git cherry-pick --continue
 done
 
 for i in "${CEPH_RELEASES[@]}"
@@ -69,4 +74,5 @@ do
     git branch -d "${TGT_BRANCH}"
 done
 
+git checkout master
 echo "All cherry-picks have been sucessfully resolved"
