@@ -1439,13 +1439,17 @@ function test_mon_osd()
   ceph osd deep-scrub 0
   ceph osd repair 0
 
-  # pool scrub
+  # pool scrub, force-recovery/backfill
   pool_names=`rados lspools`
   for pool_name in $pool_names
   do
     ceph osd pool scrub $pool_name
     ceph osd pool deep-scrub $pool_name
     ceph osd pool repair $pool_name
+    ceph osd pool force-recovery $pool_name
+    ceph osd pool cancel-force-recovery $pool_name
+    ceph osd pool force-backfill $pool_name
+    ceph osd pool cancel-force-backfill $pool_name
   done
 
   for f in noup nodown noin noout noscrub nodeep-scrub nobackfill norebalance norecover notieragent full

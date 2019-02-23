@@ -89,6 +89,22 @@ COMMAND("osd pool repair " \
         "name=who,type=CephPoolname,n=N", \
         "initiate repair on pool <who>", \
         "osd", "rw")
+COMMAND("osd pool force-recovery " \
+        "name=who,type=CephPoolname,n=N", \
+        "force recovery of specified pool <who> first", \
+        "osd", "rw")
+COMMAND("osd pool force-backfill " \
+        "name=who,type=CephPoolname,n=N", \
+        "force backfill of specified pool <who> first", \
+        "osd", "rw")
+COMMAND("osd pool cancel-force-recovery " \
+        "name=who,type=CephPoolname,n=N", \
+        "restore normal recovery priority of specified pool <who>", \
+        "osd", "rw")
+COMMAND("osd pool cancel-force-backfill " \
+        "name=who,type=CephPoolname,n=N", \
+        "restore normal recovery priority of specified pool <who>", \
+        "osd", "rw")
 COMMAND("osd reweight-by-utilization " \
 	"name=oload,type=CephInt,req=false " \
 	"name=max_change,type=CephFloat,req=false "			\
