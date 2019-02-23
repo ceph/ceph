@@ -556,6 +556,11 @@ def decode_cstr(val, encoding="utf-8"):
     return val.decode(encoding)
 
 
+def flatten_dict(d):
+    items = chain.from_iterable(d.items())
+    return ''.join(i + '\0' for i in items)
+
+
 cdef char* opt_str(s) except? NULL:
     if s is None:
         return NULL
@@ -1513,8 +1518,7 @@ Rados object in state %s." % self.state)
         """
         service = cstr(service, 'service')
         daemon = cstr(daemon, 'daemon')
-        metadata_dict = '\0'.join(chain.from_iterable(metadata.items()))
-        metadata_dict += '\0'
+        metadata_dict = flatten_dict(metadata)
         cdef:
             char *_service = service
             char *_daemon = daemon
@@ -1527,8 +1531,7 @@ Rados object in state %s." % self.state)
 
     @requires(('metadata', dict))
     def service_daemon_update(self, status):
-        status_dict = '\0'.join(chain.from_iterable(status.items()))
-        status_dict += '\0'
+        status_dict = flatten_dict(status)
         cdef:
             char *_status = status_dict
 
