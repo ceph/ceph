@@ -58,6 +58,7 @@ test-suite.log
 
 # specific local dir files
 /build-doc
+/build-full-doc
 /config.*
 /Makefile
 /tags

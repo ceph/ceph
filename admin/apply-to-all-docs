@@ -1,17 +1,15 @@
 #!/bin/sh
 
-# copy-paste from doc/releases/releases.yml:releases
-# FIXME: do it automatically
-CEPH_RELEASES[0]=dumpling
-CEPH_RELEASES[1]=emperor
-CEPH_RELEASES[2]=firefly
-CEPH_RELEASES[3]=giant
-CEPH_RELEASES[4]=hammer
-CEPH_RELEASES[5]=infernalis
-CEPH_RELEASES[6]=jewel
-CEPH_RELEASES[8]=kraken
-CEPH_RELEASES[9]=luminous
-CEPH_RELEASES[10]=mimic
+if [ ! -d admin ]; then
+    echo "ERROR: run script from ceph-root directory"
+    exit -1
+fi
+
+source admin/releases
+
+# FIXME: see admin/releases
+# I could not build docs in all versions, nevertheless I try to apply COMMIT to all of them
+CEPH_RELEASES+=("dumpling" "infernalis" "jewel" "kraken")
 
 if [ "$#" -ne 1 ]; then
     echo "$0: make cherry-pick to all release branches to update the docs globally"
@@ -55,8 +53,7 @@ do
     CHERRY_PICK_RESULT=$?
 
     if [ "${CHERRY_PICK_RESULT}" -ne 0 ]; then
-        read -p "WARNING: cherry-pick has failed (Continue?)\n"\
-                "(Press ^C to exit and resolve manually)"
+        read -p "ERROR: cherry-pick has failed (Press ^C to exit and resolve manually, ENTER - continue)"
     fi
     set -e
 
