@@ -1,0 +1,36 @@
+#!/bin/sh
+
+# copy-paste from doc/releases/releases.yml:releases
+# FIXME: do it automatically
+
+# CEPH_RELEASES[0]=dumpling # FIXME: admin/build-doc looks broken: http://docs.ceph.com/docs/dumpling/
+# Running Sphinx v1.8.4
+# Extension error:
+# Could not import extension sphinx_ditaa (exception: cannot import name Directive)
+
+CEPH_RELEASES[1]=emperor
+CEPH_RELEASES[2]=firefly
+CEPH_RELEASES[3]=giant
+CEPH_RELEASES[4]=hammer
+
+# CEPH_RELEASES[5]=infernalis # FIXME: inconsistent build-doc dependencies:
+#breathe 4.11.1 has requirement Sphinx>=1.8, but you'll have sphinx 1.1.3 which is incompatible.
+
+# CEPH_RELEASES[6]=jewel # FIXME: could not build, error in Sphinx
+# Running Sphinx v1.6.3
+# Exception occurred:
+#   File "/home/suhoy/src/github/suhoy95/ceph/build-doc/virtualenv/src/breathe/breathe/renderer/sphinxrenderer.py", line 80, in DomainDirectiveFactory
+#     'union': (cpp.CPPUnionObject, 'union'),
+# AttributeError: 'module' object has no attribute 'CPPUnionObject'
+
+# CEPH_RELEASES[8]=kraken # FIXME: could not build, error in Sphinx
+# Running Sphinx v1.1.3
+# Exception occurred:
+#   File "/home/suhoy/src/github/suhoy95/ceph/build-doc/virtualenv/src/breathe/breathe/renderer/sphinxrenderer.py", line 77, in DomainDirectiveFactory
+#     'enum': (cpp.CPPEnumObject, 'enum'),
+# AttributeError: 'module' object has no attribute 'CPPEnumObject'
+
+CEPH_RELEASES[9]=luminous
+CEPH_RELEASES[10]=mimic
+
+export CEPH_RELEASES
