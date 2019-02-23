@@ -4312,18 +4312,10 @@ int OSDMap::calc_pg_upmaps(
   CephContext *cct,
   float max_deviation_ratio,
   int max,
-  const set<int64_t>& only_pools_orig,
+  const set<int64_t>& only_pools,
   OSDMap::Incremental *pending_inc)
 {
-  ldout(cct, 10) << __func__ << " pools " << only_pools_orig  << dendl;
-  set<int64_t> only_pools;
-  if (only_pools_orig.empty()) {
-    for (auto& i : pools) {
-      only_pools.insert(i.first);
-    }
-  } else {
-    only_pools = only_pools_orig;
-  }
+  ldout(cct, 10) << __func__ << " pools " << only_pools << dendl;
   OSDMap tmp;
   tmp.deepish_copy_from(*this);
   int num_changed = 0;
