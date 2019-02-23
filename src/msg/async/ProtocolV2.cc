@@ -507,7 +507,7 @@ struct KeepAliveFrame : public SignedEncryptedFrame<KeepAliveFrame, utime_t> {
 };
 
 struct KeepAliveFrameAck
-    : public SignedEncryptedFrame<KeepAliveFrame, utime_t> {
+    : public SignedEncryptedFrame<KeepAliveFrameAck, utime_t> {
   static const ProtocolV2::Tag tag = ProtocolV2::Tag::KEEPALIVE2_ACK;
   using SignedEncryptedFrame::SignedEncryptedFrame;
 
