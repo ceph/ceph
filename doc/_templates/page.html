@@ -17,5 +17,13 @@
   </div>
 {%- endif %}
 
+  <div id="ceph-releases">
+    <label>
+        Release: <select id="ceph-release-select"></select>
+    </label>
+  </div>
+
   {{ super() }}
+
+  <script type="text/javascript" src="/docs/master/_static/js/ceph.js"></script>
 {% endblock %}
