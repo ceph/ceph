@@ -558,7 +558,7 @@ def decode_cstr(val, encoding="utf-8"):
 
 def flatten_dict(d):
     items = chain.from_iterable(d.items())
-    return ''.join(i + '\0' for i in items)
+    return cstr(''.join(i + '\0' for i in items))
 
 
 cdef char* opt_str(s) except? NULL:
