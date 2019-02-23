@@ -22,7 +22,14 @@ git clean -xfd --exclude="build-full-doc"
 for i in "${CEPH_RELEASES[@]}"
 do
     git checkout "$i"
+
+    # reset the files to get clean document build
     git clean -xfd --exclude="build-full-doc"
+
+    # FIXME: I do not know how to make it in one git clean
+    # git clean are skipping repos from virtual env, we have to remove them manually
+    rm -rf build-doc/virtualenv
+
     admin/build-doc
     mv build-doc/output "build-full-doc/$i"
 done

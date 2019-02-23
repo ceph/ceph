@@ -52,6 +52,8 @@ stamp-h1
 vgcore.*
 
 # specific local dir files
+/build-full-doc
+
 /build-doc
 /config.*
 /Makefile
