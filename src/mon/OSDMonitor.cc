@@ -7209,7 +7209,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       }
     } else {
       if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
-	ss << "nautilus OSDs are required to adjust pg_num_pending";
+	ss << "nautilus OSDs are required to decrease pg_num";
 	return -EPERM;
       }
     }
