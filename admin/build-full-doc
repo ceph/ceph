@@ -1,0 +1,37 @@
+#!/bin/sh
+
+if [ ! -d admin ]; then
+    echo "ERROR: run script from ceph-root directory"
+    exit -1
+fi
+
+source admin/releases
+CEPH_RELEASES+=("master")
+
+# Don't enable -e until after running all the potentially-erroring checks
+# for availability of commands
+set -e
+set -x
+
+mkdir -p build-full-doc
+
+read -p "WARNING: 'git clean -xfd' may remove all your uncommited data (Press ^C to cancel, ENTER to continue)"
+
+git clean -xfd --exclude="build-full-doc"
+
+for i in "${CEPH_RELEASES[@]}"
+do
+    git checkout "$i"
+
+    # reset the files to get clean document build
+    git clean -xfd --exclude="build-full-doc"
+
+    # FIXME: I do not know how to make it in one git clean
+    # git clean are skipping repos from virtual env, we have to remove them manually
+    rm -rf build-doc/virtualenv
+
+    admin/build-doc
+    mv build-doc/output "build-full-doc/$i"
+done
+
+git checkout master
