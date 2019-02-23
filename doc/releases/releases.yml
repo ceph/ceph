@@ -11,6 +11,7 @@
 #
 # If a version might represent an actual number (e.g. 0.80) quote it.
 #
+# NOTE: When updating check the CEPH_RELEASES in the admin/apply-to-all-docs
 releases:
   mimic:
     releases:
@@ -24,7 +25,7 @@ releases:
         released: 2018-07-01
       - version: 13.2.0
         released: 2018-06-01
-  
+
   luminous:
     releases:
       - version: 12.2.10
@@ -49,7 +50,7 @@ releases:
         released: 2017-09-01
       - version: 12.2.0
         released: 2017-08-01
-  
+
   kraken:
     target_eol: 2017-08-01
     actual_eol: 2017-08-01
