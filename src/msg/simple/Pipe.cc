@@ -209,8 +209,25 @@ void Pipe::start_reader()
 void Pipe::maybe_start_delay_thread()
 {
   if (!delay_thread) {
-    auto pos = msgr->cct->_conf.get_val<std::string>("ms_inject_delay_type").find(ceph_entity_type_name(connection_state->peer_type));
-    if (pos != string::npos) {
+    string ms_inject_delay_type = msgr->cct->_conf.get_val<std::string>("ms_inject_delay_type");
+    string ms_inject_delay_name = msgr->cct->_conf.get_val<std::string>("ms_inject_delay_name");
+    bool delay = false;
+    if (!ms_inject_delay_type.empty()) {
+      auto pos = ms_inject_delay_type.
+	find(ceph_entity_type_name(connection_state->peer_type));
+      if (pos != string::npos) {
+	delay = true;
+      }
+    } else if (!ms_inject_delay_name.empty()) {
+      auto pos = ms_inject_delay_name.
+	find(connection_state->get_peer_entity_name().to_str());
+      if (pos != string::npos) {
+	delay = true;
+      }
+    }
+
+
+    if (delay) {
       lsubdout(msgr->cct, ms, 1) << "setting up a delay queue on Pipe " << this << dendl;
       delay_thread = new DelayedDelivery(this);
       delay_thread->create("ms_pipe_delay");

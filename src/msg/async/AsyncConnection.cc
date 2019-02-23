@@ -158,16 +158,28 @@ int AsyncConnection::get_con_mode() const {
 void AsyncConnection::maybe_start_delay_thread()
 {
   if (!delay_state) {
-    async_msgr->cct->_conf.with_val<std::string>(
-      "ms_inject_delay_type",
-      [this](const string& s) {
-	if (s.find(ceph_entity_type_name(peer_type)) != string::npos) {
-	  ldout(msgr->cct, 1) << __func__ << " setting up a delay queue"
-			      << dendl;
-	  delay_state = new DelayedDelivery(async_msgr, center, dispatch_queue,
-					    conn_id);
-	}
-      });
+    bool delay = false;
+    string ms_inject_delay_type = msgr->cct->_conf.get_val<std::string>("ms_inject_delay_type");
+    string ms_inject_delay_name = msgr->cct->_conf.get_val<std::string>("ms_inject_delay_name");
+    if (!ms_inject_delay_type.empty()) {
+      auto pos = ms_inject_delay_type.
+	find(ceph_entity_type_name(peer_type));
+      if (pos != string::npos) {
+	delay = true;
+      }
+    } else if (!ms_inject_delay_name.empty()) {
+      auto pos = ms_inject_delay_name.find(peer_name.to_str());
+      if (pos != string::npos) {
+	delay = true;
+      }
+    }
+    
+    if (delay) {
+      ldout(msgr->cct, 1) << __func__ << " setting up a delay queue"
+			  << dendl;
+      delay_state = new DelayedDelivery(async_msgr, center, dispatch_queue,
+					conn_id);
+    }
   }
 }
 
