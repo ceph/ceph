@@ -1870,7 +1870,7 @@ void ImageReplayer<I>::reregister_admin_socket_hook() {
   {
     Mutex::Locker locker(m_lock);
     auto name = m_local_ioctx->get_pool_name() + "/" + m_local_image_name;
-    if (m_name == name) {
+    if (m_asok_hook != nullptr && m_name == name) {
       return;
     }
     m_name = name;
