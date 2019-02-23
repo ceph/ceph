@@ -39,6 +39,7 @@ alpine/APKBUILD
 
 # specific local dir files
 /build-doc
+/build-full-doc
 /tags
 
 # where is this from?
