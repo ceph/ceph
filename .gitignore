@@ -40,6 +40,7 @@ alpine/APKBUILD
 
 # specific local dir files
 /build-doc
+/build-full-doc
 
 # where is this from?
 web/*.html
