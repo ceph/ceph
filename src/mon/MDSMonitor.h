@@ -26,13 +26,14 @@
 #include "PaxosService.h"
 #include "msg/Messenger.h"
 #include "messages/MMDSBeacon.h"
+#include "CommandHandler.h"
 
 class MMonCommand;
 class MMDSLoadTargets;
 class MMDSMap;
 class FileSystemCommandHandler;
 
-class MDSMonitor : public PaxosService, public PaxosFSMap {
+class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHandler {
  public:
   MDSMonitor(Monitor *mn, Paxos *p, string service_name);
 

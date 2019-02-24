@@ -2393,15 +2393,7 @@ void MDSRankDispatcher::handle_mds_map(
 			    std::mem_fn(&OSDMap::get_epoch)));
 
     /* Now check if we should hint to the OSD that a read may follow */
-    bool found = false;
-    for (const auto& p : mdsmap->get_mds_info()) {
-      auto& info = p.second;
-      if (info.state == MDSMap::STATE_STANDBY_REPLAY && info.rank == whoami) {
-	found = true;
-	break;
-      }
-    }
-    if (found)
+    if (mdsmap->has_standby_replay(whoami))
       mdlog->set_write_iohint(0);
     else
       mdlog->set_write_iohint(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);

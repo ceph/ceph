@@ -17,6 +17,7 @@
 #define FS_COMMANDS_H_
 
 #include "Monitor.h"
+#include "CommandHandler.h"
 
 #include "osd/OSDMap.h"
 #include "mds/FSMap.h"
@@ -24,22 +25,10 @@
 #include <string>
 #include <sstream>
 
-class FileSystemCommandHandler
+class FileSystemCommandHandler : protected CommandHandler
 {
 protected:
   std::string prefix;
-
-  /**
-   * Parse true|yes|1 style boolean string from `bool_str`
-   * `result` must be non-null.
-   * `ss` will be populated with error message on error.
-   *
-   * @return 0 on success, else -EINVAL
-   */
-  int parse_bool(
-      const std::string &bool_str,
-      bool *result,
-      std::ostream &ss);
 
   /**
    * Return 0 if the pool is suitable for use with CephFS, or
