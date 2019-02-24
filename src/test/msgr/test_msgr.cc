@@ -339,6 +339,10 @@ struct TestInterceptor : public Interceptor {
  * Scenario: A connects to B, and B connects to A at the same time.
  */ 
 TEST_P(MessengerTest, ConnectionRaceTest) {
+  if (string(GetParam()) == "simple") {
+    return;
+  }
+
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(false);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
@@ -427,6 +431,10 @@ TEST_P(MessengerTest, ConnectionRaceTest) {
  *    - A reconnects
  */ 
 TEST_P(MessengerTest, MissingServerIdenTest) {
+  if (string(GetParam()) == "simple") {
+    return;
+  }
+
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(false);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
@@ -507,6 +515,10 @@ TEST_P(MessengerTest, MissingServerIdenTest) {
  *    - B reconnects to A
  */ 
 TEST_P(MessengerTest, MissingServerIdenTest2) {
+  if (string(GetParam()) == "simple") {
+    return;
+  }
+
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(false);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
@@ -578,6 +590,10 @@ TEST_P(MessengerTest, MissingServerIdenTest2) {
  *    - A reconnects
  */ 
 TEST_P(MessengerTest, ReconnectTest) {
+  if (string(GetParam()) == "simple") {
+    return;
+  }
+
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
@@ -676,6 +692,10 @@ TEST_P(MessengerTest, ReconnectTest) {
  *    - A reconnects // B reconnects
  */ 
 TEST_P(MessengerTest, ReconnectRaceTest) {
+  if (string(GetParam()) == "simple") {
+    return;
+  }
+
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
