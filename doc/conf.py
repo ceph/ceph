@@ -76,7 +76,3 @@ if pybind not in sys.path:
 # point to the correct branch.
 edit_on_github_project = 'ceph/ceph'
 edit_on_github_branch = 'master'
-
-# handles edit-on-github and old version warning display
-def setup(app):
-    app.add_javascript('js/ceph.js')
