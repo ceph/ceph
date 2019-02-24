@@ -34,17 +34,19 @@ set -x
 #
 # After all TGT_BRANCH have been resolved, script merges from TGT_BRANCH
 # and remove it
+#
+# After it you can push all release branches
 #####
 
-for i in "${CEPH_RELEASES[@]}"
+for release in "${CEPH_RELEASES[@]}"
 do
-    TGT_BRANCH="$i-$COMMIT"
+    TGT_BRANCH="$release-$COMMIT"
 
     if [ `git branch | grep -E "^[[:space:]]+${TGT_BRANCH}$"` ]; then
         continue;
     fi
 
-    git checkout "$i"
+    git checkout "$release"
     git checkout -b "${TGT_BRANCH}"
 
     # Here error are expected due merge-conflicts
@@ -54,7 +56,7 @@ do
 
     if [ "${CHERRY_PICK_RESULT}" -ne 0 ]; then
         git status
-        read -p "ERROR: cherry-pick on $i has failed (Press ^C to exit and resolve manually, ENTER - continue)"
+        read -p "ERROR: cherry-pick on $release has failed (Press ^C to exit and resolve manually, ENTER - continue)"
     fi
     set -e
 
@@ -63,14 +65,24 @@ do
     # git cherry-pick --continue
 done
 
-for i in "${CEPH_RELEASES[@]}"
+for release in "${CEPH_RELEASES[@]}"
 do
-    TGT_BRANCH="$i-$COMMIT"
+    TGT_BRANCH="$release-$COMMIT"
 
-    git checkout "$i"
+    git checkout "$release"
     git merge "${TGT_BRANCH}"
     git branch -d "${TGT_BRANCH}"
 done
 
 git checkout master
 echo "All cherry-picks have been sucessfully resolved"
+
+read -p "Do you want to push the releases to origin? (Press ^C to cancel, ENTER to push)"
+for release in "${CEPH_RELEASES[@]}"
+do
+    git checkout "$release"
+    git push
+done
+
+git checkout master
+echo "All commits in the releases have been sucessfully pushed"
