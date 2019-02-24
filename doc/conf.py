@@ -31,6 +31,7 @@ html_logo = 'logo.png'
 html_favicon = 'favicon.ico'
 html_use_smartypants = True
 html_show_sphinx = False
+html_static_path = ["_static"]
 html_sidebars = {
     '**': ['smarttoc.html', 'searchbox.html'],
     }
@@ -63,3 +64,8 @@ breathe_domain_by_extension = {'py': 'py', 'c': 'c', 'h': 'c', 'cc': 'cxx', 'hpp
 pybind = os.path.join(top_level, 'src/pybind')
 if pybind not in sys.path:
     sys.path.insert(0, pybind)
+
+# handles edit-on-github, old version warning display, releases-select and
+# releases color vertical-line
+def setup(app):
+    app.add_javascript('js/ceph.js')
