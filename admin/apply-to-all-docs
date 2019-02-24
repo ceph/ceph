@@ -53,7 +53,8 @@ do
     CHERRY_PICK_RESULT=$?
 
     if [ "${CHERRY_PICK_RESULT}" -ne 0 ]; then
-        read -p "ERROR: cherry-pick has failed (Press ^C to exit and resolve manually, ENTER - continue)"
+        git status
+        read -p "ERROR: cherry-pick on $i has failed (Press ^C to exit and resolve manually, ENTER - continue)"
     fi
     set -e
 
