@@ -19,9 +19,9 @@ read -p "WARNING: 'git clean -xfd' may remove all your uncommited data (Press ^C
 
 git clean -xfd --exclude="build-full-doc"
 
-for i in "${CEPH_RELEASES[@]}"
+for release in "${CEPH_RELEASES[@]}"
 do
-    git checkout "$i"
+    git checkout "$release"
 
     # reset the files to get clean document build
     git clean -xfd --exclude="build-full-doc"
@@ -31,7 +31,11 @@ do
     rm -rf build-doc/virtualenv
 
     admin/build-doc
-    mv build-doc/output "build-full-doc/$i"
+
+    if [ -d "build-full-doc/$release" ]; then
+        rm -r "build-full-doc/$release"
+    fi
+    mv build-doc/output "build-full-doc/$release"
 done
 
 git checkout master
