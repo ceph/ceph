@@ -44,7 +44,8 @@ uint64_t DispatchQueue::pre_dispatch(const Message::ref& m)
 	       << " ==== " << m->get_payload().length()
 	       << "+" << m->get_middle().length()
 	       << "+" << m->get_data().length()
-	       << " (" << m->get_footer().front_crc << " "
+	       << " (" << ceph_con_mode_name(m->get_connection()->get_con_mode())
+	       << " " << m->get_footer().front_crc << " "
 	       << m->get_footer().middle_crc
 	       << " " << m->get_footer().data_crc << ")"
 	       << " " << m << " con " << m->get_connection()

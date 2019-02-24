@@ -27,49 +27,25 @@ class CephContext;
 class Message;
 
 struct AuthSessionHandler {
-protected:
-  CephContext *cct;
-  int protocol;
-  CryptoKey key;                  // per mon authentication
-  std::string connection_secret;  // per connection
-
-public:
-  explicit AuthSessionHandler(CephContext *cct_) : cct(cct_), protocol(CEPH_AUTH_UNKNOWN) {}
-
-  AuthSessionHandler(CephContext *cct_, int protocol_,
-		     const CryptoKey& key_,
-		     const std::string& cs_)
-    : cct(cct_),
-      protocol(protocol_),
-      key(key_),
-      connection_secret(cs_) {}
-  virtual ~AuthSessionHandler() { }
-
-  virtual bool no_security() = 0;
+  virtual ~AuthSessionHandler() = default;
   virtual int sign_message(Message *message) = 0;
   virtual int check_message_signature(Message *message) = 0;
-  virtual int encrypt_message(Message *message) = 0;
-  virtual int decrypt_message(Message *message) = 0;
-
-  virtual int sign_bufferlist(bufferlist &in, bufferlist &out) {
-    return 0;
-  };
-  virtual int encrypt_bufferlist(bufferlist &in, bufferlist &out) {
-    return 0;
-  }
-  virtual int decrypt_bufferlist(bufferlist &in, bufferlist &out) {
-    return 0;
-  }
-
-  int get_protocol() {return protocol;}
-  CryptoKey get_key() {return key;}
-
 };
+
+struct DummyAuthSessionHandler : AuthSessionHandler {
+  int sign_message(Message*) final {
+    return 0;
+  }
+  int check_message_signature(Message*) final {
+    return 0;
+  }
+};
+
+struct DecryptionError : public std::exception {};
 
 extern AuthSessionHandler *get_auth_session_handler(
   CephContext *cct, int protocol,
   const CryptoKey& key,
-  const std::string& connection_secret,
   uint64_t features);
 
 #endif

@@ -136,6 +136,8 @@ class AsyncConnection : public Connection {
     return target_addr;
   }
 
+  int get_con_mode() const override;
+
  private:
   enum {
     STATE_NONE,

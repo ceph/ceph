@@ -105,6 +105,9 @@ public:
   virtual void write_event() = 0;
   virtual bool is_queued() = 0;
 
+  int get_con_mode() const {
+    return auth_meta->con_mode;
+  }
 };
 
 #endif /* _MSG_ASYNC_PROTOCOL_ */

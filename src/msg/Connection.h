@@ -209,6 +209,10 @@ public:
   void set_features(uint64_t f) { features = f; }
   void set_feature(uint64_t f) { features |= f; }
 
+  virtual int get_con_mode() const {
+    return CEPH_CON_MODE_CRC;
+  }
+
   void post_rx_buffer(ceph_tid_t tid, bufferlist& bl) {
     Mutex::Locker l(lock);
     ++rx_buffers_version;
