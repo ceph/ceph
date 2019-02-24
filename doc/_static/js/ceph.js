@@ -7,14 +7,14 @@ $(function() {
       if (eol) {
         $("#eol-warning").show();
       }
-      return !eol;
+      return eol;
     }
     return false;
   }
 
   function get_branch() {
     var path = window.location.pathname;
-    var res = path.match(/\/docs\/([a-z]+)\/?/i)
+    var res = path.match(/^\/docs\/([a-z]+)\/?/i)
     if (res) {
       return res[1]
     }
@@ -23,12 +23,32 @@ $(function() {
 
   function show_releases_select(branch, data) {
 
+    // Sort the releases according the last release
+    var releases = [];
+
+    for(var release in data.releases) {
+      // try to avoid modern JS: https://stackoverflow.com/a/36411645
+      if(data.releases.hasOwnProperty(release)) {
+        releases.push({
+          release_name: release,
+          released: data.releases[release].releases[0].released,
+        });
+      }
+    }
+
+    releases.sort(function (a, b) {
+      return a.released < b.released;
+    });
+
     var select = $("#ceph-release-select");
-    for (var release in data.releases) {
+
+    select.append('<option value="master">master</option>');
+    for (var i = 0; i < releases.length; i++) {
+      var release = releases[i].release_name;
       var option = '<option value="' + release + '">' + release + '</option>';
       select.append(option);
     }
-    select.append('<option value="master">master</option>');
+    // choose the current release
     select.val(branch);
 
     select.change(function (){
@@ -83,7 +103,7 @@ $(function() {
     show_releases_select(branch, data);
     draw_release_line(branch);
 
-    if (is_eol(branch, data)) {
+    if (!is_eol(branch, data)) {
       // patch the edit-on-github URL for correct branch
       var url = $("#edit-on-github").attr("href");
       url = url.replace("master", branch);
