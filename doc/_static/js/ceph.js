@@ -43,6 +43,31 @@ $(function() {
     $("#ceph-releases").show()
   }
 
+  // show horizontal color line to easy distinguish the releases
+  // even in the middle of the page
+  function draw_release_line(branch) {
+    var color_map = {
+      // colors are got from https://github.com/d3/d3-scale-chromatic#schemeSet3
+      "dumpling": "#8dd3c7",
+      "emperor": "#ffffb3",
+      "firefly": "#bebada",
+      "giant": "#fb8072",
+      "hammer": "#80b1d3",
+      "infernalis": "#fdb462",
+      "jewel": "#b3de69",
+      "kraken": "#fccde5",
+      "luminous": "#d9d9d9",
+      "mimic": "#bc80bd",
+      // free colors:
+      // "": "#ccebc5",
+      // "": "#ffed6f",
+      // development documentation is always red to attract attention
+      "master": "#FF0000",
+    };
+    var color = (branch in color_map) ? color_map[branch] : "#000";
+    $(".body").css("border-left", "5px solid " + color);
+  }
+
   $.getJSON(releases_url, function(data) {
     var branch = get_branch();
 
@@ -54,8 +79,9 @@ $(function() {
       $("#dev-warning").show();
     }
 
-    // show select regardless of eol release
+    // show select and color line regardless of eol release
     show_releases_select(branch, data);
+    draw_release_line(branch);
 
     if (is_eol(branch, data)) {
       // patch the edit-on-github URL for correct branch
