@@ -97,9 +97,7 @@ follows:
   assign them a priority
 * The bugs with higher priority are worked on first
 
-Each ``team`` is responsible for a project, managed by leads_.
-
-.. _leads: index#Leads
+Each ``team`` is responsible for a project, managed by :ref:`leads <governance>`.
 
 The ``developer`` assigned to an issue is responsible for it. The
 status of an open issue can be:

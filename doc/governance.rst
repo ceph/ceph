@@ -1,3 +1,5 @@
+.. _governance:
+
 ============
  Governance
 ============
