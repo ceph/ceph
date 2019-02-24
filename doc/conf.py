@@ -19,9 +19,15 @@ html_logo = 'logo.png'
 html_favicon = 'favicon.ico'
 html_use_smartypants = True
 html_show_sphinx = False
+html_static_path = ["_static"]
 html_sidebars = {
     '**': ['smarttoc.html', 'searchbox.html'],
     }
+
+# handles edit-on-github, old version warning display, releases-select and
+# releases color vertical-line
+def setup(app):
+    app.add_javascript('js/ceph.js')
 
 extensions = [
     'sphinx.ext.autodoc',
