@@ -1408,6 +1408,34 @@ int MDSMonitor::filesystem_command(
     }
 
     r = 0;
+  } else if (prefix == "mds freeze") {
+    std::string who;
+    cmd_getval(g_ceph_context, cmdmap, "role_or_gid", who);
+    mds_gid_t gid = gid_from_arg(fsmap, who, ss);
+    if (gid == MDS_GID_NONE) {
+      return -EINVAL;
+    }
+
+    bool freeze = false;
+    {
+      std::string str;
+      cmd_getval(g_ceph_context, cmdmap, "val", str);
+      if ((r = parse_bool(str, &freeze, ss)) != 0) {
+        return r;
+      }
+    }
+
+    auto f = [freeze,gid,&ss](auto& info) {
+      if (freeze) {
+        ss << "freezing mds." << gid;
+        info.freeze();
+      } else {
+        ss << "unfreezing mds." << gid;
+        info.unfreeze();
+      }
+    };
+    fsmap.modify_daemon(gid, f);
+    r = 0;
   } else {
     return -ENOSYS;
   }
@@ -1794,6 +1822,7 @@ void MDSMonitor::maybe_replace_gid(FSMap &fsmap, mds_gid_t gid,
   }
   mono_time now = mono_clock::now();
   chrono::duration<double> since = now-latest_beacon;
+  const bool frozen = info.is_frozen();
   const bool may_replace = since.count() <
       std::max(g_conf()->mds_beacon_interval, g_conf()->mds_beacon_grace * 0.5);
 
@@ -1804,6 +1833,7 @@ void MDSMonitor::maybe_replace_gid(FSMap &fsmap, mds_gid_t gid,
       info.state != MDSMap::STATE_STANDBY &&
       info.state != MDSMap::STATE_STANDBY_REPLAY &&
       may_replace &&
+      !frozen &&
       !fsmap.get_filesystem(fscid)->mds_map.test_flag(CEPH_MDSMAP_NOT_JOINABLE) &&
       (sgid = fsmap.find_replacement_for({fscid, info.rank}, info.name)) != MDS_GID_NONE)
   {
@@ -1832,7 +1862,7 @@ void MDSMonitor::maybe_replace_gid(FSMap &fsmap, mds_gid_t gid,
 
     *mds_propose = true;
   } else if ((info.state == MDSMap::STATE_STANDBY_REPLAY ||
-             info.state == MDSMap::STATE_STANDBY) && may_replace) {
+             info.state == MDSMap::STATE_STANDBY) && may_replace && !frozen) {
     dout(1)  << " failing and removing " << gid << " " << info.addrs
 	     << " mds." << info.rank
 	     << "." << info.inc << " " << ceph_mds_state_name(info.state)

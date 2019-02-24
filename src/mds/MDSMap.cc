@@ -89,6 +89,7 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   }
   f->close_section();
   f->dump_unsigned("features", mds_features);
+  f->dump_unsigned("flags", flags);
 }
 
 void MDSMap::mds_info_t::print_summary(ostream &out) const
@@ -105,6 +106,9 @@ void MDSMap::mds_info_t::print_summary(ostream &out) const
   }
   if (!export_targets.empty()) {
     out << " export_targets=" << export_targets;
+  }
+  if (is_frozen()) {
+    out << " frozen";
   }
 }
 
@@ -504,7 +508,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
 
 void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) const
 {
-  __u8 v = 8;
+  __u8 v = 9;
   if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
     v = 7;
   }
@@ -527,6 +531,7 @@ void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) con
   encode(mds_features, bl);
   encode(FS_CLUSTER_ID_NONE, bl); /* standby_for_fscid */
   encode(false, bl);
+  encode(flags, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -578,6 +583,9 @@ void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
   if (struct_v >= 7) {
     bool standby_replay;
     decode(standby_replay, bl);
+  }
+  if (struct_v >= 8) {
+    decode(flags, bl);
   }
   DECODE_FINISH(bl);
 }

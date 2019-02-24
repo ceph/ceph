@@ -193,6 +193,8 @@ public:
     return result;
   }
 
+  mds_gid_t get_available_standby() const;
+
   /**
    * Resolve daemon name to GID
    */

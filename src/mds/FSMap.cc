@@ -711,6 +711,21 @@ void Filesystem::print(std::ostream &out) const
   mds_map.print(out);
 }
 
+mds_gid_t FSMap::get_available_standby() const
+{
+  for (const auto& [gid, info] : standby_daemons) {
+    ceph_assert(info.rank == MDS_RANK_NONE);
+    ceph_assert(info.state == MDSMap::STATE_STANDBY);
+
+    if (info.laggy() || info.is_frozen()) {
+      continue;
+    }
+
+    return gid;
+  }
+  return MDS_GID_NONE;
+}
+
 mds_gid_t FSMap::find_replacement_for(mds_role_t role, std::string_view name) const
 {
   auto&& fs = get_filesystem(role.fscid);
@@ -718,23 +733,16 @@ mds_gid_t FSMap::find_replacement_for(mds_role_t role, std::string_view name) co
   // First see if we have a STANDBY_REPLAY
   for (const auto& [gid, info] : fs->mds_map.mds_info) {
     if (info.rank == role.rank && info.state == MDSMap::STATE_STANDBY_REPLAY) {
-      return gid;
+      if (info.is_frozen()) {
+        /* the standby-replay is frozen, do nothing! */
+        return MDS_GID_NONE;
+      } else {
+        return gid;
+      }
     }
   }
 
-  // See if there are any STANDBY daemons available
-  for (const auto& [gid, info] : standby_daemons) {
-    ceph_assert(info.rank == MDS_RANK_NONE);
-    ceph_assert(info.state == MDSMap::STATE_STANDBY);
-
-    if (info.laggy()) {
-      continue;
-    }
-
-    return gid;
-  }
-
-  return MDS_GID_NONE;
+  return get_available_standby();
 }
 
 void FSMap::sanity() const

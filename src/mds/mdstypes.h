@@ -75,14 +75,15 @@
 
 
 typedef int32_t mds_rank_t;
-typedef int32_t fs_cluster_id_t;
+constexpr mds_rank_t MDS_RANK_NONE = -1;
 
 BOOST_STRONG_TYPEDEF(uint64_t, mds_gid_t)
 extern const mds_gid_t MDS_GID_NONE;
-constexpr fs_cluster_id_t FS_CLUSTER_ID_NONE = {-1};
+
+typedef int32_t fs_cluster_id_t;
+constexpr fs_cluster_id_t FS_CLUSTER_ID_NONE = -1;
 // The namespace ID of the anonymous default filesystem from legacy systems
-constexpr fs_cluster_id_t FS_CLUSTER_ID_ANONYMOUS = {0};
-extern const mds_rank_t MDS_RANK_NONE;
+constexpr fs_cluster_id_t FS_CLUSTER_ID_ANONYMOUS = 0;
 
 class mds_role_t
 {

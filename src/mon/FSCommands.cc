@@ -974,30 +974,6 @@ FileSystemCommandHandler::load(Paxos *paxos)
   return handlers;
 }
 
-int FileSystemCommandHandler::parse_bool(
-      const std::string &bool_str,
-      bool *result,
-      std::ostream &ss)
-{
-  ceph_assert(result != nullptr);
-
-  string interr;
-  int64_t n = strict_strtoll(bool_str.c_str(), 10, &interr);
-
-  if (bool_str == "false" || bool_str == "no"
-      || (interr.length() == 0 && n == 0)) {
-    *result = false;
-    return 0;
-  } else if (bool_str == "true" || bool_str == "yes"
-      || (interr.length() == 0 && n == 1)) {
-    *result = true;
-    return 0;
-  } else {
-    ss << "value must be false|no|0 or true|yes|1";
-    return -EINVAL;
-  }
-}
-
 int FileSystemCommandHandler::_check_pool(
     OSDMap &osd_map,
     const int64_t pool_id,

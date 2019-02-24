@@ -110,11 +110,23 @@ public:
     utime_t laggy_since;
     std::set<mds_rank_t> export_targets;
     uint64_t mds_features = 0;
+    uint64_t flags = 0;
+    enum mds_flags : uint64_t {
+      FROZEN = 1 << 0,
+    };
 
     mds_info_t() = default;
 
     bool laggy() const { return !(laggy_since == utime_t()); }
     void clear_laggy() { laggy_since = utime_t(); }
+
+    bool is_degraded() const {
+      return STATE_REPLAY <= state && state <= STATE_CLIENTREPLAY;
+    }
+
+    void freeze() { flags |= mds_flags::FROZEN; }
+    void unfreeze() { flags &= ~mds_flags::FROZEN; }
+    bool is_frozen() const { return flags&mds_flags::FROZEN; }
 
     const entity_addrvec_t& get_addrs() const {
       return addrs;
@@ -541,29 +553,33 @@ public:
     return is_clientreplay(m) || is_active(m) || is_stopping(m);
   }
 
-  bool is_followable(mds_rank_t r) const {
-    bool has_followable_rank = false;
-    for (const auto& p : mds_info) {
-      auto& info = p.second;
-      if (info.rank == r) {
-        if (info.state == STATE_ACTIVE) {
-          has_followable_rank = true;
-        } else {
-          return false;
-        }
-      }
-      if (p.second.state == STATE_STANDBY_REPLAY) {
-        return false;
+  mds_gid_t get_standby_replay(mds_rank_t r) const {
+    for (auto& [gid,info] : mds_info) {
+      if (info.rank == r && info.state == STATE_STANDBY_REPLAY) {
+        return gid;
       }
     }
-    return has_followable_rank;
+    return MDS_GID_NONE;
+  }
+  bool has_standby_replay(mds_rank_t r) const {
+    return get_standby_replay(r) != MDS_GID_NONE;
+  }
+
+  bool is_followable(mds_rank_t r) const {
+    if (auto it1 = up.find(r); it1 != up.end()) {
+      if (auto it2 = mds_info.find(it1->second); it2 != mds_info.end()) {
+        auto& info = it2->second;
+        if (!info.is_degraded() && !has_standby_replay(r)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   bool is_laggy_gid(mds_gid_t gid) const {
-    if (!mds_info.count(gid))
-      return false;
-    std::map<mds_gid_t,mds_info_t>::const_iterator p = mds_info.find(gid);
-    return p->second.laggy();
+    auto it = mds_info.find(gid);
+    return it == mds_info.end() ? false : it->second.laggy();
   }
 
   // degraded = some recovery in process.  fixes active membership and
@@ -571,11 +587,10 @@ public:
   bool is_degraded() const {
     if (!failed.empty() || !damaged.empty())
       return true;
-    for (std::map<mds_gid_t,mds_info_t>::const_iterator p = mds_info.begin();
-	 p != mds_info.end();
-	 ++p)
-      if (p->second.state >= STATE_REPLAY && p->second.state <= STATE_CLIENTREPLAY)
-	return true;
+    for (const auto& p : mds_info) {
+      if (p.second.is_degraded())
+        return true;
+    }
     return false;
   }
   bool is_any_failed() const {
