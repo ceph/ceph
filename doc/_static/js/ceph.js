@@ -36,8 +36,15 @@ $(function() {
       }
     }
 
+    // RTFM: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/sort
     releases.sort(function (a, b) {
-      return a.released < b.released;
+      if (a.released > b.released) { // newer release come first
+        return -1;
+      }
+      if (a.released < b.released) {
+        return 1;
+      }
+      return 0;
     });
 
     var select = $("#ceph-release-select");
