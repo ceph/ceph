@@ -11,7 +11,9 @@
 #
 # If a version might represent an actual number (e.g. 0.80) quote it.
 #
-# NOTE: check the CEPH_RELEASES in the admin/releases on UPDATE
+# NOTE: on UPDATE check
+# - the CEPH_RELEASES in the admin/releases
+# - the draw_release_line() in the doc/_static/js/ceph.js
 releases:
   mimic:
     releases:

@@ -19,6 +19,7 @@ html_logo = 'logo.png'
 html_favicon = 'favicon.ico'
 html_use_smartypants = True
 html_show_sphinx = False
+html_static_path = ["_static"]
 html_sidebars = {
     '**': ['smarttoc.html', 'searchbox.html'],
     }
@@ -31,6 +32,11 @@ extensions = [
     'asphyxiate',
     ]
 todo_include_todos = True
+
+# handles edit-on-github, old version warning display, releases-select and
+# releases color vertical-line
+def setup(app):
+    app.add_javascript('js/ceph.js')
 
 def _get_manpages():
     import os
