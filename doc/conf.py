@@ -79,6 +79,11 @@ breathe_domain_by_extension = {'py': 'py', 'c': 'c', 'h': 'c', 'cc': 'cxx', 'hpp
 edit_on_github_project = 'ceph/ceph'
 edit_on_github_branch = 'master'
 
+# handles edit-on-github, old version warning display, releases-select and
+# releases color vertical-line
+def setup(app):
+    app.add_javascript('js/ceph.js')
+
 # mocking ceph_module offered by ceph-mgr. `ceph_module` is required by
 # mgr.mgr_module
 class Dummy(object):
