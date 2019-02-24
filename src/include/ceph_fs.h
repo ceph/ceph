@@ -78,6 +78,8 @@ struct ceph_dir_layout {
 #define CEPH_CON_MODE_CRC     0x1
 #define CEPH_CON_MODE_SECURE  0x2
 
+extern const char *ceph_con_mode_name(int con_mode);
+
 /*  For options with "_", like: GSS_GSS
     which means: Mode/Protocol to validate "authentication_authorization",
     where:

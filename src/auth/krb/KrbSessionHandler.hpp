@@ -29,27 +29,7 @@
  
 #define dout_subsys ceph_subsys_auth
 
-
-class CephContext;
-class Message;
-
-class KrbSessionHandler : public AuthSessionHandler {
-
-  public:
-    KrbSessionHandler(CephContext* ceph_ctx,
-		      const CryptoKey& session_key,
-		      const std::string& connection_secret) :
-      AuthSessionHandler(ceph_ctx, CEPH_AUTH_GSS, session_key,
-			 connection_secret) { }
-    ~KrbSessionHandler() override = default; 
-
-    bool no_security() override { return true; }
-    int sign_message(Message* msg) override { return 0; }
-    int check_message_signature(Message* msg) override { return 0; }
-    int encrypt_message(Message* msg) override { return 0; }
-    int decrypt_message(Message* msg) override { return 0; }
-
-  private:
+struct KrbSessionHandler : DummyAuthSessionHandler {
 };
 
 #endif    //-- KRB_SESSION_HANDLER_HPP

@@ -40,6 +40,7 @@ ostream& AsyncConnection::_conn_prefix(std::ostream *_dout) {
 		<< *peer_addrs << " conn(" << this
 		<< (msgr2 ? " msgr2=" : " legacy=")
 		<< protocol.get()
+		<< " " << ceph_con_mode_name(protocol->auth_meta->con_mode)
                 << " :" << port
                 << " s=" << get_state_name(state)
                 << " l=" << policy.lossy
@@ -148,6 +149,10 @@ AsyncConnection::~AsyncConnection()
   if (recv_buf)
     delete[] recv_buf;
   ceph_assert(!delay_state);
+}
+
+int AsyncConnection::get_con_mode() const {
+  return protocol->get_con_mode();
 }
 
 void AsyncConnection::maybe_start_delay_thread()
