@@ -1,6 +1,20 @@
 {% extends "!page.html" %}
 {% block body %}
 
+<div id="ceph-releases" style="float: left; display:none; padding: 15px;">
+  <label>
+      Release: <select id="ceph-release-select"></select>
+  </label>
+</div>
+
+{%- if edit_on_github_url %}
+  <div id="docubetter" align="right" style="float: right; display:none; padding: 15px; font-weight: bold;">
+    <a id="edit-on-github" href="{{ edit_on_github_url }}" rel="nofollow">{{ _('Edit on GitHub')}}</a> | <a href="https://github.com/ceph/ceph/projects/4">Report a Documentation Bug</a>
+  </div>
+{%- endif %}
+
+<div style="clear: both"></div>
+
 <div id="dev-warning" class="admonition note" style="display:none;">
   <p class="first admonition-title">Notice</p>
   <p class="last">This document is for a development version of Ceph.</p>
@@ -10,18 +24,6 @@
   <p class="first admonition-title">Warning</p>
   <p class="last">This document is for an unsupported version of Ceph.</p>
 </div>
-
-{%- if edit_on_github_url %}
-  <div id="docubetter" align="right" style="display:none; padding: 15px; font-weight: bold;">
-    <a id="edit-on-github" href="{{ edit_on_github_url }}" rel="nofollow">{{ _('Edit on GitHub')}}</a> | <a href="https://github.com/ceph/ceph/projects/4">Report a Documentation Bug</a>
-  </div>
-{%- endif %}
-
-  <div id="ceph-releases">
-    <label>
-        Release: <select id="ceph-release-select"></select>
-    </label>
-  </div>
 
   {{ super() }}
 {% endblock %}
