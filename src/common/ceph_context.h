@@ -68,6 +68,10 @@ public:
   ~CephContext();
 
   uint32_t get_module_type() const;
+  bool check_experimental_feature_enabled(const std::string& feature) {
+    // everything crimson is experimental...
+    return true;
+  }
   CryptoRandom* random() const;
   PerfCountersCollectionImpl* get_perfcounters_collection();
   ceph::common::ConfigProxy& _conf;
