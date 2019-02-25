@@ -185,6 +185,10 @@
   (default: 32K) and mds_recall_warning_decay_rate (default: 60s) sets the
   threshold for this warning.
 
+* Ceph MGR now contains :ref:`orchestrator modules <orchestrator-cli-module>` to
+  directly interact with external orchestrators like ceph-ansible, DeepSea and Rook.
+  It also contains an ssh orchestrator to directly deploy services via ssh.
+
 >=13.1.0
 --------
 
