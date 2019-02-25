@@ -233,6 +233,43 @@ Instructions
 
 #. Verify the cluster is healthy with ``ceph health``.
 
+#. To enable the new v2 network protocol, issue the following command::
+
+     ceph mon enable-msgr2
+
+   This will instruct all monitors that bind to the old default port
+   6789 for the legacy v1 protocol to also bind to the new 3300 v2
+   protocol port.  To see if all monitors have been updated,::
+
+     ceph mon dump
+
+   and verify that each monitor has both a ``v2:`` and ``v1:`` address
+   listed.
+
+#. For each host that has been upgrade, you should update your
+   ``ceph.conf`` file so that it references both the v2 and v1
+   addresses.  Things will still work if only the v1 IP and port are
+   listed, but each CLI instantiation or daemon will need to reconnect
+   after learning the monitors real IPs, slowing things down a bit and
+   preventing a full transition to the v2 protocol.
+
+   This is also a good time to fully transition any config options in
+   ceph.conf into the cluster's configuration database.  On each host,
+   you can use the following command to import any option into the
+   monitors with::
+
+     ceph config assimilate-conf -i /etc/ceph/ceph.conf
+
+   To create a minimal but sufficient ceph.conf for each host,::
+
+     ceph config generate-minimal-conf > /etc/ceph/ceph.conf
+
+   Be sure to use this new config--and, specifically, the new syntax
+   for the ``mon_host`` option that lists both ``v2:`` and ``v1:``
+   addresses in brackets--on hosts that have been upgraded to
+   Nautilus, since pre-nautilus versions of Ceph to not understand the
+   syntax.
+
 
 Upgrading from pre-Luminous releases (like Jewel)
 -------------------------------------------------
