@@ -22,6 +22,8 @@
 #include "gmock/gmock.h"
 #include <string>
 
+class MockSafeTimer;
+
 namespace librbd {
 
 namespace cache { class MockImageCache; }
@@ -215,6 +217,10 @@ struct MockImageCtx {
   MOCK_CONST_METHOD0(get_stripe_period, uint64_t());
 
   MOCK_CONST_METHOD0(is_writeback_cache_enabled, bool());
+
+  static void set_timer_instance(MockSafeTimer *timer, Mutex *timer_lock);
+  static void get_timer_instance(CephContext *cct, MockSafeTimer **timer,
+                                 Mutex **timer_lock);
 
   ImageCtx *image_ctx;
   CephContext *cct;
