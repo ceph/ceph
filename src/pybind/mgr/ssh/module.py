@@ -147,7 +147,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         elif command["prefix"] == "ssh clear-ssh-config":
             return self._clear_ssh_config(inbuf, command)
         else:
-            raise NotImplementedError(cmd["prefix"])
+            raise NotImplementedError(command["prefix"])
 
     @staticmethod
     def can_run():
@@ -386,7 +386,6 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         Add a host to be managed by the orchestrator.
 
         :param host: host name
-        :param labels: host labels
         """
         def run(host):
             key = self._hostname_to_store_key(host)
@@ -552,7 +551,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         The orchestrator CLI currently handles a narrow form of drive
         specification defined by a single block device using bluestore.
 
-        :param spec: osd specification
+        :param drive_group: osd specification
 
         TODO:
           - support full drive_group specification
