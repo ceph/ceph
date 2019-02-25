@@ -313,47 +313,40 @@ class TestFailover(CephFSTestCase):
         That discontinuous mdsmap does not affect failover.
         See http://tracker.ceph.com/issues/24856.
         """
-        mds_ids = sorted(self.mds_cluster.mds_ids)
-        mds_a, mds_b = mds_ids[0:2]
-        # Assign mds to fixed ranks. To prevent standby mds from replacing frozen mds
-        rank = 0;
-        for mds_id in mds_ids:
-            self.set_conf("mds.{0}".format(mds_id), "mds_standby_for_rank", str(rank))
-            rank += 1
-        self.mds_cluster.mds_restart()
-        self.fs.wait_for_daemons()
-
         self.fs.set_max_mds(2)
-        self.fs.wait_for_state('up:active', rank=1)
+        status = self.fs.wait_for_daemons()
 
         self.mount_a.umount_wait()
 
         grace = float(self.fs.get_config("mds_beacon_grace", service_type="mon"))
         monc_timeout = float(self.fs.get_config("mon_client_ping_timeout", service_type="mds"))
 
-        # Freeze mds_a
-        self.mds_cluster.mds_signal(mds_a, signal.SIGSTOP)
+        mds_0 = self.fs.get_rank(rank=0, status=status)
+        self.fs.rank_freeze(True, rank=0) # prevent failover
+        self.fs.rank_signal(signal.SIGSTOP, rank=0, status=status)
         self.wait_until_true(
-            lambda: "laggy_since" in self.fs.status().get_mds(mds_a),
+            lambda: "laggy_since" in self.fs.get_rank(),
             timeout=grace * 2
         )
 
-        self.mds_cluster.mds_restart(mds_b)
+        self.fs.rank_fail(rank=1)
         self.fs.wait_for_state('up:resolve', rank=1, timeout=30)
 
-        # Make sure of mds_a's monitor connection gets reset
+        # Make sure of mds_0's monitor connection gets reset
         time.sleep(monc_timeout * 2)
 
-        # Unfreeze mds_a, it will get discontinuous mdsmap
-        self.mds_cluster.mds_signal(mds_a, signal.SIGCONT)
+        # Continue rank 0, it will get discontinuous mdsmap
+        self.fs.rank_signal(signal.SIGCONT, rank=0)
         self.wait_until_true(
-            lambda: "laggy_since" not in self.fs.status().get_mds(mds_a),
+            lambda: "laggy_since" not in self.fs.get_rank(rank=0),
             timeout=grace * 2
         )
 
         # mds.b will be stuck at 'reconnect' state if snapserver gets confused
         # by discontinuous mdsmap
         self.fs.wait_for_state('up:active', rank=1, timeout=30)
+        self.assertEqual(mds_0['gid'], self.fs.get_rank(rank=0)['gid'])
+        self.fs.rank_freeze(False, rank=0)
 
 class TestStandbyReplay(CephFSTestCase):
     MDSS_REQUIRED = 4
