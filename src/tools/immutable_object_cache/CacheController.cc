@@ -103,7 +103,7 @@ void CacheController::handle_request(uint64_t session_id, ObjectCacheRequest* re
                                                     data->m_snap_id,
                                                     data->m_oid,
                                                     cache_path);
-      if (ret < 0) {
+      if (ret != OBJ_CACHE_PROMOTED) {
         ObjectCacheReadRadosData reply_data;
         reply_data.type = RBDSC_READ_RADOS;
         reply_data.seq = req->seq;

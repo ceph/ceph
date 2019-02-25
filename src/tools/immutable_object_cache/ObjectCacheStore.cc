@@ -192,14 +192,13 @@ int ObjectCacheStore::lookup_object(std::string pool_nspace,
       if (pret < 0) {
         lderr(m_cct) << "fail to start promote" << dendl;
       }
-      return pret;
+      return ret;
     }
     case OBJ_CACHE_PROMOTED:
-      target_cache_file_path = std::move(
-        get_cache_file_path(cache_file_name));
-      return 0;
+      target_cache_file_path = get_cache_file_path(cache_file_name);
+      return ret;
     case OBJ_CACHE_SKIP:
-      return pret;
+      return ret;
     default:
       lderr(m_cct) << "unrecognized object cache status" << dendl;
       ceph_assert(0);
