@@ -756,7 +756,7 @@ PG_NOT_DEEP_SCRUBBED
 ____________________
 
 One or more PGs has not been deep scrubbed recently.  PGs are normally
-scrubbed every ``osd_deep_mon_scrub_interval`` seconds, and this warning
+scrubbed every ``osd_deep_scrub_interval`` seconds, and this warning
 triggers when ``mon_warn_pg_not_deep_scrubbed_ratio`` percentage of interval has elapsed
 without a scrub since it was due.
 
