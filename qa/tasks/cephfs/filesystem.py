@@ -793,6 +793,9 @@ class Filesystem(MDSCluster):
         name = self.get_rank(rank=rank, status=status)['name']
         self.mds_signal(name, signal)
 
+    def rank_freeze(self, yes, rank=0):
+        self.mon_manager.raw_cluster_cmd("mds", "freeze", "{}:{}".format(self.id, rank), str(yes).lower())
+
     def rank_fail(self, rank=0):
         self.mon_manager.raw_cluster_cmd("mds", "fail", "{}:{}".format(self.id, rank))
 
