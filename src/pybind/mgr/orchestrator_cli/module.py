@@ -268,6 +268,19 @@ Usage:
     def _nfs_rm(self, svc_id):
         return self._rm_stateless_svc("nfs", svc_id)
 
+    @CLIWriteCommand('orchestrator nfs update',
+                     "name=svc_id,type=CephString "
+                     "name=num,type=CephInt",
+                     'Scale an NFS service')
+    @handle_exceptions
+    def _nfs_update(self, svc_id, num):
+        spec = orchestrator.StatelessServiceSpec()
+        spec.name = svc_id
+        spec.count = num
+        completion = self.update_stateless_service("nfs", spec)
+        self._orchestrator_wait([completion])
+        return HandleCommandResult()
+
     @CLIWriteCommand('orchestrator service',
                      "name=action,type=CephChoices,strings=start|stop|reload "
                      "name=svc_type,type=CephString "

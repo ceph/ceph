@@ -126,3 +126,6 @@ class TestOrchestratorCli(MgrTestCase):
 
     def test_mgr_update(self):
         self._orch_cmd("mgr", "update", "3")
+
+    def test_nfs_update(self):
+        self._orch_cmd("nfs", "update", "service_name", "2")
