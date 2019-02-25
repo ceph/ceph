@@ -1033,7 +1033,7 @@ std::vector<Option> get_global_options() {
 
     Option("ms_inject_delay_min", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_description("Min delay to inject")
+    .set_description("Min delay to inject"),
 
     Option("ms_inject_delay_max", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1)

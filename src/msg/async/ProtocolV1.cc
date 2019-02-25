@@ -1015,7 +1015,7 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
       delay_period = ((cct->_conf->ms_inject_delay_max -
 		       cct->_conf->ms_inject_delay_min) *
 		      (double)(rand() % 10000) / 10000.0) +
-	             msgr->cct->_conf->ms_inject_delay_min;
+	             cct->_conf->ms_inject_delay_min;
       ldout(cct, 1) << "queue_received will delay after "
                     << (ceph_clock_now() + delay_period) << " on " << message
                     << " " << *message << dendl;
