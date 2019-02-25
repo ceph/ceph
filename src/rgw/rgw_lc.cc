@@ -123,32 +123,10 @@ bool RGWLifecycleConfiguration::has_same_action(const lc_op& first, const lc_op&
   }
 }
 
-//Rules are conflicted: if one rule's prefix starts with other rule's prefix, and these two rules
-//define same action. 
+/* Formerly, this method checked for duplicate rules using an invalid
+ * method (prefix uniqueness). */
 bool RGWLifecycleConfiguration::valid() 
 {
-  if (prefix_map.size() < 2) {
-    return true;
-  }
-  auto cur_iter = prefix_map.begin();
-  while (cur_iter != prefix_map.end()) {
-    auto next_iter = cur_iter;
-    ++next_iter;
-    while (next_iter != prefix_map.end()) {
-      string c_pre = cur_iter->first;
-      string n_pre = next_iter->first;
-      if (n_pre.compare(0, c_pre.length(), c_pre) == 0) {
-        if (has_same_action(cur_iter->second, next_iter->second)) {
-          return false;
-        } else {
-          ++next_iter;
-        }
-      } else {
-        break;
-      }
-    }
-    ++cur_iter;
-  }
   return true;
 }
 
