@@ -618,12 +618,10 @@ bool AsyncMessenger::should_use_msgr2()
   return !did_bind || get_myaddrs().has_msgr2();
 }
 
-entity_addrvec_t AsyncMessenger::_filter_addrs(int type,
-					       const entity_addrvec_t& addrs)
+entity_addrvec_t AsyncMessenger::_filter_addrs(const entity_addrvec_t& addrs)
 {
   if (!should_use_msgr2()) {
-    ldout(cct, 10) << __func__ << " " << addrs << " type " << type
-		   << " limiting to v1 ()" << dendl;
+    ldout(cct, 10) << __func__ << " " << addrs << " limiting to v1 ()" << dendl;
     entity_addrvec_t r;
     for (auto& i : addrs.v) {
       if (i.is_msgr2()) {
@@ -662,7 +660,7 @@ int AsyncMessenger::send_to(Message *m, int type, const entity_addrvec_t& addrs)
     return -EINVAL;
   }
 
-  auto av = _filter_addrs(type, addrs);
+  auto av = _filter_addrs(addrs);
   AsyncConnectionRef conn = _lookup_conn(av);
   submit_message(m, conn, av, type);
   return 0;
@@ -678,7 +676,7 @@ ConnectionRef AsyncMessenger::connect_to(int type, const entity_addrvec_t& addrs
     return local_connection;
   }
 
-  auto av = _filter_addrs(type, addrs);
+  auto av = _filter_addrs(addrs);
 
   AsyncConnectionRef conn = _lookup_conn(av);
   if (conn) {
