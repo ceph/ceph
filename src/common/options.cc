@@ -1034,19 +1034,19 @@ std::vector<Option> get_global_options() {
 
     Option("ms_inject_delay_msg_type", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("")
-    .set_description("Message type to inject delays for"),
+    .set_description("Message type to inject delays for, if delaying"),
 
     Option("ms_inject_delay_min", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_description("Min delay to inject"),
+    .set_description("Min delay to inject, if delaying"),
 
     Option("ms_inject_delay_max", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(1)
-    .set_description("Max delay to inject"),
+    .set_description("Max delay to inject, if delaying"),
 
     Option("ms_inject_delay_probability", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
-    .set_description(""),
+    .set_description("Proportion of time we should inject delivery delays on target Pipes"),
 
     Option("ms_inject_internal_delays", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(0)
