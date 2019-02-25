@@ -9,10 +9,15 @@
 #include <seastar/core/future.hh>
 
 #include "osd/osd_types.h"
+#include "recovery_state.h"
 
 template<typename T> using Ref = boost::intrusive_ptr<T>;
 class OSDMap;
+class MQuery;
 class PGPeeringEvent;
+namespace recovery {
+  class Context;
+}
 
 namespace ceph::net {
   class Messenger;
@@ -99,15 +104,20 @@ public:
   void maybe_mark_clean();
 
   seastar::future<> do_peering_event(std::unique_ptr<PGPeeringEvent> evt);
+  seastar::future<> dispatch_context(recovery::Context&& ctx);
   seastar::future<> handle_advance_map(cached_map_t next_map);
   seastar::future<> handle_activate_map();
   seastar::future<> share_pg_info();
+  void reply_pg_query(const MQuery& query, recovery::Context* ctx);
 
   void print(ostream& os) const;
 
 private:
   seastar::future<> activate_peer(pg_shard_t peer);
+  void reply_pg_query_for_info(const MQuery& query, recovery::Context* ctx);
+  void reply_pg_query_for_log(const MQuery& query, bool full);
   seastar::future<> send_to_osd(int peer, Ref<Message> m, epoch_t from_epoch);
+
   void update_primary_state(const std::vector<int>& new_up,
 			    int new_up_primary,
 			    const std::vector<int>& new_acting,
@@ -119,6 +129,7 @@ private:
 
   epoch_t last_peering_reset = 0;
   epoch_t need_up_thru = 0;
+  recovery::State recovery_state;
 
   bool should_notify_primary = false;
 
