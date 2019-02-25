@@ -356,6 +356,11 @@ These changes occurred between the Mimic and Nautilus releases.
   The secrets can be set using the ``rbd mirror pool peer add`` and
   ``rbd mirror pool peer set`` actions.
 
+* The 'rbd-mirror' daemon will now run in active/active mode by default, where
+  mirrored images are evenly distributed between all active 'rbd-mirror'
+  daemons. To revert to active/passive mode, override the
+  'rbd_mirror_image_policy_type' config key to 'none'.
+
 * The ``ceph mds deactivate`` is fully obsolete and references to it in the docs
   have been removed or clarified.
 

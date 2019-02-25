@@ -3,6 +3,8 @@ meta:
 overrides:
   ceph:
     conf:
+      client:
+        rbd mirror image policy type: none
       # override to make these names predictable
       client.mirror.4:
         admin socket: /var/run/ceph/rbd-mirror.$cluster-$name.asok
