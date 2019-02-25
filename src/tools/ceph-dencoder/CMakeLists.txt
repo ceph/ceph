@@ -22,6 +22,10 @@ if(WITH_RADOSGW)
   list(APPEND DENCODER_EXTRALIBS
     rgw_a
     cls_rgw_client)
+  if(WITH_RADOSGW_AMQP_ENDPOINT)
+    list(APPEND DENCODER_EXTRALIBS
+      rabbitmq)
+  endif()
 endif()
 
 if(WITH_RBD)
@@ -56,6 +60,5 @@ target_link_libraries(ceph-dencoder
   cls_journal_client
   cls_timeindex_client
   ${EXTRALIBS}
-  ${CMAKE_DL_LIBS}
-  rabbitmq)
+  ${CMAKE_DL_LIBS})
 install(TARGETS ceph-dencoder DESTINATION bin)
