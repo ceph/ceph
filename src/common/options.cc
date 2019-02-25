@@ -7303,6 +7303,16 @@ static std::vector<Option> get_rbd_options() {
     .set_default(60)
     .set_min(0)
     .set_description("RBD Image access timestamp refresh interval. Set to 0 to disable access timestamp update."),
+
+    Option("rbd_io_scheduler", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("none")
+    .set_enum_allowed({"none", "simple"})
+    .set_description("RBD IO scheduler"),
+
+    Option("rbd_io_scheduler_simple_max_delay", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_min(0)
+    .set_description("maximum io delay (in milliseconds) for simple io scheduler (if set to 0 dalay is calculated based on latency stats)"),
   });
 }
 
