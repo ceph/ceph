@@ -79,8 +79,7 @@ public:
 
     }
 
-    if (cct->_conf->rgw_s3_auth_use_ldap &&
-        ! cct->_conf->rgw_ldap_uri.empty()) {
+    if (ldap_engine.valid()) {
       add_engine(Control::SUFFICIENT, ldap_engine);
     }
   }
