@@ -1395,6 +1395,7 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	auto a = i.first;
 	a.set_type(entity_addr_t::TYPE_ANY);
 	pending_inc.new_blacklist[a] = i.second;
+	pending_inc.old_blacklist.push_back(i.first);
       }
     }
   }
