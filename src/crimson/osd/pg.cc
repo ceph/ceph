@@ -11,16 +11,33 @@
 
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGLog.h"
+#include "messages/MOSDPGNotify.h"
+#include "messages/MOSDPGQuery.h"
+
 #include "osd/OSDMap.h"
 
+#include "crimson/net/Connection.h"
+#include "crimson/net/Messenger.h"
 #include "crimson/os/cyan_store.h"
 #include "crimson/osd/pg_meta.h"
+
+#include "recovery_events.h"
+#include "recovery_state.h"
 
 namespace {
   seastar::logger& logger() {
     return ceph::get_logger(ceph_subsys_osd);
   }
+  template<typename Message, typename... Args>
+  Ref<Message> make_message(Args&&... args)
+  {
+    return {new Message{std::forward<Args>(args)...}, false};
+  }
 }
+
+using recovery::AdvMap;
+using recovery::ActMap;
+using recovery::Initialize;
 
 PG::PG(spg_t pgid,
        pg_shard_t pg_shard,
@@ -32,6 +49,7 @@ PG::PG(spg_t pgid,
   : pgid{pgid},
     whoami{pg_shard},
     pool{std::move(pool)},
+    recovery_state{*this},
     info{pgid},
     osdmap{osdmap},
     msgr{msgr}
@@ -61,6 +79,9 @@ seastar::future<> PG::read_state(ceph::os::CyanStore* store)
       info.stats.acting = acting;
       info.stats.acting_primary = primary.osd;
       info.stats.mapping_epoch = info.history.same_interval_since;
+      recovery_state.handle_event(Initialize{});
+      // note: we don't activate here because we know the OSD will advance maps
+      // during boot.
       return seastar::now();
     });
 }
@@ -770,19 +791,60 @@ void PG::maybe_mark_clean()
 
 seastar::future<> PG::do_peering_event(std::unique_ptr<PGPeeringEvent> evt)
 {
-  // todo
-  return seastar::now();
+  return dispatch_context(recovery_state.handle_event(evt->get_event()));
+}
+
+seastar::future<> PG::dispatch_context(recovery::Context&& ctx)
+{
+  return seastar::do_with(recovery::Context{ctx}, [this](auto& todo) {
+    return seastar::when_all_succeed(
+      seastar::parallel_for_each(std::move(todo.notifies),
+        [this](auto& osd_notifies) {
+          auto& [peer, notifies] = osd_notifies;
+          auto m = make_message<MOSDPGNotify>(get_osdmap_epoch(),
+                                              std::move(notifies));
+          return send_to_osd(peer, m, get_osdmap_epoch());
+        }),
+      seastar::parallel_for_each(std::move(todo.queries),
+        [this](auto& osd_queries) {
+          auto& [peer, queries] = osd_queries;
+          auto m = make_message<MOSDPGQuery>(get_osdmap_epoch(),
+                                             std::move(queries));
+          return send_to_osd(peer, m, get_osdmap_epoch());
+        }),
+      seastar::parallel_for_each(std::move(todo.infos),
+        [this](auto& osd_infos) {
+          auto& [peer, infos] = osd_infos;
+          auto m = make_message<MOSDPGInfo>(get_osdmap_epoch(),
+                                            std::move(infos));
+          return send_to_osd(peer, m, get_osdmap_epoch());
+        })
+    );
+  });
 }
 
 seastar::future<> PG::handle_advance_map(cached_map_t next_map)
 {
-  // todo
+  auto last_map = std::move(osdmap);
+  osdmap = std::move(next_map);
+  vector<int> new_up, new_acting;
+  int up_primary, acting_primary;
+  osdmap->pg_to_up_acting_osds(pgid.pgid,
+                               &new_up,
+                               &up_primary,
+                               &new_acting,
+                               &acting_primary);
+  logger().info("handle_advance_map {}/{} -- {}/{}",
+                new_up, new_acting, up_primary, acting_primary);
+  recovery_state.handle_event(AdvMap{osdmap, last_map,
+                                     std::move(new_up), up_primary,
+                                     std::move(new_acting), acting_primary});
   return seastar::now();
 }
 
 seastar::future<> PG::handle_activate_map()
 {
-  // todo
+  recovery_state.handle_event(ActMap{});
   return seastar::now();
 }
 
@@ -802,6 +864,46 @@ std::ostream& operator<<(std::ostream& os, const PG& pg)
 {
   pg.print(os);
   return os;
+}
+
+void PG::reply_pg_query(const MQuery& query, recovery::Context* ctx)
+{
+  switch (query.query.type) {
+  case pg_query_t::INFO:
+    return reply_pg_query_for_info(query, ctx);
+  case pg_query_t::LOG:
+    return reply_pg_query_for_log(query, false);
+  case pg_query_t::FULLLOG:
+    return reply_pg_query_for_log(query, true);
+  }
+}
+
+void PG::reply_pg_query_for_info(const MQuery& query, recovery::Context* ctx)
+{
+  recovery::Context::notify_t notify{pg_notify_t{query.from.shard,
+                                                 whoami.shard,
+                                                 query.query_epoch,
+                                                 get_osdmap_epoch(),
+                                                 info},
+                                     past_intervals};
+  ctx->notifies[query.from.osd].push_back(std::move(notify));
+}
+
+void PG::reply_pg_query_for_log(const MQuery& query, bool full)
+{
+  auto m = make_message<MOSDPGLog>(query.from.shard,
+                                   whoami.shard,
+                                   get_osdmap_epoch(),
+                                   info,
+                                   query.query_epoch);
+  // todo:
+  // m->missing = pg_log.get_missing();
+  if (full) {
+    // m->log = pg_log.get_log();
+  } else {
+    // maybe partial
+  }
+  send_to_osd(query.from.osd, m, get_osdmap_epoch());
 }
 
 seastar::future<> PG::send_to_osd(int peer, Ref<Message> m, epoch_t from_epoch)
