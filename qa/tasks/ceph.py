@@ -410,11 +410,9 @@ def cephfs_setup(ctx, config):
         fs = Filesystem(ctx, name='cephfs', create=True,
                         ec_profile=config.get('cephfs_ec_profile', None))
 
-        is_active_mds = lambda role: 'mds.' in role and not role.endswith('-s') and '-s-' not in role
-        all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
-        num_active = len([r for r in all_roles if is_active_mds(r)])
-
-        fs.set_max_mds(config.get('max_mds', num_active))
+        max_mds = config.get('max_mds', 1)
+        if max_mds > 1:
+            fs.set_max_mds(max_mds)
 
     yield
 
@@ -494,9 +492,6 @@ def skeleton_config(ctx, roles, ips, mons, cluster='ceph'):
             if is_mds(role):
                 name = teuthology.ceph_role(role)
                 conf.setdefault(name, {})
-                if '-s-' in name:
-                    standby_mds = name[name.find('-s-') + 3:]
-                    conf[name]['mds standby for name'] = standby_mds
     return conf
 
 def create_simple_monmap(ctx, remote, conf, mons,

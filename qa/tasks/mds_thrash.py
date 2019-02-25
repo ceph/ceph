@@ -269,10 +269,10 @@ class MDSThrasher(Greenlet):
             "powercycling requested but RemoteConsole is not "
             "initialized.  Check ipmi config.")
 
-    def revive_mds(self, mds, standby_for_rank=None):
+    def revive_mds(self, mds):
         """
         Revive mds -- do an ipmpi powercycle (if indicated by the config)
-        and then restart (using --hot-standby if specified.
+        and then restart.
         """
         if self.config.get('powercycle'):
             (remote,) = (self.ctx.cluster.only('mds.{m}'.format(m=mds)).
@@ -283,8 +283,6 @@ class MDSThrasher(Greenlet):
             remote.console.power_on()
             self.manager.make_admin_daemon_dir(self.ctx, remote)
         args = []
-        if standby_for_rank:
-            args.extend(['--hot-standby', standby_for_rank])
         self.ctx.daemons.get_daemon('mds', mds).restart(*args)
 
     def wait_for_stable(self, rank = None, gid = None):

@@ -108,7 +108,7 @@ class FSStatus(object):
         """
         fs = self.get_fsmap(fscid)
         for info in fs['mdsmap']['info'].values():
-            if info['rank'] >= 0:
+            if info['rank'] >= 0 and info['state'] != 'up:standby-replay':
                 yield info
 
     def get_rank(self, fscid, rank):
@@ -484,6 +484,9 @@ class Filesystem(MDSCluster):
     def set_max_mds(self, max_mds):
         self.set_var("max_mds", "%d" % max_mds)
 
+    def set_allow_standby_replay(self, yes):
+        self.set_var("allow_standby_replay", str(yes).lower())
+
     def set_allow_new_snaps(self, yes):
         self.set_var("allow_new_snaps", str(yes).lower(), '--yes-i-really-mean-it')
 
@@ -782,10 +785,32 @@ class Filesystem(MDSCluster):
             status = self.getinfo()
         return status.get_rank(self.id, rank)
 
+    def rank_restart(self, rank=0, status=None):
+        name = self.get_rank(rank=rank, status=status)['name']
+        self.mds_restart(mds_id=name)
+
+    def rank_signal(self, signal, rank=0, status=None):
+        name = self.get_rank(rank=rank, status=status)['name']
+        self.mds_signal(name, signal)
+
+    def rank_fail(self, rank=0):
+        self.mon_manager.raw_cluster_cmd("mds", "fail", "{}:{}".format(self.id, rank))
+
     def get_ranks(self, status=None):
         if status is None:
             status = self.getinfo()
         return status.get_ranks(self.id)
+
+    def get_replays(self, status=None):
+        if status is None:
+            status = self.getinfo()
+        return status.get_replays(self.id)
+
+    def get_replay(self, rank=0, status=None):
+        for replay in self.get_replays(status=status):
+            if replay['rank'] == rank:
+                return replay
+        return None
 
     def get_rank_names(self, status=None):
         """
