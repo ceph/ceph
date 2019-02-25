@@ -354,7 +354,7 @@ class LocalDaemon(object):
 
         pid = self._get_pid()
         log.info("Killing PID {0} for {1}.{2}".format(pid, self.daemon_type, self.daemon_id))
-        os.kill(pid, signal.SIGKILL)
+        os.kill(pid, signal.SIGTERM)
 
         waited = 0
         while pid is not None:
@@ -362,7 +362,7 @@ class LocalDaemon(object):
             if new_pid is not None and new_pid != pid:
                 log.info("Killing new PID {0}".format(new_pid))
                 pid = new_pid
-                os.kill(pid, signal.SIGKILL)
+                os.kill(pid, signal.SIGTERM)
 
             if new_pid is None:
                 break
