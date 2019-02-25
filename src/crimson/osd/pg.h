@@ -17,6 +17,10 @@ namespace ceph::net {
   class Messenger;
 }
 
+namespace ceph::os {
+  class CyanStore;
+}
+
 class PG : public boost::intrusive_ref_counter<
   PG,
   boost::thread_unsafe_counter>
@@ -34,12 +38,22 @@ public:
      ceph::net::Messenger* msgr);
 
   epoch_t get_osdmap_epoch() const;
+  const pg_info_t& get_info() const;
+  const PastIntervals& get_past_intervals() const;
   pg_shard_t get_whoami() const;
+
+  seastar::future<> read_state(ceph::os::CyanStore* store);
 
 private:
   const spg_t pgid;
   pg_shard_t whoami;
   pg_pool_t pool;
+  //< pg state
+  pg_info_t info;
+  //< last written info, for fast info persistence
+  pg_info_t last_written_info;
+  PastIntervals past_intervals;
+
   cached_map_t osdmap;
   ceph::net::Messenger* msgr = nullptr;
 };
