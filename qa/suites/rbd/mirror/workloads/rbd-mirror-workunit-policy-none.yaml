@@ -1,5 +1,10 @@
 meta:
 - desc: run the rbd_mirror.sh workunit to test the rbd-mirror daemon
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd mirror image policy type: none
 tasks:
 - workunit:
     clients:
