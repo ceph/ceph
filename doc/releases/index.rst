@@ -19,6 +19,7 @@ Active Releases
 .. toctree::
    :maxdepth: 1
 
+   Nautilus <nautilus>
    Mimic <mimic>
    Luminous <luminous>
    Jewel <jewel>
