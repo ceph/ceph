@@ -111,6 +111,28 @@ class CephFSMount(object):
                 return True
         return False
 
+    def create_file(self, filename='testfile', dirname=None, user=None,
+                    check_status=True):
+        assert(self.is_mounted())
+
+        if not os.path.isabs(filename):
+            if dirname:
+                if os.path.isabs(dirname):
+                    path = os.path.join(dirname, filename)
+                else:
+                    path = os.path.join(self.mountpoint, dirname, filename)
+            else:
+                path = os.path.join(self.mountpoint, filename)
+        else:
+            path = filename
+
+        if user:
+            args = ['sudo', '-u', user, '-s', '/bin/bash', '-c', 'touch ' + path]
+        else:
+            args = 'touch ' + path
+
+        return self.client_remote.run(args=args, check_status=check_status)
+
     def create_files(self):
         assert(self.is_mounted())
 
