@@ -103,6 +103,9 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_TAG_CONFLICT, {409, "OperationAborted"}},
     { ERR_ROLE_EXISTS, {409, "EntityAlreadyExists"}},
     { ERR_DELETE_CONFLICT, {409, "DeleteConflict"}},
+    { ERR_POSITION_NOT_EQUAL_TO_LENGTH, {409, "PositionNotEqualToLength"}},
+    { ERR_OBJECT_NOT_APPENDABLE, {409, "ObjectNotAppendable"}},
+    { ERR_INVALID_BUCKET_STATE, {409, "InvalidBucketState"}},
     { ERR_INVALID_SECRET_KEY, {400, "InvalidSecretKey"}},
     { ERR_INVALID_KEY_TYPE, {400, "InvalidKeyType"}},
     { ERR_INVALID_CAP, {400, "InvalidCapability"}},
@@ -902,7 +905,9 @@ void RGWHTTPArgs::append(const string& name, const string& val)
       (name.compare("website") == 0) ||
       (name.compare("requestPayment") == 0) ||
       (name.compare("torrent") == 0) ||
-      (name.compare("tagging") == 0)) {
+      (name.compare("tagging") == 0) ||
+      (name.compare("append") == 0) ||
+      (name.compare("position") == 0)) {
     sub_resources[name] = val;
   } else if (name[0] == 'r') { // root of all evil
     if ((name.compare("response-content-type") == 0) ||

@@ -1313,7 +1313,6 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 void RGWRados::finalize()
 {
   cct->get_admin_socket()->unregister_commands(this);
-
   if (run_sync_thread) {
     Mutex::Locker l(meta_sync_thread_lock);
     meta_sync_processor_thread->stop();
@@ -3730,7 +3729,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   r = index_op->complete(poolid, epoch, size, accounted_size,
                         meta.set_mtime, etag, content_type,
                         storage_class, &acl_bl,
-                        meta.category, meta.remove_objs, meta.user_data);
+                        meta.category, meta.remove_objs, meta.user_data, meta.appendable);
   tracepoint(rgw_rados, complete_exit, req_id.c_str());
   if (r < 0)
     goto done_cancel;
@@ -4431,6 +4430,9 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
       *petag = iter->second.to_str();
     }
   }
+
+  //erase the append attr
+  cb.get_attrs().erase(RGW_ATTR_APPEND_PART_NUM);
 
   if (source_zone.empty()) {
     set_copy_attrs(cb.get_attrs(), attrs, attrs_mod);
@@ -6473,7 +6475,8 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
                                             const string& content_type, const string& storage_class,
                                             bufferlist *acl_bl,
                                             RGWObjCategory category,
-                                            list<rgw_obj_index_key> *remove_objs, const string *user_data)
+                                            list<rgw_obj_index_key> *remove_objs, const string *user_data,
+                                            bool appendable)
 {
   if (blind) {
     return 0;
@@ -6507,6 +6510,7 @@ int RGWRados::Bucket::UpdateIndex::complete(int64_t poolid, uint64_t epoch,
   ent.meta.owner = owner.get_id().to_str();
   ent.meta.owner_display_name = owner.get_display_name();
   ent.meta.content_type = content_type;
+  ent.meta.appendable = appendable;
 
   ret = store->cls_obj_complete_add(*bs, obj, optag, poolid, epoch, ent, category, remove_objs, bilog_flags, zones_trace);
 
