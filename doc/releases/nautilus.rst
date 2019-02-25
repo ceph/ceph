@@ -66,6 +66,13 @@ Major Changes from Mimic
 
 - *RBD*:
 
+  * Images can be live-migrated with minimal downtime to assist with moving
+    images between pools or to new layouts.
+  * New ``rbd perf image iotop`` and ``rbd perf image iostat`` commands provide
+    an iotop- and iostat-like IO monitor for all RBD images.
+  * The *ceph-mgr* Prometheus exporter now optionally includes an IO monitor
+    for all RBD images.
+  * Support for separate image namespaces within a pool for tenant isolation.
 
 - *Misc*:
 
