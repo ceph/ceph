@@ -12,6 +12,7 @@
 
 template<typename T> using Ref = boost::intrusive_ptr<T>;
 class OSDMap;
+class PGPeeringEvent;
 
 namespace ceph::net {
   class Messenger;
@@ -51,6 +52,11 @@ public:
   void update_last_peering_reset();
 
   seastar::future<> read_state(ceph::os::CyanStore* store);
+
+  // peering/recovery
+  seastar::future<> do_peering_event(std::unique_ptr<PGPeeringEvent> evt);
+  seastar::future<> handle_advance_map(cached_map_t next_map);
+  seastar::future<> handle_activate_map();
 
 private:
   void update_primary_state(const std::vector<int>& new_up,

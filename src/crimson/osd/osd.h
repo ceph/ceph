@@ -17,12 +17,13 @@
 #include "crimson/osd/osdmap_service.h"
 #include "crimson/osd/state.h"
 
-#include "osd/OSDMap.h"
+#include "osd/osd_types.h"
 
 class MOSDMap;
 class OSDMap;
 class OSDMeta;
 class PG;
+class PGPeeringEvent;
 class Heartbeat;
 
 namespace ceph::mon {
@@ -125,9 +126,17 @@ private:
 
   seastar::future<> handle_osd_map(ceph::net::ConnectionRef conn,
                                    Ref<MOSDMap> m);
+  seastar::future<> handle_pg_notify(ceph::net::ConnectionRef conn,
+				     Ref<MOSDPGNotify> m);
+
   seastar::future<> committed_osd_maps(version_t first,
                                        version_t last,
                                        Ref<MOSDMap> m);
+
+  seastar::future<> do_peering_event(spg_t pgid,
+				     std::unique_ptr<PGPeeringEvent> evt);
+  seastar::future<> advance_pg_to(Ref<PG> pg, epoch_t to);
+
   bool should_restart() const;
   seastar::future<> restart();
   seastar::future<> shutdown();

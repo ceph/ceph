@@ -1,5 +1,6 @@
 #include "pg.h"
 
+#include "messages/MOSDPGLog.h"
 #include "osd/OSDMap.h"
 
 #include "crimson/os/cyan_store.h"
@@ -157,4 +158,22 @@ epoch_t PG::get_last_peering_reset() const
 void PG::update_last_peering_reset()
 {
   last_peering_reset = get_osdmap_epoch();
+}
+
+seastar::future<> PG::do_peering_event(std::unique_ptr<PGPeeringEvent> evt)
+{
+  // todo
+  return seastar::now();
+}
+
+seastar::future<> PG::handle_advance_map(cached_map_t next_map)
+{
+  // todo
+  return seastar::now();
+}
+
+seastar::future<> PG::handle_activate_map()
+{
+  // todo
+  return seastar::now();
 }
