@@ -347,7 +347,9 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
                       std::move(ec_profile),
                       osdmap,
                       cluster_msgr}};
-    return seastar::make_ready_future<Ref<PG>>(std::move(pg));
+    return pg->read_state(store.get()).then([pg] {
+      return seastar::make_ready_future<Ref<PG>>(std::move(pg));
+    });
   });
 }
 
