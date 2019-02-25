@@ -18,6 +18,7 @@
 
 #include <array>
 
+#include <boost/algorithm/string.hpp>
 #include <boost/utility/string_view.hpp>
 
 #include "common/ceph_crypto.h"
@@ -2206,6 +2207,25 @@ static inline uint64_t rgw_rounded_objsize_kb(uint64_t bytes)
 {
   return ((bytes + 4095) & ~4095) / 1024;
 }
+
+/* implement combining step, S3 header canonicalization;  k is a
+ * valid header and in lc form */
+static inline void add_amz_meta_header(
+  std::map<std::string, std::string>& x_meta_map,
+  const std::string& k,
+  const std::string& v)
+{
+  auto it = x_meta_map.find(k);
+  if (it != x_meta_map.end()) {
+    std::string old = it->second;
+    boost::algorithm::trim_right(old);
+    old.append(",");
+    old.append(v);
+    x_meta_map[k] = old;
+  } else {
+    x_meta_map[k] = v;
+  }
+} /* add_amz_meta_header */
 
 extern string rgw_string_unquote(const string& s);
 extern void parse_csv_string(const string& ival, vector<string>& ovals);

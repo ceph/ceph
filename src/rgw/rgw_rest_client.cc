@@ -123,7 +123,7 @@ int RGWRESTSimpleRequest::execute(RGWAccessKey& key, const char *method, const c
   map<string, string> meta_map;
   map<string, string> sub_resources;
   rgw_create_s3_canonical_header(method, NULL, NULL, date_str.c_str(),
-                            meta_map, new_url.c_str(), sub_resources,
+                            meta_map, meta_map, new_url.c_str(), sub_resources,
                             canonical_header);
 
   string digest;

@@ -116,6 +116,7 @@ void rgw_create_s3_canonical_header(
   const char* const content_type,
   const char* const date,
   const std::map<std::string, std::string>& meta_map,
+  const std::map<std::string, std::string>& qs_map,
   const char* const request_uri,
   const std::map<std::string, std::string>& sub_resources,
   std::string& dest_str)
@@ -143,6 +144,7 @@ void rgw_create_s3_canonical_header(
   dest.append("\n");
 
   dest.append(get_canon_amz_hdr(meta_map));
+  dest.append(get_canon_amz_hdr(qs_map));
   dest.append(get_canon_resource(request_uri, sub_resources));
 
   dest_str = dest;
@@ -150,6 +152,17 @@ void rgw_create_s3_canonical_header(
 
 static inline bool is_base64_for_content_md5(unsigned char c) {
   return (isalnum(c) || isspace(c) || (c == '+') || (c == '/') || (c == '='));
+}
+
+static inline void get_v2_qs_map(const req_info& info,
+				 std::map<std::string, std::string>& qs_map) {
+  const auto& params = const_cast<RGWHTTPArgs&>(info.args).get_params();
+  for (const auto& elt : params) {
+    std::string k = boost::algorithm::to_lower_copy(elt.first);
+    if (k.find("x-amz-meta-") == /* offset */ 0) {
+      add_amz_meta_header(qs_map, k, elt.second);
+    }
+  }
 }
 
 /*
@@ -175,7 +188,10 @@ bool rgw_create_s3_canonical_header(const req_info& info,
   const char *content_type = info.env->get("CONTENT_TYPE");
 
   std::string date;
+  std::map<std::string, std::string> qs_map;
+
   if (qsr) {
+    get_v2_qs_map(info, qs_map); // handle qs metadata
     date = info.args.get("Expires");
   } else {
     const char *str = info.env->get("HTTP_X_AMZ_DATE");
@@ -214,8 +230,8 @@ bool rgw_create_s3_canonical_header(const req_info& info,
   }
 
   rgw_create_s3_canonical_header(info.method, content_md5, content_type,
-                                 date.c_str(), meta_map, request_uri.c_str(),
-                                 sub_resources, dest);
+                                 date.c_str(), meta_map, qs_map,
+				 request_uri.c_str(), sub_resources, dest);
   return true;
 }
 
@@ -412,13 +428,13 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   return 0;
 }
 
-int parse_credentials(const req_info& info,                     /* in */
-                      boost::string_view& access_key_id,        /* out */
-                      boost::string_view& credential_scope,     /* out */
-                      boost::string_view& signedheaders,        /* out */
-                      boost::string_view& signature,            /* out */
-                      boost::string_view& date,                 /* out */
-                      bool& using_qs)                           /* out */
+int parse_v4_credentials(const req_info& info,                     /* in */
+			 boost::string_view& access_key_id,        /* out */
+			 boost::string_view& credential_scope,     /* out */
+			 boost::string_view& signedheaders,        /* out */
+			 boost::string_view& signature,            /* out */
+			 boost::string_view& date,                 /* out */
+                         bool& using_qs)                           /* out */
 {
   const char* const http_auth = info.env->get("HTTP_AUTHORIZATION");
   using_qs = http_auth == nullptr || http_auth[0] == '\0';
