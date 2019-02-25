@@ -26,6 +26,7 @@ struct Server {
                                  entity.name, "pong", entity.addr.get_nonce(), 0));
     msgr->set_cluster_protocol(CEPH_OSD_PROTOCOL);
     msgr->set_default_policy(Messenger::Policy::stateless_server(0));
+    dispatcher.ms_set_require_authorizer(false);
   }
   unique_ptr<Messenger> msgr;
   struct ServerDispatcher : Dispatcher {
@@ -82,6 +83,7 @@ struct Client {
                                  getpid(), 0));
     msgr->set_cluster_protocol(CEPH_OSD_PROTOCOL);
     msgr->set_default_policy(Messenger::Policy::lossy_client(0));
+    dispatcher.ms_set_require_authorizer(false);
   }
   struct ClientDispatcher : Dispatcher {
     std::mutex mutex;
