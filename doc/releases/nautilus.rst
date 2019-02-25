@@ -13,6 +13,28 @@ Major Changes from Mimic
 
 - *Dashboard*:
 
+  The Ceph Dashboard has gained a lot of new functionality:
+
+  * Support for multiple users / roles
+  * SSO (SAMLv2) for user authentication
+  * Auditing support
+  * New landing page, showing more metrics and health info
+  * I18N support
+  * REST API documentation with Swagger API
+
+  New Ceph management features include:
+
+  * OSD management (mark as down/out, change OSD settings, recovery profiles)
+  * Cluster config settings editor
+  * Ceph Pool management (create/modify/delete)
+  * ECP management
+  * RBD mirroring configuration
+  * Embedded Grafana Dashboards (derived from Ceph Metrics)
+  * CRUSH map viewer
+  * NFS Ganesha management
+  * iSCSI target management (via ceph-iscsi)
+  * RBD QoS configuration
+  * Prometheus Alert Management
 
 - *RADOS*:
 
