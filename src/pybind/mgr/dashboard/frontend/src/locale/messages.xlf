@@ -178,7 +178,7 @@
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/nfs/nfs-list/nfs-list.component.html</context>
-          <context context-type="linenumber">32</context>
+          <context context-type="linenumber">27</context>
         </context-group>
       </trans-unit><trans-unit id="9e24f9e2d42104ffc01599db4d566d1cc518f9e6" datatype="html">
         <source>Daemons</source>
@@ -1673,6 +1673,13 @@
           <context context-type="sourcefile">app/ceph/dashboard/dashboard/dashboard.component.html</context>
           <context context-type="linenumber">8</context>
         </context-group>
+      </trans-unit><trans-unit id="f8f74e5f683012b9c0702b1446011c6b9158bc67" datatype="html">
+        <source>Please consult the <x id="START_LINK" ctype="x-a" equiv-text="&lt;a&gt;"/>documentation<x id="CLOSE_LINK" ctype="x-a" equiv-text="&lt;/a&gt;"/>
+  on how to configure and enable the NFS Ganesha management functionality.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/nfs/nfs-501/nfs-501.component.html</context>
+          <context context-type="linenumber">3</context>
+        </context-group>
       </trans-unit><trans-unit id="7ffe39df9d88c972792bd8688b215392deb8313d" datatype="html">
         <source>Clients</source>
         <context-group purpose="location">
@@ -2030,23 +2037,11 @@
           <context context-type="sourcefile">app/ceph/nfs/nfs-form/nfs-form.component.html</context>
           <context context-type="linenumber">493</context>
         </context-group>
-      </trans-unit><trans-unit id="3bd5ad3144184479c23ec67ceda089f9883840aa" datatype="html">
-        <source>To apply any changes you have to restart the Ganisha services.</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/nfs/nfs-list/nfs-list.component.html</context>
-          <context context-type="linenumber">4</context>
-        </context-group>
-      </trans-unit><trans-unit id="5a9de53b931d4b73b84f3fd729abfbbb20a9619e" datatype="html">
-        <source>Orchestrator not available</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/nfs/nfs-list/nfs-list.component.html</context>
-          <context context-type="linenumber">2</context>
-        </context-group>
       </trans-unit><trans-unit id="734c9905951a774870497c5aaae8e3ee833b6196" datatype="html">
         <source>CephFS</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/nfs/nfs-list/nfs-list.component.html</context>
-          <context context-type="linenumber">30</context>
+          <context context-type="linenumber">25</context>
         </context-group>
       </trans-unit><trans-unit id="594cd9429597cf6bede5560b3d8fe578821213de" datatype="html">
         <source>Add erasure code profile</source>
@@ -5454,6 +5449,13 @@
         <source>quorum</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/dashboard/mon-summary.pipe.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2fa50bc07995c6ea660412294298ded39fcb08d9" datatype="html">
+        <source>The NFS Ganesha service is not configured.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/nfs/nfs-501/nfs-501.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
