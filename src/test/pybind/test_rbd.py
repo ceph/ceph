@@ -1825,6 +1825,16 @@ class TestGroups(object):
         self.group.add_image(ioctx, image_name)
         eq([image_name], [img['name'] for img in self.group.list_images()])
 
+    def test_group_image_list_move_to_trash(self):
+        eq([], list(self.group.list_images()))
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+        self.group.add_image(ioctx, image_name)
+        eq([image_name], [img['name'] for img in self.group.list_images()])
+        RBD().trash_move(ioctx, image_name, 0)
+        eq([], list(self.group.list_images()))
+        RBD().trash_restore(ioctx, image_id, image_name)
+
     def test_group_image_many_images(self):
         eq([], list(self.group.list_images()))
         self.group.add_image(ioctx, image_name)
