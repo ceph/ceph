@@ -187,7 +187,9 @@ BuildRequires:	xfsprogs
 BuildRequires:	xfsprogs-devel
 BuildRequires:	xmlstarlet
 BuildRequires:	yasm
+%if 0%{with amqp_endpoint}
 BuildRequires:  librabbitmq-devel
+%endif
 %if 0%{with make_check}
 BuildRequires:  jq
 BuildRequires:	python%{_python_buildid}-bcrypt
