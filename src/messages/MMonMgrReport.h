@@ -70,7 +70,7 @@ public:
       decode(digest, p);
       bufferlist bl;
       encode(digest, bl, features);
-      data.swap(bl);
+      set_data(bl);
     }
   }
   void decode_payload() override {
