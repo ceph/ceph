@@ -19,12 +19,12 @@ export class NotificationService {
 
   // Observable sources
   private dataSource = new BehaviorSubject<CdNotification[]>([]);
-  private queuedNotifications: CdNotificationConfig[] = [];
 
   // Observable streams
   data$ = this.dataSource.asObservable();
 
-  private queueTimeoutId: number;
+  private queued: CdNotificationConfig[] = [];
+  private queuedTimeoutId: number;
   KEY = 'cdNotifications';
 
   constructor(
@@ -68,21 +68,6 @@ export class NotificationService {
     localStorage.setItem(this.KEY, JSON.stringify(recent));
   }
 
-  queueNotifications(notifications: CdNotificationConfig[]) {
-    this.queuedNotifications = this.queuedNotifications.concat(notifications);
-    this.cancel(this.queueTimeoutId);
-    this.queueTimeoutId = window.setTimeout(() => {
-      this.sendQueuedNotifications();
-    }, 500);
-  }
-
-  private sendQueuedNotifications() {
-    _.uniqWith(this.queuedNotifications, _.isEqual).forEach((notification) => {
-      this.show(notification);
-    });
-    this.queuedNotifications = [];
-  }
-
   /**
    * Method for showing a notification.
    * @param {NotificationType} type toastr type
@@ -123,10 +108,39 @@ export class NotificationService {
           application
         );
       }
+      this.queueToShow(config);
+    }, 10);
+  }
+
+  private queueToShow(config: CdNotificationConfig) {
+    if (!this.queued.find((c) => _.isEqual(c, config))) {
+      this.queued.push(config);
+    }
+    this.cancel(this.queuedTimeoutId);
+    this.queuedTimeoutId = window.setTimeout(() => {
+      this.showQueued();
+    }, 250);
+  }
+
+  private showQueued() {
+    const byTitle = {};
+    this.queued.forEach((n) => {
+      if (!byTitle[n.title]) {
+        byTitle[n.title] = [n];
+      } else {
+        byTitle[n.title].push(n);
+      }
+    });
+    Object.values(byTitle).forEach((configs: CdNotificationConfig[]) => {
+      const config = configs[0];
+      if (configs.length > 1) {
+        config.message = '<ul>' + configs.map((n) => `<li>${n.message}</li>`).join('') + '</ul>';
+      }
       const notification = new CdNotification(config);
       this.save(notification);
       this.showToasty(notification);
-    }, 10);
+    });
+    this.queued = [];
   }
 
   private showToasty(notification: CdNotification) {
