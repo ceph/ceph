@@ -5,6 +5,7 @@ tasks:
 - install:
 - ceph: {cluster: c1}
 - ceph: {cluster: c2}
+- openssl_keys:
 - rgw:
     c1.client.0:
       valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
