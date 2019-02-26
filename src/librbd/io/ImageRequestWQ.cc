@@ -670,7 +670,6 @@ template <typename I>
 bool ImageRequestWQ<I>::needs_throttle(ImageDispatchSpec<I> *item) { 
   uint64_t tokens = 0;
   uint64_t flag = 0;
-  bool blocked = false;
   TokenBucketThrottle* throttle = nullptr;
 
   for (auto t : m_throttles) {
@@ -689,12 +688,12 @@ bool ImageRequestWQ<I>::needs_throttle(ImageDispatchSpec<I> *item) {
     if (throttle->get<ImageRequestWQ<I>, ImageDispatchSpec<I>,
 	      &ImageRequestWQ<I>::handle_throttle_ready>(
 		tokens, this, item, flag)) {
-      blocked = true;
+      return true;
     } else {
       item->set_throttled(flag);
     }
   }
-  return blocked;
+  return false;
 }
 
 template <typename I>
