@@ -94,6 +94,7 @@ void CacheSession::handle_request_data(bufferptr bp, uint64_t data_len,
 
   ObjectCacheRequest* req = decode_object_cache_request(bl_data);
   process(req);
+  delete req;
   read_request_header();
 }
 
@@ -105,7 +106,8 @@ void CacheSession::process(ObjectCacheRequest* req) {
 void CacheSession::send(ObjectCacheRequest* reply) {
   ldout(cct, 20) << dendl;
   bufferlist bl;
-  bl.append(reply->get_data_buffer());
+  reply->encode();
+  bl.append(reply->get_payload_bufferlist());
 
   boost::asio::async_write(m_dm_socket,
         boost::asio::buffer(bl.c_str(), bl.length()),

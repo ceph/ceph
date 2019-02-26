@@ -87,20 +87,17 @@ public:
 
   void server_handle_request(uint64_t session_id, ObjectCacheRequest* req) {
 
-    switch (req->type) {
+    switch (req->get_request_type()) {
       case RBDSC_REGISTER: {
-        ObjectCacheRegReplyData* data = new ObjectCacheRegReplyData();
-        data->type = RBDSC_REGISTER_REPLY;
-        req = encode_object_cache_request(data, RBDSC_REGISTER_REPLY);
-        m_cache_server->send(session_id, req);
+        ObjectCacheRequest* reply = new ObjectCacheRegReplyData(RBDSC_REGISTER_REPLY,
+                                                                req->seq);
+        m_cache_server->send(session_id, reply);
         break;
       }
       case RBDSC_READ: {
-        ObjectCacheReadReplyData* data = new ObjectCacheReadReplyData();
-        data->type = RBDSC_READ_REPLY;
-        data->seq = req->seq;
-        req = encode_object_cache_request(data, RBDSC_READ_REPLY);
-        m_cache_server->send(session_id, req);
+        ObjectCacheRequest* reply = new ObjectCacheReadReplyData(RBDSC_READ_REPLY,
+                                                                req->seq);
+        m_cache_server->send(session_id, reply);
         break;
       }
     }

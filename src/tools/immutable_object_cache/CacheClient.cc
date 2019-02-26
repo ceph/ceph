@@ -25,7 +25,7 @@ namespace immutable_obj_cache {
     if (m_use_dedicated_worker) {
       m_worker = new boost::asio::io_service();
       m_worker_io_service_work = new boost::asio::io_service::work(*m_worker);
-      for(uint64_t i = 0; i < m_worker_thread_num; i++) {
+      for (uint64_t i = 0; i < m_worker_thread_num; i++) {
         std::thread* thd = new std::thread([this](){m_worker->run();});
         m_worker_threads.push_back(thd);
       }
@@ -55,7 +55,7 @@ namespace immutable_obj_cache {
     }
     if (m_use_dedicated_worker) {
       m_worker->stop();
-      for(auto thd : m_worker_threads) {
+      for (auto thd : m_worker_threads) {
         thd->join();
         delete thd;
       }
@@ -88,22 +88,16 @@ namespace immutable_obj_cache {
   void CacheClient::lookup_object(std::string pool_nspace, uint64_t pool_id, uint64_t snap_id,
                                   std::string oid, GenContext<ObjectCacheRequest*>* on_finish) {
 
-    ObjectCacheReadData data;
-    data.type = RBDSC_READ;
-    data.seq = ++m_sequence_id;
-
-    data.m_pool_id = pool_id;
-    data.m_snap_id = snap_id;
-    data.m_pool_namespace = pool_nspace;
-    data.m_oid = oid;
-    ObjectCacheRequest* req = encode_object_cache_request(&data, RBDSC_READ);
+    ObjectCacheRequest* req = new ObjectCacheReadData(RBDSC_READ, ++m_sequence_id, 0, 0,
+                                                      pool_id, snap_id, oid, pool_nspace);
     req->m_process_msg = on_finish;
+    req->encode();
 
     {
       Mutex::Locker locker(m_lock);
-      m_outcoming_bl.append(req->get_data_buffer());
-      ceph_assert(m_seq_to_req.find(data.seq) == m_seq_to_req.end());
-      m_seq_to_req[data.seq] = req;
+      m_outcoming_bl.append(req->get_payload_bufferlist());
+      ceph_assert(m_seq_to_req.find(req->seq) == m_seq_to_req.end());
+      m_seq_to_req[req->seq] = req;
     }
 
     // try to send message to server.
@@ -330,7 +324,7 @@ namespace immutable_obj_cache {
     // all pending request, which have entered into ASIO, will be re-dispatched to RADOS.
     {
       Mutex::Locker locker(m_lock);
-      for(auto it : m_seq_to_req) {
+      for (auto it : m_seq_to_req) {
         it.second->type = RBDSC_READ_RADOS;
         it.second->m_process_msg->complete(it.second);
       }
@@ -343,13 +337,11 @@ namespace immutable_obj_cache {
   }
 
   int CacheClient::register_client(Context* on_finish) {
-    ObjectCacheRegData data;
-    data.seq = m_sequence_id++;
-    data.type = RBDSC_REGISTER;
-    ObjectCacheRequest* reg_req = encode_object_cache_request(&data, RBDSC_REGISTER);
+    ObjectCacheRequest* reg_req = new ObjectCacheRegData(RBDSC_REGISTER, m_sequence_id++);
+    reg_req->encode();
 
     bufferlist bl;
-    bl.append(reg_req->get_data_buffer());
+    bl.append(reg_req->get_payload_bufferlist());
 
     uint64_t ret;
     boost::system::error_code ec;
