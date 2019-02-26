@@ -11475,7 +11475,7 @@ void BlueStore::_do_write_small(
   auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
   auto min_off = offset >= max_bsize ? offset - max_bsize : 0;
   uint32_t alloc_len = min_alloc_size;
-  auto offset0 = p2align(offset, alloc_len);
+  auto offset0 = p2align<uint64_t>(offset, alloc_len);
 
   bool any_change;
 
@@ -11743,7 +11743,7 @@ void BlueStore::_do_write_small(
   // new blob.
   
   BlobRef b = c->new_blob();
-  uint64_t b_off = p2phase(offset, alloc_len);
+  uint64_t b_off = p2phase<uint64_t>(offset, alloc_len);
   uint64_t b_off0 = b_off;
   _pad_zeros(&bl, &b_off0, block_size);
   o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);

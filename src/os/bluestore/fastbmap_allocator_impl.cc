@@ -23,7 +23,7 @@ inline interval_t _align2units(uint64_t offset, uint64_t len, uint64_t min_lengt
     auto delta_off = res.offset - offset;
     if (len > delta_off) {
       res.length = len - delta_off;
-      res.length = p2align(res.length, min_length);
+      res.length = p2align<uint32_t>(res.length, min_length);
       if (res.length) {
 	return res;
       }
@@ -190,7 +190,7 @@ void AllocatorLevel01Loose::_analyze_partials(uint64_t pos_start,
 	    (ctx->min_affordable_len == 0 ||
 	      (longest.length < ctx->min_affordable_len))) {
 
-          ctx->min_affordable_len = p2align(longest.length, min_length);
+          ctx->min_affordable_len = p2align<uint32_t>(longest.length, min_length);
 	  ctx->min_affordable_offs = longest.offset;
         }
         if (mode == STOP_ON_PARTIAL) {
@@ -288,13 +288,13 @@ void AllocatorLevel01Loose::_mark_alloc_l0(int64_t l0_pos_start,
   int64_t pos = l0_pos_start;
   slot_t bits = (slot_t)1 << (l0_pos_start % d0);
 
-  while (pos < std::min(l0_pos_end, (int64_t)p2roundup(l0_pos_start, d0))) {
+  while (pos < std::min(l0_pos_end, p2roundup<int64_t>(l0_pos_start, d0))) {
     l0[pos / d0] &= ~bits;
     bits <<= 1;
     pos++;
   }
 
-  while (pos < std::min(l0_pos_end, (int64_t)p2align(l0_pos_end, d0))) {
+  while (pos < std::min(l0_pos_end, p2align<int64_t>(l0_pos_end, d0))) {
     l0[pos / d0] = all_slot_clear;
     pos += d0;
   }
