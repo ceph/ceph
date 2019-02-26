@@ -241,7 +241,7 @@ private:
   Ct<ProtocolV2> *handle_session_reset(ceph::bufferlist &payload);
   Ct<ProtocolV2> *handle_session_retry(ceph::bufferlist &payload);
   Ct<ProtocolV2> *handle_session_retry_global(ceph::bufferlist &payload);
-  Ct<ProtocolV2> *handle_wait();
+  Ct<ProtocolV2> *handle_wait(ceph::bufferlist &payload);
   Ct<ProtocolV2> *handle_reconnect_ok(ceph::bufferlist &payload);
   Ct<ProtocolV2> *handle_server_ident(ceph::bufferlist &payload);
 
