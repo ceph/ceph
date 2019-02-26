@@ -3,13 +3,19 @@ add_executable(ceph_rgw_jsonparser
   rgw_jsonparser.cc)
 target_link_libraries(ceph_rgw_jsonparser
   rgw_a
-  global rabbitmq)
+  global)
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  target_link_libraries(ceph_rgw_jsonparser rabbitmq)
+endif()
 
 add_executable(ceph_rgw_multiparser
   rgw_multiparser.cc)
 target_link_libraries(ceph_rgw_multiparser
   rgw_a
-  global rabbitmq)
+  global)
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  target_link_libraries(ceph_rgw_multiparser rabbitmq)
+endif()
 
 install(TARGETS
   ceph_rgw_jsonparser
