@@ -1,6 +1,7 @@
 from __future__ import print_function
 import argparse
 import base64
+import glob
 import json
 import logging
 import os
@@ -231,6 +232,12 @@ class Activate(object):
             help='The FSID of the OSD, similar to a SHA1'
         )
         parser.add_argument(
+            '--all',
+            help='Activate all OSDs with a OSD JSON config',
+            action='store_true',
+            default=False,
+        )
+        parser.add_argument(
             '--file',
             help='The path to a JSON file, from a scanned OSD'
         )
@@ -244,7 +251,7 @@ class Activate(object):
             print(sub_command_help)
             return
         args = parser.parse_args(self.argv)
-        if not args.file:
+        if not args.file and not args.all:
             if not args.osd_id and not args.osd_fsid:
                 terminal.error('ID and FSID are required to find the right OSD to activate')
                 terminal.error('from a scanned OSD location in /etc/ceph/osd/')
@@ -253,13 +260,22 @@ class Activate(object):
         # implicitly indicate that it would be possible to activate a json file
         # at a non-default location which would not work at boot time if the
         # custom location is not exposed through an ENV var
-        json_dir = os.environ.get('CEPH_VOLUME_SIMPLE_JSON_DIR', '/etc/ceph/osd/')
-        if args.file:
-            json_config = args.file
-        else:
-            json_config = os.path.join(json_dir, '%s-%s.json' % (args.osd_id, args.osd_fsid))
-        if not os.path.exists(json_config):
-            raise RuntimeError('Expected JSON config path not found: %s' % json_config)
-        args.json_config = json_config
         self.skip_systemd = args.skip_systemd
-        self.activate(args)
+        json_dir = os.environ.get('CEPH_VOLUME_SIMPLE_JSON_DIR', '/etc/ceph/osd/')
+        if args.all:
+            if args.file or args.osd_id:
+                mlogger.warn('--all was passed, ignoring --file and ID/FSID arguments')
+            json_configs = glob.glob('{}/*.json'.format(json_dir))
+            for json_config in json_configs:
+                mlogger.info('activating OSD specified in {}'.format(json_config))
+                args.json_config = json_config
+                self.activate(args)
+        else:
+            if args.file:
+                json_config = args.file
+            else:
+                json_config = os.path.join(json_dir, '%s-%s.json' % (args.osd_id, args.osd_fsid))
+            if not os.path.exists(json_config):
+                raise RuntimeError('Expected JSON config path not found: %s' % json_config)
+            args.json_config = json_config
+            self.activate(args)
