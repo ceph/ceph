@@ -17,7 +17,8 @@
 
 #include <atomic>
 #include "common/LogEntry.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
+#include "include/health.h"
 
 class LogClient;
 class MLog;
@@ -90,6 +91,23 @@ public:
   }
   void debug(std::stringstream &s) {
     do_log(CLOG_DEBUG, s);
+  }
+  /**
+   * Convenience function mapping health status to
+   * the appropriate cluster log severity.
+   */
+  LogClientTemp health(health_status_t health) {
+    switch(health) {
+      case HEALTH_OK:
+        return info();
+      case HEALTH_WARN:
+        return warn();
+      case HEALTH_ERR:
+        return error();
+      default:
+        // Invalid health_status_t value
+        ceph_abort();
+    }
   }
   LogClientTemp info() {
     return LogClientTemp(CLOG_INFO, *this);
@@ -174,7 +192,7 @@ public:
 private:
   CephContext *cct;
   LogClient *parent;
-  Mutex channel_lock;
+  ceph::mutex channel_lock = ceph::make_mutex("LogChannel::channel_lock");
   std::string log_channel;
   std::string log_prio;
   std::string syslog_facility;
@@ -231,8 +249,9 @@ public:
   }
 
   uint64_t get_next_seq();
-  const entity_inst_t& get_myinst();
+  entity_addrvec_t get_myaddrs();
   const EntityName& get_myname();
+  entity_name_t get_myrank();
   version_t queue(LogEntry &entry);
 
 private:
@@ -243,9 +262,9 @@ private:
   Messenger *messenger;
   MonMap *monmap;
   bool is_mon;
-  Mutex log_lock;
+  ceph::mutex log_lock = ceph::make_mutex("LogClient::log_lock");
   version_t last_log_sent;
-  std::atomic<uint64_t> last_log;
+  version_t last_log;
   std::deque<LogEntry> log_queue;
 
   std::map<std::string, LogChannelRef> channels;

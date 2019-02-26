@@ -34,7 +34,7 @@ def task(ctx, config):
     profile = config.get('erasure_code_profile', {
         'k': '2',
         'm': '2',
-        'ruleset-failure-domain': 'osd'
+        'crush-failure-domain': 'osd'
     })
     profile_name = profile.get('name', 'lost_unfound')
     manager.create_erasure_code_profile(profile_name, profile)
@@ -123,7 +123,7 @@ def task(ctx, config):
             # verify that i can list them direct from the osd
             log.info('listing missing/lost in %s state %s', pg['pgid'],
                      pg['state']);
-            m = manager.list_pg_missing(pg['pgid'])
+            m = manager.list_pg_unfound(pg['pgid'])
             log.info('%s' % m)
             assert m['num_unfound'] == pg['stat_sum']['num_objects_unfound']
 

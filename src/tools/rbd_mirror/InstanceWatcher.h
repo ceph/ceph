@@ -31,6 +31,7 @@ template <typename> struct Threads;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class InstanceWatcher : protected librbd::Watcher {
+  using librbd::Watcher::unregister_watch; // Silence overloaded virtual warning
 public:
   static void get_instances(librados::IoCtx &io_ctx,
                             std::vector<std::string> *instance_ids,
@@ -65,14 +66,14 @@ public:
 
   void notify_image_acquire(const std::string &instance_id,
                             const std::string &global_image_id,
-                            const std::string &peer_mirror_uuid,
-                            const std::string &peer_image_id,
                             Context *on_notify_ack);
   void notify_image_release(const std::string &instance_id,
                             const std::string &global_image_id,
-                            const std::string &peer_mirror_uuid,
-                            const std::string &peer_image_id,
-			    bool schedule_delete, Context *on_notify_ack);
+			    Context *on_notify_ack);
+  void notify_peer_image_removed(const std::string &instance_id,
+                                 const std::string &global_image_id,
+                                 const std::string &peer_mirror_uuid,
+                                 Context *on_notify_ack);
 
   void notify_sync_request(const std::string &sync_id, Context *on_sync_start);
   bool cancel_sync_request(const std::string &sync_id);
@@ -162,7 +163,6 @@ private:
   librbd::ManagedLock<ImageCtxT> *m_instance_lock;
   Context *m_on_finish = nullptr;
   int m_ret_val = 0;
-  bool m_removing = false;
   std::string m_leader_instance_id;
   librbd::managed_lock::Locker m_instance_locker;
   std::set<std::pair<std::string, C_NotifyInstanceRequest *>> m_notify_ops;
@@ -210,6 +210,7 @@ private:
   bool unsuspend_notify_request(C_NotifyInstanceRequest *req);
   void unsuspend_notify_requests();
 
+  void notify_sync_complete(const Mutex& lock, const std::string &sync_id);
   void handle_notify_sync_request(C_SyncRequest *sync_ctx, int r);
   void handle_notify_sync_complete(C_SyncRequest *sync_ctx, int r);
 
@@ -225,13 +226,12 @@ private:
                      uint64_t notifier_id, bufferlist &bl) override;
 
   void handle_image_acquire(const std::string &global_image_id,
-                            const std::string &peer_mirror_uuid,
-                            const std::string &peer_image_id,
                             Context *on_finish);
   void handle_image_release(const std::string &global_image_id,
-                            const std::string &peer_mirror_uuid,
-                            const std::string &peer_image_id,
-                            bool schedule_delete, Context *on_finish);
+                            Context *on_finish);
+  void handle_peer_image_removed(const std::string &global_image_id,
+                                 const std::string &peer_mirror_uuid,
+                                 Context *on_finish);
 
   void handle_sync_request(const std::string &instance_id,
                            const std::string &sync_id, Context *on_finish);
@@ -243,6 +243,9 @@ private:
                       C_NotifyAck *on_notify_ack);
   void handle_payload(const std::string &instance_id,
                       const instance_watcher::ImageReleasePayload &payload,
+                      C_NotifyAck *on_notify_ack);
+  void handle_payload(const std::string &instance_id,
+                      const instance_watcher::PeerImageRemovedPayload &payload,
                       C_NotifyAck *on_notify_ack);
   void handle_payload(const std::string &instance_id,
                       const instance_watcher::SyncRequestPayload &payload,

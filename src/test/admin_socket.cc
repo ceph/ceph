@@ -45,15 +45,13 @@ public:
 };
 
 TEST(AdminSocket, Teardown) {
-  std::unique_ptr<AdminSocket>
-      asokc(new AdminSocket(g_ceph_context));
+  std::unique_ptr<AdminSocket> asokc = std::make_unique<AdminSocket>(g_ceph_context);
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
 }
 
 TEST(AdminSocket, TeardownSetup) {
-  std::unique_ptr<AdminSocket>
-      asokc(new AdminSocket(g_ceph_context));
+  std::unique_ptr<AdminSocket> asokc = std::make_unique<AdminSocket>(g_ceph_context);
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
@@ -61,8 +59,7 @@ TEST(AdminSocket, TeardownSetup) {
 }
 
 TEST(AdminSocket, SendHelp) {
-  std::unique_ptr<AdminSocket>
-      asokc(new AdminSocket(g_ceph_context));
+  std::unique_ptr<AdminSocket> asokc = std::make_unique<AdminSocket>(g_ceph_context);
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
@@ -93,8 +90,7 @@ TEST(AdminSocket, SendHelp) {
 }
 
 TEST(AdminSocket, SendNoOp) {
-  std::unique_ptr<AdminSocket>
-      asokc(new AdminSocket(g_ceph_context));
+  std::unique_ptr<AdminSocket> asokc = std::make_unique<AdminSocket>(g_ceph_context);
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
@@ -106,8 +102,7 @@ TEST(AdminSocket, SendNoOp) {
 }
 
 TEST(AdminSocket, SendTooLongRequest) {
-  std::unique_ptr<AdminSocket>
-      asokc(new AdminSocket(g_ceph_context));
+  std::unique_ptr<AdminSocket> asokc = std::make_unique<AdminSocket>(g_ceph_context);
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
@@ -120,7 +115,8 @@ TEST(AdminSocket, SendTooLongRequest) {
 }
 
 class MyTest : public AdminSocketHook {
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& result) override {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& result) override {
     std::vector<std::string> args;
     cmd_getval(g_ceph_context, cmdmap, "args", args);
     result.append(command);
@@ -138,13 +134,13 @@ class MyTest : public AdminSocketHook {
 };
 
 TEST(AdminSocket, RegisterCommand) {
-  std::unique_ptr<AdminSocket>
-      asokc(new AdminSocket(g_ceph_context));
+  std::unique_ptr<AdminSocket> asokc = std::make_unique<AdminSocket>(g_ceph_context);
+  std::unique_ptr<AdminSocketHook> my_test_asok = std::make_unique<MyTest>();
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
   AdminSocketClient client(get_rand_socket_path());
-  ASSERT_EQ(0, asoct.m_asokc->register_command("test", "test", new MyTest(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test", "test", my_test_asok.get(), ""));
   string result;
   ASSERT_EQ("", client.do_request("{\"prefix\":\"test\"}", &result));
   ASSERT_EQ("test|", result);
@@ -152,7 +148,8 @@ TEST(AdminSocket, RegisterCommand) {
 }
 
 class MyTest2 : public AdminSocketHook {
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& result) override {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& result) override {
     std::vector<std::string> args;
     cmd_getval(g_ceph_context, cmdmap, "args", args);
     result.append(command);
@@ -170,14 +167,15 @@ class MyTest2 : public AdminSocketHook {
 };
 
 TEST(AdminSocket, RegisterCommandPrefixes) {
-  std::unique_ptr<AdminSocket>
-      asokc(new AdminSocket(g_ceph_context));
+  std::unique_ptr<AdminSocket> asokc = std::make_unique<AdminSocket>(g_ceph_context);
+  std::unique_ptr<AdminSocketHook> my_test_asok = std::make_unique<MyTest>();
+  std::unique_ptr<AdminSocketHook> my_test2_asok = std::make_unique<MyTest2>();
   AdminSocketTest asoct(asokc.get());
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
   AdminSocketClient client(get_rand_socket_path());
-  ASSERT_EQ(0, asoct.m_asokc->register_command("test", "test name=args,type=CephString,n=N", new MyTest(), ""));
-  ASSERT_EQ(0, asoct.m_asokc->register_command("test command", "test command name=args,type=CephString,n=N", new MyTest2(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test", "test name=args,type=CephString,n=N", my_test_asok.get(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test command", "test command name=args,type=CephString,n=N", my_test2_asok.get(), ""));
   string result;
   ASSERT_EQ("", client.do_request("{\"prefix\":\"test\"}", &result));
   ASSERT_EQ("test|", result);
@@ -204,7 +202,8 @@ public:
 
   BlockingHook() : _lock("BlockingHook::_lock") {}
 
-  bool call(std::string command, cmdmap_t& cmdmap, std::string format, bufferlist& result) override {
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+	    std::string_view format, bufferlist& result) override {
     Mutex::Locker l(_lock);
     _cond.Wait(_lock);
     return true;
@@ -213,8 +212,7 @@ public:
 
 TEST(AdminSocketClient, Ping) {
   string path = get_rand_socket_path();
-  std::unique_ptr<AdminSocket>
-      asokc(new AdminSocket(g_ceph_context));
+  std::unique_ptr<AdminSocket> asokc = std::make_unique<AdminSocket>(g_ceph_context);
   AdminSocketClient client(path);
   // no socket
   {
@@ -267,8 +265,7 @@ TEST(AdminSocketClient, Ping) {
 
 TEST(AdminSocket, bind_and_listen) {
   string path = get_rand_socket_path();
-  std::unique_ptr<AdminSocket>
-      asokc(new AdminSocket(g_ceph_context));
+  std::unique_ptr<AdminSocket> asokc = std::make_unique<AdminSocket>(g_ceph_context);
 
   AdminSocketTest asoct(asokc.get());
   // successfull bind

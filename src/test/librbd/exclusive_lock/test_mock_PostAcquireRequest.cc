@@ -21,7 +21,7 @@ namespace librbd {
 namespace {
 
 struct MockTestImageCtx : public librbd::MockImageCtx {
-  MockTestImageCtx(librbd::ImageCtx &image_ctx)
+  explicit MockTestImageCtx(librbd::ImageCtx &image_ctx)
     : librbd::MockImageCtx(image_ctx) {
   }
 };
@@ -37,13 +37,13 @@ namespace image {
 template<>
 struct RefreshRequest<librbd::MockTestImageCtx> {
   static RefreshRequest *s_instance;
-  Context *on_finish;
+  Context *on_finish = nullptr;
 
   static RefreshRequest *create(librbd::MockTestImageCtx &image_ctx,
                                 bool acquire_lock_refresh,
                                 bool skip_open_parent, Context *on_finish) {
     EXPECT_TRUE(acquire_lock_refresh);
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
@@ -443,7 +443,35 @@ TEST_F(TestMockExclusiveLockPostAcquireRequest, AllocateJournalTagError) {
 }
 
 TEST_F(TestMockExclusiveLockPostAcquireRequest, OpenObjectMapError) {
-  REQUIRE_FEATURE(RBD_FEATURE_EXCLUSIVE_LOCK);
+  REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  expect_op_work_queue(mock_image_ctx);
+
+  InSequence seq;
+  expect_is_refresh_required(mock_image_ctx, false);
+
+  MockObjectMap *mock_object_map = new MockObjectMap();
+  expect_test_features(mock_image_ctx, RBD_FEATURE_OBJECT_MAP, true);
+  expect_create_object_map(mock_image_ctx, mock_object_map);
+  expect_open_object_map(mock_image_ctx, *mock_object_map, -EINVAL);
+  expect_handle_prepare_lock_complete(mock_image_ctx);
+
+  C_SaferCond *acquire_ctx = new C_SaferCond();
+  C_SaferCond ctx;
+  MockPostAcquireRequest *req = MockPostAcquireRequest::create(mock_image_ctx,
+                                                               acquire_ctx,
+                                                               &ctx);
+  req->send();
+  ASSERT_EQ(-EINVAL, ctx.wait());
+  ASSERT_EQ(nullptr, mock_image_ctx.object_map);
+}
+
+TEST_F(TestMockExclusiveLockPostAcquireRequest, OpenObjectMapTooBig) {
+  REQUIRE_FEATURE(RBD_FEATURE_OBJECT_MAP);
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));

@@ -33,8 +33,8 @@
 #include "crush/CrushWrapper.h"
 
 TEST(CrushWrapper, get_immediate_parent) {
-  CrushWrapper *c = new CrushWrapper;
-  
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+
   const int ROOT_TYPE = 1;
   c->set_type_name(ROOT_TYPE, "root");
   const int OSD_TYPE = 0;
@@ -64,12 +64,10 @@ TEST(CrushWrapper, get_immediate_parent) {
   EXPECT_EQ(0, ret);
   EXPECT_EQ("root", loc.first);
   EXPECT_EQ("default", loc.second);
-
-  delete c;
 }
 
 TEST(CrushWrapper, move_bucket) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -124,12 +122,10 @@ TEST(CrushWrapper, move_bucket) {
     EXPECT_EQ("root", loc.first);
     EXPECT_EQ("root1", loc.second);
   }
-
-  delete c;
 }
 
 TEST(CrushWrapper, swap_bucket) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -178,6 +174,9 @@ TEST(CrushWrapper, swap_bucket) {
   ASSERT_EQ(1, c->get_bucket_item(a, 1));
   ASSERT_EQ(2, c->get_bucket_item(a, 2));
   ASSERT_EQ(3, c->get_bucket_item(b, 0));
+	
+  // check if it can swap parent with child
+  ASSERT_EQ(-EINVAL, c->swap_bucket(g_ceph_context, root, a));
 
   c->swap_bucket(g_ceph_context, a, b);
   ASSERT_EQ(0x30000, c->get_item_weight(b));
@@ -192,7 +191,7 @@ TEST(CrushWrapper, swap_bucket) {
 }
 
 TEST(CrushWrapper, rename_bucket_or_item) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -256,12 +255,10 @@ TEST(CrushWrapper, rename_bucket_or_item) {
   int osd0id = c->get_item_id("osd0");
   EXPECT_EQ(0, c->rename_item("osd.0", "osd0renamed", &ss));
   EXPECT_EQ(osd0id, c->get_item_id("osd0renamed"));
-
-  delete c;
 }
 
 TEST(CrushWrapper, check_item_loc) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
   int item = 0;
   float expected_weight = 1.0;
 
@@ -323,12 +320,10 @@ TEST(CrushWrapper, check_item_loc) {
     EXPECT_TRUE(c->check_item_loc(g_ceph_context, item, loc, &weight));
     EXPECT_EQ(expected_weight, weight);
   }
-
-  delete c;
 }
 
 TEST(CrushWrapper, update_item) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -419,12 +414,10 @@ TEST(CrushWrapper, update_item) {
   EXPECT_EQ(modified_weight, c->get_item_weightf(item));
   EXPECT_FALSE(c->check_item_loc(g_ceph_context, item, loc, &weight));
   EXPECT_TRUE(c->check_item_loc(g_ceph_context, item, other_loc, &weight));
-
-  delete c;
 }
 
 TEST(CrushWrapper, adjust_item_weight) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -540,12 +533,10 @@ TEST(CrushWrapper, adjust_item_weight) {
   EXPECT_EQ(1, c->adjust_item_weightf_in_loc(g_ceph_context, item, modified_weight, loc_two));
   EXPECT_EQ(original_weight, c->get_item_weightf_in_loc(item, loc_one));
   EXPECT_EQ(modified_weight, c->get_item_weightf_in_loc(item, loc_two));
-
-  delete c;
 }
 
 TEST(CrushWrapper, adjust_subtree_weight) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -635,12 +626,10 @@ TEST(CrushWrapper, adjust_subtree_weight) {
   ASSERT_EQ(c->get_bucket_weight(host0), 262144);
   ASSERT_EQ(c->get_item_weight(host0), 262144);
   ASSERT_EQ(c->get_bucket_weight(rootno), 262144 + 131072);
-
-  delete c;
 }
 
 TEST(CrushWrapper, insert_item) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -771,12 +760,10 @@ TEST(CrushWrapper, insert_item) {
     EXPECT_EQ(-EINVAL, c->insert_item(g_ceph_context, item, 1.0,
 				      "osd." + stringify(item), loc));
   }
-
-  delete c;
 }
 
 TEST(CrushWrapper, remove_item) {
-  auto *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 2;
   c->set_type_name(ROOT_TYPE, "root");
@@ -815,12 +802,10 @@ TEST(CrushWrapper, remove_item) {
   ASSERT_EQ(0, c->remove_item(g_ceph_context, item_to_remove, true));
   float weight;
   EXPECT_FALSE(c->check_item_loc(g_ceph_context, item_to_remove, loc, &weight));
-
-  delete c;
 }
 
 TEST(CrushWrapper, item_bucket_names) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
   int index = 123;
   string name = "NAME";
   EXPECT_EQ(-EINVAL, c->set_item_name(index, "\001"));
@@ -829,18 +814,16 @@ TEST(CrushWrapper, item_bucket_names) {
   EXPECT_TRUE(c->item_exists(index));
   EXPECT_EQ(index, c->get_item_id(name));
   EXPECT_EQ(name, c->get_item_name(index));
-  delete c;
 }
 
 TEST(CrushWrapper, bucket_types) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
   int index = 123;
   string name = "NAME";
   c->set_type_name(index, name);
   EXPECT_EQ(1, c->get_num_type_names());
   EXPECT_EQ(index, c->get_type_id(name));
   EXPECT_EQ(name, c->get_type_name(index));
-  delete c;
 }
 
 TEST(CrushWrapper, is_valid_crush_name) {
@@ -867,7 +850,7 @@ TEST(CrushWrapper, is_valid_crush_loc) {
 }
 
 TEST(CrushWrapper, dump_rules) {
-  CrushWrapper *c = new CrushWrapper;
+  std::unique_ptr<CrushWrapper> c(new CrushWrapper);
 
   const int ROOT_TYPE = 1;
   c->set_type_name(ROOT_TYPE, "root");
@@ -909,7 +892,7 @@ TEST(CrushWrapper, dump_rules) {
   }
 
   string name("NAME");
-  int rule = c->add_simple_rule(name, root_name, failure_domain_type,
+  int rule = c->add_simple_rule(name, root_name, failure_domain_type, "",
 				   "firstn", pg_pool_t::TYPE_ERASURE);
   EXPECT_EQ(0, rule);
 
@@ -937,8 +920,6 @@ TEST(CrushWrapper, dump_rules) {
   c->get_rule_weight_osd_map(0, &wm);
   ASSERT_TRUE(wm.size() == 1);
   ASSERT_TRUE(wm[0] == 1.0);
-
-  delete c;
 }
 
 TEST(CrushWrapper, distance) {
@@ -1032,7 +1013,8 @@ TEST(CrushWrapper, choose_args_compat) {
   item = 2;
   c.insert_item(g_ceph_context, item, weight, "osd.2", loc);
 
-  assert(c.add_simple_rule("rule1", "r11", "host", "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
+  ceph_assert(c.add_simple_rule("rule1", "r11", "host", "",
+			   "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
 
   int id = c.get_item_id("b1");
 
@@ -1041,39 +1023,40 @@ TEST(CrushWrapper, choose_args_compat) {
   weight_set.size = 1;
   weight_set.weights = &weights;
   int maxbuckets = c.get_max_buckets();
-  assert(maxbuckets > 0);
+  ceph_assert(maxbuckets > 0);
   crush_choose_arg choose_args[maxbuckets];
   memset(choose_args, '\0', sizeof(crush_choose_arg) * maxbuckets);
   choose_args[-1-id].ids_size = 0;
-  choose_args[-1-id].weight_set_size = 1;
+  choose_args[-1-id].weight_set_positions = 1;
   choose_args[-1-id].weight_set = &weight_set;
   crush_choose_arg_map arg_map;
   arg_map.size = c.get_max_buckets();
   arg_map.args = choose_args;
 
   uint64_t features = CEPH_FEATURE_CRUSH_TUNABLES5|CEPH_FEATURE_INCARNATION_2;
+  int64_t caid = CrushWrapper::DEFAULT_CHOOSE_ARGS;
 
   // if the client is capable, encode choose_args
   {
-    c.choose_args[0] = arg_map;
+    c.choose_args[caid] = arg_map;
     bufferlist bl;
     c.encode(bl, features|CEPH_FEATURE_CRUSH_CHOOSE_ARGS);
-    bufferlist::iterator i(bl.begin());
+    auto i = bl.cbegin();
     CrushWrapper c_new;
     c_new.decode(i);
     ASSERT_EQ(1u, c_new.choose_args.size());
-    ASSERT_EQ(1u, c_new.choose_args[0].args[-1-id].weight_set_size);
-    ASSERT_EQ(weights, c_new.choose_args[0].args[-1-id].weight_set[0].weights[0]);
+    ASSERT_EQ(1u, c_new.choose_args[caid].args[-1-id].weight_set_positions);
+    ASSERT_EQ(weights, c_new.choose_args[caid].args[-1-id].weight_set[0].weights[0]);
     ASSERT_EQ(weight, c_new.get_bucket_item_weightf(id, 0));
   }
 
   // if the client is not compatible, copy choose_arg in the weights
   {
-    c.choose_args[0] = arg_map;
+    c.choose_args[caid] = arg_map;
     bufferlist bl;
     c.encode(bl, features);
     c.choose_args.clear();
-    bufferlist::iterator i(bl.begin());
+    auto i = bl.cbegin();
     CrushWrapper c_new;
     c_new.decode(i);
     ASSERT_EQ(0u, c_new.choose_args.size());
@@ -1081,7 +1064,7 @@ TEST(CrushWrapper, choose_args_compat) {
   }
 }
 
-TEST(CrushWrapper, remove_unused_root) {
+TEST(CrushWrapper, remove_root) {
   CrushWrapper c;
   c.create();
   c.set_type_name(1, "host");
@@ -1102,13 +1085,14 @@ TEST(CrushWrapper, remove_unused_root) {
   loc["root"] = "default";
   c.insert_item(g_ceph_context, item, weight, "osd.2", loc);
 
-  assert(c.add_simple_rule("rule1", "r11", "host", "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
+  ceph_assert(c.add_simple_rule("rule1", "r11", "host", "",
+			   "firstn", pg_pool_t::TYPE_ERASURE) >= 0);
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("r11"));
   ASSERT_TRUE(c.name_exists("r12"));
-  ASSERT_EQ(c.remove_root(c.get_item_id("default"), true), 0);
+  ASSERT_EQ(c.remove_root(c.get_item_id("default")), 0);
   ASSERT_FALSE(c.name_exists("default"));
-  ASSERT_TRUE(c.name_exists("r11"));
+  ASSERT_FALSE(c.name_exists("r11"));
   ASSERT_FALSE(c.name_exists("r12"));
 }
 
@@ -1129,15 +1113,16 @@ TEST(CrushWrapper, trim_roots_with_class) {
 
   int root_id = c.get_item_id("default");
   int clone_id;
-  ASSERT_EQ(c.device_class_clone(root_id, cl, &clone_id), 0);
+  map<int32_t, map<int32_t, int32_t>> old_class_bucket;
+  map<int,map<int,vector<int>>> cmap_item_weight; // cargs -> bno -> weights
+  set<int32_t> used_ids;
+
+  ASSERT_EQ(c.device_class_clone(root_id, cl, old_class_bucket, used_ids,
+				 &clone_id, &cmap_item_weight), 0);
 
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_TRUE(c.name_exists("default~ssd"));
-  c.trim_roots_with_class(true); // do nothing because still in use
-  ASSERT_TRUE(c.name_exists("default"));
-  ASSERT_TRUE(c.name_exists("default~ssd"));
-  c.class_bucket.clear();
-  c.trim_roots_with_class(true); // do nothing because still in use
+  c.trim_roots_with_class();
   ASSERT_TRUE(c.name_exists("default"));
   ASSERT_FALSE(c.name_exists("default~ssd"));
 }
@@ -1163,9 +1148,13 @@ TEST(CrushWrapper, device_class_clone) {
 
   c.reweight(g_ceph_context);
 
+  map<int32_t, map<int32_t, int32_t>> old_class_bucket;
+  map<int,map<int,vector<int>>> cmap_item_weight; // cargs -> bno -> weights
+  set<int32_t> used_ids;
   int root_id = c.get_item_id("default");
   int clone_id;
-  ASSERT_EQ(c.device_class_clone(root_id, cl, &clone_id), 0);
+  ASSERT_EQ(c.device_class_clone(root_id, cl, old_class_bucket, used_ids,
+				 &clone_id, &cmap_item_weight), 0);
   ASSERT_TRUE(c.name_exists("default~ssd"));
   ASSERT_EQ(clone_id, c.get_item_id("default~ssd"));
   ASSERT_TRUE(c.subtree_contains(clone_id, item));
@@ -1175,11 +1164,14 @@ TEST(CrushWrapper, device_class_clone) {
   ASSERT_EQ(c.get_item_weightf(clone_id), 1);
   // cloning again does nothing and returns the existing one
   int other_clone_id;
-  ASSERT_EQ(c.device_class_clone(root_id, cl, &other_clone_id), 0);
+  ASSERT_EQ(c.device_class_clone(root_id, cl, old_class_bucket, used_ids,
+				 &other_clone_id, &cmap_item_weight), 0);
   ASSERT_EQ(clone_id, other_clone_id);
   // invalid arguments
-  ASSERT_EQ(c.device_class_clone(12345, cl, &other_clone_id), -ECHILD);
-  ASSERT_EQ(c.device_class_clone(root_id, 12345, &other_clone_id), -EBADF);
+  ASSERT_EQ(c.device_class_clone(12345, cl, old_class_bucket, used_ids,
+				 &other_clone_id, &cmap_item_weight), -ECHILD);
+  ASSERT_EQ(c.device_class_clone(root_id, 12345, old_class_bucket, used_ids,
+				 &other_clone_id, &cmap_item_weight), -EBADF);
 }
 
 TEST(CrushWrapper, split_id_class) {
@@ -1196,9 +1188,13 @@ TEST(CrushWrapper, split_id_class) {
   int class_id = c.get_or_create_class_id("ssd");
   c.class_map[item] = class_id;
 
+  map<int32_t, map<int32_t, int32_t>> old_class_bucket;
+  map<int,map<int,vector<int>>> cmap_item_weight; // cargs -> bno -> weights
+  set<int32_t> used_ids;
   int item_id = c.get_item_id("default");
   int clone_id;
-  ASSERT_EQ(c.device_class_clone(item_id, class_id, &clone_id), 0);
+  ASSERT_EQ(c.device_class_clone(item_id, class_id, old_class_bucket, used_ids,
+				 &clone_id, &cmap_item_weight), 0);
   int retrieved_item_id;
   int retrieved_class_id;
   ASSERT_EQ(c.split_id_class(clone_id, &retrieved_item_id, &retrieved_class_id), 0);
@@ -1210,7 +1206,7 @@ TEST(CrushWrapper, split_id_class) {
   ASSERT_EQ(-1, retrieved_class_id);
 }
 
-TEST(CrushWrapper, populate_and_cleanup_classes) {
+TEST(CrushWrapper, populate_classes) {
   CrushWrapper c;
   c.create();
   c.set_type_name(1, "root");
@@ -1224,34 +1220,14 @@ TEST(CrushWrapper, populate_and_cleanup_classes) {
   int class_id = c.get_or_create_class_id("ssd");
   c.class_map[item] = class_id;
 
-  ASSERT_EQ(c.populate_classes(), 0);
+  map<int32_t, map<int32_t, int32_t>> old_class_bucket;
+  ASSERT_EQ(c.populate_classes(old_class_bucket), 0);
 
   ASSERT_TRUE(c.name_exists("default~ssd"));
 
-  c.class_bucket.clear();
-  ASSERT_EQ(c.cleanup_classes(), 0);
-  ASSERT_FALSE(c.name_exists("default~ssd"));
-}
-
-TEST(CrushWrapper, class_is_in_use) {
-  CrushWrapper c;
-  c.create();
-  c.set_type_name(1, "root");
-
-  int weight = 1;
-  map<string,string> loc;
-  loc["root"] = "default";
-
-  ASSERT_FALSE(c.class_is_in_use(0));
-
-  int item = 1;
-  c.insert_item(g_ceph_context, item, weight, "osd.1", loc);
-  int class_id = c.get_or_create_class_id("ssd");
-  c.class_map[item] = class_id;
-
-  ASSERT_TRUE(c.class_is_in_use(c.get_class_id("ssd")));
-  ASSERT_EQ(0, c.remove_class_name("ssd"));
-  ASSERT_FALSE(c.class_is_in_use(c.get_class_id("ssd")));
+  old_class_bucket = c.class_bucket;
+  ASSERT_EQ(c.populate_classes(old_class_bucket), 0);
+  ASSERT_EQ(old_class_bucket, c.class_bucket);
 }
 
 TEST(CrushWrapper, remove_class_name) {
@@ -1346,7 +1322,8 @@ TEST(CrushWrapper, try_remap_rule) {
   {
     cout << "take + choose + emit" << std::endl;
     ostringstream err;
-    int rule = c.add_simple_rule("one", "default", "osd", "firstn", 0, &err);
+    int rule = c.add_simple_rule("one", "default", "osd", "",
+				 "firstn", 0, &err);
     ASSERT_EQ(rule, 0);
 
     vector<int> orig = { 0, 3, 9 };
@@ -1382,7 +1359,8 @@ TEST(CrushWrapper, try_remap_rule) {
   {
     cout << "take + chooseleaf + emit" << std::endl;
     ostringstream err;
-    int rule = c.add_simple_rule("two", "default", "host", "firstn", 0, &err);
+    int rule = c.add_simple_rule("two", "default", "host", "",
+				 "firstn", 0, &err);
     ASSERT_EQ(rule, 1);
 
     vector<int> orig = { 0, 3, 9 };
@@ -1403,7 +1381,7 @@ TEST(CrushWrapper, try_remap_rule) {
   // choose + choose
   {
     cout << "take + choose + choose + choose + emit" << std::endl;
-    int rule = c.add_rule(5, 2, 0, 1, 10, 2);
+    int rule = c.add_rule(2, 5, 0, 1, 10);
     ASSERT_EQ(2, rule);
     c.set_rule_step_take(rule, 0, bno);
     c.set_rule_step_choose_indep(rule, 1, 2, 2);
@@ -1443,12 +1421,13 @@ TEST(CrushWrapper, try_remap_rule) {
 int main(int argc, char **argv) {
   vector<const char*> args;
   argv_to_vec(argc, (const char **)argv, args);
-  env_to_vec(args);
 
-  vector<const char*> def_args;
-  def_args.push_back("--debug-crush=0");
-  auto cct = global_init(&def_args, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+  map<string,string> defaults = {
+    { "debug_crush", "0" }
+  };
+  auto cct = global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();

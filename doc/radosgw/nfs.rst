@@ -121,7 +121,7 @@ Other config variables are optional, front-end-specific and front-end
 selection variables (e.g., ``rgw data`` and ``rgw frontends``) are
 optional and in some cases ignored.
 
-A small number of config variables (e.g., ``rgw_namespace_expire_secs``)
+A small number of config variables (e.g., ``rgw_nfs_namespace_expire_secs``)
 are unique to RGW NFS.
 
 ganesha.conf
@@ -326,7 +326,7 @@ following conventions work on Linux and some Unix platforms:
 
 From the command line::
 
-  mount -t nfs -o nfsvers=4,noauto,soft,proto=tcp <ganesha-host-name>:/ <mount-point>
+  mount -t nfs -o nfsvers=4.1,noauto,soft,sync,proto=tcp <ganesha-host-name>:/ <mount-point>
 
 In /etc/fstab::
 

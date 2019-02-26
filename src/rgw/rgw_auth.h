@@ -13,6 +13,7 @@
 
 #include "rgw_common.h"
 #include "rgw_keystone.h"
+#include "rgw_web_idp.h"
 
 #define RGW_USER_ANON_ID "anonymous"
 
@@ -38,7 +39,7 @@ public:
    * NOTE: an implementation is responsible for giving the real semantic to
    * the items in @aclspec. That is, their meaning may depend on particular
    * applier that is being used. */
-  virtual uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const = 0;
+  virtual uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const = 0;
 
   /* Verify whether a given identity *can be treated as* an admin of rgw_user
   * (account in Swift's terminology) specified in @uid. On error throws
@@ -68,6 +69,12 @@ public:
   /* Verify whether a given identity corresponds to an identity in the
      provided set */
   virtual bool is_identity(const idset_t& ids) const = 0;
+
+  /* Identity Type: RGW/ LDAP/ Keystone */
+  virtual uint32_t get_identity_type() const = 0;
+
+  /* Name of Account */
+  virtual string get_acct_name() const = 0;
 };
 
 inline std::ostream& operator<<(std::ostream& out,
@@ -100,11 +107,11 @@ public:
    *
    * XXX: be aware that the "account" term refers to rgw_user. The naming
    * is legacy. */
-  virtual void load_acct_info(RGWUserInfo& user_info) const = 0; /* out */
+  virtual void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const = 0; /* out */
 
   /* Apply any changes to request state. This method will be most useful for
    * TempURL of Swift API. */
-  virtual void modify_request_state(req_state* s) const {}      /* in/out */
+  virtual void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const {}      /* in/out */
 };
 
 
@@ -128,7 +135,7 @@ class Completer {
 public:
   /* It's expected that Completers would tend to implement many interfaces
    * and be used not only in req_state::auth::completer. Ref counting their
-   * instances woild be helpful. */
+   * instances would be helpful. */
   typedef std::shared_ptr<Completer> cmplptr_t;
 
   virtual ~Completer() = default;
@@ -140,7 +147,7 @@ public:
 
   /* Apply any changes to request state. The initial use case was injecting
    * the AWSv4 filter over rgw::io::RestfulClient in req_state. */
-  virtual void modify_request_state(req_state* s) = 0;     /* in/out */
+  virtual void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) = 0;     /* in/out */
 };
 
 
@@ -188,7 +195,7 @@ public:
 
     std::pair<IdentityApplier::aplptr_t, Completer::cmplptr_t> result_pair;
 
-    AuthResult(const int reason)
+    explicit AuthResult(const int reason)
       : reason(reason) {
     }
 
@@ -199,7 +206,7 @@ public:
 
     /* Allow only the reasonable combintations - returning just Completer
      * without accompanying IdentityApplier is strictly prohibited! */
-    AuthResult(IdentityApplier::aplptr_t&& applier)
+    explicit AuthResult(IdentityApplier::aplptr_t&& applier)
       : result_pair(std::move(applier), nullptr) {
     }
 
@@ -213,7 +220,7 @@ public:
       /* Engine doesn't grant the access but also doesn't reject it. */
       DENIED,
 
-      /* Engine successfully authenticated requester. */
+      /* Engine successfully authenicated requester. */
       GRANTED,
 
       /* Engine strictly indicates that a request should be rejected
@@ -274,7 +281,7 @@ public:
    *    interface.
    *
    * On error throws rgw::auth::Exception containing the reason. */
-  virtual result_t authenticate(const req_state* s) const = 0;
+  virtual result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s) const = 0;
 };
 
 
@@ -317,13 +324,13 @@ public:
     FALLBACK,
   };
 
-  Engine::result_t authenticate(const req_state* s) const override final;
+  Engine::result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s) const override final;
 
   bool is_empty() const {
     return auth_stack.empty();
   }
 
-  static int apply(const Strategy& auth_strategy, req_state* s) noexcept;
+  static int apply(const DoutPrefixProvider* dpp, const Strategy& auth_strategy, req_state* s) noexcept;
 
 private:
   /* Using the reference wrapper here to explicitly point out we are not
@@ -343,6 +350,67 @@ protected:
  *
  * Each new Strategy should be exposed to it. */
 class StrategyRegistry;
+
+class WebIdentityApplier : public IdentityApplier {
+protected:
+  CephContext* const cct;
+  RGWRados* const store;
+  rgw::web_idp::WebTokenClaims token_claims;
+
+  string get_idp_url() const;
+
+public:
+  WebIdentityApplier( CephContext* const cct,
+                      RGWRados* const store,
+                      const rgw::web_idp::WebTokenClaims& token_claims)
+    : cct(cct),
+      store(store),
+      token_claims(token_claims) {
+  }
+
+  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override {
+    user_info.user_id = rgw_user(token_claims.sub);
+    user_info.display_name = token_claims.user_name;
+  }
+
+  void modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const override;
+
+  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const  override {
+    return RGW_PERM_NONE;
+  }
+
+  bool is_admin_of(const rgw_user& uid) const override {
+    return false;
+  }
+
+  bool is_owner_of(const rgw_user& uid) const override {
+    return false;
+  }
+
+  uint32_t get_perm_mask() const override {
+    return RGW_PERM_NONE;
+  }
+
+  void to_str(std::ostream& out) const override;
+
+  bool is_identity(const idset_t& ids) const override;
+
+  uint32_t get_identity_type() const override {
+    return TYPE_WEB;
+  }
+
+  string get_acct_name() const override {
+    return token_claims.user_name;
+  }
+
+  struct Factory {
+    virtual ~Factory() {}
+
+    virtual aplptr_t create_apl_web_identity( CephContext* cct,
+                                              const req_state* s,
+                                              const rgw::web_idp::WebTokenClaims& token) const = 0;
+  };
+};
 
 /* rgw::auth::RemoteApplier targets those authentication engines which don't
  * need to ask the RADOS store while performing the auth process. Instead,
@@ -398,7 +466,8 @@ protected:
   const AuthInfo info;
   const bool implicit_tenants;
 
-  virtual void create_account(const rgw_user& acct_user,
+  virtual void create_account(const DoutPrefixProvider* dpp,
+                              const rgw_user& acct_user,
                               RGWUserInfo& user_info) const;          /* out */
 
 public:
@@ -414,14 +483,16 @@ public:
       implicit_tenants(implicit_tenants) {
   }
 
-  uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;
+  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
   bool is_admin_of(const rgw_user& uid) const override;
   bool is_owner_of(const rgw_user& uid) const override;
   bool is_identity(const idset_t& ids) const override;
 
   uint32_t get_perm_mask() const override { return info.perm_mask; }
   void to_str(std::ostream& out) const override;
-  void load_acct_info(RGWUserInfo& user_info) const override; /* out */
+  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
+  uint32_t get_identity_type() const override { return info.acct_type; }
+  string get_acct_name() const override { return info.acct_name; }
 
   struct Factory {
     virtual ~Factory() {}
@@ -431,7 +502,7 @@ public:
     virtual aplptr_t create_apl_remote(CephContext* cct,
                                        const req_state* s,
                                        acl_strategy_t&& extra_acl_strategy,
-                                       const AuthInfo info) const = 0;
+                                       const AuthInfo &info) const = 0;
   };
 };
 
@@ -446,6 +517,7 @@ class LocalApplier : public IdentityApplier {
 protected:
   const RGWUserInfo user_info;
   const std::string subuser;
+  uint32_t perm_mask;
 
   uint32_t get_perm_mask(const std::string& subuser_name,
                          const RGWUserInfo &uinfo) const;
@@ -455,31 +527,88 @@ public:
 
   LocalApplier(CephContext* const cct,
                const RGWUserInfo& user_info,
-               std::string subuser)
+               std::string subuser,
+               const boost::optional<uint32_t>& perm_mask)
     : user_info(user_info),
       subuser(std::move(subuser)) {
+    if (perm_mask) {
+      this->perm_mask = perm_mask.get();
+    } else {
+      this->perm_mask = RGW_PERM_INVALID;
+    }
   }
 
 
-  uint32_t get_perms_from_aclspec(const aclspec_t& aclspec) const override;
+  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
   bool is_admin_of(const rgw_user& uid) const override;
   bool is_owner_of(const rgw_user& uid) const override;
   bool is_identity(const idset_t& ids) const override;
   uint32_t get_perm_mask() const override {
-    return get_perm_mask(subuser, user_info);
+    if (this->perm_mask == RGW_PERM_INVALID) {
+      return get_perm_mask(subuser, user_info);
+    } else {
+      return this->perm_mask;
+    }
   }
   void to_str(std::ostream& out) const override;
-  void load_acct_info(RGWUserInfo& user_info) const override; /* out */
+  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
+  uint32_t get_identity_type() const override { return TYPE_RGW; }
+  string get_acct_name() const override { return {}; }
 
   struct Factory {
     virtual ~Factory() {}
     virtual aplptr_t create_apl_local(CephContext* cct,
                                       const req_state* s,
                                       const RGWUserInfo& user_info,
-                                      const std::string& subuser) const = 0;
+                                      const std::string& subuser,
+                                      const boost::optional<uint32_t>& perm_mask) const = 0;
     };
 };
 
+class RoleApplier : public IdentityApplier {
+protected:
+  const string role_name;
+  const rgw_user user_id;
+  vector<std::string> role_policies;
+
+public:
+
+  RoleApplier(CephContext* const cct,
+               const string& role_name,
+               const rgw_user& user_id,
+               const vector<std::string>& role_policies)
+    : role_name(role_name),
+      user_id(user_id),
+      role_policies(role_policies) {}
+
+  uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
+    return 0;
+  }
+  bool is_admin_of(const rgw_user& uid) const override {
+    return false;
+  }
+  bool is_owner_of(const rgw_user& uid) const override {
+    return false;
+  }
+  bool is_identity(const idset_t& ids) const override;
+  uint32_t get_perm_mask() const override {
+    return RGW_PERM_NONE;
+  }
+  void to_str(std::ostream& out) const override;
+  void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
+  uint32_t get_identity_type() const override { return TYPE_ROLE; }
+  string get_acct_name() const override { return {}; }
+  void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
+
+  struct Factory {
+    virtual ~Factory() {}
+    virtual aplptr_t create_apl_role( CephContext* cct,
+                                      const req_state* s,
+                                      const string& role_name,
+                                      const rgw_user& user_id,
+                                      const vector<std::string>& role_policies) const = 0;
+    };
+};
 
 /* The anonymous abstract engine. */
 class AnonymousEngine : public Engine {
@@ -497,7 +626,7 @@ public:
     return "rgw::auth::AnonymousEngine";
   }
 
-  Engine::result_t authenticate(const req_state* s) const override final;
+  Engine::result_t authenticate(const DoutPrefixProvider* dpp, const req_state* s) const override final;
 
 protected:
   virtual bool is_applicable(const req_state*) const noexcept {

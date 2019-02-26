@@ -1,4 +1,5 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
+set -x
 
 #
 # Test the lost object logic
@@ -222,8 +223,7 @@ all_osds_die_impl() {
 }
 
 all_osds_die() {
-	setup 3 'osd mon report interval max = 60
-	osd mon report interval min = 3
+	setup 3 'osd mon report interval = 3
 	mon osd report timeout = 60'
 
 	all_osds_die_impl

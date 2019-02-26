@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Copyright (C) 2015 Red Hat <contact@redhat.com>
 #
@@ -47,20 +47,8 @@ function control_osd() {
     local action=$1
     local id=$2
 
-    local init=$(ceph-detect-init)
+    sudo systemctl $action ceph-osd@$id
 
-    case $init in
-        upstart)
-            sudo service ceph-osd $action id=$id
-            ;;
-        systemd)
-            sudo systemctl $action ceph-osd@$id
-            ;;
-        *)
-            echo ceph-detect-init returned an unknown init system: $init >&2
-            return 1
-            ;;
-    esac
     return 0
 }
 
@@ -76,6 +64,7 @@ function pool_read_write() {
     ceph osd pool create $test_pool 4 || return 1
     ceph osd pool set $test_pool size $size || return 1
     ceph osd pool set $test_pool min_size $size || return 1
+    ceph osd pool application enable $test_pool rados
 
     echo FOO > $dir/BAR
     timeout $timeout rados --pool $test_pool put BAR $dir/BAR || return 1

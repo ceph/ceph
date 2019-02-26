@@ -4,10 +4,12 @@
 overrides:
   ceph:
     log-whitelist:
-      - wrongly marked me down
+      - but it is still running
       - slow request
+      - evicting unresponsive client
 
 tasks:
   - cephfs_test_runner:
+      fail_on_skip: false
       modules:
         - tasks.cephfs.test_client_recovery

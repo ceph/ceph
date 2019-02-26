@@ -22,8 +22,6 @@
 #include <map>
 #include <set>
 
-using namespace std;
-
 #include "include/types.h"
 #include "msg/Messenger.h"
 
@@ -31,7 +29,6 @@ using namespace std;
 #include "MonMap.h"
 #include "MonitorDBStore.h"
 
-class MMonGetMap;
 class MMonMap;
 class MMonCommand;
 class MMonJoin;
@@ -55,7 +52,8 @@ class MonmapMonitor : public PaxosService {
   void encode_full(MonitorDBStore::TransactionRef t) override { }
 
   void on_active() override;
-  void apply_mon_features(const mon_feature_t& features);
+  void apply_mon_features(const mon_feature_t& features,
+			  int min_mon_release);
 
   void dump_info(Formatter *f);
 
@@ -67,10 +65,6 @@ class MonmapMonitor : public PaxosService {
 
   bool preprocess_command(MonOpRequestRef op);
   bool prepare_command(MonOpRequestRef op);
-
-  void get_health(list<pair<health_status_t,string> >& summary,
-		  list<pair<health_status_t,string> > *detail,
-		  CephContext *cct) const override;
 
   int get_monmap(bufferlist &bl);
 
@@ -84,8 +78,6 @@ class MonmapMonitor : public PaxosService {
 
 private:
   void check_subs();
-
-private:
   bufferlist monmap_bl;
 };
 

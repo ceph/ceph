@@ -15,7 +15,7 @@ namespace librbd {
 namespace {
 
 struct MockTestImageCtx : public MockImageCtx {
-  MockTestImageCtx(librbd::ImageCtx& image_ctx) : MockImageCtx(image_ctx) {
+  explicit MockTestImageCtx(librbd::ImageCtx& image_ctx) : MockImageCtx(image_ctx) {
   }
 };
 
@@ -66,7 +66,7 @@ public:
     client_data.client_meta = image_client_meta;
 
     cls::journal::Client client;
-    ::encode(client_data, client.data);
+    encode(client_data, client.data);
 
     EXPECT_CALL(mock_journaler, get_cached_client("", _))
                   .WillOnce(DoAll(SetArgPointee<1>(client),
@@ -80,7 +80,7 @@ public:
     tag_data.mirror_uuid = "remote mirror";
 
     bufferlist tag_data_bl;
-    ::encode(tag_data, tag_data_bl);
+    encode(tag_data, tag_data_bl);
 
     ::journal::Journaler::Tags tags = {{0, 345, {}}, {1, 345, tag_data_bl}};
     EXPECT_CALL(mock_journaler, get_tags(345, _, _))

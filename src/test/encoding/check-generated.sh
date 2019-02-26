@@ -1,11 +1,10 @@
-#!/bin/bash -e
+#!/usr/bin/env bash
+set -e
 
 source $(dirname $0)/../detect-build-env-vars.sh
-source $CEPH_ROOT/qa/workunits/ceph-helpers.sh
+source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
 dir=$1
-
-set -e
 
 tmp1=`mktemp /tmp/typ-XXXXXXXXX`
 tmp2=`mktemp /tmp/typ-XXXXXXXXX`
@@ -16,21 +15,16 @@ failed=0
 numtests=0
 echo "checking ceph-dencoder generated test instances..."
 echo "numgen type"
-for type in `ceph-dencoder list_types`; do
+ceph-dencoder list_types | while read type; do
     num=`ceph-dencoder type $type count_tests`
     echo "$num $type"
     for n in `seq 1 1 $num 2>/dev/null`; do
-	safe_type=$type
-	# BitVector<2> needs some escaping to avoid bash issues with <>
-	if [ "$type" = "BitVector<2>" ]; then
-	    safe_type="BitVector\<2\>"
-	fi
 
 	pids=""
-	run_in_background pids bash -c "ceph-dencoder type $safe_type select_test $n dump_json > $tmp1"
-	run_in_background pids bash -c "ceph-dencoder type $safe_type select_test $n encode decode dump_json > $tmp2"
-	run_in_background pids bash -c "ceph-dencoder type $safe_type select_test $n copy dump_json > $tmp3"
-	run_in_background pids bash -c "ceph-dencoder type $safe_type select_test $n copy_ctor dump_json > $tmp4"
+	run_in_background pids save_stdout "$tmp1" ceph-dencoder type "$type" select_test "$n" dump_json
+	run_in_background pids save_stdout "$tmp2" ceph-dencoder type "$type" select_test "$n" encode decode dump_json
+	run_in_background pids save_stdout "$tmp3" ceph-dencoder type "$type" select_test "$n" copy dump_json
+	run_in_background pids save_stdout "$tmp4" ceph-dencoder type "$type" select_test "$n" copy_ctor dump_json
 	wait_background pids
 
 	if [ $? -ne 0 ]; then
@@ -44,7 +38,7 @@ for type in `ceph-dencoder list_types`; do
 	# the sorted json output.  this is a weaker test, but is better
 	# than nothing.
 	deterministic=0
-	if ceph-dencoder type $type is_deterministic; then
+	if ceph-dencoder type "$type" is_deterministic; then
 	    deterministic=1
 	fi
 
@@ -81,8 +75,8 @@ for type in `ceph-dencoder list_types`; do
 	fi
 
 	if [ $deterministic -ne 0 ]; then
-	    run_in_background pids bash -c "ceph-dencoder type $safe_type select_test $n encode export $tmp1"
-	    run_in_background pids bash -c "ceph-dencoder type $safe_type select_test $n encode decode encode export $tmp2"
+	    run_in_background pids ceph-dencoder type "$type" select_test $n encode export "$tmp1"
+	    run_in_background pids ceph-dencoder type "$type" select_test $n encode decode encode export "$tmp2"
 	    wait_background pids
 
 	    if ! cmp $tmp1 $tmp2; then

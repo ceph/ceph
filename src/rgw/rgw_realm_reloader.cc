@@ -9,6 +9,10 @@
 #include "rgw_rest.h"
 #include "rgw_user.h"
 
+#include "services/svc_zone.h"
+
+#include "common/errno.h"
+
 #define dout_subsys ceph_subsys_rgw
 
 #undef dout_prefix
@@ -21,8 +25,10 @@
 static constexpr bool USE_SAFE_TIMER_CALLBACKS = false;
 
 
-RGWRealmReloader::RGWRealmReloader(RGWRados*& store, Pauser* frontends)
+RGWRealmReloader::RGWRealmReloader(RGWRados*& store, std::map<std::string, std::string>& service_map_meta,
+                                   Pauser* frontends)
   : store(store),
+    service_map_meta(service_map_meta),
     frontends(frontends),
     timer(store->ctx(), mutex, USE_SAFE_TIMER_CALLBACKS),
     mutex("RGWRealmReloader"),
@@ -40,12 +46,12 @@ RGWRealmReloader::~RGWRealmReloader()
 class RGWRealmReloader::C_Reload : public Context {
   RGWRealmReloader* reloader;
  public:
-  C_Reload(RGWRealmReloader* reloader) : reloader(reloader) {}
+  explicit C_Reload(RGWRealmReloader* reloader) : reloader(reloader) {}
   void finish(int r) override { reloader->reload(); }
 };
 
 void RGWRealmReloader::handle_notify(RGWRealmNotify type,
-                                     bufferlist::iterator& p)
+                                     bufferlist::const_iterator& p)
 {
   if (!store) {
     /* we're in the middle of reload */
@@ -96,12 +102,14 @@ void RGWRealmReloader::reload()
 
   while (!store) {
     // recreate and initialize a new store
-    store = RGWStoreManager::get_storage(cct,
-                                         cct->_conf->rgw_enable_gc_threads,
-                                         cct->_conf->rgw_enable_lc_threads,
-                                         cct->_conf->rgw_enable_quota_threads,
-                                         cct->_conf->rgw_run_sync_thread,
-                                         cct->_conf->rgw_dynamic_resharding);
+    store =
+      RGWStoreManager::get_storage(cct,
+				   cct->_conf->rgw_enable_gc_threads,
+				   cct->_conf->rgw_enable_lc_threads,
+				   cct->_conf->rgw_enable_quota_threads,
+				   cct->_conf->rgw_run_sync_thread,
+				   cct->_conf.get_val<bool>("rgw_dynamic_resharding"),
+				   cct->_conf->rgw_cache_enabled);
 
     ldout(cct, 1) << "Creating new store" << dendl;
 
@@ -144,10 +152,17 @@ void RGWRealmReloader::reload()
     }
   }
 
+  int r = store->register_to_service_map("rgw", service_map_meta);
+  if (r < 0) {
+    lderr(cct) << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
+
+    /* ignore error */
+  }
+
   ldout(cct, 1) << "Finishing initialization of new store" << dendl;
   // finish initializing the new store
   ldout(cct, 1) << " - REST subsystem init" << dendl;
-  rgw_rest_init(cct, store, store->get_zonegroup());
+  rgw_rest_init(cct, store, store->svc.zone->get_zonegroup());
   ldout(cct, 1) << " - user subsystem init" << dendl;
   rgw_user_init(store);
   ldout(cct, 1) << " - user subsystem init" << dendl;

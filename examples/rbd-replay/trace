@@ -1,10 +1,10 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 mkdir -p traces
 lttng create -o traces librbd
 lttng enable-event -u 'librbd:*'
 lttng add-context -u -t pthread_id
 lttng start
-LD_LIBRARY_PATH=../../src/.libs/ qemu-system-i386 -m 1024 rbd:rbd/my-image:conf=../../src/ceph.conf
+LD_LIBRARY_PATH=../../build/lib qemu-system-i386 -m 1024 rbd:rbd/my-image:conf=../../src/ceph.conf
 lttng stop
 lttng view > trace.log

@@ -18,51 +18,57 @@
 
 #include "msg/Message.h"
 #include "mds/locks.h"
+#include "mds/SimpleLock.h"
 
-class MLock : public Message {
-  int32_t     action;  // action type
-  int32_t     asker;  // who is initiating this request
+class MLock : public MessageInstance<MLock> {
+public:
+  friend factory;
+private:
+  int32_t     action = 0;  // action type
+  mds_rank_t  asker = 0;  // who is initiating this request
   metareqid_t reqid;  // for remote lock requests
   
-  __u16      lock_type;  // lock object type
+  __u16      lock_type = 0;  // lock object type
   MDSCacheObjectInfo object_info;  
   
   bufferlist lockdata;  // and possibly some data
   
 public:
   bufferlist& get_data() { return lockdata; }
-  int get_asker() { return asker; }
-  int get_action() { return action; }
-  metareqid_t get_reqid() { return reqid; }
+  const bufferlist& get_data() const { return lockdata; }
+  int get_asker() const { return asker; }
+  int get_action() const { return action; }
+  metareqid_t get_reqid() const { return reqid; }
   
-  int get_lock_type() { return lock_type; }
+  int get_lock_type() const { return lock_type; }
+  const MDSCacheObjectInfo &get_object_info() const { return object_info; }
   MDSCacheObjectInfo &get_object_info() { return object_info; }
-  
-  MLock() : Message(MSG_MDS_LOCK) {}
-  MLock(int ac, int as) :
-    Message(MSG_MDS_LOCK),
+
+protected:
+  MLock() : MessageInstance(MSG_MDS_LOCK) {}
+  MLock(int ac, mds_rank_t as) :
+    MessageInstance(MSG_MDS_LOCK),
     action(ac), asker(as),
     lock_type(0) { }
-  MLock(SimpleLock *lock, int ac, int as) :
-    Message(MSG_MDS_LOCK),
+  MLock(SimpleLock *lock, int ac, mds_rank_t as) :
+    MessageInstance(MSG_MDS_LOCK),
     action(ac), asker(as),
     lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
   }
-  MLock(SimpleLock *lock, int ac, int as, bufferlist& bl) :
-    Message(MSG_MDS_LOCK),
+  MLock(SimpleLock *lock, int ac, mds_rank_t as, bufferlist& bl) :
+    MessageInstance(MSG_MDS_LOCK),
     action(ac), asker(as), lock_type(lock->get_type()) {
     lock->get_parent()->set_object_info(object_info);
     lockdata.claim(bl);
   }
-private:
   ~MLock() override {}
   
 public:
-  const char *get_type_name() const override { return "ILock"; }
+  std::string_view get_type_name() const override { return "ILock"; }
   void print(ostream& out) const override {
-    out << "lock(a=" << get_lock_action_name(action)
-	<< " " << get_lock_type_name(lock_type)
+    out << "lock(a=" << SimpleLock::get_lock_action_name(action)
+	<< " " << SimpleLock::get_lock_type_name(lock_type)
 	<< " " << object_info
 	<< ")";
   }
@@ -73,21 +79,23 @@ public:
   }
   
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(asker, p);
-    ::decode(action, p);
-    ::decode(reqid, p);
-    ::decode(lock_type, p);
-    ::decode(object_info, p);
-    ::decode(lockdata, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(asker, p);
+    decode(action, p);
+    decode(reqid, p);
+    decode(lock_type, p);
+    decode(object_info, p);
+    decode(lockdata, p);
   }
   void encode_payload(uint64_t features) override {
-    ::encode(asker, payload);
-    ::encode(action, payload);
-    ::encode(reqid, payload);
-    ::encode(lock_type, payload);
-    ::encode(object_info, payload);
-    ::encode(lockdata, payload);
+    using ceph::encode;
+    encode(asker, payload);
+    encode(action, payload);
+    encode(reqid, payload);
+    encode(lock_type, payload);
+    encode(object_info, payload);
+    encode(lockdata, payload);
   }
 
 };

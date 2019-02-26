@@ -44,7 +44,7 @@ void RGWLoadGenProcess::run()
   for (i = 0; i < num_buckets; i++) {
     buckets[i] = "/loadgen";
     string& bucket = buckets[i];
-    append_rand_alpha(NULL, bucket, bucket, 16);
+    append_rand_alpha(cct, bucket, bucket, 16);
 
     /* first create a bucket */
     gen_request("PUT", bucket, 0, &failed);
@@ -60,7 +60,7 @@ void RGWLoadGenProcess::run()
 
   for (i = 0; i < num_objs; i++) {
     char buf[16 + 1];
-    gen_rand_alphanumeric(NULL, buf, sizeof(buf));
+    gen_rand_alphanumeric(cct, buf, sizeof(buf));
     buf[16] = '\0';
     objs[i] = buckets[i % num_buckets] + "/" + buf;
   }
@@ -131,10 +131,11 @@ void RGWLoadGenProcess::handle_request(RGWRequest* r)
   env.sign(access_key);
 
   RGWLoadGenIO real_client_io(&env);
-  RGWRestfulIO client_io(&real_client_io);
+  RGWRestfulIO client_io(cct, &real_client_io);
 
   int ret = process_request(store, rest, req, uri_prefix,
-                            *auth_registry, &client_io, olog);
+                            *auth_registry, &client_io, olog,
+                            null_yield, nullptr);
   if (ret < 0) {
     /* we don't really care about return code */
     dout(20) << "process_request() returned " << ret << dendl;

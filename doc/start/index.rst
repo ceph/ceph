@@ -1,6 +1,6 @@
-======================
- Installation (Quick)
-======================
+============================
+ Installation (ceph-deploy)
+============================
 
 .. raw:: html
 
@@ -19,7 +19,7 @@ avail yourself of help by getting involved in the Ceph community.
 
 	</td><td><h3>Step 2: Storage Cluster</h3>
 	
-Once you've completed your preflight checklist, you should be able to begin
+Once you have completed your preflight checklist, you should be able to begin
 deploying a Ceph Storage Cluster.
 
 .. toctree::

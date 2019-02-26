@@ -344,7 +344,7 @@ void XioInit::package_init(CephContext *cct) {
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 static ostream& _prefix(std::ostream *_dout, XioMessenger *msgr) {
-  return *_dout << "-- " << msgr->get_myaddr() << " ";
+  return *_dout << "-- " << msgr->get_myaddr_legacy() << " ";
 }
 
 XioMessenger::XioMessenger(CephContext *cct, entity_name_t name,
@@ -511,7 +511,7 @@ int XioMessenger::session_event(struct xio_session *session,
 
     xcon->conn = conn;
     xcon->portal = static_cast<XioPortal*>(xctxa.user_context);
-    assert(xcon->portal);
+    ceph_assert(xcon->portal);
 
     xcona.user_context = xcon;
     (void) xio_modify_connection(conn, &xcona, XIO_CONNECTION_ATTR_USER_CTX);
@@ -769,7 +769,7 @@ static inline XioMsg* pool_alloc_xio_msg(Message *m, XioConnection *xcon,
   if (!!e)
     return NULL;
   XioMsg *xmsg = reinterpret_cast<XioMsg*>(mp_mem.addr);
-  assert(!!xmsg);
+  ceph_assert(!!xmsg);
   new (xmsg) XioMsg(m, xcon, mp_mem, ex_cnt, CEPH_FEATURES_ALL);
   return xmsg;
 }
@@ -781,7 +781,7 @@ XioCommand* pool_alloc_xio_command(XioConnection *xcon)
   if (!!e)
     return NULL;
   XioCommand *xcmd = reinterpret_cast<XioCommand*>(mp_mem.addr);
-  assert(!!xcmd);
+  ceph_assert(!!xcmd);
   new (xcmd) XioCommand(xcon, mp_mem);
   return xcmd;
 }
@@ -800,13 +800,12 @@ int XioMessenger::_send_message(Message *m, Connection *con)
 
   /* If con is not in READY state, we have to enforce policy */
   if (xcon->cstate.session_state.read() != XioConnection::UP) {
-    pthread_spin_lock(&xcon->sp);
+    std::lock_guard<decltype(xcon->sp) lg(xcon->sp);
+
     if (xcon->cstate.session_state.read() != XioConnection::UP) {
       xcon->outgoing.mqueue.push_back(*m);
-      pthread_spin_unlock(&xcon->sp);
       return 0;
     }
-    pthread_spin_unlock(&xcon->sp);
   }
 
   return _send_message_impl(m, xcon);
@@ -867,9 +866,9 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
     switch (m->get_type()) {
     case 43:
     // case 15:
-      ldout(cct,4) << __func__ << "stop 43 " << m->get_type() << " " << *m << dendl;
+      ldout(cct,4) << __func__ << " stop 43 " << m->get_type() << " " << *m << dendl;
       buffer::list &payload = m->get_payload();
-      ldout(cct,4) << __func__ << "payload dump:" << dendl;
+      ldout(cct,4) << __func__ << " payload dump:" << dendl;
       payload.hexdump(cout);
     }
   }
@@ -913,7 +912,7 @@ int XioMessenger::_send_message_impl(Message* m, XioConnection* xcon)
   req = xmsg->get_xio_msg();
 
   const std::list<buffer::ptr>& header = xmsg->hdr.get_bl().buffers();
-  assert(header.size() == 1); /* XXX */
+  ceph_assert(header.size() == 1); /* XXX */
   list<bufferptr>::const_iterator pb = header.begin();
   req->out.header.iov_base = (char*) pb->c_str();
   req->out.header.iov_len = pb->length();
@@ -1046,7 +1045,7 @@ ConnectionRef XioMessenger::get_loopback_connection()
 
 void XioMessenger::unregister_xcon(XioConnection *xcon)
 {
-  Spinlock::Locker lckr(conns_sp);
+  std::lock_guard<decltype(conns_sp)> lckr(conns_sp);
 
   XioConnection::EntitySet::iterator conn_iter =
 	conns_entity_map.find(xcon->peer, XioConnection::EntityComp());
@@ -1069,7 +1068,7 @@ void XioMessenger::unregister_xcon(XioConnection *xcon)
 void XioMessenger::mark_down(const entity_addr_t& addr)
 {
   entity_inst_t inst(entity_name_t(), addr);
-  Spinlock::Locker lckr(conns_sp);
+  std::lock_guard<decltype(conns_sp)> lckr(conns_sp);
   XioConnection::EntitySet::iterator conn_iter =
     conns_entity_map.find(inst, XioConnection::EntityComp());
   if (conn_iter != conns_entity_map.end()) {
@@ -1085,7 +1084,7 @@ void XioMessenger::mark_down(Connection* con)
 
 void XioMessenger::mark_down_all()
 {
-  Spinlock::Locker lckr(conns_sp);
+  std::lock_guard<decltype(conns_sp)> lckr(conns_sp);
   XioConnection::EntitySet::iterator conn_iter;
   for (conn_iter = conns_entity_map.begin(); conn_iter !=
 	 conns_entity_map.begin(); ++conn_iter) {
@@ -1125,7 +1124,7 @@ void XioMessenger::mark_disposable(Connection *con)
 
 void XioMessenger::try_insert(XioConnection *xcon)
 {
-  Spinlock::Locker lckr(conns_sp);
+  std::lock_guard<decltype(conns_sp)> lckr(conns_sp);
   /* already resident in conns_list */
   conns_entity_map.insert(*xcon);
 }

@@ -15,7 +15,6 @@
 #include <sys/stat.h>
 #include <iostream>
 #include <string>
-using namespace std;
 
 #include "common/config.h"
 
@@ -57,14 +56,14 @@ int main(int argc, const char **argv, char *envp[])
 
   list<Client*> clients;
   list<SyntheticClient*> synclients;
-  Messenger* messengers[g_conf->num_client];
-  MonClient* mclients[g_conf->num_client];
+  vector<Messenger*> messengers{static_cast<unsigned>(num_client), nullptr};
+  vector<MonClient*> mclients{static_cast<unsigned>(num_client), nullptr};
 
-  cout << "ceph-syn: starting " << g_conf->num_client << " syn client(s)" << std::endl;
-  for (int i=0; i<g_conf->num_client; i++) {
+  cout << "ceph-syn: starting " << num_client << " syn client(s)" << std::endl;
+  for (int i=0; i<num_client; i++) {
     messengers[i] = Messenger::create_client_messenger(g_ceph_context,
 						       "synclient");
-    messengers[i]->bind(g_conf->public_addr);
+    messengers[i]->bind(g_conf()->public_addr);
     mclients[i] = new MonClient(g_ceph_context);
     mclients[i]->build_initial_monmap();
     auto client = new StandaloneClient(messengers[i], mclients[i]);
@@ -91,7 +90,7 @@ int main(int argc, const char **argv, char *envp[])
     delete client;
   }
 
-  for (int i = 0; i < g_conf->num_client; ++i) {
+  for (int i = 0; i < num_client; ++i) {
     // wait for messenger to finish
     delete mclients[i];
     messengers[i]->shutdown();

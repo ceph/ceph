@@ -2,14 +2,14 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_cache.h"
+#include "rgw_perf_counters.h"
 
 #include <errno.h>
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
-int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cache_entry_info *cache_info)
+int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cache_entry_info *cache_info)
 {
   RWLock::RLocker l(lock);
 
@@ -17,10 +17,28 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cac
     return -ENOENT;
   }
 
-  map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
+  auto iter = cache_map.find(name);
   if (iter == cache_map.end()) {
     ldout(cct, 10) << "cache get: name=" << name << " : miss" << dendl;
-    if(perfcounter) perfcounter->inc(l_rgw_cache_miss);
+    if (perfcounter)
+      perfcounter->inc(l_rgw_cache_miss);
+    return -ENOENT;
+  }
+  if (expiry.count() &&
+       (ceph::coarse_mono_clock::now() - iter->second.info.time_added) > expiry) {
+    ldout(cct, 10) << "cache get: name=" << name << " : expiry miss" << dendl;
+    lock.unlock();
+    lock.get_write();
+    // check that wasn't already removed by other thread
+    iter = cache_map.find(name);
+    if (iter != cache_map.end()) {
+      for (auto &kv : iter->second.chained_entries)
+        kv.first->invalidate(kv.second);
+      remove_lru(name, iter->second.lru_iter);
+      cache_map.erase(iter);
+    }
+    if(perfcounter)
+      perfcounter->inc(l_rgw_cache_miss);
     return -ENOENT;
   }
 
@@ -69,7 +87,8 @@ int ObjectCache::get(string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cac
   return 0;
 }
 
-bool ObjectCache::chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_entries, RGWChainedCache::Entry *chained_entry)
+bool ObjectCache::chain_cache_entry(std::initializer_list<rgw_cache_entry_info*> cache_info_entries,
+				    RGWChainedCache::Entry *chained_entry)
 {
   RWLock::WLocker l(lock);
 
@@ -77,46 +96,41 @@ bool ObjectCache::chain_cache_entry(list<rgw_cache_entry_info *>& cache_info_ent
     return false;
   }
 
-  list<rgw_cache_entry_info *>::iterator citer;
-
-  list<ObjectCacheEntry *> cache_entry_list;
-
+  std::vector<ObjectCacheEntry*> entries;
+  entries.reserve(cache_info_entries.size());
   /* first verify that all entries are still valid */
-  for (citer = cache_info_entries.begin(); citer != cache_info_entries.end(); ++citer) {
-    rgw_cache_entry_info *cache_info = *citer;
-
-    ldout(cct, 10) << "chain_cache_entry: cache_locator=" << cache_info->cache_locator << dendl;
-    map<string, ObjectCacheEntry>::iterator iter = cache_map.find(cache_info->cache_locator);
+  for (auto cache_info : cache_info_entries) {
+    ldout(cct, 10) << "chain_cache_entry: cache_locator="
+		   << cache_info->cache_locator << dendl;
+    auto iter = cache_map.find(cache_info->cache_locator);
     if (iter == cache_map.end()) {
       ldout(cct, 20) << "chain_cache_entry: couldn't find cache locator" << dendl;
       return false;
     }
 
-    ObjectCacheEntry *entry = &iter->second;
+    auto entry = &iter->second;
 
     if (entry->gen != cache_info->gen) {
-      ldout(cct, 20) << "chain_cache_entry: entry.gen (" << entry->gen << ") != cache_info.gen (" << cache_info->gen << ")" << dendl;
+      ldout(cct, 20) << "chain_cache_entry: entry.gen (" << entry->gen
+		     << ") != cache_info.gen (" << cache_info->gen << ")"
+		     << dendl;
       return false;
     }
-
-    cache_entry_list.push_back(entry);
+    entries.push_back(entry);
   }
 
 
   chained_entry->cache->chain_cb(chained_entry->key, chained_entry->data);
 
-  list<ObjectCacheEntry *>::iterator liter;
-
-  for (liter = cache_entry_list.begin(); liter != cache_entry_list.end(); ++liter) {
-    ObjectCacheEntry *entry = *liter;
-
-    entry->chained_entries.push_back(make_pair(chained_entry->cache, chained_entry->key));
+  for (auto entry : entries) {
+    entry->chained_entries.push_back(make_pair(chained_entry->cache,
+					       chained_entry->key));
   }
 
   return true;
 }
 
-void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info *cache_info)
+void ObjectCache::put(const string& name, ObjectCacheInfo& info, rgw_cache_entry_info *cache_info)
 {
   RWLock::WLocker l(lock);
 
@@ -126,21 +140,16 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info 
 
   ldout(cct, 10) << "cache put: name=" << name << " info.flags=0x"
                  << std::hex << info.flags << std::dec << dendl;
-  map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
-  if (iter == cache_map.end()) {
-    ObjectCacheEntry entry;
-    entry.lru_iter = lru.end();
-    cache_map.insert(pair<string, ObjectCacheEntry>(name, entry));
-    iter = cache_map.find(name);
-  }
+
+  auto [iter, inserted] = cache_map.emplace(name, ObjectCacheEntry{});
   ObjectCacheEntry& entry = iter->second;
+  entry.info.time_added = ceph::coarse_mono_clock::now();
+  if (inserted) {
+    entry.lru_iter = lru.end();
+  }
   ObjectCacheInfo& target = entry.info;
 
-  for (list<pair<RGWChainedCache *, string> >::iterator iiter = entry.chained_entries.begin();
-       iiter != entry.chained_entries.end(); ++iiter) {
-    RGWChainedCache *chained_cache = iiter->first;
-    chained_cache->invalidate(iiter->second);
-  }
+  invalidate_lru(entry);
 
   entry.chained_entries.clear();
   entry.gen++;
@@ -193,35 +202,35 @@ void ObjectCache::put(string& name, ObjectCacheInfo& info, rgw_cache_entry_info 
     target.version = info.version;
 }
 
-void ObjectCache::remove(string& name)
+bool ObjectCache::remove(const string& name)
 {
   RWLock::WLocker l(lock);
 
   if (!enabled) {
-    return;
+    return false;
   }
 
-  map<string, ObjectCacheEntry>::iterator iter = cache_map.find(name);
+  auto iter = cache_map.find(name);
   if (iter == cache_map.end())
-    return;
+    return false;
 
   ldout(cct, 10) << "removing " << name << " from cache" << dendl;
   ObjectCacheEntry& entry = iter->second;
 
-  for (list<pair<RGWChainedCache *, string> >::iterator iiter = entry.chained_entries.begin();
-       iiter != entry.chained_entries.end(); ++iiter) {
-    RGWChainedCache *chained_cache = iiter->first;
-    chained_cache->invalidate(iiter->second);
+  for (auto& kv : entry.chained_entries) {
+    kv.first->invalidate(kv.second);
   }
 
   remove_lru(name, iter->second.lru_iter);
   cache_map.erase(iter);
+  return true;
 }
 
-void ObjectCache::touch_lru(string& name, ObjectCacheEntry& entry, std::list<string>::iterator& lru_iter)
+void ObjectCache::touch_lru(const string& name, ObjectCacheEntry& entry,
+			    std::list<string>::iterator& lru_iter)
 {
   while (lru_size > (size_t)cct->_conf->rgw_cache_lru_size) {
-    list<string>::iterator iter = lru.begin();
+    auto iter = lru.begin();
     if ((*iter).compare(name) == 0) {
       /*
        * if the entry we're touching happens to be at the lru end, don't remove it,
@@ -229,10 +238,13 @@ void ObjectCache::touch_lru(string& name, ObjectCacheEntry& entry, std::list<str
        */
       break;
     }
-    map<string, ObjectCacheEntry>::iterator map_iter = cache_map.find(*iter);
+    auto map_iter = cache_map.find(*iter);
     ldout(cct, 10) << "removing entry: name=" << *iter << " from cache LRU" << dendl;
-    if (map_iter != cache_map.end())
+    if (map_iter != cache_map.end()) {
+      ObjectCacheEntry& entry = map_iter->second;
+      invalidate_lru(entry);
       cache_map.erase(map_iter);
+    }
     lru.pop_front();
     lru_size--;
   }
@@ -254,7 +266,8 @@ void ObjectCache::touch_lru(string& name, ObjectCacheEntry& entry, std::list<str
   entry.lru_promotion_ts = lru_counter;
 }
 
-void ObjectCache::remove_lru(string& name, std::list<string>::iterator& lru_iter)
+void ObjectCache::remove_lru(const string& name,
+			     std::list<string>::iterator& lru_iter)
 {
   if (lru_iter == lru.end())
     return;
@@ -262,6 +275,15 @@ void ObjectCache::remove_lru(string& name, std::list<string>::iterator& lru_iter
   lru.erase(lru_iter);
   lru_size--;
   lru_iter = lru.end();
+}
+
+void ObjectCache::invalidate_lru(ObjectCacheEntry& entry)
+{
+  for (auto iter = entry.chained_entries.begin();
+       iter != entry.chained_entries.end(); ++iter) {
+    RGWChainedCache *chained_cache = iter->first;
+    chained_cache->invalidate(iter->second);
+  }
 }
 
 void ObjectCache::set_enabled(bool status)
@@ -291,13 +313,33 @@ void ObjectCache::do_invalidate_all()
   lru_counter = 0;
   lru_window = 0;
 
-  for (list<RGWChainedCache *>::iterator iter = chained_cache.begin(); iter != chained_cache.end(); ++iter) {
-    (*iter)->invalidate_all();
+  for (auto& cache : chained_cache) {
+    cache->invalidate_all();
   }
 }
 
 void ObjectCache::chain_cache(RGWChainedCache *cache) {
   RWLock::WLocker l(lock);
   chained_cache.push_back(cache);
+}
+
+void ObjectCache::unchain_cache(RGWChainedCache *cache) {
+  RWLock::WLocker l(lock);
+
+  auto iter = chained_cache.begin();
+  for (; iter != chained_cache.end(); ++iter) {
+    if (cache == *iter) {
+      chained_cache.erase(iter);
+      cache->unregistered();
+      return;
+    }
+  }
+}
+
+ObjectCache::~ObjectCache()
+{
+  for (auto cache : chained_cache) {
+    cache->unregistered();
+  }
 }
 

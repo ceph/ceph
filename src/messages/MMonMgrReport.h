@@ -17,50 +17,70 @@
 
 #include "messages/PaxosServiceMessage.h"
 #include "include/types.h"
+#include "include/health.h"
+#include "mon/health_check.h"
+#include "mon/PGMap.h"
 
-// health_status_t
-static inline void encode(health_status_t hs, bufferlist& bl) {
-  uint8_t v = hs;
-  ::encode(v, bl);
-}
-static inline void decode(health_status_t& hs, bufferlist::iterator& p) {
-  uint8_t v;
-  ::decode(v, p);
-  hs = health_status_t(v);
-}
-
-class MMonMgrReport : public PaxosServiceMessage {
-
-  static const int HEAD_VERSION = 1;
-  static const int COMPAT_VERSION = 1;
+class MMonMgrReport
+  : public MessageInstance<MMonMgrReport, PaxosServiceMessage> {
+public:
+  friend factory;
+private:
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
 
 public:
   // PGMapDigest is in data payload
-  list<pair<health_status_t,std::string>> health_summary, health_detail;
+  health_check_map_t health_checks;
+  bufferlist service_map_bl;  // encoded ServiceMap
+  std::map<std::string,ProgressEvent> progress_events;
 
   MMonMgrReport()
-    : PaxosServiceMessage(MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION)
+    : MessageInstance(MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION)
   {}
 private:
   ~MMonMgrReport() override {}
 
 public:
-  const char *get_type_name() const override { return "monmgrreport"; }
+  std::string_view get_type_name() const override { return "monmgrreport"; }
 
   void print(ostream& out) const override {
-    out << get_type_name();
+    out << get_type_name() << "(" << health_checks.checks.size() << " checks, "
+	<< progress_events.size() << " progress events)";
   }
 
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(health_summary, payload);
-    ::encode(health_detail, payload);
+    encode(health_checks, payload);
+    encode(service_map_bl, payload);
+    encode(progress_events, payload);
+
+    if (!HAVE_FEATURE(features, SERVER_NAUTILUS) ||
+	!HAVE_FEATURE(features, SERVER_MIMIC)) {
+      // PGMapDigest had a backwards-incompatible change between
+      // luminous and mimic, and conditionally encodes based on
+      // provided features, so reencode the one in our data payload.
+      // The mgr isn't able to do this at the time the encoded
+      // PGMapDigest is constructed because we don't know which mon we
+      // will target.  Note that this only triggers if the user
+      // upgrades ceph-mgr before ceph-mon (tsk tsk).
+      PGMapDigest digest;
+      auto p = data.cbegin();
+      decode(digest, p);
+      bufferlist bl;
+      encode(digest, bl, features);
+      data.swap(bl);
+    }
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(health_summary, p);
-    ::decode(health_detail, p);
+    decode(health_checks, p);
+    decode(service_map_bl, p);
+    if (header.version >= 2) {
+      decode(progress_events, p);
+    }
   }
 };
 

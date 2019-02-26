@@ -1,6 +1,6 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
 
-set -e
+set -ex
 
 expect_false()
 {
@@ -10,6 +10,7 @@ expect_false()
 
 # create pools, set up tier relationship
 ceph osd pool create base_pool 2
+ceph osd pool application enable base_pool rados
 ceph osd pool create partial_wrong 2
 ceph osd pool create wrong_cache 2
 ceph osd tier add base_pool partial_wrong
@@ -89,6 +90,7 @@ ceph osd pool delete partial_wrong partial_wrong --yes-i-really-really-mean-it
 
 ## set of base, cache
 ceph osd pool create base 8
+ceph osd pool application enable base rados
 ceph osd pool create cache 8
 
 ceph osd tier add base cache

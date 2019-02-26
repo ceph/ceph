@@ -201,7 +201,7 @@ __s32 ceph_to_hostos_errno(__s32 r)
 {
   int sign = (r < 0 ? -1 : 1);
   int err = std::abs(r);
-  if (err < 256 && hostos_to_ceph_conv[err] !=0 ) {
+  if (err < 256 && ceph_to_hostos_conv[err] !=0 ) {
     err = ceph_to_hostos_conv[err];
   }
   return err * sign;

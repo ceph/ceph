@@ -24,9 +24,13 @@
 #include <mutex>
 #include <atomic>
 #include <typeinfo>
+#include <boost/container/flat_set.hpp>
+#include <boost/container/flat_map.hpp>
 
 #include <common/Formatter.h>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
+#include "include/compact_map.h"
+#include "include/compact_set.h"
 
 
 /*
@@ -100,6 +104,12 @@ BlueStore::Onode, we need to do
 (This is just because we need to name some static variables and we
 can't use :: in a variable name.)
 
+XXX Note: the new operator hard-codes the allocation size to the size of the
+object given in MEMPOOL_DEFINE_OBJECT_FACTORY. For this reason, you cannot
+incorporate mempools into a base class without also defining a helper/factory
+for the child class as well (as the base class is usually smaller than the
+child class).
+
 In order to use the STL containers, simply use the namespaced variant
 of the container type.  For example,
 
@@ -154,6 +164,7 @@ namespace mempool {
   f(osdmap)			      \
   f(osdmap_mapping)		      \
   f(pgmap)			      \
+  f(mds_co)			      \
   f(unittest_1)			      \
   f(unittest_2)
 
@@ -390,6 +401,17 @@ public:
     using map = std::map<k, v, cmp,					\
 			 pool_allocator<std::pair<const k,v>>>;		\
                                                                         \
+    template<typename k,typename v, typename cmp = std::less<k> >       \
+    using compact_map = compact_map<k, v, cmp,                          \
+			 pool_allocator<std::pair<const k,v>>>;         \
+                                                                        \
+    template<typename k,typename v, typename cmp = std::less<k> >       \
+    using compact_multimap = compact_multimap<k, v, cmp,                \
+			 pool_allocator<std::pair<const k,v>>>;         \
+                                                                        \
+    template<typename k, typename cmp = std::less<k> >                  \
+    using compact_set = compact_set<k, cmp, pool_allocator<k>>;         \
+                                                                        \
     template<typename k,typename v, typename cmp = std::less<k> >	\
     using multimap = std::multimap<k,v,cmp,				\
 				   pool_allocator<std::pair<const k,	\
@@ -397,6 +419,13 @@ public:
                                                                         \
     template<typename k, typename cmp = std::less<k> >			\
     using set = std::set<k,cmp,pool_allocator<k>>;			\
+                                                                        \
+    template<typename k, typename cmp = std::less<k> >			\
+    using flat_set = boost::container::flat_set<k,cmp,pool_allocator<k>>; \
+									\
+    template<typename k, typename v, typename cmp = std::less<k> >	\
+    using flat_map = boost::container::flat_map<k,v,cmp,		\
+						pool_allocator<std::pair<k,v>>>; \
                                                                         \
     template<typename v>						\
     using list = std::list<v,pool_allocator<v>>;			\
@@ -424,7 +453,40 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 
 };
 
+// the elements allocated by mempool is in the same memory space as the ones
+// allocated by the default allocator. so compare them in an efficient way:
+// libstdc++'s std::equal is specialized to use memcmp if T is integer or
+// pointer. this is good enough for our usecase. use
+// std::is_trivially_copyable<T> to expand the support to more types if
+// nececssary.
+template<typename T, mempool::pool_index_t pool_index>
+bool operator==(const std::vector<T, std::allocator<T>>& lhs,
+		const std::vector<T, mempool::pool_allocator<pool_index, T>>& rhs)
+{
+  return (lhs.size() == rhs.size() &&
+	  std::equal(lhs.begin(), lhs.end(), rhs.begin()));
+}
 
+template<typename T, mempool::pool_index_t pool_index>
+bool operator!=(const std::vector<T, std::allocator<T>>& lhs,
+		const std::vector<T, mempool::pool_allocator<pool_index, T>>& rhs)
+{
+  return !(lhs == rhs);
+}
+
+template<typename T, mempool::pool_index_t pool_index>
+bool operator==(const std::vector<T, mempool::pool_allocator<pool_index, T>>& lhs,
+		const std::vector<T, std::allocator<T>>& rhs)
+{
+  return rhs == lhs;
+}
+
+template<typename T, mempool::pool_index_t pool_index>
+bool operator!=(const std::vector<T, mempool::pool_allocator<pool_index, T>>& lhs,
+		const std::vector<T, std::allocator<T>>& rhs)
+{
+  return !(lhs == rhs);
+}
 
 // Use this for any type that is contained by a container (unless it
 // is a class you defined; see below).
@@ -452,10 +514,10 @@ DEFINE_MEMORY_POOLS_HELPER(P)
 #define MEMPOOL_CLASS_HELPERS()						\
   void *operator new(size_t size);					\
   void *operator new[](size_t size) noexcept {				\
-    assert(0 == "no array new");					\
+    ceph_abort_msg("no array new");					\
     return nullptr; }							\
   void  operator delete(void *);					\
-  void  operator delete[](void *) { assert(0 == "no array delete"); }
+  void  operator delete[](void *) { ceph_abort_msg("no array delete"); }
 
 
 // Use this in some particular .cc file to match each class with a

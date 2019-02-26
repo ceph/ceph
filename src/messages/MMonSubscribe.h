@@ -29,13 +29,17 @@ struct ceph_mon_subscribe_item_old {
 WRITE_RAW_ENCODER(ceph_mon_subscribe_item_old)
 
 
-struct MMonSubscribe : public Message {
+class MMonSubscribe : public MessageInstance<MMonSubscribe> {
+public:
+  friend factory;
 
-  static const int HEAD_VERSION = 2;
+  static constexpr int HEAD_VERSION = 3;
+  static constexpr int COMPAT_VERSION = 1;
 
+  string hostname;
   map<string, ceph_mon_subscribe_item> what;
   
-  MMonSubscribe() : Message(CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION) { }
+  MMonSubscribe() : MessageInstance(CEPH_MSG_MON_SUBSCRIBE, HEAD_VERSION, COMPAT_VERSION) { }
 private:
   ~MMonSubscribe() override {}
 
@@ -45,16 +49,16 @@ public:
     what[w].flags = flags;
   }
 
-  const char *get_type_name() const override { return "mon_subscribe"; }
+  std::string_view get_type_name() const override { return "mon_subscribe"; }
   void print(ostream& o) const override {
     o << "mon_subscribe(" << what << ")";
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     if (header.version < 2) {
       map<string, ceph_mon_subscribe_item_old> oldwhat;
-      ::decode(oldwhat, p);
+      decode(oldwhat, p);
       what.clear();
       for (map<string, ceph_mon_subscribe_item_old>::iterator q = oldwhat.begin();
 	   q != oldwhat.end();
@@ -67,15 +71,16 @@ public:
 	if (q->second.onetime)
 	  what[q->first].flags |= CEPH_SUBSCRIBE_ONETIME;
       }
-    } else {
-      ::decode(what, p);
+      return;
+    }
+    decode(what, p);
+    if (header.version >= 3) {
+      decode(hostname, p);
     }
   }
   void encode_payload(uint64_t features) override {
-    if (features & CEPH_FEATURE_SUBSCRIBE2) {
-      ::encode(what, payload);
-      header.version = HEAD_VERSION;
-    } else {
+    using ceph::encode;
+    if ((features & CEPH_FEATURE_SUBSCRIBE2) == 0) {
       header.version = 0;
       map<string, ceph_mon_subscribe_item_old> oldwhat;
       for (map<string, ceph_mon_subscribe_item>::iterator q = what.begin();
@@ -88,8 +93,12 @@ public:
 	  oldwhat[q->first].have = 0;
 	oldwhat[q->first].onetime = q->second.flags & CEPH_SUBSCRIBE_ONETIME;
       }
-      ::encode(oldwhat, payload);
+      encode(oldwhat, payload);
+      return;
     }
+    header.version = HEAD_VERSION;
+    encode(what, payload);
+    encode(hostname, payload);
   }
 };
 

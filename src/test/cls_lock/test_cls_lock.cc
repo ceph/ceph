@@ -20,7 +20,7 @@
 #include "msg/msg_types.h"
 #include "include/rados/librados.hpp"
 
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "gtest/gtest.h"
 
 using namespace librados;
@@ -85,6 +85,9 @@ TEST(ClsLock, TestMultiLocking) {
   ASSERT_EQ(0, ioctx.write(oid, bl, bl.length(), 0));
 
   Lock l(lock_name);
+  // we set the duration, so the log output contains a locker with a
+  // non-zero expiration time
+  l.set_duration(utime_t(120, 0));
 
   /* test lock object */
 
@@ -94,10 +97,10 @@ TEST(ClsLock, TestMultiLocking) {
   ASSERT_EQ(-EEXIST, l.lock_exclusive(&ioctx, oid));
 
   /* test idempotency */
-  l.set_renew(true);
+  l.set_may_renew(true);
   ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
 
-  l.set_renew(false);
+  l.set_may_renew(false);
 
   /* test second client */
   Lock l2(lock_name);
@@ -204,7 +207,7 @@ TEST(ClsLock, TestMeta) {
   /* check new tag */
   string new_tag = "new_tag";
   l.set_tag(new_tag);
-  l.set_renew(true);
+  l.set_may_renew(true);
   ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
   lock_info(&ioctx, oid, lock_name, lockers, NULL, &new_tag);
   ASSERT_EQ(1, (int)lockers.size());
@@ -388,6 +391,178 @@ TEST(ClsLock, TestSetCookie) {
   librados::ObjectWriteOperation op9;
   set_cookie(&op9, name, LOCK_SHARED, cookie, tag, new_cookie);
   ASSERT_EQ(0, ioctx.operate(oid, &op9));
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
+TEST(ClsLock, TestRenew) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  bufferlist bl;
+
+  string oid1 = "foo1";
+  string lock_name1 = "mylock1";
+
+  ASSERT_EQ(0, ioctx.write(oid1, bl, bl.length(), 0));
+
+  Lock l1(lock_name1);
+  utime_t lock_duration1(5, 0);
+  l1.set_duration(lock_duration1);
+
+  ASSERT_EQ(0, l1.lock_exclusive(&ioctx, oid1));
+  l1.set_may_renew(true);
+  sleep(2);
+  ASSERT_EQ(0, l1.lock_exclusive(&ioctx, oid1));
+  sleep(7);
+  ASSERT_EQ(0, l1.lock_exclusive(&ioctx, oid1)) <<
+    "when a cls_lock is set to may_renew, a relock after expiration "
+    "should still work";
+  ASSERT_EQ(0, l1.unlock(&ioctx, oid1));
+
+  // ***********************************************
+
+  string oid2 = "foo2";
+  string lock_name2 = "mylock2";
+
+  ASSERT_EQ(0, ioctx.write(oid2, bl, bl.length(), 0));
+
+  Lock l2(lock_name2);
+  utime_t lock_duration2(5, 0);
+  l2.set_duration(lock_duration2);
+
+  ASSERT_EQ(0, l2.lock_exclusive(&ioctx, oid2));
+  l2.set_must_renew(true);
+  sleep(2);
+  ASSERT_EQ(0, l2.lock_exclusive(&ioctx, oid2));
+  sleep(7);
+  ASSERT_EQ(-ENOENT, l2.lock_exclusive(&ioctx, oid2)) <<
+    "when a cls_lock is set to must_renew, a relock after expiration "
+    "should fail";
+  ASSERT_EQ(-ENOENT, l2.unlock(&ioctx, oid2));
+
+  // ***********************************************
+
+  string oid3 = "foo3";
+  string lock_name3 = "mylock3";
+
+  ASSERT_EQ(0, ioctx.write(oid3, bl, bl.length(), 0));
+
+  Lock l3(lock_name3);
+  l3.set_duration(utime_t(5, 0));
+  l3.set_must_renew(true);
+
+  ASSERT_EQ(-ENOENT, l3.lock_exclusive(&ioctx, oid3)) <<
+    "unable to create a lock with must_renew";
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
+TEST(ClsLock, TestExclusiveEphemeralBasic) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  bufferlist bl;
+
+  string oid1 = "foo1";
+  string oid2 = "foo2";
+  string lock_name1 = "mylock1";
+  string lock_name2 = "mylock2";
+
+  Lock l1(lock_name1);
+  l1.set_duration(utime_t(5, 0));
+
+  uint64_t size;
+  time_t mod_time;
+
+  l1.set_may_renew(true);
+  ASSERT_EQ(0, l1.lock_exclusive_ephemeral(&ioctx, oid1));
+  ASSERT_EQ(0, ioctx.stat(oid1, &size, &mod_time));
+  sleep(2);
+  ASSERT_EQ(0, l1.unlock(&ioctx, oid1));
+  ASSERT_EQ(-ENOENT, ioctx.stat(oid1, &size, &mod_time));
+
+  // ***********************************************
+
+  Lock l2(lock_name2);
+  utime_t lock_duration2(5, 0);
+  l2.set_duration(utime_t(5, 0));
+
+  ASSERT_EQ(0, l2.lock_exclusive(&ioctx, oid2));
+  ASSERT_EQ(0, ioctx.stat(oid2, &size, &mod_time));
+  sleep(2);
+  ASSERT_EQ(0, l2.unlock(&ioctx, oid2));
+  ASSERT_EQ(0, ioctx.stat(oid2, &size, &mod_time));
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
+
+TEST(ClsLock, TestExclusiveEphemeralStealEphemeral) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  bufferlist bl;
+
+  string oid1 = "foo1";
+  string lock_name1 = "mylock1";
+
+  Lock l1(lock_name1);
+  l1.set_duration(utime_t(3, 0));
+
+  ASSERT_EQ(0, l1.lock_exclusive_ephemeral(&ioctx, oid1));
+  sleep(4);
+
+  // l1 is expired, l2 can take; l2 is also exclusive_ephemeral
+  Lock l2(lock_name1);
+  l2.set_duration(utime_t(3, 0));
+  ASSERT_EQ(0, l2.lock_exclusive_ephemeral(&ioctx, oid1));
+  sleep(1);
+  ASSERT_EQ(0, l2.unlock(&ioctx, oid1));
+
+  // l2 cannot unlock its expired lock
+  ASSERT_EQ(-ENOENT, l1.unlock(&ioctx, oid1));
+
+  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+}
+
+
+TEST(ClsLock, TestExclusiveEphemeralStealExclusive) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  bufferlist bl;
+
+  string oid1 = "foo1";
+  string lock_name1 = "mylock1";
+
+  Lock l1(lock_name1);
+  l1.set_duration(utime_t(3, 0));
+
+  ASSERT_EQ(0, l1.lock_exclusive_ephemeral(&ioctx, oid1));
+  sleep(4);
+
+  // l1 is expired, l2 can take; l2 is exclusive (but not ephemeral)
+  Lock l2(lock_name1);
+  l2.set_duration(utime_t(3, 0));
+  ASSERT_EQ(0, l2.lock_exclusive(&ioctx, oid1));
+  sleep(1);
+  ASSERT_EQ(0, l2.unlock(&ioctx, oid1));
+
+  // l2 cannot unlock its expired lock
+  ASSERT_EQ(-ENOENT, l1.unlock(&ioctx, oid1));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }

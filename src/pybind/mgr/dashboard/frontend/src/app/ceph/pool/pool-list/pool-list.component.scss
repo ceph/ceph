@@ -1,0 +1,17 @@
+@import '../../../../defaults';
+
+::ng-deep .pg-clean {
+  color: $color-bright-green;
+}
+
+::ng-deep .pg-working {
+  color: $color-primary;
+}
+
+::ng-deep .pg-warning {
+  color: $color-bright-yellow;
+}
+
+::ng-deep .pg-unknown {
+  color: $color-solid-red;
+}

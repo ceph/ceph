@@ -196,22 +196,22 @@ namespace ceph {
     virtual const ErasureCodeProfile &get_profile() const = 0;
 
     /**
-     * Create a new ruleset in **crush** under the name **name**,
+     * Create a new rule in **crush** under the name **name**,
      * unless it already exists.
      *
-     * Return the ruleset number that was created on success. If a
-     * ruleset **name** already exists, return -EEXISTS, otherwise
+     * Return the rule number that was created on success. If a
+     * rule **name** already exists, return -EEXISTS, otherwise
      * return a negative value indicating an error with a semantic
      * defined by the implementation.
      *
-     * @param [in] name of the ruleset to create
-     * @param [in] crush crushmap in which the ruleset is created
+     * @param [in] name of the rule to create
+     * @param [in] crush crushmap in which the rule is created
      * @param [out] ss contains informative messages when an error occurs
-     * @return a ruleset on success or a negative errno on error.
+     * @return a rule on success or a negative errno on error.
      */
-    virtual int create_ruleset(const std::string &name,
-			       CrushWrapper &crush,
-			       std::ostream *ss) const = 0;
+    virtual int create_rule(const std::string &name,
+			    CrushWrapper &crush,
+			    std::ostream *ss) const = 0;
 
     /**
      * Return the number of chunks created by a call to the **encode**
@@ -249,6 +249,16 @@ namespace ceph {
     virtual unsigned int get_coding_chunk_count() const = 0;
 
     /**
+     * Return the number of sub chunks chunks created by a call to the
+     * **encode** method. Each chunk can be viewed as union of sub-chunks
+     * For the case of array codes, the sub-chunk count > 1, where as the
+     * scalar codes have sub-chunk count = 1.
+     *
+     * @return the number of sub-chunks per chunk created by encode()
+     */
+    virtual int get_sub_chunk_count() = 0;
+
+    /**
      * Return the size (in bytes) of a single chunk created by a call
      * to the **decode** method. The returned size multiplied by
      * **get_chunk_count()** is greater or equal to **object_size**.
@@ -280,12 +290,14 @@ namespace ceph {
      *
      * @param [in] want_to_read chunk indexes to be decoded
      * @param [in] available chunk indexes containing valid data
-     * @param [out] minimum chunk indexes to retrieve 
+     * @param [out] minimum chunk indexes and corresponding 
+     *              subchunk index offsets, count.
      * @return **0** on success or a negative errno on error.
      */
     virtual int minimum_to_decode(const std::set<int> &want_to_read,
                                   const std::set<int> &available,
-                                  std::set<int> *minimum) = 0;
+                                  std::map<int, std::vector<std::pair<int, int>>> 
+                                  *minimum) = 0;
 
     /**
      * Compute the smallest subset of **available** chunks that needs
@@ -389,11 +401,12 @@ namespace ceph {
      * @param [in] want_to_read chunk indexes to be decoded
      * @param [in] chunks map chunk indexes to chunk data
      * @param [out] decoded map chunk indexes to chunk data
+     * @param [in] chunk_size chunk size
      * @return **0** on success or a negative errno on error.
      */
     virtual int decode(const std::set<int> &want_to_read,
                        const std::map<int, bufferlist> &chunks,
-                       std::map<int, bufferlist> *decoded) = 0;
+                       std::map<int, bufferlist> *decoded, int chunk_size) = 0;
 
     virtual int decode_chunks(const std::set<int> &want_to_read,
                               const std::map<int, bufferlist> &chunks,

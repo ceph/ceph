@@ -13,264 +13,27 @@
 #include <map>
 #include <set>
 #include <string>
-
-#include <boost/scoped_ptr.hpp>
+#include <fstream>
 
 #include "common/ceph_argparse.h"
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/strtol.h"
-#include "global/global_context.h"
-#include "global/global_init.h"
-#include "include/stringify.h"
-#include "include/utime.h"
-#include "common/Clock.h"
-#include "kv/KeyValueDB.h"
 #include "common/url_escape.h"
 
-#ifdef HAVE_LIBAIO
-#include "os/bluestore/BlueStore.h"
-#endif
+#include "global/global_context.h"
+#include "global/global_init.h"
 
-using namespace std;
-
-class StoreTool
-{
-  boost::scoped_ptr<KeyValueDB> db;
-  string store_path;
-
-  public:
-  StoreTool(string type, const string &path) : store_path(path) {
-    KeyValueDB *db_ptr;
-    if (type == "bluestore-kv") {
-#ifdef HAVE_LIBAIO
-      // note: we'll leak this!  the only user is ceph-kvstore-tool and
-      // we don't care.
-      BlueStore *bluestore = new BlueStore(g_ceph_context, path);
-      int r = bluestore->start_kv_only(&db_ptr);
-      if (r < 0) {
-	exit(1);
-      }
-#else
-      cerr << "bluestore not compiled in" << std::endl;
-      exit(1);
-#endif
-    } else {
-      db_ptr = KeyValueDB::create(g_ceph_context, type, path);
-      int r = db_ptr->open(std::cerr);
-      if (r < 0) {
-	cerr << "failed to open type " << type << " path " << path << ": "
-	     << cpp_strerror(r) << std::endl;
-	exit(1);
-      }
-    }
-    db.reset(db_ptr);
-  }
-
-  uint32_t traverse(const string &prefix,
-                    const bool do_crc,
-                    ostream *out) {
-    KeyValueDB::WholeSpaceIterator iter = db->get_iterator();
-
-    if (prefix.empty())
-      iter->seek_to_first();
-    else
-      iter->seek_to_first(prefix);
-
-    uint32_t crc = -1;
-
-    while (iter->valid()) {
-      pair<string,string> rk = iter->raw_key();
-      if (!prefix.empty() && (rk.first != prefix))
-        break;
-
-      if (out)
-        *out << url_escape(rk.first) << "\t" << url_escape(rk.second);
-      if (do_crc) {
-        bufferlist bl;
-        bl.append(rk.first);
-        bl.append(rk.second);
-        bl.append(iter->value());
-
-        crc = bl.crc32c(crc);
-        if (out) {
-          *out << "\t" << bl.crc32c(0);
-        }
-      }
-      if (out)
-        *out << std::endl;
-      iter->next();
-    }
-
-    return crc;
-  }
-
-  void list(const string &prefix, const bool do_crc) {
-    traverse(prefix, do_crc, &std::cout);
-  }
-
-  bool exists(const string &prefix) {
-    assert(!prefix.empty());
-    KeyValueDB::WholeSpaceIterator iter = db->get_iterator();
-    iter->seek_to_first(prefix);
-    return (iter->valid() && (iter->raw_key().first == prefix));
-  }
-
-  bool exists(const string &prefix, const string &key) {
-    assert(!prefix.empty());
-
-    if (key.empty()) {
-      return exists(prefix);
-    }
-
-    bool exists = false;
-    get(prefix, key, exists);
-    return exists;
-  }
-
-  bufferlist get(const string &prefix, const string &key, bool &exists) {
-    assert(!prefix.empty() && !key.empty());
-
-    map<string,bufferlist> result;
-    std::set<std::string> keys;
-    keys.insert(key);
-    db->get(prefix, keys, &result);
-
-    if (result.count(key) > 0) {
-      exists = true;
-      return result[key];
-    }
-    exists = false;
-    return bufferlist();
-  }
-
-  uint64_t get_size() {
-    map<string,uint64_t> extras;
-    uint64_t s = db->get_estimated_size(extras);
-    for (map<string,uint64_t>::iterator p = extras.begin();
-         p != extras.end(); ++p) {
-      std::cout << p->first << " - " << p->second << std::endl;
-    }
-    std::cout << "total: " << s << std::endl;
-    return s;
-  }
-
-  bool set(const string &prefix, const string &key, bufferlist &val) {
-    assert(!prefix.empty());
-    assert(!key.empty());
-    assert(val.length() > 0);
-
-    KeyValueDB::Transaction tx = db->get_transaction();
-    tx->set(prefix, key, val);
-    int ret = db->submit_transaction_sync(tx);
-
-    return (ret == 0);
-  }
-
-  bool rm(const string& prefix, const string& key) {
-    assert(!prefix.empty());
-    assert(!key.empty());
-
-    KeyValueDB::Transaction tx = db->get_transaction();
-    tx->rmkey(prefix, key);
-    int ret = db->submit_transaction_sync(tx);
-
-    return (ret == 0);
-  }
-
-  bool rm_prefix(const string& prefix) {
-    assert(!prefix.empty());
-
-    KeyValueDB::Transaction tx = db->get_transaction();
-    tx->rmkeys_by_prefix(prefix);
-    int ret = db->submit_transaction_sync(tx);
-
-    return (ret == 0);
-  }
-
-  int copy_store_to(string type, const string &other_path,
-		    const int num_keys_per_tx) {
-
-    if (num_keys_per_tx <= 0) {
-      std::cerr << "must specify a number of keys/tx > 0" << std::endl;
-      return -EINVAL;
-    }
-
-    // open or create a leveldb store at @p other_path
-    KeyValueDB *other = KeyValueDB::create(g_ceph_context, type, other_path);
-    int err = other->create_and_open(std::cerr);
-    if (err < 0)
-      return err;
-
-    KeyValueDB::WholeSpaceIterator it = db->get_iterator();
-    it->seek_to_first();
-    uint64_t total_keys = 0;
-    uint64_t total_size = 0;
-    uint64_t total_txs = 0;
-
-    utime_t started_at = ceph_clock_now();
-
-    do {
-      int num_keys = 0;
-
-      KeyValueDB::Transaction tx = other->get_transaction();
-
-
-      while (it->valid() && num_keys < num_keys_per_tx) {
-        pair<string,string> k = it->raw_key();
-        bufferlist v = it->value();
-        tx->set(k.first, k.second, v);
-
-        num_keys ++;
-        total_size += v.length();
-
-        it->next();
-      }
-
-      total_txs ++;
-      total_keys += num_keys;
-
-      if (num_keys > 0)
-        other->submit_transaction_sync(tx);
-
-      utime_t cur_duration = ceph_clock_now() - started_at;
-      std::cout << "ts = " << cur_duration << "s, copied " << total_keys
-                << " keys so far (" << stringify(si_t(total_size)) << ")"
-                << std::endl;
-
-    } while (it->valid());
-
-    utime_t time_taken = ceph_clock_now() - started_at;
-
-    std::cout << "summary:" << std::endl;
-    std::cout << "  copied " << total_keys << " keys" << std::endl;
-    std::cout << "  used " << total_txs << " transactions" << std::endl;
-    std::cout << "  total size " << stringify(si_t(total_size)) << std::endl;
-    std::cout << "  from '" << store_path << "' to '" << other_path << "'"
-              << std::endl;
-    std::cout << "  duration " << time_taken << " seconds" << std::endl;
-
-    return 0;
-  }
-
-  void compact() {
-    db->compact();
-  }
-  void compact_prefix(string prefix) {
-    db->compact_prefix(prefix);
-  }
-  void compact_range(string prefix, string start, string end) {
-    db->compact_range(prefix, start, end);
-  }
-};
+#include "kvstore_tool.h"
 
 void usage(const char *pname)
 {
-  std::cerr << "Usage: " << pname << " <leveldb|rocksdb|bluestore-kv> <store path> command [args...]\n"
+  std::cout << "Usage: " << pname << " <leveldb|rocksdb|bluestore-kv> <store path> command [args...]\n"
     << "\n"
     << "Commands:\n"
     << "  list [prefix]\n"
     << "  list-crc [prefix]\n"
+    << "  dump [prefix]\n"
     << "  exists <prefix> [key]\n"
     << "  get <prefix> <key> [out <file>]\n"
     << "  crc <prefix> <key>\n"
@@ -278,11 +41,12 @@ void usage(const char *pname)
     << "  set <prefix> <key> [ver <N>|in <file>]\n"
     << "  rm <prefix> <key>\n"
     << "  rm-prefix <prefix>\n"
-    << "  store-copy <path> [num-keys-per-tx]\n"
+    << "  store-copy <path> [num-keys-per-tx] [leveldb|rocksdb|...] \n"
     << "  store-crc <path>\n"
     << "  compact\n"
     << "  compact-prefix <prefix>\n"
     << "  compact-range <prefix> <start> <end>\n"
+    << "  destructive-repair  (use only as last resort! may corrupt healthy data)\n"
     << std::endl;
 }
 
@@ -290,13 +54,29 @@ int main(int argc, const char *argv[])
 {
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
-  env_to_vec(args);
+  if (args.empty()) {
+    cerr << argv[0] << ": -h or --help for usage" << std::endl;
+    exit(1);
+  }
+  if (ceph_argparse_need_usage(args)) {
+    usage(argv[0]);
+    exit(0);
+  }
+
+  map<string,string> defaults = {
+    { "debug_rocksdb", "2" }
+  };
 
   auto cct = global_init(
-      NULL, args,
-      CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY, 0);
+    &defaults, args,
+    CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
+    CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
 
+  ceph_assert((int)args.size() < argc);
+  for(size_t i=0; i<args.size(); i++)
+    argv[i+1] = args[i];
+  argc = args.size() + 1;
 
   if (args.size() < 3) {
     usage(argv[0]);
@@ -307,16 +87,41 @@ int main(int argc, const char *argv[])
   string path(args[1]);
   string cmd(args[2]);
 
-  StoreTool st(type, path);
+  if (type != "leveldb" &&
+      type != "rocksdb" &&
+      type != "bluestore-kv")  {
 
-  if (cmd == "list" || cmd == "list-crc") {
+    std::cerr << "Unrecognized type: " << args[0] << std::endl;
+    usage(argv[0]);
+    return 1;
+  }
+
+  bool need_open_db = (cmd != "destructive-repair");
+  StoreTool st(type, path, need_open_db);
+
+  if (cmd == "destructive-repair") {
+    int ret = st.destructive_repair();
+    if (!ret) {
+      std::cout << "destructive-repair completed without reporting an error"
+		<< std::endl;
+    } else {
+      std::cout << "destructive-repair failed with " << cpp_strerror(ret)
+		<< std::endl;
+    }
+    return ret;
+  } else if (cmd == "list" || cmd == "list-crc") {
     string prefix;
     if (argc > 4)
       prefix = url_unescape(argv[4]);
 
     bool do_crc = (cmd == "list-crc");
+    st.list(prefix, do_crc, false);
 
-    st.list(prefix, do_crc);
+  } else if (cmd == "dump") {
+    string prefix;
+    if (argc > 4)
+      prefix = url_unescape(argv[4]);
+    st.list(prefix, false, true);
 
   } else if (cmd == "exists") {
     string key;
@@ -419,7 +224,7 @@ int main(int argc, const char *argv[])
       return 1;
     }
     std::cout << "(" << url_escape(prefix) << "," << url_escape(key)
-              << ") size " << si_t(bl.length()) << std::endl;
+              << ") size " << byte_u_t(bl.length()) << std::endl;
 
   } else if (cmd == "set") {
     if (argc < 8) {
@@ -438,7 +243,7 @@ int main(int argc, const char *argv[])
         std::cerr << "error reading version: " << errstr << std::endl;
         return 1;
       }
-      ::encode(v, val);
+      encode(v, val);
     } else if (subcmd == "in") {
       int ret = val.read_file(argv[7], &errstr);
       if (ret < 0 || !errstr.empty()) {
@@ -499,8 +304,12 @@ int main(int argc, const char *argv[])
         return 1;
       }
     }
+    string other_store_type = argv[1];
+    if (argc > 6) {
+      other_store_type = argv[6];
+    }
 
-    int ret = st.copy_store_to(argv[1], argv[4], num_keys_per_tx);
+    int ret = st.copy_store_to(argv[1], argv[4], num_keys_per_tx, other_store_type);
     if (ret < 0) {
       std::cerr << "error copying store to path '" << argv[4]
                 << "': " << cpp_strerror(ret) << std::endl;
@@ -508,8 +317,13 @@ int main(int argc, const char *argv[])
     }
 
   } else if (cmd == "store-crc") {
-    uint32_t crc = st.traverse(string(), true, NULL);
-    std::cout << "store at '" << path << "' crc " << crc << std::endl;
+    if (argc < 4) {
+      usage(argv[0]);
+      return 1;
+    }
+    std::ofstream fs(argv[4]);
+    uint32_t crc = st.traverse(string(), true, false, &fs);
+    std::cout << "store at '" << argv[4] << "' crc " << crc << std::endl;
 
   } else if (cmd == "compact") {
     st.compact();

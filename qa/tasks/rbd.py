@@ -4,6 +4,8 @@ Rbd testing task
 import contextlib
 import logging
 import os
+import tempfile
+import sys
 
 from cStringIO import StringIO
 from teuthology.orchestra import run
@@ -13,6 +15,9 @@ from teuthology.parallel import parallel
 from teuthology.task.common_fs_utils import generic_mkfs
 from teuthology.task.common_fs_utils import generic_mount
 from teuthology.task.common_fs_utils import default_image_name
+
+#V1 image unsupported but required for testing purposes
+os.environ["RBD_FORCE_ALLOW_V1"] = "1"
 
 log = logging.getLogger(__name__)
 
@@ -334,11 +339,23 @@ def run_xfstests(ctx, config):
                 scratch_dev: 'scratch_dev'
                 fs_type: 'xfs'
                 tests: 'generic/100 xfs/003 xfs/005 xfs/006 generic/015'
+                exclude:
+                - generic/42
                 randomize: true
     """
     with parallel() as p:
         for role, properties in config.items():
             p.spawn(run_xfstests_one_client, ctx, role, properties)
+        exc_info = None
+        while True:
+            try:
+                p.next()
+            except StopIteration:
+                break
+            except:
+                exc_info = sys.exc_info()
+        if exc_info:
+            raise exc_info[0], exc_info[1], exc_info[2]
     yield
 
 def run_xfstests_one_client(ctx, role, properties):
@@ -360,14 +377,14 @@ def run_xfstests_one_client(ctx, role, properties):
 
         fs_type = properties.get('fs_type')
         tests = properties.get('tests')
+        exclude_list = properties.get('exclude')
         randomize = properties.get('randomize')
-
 
         (remote,) = ctx.cluster.only(role).remotes.keys()
 
         # Fetch the test script
         test_root = teuthology.get_testdir(ctx)
-        test_script = 'run_xfstests_krbd.sh'
+        test_script = 'run_xfstests.sh'
         test_path = os.path.join(test_root, test_script)
 
         xfstests_url = properties.get('xfstests_url')
@@ -390,7 +407,14 @@ def run_xfstests_one_client(ctx, role, properties):
         log.info('    scratch device: {dev}'.format(dev=scratch_dev))
         log.info('     using fs_type: {fs_type}'.format(fs_type=fs_type))
         log.info('      tests to run: {tests}'.format(tests=tests))
+        log.info('      exclude list: {}'.format(' '.join(exclude_list)))
         log.info('         randomize: {randomize}'.format(randomize=randomize))
+
+        if exclude_list:
+            with tempfile.NamedTemporaryFile(bufsize=0, prefix='exclude') as exclude_file:
+                for test in exclude_list:
+                    exclude_file.write("{}\n".format(test))
+                remote.put_file(exclude_file.name, exclude_file.name)
 
         # Note that the device paths are interpreted using
         # readlink -f <path> in order to get their canonical
@@ -398,7 +422,6 @@ def run_xfstests_one_client(ctx, role, properties):
         args = [
             '/usr/bin/sudo',
             'TESTDIR={tdir}'.format(tdir=testdir),
-            'URL_BASE={url}'.format(url=xfstests_url),
             'adjust-ulimits',
             'ceph-coverage',
             '{tdir}/archive/coverage'.format(tdir=testdir),
@@ -409,6 +432,8 @@ def run_xfstests_one_client(ctx, role, properties):
             '-t', test_dev,
             '-s', scratch_dev,
             ]
+        if exclude_list:
+            args.extend(['-x', exclude_file.name])
         if randomize:
             args.append('-r')
         if tests:
@@ -445,6 +470,8 @@ def xfstests(ctx, config):
                 scratch_format: 1
                 fs_type: 'xfs'
                 tests: 'generic/100 xfs/003 xfs/005 xfs/006 generic/015'
+                exclude:
+                - generic/42
                 randomize: true
                 xfstests_branch: master
                 xfstests_url: 'https://raw.github.com/ceph/branch/master/qa'
@@ -508,6 +535,7 @@ def xfstests(ctx, config):
             fs_type=properties.get('fs_type', 'xfs'),
             randomize=properties.get('randomize', False),
             tests=properties.get('tests'),
+            exclude=properties.get('exclude', []),
             xfstests_url=xfstests_url,
             )
 

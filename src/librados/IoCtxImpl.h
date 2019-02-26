@@ -143,9 +143,6 @@ struct librados::IoCtxImpl {
   int cmpext(const object_t& oid, uint64_t off, bufferlist& cmp_bl);
 
   int tmap_update(const object_t& oid, bufferlist& cmdbl);
-  int tmap_put(const object_t& oid, bufferlist& bl);
-  int tmap_get(const object_t& oid, bufferlist& bl);
-  int tmap_to_omap(const object_t& oid, bool nullok=false);
 
   int exec(const object_t& oid, const char *cls, const char *method, bufferlist& inbl, bufferlist& outbl);
 
@@ -226,9 +223,6 @@ struct librados::IoCtxImpl {
 		  const char *name);
   int aio_cancel(AioCompletionImpl *c);
 
-  int pool_change_auid(unsigned long long auid);
-  int pool_change_auid_async(unsigned long long auid, PoolAsyncCompletionImpl *c);
-
   int hit_set_list(uint32_t hash, AioCompletionImpl *c,
 		   std::list< std::pair<time_t, time_t> > *pls);
   int hit_set_get(uint32_t hash, AioCompletionImpl *c, time_t stamp,
@@ -281,6 +275,21 @@ struct librados::IoCtxImpl {
 
   int cache_pin(const object_t& oid);
   int cache_unpin(const object_t& oid);
+
+  int application_enable(const std::string& app_name, bool force);
+  void application_enable_async(const std::string& app_name, bool force,
+                                PoolAsyncCompletionImpl *c);
+  int application_list(std::set<std::string> *app_names);
+  int application_metadata_get(const std::string& app_name,
+                               const std::string &key,
+                               std::string* value);
+  int application_metadata_set(const std::string& app_name,
+                               const std::string &key,
+                               const std::string& value);
+  int application_metadata_remove(const std::string& app_name,
+                                  const std::string &key);
+  int application_metadata_list(const std::string& app_name,
+                                std::map<std::string, std::string> *values);
 
 };
 

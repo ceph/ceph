@@ -146,7 +146,7 @@ Delete an Object
 
 To delete an object, make a ``DELETE`` request with the API version, account,
 container and object name. You must have write permissions on the container to delete
-an object within it. Once you've successfully deleted the object, you'll be able to 
+an object within it. Once you have successfully deleted the object, you will be able to 
 reuse the object name.
 
 Syntax

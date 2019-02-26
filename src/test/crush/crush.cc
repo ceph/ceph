@@ -52,18 +52,16 @@ std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
   }
   int ret;
   int ruleno = 0;
-  int rule = 0;
-  ruleno = rule;
-  ret = c->add_rule(4, rule, 123, 1, 20, ruleno);
-  assert(ret == ruleno);
+  ret = c->add_rule(ruleno, 4, 123, 1, 20);
+  ceph_assert(ret == ruleno);
   ret = c->set_rule_step(ruleno, 0, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 10, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   ret = c->set_rule_step(ruleno, 1, CRUSH_RULE_TAKE, rootno, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   ret = c->set_rule_step(ruleno, 2, CRUSH_RULE_CHOOSELEAF_INDEP, CRUSH_CHOOSE_N, 1);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   ret = c->set_rule_step(ruleno, 3, CRUSH_RULE_EMIT, 0, 0);
-  assert(ret == 0);
+  ceph_assert(ret == 0);
   c->set_rule_name(ruleno, "data");
 
   c->finalize();
@@ -271,7 +269,7 @@ TEST(CRUSH, straw_zero) {
   EXPECT_EQ(0, c->set_item_name(root0, root_name0));
 
   string name0("rule0");
-  int rule0 = c->add_simple_rule(name0, root_name0, "osd",
+  int rule0 = c->add_simple_rule(name0, root_name0, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
   EXPECT_EQ(0, rule0);
 
@@ -282,7 +280,7 @@ TEST(CRUSH, straw_zero) {
   EXPECT_EQ(0, c->set_item_name(root1, root_name1));
 
   string name1("rule1");
-  int rule1 = c->add_simple_rule(name1, root_name1, "osd",
+  int rule1 = c->add_simple_rule(name1, root_name1, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
   EXPECT_EQ(1, rule1);
 
@@ -336,7 +334,7 @@ TEST(CRUSH, straw_same) {
   EXPECT_EQ(0, c->set_item_name(root0, root_name0));
 
   string name0("rule0");
-  int rule0 = c->add_simple_rule(name0, root_name0, "osd",
+  int rule0 = c->add_simple_rule(name0, root_name0, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
   EXPECT_EQ(0, rule0);
 
@@ -352,7 +350,7 @@ TEST(CRUSH, straw_same) {
   EXPECT_EQ(0, c->set_item_name(root1, root_name1));
 
   string name1("rule1");
-  int rule1 = c->add_simple_rule(name1, root_name1, "osd",
+  int rule1 = c->add_simple_rule(name1, root_name1, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
   EXPECT_EQ(1, rule1);
 
@@ -436,7 +434,7 @@ double calc_straw2_stddev(int *weights, int n, bool verbose)
   c->set_item_name(root0, root_name0);
 
   string name0("rule0");
-  int rule0 = c->add_simple_rule(name0, root_name0, "osd",
+  int rule0 = c->add_simple_rule(name0, root_name0, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
 
   int sum[n];
@@ -561,7 +559,7 @@ TEST(CRUSH, straw2_reweight) {
   EXPECT_EQ(0, c->set_item_name(root0, root_name0));
 
   string name0("rule0");
-  int rule0 = c->add_simple_rule(name0, root_name0, "osd",
+  int rule0 = c->add_simple_rule(name0, root_name0, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
   EXPECT_EQ(0, rule0);
 
@@ -577,7 +575,7 @@ TEST(CRUSH, straw2_reweight) {
   EXPECT_EQ(0, c->set_item_name(root1, root_name1));
 
   string name1("rule1");
-  int rule1 = c->add_simple_rule(name1, root_name1, "osd",
+  int rule1 = c->add_simple_rule(name1, root_name1, "osd", "",
 				       "firstn", pg_pool_t::TYPE_REPLICATED);
   EXPECT_EQ(1, rule1);
 

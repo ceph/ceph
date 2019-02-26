@@ -1,3 +1,4 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
  * Ceph - scalable distributed file system
@@ -24,14 +25,19 @@
 #include "include/compat.h"
 #include "include/intarith.h"
 #include "include/stringify.h"
+#include "include/str_map.h"
 #include "common/errno.h"
 #include "common/safe_io.h"
+#include "common/PriorityCache.h"
 #include "Allocator.h"
 #include "FreelistManager.h"
 #include "BlueFS.h"
 #include "BlueRocksEnv.h"
 #include "auth/Crypto.h"
 #include "common/EventTrace.h"
+#include "perfglue/heap_profiler.h"
+#include "common/blkdev.h"
+#include "common/numa.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
@@ -58,14 +64,18 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(BlueStore::TransContext, bluestore_transcontext,
 
 
 // kv store prefixes
-const string PREFIX_SUPER = "S";   // field -> value
-const string PREFIX_STAT = "T";    // field -> value(int64 array)
-const string PREFIX_COLL = "C";    // collection name -> cnode_t
-const string PREFIX_OBJ = "O";     // object name -> onode_t
-const string PREFIX_OMAP = "M";    // u64 + keyname -> value
-const string PREFIX_DEFERRED = "L";  // id -> deferred_transaction_t
-const string PREFIX_ALLOC = "B";   // u64 offset -> u64 length (freelist)
+const string PREFIX_SUPER = "S";       // field -> value
+const string PREFIX_STAT = "T";        // field -> value(int64 array)
+const string PREFIX_COLL = "C";        // collection name -> cnode_t
+const string PREFIX_OBJ = "O";         // object name -> onode_t
+const string PREFIX_OMAP = "M";        // u64 + keyname -> value
+const string PREFIX_PGMETA_OMAP = "P"; // u64 + keyname -> value(for meta coll)
+const string PREFIX_DEFERRED = "L";    // id -> deferred_transaction_t
+const string PREFIX_ALLOC = "B";       // u64 offset -> u64 length (freelist)
+const string PREFIX_ALLOC_BITMAP = "b";// (see BitmapFreelistManager)
 const string PREFIX_SHARED_BLOB = "X"; // u64 offset -> shared_blob_t
+
+const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
 
 // write a label in the first block.  always use this size.  note that
 // bluefs makes a matching assumption about the location of its
@@ -317,7 +327,7 @@ static int get_key_shared_blob(const string& key, uint64_t *sbid)
   const char *p = key.c_str();
   if (key.length() < sizeof(uint64_t))
     return -1;
-  p = _key_decode_u64(p, sbid);
+  _key_decode_u64(p, sbid);
   return 0;
 }
 
@@ -434,7 +444,7 @@ static void get_object_key(CephContext *cct, const ghobject_t& oid, S *key)
       derr << "key " << pretty_binary_string(*key) << dendl;
       derr << "oid " << oid << dendl;
       derr << "  t " << t << dendl;
-      assert(r == 0 && t == oid);
+      ceph_assert(r == 0 && t == oid);
     }
   }
 }
@@ -456,8 +466,8 @@ static void get_extent_shard_key(const S& onode_key, uint32_t offset,
 
 static void rewrite_extent_shard_key(uint32_t offset, string *key)
 {
-  assert(key->size() > sizeof(uint32_t) + 1);
-  assert(*key->rbegin() == EXTENT_SHARD_KEY_SUFFIX);
+  ceph_assert(key->size() > sizeof(uint32_t) + 1);
+  ceph_assert(*key->rbegin() == EXTENT_SHARD_KEY_SUFFIX);
   _key_encode_u32(offset, key->size() - sizeof(uint32_t) - 1, key);
 }
 
@@ -469,7 +479,7 @@ static void generate_extent_shard_key_and_apply(
   std::function<void(const string& final_key)> apply)
 {
   if (key->empty()) { // make full key
-    assert(!onode_key.empty());
+    ceph_assert(!onode_key.empty());
     get_extent_shard_key(onode_key, offset, key);
   } else {
     rewrite_extent_shard_key(offset, key);
@@ -479,12 +489,12 @@ static void generate_extent_shard_key_and_apply(
 
 int get_key_extent_shard(const string& key, string *onode_key, uint32_t *offset)
 {
-  assert(key.size() > sizeof(uint32_t) + 1);
-  assert(*key.rbegin() == EXTENT_SHARD_KEY_SUFFIX);
+  ceph_assert(key.size() > sizeof(uint32_t) + 1);
+  ceph_assert(*key.rbegin() == EXTENT_SHARD_KEY_SUFFIX);
   int okey_len = key.size() - sizeof(uint32_t) - 1;
   *onode_key = key.substr(0, okey_len);
   const char *p = key.data() + okey_len;
-  p = _key_decode_u32(p, offset);
+  _key_decode_u32(p, offset);
   return 0;
 }
 
@@ -531,6 +541,20 @@ static void get_deferred_key(uint64_t seq, string *out)
   _key_encode_u64(seq, out);
 }
 
+static void get_pool_stat_key(int64_t pool_id, string *key)
+{
+  key->clear();
+  _key_encode_u64(pool_id, key);
+}
+
+static int get_key_pool_stat(const string& key, uint64_t* pool_id)
+{
+  const char *p = key.c_str();
+  if (key.length() < sizeof(uint64_t))
+    return -1;
+  _key_decode_u64(p, pool_id);
+  return 0;
+}
 
 // merge operators
 
@@ -543,8 +567,8 @@ struct Int64ArrayMergeOperator : public KeyValueDB::MergeOperator {
     const char *ldata, size_t llen,
     const char *rdata, size_t rlen,
     std::string *new_value) override {
-    assert(llen == rlen);
-    assert((rlen % 8) == 0);
+    ceph_assert(llen == rlen);
+    ceph_assert((rlen % 8) == 0);
     new_value->resize(rlen);
     const __le64* lv = (const __le64*)ldata;
     const __le64* rv = (const __le64*)rdata;
@@ -555,7 +579,7 @@ struct Int64ArrayMergeOperator : public KeyValueDB::MergeOperator {
   }
   // We use each operator name and each prefix to construct the
   // overall RocksDB operator name for consistency check at open time.
-  string name() const override {
+  const char *name() const override {
     return "int64_array";
   }
 };
@@ -583,10 +607,10 @@ void BlueStore::GarbageCollector::process_protrusive_extents(
   uint64_t end_touch_offset,
   uint64_t min_alloc_size)
 {
-  assert(start_offset <= start_touch_offset && end_offset>= end_touch_offset);
+  ceph_assert(start_offset <= start_touch_offset && end_offset>= end_touch_offset);
 
-  uint64_t lookup_start_offset = P2ALIGN(start_offset, min_alloc_size);
-  uint64_t lookup_end_offset = ROUND_UP_TO(end_offset, min_alloc_size);
+  uint64_t lookup_start_offset = p2align(start_offset, min_alloc_size);
+  uint64_t lookup_end_offset = round_up_to(end_offset, min_alloc_size);
 
   dout(30) << __func__ << " (hex): [" << std::hex
            << lookup_start_offset << ", " << lookup_end_offset 
@@ -642,7 +666,7 @@ void BlueStore::GarbageCollector::process_protrusive_extents(
       blob_info_counted =  &bi;
       used_alloc_unit = alloc_unit_end;
 
-      assert(it->length <= bi.referenced_bytes);
+      ceph_assert(it->length <= bi.referenced_bytes);
        bi.referenced_bytes -= it->length;
       dout(30) << __func__ << " affected_blob:" << *b
                << " unref 0x" << std::hex << it->length
@@ -678,14 +702,14 @@ void BlueStore::GarbageCollector::process_protrusive_extents(
     if (bi.referenced_bytes == 0) {
       uint64_t len_on_disk = b_it->first->get_blob().get_ondisk_length();
       int64_t blob_expected_for_release =
-        ROUND_UP_TO(len_on_disk, min_alloc_size) / min_alloc_size;
+        round_up_to(len_on_disk, min_alloc_size) / min_alloc_size;
 
       dout(30) << __func__ << " " << *(b_it->first)
                << " expected4release=" << blob_expected_for_release
                << " expected_allocations=" << bi.expected_allocations
                << dendl;
       int64_t benefit = blob_expected_for_release - bi.expected_allocations;
-      if (benefit >= g_conf->bluestore_gc_enable_blob_threshold) {
+      if (benefit >= g_conf()->bluestore_gc_enable_blob_threshold) {
         if (bi.collect_candidate) {
           auto it = bi.first_lextent;
           bool bExit = false;
@@ -728,7 +752,7 @@ int64_t BlueStore::GarbageCollector::estimate(
 
       // update gc_start_offset/gc_end_offset if needed
       gc_start_offset = min(gc_start_offset, (uint64_t)it->e.blob_start());
-      gc_end_offset = max(gc_end_offset, (uint64_t)it->e.blob_end());
+      gc_end_offset = std::max(gc_end_offset, (uint64_t)it->e.blob_end());
 
       auto o = it->e.logical_offset;
       auto l = it->e.length;
@@ -771,83 +795,23 @@ BlueStore::Cache *BlueStore::Cache::create(CephContext* cct, string type,
   else if (type == "2q")
     c = new TwoQCache(cct);
   else
-    assert(0 == "unrecognized cache type");
+    ceph_abort_msg("unrecognized cache type");
 
   c->logger = logger;
   return c;
 }
 
+void BlueStore::Cache::trim(uint64_t onode_max, uint64_t buffer_max)
+{
+  std::lock_guard l(lock);
+  _trim(onode_max, buffer_max);
+}
+
 void BlueStore::Cache::trim_all()
 {
-  std::lock_guard<std::recursive_mutex> l(lock);
+  std::lock_guard l(lock);
   _trim(0, 0);
 }
-
-void BlueStore::Cache::trim(
-  uint64_t target_bytes,
-  float target_meta_ratio,
-  float target_data_ratio,
-  float bytes_per_onode)
-{
-  std::lock_guard<std::recursive_mutex> l(lock);
-  uint64_t current_meta = _get_num_onodes() * bytes_per_onode;
-  uint64_t current_buffer = _get_buffer_bytes();
-  uint64_t current = current_meta + current_buffer;
-
-  uint64_t target_meta = target_bytes * target_meta_ratio;
-  uint64_t target_buffer = target_bytes * target_data_ratio;
-
-  // correct for overflow or float imprecision
-  target_meta = min(target_bytes, target_meta);
-  target_buffer = min(target_bytes - target_meta, target_buffer);
-
-  if (current <= target_bytes) {
-    dout(10) << __func__
-	     << " shard target " << pretty_si_t(target_bytes)
-	     << " meta/data ratios " << target_meta_ratio
-	     << " + " << target_data_ratio << " ("
-	     << pretty_si_t(target_meta) << " + "
-	     << pretty_si_t(target_buffer) << "), "
-	     << " current " << pretty_si_t(current) << " ("
-	     << pretty_si_t(current_meta) << " + "
-	     << pretty_si_t(current_buffer) << ")"
-	     << dendl;
-    return;
-  }
-
-  uint64_t need_to_free = current - target_bytes;
-  uint64_t free_buffer = 0;
-  uint64_t free_meta = 0;
-  if (current_buffer > target_buffer) {
-    free_buffer = current_buffer - target_buffer;
-    if (free_buffer > need_to_free) {
-      free_buffer = need_to_free;
-    }
-  }
-  free_meta = need_to_free - free_buffer;
-
-  // start bounds at what we have now
-  uint64_t max_buffer = current_buffer - free_buffer;
-  uint64_t max_meta = current_meta - free_meta;
-  uint64_t max_onodes = max_meta / bytes_per_onode;
-
-  dout(10) << __func__
-	   << " shard target " << pretty_si_t(target_bytes)
-	   << " ratio " << target_meta_ratio << " ("
-	   << pretty_si_t(target_meta) << " + "
-	   << pretty_si_t(target_buffer) << "), "
-	   << " current " << pretty_si_t(current) << " ("
-	   << pretty_si_t(current_meta) << " + "
-	   << pretty_si_t(current_buffer) << "),"
-	   << " need_to_free " << pretty_si_t(need_to_free) << " ("
-	   << pretty_si_t(free_meta) << " + "
-	   << pretty_si_t(free_buffer) << ")"
-	   << " -> max " << max_onodes << " onodes + "
-	   << max_buffer << " buffer"
-	   << dendl;
-  _trim(max_onodes, max_buffer);
-}
-
 
 // LRUCache
 #undef dout_prefix
@@ -877,21 +841,22 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     }
 
     Buffer *b = &*i;
-    assert(b->is_clean());
+    ceph_assert(b->is_clean());
     dout(20) << __func__ << " rm " << *b << dendl;
     b->space->_rm_buffer(this, b);
   }
 
   // onodes
-  int num = onode_lru.size() - onode_max;
-  if (num <= 0)
+  if (onode_max >= onode_lru.size()) {
     return; // don't even try
+  }
+  uint64_t num = onode_lru.size() - onode_max;
 
   auto p = onode_lru.end();
-  assert(p != onode_lru.begin());
+  ceph_assert(p != onode_lru.begin());
   --p;
   int skipped = 0;
-  int max_skipped = g_conf->bluestore_cache_trim_max_skip_pinned;
+  int max_skipped = g_conf()->bluestore_cache_trim_max_skip_pinned;
   while (num > 0) {
     Onode *o = &*p;
     int refs = o->nref.load();
@@ -917,7 +882,7 @@ void BlueStore::LRUCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       onode_lru.erase(p--);
     } else {
       onode_lru.erase(p);
-      assert(num == 1);
+      ceph_assert(num == 1);
     }
     o->get();  // paranoia
     o->c->onode_map.remove(o->oid);
@@ -940,7 +905,7 @@ void BlueStore::LRUCache::_audit(const char *when)
     for (auto i = buffer_lru.begin(); i != buffer_lru.end(); ++i) {
       derr << __func__ << " " << *i << dendl;
     }
-    assert(s == buffer_size);
+    ceph_assert(s == buffer_size);
   }
   dout(20) << __func__ << " " << when << " buffer_size " << buffer_size
 	   << " ok" << dendl;
@@ -971,14 +936,14 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
       buffer_warm_in.insert(buffer_warm_in.iterator_to(*near), *b);
       break;
     case BUFFER_WARM_OUT:
-      assert(b->is_empty());
+      ceph_assert(b->is_empty());
       buffer_warm_out.insert(buffer_warm_out.iterator_to(*near), *b);
       break;
     case BUFFER_HOT:
       buffer_hot.insert(buffer_hot.iterator_to(*near), *b);
       break;
     default:
-      assert(0 == "bad cache_private");
+      ceph_abort_msg("bad cache_private");
     }
   } else if (b->cache_private == BUFFER_NEW) {
     b->cache_private = BUFFER_WARM_IN;
@@ -1005,7 +970,7 @@ void BlueStore::TwoQCache::_add_buffer(Buffer *b, int level, Buffer *near)
       buffer_hot.push_front(*b);
       break;
     default:
-      assert(0 == "bad cache_private");
+      ceph_abort_msg("bad cache_private");
     }
   }
   if (!b->is_empty()) {
@@ -1018,9 +983,9 @@ void BlueStore::TwoQCache::_rm_buffer(Buffer *b)
 {
   dout(20) << __func__ << " " << *b << dendl;
  if (!b->is_empty()) {
-    assert(buffer_bytes >= b->length);
+    ceph_assert(buffer_bytes >= b->length);
     buffer_bytes -= b->length;
-    assert(buffer_list_bytes[b->cache_private] >= b->length);
+    ceph_assert(buffer_list_bytes[b->cache_private] >= b->length);
     buffer_list_bytes[b->cache_private] -= b->length;
   }
   switch (b->cache_private) {
@@ -1034,7 +999,7 @@ void BlueStore::TwoQCache::_rm_buffer(Buffer *b)
     buffer_hot.erase(buffer_hot.iterator_to(*b));
     break;
   default:
-    assert(0 == "bad cache_private");
+    ceph_abort_msg("bad cache_private");
   }
 }
 
@@ -1046,19 +1011,19 @@ void BlueStore::TwoQCache::_move_buffer(Cache *srcc, Buffer *b)
   // preserve which list we're on (even if we can't preserve the order!)
   switch (b->cache_private) {
   case BUFFER_WARM_IN:
-    assert(!b->is_empty());
+    ceph_assert(!b->is_empty());
     buffer_warm_in.push_back(*b);
     break;
   case BUFFER_WARM_OUT:
-    assert(b->is_empty());
+    ceph_assert(b->is_empty());
     buffer_warm_out.push_back(*b);
     break;
   case BUFFER_HOT:
-    assert(!b->is_empty());
+    ceph_assert(!b->is_empty());
     buffer_hot.push_back(*b);
     break;
   default:
-    assert(0 == "bad cache_private");
+    ceph_abort_msg("bad cache_private");
   }
   if (!b->is_empty()) {
     buffer_bytes += b->length;
@@ -1070,9 +1035,9 @@ void BlueStore::TwoQCache::_adjust_buffer_size(Buffer *b, int64_t delta)
 {
   dout(20) << __func__ << " delta " << delta << " on " << *b << dendl;
   if (!b->is_empty()) {
-    assert((int64_t)buffer_bytes + delta >= 0);
+    ceph_assert((int64_t)buffer_bytes + delta >= 0);
     buffer_bytes += delta;
-    assert((int64_t)buffer_list_bytes[b->cache_private] + delta >= 0);
+    ceph_assert((int64_t)buffer_list_bytes[b->cache_private] + delta >= 0);
     buffer_list_bytes[b->cache_private] += delta;
   }
 }
@@ -1096,7 +1061,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     uint64_t buffer_num = buffer_hot.size() + buffer_warm_in.size();
     if (buffer_num) {
       uint64_t buffer_avg_size = buffer_bytes / buffer_num;
-      assert(buffer_avg_size);
+      ceph_assert(buffer_avg_size);
       uint64_t calculated_buffer_num = buffer_max / buffer_avg_size;
       kout = calculated_buffer_num * cct->_conf->bluestore_2q_cache_kout_ratio;
     }
@@ -1121,11 +1086,11 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       }
 
       Buffer *b = &*p;
-      assert(b->is_clean());
+      ceph_assert(b->is_clean());
       dout(20) << __func__ << " buffer_warm_in -> out " << *b << dendl;
-      assert(buffer_bytes >= b->length);
+      ceph_assert(buffer_bytes >= b->length);
       buffer_bytes -= b->length;
-      assert(buffer_list_bytes[BUFFER_WARM_IN] >= b->length);
+      ceph_assert(buffer_list_bytes[BUFFER_WARM_IN] >= b->length);
       buffer_list_bytes[BUFFER_WARM_IN] -= b->length;
       to_evict_bytes -= b->length;
       evicted += b->length;
@@ -1137,7 +1102,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     }
 
     if (evicted > 0) {
-      dout(20) << __func__ << " evicted " << prettybyte_t(evicted)
+      dout(20) << __func__ << " evicted " << byte_u_t(evicted)
                << " from warm_in list, done evicting warm_in buffers"
                << dendl;
     }
@@ -1155,7 +1120,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
 
       Buffer *b = &*p;
       dout(20) << __func__ << " buffer_hot rm " << *b << dendl;
-      assert(b->is_clean());
+      ceph_assert(b->is_clean());
       // adjust evict size before buffer goes invalid
       to_evict_bytes -= b->length;
       evicted += b->length;
@@ -1163,7 +1128,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     }
 
     if (evicted > 0) {
-      dout(20) << __func__ << " evicted " << prettybyte_t(evicted)
+      dout(20) << __func__ << " evicted " << byte_u_t(evicted)
                << " from hot list, done evicting hot buffers"
                << dendl;
     }
@@ -1172,22 +1137,23 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
     int64_t num = buffer_warm_out.size() - kout;
     while (num-- > 0) {
       Buffer *b = &*buffer_warm_out.rbegin();
-      assert(b->is_empty());
+      ceph_assert(b->is_empty());
       dout(20) << __func__ << " buffer_warm_out rm " << *b << dendl;
       b->space->_rm_buffer(this, b);
     }
   }
 
   // onodes
-  int num = onode_lru.size() - onode_max;
-  if (num <= 0)
+  if (onode_max >= onode_lru.size()) {
     return; // don't even try
+  }
+  uint64_t num = onode_lru.size() - onode_max;
 
   auto p = onode_lru.end();
-  assert(p != onode_lru.begin());
+  ceph_assert(p != onode_lru.begin());
   --p;
   int skipped = 0;
-  int max_skipped = g_conf->bluestore_cache_trim_max_skip_pinned;
+  int max_skipped = g_conf()->bluestore_cache_trim_max_skip_pinned;
   while (num > 0) {
     Onode *o = &*p;
     dout(20) << __func__ << " considering " << o << dendl;
@@ -1214,7 +1180,7 @@ void BlueStore::TwoQCache::_trim(uint64_t onode_max, uint64_t buffer_max)
       onode_lru.erase(p--);
     } else {
       onode_lru.erase(p);
-      assert(num == 1);
+      ceph_assert(num == 1);
     }
     o->get();  // paranoia
     o->c->onode_map.remove(o->oid);
@@ -1238,7 +1204,7 @@ void BlueStore::TwoQCache::_audit(const char *when)
          << buffer_list_bytes[BUFFER_HOT]
          << " != actual " << hot_bytes
          << dendl;
-    assert(hot_bytes == buffer_list_bytes[BUFFER_HOT]);
+    ceph_assert(hot_bytes == buffer_list_bytes[BUFFER_HOT]);
   }
 
   for (auto i = buffer_warm_in.begin(); i != buffer_warm_in.end(); ++i) {
@@ -1251,13 +1217,13 @@ void BlueStore::TwoQCache::_audit(const char *when)
          << buffer_list_bytes[BUFFER_WARM_IN]
          << " != actual " << warm_in_bytes
          << dendl;
-    assert(warm_in_bytes == buffer_list_bytes[BUFFER_WARM_IN]);
+    ceph_assert(warm_in_bytes == buffer_list_bytes[BUFFER_WARM_IN]);
   }
 
   if (s != buffer_bytes) {
     derr << __func__ << " buffer_bytes " << buffer_bytes << " actual " << s
 	 << dendl;
-    assert(s == buffer_bytes);
+    ceph_assert(s == buffer_bytes);
   }
 
   dout(20) << __func__ << " " << when << " buffer_bytes " << buffer_bytes
@@ -1355,70 +1321,79 @@ int BlueStore::BufferSpace::_discard(Cache* cache, uint32_t offset, uint32_t len
 
 void BlueStore::BufferSpace::read(
   Cache* cache, 
-  uint32_t offset, uint32_t length,
+  uint32_t offset,
+  uint32_t length,
   BlueStore::ready_regions_t& res,
-  interval_set<uint32_t>& res_intervals)
+  interval_set<uint32_t>& res_intervals,
+  int flags)
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
   res.clear();
   res_intervals.clear();
   uint32_t want_bytes = length;
   uint32_t end = offset + length;
-  for (auto i = _data_lower_bound(offset);
-       i != buffer_map.end() && offset < end && i->first < end;
-       ++i) {
-    Buffer *b = i->second.get();
-    assert(b->end() > offset);
-    if (b->is_writing() || b->is_clean()) {
-      if (b->offset < offset) {
-	uint32_t skip = offset - b->offset;
-	uint32_t l = MIN(length, b->length - skip);
-	res[offset].substr_of(b->data, skip, l);
-	res_intervals.insert(offset, l);
-	offset += l;
-	length -= l;
-	if (!b->is_writing()) {
+
+  {
+    std::lock_guard l(cache->lock);
+    for (auto i = _data_lower_bound(offset);
+         i != buffer_map.end() && offset < end && i->first < end;
+         ++i) {
+      Buffer *b = i->second.get();
+      ceph_assert(b->end() > offset);
+
+      bool val = false;
+      if (flags & BYPASS_CLEAN_CACHE)
+        val = b->is_writing();
+      else
+        val = b->is_writing() || b->is_clean();
+      if (val) {
+        if (b->offset < offset) {
+	  uint32_t skip = offset - b->offset;
+	  uint32_t l = min(length, b->length - skip);
+	  res[offset].substr_of(b->data, skip, l);
+	  res_intervals.insert(offset, l);
+	  offset += l;
+	  length -= l;
+	  if (!b->is_writing()) {
+	    cache->_touch_buffer(b);
+	  }
+	  continue;
+        }
+        if (b->offset > offset) {
+	  uint32_t gap = b->offset - offset;
+	  if (length <= gap) {
+	    break;
+	  }
+	  offset += gap;
+	  length -= gap;
+        }
+        if (!b->is_writing()) {
 	  cache->_touch_buffer(b);
-	}
-	continue;
-      }
-      if (b->offset > offset) {
-	uint32_t gap = b->offset - offset;
-	if (length <= gap) {
-	  break;
-	}
-	offset += gap;
-	length -= gap;
-      }
-      if (!b->is_writing()) {
-	cache->_touch_buffer(b);
-      }
-      if (b->length > length) {
-	res[offset].substr_of(b->data, 0, length);
-	res_intervals.insert(offset, length);
-        break;
-      } else {
-	res[offset].append(b->data);
-	res_intervals.insert(offset, b->length);
-        if (b->length == length)
+        }
+        if (b->length > length) {
+	  res[offset].substr_of(b->data, 0, length);
+	  res_intervals.insert(offset, length);
           break;
-	offset += b->length;
-	length -= b->length;
+        } else {
+	  res[offset].append(b->data);
+	  res_intervals.insert(offset, b->length);
+          if (b->length == length)
+            break;
+	  offset += b->length;
+	  length -= b->length;
+        }
       }
     }
   }
 
   uint64_t hit_bytes = res_intervals.size();
-  assert(hit_bytes <= want_bytes);
+  ceph_assert(hit_bytes <= want_bytes);
   uint64_t miss_bytes = want_bytes - hit_bytes;
   cache->logger->inc(l_bluestore_buffer_hit_bytes, hit_bytes);
   cache->logger->inc(l_bluestore_buffer_miss_bytes, miss_bytes);
 }
 
-void BlueStore::BufferSpace::finish_write(Cache* cache, uint64_t seq)
+void BlueStore::BufferSpace::_finish_write(Cache* cache, uint64_t seq)
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
-
   auto i = writing.begin();
   while (i != writing.end()) {
     if (i->seq > seq) {
@@ -1430,7 +1405,7 @@ void BlueStore::BufferSpace::finish_write(Cache* cache, uint64_t seq)
     }
 
     Buffer *b = &*i;
-    assert(b->is_writing());
+    ceph_assert(b->is_writing());
 
     if (b->flags & Buffer::FLAG_NOCACHE) {
       writing.erase(i++);
@@ -1451,7 +1426,7 @@ void BlueStore::BufferSpace::finish_write(Cache* cache, uint64_t seq)
 
 void BlueStore::BufferSpace::split(Cache* cache, size_t pos, BlueStore::BufferSpace &r)
 {
-  std::lock_guard<std::recursive_mutex> lk(cache->lock);
+  std::lock_guard lk(cache->lock);
   if (buffer_map.empty())
     return;
 
@@ -1478,7 +1453,7 @@ void BlueStore::BufferSpace::split(Cache* cache, size_t pos, BlueStore::BufferSp
       break;
     }
 
-    assert(p->second->end() > pos);
+    ceph_assert(p->second->end() > pos);
     ldout(cache->cct, 30) << __func__ << " move " << *p->second << dendl;
     if (p->second->data.length()) {
       r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq,
@@ -1496,7 +1471,7 @@ void BlueStore::BufferSpace::split(Cache* cache, size_t pos, BlueStore::BufferSp
       _rm_buffer(cache, p--);
     }
   }
-  assert(writing.empty());
+  ceph_assert(writing.empty());
 }
 
 // OnodeSpace
@@ -1506,7 +1481,7 @@ void BlueStore::BufferSpace::split(Cache* cache, size_t pos, BlueStore::BufferSp
 
 BlueStore::OnodeRef BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o)
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  std::lock_guard l(cache->lock);
   auto p = onode_map.find(oid);
   if (p != onode_map.end()) {
     ldout(cache->cct, 30) << __func__ << " " << oid << " " << o
@@ -1522,24 +1497,35 @@ BlueStore::OnodeRef BlueStore::OnodeSpace::add(const ghobject_t& oid, OnodeRef o
 
 BlueStore::OnodeRef BlueStore::OnodeSpace::lookup(const ghobject_t& oid)
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
   ldout(cache->cct, 30) << __func__ << dendl;
-  ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
-  if (p == onode_map.end()) {
-    ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
-    cache->logger->inc(l_bluestore_onode_misses);
-    return OnodeRef();
+  OnodeRef o;
+  bool hit = false;
+
+  {
+    std::lock_guard l(cache->lock);
+    ceph::unordered_map<ghobject_t,OnodeRef>::iterator p = onode_map.find(oid);
+    if (p == onode_map.end()) {
+      ldout(cache->cct, 30) << __func__ << " " << oid << " miss" << dendl;
+    } else {
+      ldout(cache->cct, 30) << __func__ << " " << oid << " hit " << p->second
+			    << dendl;
+      cache->_touch_onode(p->second);
+      hit = true;
+      o = p->second;
+    }
   }
-  ldout(cache->cct, 30) << __func__ << " " << oid << " hit " << p->second
-			<< dendl;
-  cache->_touch_onode(p->second);
-  cache->logger->inc(l_bluestore_onode_hits);
-  return p->second;
+
+  if (hit) {
+    cache->logger->inc(l_bluestore_onode_hits);
+  } else {
+    cache->logger->inc(l_bluestore_onode_misses);
+  }
+  return o;
 }
 
 void BlueStore::OnodeSpace::clear()
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  std::lock_guard l(cache->lock);
   ldout(cache->cct, 10) << __func__ << dendl;
   for (auto &p : onode_map) {
     cache->_rm_onode(p.second);
@@ -1549,7 +1535,7 @@ void BlueStore::OnodeSpace::clear()
 
 bool BlueStore::OnodeSpace::empty()
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  std::lock_guard l(cache->lock);
   return onode_map.empty();
 }
 
@@ -1559,15 +1545,15 @@ void BlueStore::OnodeSpace::rename(
   const ghobject_t& new_oid,
   const mempool::bluestore_cache_other::string& new_okey)
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  std::lock_guard l(cache->lock);
   ldout(cache->cct, 30) << __func__ << " " << old_oid << " -> " << new_oid
 			<< dendl;
   ceph::unordered_map<ghobject_t,OnodeRef>::iterator po, pn;
   po = onode_map.find(old_oid);
   pn = onode_map.find(new_oid);
-  assert(po != pn);
+  ceph_assert(po != pn);
 
-  assert(po != onode_map.end());
+  ceph_assert(po != onode_map.end());
   if (pn != onode_map.end()) {
     ldout(cache->cct, 30) << __func__ << "  removing target " << pn->second
 			  << dendl;
@@ -1590,7 +1576,7 @@ void BlueStore::OnodeSpace::rename(
 
 bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
 {
-  std::lock_guard<std::recursive_mutex> l(cache->lock);
+  std::lock_guard l(cache->lock);
   ldout(cache->cct, 20) << __func__ << dendl;
   for (auto& i : onode_map) {
     if (f(i.second)) {
@@ -1600,6 +1586,13 @@ bool BlueStore::OnodeSpace::map_any(std::function<bool(OnodeRef)> f)
   return false;
 }
 
+template <int LogLevelV = 30>
+void BlueStore::OnodeSpace::dump(CephContext *cct)
+{
+  for (auto& i : onode_map) {
+    ldout(cct, LogLevelV) << i.first << " : " << i.second << dendl;
+  }
+}
 
 // SharedBlob
 
@@ -1621,7 +1614,7 @@ ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
 BlueStore::SharedBlob::SharedBlob(uint64_t i, Collection *_coll)
   : coll(_coll), sbid_unloaded(i)
 {
-  assert(sbid_unloaded > 0);
+  ceph_assert(sbid_unloaded > 0);
   if (get_cache()) {
     get_cache()->add_blob();
   }
@@ -1629,11 +1622,6 @@ BlueStore::SharedBlob::SharedBlob(uint64_t i, Collection *_coll)
 
 BlueStore::SharedBlob::~SharedBlob()
 {
-  if (get_cache()) {   // the dummy instances have a nullptr
-    std::lock_guard<std::recursive_mutex> l(get_cache()->lock);
-    bc._clear(get_cache());
-    get_cache()->rm_blob();
-  }
   if (loaded && persistent) {
     delete persistent; 
   }
@@ -1645,35 +1633,67 @@ void BlueStore::SharedBlob::put()
     ldout(coll->store->cct, 20) << __func__ << " " << this
 			     << " removing self from set " << get_parent()
 			     << dendl;
-    if (get_parent()) {
-      if (get_parent()->remove(this)) {
-	delete this;
-      } else {
-	ldout(coll->store->cct, 20)
-	  << __func__ << " " << this << " lost race to remove myself from set"
-	  << dendl;
+  again:
+    auto coll_snap = coll;
+    if (coll_snap) {
+      std::lock_guard l(coll_snap->cache->lock);
+      if (coll_snap != coll) {
+	goto again;
       }
-    } else {
-      delete this;
+      if (!coll_snap->shared_blob_set.remove(this, true)) {
+	// race with lookup
+	return;
+      }
+      bc._clear(coll_snap->cache);
+      coll_snap->cache->rm_blob();
     }
+    delete this;
   }
 }
 
 void BlueStore::SharedBlob::get_ref(uint64_t offset, uint32_t length)
 {
-  assert(persistent);
+  ceph_assert(persistent);
   persistent->ref_map.get(offset, length);
 }
 
 void BlueStore::SharedBlob::put_ref(uint64_t offset, uint32_t length,
 				    PExtentVector *r,
-				    set<SharedBlob*> *maybe_unshared)
+				    bool *unshare)
 {
-  assert(persistent);
-  bool maybe = false;
-  persistent->ref_map.put(offset, length, r, maybe_unshared ? &maybe : nullptr);
-  if (maybe_unshared && maybe) {
-    maybe_unshared->insert(this);
+  ceph_assert(persistent);
+  persistent->ref_map.put(offset, length, r,
+    unshare && !*unshare ? unshare : nullptr);
+}
+
+void BlueStore::SharedBlob::finish_write(uint64_t seq)
+{
+  while (true) {
+    Cache *cache = coll->cache;
+    std::lock_guard l(cache->lock);
+    if (coll->cache != cache) {
+      ldout(coll->store->cct, 20) << __func__
+				  << " raced with sb cache update, was " << cache
+				  << ", now " << coll->cache << ", retrying"
+				  << dendl;
+      continue;
+    }
+    bc._finish_write(cache, seq);
+    break;
+  }
+}
+
+// SharedBlobSet
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.sharedblobset(" << this << ") "
+
+template <int LogLevelV = 30>
+void BlueStore::SharedBlobSet::dump(CephContext *cct)
+{
+  std::lock_guard l(lock);
+  for (auto& i : sb_map) {
+    ldout(cct, LogLevelV) << i.first << " : " << *i.second << dendl;
   }
 }
 
@@ -1688,35 +1708,40 @@ ostream& operator<<(ostream& out, const BlueStore::Blob& b)
   if (b.is_spanning()) {
     out << " spanning " << b.id;
   }
-  out << " " << b.get_blob() << " " << b.get_blob_use_tracker()
-      << " " << *b.shared_blob
-      << ")";
+  out << " " << b.get_blob() << " " << b.get_blob_use_tracker();
+  if (b.shared_blob) {
+    out << " " << *b.shared_blob;
+  } else {
+    out << " (shared_blob=NULL)";
+  }
+  out << ")";
   return out;
 }
 
 void BlueStore::Blob::discard_unallocated(Collection *coll)
 {
-  if (blob.is_shared()) {
+  if (get_blob().is_shared()) {
     return;
   }
-  if (blob.is_compressed()) {
+  if (get_blob().is_compressed()) {
     bool discard = false;
     bool all_invalid = true;
-    for (auto e : blob.get_extents()) {
+    for (auto e : get_blob().get_extents()) {
       if (!e.is_valid()) {
         discard = true;
       } else {
         all_invalid = false;
       }
     }
-    assert(discard == all_invalid); // in case of compressed blob all
+    ceph_assert(discard == all_invalid); // in case of compressed blob all
 				    // or none pextents are invalid.
     if (discard) {
-      shared_blob->bc.discard(shared_blob->get_cache(), 0, blob.get_logical_length());
+      shared_blob->bc.discard(shared_blob->get_cache(), 0,
+                              get_blob().get_logical_length());
     }
   } else {
     size_t pos = 0;
-    for (auto e : blob.get_extents()) {
+    for (auto e : get_blob().get_extents()) {
       if (!e.is_valid()) {
 	ldout(coll->store->cct, 20) << __func__ << " 0x" << std::hex << pos
 				    << "~" << e.length
@@ -1725,12 +1750,11 @@ void BlueStore::Blob::discard_unallocated(Collection *coll)
       }
       pos += e.length;
     }
-    if (blob.can_prune_tail()) {
-      dirty_blob();
-      blob.prune_tail();
-      used_in_blob.prune_tail(blob.get_ondisk_length());
+    if (get_blob().can_prune_tail()) {
+      dirty_blob().prune_tail();
+      used_in_blob.prune_tail(get_blob().get_ondisk_length());
       auto cct = coll->store->cct; //used by dout
-      dout(20) << __func__ << " pruned tail, now " << blob << dendl;
+      dout(20) << __func__ << " pruned tail, now " << get_blob() << dendl;
     }
   }
 }
@@ -1744,17 +1768,17 @@ void BlueStore::Blob::get_ref(
   // references.  Otherwise one is neither unable to determine required
   // amount of counters in case of per-au tracking nor obtain min_release_size
   // for single counter mode.
-  assert(get_blob().get_logical_length() != 0);
+  ceph_assert(get_blob().get_logical_length() != 0);
   auto cct = coll->store->cct;
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
            << std::dec << " " << *this << dendl;
 
   if (used_in_blob.is_empty()) {
     uint32_t min_release_size =
-      blob.get_release_size(coll->store->min_alloc_size);
-    uint64_t l = blob.get_logical_length();
-    dout(20) << __func__ << " init 0x" << std::hex << l << ", " << min_release_size
-             << std::dec << dendl;
+      get_blob().get_release_size(coll->store->min_alloc_size);
+    uint64_t l = get_blob().get_logical_length();
+    dout(20) << __func__ << " init 0x" << std::hex << l << ", "
+             << min_release_size << std::dec << dendl;
     used_in_blob.init(l, min_release_size);
   }
   used_in_blob.get(
@@ -1788,12 +1812,12 @@ bool BlueStore::Blob::put_ref(
   return b.release_extents(empty, logical, r);
 }
 
-bool BlueStore::Blob::try_reuse_blob(uint32_t min_alloc_size,
+bool BlueStore::Blob::can_reuse_blob(uint32_t min_alloc_size,
                 		     uint32_t target_blob_size,
 		                     uint32_t b_offset,
 		                     uint32_t *length0) {
-  assert(min_alloc_size);
-  assert(target_blob_size);
+  ceph_assert(min_alloc_size);
+  ceph_assert(target_blob_size);
   if (!get_blob().is_mutable()) {
     return false;
   }
@@ -1813,20 +1837,28 @@ bool BlueStore::Blob::try_reuse_blob(uint32_t min_alloc_size,
   uint32_t new_blen = blen;
 
   // make sure target_blob_size isn't less than current blob len
-  target_blob_size = MAX(blen, target_blob_size);
+  target_blob_size = std::max(blen, target_blob_size);
 
   if (b_offset >= blen) {
-    //new data totally stands out of the existing blob
-    new_blen = b_offset + length;
+    // new data totally stands out of the existing blob
+    new_blen = end;
   } else {
-    //new data overlaps with the existing blob
-    new_blen = MAX(blen, length + b_offset);
-    if (!get_blob().is_unallocated(
-      b_offset,
-      new_blen > blen ? blen - b_offset : length)) {
-          return false;
+    // new data overlaps with the existing blob
+    new_blen = std::max(blen, end);
+
+    uint32_t overlap = 0;
+    if (new_blen > blen) {
+      overlap = blen - b_offset;
+    } else {
+      overlap = length;
+    }
+
+    if (!get_blob().is_unallocated(b_offset, overlap)) {
+      // abort if any piece of the overlap has already been allocated
+      return false;
     }
   }
+
   if (new_blen > blen) {
     int64_t overflow = int64_t(new_blen) - target_blob_size;
     // Unable to decrease the provided length to fit into max_blob_size
@@ -1844,10 +1876,11 @@ bool BlueStore::Blob::try_reuse_blob(uint32_t min_alloc_size,
       length -= overflow;
       *length0 = length;
     }
+
     if (new_blen > blen) {
       dirty_blob().add_tail(new_blen);
       used_in_blob.add_tail(new_blen,
-        		    blob.get_release_size(min_alloc_size));
+                            get_blob().get_release_size(min_alloc_size));
     }
   }
   return true;
@@ -1858,8 +1891,8 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
   auto cct = coll->store->cct; //used by dout
   dout(10) << __func__ << " 0x" << std::hex << blob_offset << std::dec
 	   << " start " << *this << dendl;
-  assert(blob.can_split());
-  assert(used_in_blob.can_split());
+  ceph_assert(blob.can_split());
+  ceph_assert(used_in_blob.can_split());
   bluestore_blob_t &lb = dirty_blob();
   bluestore_blob_t &rb = r->dirty_blob();
 
@@ -1879,7 +1912,7 @@ void BlueStore::Blob::split(Collection *coll, uint32_t blob_offset, Blob *r)
 #ifndef CACHE_BLOB_BL
 void BlueStore::Blob::decode(
   Collection *coll,
-  bufferptr::iterator& p,
+  bufferptr::const_iterator& p,
   uint64_t struct_v,
   uint64_t* sbid,
   bool include_ref_map)
@@ -1938,6 +1971,111 @@ BlueStore::ExtentMap::ExtentMap(Onode *o)
       o->c->store->cct->_conf->bluestore_extent_map_inline_shard_prealloc_size) {
 }
 
+void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
+  CollectionRef& c, OnodeRef& oldo, OnodeRef& newo, uint64_t& srcoff,
+  uint64_t& length, uint64_t& dstoff) {
+
+  auto cct = onode->c->store->cct;
+  bool inject_21040 =
+    cct->_conf->bluestore_debug_inject_bug21040;  
+  vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
+  for (auto& e : oldo->extent_map.extent_map) {
+    e.blob->last_encoded_id = -1;
+  }
+
+  int n = 0;
+  uint64_t end = srcoff + length;
+  uint32_t dirty_range_begin = 0;
+  uint32_t dirty_range_end = 0;
+  bool src_dirty = false;
+  for (auto ep = oldo->extent_map.seek_lextent(srcoff);
+    ep != oldo->extent_map.extent_map.end();
+    ++ep) {
+    auto& e = *ep;
+    if (e.logical_offset >= end) {
+      break;
+    }
+    dout(20) << __func__ << "  src " << e << dendl;
+    BlobRef cb;
+    bool blob_duped = true;
+    if (e.blob->last_encoded_id >= 0) {
+      cb = id_to_blob[e.blob->last_encoded_id];
+      blob_duped = false;
+    } else { 
+      // dup the blob
+      const bluestore_blob_t& blob = e.blob->get_blob();
+      // make sure it is shared
+      if (!blob.is_shared()) {
+        c->make_blob_shared(b->_assign_blobid(txc), e.blob);
+	if (!inject_21040 && !src_dirty) {
+          src_dirty = true;
+          dirty_range_begin = e.logical_offset;
+	} else if (inject_21040 &&
+	           dirty_range_begin == 0 && dirty_range_end == 0) {
+	  dirty_range_begin = e.logical_offset;
+	}        
+        ceph_assert(e.logical_end() > 0);
+        // -1 to exclude next potential shard
+        dirty_range_end = e.logical_end() - 1;
+      } else {
+        c->load_shared_blob(e.blob->shared_blob);
+      }
+      cb = new Blob();
+      e.blob->last_encoded_id = n;
+      id_to_blob[n] = cb;
+      e.blob->dup(*cb);
+      // bump the extent refs on the copied blob's extents
+      for (auto p : blob.get_extents()) {
+        if (p.is_valid()) {
+          e.blob->shared_blob->get_ref(p.offset, p.length);
+        }
+      }
+      txc->write_shared_blob(e.blob->shared_blob);
+      dout(20) << __func__ << "    new " << *cb << dendl;
+    }
+
+    int skip_front, skip_back;
+    if (e.logical_offset < srcoff) {
+      skip_front = srcoff - e.logical_offset;
+    } else {
+      skip_front = 0;
+    }
+    if (e.logical_end() > end) {
+      skip_back = e.logical_end() - end;
+    } else {
+      skip_back = 0;
+    }
+
+    Extent* ne = new Extent(e.logical_offset + skip_front + dstoff - srcoff,
+      e.blob_offset + skip_front, e.length - skip_front - skip_back, cb);
+    newo->extent_map.extent_map.insert(*ne);
+    ne->blob->get_ref(c.get(), ne->blob_offset, ne->length);
+    // fixme: we may leave parts of new blob unreferenced that could
+    // be freed (relative to the shared_blob).
+    txc->statfs_delta.stored() += ne->length;
+    if (e.blob->get_blob().is_compressed()) {
+      txc->statfs_delta.compressed_original() += ne->length;
+      if (blob_duped) {
+        txc->statfs_delta.compressed() +=
+          cb->get_blob().get_compressed_payload_length();
+      }
+    }
+    dout(20) << __func__ << "  dst " << *ne << dendl;
+    ++n;
+  }
+  if ((!inject_21040 && src_dirty) ||
+       (inject_21040 && dirty_range_end > dirty_range_begin)) {
+    oldo->extent_map.dirty_range(dirty_range_begin,
+      dirty_range_end - dirty_range_begin);
+    txc->write_onode(oldo);
+  }
+  txc->write_onode(newo);
+
+  if (dstoff + length > newo->onode.size) {
+    newo->onode.size = dstoff + length;
+  }
+  newo->extent_map.dirty_range(dstoff, length);
+}
 void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
                                   bool force)
 {
@@ -1948,7 +2086,8 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
       unsigned n;
       // we need to encode inline_bl to measure encoded length
       bool never_happen = encode_some(0, OBJECT_MAX_SIZE, inline_bl, &n);
-      assert(!never_happen);
+      inline_bl.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+      ceph_assert(!never_happen);
       size_t len = inline_bl.length();
       dout(20) << __func__ << "  inline shard " << len << " bytes from " << n
 	       << " extents" << dendl;
@@ -1973,7 +2112,7 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
     auto p = shards.begin();
     auto prev_p = p;
     while (p != shards.end()) {
-      assert(p->shard_info->offset >= prev_p->shard_info->offset);
+      ceph_assert(p->shard_info->offset >= prev_p->shard_info->offset);
       auto n = p;
       ++n;
       if (p->dirty) {
@@ -1989,7 +2128,7 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 			bl, &p->extents)) {
 	  if (force) {
 	    derr << __func__ << "  encode_some needs reshard" << dendl;
-	    assert(!force);
+	    ceph_assert(!force);
 	  }
 	}
         size_t len = bl.length();
@@ -2006,8 +2145,8 @@ void BlueStore::ExtentMap::update(KeyValueDB::Transaction t,
 	  }
 	  // avoid resharding the trailing shard, even if it is small
 	  else if (n != shards.end() &&
-		   len < g_conf->bluestore_extent_map_shard_min_size) {
-            assert(endoff != OBJECT_MAX_SIZE);
+		   len < g_conf()->bluestore_extent_map_shard_min_size) {
+            ceph_assert(endoff != OBJECT_MAX_SIZE);
 	    if (p == shards.begin()) {
 	      // we are the first shard, combine with next shard
 	      request_reshard(p->shard_info->offset, endoff + 1);
@@ -2066,7 +2205,7 @@ bid_t BlueStore::ExtentMap::allocate_spanning_blob_id()
       if (bid < 0) bid = 0;
     }
   } while (bid != begin_bid);
-  assert(0 == "no available blob id");
+  ceph_abort_msg("no available blob id");
 }
 
 void BlueStore::ExtentMap::reshard(
@@ -2105,7 +2244,7 @@ void BlueStore::ExtentMap::reshard(
 	     << needs_reshard_end << ")" << std::dec << dendl;
   }
 
-  fault_range(db, needs_reshard_begin, needs_reshard_end);
+  fault_range(db, needs_reshard_begin, (needs_reshard_end - needs_reshard_begin));
 
   // we may need to fault in a larger interval later must have all
   // referring extents for spanning blobs loaded in order to have
@@ -2139,7 +2278,7 @@ void BlueStore::ExtentMap::reshard(
   unsigned target = cct->_conf->bluestore_extent_map_shard_target_size;
   unsigned slop = target *
     cct->_conf->bluestore_extent_map_shard_target_size_slop;
-  unsigned extent_avg = bytes / MAX(1, extents);
+  unsigned extent_avg = bytes / std::max(1u, extents);
   dout(20) << __func__ << "  extent_avg " << extent_avg << ", target " << target
 	   << ", slop " << slop << dendl;
 
@@ -2216,7 +2355,7 @@ void BlueStore::ExtentMap::reshard(
     shards.insert(shards.begin() + si_begin, new_shard_info.size(), Shard());
     si_end = si_begin + new_shard_info.size();
 
-    assert(sv.size() == shards.size());
+    ceph_assert(sv.size() == shards.size());
 
     // note that we need to update every shard_info of shards here,
     // as sv might have been totally re-allocated above
@@ -2271,7 +2410,7 @@ void BlueStore::ExtentMap::reshard(
       dout(30) << " extent " << *e << dendl;
       while (e->logical_offset >= shard_end) {
 	shard_start = shard_end;
-	assert(sp != esp);
+	ceph_assert(sp != esp);
 	++sp;
 	if (sp == esp) {
 	  shard_end = OBJECT_MAX_SIZE;
@@ -2356,7 +2495,7 @@ bool BlueStore::ExtentMap::encode_some(
   for (auto p = start;
        p != extent_map.end() && p->logical_offset < end;
        ++p, ++n) {
-    assert(p->logical_offset >= offset);
+    ceph_assert(p->logical_offset >= offset);
     p->blob->last_encoded_id = -1;
     if (!p->blob->is_spanning() && p->blob_escapes_range(offset, length)) {
       dout(30) << __func__ << " 0x" << std::hex << offset << "~" << length
@@ -2454,14 +2593,14 @@ unsigned BlueStore::ExtentMap::decode_some(bufferlist& bl)
   *_dout << dendl;
   */
 
-  assert(bl.get_num_buffers() <= 1);
+  ceph_assert(bl.get_num_buffers() <= 1);
   auto p = bl.front().begin_deep();
   __u8 struct_v;
   denc(struct_v, p);
   // Version 2 differs from v1 in blob's ref_map
   // serialization only. Hence there is no specific
   // handling at ExtentMap level below.
-  assert(struct_v == 1 || struct_v == 2);
+  ceph_assert(struct_v == 1 || struct_v == 2);
 
   uint32_t num;
   denc_varint(num, p);
@@ -2498,7 +2637,7 @@ unsigned BlueStore::ExtentMap::decode_some(bufferlist& bl)
       blobid >>= BLOBID_SHIFT_BITS;
       if (blobid) {
 	le->assign_blob(blobs[blobid - 1]);
-	assert(le->blob);
+	ceph_assert(le->blob);
       } else {
 	Blob *b = new Blob();
         uint64_t sbid = 0;
@@ -2518,7 +2657,7 @@ unsigned BlueStore::ExtentMap::decode_some(bufferlist& bl)
     extent_map.insert(*le);
   }
 
-  assert(n == num);
+  ceph_assert(n == num);
   return num;
 }
 
@@ -2556,14 +2695,14 @@ void BlueStore::ExtentMap::encode_spanning_blobs(
 }
 
 void BlueStore::ExtentMap::decode_spanning_blobs(
-  bufferptr::iterator& p)
+  bufferptr::const_iterator& p)
 {
   __u8 struct_v;
   denc(struct_v, p);
   // Version 2 differs from v1 in blob's ref_map
   // serialization only. Hence there is no specific
   // handling at ExtentMap level.
-  assert(struct_v == 1 || struct_v == 2);
+  ceph_assert(struct_v == 1 || struct_v == 2);
 
   unsigned n;
   denc_varint(n, p);
@@ -2603,10 +2742,10 @@ void BlueStore::ExtentMap::fault_range(
   if (start < 0)
     return;
 
-  assert(last >= start);
+  ceph_assert(last >= start);
   string key;
   while (start <= last) {
-    assert((size_t)start < shards.size());
+    ceph_assert((size_t)start < shards.size());
     auto p = &shards[start];
     if (!p->loaded) {
       dout(30) << __func__ << " opening shard 0x" << std::hex
@@ -2620,7 +2759,7 @@ void BlueStore::ExtentMap::fault_range(
 	    derr << __func__ << " missing shard 0x" << std::hex
 		 << p->shard_info->offset << std::dec << " for " << onode->oid
 		 << dendl;
-	    assert(r >= 0);
+	    ceph_assert(r >= 0);
           }
         }
       );
@@ -2629,8 +2768,8 @@ void BlueStore::ExtentMap::fault_range(
       dout(20) << __func__ << " open shard 0x" << std::hex
 	       << p->shard_info->offset << std::dec
 	       << " (" << v.length() << " bytes)" << dendl;
-      assert(p->dirty == false);
-      assert(v.length() == p->shard_info->bytes);
+      ceph_assert(p->dirty == false);
+      ceph_assert(v.length() == p->shard_info->bytes);
       onode->c->store->logger->inc(l_bluestore_onode_shard_misses);
     } else {
       onode->c->store->logger->inc(l_bluestore_onode_shard_hits);
@@ -2652,18 +2791,22 @@ void BlueStore::ExtentMap::dirty_range(
     return;
   }
   auto start = seek_shard(offset);
-  auto last = seek_shard(offset + length);
+  if (length == 0) {
+    length = 1;
+  }
+  auto last = seek_shard(offset + length - 1);
   if (start < 0)
     return;
 
-  assert(last >= start);
+  ceph_assert(last >= start);
   while (start <= last) {
-    assert((size_t)start < shards.size());
+    ceph_assert((size_t)start < shards.size());
     auto p = &shards[start];
     if (!p->loaded) {
-      dout(20) << __func__ << " shard 0x" << std::hex << p->shard_info->offset
-	       << std::dec << " is not loaded, can't mark dirty" << dendl;
-      assert(0 == "can't mark unloaded shard dirty");
+      derr << __func__ << "on write 0x" << std::hex << offset
+	   << "~" << length << " shard 0x" << p->shard_info->offset
+	   << std::dec << " is not loaded, can't mark dirty" << dendl;
+      ceph_abort_msg("can't mark unloaded shard dirty");
     }
     if (!p->dirty) {
       dout(20) << __func__ << " mark shard 0x" << std::hex
@@ -2731,7 +2874,7 @@ int BlueStore::ExtentMap::compress_extent_map(
     --p;  // start to the left of offset
   }
   // the caller should have just written to this region
-  assert(p != extent_map.end());
+  ceph_assert(p != extent_map.end());
 
   // identify the *next* shard
   auto pshard = shards.begin();
@@ -2767,7 +2910,7 @@ int BlueStore::ExtentMap::compress_extent_map(
       break;
     }
     if (n->logical_offset >= shard_end) {
-      assert(pshard != shards.end());
+      ceph_assert(pshard != shards.end());
       ++pshard;
       if (pshard != shards.end()) {
 	shard_end = pshard->shard_info->offset;
@@ -2776,7 +2919,7 @@ int BlueStore::ExtentMap::compress_extent_map(
       }
     }
   }
-  if (removed && onode) {
+  if (removed) {
     onode->c->store->logger->inc(l_bluestore_extent_compress, removed);
   }
   return removed;
@@ -2809,7 +2952,7 @@ void BlueStore::ExtentMap::punch_hole(
 	break;
       } else {
 	// deref tail
-	assert(p->logical_end() > offset); // else seek_lextent bug
+	ceph_assert(p->logical_end() > offset); // else seek_lextent bug
 	uint64_t keep = offset - p->logical_offset;
 	OldExtent* oe = OldExtent::create(c, offset, p->blob_offset + keep,
 					  p->length - keep, p->blob);
@@ -2846,7 +2989,7 @@ BlueStore::Extent *BlueStore::ExtentMap::set_lextent(
   old_extent_map_t *old_extents)
 {
   // We need to have completely initialized Blob to increment its ref counters.
-  assert(b->get_blob().get_logical_length() != 0);
+  ceph_assert(b->get_blob().get_logical_length() != 0);
 
   // Do get_ref prior to punch_hole to prevent from putting reused blob into 
   // old_extents list if we overwre the blob totally
@@ -2895,7 +3038,7 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
       dout(30) << __func__ << "     to " << *ne << dendl;
     } else {
       // switch blob
-      assert(ep->blob_offset >= blob_offset);
+      ceph_assert(ep->blob_offset >= blob_offset);
 
       ep->blob = rb;
       ep->blob_offset -= blob_offset;
@@ -2914,7 +3057,7 @@ void BlueStore::Onode::flush()
 {
   if (flushing_count.load()) {
     ldout(c->store->cct, 20) << __func__ << " cnt:" << flushing_count << dendl;
-    std::unique_lock<std::mutex> l(flush_lock);
+    std::unique_lock l(flush_lock);
     while (flushing_count.load()) {
       flush_cond.wait(l);
     }
@@ -2932,14 +3075,14 @@ bool BlueStore::WriteContext::has_conflict(
   uint64_t loffs_end,
   uint64_t min_alloc_size)
 {
-  assert((loffs % min_alloc_size) == 0);
-  assert((loffs_end % min_alloc_size) == 0);
+  ceph_assert((loffs % min_alloc_size) == 0);
+  ceph_assert((loffs_end % min_alloc_size) == 0);
   for (auto w : writes) {
     if (b == w.b) {
-      auto loffs2 = P2ALIGN(w.logical_offset, min_alloc_size);
-      auto loffs2_end = ROUND_UP_TO( w.logical_offset + w.length0, min_alloc_size);
+      auto loffs2 = p2align(w.logical_offset, min_alloc_size);
+      auto loffs2_end = p2roundup(w.logical_offset + w.length0, min_alloc_size);
       if ((loffs <= loffs2 && loffs_end > loffs2) ||
-          (loffs >= loffs2 &&  loffs < loffs2_end)) {
+          (loffs >= loffs2 && loffs < loffs2_end)) {
         return true;
       }
     }
@@ -2960,7 +3103,7 @@ void BlueStore::DeferredBatch::prepare_write(
 {
   _discard(cct, offset, length);
   auto i = iomap.insert(make_pair(offset, deferred_io()));
-  assert(i.second);  // this should be a new insertion
+  ceph_assert(i.second);  // this should be a new insertion
   i.first->second.seq = seq;
   blp.copy(length, i.first->second.bl);
   i.first->second.bl.reassign_to_mempool(
@@ -2991,6 +3134,7 @@ void BlueStore::DeferredBatch::_discard(
 	       << " 0x" << std::hex << p->first << "~" << p->second.bl.length()
 	       << " -> 0x" << head.length() << std::dec << dendl;
       auto i = seq_bytes.find(p->second.seq);
+      ceph_assert(i != seq_bytes.end());
       if (end > offset + length) {
 	bufferlist tail;
 	tail.substr_of(p->second.bl, offset + length - p->first,
@@ -3005,6 +3149,7 @@ void BlueStore::DeferredBatch::_discard(
       } else {
 	i->second -= end - offset;
       }
+      ceph_assert(i->second >= 0);
       p->second.bl.swap(head);
     }
     ++p;
@@ -3014,6 +3159,7 @@ void BlueStore::DeferredBatch::_discard(
       break;
     }
     auto i = seq_bytes.find(p->second.seq);
+    ceph_assert(i != seq_bytes.end());
     auto end = p->first + p->second.bl.length();
     if (end > offset + length) {
       unsigned drop_front = offset + length - p->first;
@@ -3033,6 +3179,7 @@ void BlueStore::DeferredBatch::_discard(
 	       << std::dec << dendl;
       i->second -= p->second.bl.length();
     }
+    ceph_assert(i->second >= 0);
     p = iomap.erase(p);
   }
 }
@@ -3045,11 +3192,11 @@ void BlueStore::DeferredBatch::_audit(CephContext *cct)
   }
   uint64_t pos = 0;
   for (auto& p : iomap) {
-    assert(p.first >= pos);
+    ceph_assert(p.first >= pos);
     sb[p.second.seq] += p.second.bl.length();
     pos = p.first + p.second.bl.length();
   }
-  assert(sb == seq_bytes);
+  ceph_assert(sb == seq_bytes);
 }
 
 
@@ -3058,19 +3205,35 @@ void BlueStore::DeferredBatch::_audit(CephContext *cct)
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore(" << store->path << ").collection(" << cid << " " << this << ") "
 
-BlueStore::Collection::Collection(BlueStore *ns, Cache *c, coll_t cid)
-  : store(ns),
+BlueStore::Collection::Collection(BlueStore *store_, Cache *c, coll_t cid)
+  : CollectionImpl(cid),
+    store(store_),
     cache(c),
-    cid(cid),
     lock("BlueStore::Collection::lock", true, false),
     exists(true),
-    onode_map(c)
+    onode_map(c),
+    commit_queue(nullptr)
 {
+}
+
+bool BlueStore::Collection::flush_commit(Context *c)
+{
+  return osr->flush_commit(c);
+}
+
+void BlueStore::Collection::flush()
+{
+  osr->flush();
+}
+
+void BlueStore::Collection::flush_all_but_last()
+{
+  osr->flush_all_but_last();
 }
 
 void BlueStore::Collection::open_shared_blob(uint64_t sbid, BlobRef b)
 {
-  assert(!b->shared_blob);
+  ceph_assert(!b->shared_blob);
   const bluestore_blob_t& blob = b->get_blob();
   if (!blob.is_shared()) {
     b->shared_blob = new SharedBlob(this);
@@ -3103,13 +3266,13 @@ void BlueStore::Collection::load_shared_blob(SharedBlobRef sb)
 	lderr(store->cct) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " not found at key "
 			  << pretty_binary_string(key) << dendl;
-      assert(0 == "uh oh, missing shared_blob");
+      ceph_abort_msg("uh oh, missing shared_blob");
     }
 
     sb->loaded = true;
     sb->persistent = new bluestore_shared_blob_t(sbid);
-    bufferlist::iterator p = v.begin();
-    ::decode(*(sb->persistent), p);
+    auto p = v.cbegin();
+    decode(*(sb->persistent), p);
     ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
 			  << std::dec << " loaded shared_blob " << *sb << dendl;
   }
@@ -3118,7 +3281,7 @@ void BlueStore::Collection::load_shared_blob(SharedBlobRef sb)
 void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
 {
   ldout(store->cct, 10) << __func__ << " " << *b << dendl;
-  assert(!b->shared_blob->is_loaded());
+  ceph_assert(!b->shared_blob->is_loaded());
 
   // update blob
   bluestore_blob_t& blob = b->dirty_blob();
@@ -3141,7 +3304,7 @@ void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
 uint64_t BlueStore::Collection::make_blob_unshared(SharedBlob *sb)
 {
   ldout(store->cct, 10) << __func__ << " " << *sb << dendl;
-  assert(sb->is_loaded());
+  ceph_assert(sb->is_loaded());
 
   uint64_t sbid = sb->get_sbid();
   shared_blob_set.remove(sb);
@@ -3156,7 +3319,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   const ghobject_t& oid,
   bool create)
 {
-  assert(create ? lock.is_wlocked() : lock.is_locked());
+  ceph_assert(create ? lock.is_wlocked() : lock.is_locked());
 
   spg_t pgid;
   if (cid.is_pg(&pgid)) {
@@ -3182,7 +3345,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   ldout(store->cct, 20) << " r " << r << " v.len " << v.length() << dendl;
   Onode *on;
   if (v.length() == 0) {
-    assert(r == -ENOENT);
+    ceph_assert(r == -ENOENT);
     if (!store->cct->_conf->bluestore_debug_misc &&
 	!create)
       return OnodeRef();
@@ -3191,17 +3354,22 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     on = new Onode(this, oid, key);
   } else {
     // loaded
-    assert(r >= 0);
+    ceph_assert(r >= 0);
     on = new Onode(this, oid, key);
     on->exists = true;
-    bufferptr::iterator p = v.front().begin_deep();
+    auto p = v.front().begin_deep();
     on->onode.decode(p);
+    for (auto& i : on->onode.attrs) {
+      i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+    }
 
     // initialize extent_map
     on->extent_map.decode_spanning_blobs(p);
     if (on->onode.extent_map_shards.empty()) {
       denc(on->extent_map.inline_bl, p);
       on->extent_map.decode_some(on->extent_map.inline_bl);
+      on->extent_map.inline_bl.reassign_to_mempool(
+	mempool::mempool_bluestore_cache_other);
     } else {
       on->extent_map.init_shards(false, false);
     }
@@ -3217,21 +3385,23 @@ void BlueStore::Collection::split_cache(
 
   // lock (one or both) cache shards
   std::lock(cache->lock, dest->cache->lock);
-  std::lock_guard<std::recursive_mutex> l(cache->lock, std::adopt_lock);
-  std::lock_guard<std::recursive_mutex> l2(dest->cache->lock, std::adopt_lock);
+  std::lock_guard l(cache->lock, std::adopt_lock);
+  std::lock_guard l2(dest->cache->lock, std::adopt_lock);
 
   int destbits = dest->cnode.bits;
   spg_t destpg;
   bool is_pg = dest->cid.is_pg(&destpg);
-  assert(is_pg);
+  ceph_assert(is_pg);
 
   auto p = onode_map.onode_map.begin();
   while (p != onode_map.onode_map.end()) {
+    OnodeRef o = p->second;
     if (!p->second->oid.match(destbits, destpg.pgid.ps())) {
       // onode does not belong to this child
+      ldout(store->cct, 20) << __func__ << " not moving " << o << " " << o->oid
+			    << dendl;
       ++p;
     } else {
-      OnodeRef o = p->second;
       ldout(store->cct, 20) << __func__ << " moving " << o << " " << o->oid
 			    << dendl;
 
@@ -3260,13 +3430,13 @@ void BlueStore::Collection::split_cache(
 	  continue;
 	}
 	ldout(store->cct, 20) << __func__ << "  moving " << *sb << dendl;
-	sb->coll = dest;
 	if (sb->get_sbid()) {
 	  ldout(store->cct, 20) << __func__
 				<< "   moving registration " << *sb << dendl;
 	  shared_blob_set.remove(sb);
 	  dest->shared_blob_set.add(dest, sb);
 	}
+	sb->coll = dest;
 	if (dest->cache != cache) {
 	  for (auto& i : sb->bc.buffer_map) {
 	    if (!i.second->is_writing()) {
@@ -3283,41 +3453,295 @@ void BlueStore::Collection::split_cache(
 
 // =======================================================
 
+// MempoolThread
+
+#undef dout_prefix
+#define dout_prefix *_dout << "bluestore.MempoolThread(" << this << ") "
+
 void *BlueStore::MempoolThread::entry()
 {
-  Mutex::Locker l(lock);
+  std::unique_lock l(lock);
+
+  std::list<std::shared_ptr<PriorityCache::PriCache>> caches;
+  binned_kv_cache = store->db->get_priority_cache();
+  if (binned_kv_cache != nullptr) {
+    caches.push_back(binned_kv_cache);
+  }
+  caches.push_back(meta_cache);
+  caches.push_back(data_cache);
+
+  autotune_cache_size = store->osd_memory_cache_min;
+
+  utime_t next_balance = ceph_clock_now();
+  utime_t next_resize = ceph_clock_now();
+
+  bool interval_stats_trim = false;
+  bool interval_stats_resize = false; 
   while (!stop) {
-    uint64_t meta_bytes =
-      mempool::bluestore_cache_other::allocated_bytes() +
-      mempool::bluestore_cache_onode::allocated_bytes();
-    uint64_t onode_num =
-      mempool::bluestore_cache_onode::allocated_items();
+    // Before we trim, check and see if it's time to rebalance/resize.
+    double autotune_interval = store->cache_autotune_interval;
+    double resize_interval = store->osd_memory_cache_resize_interval;
 
-    if (onode_num < 2) {
-      onode_num = 2;
+    if (autotune_interval > 0 && next_balance < ceph_clock_now()) {
+      _adjust_cache_settings();
+
+      // Log events at 5 instead of 20 when balance happens.
+      interval_stats_resize = true; 
+      interval_stats_trim = true;
+      if (store->cache_autotune) {
+        _balance_cache(caches);
+      }
+
+      next_balance = ceph_clock_now();
+      next_balance += autotune_interval;
+    }
+    if (resize_interval > 0 && next_resize < ceph_clock_now()) {
+      if (ceph_using_tcmalloc() && store->cache_autotune) {
+        _tune_cache_size(interval_stats_resize);
+        interval_stats_resize = false;
+      }
+      next_resize = ceph_clock_now();
+      next_resize += resize_interval;
     }
 
-    float bytes_per_onode = (float)meta_bytes / (float)onode_num;
-    size_t num_shards = store->cache_shards.size();
-    float target_ratio = store->cache_meta_ratio + store->cache_data_ratio;
-    // A little sloppy but should be close enough
-    uint64_t shard_target = target_ratio * (store->cct->_conf->bluestore_cache_size / num_shards);
-
-    for (auto i : store->cache_shards) {
-      i->trim(shard_target,
-	      store->cache_meta_ratio,
-	      store->cache_data_ratio,
-	      bytes_per_onode);
-    }
+    // Now Trim
+    _trim_shards(interval_stats_trim);
+    interval_stats_trim = false;
 
     store->_update_cache_logger();
-
-    utime_t wait;
-    wait += store->cct->_conf->bluestore_cache_trim_interval;
-    cond.WaitInterval(lock, wait);
+    auto wait = ceph::make_timespan(
+      store->cct->_conf->bluestore_cache_trim_interval);
+    cond.wait_for(l, wait);
   }
   stop = false;
   return NULL;
+}
+
+void BlueStore::MempoolThread::_adjust_cache_settings()
+{
+  if (binned_kv_cache != nullptr) {
+    binned_kv_cache->set_cache_ratio(store->cache_kv_ratio);
+  }
+  meta_cache->set_cache_ratio(store->cache_meta_ratio);
+  data_cache->set_cache_ratio(store->cache_data_ratio);
+}
+
+void BlueStore::MempoolThread::_trim_shards(bool interval_stats)
+{
+  auto cct = store->cct;
+  size_t num_shards = store->cache_shards.size();
+
+  int64_t kv_used = store->db->get_cache_usage();
+  int64_t meta_used = meta_cache->_get_used_bytes();
+  int64_t data_used = data_cache->_get_used_bytes();
+
+  uint64_t cache_size = store->cache_size;
+  int64_t kv_alloc =
+     static_cast<int64_t>(store->cache_kv_ratio * cache_size); 
+  int64_t meta_alloc =
+     static_cast<int64_t>(store->cache_meta_ratio * cache_size);
+  int64_t data_alloc =
+     static_cast<int64_t>(store->cache_data_ratio * cache_size);
+
+  if (binned_kv_cache != nullptr && store->cache_autotune) {
+    cache_size = autotune_cache_size;
+
+    kv_alloc = binned_kv_cache->get_committed_size();
+    meta_alloc = meta_cache->get_committed_size();
+    data_alloc = data_cache->get_committed_size();
+  }
+  
+  if (interval_stats) {
+    ldout(cct, 5) << __func__  << " cache_size: " << cache_size
+                  << " kv_alloc: " << kv_alloc
+                  << " kv_used: " << kv_used
+                  << " meta_alloc: " << meta_alloc
+                  << " meta_used: " << meta_used
+                  << " data_alloc: " << data_alloc
+                  << " data_used: " << data_used << dendl;
+  } else {
+    ldout(cct, 20) << __func__  << " cache_size: " << cache_size
+                   << " kv_alloc: " << kv_alloc
+                   << " kv_used: " << kv_used
+                   << " meta_alloc: " << meta_alloc
+                   << " meta_used: " << meta_used
+                   << " data_alloc: " << data_alloc
+                   << " data_used: " << data_used << dendl;
+  }
+
+  uint64_t max_shard_onodes = static_cast<uint64_t>(
+      (meta_alloc / (double) num_shards) / meta_cache->get_bytes_per_onode());
+  uint64_t max_shard_buffer = static_cast<uint64_t>(data_alloc / num_shards);
+
+  ldout(cct, 30) << __func__ << " max_shard_onodes: " << max_shard_onodes
+                 << " max_shard_buffer: " << max_shard_buffer << dendl;
+
+  for (auto i : store->cache_shards) {
+    i->trim(max_shard_onodes, max_shard_buffer);
+  }
+}
+
+void BlueStore::MempoolThread::_tune_cache_size(bool interval_stats)
+{
+  auto cct = store->cct;
+  uint64_t target = store->osd_memory_target;
+  uint64_t base = store->osd_memory_base;
+  double fragmentation = store->osd_memory_expected_fragmentation;
+  uint64_t cache_min = store->osd_memory_cache_min;
+  uint64_t cache_max = cache_min;
+  uint64_t limited_target = (1.0 - fragmentation) * target;
+  if (limited_target > base + cache_min) {
+    cache_max = limited_target - base;
+  }
+
+  size_t heap_size = 0;
+  size_t unmapped = 0;
+  uint64_t mapped = 0;
+
+  ceph_heap_release_free_memory();
+  ceph_heap_get_numeric_property("generic.heap_size", &heap_size);
+  ceph_heap_get_numeric_property("tcmalloc.pageheap_unmapped_bytes", &unmapped);
+  mapped = heap_size - unmapped;
+
+  uint64_t new_size = autotune_cache_size;
+  new_size = (new_size < cache_max) ? new_size : cache_max;
+  new_size = (new_size > cache_min) ? new_size : cache_min;
+
+  // Approach the min/max slowly, but bounce away quickly.
+  if ((uint64_t) mapped < target) {
+    double ratio = 1 - ((double) mapped / target);
+    new_size += ratio * (cache_max - new_size); 
+  } else {
+    double ratio = 1 - ((double) target / mapped);
+    new_size -= ratio * (new_size - cache_min);
+  }
+
+  if (interval_stats) {
+    ldout(cct, 5) << __func__
+                  << " target: " << target
+                  << " heap: " << heap_size
+                  << " unmapped: " << unmapped
+                  << " mapped: " << mapped 
+                  << " old cache_size: " << autotune_cache_size
+                  << " new cache size: " << new_size << dendl;
+  } else {
+    ldout(cct, 20) << __func__
+                   << " target: " << target
+                   << " heap: " << heap_size
+                   << " unmapped: " << unmapped
+                   << " mapped: " << mapped        
+                   << " old cache_size: " << autotune_cache_size
+                   << " new cache size: " << new_size << dendl;
+  }
+  autotune_cache_size = new_size;
+}
+
+void BlueStore::MempoolThread::_balance_cache(
+    const std::list<std::shared_ptr<PriorityCache::PriCache>>& caches)
+{
+  int64_t mem_avail = autotune_cache_size;
+  /* Each cache is going to get at least 1 chunk's worth of memory from get_chunk
+   * so shrink the available memory here to compensate.  Don't shrink the amount of
+   * memory below 0 however.
+   */
+  mem_avail -= PriorityCache::get_chunk(1, autotune_cache_size) * caches.size();
+  if (mem_avail < 0) {
+    mem_avail = 0;
+  }
+
+  // Assign memory for each priority level
+  for (int i = 0; i < PriorityCache::Priority::LAST + 1; i++) {
+    ldout(store->cct, 10) << __func__ << " assigning cache bytes for PRI: " << i << dendl;
+    PriorityCache::Priority pri = static_cast<PriorityCache::Priority>(i);
+    _balance_cache_pri(&mem_avail, caches, pri);
+  }
+  // Assign any leftover memory based on the default ratios.
+  if (mem_avail > 0) {
+    for (auto it = caches.begin(); it != caches.end(); it++) {
+      int64_t fair_share =
+          static_cast<int64_t>((*it)->get_cache_ratio() * mem_avail);
+      if (fair_share > 0) {
+        (*it)->add_cache_bytes(PriorityCache::Priority::LAST, fair_share);
+      }
+    }
+  }
+  // assert if we assigned more memory than is available.
+  ceph_assert(mem_avail >= 0);
+
+  // Finally commit the new cache sizes
+  for (auto it = caches.begin(); it != caches.end(); it++) {
+    (*it)->commit_cache_size(autotune_cache_size);
+  }
+}
+
+void BlueStore::MempoolThread::_balance_cache_pri(int64_t *mem_avail,
+    const std::list<std::shared_ptr<PriorityCache::PriCache>>& caches,
+    PriorityCache::Priority pri)
+{
+  std::list<std::shared_ptr<PriorityCache::PriCache>> tmp_caches = caches;
+  double cur_ratios = 0;
+  double new_ratios = 0;
+
+  // Zero this priority's bytes, sum the initial ratios.
+  for (auto it = tmp_caches.begin(); it != tmp_caches.end(); it++) {
+    (*it)->set_cache_bytes(pri, 0);
+    cur_ratios += (*it)->get_cache_ratio();
+  }
+
+  // For this priority, loop until caches are satisified or we run out of memory.
+  // Since we can't allocate fractional bytes, stop if we have fewer bytes left
+  // than the number of participating caches.
+  while (!tmp_caches.empty() && *mem_avail > static_cast<int64_t>(tmp_caches.size())) {
+    uint64_t total_assigned = 0;
+
+    for (auto it = tmp_caches.begin(); it != tmp_caches.end(); ) {
+      int64_t cache_wants = (*it)->request_cache_bytes(pri, autotune_cache_size);
+
+      // Usually the ratio should be set to the fraction of the current caches'
+      // assigned ratio compared to the total ratio of all caches that still
+      // want memory.  There is a special case where the only caches left are
+      // all assigned 0% ratios but still want memory.  In that case, give 
+      // them an equal shot at the remaining memory for this priority.
+      double ratio = 1.0 / tmp_caches.size();
+      if (cur_ratios > 0) {
+        ratio = (*it)->get_cache_ratio() / cur_ratios;
+      }
+      int64_t fair_share = static_cast<int64_t>(*mem_avail * ratio);
+
+      if (cache_wants > fair_share) {
+        // If we want too much, take what we can get but stick around for more
+        (*it)->add_cache_bytes(pri, fair_share);
+        total_assigned += fair_share;
+
+        new_ratios += (*it)->get_cache_ratio();
+        ldout(store->cct, 20) << __func__ << " " << (*it)->get_cache_name() 
+                              << " wanted: " << cache_wants << " fair_share: " << fair_share
+                              << " mem_avail: " << *mem_avail
+                              << " staying in list.  Size: " << tmp_caches.size()
+                              << dendl;
+        ++it;
+      } else {
+        // Otherwise assign only what we want
+        if (cache_wants > 0) { 
+          (*it)->add_cache_bytes(pri, cache_wants);
+          total_assigned += cache_wants;
+
+          ldout(store->cct, 20) << __func__ << " " << (*it)->get_cache_name()
+                                << " wanted: " << cache_wants << " fair_share: " << fair_share
+                                << " mem_avail: " << *mem_avail
+                                << " removing from list.  New size: " << tmp_caches.size() - 1
+                                << dendl;
+
+        }
+        // Either the cache didn't want anything or got what it wanted, so remove it from the tmp list. 
+        it = tmp_caches.erase(it);
+      }
+    }
+    // Reset the ratios 
+    *mem_avail -= total_assigned;
+    cur_ratios = new_ratios;
+    new_ratios = 0;
+  }
 }
 
 // =======================================================
@@ -3393,7 +3817,7 @@ bool BlueStore::OmapIteratorImpl::valid()
   return r;
 }
 
-int BlueStore::OmapIteratorImpl::next(bool validate)
+int BlueStore::OmapIteratorImpl::next()
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.has_omap()) {
@@ -3407,7 +3831,7 @@ int BlueStore::OmapIteratorImpl::next(bool validate)
 string BlueStore::OmapIteratorImpl::key()
 {
   RWLock::RLocker l(c->lock);
-  assert(it->valid());
+  ceph_assert(it->valid());
   string db_key = it->raw_key().second;
   string user_key;
   decode_omap_key(db_key, &user_key);
@@ -3417,7 +3841,7 @@ string BlueStore::OmapIteratorImpl::key()
 bufferlist BlueStore::OmapIteratorImpl::value()
 {
   RWLock::RLocker l(c->lock);
-  assert(it->valid());
+  ceph_assert(it->valid());
   return it->value();
 }
 
@@ -3435,6 +3859,20 @@ static void aio_cb(void *priv, void *priv2)
   c->aio_finish(store);
 }
 
+static void discard_cb(void *priv, void *priv2)
+{
+  BlueStore *store = static_cast<BlueStore*>(priv);
+  interval_set<uint64_t> *tmp = static_cast<interval_set<uint64_t>*>(priv2);
+  store->handle_discard(*tmp);
+}
+
+void BlueStore::handle_discard(interval_set<uint64_t>& to_release)
+{
+  dout(10) << __func__ << dendl;
+  ceph_assert(alloc);
+  alloc->release(to_release);
+}
+
 BlueStore::BlueStore(CephContext *cct, const string& path)
   : ObjectStore(cct, path),
     throttle_bytes(cct, "bluestore_throttle_bytes",
@@ -3442,12 +3880,14 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes",
 		       cct->_conf->bluestore_throttle_bytes +
 		       cct->_conf->bluestore_throttle_deferred_bytes),
+    deferred_finisher(cct, "defered_finisher", "dfin"),
+    finisher(cct, "commit_finisher", "cfin"),
     kv_sync_thread(this),
     kv_finalize_thread(this),
     mempool_thread(this)
 {
   _init_logger();
-  cct->_conf->add_observer(this);
+  cct->_conf.add_observer(this);
   set_cache_shards(1);
 }
 
@@ -3460,6 +3900,8 @@ BlueStore::BlueStore(CephContext *cct,
     throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes",
 		       cct->_conf->bluestore_throttle_bytes +
 		       cct->_conf->bluestore_throttle_deferred_bytes),
+    deferred_finisher(cct, "defered_finisher", "dfin"),
+    finisher(cct, "commit_finisher", "cfin"),
     kv_sync_thread(this),
     kv_finalize_thread(this),
     min_alloc_size(_min_alloc_size),
@@ -3467,24 +3909,19 @@ BlueStore::BlueStore(CephContext *cct,
     mempool_thread(this)
 {
   _init_logger();
-  cct->_conf->add_observer(this);
+  cct->_conf.add_observer(this);
   set_cache_shards(1);
 }
 
 BlueStore::~BlueStore()
 {
-  for (auto f : finishers) {
-    delete f;
-  }
-  finishers.clear();
-
-  cct->_conf->remove_observer(this);
+  cct->_conf.remove_observer(this);
   _shutdown_logger();
-  assert(!mounted);
-  assert(db == NULL);
-  assert(bluefs == NULL);
-  assert(fsid_fd < 0);
-  assert(path_fd < 0);
+  ceph_assert(!mounted);
+  ceph_assert(db == NULL);
+  ceph_assert(bluefs == NULL);
+  ceph_assert(fsid_fd < 0);
+  ceph_assert(path_fd < 0);
   for (auto i : cache_shards) {
     delete i;
   }
@@ -3503,8 +3940,11 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_compression_max_blob_size",
     "bluestore_compression_max_blob_size_ssd",
     "bluestore_compression_max_blob_size_hdd",
+    "bluestore_compression_required_ratio",
     "bluestore_max_alloc_size",
     "bluestore_prefer_deferred_size",
+    "bluestore_prefer_deferred_size_hdd",
+    "bluestore_prefer_deferred_size_ssd",
     "bluestore_deferred_batch_ops",
     "bluestore_deferred_batch_ops_hdd",
     "bluestore_deferred_batch_ops_ssd",
@@ -3521,7 +3961,7 @@ const char **BlueStore::get_tracked_conf_keys() const
   return KEYS;
 }
 
-void BlueStore::handle_conf_change(const struct md_config_t *conf,
+void BlueStore::handle_conf_change(const ConfigProxy& conf,
 				   const std::set<std::string> &changed)
 {
   if (changed.count("bluestore_csum_type")) {
@@ -3544,6 +3984,8 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
     }
   }
   if (changed.count("bluestore_prefer_deferred_size") ||
+      changed.count("bluestore_prefer_deferred_size_hdd") ||
+      changed.count("bluestore_prefer_deferred_size_ssd") ||
       changed.count("bluestore_max_alloc_size") ||
       changed.count("bluestore_deferred_batch_ops") ||
       changed.count("bluestore_deferred_batch_ops_hdd") ||
@@ -3573,10 +4015,33 @@ void BlueStore::handle_conf_change(const struct md_config_t *conf,
 
 void BlueStore::_set_compression()
 {
-  if (cct->_conf->bluestore_compression_max_blob_size) {
-    comp_min_blob_size = cct->_conf->bluestore_compression_max_blob_size;
+  auto m = Compressor::get_comp_mode_type(cct->_conf->bluestore_compression_mode);
+  if (m) {
+    _clear_compression_alert();
+    comp_mode = *m;
   } else {
-    assert(bdev);
+    derr << __func__ << " unrecognized value '"
+         << cct->_conf->bluestore_compression_mode
+         << "' for bluestore_compression_mode, reverting to 'none'"
+         << dendl;
+    comp_mode = Compressor::COMP_NONE;
+    string s("unknown mode: ");
+    s += cct->_conf->bluestore_compression_mode;
+    _set_compression_alert(true, s.c_str());
+  }
+
+  compressor = nullptr;
+
+  if (comp_mode == Compressor::COMP_NONE) {
+    dout(10) << __func__ << " compression mode set to 'none', "
+             << "ignore other compression settings" << dendl;
+    return;
+  }
+
+  if (cct->_conf->bluestore_compression_min_blob_size) {
+    comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size;
+  } else {
+    ceph_assert(bdev);
     if (bdev->is_rotational()) {
       comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size_hdd;
     } else {
@@ -3587,7 +4052,7 @@ void BlueStore::_set_compression()
   if (cct->_conf->bluestore_compression_max_blob_size) {
     comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size;
   } else {
-    assert(bdev);
+    ceph_assert(bdev);
     if (bdev->is_rotational()) {
       comp_max_blob_size = cct->_conf->bluestore_compression_max_blob_size_hdd;
     } else {
@@ -3595,30 +4060,20 @@ void BlueStore::_set_compression()
     }
   }
 
-  auto m = Compressor::get_comp_mode_type(cct->_conf->bluestore_compression_mode);
-  if (m) {
-    comp_mode = *m;
-  } else {
-    derr << __func__ << " unrecognized value '"
-         << cct->_conf->bluestore_compression_mode
-         << "' for bluestore_compression_mode, reverting to 'none'"
-         << dendl;
-    comp_mode = Compressor::COMP_NONE;
-  }
-
-  compressor = nullptr;
-
   auto& alg_name = cct->_conf->bluestore_compression_algorithm;
   if (!alg_name.empty()) {
     compressor = Compressor::create(cct, alg_name);
     if (!compressor) {
       derr << __func__ << " unable to initialize " << alg_name.c_str() << " compressor"
            << dendl;
+      _set_compression_alert(false, alg_name.c_str());
     }
   }
  
   dout(10) << __func__ << " mode " << Compressor::get_comp_mode_name(comp_mode)
 	   << " alg " << (compressor ? compressor->get_type_name() : "(none)")
+	   << " min_blob " << comp_min_blob_size
+	   << " max_blob " << comp_max_blob_size
 	   << dendl;
 }
 
@@ -3639,7 +4094,7 @@ void BlueStore::_set_throttle_params()
   if (cct->_conf->bluestore_throttle_cost_per_io) {
     throttle_cost_per_io = cct->_conf->bluestore_throttle_cost_per_io;
   } else {
-    assert(bdev);
+    ceph_assert(bdev);
     if (bdev->is_rotational()) {
       throttle_cost_per_io = cct->_conf->bluestore_throttle_cost_per_io_hdd;
     } else {
@@ -3655,7 +4110,7 @@ void BlueStore::_set_blob_size()
   if (cct->_conf->bluestore_max_blob_size) {
     max_blob_size = cct->_conf->bluestore_max_blob_size;
   } else {
-    assert(bdev);
+    ceph_assert(bdev);
     if (bdev->is_rotational()) {
       max_blob_size = cct->_conf->bluestore_max_blob_size_hdd;
     } else {
@@ -3668,36 +4123,93 @@ void BlueStore::_set_blob_size()
 
 int BlueStore::_set_cache_sizes()
 {
+  ceph_assert(bdev);
+  cache_autotune = cct->_conf.get_val<bool>("bluestore_cache_autotune");
+  cache_autotune_interval =
+      cct->_conf.get_val<double>("bluestore_cache_autotune_interval");
+  osd_memory_target = cct->_conf.get_val<uint64_t>("osd_memory_target");
+  osd_memory_base = cct->_conf.get_val<uint64_t>("osd_memory_base");
+  osd_memory_expected_fragmentation =
+      cct->_conf.get_val<double>("osd_memory_expected_fragmentation");
+  osd_memory_cache_min = cct->_conf.get_val<uint64_t>("osd_memory_cache_min");
+  osd_memory_cache_resize_interval = 
+      cct->_conf.get_val<double>("osd_memory_cache_resize_interval");
+
+  if (cct->_conf->bluestore_cache_size) {
+    cache_size = cct->_conf->bluestore_cache_size;
+  } else {
+    // choose global cache size based on backend type
+    if (bdev->is_rotational()) {
+      cache_size = cct->_conf->bluestore_cache_size_hdd;
+    } else {
+      cache_size = cct->_conf->bluestore_cache_size_ssd;
+    }
+  }
+
   cache_meta_ratio = cct->_conf->bluestore_cache_meta_ratio;
+  if (cache_meta_ratio < 0 || cache_meta_ratio > 1.0) {
+    derr << __func__ << " bluestore_cache_meta_ratio (" << cache_meta_ratio
+         << ") must be in range [0,1.0]" << dendl;
+    return -EINVAL;
+  }
+
   cache_kv_ratio = cct->_conf->bluestore_cache_kv_ratio;
+  if (cache_kv_ratio < 0 || cache_kv_ratio > 1.0) {
+    derr << __func__ << " bluestore_cache_kv_ratio (" << cache_kv_ratio
+         << ") must be in range [0,1.0]" << dendl;
+    return -EINVAL;
+  }
+
+  if (cache_meta_ratio + cache_kv_ratio > 1.0) {
+    derr << __func__ << " bluestore_cache_meta_ratio (" << cache_meta_ratio
+         << ") + bluestore_cache_kv_ratio (" << cache_kv_ratio
+         << ") = " << cache_meta_ratio + cache_kv_ratio << "; must be <= 1.0"
+         << dendl;
+    return -EINVAL;
+  }
+
   cache_data_ratio =
     (double)1.0 - (double)cache_meta_ratio - (double)cache_kv_ratio;
-
-  if (cache_meta_ratio <= 0 || cache_meta_ratio > 1.0) {
-    derr << __func__ << "bluestore_cache_meta_ratio (" << cache_meta_ratio
-	 << ") must be in range (0,1.0]" << dendl;
-    return -EINVAL;
-  }
-  if (cache_kv_ratio <= 0 || cache_kv_ratio > 1.0) {
-    derr << __func__ << "bluestore_cache_kv_ratio (" << cache_kv_ratio
-	 << ") must be in range (0,1.0]" << dendl;
-    return -EINVAL;
-  }
-  if (cache_meta_ratio + cache_kv_ratio > 1.0) {
-    derr << __func__ << "bluestore_cache_meta_ratio (" << cache_meta_ratio
-	 << ") + bluestore_cache_kv_ratio (" << cache_kv_ratio
-	 << ") = " << cache_meta_ratio + cache_kv_ratio << "; must be <= 1.0"
-	 << dendl;
-    return -EINVAL;
-  }
   if (cache_data_ratio < 0) {
     // deal with floating point imprecision
     cache_data_ratio = 0;
   }
-  dout(1) << __func__ << " meta " << cache_meta_ratio
+    
+  dout(1) << __func__ << " cache_size " << cache_size
+          << " meta " << cache_meta_ratio
 	  << " kv " << cache_kv_ratio
 	  << " data " << cache_data_ratio
 	  << dendl;
+  return 0;
+}
+
+int BlueStore::write_meta(const std::string& key, const std::string& value)
+{
+  bluestore_bdev_label_t label;
+  string p = path + "/block";
+  int r = _read_bdev_label(cct, p, &label);
+  if (r < 0) {
+    return ObjectStore::write_meta(key, value);
+  }
+  label.meta[key] = value;
+  r = _write_bdev_label(cct, p, label);
+  ceph_assert(r == 0);
+  return ObjectStore::write_meta(key, value);
+}
+
+int BlueStore::read_meta(const std::string& key, std::string *value)
+{
+  bluestore_bdev_label_t label;
+  string p = path + "/block";
+  int r = _read_bdev_label(cct, p, &label);
+  if (r < 0) {
+    return ObjectStore::read_meta(key, value);
+  }
+  auto i = label.meta.find(key);
+  if (i == label.meta.end()) {
+    return ObjectStore::read_meta(key, value);
+  }
+  *value = i->second;
   return 0;
 }
 
@@ -3710,9 +4222,12 @@ void BlueStore::_init_logger()
 		 "fl_l", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_time_avg(l_bluestore_kv_commit_lat, "kv_commit_lat",
 		 "Average kv_thread commit latency");
-  b.add_time_avg(l_bluestore_kv_lat, "kv_lat",
-		 "Average kv_thread sync latency",
-		 "k_l", PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time_avg(l_bluestore_kv_sync_lat, "kv_sync_lat",
+		 "Average kv_sync thread latency",
+		 "ks_l", PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time_avg(l_bluestore_kv_final_lat, "kv_final_lat",
+		 "Average kv_finalize thread latency",
+		 "kf_l", PerfCountersBuilder::PRIO_INTERESTING);
   b.add_time_avg(l_bluestore_state_prepare_lat, "state_prepare_lat",
     "Average prepare state latency");
   b.add_time_avg(l_bluestore_state_aio_wait_lat, "state_aio_wait_lat",
@@ -3763,11 +4278,11 @@ void BlueStore::_init_logger()
   b.add_u64_counter(l_bluestore_compress_rejected_count, "compress_rejected_count",
     "Sum for compress ops rejected due to low net gain of space");
   b.add_u64_counter(l_bluestore_write_pad_bytes, "write_pad_bytes",
-    "Sum for write-op padded bytes");
+		    "Sum for write-op padded bytes", NULL, 0, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_deferred_write_ops, "deferred_write_ops",
 		    "Sum for deferred write op");
   b.add_u64_counter(l_bluestore_deferred_write_bytes, "deferred_write_bytes",
-		    "Sum for deferred write bytes", "def");
+		    "Sum for deferred write bytes", "def", 0, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_write_penalty_read_ops, "write_penalty_read_ops",
 		    "Sum for write penalty read ops");
   b.add_u64(l_bluestore_allocated, "bluestore_allocated",
@@ -3799,22 +4314,22 @@ void BlueStore::_init_logger()
   b.add_u64(l_bluestore_buffers, "bluestore_buffers",
 	    "Number of buffers in cache");
   b.add_u64(l_bluestore_buffer_bytes, "bluestore_buffer_bytes",
-	    "Number of buffer bytes in cache");
-  b.add_u64(l_bluestore_buffer_hit_bytes, "bluestore_buffer_hit_bytes",
-    "Sum for bytes of read hit in the cache");
-  b.add_u64(l_bluestore_buffer_miss_bytes, "bluestore_buffer_miss_bytes",
-    "Sum for bytes of read missed in the cache");
+	    "Number of buffer bytes in cache", NULL, 0, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluestore_buffer_hit_bytes, "bluestore_buffer_hit_bytes",
+	    "Sum for bytes of read hit in the cache", NULL, 0, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluestore_buffer_miss_bytes, "bluestore_buffer_miss_bytes",
+	    "Sum for bytes of read missed in the cache", NULL, 0, unit_t(UNIT_BYTES));
 
   b.add_u64_counter(l_bluestore_write_big, "bluestore_write_big",
 		    "Large aligned writes into fresh blobs");
   b.add_u64_counter(l_bluestore_write_big_bytes, "bluestore_write_big_bytes",
-		    "Large aligned writes into fresh blobs (bytes)");
+		    "Large aligned writes into fresh blobs (bytes)", NULL, 0, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_write_big_blobs, "bluestore_write_big_blobs",
 		    "Large aligned writes into fresh blobs (blobs)");
   b.add_u64_counter(l_bluestore_write_small, "bluestore_write_small",
 		    "Small writes into existing or sparse small blobs");
   b.add_u64_counter(l_bluestore_write_small_bytes, "bluestore_write_small_bytes",
-		    "Small writes into existing or sparse small blobs (bytes)");
+		    "Small writes into existing or sparse small blobs (bytes)", NULL, 0, unit_t(UNIT_BYTES));
   b.add_u64_counter(l_bluestore_write_small_unused,
 		    "bluestore_write_small_unused",
 		    "Small writes into unused portion of existing blob");
@@ -3838,6 +4353,12 @@ void BlueStore::_init_logger()
   b.add_u64_counter(l_bluestore_gc_merged, "bluestore_gc_merged",
 		    "Sum for extents that have been merged due to garbage "
 		    "collection");
+  b.add_u64_counter(l_bluestore_read_eio, "bluestore_read_eio",
+                    "Read EIO errors propagated to high level callers");
+  b.add_u64_counter(l_bluestore_reads_with_retries, "bluestore_reads_with_retries",
+                    "Read operations that required at least one retry due to failed checksum validation");
+  b.add_u64(l_bluestore_fragmentation, "bluestore_fragmentation_micros",
+            "How fragmented bluestore free space is (free extents / max possible number of free extents) * 1000");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -3845,14 +4366,13 @@ void BlueStore::_init_logger()
 int BlueStore::_reload_logger()
 {
   struct store_statfs_t store_statfs;
-
   int r = statfs(&store_statfs);
-  if(r >= 0) {
+  if (r >= 0) {
     logger->set(l_bluestore_allocated, store_statfs.allocated);
-    logger->set(l_bluestore_stored, store_statfs.stored);
-    logger->set(l_bluestore_compressed, store_statfs.compressed);
-    logger->set(l_bluestore_compressed_allocated, store_statfs.compressed_allocated);
-    logger->set(l_bluestore_compressed_original, store_statfs.compressed_original);
+    logger->set(l_bluestore_stored, store_statfs.data_stored);
+    logger->set(l_bluestore_compressed, store_statfs.data_compressed);
+    logger->set(l_bluestore_compressed_allocated, store_statfs.data_compressed_allocated);
+    logger->set(l_bluestore_compressed_original, store_statfs.data_compressed_original);
   }
   return r;
 }
@@ -3876,14 +4396,16 @@ int BlueStore::get_block_device_fsid(CephContext* cct, const string& path,
 
 int BlueStore::_open_path()
 {
-  // initial sanity check
-  int r = _set_cache_sizes();
-  if (r < 0) {
-    return r;
+  // sanity check(s)
+  auto osd_max_object_size =
+    cct->_conf.get_val<Option::size_t>("osd_max_object_size");
+  if (osd_max_object_size >= (size_t)OBJECT_MAX_SIZE) {
+    derr << __func__ << " osd_max_object_size >= 0x" << std::hex << OBJECT_MAX_SIZE
+      << "; BlueStore has hard limit of 0x" << OBJECT_MAX_SIZE << "." <<  std::dec << dendl;
+    return -EINVAL;
   }
-
-  assert(path_fd < 0);
-  path_fd = ::open(path.c_str(), O_DIRECTORY);
+  ceph_assert(path_fd < 0);
+  path_fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_DIRECTORY|O_CLOEXEC));
   if (path_fd < 0) {
     int r = -errno;
     derr << __func__ << " unable to open " << path << ": " << cpp_strerror(r)
@@ -3899,19 +4421,20 @@ void BlueStore::_close_path()
   path_fd = -1;
 }
 
-int BlueStore::_write_bdev_label(string path, bluestore_bdev_label_t label)
+int BlueStore::_write_bdev_label(CephContext *cct,
+				 string path, bluestore_bdev_label_t label)
 {
   dout(10) << __func__ << " path " << path << " label " << label << dendl;
   bufferlist bl;
-  ::encode(label, bl);
+  encode(label, bl);
   uint32_t crc = bl.crc32c(-1);
-  ::encode(crc, bl);
-  assert(bl.length() <= BDEV_LABEL_BLOCK_SIZE);
+  encode(crc, bl);
+  ceph_assert(bl.length() <= BDEV_LABEL_BLOCK_SIZE);
   bufferptr z(BDEV_LABEL_BLOCK_SIZE - bl.length());
   z.zero();
   bl.append(std::move(z));
 
-  int fd = ::open(path.c_str(), O_WRONLY);
+  int fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_WRONLY|O_CLOEXEC));
   if (fd < 0) {
     fd = -errno;
     derr << __func__ << " failed to open " << path << ": " << cpp_strerror(fd)
@@ -3922,7 +4445,14 @@ int BlueStore::_write_bdev_label(string path, bluestore_bdev_label_t label)
   if (r < 0) {
     derr << __func__ << " failed to write to " << path
 	 << ": " << cpp_strerror(r) << dendl;
+    goto out;
   }
+  r = ::fsync(fd);
+  if (r < 0) {
+    derr << __func__ << " failed to fsync " << path
+	 << ": " << cpp_strerror(r) << dendl;
+  }
+out:
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   return r;
 }
@@ -3931,7 +4461,7 @@ int BlueStore::_read_bdev_label(CephContext* cct, string path,
 				bluestore_bdev_label_t *label)
 {
   dout(10) << __func__ << dendl;
-  int fd = ::open(path.c_str(), O_RDONLY);
+  int fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_RDONLY|O_CLOEXEC));
   if (fd < 0) {
     fd = -errno;
     derr << __func__ << " failed to open " << path << ": " << cpp_strerror(fd)
@@ -3948,19 +4478,19 @@ int BlueStore::_read_bdev_label(CephContext* cct, string path,
   }
 
   uint32_t crc, expected_crc;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   try {
-    ::decode(*label, p);
+    decode(*label, p);
     bufferlist t;
     t.substr_of(bl, 0, p.get_off());
     crc = t.crc32c(-1);
-    ::decode(expected_crc, p);
+    decode(expected_crc, p);
   }
   catch (buffer::error& e) {
-    derr << __func__ << " unable to decode label at offset " << p.get_off()
+    dout(2) << __func__ << " unable to decode label at offset " << p.get_off()
 	 << ": " << e.what()
 	 << dendl;
-    return -EINVAL;
+    return -ENOENT;
   }
   if (crc != expected_crc) {
     derr << __func__ << " bad crc on label, expected " << expected_crc
@@ -3980,7 +4510,7 @@ int BlueStore::_check_or_set_bdev_label(
     label.size = size;
     label.btime = ceph_clock_now();
     label.description = desc;
-    int r = _write_bdev_label(path, label);
+    int r = _write_bdev_label(cct, path, label);
     if (r < 0)
       return r;
   } else {
@@ -4007,7 +4537,7 @@ void BlueStore::_set_alloc_sizes(void)
   if (cct->_conf->bluestore_prefer_deferred_size) {
     prefer_deferred_size = cct->_conf->bluestore_prefer_deferred_size;
   } else {
-    assert(bdev);
+    ceph_assert(bdev);
     if (bdev->is_rotational()) {
       prefer_deferred_size = cct->_conf->bluestore_prefer_deferred_size_hdd;
     } else {
@@ -4018,7 +4548,7 @@ void BlueStore::_set_alloc_sizes(void)
   if (cct->_conf->bluestore_deferred_batch_ops) {
     deferred_batch_ops = cct->_conf->bluestore_deferred_batch_ops;
   } else {
-    assert(bdev);
+    ceph_assert(bdev);
     if (bdev->is_rotational()) {
       deferred_batch_ops = cct->_conf->bluestore_deferred_batch_ops_hdd;
     } else {
@@ -4027,7 +4557,7 @@ void BlueStore::_set_alloc_sizes(void)
   }
 
   dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
-	   << std::dec << " order " << min_alloc_size_order
+	   << std::dec << " order " << (int)min_alloc_size_order
 	   << " max_alloc_size 0x" << std::hex << max_alloc_size
 	   << " prefer_deferred_size 0x" << prefer_deferred_size
 	   << std::dec
@@ -4037,12 +4567,16 @@ void BlueStore::_set_alloc_sizes(void)
 
 int BlueStore::_open_bdev(bool create)
 {
-  assert(bdev == NULL);
+  ceph_assert(bdev == NULL);
   string p = path + "/block";
-  bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this));
+  bdev = BlockDevice::create(cct, p, aio_cb, static_cast<void*>(this), discard_cb, static_cast<void*>(this));
   int r = bdev->open(p);
   if (r < 0)
     goto fail;
+
+  if (create && cct->_conf->bdev_enable_discard) {
+    bdev->discard(0, bdev->get_size());
+  }
 
   if (bdev->supported_bdev_label()) {
     r = _check_or_set_bdev_label(p, bdev->get_size(), "main", create);
@@ -4054,7 +4588,12 @@ int BlueStore::_open_bdev(bool create)
   block_size = bdev->get_block_size();
   block_mask = ~(block_size - 1);
   block_size_order = ctz(block_size);
-  assert(block_size == 1u << block_size_order);
+  ceph_assert(block_size == 1u << block_size_order);
+  // and set cache_size based on device type
+  r = _set_cache_sizes();
+  if (r < 0) {
+    goto fail_close;
+  }
   return 0;
 
  fail_close:
@@ -4065,49 +4604,61 @@ int BlueStore::_open_bdev(bool create)
   return r;
 }
 
+void BlueStore::_validate_bdev()
+{
+  ceph_assert(bdev);
+  ceph_assert(min_alloc_size); // _get_odisk_reserved depends on that
+  uint64_t dev_size = bdev->get_size();
+  if (dev_size < 
+    _get_ondisk_reserved() + cct->_conf->bluestore_bluefs_min) {
+    dout(1) << __func__ << " main device size " << byte_u_t(dev_size)
+            << " is too small, disable bluestore_bluefs_min for now"
+            << dendl;
+    ceph_assert(dev_size >= _get_ondisk_reserved());
+
+    int r = cct->_conf.set_val("bluestore_bluefs_min", "0");
+    ceph_assert(r == 0);
+  }
+}
+
 void BlueStore::_close_bdev()
 {
-  assert(bdev);
+  ceph_assert(bdev);
   bdev->close();
   delete bdev;
   bdev = NULL;
 }
 
-int BlueStore::_open_fm(bool create)
+int BlueStore::_open_fm(KeyValueDB::Transaction t)
 {
-  assert(fm == NULL);
-  fm = FreelistManager::create(cct, freelist_type, db, PREFIX_ALLOC);
-
-  if (create) {
-    // initialize freespace
+  ceph_assert(fm == NULL);
+  fm = FreelistManager::create(cct, freelist_type, PREFIX_ALLOC);
+  ceph_assert(fm);
+  if (t) {
+    // create mode. initialize freespace
     dout(20) << __func__ << " initializing freespace" << dendl;
-    KeyValueDB::Transaction t = db->get_transaction();
     {
       bufferlist bl;
       bl.append(freelist_type);
       t->set(PREFIX_SUPER, "freelist_type", bl);
     }
-    fm->create(bdev->get_size(), t);
+    // being able to allocate in units less than bdev block size 
+    // seems to be a bad idea.
+    ceph_assert( cct->_conf->bdev_block_size <= (int64_t)min_alloc_size);
+    fm->create(bdev->get_size(), (int64_t)min_alloc_size, t);
 
     // allocate superblock reserved space.  note that we do not mark
     // bluefs space as allocated in the freelist; we instead rely on
     // bluefs_extents.
-    fm->allocate(0, SUPER_RESERVED, t);
+    auto reserved = _get_ondisk_reserved();
+    fm->allocate(0, reserved, t);
 
-    uint64_t reserved = 0;
     if (cct->_conf->bluestore_bluefs) {
-      assert(bluefs_extents.num_intervals() == 1);
+      ceph_assert(bluefs_extents.num_intervals() == 1);
       interval_set<uint64_t>::iterator p = bluefs_extents.begin();
-      reserved = p.get_start() + p.get_len();
+      reserved = round_up_to(p.get_start() + p.get_len(), min_alloc_size);
       dout(20) << __func__ << " reserved 0x" << std::hex << reserved << std::dec
 	       << " for bluefs" << dendl;
-      bufferlist bl;
-      ::encode(bluefs_extents, bl);
-      t->set(PREFIX_SUPER, "bluefs_extents", bl);
-      dout(20) << __func__ << " bluefs_extents 0x" << std::hex << bluefs_extents
-	       << std::dec << dendl;
-    } else {
-      reserved = SUPER_RESERVED;
     }
 
     if (cct->_conf->bluestore_debug_prefill > 0) {
@@ -4115,7 +4666,7 @@ int BlueStore::_open_fm(bool create)
       dout(1) << __func__ << " pre-fragmenting freespace, using "
 	      << cct->_conf->bluestore_debug_prefill << " with max free extent "
 	      << cct->_conf->bluestore_debug_prefragment_max << dendl;
-      uint64_t start = P2ROUNDUP(reserved, min_alloc_size);
+      uint64_t start = p2roundup(reserved, min_alloc_size);
       uint64_t max_b = cct->_conf->bluestore_debug_prefragment_max / min_alloc_size;
       float r = cct->_conf->bluestore_debug_prefill;
       r /= 1.0 - r;
@@ -4125,21 +4676,21 @@ int BlueStore::_open_fm(bool create)
 	uint64_t l = (rand() % max_b + 1) * min_alloc_size;
 	if (start + l > end) {
 	  l = end - start;
-          l = P2ALIGN(l, min_alloc_size);
+          l = p2align(l, min_alloc_size);
         }
-        assert(start + l <= end);
+        ceph_assert(start + l <= end);
 
 	uint64_t u = 1 + (uint64_t)(r * (double)l);
-	u = P2ROUNDUP(u, min_alloc_size);
+	u = p2roundup(u, min_alloc_size);
         if (start + l + u > end) {
           u = end - (start + l);
           // trim to align so we don't overflow again
-          u = P2ALIGN(u, min_alloc_size);
+          u = p2align(u, min_alloc_size);
           stop = true;
         }
-        assert(start + l + u <= end);
+        ceph_assert(start + l + u <= end);
 
-	dout(20) << "  free 0x" << std::hex << start << "~" << l
+	dout(20) << __func__ << " free 0x" << std::hex << start << "~" << l
 		 << " use 0x" << u << std::dec << dendl;
 
         if (u == 0) {
@@ -4151,10 +4702,9 @@ int BlueStore::_open_fm(bool create)
 	start += l + u;
       }
     }
-    db->submit_transaction_sync(t);
   }
 
-  int r = fm->init();
+  int r = fm->init(db);
   if (r < 0) {
     derr << __func__ << " freelist init failed: " << cpp_strerror(r) << dendl;
     delete fm;
@@ -4167,7 +4717,7 @@ int BlueStore::_open_fm(bool create)
 void BlueStore::_close_fm()
 {
   dout(10) << __func__ << dendl;
-  assert(fm);
+  ceph_assert(fm);
   fm->shutdown();
   delete fm;
   fm = NULL;
@@ -4175,8 +4725,23 @@ void BlueStore::_close_fm()
 
 int BlueStore::_open_alloc()
 {
-  assert(alloc == NULL);
-  assert(bdev->get_size());
+  ceph_assert(alloc == NULL);
+  ceph_assert(bdev->get_size());
+
+  if (bluefs) {
+    bluefs_extents.clear();
+    auto r = bluefs->get_block_extents(bluefs_shared_bdev, &bluefs_extents);
+    if (r < 0) {
+      lderr(cct) << __func__ << " failed to retrieve bluefs_extents: "
+		 << cpp_strerror(r) << dendl;
+
+      return r;
+    }
+    dout(10) << __func__ << " bluefs extents 0x"
+             << std::hex << bluefs_extents << std::dec
+	     << dendl;
+  }
+
   alloc = Allocator::create(cct, cct->_conf->bluestore_allocator,
                             bdev->get_size(),
                             min_alloc_size);
@@ -4193,12 +4758,13 @@ int BlueStore::_open_alloc()
   // initialize from freelist
   fm->enumerate_reset();
   uint64_t offset, length;
-  while (fm->enumerate_next(&offset, &length)) {
+  while (fm->enumerate_next(db, &offset, &length)) {
     alloc->init_add_free(offset, length);
     ++num;
     bytes += length;
   }
-  dout(1) << __func__ << " loaded " << pretty_si_t(bytes)
+  fm->enumerate_reset();
+  dout(1) << __func__ << " loaded " << byte_u_t(bytes)
 	  << " in " << num << " extents"
 	  << dendl;
 
@@ -4206,24 +4772,26 @@ int BlueStore::_open_alloc()
   for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
     alloc->init_rm_free(e.get_start(), e.get_len());
   }
-  dout(10) << __func__ << " marked bluefs_extents 0x" << std::hex
-	   << bluefs_extents << std::dec << " as allocated" << dendl;
 
   return 0;
 }
 
 void BlueStore::_close_alloc()
 {
-  assert(alloc);
+  ceph_assert(bdev);
+  bdev->discard_drain();
+
+  ceph_assert(alloc);
   alloc->shutdown();
   delete alloc;
   alloc = NULL;
+  bluefs_extents.clear();
 }
 
 int BlueStore::_open_fsid(bool create)
 {
-  assert(fsid_fd < 0);
-  int flags = O_RDWR;
+  ceph_assert(fsid_fd < 0);
+  int flags = O_RDWR|O_CLOEXEC;
   if (create)
     flags |= O_CREAT;
   fsid_fd = ::openat(path_fd, "fsid", flags, 0644);
@@ -4333,6 +4901,17 @@ bool BlueStore::is_rotational()
   return rotational;
 }
 
+bool BlueStore::is_journal_rotational()
+{
+  if (!bluefs) {
+    dout(5) << __func__ << " bluefs disabled, default to store media type"
+            << dendl;
+    return is_rotational();
+  }
+  dout(10) << __func__ << " " << (int)bluefs->wal_is_rotational() << dendl;
+  return bluefs->wal_is_rotational();
+}
+
 bool BlueStore::test_mount_in_use()
 {
   // most error conditions mean the mount is not in use (e.g., because
@@ -4354,16 +4933,327 @@ bool BlueStore::test_mount_in_use()
   return ret;
 }
 
-int BlueStore::_open_db(bool create)
+int BlueStore::_minimal_open_bluefs(bool create)
 {
   int r;
-  assert(!db);
+  bluefs = new BlueFS(cct);
+
+  string bfn;
+  struct stat st;
+
+  bfn = path + "/block.db";
+  if (::stat(bfn.c_str(), &st) == 0) {
+    r = bluefs->add_block_device(BlueFS::BDEV_DB, bfn,
+	  create && cct->_conf->bdev_enable_discard);
+    if (r < 0) {
+      derr << __func__ << " add block device(" << bfn << ") returned: "
+            << cpp_strerror(r) << dendl;
+      goto free_bluefs;
+    }
+
+    if (bluefs->bdev_support_label(BlueFS::BDEV_DB)) {
+      r = _check_or_set_bdev_label(
+	bfn,
+	bluefs->get_block_device_size(BlueFS::BDEV_DB),
+        "bluefs db", create);
+      if (r < 0) {
+        derr << __func__
+	      << " check block device(" << bfn << ") label returned: "
+              << cpp_strerror(r) << dendl;
+        goto free_bluefs;
+      }
+    }
+    if (create) {
+      bluefs->add_block_extent(
+	BlueFS::BDEV_DB,
+	SUPER_RESERVED,
+	bluefs->get_block_device_size(BlueFS::BDEV_DB) - SUPER_RESERVED);
+    }
+    bluefs_shared_bdev = BlueFS::BDEV_SLOW;
+    bluefs_single_shared_device = false;
+  } else {
+    r = -errno;
+    if (::lstat(bfn.c_str(), &st) == -1) {
+      r = 0;
+      bluefs_shared_bdev = BlueFS::BDEV_DB;
+    } else {
+      derr << __func__ << " " << bfn << " symlink exists but target unusable: "
+	    << cpp_strerror(r) << dendl;
+      goto free_bluefs;
+    }
+  }
+
+  // shared device
+  bfn = path + "/block";
+  // never trim here
+  r = bluefs->add_block_device(bluefs_shared_bdev, bfn, false,
+			       true /* shared with bluestore */);
+  if (r < 0) {
+    derr << __func__ << " add block device(" << bfn << ") returned: "
+	  << cpp_strerror(r) << dendl;
+    goto free_bluefs;
+  }
+  if (create) {
+    // note: we always leave the first SUPER_RESERVED (8k) of the device unused
+    uint64_t initial =
+      bdev->get_size() * (cct->_conf->bluestore_bluefs_min_ratio +
+			  cct->_conf->bluestore_bluefs_gift_ratio);
+    initial = std::max(initial, cct->_conf->bluestore_bluefs_min);
+    if (cct->_conf->bluefs_alloc_size % min_alloc_size) {
+      derr << __func__ << " bluefs_alloc_size 0x" << std::hex
+	    << cct->_conf->bluefs_alloc_size << " is not a multiple of "
+	    << "min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
+      r = -EINVAL;
+      goto free_bluefs;
+    }
+    // align to bluefs's alloc_size
+    initial = p2roundup(initial, cct->_conf->bluefs_alloc_size);
+    // put bluefs in the middle of the device in case it is an HDD
+    uint64_t start = p2align((bdev->get_size() - initial) / 2,
+			      cct->_conf->bluefs_alloc_size);
+    //avoiding superblock overwrite
+    ceph_assert(cct->_conf->bluefs_alloc_size > _get_ondisk_reserved());
+    start = std::max(cct->_conf->bluefs_alloc_size, start);
+
+    bluefs->add_block_extent(bluefs_shared_bdev, start, initial);
+    bluefs_extents.insert(start, initial);
+    ++out_of_sync_fm;
+  }
+
+  bfn = path + "/block.wal";
+  if (::stat(bfn.c_str(), &st) == 0) {
+    r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn,
+      create && cct->_conf->bdev_enable_discard);
+    if (r < 0) {
+      derr << __func__ << " add block device(" << bfn << ") returned: "
+	    << cpp_strerror(r) << dendl;
+      goto free_bluefs;
+    }
+
+    if (bluefs->bdev_support_label(BlueFS::BDEV_WAL)) {
+      r = _check_or_set_bdev_label(
+	bfn,
+	bluefs->get_block_device_size(BlueFS::BDEV_WAL),
+        "bluefs wal", create);
+      if (r < 0) {
+        derr << __func__ << " check block device(" << bfn
+              << ") label returned: " << cpp_strerror(r) << dendl;
+        goto free_bluefs;
+      }
+    }
+
+    if (create) {
+      bluefs->add_block_extent(
+        BlueFS::BDEV_WAL, BDEV_LABEL_BLOCK_SIZE,
+	  bluefs->get_block_device_size(BlueFS::BDEV_WAL) -
+	  BDEV_LABEL_BLOCK_SIZE);
+    }
+    bluefs_single_shared_device = false;
+  } else {
+    r = 0;
+    if (::lstat(bfn.c_str(), &st) != -1) {
+      r = -errno;
+      derr << __func__ << " " << bfn << " symlink exists but target unusable: "
+           << cpp_strerror(r) << dendl;
+      goto free_bluefs;
+    }
+  }
+  return 0;
+
+free_bluefs:
+  ceph_assert(bluefs);
+  delete bluefs;
+  bluefs = NULL;
+  return r;
+}
+
+int BlueStore::_open_bluefs(bool create)
+{
+  int r = _minimal_open_bluefs(create);
+  if (r < 0) {
+    return r;
+  }
+  if (create) {
+    bluefs->mkfs(fsid);
+  }
+  r = bluefs->mount();
+  if (r < 0) {
+    derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
+  }
+  return r;
+}
+
+void BlueStore::_close_bluefs()
+{
+  bluefs->umount();
+  _minimal_close_bluefs();
+}
+
+void BlueStore::_minimal_close_bluefs()
+{
+  delete bluefs;
+  bluefs = NULL;
+}
+
+int BlueStore::_is_bluefs(bool create, bool* ret)
+{
+  if (create) {
+    *ret = cct->_conf->bluestore_bluefs;
+  } else {
+    string s;
+    int r = read_meta("bluefs", &s);
+    if (r < 0) {
+      derr << __func__ << " unable to read 'bluefs' meta" << dendl;
+      return -EIO;
+    }
+    if (s == "1") {
+      *ret = true;
+    } else if (s == "0") {
+      *ret = false;
+    } else {
+      derr << __func__ << " bluefs = " << s << " : not 0 or 1, aborting"
+	   << dendl;
+      return -EIO;
+    }
+  }
+  return 0;
+}
+
+/*
+* opens both DB and dependant super_meta, FreelistManager and allocator
+* in the proper order
+*/
+int BlueStore::_open_db_and_around(bool read_only)
+{
+  int r;
+  bool do_bluefs = false;
+  _is_bluefs(false, &do_bluefs); // ignore err code
+  if (do_bluefs) {
+    // open in read-only first to read FM list and init allocator
+    // as they might be needed for some BlueFS procedures
+    r = _open_db(false, false, true);
+    if (r < 0)
+      return r;
+
+    r = _open_super_meta();
+    if (r < 0) {
+      goto out_db;
+    }
+
+    r = _open_fm(nullptr);
+    if (r < 0)
+      goto out_db;
+
+    r = _open_alloc();
+    if (r < 0)
+      goto out_fm;
+
+    // now open in R/W mode
+    if (!read_only) {
+      _close_db();
+
+      r = _open_db(false, false, false);
+      if (r < 0) {
+	_close_alloc();
+	_close_fm();
+	return r;
+      }
+    }
+  } else {
+    r = _open_db(false, false);
+    if (r < 0) {
+      return r;
+    }
+    r = _open_super_meta();
+    if (r < 0) {
+      goto out_db;
+    }
+
+    r = _open_fm(nullptr);
+    if (r < 0)
+      goto out_db;
+
+    r = _open_alloc();
+    if (r < 0)
+      goto out_fm;
+  }
+  return 0;
+
+ out_fm:
+  _close_fm();
+ out_db:
+  _close_db();
+  return r;
+}
+
+void BlueStore::_close_db_and_around()
+{
+  if (bluefs) {
+    if (out_of_sync_fm.fetch_and(0)) {
+      _sync_bluefs_and_fm();
+    }
+    _close_db();
+    while(out_of_sync_fm.fetch_and(0)) {
+      // if seen some allocations during close - repeat open_db, sync fm, close
+      dout(0) << __func__ << " syncing FreelistManager" << dendl;
+      int r = _open_db(false, false, false);
+      if (r < 0) {
+	derr << __func__
+	      << " unable to open db, FreelistManager is probably out of sync"
+	      << dendl;
+	break;
+      }
+      _sync_bluefs_and_fm();
+      _close_db();
+    }
+    if (!_kv_only) {
+      _close_alloc();
+      _close_fm();
+    }
+  } else {
+    _close_alloc();
+    _close_fm();
+    _close_db();
+  }
+}
+
+// updates legacy bluefs related recs in DB to a state valid for
+// downgrades from nautilus.
+void BlueStore::_sync_bluefs_and_fm()
+{
+  if (cct->_conf->bluestore_bluefs_db_compatibility) {
+    bufferlist bl;
+    encode(bluefs_extents, bl);
+    dout(20) << __func__ << " bluefs_extents at KV is now 0x"
+             << std::hex << bluefs_extents << std::dec
+	     << dendl;
+    KeyValueDB::Transaction synct = db->get_transaction();
+    synct->set(PREFIX_SUPER, "bluefs_extents", bl);
+    synct->set(PREFIX_SUPER, "bluefs_extents_back", bl);
+
+    // Nice thing is that we don't need to update FreelistManager here.
+    // It always has corresponding bits set to 'Free' for both Nautilus+ and
+    // pre-Nautilis releases.
+    // So once we get an extent to bluefs_extents this means it's
+    // been free in allocator and hence it's free in FM too.
+
+    db->submit_transaction_sync(synct);
+  }
+}
+
+int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
+{
+  int r;
+  ceph_assert(!db);
+  ceph_assert(!(create && read_only));
   string fn = path + "/db";
   string options;
   stringstream err;
-  ceph::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
+  std::shared_ptr<Int64ArrayMergeOperator> merge_op(new Int64ArrayMergeOperator);
 
   string kv_backend;
+  std::vector<KeyValueDB::ColumnFamily> cfs;
+
   if (create) {
     kv_backend = cct->_conf->bluestore_kvbackend;
   } else {
@@ -4376,27 +5266,15 @@ int BlueStore::_open_db(bool create)
   dout(10) << __func__ << " kv_backend = " << kv_backend << dendl;
 
   bool do_bluefs;
-  if (create) {
-    do_bluefs = cct->_conf->bluestore_bluefs;
-  } else {
-    string s;
-    r = read_meta("bluefs", &s);
-    if (r < 0) {
-      derr << __func__ << " unable to read 'bluefs' meta" << dendl;
-      return -EIO;
-    }
-    if (s == "1") {
-      do_bluefs = true;
-    } else if (s == "0") {
-      do_bluefs = false;
-    } else {
-      derr << __func__ << " bluefs = " << s << " : not 0 or 1, aborting"
-	   << dendl;
-      return -EIO;
-    }
+  r = _is_bluefs(create, &do_bluefs);
+  if (r < 0) {
+    return r;
   }
   dout(10) << __func__ << " do_bluefs = " << do_bluefs << dendl;
 
+  map<string,string> kv_options;
+  // force separate wal dir for all new deployments.
+  kv_options["separate_wal_dir"] = 1;
   rocksdb::Env *env = NULL;
   if (do_bluefs) {
     dout(10) << __func__ << " initializing bluefs" << dendl;
@@ -4404,118 +5282,13 @@ int BlueStore::_open_db(bool create)
       derr << " backend must be rocksdb to use bluefs" << dendl;
       return -EINVAL;
     }
-    bluefs = new BlueFS(cct);
 
-    string bfn;
-    struct stat st;
-
-    bfn = path + "/block.db";
-    if (::stat(bfn.c_str(), &st) == 0) {
-      r = bluefs->add_block_device(BlueFS::BDEV_DB, bfn);
-      if (r < 0) {
-        derr << __func__ << " add block device(" << bfn << ") returned: " 
-             << cpp_strerror(r) << dendl;
-        goto free_bluefs;
-      }
-
-      if (bluefs->bdev_support_label(BlueFS::BDEV_DB)) {
-        r = _check_or_set_bdev_label(
-	  bfn,
-	  bluefs->get_block_device_size(BlueFS::BDEV_DB),
-          "bluefs db", create);
-        if (r < 0) {
-          derr << __func__
-	       << " check block device(" << bfn << ") label returned: "
-               << cpp_strerror(r) << dendl;
-          goto free_bluefs;
-        }
-      }
-      if (create) {
-	bluefs->add_block_extent(
-	  BlueFS::BDEV_DB,
-	  SUPER_RESERVED,
-	  bluefs->get_block_device_size(BlueFS::BDEV_DB) - SUPER_RESERVED);
-      }
-      bluefs_shared_bdev = BlueFS::BDEV_SLOW;
-      bluefs_single_shared_device = false;
-    } else if (::lstat(bfn.c_str(), &st) == -1) {
-      bluefs_shared_bdev = BlueFS::BDEV_DB;
-    } else {
-      //symlink exist is bug
-      derr << __func__ << " " << bfn << " link target doesn't exist" << dendl;
-      r = -errno;
-      goto free_bluefs;
-    }
-
-    // shared device
-    bfn = path + "/block";
-    r = bluefs->add_block_device(bluefs_shared_bdev, bfn);
+    r = _open_bluefs(create);
     if (r < 0) {
-      derr << __func__ << " add block device(" << bfn << ") returned: " 
-	   << cpp_strerror(r) << dendl;
-      goto free_bluefs;
+      return r;
     }
-    if (create) {
-      // note: we always leave the first SUPER_RESERVED (8k) of the device unused
-      uint64_t initial =
-	bdev->get_size() * (cct->_conf->bluestore_bluefs_min_ratio +
-			    cct->_conf->bluestore_bluefs_gift_ratio);
-      initial = MAX(initial, cct->_conf->bluestore_bluefs_min);
-      // align to bluefs's alloc_size
-      initial = P2ROUNDUP(initial, cct->_conf->bluefs_alloc_size);
-      // put bluefs in the middle of the device in case it is an HDD
-      uint64_t start = P2ALIGN((bdev->get_size() - initial) / 2,
-			       cct->_conf->bluefs_alloc_size);
-      bluefs->add_block_extent(bluefs_shared_bdev, start, initial);
-      bluefs_extents.insert(start, initial);
-    }
+    bluefs->set_slow_device_expander(this);
 
-    bfn = path + "/block.wal";
-    if (::stat(bfn.c_str(), &st) == 0) {
-      r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn);
-      if (r < 0) {
-        derr << __func__ << " add block device(" << bfn << ") returned: " 
-	     << cpp_strerror(r) << dendl;
-        goto free_bluefs;			
-      }
-
-      if (bluefs->bdev_support_label(BlueFS::BDEV_WAL)) {
-        r = _check_or_set_bdev_label(
-	  bfn,
-	  bluefs->get_block_device_size(BlueFS::BDEV_WAL),
-          "bluefs wal", create);
-        if (r < 0) {
-          derr << __func__ << " check block device(" << bfn
-               << ") label returned: " << cpp_strerror(r) << dendl;
-          goto free_bluefs;
-        }
-      }
-
-      if (create) {
-	bluefs->add_block_extent(
-	  BlueFS::BDEV_WAL, BDEV_LABEL_BLOCK_SIZE,
-	  bluefs->get_block_device_size(BlueFS::BDEV_WAL) -
-	   BDEV_LABEL_BLOCK_SIZE);
-      }
-      cct->_conf->set_val("rocksdb_separate_wal_dir", "true");
-      bluefs_single_shared_device = false;
-    } else if (::lstat(bfn.c_str(), &st) == -1) {
-      cct->_conf->set_val("rocksdb_separate_wal_dir", "false");
-    } else {
-      //symlink exist is bug
-      derr << __func__ << " " << bfn << " link target doesn't exist" << dendl;
-      r = -errno;
-      goto free_bluefs;
-    }
-
-    if (create) {
-      bluefs->mkfs(fsid);
-    }
-    r = bluefs->mount();
-    if (r < 0) {
-      derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
-      goto free_bluefs;
-    }
     if (cct->_conf->bluestore_bluefs_env_mirror) {
       rocksdb::Env *a = new BlueRocksEnv(bluefs);
       rocksdb::Env *b = rocksdb::Env::Default();
@@ -4544,31 +5317,36 @@ int BlueStore::_open_db(bool create)
                << (uint64_t)(db_size * 95 / 100) << " "
                << fn + ".slow" << ","
                << (uint64_t)(slow_size * 95 / 100);
-      cct->_conf->set_val("rocksdb_db_paths", db_paths.str(), false);
-      dout(10) << __func__ << " set rocksdb_db_paths to "
-	       << cct->_conf->get_val<std::string>("rocksdb_db_paths") << dendl;
+      kv_options["db_paths"] = db_paths.str();
+      dout(10) << __func__ << " set db_paths to " << db_paths.str() << dendl;
     }
 
     if (create) {
       env->CreateDir(fn);
-      if (cct->_conf->rocksdb_separate_wal_dir)
-	env->CreateDir(fn + ".wal");
-      if (cct->_conf->get_val<std::string>("rocksdb_db_paths").length())
-	env->CreateDir(fn + ".slow");
+      env->CreateDir(fn + ".wal");
+      env->CreateDir(fn + ".slow");
+    } else {
+      std::vector<std::string> res;
+      // check for dir presence
+      auto r = env->GetChildren(fn+".wal", &res);
+      if (r.IsNotFound()) {
+	kv_options.erase("separate_wal_dir");
+      }
     }
-  } else if (create) {
-    int r = ::mkdir(fn.c_str(), 0755);
-    if (r < 0)
-      r = -errno;
-    if (r < 0 && r != -EEXIST) {
-      derr << __func__ << " failed to create " << fn << ": " << cpp_strerror(r)
-	   << dendl;
-      return r;
-    }
+  } else {
+    string walfn = path + "/db.wal";
 
-    // wal_dir, too!
-    if (cct->_conf->rocksdb_separate_wal_dir) {
-      string walfn = path + "/db.wal";
+    if (create) {
+      int r = ::mkdir(fn.c_str(), 0755);
+      if (r < 0)
+	r = -errno;
+      if (r < 0 && r != -EEXIST) {
+	derr << __func__ << " failed to create " << fn << ": " << cpp_strerror(r)
+	     << dendl;
+	return r;
+      }
+
+      // wal_dir, too!
       r = ::mkdir(walfn.c_str(), 0755);
       if (r < 0)
 	r = -errno;
@@ -4578,19 +5356,25 @@ int BlueStore::_open_db(bool create)
 	  << dendl;
 	return r;
       }
+    } else {
+      struct stat st;
+      r = ::stat(walfn.c_str(), &st);
+      if (r < 0 && errno == ENOENT) {
+	kv_options.erase("separate_wal_dir");
+      }
     }
   }
+
 
   db = KeyValueDB::create(cct,
 			  kv_backend,
 			  fn,
+			  kv_options,
 			  static_cast<void*>(env));
   if (!db) {
     derr << __func__ << " error creating db" << dendl;
     if (bluefs) {
-      bluefs->umount();
-      delete bluefs;
-      bluefs = NULL;
+      _close_bluefs();
     }
     // delete env manually here since we can't depend on db to do this
     // under this case
@@ -4601,105 +5385,121 @@ int BlueStore::_open_db(bool create)
 
   FreelistManager::setup_merge_operators(db);
   db->set_merge_operator(PREFIX_STAT, merge_op);
+  db->set_cache_size(cache_kv_ratio * cache_size);
 
-  db->set_cache_size(cct->_conf->bluestore_cache_size * cache_kv_ratio);
-
-  if (kv_backend == "rocksdb")
+  if (kv_backend == "rocksdb") {
     options = cct->_conf->bluestore_rocksdb_options;
+
+    map<string,string> cf_map;
+    cct->_conf.with_val<string>("bluestore_rocksdb_cfs",
+                                 get_str_map,
+                                 &cf_map,
+                                 " \t");
+    for (auto& i : cf_map) {
+      dout(10) << "column family " << i.first << ": " << i.second << dendl;
+      cfs.push_back(KeyValueDB::ColumnFamily(i.first, i.second));
+    }
+  }
+
   db->init(options);
-  if (create)
-    r = db->create_and_open(err);
-  else
-    r = db->open(err);
+  if (to_repair_db)
+    return 0;
+  if (create) {
+    if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
+      r = db->create_and_open(err, cfs);
+    } else {
+      r = db->create_and_open(err);
+    }
+  } else {
+    // we pass in cf list here, but it is only used if the db already has
+    // column families created.
+    r = read_only ?
+      db->open_read_only(err, cfs) :
+      db->open(err, cfs);
+  }
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
-    if (bluefs) {
-      bluefs->umount();
-      delete bluefs;
-      bluefs = NULL;
-    }
-    delete db;
-    db = NULL;
+    _close_db();
     return -EIO;
   }
   dout(1) << __func__ << " opened " << kv_backend
 	  << " path " << fn << " options " << options << dendl;
   return 0;
-
-free_bluefs:
-  assert(bluefs);
-  delete bluefs;
-  bluefs = NULL;
-  return r;
 }
 
 void BlueStore::_close_db()
 {
-  assert(db);
+  ceph_assert(db);
   delete db;
   db = NULL;
   if (bluefs) {
-    bluefs->umount();
-    delete bluefs;
-    bluefs = NULL;
+    _close_bluefs();
   }
 }
 
-int BlueStore::_reconcile_bluefs_freespace()
+void BlueStore::_dump_alloc_on_failure()
 {
-  dout(10) << __func__ << dendl;
-  interval_set<uint64_t> bset;
-  int r = bluefs->get_block_extents(bluefs_shared_bdev, &bset);
-  assert(r == 0);
-  if (bset == bluefs_extents) {
-    dout(10) << __func__ << " we agree bluefs has 0x" << std::hex << bset
+  auto dump_interval =
+    cct->_conf->bluestore_bluefs_alloc_failure_dump_interval;
+  if (dump_interval > 0 &&
+    next_dump_on_bluefs_alloc_failure <= ceph_clock_now()) {
+    alloc->dump();
+    next_dump_on_bluefs_alloc_failure = ceph_clock_now();
+    next_dump_on_bluefs_alloc_failure += dump_interval;
+  }
+}
+
+
+int BlueStore::allocate_bluefs_freespace(uint64_t size, PExtentVector* extents_out)
+{
+  if (size) {
+    // round up to alloc size
+    size = p2roundup(size, cct->_conf->bluefs_alloc_size);
+
+    PExtentVector extents_local;
+    PExtentVector* extents = extents_out ? extents_out : &extents_local;
+
+
+    uint64_t gift;
+    do {
+      // hard cap to fit into 32 bits
+      gift = std::min<uint64_t>(size, 1ull << 31);
+      dout(10) << __func__ << " gifting " << gift
+	       << " (" << byte_u_t(gift) << ")" << dendl;
+
+      int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
+					  0, 0, extents);
+
+      if (alloc_len < (int64_t)gift) {
+	derr << __func__
+	     << " failed to allocate on 0x" << std::hex << gift
+	     << " bluefs_alloc_size 0x" << cct->_conf->bluefs_alloc_size
+	     << " allocated 0x" << alloc_len
+	     << " available 0x " << alloc->get_free()
 	     << std::dec << dendl;
-    return 0;
-  }
-  dout(10) << __func__ << " bluefs says 0x" << std::hex << bset << std::dec
-	   << dendl;
-  dout(10) << __func__ << " super says  0x" << std::hex << bluefs_extents
-	   << std::dec << dendl;
 
-  interval_set<uint64_t> overlap;
-  overlap.intersection_of(bset, bluefs_extents);
-
-  bset.subtract(overlap);
-  if (!bset.empty()) {
-    derr << __func__ << " bluefs extra 0x" << std::hex << bset << std::dec
-	 << dendl;
-    return -EIO;
-  }
-
-  interval_set<uint64_t> super_extra;
-  super_extra = bluefs_extents;
-  super_extra.subtract(overlap);
-  if (!super_extra.empty()) {
-    // This is normal: it can happen if we commit to give extents to
-    // bluefs and we crash before bluefs commits that it owns them.
-    dout(10) << __func__ << " super extra " << super_extra << dendl;
-    for (interval_set<uint64_t>::iterator p = super_extra.begin();
-	 p != super_extra.end();
-	 ++p) {
-      bluefs->add_block_extent(bluefs_shared_bdev, p.get_start(), p.get_len());
+        alloc->dump();
+        alloc->release(*extents);
+        extents->clear();
+	return -ENOSPC;
+      }
+      size -= gift;
+    } while (size);
+    for (auto& e : *extents) {
+      dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
+      bluefs_extents.insert(e.offset, e.length);
+      ++out_of_sync_fm;
+      // apply to bluefs if not requested from outside
+      if (!extents_out) {
+        bluefs->add_block_extent(bluefs_shared_bdev, e.offset, e.length);
+      }
     }
   }
-
   return 0;
 }
 
-int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
+int64_t BlueStore::_get_bluefs_size_delta(uint64_t bluefs_free, uint64_t bluefs_total)
 {
-  int ret = 0;
-  assert(bluefs);
-
-  vector<pair<uint64_t,uint64_t>> bluefs_usage;  // <free, total> ...
-  bluefs->get_usage(&bluefs_usage);
-  assert(bluefs_usage.size() > bluefs_shared_bdev);
-
-  // fixme: look at primary bdev only for now
-  uint64_t bluefs_free = bluefs_usage[bluefs_shared_bdev].first;
-  uint64_t bluefs_total = bluefs_usage[bluefs_shared_bdev].second;
   float bluefs_free_ratio = (float)bluefs_free / (float)bluefs_total;
 
   uint64_t my_free = alloc->get_free();
@@ -4711,9 +5511,9 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
   float bluefs_ratio = (float)bluefs_free / (float)total_free;
 
   dout(10) << __func__
-	   << " bluefs " << pretty_si_t(bluefs_free)
+	   << " bluefs " << byte_u_t(bluefs_free)
 	   << " free (" << bluefs_free_ratio
-	   << ") bluestore " << pretty_si_t(my_free)
+	   << ") bluestore " << byte_u_t(my_free)
 	   << " free (" << my_free_ratio
 	   << "), bluefs_ratio " << bluefs_ratio
 	   << dendl;
@@ -4724,74 +5524,85 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     gift = cct->_conf->bluestore_bluefs_gift_ratio * total_free;
     dout(10) << __func__ << " bluefs_ratio " << bluefs_ratio
 	     << " < min_ratio " << cct->_conf->bluestore_bluefs_min_ratio
-	     << ", should gift " << pretty_si_t(gift) << dendl;
+	     << ", should gift " << byte_u_t(gift) << dendl;
   } else if (bluefs_ratio > cct->_conf->bluestore_bluefs_max_ratio) {
     reclaim = cct->_conf->bluestore_bluefs_reclaim_ratio * total_free;
     if (bluefs_total - reclaim < cct->_conf->bluestore_bluefs_min)
       reclaim = bluefs_total - cct->_conf->bluestore_bluefs_min;
     dout(10) << __func__ << " bluefs_ratio " << bluefs_ratio
 	     << " > max_ratio " << cct->_conf->bluestore_bluefs_max_ratio
-	     << ", should reclaim " << pretty_si_t(reclaim) << dendl;
+	     << ", should reclaim " << byte_u_t(reclaim) << dendl;
   }
+
+  // don't take over too much of the freespace
+  uint64_t free_cap = cct->_conf->bluestore_bluefs_max_ratio * total_free;
   if (bluefs_total < cct->_conf->bluestore_bluefs_min &&
-    cct->_conf->bluestore_bluefs_min <
-      (uint64_t)(cct->_conf->bluestore_bluefs_max_ratio * total_free)) {
+      cct->_conf->bluestore_bluefs_min < free_cap) {
     uint64_t g = cct->_conf->bluestore_bluefs_min - bluefs_total;
     dout(10) << __func__ << " bluefs_total " << bluefs_total
 	     << " < min " << cct->_conf->bluestore_bluefs_min
-	     << ", should gift " << pretty_si_t(g) << dendl;
+	     << ", should gift " << byte_u_t(g) << dendl;
     if (g > gift)
       gift = g;
     reclaim = 0;
   }
+  uint64_t min_free = cct->_conf.get_val<Option::size_t>("bluestore_bluefs_min_free");
+  if (bluefs_free < min_free &&
+      min_free < free_cap) {
+    uint64_t g = min_free - bluefs_free;
+    dout(10) << __func__ << " bluefs_free " << bluefs_free
+	     << " < min " << min_free
+	     << ", should gift " << byte_u_t(g) << dendl;
+    if (g > gift)
+      gift = g;
+    reclaim = 0;
+  }
+  ceph_assert((int64_t)gift >= 0);
+  ceph_assert((int64_t)reclaim >= 0);
+  return gift > 0 ? (int64_t)gift : (int64_t)reclaim;
+}
 
-  if (gift) {
-    // round up to alloc size
-    gift = P2ROUNDUP(gift, cct->_conf->bluefs_alloc_size);
+int BlueStore::_balance_bluefs_freespace()
+{
+  int ret = 0;
+  ceph_assert(bluefs);
 
-    // hard cap to fit into 32 bits
-    gift = MIN(gift, 1ull<<31);
-    dout(10) << __func__ << " gifting " << gift
-	     << " (" << pretty_si_t(gift) << ")" << dendl;
+  vector<pair<uint64_t,uint64_t>> bluefs_usage;  // <free, total> ...
+  bluefs->get_usage(&bluefs_usage);
+  ceph_assert(bluefs_usage.size() > bluefs_shared_bdev);
 
-    // fixme: just do one allocation to start...
-    int r = alloc->reserve(gift);
-    assert(r == 0);
-
-    AllocExtentVector exts;
-    int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
-					0, 0, &exts);
-
-    if (alloc_len < (int64_t)gift) {
-      derr << __func__ << " allocate failed on 0x" << std::hex << gift
-           << " min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
-      alloc->dump();
-      assert(0 == "allocate failed, wtf");
-      return -ENOSPC;
+  bool clear_alert = true;
+  if (bluefs_shared_bdev == BlueFS::BDEV_SLOW) {
+    auto& p = bluefs_usage[bluefs_shared_bdev];
+    if (p.first != p.second) {
+      string s("spilled over to slow device: ");
+      s += stringify(byte_u_t(p.second - p.first));
+      _set_spillover_alert(s.c_str());
+      clear_alert = false;
     }
-    for (auto& p : exts) {
-      bluestore_pextent_t e = bluestore_pextent_t(p);
-      dout(1) << __func__ << " gifting " << e << " to bluefs" << dendl;
-      extents->push_back(e);
-    }
-    gift = 0;
-
-    ret = 1;
+  }
+  if (clear_alert) {
+    _clear_spillover_alert();
   }
 
+  // fixme: look at primary bdev only for now
+  int64_t delta = _get_bluefs_size_delta(
+    bluefs_usage[bluefs_shared_bdev].first,
+    bluefs_usage[bluefs_shared_bdev].second);
+
   // reclaim from bluefs?
-  if (reclaim) {
+  if (delta < 0) {
     // round up to alloc size
-    reclaim = P2ROUNDUP(reclaim, cct->_conf->bluefs_alloc_size);
+    auto reclaim = p2roundup(uint64_t(-delta), cct->_conf->bluefs_alloc_size);
 
     // hard cap to fit into 32 bits
-    reclaim = MIN(reclaim, 1ull<<31);
+    reclaim = std::min<uint64_t>(reclaim, 1ull << 31);
     dout(10) << __func__ << " reclaiming " << reclaim
-	     << " (" << pretty_si_t(reclaim) << ")" << dendl;
+	     << " (" << byte_u_t(reclaim) << ")" << dendl;
 
     while (reclaim > 0) {
       // NOTE: this will block and do IO.
-      AllocExtentVector extents;
+      PExtentVector extents;
       int r = bluefs->reclaim_blocks(bluefs_shared_bdev, reclaim,
 				     &extents);
       if (r < 0) {
@@ -4800,6 +5611,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 	break;
       }
       for (auto e : extents) {
+	++out_of_sync_fm;
 	bluefs_extents.erase(e.offset, e.length);
 	bluefs_extents_reclaiming.insert(e.offset, e.length);
 	reclaim -= e.length;
@@ -4812,18 +5624,10 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
   return ret;
 }
 
-void BlueStore::_commit_bluefs_freespace(
-  const PExtentVector& bluefs_gift_extents)
-{
-  dout(10) << __func__ << dendl;
-  for (auto& p : bluefs_gift_extents) {
-    bluefs->add_block_extent(bluefs_shared_bdev, p.offset, p.length);
-  }
-}
-
 int BlueStore::_open_collections(int *errors)
 {
-  assert(coll_map.empty());
+  dout(10) << __func__ << dendl;
+  ceph_assert(coll_map.empty());
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_COLL);
   for (it->upper_bound(string());
        it->valid();
@@ -4836,16 +5640,19 @@ int BlueStore::_open_collections(int *errors)
 	  cache_shards[cid.hash_to_shard(cache_shards.size())],
 	  cid));
       bufferlist bl = it->value();
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       try {
-        ::decode(c->cnode, p);
+        decode(c->cnode, p);
       } catch (buffer::error& e) {
         derr << __func__ << " failed to decode cnode, key:"
              << pretty_binary_string(it->key()) << dendl;
         return -EIO;
       }   
-      dout(20) << __func__ << " opened " << cid << " " << c << dendl;
+      dout(20) << __func__ << " opened " << cid << " " << c
+	       << " " << c->cnode << dendl;
+      _osr_attach(c.get());
       coll_map[cid] = c;
+
     } else {
       derr << __func__ << " unrecognized collection " << it->key() << dendl;
       if (errors)
@@ -4857,19 +5664,53 @@ int BlueStore::_open_collections(int *errors)
 
 void BlueStore::_open_statfs()
 {
+  osd_pools.clear();
+  vstatfs.reset();
+
   bufferlist bl;
-  int r = db->get(PREFIX_STAT, "bluestore_statfs", &bl);
+  int r = db->get(PREFIX_STAT, BLUESTORE_GLOBAL_STATFS_KEY, &bl);
   if (r >= 0) {
+    per_pool_stat_collection = false;
     if (size_t(bl.length()) >= sizeof(vstatfs.values)) {
-      auto it = bl.begin();
+      auto it = bl.cbegin();
       vstatfs.decode(it);
+      dout(10) << __func__ << " store_statfs is found" << dendl;
     } else {
       dout(10) << __func__ << " store_statfs is corrupt, using empty" << dendl;
     }
+  } else if (cct->_conf->bluestore_no_per_pool_stats_tolerance == "enforce") {
+    per_pool_stat_collection = false;
+    dout(10) << __func__ << " store_statfs is requested but missing, using empty" << dendl;
+  } else {
+    per_pool_stat_collection = true;
+    dout(10) << __func__ << " per-pool statfs is enabled" << dendl;
+    KeyValueDB::Iterator it = db->get_iterator(PREFIX_STAT);
+    for (it->upper_bound(string());
+	 it->valid();
+	 it->next()) {
+
+      uint64_t pool_id;
+      int r = get_key_pool_stat(it->key(), &pool_id);
+      ceph_assert(r == 0);
+
+      bufferlist bl;
+      bl = it->value();
+      auto p = bl.cbegin();
+      auto& st = osd_pools[pool_id];
+      try {
+        st.decode(p);
+        vstatfs += st;
+
+        dout(30) << __func__ << " pool " << pool_id
+		 << " statfs " << st << dendl;
+      } catch (buffer::error& e) {
+        derr << __func__ << " failed to decode pool stats, key:"
+             << pretty_binary_string(it->key()) << dendl;
+      }   
+    }
   }
-  else {
-    dout(10) << __func__ << " store_statfs missed, using empty" << dendl;
-  }
+  dout(30) << __func__ << " statfs " << vstatfs << dendl;
+
 }
 
 int BlueStore::_setup_block_symlink_or_file(
@@ -4881,7 +5722,7 @@ int BlueStore::_setup_block_symlink_or_file(
   dout(20) << __func__ << " name " << name << " path " << epath
 	   << " size " << size << " create=" << (int)create << dendl;
   int r = 0;
-  int flags = O_RDWR;
+  int flags = O_RDWR|O_CLOEXEC;
   if (create)
     flags |= O_CREAT;
   if (epath.length()) {
@@ -4901,9 +5742,15 @@ int BlueStore::_setup_block_symlink_or_file(
 	     << cpp_strerror(r) << dendl;
 	return r;
       }
-      string serial_number = epath.substr(strlen(SPDK_PREFIX));
-      r = ::write(fd, serial_number.c_str(), serial_number.size());
-      assert(r == (int)serial_number.size());
+      // write the Transport ID of the NVMe device
+      // a transport id looks like: "trtype:PCIe traddr:0000:02:00.0"
+      // where "0000:02:00.0" is the selector of a PCI device, see
+      // the first column of "lspci -mm -n -D"
+      string trid{"trtype:PCIe "};
+      trid += "traddr:";
+      trid += epath.substr(strlen(SPDK_PREFIX));
+      r = ::write(fd, trid.c_str(), trid.size());
+      ceph_assert(r == static_cast<int>(trid.size()));
       dout(1) << __func__ << " created " << name << " symlink to "
               << epath << dendl;
       VOID_TEMP_FAILURE_RETRY(::close(fd));
@@ -4928,33 +5775,16 @@ int BlueStore::_setup_block_symlink_or_file(
 	}
 
 	if (cct->_conf->bluestore_block_preallocate_file) {
-#ifdef HAVE_POSIX_FALLOCATE
-	  r = ::posix_fallocate(fd, 0, size);
-	  if (r) {
+          r = ::ceph_posix_fallocate(fd, 0, size);
+          if (r > 0) {
 	    derr << __func__ << " failed to prefallocate " << name << " file to "
 	      << size << ": " << cpp_strerror(r) << dendl;
 	    VOID_TEMP_FAILURE_RETRY(::close(fd));
 	    return -r;
 	  }
-#else
-	  char data[1024*128];
-	  for (uint64_t off = 0; off < size; off += sizeof(data)) {
-	    if (off + sizeof(data) > size)
-	      r = ::write(fd, data, size - off);
-	    else
-	      r = ::write(fd, data, sizeof(data));
-	    if (r < 0) {
-	      r = -errno;
-	      derr << __func__ << " failed to prefallocate w/ write " << name << " file to "
-		<< size << ": " << cpp_strerror(r) << dendl;
-	      VOID_TEMP_FAILURE_RETRY(::close(fd));
-	      return r;
-	    }
-	  }
-#endif
 	}
 	dout(1) << __func__ << " resized " << name << " file to "
-		<< pretty_si_t(size) << "B" << dendl;
+		<< byte_u_t(size) << dendl;
       }
       VOID_TEMP_FAILURE_RETRY(::close(fd));
     } else {
@@ -5066,37 +5896,48 @@ int BlueStore::mkfs()
   if (r < 0)
     goto out_close_fsid;
 
+  // choose min_alloc_size
+  if (cct->_conf->bluestore_min_alloc_size) {
+    min_alloc_size = cct->_conf->bluestore_min_alloc_size;
+  } else {
+    ceph_assert(bdev);
+    if (bdev->is_rotational()) {
+      min_alloc_size = cct->_conf->bluestore_min_alloc_size_hdd;
+    } else {
+      min_alloc_size = cct->_conf->bluestore_min_alloc_size_ssd;
+    }
+  }
+  _validate_bdev();
+
+  // make sure min_alloc_size is power of 2 aligned.
+  if (!isp2(min_alloc_size)) {
+    derr << __func__ << " min_alloc_size 0x"
+	 << std::hex << min_alloc_size << std::dec
+	 << " is not power of 2 aligned!"
+	 << dendl;
+    r = -EINVAL;
+    goto out_close_bdev;
+  }
+
   r = _open_db(true);
   if (r < 0)
     goto out_close_bdev;
 
-  r = _open_fm(true);
-  if (r < 0)
-    goto out_close_db;
-
   {
     KeyValueDB::Transaction t = db->get_transaction();
+    r = _open_fm(t);
+    if (r < 0)
+      goto out_close_db;
     {
       bufferlist bl;
-      ::encode((uint64_t)0, bl);
+      encode((uint64_t)0, bl);
       t->set(PREFIX_SUPER, "nid_max", bl);
       t->set(PREFIX_SUPER, "blobid_max", bl);
     }
 
-    // choose min_alloc_size
-    if (cct->_conf->bluestore_min_alloc_size) {
-      min_alloc_size = cct->_conf->bluestore_min_alloc_size;
-    } else {
-      assert(bdev);
-      if (bdev->is_rotational()) {
-	min_alloc_size = cct->_conf->bluestore_min_alloc_size_hdd;
-      } else {
-	min_alloc_size = cct->_conf->bluestore_min_alloc_size_ssd;
-      }
-    }
     {
       bufferlist bl;
-      ::encode((uint64_t)min_alloc_size, bl);
+      encode((uint64_t)min_alloc_size, bl);
       t->set(PREFIX_SUPER, "min_alloc_size", bl);
     }
 
@@ -5105,12 +5946,11 @@ int BlueStore::mkfs()
     db->submit_transaction_sync(t);
   }
 
-
   r = write_meta("kv_backend", cct->_conf->bluestore_kvbackend);
   if (r < 0)
     goto out_close_fm;
 
-  r = write_meta("bluefs", stringify((int)cct->_conf->bluestore_bluefs));
+  r = write_meta("bluefs", stringify(bluefs ? 1 : 0));
   if (r < 0)
     goto out_close_fm;
 
@@ -5120,6 +5960,10 @@ int BlueStore::mkfs()
       derr << __func__ << " error writing fsid: " << cpp_strerror(r) << dendl;
       goto out_close_fm;
     }
+  }
+
+  if (out_of_sync_fm.fetch_and(0)) {
+    _sync_bluefs_and_fm();
   }
 
  out_close_fm:
@@ -5157,11 +6001,390 @@ int BlueStore::mkfs()
   return r;
 }
 
+int BlueStore::_mount_for_bluefs()
+{
+  int r = _open_path();
+  ceph_assert(r == 0);
+  r = _open_fsid(false);
+  ceph_assert(r == 0);
+  r = _read_fsid(&fsid);
+  ceph_assert(r == 0);
+  r = _lock_fsid();
+  ceph_assert(r == 0);
+  r = _open_bluefs(false);
+  ceph_assert(r == 0);
+  return r;
+}
+
+void BlueStore::_umount_for_bluefs()
+{
+  _close_bluefs();
+  _close_fsid();
+  _close_path();
+}
+
+int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
+{
+  dout(10) << __func__ << " path " << dev_path << " id:" << id << dendl;
+  int r;
+  ceph_assert(path_fd < 0);
+
+  ceph_assert(id == BlueFS::BDEV_NEWWAL || id == BlueFS::BDEV_NEWDB);
+
+  if (!cct->_conf->bluestore_bluefs) {
+    derr << __func__ << " bluefs isn't configured, can't add new device " << dendl;
+    return -EIO;
+  }
+
+  r = _mount_for_bluefs();
+
+  int reserved = 0;
+  if (id == BlueFS::BDEV_NEWWAL) {
+    string p = path + "/block.wal";
+    r = _setup_block_symlink_or_file("block.wal", dev_path,
+	cct->_conf->bluestore_block_wal_size,
+	true);
+    ceph_assert(r == 0);
+
+    r = bluefs->add_block_device(BlueFS::BDEV_NEWWAL, p,
+      cct->_conf->bdev_enable_discard);
+    ceph_assert(r == 0);
+
+    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
+      r = _check_or_set_bdev_label(
+	p,
+	bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
+        "bluefs wal",
+	true);
+      ceph_assert(r == 0);
+    }
+
+    reserved = BDEV_LABEL_BLOCK_SIZE;
+  } else if (id == BlueFS::BDEV_NEWDB) {
+    string p = path + "/block.db";
+    r = _setup_block_symlink_or_file("block.db", dev_path,
+	cct->_conf->bluestore_block_db_size,
+	true);
+    ceph_assert(r == 0);
+
+    r = bluefs->add_block_device(BlueFS::BDEV_NEWDB, p,
+      cct->_conf->bdev_enable_discard);
+    ceph_assert(r == 0);
+
+    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
+      r = _check_or_set_bdev_label(
+	p,
+	bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
+        "bluefs db",
+	true);
+      ceph_assert(r == 0);
+    }
+    reserved = SUPER_RESERVED;
+  }
+
+  bluefs->umount();
+  bluefs->mount();
+
+  bluefs->add_block_extent(
+    id,
+    reserved,
+    bluefs->get_block_device_size(id) - reserved);
+
+  r = bluefs->prepare_new_device(id);
+  ceph_assert(r == 0);
+
+  if (r < 0) {
+    derr << __func__ << " failed, " << cpp_strerror(r) << dendl;
+  } else {
+    dout(0) << __func__ << " success" << dendl;
+  }
+
+  _umount_for_bluefs();
+  return r;
+}
+
+int BlueStore::migrate_to_existing_bluefs_device(const set<int>& devs_source,
+  int id)
+{
+  dout(10) << __func__ << " id:" << id << dendl;
+  ceph_assert(path_fd < 0);
+
+  ceph_assert(id == BlueFS::BDEV_SLOW || id == BlueFS::BDEV_DB);
+
+  if (!cct->_conf->bluestore_bluefs) {
+    derr << __func__ << " bluefs isn't configured, can't add new device " << dendl;
+    return -EIO;
+  }
+
+  int r = _mount_for_bluefs();
+
+  // require bluestore_bluefs_min_free to be free at target device!
+  uint64_t used_space = cct->_conf.get_val<Option::size_t>("bluestore_bluefs_min_free");
+  for(auto src_id : devs_source) {
+    used_space += bluefs->get_total(src_id) - bluefs->get_free(src_id);
+  }
+  uint64_t target_free = bluefs->get_free(id);
+  if (id == BlueFS::BDEV_SLOW && target_free < used_space) {
+    // will need to remount full BlueStore instance to allocate more space
+    _umount_for_bluefs();
+
+    r = mount();
+    ceph_assert(r == 0);
+    dout(1) << __func__
+            << " Allocating more space at slow device for BlueFS: +"
+	    << used_space - target_free << " bytes" << dendl;
+    r = allocate_bluefs_freespace(used_space - target_free, nullptr);
+
+    umount();
+    if (r != 0) {
+      derr << __func__
+	   << " can't migrate, unable to allocate extra space: "
+	   << used_space - target_free << " at target:" << id
+	   << dendl;
+      return -ENOSPC;
+    }
+
+    r = _mount_for_bluefs();
+    ceph_assert(r == 0);
+  } else if (target_free < used_space) {
+    derr << __func__
+         << " can't migrate, free space at target: " << target_free
+	 << " is less than required space: " << used_space
+	 << dendl;
+    return -ENOSPC;
+  }
+  r = bluefs->device_migrate_to_existing(cct, devs_source, id);
+  if (r < 0) {
+    derr << __func__ << " failed during BlueFS migration, " << cpp_strerror(r) << dendl;
+    goto shutdown;
+  }
+
+  if (devs_source.count(BlueFS::BDEV_DB)) {
+    r = unlink(string(path + "/block.db").c_str());
+    ceph_assert(r == 0);
+  }
+  if (devs_source.count(BlueFS::BDEV_WAL)) {
+    r = unlink(string(path + "/block.wal").c_str());
+    ceph_assert(r == 0);
+  }
+
+shutdown:
+  _umount_for_bluefs();
+  return r;
+}
+
+int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
+  int id,
+  const string& dev_path)
+{
+  dout(10) << __func__ << " path " << dev_path << " id:" << id << dendl;
+  int r;
+  ceph_assert(path_fd < 0);
+
+  ceph_assert(id == BlueFS::BDEV_NEWWAL || id == BlueFS::BDEV_NEWDB);
+
+  if (!cct->_conf->bluestore_bluefs) {
+    derr << __func__ << " bluefs isn't configured, can't add new device " << dendl;
+    return -EIO;
+  }
+
+  r = _mount_for_bluefs();
+
+  int reserved = 0;
+  string link_db;
+  string link_wal;
+  if (devs_source.count(BlueFS::BDEV_DB) &&
+      bluefs_shared_bdev != BlueFS::BDEV_DB) {
+    link_db = path + "/block.db";
+  }
+  if (devs_source.count(BlueFS::BDEV_WAL)) {
+    link_wal = path + "/block.wal";
+  }
+
+  size_t target_size;
+  string target_name;
+  if (id == BlueFS::BDEV_NEWWAL) {
+    target_name = "block.wal";
+    target_size = cct->_conf->bluestore_block_wal_size;
+
+    r = bluefs->add_block_device(BlueFS::BDEV_NEWWAL, dev_path,
+      cct->_conf->bdev_enable_discard);
+    ceph_assert(r == 0);
+
+    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
+      r = _check_or_set_bdev_label(
+	dev_path,
+	bluefs->get_block_device_size(BlueFS::BDEV_NEWWAL),
+        "bluefs wal",
+	true);
+      ceph_assert(r == 0);
+    }
+    reserved = BDEV_LABEL_BLOCK_SIZE;
+  } else if (id == BlueFS::BDEV_NEWDB) {
+    target_name = "block.db";
+    target_size = cct->_conf->bluestore_block_db_size;
+
+    r = bluefs->add_block_device(BlueFS::BDEV_NEWDB, dev_path,
+      cct->_conf->bdev_enable_discard);
+    ceph_assert(r == 0);
+
+    if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
+      r = _check_or_set_bdev_label(
+	dev_path,
+	bluefs->get_block_device_size(BlueFS::BDEV_NEWDB),
+        "bluefs db",
+	true);
+      ceph_assert(r == 0);
+    }
+    reserved = SUPER_RESERVED;
+  }
+
+  bluefs->umount();
+  bluefs->mount();
+
+  bluefs->add_block_extent(
+    id, reserved, bluefs->get_block_device_size(id) - reserved);
+
+  r = bluefs->device_migrate_to_new(cct, devs_source, id);
+
+  if (r < 0) {
+    derr << __func__ << " failed during BlueFS migration, " << cpp_strerror(r) << dendl;
+    goto shutdown;
+  }
+
+  if (!link_db.empty()) {
+    r = unlink(link_db.c_str());
+    ceph_assert(r == 0);
+  }
+  if (!link_wal.empty()) {
+    r = unlink(link_wal.c_str());
+    ceph_assert(r == 0);
+  }
+  r = _setup_block_symlink_or_file(
+    target_name,
+    dev_path,
+    target_size,
+    true);
+  ceph_assert(r == 0);
+  dout(0) << __func__ << " success" << dendl;
+
+shutdown:
+  _umount_for_bluefs();
+  return r;
+}
+
+string BlueStore::get_device_path(unsigned id)
+{
+  string res;
+  if (id < BlueFS::MAX_BDEV) {
+    switch (id) {
+    case BlueFS::BDEV_WAL:
+      res = path + "/block.wal";
+      break;
+    case BlueFS::BDEV_DB:
+      if (id == bluefs_shared_bdev) {
+	res = path + "/block";
+      } else {
+	res = path + "/block.db";
+      }
+      break;
+    case BlueFS::BDEV_SLOW:
+      res = path + "/block";
+      break;
+    }
+  }
+  return res;
+}
+
+int BlueStore::expand_devices(ostream& out)
+{
+  int r = _mount(false);
+  ceph_assert(r == 0);
+  bluefs->dump_block_extents(out);
+  out << "Expanding..." << std::endl;
+  for (auto devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB}) {
+    if (devid == bluefs_shared_bdev ) {
+      continue;
+    }
+    interval_set<uint64_t> before;
+    bluefs->get_block_extents(devid, &before);
+    ceph_assert(!before.empty());
+    uint64_t end = before.range_end();
+    uint64_t size = bluefs->get_block_device_size(devid);
+    if (end < size) {
+      out << devid
+	  <<" : expanding " << " from 0x" << std::hex
+	  << end << " to 0x" << size << std::dec << std::endl;
+      bluefs->add_block_extent(devid, end, size-end);
+      string p = get_device_path(devid);
+      const char* path = p.c_str();
+      if (path == nullptr) {
+	derr << devid
+	      <<": can't find device path " << dendl;
+	continue;
+      }
+      bluestore_bdev_label_t label;
+      int r = _read_bdev_label(cct, path, &label);
+      if (r < 0) {
+	derr << "unable to read label for " << path << ": "
+	      << cpp_strerror(r) << dendl;
+	continue;
+      }
+      label.size = size;
+      r = _write_bdev_label(cct, path, label);
+      if (r < 0) {
+	derr << "unable to write label for " << path << ": "
+	      << cpp_strerror(r) << dendl;
+	continue;
+      }
+      out << devid
+	   <<" : size label updated to " << size
+	   << std::endl;
+    }
+  }
+  uint64_t size0 = fm->get_size();
+  uint64_t size = bdev->get_size();
+  if (size0 < size) {
+    out << bluefs_shared_bdev
+	<<" : expanding " << " from 0x" << std::hex
+	<< size0 << " to 0x" << size << std::dec << std::endl;
+    KeyValueDB::Transaction txn;
+    txn = db->get_transaction();
+    int r = fm->expand(size, txn);
+    ceph_assert(r == 0);
+    db->submit_transaction_sync(txn);
+
+     // always reference to slow device here
+    string p = get_device_path(BlueFS::BDEV_SLOW);
+    ceph_assert(!p.empty());
+    const char* path = p.c_str();
+    bluestore_bdev_label_t label;
+    r = _read_bdev_label(cct, path, &label);
+    if (r < 0) {
+      derr << "unable to read label for " << path << ": "
+	    << cpp_strerror(r) << dendl;
+    } else {
+      label.size = size;
+      r = _write_bdev_label(cct, path, label);
+      if (r < 0) {
+	derr << "unable to write label for " << path << ": "
+	      << cpp_strerror(r) << dendl;
+      } else {
+	out << bluefs_shared_bdev
+	      <<" : size label updated to " << size
+	      << std::endl;
+      }
+    }
+  }
+  umount();
+  return r;
+}
+
 void BlueStore::set_cache_shards(unsigned num)
 {
   dout(10) << __func__ << " " << num << dendl;
   size_t old = cache_shards.size();
-  assert(num >= old);
+  ceph_assert(num >= old);
   cache_shards.resize(num);
   for (unsigned i = old; i < num; ++i) {
     cache_shards[i] = Cache::create(cct, cct->_conf->bluestore_cache_type,
@@ -5169,9 +6392,11 @@ void BlueStore::set_cache_shards(unsigned num)
   }
 }
 
-int BlueStore::_mount(bool kv_only)
+int BlueStore::_mount(bool kv_only, bool open_db)
 {
   dout(1) << __func__ << " path " << path << dendl;
+
+  _kv_only = kv_only;
 
   {
     string type;
@@ -5217,38 +6442,31 @@ int BlueStore::_mount(bool kv_only)
   if (r < 0)
     goto out_fsid;
 
-  r = _open_db(false);
-  if (r < 0)
-    goto out_bdev;
+  if (open_db) {
+    r = _open_db_and_around(false);
+  } else {
+    // we can bypass db open exclusively in case of kv_only mode
+    ceph_assert(kv_only);
+    r = _open_db(false, true);
+    if (r < 0)
+      goto out_bdev;
+  }
 
   if (kv_only)
     return 0;
 
-  r = _open_super_meta();
-  if (r < 0)
+  r = _upgrade_super();
+  if (r < 0) {
     goto out_db;
-
-  r = _open_fm(false);
-  if (r < 0)
-    goto out_db;
-
-  r = _open_alloc();
-  if (r < 0)
-    goto out_fm;
+  }
 
   r = _open_collections();
   if (r < 0)
-    goto out_alloc;
+    goto out_db;
 
   r = _reload_logger();
   if (r < 0)
     goto out_coll;
-
-  if (bluefs) {
-    r = _reconcile_bluefs_freespace();
-    if (r < 0)
-      goto out_coll;
-  }
 
   _kv_start();
 
@@ -5258,7 +6476,6 @@ int BlueStore::_mount(bool kv_only)
 
   mempool_thread.init();
 
-
   mounted = true;
   return 0;
 
@@ -5266,12 +6483,8 @@ int BlueStore::_mount(bool kv_only)
   _kv_stop();
  out_coll:
   _flush_cache();
- out_alloc:
-  _close_alloc();
- out_fm:
-  _close_fm();
  out_db:
-  _close_db();
+  _close_db_and_around();
  out_bdev:
   _close_bdev();
  out_fsid:
@@ -5283,24 +6496,21 @@ int BlueStore::_mount(bool kv_only)
 
 int BlueStore::umount()
 {
-  assert(mounted);
+  ceph_assert(_kv_only || mounted);
   dout(1) << __func__ << dendl;
 
   _osr_drain_all();
-  _osr_unregister_all();
-
-  mempool_thread.shutdown();
-
-  dout(20) << __func__ << " stopping kv thread" << dendl;
-  _kv_stop();
-  _reap_collections();
-  _flush_cache();
-  dout(20) << __func__ << " closing" << dendl;
 
   mounted = false;
-  _close_alloc();
-  _close_fm();
-  _close_db();
+  if (!_kv_only) {
+    mempool_thread.shutdown();
+    dout(20) << __func__ << " stopping kv thread" << dendl;
+    _kv_stop();
+    _flush_cache();
+    dout(20) << __func__ << " closing" << dendl;
+
+  }
+  _close_db_and_around();
   _close_bdev();
   _close_fsid();
   _close_path();
@@ -5321,10 +6531,9 @@ static void apply(uint64_t off,
                   uint64_t len,
                   uint64_t granularity,
                   BlueStore::mempool_dynamic_bitset &bitset,
-	          const char *what,
                   std::function<void(uint64_t,
 				     BlueStore::mempool_dynamic_bitset &)> f) {
-  auto end = ROUND_UP_TO(off + len, granularity);
+  auto end = round_up_to(off + len, granularity);
   while (off < end) {
     uint64_t pos = off / granularity;
     f(pos, bitset);
@@ -5333,10 +6542,13 @@ static void apply(uint64_t off,
 }
 
 int BlueStore::_fsck_check_extents(
+  const coll_t& cid,
   const ghobject_t& oid,
   const PExtentVector& extents,
   bool compressed,
   mempool_dynamic_bitset &used_blocks,
+  uint64_t granularity,
+  BlueStoreRepairer* repairer,
   store_statfs_t& expected_statfs)
 {
   dout(30) << __func__ << " oid " << oid << " extents " << extents << dendl;
@@ -5346,24 +6558,34 @@ int BlueStore::_fsck_check_extents(
       continue;
     expected_statfs.allocated += e.length;
     if (compressed) {
-      expected_statfs.compressed_allocated += e.length;
+      expected_statfs.data_compressed_allocated += e.length;
     }
     bool already = false;
     apply(
-      e.offset, e.length, block_size, used_blocks, __func__,
+      e.offset, e.length, granularity, used_blocks,
       [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	if (bs.test(pos))
-	  already = true;
+	ceph_assert(pos < bs.size());
+	if (bs.test(pos)) {
+	  if (repairer) {
+	    repairer->note_misreference(
+	      pos * min_alloc_size, min_alloc_size, !already);
+	  }
+          if (!already) {
+            derr << "fsck error: " << oid << " extent " << e
+		 << " or a subset is already allocated (misreferenced)" << dendl;
+	    ++errors;
+	    already = true;
+	  }
+	}
 	else
 	  bs.set(pos);
       });
-    if (already) {
-      derr << " " << oid << " extent " << e
-	   << " or a subset is already allocated" << dendl;
-      ++errors;
-    }
+      if (repairer) {
+	repairer->get_space_usage_tracker().set_used( e.offset, e.length, cid, oid);
+      }
+
     if (e.end() > bdev->get_size()) {
-      derr << " " << oid << " extent " << e
+      derr << "fsck error:  " << oid << " extent " << e
 	   << " past end of block device" << dendl;
       ++errors;
     }
@@ -5371,26 +6593,190 @@ int BlueStore::_fsck_check_extents(
   return errors;
 }
 
-int BlueStore::fsck(bool deep)
+void BlueStore::_fsck_check_pool_statfs(
+  BlueStore::per_pool_statfs& expected_pool_statfs,
+  bool need_per_pool_stats,
+  int& errors,
+  BlueStoreRepairer* repairer)
 {
-  dout(1) << __func__ << (deep ? " (deep)" : " (shallow)") << " start" << dendl;
+  auto it = db->get_iterator(PREFIX_STAT);
+  if (it) {
+    for (it->lower_bound(string()); it->valid(); it->next()) {
+      string key = it->key();
+      if (key == BLUESTORE_GLOBAL_STATFS_KEY) {
+        if (repairer) {
+	  if (need_per_pool_stats) {
+	    ++errors;
+	    repairer->remove_key(db, PREFIX_STAT, BLUESTORE_GLOBAL_STATFS_KEY);
+	    derr << "fsck error: " << "legacy statfs record found, removing" << dendl;
+	  } else {
+	    derr << "fsck warning: " << "legacy statfs record found, bypassing" << dendl;
+	  }
+	} else {
+	  const char* s = "fsck warning: ";
+          if (need_per_pool_stats) {
+	    ++errors;
+	    s = "fsck error: ";
+	  }
+	  derr << s << "legacy statfs record found, suggest to "
+	          "run store repair to get consistent statistic reports"
+	       << dendl;
+	}
+	continue;
+      }
+      if (!need_per_pool_stats) {
+	continue;
+      }
+      uint64_t pool_id;
+      if (get_key_pool_stat(key, &pool_id) < 0) {
+	derr << "fsck error: bad key " << key
+	     << "in statfs namespece" << dendl;
+	if (repairer) {
+	  repairer->remove_key(db, PREFIX_STAT, key);
+	}
+	++errors;
+	continue;
+      }
+
+      volatile_statfs vstatfs;
+      bufferlist bl = it->value();
+      auto blp = bl.cbegin();
+      try {
+	vstatfs.decode(blp);
+      } catch (buffer::error& e) {
+        derr << "fsck error: failed to decode Pool StatFS record"
+	     << pretty_binary_string(key) << dendl;
+        if (repairer) {
+	  dout(20) << __func__ << " undecodable Pool StatFS record, key:'"
+	           << pretty_binary_string(key)
+		   << "', removing" << dendl;
+          repairer->remove_key(db, PREFIX_STAT, key);
+        }
+        ++errors;
+	vstatfs.reset();
+      }
+      auto stat_it = expected_pool_statfs.find(pool_id);
+      if (stat_it == expected_pool_statfs.end()) {
+        if (vstatfs.is_empty()) {
+          // we don't consider that as an error since empty pool statfs
+          // are left in DB for now
+	  dout(20) << "fsck inf: found empty stray Pool StatFS record for pool id 0x"
+	            << std::hex << pool_id << std::dec << dendl;
+	  if (repairer) {
+	    // but we need to increment error count in case of repair
+	    // to have proper counters at the end
+	    // (as repairer increments recovery counter anyway).
+	    ++errors;
+	  }
+        } else {
+	  derr << "fsck error: found stray Pool StatFS record for pool id 0x"
+	       << std::hex << pool_id << std::dec << dendl;
+	  ++errors;
+	}
+	if (repairer) {
+	  repairer->remove_key(db, PREFIX_SHARED_BLOB, key);
+	}
+	continue;
+      }
+      store_statfs_t statfs;
+      vstatfs.publish(&statfs);
+      if (!(stat_it->second == statfs)) {
+        derr << "fsck error: actual " << statfs
+	     << " != expected " << stat_it->second
+	     << " for pool "
+	     << std::hex << pool_id << std::dec << dendl;
+	if (repairer) {
+	  repairer->fix_statfs(db, key, stat_it->second);
+	}
+        ++errors;
+      }
+      expected_pool_statfs.erase(stat_it);
+    }
+  } // if (it)
+  for( auto s = expected_pool_statfs.begin(); s != expected_pool_statfs.end();
+    ++s) {
+    if (s->second.is_zero()) {
+      // we might lack empty statfs recs in DB
+      continue;
+    }
+    derr << "fsck error: missing Pool StatFS record for pool "
+	  << std::hex << s->first << std::dec << dendl;
+    if (repairer) {
+      string key;
+      get_pool_stat_key(s->first, &key);
+      repairer->fix_statfs(db, key, s->second);
+    }
+    ++errors;
+  }
+}
+
+/**
+An overview for currently implemented repair logics 
+performed in fsck in two stages: detection(+preparation) and commit.
+Detection stage (in processing order):
+  (Issue -> Repair action to schedule)
+  - Detect undecodable keys for Shared Blobs -> Remove
+  - Detect undecodable records for Shared Blobs -> Remove 
+    (might trigger missed Shared Blob detection below)
+  - Detect stray records for Shared Blobs -> Remove
+  - Detect misreferenced pextents -> Fix
+    Prepare Bloom-like filter to track cid/oid -> pextent 
+    Prepare list of extents that are improperly referenced
+    Enumerate Onode records that might use 'misreferenced' pextents
+    (Bloom-like filter applied to reduce computation)
+      Per each questinable Onode enumerate all blobs and identify broken ones 
+      (i.e. blobs having 'misreferences')
+      Rewrite each broken blob data by allocating another extents and 
+      copying data there
+      If blob is shared - unshare it and mark corresponding Shared Blob 
+      for removal
+      Release previously allocated space
+      Update Extent Map
+  - Detect missed Shared Blobs -> Recreate
+  - Detect undecodable deferred transaction -> Remove
+  - Detect Freelist Manager's 'false free' entries -> Mark as used
+  - Detect Freelist Manager's leaked entries -> Mark as free
+  - Detect statfs inconsistency - Update
+  Commit stage (separate DB commit per each step):
+  - Apply leaked FM entries fix
+  - Apply 'false free' FM entries fix
+  - Apply 'Remove' actions
+  - Apply fix for misreference pextents
+  - Apply Shared Blob recreate 
+    (can be merged with the step above if misreferences were dectected)
+  - Apply StatFS update
+*/
+int BlueStore::_fsck(bool deep, bool repair)
+{
+  dout(1) << __func__
+	  << " <<<START>>>"
+	  << (repair ? " repair" : " check")
+	  << (deep ? " (deep)" : " (shallow)") << " start" << dendl;
   int errors = 0;
+  unsigned repaired = 0;
 
   typedef btree::btree_set<
     uint64_t,std::less<uint64_t>,
     mempool::bluestore_fsck::pool_allocator<uint64_t>> uint64_t_btree_t;
   uint64_t_btree_t used_nids;
   uint64_t_btree_t used_omap_head;
+  uint64_t_btree_t used_pgmeta_omap_head;
   uint64_t_btree_t used_sbids;
 
   mempool_dynamic_bitset used_blocks;
   KeyValueDB::Iterator it;
-  store_statfs_t expected_statfs, actual_statfs;
+  store_statfs_t expected_store_statfs, actual_statfs;
+  per_pool_statfs expected_pool_statfs;
+
   struct sb_info_t {
+    coll_t cid;
+    int64_t pool_id = INT64_MIN;
     list<ghobject_t> oids;
     SharedBlobRef sb;
     bluestore_extent_ref_map_t ref_map;
-    bool compressed;
+    bool compressed = false;
+    bool passed = false;
+    bool updated = false;
   };
   mempool::bluestore_fsck::map<uint64_t,sb_info_t> sb_info;
 
@@ -5401,8 +6787,16 @@ int BlueStore::fsck(bool deep)
   uint64_t num_shared_blobs = 0;
   uint64_t num_sharded_objects = 0;
   uint64_t num_object_shards = 0;
+  BlueStoreRepairer repairer;
+  store_statfs_t* expected_statfs = nullptr;
+  // in deep mode we need R/W write access to be able to replay deferred ops
+  bool read_only = !(repair || deep);
 
   utime_t start = ceph_clock_now();
+  const auto& no_pps_mode = cct->_conf->bluestore_no_per_pool_stats_tolerance;
+  bool need_per_pool_stats = no_pps_mode == "until_fsck" ||
+    (no_pps_mode == "until_repair" && repair);
+  bool enforce_no_per_pool_stats = no_pps_mode == "enforce";
 
   int r = _open_path();
   if (r < 0)
@@ -5423,48 +6817,79 @@ int BlueStore::fsck(bool deep)
   if (r < 0)
     goto out_fsid;
 
-  r = _open_db(false);
+  r = _open_db_and_around(read_only);
   if (r < 0)
     goto out_bdev;
 
-  r = _open_super_meta();
-  if (r < 0)
-    goto out_db;
-
-  r = _open_fm(false);
-  if (r < 0)
-    goto out_db;
-
-  r = _open_alloc();
-  if (r < 0)
-    goto out_fm;
+  if (!read_only) {
+    r = _upgrade_super();
+    if (r < 0) {
+      goto out_db;
+    }
+  }
 
   r = _open_collections(&errors);
   if (r < 0)
-    goto out_alloc;
+    goto out_db;
 
   mempool_thread.init();
 
-  // we need finishers and kv_{sync,finalize}_thread *just* for replay
-  _kv_start();
-  r = _deferred_replay();
-  _kv_stop();
+  // we need finisher and kv_{sync,finalize}_thread *just* for replay
+  // enable in repair or deep mode modes only
+  if (!read_only) {
+    _kv_start();
+    r = _deferred_replay();
+    _kv_stop();
+  }
   if (r < 0)
     goto out_scan;
 
-  used_blocks.resize(bdev->get_size() / block_size);
+  used_blocks.resize(fm->get_alloc_units());
   apply(
-    0, SUPER_RESERVED, block_size, used_blocks, "0~SUPER_RESERVED",
+    0, std::max<uint64_t>(min_alloc_size, SUPER_RESERVED), fm->get_alloc_size(), used_blocks,
     [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	ceph_assert(pos < bs.size());
       bs.set(pos);
     }
   );
+  if (repair) {
+    repairer.get_space_usage_tracker().init(
+      bdev->get_size(),
+      min_alloc_size);
+  }
 
   if (bluefs) {
+    if( cct->_conf->bluestore_bluefs_db_compatibility) {
+      interval_set<uint64_t> bluefs_extents_db;
+      bufferlist bl;
+      db->get(PREFIX_SUPER, "bluefs_extents", &bl);
+      auto p = bl.cbegin();
+      auto prev_errors = errors;
+      try {
+        decode(bluefs_extents_db, p);
+	bluefs_extents_db.union_of(bluefs_extents);
+	bluefs_extents_db.subtract(bluefs_extents);
+	if (!bluefs_extents_db.empty()) {
+	  derr << "fsck error: bluefs_extents inconsistency, "
+	       << "downgrade to previous releases might be broken."
+	       << dendl;
+	  ++errors;
+	}
+      }
+      catch (buffer::error& e) {
+	derr << "fsck error: failed to retrieve bluefs_extents from kv" << dendl;
+	++errors;
+      }
+      if (errors != prev_errors && repair) {
+	repairer.fix_bluefs_extents(out_of_sync_fm);
+      }
+    }
+
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
-        e.get_start(), e.get_len(), block_size, used_blocks, "bluefs",
+        e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	ceph_assert(pos < bs.size());
           bs.set(pos);
         }
 	);
@@ -5477,28 +6902,37 @@ int BlueStore::fsck(bool deep)
       errors += r;
   }
 
-  // get expected statfs; fill unaffected fields to be able to compare
+  // get expected statfs; reset unaffected fields to be able to compare
   // structs
   statfs(&actual_statfs);
-  expected_statfs.total = actual_statfs.total;
-  expected_statfs.available = actual_statfs.available;
+  actual_statfs.total = 0;
+  actual_statfs.internally_reserved = 0;
+  actual_statfs.available = 0;
+  actual_statfs.internal_metadata = 0;
+  actual_statfs.omap_allocated = 0;
+
+  need_per_pool_stats = per_pool_stat_collection || need_per_pool_stats;
 
   // walk PREFIX_OBJ
   dout(1) << __func__ << " walking object keyspace" << dendl;
   it = db->get_iterator(PREFIX_OBJ);
   if (it) {
+     //fill global if not overriden below
+    expected_statfs = &expected_store_statfs;
+
     CollectionRef c;
     spg_t pgid;
     mempool::bluestore_fsck::list<string> expecting_shards;
     for (it->lower_bound(string()); it->valid(); it->next()) {
-      if (g_conf->bluestore_debug_fsck_abort) {
+      if (g_conf()->bluestore_debug_fsck_abort) {
 	goto out_scan;
       }
-      dout(30) << " key " << pretty_binary_string(it->key()) << dendl;
+      dout(30) << __func__ << " key "
+               << pretty_binary_string(it->key()) << dendl;
       if (is_extent_shard_key(it->key())) {
 	while (!expecting_shards.empty() &&
 	       expecting_shards.front() < it->key()) {
-	  derr << __func__ << " error: missing shard key "
+	  derr << "fsck error: missing shard key "
 	       << pretty_binary_string(expecting_shards.front())
 	       << dendl;
 	  ++errors;
@@ -5514,18 +6948,18 @@ int BlueStore::fsck(bool deep)
         uint32_t offset;
         string okey;
         get_key_extent_shard(it->key(), &okey, &offset);
-        derr << __func__ << " error: stray shard 0x" << std::hex << offset
+        derr << "fsck error: stray shard 0x" << std::hex << offset
 	     << std::dec << dendl;
         if (expecting_shards.empty()) {
-          derr << __func__ << " error: " << pretty_binary_string(it->key())
+          derr << "fsck error: " << pretty_binary_string(it->key())
                << " is unexpected" << dendl;
           ++errors;
           continue;
         }
 	while (expecting_shards.front() > it->key()) {
-	  derr << __func__ << " error:   saw " << pretty_binary_string(it->key())
+	  derr << "fsck error:   saw " << pretty_binary_string(it->key())
 	       << dendl;
-	  derr << __func__ << " error:   exp "
+	  derr << "fsck error:   exp "
 	       << pretty_binary_string(expecting_shards.front()) << dendl;
 	  ++errors;
 	  expecting_shards.pop_front();
@@ -5539,38 +6973,42 @@ int BlueStore::fsck(bool deep)
       ghobject_t oid;
       int r = get_key_object(it->key(), &oid);
       if (r < 0) {
-        derr << __func__ << " error: bad object key "
+        derr << "fsck error: bad object key "
              << pretty_binary_string(it->key()) << dendl;
 	++errors;
 	continue;
       }
       if (!c ||
 	  oid.shard_id != pgid.shard ||
-	  oid.hobj.pool != (int64_t)pgid.pool() ||
+	  oid.hobj.get_logical_pool() != (int64_t)pgid.pool() ||
 	  !c->contains(oid)) {
 	c = nullptr;
-	for (ceph::unordered_map<coll_t, CollectionRef>::iterator p =
-	       coll_map.begin();
-	     p != coll_map.end();
-	     ++p) {
-	  if (p->second->contains(oid)) {
-	    c = p->second;
+	for (auto& p : coll_map) {
+	  if (p.second->contains(oid)) {
+	    c = p.second;
 	    break;
 	  }
 	}
 	if (!c) {
-          derr << __func__ << " error: stray object " << oid
+          derr << "fsck error: stray object " << oid
                << " not owned by any collection" << dendl;
 	  ++errors;
 	  continue;
 	}
-	c->cid.is_pg(&pgid);
-	dout(20) << __func__ << "  collection " << c->cid << dendl;
+	auto pool_id = c->cid.is_pg(&pgid) ? pgid.pool() : META_POOL_ID;
+	dout(20) << __func__ << "  collection " << c->cid << " " << c->cnode
+		 << dendl;
+	if (need_per_pool_stats) {
+	  expected_statfs = &expected_pool_statfs[pool_id];
+	}
+
+	dout(20) << __func__ << "  collection " << c->cid << " " << c->cnode
+		 << dendl;
       }
 
       if (!expecting_shards.empty()) {
 	for (auto &k : expecting_shards) {
-	  derr << __func__ << " error: missing shard key "
+	  derr << "fsck error: missing shard key "
 	       << pretty_binary_string(k) << dendl;
 	}
 	++errors;
@@ -5578,16 +7016,17 @@ int BlueStore::fsck(bool deep)
       }
 
       dout(10) << __func__ << "  " << oid << dendl;
+      store_statfs_t onode_statfs;
       RWLock::RLocker l(c->lock);
       OnodeRef o = c->get_onode(oid, false);
       if (o->onode.nid) {
 	if (o->onode.nid > nid_max) {
-	  derr << __func__ << " error: " << oid << " nid " << o->onode.nid
+	  derr << "fsck error: " << oid << " nid " << o->onode.nid
 	       << " > nid_max " << nid_max << dendl;
 	  ++errors;
 	}
 	if (used_nids.count(o->onode.nid)) {
-	  derr << __func__ << " error: " << oid << " nid " << o->onode.nid
+	  derr << "fsck error: " << oid << " nid " << o->onode.nid
 	       << " already in use" << dendl;
 	  ++errors;
 	  continue; // go for next object
@@ -5597,7 +7036,7 @@ int BlueStore::fsck(bool deep)
       ++num_objects;
       num_spanning_blobs += o->extent_map.spanning_blob_map.size();
       o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
-      _dump_onode(o, 30);
+      _dump_onode(o);
       // shards
       if (!o->extent_map.shards.empty()) {
 	++num_sharded_objects;
@@ -5609,7 +7048,7 @@ int BlueStore::fsck(bool deep)
 	get_extent_shard_key(o->key, s.shard_info->offset,
 			     &expecting_shards.back());
 	if (s.shard_info->offset >= o->onode.size) {
-	  derr << __func__ << " error: " << oid << " shard 0x" << std::hex
+	  derr << "fsck error: " << oid << " shard 0x" << std::hex
 	       << s.shard_info->offset << " past EOF at 0x" << o->onode.size
 	       << std::dec << dendl;
 	  ++errors;
@@ -5623,22 +7062,22 @@ int BlueStore::fsck(bool deep)
       for (auto& l : o->extent_map.extent_map) {
 	dout(20) << __func__ << "    " << l << dendl;
 	if (l.logical_offset < pos) {
-	  derr << __func__ << " error: " << oid << " lextent at 0x"
+	  derr << "fsck error: " << oid << " lextent at 0x"
 	       << std::hex << l.logical_offset
 	       << " overlaps with the previous, which ends at 0x" << pos
 	       << std::dec << dendl;
 	  ++errors;
 	}
 	if (o->extent_map.spans_shard(l.logical_offset, l.length)) {
-	  derr << __func__ << " error: " << oid << " lextent at 0x"
+	  derr << "fsck error: " << oid << " lextent at 0x"
 	       << std::hex << l.logical_offset << "~" << l.length
 	       << " spans a shard boundary"
 	       << std::dec << dendl;
 	  ++errors;
 	}
 	pos = l.logical_offset + l.length;
-	expected_statfs.stored += l.length;
-	assert(l.blob);
+	onode_statfs.data_stored += l.length;
+	ceph_assert(l.blob);
 	const bluestore_blob_t& blob = l.blob->get_blob();
 
         auto& ref = ref_map[l.blob];
@@ -5660,12 +7099,12 @@ int BlueStore::fsck(bool deep)
 	    pu = &p->second;
 	  }
 	  uint64_t blob_len = blob.get_logical_length();
-	  assert((blob_len % (sizeof(*pu)*8)) == 0);
-	  assert(l.blob_offset + l.length <= blob_len);
+	  ceph_assert((blob_len % (sizeof(*pu)*8)) == 0);
+	  ceph_assert(l.blob_offset + l.length <= blob_len);
 	  uint64_t chunk_size = blob_len / (sizeof(*pu)*8);
 	  uint64_t start = l.blob_offset / chunk_size;
 	  uint64_t end =
-	    ROUND_UP_TO(l.blob_offset + l.length, chunk_size) / chunk_size;
+	    round_up_to(l.blob_offset + l.length, chunk_size) / chunk_size;
 	  for (auto i = start; i < end; ++i) {
 	    (*pu) |= (1u << i);
 	  }
@@ -5676,9 +7115,9 @@ int BlueStore::fsck(bool deep)
 		 << std::dec << " for " << *i.first << dendl;
 	const bluestore_blob_t& blob = i.first->get_blob();
 	if (i.second & blob.unused) {
-	  derr << __func__ << " error: " << oid << " blob claims unused 0x"
+	  derr << "fsck error: " << oid << " blob claims unused 0x"
 	       << std::hex << blob.unused
-	       << " but extents reference 0x" << i.second
+	       << " but extents reference 0x" << i.second << std::dec
 	       << " on blob " << *i.first << dendl;
 	  ++errors;
 	}
@@ -5698,7 +7137,7 @@ int BlueStore::fsck(bool deep)
 	    if ((blob.unused & mask) == mask) {
 	      // this csum chunk region is marked unused
 	      if (blob.get_csum_item(p) != 0) {
-		derr << __func__ << " error: " << oid
+		derr << "fsck error: " << oid
 		     << " blob claims csum chunk 0x" << std::hex << pos
 		     << "~" << csum_chunk_size
 		     << " is unused (mask 0x" << mask << " of unused 0x"
@@ -5716,28 +7155,33 @@ int BlueStore::fsck(bool deep)
 	const bluestore_blob_t& blob = i.first->get_blob();
 	bool equal = i.first->get_blob_use_tracker().equal(i.second);
 	if (!equal) {
-	  derr << __func__ << " error: " << oid << " blob " << *i.first
+	  derr << "fsck error: " << oid << " blob " << *i.first
 	       << " doesn't match expected ref_map " << i.second << dendl;
 	  ++errors;
 	}
 	if (blob.is_compressed()) {
-	  expected_statfs.compressed += blob.get_compressed_payload_length();
-	  expected_statfs.compressed_original += 
+	  onode_statfs.data_compressed += blob.get_compressed_payload_length();
+	  onode_statfs.data_compressed_original +=
 	    i.first->get_referenced_bytes();
 	}
 	if (blob.is_shared()) {
 	  if (i.first->shared_blob->get_sbid() > blobid_max) {
-	    derr << __func__ << " error: " << oid << " blob " << blob
+	    derr << "fsck error: " << oid << " blob " << blob
 		 << " sbid " << i.first->shared_blob->get_sbid() << " > blobid_max "
 		 << blobid_max << dendl;
 	    ++errors;
 	  } else if (i.first->shared_blob->get_sbid() == 0) {
-            derr << __func__ << " error: " << oid << " blob " << blob
+            derr << "fsck error: " << oid << " blob " << blob
                  << " marked as shared but has uninitialized sbid"
                  << dendl;
             ++errors;
           }
 	  sb_info_t& sbi = sb_info[i.first->shared_blob->get_sbid()];
+	  ceph_assert(sbi.cid == coll_t() || sbi.cid == c->cid);
+	  ceph_assert(sbi.pool_id == INT64_MIN ||
+	              sbi.pool_id == oid.hobj.get_logical_pool());
+	  sbi.cid = c->cid;
+	  sbi.pool_id = oid.hobj.get_logical_pool();
 	  sbi.sb = i.first->shared_blob;
 	  sbi.oids.push_back(oid);
 	  sbi.compressed = blob.is_compressed();
@@ -5747,85 +7191,365 @@ int BlueStore::fsck(bool deep)
 	    }
 	  }
 	} else {
-	  errors += _fsck_check_extents(oid, blob.get_extents(),
+	  errors += _fsck_check_extents(c->cid, oid, blob.get_extents(),
 					blob.is_compressed(),
 					used_blocks,
-					expected_statfs);
+					fm->get_alloc_size(),
+					repair ? &repairer : nullptr,
+					onode_statfs);
         }
       }
       if (deep) {
 	bufferlist bl;
-	int r = _do_read(c.get(), o, 0, o->onode.size, bl, 0);
-	if (r < 0) {
-	  ++errors;
-	  derr << __func__ << " error: " << oid << " error during read: "
-	       << cpp_strerror(r) << dendl;
-	}
+	uint64_t max_read_block = cct->_conf->bluestore_fsck_read_bytes_cap;
+	uint64_t offset = 0;
+	do {
+	  uint64_t l = std::min(uint64_t(o->onode.size - offset), max_read_block);
+	  int r = _do_read(c.get(), o, offset, l, bl,
+	    CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+	  if (r < 0) {
+	    ++errors;
+	    derr << "fsck error: " << oid << std::hex
+	         << " error during read: "
+		 << " " << offset << "~" << l
+		 << " " << cpp_strerror(r) << std::dec
+		 << dendl;
+	    break;
+	  }
+	  offset += l;
+	} while (offset < o->onode.size);
       }
       // omap
       if (o->onode.has_omap()) {
-	if (used_omap_head.count(o->onode.nid)) {
-	  derr << __func__ << " error: " << oid << " omap_head " << o->onode.nid
+	auto& m =
+	  o->onode.is_pgmeta_omap() ? used_pgmeta_omap_head : used_omap_head;
+	if (m.count(o->onode.nid)) {
+	  derr << "fsck error: " << oid << " omap_head " << o->onode.nid
 	       << " already in use" << dendl;
 	  ++errors;
 	} else {
-	  used_omap_head.insert(o->onode.nid);
+	  m.insert(o->onode.nid);
 	}
       }
-    }
-  }
+      expected_statfs->add(onode_statfs);
+    } // for (it->lower_bound(string()); it->valid(); it->next())
+  } // if (it)
+
   dout(1) << __func__ << " checking shared_blobs" << dendl;
   it = db->get_iterator(PREFIX_SHARED_BLOB);
   if (it) {
+    //fill global if not overriden below
+    expected_statfs = &expected_store_statfs;
+
     for (it->lower_bound(string()); it->valid(); it->next()) {
       string key = it->key();
       uint64_t sbid;
       if (get_key_shared_blob(key, &sbid)) {
-	derr << __func__ << " error: bad key '" << key
+	derr << "fsck error: bad key '" << key
 	     << "' in shared blob namespace" << dendl;
+	if (repair) {
+	  repairer.remove_key(db, PREFIX_SHARED_BLOB, key);
+	}
 	++errors;
 	continue;
       }
       auto p = sb_info.find(sbid);
       if (p == sb_info.end()) {
-	derr << __func__ << " error: found stray shared blob data for sbid 0x"
+	derr << "fsck error: found stray shared blob data for sbid 0x"
 	     << std::hex << sbid << std::dec << dendl;
+	if (repair) {
+	  repairer.remove_key(db, PREFIX_SHARED_BLOB, key);
+	}
 	++errors;
       } else {
 	++num_shared_blobs;
 	sb_info_t& sbi = p->second;
 	bluestore_shared_blob_t shared_blob(sbid);
 	bufferlist bl = it->value();
-	bufferlist::iterator blp = bl.begin();
-	::decode(shared_blob, blp);
+	auto blp = bl.cbegin();
+	try {
+    	  decode(shared_blob, blp);
+	} catch (buffer::error& e) {
+          ++errors;
+          // Force update and don't report as missing
+          sbi.updated = sbi.passed = true;
+
+          derr << "fsck error: failed to decode Shared Blob"
+    	       << pretty_binary_string(it->key()) << dendl;
+          if (repair) {
+    	    dout(20) << __func__ << " undecodable Shared Blob, key:'"
+	             << pretty_binary_string(it->key())
+	    	     << "', removing" << dendl;
+            repairer.remove_key(db, PREFIX_DEFERRED, it->key());
+          }
+          continue;
+        }	
 	dout(20) << __func__ << "  " << *sbi.sb << " " << shared_blob << dendl;
 	if (shared_blob.ref_map != sbi.ref_map) {
-	  derr << __func__ << " error: shared blob 0x" << std::hex << sbid
-	       << std::dec << " ref_map " << shared_blob.ref_map
-	       << " != expected " << sbi.ref_map << dendl;
+	  derr << "fsck error: shared blob 0x" << std::hex << sbid
+		<< std::dec << " ref_map " << shared_blob.ref_map
+		<< " != expected " << sbi.ref_map << dendl;
+	  sbi.updated = true; // will update later in repair mode only!
 	  ++errors;
 	}
 	PExtentVector extents;
 	for (auto &r : shared_blob.ref_map.ref_map) {
 	  extents.emplace_back(bluestore_pextent_t(r.first, r.second.length));
 	}
-	errors += _fsck_check_extents(p->second.oids.front(),
+	if (need_per_pool_stats) {
+	  expected_statfs = &expected_pool_statfs[sbi.pool_id];
+	}
+	errors += _fsck_check_extents(sbi.cid,
+				      p->second.oids.front(),
 				      extents,
 				      p->second.compressed,
-				      used_blocks, expected_statfs);
-	sb_info.erase(p);
+				      used_blocks,
+				      fm->get_alloc_size(),
+				      repair ? &repairer : nullptr,
+				      *expected_statfs);
+	sbi.passed = true;
+      }
+    }
+  } // if (it)
+
+  if (repair && repairer.preprocess_misreference(db)) {
+
+    dout(1) << __func__ << " sorting out misreferenced extents" << dendl;
+    auto& space_tracker = repairer.get_space_usage_tracker();
+    auto& misref_extents = repairer.get_misreferences();
+    interval_set<uint64_t> to_release;
+    it = db->get_iterator(PREFIX_OBJ);
+    if (it) {
+      //fill global if not overriden below
+      expected_statfs = &expected_store_statfs;
+
+      CollectionRef c;
+      spg_t pgid;
+      KeyValueDB::Transaction txn = repairer.get_fix_misreferences_txn();
+      bool bypass_rest = false;
+      for (it->lower_bound(string()); it->valid() && !bypass_rest;
+	   it->next()) {
+	dout(30) << __func__ << " key "
+		 << pretty_binary_string(it->key()) << dendl;
+	if (is_extent_shard_key(it->key())) {
+	  continue;
+	}
+
+	ghobject_t oid;
+	int r = get_key_object(it->key(), &oid);
+	if (r < 0 || !space_tracker.is_used(oid)) {
+	  continue;
+	}
+
+	if (!c ||
+	    oid.shard_id != pgid.shard ||
+	    oid.hobj.get_logical_pool() != (int64_t)pgid.pool() ||
+	    !c->contains(oid)) {
+	  c = nullptr;
+	  for (auto& p : coll_map) {
+	    if (p.second->contains(oid)) {
+	      c = p.second;
+	      break;
+	    }
+	  }
+	  if (!c) {
+	    continue;
+	  }
+	  auto pool_id = c->cid.is_pg(&pgid) ? pgid.pool() : META_POOL_ID;
+	  if (need_per_pool_stats) {
+	    expected_statfs = &expected_pool_statfs[pool_id];
+	  }
+	}
+	if (!space_tracker.is_used(c->cid)) {
+	  continue;
+	}
+
+	dout(20) << __func__ << " check misreference for col:" << c->cid
+		  << " obj:" << oid << dendl;
+
+	RWLock::RLocker l(c->lock);
+	OnodeRef o = c->get_onode(oid, false);
+	o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+	mempool::bluestore_fsck::set<BlobRef> blobs;
+
+	for (auto& e : o->extent_map.extent_map) {
+	  blobs.insert(e.blob);
+	}
+	bool need_onode_update = false;
+	bool first_dump = true;
+	for(auto b : blobs) {
+	  bool broken_blob = false;
+	  auto& pextents = b->dirty_blob().dirty_extents();
+	  for (auto& e : pextents) {
+	    if (!e.is_valid()) {
+	      continue;
+	    }
+	    // for the sake of simplicity and proper shared blob handling
+	    // always rewrite the whole blob even when it's partially
+	    // misreferenced.
+	    if (misref_extents.intersects(e.offset, e.length)) {
+	      if (first_dump) {
+		first_dump = false;
+		_dump_onode<10>(o);
+	      }
+	      broken_blob = true;
+	      break;
+	    }
+	  }
+	  if (!broken_blob)
+	    continue;
+	  bool compressed = b->get_blob().is_compressed();
+          need_onode_update = true;
+	  dout(10) << __func__
+		    << " fix misreferences in oid:" << oid
+		    << " " << *b << dendl;
+	  uint64_t b_off = 0;
+	  PExtentVector pext_to_release;
+	  pext_to_release.reserve(pextents.size());
+	  // rewriting all valid pextents
+	  for (auto e = pextents.begin(); e != pextents.end();
+	         b_off += e->length, e++) {
+	    if (!e->is_valid()) {
+	      continue;
+	    }
+	    PExtentVector exts;
+	    int64_t alloc_len = alloc->allocate(e->length, min_alloc_size,
+						0, 0, &exts);
+	    if (alloc_len < (int64_t)e->length) {
+	      derr << __func__
+	           << " failed to allocate 0x" << std::hex << e->length
+		   << " allocated 0x " << alloc_len
+		   << " min_alloc_size 0x" << min_alloc_size
+		   << " available 0x " << alloc->get_free()
+		   << std::dec << dendl;
+	      if (alloc_len > 0) {
+		alloc->release(exts);
+	      }
+	      bypass_rest = true;
+	      break;
+	    }
+            expected_statfs->allocated += e->length;
+	    if (compressed) {
+	      expected_statfs->data_compressed_allocated += e->length;
+	    }
+
+	    bufferlist bl;
+	    IOContext ioc(cct, NULL, true); // allow EIO
+	    r = bdev->read(e->offset, e->length, &bl, &ioc, false);
+	    if (r < 0) {
+	      derr << __func__ << " failed to read from 0x" << std::hex << e->offset
+		    <<"~" << e->length << std::dec << dendl;
+	      ceph_abort_msg("read failed, wtf");
+	    }
+	    pext_to_release.push_back(*e);
+	    e = pextents.erase(e);
+    	    e = pextents.insert(e, exts.begin(), exts.end());
+	    b->get_blob().map_bl(
+	      b_off, bl,
+	      [&](uint64_t offset, bufferlist& t) {
+		int r = bdev->write(offset, t, false);
+		ceph_assert(r == 0);
+	      });
+	    e += exts.size() - 1;
+            for (auto& p : exts) {
+	      fm->allocate(p.offset, p.length, txn);
+	    }
+	  } // for (auto e = pextents.begin(); e != pextents.end(); e++) {
+
+	  if (b->get_blob().is_shared()) {
+            b->dirty_blob().clear_flag(bluestore_blob_t::FLAG_SHARED);
+
+	    auto sb_it = sb_info.find(b->shared_blob->get_sbid());
+	    ceph_assert(sb_it != sb_info.end());
+	    sb_info_t& sbi = sb_it->second;
+
+	    for (auto& r : sbi.ref_map.ref_map) {
+	      expected_statfs->allocated -= r.second.length;
+	      if (sbi.compressed) {
+		// NB: it's crucial to use compressed flag from sb_info_t
+		// as we originally used that value while accumulating 
+		// expected_statfs
+		expected_statfs->data_compressed_allocated -= r.second.length;
+	      }
+	    }
+	    sbi.updated = sbi.passed = true;
+	    sbi.ref_map.clear();
+	    
+	    // relying on blob's pextents to decide what to release.
+	    for (auto& p : pext_to_release) {
+	      to_release.union_insert(p.offset, p.length);
+	    }
+	  } else {
+	    for (auto& p : pext_to_release) {
+	      expected_statfs->allocated -= p.length;
+	      if (compressed) {
+		expected_statfs->data_compressed_allocated -= p.length;
+	      }
+	      to_release.union_insert(p.offset, p.length);
+	    }
+	  }
+	  if (bypass_rest) {
+	    break;
+	  }
+	} // for(auto b : blobs) 
+	if (need_onode_update) {
+	  o->extent_map.dirty_range(0, OBJECT_MAX_SIZE);
+	  _record_onode(o, txn);
+	}
+      } // for (it->lower_bound(string()); it->valid(); it->next())
+
+      for (auto it = to_release.begin(); it != to_release.end(); ++it) {
+	dout(10) << __func__ << " release 0x" << std::hex << it.get_start()
+		 << "~" << it.get_len() << std::dec << dendl;
+	fm->release(it.get_start(), it.get_len(), txn);
+      }
+      alloc->release(to_release);
+      to_release.clear();
+    } // if (it) {
+  } //if (repair && repairer.preprocess_misreference()) {
+
+  for (auto &p : sb_info) {
+    sb_info_t& sbi = p.second;
+    if (!sbi.passed) {
+      derr << "fsck error: missing " << *sbi.sb << dendl;
+      ++errors;
+    }
+    if (repair && (!sbi.passed || sbi.updated)) {
+      auto sbid = p.first;
+      if (sbi.ref_map.empty()) {
+	ceph_assert(sbi.passed);
+	dout(20) << __func__ << " " << *sbi.sb
+		 << " is empty, removing" << dendl;
+	repairer.fix_shared_blob(db, sbid, nullptr);
+      } else {
+	bufferlist bl;
+	bluestore_shared_blob_t persistent(sbid, std::move(sbi.ref_map));
+	encode(persistent, bl);
+	dout(20) << __func__ << " " << *sbi.sb
+		 << " is " << bl.length() << " bytes, updating" << dendl;
+
+	repairer.fix_shared_blob(db, sbid, &bl);
       }
     }
   }
-  for (auto &p : sb_info) {
-    derr << __func__ << " error: shared_blob 0x" << p.first
-	 << " key is missing (" << *p.second.sb << ")" << dendl;
-    ++errors;
+  sb_info.clear();
+
+  // check global stats if no-pps is enforced only
+  if (!need_per_pool_stats) {
+    if (!(actual_statfs == expected_store_statfs)) {
+      derr << "fsck error: actual " << actual_statfs
+	   << " != expected " << expected_store_statfs << dendl;
+      if (repair) {
+	repairer.fix_statfs(db, BLUESTORE_GLOBAL_STATFS_KEY,
+	  expected_store_statfs);
+      }
+      ++errors;
+    }
   }
-  if (!(actual_statfs == expected_statfs)) {
-    derr << __func__ << " error: actual " << actual_statfs
-	 << " != expected " << expected_statfs << dendl;
-    ++errors;
+  if (!enforce_no_per_pool_stats) {
+    dout(1) << __func__ << " checking pool_statfs" << dendl;
+    _fsck_check_pool_statfs(expected_pool_statfs, need_per_pool_stats,
+      errors, repair ? &repairer : nullptr);
   }
 
   dout(1) << __func__ << " checking for stray omap data" << dendl;
@@ -5835,7 +7559,19 @@ int BlueStore::fsck(bool deep)
       uint64_t omap_head;
       _key_decode_u64(it->key().c_str(), &omap_head);
       if (used_omap_head.count(omap_head) == 0) {
-	derr << __func__ << " error: found stray omap data on omap_head "
+	derr << "fsck error: found stray omap data on omap_head "
+	     << omap_head << dendl;
+	++errors;
+      }
+    }
+  }
+  it = db->get_iterator(PREFIX_PGMETA_OMAP);
+  if (it) {
+    for (it->lower_bound(string()); it->valid(); it->next()) {
+      uint64_t omap_head;
+      _key_decode_u64(it->key().c_str(), &omap_head);
+      if (used_pgmeta_omap_head.count(omap_head) == 0) {
+	derr << "fsck error: found stray omap data on omap_head "
 	     << omap_head << dendl;
 	++errors;
       }
@@ -5847,23 +7583,29 @@ int BlueStore::fsck(bool deep)
   if (it) {
     for (it->lower_bound(string()); it->valid(); it->next()) {
       bufferlist bl = it->value();
-      bufferlist::iterator p = bl.begin();
+      auto p = bl.cbegin();
       bluestore_deferred_transaction_t wt;
       try {
-	::decode(wt, p);
+	decode(wt, p);
       } catch (buffer::error& e) {
-	derr << __func__ << " error: failed to decode deferred txn "
+	derr << "fsck error: failed to decode deferred txn "
 	     << pretty_binary_string(it->key()) << dendl;
-	r = -EIO;
-        goto out_scan;
+	if (repair) {
+          dout(20) << __func__ << " undecodable deferred TXN record, key: '"
+		   << pretty_binary_string(it->key())
+		   << "', removing" << dendl;	
+	  repairer.remove_key(db, PREFIX_DEFERRED, it->key());
+	}
+	continue;
       }
       dout(20) << __func__ << "  deferred " << wt.seq
 	       << " ops " << wt.ops.size()
 	       << " released 0x" << std::hex << wt.released << std::dec << dendl;
       for (auto e = wt.released.begin(); e != wt.released.end(); ++e) {
         apply(
-          e.get_start(), e.get_len(), block_size, used_blocks, "deferred",
+          e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
           [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	ceph_assert(pos < bs.size());
             bs.set(pos);
           }
         );
@@ -5877,53 +7619,94 @@ int BlueStore::fsck(bool deep)
     // know they are allocated.
     for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
       apply(
-        e.get_start(), e.get_len(), block_size, used_blocks, "bluefs_extents",
+        e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	  ceph_assert(pos < bs.size());
 	  bs.reset(pos);
         }
       );
     }
     fm->enumerate_reset();
     uint64_t offset, length;
-    while (fm->enumerate_next(&offset, &length)) {
+    while (fm->enumerate_next(db, &offset, &length)) {
       bool intersects = false;
       apply(
-        offset, length, block_size, used_blocks, "free",
+        offset, length, fm->get_alloc_size(), used_blocks,
         [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	  ceph_assert(pos < bs.size());
           if (bs.test(pos)) {
-            intersects = true;
+	    if (offset == SUPER_RESERVED &&
+	        length == min_alloc_size - SUPER_RESERVED) {
+	      // this is due to the change just after luminous to min_alloc_size
+	      // granularity allocations, and our baked in assumption at the top
+	      // of _fsck that 0~round_up_to(SUPER_RESERVED,min_alloc_size) is used
+	      // (vs luminous's round_up_to(SUPER_RESERVED,block_size)).  harmless,
+	      // since we will never allocate this region below min_alloc_size.
+	      dout(10) << __func__ << " ignoring free extent between SUPER_RESERVED"
+		       << " and min_alloc_size, 0x" << std::hex << offset << "~"
+		       << length << std::dec << dendl;
+	    } else {
+              intersects = true;
+	      if (repair) {
+		repairer.fix_false_free(db, fm,
+					pos * min_alloc_size,
+					min_alloc_size);
+	      }
+	    }
           } else {
 	    bs.set(pos);
           }
         }
       );
       if (intersects) {
-	derr << __func__ << " error: free extent 0x" << std::hex << offset
-	     << "~" << length << std::dec
-	     << " intersects allocated blocks" << dendl;
+	derr << "fsck error: free extent 0x" << std::hex << offset
+	      << "~" << length << std::dec
+	      << " intersects allocated blocks" << dendl;
 	++errors;
       }
     }
+    fm->enumerate_reset();
     size_t count = used_blocks.count();
     if (used_blocks.size() != count) {
-      assert(used_blocks.size() > count);
-      derr << __func__ << " error: leaked some space;"
-	   << (used_blocks.size() - count) * min_alloc_size
-	   << " bytes leaked" << dendl;
-      ++errors;
+      ceph_assert(used_blocks.size() > count);
+      used_blocks.flip();
+      size_t start = used_blocks.find_first();
+      while (start != decltype(used_blocks)::npos) {
+	size_t cur = start;
+	while (true) {
+	  size_t next = used_blocks.find_next(cur);
+	  if (next != cur + 1) {
+	    ++errors;
+	    derr << "fsck error: leaked extent 0x" << std::hex
+		 << ((uint64_t)start * fm->get_alloc_size()) << "~"
+		 << ((cur + 1 - start) * fm->get_alloc_size()) << std::dec
+		 << dendl;
+	    if (repair) {
+	      repairer.fix_leaked(db,
+				  fm,
+				  start * min_alloc_size,
+				  (cur + 1 - start) * min_alloc_size);
+	    }
+	    start = next;
+	    break;
+	  }
+	  cur = next;
+	}
+      }
+      used_blocks.flip();
     }
   }
-
+  if (repair) {
+    dout(5) << __func__ << " applying repair results" << dendl;
+    repaired = repairer.apply(db);
+    dout(5) << __func__ << " repair applied" << dendl;
+  }
  out_scan:
   mempool_thread.shutdown();
   _flush_cache();
- out_alloc:
-  _close_alloc();
- out_fm:
-  _close_fm();
  out_db:
   it.reset();  // before db is closed
-  _close_db();
+  _close_db_and_around();
  out_bdev:
   _close_bdev();
  out_fsid:
@@ -5945,9 +7728,133 @@ int BlueStore::fsck(bool deep)
 	  << dendl;
 
   utime_t duration = ceph_clock_now() - start;
-  dout(1) << __func__ << " finish with " << errors << " errors in "
+  dout(1) << __func__ << " <<<FINISH>>> with " << errors << " errors, " << repaired
+	  << " repaired, " << (errors - (int)repaired) << " remaining in "
 	  << duration << " seconds" << dendl;
-  return errors;
+  return errors - (int)repaired;
+}
+
+/// methods to inject various errors fsck can repair
+void BlueStore::inject_broken_shared_blob_key(const string& key,
+				  const bufferlist& bl)
+{
+  KeyValueDB::Transaction txn;
+  txn = db->get_transaction();
+  txn->set(PREFIX_SHARED_BLOB, key, bl);
+  db->submit_transaction_sync(txn);
+};
+
+void BlueStore::inject_leaked(uint64_t len)
+{
+  KeyValueDB::Transaction txn;
+  txn = db->get_transaction();
+
+  PExtentVector exts;
+  int64_t alloc_len = alloc->allocate(len, min_alloc_size,
+					   min_alloc_size * 256, 0, &exts);
+  ceph_assert(alloc_len >= (int64_t)len);
+  for (auto& p : exts) {
+    fm->allocate(p.offset, p.length, txn);
+  }
+  db->submit_transaction_sync(txn);
+}
+
+void BlueStore::inject_false_free(coll_t cid, ghobject_t oid)
+{
+  KeyValueDB::Transaction txn;
+  OnodeRef o;
+  CollectionRef c = _get_collection(cid);
+  ceph_assert(c);
+  {
+    RWLock::WLocker l(c->lock); // just to avoid internal asserts
+    o = c->get_onode(oid, false);
+    ceph_assert(o);
+    o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+  }
+
+  bool injected = false;
+  txn = db->get_transaction();
+  auto& em = o->extent_map.extent_map;
+  std::vector<const PExtentVector*> v;
+  if (em.size()) {
+    v.push_back(&em.begin()->blob->get_blob().get_extents());
+  }
+  if (em.size() > 1) {
+    auto it = em.end();
+    --it;
+    v.push_back(&(it->blob->get_blob().get_extents()));
+  }
+  for (auto pext : v) {
+    if (pext->size()) {
+      auto p = pext->begin();
+      while (p != pext->end()) {
+	if (p->is_valid()) {
+	  dout(20) << __func__ << " release 0x" << std::hex << p->offset
+	           << "~" << p->length << std::dec << dendl;
+	  fm->release(p->offset, p->length, txn);
+	  injected = true;
+	  break;
+	}
+	++p;
+      }
+    }
+  }
+  ceph_assert(injected);
+  db->submit_transaction_sync(txn);
+}
+
+void BlueStore::inject_statfs(const string& key, const store_statfs_t& new_statfs)
+{
+  BlueStoreRepairer repairer;
+  repairer.fix_statfs(db, key, new_statfs);
+  repairer.apply(db);
+}
+
+void BlueStore::inject_misreference(coll_t cid1, ghobject_t oid1,
+				    coll_t cid2, ghobject_t oid2,
+				    uint64_t offset)
+{
+  OnodeRef o1;
+  CollectionRef c1 = _get_collection(cid1);
+  ceph_assert(c1);
+  {
+    RWLock::WLocker l(c1->lock); // just to avoid internal asserts
+    o1 = c1->get_onode(oid1, false);
+    ceph_assert(o1);
+    o1->extent_map.fault_range(db, offset, OBJECT_MAX_SIZE);
+  }
+  OnodeRef o2;
+  CollectionRef c2 = _get_collection(cid2);
+  ceph_assert(c2);
+  {
+    RWLock::WLocker l(c2->lock); // just to avoid internal asserts
+    o2 = c2->get_onode(oid2, false);
+    ceph_assert(o2);
+    o2->extent_map.fault_range(db, offset, OBJECT_MAX_SIZE);
+  }
+  Extent& e1 = *(o1->extent_map.seek_lextent(offset));
+  Extent& e2 = *(o2->extent_map.seek_lextent(offset));
+
+  // require onode/extent layout to be the same (and simple)
+  // to make things easier
+  ceph_assert(o1->onode.extent_map_shards.empty());
+  ceph_assert(o2->onode.extent_map_shards.empty());
+  ceph_assert(o1->extent_map.spanning_blob_map.size() == 0);
+  ceph_assert(o2->extent_map.spanning_blob_map.size() == 0);
+  ceph_assert(e1.logical_offset == e2.logical_offset);
+  ceph_assert(e1.length == e2.length);
+  ceph_assert(e1.blob_offset == e2.blob_offset);
+
+  KeyValueDB::Transaction txn;
+  txn = db->get_transaction();
+
+  // along with misreference error this will create space leaks errors
+  e2.blob->dirty_blob() = e1.blob->get_blob();
+  o2->extent_map.dirty_range(offset, e2.length);
+  o2->extent_map.update(txn, false);
+
+  _record_onode(o2, txn);
+  db->submit_transaction_sync(txn);
 }
 
 void BlueStore::collect_metadata(map<string,string> *pm)
@@ -5957,41 +7864,194 @@ void BlueStore::collect_metadata(map<string,string> *pm)
   if (bluefs) {
     (*pm)["bluefs"] = "1";
     (*pm)["bluefs_single_shared_device"] = stringify((int)bluefs_single_shared_device);
-    bluefs->collect_metadata(pm);
+    bluefs->collect_metadata(pm, bluefs_shared_bdev);
   } else {
     (*pm)["bluefs"] = "0";
   }
+
+  // report numa mapping for underlying devices
+  int node = -1;
+  set<int> nodes;
+  set<string> failed;
+  int r = get_numa_node(&node, &nodes, &failed);
+  if (r >= 0) {
+    if (!failed.empty()) {
+      (*pm)["objectstore_numa_unknown_devices"] = stringify(failed);
+    }
+    if (!nodes.empty()) {
+      dout(1) << __func__ << " devices span numa nodes " << nodes << dendl;
+      (*pm)["objectstore_numa_nodes"] = stringify(nodes);
+    }
+    if (node >= 0) {
+      (*pm)["objectstore_numa_node"] = stringify(node);
+    }
+  }
 }
 
-int BlueStore::statfs(struct store_statfs_t *buf)
+int BlueStore::get_numa_node(
+  int *final_node,
+  set<int> *out_nodes,
+  set<string> *out_failed)
+{
+  int node = -1;
+  set<string> devices;
+  get_devices(&devices);
+  set<int> nodes;
+  set<string> failed;
+  for (auto& devname : devices) {
+    int n;
+    BlkDev bdev(devname);
+    int r = bdev.get_numa_node(&n);
+    if (r < 0) {
+      dout(10) << __func__ << " bdev " << devname << " can't detect numa_node"
+	       << dendl;
+      failed.insert(devname);
+      continue;
+    }
+    dout(10) << __func__ << " bdev " << devname << " on numa_node " << n
+	     << dendl;
+    nodes.insert(n);
+    if (node < 0) {
+      node = n;
+    }
+  }
+  if (node >= 0 && nodes.size() == 1 && failed.empty()) {
+    *final_node = node;
+  }
+  if (out_nodes) {
+    *out_nodes = nodes;
+  }
+  if (out_failed) {
+    *out_failed = failed;
+  }
+  return 0;
+}
+
+int BlueStore::get_devices(set<string> *ls)
+{
+  if (bdev) {
+    bdev->get_devices(ls);
+    if (bluefs) {
+      bluefs->get_devices(ls);
+    }
+    return 0;
+  }
+  
+  // grumble, we haven't started up yet.
+  int r = _open_path();
+  if (r < 0)
+    goto out;
+  r = _open_fsid(false);
+  if (r < 0)
+    goto out_path;
+  r = _read_fsid(&fsid);
+  if (r < 0)
+    goto out_fsid;
+  r = _lock_fsid();
+  if (r < 0)
+    goto out_fsid;
+  r = _open_bdev(false);
+  if (r < 0)
+    goto out_fsid;
+  r = _minimal_open_bluefs(false);
+  if (r < 0)
+    goto out_bdev;
+  bdev->get_devices(ls);
+  if (bluefs) {
+    bluefs->get_devices(ls);
+  }
+  r = 0;
+  _minimal_close_bluefs();
+ out_bdev:
+  _close_bdev();
+ out_fsid:
+  _close_fsid();
+ out_path:
+  _close_path();
+ out:
+  return r;
+}
+
+void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
 {
   buf->reset();
-  buf->total = bdev->get_size();
-  buf->available = alloc->get_free();
+
+  buf->omap_allocated = db->estimate_prefix_size(PREFIX_OMAP);
+
+  uint64_t bfree = alloc->get_free();
 
   if (bluefs) {
-    // part of our shared device is "free" according to BlueFS
-    // Don't include bluestore_bluefs_min because that space can't
-    // be used for any other purpose.
-    buf->available += bluefs->get_free(bluefs_shared_bdev) - cct->_conf->bluestore_bluefs_min;
-
+    int64_t bluefs_total = bluefs->get_total(bluefs_shared_bdev);
+    int64_t bluefs_free = bluefs->get_free(bluefs_shared_bdev);
+    // part of our shared device is "free" according to BlueFS, but we
+    // can't touch bluestore_bluefs_min of it.
+    int64_t shared_available = std::min(
+      bluefs_free,
+      int64_t(bluefs_total - cct->_conf->bluestore_bluefs_min));
+    buf->internally_reserved = bluefs_total - shared_available;
+    if (shared_available > 0) {
+      bfree += shared_available;
+    }
     // include dedicated db, too, if that isn't the shared device.
     if (bluefs_shared_bdev != BlueFS::BDEV_DB) {
       buf->total += bluefs->get_total(BlueFS::BDEV_DB);
     }
+    // call any non-omap bluefs space "internal metadata"
+    buf->internal_metadata =
+      std::max(bluefs->get_used(), (uint64_t)cct->_conf->bluestore_bluefs_min)
+      - buf->omap_allocated;
   }
+
+  uint64_t thin_total, thin_avail;
+  if (bdev->get_thin_utilization(&thin_total, &thin_avail)) {
+    buf->total += thin_total;
+
+    // we are limited by both the size of the virtual device and the
+    // underlying physical device.
+    bfree = std::min(bfree, thin_avail);
+
+    buf->allocated = thin_total - thin_avail;
+  } else {
+    buf->total += bdev->get_size();
+  }
+  buf->available = bfree;
+}
+
+int BlueStore::statfs(struct store_statfs_t *buf,
+		      osd_alert_list_t* alerts)
+{
+  if (alerts) {
+    alerts->clear();
+    _log_alerts(*alerts);
+  }
+  _get_statfs_overall(buf);
+  {
+    std::lock_guard l(vstatfs_lock);
+    buf->allocated = vstatfs.allocated();
+    buf->data_stored = vstatfs.stored();
+    buf->data_compressed = vstatfs.compressed();
+    buf->data_compressed_original = vstatfs.compressed_original();
+    buf->data_compressed_allocated = vstatfs.compressed_allocated();
+  }
+
+  dout(20) << __func__ << " " << *buf << dendl;
+  return 0;
+}
+
+int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
+{
+  dout(20) << __func__ << " pool " << pool_id<< dendl;
+  if (!per_pool_stat_collection) {
+    dout(20) << __func__ << " not supported in legacy mode " << dendl;
+    return -ENOTSUP;
+  }
+  buf->reset();
 
   {
-    std::lock_guard<std::mutex> l(vstatfs_lock);
-    
-    buf->allocated = vstatfs.allocated();
-    buf->stored = vstatfs.stored();
-    buf->compressed = vstatfs.compressed();
-    buf->compressed_original = vstatfs.compressed_original();
-    buf->compressed_allocated = vstatfs.compressed_allocated();
+    std::lock_guard l(vstatfs_lock);
+    osd_pools[pool_id].publish(buf);
   }
-
-  dout(20) << __func__ << *buf << dendl;
+  dout(10) << __func__ << *buf << dendl;
   return 0;
 }
 
@@ -6010,43 +8070,48 @@ BlueStore::CollectionRef BlueStore::_get_collection(const coll_t& cid)
 void BlueStore::_queue_reap_collection(CollectionRef& c)
 {
   dout(10) << __func__ << " " << c << " " << c->cid << dendl;
-  std::lock_guard<std::mutex> l(reap_lock);
+  // _reap_collections and this in the same thread,
+  // so no need a lock.
   removed_collections.push_back(c);
 }
 
 void BlueStore::_reap_collections()
 {
+
   list<CollectionRef> removed_colls;
   {
-    std::lock_guard<std::mutex> l(reap_lock);
-    removed_colls.swap(removed_collections);
+    // _queue_reap_collection and this in the same thread.
+    // So no need a lock.
+    if (!removed_collections.empty())
+      removed_colls.swap(removed_collections);
+    else
+      return;
   }
 
-  bool all_reaped = true;
-
-  for (list<CollectionRef>::iterator p = removed_colls.begin();
-       p != removed_colls.end();
-       ++p) {
+  list<CollectionRef>::iterator p = removed_colls.begin();
+  while (p != removed_colls.end()) {
     CollectionRef c = *p;
     dout(10) << __func__ << " " << c << " " << c->cid << dendl;
     if (c->onode_map.map_any([&](OnodeRef o) {
-	  assert(!o->exists);
+	  ceph_assert(!o->exists);
 	  if (o->flushing_count.load()) {
 	    dout(10) << __func__ << " " << c << " " << c->cid << " " << o->oid
 		     << " flush_txns " << o->flushing_count << dendl;
-	    return false;
+	    return true;
 	  }
-	  return true;
+	  return false;
 	})) {
-      all_reaped = false;
+      ++p;
       continue;
     }
     c->onode_map.clear();
+    p = removed_colls.erase(p);
     dout(10) << __func__ << " " << c << " " << c->cid << " done" << dendl;
   }
-
-  if (all_reaped) {
+  if (removed_colls.empty()) {
     dout(10) << __func__ << " all reaped" << dendl;
+  } else {
+    removed_collections.splice(removed_collections.begin(), removed_colls);
   }
 }
 
@@ -6076,13 +8141,33 @@ ObjectStore::CollectionHandle BlueStore::open_collection(const coll_t& cid)
   return _get_collection(cid);
 }
 
-bool BlueStore::exists(const coll_t& cid, const ghobject_t& oid)
+ObjectStore::CollectionHandle BlueStore::create_new_collection(
+  const coll_t& cid)
 {
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return false;
-  return exists(c, oid);
+  RWLock::WLocker l(coll_lock);
+  Collection *c = new Collection(
+    this,
+    cache_shards[cid.hash_to_shard(cache_shards.size())],
+    cid);
+  new_coll_map[cid] = c;
+  _osr_attach(c);
+  return c;
 }
+
+void BlueStore::set_collection_commit_queue(
+    const coll_t& cid,
+    ContextQueue *commit_queue)
+{
+  if (commit_queue) {
+    RWLock::RLocker l(coll_lock);
+    if (coll_map.count(cid)) {
+      coll_map[cid]->commit_queue = commit_queue;
+    } else if (new_coll_map.count(cid)) {
+      new_coll_map[cid]->commit_queue = commit_queue;
+    }
+  }
+}
+
 
 bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
 {
@@ -6101,18 +8186,6 @@ bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
   }
 
   return r;
-}
-
-int BlueStore::stat(
-    const coll_t& cid,
-    const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio)
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return stat(c, oid, st, allow_eio);
 }
 
 int BlueStore::stat(
@@ -6145,14 +8218,11 @@ int BlueStore::stat(
   return r;
 }
 int BlueStore::set_collection_opts(
-  const coll_t& cid,
+  CollectionHandle& ch,
   const pool_opts_t& opts)
 {
-  CollectionHandle ch = _get_collection(cid);
-  if (!ch)
-    return -ENOENT;
   Collection *c = static_cast<Collection *>(ch.get());
-  dout(15) << __func__ << " " << cid << " options " << opts << dendl;
+  dout(15) << __func__ << " " << ch->cid << " options " << opts << dendl;
   if (!c->exists)
     return -ENOENT;
   RWLock::WLocker l(c->lock);
@@ -6161,30 +8231,14 @@ int BlueStore::set_collection_opts(
 }
 
 int BlueStore::read(
-  const coll_t& cid,
-  const ghobject_t& oid,
-  uint64_t offset,
-  size_t length,
-  bufferlist& bl,
-  uint32_t op_flags,
-  bool allow_eio)
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return read(c, oid, offset, length, bl, op_flags, allow_eio);
-}
-
-int BlueStore::read(
   CollectionHandle &c_,
   const ghobject_t& oid,
   uint64_t offset,
   size_t length,
   bufferlist& bl,
-  uint32_t op_flags,
-  bool allow_eio)
+  uint32_t op_flags)
 {
-  utime_t start = ceph_clock_now();
+  auto start = mono_clock::now();
   Collection *c = static_cast<Collection *>(c_.get());
   const coll_t &cid = c->get_cid();
   dout(15) << __func__ << " " << cid << " " << oid
@@ -6197,9 +8251,9 @@ int BlueStore::read(
   int r;
   {
     RWLock::RLocker l(c->lock);
-    utime_t start1 = ceph_clock_now();
+    auto start1 = mono_clock::now();
     OnodeRef o = c->get_onode(oid, false);
-    logger->tinc(l_bluestore_read_onode_meta_lat, ceph_clock_now() - start1);
+    logger->tinc(l_bluestore_read_onode_meta_lat, mono_clock::now() - start1);
     if (!o || !o->exists) {
       r = -ENOENT;
       goto out;
@@ -6209,18 +8263,26 @@ int BlueStore::read(
       length = o->onode.size;
 
     r = _do_read(c, o, offset, length, bl, op_flags);
+    if (r == -EIO) {
+      logger->inc(l_bluestore_read_eio);
+    }
   }
 
  out:
-  assert(allow_eio || r != -EIO);
-  if (r == 0 && _debug_data_eio(oid)) {
+  if (r >= 0 && _debug_data_eio(oid)) {
     r = -EIO;
     derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
+  } else if (oid.hobj.pool > 0 &&  /* FIXME, see #23029 */
+	     cct->_conf->bluestore_debug_random_read_err &&
+	     (rand() % (int)(cct->_conf->bluestore_debug_random_read_err *
+			     100.0)) == 0) {
+    dout(0) << __func__ << ": inject random EIO" << dendl;
+    r = -EIO;
   }
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
-  logger->tinc(l_bluestore_read_lat, ceph_clock_now() - start);
+  logger->tinc(l_bluestore_read_lat, mono_clock::now() - start);
   return r;
 }
 
@@ -6230,20 +8292,20 @@ struct region_t {
   uint64_t logical_offset;
   uint64_t blob_xoffset;   //region offset within the blob
   uint64_t length;
-  bufferlist bl;
 
   // used later in read process
   uint64_t front = 0;
-  uint64_t r_off = 0;
 
-  region_t(uint64_t offset, uint64_t b_offs, uint64_t len)
+  region_t(uint64_t offset, uint64_t b_offs, uint64_t len, uint64_t front = 0)
     : logical_offset(offset),
     blob_xoffset(b_offs),
-    length(len){}
+    length(len),
+    front(front){}
   region_t(const region_t& from)
     : logical_offset(from.logical_offset),
     blob_xoffset(from.blob_xoffset),
-    length(from.length){}
+    length(from.length),
+    front(from.front){}
 
   friend ostream& operator<<(ostream& out, const region_t& r) {
     return out << "0x" << std::hex << r.logical_offset << ":"
@@ -6251,7 +8313,24 @@ struct region_t {
   }
 };
 
-typedef list<region_t> regions2read_t;
+// merged blob read request
+struct read_req_t {
+  uint64_t r_off = 0;
+  uint64_t r_len = 0;
+  bufferlist bl;
+  std::list<region_t> regs; // original read regions
+
+  read_req_t(uint64_t off, uint64_t len) : r_off(off), r_len(len) {}
+
+  friend ostream& operator<<(ostream& out, const read_req_t& r) {
+    out << "{<0x" << std::hex << r.r_off << ", 0x" << r.r_len << "> : [";
+    for (const auto& reg : r.regs)
+      out << reg;
+    return out << "]}" << std::dec;
+  }
+};
+
+typedef list<read_req_t> regions2read_t;
 typedef map<BlueStore::BlobRef, regions2read_t> blobs2read_t;
 
 int BlueStore::_do_read(
@@ -6260,10 +8339,12 @@ int BlueStore::_do_read(
   uint64_t offset,
   size_t length,
   bufferlist& bl,
-  uint32_t op_flags)
+  uint32_t op_flags,
+  uint64_t retry_count)
 {
-  FUNCTRACE();
+  FUNCTRACE(cct);
   int r = 0;
+  int read_cache_policy = 0; // do not bypass clean or dirty cache
 
   dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
            << " size 0x" << o->onode.size << " (" << std::dec
@@ -6291,12 +8372,19 @@ int BlueStore::_do_read(
     length = o->onode.size - offset;
   }
 
-  utime_t start = ceph_clock_now();
+  auto start = mono_clock::now();
   o->extent_map.fault_range(db, offset, length);
-  logger->tinc(l_bluestore_read_onode_meta_lat, ceph_clock_now() - start);
+  logger->tinc(l_bluestore_read_onode_meta_lat, mono_clock::now() - start);
   _dump_onode(o);
 
   ready_regions_t ready_regions;
+
+  // for deep-scrub, we only read dirty cache and bypass clean cache in
+  // order to read underlying block device in case there are silent disk errors.
+  if (op_flags & CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE) {
+    dout(20) << __func__ << " will bypass cache and do direct read" << dendl;
+    read_cache_policy = BufferSpace::BYPASS_CLEAN_CACHE;
+  }
 
   // build blob-wise list to of stuff read (that isn't cached)
   blobs2read_t blobs2read;
@@ -6315,7 +8403,7 @@ int BlueStore::_do_read(
       pos += hole;
       left -= hole;
     }
-    BlobRef bptr = lp->blob;
+    BlobRef& bptr = lp->blob;
     unsigned l_off = pos - lp->logical_offset;
     unsigned b_off = l_off + lp->blob_offset;
     unsigned b_len = std::min(left, lp->length - l_off);
@@ -6323,13 +8411,15 @@ int BlueStore::_do_read(
     ready_regions_t cache_res;
     interval_set<uint32_t> cache_interval;
     bptr->shared_blob->bc.read(
-      bptr->shared_blob->get_cache(), b_off, b_len, cache_res, cache_interval);
+      bptr->shared_blob->get_cache(), b_off, b_len, cache_res, cache_interval,
+      read_cache_policy);
     dout(20) << __func__ << "  blob " << *bptr << std::hex
 	     << " need 0x" << b_off << "~" << b_len
 	     << " cache has 0x" << cache_interval
 	     << std::dec << dendl;
 
     auto pc = cache_res.begin();
+    uint64_t chunk_size = bptr->get_blob().get_chunk_size(block_size);
     while (b_len > 0) {
       unsigned l;
       if (pc != cache_res.end() &&
@@ -6342,12 +8432,41 @@ int BlueStore::_do_read(
       } else {
 	l = b_len;
 	if (pc != cache_res.end()) {
-	  assert(pc->first > b_off);
+	  ceph_assert(pc->first > b_off);
 	  l = pc->first - b_off;
 	}
 	dout(30) << __func__ << "    will read 0x" << std::hex << pos << ": 0x"
 		 << b_off << "~" << l << std::dec << dendl;
-	blobs2read[bptr].emplace_back(region_t(pos, b_off, l));
+	// merge regions
+	{
+	  uint64_t r_off = b_off;
+	  uint64_t r_len = l;
+	  uint64_t front = r_off % chunk_size;
+	  if (front) {
+	    r_off -= front;
+	    r_len += front;
+	  }
+	  unsigned tail = r_len % chunk_size;
+	  if (tail) {
+	    r_len += chunk_size - tail;
+	  }
+	  bool merged = false;
+	  regions2read_t& r2r = blobs2read[bptr];
+	  if (r2r.size()) {
+	    read_req_t& pre = r2r.back();
+	    if (r_off <= (pre.r_off + pre.r_len)) {
+	      front += (r_off - pre.r_off);
+	      pre.r_len += (r_off + r_len - pre.r_off - pre.r_len);
+	      pre.regs.emplace_back(region_t(pos, b_off, l, front));
+	      merged = true;
+	    }
+	  } 
+	  if (!merged) {
+	    read_req_t req(r_off, r_len);
+	    req.regs.emplace_back(region_t(pos, b_off, l, front));
+	    r2r.emplace_back(std::move(req));
+	  }
+	}
 	++num_regions;
       }
       pos += l;
@@ -6359,15 +8478,16 @@ int BlueStore::_do_read(
   }
 
   // read raw blob data.  use aio if we have >1 blobs to read.
-  start = ceph_clock_now(); // for the sake of simplicity 
-                                    // measure the whole block below.
-                                    // The error isn't that much...
+  start = mono_clock::now(); // for the sake of simplicity
+                             // measure the whole block below.
+                             // The error isn't that much...
   vector<bufferlist> compressed_blob_bls;
-  IOContext ioc(cct, NULL);
+  IOContext ioc(cct, NULL, true); // allow EIO
   for (auto& p : blobs2read) {
-    BlobRef bptr = p.first;
+    const BlobRef& bptr = p.first;
+    regions2read_t& r2r = p.second;
     dout(20) << __func__ << "  blob " << *bptr << std::hex
-	     << " need " << p.second << std::dec << dendl;
+	     << " need " << r2r << std::dec << dendl;
     if (bptr->get_blob().is_compressed()) {
       // read the whole thing
       if (compressed_blob_bls.empty()) {
@@ -6381,7 +8501,7 @@ int BlueStore::_do_read(
 	[&](uint64_t offset, uint64_t length) {
 	  int r;
 	  // use aio if there are more regions to read than those in this blob
-	  if (num_regions > p.second.size()) {
+	  if (num_regions > r2r.size()) {
 	    r = bdev->aio_read(offset, length, &bl, &ioc);
 	  } else {
 	    r = bdev->read(offset, length, &bl, &ioc, false);
@@ -6390,46 +8510,49 @@ int BlueStore::_do_read(
             return r;
           return 0;
 	});
-        assert(r == 0);
+      if (r < 0) {
+        derr << __func__ << " bdev-read failed: " << cpp_strerror(r) << dendl;
+        if (r == -EIO) {
+          // propagate EIO to caller
+          return r;
+        }
+        ceph_assert(r == 0);
+      }
     } else {
       // read the pieces
-      for (auto& reg : p.second) {
-	// determine how much of the blob to read
-	uint64_t chunk_size = bptr->get_blob().get_chunk_size(block_size);
-	reg.r_off = reg.blob_xoffset;
-	uint64_t r_len = reg.length;
-	reg.front = reg.r_off % chunk_size;
-	if (reg.front) {
-	  reg.r_off -= reg.front;
-	  r_len += reg.front;
-	}
-	unsigned tail = r_len % chunk_size;
-	if (tail) {
-	  r_len += chunk_size - tail;
-	}
+      for (auto& req : r2r) {
 	dout(20) << __func__ << "    region 0x" << std::hex
-		 << reg.logical_offset
-		 << ": 0x" << reg.blob_xoffset << "~" << reg.length
-		 << " reading 0x" << reg.r_off << "~" << r_len << std::dec
+		 << req.regs.front().logical_offset
+		 << ": 0x" << req.regs.front().blob_xoffset
+		 << " reading 0x" << req.r_off
+		 << "~" << req.r_len << std::dec
 		 << dendl;
 
 	// read it
 	r = bptr->get_blob().map(
-	  reg.r_off, r_len,
+	  req.r_off, req.r_len,
 	  [&](uint64_t offset, uint64_t length) {
 	    int r;
 	    // use aio if there is more than one region to read
 	    if (num_regions > 1) {
-	      r = bdev->aio_read(offset, length, &reg.bl, &ioc);
+	      r = bdev->aio_read(offset, length, &req.bl, &ioc);
 	    } else {
-	      r = bdev->read(offset, length, &reg.bl, &ioc, false);
+	      r = bdev->read(offset, length, &req.bl, &ioc, false);
 	    }
 	    if (r < 0)
               return r;
             return 0;
 	  });
-	assert(r == 0);
-	assert(reg.bl.length() == r_len);
+        if (r < 0) {
+          derr << __func__ << " bdev-read failed: " << cpp_strerror(r)
+               << dendl;
+          if (r == -EIO) {
+            // propagate EIO to caller
+            return r;
+          }
+          ceph_assert(r == 0);
+        }
+	ceph_assert(req.bl.length() == req.r_len);
       }
     }
   }
@@ -6437,22 +8560,36 @@ int BlueStore::_do_read(
     bdev->aio_submit(&ioc);
     dout(20) << __func__ << " waiting for aio" << dendl;
     ioc.aio_wait();
+    r = ioc.get_return_value();
+    if (r < 0) {
+      ceph_assert(r == -EIO); // no other errors allowed
+      return -EIO;
+    }
   }
-  logger->tinc(l_bluestore_read_wait_aio_lat, ceph_clock_now() - start);
+  logger->tinc(l_bluestore_read_wait_aio_lat, mono_clock::now() - start);
 
   // enumerate and decompress desired blobs
   auto p = compressed_blob_bls.begin();
   blobs2read_t::iterator b2r_it = blobs2read.begin();
   while (b2r_it != blobs2read.end()) {
-    BlobRef bptr = b2r_it->first;
+    const BlobRef& bptr = b2r_it->first;
+    regions2read_t& r2r = b2r_it->second;
     dout(20) << __func__ << "  blob " << *bptr << std::hex
-	     << " need 0x" << b2r_it->second << std::dec << dendl;
+	     << " need 0x" << r2r << std::dec << dendl;
     if (bptr->get_blob().is_compressed()) {
-      assert(p != compressed_blob_bls.end());
+      ceph_assert(p != compressed_blob_bls.end());
       bufferlist& compressed_bl = *p++;
       if (_verify_csum(o, &bptr->get_blob(), 0, compressed_bl,
-		       b2r_it->second.front().logical_offset) < 0) {
-	return -EIO;
+        	       r2r.front().regs.front().logical_offset) < 0) {
+        // Handles spurious read errors caused by a kernel bug.
+        // We sometimes get all-zero pages as a result of the read under
+        // high memory pressure. Retrying the failing read succeeds in most 
+        // cases.
+        // See also: http://tracker.ceph.com/issues/22464
+        if (retry_count >= cct->_conf->bluestore_retry_disk_reads) {
+          return -EIO;
+        }
+        return _do_read(c, o, offset, length, bl, op_flags, retry_count + 1);
       }
       bufferlist raw_bl;
       r = _decompress(compressed_bl, &raw_bl);
@@ -6462,24 +8599,35 @@ int BlueStore::_do_read(
 	bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(), 0,
 				       raw_bl);
       }
-      for (auto& i : b2r_it->second) {
-	ready_regions[i.logical_offset].substr_of(
-	  raw_bl, i.blob_xoffset, i.length);
+      for (auto& req : r2r) {
+        for (auto& r : req.regs) {
+          ready_regions[r.logical_offset].substr_of(
+            raw_bl, r.blob_xoffset, r.length);
+        }
       }
     } else {
-      for (auto& reg : b2r_it->second) {
-	if (_verify_csum(o, &bptr->get_blob(), reg.r_off, reg.bl,
-			 reg.logical_offset) < 0) {
-	  return -EIO;
+      for (auto& req : r2r) {
+	if (_verify_csum(o, &bptr->get_blob(), req.r_off, req.bl,
+			 req.regs.front().logical_offset) < 0) {
+          // Handles spurious read errors caused by a kernel bug.
+          // We sometimes get all-zero pages as a result of the read under
+          // high memory pressure. Retrying the failing read succeeds in most
+          // cases.
+          // See also: http://tracker.ceph.com/issues/22464
+          if (retry_count >= cct->_conf->bluestore_retry_disk_reads) {
+            return -EIO;
+          }
+          return _do_read(c, o, offset, length, bl, op_flags, retry_count + 1);
 	}
 	if (buffered) {
 	  bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(),
-					 reg.r_off, reg.bl);
+					 req.r_off, req.bl);
 	}
 
 	// prune and keep result
-	ready_regions[reg.logical_offset].substr_of(
-	  reg.bl, reg.front, reg.length);
+	for (const auto& r : req.regs) {
+	  ready_regions[r.logical_offset].substr_of(req.bl, r.front, r.length);
+        }
       }
     }
     ++b2r_it;
@@ -6500,7 +8648,7 @@ int BlueStore::_do_read(
     } else {
       uint64_t l = length - pos;
       if (pr != pr_end) {
-        assert(pr->first > pos + offset);
+        ceph_assert(pr->first > pos + offset);
 	l = pr->first - (pos + offset);
       }
       dout(30) << __func__ << " assemble 0x" << std::hex << pos
@@ -6510,10 +8658,15 @@ int BlueStore::_do_read(
       pos += l;
     }
   }
-  assert(bl.length() == length);
-  assert(pos == length);
-  assert(pr == pr_end);
+  ceph_assert(bl.length() == length);
+  ceph_assert(pos == length);
+  ceph_assert(pr == pr_end);
   r = bl.length();
+  if (retry_count) {
+    logger->inc(l_bluestore_reads_with_retries);
+    dout(5) << __func__ << " read at 0x" << std::hex << offset << "~" << length
+            << " failed " << std::dec << retry_count << " times before succeeding" << dendl;
+  }
   return r;
 }
 
@@ -6524,8 +8677,15 @@ int BlueStore::_verify_csum(OnodeRef& o,
 {
   int bad;
   uint64_t bad_csum;
-  utime_t start = ceph_clock_now();
+  auto start = mono_clock::now();
   int r = blob->verify_csum(blob_xoffset, bl, &bad, &bad_csum);
+  if (cct->_conf->bluestore_debug_inject_csum_err_probability > 0 &&
+      (rand() % 10000) < cct->_conf->bluestore_debug_inject_csum_err_probability * 10000.0) {
+    derr << __func__ << " injecting bluestore checksum verifcation error" << dendl;
+    bad = blob_xoffset;
+    r = -1;
+    bad_csum = 0xDEADBEEF;
+  }
   if (r < 0) {
     if (r == -1) {
       PExtentVector pex;
@@ -6552,17 +8712,20 @@ int BlueStore::_verify_csum(OnodeRef& o,
       derr << __func__ << " failed with exit code: " << cpp_strerror(r) << dendl;
     }
   }
-  logger->tinc(l_bluestore_csum_lat, ceph_clock_now() - start);
+  logger->tinc(l_bluestore_csum_lat, mono_clock::now() - start);
+  if (cct->_conf->bluestore_ignore_data_csum) {
+    return 0;
+  }
   return r;
 }
 
 int BlueStore::_decompress(bufferlist& source, bufferlist* result)
 {
   int r = 0;
-  utime_t start = ceph_clock_now();
-  bufferlist::iterator i = source.begin();
+  auto start = mono_clock::now();
+  auto i = source.cbegin();
   bluestore_compression_header_t chdr;
-  ::decode(chdr, i);
+  decode(chdr, i);
   int alg = int(chdr.type);
   CompressorRef cp = compressor;
   if (!cp || (int)cp->get_type() != alg) {
@@ -6572,7 +8735,10 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
   if (!cp.get()) {
     // if compressor isn't available - error, because cannot return
     // decompressed data?
-    derr << __func__ << " can't load decompressor " << alg << dendl;
+    
+    const char* alg_name = Compressor::get_comp_alg_name(alg);
+    derr << __func__ << " can't load decompressor " << alg_name << dendl;
+    _set_compression_alert(false, alg_name);
     r = -EIO;
   } else {
     r = cp->decompress(i, chdr.length, *result);
@@ -6581,7 +8747,7 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
       r = -EIO;
     }
   }
-  logger->tinc(l_bluestore_decompress_lat, ceph_clock_now() - start);
+  logger->tinc(l_bluestore_decompress_lat, mono_clock::now() - start);
   return r;
 }
 
@@ -6630,7 +8796,7 @@ int BlueStore::_fiemap(
       uint64_t x_len = length;
       if (ep != eend && ep->logical_offset <= offset) {
         uint64_t x_off = offset - ep->logical_offset;
-        x_len = MIN(x_len, ep->length - x_off);
+        x_len = std::min(x_len, ep->length - x_off);
         dout(30) << __func__ << " lextent 0x" << std::hex << offset << "~"
 	         << x_len << std::dec << " blob " << ep->blob << dendl;
         destset.insert(offset, x_len);
@@ -6657,19 +8823,6 @@ int BlueStore::_fiemap(
 }
 
 int BlueStore::fiemap(
-  const coll_t& cid,
-  const ghobject_t& oid,
-  uint64_t offset,
-  size_t len,
-  bufferlist& bl)
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return fiemap(c, oid, offset, len, bl);
-}
-
-int BlueStore::fiemap(
   CollectionHandle &c_,
   const ghobject_t& oid,
   uint64_t offset,
@@ -6679,22 +8832,9 @@ int BlueStore::fiemap(
   interval_set<uint64_t> m;
   int r = _fiemap(c_, oid, offset, length, m);
   if (r >= 0) {
-    ::encode(m, bl);
+    encode(m, bl);
   }
   return r;
-}
-
-int BlueStore::fiemap(
-  const coll_t& cid,
-  const ghobject_t& oid,
-  uint64_t offset,
-  size_t len,
-  map<uint64_t, uint64_t>& destmap)
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return fiemap(c, oid, offset, len, destmap);
 }
 
 int BlueStore::fiemap(
@@ -6710,18 +8850,6 @@ int BlueStore::fiemap(
     m.move_into(destmap);
   }
   return r;
-}
-
-int BlueStore::getattr(
-  const coll_t& cid,
-  const ghobject_t& oid,
-  const char *name,
-  bufferptr& value)
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return getattr(c, oid, name, value);
 }
 
 int BlueStore::getattr(
@@ -6763,18 +8891,6 @@ int BlueStore::getattr(
   return r;
 }
 
-
-int BlueStore::getattrs(
-  const coll_t& cid,
-  const ghobject_t& oid,
-  map<string,bufferptr>& aset)
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return getattrs(c, oid, aset);
-}
-
 int BlueStore::getattrs(
   CollectionHandle &c_,
   const ghobject_t& oid,
@@ -6813,6 +8929,7 @@ int BlueStore::getattrs(
 int BlueStore::list_collections(vector<coll_t>& ls)
 {
   RWLock::RLocker l(coll_lock);
+  ls.reserve(coll_map.size());
   for (ceph::unordered_map<coll_t, CollectionRef>::iterator p = coll_map.begin();
        p != coll_map.end();
        ++p)
@@ -6826,12 +8943,12 @@ bool BlueStore::collection_exists(const coll_t& c)
   return coll_map.count(c);
 }
 
-int BlueStore::collection_empty(const coll_t& cid, bool *empty)
+int BlueStore::collection_empty(CollectionHandle& ch, bool *empty)
 {
-  dout(15) << __func__ << " " << cid << dendl;
+  dout(15) << __func__ << " " << ch->cid << dendl;
   vector<ghobject_t> ls;
   ghobject_t next;
-  int r = collection_list(cid, ghobject_t(), ghobject_t::get_max(), 1,
+  int r = collection_list(ch, ghobject_t(), ghobject_t::get_max(), 1,
 			  &ls, &next);
   if (r < 0) {
     derr << __func__ << " collection_list returned: " << cpp_strerror(r)
@@ -6839,29 +8956,17 @@ int BlueStore::collection_empty(const coll_t& cid, bool *empty)
     return r;
   }
   *empty = ls.empty();
-  dout(10) << __func__ << " " << cid << " = " << (int)(*empty) << dendl;
+  dout(10) << __func__ << " " << ch->cid << " = " << (int)(*empty) << dendl;
   return 0;
 }
 
-int BlueStore::collection_bits(const coll_t& cid)
+int BlueStore::collection_bits(CollectionHandle& ch)
 {
-  dout(15) << __func__ << " " << cid << dendl;
-  CollectionRef c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
+  dout(15) << __func__ << " " << ch->cid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   RWLock::RLocker l(c->lock);
-  dout(10) << __func__ << " " << cid << " = " << c->cnode.bits << dendl;
+  dout(10) << __func__ << " " << ch->cid << " = " << c->cnode.bits << dendl;
   return c->cnode.bits;
-}
-
-int BlueStore::collection_list(
-  const coll_t& cid, const ghobject_t& start, const ghobject_t& end, int max,
-  vector<ghobject_t> *ls, ghobject_t *pnext)
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return collection_list(c, start, end, max, ls, pnext);
 }
 
 int BlueStore::collection_list(
@@ -6869,6 +8974,7 @@ int BlueStore::collection_list(
   vector<ghobject_t> *ls, ghobject_t *pnext)
 {
   Collection *c = static_cast<Collection *>(c_.get());
+  c->flush();
   dout(15) << __func__ << " " << c->cid
            << " start " << start << " end " << end << " max " << max << dendl;
   int r;
@@ -6904,8 +9010,7 @@ int BlueStore::_collection_list(
   if (!pnext)
     pnext = &static_next;
 
-  if (start == ghobject_t::get_max() ||
-    start.hobj.is_max()) {
+  if (start.is_max() || start.hobj.is_max()) {
     goto out;
   }
   get_coll_key_range(c->cid, c->cnode.bits, &temp_start_key, &temp_end_key,
@@ -6927,12 +9032,12 @@ int BlueStore::_collection_list(
     get_object_key(cct, start, &k);
     if (start.hobj.is_temp()) {
       temp = true;
-      assert(k >= temp_start_key && k < temp_end_key);
+      ceph_assert(k >= temp_start_key && k < temp_end_key);
     } else {
       temp = false;
-      assert(k >= start_key && k < end_key);
+      ceph_assert(k >= start_key && k < end_key);
     }
-    dout(20) << " start from " << pretty_binary_string(k)
+    dout(20) << __func__ << " start from " << pretty_binary_string(k)
       << " temp=" << (int)temp << dendl;
     it->lower_bound(k);
   }
@@ -6977,7 +9082,7 @@ int BlueStore::_collection_list(
     }
     ghobject_t oid;
     int r = get_key_object(it->key(), &oid);
-    assert(r == 0);
+    ceph_assert(r == 0);
     dout(20) << __func__ << " oid " << oid << " end " << end << dendl;
     if (ls->size() >= (unsigned)max) {
       dout(20) << __func__ << " reached max " << max << dendl;
@@ -6994,19 +9099,6 @@ out:
   }
 
   return r;
-}
-
-int BlueStore::omap_get(
-  const coll_t& cid,                ///< [in] Collection containing oid
-  const ghobject_t &oid,   ///< [in] Object containing omap
-  bufferlist *header,      ///< [out] omap header
-  map<string, bufferlist> *out /// < [out] Key to value map
-  )
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return omap_get(c, oid, header, out);
 }
 
 int BlueStore::omap_get(
@@ -7031,7 +9123,9 @@ int BlueStore::omap_get(
     goto out;
   o->flush();
   {
-    KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
+    const string& prefix =
+      o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP;
+    KeyValueDB::Iterator it = db->get_iterator(prefix);
     string head, tail;
     get_omap_header(o->onode.nid, &head);
     get_omap_tail(o->onode.nid, &tail);
@@ -7046,7 +9140,7 @@ int BlueStore::omap_get(
       } else {
 	string user_key;
 	decode_omap_key(it->key(), &user_key);
-	dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
+	dout(20) << __func__ << "  got " << pretty_binary_string(it->key())
 		 << " -> " << user_key << dendl;
 	(*out)[user_key] = it->value();
       }
@@ -7057,19 +9151,6 @@ int BlueStore::omap_get(
   dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
-}
-
-int BlueStore::omap_get_header(
-  const coll_t& cid,                ///< [in] Collection containing oid
-  const ghobject_t &oid,   ///< [in] Object containing omap
-  bufferlist *header,      ///< [out] omap header
-  bool allow_eio ///< [in] don't assert on eio
-  )
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return omap_get_header(c, oid, header, allow_eio);
 }
 
 int BlueStore::omap_get_header(
@@ -7096,7 +9177,8 @@ int BlueStore::omap_get_header(
   {
     string head;
     get_omap_header(o->onode.nid, &head);
-    if (db->get(PREFIX_OMAP, head, header) >= 0) {
+    if (db->get(o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP,
+		head, header) >= 0) {
       dout(30) << __func__ << "  got header" << dendl;
     } else {
       dout(30) << __func__ << "  no header" << dendl;
@@ -7106,18 +9188,6 @@ int BlueStore::omap_get_header(
   dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
-}
-
-int BlueStore::omap_get_keys(
-  const coll_t& cid,              ///< [in] Collection containing oid
-  const ghobject_t &oid, ///< [in] Object containing omap
-  set<string> *keys      ///< [out] Keys defined on oid
-  )
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return omap_get_keys(c, oid, keys);
 }
 
 int BlueStore::omap_get_keys(
@@ -7141,7 +9211,9 @@ int BlueStore::omap_get_keys(
     goto out;
   o->flush();
   {
-    KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
+    const string& prefix =
+      o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP;
+    KeyValueDB::Iterator it = db->get_iterator(prefix);
     string head, tail;
     get_omap_key(o->onode.nid, string(), &head);
     get_omap_tail(o->onode.nid, &tail);
@@ -7153,7 +9225,7 @@ int BlueStore::omap_get_keys(
       }
       string user_key;
       decode_omap_key(it->key(), &user_key);
-      dout(30) << __func__ << "  got " << pretty_binary_string(it->key())
+      dout(20) << __func__ << "  got " << pretty_binary_string(it->key())
 	       << " -> " << user_key << dendl;
       keys->insert(user_key);
       it->next();
@@ -7163,19 +9235,6 @@ int BlueStore::omap_get_keys(
   dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
-}
-
-int BlueStore::omap_get_values(
-  const coll_t& cid,                    ///< [in] Collection containing oid
-  const ghobject_t &oid,       ///< [in] Object containing omap
-  const set<string> &keys,     ///< [in] Keys to get
-  map<string, bufferlist> *out ///< [out] Returned keys and values
-  )
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return omap_get_values(c, oid, keys, out);
 }
 
 int BlueStore::omap_get_values(
@@ -7199,36 +9258,27 @@ int BlueStore::omap_get_values(
   }
   if (!o->onode.has_omap())
     goto out;
-  o->flush();
-  _key_encode_u64(o->onode.nid, &final_key);
-  final_key.push_back('.');
-  for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p) {
-    final_key.resize(9); // keep prefix
-    final_key += *p;
-    bufferlist val;
-    if (db->get(PREFIX_OMAP, final_key, &val) >= 0) {
-      dout(30) << __func__ << "  got " << pretty_binary_string(final_key)
-	       << " -> " << *p << dendl;
-      out->insert(make_pair(*p, val));
+  {
+    const string& prefix =
+      o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP;
+    o->flush();
+    _key_encode_u64(o->onode.nid, &final_key);
+    final_key.push_back('.');
+    for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p) {
+      final_key.resize(9); // keep prefix
+      final_key += *p;
+      bufferlist val;
+      if (db->get(prefix, final_key, &val) >= 0) {
+	dout(30) << __func__ << "  got " << pretty_binary_string(final_key)
+		 << " -> " << *p << dendl;
+	out->insert(make_pair(*p, val));
+      }
     }
   }
  out:
   dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
-}
-
-int BlueStore::omap_check_keys(
-  const coll_t& cid,                ///< [in] Collection containing oid
-  const ghobject_t &oid,   ///< [in] Object containing omap
-  const set<string> &keys, ///< [in] Keys to check
-  set<string> *out         ///< [out] Subset of keys defined on oid
-  )
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return omap_check_keys(c, oid, keys, out);
 }
 
 int BlueStore::omap_check_keys(
@@ -7252,39 +9302,30 @@ int BlueStore::omap_check_keys(
   }
   if (!o->onode.has_omap())
     goto out;
-  o->flush();
-  _key_encode_u64(o->onode.nid, &final_key);
-  final_key.push_back('.');
-  for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p) {
-    final_key.resize(9); // keep prefix
-    final_key += *p;
-    bufferlist val;
-    if (db->get(PREFIX_OMAP, final_key, &val) >= 0) {
-      dout(30) << __func__ << "  have " << pretty_binary_string(final_key)
-	       << " -> " << *p << dendl;
-      out->insert(*p);
-    } else {
-      dout(30) << __func__ << "  miss " << pretty_binary_string(final_key)
-	       << " -> " << *p << dendl;
+  {
+    const string& prefix =
+      o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP;
+    o->flush();
+    _key_encode_u64(o->onode.nid, &final_key);
+    final_key.push_back('.');
+    for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p) {
+      final_key.resize(9); // keep prefix
+      final_key += *p;
+      bufferlist val;
+      if (db->get(prefix, final_key, &val) >= 0) {
+	dout(30) << __func__ << "  have " << pretty_binary_string(final_key)
+		 << " -> " << *p << dendl;
+	out->insert(*p);
+      } else {
+	dout(30) << __func__ << "  miss " << pretty_binary_string(final_key)
+		 << " -> " << *p << dendl;
+      }
     }
   }
  out:
   dout(10) << __func__ << " " << c->get_cid() << " oid " << oid << " = " << r
 	   << dendl;
   return r;
-}
-
-ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
-  const coll_t& cid,              ///< [in] collection
-  const ghobject_t &oid  ///< [in] object
-  )
-{
-  CollectionHandle c = _get_collection(cid);
-  if (!c) {
-    dout(10) << __func__ << " " << cid << "doesn't exist" <<dendl;
-    return ObjectMap::ObjectMapIterator();
-  }
-  return get_omap_iterator(c, oid);
 }
 
 ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
@@ -7305,27 +9346,33 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
   }
   o->flush();
   dout(10) << __func__ << " has_omap = " << (int)o->onode.has_omap() <<dendl;
-  KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
+  KeyValueDB::Iterator it = db->get_iterator(
+    o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP);
   return ObjectMap::ObjectMapIterator(new OmapIteratorImpl(c, o, it));
 }
 
 // -----------------
 // write helpers
 
+uint64_t BlueStore::_get_ondisk_reserved() const {
+  return round_up_to(
+    std::max<uint64_t>(SUPER_RESERVED, min_alloc_size), min_alloc_size);
+}
+
 void BlueStore::_prepare_ondisk_format_super(KeyValueDB::Transaction& t)
 {
   dout(10) << __func__ << " ondisk_format " << ondisk_format
 	   << " min_compat_ondisk_format " << min_compat_ondisk_format
 	   << dendl;
-  assert(ondisk_format == latest_ondisk_format);
+  ceph_assert(ondisk_format == latest_ondisk_format);
   {
     bufferlist bl;
-    ::encode(ondisk_format, bl);
+    encode(ondisk_format, bl);
     t->set(PREFIX_SUPER, "ondisk_format", bl);
   }
   {
     bufferlist bl;
-    ::encode(min_compat_ondisk_format, bl);
+    encode(min_compat_ondisk_format, bl);
     t->set(PREFIX_SUPER, "min_compat_ondisk_format", bl);
   }
 }
@@ -7337,10 +9384,10 @@ int BlueStore::_open_super_meta()
     nid_max = 0;
     bufferlist bl;
     db->get(PREFIX_SUPER, "nid_max", &bl);
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     try {
       uint64_t v;
-      ::decode(v, p);
+      decode(v, p);
       nid_max = v;
     } catch (buffer::error& e) {
       derr << __func__ << " unable to read nid_max" << dendl;
@@ -7355,10 +9402,10 @@ int BlueStore::_open_super_meta()
     blobid_max = 0;
     bufferlist bl;
     db->get(PREFIX_SUPER, "blobid_max", &bl);
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     try {
       uint64_t v;
-      ::decode(v, p);
+      decode(v, p);
       blobid_max = v;
     } catch (buffer::error& e) {
       derr << __func__ << " unable to read blobid_max" << dendl;
@@ -7376,25 +9423,8 @@ int BlueStore::_open_super_meta()
       freelist_type = std::string(bl.c_str(), bl.length());
       dout(10) << __func__ << " freelist_type " << freelist_type << dendl;
     } else {
-      assert("Not Support extent freelist manager" == 0);
+      ceph_abort_msg("Not Support extent freelist manager");
     }
-  }
-
-  // bluefs alloc
-  if (cct->_conf->bluestore_bluefs) {
-    bluefs_extents.clear();
-    bufferlist bl;
-    db->get(PREFIX_SUPER, "bluefs_extents", &bl);
-    bufferlist::iterator p = bl.begin();
-    try {
-      ::decode(bluefs_extents, p);
-    }
-    catch (buffer::error& e) {
-      derr << __func__ << " unable to read bluefs_extents" << dendl;
-      return -EIO;
-    }
-    dout(10) << __func__ << " bluefs_extents 0x" << std::hex << bluefs_extents
-	     << std::dec << dendl;
   }
 
   // ondisk format
@@ -7409,9 +9439,9 @@ int BlueStore::_open_super_meta()
       ondisk_format = 1;
       compat_ondisk_format = 1;
     } else {
-      auto p = bl.begin();
+      auto p = bl.cbegin();
       try {
-	::decode(ondisk_format, p);
+	decode(ondisk_format, p);
       } catch (buffer::error& e) {
 	derr << __func__ << " unable to read ondisk_format" << dendl;
 	return -EIO;
@@ -7419,10 +9449,10 @@ int BlueStore::_open_super_meta()
       bl.clear();
       {
 	r = db->get(PREFIX_SUPER, "min_compat_ondisk_format", &bl);
-	assert(!r);
-	auto p = bl.begin();
+	ceph_assert(!r);
+	auto p = bl.cbegin();
 	try {
-	  ::decode(compat_ondisk_format, p);
+	  decode(compat_ondisk_format, p);
 	} catch (buffer::error& e) {
 	  derr << __func__ << " unable to read compat_ondisk_format" << dendl;
 	  return -EIO;
@@ -7440,23 +9470,17 @@ int BlueStore::_open_super_meta()
 	 << latest_ondisk_format << dendl;
     return -EPERM;
   }
-  if (ondisk_format < latest_ondisk_format) {
-    int r = _upgrade_super();
-    if (r < 0) {
-      return r;
-    }
-  }
 
   {
     bufferlist bl;
     db->get(PREFIX_SUPER, "min_alloc_size", &bl);
-    auto p = bl.begin();
+    auto p = bl.cbegin();
     try {
       uint64_t val;
-      ::decode(val, p);
+      decode(val, p);
       min_alloc_size = val;
       min_alloc_size_order = ctz(val);
-      assert(min_alloc_size == 1u << min_alloc_size_order);
+      ceph_assert(min_alloc_size == 1u << min_alloc_size_order);
     } catch (buffer::error& e) {
       derr << __func__ << " unable to read min_alloc_size" << dendl;
       return -EIO;
@@ -7472,6 +9496,7 @@ int BlueStore::_open_super_meta()
   _set_compression();
   _set_blob_size();
 
+  _validate_bdev();
   return 0;
 }
 
@@ -7479,38 +9504,39 @@ int BlueStore::_upgrade_super()
 {
   dout(1) << __func__ << " from " << ondisk_format << ", latest "
 	  << latest_ondisk_format << dendl;
-  assert(ondisk_format > 0);
-  assert(ondisk_format < latest_ondisk_format);
+  if (ondisk_format < latest_ondisk_format) {
+    ceph_assert(ondisk_format > 0);
+    ceph_assert(ondisk_format < latest_ondisk_format);
 
-  if (ondisk_format == 1) {
-    // changes:
-    // - super: added ondisk_format
-    // - super: added min_readable_ondisk_format
-    // - super: added min_compat_ondisk_format
-    // - super: added min_alloc_size
-    // - super: removed min_min_alloc_size
-    KeyValueDB::Transaction t = db->get_transaction();
-    {
-      bufferlist bl;
-      db->get(PREFIX_SUPER, "min_min_alloc_size", &bl);
-      auto p = bl.begin();
-      try {
-	uint64_t val;
-	::decode(val, p);
-	min_alloc_size = val;
-      } catch (buffer::error& e) {
-	derr << __func__ << " failed to read min_min_alloc_size" << dendl;
-	return -EIO;
+    if (ondisk_format == 1) {
+      // changes:
+      // - super: added ondisk_format
+      // - super: added min_readable_ondisk_format
+      // - super: added min_compat_ondisk_format
+      // - super: added min_alloc_size
+      // - super: removed min_min_alloc_size
+      KeyValueDB::Transaction t = db->get_transaction();
+      {
+	bufferlist bl;
+	db->get(PREFIX_SUPER, "min_min_alloc_size", &bl);
+	auto p = bl.cbegin();
+	try {
+	  uint64_t val;
+	  decode(val, p);
+	  min_alloc_size = val;
+	} catch (buffer::error& e) {
+	  derr << __func__ << " failed to read min_min_alloc_size" << dendl;
+	  return -EIO;
+	}
+	t->set(PREFIX_SUPER, "min_alloc_size", bl);
+	t->rmkey(PREFIX_SUPER, "min_min_alloc_size");
       }
-      t->set(PREFIX_SUPER, "min_alloc_size", bl);
-      t->rmkey(PREFIX_SUPER, "min_min_alloc_size");
+      ondisk_format = 2;
+      _prepare_ondisk_format_super(t);
+      int r = db->submit_transaction_sync(t);
+      ceph_assert(r == 0);
     }
-    ondisk_format = 2;
-    _prepare_ondisk_format_super(t);
-    int r = db->submit_transaction_sync(t);
-    assert(r == 0);
   }
-
   // done
   dout(1) << __func__ << " done" << dendl;
   return 0;
@@ -7518,12 +9544,15 @@ int BlueStore::_upgrade_super()
 
 void BlueStore::_assign_nid(TransContext *txc, OnodeRef o)
 {
-  if (o->onode.nid)
+  if (o->onode.nid) {
+    ceph_assert(o->exists);
     return;
+  }
   uint64_t nid = ++nid_last;
   dout(20) << __func__ << " " << nid << dendl;
   o->onode.nid = nid;
   txc->last_nid = nid;
+  o->exists = true;
 }
 
 uint64_t BlueStore::_assign_blobid(TransContext *txc)
@@ -7539,9 +9568,11 @@ void BlueStore::get_db_statistics(Formatter *f)
   db->get_statistics(f);
 }
 
-BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
+BlueStore::TransContext *BlueStore::_txc_create(
+  Collection *c, OpSequencer *osr,
+  list<Context*> *on_commits)
 {
-  TransContext *txc = new TransContext(cct, osr);
+  TransContext *txc = new TransContext(cct, c, osr, on_commits);
   txc->t = db->get_transaction();
   osr->queue_new(txc);
   dout(20) << __func__ << " osr " << osr << " = " << txc
@@ -7551,15 +9582,8 @@ BlueStore::TransContext *BlueStore::_txc_create(OpSequencer *osr)
 
 void BlueStore::_txc_calc_cost(TransContext *txc)
 {
-  // this is about the simplest model for transaction cost you can
-  // imagine.  there is some fixed overhead cost by saying there is a
-  // minimum of one "io".  and then we have some cost per "io" that is
-  // a configurable (with different hdd and ssd defaults), and add
-  // that to the bytes value.
-  int ios = 1;  // one "io" for the kv commit
-  for (auto& p : txc->ioc.pending_aios) {
-    ios += p.iov.size();
-  }
+  // one "io" for the kv commit
+  auto ios = 1 + txc->ioc.get_num_ios();
   auto cost = throttle_cost_per_io.load();
   txc->cost = ios * cost + txc->bytes;
   dout(10) << __func__ << " " << txc << " cost " << txc->cost << " ("
@@ -7578,15 +9602,25 @@ void BlueStore::_txc_update_store_statfs(TransContext *txc)
   logger->inc(l_bluestore_compressed_allocated, txc->statfs_delta.compressed_allocated());
   logger->inc(l_bluestore_compressed_original, txc->statfs_delta.compressed_original());
 
-  {
-    std::lock_guard<std::mutex> l(vstatfs_lock);
-    vstatfs += txc->statfs_delta;
-  }
-
   bufferlist bl;
   txc->statfs_delta.encode(bl);
+  if (per_pool_stat_collection) {
+    string key;
+    get_pool_stat_key(txc->osd_pool_id, &key);
+    txc->t->merge(PREFIX_STAT, key, bl);
 
-  txc->t->merge(PREFIX_STAT, "bluestore_statfs", bl);
+    std::lock_guard l(vstatfs_lock);
+    auto& stats = osd_pools[txc->osd_pool_id];
+    stats += txc->statfs_delta;
+    
+    vstatfs += txc->statfs_delta; //non-persistent in this mode
+
+  } else {
+    txc->t->merge(PREFIX_STAT, BLUESTORE_GLOBAL_STATFS_KEY, bl);
+
+    std::lock_guard l(vstatfs_lock);
+    vstatfs += txc->statfs_delta;
+  } 
   txc->statfs_delta.reset();
 }
 
@@ -7612,7 +9646,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       return;
 
     case TransContext::STATE_IO_DONE:
-      //assert(txc->osr->qlock.is_locked());  // see _txc_finish_io
+      ceph_assert(ceph_mutex_is_locked(txc->osr->qlock));  // see _txc_finish_io
       if (txc->had_ios) {
 	++txc->osr->txc_with_unstable_io;
       }
@@ -7642,12 +9676,12 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	} else {
 	  txc->state = TransContext::STATE_KV_SUBMITTED;
 	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
-	  assert(r == 0);
+	  ceph_assert(r == 0);
 	  _txc_applied_kv(txc);
 	}
       }
       {
-	std::lock_guard<std::mutex> l(kv_lock);
+	std::lock_guard l(kv_lock);
 	kv_queue.push_back(txc);
 	kv_cond.notify_one();
 	if (txc->state != TransContext::STATE_KV_SUBMITTED) {
@@ -7660,8 +9694,6 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       }
       return;
     case TransContext::STATE_KV_SUBMITTED:
-      txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
-      txc->state = TransContext::STATE_KV_DONE;
       _txc_committed_kv(txc);
       // ** fall-thru **
 
@@ -7688,7 +9720,7 @@ void BlueStore::_txc_state_proc(TransContext *txc)
     default:
       derr << __func__ << " unexpected txc " << txc
 	   << " state " << txc->get_state_name() << dendl;
-      assert(0 == "unexpected txc state");
+      ceph_abort_msg("unexpected txc state");
       return;
     }
   }
@@ -7704,12 +9736,9 @@ void BlueStore::_txc_finish_io(TransContext *txc)
    */
 
   OpSequencer *osr = txc->osr.get();
-  std::lock_guard<std::mutex> l(osr->qlock);
+  std::lock_guard l(osr->qlock);
   txc->state = TransContext::STATE_IO_DONE;
-
-  // release aio contexts (including pinned buffers).
-  txc->ioc.running_aios.clear();
-
+  txc->ioc.release_running_aios();
   OpSequencer::q_list_t::iterator p = osr->q.iterator_to(*txc);
   while (p != osr->q.begin()) {
     --p;
@@ -7728,8 +9757,7 @@ void BlueStore::_txc_finish_io(TransContext *txc)
   } while (p != osr->q.end() &&
 	   p->state == TransContext::STATE_IO_DONE);
 
-  if (osr->kv_submitted_waiters &&
-      osr->_is_all_kv_submitted()) {
+  if (osr->kv_submitted_waiters) {
     osr->qcond.notify_all();
   }
 }
@@ -7743,48 +9771,7 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 
   // finalize onodes
   for (auto o : txc->onodes) {
-    // finalize extent_map shards
-    o->extent_map.update(t, false);
-    if (o->extent_map.needs_reshard()) {
-      o->extent_map.reshard(db, t);
-      o->extent_map.update(t, true);
-      if (o->extent_map.needs_reshard()) {
-	dout(20) << __func__ << " warning: still wants reshard, check options?"
-		 << dendl;
-	o->extent_map.clear_needs_reshard();
-      }
-      logger->inc(l_bluestore_onode_reshard);
-    }
-
-    // bound encode
-    size_t bound = 0;
-    denc(o->onode, bound);
-    o->extent_map.bound_encode_spanning_blobs(bound);
-    if (o->onode.extent_map_shards.empty()) {
-      denc(o->extent_map.inline_bl, bound);
-    }
-
-    // encode
-    bufferlist bl;
-    unsigned onode_part, blob_part, extent_part;
-    {
-      auto p = bl.get_contiguous_appender(bound, true);
-      denc(o->onode, p);
-      onode_part = p.get_logical_offset();
-      o->extent_map.encode_spanning_blobs(p);
-      blob_part = p.get_logical_offset() - onode_part;
-      if (o->onode.extent_map_shards.empty()) {
-	denc(o->extent_map.inline_bl, p);
-      }
-      extent_part = p.get_logical_offset() - onode_part - blob_part;
-    }
-
-    dout(20) << "  onode " << o->oid << " is " << bl.length()
-	     << " (" << onode_part << " bytes onode + "
-	     << blob_part << " bytes spanning blobs + "
-	     << extent_part << " bytes inline extents)"
-	     << dendl;
-    t->set(PREFIX_OBJ, o->key.c_str(), o->key.size(), bl);
+    _record_onode(o, t);
     o->flushing_count++;
   }
 
@@ -7806,13 +9793,15 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
     auto sbid = sb->get_sbid();
     get_shared_blob_key(sbid, &key);
     if (sb->persistent->empty()) {
-      dout(20) << "  shared_blob 0x" << std::hex << sbid << std::dec
+      dout(20) << __func__ << " shared_blob 0x"
+               << std::hex << sbid << std::dec
 	       << " is empty" << dendl;
       t->rmkey(PREFIX_SHARED_BLOB, key);
     } else {
       bufferlist bl;
-      ::encode(*(sb->persistent), bl);
-      dout(20) << "  shared_blob 0x" << std::hex << sbid << std::dec
+      encode(*(sb->persistent), bl);
+      dout(20) << __func__ << " shared_blob 0x"
+               << std::hex << sbid << std::dec
 	       << " is " << bl.length() << " " << *sb << dendl;
       t->set(PREFIX_SHARED_BLOB, key, bl);
     }
@@ -7822,11 +9811,11 @@ void BlueStore::_txc_write_nodes(TransContext *txc, KeyValueDB::Transaction t)
 void BlueStore::BSPerfTracker::update_from_perfcounters(
   PerfCounters &logger)
 {
-  os_commit_latency.consume_next(
-    logger.get_tavg_ms(
+  os_commit_latency_ns.consume_next(
+    logger.get_tavg_ns(
       l_bluestore_commit_lat));
-  os_apply_latency.consume_next(
-    logger.get_tavg_ms(
+  os_apply_latency_ns.consume_next(
+    logger.get_tavg_ns(
       l_bluestore_commit_lat));
 }
 
@@ -7885,7 +9874,7 @@ void BlueStore::_txc_applied_kv(TransContext *txc)
       dout(20) << __func__ << " onode " << o << " had " << o->flushing_count
 	       << dendl;
       if (--o->flushing_count == 0) {
-        std::lock_guard<std::mutex> l(o->flush_lock);
+        std::lock_guard l(o->flush_lock);
 	o->flush_cond.notify_all();
       }
     }
@@ -7895,35 +9884,26 @@ void BlueStore::_txc_applied_kv(TransContext *txc)
 void BlueStore::_txc_committed_kv(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << dendl;
-
-  // warning: we're calling onreadable_sync inside the sequencer lock
-  if (txc->onreadable_sync) {
-    txc->onreadable_sync->complete(0);
-    txc->onreadable_sync = NULL;
+  {
+    std::lock_guard l(txc->osr->qlock);
+    txc->state = TransContext::STATE_KV_DONE;
+    if (txc->ch->commit_queue) {
+      txc->ch->commit_queue->queue(txc->oncommits);
+    } else {
+      finisher.queue(txc->oncommits);
+    }
   }
-  unsigned n = txc->osr->parent->shard_hint.hash_to_shard(m_finisher_num);
-  if (txc->oncommit) {
-    logger->tinc(l_bluestore_commit_lat, ceph_clock_now() - txc->start);
-    finishers[n]->queue(txc->oncommit);
-    txc->oncommit = NULL;
-  }
-  if (txc->onreadable) {
-    finishers[n]->queue(txc->onreadable);
-    txc->onreadable = NULL;
-  }
-
-  if (!txc->oncommits.empty()) {
-    finishers[n]->queue(txc->oncommits);
-  }
+  txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
+  logger->tinc(l_bluestore_commit_lat, ceph_clock_now() - txc->start);
 }
 
 void BlueStore::_txc_finish(TransContext *txc)
 {
   dout(20) << __func__ << " " << txc << " onodes " << txc->onodes << dendl;
-  assert(txc->state == TransContext::STATE_FINISHING);
+  ceph_assert(txc->state == TransContext::STATE_FINISHING);
 
   for (auto& sb : txc->shared_blobs_written) {
-    sb->bc.finish_write(sb->get_cache(), txc->seq);
+    sb->finish_write(txc->seq);
   }
   txc->shared_blobs_written.clear();
 
@@ -7933,12 +9913,11 @@ void BlueStore::_txc_finish(TransContext *txc)
   }
 
   OpSequencerRef osr = txc->osr;
-  CollectionRef c;
   bool empty = false;
   bool submit_deferred = false;
   OpSequencer::q_list_t releasing_txc;
   {
-    std::lock_guard<std::mutex> l(osr->qlock);
+    std::lock_guard l(osr->qlock);
     txc->state = TransContext::STATE_DONE;
     bool notify = false;
     while (!osr->q.empty()) {
@@ -7952,15 +9931,12 @@ void BlueStore::_txc_finish(TransContext *txc)
           notify = true;
 	}
 	if (txc->state == TransContext::STATE_DEFERRED_QUEUED &&
-	    osr->q.size() > g_conf->bluestore_max_deferred_txc) {
+	    osr->q.size() > g_conf()->bluestore_max_deferred_txc) {
 	  submit_deferred = true;
 	}
         break;
       }
 
-      if (!c && txc->first_collection) {
-        c = txc->first_collection;
-      }
       osr->q.pop_front();
       releasing_txc.push_back(*txc);
       notify = true;
@@ -7991,25 +9967,77 @@ void BlueStore::_txc_finish(TransContext *txc)
   }
 
   if (empty && osr->zombie) {
-    dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
-    osr->_unregister();
+    std::lock_guard l(zombie_osr_lock);
+    if (zombie_osr_set.erase(osr->cid)) {
+      dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
+    } else {
+      dout(10) << __func__ << " empty zombie osr " << osr << " already reaped"
+	       << dendl;
+    }
   }
-}
+ }
 
 void BlueStore::_txc_release_alloc(TransContext *txc)
 {
-  // update allocator with full released set
-  if (!cct->_conf->bluestore_debug_no_reuse_blocks) {
-    dout(10) << __func__ << " " << txc << " " << txc->released << dendl;
-    for (interval_set<uint64_t>::iterator p = txc->released.begin();
-	 p != txc->released.end();
-	 ++p) {
-      alloc->release(p.get_start(), p.get_len());
+  // it's expected we're called with lazy_release_lock already taken!
+  if (likely(!cct->_conf->bluestore_debug_no_reuse_blocks)) {
+    int r = 0;
+    if (cct->_conf->bdev_enable_discard && cct->_conf->bdev_async_discard) {
+      r = bdev->queue_discard(txc->released);
+      if (r == 0) {
+	dout(10) << __func__ << "(queued) " << txc << " " << std::hex
+		 << txc->released << std::dec << dendl;
+	goto out;
+      }
+    } else if (cct->_conf->bdev_enable_discard) {
+      for (auto p = txc->released.begin(); p != txc->released.end(); ++p) {
+	  bdev->discard(p.get_start(), p.get_len());
+      }
     }
+    dout(10) << __func__ << "(sync) " << txc << " " << std::hex
+             << txc->released << std::dec << dendl;
+    alloc->release(txc->released);
   }
 
+out:
   txc->allocated.clear();
   txc->released.clear();
+}
+
+void BlueStore::_osr_attach(Collection *c)
+{
+  // note: caller has RWLock on coll_map
+  auto q = coll_map.find(c->cid);
+  if (q != coll_map.end()) {
+    c->osr = q->second->osr;
+    ldout(cct, 10) << __func__ << " " << c->cid
+		   << " reusing osr " << c->osr << " from existing coll "
+		   << q->second << dendl;
+  } else {
+    std::lock_guard l(zombie_osr_lock);
+    auto p = zombie_osr_set.find(c->cid);
+    if (p == zombie_osr_set.end()) {
+      c->osr = new OpSequencer(this, c->cid);
+      ldout(cct, 10) << __func__ << " " << c->cid
+		     << " fresh osr " << c->osr << dendl;
+    } else {
+      c->osr = p->second;
+      zombie_osr_set.erase(p);
+      ldout(cct, 10) << __func__ << " " << c->cid
+		     << " resurrecting zombie osr " << c->osr << dendl;
+      c->osr->zombie = false;
+    }
+  }
+}
+
+void BlueStore::_osr_register_zombie(OpSequencer *osr)
+{
+  std::lock_guard l(zombie_osr_lock);
+  dout(10) << __func__ << " " << osr << " " << osr->cid << dendl;
+  osr->zombie = true;
+  auto i = zombie_osr_set.emplace(osr->cid, osr);
+  // this is either a new insertion or the same osr is already there
+  ceph_assert(i.second || i.first->second == osr);
 }
 
 void BlueStore::_osr_drain_preceding(TransContext *txc)
@@ -8019,17 +10047,42 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
   ++deferred_aggressive; // FIXME: maybe osr-local aggressive flag?
   {
     // submit anything pending
-    std::lock_guard<std::mutex> l(deferred_lock);
-    if (osr->deferred_pending) {
-      _deferred_submit(osr);
+    deferred_lock.lock();
+    if (osr->deferred_pending && !osr->deferred_running) {
+      _deferred_submit_unlock(osr);
+    } else {
+      deferred_lock.unlock();
     }
   }
   {
     // wake up any previously finished deferred events
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     kv_cond.notify_one();
   }
   osr->drain_preceding(txc);
+  --deferred_aggressive;
+  dout(10) << __func__ << " " << osr << " done" << dendl;
+}
+
+void BlueStore::_osr_drain(OpSequencer *osr)
+{
+  dout(10) << __func__ << " " << osr << dendl;
+  ++deferred_aggressive; // FIXME: maybe osr-local aggressive flag?
+  {
+    // submit anything pending
+    deferred_lock.lock();
+    if (osr->deferred_pending && !osr->deferred_running) {
+      _deferred_submit_unlock(osr);
+    } else {
+      deferred_lock.unlock();
+    }
+  }
+  {
+    // wake up any previously finished deferred events
+    std::lock_guard l(kv_lock);
+    kv_cond.notify_one();
+  }
+  osr->drain();
   --deferred_aggressive;
   dout(10) << __func__ << " " << osr << " done" << dendl;
 }
@@ -8039,25 +10092,34 @@ void BlueStore::_osr_drain_all()
   dout(10) << __func__ << dendl;
 
   set<OpSequencerRef> s;
+  vector<OpSequencerRef> zombies;
   {
-    std::lock_guard<std::mutex> l(osr_lock);
-    s = osr_set;
+    RWLock::RLocker l(coll_lock);
+    for (auto& i : coll_map) {
+      s.insert(i.second->osr);
+    }
+  }
+  {
+    std::lock_guard l(zombie_osr_lock);
+    for (auto& i : zombie_osr_set) {
+      s.insert(i.second);
+      zombies.push_back(i.second);
+    }
   }
   dout(20) << __func__ << " osr_set " << s << dendl;
 
   ++deferred_aggressive;
   {
     // submit anything pending
-    std::lock_guard<std::mutex> l(deferred_lock);
-    _deferred_try_submit();
+    deferred_try_submit();
   }
   {
     // wake up any previously finished deferred events
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     kv_cond.notify_one();
   }
   {
-    std::lock_guard<std::mutex> l(kv_finalize_lock);
+    std::lock_guard l(kv_finalize_lock);
     kv_finalize_cond.notify_one();
   }
   for (auto osr : s) {
@@ -8066,64 +10128,33 @@ void BlueStore::_osr_drain_all()
   }
   --deferred_aggressive;
 
+  {
+    std::lock_guard l(zombie_osr_lock);
+    for (auto& osr : zombies) {
+      if (zombie_osr_set.erase(osr->cid)) {
+	dout(10) << __func__ << " reaping empty zombie osr " << osr << dendl;
+	ceph_assert(osr->q.empty());
+      } else if (osr->zombie) {
+	dout(10) << __func__ << " empty zombie osr " << osr
+		 << " already reaped" << dendl;
+	ceph_assert(osr->q.empty());
+      } else {
+	dout(10) << __func__ << " empty zombie osr " << osr
+		 << " resurrected" << dendl;
+      }
+    }
+  }
+
   dout(10) << __func__ << " done" << dendl;
 }
 
-void BlueStore::_osr_unregister_all()
-{
-  set<OpSequencerRef> s;
-  {
-    std::lock_guard<std::mutex> l(osr_lock);
-    s = osr_set;
-  }
-  dout(10) << __func__ << " " << s << dendl;
-  for (auto osr : s) {
-    osr->_unregister();
-
-    if (!osr->zombie) {
-      // break link from Sequencer to us so that this OpSequencer
-      // instance can die with this mount/umount cycle.  note that
-      // we assume umount() will not race against ~Sequencer.
-      assert(osr->parent);
-      osr->parent->p.reset();
-    }
-  }
-  // nobody should be creating sequencers during umount either.
-  {
-    std::lock_guard<std::mutex> l(osr_lock);
-    assert(osr_set.empty());
-  }
-}
 
 void BlueStore::_kv_start()
 {
   dout(10) << __func__ << dendl;
 
-  if (cct->_conf->bluestore_shard_finishers) {
-    if (cct->_conf->osd_op_num_shards) {
-      m_finisher_num = cct->_conf->osd_op_num_shards;
-    } else {
-      assert(bdev);
-      if (bdev->is_rotational()) {
-        m_finisher_num = cct->_conf->osd_op_num_shards_hdd;
-      } else {
-        m_finisher_num = cct->_conf->osd_op_num_shards_ssd;
-      }
-    }
-  }
-
-  assert(m_finisher_num != 0);
-
-  for (int i = 0; i < m_finisher_num; ++i) {
-    ostringstream oss;
-    oss << "finisher-" << i;
-    Finisher *f = new Finisher(cct, oss.str(), "finisher");
-    finishers.push_back(f);
-  }
-
-  for (auto f : finishers) {
-    f->start();
-  }
+  deferred_finisher.start();
+  finisher.start();
   kv_sync_thread.create("bstore_kv_sync");
   kv_finalize_thread.create("bstore_kv_final");
 }
@@ -8132,7 +10163,7 @@ void BlueStore::_kv_stop()
 {
   dout(10) << __func__ << dendl;
   {
-    std::unique_lock<std::mutex> l(kv_lock);
+    std::unique_lock l(kv_lock);
     while (!kv_sync_started) {
       kv_cond.wait(l);
     }
@@ -8140,7 +10171,7 @@ void BlueStore::_kv_stop()
     kv_cond.notify_all();
   }
   {
-    std::unique_lock<std::mutex> l(kv_finalize_lock);
+    std::unique_lock l(kv_finalize_lock);
     while (!kv_finalize_started) {
       kv_finalize_cond.wait(l);
     }
@@ -8149,31 +10180,33 @@ void BlueStore::_kv_stop()
   }
   kv_sync_thread.join();
   kv_finalize_thread.join();
+  ceph_assert(removed_collections.empty());
   {
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     kv_stop = false;
   }
   {
-    std::lock_guard<std::mutex> l(kv_finalize_lock);
+    std::lock_guard l(kv_finalize_lock);
     kv_finalize_stop = false;
   }
   dout(10) << __func__ << " stopping finishers" << dendl;
-  for (auto f : finishers) {
-    f->wait_for_empty();
-    f->stop();
-  }
+  deferred_finisher.wait_for_empty();
+  deferred_finisher.stop();
+  finisher.wait_for_empty();
+  finisher.stop();
   dout(10) << __func__ << " stopped" << dendl;
 }
 
 void BlueStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
-  std::unique_lock<std::mutex> l(kv_lock);
-  assert(!kv_sync_started);
+  deque<DeferredBatch*> deferred_stable_queue; ///< deferred ios done + stable
+  std::unique_lock l(kv_lock);
+  ceph_assert(!kv_sync_started);
   kv_sync_started = true;
   kv_cond.notify_all();
   while (true) {
-    assert(kv_committing.empty());
+    ceph_assert(kv_committing.empty());
     if (kv_queue.empty() &&
 	((deferred_done_queue.empty() && deferred_stable_queue.empty()) ||
 	 !deferred_aggressive)) {
@@ -8200,13 +10233,14 @@ void BlueStore::_kv_sync_thread()
       costs = kv_throttle_costs;
       kv_ios = 0;
       kv_throttle_costs = 0;
-      utime_t start = ceph_clock_now();
       l.unlock();
 
       dout(30) << __func__ << " committing " << kv_committing << dendl;
       dout(30) << __func__ << " submitting " << kv_submitting << dendl;
       dout(30) << __func__ << " deferred_done " << deferred_done << dendl;
       dout(30) << __func__ << " deferred_stable " << deferred_stable << dendl;
+
+      auto start = mono_clock::now();
 
       bool force_flush = false;
       // if bluefs is sharing the same device as data (only), then we
@@ -8216,14 +10250,18 @@ void BlueStore::_kv_sync_thread()
       if (bluefs_single_shared_device && bluefs) {
 	if (aios) {
 	  force_flush = true;
-	} else if (kv_committing.empty() && kv_submitting.empty() &&
-		   deferred_stable.empty()) {
+	} else if (kv_committing.empty() && deferred_stable.empty()) {
 	  force_flush = true;  // there's nothing else to commit!
 	} else if (deferred_aggressive) {
 	  force_flush = true;
 	}
-      } else
-	force_flush = true;
+      } else {
+      	if (aios || !deferred_done.empty()) {
+	  force_flush = true;
+      	} else {
+	  dout(20) << __func__ << " skipping flush (no aios, no deferred_done)" << dendl;
+      	}
+      }
 
       if (force_flush) {
 	dout(20) << __func__ << " num_aios=" << aios
@@ -8237,7 +10275,7 @@ void BlueStore::_kv_sync_thread()
 			       deferred_done.end());
 	deferred_done.clear();
       }
-      utime_t after_flush = ceph_clock_now();
+      auto after_flush = mono_clock::now();
 
       // we will use one final transaction to force a sync
       KeyValueDB::Transaction synct = db->get_transaction();
@@ -8252,7 +10290,7 @@ void BlueStore::_kv_sync_thread()
 	  kv_submitting.empty() ? synct : kv_submitting.front()->t;
 	new_nid_max = nid_last + cct->_conf->bluestore_nid_prealloc;
 	bufferlist bl;
-	::encode(new_nid_max, bl);
+	encode(new_nid_max, bl);
 	t->set(PREFIX_SUPER, "nid_max", bl);
 	dout(10) << __func__ << " new_nid_max " << new_nid_max << dendl;
       }
@@ -8261,30 +10299,31 @@ void BlueStore::_kv_sync_thread()
 	  kv_submitting.empty() ? synct : kv_submitting.front()->t;
 	new_blobid_max = blobid_last + cct->_conf->bluestore_blobid_prealloc;
 	bufferlist bl;
-	::encode(new_blobid_max, bl);
+	encode(new_blobid_max, bl);
 	t->set(PREFIX_SUPER, "blobid_max", bl);
 	dout(10) << __func__ << " new_blobid_max " << new_blobid_max << dendl;
       }
-      for (auto txc : kv_submitting) {
-	assert(txc->state == TransContext::STATE_KV_QUEUED);
-	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
-	int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
-	assert(r == 0);
-	_txc_applied_kv(txc);
-	--txc->osr->kv_committing_serially;
-	txc->state = TransContext::STATE_KV_SUBMITTED;
-	if (txc->osr->kv_submitted_waiters) {
-	  std::lock_guard<std::mutex> l(txc->osr->qlock);
-	  if (txc->osr->_is_all_kv_submitted()) {
+
+      for (auto txc : kv_committing) {
+	if (txc->state == TransContext::STATE_KV_QUEUED) {
+	  txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
+	  int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction(txc->t);
+	  ceph_assert(r == 0);
+	  _txc_applied_kv(txc);
+	  --txc->osr->kv_committing_serially;
+	  txc->state = TransContext::STATE_KV_SUBMITTED;
+	  if (txc->osr->kv_submitted_waiters) {
+	    std::lock_guard l(txc->osr->qlock);
 	    txc->osr->qcond.notify_all();
 	  }
+
+	} else {
+	  ceph_assert(txc->state == TransContext::STATE_KV_SUBMITTED);
+	  txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
 	}
-      }
-      for (auto txc : kv_committing) {
 	if (txc->had_ios) {
 	  --txc->osr->txc_with_unstable_io;
 	}
-	txc->log_state_latency(logger, l_bluestore_state_kv_queued_lat);
       }
 
       // release throttle *before* we commit.  this allows new ops
@@ -8295,38 +10334,19 @@ void BlueStore::_kv_sync_thread()
       // transaction is ready for commit.
       throttle_bytes.put(costs);
 
-      PExtentVector bluefs_gift_extents;
       if (bluefs &&
 	  after_flush - bluefs_last_balance >
-	  cct->_conf->bluestore_bluefs_balance_interval) {
+	  ceph::make_timespan(cct->_conf->bluestore_bluefs_balance_interval)) {
 	bluefs_last_balance = after_flush;
-	int r = _balance_bluefs_freespace(&bluefs_gift_extents);
-	assert(r >= 0);
-	if (r > 0) {
-	  for (auto& p : bluefs_gift_extents) {
-	    bluefs_extents.insert(p.offset, p.length);
-	  }
-	  bufferlist bl;
-	  ::encode(bluefs_extents, bl);
-	  dout(10) << __func__ << " bluefs_extents now 0x" << std::hex
-		   << bluefs_extents << std::dec << dendl;
-	  synct->set(PREFIX_SUPER, "bluefs_extents", bl);
-	}
+	int r = _balance_bluefs_freespace();
+	ceph_assert(r >= 0);
       }
 
       // cleanup sync deferred keys
       for (auto b : deferred_stable) {
 	for (auto& txc : b->txcs) {
 	  bluestore_deferred_transaction_t& wt = *txc.deferred_txn;
-	  if (!wt.released.empty()) {
-	    // kraken replay compat only
-	    txc.released = wt.released;
-	    dout(10) << __func__ << " deferred txn has released "
-		     << txc.released
-		     << " (we just upgraded from kraken) on " << &txc << dendl;
-	    _txc_finalize_kv(&txc, synct);
-	  }
-	  // cleanup the deferred
+	  ceph_assert(wt.released.empty()); // only kraken did this
 	  string key;
 	  get_deferred_key(wt.seq, &key);
 	  synct->rm_single_key(PREFIX_DEFERRED, key);
@@ -8335,7 +10355,30 @@ void BlueStore::_kv_sync_thread()
 
       // submit synct synchronously (block and wait for it to commit)
       int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction_sync(synct);
-      assert(r == 0);
+      ceph_assert(r == 0);
+
+      {
+	std::unique_lock m(kv_finalize_lock);
+	if (kv_committing_to_finalize.empty()) {
+	  kv_committing_to_finalize.swap(kv_committing);
+	} else {
+	  kv_committing_to_finalize.insert(
+	      kv_committing_to_finalize.end(),
+	      kv_committing.begin(),
+	      kv_committing.end());
+	  kv_committing.clear();
+	}
+	if (deferred_stable_to_finalize.empty()) {
+	  deferred_stable_to_finalize.swap(deferred_stable);
+	} else {
+	  deferred_stable_to_finalize.insert(
+	      deferred_stable_to_finalize.end(),
+	      deferred_stable.begin(),
+	      deferred_stable.end());
+	  deferred_stable.clear();
+	}
+	kv_finalize_cond.notify_one();
+      }
 
       if (new_nid_max) {
 	nid_max = new_nid_max;
@@ -8346,57 +10389,28 @@ void BlueStore::_kv_sync_thread()
 	dout(10) << __func__ << " blobid_max now " << blobid_max << dendl;
       }
 
-      utime_t finish = ceph_clock_now();
-      utime_t dur_flush = after_flush - start;
-      utime_t dur_kv = finish - after_flush;
-      utime_t dur = finish - start;
-      dout(20) << __func__ << " committed " << kv_committing.size()
-	       << " cleaned " << deferred_stable.size()
-	       << " in " << dur
-	       << " (" << dur_flush << " flush + " << dur_kv << " kv commit)"
-	       << dendl;
-      if (logger) {
+      {
+	auto finish = mono_clock::now();
+	ceph::timespan dur_flush = after_flush - start;
+	ceph::timespan dur_kv = finish - after_flush;
+	ceph::timespan dur = finish - start;
+	dout(20) << __func__ << " committed " << kv_committing.size()
+	  << " cleaned " << deferred_stable.size()
+	  << " in " << dur
+	  << " (" << dur_flush << " flush + " << dur_kv << " kv commit)"
+	  << dendl;
 	logger->tinc(l_bluestore_kv_flush_lat, dur_flush);
 	logger->tinc(l_bluestore_kv_commit_lat, dur_kv);
-	logger->tinc(l_bluestore_kv_lat, dur);
+	logger->tinc(l_bluestore_kv_sync_lat, dur);
       }
 
       if (bluefs) {
-	if (!bluefs_gift_extents.empty()) {
-	  _commit_bluefs_freespace(bluefs_gift_extents);
+	if (!bluefs_extents_reclaiming.empty()) {
+	  dout(0) << __func__ << " releasing old bluefs 0x" << std::hex
+		   << bluefs_extents_reclaiming << std::dec << dendl;
+	  alloc->release(bluefs_extents_reclaiming);
+	  bluefs_extents_reclaiming.clear();
 	}
-	for (auto p = bluefs_extents_reclaiming.begin();
-	     p != bluefs_extents_reclaiming.end();
-	     ++p) {
-	  dout(20) << __func__ << " releasing old bluefs 0x" << std::hex
-		   << p.get_start() << "~" << p.get_len() << std::dec
-		   << dendl;
-	  alloc->release(p.get_start(), p.get_len());
-	}
-	bluefs_extents_reclaiming.clear();
-      }
-
-      {
-	std::unique_lock<std::mutex> m(kv_finalize_lock);
-	if (kv_committing_to_finalize.empty()) {
-	  kv_committing_to_finalize.swap(kv_committing);
-	} else {
-	  kv_committing_to_finalize.insert(
-	    kv_committing_to_finalize.end(),
-	    kv_committing.begin(),
-	    kv_committing.end());
-	  kv_committing.clear();
-	}
-	if (deferred_stable_to_finalize.empty()) {
-	  deferred_stable_to_finalize.swap(deferred_stable);
-	} else {
-	  deferred_stable_to_finalize.insert(
-	    deferred_stable_to_finalize.end(),
-	    deferred_stable.begin(),
-	    deferred_stable.end());
-          deferred_stable.clear();
-	}
-	kv_finalize_cond.notify_one();
       }
 
       l.lock();
@@ -8414,13 +10428,13 @@ void BlueStore::_kv_finalize_thread()
   deque<TransContext*> kv_committed;
   deque<DeferredBatch*> deferred_stable;
   dout(10) << __func__ << " start" << dendl;
-  std::unique_lock<std::mutex> l(kv_finalize_lock);
-  assert(!kv_finalize_started);
+  std::unique_lock l(kv_finalize_lock);
+  ceph_assert(!kv_finalize_started);
   kv_finalize_started = true;
   kv_finalize_cond.notify_all();
   while (true) {
-    assert(kv_committed.empty());
-    assert(deferred_stable.empty());
+    ceph_assert(kv_committed.empty());
+    ceph_assert(deferred_stable.empty());
     if (kv_committing_to_finalize.empty() &&
 	deferred_stable_to_finalize.empty()) {
       if (kv_finalize_stop)
@@ -8435,9 +10449,11 @@ void BlueStore::_kv_finalize_thread()
       dout(20) << __func__ << " kv_committed " << kv_committed << dendl;
       dout(20) << __func__ << " deferred_stable " << deferred_stable << dendl;
 
+      auto start = mono_clock::now();
+
       while (!kv_committed.empty()) {
 	TransContext *txc = kv_committed.front();
-	assert(txc->state == TransContext::STATE_KV_SUBMITTED);
+	ceph_assert(txc->state == TransContext::STATE_KV_SUBMITTED);
 	_txc_state_proc(txc);
 	kv_committed.pop_front();
       }
@@ -8454,15 +10470,19 @@ void BlueStore::_kv_finalize_thread()
       deferred_stable.clear();
 
       if (!deferred_aggressive) {
-	std::lock_guard<std::mutex> l(deferred_lock);
 	if (deferred_queue_size >= deferred_batch_ops.load() ||
 	    throttle_deferred_bytes.past_midpoint()) {
-	  _deferred_try_submit();
+	  deferred_try_submit();
 	}
       }
 
       // this is as good a place as any ...
       _reap_collections();
+
+      logger->set(l_bluestore_fragmentation,
+	  (uint64_t)(alloc->get_fragmentation(min_alloc_size) * 1000));
+
+      logger->tinc(l_bluestore_kv_final_lat, mono_clock::now() - start);
 
       l.lock();
     }
@@ -8484,7 +10504,7 @@ bluestore_deferred_op_t *BlueStore::_get_deferred_op(
 void BlueStore::_deferred_queue(TransContext *txc)
 {
   dout(20) << __func__ << " txc " << txc << " osr " << txc->osr << dendl;
-  std::lock_guard<std::mutex> l(deferred_lock);
+  deferred_lock.lock();
   if (!txc->osr->deferred_pending &&
       !txc->osr->deferred_running) {
     deferred_queue.push_back(*txc->osr);
@@ -8497,7 +10517,7 @@ void BlueStore::_deferred_queue(TransContext *txc)
   bluestore_deferred_transaction_t& wt = *txc->deferred_txn;
   for (auto opi = wt.ops.begin(); opi != wt.ops.end(); ++opi) {
     const auto& op = *opi;
-    assert(op.op == bluestore_deferred_op_t::OP_WRITE);
+    ceph_assert(op.op == bluestore_deferred_op_t::OP_WRITE);
     bufferlist::const_iterator p = op.data.begin();
     for (auto e : op.extents) {
       txc->osr->deferred_pending->prepare_write(
@@ -8506,36 +10526,57 @@ void BlueStore::_deferred_queue(TransContext *txc)
   }
   if (deferred_aggressive &&
       !txc->osr->deferred_running) {
-    _deferred_submit(txc->osr.get());
+    _deferred_submit_unlock(txc->osr.get());
+  } else {
+    deferred_lock.unlock();
   }
 }
 
-void BlueStore::_deferred_try_submit()
+void BlueStore::deferred_try_submit()
 {
   dout(20) << __func__ << " " << deferred_queue.size() << " osrs, "
 	   << deferred_queue_size << " txcs" << dendl;
+  std::lock_guard l(deferred_lock);
+  vector<OpSequencerRef> osrs;
+  osrs.reserve(deferred_queue.size());
   for (auto& osr : deferred_queue) {
-    if (!osr.deferred_running) {
-      _deferred_submit(&osr);
+    osrs.push_back(&osr);
+  }
+  for (auto& osr : osrs) {
+    if (osr->deferred_pending) {
+      if (!osr->deferred_running) {
+	_deferred_submit_unlock(osr.get());
+	deferred_lock.lock();
+      } else {
+	dout(20) << __func__ << "  osr " << osr << " already has running"
+		 << dendl;
+      }
+    } else {
+      dout(20) << __func__ << "  osr " << osr << " has no pending" << dendl;
     }
   }
 }
 
-void BlueStore::_deferred_submit(OpSequencer *osr)
+void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
 {
   dout(10) << __func__ << " osr " << osr
 	   << " " << osr->deferred_pending->iomap.size() << " ios pending "
 	   << dendl;
-  assert(osr->deferred_pending);
-  assert(!osr->deferred_running);
+  ceph_assert(osr->deferred_pending);
+  ceph_assert(!osr->deferred_running);
 
   auto b = osr->deferred_pending;
   deferred_queue_size -= b->seq_bytes.size();
-  assert(deferred_queue_size >= 0);
+  ceph_assert(deferred_queue_size >= 0);
 
   osr->deferred_running = osr->deferred_pending;
   osr->deferred_pending = nullptr;
 
+  deferred_lock.unlock();
+
+  for (auto& txc : b->txcs) {
+    txc.log_state_latency(logger, l_bluestore_state_deferred_queued_lat);
+  }
   uint64_t start = 0, pos = 0;
   bufferlist bl;
   auto i = b->iomap.begin();
@@ -8545,11 +10586,11 @@ void BlueStore::_deferred_submit(OpSequencer *osr)
 	dout(20) << __func__ << " write 0x" << std::hex
 		 << start << "~" << bl.length()
 		 << " crc " << bl.crc32c(-1) << std::dec << dendl;
-	if (!g_conf->bluestore_debug_omit_block_device_write) {
+	if (!g_conf()->bluestore_debug_omit_block_device_write) {
 	  logger->inc(l_bluestore_deferred_write_ops);
 	  logger->inc(l_bluestore_deferred_write_bytes, bl.length());
 	  int r = bdev->aio_write(start, bl, &b->ioc, false);
-	  assert(r == 0);
+	  ceph_assert(r == 0);
 	}
       }
       if (i == b->iomap.end()) {
@@ -8569,45 +10610,60 @@ void BlueStore::_deferred_submit(OpSequencer *osr)
     bl.claim_append(i->second.bl);
     ++i;
   }
+
   bdev->aio_submit(&b->ioc);
 }
+
+struct C_DeferredTrySubmit : public Context {
+  BlueStore *store;
+  C_DeferredTrySubmit(BlueStore *s) : store(s) {}
+  void finish(int r) {
+    store->deferred_try_submit();
+  }
+};
 
 void BlueStore::_deferred_aio_finish(OpSequencer *osr)
 {
   dout(10) << __func__ << " osr " << osr << dendl;
-  assert(osr->deferred_running);
+  ceph_assert(osr->deferred_running);
   DeferredBatch *b = osr->deferred_running;
 
   {
-    std::lock_guard<std::mutex> l(deferred_lock);
-    assert(osr->deferred_running == b);
+    std::lock_guard l(deferred_lock);
+    ceph_assert(osr->deferred_running == b);
     osr->deferred_running = nullptr;
     if (!osr->deferred_pending) {
+      dout(20) << __func__ << " dequeueing" << dendl;
       auto q = deferred_queue.iterator_to(*osr);
       deferred_queue.erase(q);
     } else if (deferred_aggressive) {
-      _deferred_submit(osr);
+      dout(20) << __func__ << " queuing async deferred_try_submit" << dendl;
+      deferred_finisher.queue(new C_DeferredTrySubmit(this));
+    } else {
+      dout(20) << __func__ << " leaving queued, more pending" << dendl;
     }
   }
 
   {
     uint64_t costs = 0;
-    std::lock_guard<std::mutex> l2(osr->qlock);
-    for (auto& i : b->txcs) {
-      TransContext *txc = &i;
-      txc->state = TransContext::STATE_DEFERRED_CLEANUP;
-      costs += txc->cost;
+    {
+      std::lock_guard l2(osr->qlock);
+      for (auto& i : b->txcs) {
+	TransContext *txc = &i;
+	txc->log_state_latency(logger, l_bluestore_state_deferred_aio_wait_lat);
+	txc->state = TransContext::STATE_DEFERRED_CLEANUP;
+	costs += txc->cost;
+      }
     }
-    osr->qcond.notify_all();
     throttle_deferred_bytes.put(costs);
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     deferred_done_queue.emplace_back(b);
   }
 
   // in the normal case, do not bother waking up the kv thread; it will
   // catch us on the next commit anyway.
   if (deferred_aggressive) {
-    std::lock_guard<std::mutex> l(kv_lock);
+    std::lock_guard l(kv_lock);
     kv_cond.notify_one();
   }
 }
@@ -8615,9 +10671,16 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
 int BlueStore::_deferred_replay()
 {
   dout(10) << __func__ << " start" << dendl;
-  OpSequencerRef osr = new OpSequencer(cct, this);
   int count = 0;
   int r = 0;
+  CollectionRef ch = _get_collection(coll_t::meta());
+  bool fake_ch = false;
+  if (!ch) {
+    // hmm, replaying initial mkfs?
+    ch = static_cast<Collection*>(create_new_collection(coll_t::meta()).get());
+    fake_ch = true;
+  }
+  OpSequencer *osr = static_cast<OpSequencer*>(ch->osr.get());
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_DEFERRED);
   for (it->lower_bound(string()); it->valid(); it->next(), ++count) {
     dout(20) << __func__ << " replay " << pretty_binary_string(it->key())
@@ -8625,9 +10688,9 @@ int BlueStore::_deferred_replay()
     bluestore_deferred_transaction_t *deferred_txn =
       new bluestore_deferred_transaction_t;
     bufferlist bl = it->value();
-    bufferlist::iterator p = bl.begin();
+    auto p = bl.cbegin();
     try {
-      ::decode(*deferred_txn, p);
+      decode(*deferred_txn, p);
     } catch (buffer::error& e) {
       derr << __func__ << " failed to decode deferred txn "
 	   << pretty_binary_string(it->key()) << dendl;
@@ -8635,15 +10698,18 @@ int BlueStore::_deferred_replay()
       r = -EIO;
       goto out;
     }
-    TransContext *txc = _txc_create(osr.get());
+    TransContext *txc = _txc_create(ch.get(), osr,  nullptr);
     txc->deferred_txn = deferred_txn;
     txc->state = TransContext::STATE_KV_DONE;
     _txc_state_proc(txc);
   }
  out:
   dout(20) << __func__ << " draining osr" << dendl;
+  _osr_register_zombie(osr);
   _osr_drain_all();
-  osr->discard();
+  if (fake_ch) {
+    new_coll_map.clear();
+  }
   dout(10) << __func__ << " completed " << count << " events" << dendl;
   return r;
 }
@@ -8652,48 +10718,37 @@ int BlueStore::_deferred_replay()
 // transactions
 
 int BlueStore::queue_transactions(
-    Sequencer *posr,
-    vector<Transaction>& tls,
-    TrackedOpRef op,
-    ThreadPool::TPHandle *handle)
+  CollectionHandle& ch,
+  vector<Transaction>& tls,
+  TrackedOpRef op,
+  ThreadPool::TPHandle *handle)
 {
-  FUNCTRACE();
-  Context *onreadable;
-  Context *ondisk;
-  Context *onreadable_sync;
+  FUNCTRACE(cct);
+  list<Context *> on_applied, on_commit, on_applied_sync;
   ObjectStore::Transaction::collect_contexts(
-    tls, &onreadable, &ondisk, &onreadable_sync);
+    tls, &on_applied, &on_commit, &on_applied_sync);
 
   if (cct->_conf->objectstore_blackhole) {
     dout(0) << __func__ << " objectstore_blackhole = TRUE, dropping transaction"
 	    << dendl;
-    delete ondisk;
-    delete onreadable;
-    delete onreadable_sync;
+    for (auto& l : { on_applied, on_commit, on_applied_sync }) {
+      for (auto c : l) {
+	delete c;
+      }
+    }
     return 0;
   }
-  utime_t start = ceph_clock_now();
-  // set up the sequencer
-  OpSequencer *osr;
-  assert(posr);
-  if (posr->p) {
-    osr = static_cast<OpSequencer *>(posr->p.get());
-    dout(10) << __func__ << " existing " << osr << " " << *osr << dendl;
-  } else {
-    osr = new OpSequencer(cct, this);
-    osr->parent = posr;
-    posr->p = osr;
-    dout(10) << __func__ << " new " << osr << " " << *osr << dendl;
-  }
+  auto start = mono_clock::now();
+
+  Collection *c = static_cast<Collection*>(ch.get());
+  OpSequencer *osr = c->osr.get();
+  dout(10) << __func__ << " ch " << c << " " << c->cid << dendl;
 
   // prepare
-  TransContext *txc = _txc_create(osr);
-  txc->onreadable = onreadable;
-  txc->onreadable_sync = onreadable_sync;
-  txc->oncommit = ondisk;
+  TransContext *txc = _txc_create(static_cast<Collection*>(ch.get()), osr,
+				  &on_commit);
 
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
-    (*p).set_osr(osr);
     txc->bytes += (*p).get_num_bytes();
     _txc_add_transaction(txc, &(*p));
   }
@@ -8705,7 +10760,7 @@ int BlueStore::queue_transactions(
   if (txc->deferred_txn) {
     txc->deferred_txn->seq = ++deferred_seq;
     bufferlist bl;
-    ::encode(*txc->deferred_txn, bl);
+    encode(*txc->deferred_txn, bl);
     string key;
     get_deferred_key(txc->deferred_txn->seq, &key);
     txc->t->set(PREFIX_DEFERRED, key, bl);
@@ -8715,16 +10770,25 @@ int BlueStore::queue_transactions(
   if (handle)
     handle->suspend_tp_timeout();
 
-  utime_t tstart = ceph_clock_now();
+  auto tstart = mono_clock::now();
   throttle_bytes.get(txc->cost);
   if (txc->deferred_txn) {
     // ensure we do not block here because of deferred writes
     if (!throttle_deferred_bytes.get_or_fail(txc->cost)) {
+      dout(10) << __func__ << " failed get throttle_deferred_bytes, aggressive"
+	       << dendl;
+      ++deferred_aggressive;
       deferred_try_submit();
+      {
+	// wake up any previously finished deferred events
+	std::lock_guard l(kv_lock);
+	kv_cond.notify_one();
+      }
       throttle_deferred_bytes.get(txc->cost);
-    }
+      --deferred_aggressive;
+   }
   }
-  utime_t tend = ceph_clock_now();
+  auto tend = mono_clock::now();
 
   if (handle)
     handle->reset_tp_timeout();
@@ -8734,7 +10798,19 @@ int BlueStore::queue_transactions(
   // execute (start)
   _txc_state_proc(txc);
 
-  logger->tinc(l_bluestore_submit_lat, ceph_clock_now() - start);
+  // we're immediately readable (unlike FileStore)
+  for (auto c : on_applied_sync) {
+    c->complete(0);
+  }
+  if (!on_applied.empty()) {
+    if (c->commit_queue) {
+      c->commit_queue->queue(on_applied);
+    } else {
+      finisher.queue(on_applied);
+    }
+  }
+
+  logger->tinc(l_bluestore_submit_lat, mono_clock::now() - start);
   logger->tinc(l_bluestore_throttle_lat, tend - tstart);
   return 0;
 }
@@ -8756,11 +10832,8 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
   for (vector<coll_t>::iterator p = i.colls.begin(); p != i.colls.end();
        ++p, ++j) {
     cvec[j] = _get_collection(*p);
-
-    // note first collection we reference
-    if (!txc->first_collection)
-      txc->first_collection = cvec[j];
   }
+  
   vector<OnodeRef> ovec(i.objects.size());
 
   for (int pos = 0; i.have_op(); ++pos) {
@@ -8771,8 +10844,19 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     if (op->op == Transaction::OP_NOP)
       continue;
 
+
     // collection operations
     CollectionRef &c = cvec[op->cid];
+
+    // initialize osd_pool_id and do a smoke test that all collections belong
+    // to the same pool
+    spg_t pgid;
+    if (!!c ? c->cid.is_pg(&pgid) : false) {
+      ceph_assert(txc->osd_pool_id == META_POOL_ID ||
+                  txc->osd_pool_id == pgid.pool());
+      txc->osd_pool_id = pgid.pool();
+    }
+
     switch (op->op) {
     case Transaction::OP_RMCOLL:
       {
@@ -8785,7 +10869,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
 
     case Transaction::OP_MKCOLL:
       {
-	assert(!c);
+	ceph_assert(!c);
 	const coll_t &cid = i.get_cid(op->cid);
 	r = _create_collection(txc, cid, op->split_bits, &c);
 	if (!r)
@@ -8794,7 +10878,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_SPLIT_COLLECTION:
-      assert(0 == "deprecated");
+      ceph_abort_msg("deprecated");
       break;
 
     case Transaction::OP_SPLIT_COLLECTION2:
@@ -8807,17 +10891,26 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       }
       break;
 
+    case Transaction::OP_MERGE_COLLECTION:
+      {
+        uint32_t bits = op->split_bits;
+	r = _merge_collection(txc, &c, cvec[op->dest_cid], bits);
+	if (!r)
+	  continue;
+      }
+      break;
+
     case Transaction::OP_COLL_HINT:
       {
         uint32_t type = op->hint_type;
         bufferlist hint;
         i.decode_bl(hint);
-        bufferlist::iterator hiter = hint.begin();
+        auto hiter = hint.cbegin();
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;
-          ::decode(pg_num, hiter);
-          ::decode(num_objs, hiter);
+          decode(pg_num, hiter);
+          decode(num_objs, hiter);
           dout(10) << __func__ << " collection hint objects is a no-op, "
 		   << " pg_num " << pg_num << " num_objects " << num_objs
 		   << dendl;
@@ -8838,15 +10931,15 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_COLL_RENAME:
-      assert(0 == "not implemented");
+      ceph_abort_msg("not implemented");
       break;
     }
     if (r < 0) {
       derr << __func__ << " error " << cpp_strerror(r)
            << " not handled on operation " << op->op
            << " (op " << pos << ", counting from 0)" << dendl;
-      _dump_transaction(t, 0);
-      assert(0 == "unexpected error");
+      _dump_transaction<0>(t);
+      ceph_abort_msg("unexpected error");
     }
 
     // these operations implicity create the object
@@ -8904,7 +10997,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     case Transaction::OP_TRUNCATE:
       {
         uint64_t off = op->off;
-	_truncate(txc, c, o, off);
+	r = _truncate(txc, c, o, off);
       }
       break;
 
@@ -8956,7 +11049,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_CLONERANGE:
-      assert(0 == "deprecated");
+      ceph_abort_msg("deprecated");
       break;
 
     case Transaction::OP_CLONERANGE2:
@@ -8974,21 +11067,21 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     case Transaction::OP_COLL_ADD:
-      assert(0 == "not implemented");
+      ceph_abort_msg("not implemented");
       break;
 
     case Transaction::OP_COLL_REMOVE:
-      assert(0 == "not implemented");
+      ceph_abort_msg("not implemented");
       break;
 
     case Transaction::OP_COLL_MOVE:
-      assert(0 == "deprecated");
+      ceph_abort_msg("deprecated");
       break;
 
     case Transaction::OP_COLL_MOVE_RENAME:
     case Transaction::OP_TRY_RENAME:
       {
-	assert(op->cid == op->dest_cid);
+	ceph_assert(op->cid == op->dest_cid);
 	const ghobject_t& noid = i.get_oid(op->dest_oid);
 	OnodeRef& no = ovec[op->dest_oid];
 	if (!no) {
@@ -9043,7 +11136,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
       break;
 
     default:
-      derr << __func__ << "bad op " << op->op << dendl;
+      derr << __func__ << " bad op " << op->op << dendl;
       ceph_abort();
     }
 
@@ -9089,8 +11182,8 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
              << " (op " << pos << ", counting from 0)"
              << dendl;
         derr << msg << dendl;
-        _dump_transaction(t, 0);
-	assert(0 == "unexpected error");
+        _dump_transaction<0>(t);
+	ceph_abort_msg("unexpected error");
       }
     }
   }
@@ -9107,18 +11200,18 @@ int BlueStore::_touch(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
-  o->exists = true;
   _assign_nid(txc, o);
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
 }
 
-void BlueStore::_dump_onode(OnodeRef o, int log_level)
+template <int LogLevelV>
+void BlueStore::_dump_onode(const OnodeRef& o)
 {
-  if (!cct->_conf->subsys.should_gather(ceph_subsys_bluestore, log_level))
+  if (!cct->_conf->subsys.should_gather<ceph_subsys_bluestore, LogLevelV>())
     return;
-  dout(log_level) << __func__ << " " << o << " " << o->oid
+  dout(LogLevelV) << __func__ << " " << o << " " << o->oid
 		  << " nid " << o->onode.nid
 		  << " size 0x" << std::hex << o->onode.size
 		  << " (" << std::dec << o->onode.size << ")"
@@ -9131,24 +11224,25 @@ void BlueStore::_dump_onode(OnodeRef o, int log_level)
   for (auto p = o->onode.attrs.begin();
        p != o->onode.attrs.end();
        ++p) {
-    dout(log_level) << __func__ << "  attr " << p->first
+    dout(LogLevelV) << __func__ << "  attr " << p->first
 		    << " len " << p->second.length() << dendl;
   }
-  _dump_extent_map(o->extent_map, log_level);
+  _dump_extent_map<LogLevelV>(o->extent_map);
 }
 
-void BlueStore::_dump_extent_map(ExtentMap &em, int log_level)
+template <int LogLevelV>
+void BlueStore::_dump_extent_map(ExtentMap &em)
 {
   uint64_t pos = 0;
   for (auto& s : em.shards) {
-    dout(log_level) << __func__ << "  shard " << *s.shard_info
+    dout(LogLevelV) << __func__ << "  shard " << *s.shard_info
 		    << (s.loaded ? " (loaded)" : "")
 		    << (s.dirty ? " (dirty)" : "")
 		    << dendl;
   }
   for (auto& e : em.extent_map) {
-    dout(log_level) << __func__ << "  " << e << dendl;
-    assert(e.logical_offset >= pos);
+    dout(LogLevelV) << __func__ << "  " << e << dendl;
+    ceph_assert(e.logical_offset >= pos);
     pos = e.logical_offset + e.length;
     const bluestore_blob_t& blob = e.blob->get_blob();
     if (blob.has_csum()) {
@@ -9156,21 +11250,22 @@ void BlueStore::_dump_extent_map(ExtentMap &em, int log_level)
       unsigned n = blob.get_csum_count();
       for (unsigned i = 0; i < n; ++i)
 	v.push_back(blob.get_csum_item(i));
-      dout(log_level) << __func__ << "      csum: " << std::hex << v << std::dec
+      dout(LogLevelV) << __func__ << "      csum: " << std::hex << v << std::dec
 		      << dendl;
     }
-    std::lock_guard<std::recursive_mutex> l(e.blob->shared_blob->get_cache()->lock);
+    std::lock_guard l(e.blob->shared_blob->get_cache()->lock);
     for (auto& i : e.blob->shared_blob->bc.buffer_map) {
-      dout(log_level) << __func__ << "       0x" << std::hex << i.first
+      dout(LogLevelV) << __func__ << "       0x" << std::hex << i.first
 		      << "~" << i.second->length << std::dec
 		      << " " << *i.second << dendl;
     }
   }
 }
 
-void BlueStore::_dump_transaction(Transaction *t, int log_level)
+template <int LogLevelV>
+void BlueStore::_dump_transaction(Transaction *t)
 {
-  dout(log_level) << " transaction dump:\n";
+  dout(LogLevelV) << __func__ << " transaction dump:\n";
   JSONFormatter f(true);
   f.open_object_section("transaction");
   t->dump(&f);
@@ -9194,14 +11289,14 @@ void BlueStore::_pad_zeros(
   size_t back_pad = 0;
   size_t pad_count = 0;
   if (front_pad) {
-    size_t front_copy = MIN(chunk_size - front_pad, length);
-    bufferptr z = buffer::create_page_aligned(chunk_size);
-    memset(z.c_str(), 0, front_pad);
+    size_t front_copy = std::min<uint64_t>(chunk_size - front_pad, length);
+    bufferptr z = buffer::create_small_page_aligned(chunk_size);
+    z.zero(0, front_pad, false);
     pad_count += front_pad;
-    memcpy(z.c_str() + front_pad, bl->get_contiguous(0, front_copy), front_copy);
+    bl->copy(0, front_copy, z.c_str() + front_pad);
     if (front_copy + front_pad < chunk_size) {
       back_pad = chunk_size - (length + front_pad);
-      memset(z.c_str() + front_pad + length, 0, back_pad);
+      z.zero(front_pad + length, back_pad, false);
       pad_count += back_pad;
     }
     bufferlist old, t;
@@ -9210,20 +11305,19 @@ void BlueStore::_pad_zeros(
     bl->append(z);
     bl->claim_append(t);
     *offset -= front_pad;
-    length += front_pad + back_pad;
+    length += pad_count;
   }
 
   // back
   uint64_t end = *offset + length;
   unsigned back_copy = end % chunk_size;
   if (back_copy) {
-    assert(back_pad == 0);
+    ceph_assert(back_pad == 0);
     back_pad = chunk_size - back_copy;
-    assert(back_copy <= length);
+    ceph_assert(back_copy <= length);
     bufferptr tail(chunk_size);
-    memcpy(tail.c_str(), bl->get_contiguous(length - back_copy, back_copy),
-	   back_copy);
-    memset(tail.c_str() + back_copy, 0, back_pad);
+    bl->copy(length - back_copy, back_copy, tail.c_str());
+    tail.zero(back_copy, back_pad, false);
     bufferlist old;
     old.swap(*bl);
     bl->substr_of(old, 0, length - back_copy);
@@ -9239,7 +11333,7 @@ void BlueStore::_pad_zeros(
   *_dout << dendl;
   if (pad_count)
     logger->inc(l_bluestore_write_pad_bytes, pad_count);
-  assert(bl->length() == length);
+  ceph_assert(bl->length() == length);
 }
 
 void BlueStore::_do_write_small(
@@ -9252,7 +11346,7 @@ void BlueStore::_do_write_small(
 {
   dout(10) << __func__ << " 0x" << std::hex << offset << "~" << length
 	   << std::dec << dendl;
-  assert(length < min_alloc_size);
+  ceph_assert(length < min_alloc_size);
   uint64_t end_offs = offset + length;
 
   logger->inc(l_bluestore_write_small);
@@ -9278,16 +11372,16 @@ void BlueStore::_do_write_small(
     prev_ep = end; // to avoid this extent check as it's a duplicate
   }
 
-  auto max_bsize = MAX(wctx->target_blob_size, min_alloc_size);
+  auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
   auto min_off = offset >= max_bsize ? offset - max_bsize : 0;
   uint32_t alloc_len = min_alloc_size;
-  auto offset0 = P2ALIGN(offset, alloc_len);
+  auto offset0 = p2align(offset, alloc_len);
 
   bool any_change;
 
   // search suitable extent in both forward and reverse direction in
   // [offset - target_max_blob_size, offset + target_max_blob_size] range
-  // then check if blob can be reused via try_reuse_blob func or apply
+  // then check if blob can be reused via can_reuse_blob func or apply
   // direct/deferred write (the latter for extents including or higher
   // than 'offset' only).
   do {
@@ -9309,8 +11403,8 @@ void BlueStore::_do_write_small(
 	uint64_t chunk_size = b->get_blob().get_chunk_size(block_size);
 	// can we pad our head/tail out with zeros?
 	uint64_t head_pad, tail_pad;
-	head_pad = P2PHASE(offset, chunk_size);
-	tail_pad = P2NPHASE(end_offs, chunk_size);
+	head_pad = p2phase(offset, chunk_size);
+	tail_pad = p2nphase(end_offs, chunk_size);
 	if (head_pad || tail_pad) {
 	  o->extent_map.fault_range(db, offset - head_pad,
 				    end_offs - offset + head_pad + tail_pad);
@@ -9331,17 +11425,16 @@ void BlueStore::_do_write_small(
 	    b->get_blob().get_ondisk_length() >= b_off + b_len &&
 	    b->get_blob().is_unused(b_off, b_len) &&
 	    b->get_blob().is_allocated(b_off, b_len)) {
-	  bufferlist padded;
-	  _apply_padding(head_pad, tail_pad, bl, padded);
+	  _apply_padding(head_pad, tail_pad, bl);
 
 	  dout(20) << __func__ << "  write to unused 0x" << std::hex
 		   << b_off << "~" << b_len
 		   << " pad 0x" << head_pad << " + 0x" << tail_pad
 		   << std::dec << " of mutable " << *b << dendl;
-	  _buffer_cache_write(txc, b, b_off, padded,
+	  _buffer_cache_write(txc, b, b_off, bl,
 			      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
-	  if (!g_conf->bluestore_debug_omit_block_device_write) {
+	  if (!g_conf()->bluestore_debug_omit_block_device_write) {
 	    if (b_len <= prefer_deferred_size) {
 	      dout(20) << __func__ << " deferring small 0x" << std::hex
 		       << b_len << std::dec << " unused write via deferred" << dendl;
@@ -9353,17 +11446,17 @@ void BlueStore::_do_write_small(
 		  op->extents.emplace_back(bluestore_pextent_t(offset, length));
 		  return 0;
 		});
-	      op->data = padded;
+	      op->data = bl;
 	    } else {
 	      b->get_blob().map_bl(
-		b_off, padded,
+		b_off, bl,
 		[&](uint64_t offset, bufferlist& t) {
 		  bdev->aio_write(offset, t,
 				  &txc->ioc, wctx->buffered);
 		});
 	    }
 	  }
-	  b->dirty_blob().calc_csum(b_off, padded);
+	  b->dirty_blob().calc_csum(b_off, bl);
 	  dout(20) << __func__ << "  lex old " << *ep << dendl;
 	  Extent *le = o->extent_map.set_lextent(c, offset, b_off + head_pad, length,
 						 b,
@@ -9375,8 +11468,8 @@ void BlueStore::_do_write_small(
 	  return;
 	}
 	// read some data to fill out the chunk?
-	uint64_t head_read = P2PHASE(b_off, chunk_size);
-	uint64_t tail_read = P2NPHASE(b_off + b_len, chunk_size);
+	uint64_t head_read = p2phase(b_off, chunk_size);
+	uint64_t tail_read = p2nphase(b_off + b_len, chunk_size);
 	if ((head_read || tail_read) &&
 	    (b->get_blob().get_ondisk_length() >= b_off + b_len + tail_read) &&
 	    head_read + tail_read < min_alloc_size) {
@@ -9393,8 +11486,7 @@ void BlueStore::_do_write_small(
 	    b_len % chunk_size == 0 &&
 	    b->get_blob().is_allocated(b_off, b_len)) {
 
-	  bufferlist padded;
-	  _apply_padding(head_pad, tail_pad, bl, padded);
+	  _apply_padding(head_pad, tail_pad, bl);
 
 	  dout(20) << __func__ << "  reading head 0x" << std::hex << head_read
 		   << " and tail 0x" << tail_read << std::dec << dendl;
@@ -9402,50 +11494,54 @@ void BlueStore::_do_write_small(
 	    bufferlist head_bl;
 	    int r = _do_read(c.get(), o, offset - head_pad - head_read, head_read,
 			     head_bl, 0);
-	    assert(r >= 0 && r <= (int)head_read);
+	    ceph_assert(r >= 0 && r <= (int)head_read);
 	    size_t zlen = head_read - r;
 	    if (zlen) {
 	      head_bl.append_zero(zlen);
 	      logger->inc(l_bluestore_write_pad_bytes, zlen);
 	    }
-	    head_bl.claim_append(padded);
-	    padded.swap(head_bl);
+	    head_bl.claim_append(bl);
+	    bl.swap(head_bl);
 	    logger->inc(l_bluestore_write_penalty_read_ops);
 	  }
 	  if (tail_read) {
 	    bufferlist tail_bl;
 	    int r = _do_read(c.get(), o, offset + length + tail_pad, tail_read,
 			     tail_bl, 0);
-	    assert(r >= 0 && r <= (int)tail_read);
+	    ceph_assert(r >= 0 && r <= (int)tail_read);
 	    size_t zlen = tail_read - r;
 	    if (zlen) {
 	      tail_bl.append_zero(zlen);
 	      logger->inc(l_bluestore_write_pad_bytes, zlen);
 	    }
-	    padded.claim_append(tail_bl);
+	    bl.claim_append(tail_bl);
 	    logger->inc(l_bluestore_write_penalty_read_ops);
 	  }
 	  logger->inc(l_bluestore_write_small_pre_read);
 
-	  bluestore_deferred_op_t *op = _get_deferred_op(txc, o);
-	  op->op = bluestore_deferred_op_t::OP_WRITE;
-	  _buffer_cache_write(txc, b, b_off, padded,
+	  _buffer_cache_write(txc, b, b_off, bl,
 			      wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
-	  int r = b->get_blob().map(
-	    b_off, b_len,
-	    [&](uint64_t offset, uint64_t length) {
-	      op->extents.emplace_back(bluestore_pextent_t(offset, length));
-	      return 0;
-	    });
-	  assert(r == 0);
 	  if (b->get_blob().csum_type) {
-	    b->dirty_blob().calc_csum(b_off, padded);
+	    b->dirty_blob().calc_csum(b_off, bl);
 	  }
-	  op->data.claim(padded);
-	  dout(20) << __func__ << "  deferred write 0x" << std::hex << b_off << "~"
-		   << b_len << std::dec << " of mutable " << *b
-		   << " at " << op->extents << dendl;
+
+	  if (!g_conf()->bluestore_debug_omit_block_device_write) {
+	    bluestore_deferred_op_t *op = _get_deferred_op(txc, o);
+	    op->op = bluestore_deferred_op_t::OP_WRITE;
+	    int r = b->get_blob().map(
+	      b_off, b_len,
+	      [&](uint64_t offset, uint64_t length) {
+		op->extents.emplace_back(bluestore_pextent_t(offset, length));
+		return 0;
+	      });
+	    ceph_assert(r == 0);
+	    op->data.claim(bl);
+	    dout(20) << __func__ << "  deferred write 0x" << std::hex << b_off << "~"
+		     << b_len << std::dec << " of mutable " << *b
+		     << " at " << op->extents << dendl;
+	  }
+
 	  Extent *le = o->extent_map.set_lextent(c, offset, offset - bstart, length,
 						 b, &wctx->old_extents);
 	  b->dirty_blob().mark_used(le->blob_offset, le->length);
@@ -9454,12 +11550,12 @@ void BlueStore::_do_write_small(
 	  logger->inc(l_bluestore_write_small_deferred);
 	  return;
 	}
-	//try to reuse blob
-	if (b->try_reuse_blob(min_alloc_size,
+	// try to reuse blob if we can
+	if (b->can_reuse_blob(min_alloc_size,
 			      max_bsize,
 			      offset0 - bstart,
 			      &alloc_len)) {
-	  assert(alloc_len == min_alloc_size); // expecting data always
+	  ceph_assert(alloc_len == min_alloc_size); // expecting data always
 					       // fit into reused blob
 	  // Need to check for pending writes desiring to
 	  // reuse the same pextent. The rationale is that during GC two chunks
@@ -9501,11 +11597,11 @@ void BlueStore::_do_write_small(
       auto bstart = prev_ep->blob_start();
       dout(20) << __func__ << " considering " << *b
 	       << " bstart 0x" << std::hex << bstart << std::dec << dendl;
-      if (b->try_reuse_blob(min_alloc_size,
+      if (b->can_reuse_blob(min_alloc_size,
 			    max_bsize,
                             offset0 - bstart,
                             &alloc_len)) {
-	assert(alloc_len == min_alloc_size); // expecting data always
+	ceph_assert(alloc_len == min_alloc_size); // expecting data always
 					     // fit into reused blob
 	// Need to check for pending writes desiring to
 	// reuse the same pextent. The rationale is that during GC two chunks
@@ -9547,7 +11643,7 @@ void BlueStore::_do_write_small(
   // new blob.
   
   BlobRef b = c->new_blob();
-  uint64_t b_off = P2PHASE(offset, alloc_len);
+  uint64_t b_off = p2phase(offset, alloc_len);
   uint64_t b_off0 = b_off;
   _pad_zeros(&bl, &b_off0, block_size);
   o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
@@ -9572,10 +11668,10 @@ void BlueStore::_do_write_big(
   logger->inc(l_bluestore_write_big);
   logger->inc(l_bluestore_write_big_bytes, length);
   o->extent_map.punch_hole(c, offset, length, &wctx->old_extents);
-  auto max_bsize = MAX(wctx->target_blob_size, min_alloc_size);
+  auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
   while (length > 0) {
     bool new_blob = false;
-    uint32_t l = MIN(max_bsize, length);
+    uint32_t l = std::min(max_bsize, length);
     BlobRef b;
     uint32_t b_off = 0;
 
@@ -9594,13 +11690,13 @@ void BlueStore::_do_write_big(
       auto min_off = offset >= max_bsize ? offset - max_bsize : 0;
       // search suitable extent in both forward and reverse direction in
       // [offset - target_max_blob_size, offset + target_max_blob_size] range
-      // then check if blob can be reused via try_reuse_blob func.
+      // then check if blob can be reused via can_reuse_blob func.
       bool any_change;
       do {
 	any_change = false;
 	if (ep != end && ep->logical_offset < offset + max_bsize) {
 	  if (offset >= ep->blob_start() &&
-              ep->blob->try_reuse_blob(min_alloc_size, max_bsize,
+              ep->blob->can_reuse_blob(min_alloc_size, max_bsize,
 	                               offset - ep->blob_start(),
 	                               &l)) {
 	    b = ep->blob;
@@ -9615,7 +11711,7 @@ void BlueStore::_do_write_big(
 	}
 
 	if (prev_ep != end && prev_ep->logical_offset >= min_off) {
-	  if (prev_ep->blob->try_reuse_blob(min_alloc_size, max_bsize,
+	  if (prev_ep->blob->can_reuse_blob(min_alloc_size, max_bsize,
                                     	    offset - prev_ep->blob_start(),
                                     	    &l)) {
 	    b = prev_ep->blob;
@@ -9655,20 +11751,10 @@ int BlueStore::_do_alloc_write(
   dout(20) << __func__ << " txc " << txc
 	   << " " << wctx->writes.size() << " blobs"
 	   << dendl;
-
-  uint64_t need = 0;
-  auto max_bsize = MAX(wctx->target_blob_size, min_alloc_size);
-  for (auto &wi : wctx->writes) {
-    need += wi.blob_length;
-  }
-  int r = alloc->reserve(need);
-  if (r < 0) {
-    derr << __func__ << " failed to reserve 0x" << std::hex << need << std::dec
-	 << dendl;
-    return r;
+  if (wctx->writes.empty()) {
+    return 0;
   }
 
-  uint64_t hint = 0;
   CompressorRef c;
   double crr = 0;
   if (wctx->compress) {
@@ -9681,6 +11767,12 @@ int BlueStore::_do_alloc_write(
           CompressorRef cp = compressor;
           if (!cp || cp->get_type_name() != val) {
             cp = Compressor::create(cct, val);
+	    if (!cp) {
+	      if (_set_compression_alert(false, val.c_str())) {
+	        derr << __func__ << " unable to initialize " << val.c_str()
+		     << " compressor" << dendl;
+	      }
+	    }
           }
           return boost::optional<CompressorRef>(cp);
         }
@@ -9693,7 +11785,7 @@ int BlueStore::_do_alloc_write(
       cct->_conf->bluestore_compression_required_ratio,
       [&]() {
         double val;
-        if(coll->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &val)) {
+        if (coll->pool_opts.get(pool_opts_t::COMPRESSION_REQUIRED_RATIO, &val)) {
           return boost::optional<double>(val);
         }
         return boost::optional<double>();
@@ -9702,18 +11794,118 @@ int BlueStore::_do_alloc_write(
   }
 
   // checksum
-  int csum = csum_type.load();
+  int64_t csum = csum_type.load();
   csum = select_option(
     "csum_type",
     csum,
     [&]() {
-      int val;
-      if(coll->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
-        return  boost::optional<int>(val);
+      int64_t val;
+      if (coll->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
+        return boost::optional<int64_t>(val);
       }
-      return boost::optional<int>();
+      return boost::optional<int64_t>();
     }
   );
+
+  // compress (as needed) and calc needed space
+  uint64_t need = 0;
+  auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
+  for (auto& wi : wctx->writes) {
+    if (c && wi.blob_length > min_alloc_size) {
+      auto start = mono_clock::now();
+
+      // compress
+      ceph_assert(wi.b_off == 0);
+      ceph_assert(wi.blob_length == wi.bl.length());
+
+      // FIXME: memory alignment here is bad
+      bufferlist t;
+      int r = c->compress(wi.bl, t);
+      uint64_t want_len_raw = wi.blob_length * crr;
+      uint64_t want_len = p2roundup(want_len_raw, min_alloc_size);
+      bool rejected = false;
+      uint64_t compressed_len = t.length();
+      // do an approximate (fast) estimation for resulting blob size
+      // that doesn't take header overhead  into account
+      uint64_t result_len = p2roundup(compressed_len, min_alloc_size);
+      if (r == 0 && result_len <= want_len && result_len < wi.blob_length) {
+	bluestore_compression_header_t chdr;
+	chdr.type = c->get_type();
+	chdr.length = t.length();
+	encode(chdr, wi.compressed_bl);
+	wi.compressed_bl.claim_append(t);
+
+	compressed_len = wi.compressed_bl.length();
+	result_len = p2roundup(compressed_len, min_alloc_size);
+	if (result_len <= want_len && result_len < wi.blob_length) {
+	  // Cool. We compressed at least as much as we were hoping to.
+	  // pad out to min_alloc_size
+	  wi.compressed_bl.append_zero(result_len - compressed_len);
+	  wi.compressed_len = compressed_len;
+	  wi.compressed = true;
+	  logger->inc(l_bluestore_write_pad_bytes, result_len - compressed_len);
+	  dout(20) << __func__ << std::hex << "  compressed 0x" << wi.blob_length
+		   << " -> 0x" << compressed_len << " => 0x" << result_len
+		   << " with " << c->get_type()
+		   << std::dec << dendl;
+	  txc->statfs_delta.compressed() += compressed_len;
+	  txc->statfs_delta.compressed_original() += wi.blob_length;
+	  txc->statfs_delta.compressed_allocated() += result_len;
+	  logger->inc(l_bluestore_compress_success_count);
+	  need += result_len;
+	} else {
+	  rejected = true;
+	}
+      } else if (r != 0) {
+	dout(5) << __func__ << std::hex << "  0x" << wi.blob_length
+		 << " bytes compressed using " << c->get_type_name()
+		 << std::dec
+		 << " failed with errcode = " << r
+		 << ", leaving uncompressed"
+		 << dendl;
+	logger->inc(l_bluestore_compress_rejected_count);
+	need += wi.blob_length;
+      } else {
+	rejected = true;
+      }
+
+      if (rejected) {
+	dout(20) << __func__ << std::hex << "  0x" << wi.blob_length
+		 << " compressed to 0x" << compressed_len << " -> 0x" << result_len
+		 << " with " << c->get_type()
+		 << ", which is more than required 0x" << want_len_raw
+		 << " -> 0x" << want_len
+		 << ", leaving uncompressed"
+		 << std::dec << dendl;
+	logger->inc(l_bluestore_compress_rejected_count);
+	need += wi.blob_length;
+      }
+      logger->tinc(l_bluestore_compress_lat,
+                  mono_clock::now() - start);
+    } else {
+      need += wi.blob_length;
+    }
+  }
+  PExtentVector prealloc;
+  prealloc.reserve(2 * wctx->writes.size());;
+  int64_t prealloc_left = 0;
+  prealloc_left = alloc->allocate(
+    need, min_alloc_size, need,
+    0, &prealloc);
+  if (prealloc_left < (int64_t)need) {
+    derr << __func__ << " failed to allocate 0x" << std::hex << need
+         << " allocated 0x " << prealloc_left
+         << " min_alloc_size 0x" << min_alloc_size
+         << " available 0x " << alloc->get_free()
+         << std::dec << dendl;
+    if (prealloc.size()) {
+      alloc->release(prealloc);
+    }
+    return -ENOSPC;
+  }
+
+  dout(20) << __func__ << " prealloc " << prealloc << dendl;
+  auto prealloc_pos = prealloc.begin();
 
   for (auto& wi : wctx->writes) {
     BlobRef b = wi.b;
@@ -9722,66 +11914,15 @@ int BlueStore::_do_alloc_write(
     bufferlist *l = &wi.bl;
     uint64_t final_length = wi.blob_length;
     uint64_t csum_length = wi.blob_length;
-    unsigned csum_order = block_size_order;
-    bufferlist compressed_bl;
-    bool compressed = false;
-    if(c && wi.blob_length > min_alloc_size) {
-
-      utime_t start = ceph_clock_now();
-
-      // compress
-      assert(b_off == 0);
-      assert(wi.blob_length == l->length());
-      bluestore_compression_header_t chdr;
-      chdr.type = c->get_type();
-      // FIXME: memory alignment here is bad
-      bufferlist t;
-
-      r = c->compress(*l, t);
-      assert(r == 0);
-
-      chdr.length = t.length();
-      ::encode(chdr, compressed_bl);
-      compressed_bl.claim_append(t);
-      uint64_t rawlen = compressed_bl.length();
-      uint64_t newlen = P2ROUNDUP(rawlen, min_alloc_size);
-      uint64_t want_len_raw = final_length * crr;
-      uint64_t want_len = P2ROUNDUP(want_len_raw, min_alloc_size);
-      if (newlen <= want_len && newlen < final_length) {
-        // Cool. We compressed at least as much as we were hoping to.
-        // pad out to min_alloc_size
-	compressed_bl.append_zero(newlen - rawlen);
-	logger->inc(l_bluestore_write_pad_bytes, newlen - rawlen);
-	dout(20) << __func__ << std::hex << "  compressed 0x" << wi.blob_length
-		 << " -> 0x" << rawlen << " => 0x" << newlen
-		 << " with " << c->get_type()
-		 << std::dec << dendl;
-	txc->statfs_delta.compressed() += rawlen;
-	txc->statfs_delta.compressed_original() += l->length();
-	txc->statfs_delta.compressed_allocated() += newlen;
-	l = &compressed_bl;
-	final_length = newlen;
-	csum_length = newlen;
-	csum_order = ctz(newlen);
-	dblob.set_compressed(wi.blob_length, rawlen);
-	compressed = true;
-        logger->inc(l_bluestore_compress_success_count);
-      } else {
-	dout(20) << __func__ << std::hex << "  0x" << l->length()
-		 << " compressed to 0x" << rawlen << " -> 0x" << newlen
-                 << " with " << c->get_type()
-                 << ", which is more than required 0x" << want_len_raw
-		 << " -> 0x" << want_len
-                 << ", leaving uncompressed"
-                 << std::dec << dendl;
-        logger->inc(l_bluestore_compress_rejected_count);
-      }
-      logger->tinc(l_bluestore_compress_lat,
-		   ceph_clock_now() - start);
-    }
-    if (!compressed && wi.new_blob) {
+    if (wi.compressed) {
+      final_length = wi.compressed_bl.length();
+      csum_length = final_length;
+      l = &wi.compressed_bl;
+      dblob.set_compressed(wi.blob_length, wi.compressed_len);
+    } else if (wi.new_blob) {
       // initialize newly created blob only
-      assert(dblob.is_mutable());
+      ceph_assert(dblob.is_mutable());
+      unsigned csum_order;
       if (l->length() != wi.blob_length) {
         // hrm, maybe we could do better here, but let's not bother.
         dout(20) << __func__ << " forcing csum_order to block_size_order "
@@ -9797,41 +11938,52 @@ int BlueStore::_do_alloc_write(
       if ((suggested_boff % (1 << csum_order)) == 0 &&
            suggested_boff + final_length <= max_bsize &&
            suggested_boff > b_off) {
-        dout(20) << __func__ << " forcing blob_offset to "
+        dout(20) << __func__ << " forcing blob_offset to 0x"
                  << std::hex << suggested_boff << std::dec << dendl;
-        assert(suggested_boff >= b_off);
+        ceph_assert(suggested_boff >= b_off);
         csum_length += suggested_boff - b_off;
         b_off = suggested_boff;
       }
-    }
-
-    AllocExtentVector extents;
-    extents.reserve(4);  // 4 should be (more than) enough for most allocations
-    int64_t got = alloc->allocate(final_length, min_alloc_size, 
-				  max_alloc_size.load(),
-                    		  hint, &extents);
-    assert(got == (int64_t)final_length);
-    need -= got;
-    txc->statfs_delta.allocated() += got;
-    for (auto& p : extents) {
-      bluestore_pextent_t e = bluestore_pextent_t(p);
-      txc->allocated.insert(e.offset, e.length);
-      hint = p.end();
-    }
-    dblob.allocated(P2ALIGN(b_off, min_alloc_size), final_length, extents);
-
-    dout(20) << __func__ << " blob " << *b
-	     << " csum_type " << Checksummer::get_csum_type_string(csum)
-	     << " csum_order " << csum_order
-	     << " csum_length 0x" << std::hex << csum_length << std::dec
-	     << dendl;
-
-    if (csum != Checksummer::CSUM_NONE) {
-      if (!dblob.has_csum()) {
-	dblob.init_csum(csum, csum_order, csum_length);
+      if (csum != Checksummer::CSUM_NONE) {
+        dout(20) << __func__ << " initialize csum setting for new blob " << *b
+                 << " csum_type " << Checksummer::get_csum_type_string(csum)
+                 << " csum_order " << csum_order
+                 << " csum_length 0x" << std::hex << csum_length << std::dec
+                 << dendl;
+        dblob.init_csum(csum, csum_order, csum_length);
       }
+    }
+
+    PExtentVector extents;
+    int64_t left = final_length;
+    while (left > 0) {
+      ceph_assert(prealloc_left > 0);
+      if (prealloc_pos->length <= left) {
+	prealloc_left -= prealloc_pos->length;
+	left -= prealloc_pos->length;
+	txc->statfs_delta.allocated() += prealloc_pos->length;
+	extents.push_back(*prealloc_pos);
+	++prealloc_pos;
+      } else {
+	extents.emplace_back(prealloc_pos->offset, left);
+	prealloc_pos->offset += left;
+	prealloc_pos->length -= left;
+	prealloc_left -= left;
+	txc->statfs_delta.allocated() += left;
+	left = 0;
+	break;
+      }
+    }
+    for (auto& p : extents) {
+      txc->allocated.insert(p.offset, p.length);
+    }
+    dblob.allocated(p2align(b_off, min_alloc_size), final_length, extents);
+
+    dout(20) << __func__ << " blob " << *b << dendl;
+    if (dblob.has_csum()) {
       dblob.calc_csum(b_off, *l);
     }
+
     if (wi.mark_unused) {
       auto b_end = b_off + wi.bl.length();
       if (b_off) {
@@ -9854,7 +12006,7 @@ int BlueStore::_do_alloc_write(
                         wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
     // queue io
-    if (!g_conf->bluestore_debug_omit_block_device_write) {
+    if (!g_conf()->bluestore_debug_omit_block_device_write) {
       if (l->length() <= prefer_deferred_size.load()) {
 	dout(20) << __func__ << " deferring small 0x" << std::hex
 		 << l->length() << std::dec << " write via deferred" << dendl;
@@ -9866,7 +12018,7 @@ int BlueStore::_do_alloc_write(
 	    op->extents.emplace_back(bluestore_pextent_t(offset, length));
 	    return 0;
 	  });
-        assert(r == 0);
+        ceph_assert(r == 0);
 	op->data = *l;
       } else {
 	b->get_blob().map_bl(
@@ -9877,9 +12029,8 @@ int BlueStore::_do_alloc_write(
       }
     }
   }
-  if (need > 0) {
-    alloc->unreserve(need);
-  }
+  ceph_assert(prealloc_pos == prealloc.end());
+  ceph_assert(prealloc_left == 0);
   return 0;
 }
 
@@ -9910,10 +12061,17 @@ void BlueStore::_wctx_finish(
       if (blob.is_shared()) {
 	PExtentVector final;
         c->load_shared_blob(b->shared_blob);
+	bool unshare = false;
+	bool* unshare_ptr =
+	  !maybe_unshared_blobs || b->is_referenced() ? nullptr : &unshare;
 	for (auto e : r) {
 	  b->shared_blob->put_ref(
 	    e.offset, e.length, &final,
-	    b->is_referenced() ? nullptr : maybe_unshared_blobs);
+	    unshare_ptr);
+	}
+	if (unshare) {
+	  ceph_assert(maybe_unshared_blobs);
+	  maybe_unshared_blobs->insert(b->shared_blob.get());
 	}
 	dout(20) << __func__ << "  shared_blob release " << final
 		 << " from " << *b->shared_blob << dendl;
@@ -9968,10 +12126,10 @@ void BlueStore::_do_write_data(
     uint64_t tail_offset, tail_length;
 
     head_offset = offset;
-    head_length = P2NPHASE(offset, min_alloc_size);
+    head_length = p2nphase(offset, min_alloc_size);
 
-    tail_offset = P2ALIGN(end, min_alloc_size);
-    tail_length = P2PHASE(end, min_alloc_size);
+    tail_offset = p2align(end, min_alloc_size);
+    tail_length = p2phase(end, min_alloc_size);
 
     middle_offset = head_offset + head_length;
     middle_length = length - head_length - tail_length;
@@ -10016,7 +12174,7 @@ void BlueStore::_choose_write_options(
     comp_mode.load(),
     [&]() {
       string val;
-      if(c->pool_opts.get(pool_opts_t::COMPRESSION_MODE, &val)) {
+      if (c->pool_opts.get(pool_opts_t::COMPRESSION_MODE, &val)) {
 	return boost::optional<Compressor::CompressionMode>(
 	  Compressor::get_comp_mode_type(val));
       }
@@ -10051,8 +12209,8 @@ void BlueStore::_choose_write_options(
         "compression_max_blob_size",
         comp_max_blob_size.load(),
         [&]() {
-          int val;
-          if(c->pool_opts.get(pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, &val)) {
+          int64_t val;
+          if (c->pool_opts.get(pool_opts_t::COMPRESSION_MAX_BLOB_SIZE, &val)) {
    	    return boost::optional<uint64_t>((uint64_t)val);
           }
           return boost::optional<uint64_t>();
@@ -10065,8 +12223,8 @@ void BlueStore::_choose_write_options(
         "compression_min_blob_size",
         comp_min_blob_size.load(),
         [&]() {
-          int val;
-          if(c->pool_opts.get(pool_opts_t::COMPRESSION_MIN_BLOB_SIZE, &val)) {
+          int64_t val;
+          if (c->pool_opts.get(pool_opts_t::COMPRESSION_MIN_BLOB_SIZE, &val)) {
    	    return boost::optional<uint64_t>((uint64_t)val);
           }
           return boost::optional<uint64_t>();
@@ -10090,6 +12248,8 @@ void BlueStore::_choose_write_options(
 
   dout(20) << __func__ << " prefer csum_order " << wctx->csum_order
            << " target_blob_size 0x" << std::hex << wctx->target_blob_size
+	   << " compress=" << (int)wctx->compress
+	   << " buffered=" << (int)wctx->buffered
            << std::dec << dendl;
 }
 
@@ -10104,6 +12264,7 @@ int BlueStore::_do_gc(
 {
   auto& extents_to_collect = gc.get_extents_to_collect();
 
+  bool dirty_range_updated = false;
   WriteContext wctx_gc;
   wctx_gc.fork(wctx); // make a clone for garbage collection
 
@@ -10112,19 +12273,23 @@ int BlueStore::_do_gc(
        ++it) {
     bufferlist bl;
     int r = _do_read(c.get(), o, it->offset, it->length, bl, 0);
-    assert(r == (int)it->length);
+    ceph_assert(r == (int)it->length);
 
-    o->extent_map.fault_range(db, it->offset, it->length);
     _do_write_data(txc, c, o, it->offset, it->length, bl, &wctx_gc);
     logger->inc(l_bluestore_gc_merged, it->length);
 
     if (*dirty_start > it->offset) {
       *dirty_start = it->offset;
+      dirty_range_updated = true;
     }
 
     if (*dirty_end < it->offset + it->length) {
       *dirty_end = it->offset + it->length;
+      dirty_range_updated = true;
     }
+  }
+  if (dirty_range_updated) {
+    o->extent_map.fault_range(db, *dirty_start, *dirty_end);
   }
 
   dout(30) << __func__ << " alloc write" << dendl;
@@ -10197,7 +12362,7 @@ int BlueStore::_do_write(
     o->onode.size = end;
   }
 
-  if (benefit >= g_conf->bluestore_gc_enable_total_threshold) {
+  if (benefit >= g_conf()->bluestore_gc_enable_total_threshold) {
     if (!gc.get_extents_to_collect().empty()) {
       dout(20) << __func__ << " perform garbage collection, "
                << "expected benefit = " << benefit << " AUs" << dendl;
@@ -10207,9 +12372,10 @@ int BlueStore::_do_write(
              << dendl;
         goto out;
       }
+      dout(20)<<__func__<<" gc range is " << std::hex << dirty_start
+	      << "~" << dirty_end - dirty_start << std::dec << dendl;
     }
   }
-
   o->extent_map.compress_extent_map(dirty_start, dirty_end - dirty_start);
   o->extent_map.dirty_range(dirty_start, dirty_end - dirty_start);
 
@@ -10229,11 +12395,14 @@ int BlueStore::_write(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
-  o->exists = true;
-  _assign_nid(txc, o);
-  int r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
-  txc->write_onode(o);
-
+  int r = 0;
+  if (offset + length >= OBJECT_MAX_SIZE) {
+    r = -E2BIG;
+  } else {
+    _assign_nid(txc, o);
+    r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
+    txc->write_onode(o);
+  }
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
@@ -10248,9 +12417,13 @@ int BlueStore::_zero(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
-  o->exists = true;
-  _assign_nid(txc, o);
-  int r = _do_zero(txc, c, o, offset, length);
+  int r = 0;
+  if (offset + length >= OBJECT_MAX_SIZE) {
+    r = -E2BIG;
+  } else {
+    _assign_nid(txc, o);
+    r = _do_zero(txc, c, o, offset, length);
+  }
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
@@ -10275,7 +12448,7 @@ int BlueStore::_do_zero(TransContext *txc,
   o->extent_map.dirty_range(offset, length);
   _wctx_finish(txc, c, o, &wctx);
 
-  if (offset + length > o->onode.size) {
+  if (length > 0 && offset + length > o->onode.size) {
     o->onode.size = offset + length;
     dout(20) << __func__ << " extending size to " << offset + length
 	     << dendl;
@@ -10295,7 +12468,7 @@ void BlueStore::_do_truncate(
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << std::dec << dendl;
 
-  _dump_onode(o, 30);
+  _dump_onode(o);
 
   if (offset == o->onode.size)
     return;
@@ -10325,7 +12498,7 @@ void BlueStore::_do_truncate(
   txc->write_onode(o);
 }
 
-void BlueStore::_truncate(TransContext *txc,
+int BlueStore::_truncate(TransContext *txc,
 			 CollectionRef& c,
 			 OnodeRef& o,
 			 uint64_t offset)
@@ -10333,7 +12506,16 @@ void BlueStore::_truncate(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << std::dec
 	   << dendl;
-  _do_truncate(txc, c, o, offset);
+  int r = 0;
+  if (offset >= OBJECT_MAX_SIZE) {
+    r = -E2BIG;
+  } else {
+    _do_truncate(txc, c, o, offset);
+  }
+  dout(10) << __func__ << " " << c->cid << " " << o->oid
+	   << " 0x" << std::hex << offset << std::dec
+	   << " = " << r << dendl;
+  return r;
 }
 
 int BlueStore::_do_remove(
@@ -10342,10 +12524,13 @@ int BlueStore::_do_remove(
   OnodeRef o)
 {
   set<SharedBlob*> maybe_unshared_blobs;
-  _do_truncate(txc, c, o, 0, &maybe_unshared_blobs);
+  bool is_gen = !o->oid.is_no_gen();
+  _do_truncate(txc, c, o, 0, is_gen ? &maybe_unshared_blobs : nullptr);
   if (o->onode.has_omap()) {
     o->flush();
-    _do_omap_clear(txc, o->onode.nid);
+    _do_omap_clear(txc,
+		   o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP,
+		   o->onode.nid);
   }
   o->exists = false;
   string key;
@@ -10359,77 +12544,80 @@ int BlueStore::_do_remove(
     );
   }
   txc->t->rmkey(PREFIX_OBJ, o->key.c_str(), o->key.size());
-  txc->removed(o);
+  txc->note_removed_object(o);
   o->extent_map.clear();
   o->onode = bluestore_onode_t();
   _debug_obj_on_delete(o->oid);
 
-  if (!o->oid.is_no_gen() &&
-      !maybe_unshared_blobs.empty()) {
-    // see if we can unshare blobs still referenced by the head
-    dout(10) << __func__ << " gen and maybe_unshared_blobs "
-	     << maybe_unshared_blobs << dendl;
-    ghobject_t nogen = o->oid;
-    nogen.generation = ghobject_t::NO_GEN;
-    OnodeRef h = c->onode_map.lookup(nogen);
-    if (h && h->exists) {
-      dout(20) << __func__ << " checking for unshareable blobs on " << h
-	       << " " << h->oid << dendl;
-      map<SharedBlob*,bluestore_extent_ref_map_t> expect;
-      for (auto& e : h->extent_map.extent_map) {
-	const bluestore_blob_t& b = e.blob->get_blob();
-	SharedBlob *sb = e.blob->shared_blob.get();
-	if (b.is_shared() &&
-	    sb->loaded &&
-	    maybe_unshared_blobs.count(sb)) {
-	  b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
-	      expect[sb].get(off, len);
-	      return 0;
-	    });
-	}
-      }
-      vector<SharedBlob*> unshared_blobs;
-      unshared_blobs.reserve(maybe_unshared_blobs.size());
-      for (auto& p : expect) {
-	dout(20) << " ? " << *p.first << " vs " << p.second << dendl;
-	if (p.first->persistent->ref_map == p.second) {
-	  SharedBlob *sb = p.first;
-	  dout(20) << __func__ << "  unsharing " << *sb << dendl;
-	  unshared_blobs.push_back(sb);
-	  txc->unshare_blob(sb);
-	  uint64_t sbid = c->make_blob_unshared(sb);
-	  string key;
-	  get_shared_blob_key(sbid, &key);
-	  txc->t->rmkey(PREFIX_SHARED_BLOB, key);
-	}
-      }
+  if (!is_gen || maybe_unshared_blobs.empty()) {
+    return 0;
+  }
 
-      if (!unshared_blobs.empty()) {
-        uint32_t b_start = OBJECT_MAX_SIZE;
-        uint32_t b_end = 0;
-        for (auto& e : h->extent_map.extent_map) {
-          const bluestore_blob_t& b = e.blob->get_blob();
-          SharedBlob *sb = e.blob->shared_blob.get();
-          if (b.is_shared() &&
-              std::find(unshared_blobs.begin(), unshared_blobs.end(),
-                        sb) != unshared_blobs.end()) {
-            dout(20) << __func__ << "  unsharing " << e << dendl;
-            bluestore_blob_t& blob = e.blob->dirty_blob();
-            blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
-            if (e.logical_offset < b_start) {
-              b_start = e.logical_offset;
-            }
-            if (e.logical_end() > b_end) {
-              b_end = e.logical_end();
-            }
-          }
-        }
+  // see if we can unshare blobs still referenced by the head
+  dout(10) << __func__ << " gen and maybe_unshared_blobs "
+	   << maybe_unshared_blobs << dendl;
+  ghobject_t nogen = o->oid;
+  nogen.generation = ghobject_t::NO_GEN;
+  OnodeRef h = c->onode_map.lookup(nogen);
 
-	h->extent_map.dirty_range(b_start, b_end - b_start);
-	txc->write_onode(h);
+  if (!h || !h->exists) {
+    return 0;
+  }
+
+  dout(20) << __func__ << " checking for unshareable blobs on " << h
+	   << " " << h->oid << dendl;
+  map<SharedBlob*,bluestore_extent_ref_map_t> expect;
+  for (auto& e : h->extent_map.extent_map) {
+    const bluestore_blob_t& b = e.blob->get_blob();
+    SharedBlob *sb = e.blob->shared_blob.get();
+    if (b.is_shared() &&
+	sb->loaded &&
+	maybe_unshared_blobs.count(sb)) {
+      if (b.is_compressed()) {
+	expect[sb].get(0, b.get_ondisk_length());
+      } else {
+	b.map(e.blob_offset, e.length, [&](uint64_t off, uint64_t len) {
+	    expect[sb].get(off, len);
+	    return 0;
+	  });
       }
     }
   }
+
+  vector<SharedBlob*> unshared_blobs;
+  unshared_blobs.reserve(maybe_unshared_blobs.size());
+  for (auto& p : expect) {
+    dout(20) << " ? " << *p.first << " vs " << p.second << dendl;
+    if (p.first->persistent->ref_map == p.second) {
+      SharedBlob *sb = p.first;
+      dout(20) << __func__ << "  unsharing " << *sb << dendl;
+      unshared_blobs.push_back(sb);
+      txc->unshare_blob(sb);
+      uint64_t sbid = c->make_blob_unshared(sb);
+      string key;
+      get_shared_blob_key(sbid, &key);
+      txc->t->rmkey(PREFIX_SHARED_BLOB, key);
+    }
+  }
+
+  if (unshared_blobs.empty()) {
+    return 0;
+  }
+
+  for (auto& e : h->extent_map.extent_map) {
+    const bluestore_blob_t& b = e.blob->get_blob();
+    SharedBlob *sb = e.blob->shared_blob.get();
+    if (b.is_shared() &&
+        std::find(unshared_blobs.begin(), unshared_blobs.end(),
+                  sb) != unshared_blobs.end()) {
+      dout(20) << __func__ << "  unsharing " << e << dendl;
+      bluestore_blob_t& blob = e.blob->dirty_blob();
+      blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
+      h->extent_map.dirty_range(e.logical_offset, 1);
+    }
+  }
+  txc->write_onode(h);
+
   return 0;
 }
 
@@ -10437,7 +12625,9 @@ int BlueStore::_remove(TransContext *txc,
 		       CollectionRef& c,
 		       OnodeRef &o)
 {
-  dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
+  dout(15) << __func__ << " " << c->cid << " " << o->oid
+	   << " onode " << o.get()
+	   << " txc "<< txc << dendl;
   int r = _do_remove(txc, c, o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
@@ -10453,10 +12643,14 @@ int BlueStore::_setattr(TransContext *txc,
 	   << " " << name << " (" << val.length() << " bytes)"
 	   << dendl;
   int r = 0;
-  if (val.is_partial())
-    o->onode.attrs[name.c_str()] = bufferptr(val.c_str(), val.length());
-  else
-    o->onode.attrs[name.c_str()] = val;
+  if (val.is_partial()) {
+    auto& b = o->onode.attrs[name.c_str()] = bufferptr(val.c_str(),
+						       val.length());
+    b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+  } else {
+    auto& b = o->onode.attrs[name.c_str()] = val;
+    b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+  }
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " " << name << " (" << val.length() << " bytes)"
@@ -10475,11 +12669,14 @@ int BlueStore::_setattrs(TransContext *txc,
   int r = 0;
   for (map<string,bufferptr>::const_iterator p = aset.begin();
        p != aset.end(); ++p) {
-    if (p->second.is_partial())
-      o->onode.attrs[p->first.c_str()] =
+    if (p->second.is_partial()) {
+      auto& b = o->onode.attrs[p->first.c_str()] =
 	bufferptr(p->second.c_str(), p->second.length());
-    else
-      o->onode.attrs[p->first.c_str()] = p->second;
+      b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+    } else {
+      auto& b = o->onode.attrs[p->first.c_str()] = p->second;
+      b.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+    }
   }
   txc->write_onode(o);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
@@ -10528,23 +12725,16 @@ int BlueStore::_rmattrs(TransContext *txc,
   return r;
 }
 
-void BlueStore::_do_omap_clear(TransContext *txc, uint64_t id)
+void BlueStore::_do_omap_clear(TransContext *txc, const string& omap_prefix,
+			       uint64_t id)
 {
-  KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
   string prefix, tail;
   get_omap_header(id, &prefix);
   get_omap_tail(id, &tail);
-  it->lower_bound(prefix);
-  while (it->valid()) {
-    if (it->key() >= tail) {
-      dout(30) << __func__ << "  stop at " << pretty_binary_string(tail)
-	       << dendl;
-      break;
-    }
-    txc->t->rmkey(PREFIX_OMAP, it->key());
-    dout(30) << __func__ << "  rm " << pretty_binary_string(it->key()) << dendl;
-    it->next();
-  }
+  txc->t->rm_range_keys(omap_prefix, prefix, tail);
+  dout(20) << __func__ << " remove range start: "
+           << pretty_binary_string(prefix) << " end: "
+           << pretty_binary_string(tail) << dendl;
 }
 
 int BlueStore::_omap_clear(TransContext *txc,
@@ -10555,7 +12745,9 @@ int BlueStore::_omap_clear(TransContext *txc,
   int r = 0;
   if (o->onode.has_omap()) {
     o->flush();
-    _do_omap_clear(txc, o->onode.nid);
+    _do_omap_clear(txc,
+		   o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP,
+		   o->onode.nid);
     o->onode.clear_omap_flag();
     txc->write_onode(o);
   }
@@ -10570,28 +12762,33 @@ int BlueStore::_omap_setkeys(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   __u32 num;
   if (!o->onode.has_omap()) {
     o->onode.set_omap_flag();
+    if (o->oid.is_pgmeta()) {
+      o->onode.flags |= bluestore_onode_t::FLAG_PGMETA_OMAP;
+    }
     txc->write_onode(o);
   } else {
     txc->note_modified_object(o);
   }
+  const string& prefix =
+    o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP;
   string final_key;
   _key_encode_u64(o->onode.nid, &final_key);
   final_key.push_back('.');
-  ::decode(num, p);
+  decode(num, p);
   while (num--) {
     string key;
     bufferlist value;
-    ::decode(key, p);
-    ::decode(value, p);
+    decode(key, p);
+    decode(value, p);
     final_key.resize(9); // keep prefix
     final_key += key;
-    dout(30) << __func__ << "  " << pretty_binary_string(final_key)
+    dout(20) << __func__ << "  " << pretty_binary_string(final_key)
 	     << " <- " << key << dendl;
-    txc->t->set(PREFIX_OMAP, final_key, value);
+    txc->t->set(prefix, final_key, value);
   }
   r = 0;
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
@@ -10608,12 +12805,17 @@ int BlueStore::_omap_setheader(TransContext *txc,
   string key;
   if (!o->onode.has_omap()) {
     o->onode.set_omap_flag();
+    if (o->oid.is_pgmeta()) {
+      o->onode.flags |= bluestore_onode_t::FLAG_PGMETA_OMAP;
+    }
     txc->write_onode(o);
   } else {
     txc->note_modified_object(o);
   }
+  const string& prefix =
+    o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP;
   get_omap_header(o->onode.nid, &key);
-  txc->t->set(PREFIX_OMAP, key, bl);
+  txc->t->set(prefix, key, bl);
   r = 0;
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
   return r;
@@ -10626,24 +12828,28 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
   int r = 0;
-  bufferlist::iterator p = bl.begin();
+  auto p = bl.cbegin();
   __u32 num;
   string final_key;
 
   if (!o->onode.has_omap()) {
     goto out;
   }
-  _key_encode_u64(o->onode.nid, &final_key);
-  final_key.push_back('.');
-  ::decode(num, p);
-  while (num--) {
-    string key;
-    ::decode(key, p);
-    final_key.resize(9); // keep prefix
-    final_key += key;
-    dout(30) << __func__ << "  rm " << pretty_binary_string(final_key)
-	     << " <- " << key << dendl;
-    txc->t->rmkey(PREFIX_OMAP, final_key);
+  {
+    const string& prefix =
+      o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP;
+    _key_encode_u64(o->onode.nid, &final_key);
+    final_key.push_back('.');
+    decode(num, p);
+    while (num--) {
+      string key;
+      decode(key, p);
+      final_key.resize(9); // keep prefix
+      final_key += key;
+      dout(20) << __func__ << "  rm " << pretty_binary_string(final_key)
+	       << " <- " << key << dendl;
+      txc->t->rmkey(prefix, final_key);
+    }
   }
   txc->note_modified_object(o);
 
@@ -10658,26 +12864,21 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
 				 const string& first, const string& last)
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid << dendl;
-  KeyValueDB::Iterator it;
   string key_first, key_last;
   int r = 0;
   if (!o->onode.has_omap()) {
     goto out;
   }
-  o->flush();
-  it = db->get_iterator(PREFIX_OMAP);
-  get_omap_key(o->onode.nid, first, &key_first);
-  get_omap_key(o->onode.nid, last, &key_last);
-  it->lower_bound(key_first);
-  while (it->valid()) {
-    if (it->key() >= key_last) {
-      dout(30) << __func__ << "  stop at " << pretty_binary_string(key_last)
-	       << dendl;
-      break;
-    }
-    txc->t->rmkey(PREFIX_OMAP, it->key());
-    dout(30) << __func__ << "  rm " << pretty_binary_string(it->key()) << dendl;
-    it->next();
+  {
+    const string& prefix =
+      o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP;
+    o->flush();
+    get_omap_key(o->onode.nid, first, &key_first);
+    get_omap_key(o->onode.nid, last, &key_last);
+    txc->t->rm_range_keys(prefix, key_first, key_last);
+    dout(20) << __func__ << " remove range start: "
+             << pretty_binary_string(key_first) << " end: "
+             << pretty_binary_string(key_last) << dendl;
   }
   txc->note_modified_object(o);
 
@@ -10726,7 +12927,6 @@ int BlueStore::_clone(TransContext *txc,
     return -EINVAL;
   }
 
-  newo->exists = true;
   _assign_nid(txc, newo);
 
   // clone data
@@ -10751,14 +12951,22 @@ int BlueStore::_clone(TransContext *txc,
   if (newo->onode.has_omap()) {
     dout(20) << __func__ << " clearing old omap data" << dendl;
     newo->flush();
-    _do_omap_clear(txc, newo->onode.nid);
+    _do_omap_clear(txc,
+		   newo->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP
+		   : PREFIX_OMAP,
+		   newo->onode.nid);
   }
   if (oldo->onode.has_omap()) {
     dout(20) << __func__ << " copying omap data" << dendl;
     if (!newo->onode.has_omap()) {
       newo->onode.set_omap_flag();
+      if (newo->oid.is_pgmeta()) {
+	newo->onode.flags |= bluestore_onode_t::FLAG_PGMETA_OMAP;
+      }
     }
-    KeyValueDB::Iterator it = db->get_iterator(PREFIX_OMAP);
+    const string& prefix =
+      newo->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP;
+    KeyValueDB::Iterator it = db->get_iterator(prefix);
     string head, tail;
     get_omap_header(oldo->onode.nid, &head);
     get_omap_tail(oldo->onode.nid, &tail);
@@ -10772,7 +12980,7 @@ int BlueStore::_clone(TransContext *txc,
 		 << pretty_binary_string(it->key()) << dendl;
         string key;
 	rewrite_omap_key(newo->onode.nid, it->key(), &key);
-	txc->t->set(PREFIX_OMAP, key, it->value());
+	txc->t->set(prefix, key, it->value());
       }
       it->next();
     }
@@ -10794,7 +13002,9 @@ int BlueStore::_do_clone_range(
   CollectionRef& c,
   OnodeRef& oldo,
   OnodeRef& newo,
-  uint64_t srcoff, uint64_t length, uint64_t dstoff)
+  uint64_t srcoff,
+  uint64_t length,
+  uint64_t dstoff)
 {
   dout(15) << __func__ << " " << c->cid << " " << oldo->oid << " -> "
 	   << newo->oid
@@ -10805,91 +13015,7 @@ int BlueStore::_do_clone_range(
   _dump_onode(oldo);
   _dump_onode(newo);
 
-  // hmm, this could go into an ExtentMap::dup() method.
-  vector<BlobRef> id_to_blob(oldo->extent_map.extent_map.size());
-  for (auto &e : oldo->extent_map.extent_map) {
-    e.blob->last_encoded_id = -1;
-  }
-  int n = 0;
-  bool dirtied_oldo = false;
-  uint64_t end = srcoff + length;
-  for (auto ep = oldo->extent_map.seek_lextent(srcoff);
-       ep != oldo->extent_map.extent_map.end();
-       ++ep) {
-    auto& e = *ep;
-    if (e.logical_offset >= end) {
-      break;
-    }
-    dout(20) << __func__ << "  src " << e << dendl;
-    BlobRef cb;
-    bool blob_duped = true;
-    if (e.blob->last_encoded_id >= 0) {
-      // blob is already duped
-      cb = id_to_blob[e.blob->last_encoded_id];
-      blob_duped = false;
-    } else {
-      // dup the blob
-      const bluestore_blob_t& blob = e.blob->get_blob();
-      // make sure it is shared
-      if (!blob.is_shared()) {
-	c->make_blob_shared(_assign_blobid(txc), e.blob);
-	dirtied_oldo = true;  // fixme: overkill
-      } else {
-	c->load_shared_blob(e.blob->shared_blob);
-      }
-      cb = new Blob();
-      e.blob->last_encoded_id = n;
-      id_to_blob[n] = cb;
-      e.blob->dup(*cb);
-      // bump the extent refs on the copied blob's extents
-      for (auto p : blob.get_extents()) {
-	if (p.is_valid()) {
-	  e.blob->shared_blob->get_ref(p.offset, p.length);
-	}
-      }
-      txc->write_shared_blob(e.blob->shared_blob);
-      dout(20) << __func__ << "    new " << *cb << dendl;
-    }
-    // dup extent
-    int skip_front, skip_back;
-    if (e.logical_offset < srcoff) {
-      skip_front = srcoff - e.logical_offset;
-    } else {
-      skip_front = 0;
-    }
-    if (e.logical_end() > end) {
-      skip_back = e.logical_end() - end;
-    } else {
-      skip_back = 0;
-    }
-    Extent *ne = new Extent(e.logical_offset + skip_front + dstoff - srcoff,
-			    e.blob_offset + skip_front,
-			    e.length - skip_front - skip_back, cb);
-    newo->extent_map.extent_map.insert(*ne);
-    ne->blob->get_ref(c.get(), ne->blob_offset, ne->length);
-    // fixme: we may leave parts of new blob unreferenced that could
-    // be freed (relative to the shared_blob).
-    txc->statfs_delta.stored() += ne->length;
-    if (e.blob->get_blob().is_compressed()) {
-      txc->statfs_delta.compressed_original() += ne->length;
-      if (blob_duped){
-        txc->statfs_delta.compressed() +=
-          cb->get_blob().get_compressed_payload_length();
-      }
-    }
-    dout(20) << __func__ << "  dst " << *ne << dendl;
-    ++n;
-  }
-  if (dirtied_oldo) {
-    oldo->extent_map.dirty_range(srcoff, length); // overkill
-    txc->write_onode(oldo);
-  }
-  txc->write_onode(newo);
-
-  if (dstoff + length > newo->onode.size) {
-    newo->onode.size = dstoff + length;
-  }
-  newo->extent_map.dirty_range(dstoff, length);
+  oldo->extent_map.dup(this, txc, c, oldo, newo, srcoff, length, dstoff);
   _dump_onode(oldo);
   _dump_onode(newo);
   return 0;
@@ -10906,12 +13032,16 @@ int BlueStore::_clone_range(TransContext *txc,
 	   << " to offset 0x" << dstoff << std::dec << dendl;
   int r = 0;
 
+  if (srcoff + length >= OBJECT_MAX_SIZE ||
+      dstoff + length >= OBJECT_MAX_SIZE) {
+    r = -E2BIG;
+    goto out;
+  }
   if (srcoff + length > oldo->onode.size) {
     r = -EINVAL;
     goto out;
   }
 
-  newo->exists = true;
   _assign_nid(txc, newo);
 
   if (length > 0) {
@@ -10957,7 +13087,7 @@ int BlueStore::_rename(TransContext *txc,
       r = -EEXIST;
       goto out;
     }
-    assert(txc->onodes.count(newo) == 0);
+    ceph_assert(txc->onodes.count(newo) == 0);
   }
 
   txc->t->rmkey(PREFIX_OBJ, oldo->key.c_str(), oldo->key.size());
@@ -10985,6 +13115,11 @@ int BlueStore::_rename(TransContext *txc,
   c->onode_map.rename(oldo, old_oid, new_oid, new_okey);
   r = 0;
 
+  // hold a ref to new Onode in old name position, to ensure we don't drop
+  // it from the cache before this txc commits (or else someone may come along
+  // and read newo's metadata via the old name).
+  txc->note_modified_object(oldo);
+
  out:
   dout(10) << __func__ << " " << c->cid << " " << old_oid << " -> "
 	   << new_oid << " = " << r << dendl;
@@ -11009,15 +13144,14 @@ int BlueStore::_create_collection(
       r = -EEXIST;
       goto out;
     }
-    c->reset(
-      new Collection(
-	this,
-	cache_shards[cid.hash_to_shard(cache_shards.size())],
-	cid));
+    auto p = new_coll_map.find(cid);
+    ceph_assert(p != new_coll_map.end());
+    *c = p->second;
     (*c)->cnode.bits = bits;
     coll_map[cid] = *c;
+    new_coll_map.erase(p);
   }
-  ::encode((*c)->cnode, bl);
+  encode((*c)->cnode, bl);
   txc->t->set(PREFIX_COLL, stringify(cid), bl);
   r = 0;
 
@@ -11032,6 +13166,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
   dout(15) << __func__ << " " << cid << dendl;
   int r;
 
+  (*c)->flush_all_but_last();
   {
     RWLock::WLocker l(coll_lock);
     if (!*c) {
@@ -11039,7 +13174,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
       goto out;
     }
     size_t nonexistent_count = 0;
-    assert((*c)->exists);
+    ceph_assert((*c)->exists);
     if ((*c)->onode_map.map_any([&](OnodeRef o) {
         if (o->exists) {
           dout(10) << __func__ << " " << o->oid << " " << o
@@ -11057,26 +13192,26 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
     ghobject_t next;
     // Enumerate onodes in db, up to nonexistent_count + 1
     // then check if all of them are marked as non-existent.
-    // Bypass the check if returned number is greater than nonexistent_count
+    // Bypass the check if (next != ghobject_t::get_max())
     r = _collection_list(c->get(), ghobject_t(), ghobject_t::get_max(),
                          nonexistent_count + 1, &ls, &next);
     if (r >= 0) {
-      bool exists = false; //ls.size() > nonexistent_count;
+      // If true mean collecton has more objects than nonexistent_count,
+      // so bypass check.
+      bool exists = (!next.is_max());
       for (auto it = ls.begin(); !exists && it < ls.end(); ++it) {
         dout(10) << __func__ << " oid " << *it << dendl;
         auto onode = (*c)->onode_map.lookup(*it);
         exists = !onode || onode->exists;
         if (exists) {
           dout(10) << __func__ << " " << *it
-                   << " exists in db" << dendl;
+		   << " exists in db, "
+		   << (!onode ? "not present in ram" : "present in ram")
+		   << dendl;
         }
       }
       if (!exists) {
-        coll_map.erase(cid);
-        txc->removed_collections.push_back(*c);
-        (*c)->exists = false;
-        c->reset();
-        txc->t->rmkey(PREFIX_COLL, stringify(cid));
+	_do_remove_collection(txc, c);
         r = 0;
       } else {
         dout(10) << __func__ << " " << cid
@@ -11089,6 +13224,17 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
  out:
   dout(10) << __func__ << " " << cid << " = " << r << dendl;
   return r;
+}
+
+void BlueStore::_do_remove_collection(TransContext *txc,
+				      CollectionRef *c)
+{
+  coll_map.erase((*c)->cid);
+  txc->removed_collections.push_back(*c);
+  (*c)->exists = false;
+  _osr_register_zombie((*c)->osr.get());
+  txc->t->rmkey(PREFIX_COLL, stringify((*c)->cid));
+  c->reset();
 }
 
 int BlueStore::_split_collection(TransContext *txc,
@@ -11117,31 +13263,89 @@ int BlueStore::_split_collection(TransContext *txc,
 
   spg_t pgid, dest_pgid;
   bool is_pg = c->cid.is_pg(&pgid);
-  assert(is_pg);
+  ceph_assert(is_pg);
   is_pg = d->cid.is_pg(&dest_pgid);
-  assert(is_pg);
+  ceph_assert(is_pg);
 
   // the destination should initially be empty.
-  assert(d->onode_map.empty());
-  assert(d->shared_blob_set.empty());
-  assert(d->cnode.bits == bits);
+  ceph_assert(d->onode_map.empty());
+  ceph_assert(d->shared_blob_set.empty());
+  ceph_assert(d->cnode.bits == bits);
 
   c->split_cache(d.get());
 
   // adjust bits.  note that this will be redundant for all but the first
   // split call for this parent (first child).
   c->cnode.bits = bits;
-  assert(d->cnode.bits == bits);
+  ceph_assert(d->cnode.bits == bits);
   r = 0;
 
   bufferlist bl;
-  ::encode(c->cnode, bl);
+  encode(c->cnode, bl);
   txc->t->set(PREFIX_COLL, stringify(c->cid), bl);
 
   dout(10) << __func__ << " " << c->cid << " to " << d->cid << " "
 	   << " bits " << bits << " = " << r << dendl;
   return r;
 }
+
+int BlueStore::_merge_collection(
+  TransContext *txc,
+  CollectionRef *c,
+  CollectionRef& d,
+  unsigned bits)
+{
+  dout(15) << __func__ << " " << (*c)->cid << " to " << d->cid
+	   << " bits " << bits << dendl;
+  RWLock::WLocker l((*c)->lock);
+  RWLock::WLocker l2(d->lock);
+  int r;
+
+  coll_t cid = (*c)->cid;
+
+  // flush all previous deferred writes on the source collection to ensure
+  // that all deferred writes complete before we merge as the target collection's
+  // sequencer may need to order new ops after those writes.
+
+  _osr_drain((*c)->osr.get());
+
+  // move any cached items (onodes and referenced shared blobs) that will
+  // belong to the child collection post-split.  leave everything else behind.
+  // this may include things that don't strictly belong to the now-smaller
+  // parent split, but the OSD will always send us a split for every new
+  // child.
+
+  spg_t pgid, dest_pgid;
+  bool is_pg = cid.is_pg(&pgid);
+  ceph_assert(is_pg);
+  is_pg = d->cid.is_pg(&dest_pgid);
+  ceph_assert(is_pg);
+
+  // adjust bits.  note that this will be redundant for all but the first
+  // merge call for the parent/target.
+  d->cnode.bits = bits;
+
+  // behavior depends on target (d) bits, so this after that is updated.
+  (*c)->split_cache(d.get());
+
+  // remove source collection
+  {
+    RWLock::WLocker l3(coll_lock);
+    _do_remove_collection(txc, c);
+  }
+
+  r = 0;
+
+  bufferlist bl;
+  encode(d->cnode, bl);
+  txc->t->set(PREFIX_COLL, stringify(d->cid), bl);
+
+  dout(10) << __func__ << " " << cid << " to " << d->cid << " "
+	   << " bits " << bits << " = " << r << dendl;
+  return r;
+}
+
+
 
 // DB key value Histogram
 #define KEY_SLAB 32
@@ -11183,10 +13387,12 @@ void BlueStore::DBHistogram::update_hist_entry(map<string, map<int, struct key_d
     uint32_t key_slab = get_key_slab(key_size);
     uint32_t value_slab = get_value_slab(value_size);
     key_hist[prefix][key_slab].count++;
-    key_hist[prefix][key_slab].max_len = MAX(key_size, key_hist[prefix][key_slab].max_len);
+    key_hist[prefix][key_slab].max_len =
+      std::max<size_t>(key_size, key_hist[prefix][key_slab].max_len);
     key_hist[prefix][key_slab].val_map[value_slab].count++;
     key_hist[prefix][key_slab].val_map[value_slab].max_len =
-                  MAX(value_size, key_hist[prefix][key_slab].val_map[value_slab].max_len);
+      std::max<size_t>(value_size,
+                       key_hist[prefix][key_slab].val_map[value_slab].max_len);
 }
 
 void BlueStore::DBHistogram::dump(Formatter *f)
@@ -11225,6 +13431,7 @@ void BlueStore::generate_db_histogram(Formatter *f)
   uint64_t num_super = 0;
   uint64_t num_coll = 0;
   uint64_t num_omap = 0;
+  uint64_t num_pgmeta_omap = 0;
   uint64_t num_deferred = 0;
   uint64_t num_alloc = 0;
   uint64_t num_stat = 0;
@@ -11235,17 +13442,17 @@ void BlueStore::generate_db_histogram(Formatter *f)
   size_t key_size = 0, value_size = 0;
   DBHistogram hist;
 
-  utime_t start = ceph_clock_now();
+  auto start = coarse_mono_clock::now();
 
-  KeyValueDB::WholeSpaceIterator iter = db->get_iterator();
+  KeyValueDB::WholeSpaceIterator iter = db->get_wholespace_iterator();
   iter->seek_to_first();
   while (iter->valid()) {
     dout(30) << __func__ << " Key: " << iter->key() << dendl;
     key_size = iter->key_size();
     value_size = iter->value_size();
     hist.value_hist[hist.get_value_slab(value_size)]++;
-    max_key_size = MAX(max_key_size, key_size);
-    max_value_size = MAX(max_value_size, value_size);
+    max_key_size = std::max(max_key_size, key_size);
+    max_value_size = std::max(max_value_size, value_size);
     total_key_size += key_size;
     total_value_size += value_size;
 
@@ -11271,10 +13478,13 @@ void BlueStore::generate_db_histogram(Formatter *f)
     } else if (key.first == PREFIX_OMAP) {
 	hist.update_hist_entry(hist.key_hist, PREFIX_OMAP, key_size, value_size);
 	num_omap++;
+    } else if (key.first == PREFIX_PGMETA_OMAP) {
+	hist.update_hist_entry(hist.key_hist, PREFIX_PGMETA_OMAP, key_size, value_size);
+	num_pgmeta_omap++;
     } else if (key.first == PREFIX_DEFERRED) {
 	hist.update_hist_entry(hist.key_hist, PREFIX_DEFERRED, key_size, value_size);
 	num_deferred++;
-    } else if (key.first == PREFIX_ALLOC || key.first == "b" ) {
+    } else if (key.first == PREFIX_ALLOC || key.first == PREFIX_ALLOC_BITMAP) {
 	hist.update_hist_entry(hist.key_hist, PREFIX_ALLOC, key_size, value_size);
 	num_alloc++;
     } else if (key.first == PREFIX_SHARED_BLOB) {
@@ -11287,13 +13497,14 @@ void BlueStore::generate_db_histogram(Formatter *f)
     iter->next();
   }
 
-  utime_t duration = ceph_clock_now() - start;
+  ceph::timespan duration = coarse_mono_clock::now() - start;
   f->open_object_section("rocksdb_key_value_stats");
   f->dump_unsigned("num_onodes", num_onodes);
   f->dump_unsigned("num_shards", num_shards);
   f->dump_unsigned("num_super", num_super);
   f->dump_unsigned("num_coll", num_coll);
   f->dump_unsigned("num_omap", num_omap);
+  f->dump_unsigned("num_pgmeta_omap", num_pgmeta_omap);
   f->dump_unsigned("num_deferred", num_deferred);
   f->dump_unsigned("num_alloc", num_alloc);
   f->dump_unsigned("num_stat", num_stat);
@@ -11316,11 +13527,19 @@ void BlueStore::_flush_cache()
   dout(10) << __func__ << dendl;
   for (auto i : cache_shards) {
     i->trim_all();
-    assert(i->empty());
+    ceph_assert(i->empty());
   }
   for (auto& p : coll_map) {
-    assert(p.second->onode_map.empty());
-    assert(p.second->shared_blob_set.empty());
+    if (!p.second->onode_map.empty()) {
+      derr << __func__ << " stray onodes on " << p.first << dendl;
+      p.second->onode_map.dump<0>(cct);
+    }
+    if (!p.second->shared_blob_set.empty()) {
+      derr << __func__ << " stray shared blobs on " << p.first << dendl;
+      p.second->shared_blob_set.dump<0>(cct);
+    }
+    ceph_assert(p.second->onode_map.empty());
+    ceph_assert(p.second->shared_blob_set.empty());
   }
   coll_map.clear();
 }
@@ -11329,25 +13548,22 @@ void BlueStore::_flush_cache()
 // We use a best-effort policy instead, e.g.,
 // we don't care if there are still some pinned onodes/data in the cache
 // after this command is completed.
-void BlueStore::flush_cache()
+int BlueStore::flush_cache(ostream *os)
 {
   dout(10) << __func__ << dendl;
   for (auto i : cache_shards) {
     i->trim_all();
   }
+
+  return 0;
 }
 
 void BlueStore::_apply_padding(uint64_t head_pad,
 			       uint64_t tail_pad,
-			       bufferlist& bl,
 			       bufferlist& padded)
 {
-  padded = bl;
   if (head_pad) {
-    bufferlist z;
-    z.append_zero(head_pad);
-    z.claim_append(padded);
-    padded.claim(z);
+    padded.prepend_zero(head_pad);
   }
   if (tail_pad) {
     padded.append_zero(tail_pad);
@@ -11359,4 +13575,258 @@ void BlueStore::_apply_padding(uint64_t head_pad,
   }
 }
 
+void BlueStore::_record_onode(OnodeRef &o, KeyValueDB::Transaction &txn)
+{
+  // finalize extent_map shards
+  o->extent_map.update(txn, false);
+  if (o->extent_map.needs_reshard()) {
+    o->extent_map.reshard(db, txn);
+    o->extent_map.update(txn, true);
+    if (o->extent_map.needs_reshard()) {
+      dout(20) << __func__ << " warning: still wants reshard, check options?"
+		<< dendl;
+      o->extent_map.clear_needs_reshard();
+    }
+    logger->inc(l_bluestore_onode_reshard);
+  }
+
+  // bound encode
+  size_t bound = 0;
+  denc(o->onode, bound);
+  o->extent_map.bound_encode_spanning_blobs(bound);
+  if (o->onode.extent_map_shards.empty()) {
+    denc(o->extent_map.inline_bl, bound);
+  }
+
+  // encode
+  bufferlist bl;
+  unsigned onode_part, blob_part, extent_part;
+  {
+    auto p = bl.get_contiguous_appender(bound, true);
+    denc(o->onode, p);
+    onode_part = p.get_logical_offset();
+    o->extent_map.encode_spanning_blobs(p);
+    blob_part = p.get_logical_offset() - onode_part;
+    if (o->onode.extent_map_shards.empty()) {
+      denc(o->extent_map.inline_bl, p);
+    }
+    extent_part = p.get_logical_offset() - onode_part - blob_part;
+  }
+
+  dout(20) << __func__  << " onode " << o->oid << " is " << bl.length()
+	    << " (" << onode_part << " bytes onode + "
+	    << blob_part << " bytes spanning blobs + "
+	    << extent_part << " bytes inline extents)"
+	    << dendl;
+
+
+  txn->set(PREFIX_OBJ, o->key.c_str(), o->key.size(), bl);
+}
+
+void BlueStore::_log_alerts(osd_alert_list_t& alerts)
+{
+  std::lock_guard l(qlock);
+
+  if (!spillover_alert.empty() &&
+      cct->_conf->bluestore_warn_on_bluefs_spillover) {
+    alerts.emplace(
+      "BLUEFS_SPILLOVER",
+      spillover_alert);
+  }
+  string s0(failed_cmode);
+
+  if (!failed_compressors.empty()) {
+    if (!s0.empty()) {
+      s0 += ", ";
+    }
+    s0 += "unable to load:";
+    bool first = true;
+    for (auto& s : failed_compressors) {
+      if (first) {
+	first = false;
+      } else {
+	s0 += ", ";
+      }
+      s0 += s;
+    }
+    alerts.emplace(
+      "BLUESTORE_NO_COMPRESSION",
+      s0);
+  }
+}
+
 // ===========================================
+// BlueStoreRepairer
+
+size_t BlueStoreRepairer::StoreSpaceTracker::filter_out(
+  const interval_set<uint64_t>& extents)
+{
+  ceph_assert(granularity); // initialized
+  // can't call for the second time
+  ceph_assert(!was_filtered_out);
+  ceph_assert(collections_bfs.size() == objects_bfs.size());
+
+  uint64_t prev_pos = 0;
+  uint64_t npos = collections_bfs.size();
+
+  bloom_vector collections_reduced;
+  bloom_vector objects_reduced;
+
+  for (auto e : extents) {
+    if (e.second == 0) {
+      continue;
+    }
+    uint64_t pos = max(e.first / granularity, prev_pos);
+    uint64_t end_pos = 1 + (e.first + e.second - 1) / granularity;
+    while (pos != npos && pos < end_pos)  {
+        ceph_assert( collections_bfs[pos].element_count() ==
+          objects_bfs[pos].element_count());
+        if (collections_bfs[pos].element_count()) {
+          collections_reduced.push_back(std::move(collections_bfs[pos]));
+          objects_reduced.push_back(std::move(objects_bfs[pos]));
+        }
+        ++pos;
+    }
+    prev_pos = end_pos;
+  }
+  collections_reduced.swap(collections_bfs);
+  objects_reduced.swap(objects_bfs);
+  was_filtered_out = true;
+  return collections_bfs.size();
+}
+
+bool BlueStoreRepairer::remove_key(KeyValueDB *db,
+				   const string& prefix,
+				   const string& key)
+{
+  if (!remove_key_txn) {
+    remove_key_txn = db->get_transaction();
+  }
+  ++to_repair_cnt;
+  remove_key_txn->rmkey(prefix, key);
+
+  return true;
+}
+
+bool BlueStoreRepairer::fix_shared_blob(
+  KeyValueDB *db,
+  uint64_t sbid,
+  const bufferlist* bl)
+{
+  KeyValueDB::Transaction txn;
+  if (fix_misreferences_txn) { // reuse this txn
+    txn = fix_misreferences_txn;
+  } else {
+    if (!fix_shared_blob_txn) {
+      fix_shared_blob_txn = db->get_transaction();
+    }
+    txn = fix_shared_blob_txn;
+  }
+  string key;
+  get_shared_blob_key(sbid, &key);
+
+  ++to_repair_cnt;
+  if (bl) {
+    txn->set(PREFIX_SHARED_BLOB, key, *bl);
+  } else {
+    txn->rmkey(PREFIX_SHARED_BLOB, key);
+  }
+  return true;
+}
+
+bool BlueStoreRepairer::fix_statfs(KeyValueDB *db,
+				   const string& key,
+				   const store_statfs_t& new_statfs)
+{
+  if (!fix_statfs_txn) {
+    fix_statfs_txn = db->get_transaction();
+  }
+  BlueStore::volatile_statfs vstatfs;
+  vstatfs = new_statfs;
+  bufferlist bl;
+  vstatfs.encode(bl);
+  ++to_repair_cnt;
+  fix_statfs_txn->set(PREFIX_STAT, key, bl);
+  return true;
+}
+
+bool BlueStoreRepairer::fix_leaked(KeyValueDB *db,
+				   FreelistManager* fm,
+				   uint64_t offset, uint64_t len)
+{
+  if (!fix_fm_leaked_txn) {
+    fix_fm_leaked_txn = db->get_transaction();
+  }
+  ++to_repair_cnt;
+  fm->release(offset, len, fix_fm_leaked_txn);
+  return true;
+}
+bool BlueStoreRepairer::fix_false_free(KeyValueDB *db,
+				       FreelistManager* fm,
+				       uint64_t offset, uint64_t len)
+{
+  if (!fix_fm_false_free_txn) {
+    fix_fm_false_free_txn = db->get_transaction();
+  }
+  ++to_repair_cnt;
+  fm->allocate(offset, len, fix_fm_false_free_txn);
+  return true;
+}
+
+bool BlueStoreRepairer::fix_bluefs_extents(std::atomic<uint64_t>& out_of_sync_flag)
+{
+  // this is just a stub to count num of repairs properly,
+  // actual repair happens in BlueStore::_close_db_and_around()
+  // while doing _sync_bluefs_and_fm
+  ++out_of_sync_flag;
+  ++to_repair_cnt;
+  return true;
+}
+
+bool BlueStoreRepairer::preprocess_misreference(KeyValueDB *db)
+{
+  if (misreferenced_extents.size()) {
+    size_t n = space_usage_tracker.filter_out(misreferenced_extents);
+    ceph_assert(n > 0);
+    if (!fix_misreferences_txn) {
+      fix_misreferences_txn = db->get_transaction();
+    }
+    return true;
+  }
+  return false;
+}
+
+unsigned BlueStoreRepairer::apply(KeyValueDB* db)
+{
+  if (fix_fm_leaked_txn) {
+    db->submit_transaction_sync(fix_fm_leaked_txn);
+    fix_fm_leaked_txn = nullptr;
+  }
+  if (fix_fm_false_free_txn) {
+    db->submit_transaction_sync(fix_fm_false_free_txn);
+    fix_fm_false_free_txn = nullptr;
+  }
+  if (remove_key_txn) {
+    db->submit_transaction_sync(remove_key_txn);
+    remove_key_txn = nullptr;
+  }
+  if (fix_misreferences_txn) {
+    db->submit_transaction_sync(fix_misreferences_txn);
+    fix_misreferences_txn = nullptr;
+  }
+  if (fix_shared_blob_txn) {
+    db->submit_transaction_sync(fix_shared_blob_txn);
+    fix_shared_blob_txn = nullptr;
+  }
+
+  if (fix_statfs_txn) {
+    db->submit_transaction_sync(fix_statfs_txn);
+    fix_statfs_txn = nullptr;
+  }
+  unsigned repaired = to_repair_cnt;
+  to_repair_cnt = 0;
+  return repaired;
+}
+
+// =======================================================
+

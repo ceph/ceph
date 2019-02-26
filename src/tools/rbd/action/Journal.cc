@@ -30,6 +30,150 @@ namespace journal {
 namespace at = argument_types;
 namespace po = boost::program_options;
 
+static const std::string JOURNAL_SPEC("journal-spec");
+static const std::string JOURNAL_NAME("journal");
+static const std::string DEST_JOURNAL_NAME("dest-journal");
+
+void add_journal_option(po::options_description *opt,
+                        at::ArgumentModifier modifier) {
+  std::string name = JOURNAL_NAME;
+  std::string description = at::get_description_prefix(modifier) +
+                            "journal name";
+  switch (modifier) {
+  case at::ARGUMENT_MODIFIER_NONE:
+  case at::ARGUMENT_MODIFIER_SOURCE:
+    break;
+  case at::ARGUMENT_MODIFIER_DEST:
+    name = DEST_JOURNAL_NAME;
+    break;
+  }
+
+  // TODO add validator
+  opt->add_options()
+    (name.c_str(), po::value<std::string>(), description.c_str());
+}
+
+void add_journal_spec_options(po::options_description *pos,
+			      po::options_description *opt,
+			      at::ArgumentModifier modifier) {
+
+  pos->add_options()
+    ((get_name_prefix(modifier) + JOURNAL_SPEC).c_str(),
+     (get_description_prefix(modifier) + "journal specification\n" +
+      "(example: [<pool-name>/[<namespace>/]]<journal-name>)").c_str());
+  add_pool_option(opt, modifier);
+  add_namespace_option(opt, modifier);
+  add_image_option(opt, modifier);
+  add_journal_option(opt, modifier);
+}
+
+int get_pool_journal_names(const po::variables_map &vm,
+			   at::ArgumentModifier mod,
+			   size_t *spec_arg_index,
+			   std::string *pool_name,
+			   std::string *namespace_name,
+			   std::string *journal_name) {
+  std::string pool_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_POOL_NAME : at::POOL_NAME);
+  std::string namespace_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_NAMESPACE_NAME : at::NAMESPACE_NAME);
+  std::string image_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    at::DEST_IMAGE_NAME : at::IMAGE_NAME);
+  std::string journal_key = (mod == at::ARGUMENT_MODIFIER_DEST ?
+    DEST_JOURNAL_NAME : JOURNAL_NAME);
+
+  if (vm.count(pool_key) && pool_name != nullptr) {
+    *pool_name = vm[pool_key].as<std::string>();
+  }
+  if (vm.count(namespace_key) && namespace_name != nullptr) {
+    *namespace_name = vm[namespace_key].as<std::string>();
+  }
+  if (vm.count(journal_key) && journal_name != nullptr) {
+    *journal_name = vm[journal_key].as<std::string>();
+  }
+
+  std::string image_name;
+  if (vm.count(image_key)) {
+    image_name = vm[image_key].as<std::string>();
+  }
+
+  int r;
+  if (journal_name != nullptr && !journal_name->empty()) {
+    // despite the separate pool option,
+    // we can also specify them via the journal option
+    std::string journal_name_copy(*journal_name);
+    r = extract_spec(journal_name_copy, pool_name, namespace_name, journal_name,
+                     nullptr, utils::SPEC_VALIDATION_FULL);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  if (!image_name.empty()) {
+    // despite the separate pool option,
+    // we can also specify them via the image option
+    std::string image_name_copy(image_name);
+    r = extract_spec(image_name_copy, pool_name, namespace_name, &image_name,
+                     nullptr, utils::SPEC_VALIDATION_NONE);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  if (journal_name != nullptr && spec_arg_index != nullptr &&
+      journal_name->empty()) {
+    std::string spec = utils::get_positional_argument(vm, (*spec_arg_index)++);
+    if (!spec.empty()) {
+      r = extract_spec(spec, pool_name, namespace_name, journal_name, nullptr,
+                       utils::SPEC_VALIDATION_FULL);
+      if (r < 0) {
+        return r;
+      }
+    }
+  }
+
+  if (pool_name != nullptr && pool_name->empty()) {
+    *pool_name = utils::get_default_pool_name();
+  }
+
+  if (pool_name != nullptr && namespace_name != nullptr &&
+      journal_name != nullptr && journal_name->empty() && !image_name.empty()) {
+    // Try to get journal name from image info.
+    librados::Rados rados;
+    librados::IoCtx io_ctx;
+    librbd::Image image;
+    int r = utils::init_and_open_image(*pool_name, *namespace_name, image_name,
+                                       "", "", true, &rados, &io_ctx, &image);
+    if (r < 0) {
+      std::cerr << "rbd: failed to open image " << image_name
+		<< " to get journal name: " << cpp_strerror(r) << std::endl;
+      return r;
+    }
+
+    uint64_t features;
+    r = image.features(&features);
+    if (r < 0) {
+      return r;
+    }
+    if ((features & RBD_FEATURE_JOURNALING) == 0) {
+      std::cerr << "rbd: journaling is not enabled for image " << image_name
+		<< std::endl;
+      return -EINVAL;
+    }
+    *journal_name = utils::image_id(image);
+  }
+
+  if (journal_name != nullptr && journal_name->empty()) {
+    std::string prefix = at::get_description_prefix(mod);
+    std::cerr << "rbd: "
+              << (mod == at::ARGUMENT_MODIFIER_DEST ? prefix : std::string())
+              << "journal was not specified" << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 static int do_show_journal_info(librados::Rados& rados, librados::IoCtx& io_ctx,
 				const std::string& journal_id, Formatter *f)
 {
@@ -78,7 +222,7 @@ static int do_show_journal_info(librados::Rados& rados, librados::IoCtx& io_ctx,
     std::cout << "\theader_oid: " << header_oid << std::endl;
     std::cout << "\tobject_oid_prefix: " << object_oid_prefix << std::endl;
     std::cout << "\torder: " << static_cast<int>(order) << " ("
-	      << prettybyte_t(1ull << order) << " objects)"<< std::endl;
+	      << byte_u_t(1ull << order) << " objects)"<< std::endl;
     std::cout << "\tsplay_width: " << static_cast<int>(splay_width) << std::endl;
     if (!object_pool_name.empty()) {
       std::cout << "\tobject_pool: " << object_pool_name << std::endl;
@@ -363,8 +507,8 @@ static int inspect_entry(bufferlist& data,
 			 librbd::journal::EventEntry& event_entry,
 			 bool verbose) {
   try {
-    bufferlist::iterator it = data.begin();
-    ::decode(event_entry, it);
+    auto it = data.cbegin();
+    decode(event_entry, it);
   } catch (const buffer::error &err) {
     std::cerr << "failed to decode event entry: " << err.what() << std::endl;
     return -EINVAL;
@@ -605,7 +749,7 @@ public:
   }
 
   bool read_entry(bufferlist& bl, int& r) {
-    // Entries are storead in the file using the following format:
+    // Entries are stored in the file using the following format:
     //
     //   # Optional comments
     //   NNN {json encoded entry}
@@ -665,7 +809,7 @@ public:
 		<< std::endl;
       return false;
     }
-    assert(entry_size > 0);
+    ceph_assert(entry_size > 0);
     // Read entry.
     r = bl.read_fd(m_fd, entry_size);
     if (r < 0) {
@@ -674,7 +818,7 @@ public:
       return false;
     }
     if (r != entry_size) {
-      std::cerr << "rbd: error reading from stdin: trucated"
+      std::cerr << "rbd: error reading from stdin: truncated"
 		<< std::endl;
       r = -EINVAL;
       return false;
@@ -688,7 +832,7 @@ public:
     if (r < 0) {
       return r;
     }
-    m_journaler.start_append(0, 0, 0);
+    m_journaler.start_append(0, 0, 0, 0);
 
     int r1 = 0;
     bufferlist bl;
@@ -806,16 +950,18 @@ static int do_import_journal(librados::IoCtx& io_ctx,
 
 void get_info_arguments(po::options_description *positional,
 			po::options_description *options) {
-  at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   at::add_format_options(options);
 }
 
-int execute_info(const po::variables_map &vm) {
+int execute_info(const po::variables_map &vm,
+                 const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string journal_name;
-  int r = utils::get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_NONE,
-					&arg_index, &pool_name, &journal_name);
+  int r = get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_NONE, &arg_index,
+                                 &pool_name, &namespace_name, &journal_name);
   if (r < 0) {
     return r;
   }
@@ -828,7 +974,7 @@ int execute_info(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -844,16 +990,18 @@ int execute_info(const po::variables_map &vm) {
 
 void get_status_arguments(po::options_description *positional,
 			  po::options_description *options) {
-  at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   at::add_format_options(options);
 }
 
-int execute_status(const po::variables_map &vm) {
+int execute_status(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string journal_name;
-  int r = utils::get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_NONE,
-					&arg_index, &pool_name, &journal_name);
+  int r = get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_NONE, &arg_index,
+                                 &pool_name, &namespace_name, &journal_name);
   if (r < 0) {
     return r;
   }
@@ -866,7 +1014,7 @@ int execute_status(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -881,22 +1029,24 @@ int execute_status(const po::variables_map &vm) {
 
 void get_reset_arguments(po::options_description *positional,
 			 po::options_description *options) {
-  at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
 }
 
-int execute_reset(const po::variables_map &vm) {
+int execute_reset(const po::variables_map &vm,
+                  const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string journal_name;
-  int r = utils::get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_NONE,
-					&arg_index, &pool_name, &journal_name);
+  int r = get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_NONE, &arg_index,
+                                 &pool_name, &namespace_name, &journal_name);
   if (r < 0) {
     return r;
   }
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -911,18 +1061,20 @@ int execute_reset(const po::variables_map &vm) {
 
 void get_client_disconnect_arguments(po::options_description *positional,
 				     po::options_description *options) {
-  at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   options->add_options()
     ("client-id", po::value<std::string>(),
      "client ID (or leave unspecified to disconnect all)");
 }
 
-int execute_client_disconnect(const po::variables_map &vm) {
+int execute_client_disconnect(const po::variables_map &vm,
+                              const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string journal_name;
-  int r = utils::get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_NONE,
-					&arg_index, &pool_name, &journal_name);
+  int r = get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_NONE, &arg_index,
+                                 &pool_name, &namespace_name, &journal_name);
   if (r < 0) {
     return r;
   }
@@ -934,7 +1086,7 @@ int execute_client_disconnect(const po::variables_map &vm) {
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -950,23 +1102,25 @@ int execute_client_disconnect(const po::variables_map &vm) {
 
 void get_inspect_arguments(po::options_description *positional,
 			   po::options_description *options) {
-  at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
+  add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_NONE);
   at::add_verbose_option(options);
 }
 
-int execute_inspect(const po::variables_map &vm) {
+int execute_inspect(const po::variables_map &vm,
+                    const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string journal_name;
-  int r = utils::get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_NONE,
-					&arg_index, &pool_name, &journal_name);
+  int r = get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_NONE, &arg_index,
+                                 &pool_name, &namespace_name, &journal_name);
   if (r < 0) {
     return r;
   }
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -981,7 +1135,7 @@ int execute_inspect(const po::variables_map &vm) {
 
 void get_export_arguments(po::options_description *positional,
 			  po::options_description *options) {
-  at::add_journal_spec_options(positional, options,
+  add_journal_spec_options(positional, options,
 			       at::ARGUMENT_MODIFIER_SOURCE);
   at::add_path_options(positional, options,
                        "export file (or '-' for stdout)");
@@ -989,25 +1143,27 @@ void get_export_arguments(po::options_description *positional,
   at::add_no_error_option(options);
 }
 
-int execute_export(const po::variables_map &vm) {
+int execute_export(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   size_t arg_index = 0;
   std::string pool_name;
+  std::string namespace_name;
   std::string journal_name;
-  int r = utils::get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_SOURCE,
-					&arg_index, &pool_name, &journal_name);
+  int r = get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_SOURCE, &arg_index,
+                                 &pool_name, &namespace_name, &journal_name);
   if (r < 0) {
     return r;
   }
 
   std::string path;
-  r = utils::get_path(vm, utils::get_positional_argument(vm, 1), &path);
+  r = utils::get_path(vm, &arg_index, &path);
   if (r < 0) {
     return r;
   }
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -1025,30 +1181,32 @@ void get_import_arguments(po::options_description *positional,
 			  po::options_description *options) {
   at::add_path_options(positional, options,
                        "import file (or '-' for stdin)");
-  at::add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST);
+  add_journal_spec_options(positional, options, at::ARGUMENT_MODIFIER_DEST);
   at::add_verbose_option(options);
   at::add_no_error_option(options);
 }
 
-int execute_import(const po::variables_map &vm) {
+int execute_import(const po::variables_map &vm,
+                   const std::vector<std::string> &ceph_global_init_args) {
   std::string path;
-  int r = utils::get_path(vm, utils::get_positional_argument(vm, 0), &path);
+  size_t arg_index = 0;
+  int r = utils::get_path(vm, &arg_index, &path);
   if (r < 0) {
     return r;
   }
 
-  size_t arg_index = 1;
   std::string pool_name;
+  std::string namespace_name;
   std::string journal_name;
-  r = utils::get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_DEST,
-				    &arg_index, &pool_name, &journal_name);
+  r = get_pool_journal_names(vm, at::ARGUMENT_MODIFIER_DEST, &arg_index,
+                             &pool_name, &namespace_name, &journal_name);
   if (r < 0) {
     return r;
   }
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
-  r = utils::init(pool_name, &rados, &io_ctx);
+  r = utils::init(pool_name, namespace_name, &rados, &io_ctx);
   if (r < 0) {
     return r;
   }
@@ -1056,7 +1214,7 @@ int execute_import(const po::variables_map &vm) {
   r = do_import_journal(io_ctx, journal_name, path, vm[at::NO_ERROR].as<bool>(),
 			vm[at::VERBOSE].as<bool>());
   if (r < 0) {
-    std::cerr << "rbd: journal export: " << cpp_strerror(r) << std::endl;
+    std::cerr << "rbd: journal import: " << cpp_strerror(r) << std::endl;
     return r;
   }
   return 0;

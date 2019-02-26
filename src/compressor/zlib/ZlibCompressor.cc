@@ -22,7 +22,7 @@
 #include <zlib.h>
 
 // -----------------------------------------------------------------------------
-#define dout_context g_ceph_context
+#define dout_context cct
 #define dout_subsys ceph_subsys_compressor
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
@@ -59,14 +59,14 @@ int ZlibCompressor::zlib_compress(const bufferlist &in, bufferlist &out)
   strm.zalloc = Z_NULL;
   strm.zfree = Z_NULL;
   strm.opaque = Z_NULL;
-  ret = deflateInit2(&strm, g_conf->compressor_zlib_level, Z_DEFLATED, ZLIB_DEFAULT_WIN_SIZE, ZLIB_MEMORY_LEVEL, Z_DEFAULT_STRATEGY);
+  ret = deflateInit2(&strm, cct->_conf->compressor_zlib_level, Z_DEFLATED, ZLIB_DEFAULT_WIN_SIZE, ZLIB_MEMORY_LEVEL, Z_DEFAULT_STRATEGY);
   if (ret != Z_OK) {
     dout(1) << "Compression init error: init return "
          << ret << " instead of Z_OK" << dendl;
     return -1;
   }
 
-  for (std::list<buffer::ptr>::const_iterator i = in.buffers().begin();
+  for (ceph::bufferlist::buffers_t::const_iterator i = in.buffers().begin();
       i != in.buffers().end();) {
 
     c_in = (unsigned char*) (*i).c_str();
@@ -120,7 +120,7 @@ int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out)
   isal_deflate_init(&strm);
   strm.end_of_stream = 0;
 
-  for (std::list<buffer::ptr>::const_iterator i = in.buffers().begin();
+  for (ceph::bufferlist::buffers_t::const_iterator i = in.buffers().begin();
       i != in.buffers().end();) {
 
     c_in = (unsigned char*) (*i).c_str();
@@ -163,6 +163,10 @@ int ZlibCompressor::isal_compress(const bufferlist &in, bufferlist &out)
 
 int ZlibCompressor::compress(const bufferlist &in, bufferlist &out)
 {
+#ifdef HAVE_QATZIP
+  if (qat_enabled)
+    return qat_accel.compress(in, out);
+#endif
 #if __x86_64__ && defined(HAVE_BETTER_YASM_ELF64)
   if (isal_enabled)
     return isal_compress(in, out);
@@ -173,8 +177,13 @@ int ZlibCompressor::compress(const bufferlist &in, bufferlist &out)
 #endif
 }
 
-int ZlibCompressor::decompress(bufferlist::iterator &p, size_t compressed_size, bufferlist &out)
+int ZlibCompressor::decompress(bufferlist::const_iterator &p, size_t compressed_size, bufferlist &out)
 {
+#ifdef HAVE_QATZIP
+  if (qat_enabled)
+    return qat_accel.decompress(p, compressed_size, out);
+#endif
+
   int ret;
   unsigned have;
   z_stream strm;
@@ -196,7 +205,7 @@ int ZlibCompressor::decompress(bufferlist::iterator &p, size_t compressed_size, 
     return -1;
   }
 
-  size_t remaining = MIN(p.get_remaining(), compressed_size);
+  size_t remaining = std::min<size_t>(p.get_remaining(), compressed_size);
 
   while(remaining) {
     long unsigned int len = p.get_ptr_and_advance(remaining, &c_in);
@@ -228,6 +237,10 @@ int ZlibCompressor::decompress(bufferlist::iterator &p, size_t compressed_size, 
 
 int ZlibCompressor::decompress(const bufferlist &in, bufferlist &out)
 {
-  bufferlist::iterator i = const_cast<bufferlist&>(in).begin();
+#ifdef HAVE_QATZIP
+  if (qat_enabled)
+    return qat_accel.decompress(in, out);
+#endif
+  auto i = std::cbegin(in);
   return decompress(i, in.length(), out);
 }

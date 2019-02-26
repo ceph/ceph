@@ -33,16 +33,22 @@ namespace ceph {
     std::vector<int> chunk_mapping;
     ErasureCodeProfile _profile;
 
+    // for CRUSH rule
+    std::string rule_root;
+    std::string rule_failure_domain;
+    std::string rule_device_class;
+
     ~ErasureCode() override {}
 
-    int init(ErasureCodeProfile &profile, std::ostream *ss) override {
-      _profile = profile;
-      return 0;
-    }
+    int init(ErasureCodeProfile &profile, std::ostream *ss) override;
 
     const ErasureCodeProfile &get_profile() const override {
       return _profile;
     }
+
+    int create_rule(const std::string &name,
+		    CrushWrapper &crush,
+		    std::ostream *ss) const override;
 
     int sanity_check_k(int k, std::ostream *ss);
 
@@ -50,9 +56,17 @@ namespace ceph {
       return get_chunk_count() - get_data_chunk_count();
     }
 
+    virtual int get_sub_chunk_count() override {
+      return 1;
+    }
+
+    virtual int _minimum_to_decode(const std::set<int> &want_to_read,
+				   const std::set<int> &available_chunks,
+				   std::set<int> *minimum);
+
     int minimum_to_decode(const std::set<int> &want_to_read,
-                                  const std::set<int> &available_chunks,
-                                  std::set<int> *minimum) override;
+			  const std::set<int> &available,
+			  std::map<int, std::vector<std::pair<int, int>>> *minimum) override;
 
     int minimum_to_decode_with_cost(const std::set<int> &want_to_read,
                                             const std::map<int, int> &available,
@@ -69,8 +83,12 @@ namespace ceph {
                               std::map<int, bufferlist> *encoded) override;
 
     int decode(const std::set<int> &want_to_read,
-                       const std::map<int, bufferlist> &chunks,
-                       std::map<int, bufferlist> *decoded) override;
+                const std::map<int, bufferlist> &chunks,
+                std::map<int, bufferlist> *decoded, int chunk_size) override;
+
+    virtual int _decode(const std::set<int> &want_to_read,
+			const std::map<int, bufferlist> &chunks,
+			std::map<int, bufferlist> *decoded);
 
     int decode_chunks(const std::set<int> &want_to_read,
                               const std::map<int, bufferlist> &chunks,

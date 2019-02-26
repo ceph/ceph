@@ -25,7 +25,7 @@
 #include "FileStoreDiff.h"
 
 #include "common/config.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_
@@ -33,7 +33,7 @@
 #define dout_prefix *_dout << "test_idempotent_sequence "
 
 void usage(const char *name, std::string command = "") {
-  assert(name != NULL);
+  ceph_assert(name != NULL);
 
   std::string more = "cmd <args...>";
   std::string diff = "diff <filestoreA> <journalA> <filestoreB> <journalB>";
@@ -111,14 +111,23 @@ int run_get_last_op(std::string& filestore_path, std::string& journal_path)
     return err;
   }
 
-  coll_t txn_coll;
-  ghobject_t txn_object(hobject_t(sobject_t("txn", CEPH_NOSNAP)));
-  bufferlist bl;
-  store->read(txn_coll, txn_object, 0, 100, bl);
+  vector<coll_t> cls;
+  store->list_collections(cls);
+
   int32_t txn = 0;
-  if (bl.length()) {
-    bufferlist::iterator p = bl.begin();
-    ::decode(txn, p);
+  for (auto cid : cls) {
+    ghobject_t txn_object = DeterministicOpSequence::get_txn_object(cid);
+    bufferlist bl;
+    auto ch = store->open_collection(cid);
+    store->read(ch, txn_object, 0, 100, bl);
+    int32_t t = 0;
+    if (bl.length()) {
+      auto p = bl.cbegin();
+      decode(t, p);
+    }
+    if (t > txn) {
+      txn = t;
+    }
   }
 
   store->umount();
@@ -201,16 +210,15 @@ int run_command(std::string& command, std::vector<std::string>& args)
 
 int main(int argc, const char *argv[])
 {
-  vector<const char*> def_args;
   vector<const char*> args;
   our_name = argv[0];
   argv_to_vec(argc, argv, args);
 
-  auto cct = global_init(&def_args, args,
+  auto cct = global_init(NULL, args,
 			 CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   std::string command;
   std::vector<std::string> command_args;

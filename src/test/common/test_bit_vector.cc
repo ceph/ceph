@@ -137,18 +137,18 @@ TYPED_TEST(BitVectorTest, partial_decode_encode) {
   }
 
   bufferlist bl;
-  ::encode(bit_vector, bl);
+  encode(bit_vector, bl);
   bit_vector.clear();
 
   bufferlist header_bl;
   header_bl.substr_of(bl, 0, bit_vector.get_header_length());
-  bufferlist::iterator header_it = header_bl.begin();
+  auto header_it = header_bl.cbegin();
   bit_vector.decode_header(header_it);
 
   bufferlist footer_bl;
   footer_bl.substr_of(bl, bit_vector.get_footer_offset(),
 		      bl.length() - bit_vector.get_footer_offset());
-  bufferlist::iterator footer_it = footer_bl.begin();
+  auto footer_it = footer_bl.cbegin();
   bit_vector.decode_footer(footer_it);
 
   typedef std::pair<uint64_t, uint64_t> Extent;
@@ -172,7 +172,7 @@ TYPED_TEST(BitVectorTest, partial_decode_encode) {
     bufferlist data_bl;
     data_bl.substr_of(bl, bit_vector.get_header_length() + byte_offset,
 		      byte_length);
-    bufferlist::iterator data_it = data_bl.begin();
+    auto data_it = data_bl.cbegin();
     bit_vector.decode_data(data_it, byte_offset);
 
     data_bl.clear();
@@ -196,8 +196,8 @@ TYPED_TEST(BitVectorTest, partial_decode_encode) {
     updated_bl.append(footer_bl);
     ASSERT_EQ(bl, updated_bl);
 
-    bufferlist::iterator updated_it = updated_bl.begin();
-    ::decode(bit_vector, updated_it);
+    auto updated_it = updated_bl.cbegin();
+    decode(bit_vector, updated_it);
   }
 }
 
@@ -210,7 +210,7 @@ TYPED_TEST(BitVectorTest, header_crc) {
   bufferlist footer;
   bit_vector.encode_footer(footer);
 
-  bufferlist::iterator it = footer.begin();
+  auto it = footer.cbegin();
   bit_vector.decode_footer(it);
 
   bit_vector.resize(1);
@@ -236,7 +236,7 @@ TYPED_TEST(BitVectorTest, data_crc) {
   bufferlist data;
   bit_vector1.encode_data(data, byte_offset, byte_length);
 
-  bufferlist::iterator data_it = data.begin();
+  auto data_it = data.cbegin();
   bit_vector1.decode_data(data_it, byte_offset);
 
   bit_vector2[bit_vector2.size() - 1] = 1;
@@ -247,4 +247,32 @@ TYPED_TEST(BitVectorTest, data_crc) {
   data_it = data.begin();
   ASSERT_THROW(bit_vector2.decode_data(data_it, byte_offset),
 	       buffer::malformed_input);
+}
+
+TYPED_TEST(BitVectorTest, iterator) {
+  typename TestFixture::bit_vector_t bit_vector;
+
+  uint64_t radix = 1 << bit_vector.BIT_COUNT;
+  uint64_t size = 25 * (1ULL << 20);
+  uint64_t offset = 0;
+
+  // create fragmented in-memory bufferlist layout
+  uint64_t resize = 0;
+  while (resize < size) {
+    resize += 4096;
+    if (resize > size) {
+      resize = size;
+    }
+    bit_vector.resize(resize);
+  }
+
+  for (auto it = bit_vector.begin(); it != bit_vector.end(); ++it, ++offset) {
+    *it = offset % radix;
+  }
+
+  offset = 123;
+  auto end_it = bit_vector.begin() + (size - 1024);
+  for (auto it = bit_vector.begin() + offset; it != end_it; ++it, ++offset) {
+    ASSERT_EQ(offset % radix, *it);
+  }
 }

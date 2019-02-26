@@ -37,6 +37,8 @@
 #include <limits.h>
 #endif
 
+#include "include/ceph_assert.h"
+
 // Startup common: create and mount ceph fs
 #define STARTUP_CEPH() do {				\
     ASSERT_EQ(0, ceph_create(&cmount, NULL));		\
@@ -61,7 +63,7 @@ static const long waitSlowMs = 5000;
 // Get the absolute struct timespec reference from now + 'ms' milliseconds
 static const struct timespec* abstime(struct timespec &ts, long ms) {
   if (clock_gettime(CLOCK_REALTIME, &ts) == -1) {
-    abort();
+    ceph_abort();
   }
   ts.tv_nsec += ms * 1000000;
   ts.tv_sec += ts.tv_nsec / 1000000000;

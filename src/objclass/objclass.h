@@ -14,12 +14,6 @@
 
 struct obj_list_watch_response_t;
 
-#if __GNUC__ >= 4
-  #define CEPH_CLS_API    __attribute__ ((visibility ("default")))
-#else
-  #define CEPH_CLS_API
-#endif
-
 extern "C" {
 #endif
 
@@ -95,7 +89,7 @@ public:
    * handle any encoding errors, and return an appropriate error code,
    * or 0 on valid input.
    */
-  virtual int init(bufferlist::iterator &params) = 0;
+  virtual int init(bufferlist::const_iterator &params) = 0;
 
   /**
    * xattr key, or empty string.  If non-empty, this xattr will be fetched
@@ -130,16 +124,19 @@ extern int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferli
 extern int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid);
 extern int cls_cxx_map_clear(cls_method_context_t hctx);
 extern int cls_cxx_map_get_all_vals(cls_method_context_t hctx,
-                                    std::map<string, bufferlist> *vals);
+                                    std::map<string, bufferlist> *vals,
+                                    bool *more);
 extern int cls_cxx_map_get_keys(cls_method_context_t hctx,
                                 const string &start_after,
                                 uint64_t max_to_get,
-                                std::set<string> *keys);
+                                std::set<string> *keys,
+                                bool *more);
 extern int cls_cxx_map_get_vals(cls_method_context_t hctx,
                                 const string &start_after,
                                 const string &filter_prefix,
                                 uint64_t max_to_get,
-                                std::map<string, bufferlist> *vals);
+                                std::map<string, bufferlist> *vals,
+                                bool *more);
 extern int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl);
 extern int cls_cxx_map_set_vals(cls_method_context_t hctx,
                                 const std::map<string, bufferlist> *map);
@@ -159,9 +156,12 @@ extern uint64_t cls_current_version(cls_method_context_t hctx);
 extern int cls_current_subop_num(cls_method_context_t hctx);
 extern uint64_t cls_get_features(cls_method_context_t hctx);
 extern uint64_t cls_get_client_features(cls_method_context_t hctx);
+extern int8_t cls_get_required_osd_release(cls_method_context_t hctx);
 
 /* helpers */
 extern void cls_cxx_subop_version(cls_method_context_t hctx, string *s);
+
+extern int cls_get_snapset_seq(cls_method_context_t hctx, uint64_t *snap_seq);
 
 /* These are also defined in rados.h and librados.h. Keep them in sync! */
 #define CEPH_OSD_TMAP_HDR 'h'
@@ -169,6 +169,10 @@ extern void cls_cxx_subop_version(cls_method_context_t hctx, string *s);
 #define CEPH_OSD_TMAP_CREATE 'c'
 #define CEPH_OSD_TMAP_RM 'r'
 
+int cls_cxx_chunk_write_and_set(cls_method_context_t hctx, int ofs, int len,
+                   bufferlist *write_inbl, uint32_t op_flags, bufferlist *set_inbl,
+		   int set_len);
+bool cls_has_chunk(cls_method_context_t hctx, string fp_oid);
 
 #endif
 

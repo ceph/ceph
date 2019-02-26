@@ -20,39 +20,59 @@
 #include <vector>
 using std::vector;
 
-class MMonJoin : public PaxosServiceMessage {
- public:
+class MMonJoin : public MessageInstance<MMonJoin, PaxosServiceMessage> {
+public:
+  friend factory;
+
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 2;
+
   uuid_d fsid;
   string name;
-  entity_addr_t addr;
+  entity_addrvec_t addrs;
 
-  MMonJoin() : PaxosServiceMessage(MSG_MON_JOIN, 0) {}
-  MMonJoin(uuid_d &f, string n, const entity_addr_t& a)
-    : PaxosServiceMessage(MSG_MON_JOIN, 0),
-      fsid(f), name(n), addr(a)
+  MMonJoin() : MessageInstance(MSG_MON_JOIN, 0, HEAD_VERSION, COMPAT_VERSION) {}
+  MMonJoin(uuid_d &f, string n, const entity_addrvec_t& av)
+    : MessageInstance(MSG_MON_JOIN, 0, HEAD_VERSION, COMPAT_VERSION),
+      fsid(f), name(n), addrs(av)
   { }
   
 private:
   ~MMonJoin() override {}
 
 public:  
-  const char *get_type_name() const override { return "mon_join"; }
+  std::string_view get_type_name() const override { return "mon_join"; }
   void print(ostream& o) const override {
-    o << "mon_join(" << name << " " << addr << ")";
+    o << "mon_join(" << name << " " << addrs << ")";
   }
   
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     paxos_encode();
-    ::encode(fsid, payload);
-    ::encode(name, payload);
-    ::encode(addr, payload, features);
+    encode(fsid, payload);
+    encode(name, payload);
+    if (HAVE_FEATURE(features, SERVER_NAUTILUS)) {
+      header.version = HEAD_VERSION;
+      header.compat_version = COMPAT_VERSION;
+      encode(addrs, payload, features);
+    } else {
+      header.version = 1;
+      header.compat_version = 1;
+      encode(addrs.legacy_addr(), payload, features);
+    }
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
+    auto p = payload.cbegin();
     paxos_decode(p);
-    ::decode(fsid, p);
-    ::decode(name, p);
-    ::decode(addr, p);
+    decode(fsid, p);
+    decode(name, p);
+    if (header.version == 1) {
+      entity_addr_t addr;
+      decode(addr, p);
+      addrs = entity_addrvec_t(addr);
+    } else {
+      decode(addrs, p);
+    }
   }
 };
 

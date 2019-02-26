@@ -52,6 +52,7 @@ protected:
       OSDMap &osd_map,
       const int64_t pool_id,
       bool metadata,
+      bool force,
       std::stringstream *ss) const;
 
   virtual std::string const &get_prefix() {return prefix;}
@@ -69,13 +70,17 @@ public:
     return get_prefix() == prefix_;
   }
 
-  static std::list<std::shared_ptr<FileSystemCommandHandler> > load();
+  static std::list<std::shared_ptr<FileSystemCommandHandler> > load(Paxos *paxos);
+
+  virtual bool batched_propose() {
+    return false;
+  }
 
   virtual int handle(
     Monitor *mon,
     FSMap &fsmap,
     MonOpRequestRef op,
-    map<string, cmd_vartype> &cmdmap,
+    const cmdmap_t& cmdmap,
     std::stringstream &ss) = 0;
 };
 

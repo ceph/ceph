@@ -20,7 +20,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
    * is required to ensure that they stop issuing requests on the old
    * RGWRados instance, and restart with the updated configuration.
    *
-   * This abstraction avoids a depency on class RGWFrontend.
+   * This abstraction avoids a dependency on class RGWFrontend.
    */
   class Pauser {
    public:
@@ -32,11 +32,12 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
     virtual void resume(RGWRados* store) = 0;
   };
 
-  RGWRealmReloader(RGWRados*& store, Pauser* frontends);
+  RGWRealmReloader(RGWRados*& store, std::map<std::string, std::string>& service_map_meta,
+                   Pauser* frontends);
   ~RGWRealmReloader() override;
 
   /// respond to realm notifications by scheduling a reload()
-  void handle_notify(RGWRealmNotify type, bufferlist::iterator& p) override;
+  void handle_notify(RGWRealmNotify type, bufferlist::const_iterator& p) override;
 
  private:
   /// pause frontends and replace the RGWRados instance
@@ -46,6 +47,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
 
   /// main()'s RGWRados pointer as a reference, modified by reload()
   RGWRados*& store;
+  std::map<std::string, std::string>& service_map_meta;
   Pauser *const frontends;
 
   /// reload() takes a significant amount of time, so we don't want to run

@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include <errno.h>
@@ -19,7 +19,7 @@ static int set_version(cls_method_context_t hctx, struct obj_version *objv)
 {
   bufferlist bl;
 
-  ::encode(*objv, bl);
+  encode(*objv, bl);
 
   CLS_LOG(20, "cls_version: set_version %s:%d", objv->tag.c_str(), (int)objv->ver);
 
@@ -64,23 +64,24 @@ static int read_version(cls_method_context_t hctx, obj_version *objv, bool impli
     return ret;
 
   try {
-    bufferlist::iterator iter = bl.begin();
-    ::decode(*objv, iter);
+    auto iter = bl.cbegin();
+    decode(*objv, iter);
   } catch (buffer::error& err) {
     CLS_LOG(0, "ERROR: read_version(): failed to decode version entry\n");
     return -EIO;
   }
+  CLS_LOG(20, "cls_version: read_version %s:%d", objv->tag.c_str(), (int)objv->ver);
 
   return 0;
 }
 
 static int cls_version_set(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_version_set_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_version_get(): failed to decode entry\n");
     return -EINVAL;
@@ -142,11 +143,11 @@ static bool check_conds(list<obj_version_cond>& conds, obj_version& objv)
 
 static int cls_version_inc(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_version_inc_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_version_get(): failed to decode entry\n");
     return -EINVAL;
@@ -171,11 +172,11 @@ static int cls_version_inc(cls_method_context_t hctx, bufferlist *in, bufferlist
 
 static int cls_version_check(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  bufferlist::iterator in_iter = in->begin();
+  auto in_iter = in->cbegin();
 
   cls_version_check_op op;
   try {
-    ::decode(op, in_iter);
+    decode(op, in_iter);
   } catch (buffer::error& err) {
     CLS_LOG(1, "ERROR: cls_version_get(): failed to decode entry\n");
     return -EINVAL;
@@ -185,7 +186,6 @@ static int cls_version_check(cls_method_context_t hctx, bufferlist *in, bufferli
   int ret = read_version(hctx, &objv, false);
   if (ret < 0)
     return ret;
-  CLS_LOG(20, "cls_version: read_version %s:%d", objv.tag.c_str(), (int)objv.ver);
   
   if (!check_conds(op.conds, objv)) {
     CLS_LOG(20, "cls_version: failed condition check");
@@ -204,7 +204,7 @@ static int cls_version_read(cls_method_context_t hctx, bufferlist *in, bufferlis
   if (ret < 0)
     return ret;
 
-  ::encode(read_ret, *out);
+  encode(read_ret, *out);
 
   return 0;
 }

@@ -70,8 +70,8 @@ static clslua_hctx *__clslua_get_hctx(lua_State *L)
   lua_gettable(L, LUA_REGISTRYINDEX);
 
   /* check cls_lua assumptions */
-  assert(!lua_isnil(L, -1));
-  assert(lua_type(L, -1) == LUA_TLIGHTUSERDATA);
+  ceph_assert(!lua_isnil(L, -1));
+  ceph_assert(lua_type(L, -1) == LUA_TLIGHTUSERDATA);
 
   /* cast and cleanup stack */
   clslua_hctx *hctx = (struct clslua_hctx *)lua_touserdata(L, -1);
@@ -118,7 +118,7 @@ static int clslua_pcall(lua_State *L)
   lua_insert(L, 1);
   lua_call(L, nargs, LUA_MULTRET);
   struct clslua_err *err = clslua_checkerr(L);
-  assert(err);
+  ceph_assert(err);
   if (err->error) {
     err->error = false;
     lua_pushinteger(L, err->ret);
@@ -187,7 +187,7 @@ static int clslua_register(lua_State *L)
   /* get table of registered handlers */
   lua_pushlightuserdata(L, &clslua_registered_handle_reg_key);
   lua_gettable(L, LUA_REGISTRYINDEX);
-  assert(lua_type(L, -1) == LUA_TTABLE);
+  ceph_assert(lua_type(L, -1) == LUA_TTABLE);
 
   /* lookup function argument */
   lua_pushvalue(L, 1);
@@ -215,7 +215,7 @@ static void clslua_check_registered_handler(lua_State *L)
   /* get table of registered handlers */
   lua_pushlightuserdata(L, &clslua_registered_handle_reg_key);
   lua_gettable(L, LUA_REGISTRYINDEX);
-  assert(lua_type(L, -1) == LUA_TTABLE);
+  ceph_assert(lua_type(L, -1) == LUA_TTABLE);
 
   /* lookup function argument */
   lua_pushvalue(L, -2);
@@ -239,7 +239,7 @@ static int clslua_opresult(lua_State *L, int ok, int ret, int nargs,
 {
   struct clslua_err *err = clslua_checkerr(L);
 
-  assert(err);
+  ceph_assert(err);
   if (err->error) {
     CLS_ERR("error: cls_lua state machine: unexpected error");
     ceph_abort();
@@ -429,7 +429,8 @@ static int clslua_map_get_keys(lua_State *L)
   int max_to_get = luaL_checkinteger(L, 2);
 
   std::set<string> keys;
-  int ret = cls_cxx_map_get_keys(hctx, start_after, max_to_get, &keys);
+  bool more;
+  int ret = cls_cxx_map_get_keys(hctx, start_after, max_to_get, &keys, &more);
   if (ret < 0)
     return clslua_opresult(L, 0, ret, 0);
 
@@ -456,8 +457,9 @@ static int clslua_map_get_vals(lua_State *L)
   int max_to_get = luaL_checkinteger(L, 3);
 
   map<string, bufferlist> kvpairs;
+  bool more;
   int ret = cls_cxx_map_get_vals(hctx, start_after, filter_prefix,
-      max_to_get, &kvpairs);
+      max_to_get, &kvpairs, &more);
   if (ret < 0)
     return clslua_opresult(L, 0, ret, 0);
 
@@ -641,7 +643,7 @@ static const luaL_Reg clslua_lib[] = {
 };
 
 /*
- * Set int const in table at top of stack
+ * Set const int in table at top of stack
  */
 #define SET_INT_CONST(var) do { \
   lua_pushinteger(L, var); \
@@ -863,8 +865,8 @@ static int clslua_eval(lua_State *L)
         cls_lua_eval_op op;
 
         try {
-          bufferlist::iterator it = ctx->inbl->begin();
-          ::decode(op, it);
+          auto it = ctx->inbl->cbegin();
+          decode(op, it);
         } catch (const buffer::error &err) {
           CLS_ERR("error: could not decode ceph encoded input");
           ctx->ret = -EINVAL;

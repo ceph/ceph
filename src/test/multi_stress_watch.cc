@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 
 #include <semaphore.h>
 #include <errno.h>
@@ -42,6 +42,7 @@ test_loop(Rados &cluster, std::string pool_name, std::string obj_name)
     std::cerr << "ioctx_create " << pool_name << " failed with " << ret << std::endl;
     exit(1);
   }
+  ioctx.application_enable("rados", true);
 
   ret = ioctx.create(obj_name, false);
   if (ret < 0) {
@@ -54,23 +55,28 @@ test_loop(Rados &cluster, std::string pool_name, std::string obj_name)
     uint64_t handle;
     WatchNotifyTestCtx ctx;
     ret = ioctx.watch(obj_name, 0, &handle, &ctx);
-    assert(!ret);
+    ceph_assert(!ret);
     bufferlist bl2;
     ret = ioctx.notify(obj_name, 0, bl2);
-    assert(!ret);
+    ceph_assert(!ret);
     TestAlarm alarm;
     sem_wait(&sem);
     ioctx.unwatch(obj_name, handle);
   }
 
   ioctx.close();
+  ret = cluster.pool_delete(pool_name.c_str());
+  if (ret < 0) {
+    std::cerr << "pool_delete failed with " << ret << std::endl;
+    exit(1);
+  }
 }
 
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic warning "-Wpragmas"
 
 void
-test_replicated(Rados &cluster, std::string pool_name, std::string obj_name)
+test_replicated(Rados &cluster, std::string pool_name, const std::string &obj_name)
 {
   // May already exist
   cluster.pool_create(pool_name.c_str());
@@ -79,13 +85,13 @@ test_replicated(Rados &cluster, std::string pool_name, std::string obj_name)
 }
 
 void
-test_erasure(Rados &cluster, std::string pool_name, std::string obj_name)
+test_erasure(Rados &cluster, const std::string &pool_name, const std::string &obj_name)
 {
   string outs;
   bufferlist inbl;
   int ret;
   ret = cluster.mon_command(
-    "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile\", \"profile\": [ \"k=2\", \"m=1\", \"ruleset-failure-domain=osd\"]}",
+    "{\"prefix\": \"osd erasure-code-profile set\", \"name\": \"testprofile\", \"profile\": [ \"k=2\", \"m=1\", \"crush-failure-domain=osd\"]}",
     inbl, NULL, &outs);
   if (ret < 0) {
     std::cerr << "mon_command erasure-code-profile set failed with " << ret << std::endl;

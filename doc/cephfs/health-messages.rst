@@ -1,4 +1,6 @@
 
+.. _cephfs-health-messages:
+
 ======================
 CephFS health messages
 ======================
@@ -35,7 +37,7 @@ automatically replace laggy daemons with standbys if any are available.
 Message: insufficient standby daemons available
 Description: One or more file systems are configured to have a certain number
 of standby daemons available (including daemons in standby-replay) but the
-cluster does not have enough standby daemons. The standby deamons not in replay
+cluster does not have enough standby daemons. The standby daemons not in replay
 count towards any file system (i.e. they may overlap). This warning can
 configured by setting ``ceph fs set <fs> standby_count_wanted <count>``.  Use
 zero for ``count`` to disable.
@@ -67,18 +69,20 @@ are like locks.  Sometimes, for example when another client needs access,
 the MDS will request clients release their capabilities.  If the client
 is unresponsive or buggy, it might fail to do so promptly or fail to do
 so at all.  This message appears if a client has taken longer than
-``mds_revoke_cap_timeout`` (default 60s) to comply.
+``session_timeout`` (default 60s) to comply.
 
 Message: "Client *name* failing to respond to cache pressure"
 Code: MDS_HEALTH_CLIENT_RECALL, MDS_HEALTH_CLIENT_RECALL_MANY
-Description: Clients maintain a metadata cache.  Items (such as inodes)
-in the client cache are also pinned in the MDS cache, so when the MDS
-needs to shrink its cache (to stay within ``mds_cache_size``), it
-sends messages to clients to shrink their caches too.  If the client
-is unresponsive or buggy, this can prevent the MDS from properly staying
-within its ``mds_cache_size`` and it may eventually run out of memory
-and crash.  This message appears if a client has taken more than
-``mds_recall_state_timeout`` (default 60s) to comply.
+Description: Clients maintain a metadata cache.  Items (such as inodes) in the
+client cache are also pinned in the MDS cache, so when the MDS needs to shrink
+its cache (to stay within ``mds_cache_size`` or ``mds_cache_memory_limit``), it
+sends messages to clients to shrink their caches too.  If the client is
+unresponsive or buggy, this can prevent the MDS from properly staying within
+its cache limits and it may eventually run out of memory and crash.  This
+message appears if a client has failed to release more than
+``mds_recall_warning_threshold`` capabilities (decaying with a half-life of
+``mds_recall_max_decay_rate``) within the last
+``mds_recall_warning_decay_rate`` second.
 
 Message: "Client *name* failing to advance its oldest client/flush tid"
 Code: MDS_HEALTH_CLIENT_OLDEST_TID, MDS_HEALTH_CLIENT_OLDEST_TID_MANY
@@ -119,9 +123,9 @@ This message appears if any client requests have taken longer than
 
 Message: "Too many inodes in cache"
 Code: MDS_HEALTH_CACHE_OVERSIZED
-Description: The MDS is not succeeding in trimming its cache to comply
-with the limit set by the administrator.  If the MDS cache becomes too large,
-the daemon may exhaust available memory and crash.
-This message appears if the actual cache size (in inodes) is at least 50%
-greater than ``mds_cache_size`` (default 100000).
-
+Description: The MDS is not succeeding in trimming its cache to comply with the
+limit set by the administrator.  If the MDS cache becomes too large, the daemon
+may exhaust available memory and crash.  By default, this message appears if
+the actual cache size (in inodes or memory) is at least 50% greater than
+``mds_cache_size`` (default 100000) or ``mds_cache_memory_limit`` (default
+1GB). Modify ``mds_health_cache_threshold`` to set the warning ratio.

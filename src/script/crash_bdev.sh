@@ -1,4 +1,5 @@
-#!/bin/bash -ex
+#!/usr/bin/env bash
+set -ex
 
 while true; do
     ./ceph daemon osd.0 config set bdev_inject_crash 2

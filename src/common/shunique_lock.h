@@ -5,8 +5,8 @@
 #define CEPH_COMMON_SHUNIQUE_LOCK_H
 
 #include <mutex>
+#include <shared_mutex>
 #include <system_error>
-#include <boost/thread/shared_mutex.hpp>
 
 namespace ceph {
 // This is a 'lock' class in the style of shared_lock and
@@ -48,7 +48,7 @@ class shunique_lock {
 public:
   typedef Mutex mutex_type;
   typedef std::unique_lock<Mutex> unique_lock_type;
-  typedef boost::shared_lock<Mutex> shared_lock_type;
+  typedef std::shared_lock<Mutex> shared_lock_type;
 
   shunique_lock() noexcept : m(nullptr), o(ownership::none) { }
 
@@ -323,7 +323,6 @@ public:
     }
     throw std::system_error((int)std::errc::operation_not_permitted,
 			    std::generic_category());
-    return unique_lock_type();
   }
 
   shared_lock_type release_to_shared() {

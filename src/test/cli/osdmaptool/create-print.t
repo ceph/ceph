@@ -1,4 +1,4 @@
-  $ osdmaptool --createsimple 3 myosdmap
+  $ osdmaptool --createsimple 3 myosdmap --with-default-pool
   osdmaptool: osdmap file 'myosdmap'
   osdmaptool: writing epoch 1 to myosdmap
 
@@ -61,7 +61,7 @@
   
   # rules
   rule replicated_rule {
-  \truleset 0 (esc)
+  \tid 0 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)
@@ -84,14 +84,14 @@
   nearfull_ratio 0
   min_compat_client jewel
   
-  pool 0 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 flags hashpspool stripe_width 0
+  pool 1 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 192 pgp_num 192 autoscale_mode warn last_change 0 flags hashpspool stripe_width 0 application rbd
   
   max_osd 3
   
-  $ osdmaptool --clobber --createsimple 3 myosdmap
+  $ osdmaptool --clobber --createsimple 3 --with-default-pool myosdmap
   osdmaptool: osdmap file 'myosdmap'
   osdmaptool: writing epoch 1 to myosdmap
-  $ osdmaptool --print myosdmap | grep 'pool 0'
+  $ osdmaptool --print myosdmap | grep 'pool 1'
   osdmaptool: osdmap file 'myosdmap'
-  pool 0 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 192 pgp_num 192 last_change 0 flags hashpspool stripe_width 0
+  pool 1 'rbd' replicated size 3 min_size 2 crush_rule 0 object_hash rjenkins pg_num 192 pgp_num 192 autoscale_mode warn last_change 0 flags hashpspool stripe_width 0 application rbd
   $ rm -f myosdmap

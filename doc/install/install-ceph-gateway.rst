@@ -159,18 +159,31 @@ CA or intermediate certificates be supplied in one file.  Each of these
 items must be in `pem` form.  Because the combined file contains the
 secret key, it should be protected from unauthorized access.
 
-To configure ssl operation, append ``s`` to the port number.  Currently
-it is not possible to configure the radosgw to listen on both
-http and https, you must pick only one.  So::
+To configure ssl operation, append ``s`` to the port number. For eg::
 
  [client.rgw.gateway-node1]
  rgw_frontends = civetweb port=443s ssl_certificate=/etc/ceph/private/keyandcert.pem
 
+.. versionadded :: Luminous
+
+Furthermore, civetweb can be made to bind to multiple ports, by separating them
+with ``+`` in the configuration. This allows for use cases where both ssl and
+non-ssl connections are hosted by a single rgw instance. For eg::
+
+ [client.rgw.gateway-node1]
+ rgw_frontends = civetweb port=80+443s ssl_certificate=/etc/ceph/private/keyandcert.pem
+
+Additional Civetweb Configuration Options 
+----------------------------------------- 
+Some additional configuration options can be adjusted for the embedded Civetweb web server 
+in the **Ceph Object Gateway** section of the ``ceph.conf`` file. 
+A list of supported options, including an example, can be found in the `HTTP Frontends`_. 
+
 Migrating from Apache to Civetweb
 ---------------------------------
 
-If you're running the Ceph Object Gateway on Apache and FastCGI with Ceph
-Storage v0.80 or above, you're already running Civetweb--it starts with the
+If you are running the Ceph Object Gateway on Apache and FastCGI with Ceph
+Storage v0.80 or above, you are already running Civetweb--it starts with the
 ``ceph-radosgw`` daemon and it's running on port 7480 by default so that it
 doesn't conflict with your Apache and FastCGI installation and other commonly
 used web service ports. Migrating to use Civetweb basically involves removing
@@ -256,7 +269,7 @@ system-wide value. You can also set it for each instance in your Ceph
 configuration file.
 
 Once you have changed your bucket sharding configuration in your Ceph
-configuration file, restart your gateway. On Red Hat Enteprise Linux execute::
+configuration file, restart your gateway. On Red Hat Enterprise Linux execute::
 
  sudo systemctl restart ceph-radosgw.service
 
@@ -265,26 +278,25 @@ On Ubuntu execute::
  sudo service radosgw restart id=rgw.<short-hostname>
 
 For federated configurations, each zone may have a different ``index_pool``
-setting for failover. To make the value consistent for a region's zones, you
-may set ``rgw_override_bucket_index_max_shards`` in a gateway's region
+setting for failover. To make the value consistent for a zonegroup's zones, you
+may set ``rgw_override_bucket_index_max_shards`` in a gateway's zonegroup
 configuration. For example::
 
-  radosgw-admin region get > region.json
+  radosgw-admin zonegroup get > zonegroup.json
 
-Open the ``region.json`` file and edit the ``bucket_index_max_shards`` setting
-for each named zone. Save the ``region.json`` file and reset the region. For
-example::
+Open the ``zonegroup.json`` file and edit the ``bucket_index_max_shards`` setting
+for each named zone. Save the ``zonegroup.json`` file and reset the zonegroup.
+For example::
 
-   radosgw-admin region set < region.json
+   radosgw-admin zonegroup set < zonegroup.json
 
-Once you've updated your region, update the region map. For example::
+Once you have updated your zonegroup, update and commit the period.
+For example::
 
-   radosgw-admin regionmap update --name client.rgw.ceph-client
-
-Where ``client.rgw.ceph-client`` is the name of the gateway user.
+   radosgw-admin period update --commit
 
 .. note:: Mapping the index pool (for each zone, if applicable) to a CRUSH
-          ruleset of SSD-based OSDs may also help with bucket index performance.
+          rule of SSD-based OSDs may also help with bucket index performance.
 
 Add Wildcard to DNS
 -------------------
@@ -368,7 +380,6 @@ The output of the command will be something like the following::
 	 "email": "",
 	 "suspended": 0,
 	 "max_buckets": 1000,
-	 "auid": 0,
 	 "subusers": [],
 	 "keys": [{
 		 "user": "testuser",
@@ -429,7 +440,6 @@ The output will be something like the following::
 	 "email": "",
 	 "suspended": 0,
 	 "max_buckets": 1000,
-	 "auid": 0,
 	 "subusers": [{
 		 "id": "testuser:swift",
 		 "permissions": "full-control"
@@ -473,7 +483,6 @@ The output will be something like the following::
 	 "email": "",
 	 "suspended": 0,
 	 "max_buckets": 1000,
-	 "auid": 0,
 	 "subusers": [{
 		 "id": "testuser:swift",
 		 "permissions": "full-control"
@@ -586,7 +595,7 @@ On Debian-based distributions::
 
 To test swift access, execute the following::
 
- swift -A http://{IP ADDRESS}:{port}/auth/1.0 -U testuser:swift -K '{swift_secret_key}' list
+ swift -V 1 -A http://{IP ADDRESS}:{port}/auth -U testuser:swift -K '{swift_secret_key}' list
 
 Replace ``{IP ADDRESS}`` with the public IP address of the gateway server and
 ``{swift_secret_key}`` with its value from the output of ``radosgw-admin key
@@ -596,10 +605,11 @@ don't replace the port, it will default to port ``80``.
 
 For example::
 
- swift -A http://10.19.143.116:7480/auth/1.0 -U testuser:swift -K '244+fz2gSqoHwR3lYtSbIyomyPHf3i7rgSJrF/IA' list
+ swift -V 1 -A http://10.19.143.116:7480/auth -U testuser:swift -K '244+fz2gSqoHwR3lYtSbIyomyPHf3i7rgSJrF/IA' list
 
 The output should be::
 
  my-new-bucket
 
 .. _Preflight:  ../../start/quick-start-preflight
+.. _HTTP Frontends: ../../radosgw/frontends

@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_EUPDATE_H
 #define CEPH_MDS_EUPDATE_H
 
+#include <string_view>
+
 #include "../LogEvent.h"
 #include "EMetaBlob.h"
 
@@ -28,8 +30,8 @@ public:
   bool had_slaves;
 
   EUpdate() : LogEvent(EVENT_UPDATE), cmapv(0), had_slaves(false) { }
-  EUpdate(MDLog *mdlog, const char *s) : 
-    LogEvent(EVENT_UPDATE), metablob(mdlog),
+  EUpdate(MDLog *mdlog, std::string_view s) :
+    LogEvent(EVENT_UPDATE),
     type(s), cmapv(0), had_slaves(false) { }
   
   void print(ostream& out) const override {
@@ -41,13 +43,12 @@ public:
   EMetaBlob *get_metablob() override { return &metablob; }
 
   void encode(bufferlist& bl, uint64_t features) const override;
-  void decode(bufferlist::iterator& bl) override;
+  void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
   static void generate_test_instances(list<EUpdate*>& ls);
 
   void update_segment() override;
   void replay(MDSRank *mds) override;
-  EMetaBlob const *get_metablob() const {return &metablob;}
 };
 WRITE_CLASS_ENCODER_FEATURES(EUpdate)
 

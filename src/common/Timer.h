@@ -57,7 +57,7 @@ public:
    * setting safe_callbacks = false eliminates the lock cycle issue.
    * */
   SafeTimer(CephContext *cct, Mutex &l, bool safe_callbacks=true);
-  ~SafeTimer();
+  virtual ~SafeTimer();
 
   /* Call with the event_lock UNLOCKED.
    *
@@ -70,14 +70,14 @@ public:
 
   /* Schedule an event in the future
    * Call with the event_lock LOCKED */
-  void add_event_after(double seconds, Context *callback);
-  void add_event_at(utime_t when, Context *callback);
+  Context* add_event_after(double seconds, Context *callback);
+  Context* add_event_at(utime_t when, Context *callback);
 
   /* Cancel an event.
    * Call with the event_lock LOCKED
    *
    * Returns true if the callback was cancelled.
-   * Returns false if you never addded the callback in the first place.
+   * Returns false if you never added the callback in the first place.
    */
   bool cancel_event(Context *callback);
 

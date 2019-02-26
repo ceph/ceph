@@ -16,7 +16,9 @@
 
 #include <atomic>
 
-class RGWGC {
+class RGWGCIOManager;
+
+class RGWGC : public DoutPrefixProvider {
   CephContext *cct;
   RGWRados *store;
   int max_objs;
@@ -26,13 +28,14 @@ class RGWGC {
   int tag_index(const string& tag);
 
   class GCWorker : public Thread {
+    const DoutPrefixProvider *dpp;
     CephContext *cct;
     RGWGC *gc;
     Mutex lock;
     Cond cond;
 
   public:
-    GCWorker(CephContext *_cct, RGWGC *_gc) : cct(_cct), gc(_gc), lock("GCWorker") {}
+    GCWorker(const DoutPrefixProvider *_dpp, CephContext *_cct, RGWGC *_gc) : dpp(_dpp), cct(_cct), gc(_gc), lock("GCWorker") {}
     void *entry() override;
     void stop();
   };
@@ -48,19 +51,26 @@ public:
   void add_chain(librados::ObjectWriteOperation& op, cls_rgw_obj_chain& chain, const string& tag);
   int send_chain(cls_rgw_obj_chain& chain, const string& tag, bool sync);
   int defer_chain(const string& tag, bool sync);
-  int remove(int index, const std::list<string>& tags);
+  int remove(int index, const std::vector<string>& tags, librados::AioCompletion **pc);
 
   void initialize(CephContext *_cct, RGWRados *_store);
   void finalize();
 
   int list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated);
   void list_init(int *index) { *index = 0; }
-  int process(int index, int process_max_secs);
-  int process();
+  int process(int index, int process_max_secs, bool expired_only,
+              RGWGCIOManager& io_manager);
+  int process(bool expired_only);
 
   bool going_down();
   void start_processor();
   void stop_processor();
+
+  CephContext *get_cct() const override { return store->ctx(); }
+  unsigned get_subsys() const;
+
+  std::ostream& gen_prefix(std::ostream& out) const;
+
 };
 
 

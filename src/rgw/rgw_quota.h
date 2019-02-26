@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -16,6 +17,7 @@
 #define CEPH_RGW_QUOTA_H
 
 #include "include/utime.h"
+#include "common/config_fwd.h"
 #include "common/lru_map.h"
 
 #include <atomic>
@@ -58,29 +60,29 @@ public:
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 1, bl);
     if (max_size < 0) {
-      ::encode(-rgw_rounded_kb(abs(max_size)), bl);
+      encode(-rgw_rounded_kb(abs(max_size)), bl);
     } else {
-      ::encode(rgw_rounded_kb(max_size), bl);
+      encode(rgw_rounded_kb(max_size), bl);
     }
-    ::encode(max_objects, bl);
-    ::encode(enabled, bl);
-    ::encode(max_size, bl);
-    ::encode(check_on_raw, bl);
+    encode(max_objects, bl);
+    encode(enabled, bl);
+    encode(max_size, bl);
+    encode(check_on_raw, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(3, 1, 1, bl);
     int64_t max_size_kb;
-    ::decode(max_size_kb, bl);
-    ::decode(max_objects, bl);
-    ::decode(enabled, bl);
+    decode(max_size_kb, bl);
+    decode(max_objects, bl);
+    decode(enabled, bl);
     if (struct_v < 2) {
       max_size = max_size_kb * 1024;
     } else {
-      ::decode(max_size, bl);
+      decode(max_size, bl);
     }
     if (struct_v >= 3) {
-      ::decode(check_on_raw, bl);
+      decode(check_on_raw, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -113,5 +115,9 @@ public:
   static RGWQuotaHandler *generate_handler(RGWRados *store, bool quota_threads);
   static void free_handler(RGWQuotaHandler *handler);
 };
+
+// apply default quotas from configuration
+void rgw_apply_default_bucket_quota(RGWQuotaInfo& quota, const ConfigProxy& conf);
+void rgw_apply_default_user_quota(RGWQuotaInfo& quota, const ConfigProxy& conf);
 
 #endif

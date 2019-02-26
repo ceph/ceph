@@ -125,19 +125,17 @@ TEST(pg_interval_t, check_new_interval)
 {
 // iterate through all 4 combinations
 for (unsigned i = 0; i < 4; ++i) {
-  bool compact = i & 1;
-  bool ec_pool = i & 2;
   //
   // Create a situation where osdmaps are the same so that
   // each test case can diverge from it using minimal code.
   //
   int osd_id = 1;
   epoch_t epoch = 40;
-  ceph::shared_ptr<OSDMap> osdmap(new OSDMap());
+  std::shared_ptr<OSDMap> osdmap(new OSDMap());
   osdmap->set_max_osd(10);
   osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
   osdmap->set_epoch(epoch);
-  ceph::shared_ptr<OSDMap> lastmap(new OSDMap());
+  std::shared_ptr<OSDMap> lastmap(new OSDMap());
   lastmap->set_max_osd(10);
   lastmap->set_state(osd_id, CEPH_OSD_EXISTS);
   lastmap->set_epoch(epoch);
@@ -151,6 +149,7 @@ for (unsigned i = 0; i < 4; ++i) {
     OSDMap::Incremental inc(epoch + 1);
     inc.new_pools[pool_id].min_size = min_size;
     inc.new_pools[pool_id].set_pg_num(pg_num);
+    inc.new_pools[pool_id].set_pg_num_pending(pg_num);
     inc.new_up_thru[osd_id] = epoch + 1;
     osdmap->apply_incremental(inc);
     lastmap->apply_incremental(inc);
@@ -175,7 +174,7 @@ for (unsigned i = 0; i < 4; ++i) {
   // being split
   //
   {
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_FALSE(PastIntervals::check_new_interval(old_primary,
@@ -204,7 +203,7 @@ for (unsigned i = 0; i < 4; ++i) {
     int _new_primary = osd_id + 1;
     new_acting.push_back(_new_primary);
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -233,7 +232,7 @@ for (unsigned i = 0; i < 4; ++i) {
     int _new_primary = osd_id + 1;
     new_up.push_back(_new_primary);
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -260,7 +259,7 @@ for (unsigned i = 0; i < 4; ++i) {
     vector<int> new_up;
     int _new_up_primary = osd_id + 1;
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -284,7 +283,7 @@ for (unsigned i = 0; i < 4; ++i) {
   // PG is splitting
   //
   {
-    ceph::shared_ptr<OSDMap> osdmap(new OSDMap());
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
     osdmap->set_max_osd(10);
     osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
     osdmap->set_epoch(epoch);
@@ -294,7 +293,7 @@ for (unsigned i = 0; i < 4; ++i) {
     inc.new_pools[pool_id].set_pg_num(new_pg_num);
     osdmap->apply_incremental(inc);
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -315,10 +314,211 @@ for (unsigned i = 0; i < 4; ++i) {
   }
 
   //
+  // PG is pre-merge source
+  //
+  {
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num(pg_num);
+    inc.new_pools[pool_id].set_pg_num_pending(pg_num - 1);
+    osdmap->apply_incremental(inc);
+    cout << "pg_num " << pg_num << std::endl;
+    PastIntervals past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
+						  new_primary,
+						  old_acting,
+						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pg_t(pg_num - 1, pool_id),
+                                                  recoverable.get(),
+						  &past_intervals));
+  }
+
+  //
+  // PG was pre-merge source
+  //
+  {
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num(pg_num);
+    inc.new_pools[pool_id].set_pg_num_pending(pg_num - 1);
+    osdmap->apply_incremental(inc);
+
+    cout << "pg_num " << pg_num << std::endl;
+    PastIntervals past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
+						  new_primary,
+						  old_acting,
+						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  lastmap,  // reverse order!
+						  osdmap,
+						  pg_t(pg_num - 1, pool_id),
+                                                  recoverable.get(),
+						  &past_intervals));
+  }
+
+  //
+  // PG is merge source
+  //
+  {
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num(pg_num - 1);
+    osdmap->apply_incremental(inc);
+
+    PastIntervals past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
+						  new_primary,
+						  old_acting,
+						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pg_t(pg_num - 1, pool_id),
+                                                  recoverable.get(),
+						  &past_intervals));
+  }
+
+  //
+  // PG is pre-merge target
+  //
+  {
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num_pending(pg_num - 1);
+    osdmap->apply_incremental(inc);
+
+    PastIntervals past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
+						  new_primary,
+						  old_acting,
+						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pg_t(pg_num / 2 - 1, pool_id),
+                                                  recoverable.get(),
+						  &past_intervals));
+  }
+
+  //
+  // PG was pre-merge target
+  //
+  {
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num_pending(pg_num - 1);
+    osdmap->apply_incremental(inc);
+
+    PastIntervals past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
+						  new_primary,
+						  old_acting,
+						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  lastmap,  // reverse order!
+						  osdmap,
+						  pg_t(pg_num / 2 - 1, pool_id),
+                                                  recoverable.get(),
+						  &past_intervals));
+  }
+
+  //
+  // PG is merge target
+  //
+  {
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
+    osdmap->set_max_osd(10);
+    osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
+    osdmap->set_epoch(epoch);
+    OSDMap::Incremental inc(epoch + 1);
+    inc.new_pools[pool_id].min_size = min_size;
+    inc.new_pools[pool_id].set_pg_num(pg_num - 1);
+    osdmap->apply_incremental(inc);
+
+    PastIntervals past_intervals;
+
+    ASSERT_TRUE(past_intervals.empty());
+    ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
+						  new_primary,
+						  old_acting,
+						  new_acting,
+						  old_up_primary,
+						  new_up_primary,
+						  old_up,
+						  new_up,
+						  same_interval_since,
+						  last_epoch_clean,
+						  osdmap,
+						  lastmap,
+						  pg_t(pg_num / 2 - 1, pool_id),
+                                                  recoverable.get(),
+						  &past_intervals));
+  }
+
+  //
   // PG size has changed
   //
   {
-    ceph::shared_ptr<OSDMap> osdmap(new OSDMap());
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
     osdmap->set_max_osd(10);
     osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
     osdmap->set_epoch(epoch);
@@ -328,7 +528,7 @@ for (unsigned i = 0; i < 4; ++i) {
     inc.new_pools[pool_id].set_pg_num(pg_num);
     osdmap->apply_incremental(inc);
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -355,7 +555,7 @@ for (unsigned i = 0; i < 4; ++i) {
   {
     vector<int> old_acting;
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ostringstream out;
 
@@ -395,7 +595,7 @@ for (unsigned i = 0; i < 4; ++i) {
     // The new osdmap is created so that it triggers the
     // bug.
     //
-    ceph::shared_ptr<OSDMap> osdmap(new OSDMap());
+    std::shared_ptr<OSDMap> osdmap(new OSDMap());
     osdmap->set_max_osd(10);
     osdmap->set_state(osd_id, CEPH_OSD_EXISTS);
     osdmap->set_epoch(epoch);
@@ -407,7 +607,7 @@ for (unsigned i = 0; i < 4; ++i) {
 
     ostringstream out;
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -440,7 +640,7 @@ for (unsigned i = 0; i < 4; ++i) {
 
     ostringstream out;
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -471,7 +671,7 @@ for (unsigned i = 0; i < 4; ++i) {
     new_acting.push_back(osd_id + 4);
     new_acting.push_back(osd_id + 5);
 
-    ceph::shared_ptr<OSDMap> lastmap(new OSDMap());
+    std::shared_ptr<OSDMap> lastmap(new OSDMap());
     lastmap->set_max_osd(10);
     lastmap->set_state(osd_id, CEPH_OSD_EXISTS);
     lastmap->set_epoch(epoch);
@@ -483,7 +683,7 @@ for (unsigned i = 0; i < 4; ++i) {
 
     ostringstream out;
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -518,7 +718,7 @@ for (unsigned i = 0; i < 4; ++i) {
 
     epoch_t last_epoch_clean = epoch - 10;
 
-    ceph::shared_ptr<OSDMap> lastmap(new OSDMap());
+    std::shared_ptr<OSDMap> lastmap(new OSDMap());
     lastmap->set_max_osd(10);
     lastmap->set_state(osd_id, CEPH_OSD_EXISTS);
     lastmap->set_epoch(epoch);
@@ -530,7 +730,7 @@ for (unsigned i = 0; i < 4; ++i) {
 
     ostringstream out;
 
-    PastIntervals past_intervals; past_intervals.update_type(ec_pool, compact);
+    PastIntervals past_intervals;
 
     ASSERT_TRUE(past_intervals.empty());
     ASSERT_TRUE(PastIntervals::check_new_interval(old_primary,
@@ -556,19 +756,19 @@ for (unsigned i = 0; i < 4; ++i) {
 
 TEST(pg_t, get_ancestor)
 {
-  ASSERT_EQ(pg_t(0, 0, -1), pg_t(16, 0, -1).get_ancestor(16));
-  ASSERT_EQ(pg_t(1, 0, -1), pg_t(17, 0, -1).get_ancestor(16));
-  ASSERT_EQ(pg_t(0, 0, -1), pg_t(16, 0, -1).get_ancestor(8));
-  ASSERT_EQ(pg_t(16, 0, -1), pg_t(16, 0, -1).get_ancestor(80));
-  ASSERT_EQ(pg_t(16, 0, -1), pg_t(16, 0, -1).get_ancestor(83));
-  ASSERT_EQ(pg_t(1, 0, -1), pg_t(1321, 0, -1).get_ancestor(123).get_ancestor(8));
-  ASSERT_EQ(pg_t(3, 0, -1), pg_t(1323, 0, -1).get_ancestor(123).get_ancestor(8));
-  ASSERT_EQ(pg_t(3, 0, -1), pg_t(1323, 0, -1).get_ancestor(8));
+  ASSERT_EQ(pg_t(0, 0), pg_t(16, 0).get_ancestor(16));
+  ASSERT_EQ(pg_t(1, 0), pg_t(17, 0).get_ancestor(16));
+  ASSERT_EQ(pg_t(0, 0), pg_t(16, 0).get_ancestor(8));
+  ASSERT_EQ(pg_t(16, 0), pg_t(16, 0).get_ancestor(80));
+  ASSERT_EQ(pg_t(16, 0), pg_t(16, 0).get_ancestor(83));
+  ASSERT_EQ(pg_t(1, 0), pg_t(1321, 0).get_ancestor(123).get_ancestor(8));
+  ASSERT_EQ(pg_t(3, 0), pg_t(1323, 0).get_ancestor(123).get_ancestor(8));
+  ASSERT_EQ(pg_t(3, 0), pg_t(1323, 0).get_ancestor(8));
 }
 
 TEST(pg_t, split)
 {
-  pg_t pgid(0, 0, -1);
+  pg_t pgid(0, 0);
   set<pg_t> s;
   bool b;
 
@@ -582,21 +782,21 @@ TEST(pg_t, split)
   b = pgid.is_split(2, 4, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(2, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(2, 0)));
 
   s.clear();
   b = pgid.is_split(2, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(3u, s.size());
-  ASSERT_TRUE(s.count(pg_t(2, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(4, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(6, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(2, 0)));
+  ASSERT_TRUE(s.count(pg_t(4, 0)));
+  ASSERT_TRUE(s.count(pg_t(6, 0)));
 
   s.clear();
   b = pgid.is_split(3, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(4, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(4, 0)));
 
   s.clear();
   b = pgid.is_split(6, 8, NULL);
@@ -605,69 +805,100 @@ TEST(pg_t, split)
   ASSERT_TRUE(!b);
   ASSERT_EQ(0u, s.size());
 
-  pgid = pg_t(1, 0, -1);
+  pgid = pg_t(1, 0);
 
   s.clear();
   b = pgid.is_split(2, 4, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(3, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(3, 0)));
 
   s.clear();
   b = pgid.is_split(2, 6, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(2u, s.size());
-  ASSERT_TRUE(s.count(pg_t(3, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(5, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(3, 0)));
+  ASSERT_TRUE(s.count(pg_t(5, 0)));
 
   s.clear();
   b = pgid.is_split(2, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(3u, s.size());
-  ASSERT_TRUE(s.count(pg_t(3, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(5, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(3, 0)));
+  ASSERT_TRUE(s.count(pg_t(5, 0)));
+  ASSERT_TRUE(s.count(pg_t(7, 0)));
 
   s.clear();
   b = pgid.is_split(4, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(5, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(5, 0)));
 
   s.clear();
   b = pgid.is_split(3, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(3u, s.size());
-  ASSERT_TRUE(s.count(pg_t(3, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(5, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(3, 0)));
+  ASSERT_TRUE(s.count(pg_t(5, 0)));
+  ASSERT_TRUE(s.count(pg_t(7, 0)));
 
   s.clear();
   b = pgid.is_split(6, 8, &s);
   ASSERT_TRUE(!b);
   ASSERT_EQ(0u, s.size());
 
-  pgid = pg_t(3, 0, -1);
+  pgid = pg_t(3, 0);
 
   s.clear();
   b = pgid.is_split(7, 8, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(7, 0)));
 
   s.clear();
   b = pgid.is_split(7, 12, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(2u, s.size());
-  ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
-  ASSERT_TRUE(s.count(pg_t(11, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(7, 0)));
+  ASSERT_TRUE(s.count(pg_t(11, 0)));
 
   s.clear();
   b = pgid.is_split(7, 11, &s);
   ASSERT_TRUE(b);
   ASSERT_EQ(1u, s.size());
-  ASSERT_TRUE(s.count(pg_t(7, 0, -1)));
+  ASSERT_TRUE(s.count(pg_t(7, 0)));
 
+}
+
+TEST(pg_t, merge)
+{
+  pg_t pgid, parent;
+  bool b;
+
+  pgid = pg_t(7, 0);
+  b = pgid.is_merge_source(8, 7, &parent);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(parent, pg_t(3, 0));
+  ASSERT_TRUE(parent.is_merge_target(8, 7));
+
+  b = pgid.is_merge_source(8, 5, &parent);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(parent, pg_t(3, 0));
+  ASSERT_TRUE(parent.is_merge_target(8, 5));
+
+  b = pgid.is_merge_source(8, 4, &parent);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(parent, pg_t(3, 0));
+  ASSERT_TRUE(parent.is_merge_target(8, 4));
+
+  b = pgid.is_merge_source(8, 3, &parent);
+  ASSERT_TRUE(b);
+  ASSERT_EQ(parent, pg_t(1, 0));
+  ASSERT_TRUE(parent.is_merge_target(8, 4));
+
+  b = pgid.is_merge_source(9, 8, &parent);
+  ASSERT_FALSE(b);
+  ASSERT_FALSE(parent.is_merge_target(9, 8));
 }
 
 TEST(pg_missing_t, constructor)
@@ -682,7 +913,7 @@ TEST(pg_missing_t, have_missing)
   hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   pg_missing_t missing;
   EXPECT_FALSE(missing.have_missing());
-  missing.add(oid, eversion_t(), eversion_t());
+  missing.add(oid, eversion_t(), eversion_t(), false);
   EXPECT_TRUE(missing.have_missing());
 }
 
@@ -691,7 +922,7 @@ TEST(pg_missing_t, claim)
   hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
   pg_missing_t missing;
   EXPECT_FALSE(missing.have_missing());
-  missing.add(oid, eversion_t(), eversion_t());
+  missing.add(oid, eversion_t(), eversion_t(), false);
   EXPECT_TRUE(missing.have_missing());
 
   pg_missing_t other;
@@ -708,7 +939,7 @@ TEST(pg_missing_t, is_missing)
     hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add(oid, eversion_t(), eversion_t());
+    missing.add(oid, eversion_t(), eversion_t(), false);
     EXPECT_TRUE(missing.is_missing(oid));
   }
 
@@ -718,23 +949,11 @@ TEST(pg_missing_t, is_missing)
     pg_missing_t missing;
     eversion_t need(10,5);
     EXPECT_FALSE(missing.is_missing(oid, eversion_t()));
-    missing.add(oid, need, eversion_t());
+    missing.add(oid, need, eversion_t(), false);
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_FALSE(missing.is_missing(oid, eversion_t()));
     EXPECT_TRUE(missing.is_missing(oid, need));
   }
-}
-
-TEST(pg_missing_t, have_old)
-{
-  hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
-  pg_missing_t missing;
-  EXPECT_EQ(eversion_t(), missing.have_old(oid));
-  missing.add(oid, eversion_t(), eversion_t());
-  EXPECT_EQ(eversion_t(), missing.have_old(oid));
-  eversion_t have(1,1);
-  missing.revise_have(oid, have);
-  EXPECT_EQ(have, missing.have_old(oid));
 }
 
 TEST(pg_missing_t, add_next_event)
@@ -843,20 +1062,6 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_EQ(1U, missing.get_rmissing().size());
   }
 
-  // obsolete (BACKLOG)
-  {
-    pg_missing_t missing;
-    pg_log_entry_t e = sample_e;
-
-    e.op = pg_log_entry_t::BACKLOG;
-    EXPECT_TRUE(e.is_backlog());
-    EXPECT_TRUE(e.object_is_indexed());
-    EXPECT_FALSE(e.reqid_is_indexed());
-    EXPECT_FALSE(missing.is_missing(oid));
-    PrCtl unset_dumpable;
-    EXPECT_DEATH(missing.add_next_event(e), "");
-  }
-
   // adding a DELETE matching an existing event
   {
     pg_missing_t missing;
@@ -873,44 +1078,40 @@ TEST(pg_missing_t, add_next_event)
     e.op = pg_log_entry_t::DELETE;
     EXPECT_TRUE(e.is_delete());
     missing.add_next_event(e);
-    EXPECT_FALSE(missing.have_missing());
+    EXPECT_TRUE(missing.is_missing(oid));
+    EXPECT_TRUE(missing.get_items().at(oid).is_delete());
+    EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
+    EXPECT_EQ(version, missing.get_items().at(oid).need);
+    EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
+    EXPECT_EQ(1U, missing.num_missing());
+    EXPECT_EQ(1U, missing.get_rmissing().size());
   }
 
-  // ERROR op should only be used for dup detection
+  // adding a LOST_DELETE after an existing event
   {
     pg_missing_t missing;
     pg_log_entry_t e = sample_e;
 
-    e.op = pg_log_entry_t::ERROR;
-    e.return_code = -ENOENT;
-    EXPECT_FALSE(e.is_update());
-    EXPECT_FALSE(e.object_is_indexed());
+    e.op = pg_log_entry_t::MODIFY;
+    EXPECT_TRUE(e.is_update());
+    EXPECT_TRUE(e.object_is_indexed());
     EXPECT_TRUE(e.reqid_is_indexed());
     EXPECT_FALSE(missing.is_missing(oid));
     missing.add_next_event(e);
-    EXPECT_FALSE(missing.is_missing(oid));
-    EXPECT_FALSE(e.object_is_indexed());
-    EXPECT_TRUE(e.reqid_is_indexed());
-  }
-
-  // ERROR op should not affect previous entries
-  {
-    pg_missing_t missing;
-    pg_log_entry_t modify = sample_e;
-
-    modify.op = pg_log_entry_t::MODIFY;
-    EXPECT_FALSE(missing.is_missing(oid));
-    missing.add_next_event(modify);
     EXPECT_TRUE(missing.is_missing(oid));
-    EXPECT_EQ(missing.get_items().at(oid).need, version);
+    EXPECT_FALSE(missing.get_items().at(oid).is_delete());
 
-    pg_log_entry_t error = sample_e;
-    error.op = pg_log_entry_t::ERROR;
-    error.return_code = -ENOENT;
-    error.version = eversion_t(11, 5);
-    missing.add_next_event(error);
+    e.op = pg_log_entry_t::LOST_DELETE;
+    e.version.version++;
+    EXPECT_TRUE(e.is_delete());
+    missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
-    EXPECT_EQ(missing.get_items().at(oid).need, version);
+    EXPECT_TRUE(missing.get_items().at(oid).is_delete());
+    EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
+    EXPECT_EQ(e.version, missing.get_items().at(oid).need);
+    EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
+    EXPECT_EQ(1U, missing.num_missing());
+    EXPECT_EQ(1U, missing.get_rmissing().size());
   }
 }
 
@@ -921,7 +1122,7 @@ TEST(pg_missing_t, revise_need)
   // create a new entry
   EXPECT_FALSE(missing.is_missing(oid));
   eversion_t need(10,10);
-  missing.revise_need(oid, need);
+  missing.revise_need(oid, need, false);
   EXPECT_TRUE(missing.is_missing(oid));
   EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
   EXPECT_EQ(need, missing.get_items().at(oid).need);
@@ -930,7 +1131,7 @@ TEST(pg_missing_t, revise_need)
   missing.revise_have(oid, have);
   eversion_t new_need(10,12);
   EXPECT_EQ(have, missing.get_items().at(oid).have);
-  missing.revise_need(oid, new_need);
+  missing.revise_need(oid, new_need, false);
   EXPECT_EQ(have, missing.get_items().at(oid).have);
   EXPECT_EQ(new_need, missing.get_items().at(oid).need);
 }
@@ -946,7 +1147,7 @@ TEST(pg_missing_t, revise_have)
   EXPECT_FALSE(missing.is_missing(oid));
   // update an existing entry
   eversion_t need(10,12);
-  missing.add(oid, need, have);
+  missing.add(oid, need, have, false);
   EXPECT_TRUE(missing.is_missing(oid));
   eversion_t new_have(2,2);
   EXPECT_EQ(have, missing.get_items().at(oid).have);
@@ -962,7 +1163,7 @@ TEST(pg_missing_t, add)
   EXPECT_FALSE(missing.is_missing(oid));
   eversion_t have(1,1);
   eversion_t need(10,10);
-  missing.add(oid, need, have);
+  missing.add(oid, need, have, false);
   EXPECT_TRUE(missing.is_missing(oid));
   EXPECT_EQ(have, missing.get_items().at(oid).have);
   EXPECT_EQ(need, missing.get_items().at(oid).need);
@@ -977,7 +1178,7 @@ TEST(pg_missing_t, rm)
     EXPECT_FALSE(missing.is_missing(oid));
     epoch_t epoch = 10;
     eversion_t need(epoch,10);
-    missing.add(oid, need, eversion_t());
+    missing.add(oid, need, eversion_t(), false);
     EXPECT_TRUE(missing.is_missing(oid));
     // rm of an older version is a noop
     missing.rm(oid, eversion_t(epoch / 2,20));
@@ -991,7 +1192,7 @@ TEST(pg_missing_t, rm)
     hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add(oid, eversion_t(), eversion_t());
+    missing.add(oid, eversion_t(), eversion_t(), false);
     EXPECT_TRUE(missing.is_missing(oid));
     auto m = missing.get_items().find(oid);
     missing.rm(m);
@@ -1013,7 +1214,7 @@ TEST(pg_missing_t, got)
     EXPECT_FALSE(missing.is_missing(oid));
     epoch_t epoch = 10;
     eversion_t need(epoch,10);
-    missing.add(oid, need, eversion_t());
+    missing.add(oid, need, eversion_t(), false);
     EXPECT_TRUE(missing.is_missing(oid));
     // assert if that the version to be removed is lower than the version of the object
     {
@@ -1029,7 +1230,7 @@ TEST(pg_missing_t, got)
     hobject_t oid(object_t("objname"), "key", 123, 456, 0, "");
     pg_missing_t missing;
     EXPECT_FALSE(missing.is_missing(oid));
-    missing.add(oid, eversion_t(), eversion_t());
+    missing.add(oid, eversion_t(), eversion_t(), false);
     EXPECT_TRUE(missing.is_missing(oid));
     auto m = missing.get_items().find(oid);
     missing.got(m);
@@ -1044,8 +1245,8 @@ TEST(pg_missing_t, split_into)
   uint32_t hash2 = 2;
   hobject_t oid2(object_t("objname"), "key2", 123, hash2, 0, "");
   pg_missing_t missing;
-  missing.add(oid1, eversion_t(), eversion_t());
-  missing.add(oid2, eversion_t(), eversion_t());
+  missing.add(oid1, eversion_t(), eversion_t(), false);
+  missing.add(oid2, eversion_t(), eversion_t(), false);
   pg_t child_pgid;
   child_pgid.m_seed = 1;
   pg_missing_t child;
@@ -1055,197 +1256,6 @@ TEST(pg_missing_t, split_into)
   EXPECT_FALSE(child.is_missing(oid2));
   EXPECT_FALSE(missing.is_missing(oid1));
   EXPECT_TRUE(missing.is_missing(oid2));
-}
-
-class ObjectContextTest : public ::testing::Test {
-protected:
-
-  static const useconds_t DELAY_MAX = 20 * 1000 * 1000;
-
-  class Thread_read_lock : public Thread {
-  public:
-    ObjectContext &obc;
-
-    explicit Thread_read_lock(ObjectContext& _obc) :
-      obc(_obc)
-    {
-    }
-
-    void *entry() override {
-      obc.ondisk_read_lock();
-      return NULL;
-    }
-  };
-
-  class Thread_write_lock : public Thread {
-  public:
-    ObjectContext &obc;
-
-    explicit Thread_write_lock(ObjectContext& _obc) :
-      obc(_obc)
-    {
-    }
-
-    void *entry() override {
-      obc.ondisk_write_lock();
-      return NULL;
-    }
-  };
-
-};
-
-TEST_F(ObjectContextTest, read_write_lock)
-{
-  {
-    ObjectContext obc;
-
-    //
-    // write_lock
-    // write_lock
-    // write_unlock
-    // write_unlock
-    //
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    obc.ondisk_write_lock();
-
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(1, obc.unstable_writes);
-
-    obc.ondisk_write_lock();
-
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(2, obc.unstable_writes);
-
-    obc.ondisk_write_unlock();
-
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(1, obc.unstable_writes);
-
-    obc.ondisk_write_unlock();
-
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-  }
-
-  useconds_t delay = 0;
-
-  {
-    ObjectContext obc;
-
-    //
-    // write_lock
-    // read_lock => wait
-    // write_unlock => signal
-    // read_unlock
-    //
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    obc.ondisk_write_lock();
-
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(1, obc.unstable_writes);
-
-    Thread_read_lock t(obc);
-    t.create("obc_read");
-
-    do {
-      cout << "Trying (1) with delay " << delay << "us\n";
-      usleep(delay);
-    } while (obc.readers_waiting == 0 &&
-	     ( delay = delay * 2 + 1) < DELAY_MAX);
-
-    EXPECT_EQ(1, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(1, obc.unstable_writes);
-
-    obc.ondisk_write_unlock();
-
-    do {
-      cout << "Trying (2) with delay " << delay << "us\n";
-      usleep(delay);
-    } while ((obc.readers == 0 || obc.readers_waiting == 1) &&
-	     ( delay = delay * 2 + 1) < DELAY_MAX);
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(1, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    obc.ondisk_read_unlock();
-
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    t.join();
-  }
-
-  {
-    ObjectContext obc;
-
-    //
-    // read_lock
-    // write_lock => wait
-    // read_unlock => signal
-    // write_unlock
-    //
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    obc.ondisk_read_lock();
-
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(1, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    Thread_write_lock t(obc);
-    t.create("obc_write");
-
-    do {
-      cout << "Trying (3) with delay " << delay << "us\n";
-      usleep(delay);
-    } while ((obc.writers_waiting == 0) &&
-	     ( delay = delay * 2 + 1) < DELAY_MAX);
-
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(1, obc.readers);
-    EXPECT_EQ(1, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    obc.ondisk_read_unlock();
-
-    do {
-      cout << "Trying (4) with delay " << delay << "us\n";
-      usleep(delay);
-    } while ((obc.unstable_writes == 0 || obc.writers_waiting == 1) &&
-	     ( delay = delay * 2 + 1) < DELAY_MAX);
-
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(1, obc.unstable_writes);
-
-    obc.ondisk_write_unlock();
-
-    EXPECT_EQ(0, obc.readers_waiting);
-    EXPECT_EQ(0, obc.readers);
-    EXPECT_EQ(0, obc.writers_waiting);
-    EXPECT_EQ(0, obc.unstable_writes);
-
-    t.join();
-  }
-
 }
 
 TEST(pg_pool_t_test, get_pg_num_divisor) {
@@ -1531,7 +1541,7 @@ TEST(pool_opts_t, deep_scrub_interval) {
 
 struct RequiredPredicate : IsPGRecoverablePredicate {
   unsigned required_size;
-  RequiredPredicate(unsigned required_size) : required_size(required_size) {}
+  explicit RequiredPredicate(unsigned required_size) : required_size(required_size) {}
   bool operator()(const set<pg_shard_t> &have) const override {
     return have.size() >= required_size;
   }
@@ -1540,8 +1550,8 @@ struct RequiredPredicate : IsPGRecoverablePredicate {
 using namespace std;
 struct MapPredicate {
   map<int, pair<PastIntervals::osd_state_t, epoch_t>> states;
-  MapPredicate(
-    vector<pair<int, pair<PastIntervals::osd_state_t, epoch_t>>> _states)
+  explicit MapPredicate(
+    const vector<pair<int, pair<PastIntervals::osd_state_t, epoch_t>>> &_states)
    : states(_states.begin(), _states.end()) {}
   PastIntervals::osd_state_t operator()(epoch_t start, int osd, epoch_t *lost_at) {
     auto val = states.at(osd);
@@ -1583,21 +1593,10 @@ struct PITest : ::testing::Test {
       pg_down,
       new RequiredPredicate(rec_pred));
 
-    PastIntervals simple, compact;
-    simple.update_type(ec_pool, false);
-    compact.update_type(ec_pool, true);
+    PastIntervals compact;
     for (auto &&i: intervals) {
-      simple.add_interval(ec_pool, i);
       compact.add_interval(ec_pool, i);
     }
-    PI::PriorSet simple_ps = simple.get_prior_set(
-      ec_pool,
-      last_epoch_started,
-      new RequiredPredicate(rec_pred),
-      map_pred,
-      up,
-      acting,
-      nullptr);
     PI::PriorSet compact_ps = compact.get_prior_set(
       ec_pool,
       last_epoch_started,
@@ -1606,7 +1605,6 @@ struct PITest : ::testing::Test {
       up,
       acting,
       nullptr);
-    ASSERT_EQ(correct, simple_ps);
     ASSERT_EQ(correct, compact_ps);
   }
 };

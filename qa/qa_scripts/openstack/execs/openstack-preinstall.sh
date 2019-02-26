@@ -1,4 +1,6 @@
-#!/bin/bash -f
+#!/usr/bin/env bash
+set -f
+
 #
 # Remotely setup the stuff needed to run packstack.  This should do items 1-4 in
 # https://docs.google.com/document/d/1us18KR3LuLyINgGk2rmI-SVj9UksCE7y4C2D_68Aa8o/edit?ts=56a78fcb

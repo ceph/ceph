@@ -6,6 +6,7 @@ import json
 
 import logging
 import os
+import time
 from textwrap import dedent
 import traceback
 from collections import namedtuple, defaultdict
@@ -309,7 +310,7 @@ class TestDataScan(CephFSTestCase):
         mds_map = self.fs.get_mds_map()
         return rank in mds_map['damaged']
 
-    def _rebuild_metadata(self, workload, other_pool=None, workers=1):
+    def _rebuild_metadata(self, workload, workers=1):
         """
         That when all objects in metadata pool are removed, we can rebuild a metadata pool
         based on the contents of a data pool, and a client can see and read our files.
@@ -317,30 +318,12 @@ class TestDataScan(CephFSTestCase):
 
         # First, inject some files
 
-        other_fs = other_pool + '-fs' if other_pool else None
         workload.write()
 
         # Unmount the client and flush the journal: the tool should also cope with
         # situations where there is dirty metadata, but we'll test that separately
         self.mount_a.umount_wait()
         workload.flush()
-
-        # Create the alternate pool if requested
-        if other_pool:
-            self.fs.rados(['mkpool', other_pool])
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'flag', 'set',
-                                                'enable_multiple', 'true',
-                                                '--yes-i-really-mean-it')
-            self.fs.mon_manager.raw_cluster_cmd('fs', 'new', other_fs,
-                                                other_pool,
-                                                self.fs.get_data_pool_name(),
-                                                '--allow-dangerous-metadata-overlay')
-            self.fs.data_scan(['init', '--force-init', '--filesystem',
-                               other_fs, '--alternate-pool', other_pool])
-            self.fs.mon_manager.raw_cluster_cmd('-s')
-            self.fs.table_tool([other_fs + ":0", "reset", "session"])
-            self.fs.table_tool([other_fs + ":0", "reset", "snap"])
-            self.fs.table_tool([other_fs + ":0", "reset", "inode"])
 
         # Stop the MDS
         self.fs.mds_stop()
@@ -359,20 +342,18 @@ class TestDataScan(CephFSTestCase):
         self.fs.mon_manager.raw_cluster_cmd('fs', 'reset', self.fs.name,
                 '--yes-i-really-mean-it')
 
-        if other_pool is None:
-            self.fs.mds_restart()
+        self.fs.mds_restart()
 
         def get_state(mds_id):
             info = self.mds_cluster.get_mds_info(mds_id)
             return info['state'] if info is not None else None
 
-        if other_pool is None:
-            self.wait_until_true(lambda: self.is_marked_damaged(0), 60)
-            for mds_id in self.fs.mds_ids:
-                self.wait_until_equal(
-                        lambda: get_state(mds_id),
-                        "up:standby",
-                        timeout=60)
+        self.wait_until_true(lambda: self.is_marked_damaged(0), 60)
+        for mds_id in self.fs.mds_ids:
+            self.wait_until_equal(
+                    lambda: get_state(mds_id),
+                    "up:standby",
+                    timeout=60)
 
         self.fs.table_tool([self.fs.name + ":0", "reset", "session"])
         self.fs.table_tool([self.fs.name + ":0", "reset", "snap"])
@@ -382,40 +363,12 @@ class TestDataScan(CephFSTestCase):
         if False:
             with self.assertRaises(CommandFailedError):
                 # Normal reset should fail when no objects are present, we'll use --force instead
-                self.fs.journal_tool(["journal", "reset"])
+                self.fs.journal_tool(["journal", "reset"], 0)
 
-        if other_pool:
-            self.fs.mds_stop()
-            self.fs.data_scan(['scan_extents', '--alternate-pool',
-                               other_pool, '--filesystem', self.fs.name,
-                               self.fs.get_data_pool_name()])
-            self.fs.data_scan(['scan_inodes', '--alternate-pool',
-                               other_pool, '--filesystem', self.fs.name,
-                               '--force-corrupt', '--force-init',
-                               self.fs.get_data_pool_name()])
-            self.fs.journal_tool(['--rank=' + self.fs.name + ":0", 'event',
-                                  'recover_dentries', 'list',
-                                  '--alternate-pool', other_pool])
-
-            self.fs.data_scan(['init', '--force-init', '--filesystem',
-                               self.fs.name])
-            self.fs.data_scan(['scan_inodes', '--filesystem', self.fs.name,
-                               '--force-corrupt', '--force-init',
-                               self.fs.get_data_pool_name()])
-            self.fs.journal_tool(['--rank=' + self.fs.name + ":0", 'event',
-                                  'recover_dentries', 'list'])
-
-            self.fs.journal_tool(['--rank=' + other_fs + ":0", 'journal',
-                                  'reset', '--force'])
-            self.fs.journal_tool(['--rank=' + self.fs.name + ":0", 'journal',
-                                  'reset', '--force'])
-            self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired',
-                                                other_fs + ":0")
-        else:
-            self.fs.journal_tool(["journal", "reset", "--force"])
-            self.fs.data_scan(["init"])
-            self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()], worker_count=workers)
-            self.fs.data_scan(["scan_inodes", self.fs.get_data_pool_name()], worker_count=workers)
+        self.fs.journal_tool(["journal", "reset", "--force"], 0)
+        self.fs.data_scan(["init"])
+        self.fs.data_scan(["scan_extents", self.fs.get_data_pool_name()], worker_count=workers)
+        self.fs.data_scan(["scan_inodes", self.fs.get_data_pool_name()], worker_count=workers)
 
         # Mark the MDS repaired
         self.fs.mon_manager.raw_cluster_cmd('mds', 'repaired', '0')
@@ -423,17 +376,10 @@ class TestDataScan(CephFSTestCase):
         # Start the MDS
         self.fs.mds_restart()
         self.fs.wait_for_daemons()
-        if other_pool:
-            for mds_id in self.fs.mds_ids:
-                self.fs.mon_manager.raw_cluster_cmd('tell', "mds." + mds_id,
-                                                    'injectargs', '--debug-mds=20')
-                self.fs.mon_manager.raw_cluster_cmd('daemon', "mds." + mds_id,
-                                                    'scrub_path', '/',
-                                                    'recursive', 'repair')
         log.info(str(self.mds_cluster.status()))
 
         # Mount a client
-        self.mount_a.mount(mount_fs_name=other_fs)
+        self.mount_a.mount()
         self.mount_a.wait_until_mounted()
 
         # See that the files are present and correct
@@ -468,12 +414,7 @@ class TestDataScan(CephFSTestCase):
     def test_stashed_layout(self):
         self._rebuild_metadata(StripedStashedLayout(self.fs, self.mount_a))
 
-    def test_rebuild_simple_altpool(self):
-        self._rebuild_metadata(SimpleWorkload(self.fs, self.mount_a), other_pool="recovery")
-
     def _dirfrag_keys(self, object_id):
-        self.other_pool = 'recovery'
-        self.other_fs = self.other_pool + '-fs'
         keys_str = self.fs.rados(["listomapkeys", object_id])
         if keys_str:
             return keys_str.split("\n")
@@ -484,8 +425,6 @@ class TestDataScan(CephFSTestCase):
         """
         That when injecting a dentry into a fragmented directory, we put it in the right fragment.
         """
-
-        self.fs.set_allow_dirfrags(True)
 
         file_count = 100
         file_names = ["%s" % n for n in range(0, file_count)]
@@ -603,7 +542,7 @@ class TestDataScan(CephFSTestCase):
             log.info("{0}: {1}".format(pg_str, lines))
             self.assertSetEqual(set(lines), set(pgs_to_files[pg_str]))
 
-    def test_scan_links(self):
+    def test_rebuild_linkage(self):
         """
         The scan_links command fixes linkage errors
         """
@@ -658,3 +597,83 @@ class TestDataScan(CephFSTestCase):
         # link count was adjusted?
         file1_nlink = self.mount_a.path_to_nlink("testdir1/file1")
         self.assertEqual(file1_nlink, 2)
+
+    def test_rebuild_inotable(self):
+        """
+        The scan_links command repair inotables
+        """
+        self.fs.set_max_mds(2)
+        self.fs.wait_for_daemons()
+
+        active_mds_names = self.fs.get_active_names()
+        mds0_id = active_mds_names[0]
+        mds1_id = active_mds_names[1]
+
+        self.mount_a.run_shell(["mkdir", "dir1"])
+        dir_ino = self.mount_a.path_to_ino("dir1")
+        self.mount_a.setfattr("dir1", "ceph.dir.pin", "1")
+        # wait for subtree migration
+
+        file_ino = 0;
+        while True:
+            time.sleep(1)
+            # allocate an inode from mds.1
+            self.mount_a.run_shell(["touch", "dir1/file1"])
+            file_ino = self.mount_a.path_to_ino("dir1/file1")
+            if file_ino >= (2 << 40):
+                break
+            self.mount_a.run_shell(["rm", "-f", "dir1/file1"])
+
+        self.mount_a.umount_wait()
+
+        self.fs.mds_asok(["flush", "journal"], mds0_id)
+        self.fs.mds_asok(["flush", "journal"], mds1_id)
+        self.mds_cluster.mds_stop()
+
+        self.fs.rados(["rm", "mds0_inotable"])
+        self.fs.rados(["rm", "mds1_inotable"])
+
+        self.fs.data_scan(["scan_links", "--filesystem", self.fs.name])
+
+        mds0_inotable = json.loads(self.fs.table_tool([self.fs.name + ":0", "show", "inode"]))
+        self.assertGreaterEqual(
+            mds0_inotable['0']['data']['inotable']['free'][0]['start'], dir_ino)
+
+        mds1_inotable = json.loads(self.fs.table_tool([self.fs.name + ":1", "show", "inode"]))
+        self.assertGreaterEqual(
+            mds1_inotable['1']['data']['inotable']['free'][0]['start'], file_ino)
+
+    def test_rebuild_snaptable(self):
+        """
+        The scan_links command repair snaptable
+        """
+        self.fs.set_allow_new_snaps(True)
+
+        self.mount_a.run_shell(["mkdir", "dir1"])
+        self.mount_a.run_shell(["mkdir", "dir1/.snap/s1"])
+        self.mount_a.run_shell(["mkdir", "dir1/.snap/s2"])
+        self.mount_a.run_shell(["rmdir", "dir1/.snap/s2"])
+
+        self.mount_a.umount_wait()
+
+        mds0_id = self.fs.get_active_names()[0]
+        self.fs.mds_asok(["flush", "journal"], mds0_id)
+
+        # wait for mds to update removed snaps
+        time.sleep(10)
+
+        old_snaptable = json.loads(self.fs.table_tool([self.fs.name + ":0", "show", "snap"]))
+        # stamps may have minor difference
+        for item in old_snaptable['snapserver']['snaps']:
+            del item['stamp']
+
+        self.fs.rados(["rm", "mds_snaptable"])
+        self.fs.data_scan(["scan_links", "--filesystem", self.fs.name])
+
+        new_snaptable = json.loads(self.fs.table_tool([self.fs.name + ":0", "show", "snap"]))
+        for item in new_snaptable['snapserver']['snaps']:
+            del item['stamp']
+        self.assertGreaterEqual(
+            new_snaptable['snapserver']['last_snap'], old_snaptable['snapserver']['last_snap'])
+        self.assertEqual(
+            new_snaptable['snapserver']['snaps'], old_snaptable['snapserver']['snaps'])

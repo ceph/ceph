@@ -41,19 +41,19 @@
 #define dout_context g_ceph_context
 
 
-LogEvent *LogEvent::decode(bufferlist& bl)
+std::unique_ptr<LogEvent> LogEvent::decode_event(bufferlist::const_iterator p)
 {
   // parse type, length
-  bufferlist::iterator p = bl.begin();
   EventType type;
-  LogEvent *event = NULL;
-  ::decode(type, p);
+  std::unique_ptr<LogEvent> event;
+  using ceph::decode;
+  decode(type, p);
 
   if (EVENT_NEW_ENCODING == type) {
     try {
       DECODE_START(1, p);
-      ::decode(type, p);
-      event = decode_event(bl, p, type);
+      decode(type, p);
+      event = decode_event(p, type);
       DECODE_FINISH(p);
     }
     catch (const buffer::error &e) {
@@ -61,13 +61,13 @@ LogEvent *LogEvent::decode(bufferlist& bl)
       return NULL;
     }
   } else { // we are using classic encoding
-    event = decode_event(bl, p, type);
+    event = decode_event(p, type);
   }
   return event;
 }
 
 
-std::string LogEvent::get_type_str() const
+std::string_view LogEvent::get_type_str() const
 {
   switch(_type) {
   case EVENT_SUBTREEMAP: return "SUBTREEMAP";
@@ -94,74 +94,104 @@ std::string LogEvent::get_type_str() const
   }
 }
 
+const std::map<std::string, LogEvent::EventType> LogEvent::types = {
+  {"SUBTREEMAP", EVENT_SUBTREEMAP},
+  {"SUBTREEMAP_TEST", EVENT_SUBTREEMAP_TEST},
+  {"EXPORT", EVENT_EXPORT},
+  {"IMPORTSTART", EVENT_IMPORTSTART},
+  {"IMPORTFINISH", EVENT_IMPORTFINISH},
+  {"FRAGMENT", EVENT_FRAGMENT},
+  {"RESETJOURNAL", EVENT_RESETJOURNAL},
+  {"SESSION", EVENT_SESSION},
+  {"SESSIONS_OLD", EVENT_SESSIONS_OLD},
+  {"SESSIONS", EVENT_SESSIONS},
+  {"UPDATE", EVENT_UPDATE},
+  {"SLAVEUPDATE", EVENT_SLAVEUPDATE},
+  {"OPEN", EVENT_OPEN},
+  {"COMMITTED", EVENT_COMMITTED},
+  {"TABLECLIENT", EVENT_TABLECLIENT},
+  {"TABLESERVER", EVENT_TABLESERVER},
+  {"NOOP", EVENT_NOOP}
+};
 
 /*
  * Resolve type string to type enum
  *
  * Return -1 if not found
  */
-LogEvent::EventType LogEvent::str_to_type(std::string const &str)
+LogEvent::EventType LogEvent::str_to_type(std::string_view str)
 {
-  std::map<std::string, EventType> types;
-  types["SUBTREEMAP"] = EVENT_SUBTREEMAP;
-  types["SUBTREEMAP_TEST"] = EVENT_SUBTREEMAP_TEST;
-  types["EXPORT"] = EVENT_EXPORT;
-  types["IMPORTSTART"] = EVENT_IMPORTSTART;
-  types["IMPORTFINISH"] = EVENT_IMPORTFINISH;
-  types["FRAGMENT"] = EVENT_FRAGMENT;
-  types["RESETJOURNAL"] = EVENT_RESETJOURNAL;
-  types["SESSION"] = EVENT_SESSION;
-  types["SESSIONS_OLD"] = EVENT_SESSIONS_OLD;
-  types["SESSIONS"] = EVENT_SESSIONS;
-  types["UPDATE"] = EVENT_UPDATE;
-  types["SLAVEUPDATE"] = EVENT_SLAVEUPDATE;
-  types["OPEN"] = EVENT_OPEN;
-  types["COMMITTED"] = EVENT_COMMITTED;
-  types["TABLECLIENT"] = EVENT_TABLECLIENT;
-  types["TABLESERVER"] = EVENT_TABLESERVER;
-  types["NOOP"] = EVENT_NOOP;
-
-  return types[str];
+  return LogEvent::types.at(std::string(str));
 }
 
 
-LogEvent *LogEvent::decode_event(bufferlist& bl, bufferlist::iterator& p, LogEvent::EventType type)
+std::unique_ptr<LogEvent> LogEvent::decode_event(bufferlist::const_iterator& p, LogEvent::EventType type)
 {
-  int length = bl.length() - p.get_off();
+  const auto length = p.get_remaining();
   generic_dout(15) << "decode_log_event type " << type << ", size " << length << dendl;
   
   // create event
-  LogEvent *le;
+  std::unique_ptr<LogEvent> le;
   switch (type) {
-  case EVENT_SUBTREEMAP: le = new ESubtreeMap; break;
+  case EVENT_SUBTREEMAP:
+    le = std::make_unique<ESubtreeMap>();
+    break;
   case EVENT_SUBTREEMAP_TEST: 
-    le = new ESubtreeMap;
+    le = std::make_unique<ESubtreeMap>();
     le->set_type(type);
     break;
-  case EVENT_EXPORT: le = new EExport; break;
-  case EVENT_IMPORTSTART: le = new EImportStart; break;
-  case EVENT_IMPORTFINISH: le = new EImportFinish; break;
-  case EVENT_FRAGMENT: le = new EFragment; break;
-
-  case EVENT_RESETJOURNAL: le = new EResetJournal; break;
-
-  case EVENT_SESSION: le = new ESession; break;
-  case EVENT_SESSIONS_OLD: le = new ESessions; (static_cast<ESessions *>(le))->mark_old_encoding(); break;
-  case EVENT_SESSIONS: le = new ESessions; break;
-
-  case EVENT_UPDATE: le = new EUpdate; break;
-  case EVENT_SLAVEUPDATE: le = new ESlaveUpdate; break;
-  case EVENT_OPEN: le = new EOpen; break;
-  case EVENT_COMMITTED: le = new ECommitted; break;
-
-  case EVENT_TABLECLIENT: le = new ETableClient; break;
-  case EVENT_TABLESERVER: le = new ETableServer; break;
-
-  case EVENT_NOOP: le = new ENoOp; break;
-
+  case EVENT_EXPORT:
+    le = std::make_unique<EExport>();
+    break;
+  case EVENT_IMPORTSTART:
+    le = std::make_unique<EImportStart>();
+    break;
+  case EVENT_IMPORTFINISH:
+    le = std::make_unique<EImportFinish>();
+    break;
+  case EVENT_FRAGMENT:
+    le = std::make_unique<EFragment>();
+    break;
+  case EVENT_RESETJOURNAL:
+    le = std::make_unique<EResetJournal>();
+    break;
+  case EVENT_SESSION:
+    le = std::make_unique<ESession>();
+    break;
+  case EVENT_SESSIONS_OLD:
+    {
+      auto e = std::make_unique<ESessions>();
+      e->mark_old_encoding();
+      le = std::move(e);
+    }
+    break;
+  case EVENT_SESSIONS:
+    le = std::make_unique<ESessions>();
+    break;
+  case EVENT_UPDATE:
+    le = std::make_unique<EUpdate>();
+    break;
+  case EVENT_SLAVEUPDATE:
+    le = std::make_unique<ESlaveUpdate>();
+    break;
+  case EVENT_OPEN:
+    le = std::make_unique<EOpen>();
+    break;
+  case EVENT_COMMITTED:
+    le = std::make_unique<ECommitted>();
+    break;
+  case EVENT_TABLECLIENT:
+    le = std::make_unique<ETableClient>();
+    break;
+  case EVENT_TABLESERVER:
+    le = std::make_unique<ETableServer>();
+    break;
+  case EVENT_NOOP:
+    le = std::make_unique<ENoOp>();
+    break;
   default:
     generic_dout(0) << "uh oh, unknown log event type " << type << " length " << length << dendl;
-    return NULL;
+    return nullptr;
   }
 
   // decode
@@ -170,11 +200,10 @@ LogEvent *LogEvent::decode_event(bufferlist& bl, bufferlist::iterator& p, LogEve
   }
   catch (const buffer::error &e) {
     generic_dout(0) << "failed to decode LogEvent type " << type << dendl;
-    delete le;
-    return NULL;
+    return nullptr;
   }
 
-  assert(p.end());
+  ceph_assert(p.end());
   return le;
 }
 

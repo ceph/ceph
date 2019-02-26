@@ -55,7 +55,7 @@ public:
   void acquire_lock(Context *on_acquired);
   void try_acquire_lock(Context *on_acquired);
   void release_lock(Context *on_released);
-  void reacquire_lock(Context *on_reacquired = nullptr);
+  void reacquire_lock(Context *on_reacquired);
   void get_locker(managed_lock::Locker *locker, Context *on_finish);
   void break_lock(const managed_lock::Locker &locker, bool force_break_lock,
                   Context *on_finish);
@@ -71,59 +71,59 @@ protected:
   mutable Mutex m_lock;
 
   inline void set_state_uninitialized() {
-    assert(m_lock.is_locked());
-    assert(m_state == STATE_UNLOCKED);
+    ceph_assert(m_lock.is_locked());
+    ceph_assert(m_state == STATE_UNLOCKED);
     m_state = STATE_UNINITIALIZED;
   }
   inline void set_state_initializing() {
-    assert(m_lock.is_locked());
-    assert(m_state == STATE_UNINITIALIZED);
+    ceph_assert(m_lock.is_locked());
+    ceph_assert(m_state == STATE_UNINITIALIZED);
     m_state = STATE_INITIALIZING;
   }
   inline void set_state_unlocked() {
-    assert(m_lock.is_locked());
-    assert(m_state == STATE_INITIALIZING || m_state == STATE_RELEASING);
+    ceph_assert(m_lock.is_locked());
+    ceph_assert(m_state == STATE_INITIALIZING || m_state == STATE_RELEASING);
     m_state = STATE_UNLOCKED;
   }
   inline void set_state_waiting_for_lock() {
-    assert(m_lock.is_locked());
-    assert(m_state == STATE_ACQUIRING);
+    ceph_assert(m_lock.is_locked());
+    ceph_assert(m_state == STATE_ACQUIRING);
     m_state = STATE_WAITING_FOR_LOCK;
   }
   inline void set_state_post_acquiring() {
-    assert(m_lock.is_locked());
-    assert(m_state == STATE_ACQUIRING);
+    ceph_assert(m_lock.is_locked());
+    ceph_assert(m_state == STATE_ACQUIRING);
     m_state = STATE_POST_ACQUIRING;
   }
 
   bool is_state_shutdown() const;
   inline bool is_state_acquiring() const {
-    assert(m_lock.is_locked());
+    ceph_assert(m_lock.is_locked());
     return m_state == STATE_ACQUIRING;
   }
   inline bool is_state_post_acquiring() const {
-    assert(m_lock.is_locked());
+    ceph_assert(m_lock.is_locked());
     return m_state == STATE_POST_ACQUIRING;
   }
   inline bool is_state_releasing() const {
-    assert(m_lock.is_locked());
+    ceph_assert(m_lock.is_locked());
     return m_state == STATE_RELEASING;
   }
   inline bool is_state_pre_releasing() const {
-    assert(m_lock.is_locked());
+    ceph_assert(m_lock.is_locked());
     return m_state == STATE_PRE_RELEASING;
   }
   inline bool is_state_locked() const {
-    assert(m_lock.is_locked());
+    ceph_assert(m_lock.is_locked());
     return m_state == STATE_LOCKED;
   }
   inline bool is_state_waiting_for_lock() const {
-    assert(m_lock.is_locked());
+    ceph_assert(m_lock.is_locked());
     return m_state == STATE_WAITING_FOR_LOCK;
   }
 
   inline bool is_action_acquire_lock() const {
-    assert(m_lock.is_locked());
+    ceph_assert(m_lock.is_locked());
     return get_active_action() == ACTION_ACQUIRE_LOCK;
   }
 
@@ -240,11 +240,14 @@ private:
   void send_acquire_lock();
   void handle_pre_acquire_lock(int r);
   void handle_acquire_lock(int r);
+  void handle_no_op_reacquire_lock(int r);
+
   void handle_post_acquire_lock(int r);
   void revert_to_unlock_state(int r);
 
   void send_reacquire_lock();
   void handle_reacquire_lock(int r);
+  void release_acquire_lock();
 
   void send_release_lock();
   void handle_pre_release_lock(int r);

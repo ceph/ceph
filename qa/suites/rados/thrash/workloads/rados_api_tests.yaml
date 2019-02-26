@@ -2,12 +2,17 @@ overrides:
   ceph:
     log-whitelist:
       - reached quota
-    crush_tunables: hammer
+      - \(POOL_APP_NOT_ENABLED\)
+      - \(PG_AVAILABILITY\)
+    crush_tunables: jewel
     conf:
       client:
         debug ms: 1
         debug objecter: 20
         debug rados: 20
+      mon:
+        mon warn on pool no app: false
+        debug mgrc: 20
 tasks:
 - workunit:
     clients:

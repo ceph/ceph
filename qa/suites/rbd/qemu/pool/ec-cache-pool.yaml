@@ -1,7 +1,13 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - \(CACHE_POOL_NEAR_FULL\)
+      - \(CACHE_POOL_NO_HIT_SET\)
 tasks:
 - exec:
     client.0:
-      - sudo ceph osd erasure-code-profile set teuthologyprofile ruleset-failure-domain=osd m=1 k=2
+      - sudo ceph osd erasure-code-profile set teuthologyprofile crush-failure-domain=osd m=1 k=2
       - sudo ceph osd pool delete rbd rbd --yes-i-really-really-mean-it
       - sudo ceph osd pool create rbd 4 4 erasure teuthologyprofile
       - sudo ceph osd pool create cache 4
@@ -12,3 +18,4 @@ tasks:
       - sudo ceph osd pool set cache hit_set_count 8
       - sudo ceph osd pool set cache hit_set_period 60
       - sudo ceph osd pool set cache target_max_objects 250
+      - rbd pool init rbd

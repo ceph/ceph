@@ -15,7 +15,6 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-using namespace std;
 
 XMLObjIter::
 XMLObjIter()
@@ -43,6 +42,16 @@ get_next()
     ++cur;
   }
   return obj;
+}
+
+bool XMLObjIter::get_name(string *name) const
+{
+  if (cur == end) {
+    return false;
+  }
+
+  *name = cur->first;
+  return true;
 }
 
 ostream& operator<<(ostream &out, const XMLObj &obj) {
@@ -78,10 +87,16 @@ xml_handle_data(const char *s, int len)
   data.append(s, len);
 }
 
-string& XMLObj::
+const string& XMLObj::
 XMLObj::get_data()
 {
   return data;
+}
+
+const string& XMLObj::
+XMLObj::get_obj_type()
+{
+  return obj_type;
 }
 
 XMLObj *XMLObj::
@@ -121,10 +136,20 @@ find(string name)
   return iter;
 }
 
+XMLObjIter XMLObj::find_first()
+{
+  XMLObjIter iter;
+  map<string, XMLObj *>::iterator first;
+  map<string, XMLObj *>::iterator last;
+  first = children.begin();
+  last = children.end();
+  iter.set(first, last);
+  return iter;
+}
+
 XMLObj *XMLObj::
 find_first(string name)
 {
-  XMLObjIter iter;
   map<string, XMLObj *>::iterator first;
   first = children.find(name);
   if (first != children.end())
@@ -247,7 +272,7 @@ bool RGWXMLParser::parse(const char *_buf, int len, int done)
 
 void decode_xml_obj(unsigned long& val, XMLObj *obj)
 {
-  string& s = obj->get_data();
+  auto& s = obj->get_data();
   const char *start = s.c_str();
   char *p;
 

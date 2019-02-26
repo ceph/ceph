@@ -35,7 +35,7 @@ class ConfigKeyService : public QuorumService
       MonitorDBStore::TransactionRef t,
       const string &prefix);
   void store_list(stringstream &ss);
-  void store_dump(stringstream &ss);
+  void store_dump(stringstream &ss, const string& prefix);
   bool store_exists(const string &key);
   bool store_has_prefix(const string &prefix);
 
@@ -57,9 +57,6 @@ public:
    * @{
    */
   void init() override { }
-  void get_health(Formatter *f,
-                  list<pair<health_status_t,string> >& summary,
-                  list<pair<health_status_t,string> > *detail) override { }
   bool service_dispatch(MonOpRequestRef op) override;
 
   void start_epoch() override { }
@@ -82,7 +79,7 @@ public:
   string get_name() const override {
     return "config_key";
   }
-  virtual void get_store_prefixes(set<string>& s);
+  void get_store_prefixes(set<string>& s) const;
   /**
    * @} // ConfigKeyService_Inherited_h
    */

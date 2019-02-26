@@ -26,11 +26,6 @@
  *
  * Author: Haomai Wang <haomaiwang@gmail.com>
  *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.  See file COPYING.
- *
  */
 
 #include "net.h"
@@ -38,14 +33,14 @@
 #include "DPDKStack.h"
 
 #include "common/dout.h"
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #define dout_subsys ceph_subsys_dpdk
 #undef dout_prefix
 #define dout_prefix *_dout << "net "
 
-interface::interface(CephContext *c, std::shared_ptr<DPDKDevice> dev, EventCenter *center)
-    : cct(c), _dev(dev),
+interface::interface(CephContext *cct, std::shared_ptr<DPDKDevice> dev, EventCenter *center)
+    : cct(cct), _dev(dev),
       _rx(_dev->receive(
           center->get_id(),
           [center, this] (Packet p) {
@@ -69,7 +64,7 @@ interface::interface(CephContext *c, std::shared_ptr<DPDKDevice> dev, EventCente
         eh->src_mac = _hw_address;
         eh->eth_proto = uint16_t(l3pv.proto_num);
         *eh = eh->hton();
-        ldout(cct, 10) << "=== tx === proto " << std::hex << uint16_t(l3pv.proto_num)
+        ldout(this->cct, 10) << "=== tx === proto " << std::hex << uint16_t(l3pv.proto_num)
                        << " " << _hw_address << " -> " << l3pv.to
                        << " length " << std::dec << l3pv.p.len() << dendl;
         p = std::move(l3pv.p);
@@ -86,7 +81,7 @@ subscription<Packet, ethernet_address> interface::register_l3(
     std::function<bool (forward_hash&, Packet& p, size_t)> forward)
 {
   auto i = _proto_map.emplace(std::piecewise_construct, std::make_tuple(uint16_t(proto_num)), std::forward_as_tuple(std::move(forward)));
-  assert(i.second);
+  ceph_assert(i.second);
   l3_rx_stream& l3_rx = i.first->second;
   return l3_rx.packet_stream.listen(std::move(next));
 }
@@ -112,7 +107,7 @@ class C_handle_l2forward : public EventCallback {
  public:
   C_handle_l2forward(std::shared_ptr<DPDKDevice> &p, unsigned &qd, Packet pkt, unsigned target)
       : sdev(p), queue_depth(qd), p(std::move(pkt)), dst(target) {}
-  void do_request(int fd) {
+  void do_request(uint64_t fd) {
     sdev->l2receive(dst, std::move(p));
     queue_depth--;
     delete this;
@@ -184,7 +179,7 @@ class C_arp_learn : public EventCallback {
  public:
   C_arp_learn(DPDKWorker *w, ethernet_address l2, ipv4_address l3)
       : worker(w), l2_addr(l2), l3_addr(l3) {}
-  void do_request(int id) {
+  void do_request(uint64_t id) {
     worker->arp_learn(l2_addr, l3_addr);
     delete this;
   }

@@ -47,10 +47,9 @@ public:
     encode_chunks_encoded = *encoded;
     return 0;
   }
-  int create_ruleset(const string &name,
-			     CrushWrapper &crush,
-			     ostream *ss) const override { return 0; }
-
+  int create_rule(const string &name,
+		  CrushWrapper &crush,
+		  ostream *ss) const override { return 0; }
 };
 
 /*

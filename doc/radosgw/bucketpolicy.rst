@@ -22,7 +22,7 @@ For example, one may use s3cmd to set or delete a policy thus::
     "Statement": [{
       "Effect": "Allow",
       "Principal": {"AWS": ["arn:aws:iam::usfolks:user/fred"]},
-      "Action": "s3PutObjectAcl",
+      "Action": "s3:PutObjectAcl",
       "Resource": [
         "arn:aws:s3:::happybucket/*"
       ]
@@ -110,7 +110,7 @@ a bucket grants access to all users in that account.
 
 Bucket policies do not yet support string interpolation.
 
-Currently, the only condition keys we support are:
+For all requests, condition keys we support are:
 - aws:CurrentTime
 - aws:EpochTime
 - aws:PrincipalType
@@ -119,6 +119,87 @@ Currently, the only condition keys we support are:
 - aws:SourceIp
 - aws:UserAgent
 - aws:username
+
+We support certain s3 condition keys for bucket and object requests.
+
+.. versionadded:: Mimic
+
+Bucket Related Operations
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
++-----------------------+----------------------+----------------+
+| Permission            | Condition Keys       | Comments       |
++-----------------------+----------------------+----------------+
+|                       | s3:x-amz-acl         |                |
+|                       | s3:x-amz-grant-<perm>|                |
+|s3:createBucket        | where perm is one of |                |
+|                       | read/write/read-acp  |                |
+|                       | write-acp/           |                |
+|                       | full-control         |                |
++-----------------------+----------------------+----------------+
+|                       | s3:prefix            |                |
+|                       +----------------------+----------------+
+| s3:ListBucket &       | s3:delimiter         |                |
+|                       +----------------------+----------------+
+| s3:ListBucketVersions | s3:max-keys          |                |
++-----------------------+----------------------+----------------+
+| s3:PutBucketAcl       | s3:x-amz-acl         |                |
+|                       | s3:x-amz-grant-<perm>|                |
++-----------------------+----------------------+----------------+
+
+.. _tag_policy:
+
+Object Related Operations
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
++-----------------------------+-----------------------------------------------+-------------------+
+|Permission                   |Condition Keys                                 | Comments          |
+|                             |                                               |                   |
++-----------------------------+-----------------------------------------------+-------------------+
+|                             |s3:x-amz-acl & s3:x-amz-grant-<perm>           |                   |
+|                             |                                               |                   |
+|                             +-----------------------------------------------+-------------------+
+|                             |s3:x-amz-copy-source                           |                   |
+|                             |                                               |                   |
+|                             +-----------------------------------------------+-------------------+
+|                             |s3:x-amz-server-side-encryption                |                   |
+|                             |                                               |                   |
+|                             +-----------------------------------------------+-------------------+
+|s3:PutObject                 |s3:x-amz-server-side-encryption-aws-kms-key-id |                   |
+|                             |                                               |                   |
+|                             +-----------------------------------------------+-------------------+
+|                             |s3:x-amz-metadata-directive                    |PUT & COPY to      |
+|                             |                                               |overwrite/preserve |
+|                             |                                               |metadata in COPY   |
+|                             |                                               |requests           |
+|                             +-----------------------------------------------+-------------------+
+|                             |s3:RequestObjectTag/<tag-key>                  |                   |
+|                             |                                               |                   |
++-----------------------------+-----------------------------------------------+-------------------+
+|s3:PutObjectAcl              |s3:x-amz-acl & s3-amz-grant-<perm>             |                   |
+|s3:PutObjectVersionAcl       |                                               |                   |
+|                             +-----------------------------------------------+-------------------+
+|                             |s3:ExistingObjectTag/<tag-key>                 |                   |
+|                             |                                               |                   |
++-----------------------------+-----------------------------------------------+-------------------+
+|                             |s3:RequestObjectTag/<tag-key>                  |                   |
+|s3:PutObjectTagging &        +-----------------------------------------------+-------------------+
+|s3:PutObjectVersionTagging   |s3:ExistingObjectTag/<tag-key>                 |                   |
+|                             |                                               |                   |
++-----------------------------+-----------------------------------------------+-------------------+
+|s3:GetObject &               |s3:ExistingObjectTag/<tag-key>                 |                   |
+|s3:GetObjectVersion          |                                               |                   |
++-----------------------------+-----------------------------------------------+-------------------+
+|s3:GetObjectAcl &            |s3:ExistingObjectTag/<tag-key>                 |                   |
+|s3:GetObjectVersionAcl       |                                               |                   |
++-----------------------------+-----------------------------------------------+-------------------+
+|s3:GetObjectTagging &        |s3:ExistingObjectTag/<tag-key>                 |                   |
+|s3:GetObjectVersionTagging   |                                               |                   |
++-----------------------------+-----------------------------------------------+-------------------+
+|s3:DeleteObjectTagging &     |s3:ExistingOBjectTag/<tag-key>                 |                   |
+|s3:DeleteObjectVersionTagging|                                               |                   |
++-----------------------------+-----------------------------------------------+-------------------+
+
 
 More may be supported soon as we integrate with the recently rewritten
 Authentication/Authorization subsystem.

@@ -17,6 +17,16 @@ const char *ceph_entity_type_name(int type)
 	}
 }
 
+const char *ceph_con_mode_name(int con_mode)
+{
+	switch (con_mode) {
+	case CEPH_CON_MODE_UNKNOWN: return "unknown";
+	case CEPH_CON_MODE_CRC: return "crc";
+	case CEPH_CON_MODE_SECURE: return "secure";
+	default: return "???";
+	}
+}
+
 const char *ceph_osd_op_name(int op)
 {
 	switch (op) {
@@ -89,7 +99,11 @@ const char *ceph_release_name(int r)
 		return "luminous";
 	case CEPH_RELEASE_MIMIC:
 		return "mimic";
+	case CEPH_RELEASE_NAUTILUS:
+		return "nautilus";
 	default:
+		if (r < 0)
+			return "unspecified";
 		return "unknown";
 	}
 }
@@ -98,6 +112,9 @@ int ceph_release_from_name(const char *s)
 {
 	if (!s) {
 		return -1;
+	}
+	if (strcmp(s, "nautilus") == 0) {
+		return CEPH_RELEASE_NAUTILUS;
 	}
 	if (strcmp(s, "mimic") == 0) {
 		return CEPH_RELEASE_MIMIC;
@@ -266,6 +283,8 @@ const char *ceph_mds_state_name(int s)
 	case CEPH_MDS_STATE_CLIENTREPLAY: return "up:clientreplay";
 	case CEPH_MDS_STATE_ACTIVE:     return "up:active";
 	case CEPH_MDS_STATE_STOPPING:   return "up:stopping";
+               /* misc */
+	case CEPH_MDS_STATE_NULL:       return "null";
 	}
 	return "???";
 }
@@ -285,6 +304,7 @@ const char *ceph_session_op_name(int op)
 	case CEPH_SESSION_FLUSHMSG_ACK: return "flushmsg_ack";
 	case CEPH_SESSION_FORCE_RO: return "force_ro";
 	case CEPH_SESSION_REJECT: return "reject";
+	case CEPH_SESSION_REQUEST_FLUSH_MDLOG: return "request_flushmdlog";
 	}
 	return "???";
 }
@@ -387,7 +407,7 @@ const char *ceph_pool_op_name(int op)
 	switch (op) {
 	case POOL_OP_CREATE: return "create";
 	case POOL_OP_DELETE: return "delete";
-	case POOL_OP_AUID_CHANGE: return "auid change";
+	case POOL_OP_AUID_CHANGE: return "auid change";  // (obsolete)
 	case POOL_OP_CREATE_SNAP: return "create snap";
 	case POOL_OP_DELETE_SNAP: return "delete snap";
 	case POOL_OP_CREATE_UNMANAGED_SNAP: return "create unmanaged snap";

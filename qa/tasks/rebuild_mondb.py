@@ -94,7 +94,7 @@ def _rebuild_db(ctx, manager, cluster_name, mon, mon_id, keyring_path):
             log.info('rm -rf {0}'.format(local_mstore))
             shutil.rmtree(local_mstore)
             # update leveldb with OSD data
-            options = '--op update-mon-db --mon-store-path {0}'
+            options = '--no-mon-config --op update-mon-db --mon-store-path {0}'
             log.info('cot {0}'.format(osd_mstore))
             manager.objectstore_tool(pool=None,
                                      options=options.format(osd_mstore),
@@ -129,9 +129,12 @@ def _rebuild_db(ctx, manager, cluster_name, mon, mon_id, keyring_path):
                   '--cap', 'mds', 'allow *',
                   '--cap', 'mgr', 'allow *'])
     mon.run(args=['sudo', '-u', 'ceph',
+                  'CEPH_ARGS=--no-mon-config',
                   'ceph-monstore-tool', mon_store_dir,
-                  'rebuild', '--', '--keyring',
-                  keyring_path])
+                  'rebuild', '--',
+                  '--keyring', keyring_path,
+                  '--monmap', '/tmp/monmap',
+                  ])
 
 
 def _revive_mons(manager, mons, recovered, keyring_path):
@@ -155,7 +158,8 @@ def _revive_mons(manager, mons, recovered, keyring_path):
                         '--cluster', cluster,
                         '--mkfs',
                         '-i', m,
-                        '--keyring', keyring_path])
+                        '--keyring', keyring_path,
+                        '--monmap', '/tmp/monmap'])
             log.info('reviving mon.{0}'.format(m))
             manager.revive_mon(m)
             n_mons += 1
@@ -197,6 +201,10 @@ def task(ctx, config):
 
     first_mon = teuthology.get_first_mon(ctx, config)
     (mon,) = ctx.cluster.only(first_mon).remotes.iterkeys()
+
+    # stash a monmap for later
+    mon.run(args=['ceph', 'mon', 'getmap', '-o', '/tmp/monmap'])
+
     manager = ceph_manager.CephManager(
         mon,
         ctx=ctx,

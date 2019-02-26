@@ -10,7 +10,7 @@ instructions will help the Ceph project immensely.
 
 The Ceph documentation source resides in the ``ceph/doc`` directory of the Ceph
 repository, and Python Sphinx renders the source into HTML and manpages. The
-http://ceph.com/docs link currenly displays the  ``master`` branch by default,
+http://ceph.com/docs link currently displays the  ``master`` branch by default,
 but you may view documentation for older branches (e.g., ``argonaut``) or future
 branches (e.g., ``next``) as well as work-in-progress branches by substituting
 ``master`` with the branch name you prefer.
@@ -31,7 +31,7 @@ steps:
 #. `Commit the Change`_
 #. `Push the Change`_
 #. `Make a Pull Request`_
-#. `Notify the Relevant Person`_
+#. `Notify Us`_
 
 Get the Source
 --------------
@@ -188,7 +188,7 @@ To build the documentation on Debian/Ubuntu, Fedora, or CentOS/RHEL, execute::
 
 	admin/build-doc
 
-To scan for the reachablity of external links, execute::
+To scan for the reachability of external links, execute::
 
 	admin/build-doc linkcheck
 
@@ -205,11 +205,12 @@ SHOULD fix warnings that are related to syntax you modified.
 .. important:: You must validate ALL HYPERLINKS. If a hyperlink is broken,
    it automatically breaks the build!
 
-Once you build the documentation set, you may navigate to the source directory
-to view it::
+Once you build the documentation set, you may start an HTTP server at
+``http://localhost:8080/`` to view it::
 
-	cd build-doc/output
+	admin/serve-doc
 
+You can also navigate to ``build-doc/output`` to inspect the built documents.
 There should be an ``html`` directory and a ``man`` directory containing
 documentation in HTML and manpage formats respectively.
 
@@ -284,7 +285,7 @@ the following packages are required:
 	</td></tr></tbody></table>
 
 
-Install each dependency that isn't installed on your host. For Debian/Ubuntu
+Install each dependency that is not installed on your host. For Debian/Ubuntu
 distributions, execute the following::
 
 	sudo apt-get install gcc python-dev python-pip python-virtualenv libxml2-dev libxslt-dev doxygen graphviz ant ditaa
@@ -322,7 +323,7 @@ packages. Then, download them from a mirror and install them. For example::
 	wget http://rpmfind.net/linux/centos/7/os/x86_64/Packages/python-sphinx-1.1.3-11.el7.noarch.rpm
 	sudo yum install python-sphinx-1.1.3-11.el7.noarch.rpm
 
-Ceph documentation makes extensive use of `ditaa`_, which isn't presently built
+Ceph documentation makes extensive use of `ditaa`_, which is not presently built
 for CentOS/RHEL7. You must install ``ditaa`` if you are making changes to
 ``ditaa`` diagrams so that you can verify that they render properly before you
 commit new or modified ``ditaa`` diagrams. You may retrieve compatible required
@@ -446,11 +447,10 @@ Pull`_ approach.
 
 
 
-Notify the Relevant Person
---------------------------
+Notify Us
+---------
 
-After you make a pull request, notify the relevant person. For general
-documentation pull requests, notify `John Wilkins`_.
+After you make a pull request, please email ceph-docs@redhat.com.
 
 
 
@@ -464,7 +464,7 @@ its native format. You may notice that it is generally as legible in a terminal
 as it is in its rendered HTML format. Additionally, you may also notice that
 diagrams in ``ditaa`` format also render reasonably well in text mode. ::
 
-	cat doc/architecture.rst | less
+	less doc/architecture.rst
 
 Review the following style guides to maintain this consistency.
 
@@ -589,9 +589,8 @@ improves the readability of the document in a command line interface.
 .. _ditaa: http://ditaa.sourceforge.net/
 .. _Document Title: http://docutils.sourceforge.net/docs/user/rst/quickstart.html#document-title-subtitle
 .. _Sections: http://docutils.sourceforge.net/docs/user/rst/quickstart.html#sections
-.. _Cross referencing arbitrary locations: http://sphinx-doc.org/markup/inline.html#ref-role
+.. _Cross referencing arbitrary locations: http://www.sphinx-doc.org/en/master/usage/restructuredtext/roles.html#role-ref
 .. _The TOC tree: http://sphinx-doc.org/markup/toctree.html
 .. _Showing code examples: http://sphinx-doc.org/markup/code.html
 .. _paragraph level markup: http://sphinx-doc.org/markup/para.html
 .. _topic directive: http://docutils.sourceforge.net/docs/ref/rst/directives.html#topic
-.. _John Wilkins: mailto:jowilkin@redhat.com

@@ -24,9 +24,6 @@
 #include "erasure-code/ErasureCode.h"
 #include "ErasureCodeShecTableCache.h"
 
-#define DEFAULT_RULESET_ROOT "default"
-#define DEFAULT_RULESET_FAILURE_DOMAIN "host"
-
 class ErasureCodeShec : public ErasureCode {
 
 public:
@@ -45,8 +42,6 @@ public:
   int w;
   int DEFAULT_W;
   int technique;
-  string ruleset_root;
-  string ruleset_failure_domain;
   int *matrix;
 
   ErasureCodeShec(const int _technique,
@@ -61,16 +56,10 @@ public:
     w(0),
     DEFAULT_W(8),
     technique(_technique),
-    ruleset_root(DEFAULT_RULESET_ROOT),
-    ruleset_failure_domain(DEFAULT_RULESET_FAILURE_DOMAIN),
     matrix(0)
   {}
 
   ~ErasureCodeShec() override {}
-
-  int create_ruleset(const string &name,
-			     CrushWrapper &crush,
-			     ostream *ss) const override;
 
   unsigned int get_chunk_count() const override {
     return k + m;
@@ -82,9 +71,9 @@ public:
 
   unsigned int get_chunk_size(unsigned int object_size) const override;
 
-  int minimum_to_decode(const set<int> &want_to_read,
-				const set<int> &available_chunks,
-				set<int> *minimum) override;
+  int _minimum_to_decode(const std::set<int> &want_to_read,
+			 const std::set<int> &available_chunks,
+			 std::set<int> *minimum);
 
   int minimum_to_decode_with_cost(const set<int> &want_to_read,
 					  const map<int, int> &available,
@@ -96,9 +85,9 @@ public:
   int encode_chunks(const set<int> &want_to_encode,
 			    map<int, bufferlist> *encoded) override;
 
-  int decode(const set<int> &want_to_read,
-		     const map<int, bufferlist> &chunks,
-		     map<int, bufferlist> *decoded) override;
+  int _decode(const std::set<int> &want_to_read,
+	      const std::map<int, bufferlist> &chunks,
+	      std::map<int, bufferlist> *decoded) override;
   int decode_chunks(const set<int> &want_to_read,
 			    const map<int, bufferlist> &chunks,
 			    map<int, bufferlist> *decoded) override;
@@ -130,7 +119,7 @@ private:
                                         int *minimum);
 };
 
-class ErasureCodeShecReedSolomonVandermonde : public ErasureCodeShec {
+class ErasureCodeShecReedSolomonVandermonde final : public ErasureCodeShec {
 public:
 
   ErasureCodeShecReedSolomonVandermonde(ErasureCodeShecTableCache &_tcache,

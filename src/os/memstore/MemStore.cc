@@ -24,7 +24,6 @@
 #include "include/types.h"
 #include "include/stringify.h"
 #include "include/unordered_map.h"
-#include "include/memory.h"
 #include "common/errno.h"
 #include "MemStore.h"
 #include "include/compat.h"
@@ -69,7 +68,7 @@ int MemStore::_save()
     dout(20) << __func__ << " coll " << p->first << " " << p->second << dendl;
     collections.insert(p->first);
     bufferlist bl;
-    assert(p->second);
+    ceph_assert(p->second);
     p->second->encode(bl);
     string fn = path + "/" + stringify(p->first);
     int r = bl.write_file(fn.c_str());
@@ -79,7 +78,7 @@ int MemStore::_save()
 
   string fn = path + "/collections";
   bufferlist bl;
-  ::encode(collections, bl);
+  encode(collections, bl);
   int r = bl.write_file(fn.c_str());
   if (r < 0)
     return r;
@@ -147,8 +146,8 @@ int MemStore::_load()
     return r;
 
   set<coll_t> collections;
-  bufferlist::iterator p = bl.begin();
-  ::decode(collections, p);
+  auto p = bl.cbegin();
+  decode(collections, p);
 
   for (set<coll_t>::iterator q = collections.begin();
        q != collections.end();
@@ -159,7 +158,7 @@ int MemStore::_load()
     if (r < 0)
       return r;
     CollectionRef c(new Collection(cct, *q));
-    bufferlist::iterator p = cbl.begin();
+    auto p = cbl.cbegin();
     c->decode(p);
     coll_map[*q] = c;
     used_bytes += c->used_bytes();
@@ -172,30 +171,30 @@ int MemStore::_load()
 
 void MemStore::set_fsid(uuid_d u)
 {
-  int r = write_meta("fs_fsid", stringify(u));
-  assert(r >= 0);
+  int r = write_meta("fsid", stringify(u));
+  ceph_assert(r >= 0);
 }
 
 uuid_d MemStore::get_fsid()
 {
   string fsid_str;
-  int r = read_meta("fs_fsid", &fsid_str);
-  assert(r >= 0);
+  int r = read_meta("fsid", &fsid_str);
+  ceph_assert(r >= 0);
   uuid_d uuid;
   bool b = uuid.parse(fsid_str.c_str());
-  assert(b);
+  ceph_assert(b);
   return uuid;
 }
 
 int MemStore::mkfs()
 {
   string fsid_str;
-  int r = read_meta("fs_fsid", &fsid_str);
+  int r = read_meta("fsid", &fsid_str);
   if (r == -ENOENT) {
     uuid_d fsid;
     fsid.generate_random();
     fsid_str = stringify(fsid);
-    r = write_meta("fs_fsid", fsid_str);
+    r = write_meta("fsid", fsid_str);
     if (r < 0)
       return r;
     dout(1) << __func__ << " new fsid " << fsid_str << dendl;
@@ -209,7 +208,7 @@ int MemStore::mkfs()
   derr << path << dendl;
   bufferlist bl;
   set<coll_t> collections;
-  ::encode(collections, bl);
+  encode(collections, bl);
   r = bl.write_file(fn.c_str());
   if (r < 0)
     return r;
@@ -221,15 +220,23 @@ int MemStore::mkfs()
   return 0;
 }
 
-int MemStore::statfs(struct store_statfs_t *st)
+int MemStore::statfs(struct store_statfs_t *st, osd_alert_list_t* alerts)
 {
-   dout(10) << __func__ << dendl;
+  dout(10) << __func__ << dendl;
+  if (alerts) {
+    alerts->clear(); // returns nothing for now
+  }
   st->reset();
   st->total = cct->_conf->memstore_device_bytes;
-  st->available = MAX(int64_t(st->total) - int64_t(used_bytes), 0ll);
+  st->available = std::max<int64_t>(st->total - used_bytes, 0);
   dout(10) << __func__ << ": used_bytes: " << used_bytes
 	   << "/" << cct->_conf->memstore_device_bytes << dendl;
   return 0;
+}
+
+int MemStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
+{
+  return -ENOTSUP;
 }
 
 objectstore_perf_stat_t MemStore::get_cur_stats()
@@ -240,24 +247,24 @@ objectstore_perf_stat_t MemStore::get_cur_stats()
 
 MemStore::CollectionRef MemStore::get_collection(const coll_t& cid)
 {
-  RWLock::RLocker l(coll_lock);
+  std::shared_lock l{coll_lock};
   ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
   if (cp == coll_map.end())
     return CollectionRef();
   return cp->second;
 }
 
+ObjectStore::CollectionHandle MemStore::create_new_collection(const coll_t& cid)
+{
+  std::lock_guard l{coll_lock};
+  Collection *c = new Collection(cct, cid);
+  new_coll_map[cid] = c;
+  return c;
+}
+
 
 // ---------------
 // read operations
-
-bool MemStore::exists(const coll_t& cid, const ghobject_t& oid)
-{
-  CollectionHandle c = get_collection(cid);
-  if (!c)
-    return false;
-  return exists(c, oid);
-}
 
 bool MemStore::exists(CollectionHandle &c_, const ghobject_t& oid)
 {
@@ -269,18 +276,6 @@ bool MemStore::exists(CollectionHandle &c_, const ghobject_t& oid)
   // Perform equivalent of c->get_object_(oid) != NULL. In C++11 the
   // shared_ptr needs to be compared to nullptr.
   return (bool)c->get_object(oid);
-}
-
-int MemStore::stat(
-    const coll_t& cid,
-    const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio)
-{
-  CollectionHandle c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return stat(c, oid, st, allow_eio);
 }
 
 int MemStore::stat(
@@ -304,25 +299,10 @@ int MemStore::stat(
 }
 
 int MemStore::set_collection_opts(
-  const coll_t& cid,
+  CollectionHandle& ch,
   const pool_opts_t& opts)
 {
   return -EOPNOTSUPP;
-}
-
-int MemStore::read(
-    const coll_t& cid,
-    const ghobject_t& oid,
-    uint64_t offset,
-    size_t len,
-    bufferlist& bl,
-    uint32_t op_flags,
-    bool allow_eio)
-{
-  CollectionHandle c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return read(c, oid, offset, len, bl, op_flags, allow_eio);
 }
 
 int MemStore::read(
@@ -331,8 +311,7 @@ int MemStore::read(
   uint64_t offset,
   size_t len,
   bufferlist& bl,
-  uint32_t op_flags,
-  bool allow_eio)
+  uint32_t op_flags)
 {
   Collection *c = static_cast<Collection*>(c_.get());
   dout(10) << __func__ << " " << c->cid << " " << oid << " "
@@ -353,22 +332,22 @@ int MemStore::read(
   return o->read(offset, l, bl);
 }
 
-int MemStore::fiemap(const coll_t& cid, const ghobject_t& oid,
+int MemStore::fiemap(CollectionHandle& ch, const ghobject_t& oid,
 		     uint64_t offset, size_t len, bufferlist& bl)
 {
   map<uint64_t, uint64_t> destmap;
-  int r = fiemap(cid, oid, offset, len, destmap);
+  int r = fiemap(ch, oid, offset, len, destmap);
   if (r >= 0)
-    ::encode(destmap, bl);
+    encode(destmap, bl);
   return r;
 }
 
-int MemStore::fiemap(const coll_t& cid, const ghobject_t& oid,
+int MemStore::fiemap(CollectionHandle& ch, const ghobject_t& oid,
 		     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap)
 {
-  dout(10) << __func__ << " " << cid << " " << oid << " " << offset << "~"
+  dout(10) << __func__ << " " << ch->cid << " " << oid << " " << offset << "~"
 	   << len << dendl;
-  CollectionRef c = get_collection(cid);
+  Collection *c = static_cast<Collection*>(ch.get());
   if (!c)
     return -ENOENT;
 
@@ -385,15 +364,6 @@ int MemStore::fiemap(const coll_t& cid, const ghobject_t& oid,
   return 0;
 }
 
-int MemStore::getattr(const coll_t& cid, const ghobject_t& oid,
-		      const char *name, bufferptr& value)
-{
-  CollectionHandle c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return getattr(c, oid, name, value);
-}
-
 int MemStore::getattr(CollectionHandle &c_, const ghobject_t& oid,
 		      const char *name, bufferptr& value)
 {
@@ -405,21 +375,12 @@ int MemStore::getattr(CollectionHandle &c_, const ghobject_t& oid,
   if (!o)
     return -ENOENT;
   string k(name);
-  std::lock_guard<std::mutex> lock(o->xattr_mutex);
+  std::lock_guard lock{o->xattr_mutex};
   if (!o->xattr.count(k)) {
     return -ENODATA;
   }
   value = o->xattr[k];
   return 0;
-}
-
-int MemStore::getattrs(const coll_t& cid, const ghobject_t& oid,
-		       map<string,bufferptr>& aset)
-{
-  CollectionHandle c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  return getattrs(c, oid, aset);
 }
 
 int MemStore::getattrs(CollectionHandle &c_, const ghobject_t& oid,
@@ -433,7 +394,7 @@ int MemStore::getattrs(CollectionHandle &c_, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard<std::mutex> lock(o->xattr_mutex);
+  std::lock_guard lock{o->xattr_mutex};
   aset = o->xattr;
   return 0;
 }
@@ -441,7 +402,7 @@ int MemStore::getattrs(CollectionHandle &c_, const ghobject_t& oid,
 int MemStore::list_collections(vector<coll_t>& ls)
 {
   dout(10) << __func__ << dendl;
-  RWLock::RLocker l(coll_lock);
+  std::shared_lock l{coll_lock};
   for (ceph::unordered_map<coll_t,CollectionRef>::iterator p = coll_map.begin();
        p != coll_map.end();
        ++p) {
@@ -453,43 +414,37 @@ int MemStore::list_collections(vector<coll_t>& ls)
 bool MemStore::collection_exists(const coll_t& cid)
 {
   dout(10) << __func__ << " " << cid << dendl;
-  RWLock::RLocker l(coll_lock);
+  std::shared_lock l{coll_lock};
   return coll_map.count(cid);
 }
 
-int MemStore::collection_empty(const coll_t& cid, bool *empty)
+int MemStore::collection_empty(CollectionHandle& ch, bool *empty)
 {
-  dout(10) << __func__ << " " << cid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  RWLock::RLocker l(c->lock);
+  dout(10) << __func__ << " " << ch->cid << dendl;
+  CollectionRef c = static_cast<Collection*>(ch.get());
+  std::shared_lock l{c->lock};
   *empty = c->object_map.empty();
   return 0;
 }
 
-int MemStore::collection_bits(const coll_t& cid)
+int MemStore::collection_bits(CollectionHandle& ch)
 {
-  dout(10) << __func__ << " " << cid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  RWLock::RLocker l(c->lock);
+  dout(10) << __func__ << " " << ch->cid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
+  std::shared_lock l{c->lock};
   return c->bits;
 }
 
-int MemStore::collection_list(const coll_t& cid,
+int MemStore::collection_list(CollectionHandle& ch,
 			      const ghobject_t& start,
 			      const ghobject_t& end,
 			      int max,
 			      vector<ghobject_t> *ls, ghobject_t *next)
 {
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-  RWLock::RLocker l(c->lock);
+  Collection *c = static_cast<Collection*>(ch.get());
+  std::shared_lock l{c->lock};
 
-  dout(10) << __func__ << " cid " << cid << " start " << start
+  dout(10) << __func__ << " cid " << ch->cid << " start " << start
 	   << " end " << end << dendl;
   map<ghobject_t,ObjectRef>::iterator p = c->object_map.lower_bound(start);
   while (p != c->object_map.end() &&
@@ -504,66 +459,58 @@ int MemStore::collection_list(const coll_t& cid,
     else
       *next = p->first;
   }
-  dout(10) << __func__ << " cid " << cid << " got " << ls->size() << dendl;
+  dout(10) << __func__ << " cid " << ch->cid << " got " << ls->size() << dendl;
   return 0;
 }
 
 int MemStore::omap_get(
-    const coll_t& cid,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    map<string, bufferlist> *out /// < [out] Key to value map
-    )
+  CollectionHandle& ch,                ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  bufferlist *header,      ///< [out] omap header
+  map<string, bufferlist> *out /// < [out] Key to value map
+  )
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
 
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard<std::mutex> lock(o->omap_mutex);
+  std::lock_guard lock{o->omap_mutex};
   *header = o->omap_header;
   *out = o->omap;
   return 0;
 }
 
 int MemStore::omap_get_header(
-    const coll_t& cid,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    bool allow_eio ///< [in] don't assert on eio
-    )
+  CollectionHandle& ch,                ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  bufferlist *header,      ///< [out] omap header
+  bool allow_eio ///< [in] don't assert on eio
+  )
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard<std::mutex> lock(o->omap_mutex);
+  std::lock_guard lock{o->omap_mutex};
   *header = o->omap_header;
   return 0;
 }
 
 int MemStore::omap_get_keys(
-    const coll_t& cid,              ///< [in] Collection containing oid
-    const ghobject_t &oid, ///< [in] Object containing omap
-    set<string> *keys      ///< [out] Keys defined on oid
-    )
+  CollectionHandle& ch,              ///< [in] Collection containing oid
+  const ghobject_t &oid, ///< [in] Object containing omap
+  set<string> *keys      ///< [out] Keys defined on oid
+  )
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard<std::mutex> lock(o->omap_mutex);
+  std::lock_guard lock{o->omap_mutex};
   for (map<string,bufferlist>::iterator p = o->omap.begin();
        p != o->omap.end();
        ++p)
@@ -572,21 +519,18 @@ int MemStore::omap_get_keys(
 }
 
 int MemStore::omap_get_values(
-    const coll_t& cid,                    ///< [in] Collection containing oid
-    const ghobject_t &oid,       ///< [in] Object containing omap
-    const set<string> &keys,     ///< [in] Keys to get
-    map<string, bufferlist> *out ///< [out] Returned keys and values
-    )
+  CollectionHandle& ch,                    ///< [in] Collection containing oid
+  const ghobject_t &oid,       ///< [in] Object containing omap
+  const set<string> &keys,     ///< [in] Keys to get
+  map<string, bufferlist> *out ///< [out] Returned keys and values
+  )
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard<std::mutex> lock(o->omap_mutex);
+  std::lock_guard lock{o->omap_mutex};
   for (set<string>::const_iterator p = keys.begin();
        p != keys.end();
        ++p) {
@@ -598,21 +542,18 @@ int MemStore::omap_get_values(
 }
 
 int MemStore::omap_check_keys(
-    const coll_t& cid,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    const set<string> &keys, ///< [in] Keys to check
-    set<string> *out         ///< [out] Subset of keys defined on oid
-    )
+  CollectionHandle& ch,                ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  const set<string> &keys, ///< [in] Keys to check
+  set<string> *out         ///< [out] Subset of keys defined on oid
+  )
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return -ENOENT;
-
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard<std::mutex> lock(o->omap_mutex);
+  std::lock_guard lock{o->omap_mutex};
   for (set<string>::const_iterator p = keys.begin();
        p != keys.end();
        ++p) {
@@ -632,35 +573,35 @@ public:
     : c(c), o(o), it(o->omap.begin()) {}
 
   int seek_to_first() override {
-    std::lock_guard<std::mutex>(o->omap_mutex);
+    std::lock_guard lock{o->omap_mutex};
     it = o->omap.begin();
     return 0;
   }
   int upper_bound(const string &after) override {
-    std::lock_guard<std::mutex>(o->omap_mutex);
+    std::lock_guard lock{o->omap_mutex};
     it = o->omap.upper_bound(after);
     return 0;
   }
   int lower_bound(const string &to) override {
-    std::lock_guard<std::mutex>(o->omap_mutex);
+    std::lock_guard lock{o->omap_mutex};
     it = o->omap.lower_bound(to);
     return 0;
   }
   bool valid() override {
-    std::lock_guard<std::mutex>(o->omap_mutex);
+    std::lock_guard lock{o->omap_mutex};
     return it != o->omap.end();
   }
-  int next(bool validate=true) override {
-    std::lock_guard<std::mutex>(o->omap_mutex);
+  int next() override {
+    std::lock_guard lock{o->omap_mutex};
     ++it;
     return 0;
   }
   string key() override {
-    std::lock_guard<std::mutex>(o->omap_mutex);
+    std::lock_guard lock{o->omap_mutex};
     return it->first;
   }
   bufferlist value() override {
-    std::lock_guard<std::mutex>(o->omap_mutex);
+    std::lock_guard lock{o->omap_mutex};
     return it->second;
   }
   int status() override {
@@ -668,14 +609,12 @@ public:
   }
 };
 
-ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(const coll_t& cid,
-							 const ghobject_t& oid)
+ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(
+  CollectionHandle& ch,
+  const ghobject_t& oid)
 {
-  dout(10) << __func__ << " " << cid << " " << oid << dendl;
-  CollectionRef c = get_collection(cid);
-  if (!c)
-    return ObjectMap::ObjectMapIterator();
-
+  dout(10) << __func__ << " " << ch->cid << " " << oid << dendl;
+  Collection *c = static_cast<Collection*>(ch.get());
   ObjectRef o = c->get_object(oid);
   if (!o)
     return ObjectMap::ObjectMapIterator();
@@ -686,30 +625,17 @@ ObjectMap::ObjectMapIterator MemStore::get_omap_iterator(const coll_t& cid,
 // ---------------
 // write operations
 
-int MemStore::queue_transactions(Sequencer *osr,
-				 vector<Transaction>& tls,
-				 TrackedOpRef op,
-				 ThreadPool::TPHandle *handle)
+int MemStore::queue_transactions(
+  CollectionHandle& ch,
+  vector<Transaction>& tls,
+  TrackedOpRef op,
+  ThreadPool::TPHandle *handle)
 {
   // because memstore operations are synchronous, we can implement the
   // Sequencer with a mutex. this guarantees ordering on a given sequencer,
   // while allowing operations on different sequencers to happen in parallel
-  struct OpSequencer : public Sequencer_impl {
-    OpSequencer(CephContext* cct) :
-      Sequencer_impl(cct) {}
-    std::mutex mutex;
-    void flush() override {}
-    bool flush_commit(Context*) override { return true; }
-  };
-
-  std::unique_lock<std::mutex> lock;
-  if (osr) {
-    if (!osr->p) {
-      osr->p = new OpSequencer(cct);
-    }
-    auto seq = static_cast<OpSequencer*>(osr->p.get());
-    lock = std::unique_lock<std::mutex>(seq->mutex);
-  }
+  Collection *c = static_cast<Collection*>(ch.get());
+  std::unique_lock lock{c->sequencer_mutex};
 
   for (vector<Transaction>::iterator p = tls.begin(); p != tls.end(); ++p) {
     // poke the TPHandle heartbeat just to exercise that code path
@@ -882,12 +808,12 @@ void MemStore::_do_transaction(Transaction& t)
         uint32_t type = op->hint_type;
         bufferlist hint;
         i.decode_bl(hint);
-        bufferlist::iterator hiter = hint.begin();
+        auto hiter = hint.cbegin();
         if (type == Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS) {
           uint32_t pg_num;
           uint64_t num_objs;
-          ::decode(pg_num, hiter);
-          ::decode(num_objs, hiter);
+          decode(pg_num, hiter);
+          decode(num_objs, hiter);
           r = _collection_hint_expected_num_objs(cid, pg_num, num_objs);
         } else {
           // Ignore the hint
@@ -921,7 +847,7 @@ void MemStore::_do_transaction(Transaction& t)
       break;
 
     case Transaction::OP_COLL_MOVE:
-      assert(0 == "deprecated");
+      ceph_abort_msg("deprecated");
       break;
 
     case Transaction::OP_COLL_MOVE_RENAME:
@@ -949,19 +875,19 @@ void MemStore::_do_transaction(Transaction& t)
 
     case Transaction::OP_COLL_SETATTR:
       {
-	assert(0 == "not implemented");
+	ceph_abort_msg("not implemented");
       }
       break;
 
     case Transaction::OP_COLL_RMATTR:
       {
-	assert(0 == "not implemented");
+	ceph_abort_msg("not implemented");
       }
       break;
 
     case Transaction::OP_COLL_RENAME:
       {
-	assert(0 == "not implemented");
+	ceph_abort_msg("not implemented");
       }
       break;
 
@@ -1010,7 +936,7 @@ void MemStore::_do_transaction(Transaction& t)
       }
       break;
     case Transaction::OP_SPLIT_COLLECTION:
-      assert(0 == "deprecated");
+      ceph_abort_msg("deprecated");
       break;
     case Transaction::OP_SPLIT_COLLECTION2:
       {
@@ -1021,8 +947,22 @@ void MemStore::_do_transaction(Transaction& t)
 	r = _split_collection(cid, bits, rem, dest);
       }
       break;
+    case Transaction::OP_MERGE_COLLECTION:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        uint32_t bits = op->split_bits;
+        coll_t dest = i.get_cid(op->dest_cid);
+	r = _merge_collection(cid, bits, dest);
+      }
+      break;
 
     case Transaction::OP_SETALLOCHINT:
+      {
+        r = 0;
+      }
+      break;
+
+    case Transaction::OP_COLL_SET_BITS:
       {
         r = 0;
       }
@@ -1073,7 +1013,7 @@ void MemStore::_do_transaction(Transaction& t)
 	f.close_section();
 	f.flush(*_dout);
 	*_dout << dendl;
-	assert(0 == "unexpected error");
+	ceph_abort_msg("unexpected error");
       }
     }
 
@@ -1098,7 +1038,7 @@ int MemStore::_write(const coll_t& cid, const ghobject_t& oid,
 {
   dout(10) << __func__ << " " << cid << " " << oid << " "
 	   << offset << "~" << len << dendl;
-  assert(len == bl.length());
+  ceph_assert(len == bl.length());
 
   CollectionRef c = get_collection(cid);
   if (!c)
@@ -1146,7 +1086,7 @@ int MemStore::_remove(const coll_t& cid, const ghobject_t& oid)
   CollectionRef c = get_collection(cid);
   if (!c)
     return -ENOENT;
-  RWLock::WLocker l(c->lock);
+  std::lock_guard l{c->lock};
 
   auto i = c->object_hash.find(oid);
   if (i == c->object_hash.end())
@@ -1169,7 +1109,7 @@ int MemStore::_setattrs(const coll_t& cid, const ghobject_t& oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard<std::mutex> lock(o->xattr_mutex);
+  std::lock_guard lock{o->xattr_mutex};
   for (map<string,bufferptr>::const_iterator p = aset.begin(); p != aset.end(); ++p)
     o->xattr[p->first] = p->second;
   return 0;
@@ -1185,7 +1125,7 @@ int MemStore::_rmattr(const coll_t& cid, const ghobject_t& oid, const char *name
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard<std::mutex> lock(o->xattr_mutex);
+  std::lock_guard lock{o->xattr_mutex};
   auto i = o->xattr.find(name);
   if (i == o->xattr.end())
     return -ENODATA;
@@ -1203,7 +1143,7 @@ int MemStore::_rmattrs(const coll_t& cid, const ghobject_t& oid)
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard<std::mutex> lock(o->xattr_mutex);
+  std::lock_guard lock{o->xattr_mutex};
   o->xattr.clear();
   return 0;
 }
@@ -1225,12 +1165,10 @@ int MemStore::_clone(const coll_t& cid, const ghobject_t& oldoid,
   no->clone(oo.get(), 0, oo->get_size(), 0);
 
   // take xattr and omap locks with std::lock()
-  std::unique_lock<std::mutex>
-      ox_lock(oo->xattr_mutex, std::defer_lock),
-      nx_lock(no->xattr_mutex, std::defer_lock),
-      oo_lock(oo->omap_mutex, std::defer_lock),
-      no_lock(no->omap_mutex, std::defer_lock);
-  std::lock(ox_lock, nx_lock, oo_lock, no_lock);
+  std::scoped_lock l{oo->xattr_mutex,
+		     no->xattr_mutex,
+		     oo->omap_mutex,
+		     no->omap_mutex};
 
   no->omap_header = oo->omap_header;
   no->omap = oo->omap;
@@ -1276,7 +1214,7 @@ int MemStore::_omap_clear(const coll_t& cid, const ghobject_t &oid)
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard<std::mutex> lock(o->omap_mutex);
+  std::lock_guard lock{o->omap_mutex};
   o->omap.clear();
   o->omap_header.clear();
   return 0;
@@ -1293,14 +1231,14 @@ int MemStore::_omap_setkeys(const coll_t& cid, const ghobject_t &oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard<std::mutex> lock(o->omap_mutex);
-  bufferlist::iterator p = aset_bl.begin();
+  std::lock_guard lock{o->omap_mutex};
+  auto p = aset_bl.cbegin();
   __u32 num;
-  ::decode(num, p);
+  decode(num, p);
   while (num--) {
     string key;
-    ::decode(key, p);
-    ::decode(o->omap[key], p);
+    decode(key, p);
+    decode(o->omap[key], p);
   }
   return 0;
 }
@@ -1316,13 +1254,13 @@ int MemStore::_omap_rmkeys(const coll_t& cid, const ghobject_t &oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard<std::mutex> lock(o->omap_mutex);
-  bufferlist::iterator p = keys_bl.begin();
+  std::lock_guard lock{o->omap_mutex};
+  auto p = keys_bl.cbegin();
   __u32 num;
-  ::decode(num, p);
+  decode(num, p);
   while (num--) {
     string key;
-    ::decode(key, p);
+    decode(key, p);
     o->omap.erase(key);
   }
   return 0;
@@ -1340,7 +1278,7 @@ int MemStore::_omap_rmkeyrange(const coll_t& cid, const ghobject_t &oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard<std::mutex> lock(o->omap_mutex);
+  std::lock_guard lock{o->omap_mutex};
   map<string,bufferlist>::iterator p = o->omap.lower_bound(first);
   map<string,bufferlist>::iterator e = o->omap.lower_bound(last);
   o->omap.erase(p, e);
@@ -1358,7 +1296,7 @@ int MemStore::_omap_setheader(const coll_t& cid, const ghobject_t &oid,
   ObjectRef o = c->get_object(oid);
   if (!o)
     return -ENOENT;
-  std::lock_guard<std::mutex> lock(o->omap_mutex);
+  std::lock_guard lock{o->omap_mutex};
   o->omap_header = bl;
   return 0;
 }
@@ -1366,24 +1304,27 @@ int MemStore::_omap_setheader(const coll_t& cid, const ghobject_t &oid,
 int MemStore::_create_collection(const coll_t& cid, int bits)
 {
   dout(10) << __func__ << " " << cid << dendl;
-  RWLock::WLocker l(coll_lock);
+  std::lock_guard l{coll_lock};
   auto result = coll_map.insert(std::make_pair(cid, CollectionRef()));
   if (!result.second)
     return -EEXIST;
-  result.first->second.reset(new Collection(cct, cid));
+  auto p = new_coll_map.find(cid);
+  ceph_assert(p != new_coll_map.end());
+  result.first->second = p->second;
   result.first->second->bits = bits;
+  new_coll_map.erase(p);
   return 0;
 }
 
 int MemStore::_destroy_collection(const coll_t& cid)
 {
   dout(10) << __func__ << " " << cid << dendl;
-  RWLock::WLocker l(coll_lock);
+  std::lock_guard l{coll_lock};
   ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
   if (cp == coll_map.end())
     return -ENOENT;
   {
-    RWLock::RLocker l2(cp->second->lock);
+    std::shared_lock l2{cp->second->lock};
     if (!cp->second->object_map.empty())
       return -ENOTEMPTY;
     cp->second->exists = false;
@@ -1402,8 +1343,9 @@ int MemStore::_collection_add(const coll_t& cid, const coll_t& ocid, const ghobj
   CollectionRef oc = get_collection(ocid);
   if (!oc)
     return -ENOENT;
-  RWLock::WLocker l1(MIN(&(*c), &(*oc))->lock);
-  RWLock::WLocker l2(MAX(&(*c), &(*oc))->lock);
+
+  std::scoped_lock l{std::min(&(*c), &(*oc))->lock,
+		     std::max(&(*c), &(*oc))->lock};
 
   if (c->object_hash.count(oid))
     return -EEXIST;
@@ -1428,15 +1370,13 @@ int MemStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& ol
     return -ENOENT;
 
   // note: c and oc may be the same
-  assert(&(*c) == &(*oc));
-  c->lock.get_write();
+  ceph_assert(&(*c) == &(*oc));
 
-  int r = -EEXIST;
+  std::lock_guard l{c->lock};
   if (c->object_hash.count(oid))
-    goto out;
-  r = -ENOENT;
+    return -EEXIST;
   if (oc->object_hash.count(oldoid) == 0)
-    goto out;
+    return -ENOENT;
   {
     ObjectRef o = oc->object_hash[oldoid];
     c->object_map[oid] = o;
@@ -1444,10 +1384,7 @@ int MemStore::_collection_move_rename(const coll_t& oldcid, const ghobject_t& ol
     oc->object_map.erase(oldoid);
     oc->object_hash.erase(oldoid);
   }
-  r = 0;
- out:
-  c->lock.put_write();
-  return r;
+  return 0;
 }
 
 int MemStore::_split_collection(const coll_t& cid, uint32_t bits, uint32_t match,
@@ -1461,8 +1398,9 @@ int MemStore::_split_collection(const coll_t& cid, uint32_t bits, uint32_t match
   CollectionRef dc = get_collection(dest);
   if (!dc)
     return -ENOENT;
-  RWLock::WLocker l1(MIN(&(*sc), &(*dc))->lock);
-  RWLock::WLocker l2(MAX(&(*sc), &(*dc))->lock);
+
+  std::scoped_lock l{std::min(&(*sc), &(*dc))->lock,
+                     std::max(&(*sc), &(*dc))->lock};
 
   map<ghobject_t,ObjectRef>::iterator p = sc->object_map.begin();
   while (p != sc->object_map.end()) {
@@ -1478,13 +1416,51 @@ int MemStore::_split_collection(const coll_t& cid, uint32_t bits, uint32_t match
   }
 
   sc->bits = bits;
-  assert(dc->bits == (int)bits);
+  ceph_assert(dc->bits == (int)bits);
 
   return 0;
 }
+
+int MemStore::_merge_collection(const coll_t& cid, uint32_t bits, coll_t dest)
+{
+  dout(10) << __func__ << " " << cid << " " << bits << " "
+	   << dest << dendl;
+  CollectionRef sc = get_collection(cid);
+  if (!sc)
+    return -ENOENT;
+  CollectionRef dc = get_collection(dest);
+  if (!dc)
+    return -ENOENT;
+  {
+    std::scoped_lock l{std::min(&(*sc), &(*dc))->lock,
+                       std::max(&(*sc), &(*dc))->lock};
+
+    map<ghobject_t,ObjectRef>::iterator p = sc->object_map.begin();
+    while (p != sc->object_map.end()) {
+      dout(20) << " moving " << p->first << dendl;
+      dc->object_map.insert(make_pair(p->first, p->second));
+      dc->object_hash.insert(make_pair(p->first, p->second));
+      sc->object_hash.erase(p->first);
+      sc->object_map.erase(p++);
+    }
+
+    dc->bits = bits;
+  }
+
+  {
+    std::lock_guard l{coll_lock};
+    ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
+    ceph_assert(cp != coll_map.end());
+    used_bytes -= cp->second->used_bytes();
+    coll_map.erase(cp);
+  }
+
+  return 0;
+}
+
 namespace {
 struct BufferlistObject : public MemStore::Object {
-  Spinlock mutex;
+  ceph::spinlock mutex;
   bufferlist data;
 
   size_t get_size() const override { return data.length(); }
@@ -1497,13 +1473,13 @@ struct BufferlistObject : public MemStore::Object {
 
   void encode(bufferlist& bl) const override {
     ENCODE_START(1, 1, bl);
-    ::encode(data, bl);
+    encode(data, bl);
     encode_base(bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) override {
+  void decode(bufferlist::const_iterator& p) override {
     DECODE_START(1, p);
-    ::decode(data, p);
+    decode(data, p);
     decode_base(p);
     DECODE_FINISH(p);
   }
@@ -1513,7 +1489,7 @@ struct BufferlistObject : public MemStore::Object {
 int BufferlistObject::read(uint64_t offset, uint64_t len,
                                      bufferlist &bl)
 {
-  std::lock_guard<Spinlock> lock(mutex);
+  std::lock_guard<decltype(mutex)> lock(mutex);
   bl.substr_of(data, offset, len);
   return bl.length();
 }
@@ -1522,7 +1498,7 @@ int BufferlistObject::write(uint64_t offset, const bufferlist &src)
 {
   unsigned len = src.length();
 
-  std::lock_guard<Spinlock> lock(mutex);
+  std::lock_guard<decltype(mutex)> lock(mutex);
 
   // before
   bufferlist newdata;
@@ -1557,7 +1533,7 @@ int BufferlistObject::clone(Object *src, uint64_t srcoff,
 
   bufferlist bl;
   {
-    std::lock_guard<Spinlock> lock(srcbl->mutex);
+    std::lock_guard<decltype(srcbl->mutex)> lock(srcbl->mutex);
     if (srcoff == dstoff && len == src->get_size()) {
       data = srcbl->data;
       return 0;
@@ -1569,7 +1545,7 @@ int BufferlistObject::clone(Object *src, uint64_t srcoff,
 
 int BufferlistObject::truncate(uint64_t size)
 {
-  std::lock_guard<Spinlock> lock(mutex);
+  std::lock_guard<decltype(mutex)> lock(mutex);
   if (get_size() > size) {
     bufferlist bl;
     bl.substr_of(data, 0, size);
@@ -1605,14 +1581,14 @@ struct MemStore::PageSetObject : public Object {
 
   void encode(bufferlist& bl) const override {
     ENCODE_START(1, 1, bl);
-    ::encode(data_len, bl);
+    encode(data_len, bl);
     data.encode(bl);
     encode_base(bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& p) override {
+  void decode(bufferlist::const_iterator& p) override {
     DECODE_START(1, p);
-    ::decode(data_len, p);
+    decode(data_len, p);
     data.decode(p);
     decode_base(p);
     DECODE_FINISH(p);

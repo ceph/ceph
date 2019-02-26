@@ -17,21 +17,20 @@
 #include "Mutation.h"
 
 void SimpleLock::dump(Formatter *f) const {
-  assert(f != NULL);
+  ceph_assert(f != NULL);
   if (is_sync_and_unlocked()) {
     return;
   }
 
   f->open_array_section("gather_set");
   if (have_more()) {
-    for(std::set<int32_t>::iterator i = more()->gather_set.begin();
-        i != more()->gather_set.end(); ++i) {
-      f->dump_int("rank", *i);
+    for(const auto &i : more()->gather_set) {
+      f->dump_int("rank", i);
     }
   }
   f->close_section();
 
-  f->dump_int("num_client_lease", num_client_lease);
+  f->dump_bool("is_leased", is_leased());
   f->dump_int("num_rdlocks", get_num_rdlocks());
   f->dump_int("num_wrlocks", get_num_wrlocks());
   f->dump_int("num_xlocks", get_num_xlocks());

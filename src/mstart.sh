@@ -25,10 +25,13 @@ elif [ -e $root_path/../build/CMakeCache.txt ]; then
     root_path=$PWD
 fi
 RUN_ROOT_PATH=${root_path}/run
-CLUSTERS_LIST=$RUN_ROOT_PATH/.clusters.list
 
 mkdir -p $RUN_ROOT_PATH
 
+if [ -z "$CLUSTERS_LIST" ]
+then
+  CLUSTERS_LIST=$RUN_ROOT_PATH/.clusters.list
+fi
 
 if [ ! -f $CLUSTERS_LIST ]; then
 touch $CLUSTERS_LIST

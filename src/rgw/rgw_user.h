@@ -6,7 +6,7 @@
 
 #include <string>
 #include <boost/algorithm/string.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 #include "include/types.h"
 #include "rgw_common.h"
@@ -37,17 +37,21 @@ struct RGWUID
   void encode(bufferlist& bl) const {
     string s;
     user_id.to_str(s);
-    ::encode(s, bl);
+    using ceph::encode;
+    encode(s, bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     string s;
-    ::decode(s, bl);
+    using ceph::decode;
+    decode(s, bl);
     user_id.from_str(s);
   }
 };
 WRITE_CLASS_ENCODER(RGWUID)
 
 extern int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id);
+extern int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map<string, cls_user_bucket_entry>&buckets_usage_map);
+
 /**
  * Get the anonymous (ie, unauthenticated) user info.
  */
@@ -113,9 +117,6 @@ extern int rgw_get_user_attrs_by_uid(RGWRados *store,
  * Given an RGWUserInfo, deletes the user and its bucket ACLs.
  */
 extern int rgw_delete_user(RGWRados *store, RGWUserInfo& user, RGWObjVersionTracker& objv_tracker);
-/**
- * Store a list of the user's buckets, with associated functinos.
- */
 
 /*
  * remove the different indexes
@@ -125,13 +126,10 @@ extern int rgw_remove_uid_index(RGWRados *store, rgw_user& uid);
 extern int rgw_remove_email_index(RGWRados *store, string& email);
 extern int rgw_remove_swift_name_index(RGWRados *store, string& swift_name);
 
-/*
- * An RGWUser class along with supporting classes created
- * to support the creation of an RESTful administrative API
- */
-
 extern void rgw_perm_to_str(uint32_t mask, char *buf, int len);
 extern uint32_t rgw_str_to_perm(const char *str);
+
+extern int rgw_validate_tenant_name(const string& t);
 
 enum ObjectKeyType {
   KEY_TYPE_SWIFT,
@@ -151,6 +149,10 @@ enum RGWUserId {
   RGW_ACCESS_KEY,
 };
 
+/*
+ * An RGWUser class along with supporting classes created
+ * to support the creation of an RESTful administrative API
+ */
 struct RGWUserAdminOpState {
   // user attributes
   RGWUserInfo info;
@@ -163,6 +165,7 @@ struct RGWUserAdminOpState {
   __u8 system;
   __u8 exclusive;
   __u8 fetch_stats;
+  __u8 sync_stats;
   std::string caps;
   RGWObjVersionTracker objv;
   uint32_t op_mask;
@@ -176,6 +179,8 @@ struct RGWUserAdminOpState {
   std::string id; // access key
   std::string key; // secret key
   int32_t key_type;
+
+  std::set<string> mfa_ids;
 
   // operation attributes
   bool existing_user;
@@ -199,13 +204,14 @@ struct RGWUserAdminOpState {
   bool op_mask_specified;
   bool caps_specified;
   bool suspension_op;
-  bool admin_specified;
+  bool admin_specified = false;
   bool system_specified;
   bool key_op;
   bool temp_url_key_specified;
   bool found_by_uid; 
   bool found_by_email;  
   bool found_by_key;
+  bool mfa_ids_specified;
  
   // req parameters
   bool populated;
@@ -220,7 +226,11 @@ struct RGWUserAdminOpState {
   RGWQuotaInfo bucket_quota;
   RGWQuotaInfo user_quota;
 
-  void set_access_key(std::string& access_key) {
+  // req parameters for listing user
+  std::string marker;
+  uint32_t max_entries;
+
+  void set_access_key(const std::string& access_key) {
     if (access_key.empty())
       return;
 
@@ -230,7 +240,7 @@ struct RGWUserAdminOpState {
     key_op = true;
   }
 
-  void set_secret_key(std::string& secret_key) {
+  void set_secret_key(const std::string& secret_key) {
     if (secret_key.empty())
       return;
 
@@ -248,16 +258,13 @@ struct RGWUserAdminOpState {
   }
 
   void set_user_email(std::string& email) {
-    if (email.empty())
-      return;
-
-    /* always lowercase email address */
+   /* always lowercase email address */
     boost::algorithm::to_lower(email);
     user_email = email;
     user_email_specified = true;
   }
 
-  void set_display_name(std::string& name) {
+  void set_display_name(const std::string& name) {
     if (name.empty())
       return;
 
@@ -286,7 +293,7 @@ struct RGWUserAdminOpState {
     subuser_specified = true;
   }
 
-  void set_caps(std::string& _caps) {
+  void set_caps(const std::string& _caps) {
     if (_caps.empty())
       return;
 
@@ -337,6 +344,10 @@ struct RGWUserAdminOpState {
     fetch_stats = is_fetch_stats;
   }
 
+  void set_sync_stats(__u8 is_sync_stats) {
+    sync_stats = is_sync_stats;
+  }
+
   void set_user_info(RGWUserInfo& user_info) {
     user_id = user_info.user_id;
     info = user_info;
@@ -385,6 +396,11 @@ struct RGWUserAdminOpState {
     user_quota_specified = true;
   }
 
+  void set_mfa_ids(const std::set<string>& ids) {
+    mfa_ids = ids;
+    mfa_ids_specified = true;
+  }
+
   bool is_populated() { return populated; }
   bool is_initialized() { return initialized; }
   bool has_existing_user() { return existing_user; }
@@ -421,6 +437,7 @@ struct RGWUserAdminOpState {
   uint32_t get_op_mask() { return op_mask; }
   RGWQuotaInfo& get_bucket_quota() { return bucket_quota; }
   RGWQuotaInfo& get_user_quota() { return user_quota; }
+  set<string>& get_mfa_ids() { return mfa_ids; }
 
   rgw_user& get_user_id() { return user_id; }
   std::string get_subuser() { return subuser; }
@@ -462,8 +479,7 @@ struct RGWUserAdminOpState {
     int sub_buf_size = RAND_SUBUSER_LEN + 1;
     char sub_buf[RAND_SUBUSER_LEN + 1];
 
-    if (gen_rand_alphanumeric_upper(g_ceph_context, sub_buf, sub_buf_size) < 0)
-      return "";
+    gen_rand_alphanumeric_upper(g_ceph_context, sub_buf, sub_buf_size);
 
     rand_suffix = sub_buf;
     if (rand_suffix.empty())
@@ -521,6 +537,9 @@ struct RGWUserAdminOpState {
     found_by_uid = false;
     found_by_email = false;
     found_by_key = false;
+    mfa_ids_specified = false;
+    max_entries = 1000;
+    marker = "";
   }
 };
 
@@ -686,16 +705,22 @@ public:
   /* info from an already populated RGWUser */
   int info (RGWUserInfo& fetched_info, std::string *err_msg = NULL);
 
+  /* list the existing users */
+  int list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
+
   friend class RGWAccessKeyPool;
   friend class RGWSubUserPool;
   friend class RGWUserCapPool;
 };
 
-/* Wrapers for admin API functionality */
+/* Wrappers for admin API functionality */
 
 class RGWUserAdminOp_User
 {
 public:
+  static int list(RGWRados *store,
+                  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
+
   static int info(RGWRados *store,
                   RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 

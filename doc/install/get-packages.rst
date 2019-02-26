@@ -30,9 +30,7 @@ also add keys and recommended packages.
 
 - **Keys: (Recommended)** Whether you add repositories or download packages
   manually, you should download keys to verify the packages. If you do not get
-  the keys, you may encounter security warnings. There are two keys: one for
-  releases (common) and one for development (programmers and QA only). Choose
-  the key that suits your needs. See `Add Keys`_ for details.
+  the keys, you may encounter security warnings. See `Add Keys`_ for details.
 
 - **Ceph: (Required)** All Ceph deployments require Ceph release packages,
   except for deployments that use development packages (development, QA, and
@@ -43,14 +41,6 @@ also add keys and recommended packages.
   development, you may get Ceph development packages. See
   `Add Ceph Development`_ for details.
 
-- **Apache/FastCGI: (Optional)** If you are deploying a
-  :term:`Ceph Object Storage` service, you must install Apache and FastCGI.
-  Ceph provides Apache and FastCGI builds that are identical to those available
-  from Apache, but with 100-continue support. If you want to enable
-  :term:`Ceph Object Gateway` daemons with 100-continue support, you must
-  retrieve Apache/FastCGI packages from the Ceph repository.
-  See `Add Apache/FastCGI`_ for details.
-
 
 If you intend to download packages manually, see Section `Download Packages`_.
 
@@ -59,10 +49,8 @@ Add Keys
 ========
 
 Add a key to your system's list of trusted keys to avoid a security warning. For
-major releases (e.g., ``hammer``, ``jewel``) and development releases
-(``release-name-rc1``, ``release-name-rc2``), use the ``release.asc`` key. For
-development testing packages, use the ``autobuild.asc`` key (developers and
-QA).
+major releases (e.g., ``hammer``, ``jewel``, ``luminous``) and development releases
+(``release-name-rc1``, ``release-name-rc2``), use the ``release.asc`` key.
 
 
 APT
@@ -73,24 +61,12 @@ To install the ``release.asc`` key, execute the following::
 	wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
 
 
-To install the ``autobuild.asc`` key, execute the following
-(QA and developers only)::
-
-	wget -q -O- 'https://download.ceph.com/keys/autobuild.asc' | sudo apt-key add -
-
-
 RPM
 ---
 
 To install the ``release.asc`` key, execute the following::
 
 	sudo rpm --import 'https://download.ceph.com/keys/release.asc'
-
-To install the ``autobuild.asc`` key, execute the following
-(QA and developers only)::
-
-	sudo rpm --import 'https://download.ceph.com/keys/autobuild.asc'
-
 
 Add Ceph
 ========
@@ -107,16 +83,15 @@ You may find releases for CentOS/RHEL and others (installed with YUM) at::
 
 	https://download.ceph.com/rpm-{release-name}
 
-The major releases of Ceph are summarized at: :doc:`/releases`.
+The major releases of Ceph are summarized at: :ref:`ceph-releases`
 
 Every second major release is considered Long Term Stable (LTS). Critical
 bugfixes are backported to LTS releases until their retirement. Since retired
 releases are no longer maintained, we recommend that users upgrade their
 clusters regularly - preferably to the latest LTS release.
 
-The most recent LTS release is Jewel (10.2.x).
-
-.. tip:: For international users: There might be a mirror close to you where download Ceph from. For more information see: `Ceph Mirrors`_.
+.. tip:: For non-US users: There might be a mirror close to you where
+         to download Ceph from. For more information see: `Ceph Mirrors`_.
 
 Debian Packages
 ---------------
@@ -125,15 +100,16 @@ Add a Ceph package repository to your system's list of APT sources. For newer
 versions of Debian/Ubuntu, call ``lsb_release -sc`` on the command line to
 get the short codename, and replace ``{codename}`` in the following command. ::
 
-	sudo apt-add-repository 'deb https://download.ceph.com/debian-jewel/ {codename} main'
+	sudo apt-add-repository 'deb https://download.ceph.com/debian-luminous/ {codename} main'
 
 For early Linux distributions, you may execute the following command::
 
-	echo deb https://download.ceph.com/debian-jewel/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+	echo deb https://download.ceph.com/debian-luminous/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
 For earlier Ceph releases, replace ``{release-name}`` with the name  with the
 name of the Ceph release. You may call ``lsb_release -sc`` on the command  line
 to get the short codename, and replace ``{codename}`` in the following command.
+
 ::
 
 	sudo apt-add-repository 'deb https://download.ceph.com/debian-{release-name}/ {codename} main'
@@ -143,27 +119,22 @@ release::
 
 	echo deb https://download.ceph.com/debian-{release-name}/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
-Ceph on ARM processors requires Google's memory profiling tools (``google-perftools``).
-The Ceph repository should have a copy at
-https://download.ceph.com/packages/google-perftools/debian. ::
-
-	echo deb https://download.ceph.com/packages/google-perftools/debian  $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/google-perftools.list
-
-
 For development release packages, add our package repository to your system's
 list of APT sources.  See `the testing Debian repository`_ for a complete list
 of Debian and Ubuntu releases supported. ::
 
 	echo deb https://download.ceph.com/debian-testing/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
 
-.. tip:: For international users: There might be a mirror close to you where download Ceph from. For more information see: `Ceph Mirrors`_.
+.. tip:: For non-US users: There might be a mirror close to you where
+         to download Ceph from. For more information see: `Ceph Mirrors`_.
+
 
 RPM Packages
 ------------
 
 For major releases, you may add a Ceph entry to the ``/etc/yum.repos.d``
 directory. Create a ``ceph.repo`` file. In the example below, replace
-``{ceph-release}`` with  a major release of Ceph (e.g., ``hammer``, ``jewel``,
+``{ceph-release}`` with  a major release of Ceph (e.g., ``hammer``, ``jewel``, ``luminous``,
 etc.) and ``{distro}`` with your Linux distribution (e.g., ``el7``, etc.).  You
 may view https://download.ceph.com/rpm-{ceph-release}/ directory to see which
 distributions Ceph supports. Some Ceph packages (e.g., EPEL) must take priority
@@ -195,39 +166,11 @@ over standard packages, so you must ensure that you set
 	gpgkey=https://download.ceph.com/keys/release.asc
 
 
-For development release packages, you may specify the repository
-for development releases instead. ::
-
-	[ceph]
-	name=Ceph packages for $basearch/$releasever
-	baseurl=https://download.ceph.com/rpm-testing/{distro}/$basearch
-	enabled=1
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/release.asc
-
-	[ceph-noarch]
-	name=Ceph noarch packages
-	baseurl=https://download.ceph.com/rpm-testing/{distro}/noarch
-	enabled=1
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/release.asc
-
-	[ceph-source]
-	name=Ceph source packages
-	baseurl=https://download.ceph.com/rpm-testing/{distro}/SRPMS
-	enabled=0
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/release.asc
-
-
-For specific packages, you may retrieve them by specifically downloading the
-release package by name. Our development process generates a new release of Ceph
-every 3-4 weeks. These packages are faster-moving than the major releases.
-Development packages have new features integrated quickly, while still
-undergoing several weeks of QA prior to release.
+For specific packages, you may retrieve them by downloading the release package
+by name. Our development process generates a new release of Ceph every 3-4
+weeks. These packages are faster-moving than the major releases.  Development
+packages have new features integrated quickly, while still undergoing several
+weeks of QA prior to release.
 
 The repository package installs the repository details on your local system for
 use with ``yum``. Replace ``{distro}`` with your Linux distribution, and
@@ -239,124 +182,61 @@ You can download the RPMs directly from::
 
      https://download.ceph.com/rpm-testing
 
-.. tip:: For international users: There might be a mirror close to you where download Ceph from. For more information see: `Ceph Mirrors`_.
+.. tip:: For non-US users: There might be a mirror close to you where
+         to download Ceph from. For more information see: `Ceph Mirrors`_.
 
 
 Add Ceph Development
 ====================
 
-Development repositories use the ``autobuild.asc`` key to verify packages.
 If you are developing Ceph and need to deploy and test specific Ceph branches,
 ensure that you remove repository entries for major releases first.
 
 
-Debian Packages
----------------
+DEB Packages
+------------
 
-We automatically build Debian and Ubuntu packages for current
-development branches in the Ceph source code repository.  These
-packages are intended for developers and QA only.
+We automatically build Ubuntu packages for current development branches in the
+Ceph source code repository.  These packages are intended for developers and QA
+only.
 
-Add our package repository to your system's list of APT sources, but
-replace ``{BRANCH}`` with the branch you'd like to use (e.g., chef-3,
-wip-hack, master).  See `the gitbuilder page`_ for a complete
+Add the package repository to your system's list of APT sources, but
+replace ``{BRANCH}`` with the branch you'd like to use (e.g.,
+wip-hack, master).  See `the shaman page`_ for a complete
 list of distributions we build. ::
 
-	echo deb http://gitbuilder.ceph.com/ceph-deb-$(lsb_release -sc)-x86_64-basic/ref/{BRANCH} $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+    curl -L https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/ubuntu/$(lsb_release -sc)/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
 
+.. note:: If the repository is not ready an HTTP 504 will be returned
+
+The use of ``latest`` in the url, means it will figure out which is the last
+commit that has been built. Alternatively, a specific sha1 can be specified.
+For Ubuntu Xenial and the master branch of Ceph, it would look like::
+
+    curl -L https://shaman.ceph.com/api/repos/ceph/master/53e772a45fdf2d211c0c383106a66e1feedec8fd/ubuntu/xenial/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
+
+
+.. warning:: Development repositories are no longer available after two weeks.
 
 RPM Packages
 ------------
 
 For current development branches, you may add a Ceph entry to the
-``/etc/yum.repos.d`` directory. Create a ``ceph.repo`` file. In the example
-below, replace ``{distro}`` with your Linux distribution (e.g., ``el7``), and
-``{branch}`` with the name of the branch you want to install. ::
+``/etc/yum.repos.d`` directory. The `the shaman page`_ can be used to retrieve the full details
+of a repo file. It can be retrieved via an HTTP request, for example::
+
+    curl -L https://shaman.ceph.com/api/repos/ceph/{BRANCH}/latest/centos/7/repo/ | sudo tee /etc/yum.repos.d/shaman.repo
+
+The use of ``latest`` in the url, means it will figure out which is the last
+commit that has been built. Alternatively, a specific sha1 can be specified.
+For CentOS 7 and the master branch of Ceph, it would look like::
+
+    curl -L https://shaman.ceph.com/api/repos/ceph/master/53e772a45fdf2d211c0c383106a66e1feedec8fd/centos/7/repo/ | sudo tee /etc/apt/sources.list.d/shaman.list
 
 
-	[ceph-source]
-	name=Ceph source packages
-	baseurl=http://gitbuilder.ceph.com/ceph-rpm-{distro}-x86_64-basic/ref/{branch}/SRPMS
-	enabled=0
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/autobuild.asc
+.. warning:: Development repositories are no longer available after two weeks.
 
-
-You may view http://gitbuilder.ceph.com directory to see which distributions
-Ceph supports.
-
-
-Add Apache/FastCGI
-==================
-
-Ceph Object Gateway works with ordinary Apache and FastCGI libraries. However,
-Ceph builds Apache and FastCGI packages that support 100-continue. To use the
-Ceph Apache and FastCGI packages, add them to your repository.
-
-
-Debian Packages
----------------
-
-Add our Apache and FastCGI packages to your system's list of APT sources if you intend to
-use 100-continue. ::
-
-	echo deb http://gitbuilder.ceph.com/apache2-deb-$(lsb_release -sc)-x86_64-basic/ref/master $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph-apache.list
-	echo deb http://gitbuilder.ceph.com/libapache-mod-fastcgi-deb-$(lsb_release -sc)-x86_64-basic/ref/master $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph-fastcgi.list
-
-
-RPM Packages
-------------
-
-You may add a Ceph entry to the ``/etc/yum.repos.d`` directory. Create a
-``ceph-apache.repo`` file. In the example below, replace ``{distro}`` with your
-Linux distribution (e.g., ``el7``).  You may view http://gitbuilder.ceph.com
-directory to see which distributions Ceph supports.
-::
-
-
-	[apache2-ceph-noarch]
-	name=Apache noarch packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/apache2-rpm-{distro}-x86_64-basic/ref/master
-	enabled=1
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/autobuild.asc
-
-	[apache2-ceph-source]
-	name=Apache source packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/apache2-rpm-{distro}-x86_64-basic/ref/master
-	enabled=0
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/autobuild.asc
-
-
-Repeat the forgoing process by creating a ``ceph-fastcgi.repo`` file. ::
-
-	[fastcgi-ceph-basearch]
-	name=FastCGI basearch packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/mod_fastcgi-rpm-{distro}-x86_64-basic/ref/master
-	enabled=1
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/autobuild.asc
-
-	[fastcgi-ceph-noarch]
-	name=FastCGI noarch packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/mod_fastcgi-rpm-{distro}-x86_64-basic/ref/master
-	enabled=1
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/autobuild.asc
-
-	[fastcgi-ceph-source]
-	name=FastCGI source packages for Ceph
-	baseurl=http://gitbuilder.ceph.com/mod_fastcgi-rpm-{distro}-x86_64-basic/ref/master
-	enabled=0
-	priority=2
-	gpgcheck=1
-	gpgkey=https://download.ceph.com/keys/autobuild.asc
-
+.. note:: If the repository is not ready an HTTP 504 will be returned
 
 Download Packages
 =================
@@ -368,7 +248,7 @@ before attempting an install.
 Debian Packages
 ---------------
 
-Ceph requires additional additional third party libraries.
+Ceph requires additional third party libraries.
 
 - libaio1
 - libsnappy1
@@ -410,15 +290,15 @@ Packages are currently built for the RHEL/CentOS7 (``el7``) platforms.  The
 repository package installs the repository details on your local system for use
 with ``yum``. Replace ``{distro}`` with your distribution. ::
 
-    su -c 'rpm -Uvh https://download.ceph.com/rpm-jewel/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
+    su -c 'rpm -Uvh https://download.ceph.com/rpm-luminous/{distro}/noarch/ceph-{version}.{distro}.noarch.rpm'
 
 For example, for CentOS 7  (``el7``)::
 
-    su -c 'rpm -Uvh https://download.ceph.com/rpm-jewel/el7/noarch/ceph-release-1-0.el7.noarch.rpm'
+    su -c 'rpm -Uvh https://download.ceph.com/rpm-luminous/el7/noarch/ceph-release-1-0.el7.noarch.rpm'
 
 You can download the RPMs directly from::
 
-	https://download.ceph.com/rpm-jewel
+	https://download.ceph.com/rpm-luminous
 
 
 For earlier Ceph releases, replace ``{release-name}`` with the name
@@ -429,8 +309,7 @@ line to get the short codename. ::
 
 
 
-
 .. _Install Ceph Object Storage: ../install-storage-cluster
 .. _the testing Debian repository: https://download.ceph.com/debian-testing/dists
-.. _the gitbuilder page: http://gitbuilder.ceph.com
+.. _the shaman page: https://shaman.ceph.com
 .. _Ceph Mirrors: ../mirrors

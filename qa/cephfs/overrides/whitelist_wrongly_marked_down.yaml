@@ -1,10 +1,9 @@
 overrides:
   ceph:
     log-whitelist:
-      - wrongly marked me down
-    conf:
-      mds:
-        debug mds: 20
-        debug ms: 1
-      client:
-        debug client: 10
+      - overall HEALTH_
+      - \(OSD_DOWN\)
+      - \(OSD_
+      - but it is still running
+# MDS daemon 'b' is not responding, replacing it as rank 0 with standby 'a'
+      - is not responding

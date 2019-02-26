@@ -9,9 +9,7 @@
 Synopsis
 ========
 
-| **rados** [ -m *monaddr* ] [ mkpool | rmpool *foo* ] [ -p | --pool
-  *pool* ] [ -s | --snap *snap* ] [ -i *infile* ] [ -o *outfile* ]
-  *command* ...
+| **rados** [ *options* ] [ *command* ]
 
 
 Description
@@ -60,7 +58,8 @@ Options
 .. option:: --striper
 
    Uses the striping API of rados rather than the default one.
-   Available for stat, get, put, append, truncate, rm, ls and all xattr related operation
+   Available for stat, stat2, get, put, append, truncate, rm, ls
+   and all xattr related operation
 
 
 Global commands
@@ -73,12 +72,6 @@ Global commands
   Show utilization statistics, including disk usage (bytes) and object
   counts, over the entire system and broken down by pool.
 
-:command:`mkpool` *foo*
-  Create a pool with name foo.
-
-:command:`rmpool` *foo* [ *foo* --yes-i-really-really-mean-it ]
-  Delete the pool foo (and all its data).
-
 :command:`list-inconsistent-pg` *pool*
   List inconsistent PGs in given pool.
 
@@ -88,14 +81,18 @@ Global commands
 :command:`list-inconsistent-snapset` *pgid*
   List inconsistent snapsets in given PG.
 
+
 Pool specific commands
 ======================
 
 :command:`get` *name* *outfile*
   Read object name from the cluster and write it to outfile.
 
-:command:`put` *name* *infile*
-  Write object name to the cluster with contents from infile.
+:command:`put` *name* *infile* [--offset offset]
+  Write object name with start offset (default:0) to the cluster with contents from infile.
+  **Warning:** The put command creates a single RADOS object, sized just as
+  large as your input file. Unless your objects are of reasonable and consistent sizes, that
+  is probably not what you want -- consider using RGW/S3, CephFS, or RBD instead.
 
 :command:`append` *name* *infile*
   Append object name to the cluster with contents from infile.
@@ -136,7 +133,9 @@ Pool specific commands
   Note: *write* and *seq* must be run on the same host otherwise the
   objects created by *write* will have names that will fail *seq*.
 
-:command:`cleanup`
+:command:`cleanup` [ --run-name *run_name* ] [ --prefix *prefix* ]
+  Clean up a previous benchmark operation.
+  Note: the default run-name is "benchmark_last_metadata"
 
 :command:`listxattr` *name*
   List all extended attributes of an object.
@@ -150,6 +149,12 @@ Pool specific commands
 :command:`rmxattr` *name* *attr*
   Remove *attr* from the extended attributes of an object.
 
+:command:`stat` *name*
+   Get stat (ie. mtime, size) of given object
+
+:command:`stat2` *name*
+   Get stat (similar to stat, but with high precision time) of given object
+
 :command:`listomapkeys` *name*
   List all the keys stored in the object map of object name.
 
@@ -159,12 +164,12 @@ Pool specific commands
 
 :command:`getomapval` [ --omap-key-file *file* ] *name* *key* [ *out-file* ]
   Dump the hexadecimal value of key in the object map of object name.
-  If the optional *out-file* argument isn't provided, the value will be
+  If the optional *out-file* argument is not provided, the value will be
   written to standard output.
 
 :command:`setomapval` [ --omap-key-file *file* ] *name* *key* [ *value* ]
   Set the value of key in the object map of object name. If the optional
-  *value* argument isn't provided, the value will be read from standard
+  *value* argument is not provided, the value will be read from standard
   input.
 
 :command:`rmomapkey` [ --omap-key-file *file* ] *name* *key*
@@ -175,6 +180,13 @@ Pool specific commands
 
 :command:`setomapheader` *name* *value*
   Set the value of the object map header of object name.
+
+:command:`export` *filename*
+  Serialize pool contents to a file or standard output.\n"
+
+:command:`import` [--dry-run] [--no-overwrite] < filename | - >
+  Load pool contents from a file or standard input
+
 
 Examples
 ========

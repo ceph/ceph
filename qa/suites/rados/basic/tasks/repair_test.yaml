@@ -16,7 +16,12 @@ overrides:
       - scrub [0-9]+ errors
       - 'size 1 != size'
       - attr name mismatch
-      - Regular scrub request, losing deep-scrub details
+      - Regular scrub request, deep-scrub details will be lost
+      - candidate size [0-9]+ info size [0-9]+ mismatch
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
     conf:
       osd:
         filestore debug inject read err: true

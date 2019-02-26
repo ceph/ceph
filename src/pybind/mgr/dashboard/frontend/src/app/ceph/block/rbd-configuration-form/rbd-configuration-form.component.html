@@ -1,0 +1,79 @@
+<fieldset #cfgFormGroup [formGroup]="form.get('configuration')">
+  <legend i18n>RBD Configuration</legend>
+
+  <div *ngFor="let section of rbdConfigurationService.sections">
+    <h3 class="page-header">
+      <span
+        (click)="toggleSectionVisibility(section.class)"
+        class="collapsible">{{ section.heading }} <i [ngClass]="{'fa-plus-circle': !sectionVisibility[section.class], 'fa-minus-circle': sectionVisibility[section.class]}" class="fa" aria-hidden="true"></i></span>
+    </h3>
+    <div class="{{ section.class }}" [hidden]="!sectionVisibility[section.class]">
+      <div
+        class="form-group"
+        *ngFor="let option of section.options"
+        [ngClass]="{'has-error': form.showError('configuration.' + option.name, cfgFormGroup)}">
+        <label
+          class="control-label col-sm-3"
+          [for]="option.name">{{ option.displayName }}<cd-helper>{{ option.description }}</cd-helper></label>
+
+        <div class="col-sm-9 {{ section.heading }}">
+          <div class="input-group">
+            <ng-container [ngSwitch]="option.type">
+              <ng-container *ngSwitchCase="configurationType.milliseconds">
+                <input
+                  [id]="option.name"
+                  [name]="option.name"
+                  [formControlName]="option.name"
+                  type="text"
+                  class="form-control"
+                  [ngDataReady]="ngDataReady"
+                  cdMilliseconds>
+              </ng-container>
+              <ng-container *ngSwitchCase="configurationType.bps">
+                <input
+                  [id]="option.name"
+                  [name]="option.name"
+                  [formControlName]="option.name"
+                  type="text"
+                  class="form-control"
+                  defaultUnit="b"
+                  [ngDataReady]="ngDataReady"
+                  cdDimlessBinaryPerSecond>
+              </ng-container>
+              <ng-container *ngSwitchCase="configurationType.iops">
+                <input
+                  [id]="option.name"
+                  [name]="option.name"
+                  [formControlName]="option.name"
+                  type="text"
+                  class="form-control"
+                  [ngDataReady]="ngDataReady"
+                  cdIops>
+              </ng-container>
+            </ng-container>
+            <span class="input-group-btn">
+              <button
+                class="btn btn-default"
+                type="button"
+                data-toggle="button"
+                [ngClass]="{'active': isDisabled(option.name)}"
+                tooltip="Remove the local configuration value. The parent configuration value will be inherited and used instead."
+                containerClass="tooltip-wide"
+                [delay]="1000"
+                i18n-tooltip
+                (click)="reset(option.name)">
+                <i class="fa fa-eraser"
+                   aria-hidden="true"></i>
+              </button>
+            </span>
+          </div>
+          <span
+            i18n
+            class="help-block"
+            *ngIf="form.showError('configuration.' + option.name, cfgFormGroup, 'min')">The mininum value is 0</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</fieldset>

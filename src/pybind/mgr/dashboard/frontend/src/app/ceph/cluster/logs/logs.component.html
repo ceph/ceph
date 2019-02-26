@@ -1,0 +1,35 @@
+<div *ngIf="contentData">
+<tabset>
+  <tab i18n-heading
+       heading="Cluster Logs">
+  <div class="well">
+    <div *ngIf="contentData.clog">
+      <p *ngFor="let line of contentData.clog">
+        <span class="timestamp">{{ line.stamp }}</span>
+        <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
+        <span class="message">{{ line.message }}</span>
+      </p>
+    </div>
+    <div *ngIf="contentData.clog.length === 0">
+      <p i18n>No entries found</p>
+    </div>
+  </div>
+  </tab>
+
+  <tab i18n-heading
+       heading="Audit Logs">
+  <div class="well">
+    <div *ngIf="contentData.audit_log">
+      <p *ngFor="let line of contentData.audit_log">
+        <span class="timestamp">{{ line.stamp }}</span>
+        <span class="priority {{ line.priority | logPriority }}">{{ line.priority }}</span>
+        <span class="message">{{ line.message }}</span>
+      </p>
+    </div>
+    <div *ngIf="contentData.audit_log.length === 0">
+      <p i18n>No entries found</p>
+    </div>
+  </div>
+  </tab>
+</tabset>
+</div>

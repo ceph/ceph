@@ -1,7 +1,7 @@
 from pecan import expose
 from pecan.rest import RestController
 
-from restful import common, module
+from restful import common, context
 from collections import defaultdict
 
 from restful.decorators import auth
@@ -14,11 +14,11 @@ class CrushRule(RestController):
         """
         Show crush rules
         """
-        rules = module.instance.get('osd_map_crush')['rules']
-        nodes = module.instance.get('osd_map_tree')['nodes']
+        crush = context.instance.get('osd_map_crush')
+        rules = crush['rules']
 
         for rule in rules:
-            rule['osd_count'] = len(common.crush_rule_osds(nodes, rule))
+            rule['osd_count'] = len(common.crush_rule_osds(crush['buckets'], rule))
 
         return rules
 

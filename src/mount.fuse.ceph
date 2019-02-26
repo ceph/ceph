@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python3
 '''
 Helper to mount ceph-fuse from /etc/fstab.  To use, add an entry
 like:
@@ -11,11 +11,11 @@ none    /mnt/ceph  fuse.ceph   ceph.id=myuser,ceph.conf=/etc/ceph/foo.conf,_netd
 ceph-fuse options are specified in the fs_mntops(4) column and must begin
 with 'ceph.' prefix. This way ceph related fs options will be passed to
 ceph-fuse and others will be ignored by ceph-fuse.
-First two examples above, for example, speficy that ceph-fuse will authenticate
-as client.admin. Third example specify, that ceph-fuse will authenticate as
+
+The first two examples above specify that ceph-fuse will authenticate
+as client.admin. The third example specify that ceph-fuse will authenticate as
 client.myuser and also sets 'conf' option to '/etc/ceph/foo.conf' via ceph-fuse
-command line.
-Any valid ceph-fuse options can be passed this way.
+command line. Any valid ceph-fuse options can be passed this way.
 
 NOTE:
 Old format is also supported

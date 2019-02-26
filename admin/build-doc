@@ -21,7 +21,7 @@ if command -v dpkg >/dev/null; then
     fi
 elif command -v yum >/dev/null; then
     for package in python-devel python-pip python-virtualenv doxygen ditaa ant libxml2-devel libxslt-devel Cython graphviz; do
-	if ! rpm -q $package >/dev/null ; then
+	if ! rpm -q --whatprovides $package >/dev/null ; then
 		missing="${missing:+$missing }$package"
 	fi
     done
@@ -57,7 +57,7 @@ cd build-doc
 [ -z "$vdir" ] && vdir="$TOPDIR/build-doc/virtualenv"
 
 if [ ! -e $vdir ]; then
-    virtualenv --system-site-packages $vdir -p python2
+    virtualenv --system-site-packages $vdir
 fi
 $vdir/bin/pip install --quiet -r $TOPDIR/admin/doc-requirements.txt
 
@@ -86,9 +86,14 @@ for bind in rados rbd cephfs rgw; do
         CFLAGS="-iquote$TOPDIR/src/include" \
         CPPFLAGS="-iquote$TOPDIR/src/include" \
         LDFLAGS="-L$vdir/lib -Wl,--no-as-needed" \
-        $vdir/bin/pip install $TOPDIR/src/pybind/${bind}
+        $vdir/bin/pip install --upgrade $TOPDIR/src/pybind/${bind}
     # rgwfile_version(), librgw_create(), rgw_mount()
-    nm $vdir/lib/python*/*-packages/${bind}.so | grep -E "U (lib)?${bind}" | \
+    # since py3.5, distutils adds postfix in between ${bind} and so
+    lib_fn=$vdir/lib/python*/*-packages/${bind}.*.so
+    if [ ! -e $lib_fn ]; then
+       lib_fn=$vdir/lib/python*/*-packages/${bind}.so
+    fi
+    nm $lib_fn | grep -E "U (lib)?${bind}" | \
         awk '{ print "void "$2"(void) {}" }' | \
         gcc -shared -o $vdir/lib/lib${bind}.so.1 -xc -
     if [ ${bind} != rados ]; then
@@ -106,14 +111,36 @@ for target in $sphinx_targets; do
     case $target in
         html)
             builder=dirhtml
+            extra_opt="-D graphviz_output_format=svg"
             ;;
         man)
             extra_opt="-t man"
             ;;
     esac
-    $vdir/bin/sphinx-build -a -b $builder $extra_opt -d doctrees \
+    # Build with -W so that warnings are treated as errors and this fails
+    $vdir/bin/sphinx-build -W -a -b $builder $extra_opt -d doctrees \
                            $TOPDIR/doc $TOPDIR/build-doc/output/$target
+
+
 done
+
+# build the releases.json. this reads in the yaml version and dumps
+# out the json representation of the same file. the resulting releases.json
+# should be served from the root of hosted site.
+$vdir/bin/python << EOF > $TOPDIR/build-doc/output/html/releases.json
+from __future__ import print_function
+import datetime
+import json
+import yaml
+
+def json_serialize(obj):
+    if isinstance(obj, datetime.date):
+        return obj.isoformat()
+
+with open("$TOPDIR/doc/releases/releases.yml", 'r') as fp:
+    releases = yaml.load(fp)
+    print(json.dumps(releases, indent=2, default=json_serialize))
+EOF
 
 #
 # Build and install JavaDocs

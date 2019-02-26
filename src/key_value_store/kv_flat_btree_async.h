@@ -32,7 +32,6 @@
 #include <sstream>
 #include <stdarg.h>
 
-using namespace std;
 using ceph::bufferlist;
 
 enum {
@@ -105,14 +104,14 @@ struct key_data {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(raw_key, bl);
-    ::encode(prefix, bl);
+    encode(raw_key, bl);
+    encode(prefix, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(raw_key, p);
-    ::decode(prefix, p);
+    decode(raw_key, p);
+    decode(prefix, p);
     DECODE_FINISH(p);
   }
 };
@@ -176,24 +175,24 @@ struct object_data {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(min_kdata, bl);
-    ::encode(max_kdata, bl);
-    ::encode(name, bl);
-    ::encode(omap, bl);
-    ::encode(unwritable, bl);
-    ::encode(version, bl);
-    ::encode(size, bl);
+    encode(min_kdata, bl);
+    encode(max_kdata, bl);
+    encode(name, bl);
+    encode(omap, bl);
+    encode(unwritable, bl);
+    encode(version, bl);
+    encode(size, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(min_kdata, p);
-    ::decode(max_kdata, p);
-    ::decode(name, p);
-    ::decode(omap, p);
-    ::decode(unwritable, p);
-    ::decode(version, p);
-    ::decode(size, p);
+    decode(min_kdata, p);
+    decode(max_kdata, p);
+    decode(name, p);
+    decode(omap, p);
+    decode(unwritable, p);
+    decode(version, p);
+    decode(size, p);
     DECODE_FINISH(p);
   }
 };
@@ -232,16 +231,16 @@ struct create_data {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(min, bl);
-    ::encode(max, bl);
-    ::encode(obj, bl);
+    encode(min, bl);
+    encode(max, bl);
+    encode(obj, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(min, p);
-    ::decode(max, p);
-    ::decode(obj, p);
+    decode(min, p);
+    decode(max, p);
+    decode(obj, p);
     DECODE_FINISH(p);
   }
 };
@@ -279,18 +278,18 @@ struct delete_data {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(min, bl);
-    ::encode(max, bl);
-    ::encode(obj, bl);
-    ::encode(version, bl);
+    encode(min, bl);
+    encode(max, bl);
+    encode(obj, bl);
+    encode(version, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(min, p);
-    ::decode(max, p);
-    ::decode(obj, p);
-    ::decode(version, p);
+    decode(min, p);
+    decode(max, p);
+    decode(obj, p);
+    decode(version, p);
     DECODE_FINISH(p);
   }
 };
@@ -355,24 +354,24 @@ struct index_data {
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1,1,bl);
-    ::encode(prefix, bl);
-    ::encode(min_kdata, bl);
-    ::encode(kdata, bl);
-    ::encode(ts, bl);
-    ::encode(to_create, bl);
-    ::encode(to_delete, bl);
-    ::encode(obj, bl);
+    encode(prefix, bl);
+    encode(min_kdata, bl);
+    encode(kdata, bl);
+    encode(ts, bl);
+    encode(to_create, bl);
+    encode(to_delete, bl);
+    encode(obj, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator &p) {
+  void decode(bufferlist::const_iterator &p) {
     DECODE_START(1, p);
-    ::decode(prefix, p);
-    ::decode(min_kdata, p);
-    ::decode(kdata, p);
-    ::decode(ts, p);
-    ::decode(to_create, p);
-    ::decode(to_delete, p);
-    ::decode(obj, p);
+    decode(prefix, p);
+    decode(min_kdata, p);
+    decode(kdata, p);
+    decode(ts, p);
+    decode(to_create, p);
+    decode(to_delete, p);
+    decode(obj, p);
     DECODE_FINISH(p);
   }
 
@@ -813,7 +812,7 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
   /**
    * sets this kvba to call inject before every ObjectWriteOperation.
    * If inject is wait and wait_time is set, wait will have a 10% chance of
-   * sleeping for waite_time miliseconds.
+   * sleeping for waite_time milliseconds.
    */
   void set_inject(injection_t inject, int wait_time) override;
 

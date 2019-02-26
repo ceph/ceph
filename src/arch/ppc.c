@@ -14,10 +14,10 @@ int ceph_arch_ppc_crc32 = 0;
 
 #include <stdio.h>
 
-#if __linux__ && __powerpc64__
+#ifdef HAVE_PPC64LE
 #include <sys/auxv.h>
 #include <asm/cputable.h>
-#endif /* __linux__ && __powerpc64__ */
+#endif /* HAVE_PPC64LE */
 
 #ifndef PPC_FEATURE2_VEC_CRYPTO
 #define PPC_FEATURE2_VEC_CRYPTO		0x02000000
@@ -31,9 +31,9 @@ int ceph_arch_ppc_probe(void)
 {
   ceph_arch_ppc_crc32 = 0;
 
-#if __linux__ && __powerpc64__
+#ifdef HAVE_PPC64LE
   if (getauxval(AT_HWCAP2) & PPC_FEATURE2_VEC_CRYPTO) ceph_arch_ppc_crc32 = 1;
-#endif /* __linux__ && __powerpc64__ */
+#endif /* HAVE_PPC64LE */
 
   return 0;
 }

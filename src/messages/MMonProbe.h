@@ -20,10 +20,12 @@
 #include "msg/Message.h"
 #include "mon/MonMap.h"
 
-class MMonProbe : public Message {
+class MMonProbe : public MessageInstance<MMonProbe> {
 public:
-  static const int HEAD_VERSION = 6;
-  static const int COMPAT_VERSION = 5;
+  friend factory;
+
+  static constexpr int HEAD_VERSION = 7;
+  static constexpr int COMPAT_VERSION = 5;
 
   enum {
     OP_PROBE = 1,
@@ -47,31 +49,33 @@ public:
   }
   
   uuid_d fsid;
-  int32_t op;
+  int32_t op = 0;
   string name;
   set<int32_t> quorum;
   bufferlist monmap_bl;
-  version_t paxos_first_version;
-  version_t paxos_last_version;
-  bool has_ever_joined;
-  uint64_t required_features;
+  version_t paxos_first_version = 0;
+  version_t paxos_last_version = 0;
+  bool has_ever_joined = 0;
+  uint64_t required_features = 0;
+  uint8_t mon_release = 0;
 
   MMonProbe()
-    : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION) {}
-  MMonProbe(const uuid_d& f, int o, const string& n, bool hej)
-    : Message(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION) {}
+  MMonProbe(const uuid_d& f, int o, const string& n, bool hej, uint8_t mr)
+    : MessageInstance(MSG_MON_PROBE, HEAD_VERSION, COMPAT_VERSION),
       fsid(f),
       op(o),
       name(n),
       paxos_first_version(0),
       paxos_last_version(0),
       has_ever_joined(hej),
-      required_features(0) {}
+      required_features(0),
+      mon_release(mr) {}
 private:
   ~MMonProbe() override {}
 
 public:  
-  const char *get_type_name() const override { return "mon_probe"; }
+  std::string_view get_type_name() const override { return "mon_probe"; }
   void print(ostream& out) const override {
     out << "mon_probe(" << get_opname(op) << " " << fsid << " name " << name;
     if (quorum.size())
@@ -86,10 +90,13 @@ public:
       out << " new";
     if (required_features)
       out << " required_features " << required_features;
+    if (mon_release)
+      out << " mon_release " << (int)mon_release;
     out << ")";
   }
   
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     if (monmap_bl.length() &&
 	((features & CEPH_FEATURE_MONENC) == 0 ||
 	 (features & CEPH_FEATURE_MSG_ADDR2) == 0)) {
@@ -100,30 +107,35 @@ public:
       t.encode(monmap_bl, features);
     }
 
-    ::encode(fsid, payload);
-    ::encode(op, payload);
-    ::encode(name, payload);
-    ::encode(quorum, payload);
-    ::encode(monmap_bl, payload);
-    ::encode(has_ever_joined, payload);
-    ::encode(paxos_first_version, payload);
-    ::encode(paxos_last_version, payload);
-    ::encode(required_features, payload);
+    encode(fsid, payload);
+    encode(op, payload);
+    encode(name, payload);
+    encode(quorum, payload);
+    encode(monmap_bl, payload);
+    encode(has_ever_joined, payload);
+    encode(paxos_first_version, payload);
+    encode(paxos_last_version, payload);
+    encode(required_features, payload);
+    encode(mon_release, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(fsid, p);
-    ::decode(op, p);
-    ::decode(name, p);
-    ::decode(quorum, p);
-    ::decode(monmap_bl, p);
-    ::decode(has_ever_joined, p);
-    ::decode(paxos_first_version, p);
-    ::decode(paxos_last_version, p);
+    auto p = payload.cbegin();
+    decode(fsid, p);
+    decode(op, p);
+    decode(name, p);
+    decode(quorum, p);
+    decode(monmap_bl, p);
+    decode(has_ever_joined, p);
+    decode(paxos_first_version, p);
+    decode(paxos_last_version, p);
     if (header.version >= 6)
-      ::decode(required_features, p);
+      decode(required_features, p);
     else
       required_features = 0;
+    if (header.version >= 7)
+      decode(mon_release, p);
+    else
+      mon_release = 0;
   }
 };
 

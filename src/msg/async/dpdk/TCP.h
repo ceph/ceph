@@ -29,18 +29,15 @@
 #include <functional>
 #include <deque>
 #include <chrono>
-#include <random>
 #include <stdexcept>
 #include <system_error>
-
-#define CRYPTOPP_ENABLE_NAMESPACE_WEAK 1
-#include <cryptopp/md5.h>
 
 #include "msg/async/dpdk/EventDPDK.h"
 
 #include "include/utime.h"
 #include "common/Throttle.h"
 #include "common/ceph_time.h"
+#include "common/ceph_crypto.h"
 #include "msg/async/Event.h"
 #include "IPChecksum.h"
 #include "IP.h"
@@ -48,6 +45,8 @@
 #include "byteorder.h"
 #include "shared_ptr.h"
 #include "PacketUtil.h"
+
+#include "include/random.h"
 
 struct tcp_hdr;
 
@@ -234,7 +233,7 @@ class tcp {
 
    public:
     C_handle_delayed_ack(tcb *t): tc(t) { }
-    void do_request(int r) {
+    void do_request(uint64_t r) {
       tc->_nr_full_seg_received = 0;
       tc->output();
     }
@@ -245,7 +244,7 @@ class tcp {
 
    public:
     C_handle_retransmit(tcb *t): tc(t) { }
-    void do_request(int r) {
+    void do_request(uint64_t r) {
       tc->retransmit();
     }
   };
@@ -255,7 +254,7 @@ class tcp {
 
    public:
     C_handle_persist(tcb *t): tc(t) { }
-    void do_request(int r) {
+    void do_request(uint64_t r) {
       tc->persist();
     }
   };
@@ -265,7 +264,7 @@ class tcp {
 
    public:
     C_all_data_acked(tcb *t): tc(t) {}
-    void do_request(int fd_or_id) {
+    void do_request(uint64_t fd_or_id) {
       tc->close_final_cleanup();
     }
   };
@@ -274,7 +273,7 @@ class tcp {
     lw_shared_ptr<tcb> tc;
    public:
     C_actual_remove_tcb(tcb *t): tc(t->shared_from_this()) {}
-    void do_request(int r) {
+    void do_request(uint64_t r) {
       delete this;
     }
   };
@@ -381,11 +380,8 @@ class tcp {
       // 512 bits secretkey for ISN generating
       uint32_t key[16];
       isn_secret () {
-        std::random_device rd;
-        std::default_random_engine e(rd());
-        std::uniform_int_distribution<uint32_t> dist{};
         for (auto& k : key) {
-          k = dist(e);
+          k = ceph::util::generate_random_number<uint32_t>(0, std::numeric_limits<uint32_t>::max());
         }
       }
     };
@@ -1067,7 +1063,7 @@ Packet tcp<InetTraits>::tcb::get_transmit_packet() {
   // Max number of TCP payloads we can pass to NIC
   uint32_t len;
   if (_tcp.get_hw_features().tx_tso) {
-    // FIXME: Info tap device the size of the splitted packet
+    // FIXME: Info tap device the size of the split packet
     len = _tcp.get_hw_features().max_packet_len - tcp_hdr_len_min - InetTraits::ip_hdr_len_min;
   } else {
     len = std::min(uint16_t(_tcp.get_hw_features().mtu - tcp_hdr_len_min - InetTraits::ip_hdr_len_min), _snd.mss);
@@ -1237,7 +1233,7 @@ Tub<Packet> tcp<InetTraits>::tcb::read() {
 template <typename InetTraits>
 int tcp<InetTraits>::tcb::send(Packet p) {
   // We can not send after the connection is closed
-  assert(!_snd.closed);
+  ceph_assert(!_snd.closed);
 
   if (in_state(CLOSED))
     return -ECONNRESET;
@@ -1443,7 +1439,9 @@ tcp_sequence tcp<InetTraits>::tcb::get_isn() {
   hash[1] = _foreign_ip.ip;
   hash[2] = (_local_port << 16) + _foreign_port;
   hash[3] = _isn_secret.key[15];
-  CryptoPP::Weak::MD5::Transform(hash, _isn_secret.key);
+  ceph::crypto::MD5 md5;
+  md5.Update((const unsigned char*)_isn_secret.key, sizeof(_isn_secret.key));
+  md5.Final((unsigned char*)hash);
   auto seq = hash[0];
   auto m = duration_cast<microseconds>(clock_type::now().time_since_epoch());
   seq += m.count() / 4;
@@ -1462,7 +1460,7 @@ Tub<typename InetTraits::l4packet> tcp<InetTraits>::tcb::get_packet() {
     return p;
   }
 
-  assert(!_packetq.empty());
+  ceph_assert(!_packetq.empty());
 
   p = std::move(_packetq.front());
   _packetq.pop_front();

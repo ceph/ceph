@@ -1,0 +1,30 @@
+overrides:
+  ceph:
+    wait-for-scrub: false
+    log-whitelist:
+    - '!= data_digest'
+    - '!= omap_digest'
+    - '!= size'
+    - 'deep-scrub 0 missing, 1 inconsistent objects'
+    - 'deep-scrub [0-9]+ errors'
+    - 'repair 0 missing, 1 inconsistent objects'
+    - 'repair [0-9]+ errors, [0-9]+ fixed'
+    - 'shard [0-9]+ .* : missing'
+    - 'deep-scrub 1 missing, 1 inconsistent objects'
+    - 'does not match object info size'
+    - 'attr name mistmatch'
+    - 'deep-scrub 1 missing, 0 inconsistent objects'
+    - 'failed to pick suitable auth object'
+    - 'candidate size [0-9]+ info size [0-9]+ mismatch'
+    - overall HEALTH_
+    - \(OSDMAP_FLAGS\)
+    - \(OSD_
+    - \(PG_
+    - \(OSD_SCRUB_ERRORS\)
+    - \(TOO_FEW_PGS\)
+    conf:
+      osd:
+        osd deep scrub update digest min age: 0
+        osd skip data digest: false
+tasks:
+- scrub_test:

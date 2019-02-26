@@ -23,13 +23,13 @@ configuration file. To add settings directly to a specific Ceph OSD Daemon
 file. For example:
 
 .. code-block:: ini
-	
+
 	[osd]
-		osd journal size = 1024
-	
+		osd journal size = 5120
+
 	[osd.0]
 		host = osd-host-a
-		
+
 	[osd.1]
 		host = osd-host-b
 
@@ -41,8 +41,10 @@ General Settings
 
 The following settings provide an Ceph OSD Daemon's ID, and determine paths to
 data and journals. Ceph deployment scripts typically generate the UUID
-automatically. We **DO NOT** recommend changing the default paths for data or
-journals, as it makes it more problematic to troubleshoot Ceph later. 
+automatically.
+
+.. warning:: **DO NOT** change the default paths for data or journals, as it
+             makes it more problematic to troubleshoot Ceph later.
 
 The journal size should be at least twice the product of the expected drive
 speed multiplied by ``filestore max sync interval``. However, the most common
@@ -55,35 +57,42 @@ that Ceph uses the entire partition for the journal.
 :Description: The universally unique identifier (UUID) for the Ceph OSD Daemon.
 :Type: UUID
 :Default: The UUID.
-:Note: The ``osd uuid`` applies to a single Ceph OSD Daemon. The ``fsid`` 
+:Note: The ``osd uuid`` applies to a single Ceph OSD Daemon. The ``fsid``
        applies to the entire cluster.
 
 
-``osd data`` 
+``osd data``
 
-:Description: The path to the OSDs data. You must create the directory when 
-              deploying Ceph. You should mount a drive for OSD data at this 
-              mount point. We do not recommend changing the default. 
+:Description: The path to the OSDs data. You must create the directory when
+              deploying Ceph. You should mount a drive for OSD data at this
+              mount point. We do not recommend changing the default.
 
 :Type: String
 :Default: ``/var/lib/ceph/osd/$cluster-$id``
 
 
-``osd max write size`` 
+``osd max write size``
 
 :Description: The maximum size of a write in megabytes.
 :Type: 32-bit Integer
 :Default: ``90``
 
 
-``osd client message size cap`` 
+``osd max object size``
+
+:Description: The maximum size of a RADOS object in bytes.
+:Type: 32-bit Unsigned Integer
+:Default: 128MB
+
+
+``osd client message size cap``
 
 :Description: The largest client data message allowed in memory.
-:Type: 64-bit Integer Unsigned
-:Default: 500MB default. ``500*1024L*1024L`` 
+:Type: 64-bit Unsigned Integer
+:Default: 500MB default. ``500*1024L*1024L``
 
 
-``osd class dir`` 
+``osd class dir``
 
 :Description: The class path for RADOS class plug-ins.
 :Type: String
@@ -96,7 +105,7 @@ File System Settings
 ====================
 Ceph builds and mounts file systems which are used for Ceph OSDs.
 
-``osd mkfs options {fs-type}`` 
+``osd mkfs options {fs-type}``
 
 :Description: Options used when creating a new Ceph OSD of type {fs-type}.
 
@@ -107,7 +116,7 @@ Ceph builds and mounts file systems which are used for Ceph OSDs.
 For example::
   ``osd mkfs options xfs = -f -d agcount=24``
 
-``osd mount options {fs-type}`` 
+``osd mount options {fs-type}``
 
 :Description: Options used when mounting a Ceph OSD of type {fs-type}.
 
@@ -129,32 +138,25 @@ the  following path::
 
 	/var/lib/ceph/osd/$cluster-$id/journal
 
-Without performance optimization, Ceph stores the journal on the same disk as
-the Ceph OSD Daemons data. An Ceph OSD Daemon optimized for performance may use
-a separate disk to store journal data (e.g., a solid state drive delivers high
-performance journaling).
+When using a single device type (for example, spinning drives), the journals
+should be *colocated*: the logical volume (or partition) should be in the same
+device as the ``data`` logical volume.
 
-Ceph's default ``osd journal size`` is 0, so you will need to set this in your
-``ceph.conf`` file. A journal size should find the product of the ``filestore
-max sync interval`` and the expected throughput, and multiply the product by
-two (2)::  
-	  
-	osd journal size = {2 * (expected throughput * filestore max sync interval)}
+When using a mix of fast (SSDs, NVMe) devices with slower ones (like spinning
+drives) it makes sense to place the journal on the faster device, while
+``data`` occupies the slower device fully.
 
-The expected throughput number should include the expected disk throughput
-(i.e., sustained data transfer rate), and network throughput. For example, 
-a 7200 RPM disk will likely have approximately 100 MB/s. Taking the ``min()``
-of the disk and network throughput should provide a reasonable expected 
-throughput. Some users just start off with a 10GB journal size. For 
-example::
-
-	osd journal size = 10000
+The default ``osd journal size`` value is 5120 (5 gigabytes), but it can be
+larger, in which case it will need to be set in the ``ceph.conf`` file::
 
 
-``osd journal`` 
+	osd journal size = 10240
+
+
+``osd journal``
 
 :Description: The path to the OSD's journal. This may be a path to a file or a
-              block device (such as a partition of an SSD). If it is a file, 
+              block device (such as a partition of an SSD). If it is a file,
               you must create the directory to contain it. We recommend using a
               drive separate from the ``osd data`` drive.
 
@@ -162,17 +164,12 @@ example::
 :Default: ``/var/lib/ceph/osd/$cluster-$id/journal``
 
 
-``osd journal size`` 
+``osd journal size``
 
-:Description: The size of the journal in megabytes. If this is 0, and the 
-              journal is a block device, the entire block device is used. 
-              Since v0.54, this is ignored if the journal is a block device, 
-              and the entire block device is used.
+:Description: The size of the journal in megabytes.
 
 :Type: 32-bit Integer
 :Default: ``5120``
-:Recommended: Begin with 1GB. Should be at least twice the product of the 
-              expected speed multiplied by ``filestore max sync interval``.
 
 
 See `Journal Config Reference`_ for additional details.
@@ -211,13 +208,13 @@ performance. You can adjust the following settings to increase or decrease
 scrubbing operations.
 
 
-``osd max scrubs`` 
+``osd max scrubs``
 
-:Description: The maximum number of simultaneous scrub operations for 
+:Description: The maximum number of simultaneous scrub operations for
               a Ceph OSD Daemon.
 
 :Type: 32-bit Int
-:Default: ``1`` 
+:Default: ``1``
 
 ``osd scrub begin hour``
 
@@ -238,6 +235,22 @@ scrubbing operations.
 :Default: ``24``
 
 
+``osd scrub begin week day``
+
+:Description: This restricts scrubbing to this day of the week or later.
+              0 or 7 = Sunday, 1 = Monday, etc.
+:Type: Integer in the range of 0 to 7
+:Default: ``0``
+
+
+``osd scrub end week day``
+
+:Description: This restricts scrubbing to days of the week earlier than this.
+              0 or 7 = Sunday, 1 = Monday, etc.
+:Type: Integer in the range of 0 to 7
+:Default: ``7``
+
+
 ``osd scrub during recovery``
 
 :Description: Allow scrub during recovery. Setting this to ``false`` will disable
@@ -248,33 +261,33 @@ scrubbing operations.
 :Default: ``true``
 
 
-``osd scrub thread timeout`` 
+``osd scrub thread timeout``
 
 :Description: The maximum time in seconds before timing out a scrub thread.
 :Type: 32-bit Integer
-:Default: ``60`` 
+:Default: ``60``
 
 
-``osd scrub finalize thread timeout`` 
+``osd scrub finalize thread timeout``
 
-:Description: The maximum time in seconds before timing out a scrub finalize 
+:Description: The maximum time in seconds before timing out a scrub finalize
               thread.
 
 :Type: 32-bit Integer
 :Default: ``60*10``
 
 
-``osd scrub load threshold`` 
+``osd scrub load threshold``
 
-:Description: The maximum load. Ceph will not scrub when the system load 
-              (as defined by ``getloadavg()``) is higher than this number. 
+:Description: The normalized maximum load. Ceph will not scrub when the system load
+              (as defined by ``getloadavg() / number of online cpus``) is higher than this number.
               Default is ``0.5``.
 
 :Type: Float
-:Default: ``0.5`` 
+:Default: ``0.5``
 
 
-``osd scrub min interval`` 
+``osd scrub min interval``
 
 :Description: The minimal interval in seconds for scrubbing the Ceph OSD Daemon
               when the Ceph Storage Cluster load is low.
@@ -283,9 +296,9 @@ scrubbing operations.
 :Default: Once per day. ``60*60*24``
 
 
-``osd scrub max interval`` 
+``osd scrub max interval``
 
-:Description: The maximum interval in seconds for scrubbing the Ceph OSD Daemon 
+:Description: The maximum interval in seconds for scrubbing the Ceph OSD Daemon
               irrespective of cluster load.
 
 :Type: Float
@@ -320,7 +333,7 @@ scrubbing operations.
 
 ``osd deep scrub interval``
 
-:Description: The interval for "deep" scrubbing (fully reading all data). The 
+:Description: The interval for "deep" scrubbing (fully reading all data). The
               ``osd scrub load threshold`` does not affect this setting.
 
 :Type: Float
@@ -350,24 +363,6 @@ scrubbing operations.
 Operations
 ==========
 
-Operations settings allow you to configure the number of threads for servicing
-requests. If you set ``osd op threads`` to ``0``, it disables multi-threading.
-By default, Ceph  uses two threads with a 30 second timeout and a 30 second
-complaint time if an operation doesn't complete within those time parameters.
-You can set operations priority weights between client operations and
-recovery operations to ensure optimal performance during recovery.
-
-
-``osd op threads`` 
-
-:Description: The number of threads to service Ceph OSD Daemon operations. 
-              Set to ``0`` to disable it. Increasing the number may increase 
-              the request processing rate.
-
-:Type: 32-bit Integer
-:Default: ``2`` 
-
-
 ``osd op queue``
 
 :Description: This sets the type of queue to be used for prioritizing ops
@@ -377,13 +372,18 @@ recovery operations to ensure optimal performance during recovery.
               token bucket system which when there are sufficient tokens will
               dequeue high priority queues first. If there are not enough
               tokens available, queues are dequeued low priority to high priority.
-              The new WeightedPriorityQueue (``wpq``) dequeues all priorities in
+              The WeightedPriorityQueue (``wpq``) dequeues all priorities in
               relation to their priorities to prevent starvation of any queue.
               WPQ should help in cases where a few OSDs are more overloaded
-              than others. Requires a restart.
+              than others. The new mClock based OpClassQueue
+              (``mclock_opclass``) prioritizes operations based on which class
+              they belong to (recovery, scrub, snaptrim, client op, osd subop).
+              And, the mClock based ClientQueue (``mclock_client``) also
+              incorporates the client identifier in order to promote fairness
+              between clients. See `QoS Based on mClock`_. Requires a restart.
 
 :Type: String
-:Valid Choices: prio, wpq
+:Valid Choices: prio, wpq, mclock_opclass, mclock_client
 :Default: ``prio``
 
 
@@ -406,21 +406,21 @@ recovery operations to ensure optimal performance during recovery.
 
 ``osd client op priority``
 
-:Description: The priority set for client operations. It is relative to 
+:Description: The priority set for client operations. It is relative to
               ``osd recovery op priority``.
 
 :Type: 32-bit Integer
-:Default: ``63`` 
+:Default: ``63``
 :Valid Range: 1-63
 
 
 ``osd recovery op priority``
 
-:Description: The priority set for recovery operations. It is relative to 
+:Description: The priority set for recovery operations. It is relative to
               ``osd client op priority``.
 
 :Type: 32-bit Integer
-:Default: ``3`` 
+:Default: ``3``
 :Valid Range: 1-63
 
 
@@ -444,30 +444,30 @@ recovery operations to ensure optimal performance during recovery.
 :Valid Range: 1-63
 
 
-``osd op thread timeout`` 
+``osd op thread timeout``
 
 :Description: The Ceph OSD Daemon operation thread timeout in seconds.
 :Type: 32-bit Integer
-:Default: ``15`` 
+:Default: ``15``
 
 
-``osd op complaint time`` 
+``osd op complaint time``
 
 :Description: An operation becomes complaint worthy after the specified number
               of seconds have elapsed.
 
 :Type: Float
-:Default: ``30`` 
+:Default: ``30``
 
 
-``osd disk threads`` 
+``osd disk threads``
 
-:Description: The number of disk threads, which are used to perform background 
-              disk intensive OSD operations such as scrubbing and snap 
+:Description: The number of disk threads, which are used to perform background
+              disk intensive OSD operations such as scrubbing and snap
               trimming.
 
 :Type: 32-bit Integer
-:Default: ``1`` 
+:Default: ``1``
 
 ``osd disk thread ioprio class``
 
@@ -481,8 +481,8 @@ recovery operations to ensure optimal performance during recovery.
 	      down scrubbing on an OSD that is busy handling client
 	      operations. ``be`` is the default and is the same
 	      priority as all other threads in the OSD. ``rt`` means
-	      the disk thread will have precendence over all other
-	      threads in the OSD. Note: Only works with the Linux Kernel 
+	      the disk thread will have precedence over all other
+	      threads in the OSD. Note: Only works with the Linux Kernel
 	      CFQ scheduler. Since Jewel scrubbing is no longer carried
 	      out by the disk iothread, see osd priority options instead.
 :Type: String
@@ -523,6 +523,274 @@ recovery operations to ensure optimal performance during recovery.
 :Type: 32-bit Integer
 :Default: ``5``
 
+
+QoS Based on mClock
+-------------------
+
+Ceph's use of mClock is currently in the experimental phase and should
+be approached with an exploratory mindset.
+
+Core Concepts
+`````````````
+
+The QoS support of Ceph is implemented using a queueing scheduler
+based on `the dmClock algorithm`_. This algorithm allocates the I/O
+resources of the Ceph cluster in proportion to weights, and enforces
+the constraints of minimum reservation and maximum limitation, so that
+the services can compete for the resources fairly. Currently the
+*mclock_opclass* operation queue divides Ceph services involving I/O
+resources into following buckets:
+
+- client op: the iops issued by client
+- osd subop: the iops issued by primary OSD
+- snap trim: the snap trimming related requests
+- pg recovery: the recovery related requests
+- pg scrub: the scrub related requests
+
+And the resources are partitioned using following three sets of tags. In other
+words, the share of each type of service is controlled by three tags:
+
+#. reservation: the minimum IOPS allocated for the service.
+#. limitation: the maximum IOPS allocated for the service.
+#. weight: the proportional share of capacity if extra capacity or system
+   oversubscribed.
+
+In Ceph operations are graded with "cost". And the resources allocated
+for serving various services are consumed by these "costs". So, for
+example, the more reservation a services has, the more resource it is
+guaranteed to possess, as long as it requires. Assuming there are 2
+services: recovery and client ops:
+
+- recovery: (r:1, l:5, w:1)
+- client ops: (r:2, l:0, w:9)
+
+The settings above ensure that the recovery won't get more than 5
+requests per second serviced, even if it requires so (see CURRENT
+IMPLEMENTATION NOTE below), and no other services are competing with
+it. But if the clients start to issue large amount of I/O requests,
+neither will they exhaust all the I/O resources. 1 request per second
+is always allocated for recovery jobs as long as there are any such
+requests. So the recovery jobs won't be starved even in a cluster with
+high load. And in the meantime, the client ops can enjoy a larger
+portion of the I/O resource, because its weight is "9", while its
+competitor "1". In the case of client ops, it is not clamped by the
+limit setting, so it can make use of all the resources if there is no
+recovery ongoing.
+
+Along with *mclock_opclass* another mclock operation queue named
+*mclock_client* is available. It divides operations based on category
+but also divides them based on the client making the request. This
+helps not only manage the distribution of resources spent on different
+classes of operations but also tries to insure fairness among clients.
+
+CURRENT IMPLEMENTATION NOTE: the current experimental implementation
+does not enforce the limit values. As a first approximation we decided
+not to prevent operations that would otherwise enter the operation
+sequencer from doing so.
+
+Subtleties of mClock
+````````````````````
+
+The reservation and limit values have a unit of requests per
+second. The weight, however, does not technically have a unit and the
+weights are relative to one another. So if one class of requests has a
+weight of 1 and another a weight of 9, then the latter class of
+requests should get 9 executed at a 9 to 1 ratio as the first class.
+However that will only happen once the reservations are met and those
+values include the operations executed under the reservation phase.
+
+Even though the weights do not have units, one must be careful in
+choosing their values due how the algorithm assigns weight tags to
+requests. If the weight is *W*, then for a given class of requests,
+the next one that comes in will have a weight tag of *1/W* plus the
+previous weight tag or the current time, whichever is larger. That
+means if *W* is sufficiently large and therefore *1/W* is sufficiently
+small, the calculated tag may never be assigned as it will get a value
+of the current time. The ultimate lesson is that values for weight
+should not be too large. They should be under the number of requests
+one expects to ve serviced each second.
+
+Caveats
+```````
+
+There are some factors that can reduce the impact of the mClock op
+queues within Ceph. First, requests to an OSD are sharded by their
+placement group identifier. Each shard has its own mClock queue and
+these queues neither interact nor share information among them. The
+number of shards can be controlled with the configuration options
+``osd_op_num_shards``, ``osd_op_num_shards_hdd``, and
+``osd_op_num_shards_ssd``. A lower number of shards will increase the
+impact of the mClock queues, but may have other deleterious effects.
+
+Second, requests are transferred from the operation queue to the
+operation sequencer, in which they go through the phases of
+execution. The operation queue is where mClock resides and mClock
+determines the next op to transfer to the operation sequencer. The
+number of operations allowed in the operation sequencer is a complex
+issue. In general we want to keep enough operations in the sequencer
+so it's always getting work done on some operations while it's waiting
+for disk and network access to complete on other operations. On the
+other hand, once an operation is transferred to the operation
+sequencer, mClock no longer has control over it. Therefore to maximize
+the impact of mClock, we want to keep as few operations in the
+operation sequencer as possible. So we have an inherent tension.
+
+The configuration options that influence the number of operations in
+the operation sequencer are ``bluestore_throttle_bytes``,
+``bluestore_throttle_deferred_bytes``,
+``bluestore_throttle_cost_per_io``,
+``bluestore_throttle_cost_per_io_hdd``, and
+``bluestore_throttle_cost_per_io_ssd``.
+
+A third factor that affects the impact of the mClock algorithm is that
+we're using a distributed system, where requests are made to multiple
+OSDs and each OSD has (can have) multiple shards. Yet we're currently
+using the mClock algorithm, which is not distributed (note: dmClock is
+the distributed version of mClock).
+
+Various organizations and individuals are currently experimenting with
+mClock as it exists in this code base along with their modifications
+to the code base. We hope you'll share you're experiences with your
+mClock and dmClock experiments in the ceph-devel mailing list.
+
+
+``osd push per object cost``
+
+:Description: the overhead for serving a push op
+
+:Type: Unsigned Integer
+:Default: 1000
+
+``osd recovery max chunk``
+
+:Description: the maximum total size of data chunks a recovery op can carry.
+
+:Type: Unsigned Integer
+:Default: 8 MiB
+
+
+``osd op queue mclock client op res``
+
+:Description: the reservation of client op.
+
+:Type: Float
+:Default: 1000.0
+
+
+``osd op queue mclock client op wgt``
+
+:Description: the weight of client op.
+
+:Type: Float
+:Default: 500.0
+
+
+``osd op queue mclock client op lim``
+
+:Description: the limit of client op.
+
+:Type: Float
+:Default: 1000.0
+
+
+``osd op queue mclock osd subop res``
+
+:Description: the reservation of osd subop.
+
+:Type: Float
+:Default: 1000.0
+
+
+``osd op queue mclock osd subop wgt``
+
+:Description: the weight of osd subop.
+
+:Type: Float
+:Default: 500.0
+
+
+``osd op queue mclock osd subop lim``
+
+:Description: the limit of osd subop.
+
+:Type: Float
+:Default: 0.0
+
+
+``osd op queue mclock snap res``
+
+:Description: the reservation of snap trimming.
+
+:Type: Float
+:Default: 0.0
+
+
+``osd op queue mclock snap wgt``
+
+:Description: the weight of snap trimming.
+
+:Type: Float
+:Default: 1.0
+
+
+``osd op queue mclock snap lim``
+
+:Description: the limit of snap trimming.
+
+:Type: Float
+:Default: 0.001
+
+
+``osd op queue mclock recov res``
+
+:Description: the reservation of recovery.
+
+:Type: Float
+:Default: 0.0
+
+
+``osd op queue mclock recov wgt``
+
+:Description: the weight of recovery.
+
+:Type: Float
+:Default: 1.0
+
+
+``osd op queue mclock recov lim``
+
+:Description: the limit of recovery.
+
+:Type: Float
+:Default: 0.001
+
+
+``osd op queue mclock scrub res``
+
+:Description: the reservation of scrub jobs.
+
+:Type: Float
+:Default: 0.0
+
+
+``osd op queue mclock scrub wgt``
+
+:Description: the weight of scrub jobs.
+
+:Type: Float
+:Default: 1.0
+
+
+``osd op queue mclock scrub lim``
+
+:Description: the limit of scrub jobs.
+
+:Type: Float
+:Default: 0.001
+
+.. _the dmClock algorithm: https://www.usenix.org/legacy/event/osdi10/tech/full_papers/Gulati.pdf
+
+
 .. index:: OSD; backfilling
 
 Backfilling
@@ -534,7 +802,7 @@ Daemons to restore the balance. The process of migrating placement groups and
 the objects they contain can reduce the cluster's operational performance
 considerably. To maintain operational performance, Ceph performs this migration
 with 'backfilling', which allows Ceph to set backfill operations to a lower
-priority than requests to read or write data. 
+priority than requests to read or write data.
 
 
 ``osd max backfills``
@@ -544,20 +812,20 @@ priority than requests to read or write data.
 :Default: ``1``
 
 
-``osd backfill scan min`` 
+``osd backfill scan min``
 
 :Description: The minimum number of objects per backfill scan.
 
 :Type: 32-bit Integer
-:Default: ``64`` 
+:Default: ``64``
 
 
-``osd backfill scan max`` 
+``osd backfill scan max``
 
 :Description: The maximum number of objects per backfill scan.
 
 :Type: 32-bit Integer
-:Default: ``512`` 
+:Default: ``512``
 
 
 ``osd backfill retry interval``
@@ -571,46 +839,30 @@ priority than requests to read or write data.
 OSD Map
 =======
 
-OSD maps reflect the OSD daemons operating in the cluster. Over time, the 
+OSD maps reflect the OSD daemons operating in the cluster. Over time, the
 number of map epochs increases. Ceph provides some settings to ensure that
 Ceph performs well as the OSD map grows larger.
 
 
 ``osd map dedup``
 
-:Description: Enable removing duplicates in the OSD map. 
+:Description: Enable removing duplicates in the OSD map.
 :Type: Boolean
 :Default: ``true``
 
 
-``osd map cache size`` 
+``osd map cache size``
 
 :Description: The number of OSD maps to keep cached.
-:Type: 32-bit Integer
-:Default: ``500``
-
-
-``osd map cache bl size``
-
-:Description: The size of the in-memory OSD map cache in OSD daemons. 
 :Type: 32-bit Integer
 :Default: ``50``
 
 
-``osd map cache bl inc size``
-
-:Description: The size of the in-memory OSD map cache incrementals in 
-              OSD daemons.
-
-:Type: 32-bit Integer
-:Default: ``100``
-
-
-``osd map message max`` 
+``osd map message max``
 
 :Description: The maximum map entries allowed per MOSDMap message.
 :Type: 32-bit Integer
-:Default: ``100``
+:Default: ``40``
 
 
 
@@ -635,44 +887,44 @@ intensive.
 
 To maintain operational performance, Ceph performs recovery with limitations on
 the number recovery requests, threads and object chunk sizes which allows Ceph
-perform well in a degraded state. 
+perform well in a degraded state.
 
 
-``osd recovery delay start`` 
+``osd recovery delay start``
 
-:Description: After peering completes, Ceph will delay for the specified number 
+:Description: After peering completes, Ceph will delay for the specified number
               of seconds before starting to recover objects.
 
 :Type: Float
-:Default: ``0`` 
+:Default: ``0``
 
 
-``osd recovery max active`` 
+``osd recovery max active``
 
-:Description: The number of active recovery requests per OSD at one time. More 
-              requests will accelerate recovery, but the requests places an 
+:Description: The number of active recovery requests per OSD at one time. More
+              requests will accelerate recovery, but the requests places an
               increased load on the cluster.
 
 :Type: 32-bit Integer
 :Default: ``3``
 
 
-``osd recovery max chunk`` 
+``osd recovery max chunk``
 
-:Description: The maximum size of a recovered chunk of data to push. 
-:Type: 64-bit Integer Unsigned
-:Default: ``8 << 20`` 
+:Description: The maximum size of a recovered chunk of data to push.
+:Type: 64-bit Unsigned Integer
+:Default: ``8 << 20``
 
 
 ``osd recovery max single start``
 
 :Description: The maximum number of recovery operations per OSD that will be
               newly started when an OSD is recovering.
-:Type: 64-bit Integer Unsigned
+:Type: 64-bit Unsigned Integer
 :Default: ``1``
 
 
-``osd recovery thread timeout`` 
+``osd recovery thread timeout``
 
 :Description: The maximum time in seconds before timing out a recovery thread.
 :Type: 32-bit Integer
@@ -681,7 +933,7 @@ perform well in a degraded state.
 
 ``osd recover clone overlap``
 
-:Description: Preserves clone overlap during recovery. Should always be set 
+:Description: Preserves clone overlap during recovery. Should always be set
               to ``true``.
 
 :Type: Boolean
@@ -690,12 +942,39 @@ perform well in a degraded state.
 
 ``osd recovery sleep``
 
-:Description: Time to sleep before next recovery. Increasing this value will
-              slow down recovery operation while client operations will be
-              less impacted.
+:Description: Time in seconds to sleep before next recovery or backfill op.
+              Increasing this value will slow down recovery operation while
+              client operations will be less impacted.
 
 :Type: Float
-:Default: ``0.01``
+:Default: ``0``
+
+
+``osd recovery sleep hdd``
+
+:Description: Time in seconds to sleep before next recovery or backfill op
+              for HDDs.
+
+:Type: Float
+:Default: ``0.1``
+
+
+``osd recovery sleep ssd``
+
+:Description: Time in seconds to sleep before next recovery or backfill op
+              for SSDs.
+
+:Type: Float
+:Default: ``0``
+
+
+``osd recovery sleep hybrid``
+
+:Description: Time in seconds to sleep before next recovery or backfill op
+              when osd data is on HDD and osd journal is on SSD.
+
+:Type: Float
+:Default: ``0.025``
 
 Tiering
 =======
@@ -722,74 +1001,53 @@ Miscellaneous
 =============
 
 
-``osd snap trim thread timeout`` 
+``osd snap trim thread timeout``
 
 :Description: The maximum time in seconds before timing out a snap trim thread.
 :Type: 32-bit Integer
-:Default: ``60*60*1`` 
+:Default: ``60*60*1``
 
 
-``osd backlog thread timeout`` 
+``osd backlog thread timeout``
 
 :Description: The maximum time in seconds before timing out a backlog thread.
 :Type: 32-bit Integer
-:Default: ``60*60*1`` 
+:Default: ``60*60*1``
 
 
-``osd default notify timeout`` 
+``osd default notify timeout``
 
 :Description: The OSD default notification timeout (in seconds).
-:Type: 32-bit Integer Unsigned
-:Default: ``30`` 
+:Type: 32-bit Unsigned Integer
+:Default: ``30``
 
 
-``osd check for log corruption`` 
+``osd check for log corruption``
 
 :Description: Check log files for corruption. Can be computationally expensive.
 :Type: Boolean
-:Default: ``false`` 
+:Default: ``false``
 
 
-``osd remove thread timeout`` 
+``osd remove thread timeout``
 
 :Description: The maximum time in seconds before timing out a remove OSD thread.
 :Type: 32-bit Integer
 :Default: ``60*60``
 
 
-``osd command thread timeout`` 
+``osd command thread timeout``
 
 :Description: The maximum time in seconds before timing out a command thread.
 :Type: 32-bit Integer
-:Default: ``10*60`` 
+:Default: ``10*60``
 
 
-``osd command max records`` 
+``osd command max records``
 
-:Description: Limits the number of lost objects to return. 
+:Description: Limits the number of lost objects to return.
 :Type: 32-bit Integer
-:Default: ``256`` 
-
-
-``osd auto upgrade tmap`` 
-
-:Description: Uses ``tmap`` for ``omap`` on old objects.
-:Type: Boolean
-:Default: ``true``
- 
-
-``osd tmapput sets users tmap`` 
-
-:Description: Uses ``tmap`` for debugging only.
-:Type: Boolean
-:Default: ``false`` 
-
-
-``osd preserve trimmed log``
-
-:Description: Preserves trimmed log files, but uses more disk space.
-:Type: Boolean
-:Default: ``false``
+:Default: ``256``
 
 
 ``osd fast fail on connection refused``

@@ -19,23 +19,24 @@
 #include "msg/Message.h"
 
 
-class MExportDir : public Message {
- public:  
+class MExportDir : public MessageInstance<MExportDir> {
+public:
+  friend factory;
   dirfrag_t dirfrag;
   bufferlist export_data;
   vector<dirfrag_t> bounds;
   bufferlist client_map;
 
-  MExportDir() : Message(MSG_MDS_EXPORTDIR) {}
+protected:
+  MExportDir() : MessageInstance(MSG_MDS_EXPORTDIR) {}
   MExportDir(dirfrag_t df, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIR), dirfrag(df) {
+    MessageInstance(MSG_MDS_EXPORTDIR), dirfrag(df) {
     set_tid(tid);
   }
-private:
   ~MExportDir() override {}
 
 public:
-  const char *get_type_name() const override { return "Ex"; }
+  std::string_view get_type_name() const override { return "Ex"; }
   void print(ostream& o) const override {
     o << "export(" << dirfrag << ")";
   }
@@ -45,17 +46,18 @@ public:
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(dirfrag, payload);
-    ::encode(bounds, payload);
-    ::encode(export_data, payload);
-    ::encode(client_map, payload);
+    using ceph::encode;
+    encode(dirfrag, payload);
+    encode(bounds, payload);
+    encode(export_data, payload);
+    encode(client_map, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(dirfrag, p);
-    ::decode(bounds, p);
-    ::decode(export_data, p);
-    ::decode(client_map, p);
+    auto p = payload.cbegin();
+    decode(dirfrag, p);
+    decode(bounds, p);
+    decode(export_data, p);
+    decode(client_map, p);
   }
 
 };

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 #
 # Copyright (C) 2015 Red Hat <contact@redhat.com>
 #
@@ -19,7 +19,7 @@ set -xe
 base=${1:-/tmp/release}
 codename=$(lsb_release -sc)
 releasedir=$base/$(lsb_release -si)/WORKDIR
-rm -fr $releasedir
+rm -fr $(dirname $releasedir)
 mkdir -p $releasedir
 #
 # remove all files not under git so they are not
@@ -79,7 +79,7 @@ cat > $codename/conf/distributions <<EOF
 Codename: $codename
 Suite: stable
 Components: main
-Architectures: i386 amd64 source
+Architectures: $(dpkg --print-architecture) source
 EOF
 if [ ! -e conf ]; then
     ln -s $codename/conf conf

@@ -7,6 +7,7 @@ overrides:
         client acl type: posix_acl
 tasks:
 - workunit:
+    timeout: 6h
     clients:
       all:
         - suites/pjd.sh

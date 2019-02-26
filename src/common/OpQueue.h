@@ -28,15 +28,13 @@ namespace ceph {
  * Abstract class for all Op Queues
  *
  * In order to provide optimized code, be sure to declare all
- * virutal functions as final in the derived class.
+ * virtual functions as final in the derived class.
  */
 
 template <typename T, typename K>
 class OpQueue {
 
   public:
-    // How many Ops are in the queue
-    virtual unsigned length() const = 0;
     // Ops of this class should be deleted immediately. If out isn't
     // nullptr then items should be added to the front in
     // front-to-back order. The typical strategy is to visit items in
@@ -44,13 +42,14 @@ class OpQueue {
     // them into out.
     virtual void remove_by_class(K k, std::list<T> *out) = 0;
     // Enqueue op in the back of the strict queue
-    virtual void enqueue_strict(K cl, unsigned priority, T item) = 0;
+    virtual void enqueue_strict(K cl, unsigned priority, T &&item) = 0;
     // Enqueue op in the front of the strict queue
-    virtual void enqueue_strict_front(K cl, unsigned priority, T item) = 0;
+    virtual void enqueue_strict_front(K cl, unsigned priority, T &&item) = 0;
     // Enqueue op in the back of the regular queue
-    virtual void enqueue(K cl, unsigned priority, unsigned cost, T item) = 0;
+    virtual void enqueue(K cl, unsigned priority, unsigned cost, T &&item) = 0;
     // Enqueue the op in the front of the regular queue
-    virtual void enqueue_front(K cl, unsigned priority, unsigned cost, T item) = 0;
+    virtual void enqueue_front(
+      K cl, unsigned priority, unsigned cost, T &&item) = 0;
     // Returns if the queue is empty
     virtual bool empty() const = 0;
     // Return an op to be dispatch

@@ -1,0 +1,41 @@
+@import '../../../../defaults';
+
+p {
+  font-family: monospace;
+  color: black;
+}
+
+.well {
+  div p {
+    display: flex;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  .timestamp {
+    font-weight: bold;
+    flex-shrink: 0;
+  }
+
+  .priority {
+    margin-left: 0.5rem;
+  }
+
+  .message {
+    margin-left: 1rem;
+  }
+
+  .err {
+    color: $color-pink;
+  }
+
+  .warn {
+    color: $color-bright-yellow;
+  }
+
+  .info {
+    color: $color-brand-teal;
+  }
+}

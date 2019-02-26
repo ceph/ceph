@@ -13,6 +13,7 @@
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/internal.h"
 #include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include <iostream>
 #include <sstream>
 #include <stdlib.h>
@@ -57,6 +58,7 @@ std::string TestFixture::get_temp_image_name() {
 
 void TestFixture::SetUp() {
   ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), m_ioctx));
+  m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
 
   m_image_name = get_temp_image_name();
   m_image_size = 2 << 20;
@@ -75,10 +77,10 @@ void TestFixture::TearDown() {
 
 int TestFixture::open_image(const std::string &image_name,
 			    librbd::ImageCtx **ictx) {
-  *ictx = new librbd::ImageCtx(image_name.c_str(), "", NULL, m_ioctx, false);
+  *ictx = new librbd::ImageCtx(image_name.c_str(), "", nullptr, m_ioctx, false);
   m_ictxs.insert(*ictx);
 
-  return (*ictx)->state->open(false);
+  return (*ictx)->state->open(0);
 }
 
 int TestFixture::snap_create(librbd::ImageCtx &ictx,
@@ -96,6 +98,11 @@ int TestFixture::snap_protect(librbd::ImageCtx &ictx,
 int TestFixture::flatten(librbd::ImageCtx &ictx,
                          librbd::ProgressContext &prog_ctx) {
   return ictx.operations->flatten(prog_ctx);
+}
+
+int TestFixture::resize(librbd::ImageCtx *ictx, uint64_t size){
+  librbd::NoOpProgressContext prog_ctx;
+  return ictx->operations->resize(size, true, prog_ctx);
 }
 
 void TestFixture::close_image(librbd::ImageCtx *ictx) {
@@ -133,6 +140,6 @@ int TestFixture::acquire_exclusive_lock(librbd::ImageCtx &ictx) {
   }
 
   RWLock::RLocker owner_locker(ictx.owner_lock);
-  assert(ictx.exclusive_lock != nullptr);
+  ceph_assert(ictx.exclusive_lock != nullptr);
   return ictx.exclusive_lock->is_lock_owner() ? 0 : -EINVAL;
 }

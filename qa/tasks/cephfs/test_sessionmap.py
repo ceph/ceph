@@ -145,10 +145,10 @@ class TestSessionMap(CephFSTestCase):
         # a single session get written out (the first of the two, triggered by the second getting marked
         # dirty)
         # The number of writes is two per session, because the header (sessionmap version) update and
-        # KV write both count.
+        # KV write both count. Also, multiply by 2 for each openfile table update.
         self.wait_until_true(
-            lambda: get_omap_wrs() - initial_omap_wrs == 2,
-            timeout=10  # Long enough for an export to get acked
+            lambda: get_omap_wrs() - initial_omap_wrs == 2*2,
+            timeout=30  # Long enough for an export to get acked
         )
 
         # Now end our sessions and check the backing sessionmap is updated correctly
@@ -230,6 +230,6 @@ class TestSessionMap(CephFSTestCase):
         # Configure the client to claim that its mount point metadata is /baz
         self.set_conf("client.badguy", "client_metadata", "root=/baz")
         # Try to mount the client, see that it fails
-        with self.assert_cluster_log("client session with invalid root '/baz' denied"):
+        with self.assert_cluster_log("client session with non-allowable root '/baz' denied"):
             with self.assertRaises(CommandFailedError):
                 self.mount_b.mount(mount_path="/foo/bar")

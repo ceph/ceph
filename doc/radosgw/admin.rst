@@ -56,7 +56,6 @@ For example::
     "email": "john@example.com",
     "suspended": 0,
     "max_buckets": 1000,
-    "auid": 0,
     "subusers": [],
     "keys": [
           { "user": "johndoe",
@@ -109,7 +108,6 @@ For example::
     "email": "john@example.com",
     "suspended": 0,
     "max_buckets": 1000,
-    "auid": 0,
     "subusers": [
           { "id": "johndoe:swift",
             "permissions": "full-control"}],
@@ -152,7 +150,7 @@ email addresses, display names and access levels. For example::
 
 To modify subuser values, specify ``subuser modify`` and the subuser ID. For example::
 
-	radosgw-admin subuser modify --uid=johndoe:swift --access=full
+	radosgw-admin subuser modify --subuser=johndoe:swift --access=full
 
 
 User Enable/Suspend
@@ -224,8 +222,8 @@ also remove a key. Options include:
 - ``--key-type=<type>`` specifies the key type. The options are: s3, swift
 - ``--access-key=<key>`` manually specifies an S3 access key.
 - ``--secret-key=<key>`` manually specifies a S3 secret key or a Swift secret key.
-- ``--gen-access-key`` automatically generates a S3 key.
-- ``--gen-secret`` automatically generates a S3 secret key or a Swift secret key.
+- ``--gen-access-key`` automatically generates a random S3 access key.
+- ``--gen-secret`` automatically generates a random S3 secret key or a random Swift secret key.
 
 An example how to add a specified S3 key pair for a user. ::
 

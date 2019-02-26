@@ -14,7 +14,13 @@ tasks:
 - install:
 - ceph:
     log-whitelist:
-    - wrongly marked me down
+      - but it is still running
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(OBJECT_DEGRADED\)
+      - \(SLOW_OPS\)
     conf:
       osd:
         osd min pg log entries: 5

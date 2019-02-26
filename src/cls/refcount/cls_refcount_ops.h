@@ -5,8 +5,7 @@
 #define CEPH_CLS_REFCOUNT_OPS_H
 
 #include "include/types.h"
-
-class Formatter;
+#include "common/hobject.h"
 
 struct cls_refcount_get_op {
   string tag;
@@ -16,15 +15,15 @@ struct cls_refcount_get_op {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(tag, bl);
-    ::encode(implicit_ref, bl);
+    encode(tag, bl);
+    encode(implicit_ref, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(tag, bl);
-    ::decode(implicit_ref, bl);
+    decode(tag, bl);
+    decode(implicit_ref, bl);
     DECODE_FINISH(bl);
   }
   void dump(ceph::Formatter *f) const;
@@ -41,15 +40,15 @@ struct cls_refcount_put_op {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(tag, bl);
-    ::encode(implicit_ref, bl);
+    encode(tag, bl);
+    encode(implicit_ref, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(tag, bl);
-    ::decode(implicit_ref, bl);
+    decode(tag, bl);
+    decode(implicit_ref, bl);
     DECODE_FINISH(bl);
   }
 
@@ -65,13 +64,13 @@ struct cls_refcount_set_op {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(refs, bl);
+    encode(refs, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(refs, bl);
+    decode(refs, bl);
     DECODE_FINISH(bl);
   }
 
@@ -88,13 +87,13 @@ struct cls_refcount_read_op {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(implicit_ref, bl);
+    encode(implicit_ref, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(implicit_ref, bl);
+    decode(implicit_ref, bl);
     DECODE_FINISH(bl);
   }
 
@@ -110,13 +109,13 @@ struct cls_refcount_read_ret {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    ::encode(refs, bl);
+    encode(refs, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    ::decode(refs, bl);
+    decode(refs, bl);
     DECODE_FINISH(bl);
   }
 
@@ -125,5 +124,31 @@ struct cls_refcount_read_ret {
 };
 WRITE_CLASS_ENCODER(cls_refcount_read_ret)
 
+struct obj_refcount {
+  map<string, bool> refs;
+  set<string> retired_refs;
+
+  obj_refcount() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(2, 1, bl);
+    encode(refs, bl);
+    encode(retired_refs, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(2, bl);
+    decode(refs, bl);
+    if (struct_v >= 2) {
+      decode(retired_refs, bl);
+    }
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(list<obj_refcount*>& ls);
+};
+WRITE_CLASS_ENCODER(obj_refcount)
 
 #endif

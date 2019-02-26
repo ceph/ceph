@@ -18,8 +18,8 @@ class CrushLocation {
   int _parse(const std::string& s);
 
 public:
-  CrushLocation(CephContext *c) : cct(c) {
-    update_from_conf();
+  explicit CrushLocation(CephContext *c) : cct(c) {
+    init_on_startup();
   }
 
   int update_from_conf();  ///< refresh from config

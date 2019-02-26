@@ -24,7 +24,7 @@ class ImageWriteback {
 public:
   typedef std::vector<std::pair<uint64_t,uint64_t> > Extents;
 
-  ImageWriteback(ImageCtxT &image_ctx);
+  explicit ImageWriteback(ImageCtxT &image_ctx);
 
   void aio_read(Extents &&image_extents, ceph::bufferlist *bl,
                 int fadvise_flags, Context *on_finish);
@@ -36,7 +36,11 @@ public:
   void aio_writesame(uint64_t offset, uint64_t length,
                      ceph::bufferlist&& bl,
                      int fadvise_flags, Context *on_finish);
-
+  void aio_compare_and_write(Extents &&image_extents,
+                             ceph::bufferlist&& cmp_bl,
+                             ceph::bufferlist&& bl,
+                             uint64_t *mismatch_offset,
+                             int fadvise_flags, Context *on_finish);
 private:
   ImageCtxT &m_image_ctx;
 

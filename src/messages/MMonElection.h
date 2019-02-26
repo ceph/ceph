@@ -20,16 +20,19 @@
 #include "mon/MonMap.h"
 #include "mon/mon_types.h"
 
-class MMonElection : public Message {
+class MMonElection : public MessageInstance<MMonElection> {
+public:
+  friend factory;
 
-  static const int HEAD_VERSION = 6;
-  static const int COMPAT_VERSION = 5;
+private:
+  static constexpr int HEAD_VERSION = 8;
+  static constexpr int COMPAT_VERSION = 5;
 
 public:
-  static const int OP_PROPOSE = 1;
-  static const int OP_ACK     = 2;
-  static const int OP_NAK     = 3;
-  static const int OP_VICTORY = 4;
+  static constexpr int OP_PROPOSE = 1;
+  static constexpr int OP_ACK     = 2;
+  static constexpr int OP_NAK     = 3;
+  static constexpr int OP_VICTORY = 4;
   static const char *get_opname(int o) {
     switch (o) {
     case OP_PROPOSE: return "propose";
@@ -47,26 +50,21 @@ public:
   set<int32_t> quorum;
   uint64_t quorum_features;
   mon_feature_t mon_features;
+  uint8_t mon_release = 0;
   bufferlist sharing_bl;
-  /* the following were both used in the next branch for a while
-   * on user cluster, so we've left them in for compatibility. */
-  version_t defunct_one;
-  version_t defunct_two;
+  map<string,string> metadata;
   
-  MMonElection() : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
+  MMonElection() : MessageInstance(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
     op(0), epoch(0),
     quorum_features(0),
-    mon_features(0),
-    defunct_one(0),
-    defunct_two(0)
+    mon_features(0)
   { }
 
   MMonElection(int o, epoch_t e, MonMap *m)
-    : Message(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
+    : MessageInstance(MSG_MON_ELECTION, HEAD_VERSION, COMPAT_VERSION),
       fsid(m->fsid), op(o), epoch(e),
       quorum_features(0),
-      mon_features(0),
-      defunct_one(0), defunct_two(0)
+      mon_features(0)
   {
     // encode using full feature set; we will reencode for dest later,
     // if necessary
@@ -76,12 +74,14 @@ private:
   ~MMonElection() override {}
 
 public:  
-  const char *get_type_name() const override { return "election"; }
+  std::string_view get_type_name() const override { return "election"; }
   void print(ostream& out) const override {
-    out << "election(" << fsid << " " << get_opname(op) << " " << epoch << ")";
+    out << "election(" << fsid << " " << get_opname(op)
+	<< " rel " << (int)mon_release << " e" << epoch << ")";
   }
   
   void encode_payload(uint64_t features) override {
+    using ceph::encode;
     if (monmap_bl.length() && (features != CEPH_FEATURES_ALL)) {
       // reencode old-format monmap
       MonMap t;
@@ -90,30 +90,41 @@ public:
       t.encode(monmap_bl, features);
     }
 
-    ::encode(fsid, payload);
-    ::encode(op, payload);
-    ::encode(epoch, payload);
-    ::encode(monmap_bl, payload);
-    ::encode(quorum, payload);
-    ::encode(quorum_features, payload);
-    ::encode(defunct_one, payload);
-    ::encode(defunct_two, payload);
-    ::encode(sharing_bl, payload);
-    ::encode(mon_features, payload);
+    encode(fsid, payload);
+    encode(op, payload);
+    encode(epoch, payload);
+    encode(monmap_bl, payload);
+    encode(quorum, payload);
+    encode(quorum_features, payload);
+    encode((version_t)0, payload);  // defunct
+    encode((version_t)0, payload);  // defunct
+    encode(sharing_bl, payload);
+    encode(mon_features, payload);
+    encode(metadata, payload);
+    encode(mon_release, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(fsid, p);
-    ::decode(op, p);
-    ::decode(epoch, p);
-    ::decode(monmap_bl, p);
-    ::decode(quorum, p);
-    ::decode(quorum_features, p);
-    ::decode(defunct_one, p);
-    ::decode(defunct_two, p);
-    ::decode(sharing_bl, p);
+    auto p = payload.cbegin();
+    decode(fsid, p);
+    decode(op, p);
+    decode(epoch, p);
+    decode(monmap_bl, p);
+    decode(quorum, p);
+    decode(quorum_features, p);
+    {
+      version_t v;  // defunct fields from old encoding
+      decode(v, p);
+      decode(v, p);
+    }
+    decode(sharing_bl, p);
     if (header.version >= 6)
-      ::decode(mon_features, p);
+      decode(mon_features, p);
+    if (header.version >= 7)
+      decode(metadata, p);
+    if (header.version >= 8)
+      decode(mon_release, p);
+    else
+      mon_release = infer_ceph_release_from_mon_features(mon_features);
   }
   
 };

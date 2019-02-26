@@ -1,0 +1,3 @@
+overrides:
+   ceph-deploy:
+      use-ceph-volume: True

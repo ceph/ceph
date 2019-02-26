@@ -6,43 +6,43 @@
   $ map="$TESTDIR/foo"
   $ crushtool --outfn "$map" --build --set-chooseleaf-vary-r 0 --set-chooseleaf-stable 0 --num_osds 25 node straw 5 rack straw 1 root straw 0 --reweight-item osd.2 99 -o "$map" --tree
   crushtool reweighting item osd.2 to 99
-  ID\tWEIGHT\tTYPE NAME (esc)
-  -11\t123.00000\troot root (esc)
-  -6\t103.00000\t\track rack0 (esc)
-  -1\t103.00000\t\t\tnode node0 (esc)
-  0\t1.00000\t\t\t\tosd.0 (esc)
-  1\t1.00000\t\t\t\tosd.1 (esc)
-  2\t99.00000\t\t\t\tosd.2 (esc)
-  3\t1.00000\t\t\t\tosd.3 (esc)
-  4\t1.00000\t\t\t\tosd.4 (esc)
-  -7\t5.00000\t\track rack1 (esc)
-  -2\t5.00000\t\t\tnode node1 (esc)
-  5\t1.00000\t\t\t\tosd.5 (esc)
-  6\t1.00000\t\t\t\tosd.6 (esc)
-  7\t1.00000\t\t\t\tosd.7 (esc)
-  8\t1.00000\t\t\t\tosd.8 (esc)
-  9\t1.00000\t\t\t\tosd.9 (esc)
-  -8\t5.00000\t\track rack2 (esc)
-  -3\t5.00000\t\t\tnode node2 (esc)
-  10\t1.00000\t\t\t\tosd.10 (esc)
-  11\t1.00000\t\t\t\tosd.11 (esc)
-  12\t1.00000\t\t\t\tosd.12 (esc)
-  13\t1.00000\t\t\t\tosd.13 (esc)
-  14\t1.00000\t\t\t\tosd.14 (esc)
-  -9\t5.00000\t\track rack3 (esc)
-  -4\t5.00000\t\t\tnode node3 (esc)
-  15\t1.00000\t\t\t\tosd.15 (esc)
-  16\t1.00000\t\t\t\tosd.16 (esc)
-  17\t1.00000\t\t\t\tosd.17 (esc)
-  18\t1.00000\t\t\t\tosd.18 (esc)
-  19\t1.00000\t\t\t\tosd.19 (esc)
-  -10\t5.00000\t\track rack4 (esc)
-  -5\t5.00000\t\t\tnode node4 (esc)
-  20\t1.00000\t\t\t\tosd.20 (esc)
-  21\t1.00000\t\t\t\tosd.21 (esc)
-  22\t1.00000\t\t\t\tosd.22 (esc)
-  23\t1.00000\t\t\t\tosd.23 (esc)
-  24\t1.00000\t\t\t\tosd.24 (esc)
+  ID  CLASS WEIGHT    TYPE NAME          
+  -11       123.00000 root root          
+   -6       103.00000     rack rack0     
+   -1       103.00000         node node0 
+    0         1.00000             osd.0  
+    1         1.00000             osd.1  
+    2        99.00000             osd.2  
+    3         1.00000             osd.3  
+    4         1.00000             osd.4  
+   -7         5.00000     rack rack1     
+   -2         5.00000         node node1 
+    5         1.00000             osd.5  
+    6         1.00000             osd.6  
+    7         1.00000             osd.7  
+    8         1.00000             osd.8  
+    9         1.00000             osd.9  
+   -8         5.00000     rack rack2     
+   -3         5.00000         node node2 
+   10         1.00000             osd.10 
+   11         1.00000             osd.11 
+   12         1.00000             osd.12 
+   13         1.00000             osd.13 
+   14         1.00000             osd.14 
+   -9         5.00000     rack rack3     
+   -4         5.00000         node node3 
+   15         1.00000             osd.15 
+   16         1.00000             osd.16 
+   17         1.00000             osd.17 
+   18         1.00000             osd.18 
+   19         1.00000             osd.19 
+  -10         5.00000     rack rack4     
+   -5         5.00000         node node4 
+   20         1.00000             osd.20 
+   21         1.00000             osd.21 
+   22         1.00000             osd.22 
+   23         1.00000             osd.23 
+   24         1.00000             osd.24 
   $ crushtool -d "$map"
   # begin crush map
   tunable choose_local_tries 0
@@ -190,7 +190,7 @@
   
   # rules
   rule replicated_rule {
-  \truleset 0 (esc)
+  \tid 0 (esc)
   \ttype replicated (esc)
   \tmin_size 1 (esc)
   \tmax_size 10 (esc)

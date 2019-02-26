@@ -18,26 +18,33 @@
 #include "msg/Message.h"
 #include "include/filepath.h"
 
-struct MMDSFindInoReply : public Message {
-  ceph_tid_t tid;
+class MMDSFindInoReply : public MessageInstance<MMDSFindInoReply> {
+public:
+  friend factory;
+
+  ceph_tid_t tid = 0;
   filepath path;
 
-  MMDSFindInoReply() : Message(MSG_MDS_FINDINOREPLY) {}
-  MMDSFindInoReply(ceph_tid_t t) : Message(MSG_MDS_FINDINOREPLY), tid(t) {}
+protected:
+  MMDSFindInoReply() : MessageInstance(MSG_MDS_FINDINOREPLY) {}
+  MMDSFindInoReply(ceph_tid_t t) : MessageInstance(MSG_MDS_FINDINOREPLY), tid(t) {}
+  ~MMDSFindInoReply() override {}
 
-  const char *get_type_name() const override { return "findinoreply"; }
+public:
+  std::string_view get_type_name() const override { return "findinoreply"; }
   void print(ostream &out) const override {
     out << "findinoreply(" << tid << " " << path << ")";
   }
   
   void encode_payload(uint64_t features) override {
-    ::encode(tid, payload);
-    ::encode(path, payload);
+    using ceph::encode;
+    encode(tid, payload);
+    encode(path, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(tid, p);
-    ::decode(path, p);
+    auto p = payload.cbegin();
+    decode(tid, p);
+    decode(path, p);
   }
 };
 

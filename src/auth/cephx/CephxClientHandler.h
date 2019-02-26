@@ -31,11 +31,12 @@ class CephxClientHandler : public AuthClientHandler {
   CephXTicketManager tickets;
   CephXTicketHandler* ticket_handler;
 
-  RotatingKeyRing *rotating_secrets;
+  RotatingKeyRing* rotating_secrets;
   KeyRing *keyring;
 
 public:
-  CephxClientHandler(CephContext *cct_, RotatingKeyRing *rsecrets) 
+  CephxClientHandler(CephContext *cct_,
+		     RotatingKeyRing *rsecrets)
     : AuthClientHandler(cct_),
       starting(false),
       server_challenge(0),
@@ -47,14 +48,12 @@ public:
     reset();
   }
 
-  void reset() override {
-    RWLock::WLocker l(lock);
-    starting = true;
-    server_challenge = 0;
-  }
+  void reset() override;
   void prepare_build_request() override;
   int build_request(bufferlist& bl) const override;
-  int handle_response(int ret, bufferlist::iterator& iter) override;
+  int handle_response(int ret, bufferlist::const_iterator& iter,
+		      CryptoKey *session_key,
+		      std::string *connection_secret) override;
   bool build_rotating_request(bufferlist& bl) const override;
 
   int get_protocol() const override { return CEPH_AUTH_CEPHX; }
@@ -64,7 +63,6 @@ public:
   bool need_tickets() override;
 
   void set_global_id(uint64_t id) override {
-    RWLock::WLocker l(lock);
     global_id = id;
     tickets.global_id = id;
   }

@@ -32,6 +32,7 @@ namespace cohort {
     /* public flag values */
     constexpr uint32_t FLAG_NONE = 0x0000;
     constexpr uint32_t FLAG_INITIAL = 0x0001;
+    constexpr uint32_t FLAG_RECYCLE = 0x0002;
 
     enum class Edge : std::uint8_t
     {
@@ -136,6 +137,7 @@ namespace cohort {
 	for (int ix = 0; ix < n_lanes; ++ix,
 	       lane_ix = next_evict_lane()) {
 	  Lane& lane = qlane[lane_ix];
+	  lane.lock.lock();
 	  /* if object at LRU has refcnt==1, it may be reclaimable */
 	  Object* o = &(lane.q.back());
 	  if (can_reclaim(o)) {
@@ -147,8 +149,8 @@ namespace cohort {
 	      --(o->lru_refcnt);
 	      /* assertions that o state has not changed across
 	       * relock */
-	      assert(o->lru_refcnt == SENTINEL_REFCNT);
-	      assert(o->lru_flags & FLAG_INLRU);
+	      ceph_assert(o->lru_refcnt == SENTINEL_REFCNT);
+	      ceph_assert(o->lru_flags & FLAG_INLRU);
 	      Object::Queue::iterator it =
 		Object::Queue::s_iterator_to(*o);
 	      lane.q.erase(it);
@@ -156,7 +158,6 @@ namespace cohort {
 	      return o;
 	    } else {
 	      // XXX can't make unreachable (means what?)
-	      lane.lock.lock();
 	      --(o->lru_refcnt);
 	      o->lru_flags &= ~FLAG_EVICTING;
 	      /* unlock in next block */
@@ -172,7 +173,7 @@ namespace cohort {
       LRU(int lanes, uint32_t _hiwat)
 	: n_lanes(lanes), evict_lane(0), lane_hiwat(_hiwat)
 	  {
-	    assert(n_lanes > 0);
+	    ceph_assert(n_lanes > 0);
 	    qlane = new Lane[n_lanes];
 	  }
 
@@ -232,12 +233,14 @@ namespace cohort {
 	  delete tdo;
       } /* unref */
 
-      Object* insert(ObjectFactory* fac, Edge edge, uint32_t flags) {
+      Object* insert(ObjectFactory* fac, Edge edge, uint32_t& flags) {
 	/* use supplied functor to re-use an evicted object, or
 	 * allocate a new one of the descendant type */
 	Object* o = evict_block();
-	if (o)
+	if (o) {
 	  fac->recycle(o); /* recycle existing object */
+	  flags |= FLAG_RECYCLE;
+	}
 	else
 	  o = fac->alloc(); /* get a new one */
 
@@ -253,7 +256,7 @@ namespace cohort {
 	  lane.q.push_back(*o);
 	  break;
 	default:
-	  abort();
+	  ceph_abort();
 	  break;
 	}
 	if (flags & FLAG_INITIAL)
@@ -305,7 +308,7 @@ namespace cohort {
       struct Latch {
 	Partition* p;
 	LK* lock;
-	insert_commit_data commit_data;
+	insert_commit_data commit_data{};
 
 	Latch() : p(nullptr), lock(nullptr) {}
       };
@@ -333,7 +336,7 @@ namespace cohort {
       }
 
       TreeX(int n_part=1, int csz=127) : n_part(n_part), csz(csz) {
-	assert(n_part > 0);
+	ceph_assert(n_part > 0);
 	part = new Partition[n_part];
 	for (int ix = 0; ix < n_part; ++ix) {
 	  Partition& p = part[ix];
@@ -399,7 +402,7 @@ namespace cohort {
 	  v = lat.p->cache[slot];
 	  if (v) {
 	    if (CEQ()(*v, k)) {
-	      if (flags & (FLAG_LOCK|FLAG_UNLOCK))
+	      if ((flags & FLAG_LOCK) && (flags & FLAG_UNLOCK))
 		lat.lock->unlock();
 	      return v;
 	    }
@@ -417,7 +420,7 @@ namespace cohort {
 	    lat.p->cache[slot] = v;
 	  }
 	}
-	if (flags & (FLAG_LOCK|FLAG_UNLOCK))
+	if ((flags & FLAG_LOCK) && (flags & FLAG_UNLOCK))
 	  lat.lock->unlock();
 	return v;
       } /* find_latch */
@@ -457,7 +460,7 @@ namespace cohort {
       void drain(std::function<void(T*)> uref,
 		 uint32_t flags = FLAG_NONE) {
 	/* clear a table, call supplied function on
-	 * each element found (e.g., retuns sentinel
+	 * each element found (e.g., returns sentinel
 	 * references) */
 	Object::Queue2 drain_q;
 	for (int t_ix = 0; t_ix < n_part; ++t_ix) {

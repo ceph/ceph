@@ -1,14 +1,26 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_ROLE_H
 #define CEPH_RGW_ROLE_H
 
+#include <string>
+
+#include "common/ceph_context.h"
+
+#include "rgw/rgw_rados.h"
+
 class RGWRole
 {
+  using string = std::string;
   static const string role_name_oid_prefix;
   static const string role_oid_prefix;
   static const string role_path_oid_prefix;
   static const string role_arn_prefix;
   static constexpr int MAX_ROLE_NAME_LEN = 64;
   static constexpr int MAX_PATH_NAME_LEN = 512;
+  static constexpr uint64_t SESSION_DURATION_MIN = 3600; // in seconds
+  static constexpr uint64_t SESSION_DURATION_MAX = 43200; // in seconds
 
   CephContext *cct;
   RGWRados *store;
@@ -20,6 +32,7 @@ class RGWRole
   string trust_policy;
   map<string, string> perm_policy_map;
   string tenant;
+  uint64_t max_session_duration;
 
   int store_info(bool exclusive);
   int store_name(bool exclusive);
@@ -37,7 +50,8 @@ public:
           string name,
           string path,
           string trust_policy,
-          string tenant)
+          string tenant,
+          string max_session_duration_str="")
   : cct(cct),
     store(store),
     name(std::move(name)),
@@ -47,6 +61,11 @@ public:
     if (this->path.empty())
       this->path = "/";
     extract_name_tenant(this->name);
+    if (max_session_duration_str.empty()) {
+      max_session_duration = SESSION_DURATION_MIN;
+    } else {
+      max_session_duration = std::stoull(max_session_duration_str);
+    }
   }
 
   RGWRole(CephContext *cct,
@@ -77,29 +96,33 @@ public:
   ~RGWRole() = default;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
-    ::encode(id, bl);
-    ::encode(name, bl);
-    ::encode(path, bl);
-    ::encode(arn, bl);
-    ::encode(creation_date, bl);
-    ::encode(trust_policy, bl);
-    ::encode(perm_policy_map, bl);
-    ::encode(tenant, bl);
+    ENCODE_START(3, 1, bl);
+    encode(id, bl);
+    encode(name, bl);
+    encode(path, bl);
+    encode(arn, bl);
+    encode(creation_date, bl);
+    encode(trust_policy, bl);
+    encode(perm_policy_map, bl);
+    encode(tenant, bl);
+    encode(max_session_duration, bl);
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START(2, bl);
-    ::decode(id, bl);
-    ::decode(name, bl);
-    ::decode(path, bl);
-    ::decode(arn, bl);
-    ::decode(creation_date, bl);
-    ::decode(trust_policy, bl);
-    ::decode(perm_policy_map, bl);
+    decode(id, bl);
+    decode(name, bl);
+    decode(path, bl);
+    decode(arn, bl);
+    decode(creation_date, bl);
+    decode(trust_policy, bl);
+    decode(perm_policy_map, bl);
     if (struct_v >= 2) {
-      ::decode(tenant, bl);
+      decode(tenant, bl);
+    }
+    if (struct_v >= 3) {
+      decode(max_session_duration, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -109,6 +132,7 @@ public:
   const string& get_path() const { return path; }
   const string& get_create_date() const { return creation_date; }
   const string& get_assume_role_policy() const { return trust_policy;}
+  const uint64_t& get_max_session_duration() const { return max_session_duration; }
 
   int create(bool exclusive);
   int delete_obj();

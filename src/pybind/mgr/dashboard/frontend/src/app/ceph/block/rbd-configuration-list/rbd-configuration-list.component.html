@@ -1,0 +1,25 @@
+<cd-table [data]="data"
+          [columns]="poolConfigurationColumns"
+          identifier="name">
+</cd-table>
+
+<ng-template #configurationSourceTpl
+             let-row="row"
+             let-value="value">
+  <div [ngSwitch]="+value">
+    <span *ngSwitchCase="sourceField.global" i18n>Global</span>
+    <strong *ngSwitchCase="sourceField.image" i18n>Image</strong>
+    <strong *ngSwitchCase="sourceField.pool" i18n>Pool</strong>
+  </div>
+</ng-template>
+
+<ng-template #configurationValueTpl
+             let-row="row"
+             let-value="value">
+  <div [ngSwitch]="row.type">
+    <span *ngSwitchCase="typeField.bps">{{ value | dimlessBinaryPerSecond }}</span>
+    <span *ngSwitchCase="typeField.milliseconds">{{ value | milliseconds }}</span>
+    <span *ngSwitchCase="typeField.iops">{{ value | iops }}</span>
+    <span *ngSwitchDefault>{{ value }}</span>
+  </div>
+</ng-template>

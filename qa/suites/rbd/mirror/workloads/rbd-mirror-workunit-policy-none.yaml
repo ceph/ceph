@@ -1,0 +1,16 @@
+meta:
+- desc: run the rbd_mirror.sh workunit to test the rbd-mirror daemon
+overrides:
+  ceph:
+    conf:
+      client:
+        rbd mirror image policy type: none
+tasks:
+- workunit:
+    clients:
+      cluster1.client.mirror: [rbd/rbd_mirror.sh]
+    env:
+      # override workunit setting of CEPH_ARGS='--cluster'
+      CEPH_ARGS: ''
+      RBD_MIRROR_INSTANCES: '4'
+      RBD_MIRROR_USE_EXISTING_CLUSTER: '1'

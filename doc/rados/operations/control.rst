@@ -50,7 +50,7 @@ To add a keyring for an OSD, execute the following::
 
 To list the cluster's keys and their capabilities, execute the following::
 
-	ceph auth list
+	ceph auth ls
 
 
 Placement Group Subsystem
@@ -96,11 +96,9 @@ Query OSD subsystem status. ::
 	ceph osd stat
 
 Write a copy of the most recent OSD map to a file. See
-`osdmaptool`_. ::
+:ref:`osdmaptool <osdmaptool>`. ::
 
 	ceph osd getmap -o file
-
-.. _osdmaptool: ../../man/8/osdmaptool
 
 Write a copy of the crush map from the most recent OSD map to
 file. ::
@@ -141,15 +139,11 @@ Remove an existing bucket from the CRUSH map. ::
 
 Move an existing bucket from one position in the hierarchy to another.  ::
 
-   ceph osd crush move {id} {loc1} [{loc2} ...]
+	ceph osd crush move {id} {loc1} [{loc2} ...]
 
 Set the weight of the item given by ``{name}`` to ``{weight}``. ::
 
 	ceph osd crush reweight {name} {weight}
-
-Create a cluster snapshot. ::
-
-	ceph osd cluster_snap {name}
 
 Mark an OSD as lost. This may result in permanent data loss. Use with caution. ::
 
@@ -189,10 +183,6 @@ Mark ``{osd-num}`` in the distribution (i.e. allocated data). ::
 
 	ceph osd in {osd-num}
 
-List classes that are loaded in the ceph cluster. ::
-
-	ceph class list
-
 Set or clear the pause flags in the OSD map. If set, no IO requests
 will be sent to any OSD. Clearing the flags via unpause results in
 resending pending requests. ::
@@ -207,7 +197,7 @@ sets an override weight on the OSD. This value is in the range 0 to 1,
 and forces CRUSH to re-place (1-weight) of the data that would
 otherwise live on this drive. It does not change the weights assigned
 to the buckets above the OSD in the crush map, and is a corrective
-measure in case the normal CRUSH distribution isn't working out quite
+measure in case the normal CRUSH distribution is not working out quite
 right. For instance, if one of your OSDs is at 90% and the others are
 at 50%, you could reduce this weight to try and compensate for it. ::
 
@@ -257,7 +247,7 @@ Valid fields are:
 	* ``size``: Sets the number of copies of data in the pool.
 	* ``pg_num``: The placement group number.
 	* ``pgp_num``: Effective number when calculating pg placement.
-	* ``crush_ruleset``: rule number for mapping placement.
+	* ``crush_rule``: rule number for mapping placement.
 
 Get the value of a pool setting. ::
 
@@ -267,8 +257,6 @@ Valid fields are:
 
 	* ``pg_num``: The placement group number.
 	* ``pgp_num``: Effective number of placement groups when calculating placement.
-	* ``lpg_num``: The number of local placement groups.
-	* ``lpgp_num``: The number used for placing the local placement groups.
 
 
 Sends a scrub command to OSD ``{osd-num}``. To send the command to all OSDs, use ``*``. ::
@@ -288,17 +276,24 @@ concurrently accessing the OSD. ::
 
 	ceph tell osd.N bench [TOTAL_DATA_BYTES] [BYTES_PER_WRITE]
 
+To clear an OSD's caches between benchmark runs, use the 'cache drop' command ::
+
+	ceph tell osd.N cache drop
+
+To get the cache statistics of an OSD, use the 'cache status' command ::
+
+	ceph tell osd.N cache status
 
 MDS Subsystem
 =============
 
 Change configuration parameters on a running mds. ::
 
-	ceph tell mds.{mds-id} injectargs --{switch} {value} [--{switch} {value}]
+	ceph tell mds.{mds-id} config set {setting} {value}
 
 Example::
 
-	ceph tell mds.0 injectargs --debug_ms 1 --debug_mds 10
+	ceph tell mds.0 config set debug_ms 1
 
 Enables debug messages. ::
 

@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # vim: ts=8 sw=2 smarttab
 #
 # run_seed_to.sh - Run ceph_test_filestore_idempotent_sequence up until an 
@@ -51,6 +51,8 @@ usage() {
   echo "  OPTS_STORE_B         additional opts for store B"
   echo
 }
+
+echo $0 $*
 
 die_on_missing_arg() {
   if [[ "$2" == "" ]]; then
@@ -248,12 +250,12 @@ do
     $tmp_name_a $tmp_name_a/journal \
     --test-seed $seed --osd-journal-size 100 \
     --filestore-kill-at $killat $tmp_opts_a \
-    --log-file $tmp_name_a.fail --debug-filestore 20 || true
+    --log-file $tmp_name_a.fail --debug-filestore 20 --no-log-to-stderr || true
 
   stop_at=`ceph_test_filestore_idempotent_sequence get-last-op \
     $tmp_name_a $tmp_name_a/journal \
     --log-file $tmp_name_a.recover \
-    --debug-filestore 20 --debug-journal 20`
+    --debug-filestore 20 --debug-journal 20 --no-log-to-stderr`
 
   if [[ "`expr $stop_at - $stop_at 2>/dev/null`" != "0" ]]; then
     echo "error: get-last-op returned '$stop_at'"
@@ -266,10 +268,11 @@ do
   $v ceph_test_filestore_idempotent_sequence run-sequence-to \
     $stop_at $tmp_name_b $tmp_name_b/journal \
     --test-seed $seed --osd-journal-size 100 \
-    --log-file $tmp_name_b.clean --debug-filestore 20 $tmp_opts_b
+    --log-file $tmp_name_b.clean --debug-filestore 20 --no-log-to-stderr \
+    $tmp_opts_b
 
   if $v ceph_test_filestore_idempotent_sequence diff \
-    $tmp_name_a $tmp_name_a/journal $tmp_name_b $tmp_name_b/journal ; then
+    $tmp_name_a $tmp_name_a/journal $tmp_name_b $tmp_name_b/journal --no-log-to-stderr --log-file $tmp_name_a.diff.log --debug-filestore 20 ; then
       echo OK
   else
     echo "FAIL"

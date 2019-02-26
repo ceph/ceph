@@ -1,0 +1,12 @@
+<cd-iscsi-tabs></cd-iscsi-tabs>
+
+<legend i18n>Daemons</legend>
+<cd-table [data]="daemons"
+          (fetchData)="refresh()"
+          [columns]="daemonsColumns">
+</cd-table>
+
+<legend i18n>Images</legend>
+<cd-table [data]="images"
+          [columns]="imagesColumns">
+</cd-table>

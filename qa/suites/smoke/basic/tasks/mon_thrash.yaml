@@ -2,6 +2,17 @@ overrides:
   ceph:
     log-whitelist:
       - reached quota
+      - mons down
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(SMALLER_PGP_NUM\)
+      - \(OBJECT_
+      - \(SLOW_OPS\)
+      - \(TOO_FEW_PGS\)
     conf:
       global:
         ms inject delay max: 1

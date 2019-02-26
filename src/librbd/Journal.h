@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/Context.h"
 #include "include/interval_set.h"
+#include "include/rados/librados_fwd.hpp"
 #include "common/Cond.h"
 #include "common/Mutex.h"
 #include "common/Cond.h"
@@ -29,15 +30,11 @@ class SafeTimer;
 namespace journal {
 class Journaler;
 }
-namespace librados {
-  class IoCtx;
-}
 
 namespace librbd {
 
 class ImageCtx;
 
-namespace io { struct ObjectRequestHandle; }
 namespace journal { template <typename> class Replay; }
 
 template <typename ImageCtxT = ImageCtx>
@@ -91,8 +88,6 @@ public:
   static const std::string LOCAL_MIRROR_UUID;
   static const std::string ORPHAN_MIRROR_UUID;
 
-  typedef std::list<io::ObjectRequestHandle *> IOObjectRequests;
-
   Journal(ImageCtxT &image_ctx);
   ~Journal();
 
@@ -137,12 +132,10 @@ public:
 
   uint64_t append_write_event(uint64_t offset, size_t length,
                               const bufferlist &bl,
-                              const IOObjectRequests &requests,
                               bool flush_entry);
   uint64_t append_io_event(journal::EventEntry &&event_entry,
-                           const IOObjectRequests &requests,
                            uint64_t offset, size_t length,
-                           bool flush_entry);
+                           bool flush_entry, int filter_ret_val);
   void commit_io_event(uint64_t tid, int r);
   void commit_io_event_extent(uint64_t tid, uint64_t offset, uint64_t length,
                               int r);
@@ -157,7 +150,7 @@ public:
 
   uint64_t allocate_op_tid() {
     uint64_t op_tid = ++m_op_tid;
-    assert(op_tid != 0);
+    ceph_assert(op_tid != 0);
     return op_tid;
   }
 
@@ -190,18 +183,18 @@ private:
 
   struct Event {
     Futures futures;
-    IOObjectRequests aio_object_requests;
     Contexts on_safe_contexts;
     ExtentInterval pending_extents;
+    int filter_ret_val = 0;
     bool committed_io = false;
     bool safe = false;
     int ret_val = 0;
 
     Event() {
     }
-    Event(const Futures &_futures, const IOObjectRequests &_requests,
-          uint64_t offset, size_t length)
-      : futures(_futures), aio_object_requests(_requests) {
+    Event(const Futures &_futures, uint64_t offset, size_t length,
+          int filter_ret_val)
+      : futures(_futures), filter_ret_val(filter_ret_val) {
       if (length > 0) {
         pending_extents.insert(offset, length);
       }
@@ -333,8 +326,8 @@ private:
 
   uint64_t append_io_events(journal::EventType event_type,
                             const Bufferlists &bufferlists,
-                            const IOObjectRequests &requests,
-                            uint64_t offset, size_t length, bool flush_entry);
+                            uint64_t offset, size_t length, bool flush_entry,
+                            int filter_ret_val);
   Future wait_event(Mutex &lock, uint64_t tid, Context *on_safe);
 
   void create_journaler();

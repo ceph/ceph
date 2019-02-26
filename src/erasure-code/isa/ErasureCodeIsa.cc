@@ -19,8 +19,7 @@
 #include "common/debug.h"
 #include "ErasureCodeIsa.h"
 #include "xor_op.h"
-#include "crush/CrushWrapper.h"
-#include "osd/osd_types.h"
+#include "include/ceph_assert.h"
 using namespace std;
 
 // -----------------------------------------------------------------------------
@@ -46,26 +45,6 @@ _prefix(std::ostream* _dout)
 const std::string ErasureCodeIsaDefault::DEFAULT_K("7");
 const std::string ErasureCodeIsaDefault::DEFAULT_M("3");
 
-int
-ErasureCodeIsa::create_ruleset(const string &name,
-                               CrushWrapper &crush,
-                               ostream *ss) const
-{
-  int ruleid = crush.add_simple_rule(
-    name,
-    ruleset_root,
-    ruleset_failure_domain,
-    "indep",
-    pg_pool_t::TYPE_ERASURE,
-    ss);
-
-  if (ruleid < 0)
-    return ruleid;
-  else {
-    crush.set_rule_mask_max_size(ruleid, get_chunk_count());
-    return crush.get_rule_mask_ruleset(ruleid);
-  }
-}
 
 // -----------------------------------------------------------------------------
 
@@ -73,18 +52,11 @@ int
 ErasureCodeIsa::init(ErasureCodeProfile &profile, ostream *ss)
 {
   int err = 0;
-  err |= to_string("ruleset-root", profile,
-		   &ruleset_root,
-		   DEFAULT_RULESET_ROOT, ss);
-  err |= to_string("ruleset-failure-domain", profile,
-		   &ruleset_failure_domain,
-		   DEFAULT_RULESET_FAILURE_DOMAIN, ss);
   err |= parse(profile, ss);
   if (err)
     return err;
   prepare();
-  ErasureCode::init(profile, ss);
-  return err;
+  return ErasureCode::init(profile, ss);
 }
 
 // -----------------------------------------------------------------------------
@@ -137,7 +109,7 @@ int ErasureCodeIsa::decode_chunks(const set<int> &want_to_read,
       coding[i - k] = (*decoded)[i].c_str();
   }
   erasures[erasures_count] = -1;
-  assert(erasures_count > 0);
+  ceph_assert(erasures_count > 0);
   return isa_decode(erasures, data, coding, blocksize);
 }
 
@@ -222,7 +194,7 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
 
   if (m == 1) {
     // single parity decoding
-    assert(1 == nerrs);
+    ceph_assert(1 == nerrs);
     dout(20) << "isa_decode: reconstruct using region xor [" <<
       erasures[0] << "]" << dendl;
     region_xor(recover_source, recover_target[0], k, blocksize);
@@ -236,8 +208,8 @@ ErasureCodeIsaDefault::isa_decode(int *erasures,
     // use xor decoding if a data chunk is missing or the first coding chunk
     dout(20) << "isa_decode: reconstruct using region xor [" <<
       erasures[0] << "]" << dendl;
-    assert(1 == s);
-    assert(k == r);
+    ceph_assert(1 == s);
+    ceph_assert(k == r);
     region_xor(recover_source, recover_target[0], k, blocksize);
     return 0;
   }
@@ -443,7 +415,7 @@ ErasureCodeIsaDefault::prepare()
     " [ matrix ] = " <<
     ((matrixtype == kVandermonde) ? "Vandermonde" : "Cauchy") << dendl;
 
-  assert((matrixtype == kVandermonde) || (matrixtype == kCauchy));
+  ceph_assert((matrixtype == kVandermonde) || (matrixtype == kCauchy));
 
 }
 // -----------------------------------------------------------------------------

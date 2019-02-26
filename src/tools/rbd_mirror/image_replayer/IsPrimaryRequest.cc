@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "IsPrimaryRequest.h"
+#include "common/debug.h"
 #include "common/errno.h"
 #include "common/WorkQueue.h"
 #include "cls/rbd/cls_rbd_client.h"
@@ -45,7 +46,7 @@ void IsPrimaryRequest<I>::send_get_mirror_state() {
     IsPrimaryRequest<I>, &IsPrimaryRequest<I>::handle_get_mirror_state>(this);
   int r = m_image_ctx->md_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op,
                                           &m_out_bl);
-  assert(r == 0);
+  ceph_assert(r == 0);
   aio_comp->release();
 }
 
@@ -55,7 +56,7 @@ void IsPrimaryRequest<I>::handle_get_mirror_state(int r) {
 
   cls::rbd::MirrorImage mirror_image;
   if (r == 0) {
-    bufferlist::iterator iter = m_out_bl.begin();
+    auto iter = m_out_bl.cbegin();
     r = librbd::cls_client::mirror_image_get_finish(&iter, &mirror_image);
     if (r == 0) {
       if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_ENABLED) {
@@ -63,7 +64,7 @@ void IsPrimaryRequest<I>::handle_get_mirror_state(int r) {
         return;
       } else if (mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
         dout(5) << ": image mirroring is being disabled" << dendl;
-        *m_primary = false;
+        r = -ENOENT;
       } else {
         derr << ": image mirroring is disabled" << dendl;
         r = -EINVAL;
@@ -72,6 +73,8 @@ void IsPrimaryRequest<I>::handle_get_mirror_state(int r) {
       derr << ": failed to decode image mirror state: " << cpp_strerror(r)
            << dendl;
     }
+  } else if (r == -ENOENT) {
+    dout(5) << ": image is not mirrored" << dendl;
   } else {
     derr << ": failed to retrieve image mirror state: " << cpp_strerror(r)
          << dendl;

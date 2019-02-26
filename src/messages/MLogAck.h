@@ -15,34 +15,38 @@
 #ifndef CEPH_MLOGACK_H
 #define CEPH_MLOGACK_H
 
-class MLogAck : public Message {
+class MLogAck : public MessageInstance<MLogAck> {
 public:
+  friend factory;
+
   uuid_d fsid;
-  version_t last;
+  version_t last = 0;
   std::string channel;
 
-  MLogAck() : Message(MSG_LOGACK) {}
-  MLogAck(uuid_d& f, version_t l) : Message(MSG_LOGACK), fsid(f), last(l) {}
+  MLogAck() : MessageInstance(MSG_LOGACK) {}
+  MLogAck(uuid_d& f, version_t l) : MessageInstance(MSG_LOGACK), fsid(f), last(l) {}
 private:
   ~MLogAck() override {}
 
 public:
-  const char *get_type_name() const override { return "log_ack"; }
+  std::string_view get_type_name() const override { return "log_ack"; }
   void print(ostream& out) const override {
     out << "log(last " << last << ")";
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(fsid, payload);
-    ::encode(last, payload);
-    ::encode(channel, payload);
+    using ceph::encode;
+    encode(fsid, payload);
+    encode(last, payload);
+    encode(channel, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(fsid, p);
-    ::decode(last, p);
+    using ceph::decode;
+    auto p = payload.cbegin();
+    decode(fsid, p);
+    decode(last, p);
     if (!p.end())
-      ::decode(channel, p);
+      decode(channel, p);
   }
 };
 

@@ -151,10 +151,9 @@ class MDSThrasher(Greenlet):
     thrash_in_replay: [default: 0.0] likelihood that the MDS will be thrashed
       during replay.  Value should be between 0.0 and 1.0.
 
-    thrash_max_mds: [default: 0.0] likelihood that the max_mds of the mds
+    thrash_max_mds: [default: 0.05] likelihood that the max_mds of the mds
       cluster will be modified to a value [1, current) or (current, starting
-      max_mds]. When reduced, randomly selected MDSs other than rank 0 will be
-      deactivated to reach the new max_mds.  Value should be between 0.0 and 1.0.
+      max_mds]. Value should be between 0.0 and 1.0.
 
     thrash_while_stopping: [default: false] thrash an MDS while there
       are MDS in up:stopping (because max_mds was changed and some
@@ -216,7 +215,7 @@ class MDSThrasher(Greenlet):
         self.stopping = Event()
 
         self.randomize = bool(self.config.get('randomize', True))
-        self.thrash_max_mds = float(self.config.get('thrash_max_mds', 0.0))
+        self.thrash_max_mds = float(self.config.get('thrash_max_mds', 0.05))
         self.max_thrash = int(self.config.get('max_thrash', 1))
         self.max_thrash_delay = float(self.config.get('thrash_delay', 120.0))
         self.thrash_in_replay = float(self.config.get('thrash_in_replay', False))
@@ -230,7 +229,7 @@ class MDSThrasher(Greenlet):
             self.do_thrash()
         except Exception as e:
             # Log exceptions here so we get the full backtrace (gevent loses them).
-            # Also allow succesful completion as gevent exception handling is a broken mess:
+            # Also allow successful completion as gevent exception handling is a broken mess:
             #
             # 2017-02-03T14:34:01.259 CRITICAL:root:  File "gevent.libev.corecext.pyx", line 367, in gevent.libev.corecext.loop.handle_error (src/gevent/libev/gevent.corecext.c:5051)
             #   File "/home/teuthworker/src/git.ceph.com_git_teuthology_master/virtualenv/local/lib/python2.7/site-packages/gevent/hub.py", line 558, in handle_error
@@ -314,7 +313,7 @@ class MDSThrasher(Greenlet):
                         self.log("cluster has %d actives (max_mds is %d), no MDS can replace rank %d".format(len(actives), max_mds, rank))
                         return status
                 else:
-                    if len(actives) >= max_mds:
+                    if len(actives) == max_mds:
                         self.log('mds cluster has {count} alive and active, now stable!'.format(count = len(actives)))
                         return status, None
             if itercount > 300/2: # 5 minutes
@@ -359,16 +358,7 @@ class MDSThrasher(Greenlet):
                     self.log('thrashing max_mds: %d -> %d' % (max_mds, new_max_mds))
                     self.fs.set_max_mds(new_max_mds)
                     stats['max_mds'] += 1
-
-                    # Now randomly deactivate mds if we shrank
-                    # TODO: it's desirable to deactivate in order. Make config to do random.
-                    targets = filter(lambda r: r['rank'] > 0, status.get_ranks(self.fs.id)) # can't deactivate 0
-                    for target in random.sample(targets, max(0, max_mds-new_max_mds)):
-                        self.log("deactivating rank %d" % target['rank'])
-                        self.fs.deactivate(target['rank'])
-                        stats['deactivate'] += 1
-
-                    status = self.wait_for_stable()[0]
+                    self.wait_for_stable()
 
             count = 0
             for info in status.get_ranks(self.fs.id):

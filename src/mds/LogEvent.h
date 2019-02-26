@@ -53,27 +53,17 @@ class EMetaBlob;
 // generic log event
 class LogEvent {
 public:
- typedef __u32 EventType;
-
-private:
-  EventType _type;
-  uint64_t _start_off;
-  static LogEvent *decode_event(bufferlist& bl, bufferlist::iterator& p, EventType type);
-
-protected:
-  utime_t stamp;
-
   friend class MDLog;
+  typedef __u32 EventType;
 
-public:
-  LogSegment *_segment;
+  LogEvent() = delete;
+  explicit LogEvent(int t) : _type(t) {}
+  LogEvent(const LogEvent&) = delete;
+  LogEvent& operator=(const LogEvent&) = delete;
+  virtual ~LogEvent() {}
 
-  explicit LogEvent(int t)
-    : _type(t), _start_off(0), _segment(0) { }
-  virtual ~LogEvent() { }
-
-  string get_type_str() const;
-  static EventType str_to_type(std::string const &str);
+  std::string_view get_type_str() const;
+  static EventType str_to_type(std::string_view str);
   EventType get_type() const { return _type; }
   void set_type(EventType t) { _type = t; }
 
@@ -85,15 +75,16 @@ public:
 
   // encoding
   virtual void encode(bufferlist& bl, uint64_t features) const = 0;
-  virtual void decode(bufferlist::iterator &bl) = 0;
-  static LogEvent *decode(bufferlist &bl);
+  virtual void decode(bufferlist::const_iterator &) = 0;
+  static std::unique_ptr<LogEvent> decode_event(bufferlist::const_iterator);
   virtual void dump(Formatter *f) const = 0;
 
   void encode_with_header(bufferlist& bl, uint64_t features) {
-    ::encode(EVENT_NEW_ENCODING, bl);
+    using ceph::encode;
+    encode(EVENT_NEW_ENCODING, bl);
     ENCODE_START(1, 1, bl)
-    ::encode(_type, bl);
-    encode(bl, features);
+    encode(_type, bl);
+    this->encode(bl, features);
     ENCODE_FINISH(bl);
   }
 
@@ -116,6 +107,21 @@ public:
    * tools can examine metablobs while traversing lists of LogEvent.
    */
   virtual EMetaBlob *get_metablob() { return NULL; }
+
+protected:
+  utime_t stamp;
+
+  LogSegment* get_segment() { return _segment; }
+  LogSegment const* get_segment() const { return _segment; }
+
+private:
+  static const std::map<std::string, LogEvent::EventType> types;
+
+  static std::unique_ptr<LogEvent> decode_event(bufferlist::const_iterator&, EventType);
+
+  EventType _type = 0;
+  uint64_t _start_off = 0;
+  LogSegment *_segment = nullptr;
 };
 
 inline ostream& operator<<(ostream& out, const LogEvent &le) {

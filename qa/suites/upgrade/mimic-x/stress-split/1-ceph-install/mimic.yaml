@@ -1,0 +1,25 @@
+meta:
+- desc: install ceph/mimic latest
+tasks:
+- install:
+    branch: mimic
+    exclude_packages:
+      - librados3
+      - ceph-mgr-dashboard
+      - ceph-mgr-diskprediction-local
+      - ceph-mgr-diskprediction-cloud
+      - ceph-mgr-rook
+      - ceph-mgr-ssh
+    extra_packages: ['librados2']
+- print: "**** done install mimic"
+- ceph:
+- exec:
+    osd.0:
+      - ceph osd require-osd-release mimic
+      - ceph osd set-require-min-compat-client mimic
+- print: "**** done ceph"
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on osd down out interval zero: false

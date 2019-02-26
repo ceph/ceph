@@ -27,7 +27,7 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
 struct MockMirroringWatcher {
   static MockMirroringWatcher *s_instance;
   static MockMirroringWatcher &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 
@@ -53,7 +53,7 @@ struct MirroringWatcher<MockTestImageCtx> {
   }
 
   static MirroringWatcher<MockTestImageCtx> &get_instance() {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     return *s_instance;
   }
 
@@ -114,7 +114,7 @@ struct RefreshImagesRequest<librbd::MockTestImageCtx> {
   static RefreshImagesRequest *create(librados::IoCtx &io_ctx,
                                       ImageIds *image_ids,
                                       Context *on_finish) {
-    assert(s_instance != nullptr);
+    ceph_assert(s_instance != nullptr);
     s_instance->image_ids = image_ids;
     s_instance->on_finish = on_finish;
     return s_instance;
@@ -145,6 +145,7 @@ using ::testing::DoAll;
 using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::Return;
+using ::testing::ReturnArg;
 using ::testing::StrEq;
 using ::testing::WithArg;
 using ::testing::WithoutArgs;
@@ -157,7 +158,7 @@ public:
   typedef librbd::MockMirroringWatcher MockMirroringWatcher;
   typedef librbd::MirroringWatcher<librbd::MockTestImageCtx> MirroringWatcher;
 
-  struct MockListener : MockPoolWatcher::Listener {
+  struct MockListener : pool_watcher::Listener {
     TestMockPoolWatcher *test;
 
     MockListener(TestMockPoolWatcher *test) : test(test) {
@@ -225,12 +226,12 @@ public:
   void expect_mirror_uuid_get(librados::IoCtx &io_ctx,
                               const std::string &uuid, int r) {
     bufferlist out_bl;
-    ::encode(uuid, out_bl);
+    encode(uuid, out_bl);
 
     EXPECT_CALL(get_mock_io_ctx(io_ctx),
                 exec(RBD_MIRRORING, _, StrEq("rbd"), StrEq("mirror_uuid_get"),
                      _, _, _))
-      .WillOnce(DoAll(WithArg<5>(Invoke([this, out_bl](bufferlist *bl) {
+      .WillOnce(DoAll(WithArg<5>(Invoke([out_bl](bufferlist *bl) {
                           *bl = out_bl;
                         })),
                       Return(r)));
@@ -238,13 +239,15 @@ public:
 
   void expect_timer_add_event(MockThreads &mock_threads) {
     EXPECT_CALL(*mock_threads.timer, add_event_after(_, _))
-      .WillOnce(WithArg<1>(Invoke([this](Context *ctx) {
-          auto wrapped_ctx = new FunctionContext([this, ctx](int r) {
-              Mutex::Locker timer_locker(m_threads->timer_lock);
-              ctx->complete(r);
-            });
-          m_threads->work_queue->queue(wrapped_ctx, 0);
-        })));
+      .WillOnce(DoAll(WithArg<1>(Invoke([this](Context *ctx) {
+                        auto wrapped_ctx =
+			  new FunctionContext([this, ctx](int r) {
+			      Mutex::Locker timer_locker(m_threads->timer_lock);
+			      ctx->complete(r);
+			    });
+			m_threads->work_queue->queue(wrapped_ctx, 0);
+                      })),
+                      ReturnArg<1>()));
   }
 
   int when_shut_down(MockPoolWatcher &mock_pool_watcher) {

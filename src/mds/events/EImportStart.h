@@ -33,11 +33,11 @@ protected:
 public:
   EMetaBlob metablob;
   bufferlist client_map;  // encoded map<__u32,entity_inst_t>
-  version_t cmapv;
+  version_t cmapv{0};
 
-  EImportStart(MDLog *log, dirfrag_t di, vector<dirfrag_t>& b, mds_rank_t f) :
+  EImportStart(MDLog *log, dirfrag_t di, const vector<dirfrag_t>& b, mds_rank_t f) :
     LogEvent(EVENT_IMPORTSTART),
-    base(di), bounds(b), from(f), metablob(log) { }
+    base(di), bounds(b), from(f) { }
   EImportStart() :
     LogEvent(EVENT_IMPORTSTART), from(MDS_RANK_NONE) { }
   
@@ -48,7 +48,7 @@ public:
   EMetaBlob *get_metablob() override { return &metablob; }
   
   void encode(bufferlist &bl, uint64_t features) const override;
-  void decode(bufferlist::iterator &bl) override;
+  void decode(bufferlist::const_iterator &bl) override;
   void dump(Formatter *f) const override;
   static void generate_test_instances(list<EImportStart*>& ls);
   

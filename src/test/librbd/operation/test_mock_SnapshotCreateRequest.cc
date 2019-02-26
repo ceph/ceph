@@ -43,7 +43,7 @@ public:
   }
 
   void expect_allocate_snap_id(MockImageCtx &mock_image_ctx, int r) {
-    auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
+    auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
                                selfmanaged_snap_create(_));
     if (r < 0 && r != -ESTALE) {
       expect.WillOnce(Return(r));
@@ -53,7 +53,7 @@ public:
   }
 
   void expect_release_snap_id(MockImageCtx &mock_image_ctx, int r) {
-    auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.md_ctx),
+    auto &expect = EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx),
                                selfmanaged_snap_remove(_));
     if (r < 0) {
       expect.WillOnce(Return(r));
@@ -125,8 +125,8 @@ TEST_F(TestMockOperationSnapshotCreateRequest, Success) {
   expect_allocate_snap_id(mock_image_ctx, 0);
   expect_snap_create(mock_image_ctx, 0);
   if (!mock_image_ctx.old_format) {
-    expect_update_snap_context(mock_image_ctx);
     expect_object_map_snap_create(mock_image_ctx);
+    expect_update_snap_context(mock_image_ctx);
   }
   expect_unblock_writes(mock_image_ctx);
 
@@ -194,8 +194,8 @@ TEST_F(TestMockOperationSnapshotCreateRequest, CreateSnapStale) {
   expect_allocate_snap_id(mock_image_ctx, -ESTALE);
   expect_snap_create(mock_image_ctx, -ESTALE);
   if (!mock_image_ctx.old_format) {
-    expect_update_snap_context(mock_image_ctx);
     expect_object_map_snap_create(mock_image_ctx);
+    expect_update_snap_context(mock_image_ctx);
   }
   expect_unblock_writes(mock_image_ctx);
 

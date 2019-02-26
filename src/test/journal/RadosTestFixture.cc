@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "test/librados/test_cxx.h"
 #include "test/journal/RadosTestFixture.h"
 #include "cls/journal/cls_journal_client.h"
 #include "include/stringify.h"

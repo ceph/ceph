@@ -16,7 +16,7 @@
 #include <boost/intrusive_ptr.hpp>
 #include <boost/noncopyable.hpp>
 #include <boost/unordered_map.hpp>
-#include "include/assert.h"
+#include "include/ceph_assert.h"
 
 class SafeTimer;
 
@@ -87,12 +87,6 @@ private:
     Context *on_finish;
     bufferlist read_bl;
     C_Fetch(ObjectPlayer *o, Context *ctx) : object_player(o), on_finish(ctx) {
-    }
-    void finish(int r) override;
-  };
-  struct C_WatchTask : public Context {
-    ObjectPlayerPtr object_player;
-    C_WatchTask(ObjectPlayer *o) : object_player(o) {
     }
     void finish(int r) override;
   };

@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -11,6 +12,7 @@
  * Foundation.  See file COPYING.
  *
  */
+
 #include "include/compat.h"
 #include <sys/types.h>
 #include <string.h>
@@ -22,7 +24,9 @@
 #include "rgw_acl.h"
 
 #include "include/str_list.h"
+#include "include/stringify.h"
 #include "global/global_init.h"
+#include "global/signal_handler.h"
 #include "common/config.h"
 #include "common/errno.h"
 #include "common/Timer.h"
@@ -47,18 +51,24 @@
 #include "rgw_auth_s3.h"
 #include "rgw_lib.h"
 #include "rgw_lib_frontend.h"
+#include "rgw_http_client.h"
+#include "rgw_http_client_curl.h"
+#include "rgw_perf_counters.h"
 
 #include <errno.h>
-#include <chrono>
 #include <thread>
 #include <string>
-#include <string.h>
 #include <mutex>
 
 
 #define dout_subsys ceph_subsys_rgw
 
 bool global_stop = false;
+
+static void handle_sigterm(int signum)
+{
+  dout(20) << __func__ << " SIGUSR1 ignored" << dendl;
+}
 
 namespace rgw {
 
@@ -102,7 +112,7 @@ namespace rgw {
       auto expire_s = cct->_conf->rgw_nfs_namespace_expire_secs;
 
       /* delay between gc cycles */
-      auto delay_s = std::max(1, std::min(MIN_EXPIRE_S, expire_s/2));
+      auto delay_s = std::max(int64_t(1), std::min(int64_t(MIN_EXPIRE_S), expire_s/2));
 
       unique_lock uniq(mtx);
     restart:
@@ -112,6 +122,7 @@ namespace rgw {
 	RGWLibFS* fs = iter->first->ref();
 	uniq.unlock();
 	fs->gc();
+	fs->update_user();
 	fs->rele();
 	uniq.lock();
 	if (cur_gen != gen)
@@ -215,7 +226,8 @@ namespace rgw {
     rgw_env.set("HTTP_HOST", "");
 
     /* XXX and -then- bloat up req_state with string copies from it */
-    struct req_state rstate(req->cct, &rgw_env, req->get_user());
+    const uint64_t reqid = store->get_new_req_id();
+    struct req_state rstate(req->cct, &rgw_env, req->get_user(), reqid);
     struct req_state *s = &rstate;
 
     // XXX fix this
@@ -239,10 +251,15 @@ namespace rgw {
       goto done;
     }
 
+    /* now expected by rgw_log_op() */
+    rgw_env.set("REQUEST_METHOD", s->info.method);
+    rgw_env.set("REQUEST_URI", s->info.request_uri);
+    rgw_env.set("QUERY_STRING", "");
+
     /* XXX authorize does less here then in the REST path, e.g.,
      * the user's info is cached, but still incomplete */
-    req->log(s, "authorizing");
-    ret = req->authorize();
+    ldpp_dout(s, 2) << "authorizing" << dendl;
+    ret = req->authorize(op);
     if (ret < 0) {
       dout(10) << "failed to authorize request" << dendl;
       abort_req(s, op, ret);
@@ -255,28 +272,28 @@ namespace rgw {
       s->auth.identity = rgw::auth::transform_old_authinfo(s);
     }
 
-    req->log(s, "reading op permissions");
+    ldpp_dout(s, 2) << "reading op permissions" << dendl;
     ret = req->read_permissions(op);
     if (ret < 0) {
       abort_req(s, op, ret);
       goto done;
     }
 
-    req->log(s, "init op");
+    ldpp_dout(s, 2) << "init op" << dendl;
     ret = op->init_processing();
     if (ret < 0) {
       abort_req(s, op, ret);
       goto done;
     }
 
-    req->log(s, "verifying op mask");
+    ldpp_dout(s, 2) << "verifying op mask" << dendl;
     ret = op->verify_op_mask();
     if (ret < 0) {
       abort_req(s, op, ret);
       goto done;
     }
 
-    req->log(s, "verifying op permissions");
+    ldpp_dout(s, 2) << "verifying op permissions" << dendl;
     ret = op->verify_permission();
     if (ret < 0) {
       if (s->system_request) {
@@ -289,14 +306,14 @@ namespace rgw {
       }
     }
 
-    req->log(s, "verifying op params");
+    ldpp_dout(s, 2) << "verifying op params" << dendl;
     ret = op->verify_params();
     if (ret < 0) {
       abort_req(s, op, ret);
       goto done;
     }
 
-    req->log(s, "executing");
+    ldpp_dout(s, 2) << "executing" << dendl;
     op->pre_exec();
     op->execute();
     op->complete();
@@ -315,7 +332,7 @@ namespace rgw {
 
     int http_ret = s->err.http_ret;
 
-    req->log_format(s, "http status=%d", http_ret);
+    ldpp_dout(s, 2) << "http status=" << http_ret << dendl;
 
     dout(1) << "====== " << __func__
 	    << " req done req=" << hex << req << dec << " http_status="
@@ -356,8 +373,8 @@ namespace rgw {
 
     /* XXX authorize does less here then in the REST path, e.g.,
      * the user's info is cached, but still incomplete */
-    req->log(s, "authorizing");
-    ret = req->authorize();
+    ldpp_dout(s, 2) << "authorizing" << dendl;
+    ret = req->authorize(op);
     if (ret < 0) {
       dout(10) << "failed to authorize request" << dendl;
       abort_req(s, op, ret);
@@ -370,28 +387,28 @@ namespace rgw {
       s->auth.identity = rgw::auth::transform_old_authinfo(s);
     }
 
-    req->log(s, "reading op permissions");
+    ldpp_dout(s, 2) << "reading op permissions" << dendl;
     ret = req->read_permissions(op);
     if (ret < 0) {
       abort_req(s, op, ret);
       goto done;
     }
 
-    req->log(s, "init op");
+    ldpp_dout(s, 2) << "init op" << dendl;
     ret = op->init_processing();
     if (ret < 0) {
       abort_req(s, op, ret);
       goto done;
     }
 
-    req->log(s, "verifying op mask");
+    ldpp_dout(s, 2) << "verifying op mask" << dendl;
     ret = op->verify_op_mask();
     if (ret < 0) {
       abort_req(s, op, ret);
       goto done;
     }
 
-    req->log(s, "verifying op permissions");
+    ldpp_dout(s, 2) << "verifying op permissions" << dendl;
     ret = op->verify_permission();
     if (ret < 0) {
       if (s->system_request) {
@@ -404,7 +421,7 @@ namespace rgw {
       }
     }
 
-    req->log(s, "verifying op params");
+    ldpp_dout(s, 2) << "verifying op params" << dendl;
     ret = op->verify_params();
     if (ret < 0) {
       abort_req(s, op, ret);
@@ -440,7 +457,7 @@ namespace rgw {
   int RGWLibFrontend::init()
   {
     pprocess = new RGWLibProcess(g_ceph_context, &env,
-				 g_conf->rgw_thread_pool_size, conf);
+				 g_conf()->rgw_thread_pool_size, conf);
     return 0;
   }
 
@@ -455,12 +472,13 @@ namespace rgw {
     int r = 0;
 
     /* alternative default for module */
-    vector<const char *> def_args;
-    def_args.push_back("--debug-rgw=1/5");
-    def_args.push_back("--keyring=$rgw_data/keyring");
-    def_args.push_back("--log-file=/var/log/radosgw/$cluster-$name.log");
+    map<string,string> defaults = {
+      { "debug_rgw", "1/5" },
+      { "keyring", "$rgw_data/keyring" },
+      { "log_file", "/var/log/radosgw/$cluster-$name.log" }
+    };
 
-    cct = global_init(&def_args, args,
+    cct = global_init(&defaults, args,
 		      CEPH_ENTITY_TYPE_CLIENT,
 		      CODE_ENVIRONMENT_DAEMON,
 		      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
@@ -469,7 +487,7 @@ namespace rgw {
     SafeTimer init_timer(g_ceph_context, mutex);
     init_timer.init();
     mutex.Lock();
-    init_timer.add_event_after(g_conf->rgw_init_timeout, new C_InitTimeout);
+    init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
     mutex.Unlock();
 
     common_init_finish(g_ceph_context);
@@ -477,13 +495,15 @@ namespace rgw {
     rgw_tools_init(g_ceph_context);
 
     rgw_init_resolver();
+    rgw::curl::setup_curl(boost::none);
+    rgw_http_client_init(g_ceph_context);
 
     store = RGWStoreManager::get_storage(g_ceph_context,
-					 g_conf->rgw_enable_gc_threads,
-					 g_conf->rgw_enable_lc_threads,
-					 g_conf->rgw_enable_quota_threads,
-					 g_conf->rgw_run_sync_thread,
-					 g_conf->rgw_dynamic_resharding);
+					 g_conf()->rgw_enable_gc_threads,
+					 g_conf()->rgw_enable_lc_threads,
+					 g_conf()->rgw_enable_quota_threads,
+					 g_conf()->rgw_run_sync_thread,
+					 g_conf().get_val<bool>("rgw_dynamic_resharding"));
 
     if (!store) {
       mutex.Lock();
@@ -497,7 +517,7 @@ namespace rgw {
 
     r = rgw_perf_start(g_ceph_context);
 
-    rgw_rest_init(g_ceph_context, store, store->get_zonegroup());
+    rgw_rest_init(g_ceph_context, store, store->svc.zone->get_zonegroup());
 
     mutex.Lock();
     init_timer.cancel_all_events();
@@ -526,16 +546,25 @@ namespace rgw {
 
     // XXX ex-RGWRESTMgr_lib, mgr->set_logging(true)
 
-    if (!g_conf->rgw_ops_log_socket_path.empty()) {
-      olog = new OpsLogSocket(g_ceph_context, g_conf->rgw_ops_log_data_backlog);
-      olog->init(g_conf->rgw_ops_log_socket_path);
+    if (!g_conf()->rgw_ops_log_socket_path.empty()) {
+      olog = new OpsLogSocket(g_ceph_context, g_conf()->rgw_ops_log_data_backlog);
+      olog->init(g_conf()->rgw_ops_log_socket_path);
     }
 
     int port = 80;
     RGWProcessEnv env = { store, &rest, olog, port };
 
+    string fe_count{"0"};
     fec = new RGWFrontendConfig("rgwlib");
     fe = new RGWLibFrontend(env, fec);
+
+    init_async_signal_handler();
+    register_async_signal_handler(SIGUSR1, handle_sigterm);
+
+    map<string, string> service_map_meta;
+    service_map_meta["pid"] = stringify(getpid());
+    service_map_meta["frontend_type#" + fe_count] = "rgw-nfs";
+    service_map_meta["frontend_config#" + fe_count] = fec->get_config();
 
     fe->init();
     if (r < 0) {
@@ -544,6 +573,12 @@ namespace rgw {
     }
 
     fe->run();
+
+    r = store->register_to_service_map("rgw-nfs", service_map_meta);
+    if (r < 0) {
+      derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
+      /* ignore error */
+    }
 
     return 0;
   } /* RGWLib::init() */
@@ -560,6 +595,9 @@ namespace rgw {
     delete fec;
     delete ldh;
 
+    unregister_async_signal_handler(SIGUSR1, handle_sigterm);
+    shutdown_async_signal_handler();
+
     rgw_log_usage_finalize();
 
     delete olog;
@@ -568,6 +606,8 @@ namespace rgw {
 
     rgw_tools_cleanup();
     rgw_shutdown_resolver();
+    rgw_http_client_cleanup();
+    rgw::curl::cleanup_curl();
 
     rgw_perf_stop(g_ceph_context);
 
@@ -615,7 +655,7 @@ namespace rgw {
     return ret;
   } /* RGWLibRequest::read_permissions */
 
-  int RGWHandler_Lib::authorize()
+  int RGWHandler_Lib::authorize(const DoutPrefixProvider *dpp)
   {
     /* TODO: handle
      *  1. subusers
@@ -660,7 +700,6 @@ int librgw_create(librgw_t* rgw, int argc, char **argv)
       for (const auto& elt : spl_args) {
 	args.push_back(elt.c_str());
       }
-      env_to_vec(args);
       rc = rgwlib.init(args);
     }
   }

@@ -20,6 +20,7 @@
 #define VMX_ALIGN	16
 #define VMX_ALIGN_MASK	(VMX_ALIGN-1)
 
+#ifdef HAVE_PPC64LE
 #ifdef REFLECT
 static unsigned int crc32_align(unsigned int crc, unsigned char const *p,
                                 unsigned long len)
@@ -38,7 +39,6 @@ static unsigned int crc32_align(unsigned int crc, unsigned char const *p,
 }
 #endif
 
-#ifdef HAVE_POWER8
 static inline unsigned long polynomial_multiply(unsigned int a, unsigned int b) {
         vector unsigned int va = {a, 0, 0, 0};
         vector unsigned int vb = {b, 0, 0, 0};
@@ -134,7 +134,7 @@ uint32_t ceph_crc32c_ppc(uint32_t crc, unsigned char const *data, unsigned len)
   return crc;
 }
 
-#else /* HAVE_POWER8 */
+#else /* HAVE_PPC64LE */
 
 /* This symbol has to exist on non-ppc architectures (and on legacy
  * ppc systems using power7 or below) in order to compile properly
@@ -145,4 +145,4 @@ uint32_t ceph_crc32c_ppc(uint32_t crc, unsigned char const *data, unsigned len)
   return 0;
 }
 
-#endif /* HAVE_POWER8 */
+#endif /* HAVE_PPC64LE */

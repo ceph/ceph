@@ -106,8 +106,8 @@ public:
                        librbd::journal::EventEntry *event_entry) {
     try {
       bufferlist data_bl = replay_entry.get_data();
-      bufferlist::iterator it = data_bl.begin();
-      ::decode(*event_entry, it);
+      auto it = data_bl.cbegin();
+      decode(*event_entry, it);
     } catch (const buffer::error &err) {
       return false;
     }
@@ -164,7 +164,7 @@ TEST_F(TestJournalEntries, AioDiscard) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
   CephContext* cct = reinterpret_cast<CephContext*>(_rados.cct());
-  REQUIRE(!cct->_conf->rbd_skip_partial_discard);
+  REQUIRE(!cct->_conf.get_val<bool>("rbd_skip_partial_discard"));
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
@@ -175,7 +175,7 @@ TEST_F(TestJournalEntries, AioDiscard) {
   C_SaferCond cond_ctx;
   auto c = librbd::io::AioCompletion::create(&cond_ctx);
   c->get();
-  ictx->io_work_queue->aio_discard(c, 123, 234, cct->_conf->rbd_skip_partial_discard);
+  ictx->io_work_queue->aio_discard(c, 123, 234, ictx->skip_partial_discard);
   ASSERT_EQ(0, c->wait_for_complete());
   c->put();
 

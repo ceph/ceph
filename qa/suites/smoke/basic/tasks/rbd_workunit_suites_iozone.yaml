@@ -8,7 +8,6 @@ overrides:
 tasks:
 - install:
 - ceph:
-    fs: btrfs
 - rbd:
     all:
       image_size: 20480

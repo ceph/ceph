@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 set -e
 name=`echo $0 | sed 's/\//_/g'`

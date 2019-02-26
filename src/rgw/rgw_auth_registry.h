@@ -14,6 +14,7 @@
 #include "rgw_auth.h"
 #include "rgw_auth_s3.h"
 #include "rgw_swift_auth.h"
+#include "rgw_rest_sts.h"
 
 namespace rgw {
 namespace auth {
@@ -21,12 +22,14 @@ namespace auth {
 /* A class aggregating the knowledge about all Strategies in RadosGW. It is
  * responsible for handling the dynamic reconfiguration on e.g. realm update. */
 class StrategyRegistry {
-  template <class AbstractorT>
-  using s3_strategy_t = rgw::auth::s3::AWSAuthStrategy<AbstractorT>;
+  template <class AbstractorT,
+            bool AllowAnonAccessT = false>
+  using s3_strategy_t = \
+    rgw::auth::s3::AWSAuthStrategy<AbstractorT, AllowAnonAccessT>;
 
   struct s3_main_strategy_t : public Strategy {
     using s3_main_strategy_plain_t = \
-      s3_strategy_t<rgw::auth::s3::AWSGeneralAbstractor>;
+      s3_strategy_t<rgw::auth::s3::AWSGeneralAbstractor, true>;
     using s3_main_strategy_boto2_t = \
       s3_strategy_t<rgw::auth::s3::AWSGeneralBoto2Abstractor>;
 
@@ -51,12 +54,15 @@ class StrategyRegistry {
 
   rgw::auth::swift::DefaultStrategy swift_strategy;
 
+  rgw::auth::sts::DefaultStrategy sts_strategy;
+
 public:
   StrategyRegistry(CephContext* const cct,
                    RGWRados* const store)
     : s3_main_strategy(cct, store),
       s3_post_strategy(cct, store),
-      swift_strategy(cct, store) {
+      swift_strategy(cct, store),
+      sts_strategy(cct, store) {
   }
 
   const s3_main_strategy_t& get_s3_main() const {
@@ -69,6 +75,10 @@ public:
 
   const rgw::auth::swift::DefaultStrategy& get_swift() const {
     return swift_strategy;
+  }
+
+  const rgw::auth::sts::DefaultStrategy& get_sts() const {
+    return sts_strategy;
   }
 
   static std::shared_ptr<StrategyRegistry>

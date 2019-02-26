@@ -17,10 +17,13 @@
 
 #include "common/RefCountedObj.h"
 #include "common/Mutex.h"
-#include "include/Spinlock.h"
+#include "global/global_context.h"
+#include "include/spinlock.h"
 #include "OSDCap.h"
 #include "Watch.h"
 #include "OSDMap.h"
+
+//#define PG_DEBUG_REFS
 
 struct Session;
 typedef boost::intrusive_ptr<Session> SessionRef;
@@ -71,7 +74,7 @@ struct Backoff : public RefCountedObject {
     STATE_ACKED = 2,   ///< backoff acked
     STATE_DELETING = 3 ///< backoff deleted, but un-acked
   };
-  std::atomic_int state = {STATE_NEW};
+  std::atomic<int> state = {STATE_NEW};
   spg_t pgid;          ///< owning pgid
   uint64_t id = 0;     ///< unique id (within the Session)
 
@@ -128,33 +131,36 @@ struct Backoff : public RefCountedObject {
 struct Session : public RefCountedObject {
   EntityName entity_name;
   OSDCap caps;
-  int64_t auid;
   ConnectionRef con;
+  entity_addr_t socket_addr;
   WatchConState wstate;
 
   Mutex session_dispatch_lock;
   boost::intrusive::list<OpRequest> waiting_on_map;
 
-  Spinlock sent_epoch_lock;
+  ceph::spinlock sent_epoch_lock;
   epoch_t last_sent_epoch;
-  Spinlock received_map_lock;
-  epoch_t received_map_epoch; // largest epoch seen in MOSDMap from here
 
   /// protects backoffs; orders inside Backoff::lock *and* PG::backoff_lock
   Mutex backoff_lock;
-  std::atomic_int backoff_count= {0};  ///< simple count of backoffs
+  std::atomic<int> backoff_count= {0};  ///< simple count of backoffs
   map<spg_t,map<hobject_t,set<BackoffRef>>> backoffs;
 
   std::atomic<uint64_t> backoff_seq = {0};
 
-  explicit Session(CephContext *cct) :
+  explicit Session(CephContext *cct, Connection *con_) :
     RefCountedObject(cct),
-    auid(-1), con(0),
+    con(con_),
+    socket_addr(con_->get_peer_socket_addr()),
     wstate(cct),
     session_dispatch_lock("Session::session_dispatch_lock"),
-    last_sent_epoch(0), received_map_epoch(0),
+    last_sent_epoch(0),
     backoff_lock("Session::backoff_lock")
     {}
+
+  entity_addr_t& get_peer_socket_addr() {
+    return socket_addr;
+  }
 
   void ack_backoff(
     CephContext *cct,
@@ -167,15 +173,15 @@ struct Session : public RefCountedObject {
     if (!backoff_count.load()) {
       return nullptr;
     }
-    Mutex::Locker l(backoff_lock);
-    assert(!backoff_count == backoffs.empty());
+    std::lock_guard l(backoff_lock);
+    ceph_assert(!backoff_count == backoffs.empty());
     auto i = backoffs.find(pgid);
     if (i == backoffs.end()) {
       return nullptr;
     }
     auto p = i->second.lower_bound(oid);
     if (p != i->second.begin() &&
-	p->first > oid) {
+	(p == i->second.end() || p->first > oid)) {
       --p;
     }
     if (p != i->second.end()) {
@@ -195,17 +201,17 @@ struct Session : public RefCountedObject {
     CephContext *cct, spg_t pgid, const hobject_t& oid, const Message *m);
 
   void add_backoff(BackoffRef b) {
-    Mutex::Locker l(backoff_lock);
-    assert(!backoff_count == backoffs.empty());
+    std::lock_guard l(backoff_lock);
+    ceph_assert(!backoff_count == backoffs.empty());
     backoffs[b->pgid][b->begin].insert(b);
     ++backoff_count;
   }
 
   // called by PG::release_*_backoffs and PG::clear_backoffs()
   void rm_backoff(BackoffRef b) {
-    Mutex::Locker l(backoff_lock);
-    assert(b->lock.is_locked_by_me());
-    assert(b->session == this);
+    std::lock_guard l(backoff_lock);
+    ceph_assert(b->lock.is_locked_by_me());
+    ceph_assert(b->session == this);
     auto i = backoffs.find(b->pgid);
     if (i != backoffs.end()) {
       // may race with clear_backoffs()
@@ -224,7 +230,7 @@ struct Session : public RefCountedObject {
 	}
       }
     }
-    assert(!backoff_count == backoffs.empty());
+    ceph_assert(!backoff_count == backoffs.empty());
   }
   void clear_backoffs();
 };

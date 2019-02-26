@@ -56,11 +56,8 @@ class MessengerClient {
     bool ms_handle_reset(Connection *con) override { return true; }
     void ms_handle_remote_reset(Connection *con) override {}
     bool ms_handle_refused(Connection *con) override { return false; }
-    bool ms_verify_authorizer(Connection *con, int peer_type, int protocol,
-                              bufferlist& authorizer, bufferlist& authorizer_reply,
-                              bool& isvalid, CryptoKey& session_key) override {
-      isvalid = true;
-      return true;
+    int ms_handle_authentication(Connection *con) override {
+      return 1;
     }
   };
 
@@ -84,7 +81,7 @@ class MessengerClient {
 
     ClientThread(Messenger *m, int c, ConnectionRef con, int len, int ops, int think_time_us):
         msgr(m), concurrent(c), conn(con), oid("object-name"), oloc(1, 1), msg_len(len), ops(ops),
-        dispatcher(think_time_us, this), lock("MessengerBenchmark::ClientThread::lock") {
+        dispatcher(think_time_us, this), lock("MessengerBenchmark::ClientThread::lock"), inflight(0) {
       m->add_dispatcher_head(&dispatcher);
       bufferptr ptr(msg_len);
       memset(ptr.c_str(), 0, msg_len);
@@ -100,7 +97,8 @@ class MessengerClient {
 		       oloc.nspace);
 	spg_t spgid(pgid);
         MOSDOp *m = new MOSDOp(client_inc, 0, hobj, spgid, 0, 0, 0);
-        m->write(0, msg_len, data);
+        bufferlist msg_data(data);
+        m->write(0, msg_len, msg_data);
         inflight++;
         conn->send_message(m);
         //cerr << __func__ << " send m=" << m << std::endl;
@@ -118,7 +116,7 @@ class MessengerClient {
   vector<ClientThread*> clients;
 
  public:
-  MessengerClient(string t, string addr, int delay):
+  MessengerClient(const string &t, const string &addr, int delay):
       type(t), serveraddr(addr), think_time_us(delay) {
   }
   ~MessengerClient() {
@@ -136,12 +134,12 @@ class MessengerClient {
     for (int i = 0; i < jobs; ++i) {
       Messenger *msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(0), "client", getpid()+i, 0);
       msgr->set_default_policy(Messenger::Policy::lossless_client(0));
-      entity_inst_t inst(entity_name_t::OSD(0), addr);
-      ConnectionRef conn = msgr->get_connection(inst);
+      msgr->start();
+      entity_addrvec_t addrs(addr);
+      ConnectionRef conn = msgr->connect_to_osd(addrs);
       ClientThread *t = new ClientThread(msgr, c, conn, msg_len, ops, think_time_us);
       msgrs.push_back(msgr);
       clients.push_back(t);
-      msgr->start();
     }
     usleep(1000*1000);
   }
@@ -178,9 +176,10 @@ int main(int argc, char **argv)
   argv_to_vec(argc, (const char **)argv, args);
 
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf->apply_changes(NULL);
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   if (args.size() < 6) {
     usage(argv[0]);
@@ -193,7 +192,7 @@ int main(int argc, char **argv)
   int think_time = atoi(args[4]);
   int len = atoi(args[5]);
 
-  std::string public_msgr_type = g_ceph_context->_conf->ms_public_type.empty() ? g_ceph_context->_conf->get_val<std::string>("ms_type") : g_ceph_context->_conf->ms_public_type;
+  std::string public_msgr_type = g_ceph_context->_conf->ms_public_type.empty() ? g_ceph_context->_conf.get_val<std::string>("ms_type") : g_ceph_context->_conf->ms_public_type;
 
   cerr << " using ms-public-type " << public_msgr_type << std::endl;
   cerr << "       server ip:port " << args[0] << std::endl;

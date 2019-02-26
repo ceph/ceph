@@ -47,7 +47,7 @@ You can also use Ceph block devices with ``libvirt``, ``virsh`` and the
 
 
 To create VMs that use Ceph block devices, use the procedures in the following
-sections. In the exemplary embodiment, we've used ``libvirt-pool`` for the pool
+sections. In the exemplary embodiment, we have used ``libvirt-pool`` for the pool
 name, ``client.libvirt`` for the user name, and ``new-libvirt-image`` for  the
 image name. You may use any value you like, but ensure you replace those values
 when executing commands in the subsequent procedures.
@@ -58,7 +58,7 @@ Configuring Ceph
 
 To configure Ceph for use with ``libvirt``, perform the following steps:
 
-#. `Create a pool`_ (or use the default). The following example uses the 
+#. `Create a pool`_. The following example uses the 
    pool name ``libvirt-pool`` with 128 placement groups. ::
 
 	ceph osd pool create libvirt-pool 128 128
@@ -67,15 +67,19 @@ To configure Ceph for use with ``libvirt``, perform the following steps:
 
 	ceph osd lspools
 
-#. `Create a Ceph User`_ (or use ``client.admin`` for version 0.9.7 and 
-   earlier). The following example uses the Ceph user name ``client.libvirt`` 
+#. Use the ``rbd`` tool to initialize the pool for use by RBD::
+
+        rbd pool init <pool-name>
+
+#. `Create a Ceph User`_ (or use ``client.admin`` for version 0.9.7 and
+   earlier). The following example uses the Ceph user name ``client.libvirt``
    and references ``libvirt-pool``. ::
 
-	ceph auth get-or-create client.libvirt mon 'allow r' osd 'allow class-read object_prefix rbd_children, allow rwx pool=libvirt-pool'
+	ceph auth get-or-create client.libvirt mon 'profile rbd' osd 'profile rbd pool=libvirt-pool'
 	
    Verify the name exists. :: 
    
-	ceph auth list
+	ceph auth ls
 
    **NOTE**: ``libvirt`` will access Ceph using the ID ``libvirt``, 
    not the Ceph name ``client.libvirt``. See `User Management - User`_ and 

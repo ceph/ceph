@@ -16,28 +16,31 @@
 #ifndef CEPH_MSTATFSREPLY_H
 #define CEPH_MSTATFSREPLY_H
 
-class MStatfsReply : public Message {
+class MStatfsReply : public MessageInstance<MStatfsReply> {
 public:
-  struct ceph_mon_statfs_reply h;
+  friend factory;
 
-  MStatfsReply() : Message(CEPH_MSG_STATFS_REPLY) {}
-  MStatfsReply(uuid_d &f, ceph_tid_t t, epoch_t epoch) : Message(CEPH_MSG_STATFS_REPLY) {
+  struct ceph_mon_statfs_reply h{};
+
+  MStatfsReply() : MessageInstance(CEPH_MSG_STATFS_REPLY) {}
+  MStatfsReply(uuid_d &f, ceph_tid_t t, epoch_t epoch) : MessageInstance(CEPH_MSG_STATFS_REPLY) {
     memcpy(&h.fsid, f.bytes(), sizeof(h.fsid));
     header.tid = t;
     h.version = epoch;
   }
 
-  const char *get_type_name() const override { return "statfs_reply"; }
+  std::string_view get_type_name() const override { return "statfs_reply"; }
   void print(ostream& out) const override {
     out << "statfs_reply(" << header.tid << ")";
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(h, payload);
+    using ceph::encode;
+    encode(h, payload);
   }
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(h, p);
+    auto p = payload.cbegin();
+    decode(h, p);
   }
 };
 

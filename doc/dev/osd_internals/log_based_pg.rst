@@ -1,3 +1,5 @@
+.. _log-based-pg:
+
 ============
 Log Based PG
 ============
@@ -27,7 +29,7 @@ writes on overlapping regions), we might as well serialize writes on
 the whole PG since it lets us represent the current state of the PG
 using two numbers: the epoch of the map on the primary in which the
 most recent write started (this is a bit stranger than it might seem
-since map distribution itself is asyncronous -- see Peering and the
+since map distribution itself is asynchronous -- see Peering and the
 concept of interval changes) and an increasing per-pg version number
 -- this is referred to in the code with type eversion_t and stored as
 pg_info_t::last_update.  Furthermore, we maintain a log of "recent"
@@ -94,7 +96,7 @@ and so many similarities
 #. The high level locking rules for mixing reads and writes without exposing
    uncommitted state (which might be rolled back or forgotten later)
 #. The process, metadata, and protocol needed to determine the set of osds
-   which partcipated in the most recent interval in which we accepted writes
+   which participated in the most recent interval in which we accepted writes
 #. etc.
 
 Instead, we choose a few abstractions (and a few kludges) to paper over the differences:
@@ -126,7 +128,7 @@ Readable vs Degraded
 For a replicated pool, an object is readable iff it is present on
 the primary (at the right version).  For an ec pool, we need at least
 M shards present to do a read, and we need it on the primary.  For
-this reason, PGBackend needs to include some interfaces for determing
+this reason, PGBackend needs to include some interfaces for determining
 when recovery is required to serve a read vs a write.  This also
 changes the rules for when peering has enough logs to prove that it
 
@@ -142,7 +144,7 @@ Reads with the replicated strategy can always be satisfied
 synchronously out of the primary OSD.  With an erasure coded strategy,
 the primary will need to request data from some number of replicas in
 order to satisfy a read.  PGBackend will therefore need to provide
-seperate objects_read_sync and objects_read_async interfaces where
+separate objects_read_sync and objects_read_async interfaces where
 the former won't be implemented by the ECBackend.
 
 PGBackend interfaces:

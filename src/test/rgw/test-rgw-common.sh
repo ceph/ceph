@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
 rgw_flags="--debug-rgw=20 --debug-ms=1"
 

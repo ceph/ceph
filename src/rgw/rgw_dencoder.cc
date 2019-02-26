@@ -3,10 +3,13 @@
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
+#include "rgw_zone.h"
 #include "rgw_log.h"
 #include "rgw_acl.h"
 #include "rgw_acl_s3.h"
 #include "rgw_cache.h"
+#include "rgw_meta_sync_status.h"
+#include "rgw_data_sync.h"
 
 #include "common/Formatter.h"
 
@@ -98,9 +101,9 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
 
   if (!rule.part_size) {
     stripe_size = rule.stripe_max_size;
-    stripe_size = MIN(manifest->get_obj_size() - stripe_ofs, stripe_size);
+    stripe_size = std::min(manifest->get_obj_size() - stripe_ofs, stripe_size);
   } else {
-    uint64_t next = MIN(stripe_ofs + rule.stripe_max_size, part_ofs + rule.part_size);
+    uint64_t next = std::min(stripe_ofs + rule.stripe_max_size, part_ofs + rule.part_size);
     stripe_size = next - stripe_ofs;
   }
 
@@ -356,14 +359,15 @@ void ObjectMetaInfo::generate_test_instances(list<ObjectMetaInfo*>& o)
 
 void ObjectCacheInfo::generate_test_instances(list<ObjectCacheInfo*>& o)
 {
+  using ceph::encode;
   ObjectCacheInfo *i = new ObjectCacheInfo;
   i->status = 0;
   i->flags = CACHE_FLAG_MODIFY_XATTRS;
   string s = "this is a string";
   string s2 = "this is a another string";
   bufferlist data, data2;
-  ::encode(s, data);
-  ::encode(s2, data2);
+  encode(s, data);
+  encode(s2, data2);
   i->data = data;
   i->xattrs["x1"] = data;
   i->xattrs["x2"] = data2;
@@ -401,7 +405,6 @@ void RGWSubUser::generate_test_instances(list<RGWSubUser*>& o)
 void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
 {
   RGWUserInfo *i = new RGWUserInfo;
-  i->auid = 1;
   i->user_id = "user_id";
   i->display_name =  "display_name";
   i->user_email = "user@email";
@@ -453,6 +456,20 @@ void RGWZone::generate_test_instances(list<RGWZone*> &o)
   o.push_back(new RGWZone);
 }
 
+void RGWRealm::generate_test_instances(list<RGWRealm*> &o)
+{
+  RGWRealm *z = new RGWRealm;
+  o.push_back(z);
+  o.push_back(new RGWRealm);
+}
+
+void RGWPeriod::generate_test_instances(list<RGWPeriod*> &o)
+{
+  RGWPeriod *z = new RGWPeriod;
+  o.push_back(z);
+  o.push_back(new RGWPeriod);
+}
+
 void RGWZoneParams::generate_test_instances(list<RGWZoneParams*> &o)
 {
   o.push_back(new RGWZoneParams);
@@ -497,3 +514,51 @@ void rgw_obj::generate_test_instances(list<rgw_obj*>& o)
   o.push_back(new rgw_obj);
 }
 
+void rgw_meta_sync_info::generate_test_instances(list<rgw_meta_sync_info*>& o)
+{
+  auto info = new rgw_meta_sync_info;
+  info->state = rgw_meta_sync_info::StateBuildingFullSyncMaps;
+  info->period = "periodid";
+  info->realm_epoch = 5;
+  o.push_back(info);
+  o.push_back(new rgw_meta_sync_info);
+}
+
+void rgw_meta_sync_marker::generate_test_instances(list<rgw_meta_sync_marker*>& o)
+{
+  auto marker = new rgw_meta_sync_marker;
+  marker->state = rgw_meta_sync_marker::IncrementalSync;
+  marker->marker = "01234";
+  marker->realm_epoch = 5;
+  o.push_back(marker);
+  o.push_back(new rgw_meta_sync_marker);
+}
+
+void rgw_meta_sync_status::generate_test_instances(list<rgw_meta_sync_status*>& o)
+{
+  o.push_back(new rgw_meta_sync_status);
+}
+
+void rgw_data_sync_info::generate_test_instances(list<rgw_data_sync_info*>& o)
+{
+  auto info = new rgw_data_sync_info;
+  info->state = rgw_data_sync_info::StateBuildingFullSyncMaps;
+  info->num_shards = 8;
+  o.push_back(info);
+  o.push_back(new rgw_data_sync_info);
+}
+
+void rgw_data_sync_marker::generate_test_instances(list<rgw_data_sync_marker*>& o)
+{
+  auto marker = new rgw_data_sync_marker;
+  marker->state = rgw_data_sync_marker::IncrementalSync;
+  marker->marker = "01234";
+  marker->pos = 5;
+  o.push_back(marker);
+  o.push_back(new rgw_data_sync_marker);
+}
+
+void rgw_data_sync_status::generate_test_instances(list<rgw_data_sync_status*>& o)
+{
+  o.push_back(new rgw_data_sync_status);
+}

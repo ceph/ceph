@@ -19,7 +19,6 @@
 #include "arch/probe.h"
 #include "arch/intel.h"
 #include "arch/arm.h"
-#include "common/config.h"
 #include "compressor/CompressionPlugin.h"
 #include "ZlibCompressor.h"
 
@@ -44,7 +43,7 @@ public:
     }
 #endif
     if (compressor == 0 || has_isal != isal) {
-      compressor = std::make_shared<ZlibCompressor>(isal);
+      compressor = std::make_shared<ZlibCompressor>(cct, isal);
       has_isal = isal;
     }
     *cs = compressor;

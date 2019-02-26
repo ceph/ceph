@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-ceph mds set allow_new_snaps true --yes-i-really-mean-it
+ceph fs set cephfs allow_new_snaps true --yes-i-really-mean-it
 
 echo "Create dir 100 to 199 ..."
 for i in $(seq 100 199); do

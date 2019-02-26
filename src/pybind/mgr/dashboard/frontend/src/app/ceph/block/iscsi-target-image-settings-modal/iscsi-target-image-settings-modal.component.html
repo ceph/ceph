@@ -1,0 +1,44 @@
+<cd-modal>
+  <ng-container class="modal-title">
+    <ng-container i18n>Settings</ng-container>&nbsp;
+    <small>{{ image }}</small>
+  </ng-container>
+
+  <ng-container class="modal-content">
+    <form name="settingsForm"
+          class="form"
+          #formDir="ngForm"
+          [formGroup]="settingsForm"
+          novalidate>
+      <div class="modal-body">
+        <p class="alert-warning"
+           i18n>Changing these parameters from their default values is usually not necessary.</p>
+
+        <div class="form-group row"
+             *ngFor="let setting of disk_default_controls | keyvalue"
+             [ngClass]="{'has-error': settingsForm.showError(setting.key, formDir)}">
+          <div class="col-sm-12">
+            <label class="control-label"
+                   for="{{ setting.key }}">{{ setting.key }}</label>
+            <input type="number"
+                   class="form-control"
+                   [formControlName]="setting.key">
+            <span class="help-block">{{ helpText[setting.key]?.help }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <div class="button-group text-right">
+          <cd-submit-button i18n
+                            [form]="settingsForm"
+                            (submitAction)="save()">Confirm</cd-submit-button>
+          <button i18n
+                  type="button"
+                  class="btn btn-sm btn-default"
+                  (click)="modalRef.hide()">Cancel</button>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

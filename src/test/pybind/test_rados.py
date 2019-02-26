@@ -1,13 +1,15 @@
 from __future__ import print_function
+from nose import SkipTest
 from nose.tools import eq_ as eq, ok_ as ok, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, requires, opt,
-                   ANONYMOUS_AUID, ADMIN_AUID, LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx,
+                   LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx,
                    LIBRADOS_SNAP_HEAD, LIBRADOS_OPERATION_BALANCE_READS, LIBRADOS_OPERATION_SKIPRWLOCKS, MonitorLog)
 import time
 import threading
 import json
 import errno
+import os
 import sys
 
 # Are we running Python 2.x
@@ -177,11 +179,6 @@ class TestRados(object):
         finally:
             self.rados.delete_pool(poolname)
 
-    def test_create_auid(self):
-        self.rados.create_pool('foo', 100)
-        assert self.rados.pool_exists('foo')
-        self.rados.delete_pool('foo')
-
     def test_eexist(self):
         self.rados.create_pool('foo')
         assert_raises(ObjectExists, self.rados.create_pool, 'foo')
@@ -224,7 +221,7 @@ class TestRados(object):
                 eq(ret, 0)
 
                 try:
-                    cmd = {"prefix":"osd tier cache-mode", "pool":"foo-cache", "tierpool":"foo-cache", "mode":"readonly", "sure":"--yes-i-really-mean-it"}
+                    cmd = {"prefix":"osd tier cache-mode", "pool":"foo-cache", "tierpool":"foo-cache", "mode":"readonly", "yes_i_really_mean_it": True}
                     ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
                     eq(ret, 0)
 
@@ -308,10 +305,6 @@ class TestIoctx(object):
                    'num_objects_degraded': 0,
                    'num_rd': 0})
 
-    def test_change_auid(self):
-        self.ioctx.change_auid(ANONYMOUS_AUID)
-        self.ioctx.change_auid(ADMIN_AUID)
-
     def test_write(self):
         self.ioctx.write('abc', b'abc')
         eq(self.ioctx.read('abc'), b'abc')
@@ -368,7 +361,7 @@ class TestIoctx(object):
                 ('ns1', 'ns1-c'), ('ns1', 'ns1-d')])
 
     def test_xattrs(self):
-        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0')
+        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0', f='')
         self.ioctx.write('abc', b'')
         for key, value in xattrs.items():
             self.ioctx.set_xattr('abc', key, value)
@@ -379,7 +372,7 @@ class TestIoctx(object):
         eq(stored_xattrs, xattrs)
 
     def test_obj_xattrs(self):
-        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0')
+        xattrs = dict(a=b'1', b=b'2', c=b'3', d=b'a\0b', e=b'\0', f='')
         self.ioctx.write('abc', b'')
         obj = list(self.ioctx.list_objects())[0]
         for key, value in xattrs.items():
@@ -859,6 +852,117 @@ class TestIoctx(object):
 
         [i.remove() for i in self.ioctx.list_objects()]
 
+    def test_applications(self):
+        cmd = {"prefix":"osd dump", "format":"json"}
+        ret, buf, errs = self.rados.mon_command(json.dumps(cmd), b'')
+        eq(ret, 0)
+        assert len(buf) > 0
+        release = json.loads(buf.decode("utf-8")).get("require_osd_release",
+                                                      None)
+        if not release or release[0] < 'l':
+            raise SkipTest
+
+        eq([], self.ioctx.application_list())
+
+        self.ioctx.application_enable("app1")
+        assert_raises(Error, self.ioctx.application_enable, "app2")
+        self.ioctx.application_enable("app2", True)
+
+        assert_raises(Error, self.ioctx.application_metadata_list, "dne")
+        eq([], self.ioctx.application_metadata_list("app1"))
+
+        assert_raises(Error, self.ioctx.application_metadata_set, "dne", "key",
+                      "key")
+        self.ioctx.application_metadata_set("app1", "key1", "val1")
+        self.ioctx.application_metadata_set("app1", "key2", "val2")
+        self.ioctx.application_metadata_set("app2", "key1", "val1")
+
+        eq([("key1", "val1"), ("key2", "val2")],
+           self.ioctx.application_metadata_list("app1"))
+
+        self.ioctx.application_metadata_remove("app1", "key1")
+        eq([("key2", "val2")], self.ioctx.application_metadata_list("app1"))
+
+    def test_service_daemon(self):
+        name = "pid-" + str(os.getpid())
+        metadata = {'version': '3.14', 'memory': '42'}
+        self.rados.service_daemon_register("laundry", name, metadata)
+        status = {'result': 'unknown', 'test': 'running'}
+        self.rados.service_daemon_update(status)
+
+    def test_alignment(self):
+        eq(self.ioctx.alignment(), None)
+
+
+class TestIoctxEc(object):
+
+    def setUp(self):
+        self.rados = Rados(conffile='')
+        self.rados.connect()
+        self.pool = 'test-ec'
+        self.profile = 'testprofile-%s' % self.pool
+        cmd = {"prefix": "osd erasure-code-profile set", 
+               "name": self.profile, "profile": ["k=2", "m=1", "crush-failure-domain=osd"]}
+        ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
+        eq(ret, 0, msg=out)
+        # create ec pool with profile created above
+        cmd = {'prefix': 'osd pool create', 'pg_num': 8, 'pgp_num': 8,
+               'pool': self.pool, 'pool_type': 'erasure', 
+               'erasure_code_profile': self.profile}
+        ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
+        eq(ret, 0, msg=out)
+        assert self.rados.pool_exists(self.pool)
+        self.ioctx = self.rados.open_ioctx(self.pool)
+
+    def tearDown(self):
+        cmd = {"prefix": "osd unset", "key": "noup"}
+        self.rados.mon_command(json.dumps(cmd), b'')
+        self.ioctx.close()
+        self.rados.delete_pool(self.pool)
+        self.rados.shutdown()
+
+    def test_alignment(self):
+        eq(self.ioctx.alignment(), 8192)
+
+
+class TestIoctx2(object):
+
+    def setUp(self):
+        self.rados = Rados(conffile='')
+        self.rados.connect()
+        self.rados.create_pool('test_pool')
+        assert self.rados.pool_exists('test_pool')
+        pool_id = self.rados.pool_lookup('test_pool')
+        assert pool_id > 0
+        self.ioctx2 = self.rados.open_ioctx2(pool_id)
+
+    def tearDown(self):
+        cmd = {"prefix": "osd unset", "key": "noup"}
+        self.rados.mon_command(json.dumps(cmd), b'')
+        self.ioctx2.close()
+        self.rados.delete_pool('test_pool')
+        self.rados.shutdown()
+
+    def test_get_last_version(self):
+        version = self.ioctx2.get_last_version()
+        assert version >= 0
+
+    def test_get_stats(self):
+        stats = self.ioctx2.get_stats()
+        eq(stats, {'num_objects_unfound': 0,
+                   'num_objects_missing_on_primary': 0,
+                   'num_object_clones': 0,
+                   'num_objects': 0,
+                   'num_object_copies': 0,
+                   'num_bytes': 0,
+                   'num_rd_kb': 0,
+                   'num_wr_kb': 0,
+                   'num_kb': 0,
+                   'num_wr': 0,
+                   'num_objects_degraded': 0,
+                   'num_rd': 0})
+
+
 class TestObject(object):
 
     def setUp(self):
@@ -893,6 +997,43 @@ class TestObject(object):
         self.object.seek(0)
         eq(self.object.read(3), b'bar')
         eq(self.object.read(3), b'baz')
+
+class TestIoCtxSelfManagedSnaps(object):
+    def setUp(self):
+        self.rados = Rados(conffile='')
+        self.rados.connect()
+        self.rados.create_pool('test_pool')
+        assert self.rados.pool_exists('test_pool')
+        self.ioctx = self.rados.open_ioctx('test_pool')
+
+    def tearDown(self):
+        cmd = {"prefix":"osd unset", "key":"noup"}
+        self.rados.mon_command(json.dumps(cmd), b'')
+        self.ioctx.close()
+        self.rados.delete_pool('test_pool')
+        self.rados.shutdown()
+
+    def test(self):
+        # cannot mix-and-match pool and self-managed snapshot mode
+        self.ioctx.set_self_managed_snap_write([])
+        self.ioctx.write('abc', b'abc')
+        snap_id_1 = self.ioctx.create_self_managed_snap()
+        self.ioctx.set_self_managed_snap_write([snap_id_1])
+
+        self.ioctx.write('abc', b'def')
+        snap_id_2 = self.ioctx.create_self_managed_snap()
+        self.ioctx.set_self_managed_snap_write([snap_id_1, snap_id_2])
+
+        self.ioctx.write('abc', b'ghi')
+
+        self.ioctx.rollback_self_managed_snap('abc', snap_id_1)
+        eq(self.ioctx.read('abc'), b'abc')
+
+        self.ioctx.rollback_self_managed_snap('abc', snap_id_2)
+        eq(self.ioctx.read('abc'), b'def')
+
+        self.ioctx.remove_self_managed_snap(snap_id_1)
+        self.ioctx.remove_self_managed_snap(snap_id_2)
 
 class TestCommand(object):
 
@@ -953,8 +1094,8 @@ class TestCommand(object):
         ret, buf, err = self.rados.osd_command(0, json.dumps(cmd), b'',
                                                timeout=30)
         eq(ret, 0)
-        assert len(err) > 0
-        out = json.loads(err)
+        assert len(buf) > 0
+        out = json.loads(buf.decode('utf-8'))
         eq(out['blocksize'], cmd['size'])
         eq(out['bytes_written'], cmd['count'])
 

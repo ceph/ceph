@@ -2,4 +2,4 @@ overrides:
   ceph:
     conf:
       global:
-        mon osd pool ec fast read: true
+        osd pool default ec fast read: true

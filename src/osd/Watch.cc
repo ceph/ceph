@@ -25,7 +25,7 @@ struct CancelableContext : public Context {
 static ostream& _prefix(
   std::ostream* _dout,
   Notify *notify) {
-  return *_dout << notify->gen_dbg_prefix();
+  return notify->gen_dbg_prefix(*_dout);
 }
 
 Notify::Notify(
@@ -84,16 +84,16 @@ public:
     notif->osd->watch_lock.Lock();
   }
   void cancel() override {
-    assert(notif->lock.is_locked_by_me());
+    ceph_assert(notif->lock.is_locked_by_me());
     canceled = true;
   }
 };
 
 void Notify::do_timeout()
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
   dout(10) << "timeout" << dendl;
-  cb = NULL;
+  cb = nullptr;
   if (is_discarded()) {
     lock.Unlock();
     return;
@@ -101,7 +101,7 @@ void Notify::do_timeout()
 
   timed_out = true;         // we will send the client an error code
   maybe_complete_notify();
-  assert(complete);
+  ceph_assert(complete);
   set<WatchRef> _watchers;
   _watchers.swap(watchers);
   lock.Unlock();
@@ -120,45 +120,45 @@ void Notify::do_timeout()
 
 void Notify::register_cb()
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
   {
     osd->watch_lock.Lock();
     cb = new NotifyTimeoutCB(self.lock());
-    osd->watch_timer.add_event_after(
-      timeout,
-      cb);
+    if (!osd->watch_timer.add_event_after(timeout, cb)) {
+      cb = nullptr;
+    }
     osd->watch_lock.Unlock();
   }
 }
 
 void Notify::unregister_cb()
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
   if (!cb)
     return;
   cb->cancel();
   {
     osd->watch_lock.Lock();
     osd->watch_timer.cancel_event(cb);
-    cb = NULL;
+    cb = nullptr;
     osd->watch_lock.Unlock();
   }
 }
 
 void Notify::start_watcher(WatchRef watch)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   dout(10) << "start_watcher" << dendl;
   watchers.insert(watch);
 }
 
 void Notify::complete_watcher(WatchRef watch, bufferlist& reply_bl)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   dout(10) << "complete_watcher" << dendl;
   if (is_discarded())
     return;
-  assert(watchers.count(watch));
+  ceph_assert(watchers.count(watch));
   watchers.erase(watch);
   notify_replies.insert(make_pair(make_pair(watch->get_watcher_gid(),
 					    watch->get_cookie()),
@@ -168,11 +168,11 @@ void Notify::complete_watcher(WatchRef watch, bufferlist& reply_bl)
 
 void Notify::complete_watcher_remove(WatchRef watch)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   dout(10) << __func__ << dendl;
   if (is_discarded())
     return;
-  assert(watchers.count(watch));
+  ceph_assert(watchers.count(watch));
   watchers.erase(watch);
   maybe_complete_notify();
 }
@@ -185,13 +185,13 @@ void Notify::maybe_complete_notify()
   if (watchers.empty() || timed_out) {
     // prepare reply
     bufferlist bl;
-    ::encode(notify_replies, bl);
+    encode(notify_replies, bl);
     list<pair<uint64_t,uint64_t> > missed;
     for (set<WatchRef>::iterator p = watchers.begin(); p != watchers.end(); ++p) {
       missed.push_back(make_pair((*p)->get_watcher_gid(),
 				 (*p)->get_cookie()));
     }
-    ::encode(missed, bl);
+    encode(missed, bl);
 
     bufferlist empty;
     MWatchNotify *reply(new MWatchNotify(cookie, version, notify_id,
@@ -209,7 +209,7 @@ void Notify::maybe_complete_notify()
 
 void Notify::discard()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   discarded = true;
   unregister_cb();
   watchers.clear();
@@ -217,7 +217,7 @@ void Notify::discard()
 
 void Notify::init()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   register_cb();
   maybe_complete_notify();
 }
@@ -229,7 +229,7 @@ void Notify::init()
 static ostream& _prefix(
   std::ostream* _dout,
   Watch *watch) {
-  return *_dout << watch->gen_dbg_prefix();
+  return watch->gen_dbg_prefix(*_dout);
 }
 
 class HandleWatchTimeout : public CancelableContext {
@@ -247,7 +247,7 @@ public:
     boost::intrusive_ptr<PrimaryLogPG> pg(watch->pg);
     osd->watch_lock.Unlock();
     pg->lock();
-    watch->cb = NULL;
+    watch->cb = nullptr;
     if (!watch->is_discarded() && !canceled)
       watch->pg->handle_watch_timeout(watch);
     delete this; // ~Watch requires pg lock!
@@ -267,8 +267,8 @@ public:
   void finish(int) override {
     OSDService *osd(watch->osd);
     dout(10) << "HandleWatchTimeoutDelayed" << dendl;
-    assert(watch->pg->is_locked());
-    watch->cb = NULL;
+    ceph_assert(watch->pg->is_locked());
+    watch->cb = nullptr;
     if (!watch->is_discarded() && !canceled)
       watch->pg->handle_watch_timeout(watch);
   }
@@ -278,11 +278,9 @@ public:
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, this)
 
-string Watch::gen_dbg_prefix() {
-  stringstream ss;
-  ss << pg->gen_prefix() << " -- Watch(" 
-     << make_pair(cookie, entity) << ") ";
-  return ss.str();
+std::ostream& Watch::gen_dbg_prefix(std::ostream& out) {
+  return pg->gen_prefix(out) << " -- Watch("
+      << make_pair(cookie, entity) << ") ";
 }
 
 Watch::Watch(
@@ -309,22 +307,22 @@ Watch::Watch(
 Watch::~Watch() {
   dout(10) << "~Watch" << dendl;
   // users must have called remove() or discard() prior to this point
-  assert(!obc);
-  assert(!conn);
+  ceph_assert(!obc);
+  ceph_assert(!conn);
 }
 
 bool Watch::connected() { return !!conn; }
 
 Context *Watch::get_delayed_cb()
 {
-  assert(!cb);
+  ceph_assert(!cb);
   cb = new HandleDelayedWatchTimeout(self.lock());
   return cb;
 }
 
 void Watch::register_cb()
 {
-  Mutex::Locker l(osd->watch_lock);
+  std::lock_guard l(osd->watch_lock);
   if (cb) {
     dout(15) << "re-registering callback, timeout: " << timeout << dendl;
     cb->cancel();
@@ -333,9 +331,9 @@ void Watch::register_cb()
     dout(15) << "registering callback, timeout: " << timeout << dendl;
   }
   cb = new HandleWatchTimeout(self.lock());
-  osd->watch_timer.add_event_after(
-    timeout,
-    cb);
+  if (!osd->watch_timer.add_event_after(timeout, cb)) {
+    cb = nullptr;
+  }
 }
 
 void Watch::unregister_cb()
@@ -346,10 +344,10 @@ void Watch::unregister_cb()
   dout(15) << "actually registered, cancelling" << dendl;
   cb->cancel();
   {
-    Mutex::Locker l(osd->watch_lock);
+    std::lock_guard l(osd->watch_lock);
     osd->watch_timer.cancel_event(cb); // harmless if not registered with timer
   }
-  cb = NULL;
+  cb = nullptr;
 }
 
 void Watch::got_ping(utime_t t)
@@ -369,10 +367,11 @@ void Watch::connect(ConnectionRef con, bool _will_ping)
   dout(10) << __func__ << " con " << con << dendl;
   conn = con;
   will_ping = _will_ping;
-  Session* sessionref(static_cast<Session*>(con->get_priv()));
-  if (sessionref) {
+  auto priv = con->get_priv();
+  if (priv) {
+    auto sessionref = static_cast<Session*>(priv.get());
     sessionref->wstate.addWatch(self.lock());
-    sessionref->put();
+    priv.reset();
     for (map<uint64_t, NotifyRef>::iterator i = in_progress_notifies.begin();
 	 i != in_progress_notifies.end();
 	 ++i) {
@@ -408,17 +407,16 @@ void Watch::discard()
 
 void Watch::discard_state()
 {
-  assert(pg->is_locked());
-  assert(!discarded);
-  assert(obc);
+  ceph_assert(pg->is_locked());
+  ceph_assert(!discarded);
+  ceph_assert(obc);
   in_progress_notifies.clear();
   unregister_cb();
   discarded = true;
   if (conn) {
-    Session* sessionref(static_cast<Session*>(conn->get_priv()));
-    if (sessionref) {
-      sessionref->wstate.removeWatch(self.lock());
-      sessionref->put();
+    if (auto priv = conn->get_priv(); priv) {
+      auto session = static_cast<Session*>(priv.get());
+      session->wstate.removeWatch(self.lock());
     }
     conn = ConnectionRef();
   }
@@ -449,7 +447,7 @@ void Watch::remove(bool send_disconnect)
 
 void Watch::start_notify(NotifyRef notif)
 {
-  assert(in_progress_notifies.find(notif->notify_id) ==
+  ceph_assert(in_progress_notifies.find(notif->notify_id) ==
 	 in_progress_notifies.end());
   if (will_ping) {
     utime_t cutoff = ceph_clock_now();
@@ -506,13 +504,13 @@ WatchRef Watch::makeWatchRef(
 
 void WatchConState::addWatch(WatchRef watch)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   watches.insert(watch);
 }
 
 void WatchConState::removeWatch(WatchRef watch)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l(lock);
   watches.erase(watch);
 }
 
@@ -520,7 +518,7 @@ void WatchConState::reset(Connection *con)
 {
   set<WatchRef> _watches;
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l(lock);
     _watches.swap(watches);
   }
   for (set<WatchRef>::iterator i = _watches.begin();

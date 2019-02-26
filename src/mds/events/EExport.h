@@ -35,7 +35,7 @@ public:
   EExport() :
     LogEvent(EVENT_EXPORT), target(MDS_RANK_NONE) { }
   EExport(MDLog *mdlog, CDir *dir, mds_rank_t t) :
-    LogEvent(EVENT_EXPORT), metablob(mdlog),
+    LogEvent(EVENT_EXPORT),
     base(dir->dirfrag()), target(t) { }
   
   set<dirfrag_t> &get_bounds() { return bounds; }
@@ -47,7 +47,7 @@ public:
   EMetaBlob *get_metablob() override { return &metablob; }
 
   void encode(bufferlist& bl, uint64_t features) const override;
-  void decode(bufferlist::iterator &bl) override;
+  void decode(bufferlist::const_iterator &bl) override;
   void dump(Formatter *f) const override;
   static void generate_test_instances(list<EExport*>& ls);
   void replay(MDSRank *mds) override;

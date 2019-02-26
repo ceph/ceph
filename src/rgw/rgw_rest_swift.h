@@ -37,18 +37,27 @@ public:
 
 class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {
   bool need_stats;
+  bool wants_reversed;
   std::string prefix;
+  std::vector<RGWUserBuckets> reverse_buffer;
 
   uint64_t get_default_max() const override {
     return 0;
   }
+
 public:
-  RGWListBuckets_ObjStore_SWIFT() : need_stats(true) {}
+  RGWListBuckets_ObjStore_SWIFT()
+    : need_stats(true),
+      wants_reversed(false) {
+  }
   ~RGWListBuckets_ObjStore_SWIFT() override {}
 
   int get_params() override;
+  void handle_listing_chunk(RGWUserBuckets&& buckets) override;
   void send_response_begin(bool has_buckets) override;
   void send_response_data(RGWUserBuckets& buckets) override;
+  void send_response_data_reversed(RGWUserBuckets& buckets);
+  void dump_bucket_entry(const RGWBucketEnt& obj);
   void send_response_end() override;
 
   bool should_get_stats() override { return need_stats; }
@@ -111,6 +120,8 @@ class RGWPutObj_ObjStore_SWIFT : public RGWPutObj_ObjStore {
 public:
   RGWPutObj_ObjStore_SWIFT() {}
   ~RGWPutObj_ObjStore_SWIFT() override {}
+
+  int update_slo_segment_size(rgw_slo_entry& entry);
 
   int verify_permission() override;
   int get_params() override;
@@ -224,7 +235,7 @@ protected:
   struct info
   {
     bool is_admin_info;
-    function<void (Formatter&, const md_config_t&, RGWRados&)> list_data;
+    function<void (Formatter&, const ConfigProxy&, RGWRados&)> list_data;
   };
 
   static const vector<pair<string, struct info>> swift_info;
@@ -234,9 +245,10 @@ public:
 
   void execute() override;
   void send_response() override;
-  static void list_swift_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
-  static void list_tempurl_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
-  static void list_slo_data(Formatter& formatter, const md_config_t& config, RGWRados& store);
+  static void list_swift_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
+  static void list_tempauth_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
+  static void list_tempurl_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
+  static void list_slo_data(Formatter& formatter, const ConfigProxy& config, RGWRados& store);
   static bool is_expired(const std::string& expires, CephContext* cct);
 };
 
@@ -375,15 +387,15 @@ protected:
   static int init_from_header(struct req_state* s,
                               const std::string& frontend_prefix);
 public:
-  RGWHandler_REST_SWIFT(const rgw::auth::Strategy& auth_strategy)
+  explicit RGWHandler_REST_SWIFT(const rgw::auth::Strategy& auth_strategy)
     : auth_strategy(auth_strategy) {
   }
   ~RGWHandler_REST_SWIFT() override = default;
 
-  static int validate_bucket_name(const string& bucket);
+  int validate_bucket_name(const string& bucket);
 
   int init(RGWRados *store, struct req_state *s, rgw::io::BasicClient *cio) override;
-  int authorize() override;
+  int authorize(const DoutPrefixProvider *dpp) override;
   int postauth_init() override;
 
   RGWAccessControlPolicy *alloc_policy() { return nullptr; /* return new RGWAccessControlPolicy_SWIFT; */ }
@@ -531,7 +543,7 @@ public:
     return RGWHandler::init(store, state, cio);
   }
 
-  int authorize() override {
+  int authorize(const DoutPrefixProvider *dpp) override {
     return 0;
   }
 
@@ -587,7 +599,7 @@ public:
     return RGWHandler::init(store, state, cio);
   }
 
-  int authorize() override {
+  int authorize(const DoutPrefixProvider *dpp) override {
     return 0;
   }
 
@@ -643,7 +655,7 @@ public:
     return RGWHandler::init(store, state, cio);
   }
 
-  int authorize() override {
+  int authorize(const DoutPrefixProvider *dpp) override {
     return 0;
   }
 

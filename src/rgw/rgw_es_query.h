@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #ifndef CEPH_RGW_ES_QUERY_H
 #define CEPH_RGW_ES_QUERY_H
 
@@ -8,7 +11,7 @@ class ESQueryStack {
   list<string>::iterator iter;
 
 public:
-  ESQueryStack(list<string>& src) {
+  explicit ESQueryStack(list<string>& src) {
     assign(src);
   }
 
@@ -58,7 +61,7 @@ class ESInfixQueryParser {
   bool parse_close_bracket();
 
 public:
-  ESInfixQueryParser(const string& _query) : query(_query), size(query.size()), str(query.c_str()) {}
+  explicit ESInfixQueryParser(const string& _query) : query(_query), size(query.size()), str(query.c_str()) {}
   bool parse(list<string> *result);
 };
 
@@ -74,7 +77,7 @@ struct ESEntityTypeMap {
 
   map<string, EntityType> m;
 
-  ESEntityTypeMap(map<string, EntityType>& _m) : m(_m) {}
+  explicit ESEntityTypeMap(map<string, EntityType>& _m) : m(_m) {}
 
   bool find(const string& entity, EntityType *ptype) {
     auto i = m.find(entity);
@@ -102,8 +105,8 @@ class ESQueryCompiler {
   ESEntityTypeMap *generic_type_map{nullptr};
   ESEntityTypeMap *custom_type_map{nullptr};
 
-  map<string, string, ltstr_nocase> *field_aliases;
-  set<string> *restricted_fields;
+  map<string, string, ltstr_nocase> *field_aliases = nullptr;
+  set<string> *restricted_fields = nullptr;
 
 public:
   ESQueryCompiler(const string& query, list<pair<string, string> > *prepend_eq_conds, const string& _custom_prefix) : parser(query), custom_prefix(_custom_prefix) {

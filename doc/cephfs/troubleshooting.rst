@@ -13,7 +13,7 @@ them. Start by looking to see if either side has stuck operations
 RADOS Health
 ============
 
-If part of the CephFS metadata or data pools is unavaible and CephFS isn't
+If part of the CephFS metadata or data pools is unavailable and CephFS is not
 responding, it is probably because RADOS itself is unhealthy. Resolve those
 problems first (:doc:`../../rados/troubleshooting/index`).
 
@@ -47,15 +47,15 @@ Usually the last "event" will have been an attempt to gather locks, or sending
 the operation off to the MDS log. If it is waiting on the OSDs, fix them. If
 operations are stuck on a specific inode, you probably have a client holding
 caps which prevent others from using it, either because the client is trying
-to flush out dirty data or because you've encountered a bug in CephFS'
+to flush out dirty data or because you have encountered a bug in CephFS'
 distributed file lock code (the file "capabilities" ["caps"] system).
 
 If it's a result of a bug in the capabilities code, restarting the MDS
 is likely to resolve the problem.
 
-If there are no slow requests reported on the MDS, and it isn't reporting
+If there are no slow requests reported on the MDS, and it is not reporting
 that clients are misbehaving, either the client has a problem or its
-requests aren't reaching the MDS.
+requests are not reaching the MDS.
 
 ceph-fuse debugging
 ===================
@@ -101,7 +101,7 @@ slow requests are probably the ``mdsc`` and ``osdc`` files.
 * osdc: Dumps the current ops in-flight to OSDs (ie, file data IO)
 * osdmap: Dumps the current OSDMap epoch, pools, and OSDs
 
-If there are no stuck requests but you have file IO which isn't progressing,
+If there are no stuck requests but you have file IO which is not progressing,
 you might have a...
 
 Disconnected+Remounted FS
@@ -109,7 +109,7 @@ Disconnected+Remounted FS
 Because CephFS has a "consistent cache", if your network connection is
 disrupted for a long enough time, the client will be forcibly
 disconnected from the system. At this point, the kernel client is in
-a bind: it can't safely write back dirty data, and many applications
+a bind: it cannot safely write back dirty data, and many applications
 do not handle IO errors correctly on close().
 At the moment, the kernel client will remount the FS, but outstanding filesystem
 IO may or may not be satisfied. In these cases, you may need to reboot your

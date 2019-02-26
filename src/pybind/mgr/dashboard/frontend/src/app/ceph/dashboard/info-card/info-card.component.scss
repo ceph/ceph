@@ -1,0 +1,135 @@
+@import '../../../../defaults';
+
+$card-height: 6vw;
+$card-medium-height: 12vw;
+$card-font-min-width: 320px;
+$card-font-max-width: 2048px;
+$card-font-min-size: 12px;
+$card-font-max-size: 21px;
+$logs-text-font-size: $card-font-min-size;
+
+.card {
+  border: 0.5px solid $color-info-card-border;
+  border-radius: 3px;
+  background-color: $color-solid-white;
+  box-shadow: 0 1px 1px $color-shadow-gray;
+  margin: 0 -10px 20px;
+  padding: 0 20px;
+  width: auto;
+  height: auto;
+  margin-left: auto;
+  margin-right: auto;
+  min-height: $card-height;
+  @include fluid-font-size(
+    $card-font-min-width,
+    $card-font-max-width,
+    $card-font-min-size,
+    $card-font-max-size
+  );
+  position: relative;
+}
+
+.card-title {
+  margin: 1.1vw 0;
+  padding: 0;
+}
+
+.card-body {
+  text-align: center;
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%);
+}
+
+.content-chart {
+  margin-top: -0.7vw;
+  position: unset;
+  top: unset;
+  left: unset;
+  transform: unset;
+}
+
+.no-center {
+  position: unset;
+  top: unset;
+  left: unset;
+  transform: unset;
+}
+
+.text-area-size-2 {
+  margin-right: -50%;
+  transform: translate(-50%, -20%);
+}
+
+.text-area-size-3 {
+  margin-right: -50%;
+  transform: translate(-50%, -40%);
+}
+
+.content-highlight {
+  font-weight: bold;
+}
+
+.card-medium {
+  min-height: $card-medium-height;
+}
+
+.scroll {
+  max-height: ($card-medium-height * 1.5);
+  overflow-y: auto;
+}
+
+.text-monospace {
+  font-size: $logs-text-font-size;
+  font-family: monospace;
+  text-align: left;
+}
+
+@media (max-width: 1599px) {
+  .card {
+    min-height: $card-height * 1.3;
+  }
+
+  .card-medium {
+    min-height: $card-medium-height * 1.2;
+  }
+}
+
+@media (max-width: $screen-md-max) {
+  .card-medium {
+    min-height: $card-medium-height * 1.5;
+  }
+
+  .content-chart {
+    margin-top: -0.6vw;
+  }
+}
+
+@media (max-width: $screen-sm-max) {
+  .card {
+    min-height: $card-height * 2;
+  }
+
+  .content-chart {
+    margin-top: -0.3vw;
+  }
+}
+
+@media (max-width: $screen-sm-max) and (min-width: $screen-sm-min) {
+  .card-medium {
+    min-height: $card-medium-height * 2.2;
+  }
+}
+
+@media (max-width: 599px) {
+  .card {
+    min-height: $card-height * 3;
+  }
+}
+
+@media (max-width: 319px) {
+  .card {
+    min-height: $card-height * 4;
+  }
+}

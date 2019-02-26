@@ -1,0 +1,15 @@
+tasks:
+- install.upgrade:
+    osd.8:
+    client.0:
+- ceph.restart:
+    daemons: [mon.c, osd.8, osd.9, osd.10, osd.11]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+- exec:
+    osd.0:
+      - ceph osd set pglog_hardlimit
+      - ceph osd dump --format=json-pretty | grep "flags"
+      - ceph config set global mon_warn_on_msgr2_not_enabled false
+- print: "**** try to set pglog_hardlimit again, should succeed"
+

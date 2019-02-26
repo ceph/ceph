@@ -23,8 +23,14 @@ struct MgrSession : public RefCountedObject {
   // mon caps are suitably generic for mgr
   MonCap caps;
 
-  MgrSession(CephContext *cct) : RefCountedObject(cct, 0) {}
+  std::set<std::string> declared_types;
+
+  explicit MgrSession(CephContext *cct) : RefCountedObject(cct, 0) {}
   ~MgrSession() override {}
+
+  const entity_addr_t& get_peer_addr() {
+    return inst.addr;
+  }
 };
 
 typedef boost::intrusive_ptr<MgrSession> MgrSessionRef;

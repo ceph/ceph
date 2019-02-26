@@ -275,7 +275,8 @@ def task(ctx, config):
           - 'scrub [0-9]+ errors'
           - 'size 1 != size'
           - 'attr name mismatch'
-          - 'Regular scrub request, losing deep-scrub details'
+          - 'Regular scrub request, deep-scrub details will be lost'
+          - 'candidate size [0-9]+ info size [0-9]+ mismatch'
         conf:
           osd:
             filestore debug inject read err: true
@@ -288,7 +289,7 @@ def task(ctx, config):
         'repair_test task only accepts a dict for config'
 
     manager = ctx.managers['ceph']
-    manager.wait_for_all_up()
+    manager.wait_for_all_osds_up()
 
     manager.raw_cluster_cmd('osd', 'set', 'noscrub')
     manager.raw_cluster_cmd('osd', 'set', 'nodeep-scrub')

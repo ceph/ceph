@@ -179,12 +179,12 @@ class ObjectCacher {
 
     // reference counting
     int get() {
-      assert(ref >= 0);
+      ceph_assert(ref >= 0);
       if (ref == 0) lru_pin();
       return ++ref;
     }
     int put() {
-      assert(ref > 0);
+      ceph_assert(ref > 0);
       if (ref == 1) lru_unpin();
       --ref;
       return ref;
@@ -247,7 +247,7 @@ class ObjectCacher {
     map<loff_t, BufferHead*>     data;
 
     ceph_tid_t last_write_tid;  // version of bh (if non-zero)
-    ceph_tid_t last_commit_tid; // last update commited.
+    ceph_tid_t last_commit_tid; // last update committed.
 
     int dirty_or_tx;
 
@@ -271,9 +271,9 @@ class ObjectCacher {
     }
     ~Object() {
       reads.clear();
-      assert(ref == 0);
-      assert(data.empty());
-      assert(dirty_or_tx == 0);
+      ceph_assert(ref == 0);
+      ceph_assert(data.empty());
+      ceph_assert(dirty_or_tx == 0);
       set_item.remove_myself();
     }
 
@@ -289,8 +289,8 @@ class ObjectCacher {
 
     bool can_close() const {
       if (lru_is_expireable()) {
-	assert(data.empty());
-	assert(waitfor_commit.empty());
+	ceph_assert(data.empty());
+	ceph_assert(waitfor_commit.empty());
 	return true;
       }
       return false;
@@ -326,11 +326,11 @@ class ObjectCacher {
     void add_bh(BufferHead *bh) {
       if (data.empty())
 	get();
-      assert(data.count(bh->start()) == 0);
+      ceph_assert(data.count(bh->start()) == 0);
       data[bh->start()] = bh;
     }
     void remove_bh(BufferHead *bh) {
-      assert(data.count(bh->start()));
+      ceph_assert(data.count(bh->start()));
       data.erase(bh->start());
       if (data.empty())
 	put();
@@ -341,7 +341,9 @@ class ObjectCacher {
     // mid-level
     BufferHead *split(BufferHead *bh, loff_t off);
     void merge_left(BufferHead *left, BufferHead *right);
+    bool can_merge_bh(BufferHead *left, BufferHead *right);
     void try_merge_bh(BufferHead *bh);
+    void maybe_rebuild_buffer(BufferHead *bh);
 
     bool is_cached(loff_t off, loff_t len) const;
     bool include_all_cached_data(loff_t off, loff_t len);
@@ -354,16 +356,16 @@ class ObjectCacher {
 
     void replace_journal_tid(BufferHead *bh, ceph_tid_t tid);
     void truncate(loff_t s);
-    void discard(loff_t off, loff_t len);
+    void discard(loff_t off, loff_t len, C_GatherBuilder* commit_gather);
 
     // reference counting
     int get() {
-      assert(ref >= 0);
+      ceph_assert(ref >= 0);
       if (ref == 0) lru_pin();
       return ++ref;
     }
     int put() {
-      assert(ref > 0);
+      ceph_assert(ref > 0);
       if (ref == 1) lru_unpin();
       --ref;
       return ref;
@@ -461,6 +463,8 @@ class ObjectCacher {
   loff_t stat_error;
   loff_t stat_dirty_waiting;   // bytes that writers are waiting on to write
 
+  size_t stat_nr_dirty_waiters;
+
   void verify_stats() const;
 
   void bh_stat_add(BufferHead *bh);
@@ -468,9 +472,10 @@ class ObjectCacher {
   loff_t get_stat_tx() const { return stat_tx; }
   loff_t get_stat_rx() const { return stat_rx; }
   loff_t get_stat_dirty() const { return stat_dirty; }
-  loff_t get_stat_dirty_waiting() const { return stat_dirty_waiting; }
   loff_t get_stat_clean() const { return stat_clean; }
   loff_t get_stat_zero() const { return stat_zero; }
+  loff_t get_stat_dirty_waiting() const { return stat_dirty_waiting; }
+  size_t get_stat_nr_dirty_waiters() const { return stat_nr_dirty_waiters; }
 
   void touch_bh(BufferHead *bh) {
     if (bh->is_dirty())
@@ -584,7 +589,7 @@ class ObjectCacher {
     flusher_thread.create("flusher");
   }
   void stop() {
-    assert(flusher_thread.is_started());
+    ceph_assert(flusher_thread.is_started());
     lock.Lock();  // hmm.. watch out for deadlock!
     flusher_stop = true;
     flusher_cond.Signal();
@@ -616,6 +621,10 @@ private:
   void maybe_wait_for_writeback(uint64_t len, ZTracer::Trace *trace);
   bool _flush_set_finish(C_GatherBuilder *gather, Context *onfinish);
 
+  void _discard(ObjectSet *oset, const vector<ObjectExtent>& exls,
+                C_GatherBuilder* gather);
+  void _discard_finish(ObjectSet *oset, bool was_dirty, Context* on_finish);
+
 public:
   bool set_is_empty(ObjectSet *oset);
   bool set_is_cached(ObjectSet *oset);
@@ -633,6 +642,8 @@ public:
   uint64_t release_all();
 
   void discard_set(ObjectSet *oset, const vector<ObjectExtent>& ex);
+  void discard_writeback(ObjectSet *oset, const vector<ObjectExtent>& ex,
+                         Context* on_finish);
 
   /**
    * Retry any in-flight reads that get -ENOENT instead of marking

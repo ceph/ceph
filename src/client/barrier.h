@@ -25,7 +25,6 @@ class Client;
 
 typedef boost::icl::interval<uint64_t>::type barrier_interval;
 
-using namespace std;
 
 /*
  * we keep count of uncommitted writes on the inode, so that

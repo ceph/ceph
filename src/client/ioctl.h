@@ -6,7 +6,7 @@
 #if defined(__linux__)
 #include <linux/ioctl.h>
 #include <linux/types.h>
-#elif defined(DARWIN) || defined(__FreeBSD__)
+#elif defined(__APPLE__) || defined(__FreeBSD__)
 #include <sys/ioctl.h>
 #include <sys/types.h>
 #endif

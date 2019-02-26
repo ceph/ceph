@@ -23,8 +23,13 @@ from libc.stdint cimport *
 from libc.stdlib cimport realloc, free
 from libc.string cimport strdup
 
-from collections import Iterable
+try:
+    from collections.abc import Iterable
+except ImportError:
+    from collections import Iterable
 from datetime import datetime
+from itertools import chain
+import time
 
 cimport rados
 
@@ -44,8 +49,9 @@ cdef extern from "time.h":
         time_t tv_sec
         long tv_nsec
 
-cdef extern from "limits.h":
-    cdef uint64_t INT64_MAX
+cdef extern from "rados/librados.h":
+    enum:
+        _LIBRADOS_SNAP_HEAD "LIBRADOS_SNAP_HEAD"
 
 cdef extern from "rbd/librbd.h" nogil:
     enum:
@@ -57,12 +63,18 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_FEATURE_DEEP_FLATTEN "RBD_FEATURE_DEEP_FLATTEN"
         _RBD_FEATURE_JOURNALING "RBD_FEATURE_JOURNALING"
         _RBD_FEATURE_DATA_POOL "RBD_FEATURE_DATA_POOL"
+        _RBD_FEATURE_OPERATIONS "RBD_FEATURE_OPERATIONS"
 
         _RBD_FEATURES_INCOMPATIBLE "RBD_FEATURES_INCOMPATIBLE"
         _RBD_FEATURES_RW_INCOMPATIBLE "RBD_FEATURES_RW_INCOMPATIBLE"
         _RBD_FEATURES_MUTABLE "RBD_FEATURES_MUTABLE"
         _RBD_FEATURES_SINGLE_CLIENT "RBD_FEATURES_SINGLE_CLIENT"
         _RBD_FEATURES_ALL "RBD_FEATURES_ALL"
+
+        _RBD_OPERATION_FEATURE_CLONE_PARENT "RBD_OPERATION_FEATURE_CLONE_PARENT"
+        _RBD_OPERATION_FEATURE_CLONE_CHILD "RBD_OPERATION_FEATURE_CLONE_CHILD"
+        _RBD_OPERATION_FEATURE_GROUP "RBD_OPERATION_FEATURE_GROUP"
+        _RBD_OPERATION_FEATURE_SNAP_TRASH "RBD_OPERATION_FEATURE_SNAP_TRASH"
 
         _RBD_FLAG_OBJECT_MAP_INVALID "RBD_FLAG_OBJECT_MAP_INVALID"
         _RBD_FLAG_FAST_DIFF_INVALID "RBD_FLAG_FAST_DIFF_INVALID"
@@ -80,6 +92,7 @@ cdef extern from "rbd/librbd.h" nogil:
     ctypedef void* rados_ioctx_t
     ctypedef void* rbd_image_t
     ctypedef void* rbd_image_options_t
+    ctypedef void* rbd_pool_stats_t
     ctypedef void *rbd_completion_t
 
     ctypedef struct rbd_image_info_t:
@@ -96,6 +109,37 @@ cdef extern from "rbd/librbd.h" nogil:
         uint64_t size
         char *name
 
+    ctypedef struct rbd_snap_group_namespace_t:
+        int64_t group_pool
+        char *group_name
+        char *group_snap_name
+
+    ctypedef struct rbd_group_info_t:
+        char *name
+        int64_t pool
+
+    ctypedef struct rbd_image_spec_t:
+        char *id
+        char *name
+
+    ctypedef struct rbd_linked_image_spec_t:
+        int64_t pool_id
+        char *pool_name
+        char *pool_namespace
+        char *image_id
+        char *image_name
+        bint trash
+
+    ctypedef enum rbd_snap_namespace_type_t:
+        _RBD_SNAP_NAMESPACE_TYPE_USER "RBD_SNAP_NAMESPACE_TYPE_USER"
+        _RBD_SNAP_NAMESPACE_TYPE_GROUP "RBD_SNAP_NAMESPACE_TYPE_GROUP"
+        _RBD_SNAP_NAMESPACE_TYPE_TRASH "RBD_SNAP_NAMESPACE_TYPE_TRASH"
+
+    ctypedef struct rbd_snap_spec_t:
+        uint64_t id
+        rbd_snap_namespace_type_t namespace_type
+        char *name
+
     ctypedef enum rbd_mirror_mode_t:
         _RBD_MIRROR_MODE_DISABLED "RBD_MIRROR_MODE_DISABLED"
         _RBD_MIRROR_MODE_IMAGE "RBD_MIRROR_MODE_IMAGE"
@@ -105,6 +149,9 @@ cdef extern from "rbd/librbd.h" nogil:
         char *uuid
         char *cluster_name
         char *client_name
+
+    cdef char* _RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST "RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST"
+    cdef char* _RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY "RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY"
 
     ctypedef enum rbd_mirror_image_state_t:
         _RBD_MIRROR_IMAGE_DISABLING "RBD_MIRROR_IMAGE_DISABLING"
@@ -139,7 +186,9 @@ cdef extern from "rbd/librbd.h" nogil:
 
     ctypedef enum rbd_trash_image_source_t:
         _RBD_TRASH_IMAGE_SOURCE_USER "RBD_TRASH_IMAGE_SOURCE_USER",
-        _RBD_TRASH_IMAGE_SOURCE_MIRRORING "RBD_TRASH_IMAGE_SOURCE_MIRRORING"
+        _RBD_TRASH_IMAGE_SOURCE_MIRRORING "RBD_TRASH_IMAGE_SOURCE_MIRRORING",
+        _RBD_TRASH_IMAGE_SOURCE_MIGRATION "RBD_TRASH_IMAGE_SOURCE_MIGRATION"
+        _RBD_TRASH_IMAGE_SOURCE_REMOVING "RBD_TRASH_IMAGE_SOURCE_REMOVING"
 
     ctypedef struct rbd_trash_image_info_t:
         char *id
@@ -148,10 +197,78 @@ cdef extern from "rbd/librbd.h" nogil:
         time_t deletion_time
         time_t deferment_end_time
 
+    ctypedef struct rbd_image_watcher_t:
+        char *addr
+        int64_t id
+        uint64_t cookie
+
+    ctypedef enum rbd_group_image_state_t:
+        _RBD_GROUP_IMAGE_STATE_ATTACHED "RBD_GROUP_IMAGE_STATE_ATTACHED"
+        _RBD_GROUP_IMAGE_STATE_INCOMPLETE "RBD_GROUP_IMAGE_STATE_INCOMPLETE"
+
+    ctypedef struct rbd_group_image_info_t:
+        char *name
+        int64_t pool
+        rbd_group_image_state_t state
+
+    ctypedef enum rbd_group_snap_state_t:
+        _RBD_GROUP_SNAP_STATE_INCOMPLETE "RBD_GROUP_SNAP_STATE_INCOMPLETE"
+        _RBD_GROUP_SNAP_STATE_COMPLETE "RBD_GROUP_SNAP_STATE_COMPLETE"
+
+    ctypedef struct rbd_group_snap_info_t:
+        char *name
+        rbd_group_snap_state_t state
+
+    ctypedef enum rbd_image_migration_state_t:
+        _RBD_IMAGE_MIGRATION_STATE_UNKNOWN "RBD_IMAGE_MIGRATION_STATE_UNKNOWN"
+        _RBD_IMAGE_MIGRATION_STATE_ERROR "RBD_IMAGE_MIGRATION_STATE_ERROR"
+        _RBD_IMAGE_MIGRATION_STATE_PREPARING "RBD_IMAGE_MIGRATION_STATE_PREPARING"
+        _RBD_IMAGE_MIGRATION_STATE_PREPARED "RBD_IMAGE_MIGRATION_STATE_PREPARED"
+        _RBD_IMAGE_MIGRATION_STATE_EXECUTING "RBD_IMAGE_MIGRATION_STATE_EXECUTING"
+        _RBD_IMAGE_MIGRATION_STATE_EXECUTED "RBD_IMAGE_MIGRATION_STATE_EXECUTED"
+
+    ctypedef struct rbd_image_migration_status_t:
+        int64_t source_pool_id
+        char *source_pool_namespace
+        char *source_image_name
+        char *source_image_id
+        int64_t dest_pool_id
+        char *dest_pool_namespace
+        char *dest_image_name
+        char *dest_image_id
+        rbd_image_migration_state_t state
+        char *state_description
+
+    ctypedef enum rbd_config_source_t:
+        _RBD_CONFIG_SOURCE_CONFIG "RBD_CONFIG_SOURCE_CONFIG"
+        _RBD_CONFIG_SOURCE_POOL "RBD_CONFIG_SOURCE_POOL"
+        _RBD_CONFIG_SOURCE_IMAGE "RBD_CONFIG_SOURCE_IMAGE"
+
+    ctypedef struct rbd_config_option_t:
+        char *name
+        char *value
+        rbd_config_source_t source
+
+    ctypedef enum rbd_pool_stat_option_t:
+        _RBD_POOL_STAT_OPTION_IMAGES "RBD_POOL_STAT_OPTION_IMAGES"
+        _RBD_POOL_STAT_OPTION_IMAGE_PROVISIONED_BYTES "RBD_POOL_STAT_OPTION_IMAGE_PROVISIONED_BYTES"
+        _RBD_POOL_STAT_OPTION_IMAGE_MAX_PROVISIONED_BYTES "RBD_POOL_STAT_OPTION_IMAGE_MAX_PROVISIONED_BYTES"
+        _RBD_POOL_STAT_OPTION_IMAGE_SNAPSHOTS "RBD_POOL_STAT_OPTION_IMAGE_SNAPSHOTS"
+        _RBD_POOL_STAT_OPTION_TRASH_IMAGES "RBD_POOL_STAT_OPTION_TRASH_IMAGES"
+        _RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES "RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES"
+        _RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES "RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES"
+        _RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS "RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS"
+
     ctypedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg)
     ctypedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void* ptr)
 
     void rbd_version(int *major, int *minor, int *extra)
+
+    void rbd_image_spec_list_cleanup(rbd_image_spec_t *image, size_t num_images)
+    void rbd_linked_image_spec_cleanup(rbd_linked_image_spec_t *image)
+    void rbd_linked_image_spec_list_cleanup(rbd_linked_image_spec_t *images,
+                                            size_t num_images)
+    void rbd_snap_spec_cleanup(rbd_snap_spec_t *snap)
 
     void rbd_image_options_create(rbd_image_options_t* opts)
     void rbd_image_options_destroy(rbd_image_options_t opts)
@@ -168,6 +285,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_image_options_is_empty(rbd_image_options_t opts)
 
     int rbd_list(rados_ioctx_t io, char *names, size_t *size)
+    int rbd_list2(rados_ioctx_t io, rbd_image_spec_t *images,
+                  size_t *num_images)
     int rbd_create(rados_ioctx_t io, const char *name, uint64_t size,
                    int *order)
     int rbd_create4(rados_ioctx_t io, const char *name, uint64_t size,
@@ -187,8 +306,20 @@ cdef extern from "rbd/librbd.h" nogil:
                        size_t *num_entries)
     void rbd_trash_list_cleanup(rbd_trash_image_info_t *trash_entries,
                                 size_t num_entries)
+    int rbd_trash_purge(rados_ioctx_t io, time_t expire_ts, float threshold)
     int rbd_trash_remove(rados_ioctx_t io, const char *id, int force)
     int rbd_trash_restore(rados_ioctx_t io, const char *id, const char *name)
+
+    int rbd_migration_prepare(rados_ioctx_t io_ctx, const char *image_name,
+                              rados_ioctx_t dest_io_ctx, const char *dest_image_name,
+                              rbd_image_options_t opts)
+    int rbd_migration_execute(rados_ioctx_t io_ctx, const char *image_name)
+    int rbd_migration_commit(rados_ioctx_t io_ctx, const char *image_name)
+    int rbd_migration_abort(rados_ioctx_t io_ctx, const char *image_name)
+    int rbd_migration_status(rados_ioctx_t io_ctx, const char *image_name,
+                             rbd_image_migration_status_t *status,
+                             size_t status_size)
+    void rbd_migration_status_cleanup(rbd_image_migration_status_t *status)
 
     int rbd_mirror_mode_get(rados_ioctx_t io, rbd_mirror_mode_t *mirror_mode)
     int rbd_mirror_mode_set(rados_ioctx_t io, rbd_mirror_mode_t mirror_mode)
@@ -203,6 +334,14 @@ cdef extern from "rbd/librbd.h" nogil:
                                    const char *client_name)
     int rbd_mirror_peer_set_cluster(rados_ioctx_t io_ctx, const char *uuid,
                                     const char *cluster_name)
+    int rbd_mirror_peer_get_attributes(rados_ioctx_t io_ctx, const char *uuid,
+                                       char *keys, size_t *max_key_len,
+                                       char *values, size_t *max_val_length,
+                                       size_t *key_value_count)
+    int rbd_mirror_peer_set_attributes(rados_ioctx_t io_ctx, const char *uuid,
+                                       const char *keys, const char *values,
+                                       size_t count)
+
     int rbd_mirror_image_status_list(rados_ioctx_t io, const char *start_id,
                                      size_t max, char **image_ids,
                                      rbd_mirror_image_status_t *images,
@@ -213,32 +352,65 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_mirror_image_status_summary(rados_ioctx_t io,
                                         rbd_mirror_image_status_state_t *states,
                                         int *counts, size_t *maxlen)
+    int rbd_mirror_image_instance_id_list(rados_ioctx_t io_ctx,
+                                          const char *start_id,
+                                          size_t max, char **image_ids,
+                                          char **instance_ids,
+                                          size_t *len)
+    void rbd_mirror_image_instance_id_list_cleanup(char **image_ids,
+                                                   char **instance_ids,
+                                                   size_t len)
+
+    int rbd_pool_metadata_get(rados_ioctx_t io_ctx, const char *key,
+                              char *value, size_t *val_len)
+    int rbd_pool_metadata_set(rados_ioctx_t io_ctx, const char *key,
+                              const char *value)
+    int rbd_pool_metadata_remove(rados_ioctx_t io_ctx, const char *key)
+    int rbd_pool_metadata_list(rados_ioctx_t io_ctx, const char *start,
+                               uint64_t max, char *keys, size_t *key_len,
+                               char *values, size_t *vals_len)
+
+    int rbd_config_pool_list(rados_ioctx_t io_ctx, rbd_config_option_t *options,
+                             int *max_options)
+    void rbd_config_pool_list_cleanup(rbd_config_option_t *options,
+                                      int max_options)
 
     int rbd_open(rados_ioctx_t io, const char *name,
                  rbd_image_t *image, const char *snap_name)
+    int rbd_open_by_id(rados_ioctx_t io, const char *image_id,
+                       rbd_image_t *image, const char *snap_name)
     int rbd_open_read_only(rados_ioctx_t io, const char *name,
                            rbd_image_t *image, const char *snap_name)
+    int rbd_open_by_id_read_only(rados_ioctx_t io, const char *image_id,
+                                 rbd_image_t *image, const char *snap_name)
     int rbd_close(rbd_image_t image)
-    int rbd_resize(rbd_image_t image, uint64_t size)
+    int rbd_resize2(rbd_image_t image, uint64_t size, bint allow_shrink,
+                    librbd_progress_fn_t cb, void *cbdata)
     int rbd_stat(rbd_image_t image, rbd_image_info_t *info, size_t infosize)
     int rbd_get_old_format(rbd_image_t image, uint8_t *old)
     int rbd_get_size(rbd_image_t image, uint64_t *size)
     int rbd_get_features(rbd_image_t image, uint64_t *features)
     int rbd_update_features(rbd_image_t image, uint64_t features,
                             uint8_t enabled)
+    int rbd_get_op_features(rbd_image_t image, uint64_t *op_features)
     int rbd_get_stripe_unit(rbd_image_t image, uint64_t *stripe_unit)
     int rbd_get_stripe_count(rbd_image_t image, uint64_t *stripe_count)
     int rbd_get_create_timestamp(rbd_image_t image, timespec *timestamp)
+    int rbd_get_access_timestamp(rbd_image_t image, timespec *timestamp)
+    int rbd_get_modify_timestamp(rbd_image_t image, timespec *timestamp)
     int rbd_get_overlap(rbd_image_t image, uint64_t *overlap)
+    int rbd_get_name(rbd_image_t image, char *name, size_t *name_len)
     int rbd_get_id(rbd_image_t image, char *id, size_t id_len)
     int rbd_get_block_name_prefix(rbd_image_t image, char *prefix,
                                   size_t prefix_len)
-    int rbd_get_parent_info2(rbd_image_t image,
-                             char *parent_poolname, size_t ppoolnamelen,
-                             char *parent_name, size_t pnamelen,
-                             char *parent_id, size_t pidlen,
-                             char *parent_snapname, size_t psnapnamelen)
+    int64_t rbd_get_data_pool_id(rbd_image_t image)
+    int rbd_get_parent(rbd_image_t image,
+                       rbd_linked_image_spec_t *parent_image,
+                       rbd_snap_spec_t *parent_snap)
     int rbd_get_flags(rbd_image_t image, uint64_t *flags)
+    int rbd_get_group(rbd_image_t image, rbd_group_info_t *group_info,
+                      size_t group_info_size)
+
     ssize_t rbd_read2(rbd_image_t image, uint64_t ofs, size_t len,
                       char *buf, int op_flags)
     ssize_t rbd_write2(rbd_image_t image, uint64_t ofs, size_t len,
@@ -246,6 +418,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_discard(rbd_image_t image, uint64_t ofs, uint64_t len)
     int rbd_copy3(rbd_image_t src, rados_ioctx_t dest_io_ctx,
                   const char *destname, rbd_image_options_t dest_opts)
+    int rbd_deep_copy(rbd_image_t src, rados_ioctx_t dest_io_ctx,
+                      const char *destname, rbd_image_options_t dest_opts)
     int rbd_snap_list(rbd_image_t image, rbd_snap_info_t *snaps,
                       int *max_snaps)
     void rbd_snap_list_end(rbd_snap_info_t *snaps)
@@ -253,6 +427,7 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_snap_remove(rbd_image_t image, const char *snapname)
     int rbd_snap_remove2(rbd_image_t image, const char *snapname, uint32_t flags,
 			 librbd_progress_fn_t cb, void *cbdata)
+    int rbd_snap_remove_by_id(rbd_image_t image, uint64_t snap_id)
     int rbd_snap_rollback(rbd_image_t image, const char *snapname)
     int rbd_snap_rename(rbd_image_t image, const char *snapname,
                         const char* dstsnapsname)
@@ -264,11 +439,28 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_snap_set_limit(rbd_image_t image, uint64_t limit)
     int rbd_snap_get_timestamp(rbd_image_t image, uint64_t snap_id, timespec *timestamp)
     int rbd_snap_set(rbd_image_t image, const char *snapname)
+    int rbd_snap_set_by_id(rbd_image_t image, uint64_t snap_id)
+    int rbd_snap_get_namespace_type(rbd_image_t image,
+                                    uint64_t snap_id,
+                                    rbd_snap_namespace_type_t *namespace_type)
+    int rbd_snap_get_group_namespace(rbd_image_t image, uint64_t snap_id,
+                                     rbd_snap_group_namespace_t *group_info,
+                                     size_t snap_group_namespace_size)
+    void rbd_snap_group_namespace_cleanup(rbd_snap_group_namespace_t *group_spec,
+                                          size_t snap_group_namespace_size)
+    int rbd_snap_get_trash_namespace(rbd_image_t image, uint64_t snap_id,
+                                     char *original_name, size_t max_length)
+
     int rbd_flatten(rbd_image_t image)
+    int rbd_sparsify(rbd_image_t image, size_t sparse_size)
     int rbd_rebuild_object_map(rbd_image_t image, librbd_progress_fn_t cb,
                                void *cbdata)
-    ssize_t rbd_list_children(rbd_image_t image, char *pools, size_t *pools_len,
-                              char *images, size_t *images_len)
+    int rbd_list_children3(rbd_image_t image, rbd_linked_image_spec_t *children,
+                           size_t *max_children)
+    int rbd_list_descendants(rbd_image_t image,
+                             rbd_linked_image_spec_t *descendants,
+                             size_t *max_descendants)
+
     ssize_t rbd_list_lockers(rbd_image_t image, int *exclusive,
                              char *tag, size_t *tag_len,
                              char *clients, size_t *clients_len,
@@ -315,6 +507,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_mirror_image_get_status(rbd_image_t image,
                                     rbd_mirror_image_status_t *mirror_image_status,
                                     size_t status_size)
+    int rbd_mirror_image_get_instance_id(rbd_image_t image, char *instance_id,
+                                         size_t *id_max_length)
 
     int rbd_aio_write2(rbd_image_t image, uint64_t off, size_t len,
                        const char *buf, rbd_completion_t c, int op_flags)
@@ -338,6 +532,70 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_metadata_list(rbd_image_t image, const char *start, uint64_t max,
                           char *keys, size_t *key_len, char *values,
                           size_t *vals_len)
+    int rbd_group_create(rados_ioctx_t p, const char *name)
+    int rbd_group_remove(rados_ioctx_t p, const char *name)
+    int rbd_group_list(rados_ioctx_t p, char *names, size_t *size)
+    int rbd_group_rename(rados_ioctx_t p, const char *src, const char *dest)
+    void rbd_group_info_cleanup(rbd_group_info_t *group_info,
+                                size_t group_info_size)
+    int rbd_group_image_add(rados_ioctx_t group_p, const char *group_name,
+			    rados_ioctx_t image_p, const char *image_name)
+    int rbd_group_image_remove(rados_ioctx_t group_p, const char *group_name,
+                               rados_ioctx_t image_p, const char *image_name)
+
+    int rbd_group_image_list(rados_ioctx_t group_p,
+                             const char *group_name,
+                             rbd_group_image_info_t *images,
+                             size_t group_image_info_size,
+                             size_t *image_size)
+    void rbd_group_image_list_cleanup(rbd_group_image_info_t *images,
+                                      size_t group_image_info_size, size_t len)
+
+    int rbd_group_snap_create(rados_ioctx_t group_p, const char *group_name,
+                              const char *snap_name)
+
+    int rbd_group_snap_remove(rados_ioctx_t group_p, const char *group_name,
+                              const char *snap_name)
+
+    int rbd_group_snap_rename(rados_ioctx_t group_p, const char *group_name,
+                              const char *old_snap_name,
+                              const char *new_snap_name)
+
+    int rbd_group_snap_list(rados_ioctx_t group_p,
+                            const char *group_name,
+                            rbd_group_snap_info_t *snaps,
+                            size_t group_snap_info_size,
+                            size_t *snaps_size)
+
+    void rbd_group_snap_list_cleanup(rbd_group_snap_info_t *snaps,
+                                     size_t group_snap_info_size, size_t len)
+    int rbd_group_snap_rollback(rados_ioctx_t group_p, const char *group_name,
+                                const char *snap_name)
+
+    int rbd_watchers_list(rbd_image_t image, rbd_image_watcher_t *watchers,
+                          size_t *max_watchers)
+    void rbd_watchers_list_cleanup(rbd_image_watcher_t *watchers,
+                                   size_t num_watchers)
+
+    int rbd_config_image_list(rbd_image_t image, rbd_config_option_t *options,
+                              int *max_options)
+    void rbd_config_image_list_cleanup(rbd_config_option_t *options,
+                                       int max_options)
+
+    int rbd_namespace_create(rados_ioctx_t io, const char *namespace_name)
+    int rbd_namespace_remove(rados_ioctx_t io, const char *namespace_name)
+    int rbd_namespace_list(rados_ioctx_t io, char *namespace_names,
+                           size_t *size)
+    int rbd_namespace_exists(rados_ioctx_t io, const char *namespace_name,
+                             bint *exists)
+
+    int rbd_pool_init(rados_ioctx_t, bint force)
+
+    void rbd_pool_stats_create(rbd_pool_stats_t *stats)
+    void rbd_pool_stats_destroy(rbd_pool_stats_t stats)
+    int rbd_pool_stats_option_add_uint64(rbd_pool_stats_t stats,
+                                         int stat_option, uint64_t* stat_val)
+    int rbd_pool_stats_get(rados_ioctx_t io, rbd_pool_stats_t stats)
 
 RBD_FEATURE_LAYERING = _RBD_FEATURE_LAYERING
 RBD_FEATURE_STRIPINGV2 = _RBD_FEATURE_STRIPINGV2
@@ -347,6 +605,7 @@ RBD_FEATURE_FAST_DIFF = _RBD_FEATURE_FAST_DIFF
 RBD_FEATURE_DEEP_FLATTEN = _RBD_FEATURE_DEEP_FLATTEN
 RBD_FEATURE_JOURNALING = _RBD_FEATURE_JOURNALING
 RBD_FEATURE_DATA_POOL = _RBD_FEATURE_DATA_POOL
+RBD_FEATURE_OPERATIONS = _RBD_FEATURE_OPERATIONS
 
 RBD_FEATURES_INCOMPATIBLE = _RBD_FEATURES_INCOMPATIBLE
 RBD_FEATURES_RW_INCOMPATIBLE = _RBD_FEATURES_RW_INCOMPATIBLE
@@ -354,7 +613,13 @@ RBD_FEATURES_MUTABLE = _RBD_FEATURES_MUTABLE
 RBD_FEATURES_SINGLE_CLIENT = _RBD_FEATURES_SINGLE_CLIENT
 RBD_FEATURES_ALL = _RBD_FEATURES_ALL
 
+RBD_OPERATION_FEATURE_CLONE_PARENT = _RBD_OPERATION_FEATURE_CLONE_PARENT
+RBD_OPERATION_FEATURE_CLONE_CHILD = _RBD_OPERATION_FEATURE_CLONE_CHILD
+RBD_OPERATION_FEATURE_GROUP = _RBD_OPERATION_FEATURE_GROUP
+RBD_OPERATION_FEATURE_SNAP_TRASH = _RBD_OPERATION_FEATURE_SNAP_TRASH
+
 RBD_FLAG_OBJECT_MAP_INVALID = _RBD_FLAG_OBJECT_MAP_INVALID
+RBD_FLAG_FAST_DIFF_INVALID = _RBD_FLAG_FAST_DIFF_INVALID
 
 RBD_MIRROR_MODE_DISABLED = _RBD_MIRROR_MODE_DISABLED
 RBD_MIRROR_MODE_IMAGE = _RBD_MIRROR_MODE_IMAGE
@@ -382,21 +647,55 @@ RBD_IMAGE_OPTION_STRIPE_UNIT = _RBD_IMAGE_OPTION_STRIPE_UNIT
 RBD_IMAGE_OPTION_STRIPE_COUNT = _RBD_IMAGE_OPTION_STRIPE_COUNT
 RBD_IMAGE_OPTION_DATA_POOL = _RBD_IMAGE_OPTION_DATA_POOL
 
+RBD_SNAP_NAMESPACE_TYPE_USER = _RBD_SNAP_NAMESPACE_TYPE_USER
+RBD_SNAP_NAMESPACE_TYPE_GROUP = _RBD_SNAP_NAMESPACE_TYPE_GROUP
+RBD_SNAP_NAMESPACE_TYPE_TRASH = _RBD_SNAP_NAMESPACE_TYPE_TRASH
+
+RBD_GROUP_IMAGE_STATE_ATTACHED = _RBD_GROUP_IMAGE_STATE_ATTACHED
+RBD_GROUP_IMAGE_STATE_INCOMPLETE = _RBD_GROUP_IMAGE_STATE_INCOMPLETE
+
+RBD_GROUP_SNAP_STATE_INCOMPLETE = _RBD_GROUP_SNAP_STATE_INCOMPLETE
+RBD_GROUP_SNAP_STATE_COMPLETE = _RBD_GROUP_SNAP_STATE_COMPLETE
+
+RBD_IMAGE_MIGRATION_STATE_UNKNOWN = _RBD_IMAGE_MIGRATION_STATE_UNKNOWN
+RBD_IMAGE_MIGRATION_STATE_ERROR = _RBD_IMAGE_MIGRATION_STATE_ERROR
+RBD_IMAGE_MIGRATION_STATE_PREPARING = _RBD_IMAGE_MIGRATION_STATE_PREPARING
+RBD_IMAGE_MIGRATION_STATE_PREPARED = _RBD_IMAGE_MIGRATION_STATE_PREPARED
+RBD_IMAGE_MIGRATION_STATE_EXECUTING = _RBD_IMAGE_MIGRATION_STATE_EXECUTING
+RBD_IMAGE_MIGRATION_STATE_EXECUTED = _RBD_IMAGE_MIGRATION_STATE_EXECUTED
+
+RBD_CONFIG_SOURCE_CONFIG = _RBD_CONFIG_SOURCE_CONFIG
+RBD_CONFIG_SOURCE_POOL = _RBD_CONFIG_SOURCE_POOL
+RBD_CONFIG_SOURCE_IMAGE = _RBD_CONFIG_SOURCE_IMAGE
+
+RBD_POOL_STAT_OPTION_IMAGES = _RBD_POOL_STAT_OPTION_IMAGES
+RBD_POOL_STAT_OPTION_IMAGE_PROVISIONED_BYTES = _RBD_POOL_STAT_OPTION_IMAGE_PROVISIONED_BYTES
+RBD_POOL_STAT_OPTION_IMAGE_MAX_PROVISIONED_BYTES = _RBD_POOL_STAT_OPTION_IMAGE_MAX_PROVISIONED_BYTES
+RBD_POOL_STAT_OPTION_IMAGE_SNAPSHOTS = _RBD_POOL_STAT_OPTION_IMAGE_SNAPSHOTS
+RBD_POOL_STAT_OPTION_TRASH_IMAGES = _RBD_POOL_STAT_OPTION_TRASH_IMAGES
+RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES = _RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES
+RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES = _RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES
+RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS = _RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS
+
+
 class Error(Exception):
     pass
 
 
 class OSError(Error):
     """ `OSError` class, derived from `Error` """
-    def __init__(self, errno, strerror):
+    def __init__(self, message, errno=None):
+        super(OSError, self).__init__(message)
         self.errno = errno
-        self.strerror = strerror
 
     def __str__(self):
-        return '[Errno {0}] {1}'.format(self.errno, self.strerror)
+        msg = super(OSError, self).__str__()
+        if self.errno is None:
+            return msg
+        return '[errno {0}] {1}'.format(self.errno, msg)
 
     def __reduce__(self):
-        return (self.__class__, (self.errno, self.strerror))
+        return (self.__class__, (self.message, self.errno))
 
 class PermissionError(OSError):
     pass
@@ -405,8 +704,13 @@ class PermissionError(OSError):
 class ImageNotFound(OSError):
     pass
 
+class ObjectNotFound(OSError):
+    pass
 
 class ImageExists(OSError):
+    pass
+
+class ObjectExists(OSError):
     pass
 
 
@@ -478,7 +782,24 @@ cdef errno_to_exception = {
     errno.EDQUOT    : DiskQuotaExceeded,
 }
 
-cdef make_ex(ret, msg):
+cdef group_errno_to_exception = {
+    errno.EPERM     : PermissionError,
+    errno.ENOENT    : ObjectNotFound,
+    errno.EIO       : IOError,
+    errno.ENOSPC    : NoSpace,
+    errno.EEXIST    : ObjectExists,
+    errno.EINVAL    : InvalidArgument,
+    errno.EROFS     : ReadOnlyImage,
+    errno.EBUSY     : ImageBusy,
+    errno.ENOTEMPTY : ImageHasSnapshots,
+    errno.ENOSYS    : FunctionNotSupported,
+    errno.EDOM      : ArgumentOutOfRange,
+    errno.ESHUTDOWN : ConnectionShutdown,
+    errno.ETIMEDOUT : Timeout,
+    errno.EDQUOT    : DiskQuotaExceeded,
+}
+
+cdef make_ex(ret, msg, exception_map=errno_to_exception):
     """
     Translate a librbd return code into an exception.
 
@@ -489,10 +810,10 @@ cdef make_ex(ret, msg):
     :returns: a subclass of :class:`Error`
     """
     ret = abs(ret)
-    if ret in errno_to_exception:
-        return errno_to_exception[ret](ret, msg)
+    if ret in exception_map:
+        return exception_map[ret](msg, errno=ret)
     else:
-        return Error(ret, msg + (": error code %d" % ret))
+        return OSError(msg, errno=ret)
 
 
 cdef rados_ioctx_t convert_ioctx(rados.Ioctx ioctx) except? NULL:
@@ -516,7 +837,9 @@ def cstr(val, name, encoding="utf-8", opt=False):
         return None
     if isinstance(val, bytes):
         return val
-    elif isinstance(val, unicode):
+    elif isinstance(val, str):
+        return val.encode(encoding)
+    elif sys.version_info < (3, 0) and isinstance(val, unicode):
         return val.encode(encoding)
     else:
         raise InvalidArgument('%s must be a string' % name)
@@ -544,6 +867,9 @@ cdef void* realloc_chk(void* ptr, size_t size) except NULL:
     if ret == NULL:
         raise MemoryError("realloc failed")
     return ret
+
+RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST = decode_cstr(_RBD_MIRROR_PEER_ATTRIBUTE_NAME_MON_HOST)
+RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY = decode_cstr(_RBD_MIRROR_PEER_ATTRIBUTE_NAME_KEY)
 
 cdef class Completion
 
@@ -701,6 +1027,7 @@ class RBD(object):
         :raises: :class:`FunctionNotSupported`
         """
         name = cstr(name, 'name')
+        data_pool = cstr(data_pool, 'data_pool', opt=True)
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
             char *_name = name
@@ -784,6 +1111,7 @@ class RBD(object):
         p_snapname = cstr(p_snapname, 'p_snapname')
         p_name = cstr(p_name, 'p_name')
         c_name = cstr(c_name, 'c_name')
+        data_pool = cstr(data_pool, 'data_pool', opt=True)
         cdef:
             rados_ioctx_t _p_ioctx = convert_ioctx(p_ioctx)
             rados_ioctx_t _c_ioctx = convert_ioctx(c_ioctx)
@@ -843,6 +1171,16 @@ class RBD(object):
         finally:
             free(c_names)
 
+    def list2(self, ioctx):
+        """
+        Iterate over the images in the pool.
+
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: :class:`ImageIterator`
+        """
+        return ImageIterator(ioctx)
+
     def remove(self, ioctx, name):
         """
         Delete an RBD image. This may take a long time, since it does
@@ -894,7 +1232,8 @@ class RBD(object):
 
     def trash_move(self, ioctx, name, delay=0):
         """
-        Moves an RBD image to the trash.
+        Move an RBD image to the trash.
+
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
         :param name: the name of the image to remove
@@ -914,10 +1253,43 @@ class RBD(object):
         if ret != 0:
             raise make_ex(ret, 'error moving image to trash')
 
+    def trash_purge(self, ioctx, expire_ts=None, threshold=-1):
+        """
+        Delete RBD images from trash in bulk.
+
+        By default it removes images with deferment end time less than now.
+
+        The timestamp is configurable, e.g. delete images that have expired a
+        week ago.
+
+        If the threshold is used it deletes images until X% pool usage is met.
+
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param expire_ts: timestamp for images to be considered as expired (UTC)
+        :type expire_ts: datetime
+        :param threshold: percentage of pool usage to be met (0 to 1)
+        :type threshold: float
+        """
+        if expire_ts:
+            expire_epoch_ts = time.mktime(expire_ts.timetuple())
+        else:
+            expire_epoch_ts = 0
+
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            time_t _expire_ts = expire_epoch_ts
+            float _threshold = threshold
+        with nogil:
+            ret = rbd_trash_purge(_ioctx, _expire_ts, _threshold)
+        if ret != 0:
+            raise make_ex(ret, 'error purging images from trash')
+
     def trash_remove(self, ioctx, image_id, force=False):
         """
-        Deletes an RBD image from trash. If image deferment time has not
+        Delete an RBD image from trash. If image deferment time has not
         expired :class:`PermissionError` is raised.
+
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
         :param image_id: the id of the image to remove
@@ -938,7 +1310,8 @@ class RBD(object):
 
     def trash_get(self, ioctx, image_id):
         """
-        Retrieve RBD image info from trash
+        Retrieve RBD image info from trash.
+
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
         :param image_id: the id of the image to restore
@@ -966,22 +1339,23 @@ class RBD(object):
         with nogil:
             ret = rbd_trash_get(_ioctx, _image_id, &c_info)
         if ret != 0:
-            raise make_ex(ret, 'error restoring image from trash')
+            raise make_ex(ret, 'error retrieving image from trash')
 
-        __source_string = ['USER', 'MIRRORING']
+        __source_string = ['USER', 'MIRRORING', 'MIGRATION', 'REMOVING']
         info = {
             'id'          : decode_cstr(c_info.id),
             'name'        : decode_cstr(c_info.name),
             'source'      : __source_string[c_info.source],
-            'deletion_time' : datetime.fromtimestamp(c_info.deletion_time),
-            'deferment_end_time' : datetime.fromtimestamp(c_info.deferment_end_time)
+            'deletion_time' : datetime.utcfromtimestamp(c_info.deletion_time),
+            'deferment_end_time' : datetime.utcfromtimestamp(c_info.deferment_end_time)
             }
         rbd_trash_get_cleanup(&c_info)
         return info
 
     def trash_list(self, ioctx):
         """
-        Lists all entries from trash.
+        List all entries from trash.
+
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
         :returns: :class:`TrashIterator`
@@ -990,7 +1364,8 @@ class RBD(object):
 
     def trash_restore(self, ioctx, image_id, name):
         """
-        Restores an RBD image from trash.
+        Restore an RBD image from trash.
+
         :param ioctx: determines which RADOS pool the image is in
         :type ioctx: :class:`rados.Ioctx`
         :param image_id: the id of the image to restore
@@ -1009,6 +1384,187 @@ class RBD(object):
             ret = rbd_trash_restore(_ioctx, _image_id, _name)
         if ret != 0:
             raise make_ex(ret, 'error restoring image from trash')
+
+    def migration_prepare(self, ioctx, image_name, dest_ioctx, dest_image_name,
+                          features=None, order=None, stripe_unit=None, stripe_count=None,
+                          data_pool=None):
+        """
+        Prepare an RBD image migration.
+
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param image_name: the current name of the image
+        :type src: str
+        :param dest_ioctx: determines which pool to migration into
+        :type dest_ioctx: :class:`rados.Ioctx`
+        :param dest_image_name: the name of the destination image (may be the same image)
+        :type dest_image_name: str
+        :param features: bitmask of features to enable; if set, must include layering
+        :type features: int
+        :param order: the image is split into (2**order) byte objects
+        :type order: int
+        :param stripe_unit: stripe unit in bytes (default None to let librbd decide)
+        :type stripe_unit: int
+        :param stripe_count: objects to stripe over before looping
+        :type stripe_count: int
+        :param data_pool: optional separate pool for data blocks
+        :type data_pool: str
+        :raises: :class:`TypeError`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`ImageExists`
+        :raises: :class:`FunctionNotSupported`
+        :raises: :class:`ArgumentOutOfRange`
+        """
+        image_name = cstr(image_name, 'image_name')
+        dest_image_name = cstr(dest_image_name, 'dest_image_name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_image_name = image_name
+            rados_ioctx_t _dest_ioctx = convert_ioctx(dest_ioctx)
+            char *_dest_image_name = dest_image_name
+            rbd_image_options_t opts
+
+        rbd_image_options_create(&opts)
+        try:
+            if features is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
+                                             features)
+            if order is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
+                                             order)
+            if stripe_unit is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                             stripe_unit)
+            if stripe_count is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                             stripe_count)
+            if data_pool is not None:
+                rbd_image_options_set_string(opts, RBD_IMAGE_OPTION_DATA_POOL,
+                                             data_pool)
+            with nogil:
+                ret = rbd_migration_prepare(_ioctx, _image_name, _dest_ioctx,
+                                            _dest_image_name, opts)
+        finally:
+            rbd_image_options_destroy(opts)
+        if ret < 0:
+            raise make_ex(ret, 'error migrating image %s' % (image_name))
+
+    def migration_execute(self, ioctx, image_name):
+        """
+        Execute a prepared RBD image migration.
+
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param image_name: the name of the image
+        :type image_name: str
+        :raises: :class:`ImageNotFound`
+        """
+        image_name = cstr(image_name, 'image_name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_image_name = image_name
+        with nogil:
+            ret = rbd_migration_execute(_ioctx, _image_name)
+        if ret != 0:
+            raise make_ex(ret, 'error aborting migration')
+
+    def migration_commit(self, ioctx, image_name):
+        """
+        Commit an executed RBD image migration.
+
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param image_name: the name of the image
+        :type image_name: str
+        :raises: :class:`ImageNotFound`
+        """
+        image_name = cstr(image_name, 'image_name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_image_name = image_name
+        with nogil:
+            ret = rbd_migration_commit(_ioctx, _image_name)
+        if ret != 0:
+            raise make_ex(ret, 'error aborting migration')
+
+    def migration_abort(self, ioctx, image_name):
+        """
+        Cancel a previously started but interrupted migration.
+
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param image_name: the name of the image
+        :type image_name: str
+        :raises: :class:`ImageNotFound`
+        """
+        image_name = cstr(image_name, 'image_name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_image_name = image_name
+        with nogil:
+            ret = rbd_migration_abort(_ioctx, _image_name)
+        if ret != 0:
+            raise make_ex(ret, 'error aborting migration')
+
+    def migration_status(self, ioctx, image_name):
+        """
+        Return RBD image migration status.
+
+        :param ioctx: determines which RADOS pool the image is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param image_name: the name of the image
+        :type image_name: str
+        :returns: dict - contains the following keys:
+
+            * ``source_pool_id`` (int) - source image pool id
+
+            * ``source_pool_namespace`` (str) - source image pool namespace
+
+            * ``source_image_name`` (str) - source image name
+
+            * ``source_image_id`` (str) - source image id
+
+            * ``dest_pool_id`` (int) - destination image pool id
+
+            * ``dest_pool_namespace`` (str) - destination image pool namespace
+
+            * ``dest_image_name`` (str) - destination image name
+
+            * ``dest_image_id`` (str) - destination image id
+
+            * ``state`` (int) - current migration state
+
+            * ``state_description`` (str) - migration state description
+
+        :raises: :class:`ImageNotFound`
+        """
+        image_name = cstr(image_name, 'image_name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_image_name = image_name
+            rbd_image_migration_status_t c_status
+        with nogil:
+            ret = rbd_migration_status(_ioctx, _image_name, &c_status,
+                                       sizeof(c_status))
+        if ret != 0:
+            raise make_ex(ret, 'error getting migration status')
+
+        status = {
+            'source_pool_id'        : c_status.source_pool_id,
+            'source_pool_namespace' : decode_cstr(c_status.source_pool_namespace),
+            'source_image_name'     : decode_cstr(c_status.source_image_name),
+            'source_image_id'       : decode_cstr(c_status.source_image_id),
+            'dest_pool_id'          : c_status.source_pool_id,
+            'dest_pool_namespace'   : decode_cstr(c_status.dest_pool_namespace),
+            'dest_image_name'       : decode_cstr(c_status.dest_image_name),
+            'dest_image_id'         : decode_cstr(c_status.dest_image_id),
+            'state'                 : c_status.state,
+            'state_description'     : decode_cstr(c_status.state_description)
+         }
+
+        rbd_migration_status_cleanup(&c_status)
+
+        return status
 
     def mirror_mode_get(self, ioctx):
         """
@@ -1146,13 +1702,83 @@ class RBD(object):
         if ret != 0:
             raise make_ex(ret, 'error setting mirror peer cluster')
 
+    def mirror_peer_get_attributes(self, ioctx, uuid):
+        """
+        Get optional mirror peer attributes
+
+        :param ioctx: determines which RADOS pool is written
+        :type ioctx: :class:`rados.Ioctx`
+        :param uuid: uuid of the mirror peer
+        :type uuid: str
+
+        :returns: dict - contains the following keys:
+
+            * ``mon_host`` (str) - monitor addresses
+
+            * ``key`` (str) - CephX key
+        """
+        uuid = cstr(uuid, 'uuid')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_uuid = uuid
+            char *_keys = NULL
+            char *_vals = NULL
+            size_t _keys_size = 512
+            size_t _vals_size = 512
+            size_t _count = 0
+        try:
+            while True:
+                _keys = <char *>realloc_chk(_keys, _keys_size)
+                _vals = <char *>realloc_chk(_vals, _vals_size)
+                with nogil:
+                    ret = rbd_mirror_peer_get_attributes(_ioctx, _uuid, _keys,
+                                                         &_keys_size, _vals,
+                                                         &_vals_size, &_count)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error getting mirror peer attributes')
+            keys = [decode_cstr(x) for x in _keys[:_keys_size].split(b'\0')[:-1]]
+            vals = [decode_cstr(x) for x in _vals[:_vals_size].split(b'\0')[:-1]]
+            return dict(zip(keys, vals))
+        finally:
+            free(_keys)
+            free(_vals)
+
+    def mirror_peer_set_attributes(self, ioctx, uuid, attributes):
+        """
+        Set optional mirror peer attributes
+
+        :param ioctx: determines which RADOS pool is written
+        :type ioctx: :class:`rados.Ioctx`
+        :param uuid: uuid of the mirror peer
+        :type uuid: str
+        :param attributes: 'mon_host' and 'key' attributes
+        :type attributes: dict
+        """
+        uuid = cstr(uuid, 'uuid')
+        keys_str = b'\0'.join([cstr(x[0], 'key') for x in attributes.items()])
+        vals_str = b'\0'.join([cstr(x[1], 'val') for x in attributes.items()])
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_uuid = uuid
+            char *_keys = keys_str
+            char *_vals = vals_str
+            size_t _count = len(attributes)
+
+        with nogil:
+            ret = rbd_mirror_peer_set_attributes(_ioctx, _uuid, _keys, _vals,
+                                                 _count)
+        if ret != 0:
+            raise make_ex(ret, 'error setting mirror peer attributes')
+
     def mirror_image_status_list(self, ioctx):
         """
         Iterate over the mirror image statuses of a pool.
 
         :param ioctx: determines which RADOS pool is read
         :type ioctx: :class:`rados.Ioctx`
-        :returns: :class:`MirrorImageStatus`
+        :returns: :class:`MirrorImageStatusIterator`
         """
         return MirrorImageStatusIterator(ioctx)
 
@@ -1182,6 +1808,377 @@ class RBD(object):
         finally:
             free(states)
             free(counts)
+
+    def mirror_image_instance_id_list(self, ioctx):
+        """
+        Iterate over the mirror image instance ids of a pool.
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: :class:`MirrorImageInstanceIdIterator`
+        """
+        return MirrorImageInstanceIdIterator(ioctx)
+
+    def pool_metadata_get(self, ioctx, key):
+        """
+        Get pool metadata for the given key.
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :param key: metadata key
+        :type key: str
+        :returns: str - metadata value
+        """
+        key = cstr(key, 'key')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_key = key
+            size_t size = 4096
+            char *value = NULL
+            int ret
+        try:
+            while True:
+                value = <char *>realloc_chk(value, size)
+                with nogil:
+                    ret = rbd_pool_metadata_get(_ioctx, _key, value, &size)
+                if ret != -errno.ERANGE:
+                    break
+            if ret == -errno.ENOENT:
+                raise KeyError('no metadata %s' % (key))
+            if ret != 0:
+                raise make_ex(ret, 'error getting metadata %s' % (key))
+            return decode_cstr(value)
+        finally:
+            free(value)
+
+    def pool_metadata_set(self, ioctx, key, value):
+        """
+        Set pool metadata for the given key.
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :param key: metadata key
+        :type key: str
+        :param value: metadata value
+        :type value: str
+        """
+        key = cstr(key, 'key')
+        value = cstr(value, 'value')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_key = key
+            char *_value = value
+        with nogil:
+            ret = rbd_pool_metadata_set(_ioctx, _key, _value)
+
+        if ret != 0:
+            raise make_ex(ret, 'error setting metadata %s' % (key))
+
+    def pool_metadata_remove(self, ioctx, key):
+        """
+        Remove pool metadata for the given key.
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :param key: metadata key
+        :type key: str
+        :returns: str - metadata value
+        """
+        key = cstr(key, 'key')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_key = key
+        with nogil:
+            ret = rbd_pool_metadata_remove(_ioctx, _key)
+
+        if ret == -errno.ENOENT:
+            raise KeyError('no metadata %s' % (key))
+        if ret != 0:
+            raise make_ex(ret, 'error removing metadata %s' % (key))
+
+    def pool_metadata_list(self, ioctx):
+        """
+        List pool metadata.
+
+        :returns: :class:`PoolMetadataIterator`
+        """
+        return PoolMetadataIterator(ioctx)
+
+    def config_list(self, ioctx):
+        """
+        List pool-level config overrides.
+
+        :returns: :class:`ConfigPoolIterator`
+        """
+        return ConfigPoolIterator(ioctx)
+
+    def group_create(self, ioctx, name):
+        """
+        Create a group.
+
+        :param ioctx: determines which RADOS pool is used
+        :type ioctx: :class:`rados.Ioctx`
+        :param name: the name of the group
+        :type name: str
+        :raises: :class:`ObjectExists`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`FunctionNotSupported`
+        """
+        name = cstr(name, 'name')
+        cdef:
+            char *_name = name
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+        with nogil:
+            ret = rbd_group_create(_ioctx, _name)
+        if ret != 0:
+            raise make_ex(ret, 'error creating group %s' % name, group_errno_to_exception)
+
+    def group_remove(self, ioctx, name):
+        """
+        Delete an RBD group. This may take a long time, since it does
+        not return until every image in the group has been removed
+        from the group.
+
+        :param ioctx: determines which RADOS pool the group is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param name: the name of the group to remove
+        :type name: str
+        :raises: :class:`ObjectNotFound`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`FunctionNotSupported`
+        """
+        name = cstr(name, 'name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_name = name
+        with nogil:
+            ret = rbd_group_remove(_ioctx, _name)
+        if ret != 0:
+            raise make_ex(ret, 'error removing group', group_errno_to_exception)
+
+    def group_list(self, ioctx):
+        """
+        List groups.
+
+        :param ioctx: determines which RADOS pool is read
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: list -- a list of groups names
+        :raises: :class:`FunctionNotSupported`
+        """
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            size_t size = 512
+            char *c_names = NULL
+        try:
+            while True:
+                c_names = <char *>realloc_chk(c_names, size)
+                with nogil:
+                    ret = rbd_group_list(_ioctx, c_names, &size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error listing groups', group_errno_to_exception)
+            return [decode_cstr(name) for name in c_names[:ret].split(b'\0')
+                    if name]
+        finally:
+            free(c_names)
+
+    def group_rename(self, ioctx, src, dest):
+        """
+        Rename an RBD group.
+
+        :param ioctx: determines which RADOS pool the group is in
+        :type ioctx: :class:`rados.Ioctx`
+        :param src: the current name of the group
+        :type src: str
+        :param dest: the new name of the group
+        :type dest: str
+        :raises: :class:`ObjectExists`
+        :raises: :class:`ObjectNotFound`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`FunctionNotSupported`
+        """
+        src = cstr(src, 'src')
+        dest = cstr(dest, 'dest')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_src = src
+            char *_dest = dest
+        with nogil:
+            ret = rbd_group_rename(_ioctx, _src, _dest)
+        if ret != 0:
+            raise make_ex(ret, 'error renaming group')
+
+    def namespace_create(self, ioctx, name):
+        """
+        Create an RBD namespace within a pool
+
+        :param ioctx: determines which RADOS pool
+        :type ioctx: :class:`rados.Ioctx`
+        :param name: namespace name
+        :type name: str
+        """
+        name = cstr(name, 'name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            const char *_name = name
+        with nogil:
+            ret = rbd_namespace_create(_ioctx, _name)
+        if ret != 0:
+            raise make_ex(ret, 'error creating namespace')
+
+    def namespace_remove(self, ioctx, name):
+        """
+        Remove an RBD namespace from a pool
+
+        :param ioctx: determines which RADOS pool
+        :type ioctx: :class:`rados.Ioctx`
+        :param name: namespace name
+        :type name: str
+        """
+        name = cstr(name, 'name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            const char *_name = name
+        with nogil:
+            ret = rbd_namespace_remove(_ioctx, _name)
+        if ret != 0:
+            raise make_ex(ret, 'error removing namespace')
+
+    def namespace_exists(self, ioctx, name):
+        """
+        Verifies if a namespace exists within a pool
+
+        :param ioctx: determines which RADOS pool
+        :type ioctx: :class:`rados.Ioctx`
+        :param name: namespace name
+        :type name: str
+        :returns: bool - true if namespace exists
+        """
+        name = cstr(name, 'name')
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            const char *_name = name
+            bint _exists = False
+        with nogil:
+            ret = rbd_namespace_exists(_ioctx, _name, &_exists)
+        if ret != 0:
+            raise make_ex(ret, 'error verifying namespace')
+        return bool(_exists != 0)
+
+    def namespace_list(self, ioctx):
+        """
+        List all namespaces within a pool
+
+        :param ioctx: determines which RADOS pool
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: list - collection of namespace names
+        """
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            char *_names = NULL
+            size_t _size = 512
+        try:
+            while True:
+                _names = <char *>realloc_chk(_names, _size)
+                with nogil:
+                    ret = rbd_namespace_list(_ioctx, _names, &_size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error listing namespaces')
+            return [decode_cstr(name) for name in _names[:_size].split(b'\0')
+                    if name]
+        finally:
+            free(_names)
+
+    def pool_init(self, ioctx, force):
+        """
+        Initialize an RBD pool
+        :param ioctx: determines which RADOS pool
+        :type ioctx: :class:`rados.Ioctx`
+        :param force: force init
+        :type force: bool
+        """
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            bint _force = force
+        with nogil:
+            ret = rbd_pool_init(_ioctx, _force)
+        if ret != 0:
+            raise make_ex(ret, 'error initializing pool')
+
+    def pool_stats_get(self, ioctx):
+        """
+        Return RBD pool stats
+
+        :param ioctx: determines which RADOS pool
+        :type ioctx: :class:`rados.Ioctx`
+        :returns: dict - contains the following keys:
+
+            * ``image_count`` (int) - image count
+
+            * ``image_provisioned_bytes`` (int) - image total HEAD provisioned bytes
+
+            * ``image_max_provisioned_bytes`` (int) - image total max provisioned bytes
+
+            * ``image_snap_count`` (int) - image snap count
+
+            * ``trash_count`` (int) - trash image count
+
+            * ``trash_provisioned_bytes`` (int) - trash total HEAD provisioned bytes
+
+            * ``trash_max_provisioned_bytes`` (int) - trash total max provisioned bytes
+
+            * ``trash_snap_count`` (int) - trash snap count
+
+        """
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+            uint64_t _image_count = 0
+            uint64_t _image_provisioned_bytes = 0
+            uint64_t _image_max_provisioned_bytes = 0
+            uint64_t _image_snap_count = 0
+            uint64_t _trash_count = 0
+            uint64_t _trash_provisioned_bytes = 0
+            uint64_t _trash_max_provisioned_bytes = 0
+            uint64_t _trash_snap_count = 0
+            rbd_pool_stats_t _stats
+
+        rbd_pool_stats_create(&_stats)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_IMAGES,
+                                         &_image_count)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_IMAGE_PROVISIONED_BYTES,
+                                         &_image_provisioned_bytes)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_IMAGE_MAX_PROVISIONED_BYTES,
+                                         &_image_max_provisioned_bytes)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_IMAGE_SNAPSHOTS,
+                                         &_image_snap_count)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_TRASH_IMAGES,
+                                         &_trash_count)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_TRASH_PROVISIONED_BYTES,
+                                         &_trash_provisioned_bytes)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_TRASH_MAX_PROVISIONED_BYTES,
+                                         &_trash_max_provisioned_bytes)
+        rbd_pool_stats_option_add_uint64(_stats, RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS,
+                                         &_trash_snap_count)
+        try:
+            with nogil:
+                ret = rbd_pool_stats_get(_ioctx, _stats)
+            if ret != 0:
+                raise make_ex(ret, 'error retrieving pool stats')
+        else:
+            return {'image_count': _image_count,
+                    'image_provisioned_bytes': _image_provisioned_bytes,
+                    'image_max_provisioned_bytes': _image_max_provisioned_bytes,
+                    'image_snap_count': _image_snap_count,
+                    'trash_count': _trash_count,
+                    'trash_provisioned_bytes': _trash_provisioned_bytes,
+                    'trash_max_provisioned_bytes': _trash_max_provisioned_bytes,
+                    'trash_snap_count': _trash_snap_count}
+        finally:
+            rbd_pool_stats_destroy(_stats)
+
 
 cdef class MirrorPeerIterator(object):
     """
@@ -1242,6 +2239,8 @@ cdef class MirrorImageStatusIterator(object):
 
         * ``name`` (str) - mirror image name
 
+        * ``id`` (str) - mirror image id
+
         * `info` (dict) - mirror image info
 
         * `state` (int) - mirror state
@@ -1277,13 +2276,14 @@ cdef class MirrorImageStatusIterator(object):
             for i in range(self.size):
                 yield {
                     'name'        : decode_cstr(self.images[i].name),
+                    'id'          : decode_cstr(self.image_ids[i]),
                     'info'        : {
                         'global_id' : decode_cstr(self.images[i].info.global_id),
                         'state'     : self.images[i].info.state,
                         },
                     'state'       : self.images[i].state,
                     'description' : decode_cstr(self.images[i].description),
-                    'last_update' : datetime.fromtimestamp(self.images[i].last_update),
+                    'last_update' : datetime.utcfromtimestamp(self.images[i].last_update),
                     'up'          : self.images[i].up,
                     }
             if self.size < self.max_read:
@@ -1312,12 +2312,193 @@ cdef class MirrorImageStatusIterator(object):
         if ret < 0:
             raise make_ex(ret, 'error listing mirror images status')
         if self.size > 0:
+            last_read = cstr(self.image_ids[self.size - 1], 'last_read')
             free(self.last_read)
-            last_read = decode_cstr(self.image_ids[self.size - 1])
             self.last_read = strdup(last_read)
         else:
             free(self.last_read)
             self.last_read = strdup("")
+
+cdef class MirrorImageInstanceIdIterator(object):
+    """
+    Iterator over mirror image instance id for a pool.
+
+    Yields ``(image_id, instance_id)`` tuple.
+    """
+
+    cdef:
+        rados_ioctx_t ioctx
+        size_t max_read
+        char *last_read
+        char **image_ids
+        char **instance_ids
+        size_t size
+
+    def __init__(self, ioctx):
+        self.ioctx = convert_ioctx(ioctx)
+        self.max_read = 1024
+        self.last_read = strdup("")
+        self.image_ids = <char **>realloc_chk(NULL,
+            sizeof(char *) * self.max_read)
+        self.instance_ids = <char **>realloc_chk(NULL,
+            sizeof(char *) * self.max_read)
+        self.size = 0
+        self.get_next_chunk()
+
+    def __iter__(self):
+        while self.size > 0:
+            for i in range(self.size):
+                yield (decode_cstr(self.image_ids[i]),
+                       decode_cstr(self.instance_ids[i]))
+            if self.size < self.max_read:
+                break
+            self.get_next_chunk()
+
+    def __dealloc__(self):
+        rbd_mirror_image_instance_id_list_cleanup(self.image_ids,
+                                                  self.instance_ids, self.size)
+        if self.last_read:
+            free(self.last_read)
+        if self.image_ids:
+            free(self.image_ids)
+        if self.instance_ids:
+            free(self.instance_ids)
+
+    def get_next_chunk(self):
+        if self.size > 0:
+            rbd_mirror_image_instance_id_list_cleanup(self.image_ids,
+                                                      self.instance_ids,
+                                                      self.size)
+            self.size = 0
+        with nogil:
+            ret = rbd_mirror_image_instance_id_list(self.ioctx, self.last_read,
+                                                    self.max_read,
+                                                    self.image_ids,
+                                                    self.instance_ids,
+                                                    &self.size)
+        if ret < 0:
+            raise make_ex(ret, 'error listing mirror images instance ids')
+        if self.size > 0:
+            last_read = cstr(self.image_ids[self.size - 1], 'last_read')
+            free(self.last_read)
+            self.last_read = strdup(last_read)
+        else:
+            free(self.last_read)
+            self.last_read = strdup("")
+
+cdef class PoolMetadataIterator(object):
+    """
+    Iterator over pool metadata list.
+
+    Yields ``(key, value)`` tuple.
+
+    * ``key`` (str) - metadata key
+    * ``value`` (str) - metadata value
+    """
+
+    cdef:
+        rados_ioctx_t ioctx
+        char *last_read
+        uint64_t max_read
+        object next_chunk
+
+    def __init__(self, ioctx):
+        self.ioctx = convert_ioctx(ioctx)
+        self.last_read = strdup("")
+        self.max_read = 32
+        self.get_next_chunk()
+
+    def __iter__(self):
+        while len(self.next_chunk) > 0:
+            for pair in self.next_chunk:
+                yield pair
+            if len(self.next_chunk) < self.max_read:
+                break
+            self.get_next_chunk()
+
+    def __dealloc__(self):
+        if self.last_read:
+            free(self.last_read)
+
+    def get_next_chunk(self):
+        cdef:
+            char *c_keys = NULL
+            size_t keys_size = 4096
+            char *c_vals = NULL
+            size_t vals_size = 4096
+        try:
+            while True:
+                c_keys = <char *>realloc_chk(c_keys, keys_size)
+                c_vals = <char *>realloc_chk(c_vals, vals_size)
+                with nogil:
+                    ret = rbd_pool_metadata_list(self.ioctx, self.last_read,
+                                                 self.max_read, c_keys,
+                                                 &keys_size, c_vals, &vals_size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error listing metadata')
+            keys = [decode_cstr(key) for key in
+                        c_keys[:keys_size].split(b'\0') if key]
+            vals = [decode_cstr(val) for val in
+                        c_vals[:vals_size].split(b'\0') if val]
+            if len(keys) > 0:
+                last_read = cstr(keys[-1], 'last_read')
+                free(self.last_read)
+                self.last_read = strdup(last_read)
+            self.next_chunk = list(zip(keys, vals))
+        finally:
+            free(c_keys)
+            free(c_vals)
+
+cdef class ConfigPoolIterator(object):
+    """
+    Iterator over pool-level overrides for a pool.
+
+    Yields a dictionary containing information about an override.
+
+    Keys are:
+
+    * ``name`` (str) - override name
+
+    * ``value`` (str) - override value
+
+    * ``source`` (str) - override source
+    """
+
+    cdef:
+        rbd_config_option_t *options
+        int num_options
+
+    def __init__(self, ioctx):
+        cdef:
+            rados_ioctx_t _ioctx = convert_ioctx(ioctx)
+        self.options = NULL
+        self.num_options = 32
+        while True:
+            self.options = <rbd_config_option_t *>realloc_chk(
+                self.options, self.num_options * sizeof(rbd_config_option_t))
+            with nogil:
+                ret = rbd_config_pool_list(_ioctx, self.options, &self.num_options)
+            if ret < 0:
+                if ret == -errno.ERANGE:
+                    continue
+                self.num_options = 0
+                raise make_ex(ret, 'error listing config options')
+            break
+
+    def __iter__(self):
+        for i in range(self.num_options):
+            yield {
+                'name'   : decode_cstr(self.options[i].name),
+                'value'  : decode_cstr(self.options[i].value),
+                'source' : self.options[i].source,
+                }
+
+    def __dealloc__(self):
+        if self.options:
+            rbd_config_pool_list_cleanup(self.options, self.num_options)
+            free(self.options)
 
 cdef int diff_iterate_cb(uint64_t offset, size_t length, int write, void *cb) \
     except? -9000 with gil:
@@ -1331,6 +2512,163 @@ cdef int diff_iterate_cb(uint64_t offset, size_t length, int write, void *cb) \
         return 0
     return ret
 
+cdef class Group(object):
+    """
+    This class represents an RBD group. It is used to interact with
+    snapshots and images members.
+    """
+
+    cdef object name
+    cdef char *_name
+    cdef object ioctx
+
+    cdef rados_ioctx_t _ioctx
+
+    def __init__(self, ioctx, name):
+        name = cstr(name, 'name')
+        self.name = name
+
+        self._ioctx = convert_ioctx(ioctx)
+        self._name = name
+
+    def add_image(self, image_ioctx, image_name):
+        """
+        Add an image to a group.
+
+        :param image_ioctx: determines which RADOS pool the image belongs to.
+        :type ioctx: :class:`rados.Ioctx`
+        :param name: the name of the image to add
+        :type name: str
+
+        :raises: :class:`ObjectNotFound`
+        :raises: :class:`ObjectExists`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`FunctionNotSupported`
+        """
+        image_name = cstr(image_name, 'image_name')
+        cdef:
+            rados_ioctx_t _image_ioctx = convert_ioctx(image_ioctx)
+            char *_image_name = image_name
+        with nogil:
+            ret = rbd_group_image_add(self._ioctx, self._name, _image_ioctx, _image_name)
+        if ret != 0:
+            raise make_ex(ret, 'error adding image to group', group_errno_to_exception)
+
+    def remove_image(self, image_ioctx, image_name):
+        """
+        Remove an image from a group.
+
+        :param image_ioctx: determines which RADOS pool the image belongs to.
+        :type ioctx: :class:`rados.Ioctx`
+        :param name: the name of the image to remove
+        :type name: str
+
+        :raises: :class:`ObjectNotFound`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`FunctionNotSupported`
+        """
+        image_name = cstr(image_name, 'image_name')
+        cdef:
+            rados_ioctx_t _image_ioctx = convert_ioctx(image_ioctx)
+            char *_image_name = image_name
+        with nogil:
+            ret = rbd_group_image_remove(self._ioctx, self._name, _image_ioctx, _image_name)
+        if ret != 0:
+            raise make_ex(ret, 'error removing image from group', group_errno_to_exception)
+
+
+    def list_images(self):
+        """
+        Iterate over the images of a group.
+
+        :returns: :class:`GroupImageIterator`
+        """
+        return GroupImageIterator(self)
+
+    def create_snap(self, snap_name):
+        """
+        Create a snapshot for the group.
+
+        :param snap_name: the name of the snapshot to create
+        :type name: str
+
+        :raises: :class:`ObjectNotFound`
+        :raises: :class:`ObjectExists`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`FunctionNotSupported`
+        """
+        snap_name = cstr(snap_name, 'snap_name')
+        cdef:
+            char *_snap_name = snap_name
+        with nogil:
+            ret = rbd_group_snap_create(self._ioctx, self._name, _snap_name)
+        if ret != 0:
+            raise make_ex(ret, 'error creating group snapshot', group_errno_to_exception)
+
+    def remove_snap(self, snap_name):
+        """
+        Remove a snapshot from the group.
+
+        :param snap_name: the name of the snapshot to remove
+        :type name: str
+
+        :raises: :class:`ObjectNotFound`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`FunctionNotSupported`
+        """
+        snap_name = cstr(snap_name, 'snap_name')
+        cdef:
+            char *_snap_name = snap_name
+        with nogil:
+            ret = rbd_group_snap_remove(self._ioctx, self._name, _snap_name)
+        if ret != 0:
+            raise make_ex(ret, 'error removing group snapshot', group_errno_to_exception)
+
+    def rename_snap(self, old_snap_name, new_snap_name):
+        """
+        Rename group's snapshot.
+
+        :raises: :class:`ObjectNotFound`
+        :raises: :class:`ObjectExists`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`FunctionNotSupported`
+        """
+
+        old_snap_name = cstr(old_snap_name, 'old_snap_name')
+        new_snap_name = cstr(new_snap_name, 'new_snap_name')
+        cdef:
+            char *_old_snap_name = old_snap_name
+            char *_new_snap_name = new_snap_name
+        with nogil:
+            ret = rbd_group_snap_rename(self._ioctx, self._name, _old_snap_name,
+                                        _new_snap_name)
+        if ret != 0:
+            raise make_ex(ret, 'error renaming group snapshot',
+                          group_errno_to_exception)
+
+    def list_snaps(self):
+        """
+        Iterate over the images of a group.
+
+        :returns: :class:`GroupSnapIterator`
+        """
+        return GroupSnapIterator(self)
+
+    def rollback_to_snap(self, name):
+        """
+        Rollback group to snapshot.
+
+        :param name: the group snapshot to rollback to
+        :type name: str
+        :raises: :class:`ObjectNotFound`
+        :raises: :class:`IOError`
+        """
+        name = cstr(name, 'name')
+        cdef char *_name = name
+        with nogil:
+            ret = rbd_group_snap_rollback(self._ioctx, self._name, _name)
+        if ret != 0:
+            raise make_ex(ret, 'error rolling back group to snapshot', group_errno_to_exception)
 
 cdef class Image(object):
     """
@@ -1346,9 +2684,12 @@ cdef class Image(object):
     cdef object ioctx
     cdef rados_ioctx_t _ioctx
 
-    def __init__(self, ioctx, name, snapshot=None, read_only=False):
+    def __init__(self, ioctx, name=None, snapshot=None,
+                 read_only=False, image_id=None):
         """
         Open the image at the given snapshot.
+        Specify either name or id, otherwise :class:`InvalidArgument` is raised.
+
         If a snapshot is specified, the image will be read-only, unless
         :func:`Image.set_snap` is called later.
 
@@ -1368,26 +2709,45 @@ cdef class Image(object):
         :type snaphshot: str
         :param read_only: whether to open the image in read-only mode
         :type read_only: bool
+        :param image_id: the id of the image
+        :type image_id: str
         """
-        name = cstr(name, 'name')
+        name = cstr(name, 'name', opt=True)
+        image_id = cstr(image_id, 'image_id', opt=True)
         snapshot = cstr(snapshot, 'snapshot', opt=True)
         self.closed = True
-        self.name = name
+        if name is not None and image_id is not None:
+            raise InvalidArgument("only need to specify image name or image id")
+        elif name is None and image_id is None:
+            raise InvalidArgument("image name or image id was not specified")
+        elif name is not None:
+            self.name = name
+        else:
+            self.name = image_id
         # Keep around a reference to the ioctx, so it won't get deleted
         self.ioctx = ioctx
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
-            char *_name = name
+            char *_name = opt_str(name)
+            char *_image_id = opt_str(image_id)
             char *_snapshot = opt_str(snapshot)
         if read_only:
             with nogil:
-                ret = rbd_open_read_only(_ioctx, _name, &self.image, _snapshot)
+                if name is not None:
+                    ret = rbd_open_read_only(_ioctx, _name, &self.image, _snapshot)
+                else:
+                    ret = rbd_open_by_id_read_only(_ioctx, _image_id, &self.image, _snapshot)
         else:
             with nogil:
-                ret = rbd_open(_ioctx, _name, &self.image, _snapshot)
+                if name is not None:
+                    ret = rbd_open(_ioctx, _name, &self.image, _snapshot)
+                else:
+                    ret = rbd_open_by_id(_ioctx, _image_id, &self.image, _snapshot)
         if ret != 0:
-            raise make_ex(ret, 'error opening image %s at snapshot %s' % (name, snapshot))
+            raise make_ex(ret, 'error opening image %s at snapshot %s' % (self.name, snapshot))
         self.closed = False
+        if name is None:
+            self.name = self.get_name()
 
     def __enter__(self):
         return self
@@ -1444,18 +2804,28 @@ cdef class Image(object):
     def __repr__(self):
         return "rbd.Image(ioctx, %r)" % self.name
 
-    def resize(self, size):
+    def resize(self, size, allow_shrink=True):
         """
-        Change the size of the image.
+        Change the size of the image, allow shrink.
 
         :param size: the new size of the image
         :type size: int
+        :param allow_shrink: permit shrinking
+        :type allow_shrink: bool
         """
-        cdef uint64_t _size = size
+        old_size = self.size()
+        if old_size == size:
+            return
+        if not allow_shrink and old_size > size:
+            raise InvalidArgument("error allow_shrink is False but old_size > new_size")
+        cdef:
+            uint64_t _size = size
+            bint _allow_shrink = allow_shrink
+            librbd_progress_fn_t prog_cb = &no_op_progress_callback
         with nogil:
-            ret = rbd_resize(self.image, _size)
+            ret = rbd_resize2(self.image, _size, _allow_shrink, prog_cb, NULL)
         if ret < 0:
-            raise make_ex(ret, 'error resizing image %s' % (self.name,))
+            raise make_ex(ret, 'error resizing image %s' % self.name)
 
     def stat(self):
         """
@@ -1487,7 +2857,7 @@ cdef class Image(object):
         with nogil:
             ret = rbd_stat(self.image, &info, sizeof(info))
         if ret != 0:
-            raise make_ex(ret, 'error getting info for image %s' % (self.name,))
+            raise make_ex(ret, 'error getting info for image %s' % self.name)
         return {
             'size'              : info.size,
             'obj_size'          : info.obj_size,
@@ -1497,6 +2867,28 @@ cdef class Image(object):
             'parent_pool'       : info.parent_pool,
             'parent_name'       : info.parent_name
             }
+
+    def get_name(self):
+        """
+        Get the RBD image name
+
+        :returns: str - image name
+        """
+        cdef:
+            int ret = -errno.ERANGE
+            size_t size = 64
+            char *image_name = NULL
+        try:
+            while ret == -errno.ERANGE:
+                image_name =  <char *>realloc_chk(image_name, size)
+                with nogil:
+                    ret = rbd_get_name(self.image, image_name, &size)
+
+            if ret != 0:
+                raise make_ex(ret, 'error getting name for image %s' % self.name)
+            return decode_cstr(image_name)
+        finally:
+            free(image_name)
 
     def id(self):
         """
@@ -1517,7 +2909,7 @@ cdef class Image(object):
                     size *= 2
 
             if ret != 0:
-                raise make_ex(ret, 'error getting id for image %s' % (self.name,))
+                raise make_ex(ret, 'error getting id for image %s' % self.name)
             return decode_cstr(image_id)
         finally:
             free(image_id)
@@ -1541,10 +2933,18 @@ cdef class Image(object):
                     size *= 2
 
             if ret != 0:
-                raise make_ex(ret, 'error getting block name prefix for image %s' % (self.name,))
+                raise make_ex(ret, 'error getting block name prefix for image %s' % self.name)
             return decode_cstr(prefix)
         finally:
             free(prefix)
+
+    def data_pool_id(self):
+        """
+        Get the pool id of the pool where the data of this RBD image is stored.
+
+        :returns: int - the pool id
+        """
+        return rbd_get_data_pool_id(self.image)
 
     def parent_info(self):
         """
@@ -1555,29 +2955,20 @@ cdef class Image(object):
         :raises: :class:`ImageNotFound` if the image doesn't have a parent
         """
         cdef:
-            int ret = -errno.ERANGE
-            size_t size = 8
-            char *pool = NULL
-            char *name = NULL
-            char *snapname = NULL
-        try:
-            while ret == -errno.ERANGE and size <= 4096:
-                pool = <char *>realloc_chk(pool, size)
-                name = <char *>realloc_chk(name, size)
-                snapname = <char *>realloc_chk(snapname, size)
-                with nogil:
-                    ret = rbd_get_parent_info2(self.image, pool, size, name,
-                                               size, NULL, 0, snapname, size)
-                if ret == -errno.ERANGE:
-                    size *= 2
+            rbd_linked_image_spec_t parent_spec
+            rbd_snap_spec_t snap_spec
+        with nogil:
+            ret = rbd_get_parent(self.image, &parent_spec, &snap_spec)
+        if ret != 0:
+            raise make_ex(ret, 'error getting parent info for image %s' % self.name)
 
-            if ret != 0:
-                raise make_ex(ret, 'error getting parent info for image %s' % (self.name,))
-            return (decode_cstr(pool), decode_cstr(name), decode_cstr(snapname))
-        finally:
-            free(pool)
-            free(name)
-            free(snapname)
+        result = (decode_cstr(parent_spec.pool_name),
+                  decode_cstr(parent_spec.image_name),
+                  decode_cstr(snap_spec.name))
+
+        rbd_linked_image_spec_cleanup(&parent_spec)
+        rbd_snap_spec_cleanup(&snap_spec)
+        return result
 
     def parent_id(self):
         """
@@ -1587,23 +2978,18 @@ cdef class Image(object):
         :raises: :class:`ImageNotFound` if the image doesn't have a parent
         """
         cdef:
-            int ret = -errno.ERANGE
-            size_t size = 32
-            char *parent_id = NULL
-        try:
-            while ret == -errno.ERANGE and size <= 4096:
-                parent_id = <char *>realloc_chk(parent_id, size)
-                with nogil:
-                    ret = rbd_get_parent_info2(self.image, NULL, 0, NULL, 0,
-                                               parent_id, size, NULL, 0)
-                if ret == -errno.ERANGE:
-                    size *= 2
+            rbd_linked_image_spec_t parent_spec
+            rbd_snap_spec_t snap_spec
+        with nogil:
+            ret = rbd_get_parent(self.image, &parent_spec, &snap_spec)
+        if ret != 0:
+            raise make_ex(ret, 'error getting parent info for image %s' % self.name)
 
-            if ret != 0:
-                raise make_ex(ret, 'error getting parent id for image %s' % (self.name,))
-            return decode_cstr(parent_id)
-        finally:
-            free(parent_id)
+        result = decode_cstr(parent_spec.image_id)
+
+        rbd_linked_image_spec_cleanup(&parent_spec)
+        rbd_snap_spec_cleanup(&snap_spec)
+        return result
 
     def old_format(self):
         """
@@ -1623,7 +3009,7 @@ cdef class Image(object):
         Get the size of the image. If open to a snapshot, returns the
         size of that snapshot.
 
-        :returns: the size of the image in bytes
+        :returns: int - the size of the image in bytes
         """
         cdef uint64_t image_size
         with nogil:
@@ -1634,7 +3020,7 @@ cdef class Image(object):
 
     def features(self):
         """
-        Gets the features bitmask of the image.
+        Get the features bitmask of the image.
 
         :returns: int - the features bitmask of the image
         """
@@ -1647,7 +3033,7 @@ cdef class Image(object):
 
     def update_features(self, features, enabled):
         """
-        Updates the features bitmask of the image by enabling/disabling
+        Update the features bitmask of the image by enabling/disabling
         a single feature.  The feature must support the ability to be
         dynamically enabled/disabled.
 
@@ -1666,9 +3052,22 @@ cdef class Image(object):
             raise make_ex(ret, 'error updating features for image %s' %
                                (self.name))
 
+    def op_features(self):
+        """
+        Get the op features bitmask of the image.
+
+        :returns: int - the op features bitmask of the image
+        """
+        cdef uint64_t op_features
+        with nogil:
+            ret = rbd_get_op_features(self.image, &op_features)
+        if ret != 0:
+            raise make_ex(ret, 'error getting op features for image %s' % (self.name))
+        return op_features
+
     def overlap(self):
         """
-        Gets the number of overlapping bytes between the image and its parent
+        Get the number of overlapping bytes between the image and its parent
         image. If open to a snapshot, returns the overlap between the snapshot
         and the parent image.
 
@@ -1684,7 +3083,7 @@ cdef class Image(object):
 
     def flags(self):
         """
-        Gets the flags bitmask of the image.
+        Get the flags bitmask of the image.
 
         :returns: int - the flags bitmask of the image
         """
@@ -1695,9 +3094,32 @@ cdef class Image(object):
             raise make_ex(ret, 'error getting flags for image %s' % (self.name))
         return flags
 
+    def group(self):
+        """
+        Get information about the image's group.
+
+        :returns: dict - contains the following keys:
+
+            * ``pool`` (int) - id of the group pool
+
+            * ``name`` (str) - name of the group
+
+        """
+        cdef rbd_group_info_t info
+        with nogil:
+            ret = rbd_get_group(self.image, &info, sizeof(info))
+        if ret != 0:
+            raise make_ex(ret, 'error getting group for image %s' % self.name)
+        result = {
+            'pool' : info.pool,
+            'name' : decode_cstr(info.name)
+            }
+        rbd_group_info_cleanup(&info, sizeof(info))
+        return result
+
     def is_exclusive_lock_owner(self):
         """
-        Gets the status of the image exclusive lock.
+        Get the status of the image exclusive lock.
 
         :returns: bool - true if the image is exclusively locked
         """
@@ -1734,6 +3156,7 @@ cdef class Image(object):
         :raises: :class:`ArgumentOutOfRange`
         """
         dest_name = cstr(dest_name, 'dest_name')
+        data_pool = cstr(data_pool, 'data_pool', opt=True)
         cdef:
             rados_ioctx_t _dest_ioctx = convert_ioctx(dest_ioctx)
             char *_dest_name = dest_name
@@ -1758,6 +3181,62 @@ cdef class Image(object):
                                              data_pool)
             with nogil:
                 ret = rbd_copy3(self.image, _dest_ioctx, _dest_name, opts)
+        finally:
+            rbd_image_options_destroy(opts)
+        if ret < 0:
+            raise make_ex(ret, 'error copying image %s to %s' % (self.name, dest_name))
+
+    def deep_copy(self, dest_ioctx, dest_name, features=None, order=None,
+                  stripe_unit=None, stripe_count=None, data_pool=None):
+        """
+        Deep copy the image to another location.
+
+        :param dest_ioctx: determines which pool to copy into
+        :type dest_ioctx: :class:`rados.Ioctx`
+        :param dest_name: the name of the copy
+        :type dest_name: str
+        :param features: bitmask of features to enable; if set, must include layering
+        :type features: int
+        :param order: the image is split into (2**order) byte objects
+        :type order: int
+        :param stripe_unit: stripe unit in bytes (default None to let librbd decide)
+        :type stripe_unit: int
+        :param stripe_count: objects to stripe over before looping
+        :type stripe_count: int
+        :param data_pool: optional separate pool for data blocks
+        :type data_pool: str
+        :raises: :class:`TypeError`
+        :raises: :class:`InvalidArgument`
+        :raises: :class:`ImageExists`
+        :raises: :class:`FunctionNotSupported`
+        :raises: :class:`ArgumentOutOfRange`
+        """
+        dest_name = cstr(dest_name, 'dest_name')
+        data_pool = cstr(data_pool, 'data_pool', opt=True)
+        cdef:
+            rados_ioctx_t _dest_ioctx = convert_ioctx(dest_ioctx)
+            char *_dest_name = dest_name
+            rbd_image_options_t opts
+
+        rbd_image_options_create(&opts)
+        try:
+            if features is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_FEATURES,
+                                             features)
+            if order is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_ORDER,
+                                             order)
+            if stripe_unit is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_UNIT,
+                                             stripe_unit)
+            if stripe_count is not None:
+                rbd_image_options_set_uint64(opts, RBD_IMAGE_OPTION_STRIPE_COUNT,
+                                             stripe_count)
+            if data_pool is not None:
+                rbd_image_options_set_string(opts, RBD_IMAGE_OPTION_DATA_POOL,
+                                             data_pool)
+            with nogil:
+                ret = rbd_deep_copy(self.image, _dest_ioctx, _dest_name, opts)
         finally:
             rbd_image_options_destroy(opts)
         if ret < 0:
@@ -1840,6 +3319,21 @@ cdef class Image(object):
         if ret != 0:
             raise make_ex(ret, 'error removing snapshot %s from %s with flags %llx' % (name, self.name, flags))
 
+    def remove_snap_by_id(self, snap_id):
+        """
+        Delete a snapshot of the image by its id.
+
+        :param id: the id of the snapshot
+        :type name: int
+        :raises: :class:`IOError`, :class:`ImageBusy`
+        """
+        cdef:
+            uint64_t _snap_id = snap_id
+        with nogil:
+            ret = rbd_snap_remove_by_id(self.image, _snap_id)
+        if ret != 0:
+            raise make_ex(ret, 'error removing snapshot %s from %s' % (snap_id, self.name))
+
     def rollback_to_snap(self, name):
         """
         Revert the image to its contents at a snapshot. This is a
@@ -1911,6 +3405,8 @@ cdef class Image(object):
     def get_snap_limit(self):
         """
         Get the snapshot limit for an image.
+
+        :returns: int - the snapshot limit for an image
         """
 
         cdef:
@@ -1940,6 +3436,7 @@ cdef class Image(object):
         """
         Get the snapshot timestamp for an image.
         :param snap_id: the snapshot id of a snap shot
+        :returns: datetime - the snapshot timestamp for an image
         """
         cdef:
             timespec timestamp
@@ -1948,7 +3445,7 @@ cdef class Image(object):
             ret = rbd_snap_get_timestamp(self.image, _snap_id, &timestamp)
         if ret != 0:
             raise make_ex(ret, 'error getting snapshot timestamp for image: %s, snap_id: %d' % (self.name, snap_id))
-        return datetime.fromtimestamp(timestamp.tv_sec)
+        return datetime.utcfromtimestamp(timestamp.tv_sec)
 
     def remove_snap_limit(self):
         """
@@ -1976,6 +3473,23 @@ cdef class Image(object):
             ret = rbd_snap_set(self.image, _name)
         if ret != 0:
             raise make_ex(ret, 'error setting image %s to snapshot %s' % (self.name, name))
+
+    def set_snap_by_id(self, snap_id):
+        """
+        Set the snapshot to read from. Writes will raise ReadOnlyImage
+        while a snapshot is set. Pass None to unset the snapshot
+        (reads come from the current image) , and allow writing again.
+
+        :param snap_id: the snapshot to read from, or None to unset the snapshot
+        :type snap_id: int
+        """
+        if not snap_id:
+            snap_id = _LIBRADOS_SNAP_HEAD
+        cdef int64_t _snap_id = snap_id
+        with nogil:
+            ret = rbd_snap_set_by_id(self.image, _snap_id)
+        if ret != 0:
+            raise make_ex(ret, 'error setting image %s to snapshot %d' % (self.name, snap_id))
 
     def read(self, offset, length, fadvise_flags=0):
         """
@@ -2107,7 +3621,7 @@ cdef class Image(object):
         if ret == <ssize_t>length:
             return ret
         elif ret < 0:
-            raise make_ex(ret, "error writing to %s" % (self.name,))
+            raise make_ex(ret, "error writing to %s" % self.name)
         elif ret < <ssize_t>length:
             raise IncompleteWriteError("Wrote only %ld out of %ld bytes" % (ret, length))
         else:
@@ -2147,7 +3661,7 @@ written." % (self.name, ret, length))
 
     def stripe_unit(self):
         """
-        Returns the stripe unit used for the image.
+        Return the stripe unit used for the image.
         """
         cdef uint64_t stripe_unit
         with nogil:
@@ -2158,7 +3672,7 @@ written." % (self.name, ret, length))
 
     def stripe_count(self):
         """
-        Returns the stripe count used for the image.
+        Return the stripe count used for the image.
         """
         cdef uint64_t stripe_count
         with nogil:
@@ -2169,7 +3683,7 @@ written." % (self.name, ret, length))
 
     def create_timestamp(self):
         """
-        Returns the create timestamp for the image.
+        Return the create timestamp for the image.
         """
         cdef:
             timespec timestamp
@@ -2177,6 +3691,30 @@ written." % (self.name, ret, length))
             ret = rbd_get_create_timestamp(self.image, &timestamp)
         if ret != 0:
             raise make_ex(ret, 'error getting create timestamp for image: %s' % (self.name))
+        return datetime.utcfromtimestamp(timestamp.tv_sec)
+
+    def access_timestamp(self):
+        """
+        Return the access timestamp for the image.
+        """
+        cdef:
+            timespec timestamp
+        with nogil:
+            ret = rbd_get_access_timestamp(self.image, &timestamp)
+        if ret != 0:
+            raise make_ex(ret, 'error getting access timestamp for image: %s' % (self.name))
+        return datetime.fromtimestamp(timestamp.tv_sec)
+
+    def modify_timestamp(self):
+        """
+        Return the modify timestamp for the image.
+        """
+        cdef:
+            timespec timestamp
+        with nogil:
+            ret = rbd_get_modify_timestamp(self.image, &timestamp)
+        if ret != 0:
+            raise make_ex(ret, 'error getting modify timestamp for image: %s' % (self.name))
         return datetime.fromtimestamp(timestamp.tv_sec)
 
     def flatten(self):
@@ -2188,9 +3726,20 @@ written." % (self.name, ret, length))
         if ret < 0:
             raise make_ex(ret, "error flattening %s" % self.name)
 
+    def sparsify(self, sparse_size):
+        """
+        Reclaim space for zeroed image extents
+        """
+        cdef:
+            size_t _sparse_size = sparse_size
+        with nogil:
+            ret = rbd_sparsify(self.image, _sparse_size)
+        if ret < 0:
+            raise make_ex(ret, "error sparsifying %s" % self.name)
+
     def rebuild_object_map(self):
         """
-        Rebuilds the object map for the image HEAD or currently set snapshot
+        Rebuild the object map for the image HEAD or currently set snapshot
         """
         cdef librbd_progress_fn_t prog_cb = &no_op_progress_callback
         with nogil:
@@ -2205,28 +3754,43 @@ written." % (self.name, ret, length))
         :returns: list - a list of (pool name, image name) tuples
         """
         cdef:
-            size_t pools_size = 512, images_size = 512
-            char *c_pools = NULL
-            char *c_images = NULL
+            rbd_linked_image_spec_t *children = NULL
+            size_t num_children = 10
+
         try:
             while True:
-                c_pools = <char *>realloc_chk(c_pools, pools_size)
-                c_images = <char *>realloc_chk(c_images, images_size)
+                children = <rbd_linked_image_spec_t*>realloc_chk(
+                    children, num_children * sizeof(rbd_linked_image_spec_t))
                 with nogil:
-                    ret = rbd_list_children(self.image, c_pools, &pools_size,
-                                            c_images, &images_size)
+                    ret = rbd_list_children3(self.image, children,
+                                             &num_children)
                 if ret >= 0:
                     break
                 elif ret != -errno.ERANGE:
-                    raise make_ex(ret, 'error listing images')
-            if ret == 0:
-                return []
-            pools = map(decode_cstr, c_pools[:pools_size - 1].split(b'\0'))
-            images = map(decode_cstr, c_images[:images_size - 1].split(b'\0'))
-            return list(zip(pools, images))
+                    raise make_ex(ret, 'error listing children.')
+
+            return [(decode_cstr(x.pool_name), decode_cstr(x.image_name)) for x
+                    in children[:num_children] if not x.trash]
         finally:
-            free(c_pools)
-            free(c_images)
+            if children:
+                rbd_linked_image_spec_list_cleanup(children, num_children)
+                free(children)
+
+    def list_children2(self):
+        """
+        Iterate over the children of the image or its snapshot.
+
+        :returns: :class:`ChildIterator`
+        """
+        return ChildIterator(self)
+
+    def list_descendants(self):
+        """
+        Iterate over the descendants of the image.
+
+        :returns: :class:`ChildIterator`
+        """
+        return ChildIterator(self, True)
 
     def list_lockers(self):
         """
@@ -2395,8 +3959,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_mirror_image_enable(self.image)
         if ret < 0:
-            raise make_ex(ret, 'error enabling mirroring for image %s'
-                          % (self.name,))
+            raise make_ex(ret, 'error enabling mirroring for image %s' % self.name)
 
     def mirror_image_disable(self, force):
         """
@@ -2409,8 +3972,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_mirror_image_disable(self.image, c_force)
         if ret < 0:
-            raise make_ex(ret, 'error disabling mirroring for image %s' %
-                          (self.name,))
+            raise make_ex(ret, 'error disabling mirroring for image %s' % self.name)
 
     def mirror_image_promote(self, force):
         """
@@ -2423,8 +3985,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_mirror_image_promote(self.image, c_force)
         if ret < 0:
-            raise make_ex(ret, 'error promoting image %s to primary' %
-                          (self.name,))
+            raise make_ex(ret, 'error promoting image %s to primary' % self.name)
 
     def mirror_image_demote(self):
         """
@@ -2433,8 +3994,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_mirror_image_demote(self.image)
         if ret < 0:
-            raise make_ex(ret, 'error demoting image %s to secondary' %
-                          (self.name,))
+            raise make_ex(ret, 'error demoting image %s to secondary' % self.name)
 
     def mirror_image_resync(self):
         """
@@ -2443,7 +4003,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_mirror_image_resync(self.image)
         if ret < 0:
-            raise make_ex(ret, 'error to resync image %s' % (self.name,))
+            raise make_ex(ret, 'error to resync image %s' % self.name)
 
     def mirror_image_get_info(self):
         """
@@ -2461,8 +4021,7 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_mirror_image_get_info(self.image, &c_info, sizeof(c_info))
         if ret != 0:
-            raise make_ex(ret, 'error getting mirror info for image %s' %
-                          (self.name,))
+            raise make_ex(ret, 'error getting mirror info for image %s' % self.name)
         info = {
             'global_id' : decode_cstr(c_info.global_id),
             'state'     : int(c_info.state),
@@ -2479,6 +4038,8 @@ written." % (self.name, ret, length))
 
             * ``name`` (str) - mirror image name
 
+            * ``id`` (str) - mirror image id
+
             * `info` (dict) - mirror image info
 
             * ``state`` (int) - status mirror state
@@ -2494,10 +4055,10 @@ written." % (self.name, ret, length))
             ret = rbd_mirror_image_get_status(self.image, &c_status,
                                               sizeof(c_status))
         if ret != 0:
-            raise make_ex(ret, 'error getting mirror status for image %s' %
-                          (self.name,))
+            raise make_ex(ret, 'error getting mirror status for image %s' % self.name)
         status = {
             'name'      : decode_cstr(c_status.name),
+            'id'        : self.id(),
             'info'      : {
                 'global_id' : decode_cstr(c_status.info.global_id),
                 'state'     : int(c_status.info.state),
@@ -2505,13 +4066,37 @@ written." % (self.name, ret, length))
                 },
             'state'       : c_status.state,
             'description' : decode_cstr(c_status.description),
-            'last_update' : datetime.fromtimestamp(c_status.last_update),
+            'last_update' : datetime.utcfromtimestamp(c_status.last_update),
             'up'          : c_status.up,
             }
         free(c_status.name)
         free(c_status.info.global_id)
         free(c_status.description)
         return status
+
+    def mirror_image_get_instance_id(self):
+        """
+        Get mirror instance id for the image.
+
+        :returns: str - instance id
+        """
+        cdef:
+            int ret = -errno.ERANGE
+            size_t size = 32
+            char *instance_id = NULL
+        try:
+            while ret == -errno.ERANGE and size <= 4096:
+                instance_id =  <char *>realloc_chk(instance_id, size)
+                with nogil:
+                    ret = rbd_mirror_image_get_instance_id(self.image,
+                                                           instance_id, &size)
+            if ret != 0:
+                raise make_ex(ret,
+                              'error getting mirror instance id for image %s' %
+                              self.name)
+            return decode_cstr(instance_id)
+        finally:
+            free(instance_id)
 
     def aio_read(self, offset, length, oncomplete, fadvise_flags=0):
         """
@@ -2641,7 +4226,7 @@ written." % (self.name, ret, length))
 
     def aio_flush(self, oncomplete):
         """
-        Asyncronously wait until all writes are fully flushed if caching is
+        Asynchronously wait until all writes are fully flushed if caching is
         enabled.
         """
 
@@ -2664,7 +4249,7 @@ written." % (self.name, ret, length))
 
         :param key: metadata key
         :type key: str
-        :returns: str - image id
+        :returns: str - metadata value
         """
         key = cstr(key, 'key')
         cdef:
@@ -2679,9 +4264,11 @@ written." % (self.name, ret, length))
                     ret = rbd_metadata_get(self.image, _key, value, &size)
                 if ret != -errno.ERANGE:
                     break
+            if ret == -errno.ENOENT:
+                raise KeyError('no metadata %s for image %s' % (key, self.name))
             if ret != 0:
                 raise make_ex(ret, 'error getting metadata %s for image %s' %
-                              (self.key, self.name,))
+                              (key, self.name))
             return decode_cstr(value)
         finally:
             free(value)
@@ -2705,7 +4292,7 @@ written." % (self.name, ret, length))
 
         if ret != 0:
             raise make_ex(ret, 'error setting metadata %s for image %s' %
-                          (self.key, self.name,))
+                          (key, self.name))
 
 
     def metadata_remove(self, key):
@@ -2721,9 +4308,11 @@ written." % (self.name, ret, length))
         with nogil:
             ret = rbd_metadata_remove(self.image, _key)
 
+        if ret == -errno.ENOENT:
+            raise KeyError('no metadata %s for image %s' % (key, self.name))
         if ret != 0:
             raise make_ex(ret, 'error removing metadata %s for image %s' %
-                          (self.key, self.name,))
+                          (key, self.name))
 
     def metadata_list(self):
         """
@@ -2732,6 +4321,146 @@ written." % (self.name, ret, length))
         :returns: :class:`MetadataIterator`
         """
         return MetadataIterator(self)
+
+    def watchers_list(self):
+        """
+        List image watchers.
+
+        :returns: :class:`WatcherIterator`
+        """
+        return WatcherIterator(self)
+
+    def config_list(self):
+        """
+        List image-level config overrides.
+
+        :returns: :class:`ConfigPoolIterator`
+        """
+        return ConfigImageIterator(self)
+
+    def snap_get_namespace_type(self, snap_id):
+        """
+        Get the snapshot namespace type.
+        :param snap_id: the snapshot id of a snap shot
+        :type key: int
+        """
+        cdef:
+            rbd_snap_namespace_type_t namespace_type
+            uint64_t _snap_id = snap_id
+        with nogil:
+            ret = rbd_snap_get_namespace_type(self.image, _snap_id, &namespace_type)
+        if ret != 0:
+            raise make_ex(ret, 'error getting snapshot namespace type for image: %s, snap_id: %d' % (self.name, snap_id))
+
+        return namespace_type
+
+    def snap_get_group_namespace(self, snap_id):
+        """
+        get the group namespace details.
+        :param snap_id: the snapshot id of the group snapshot
+        :type key: int
+        :returns: dict - contains the following keys:
+
+            * ``pool`` (int) - pool id
+
+            * ``name`` (str) - group name
+
+            * ``snap_name`` (str) - group snap name
+        """
+        cdef:
+            rbd_snap_group_namespace_t group_namespace
+            uint64_t _snap_id = snap_id
+        with nogil:
+            ret = rbd_snap_get_group_namespace(self.image, _snap_id,
+                                               &group_namespace,
+                                               sizeof(rbd_snap_group_namespace_t))
+        if ret != 0:
+            raise make_ex(ret, 'error getting snapshot group namespace for image: %s, snap_id: %d' % (self.name, snap_id))
+
+        info = {
+                'pool' : group_namespace.group_pool,
+                'name' : decode_cstr(group_namespace.group_name),
+                'snap_name' : decode_cstr(group_namespace.group_snap_name)
+            }
+        rbd_snap_group_namespace_cleanup(&group_namespace,
+                                         sizeof(rbd_snap_group_namespace_t))
+        return info
+
+    def snap_get_trash_namespace(self, snap_id):
+        """
+        get the trash namespace details.
+        :param snap_id: the snapshot id of the trash snapshot
+        :type key: int
+        :returns: dict - contains the following keys:
+
+            * ``original_name`` (str) - original snap name
+        """
+        cdef:
+            uint64_t _snap_id = snap_id
+            size_t _size = 512
+            char *_name = NULL
+        try:
+            while True:
+                _name = <char*>realloc_chk(_name, _size);
+                with nogil:
+                    ret = rbd_snap_get_trash_namespace(self.image, _snap_id,
+                                                       _name, _size)
+                if ret >= 0:
+                    break
+                elif ret != -errno.ERANGE:
+                    raise make_ex(ret, 'error getting snapshot trash '
+                                       'namespace image: %s, snap_id: %d' % (self.name, snap_id))
+            return {
+                    'original_name' : decode_cstr(_name)
+                }
+        finally:
+            free(_name)
+
+
+cdef class ImageIterator(object):
+    """
+    Iterator over RBD images in a pool
+
+    Yields a dictionary containing information about the images
+
+    Keys are:
+
+    * ``id`` (str) - image id
+
+    * ``name`` (str) - image name
+    """
+    cdef rados_ioctx_t ioctx
+    cdef rbd_image_spec_t *images
+    cdef size_t num_images
+
+    def __init__(self, ioctx):
+        self.ioctx = convert_ioctx(ioctx)
+        self.images = NULL
+        self.num_images = 1024
+        while True:
+            self.images = <rbd_image_spec_t*>realloc_chk(
+                self.images, self.num_images * sizeof(rbd_image_spec_t))
+            with nogil:
+                ret = rbd_list2(self.ioctx, self.images, &self.num_images)
+            if ret >= 0:
+                break
+            elif ret == -errno.ERANGE:
+                self.num_images *= 2
+            else:
+                raise make_ex(ret, 'error listing images.')
+
+    def __iter__(self):
+        for i in range(self.num_images):
+            yield {
+                'id'   : decode_cstr(self.images[i].id),
+                'name' : decode_cstr(self.images[i].name)
+                }
+
+    def __dealloc__(self):
+        if self.images:
+            rbd_image_spec_list_cleanup(self.images, self.num_images)
+            free(self.images)
+
 
 cdef class LockOwnerIterator(object):
     """
@@ -2767,7 +4496,7 @@ cdef class LockOwnerIterator(object):
             if ret >= 0:
                 break
             elif ret != -errno.ERANGE:
-                raise make_ex(ret, 'error listing lock owners for image %s' % (image.name,))
+                raise make_ex(ret, 'error listing lock owners for image %s' % image.name)
 
     def __iter__(self):
         for i in range(self.num_lock_owners):
@@ -2835,15 +4564,16 @@ cdef class MetadataIterator(object):
                     break
                 elif ret != -errno.ERANGE:
                     raise make_ex(ret, 'error listing metadata for image %s' %
-                                  (self.image_name,))
+                                  self.image_name)
             keys = [decode_cstr(key) for key in
                         c_keys[:keys_size].split(b'\0') if key]
             vals = [decode_cstr(val) for val in
                         c_vals[:vals_size].split(b'\0') if val]
             if len(keys) > 0:
+                last_read = cstr(keys[-1], 'last_read')
                 free(self.last_read)
-                self.last_read = strdup(keys[-1])
-            self.next_chunk = zip(keys, vals)
+                self.last_read = strdup(last_read)
+            self.next_chunk = list(zip(keys, vals))
         finally:
             free(c_keys)
             free(c_vals)
@@ -2861,6 +4591,12 @@ cdef class SnapIterator(object):
     * ``size`` (int) - size of the image at the time of snapshot (in bytes)
 
     * ``name`` (str) - name of the snapshot
+
+    * ``namespace`` (int) - enum for snap namespace
+
+    * ``group`` (dict) - optional for group namespace snapshots
+
+    * ``trash`` (dict) - optional for trash namespace snapshots
     """
 
     cdef rbd_snap_info_t *snaps
@@ -2881,15 +4617,29 @@ cdef class SnapIterator(object):
                 self.num_snaps = ret
                 break
             elif ret != -errno.ERANGE:
-                raise make_ex(ret, 'error listing snapshots for image %s' % (image.name,))
+                raise make_ex(ret, 'error listing snapshots for image %s' % image.name)
 
     def __iter__(self):
         for i in range(self.num_snaps):
-            yield {
+            s = {
                 'id'   : self.snaps[i].id,
                 'size' : self.snaps[i].size,
                 'name' : decode_cstr(self.snaps[i].name),
+                'namespace' : self.image.snap_get_namespace_type(self.snaps[i].id)
                 }
+            if s['namespace'] == RBD_SNAP_NAMESPACE_TYPE_GROUP:
+                try:
+                    group = self.image.snap_get_group_namespace(self.snaps[i].id)
+                except:
+                    group = None
+                s['group'] = group
+            elif s['namespace'] == RBD_SNAP_NAMESPACE_TYPE_TRASH:
+                try:
+                    trash = self.image.snap_get_trash_namespace(self.snaps[i].id)
+                except:
+                    trash = None
+                s['trash'] = trash
+            yield s
 
     def __dealloc__(self):
         if self.snaps:
@@ -2945,8 +4695,8 @@ cdef class TrashIterator(object):
                 'id'          : decode_cstr(self.entries[i].id),
                 'name'        : decode_cstr(self.entries[i].name),
                 'source'      : TrashIterator.__source_string[self.entries[i].source],
-                'deletion_time' : datetime.fromtimestamp(self.entries[i].deletion_time),
-                'deferment_end_time' : datetime.fromtimestamp(self.entries[i].deferment_end_time)
+                'deletion_time' : datetime.utcfromtimestamp(self.entries[i].deletion_time),
+                'deferment_end_time' : datetime.utcfromtimestamp(self.entries[i].deferment_end_time)
                 }
 
     def __dealloc__(self):
@@ -2954,3 +4704,257 @@ cdef class TrashIterator(object):
         if self.entries:
             free(self.entries)
 
+cdef class ChildIterator(object):
+    """
+    Iterator over child info for the image or its snapshot.
+
+    Yields a dictionary containing information about a child.
+
+    Keys are:
+
+    * ``pool`` (str) - name of the pool
+
+    * ``pool_namespace`` (str) - namespace of the pool
+
+    * ``image`` (str) - name of the child
+
+    * ``id`` (str) - id of the child
+
+    * ``trash`` (bool) - True if child is in trash bin
+    """
+
+    cdef rbd_linked_image_spec_t *children
+    cdef size_t num_children
+    cdef object image
+
+    def __init__(self, Image image, descendants=False):
+        self.image = image
+        self.children = NULL
+        self.num_children = 10
+        while True:
+            self.children = <rbd_linked_image_spec_t*>realloc_chk(
+                self.children, self.num_children * sizeof(rbd_linked_image_spec_t))
+            if descendants:
+                with nogil:
+                    ret = rbd_list_descendants(image.image, self.children,
+                                               &self.num_children)
+            else:
+                with nogil:
+                    ret = rbd_list_children3(image.image, self.children,
+                                             &self.num_children)
+            if ret >= 0:
+                break
+            elif ret != -errno.ERANGE:
+                raise make_ex(ret, 'error listing children.')
+
+    def __iter__(self):
+        for i in range(self.num_children):
+            yield {
+                'pool'           : decode_cstr(self.children[i].pool_name),
+                'pool_namespace' : decode_cstr(self.children[i].pool_namespace),
+                'image'          : decode_cstr(self.children[i].image_name),
+                'id'             : decode_cstr(self.children[i].image_id),
+                'trash'          : self.children[i].trash
+                }
+
+    def __dealloc__(self):
+        if self.children:
+            rbd_linked_image_spec_list_cleanup(self.children, self.num_children)
+            free(self.children)
+
+cdef class WatcherIterator(object):
+    """
+    Iterator over watchers of an image.
+
+    Yields a dictionary containing information about a watcher.
+
+    Keys are:
+
+    * ``addr`` (str) - address of the watcher
+
+    * ``id`` (int) - id of the watcher
+
+    * ``cookie`` (int) - the watcher's cookie
+    """
+
+    cdef rbd_image_watcher_t *watchers
+    cdef size_t num_watchers
+    cdef object image
+
+    def __init__(self, Image image):
+        self.image = image
+        self.watchers = NULL
+        self.num_watchers = 10
+        while True:
+            self.watchers = <rbd_image_watcher_t*>realloc_chk(self.watchers,
+                                                              self.num_watchers *
+                                                              sizeof(rbd_image_watcher_t))
+            with nogil:
+                ret = rbd_watchers_list(image.image, self.watchers, &self.num_watchers)
+            if ret >= 0:
+                break
+            elif ret != -errno.ERANGE:
+                raise make_ex(ret, 'error listing watchers.')
+
+    def __iter__(self):
+        for i in range(self.num_watchers):
+            yield {
+                'addr'   : decode_cstr(self.watchers[i].addr),
+                'id'     : self.watchers[i].id,
+                'cookie' : self.watchers[i].cookie
+                }
+
+    def __dealloc__(self):
+        if self.watchers:
+            rbd_watchers_list_cleanup(self.watchers, self.num_watchers)
+            free(self.watchers)
+
+cdef class ConfigImageIterator(object):
+    """
+    Iterator over image-level overrides for an image.
+
+    Yields a dictionary containing information about an override.
+
+    Keys are:
+
+    * ``name`` (str) - override name
+
+    * ``value`` (str) - override value
+
+    * ``source`` (str) - override source
+    """
+
+    cdef:
+        rbd_config_option_t *options
+        int num_options
+
+    def __init__(self, Image image):
+        self.options = NULL
+        self.num_options = 32
+        while True:
+            self.options = <rbd_config_option_t *>realloc_chk(
+                self.options, self.num_options * sizeof(rbd_config_option_t))
+            with nogil:
+                ret = rbd_config_image_list(image.image, self.options,
+                                            &self.num_options)
+            if ret < 0:
+                if ret == -errno.ERANGE:
+                    continue
+                self.num_options = 0
+                raise make_ex(ret, 'error listing config options')
+            break
+
+    def __iter__(self):
+        for i in range(self.num_options):
+            yield {
+                'name'   : decode_cstr(self.options[i].name),
+                'value'  : decode_cstr(self.options[i].value),
+                'source' : self.options[i].source,
+                }
+
+    def __dealloc__(self):
+        if self.options:
+            rbd_config_image_list_cleanup(self.options, self.num_options)
+            free(self.options)
+
+cdef class GroupImageIterator(object):
+    """
+    Iterator over image info for a group.
+
+    Yields a dictionary containing information about an image.
+
+    Keys are:
+
+    * ``name`` (str) - name of the image
+
+    * ``pool`` (int) - id of the pool this image belongs to
+
+    * ``state`` (int) - state of the image
+    """
+
+    cdef rbd_group_image_info_t *images
+    cdef size_t num_images
+    cdef object group
+
+    def __init__(self, Group group):
+        self.group = group
+        self.images = NULL
+        self.num_images = 10
+        while True:
+            self.images = <rbd_group_image_info_t*>realloc_chk(self.images,
+                                                               self.num_images *
+                                                               sizeof(rbd_group_image_info_t))
+            with nogil:
+                ret = rbd_group_image_list(group._ioctx, group._name,
+                                           self.images,
+                                           sizeof(rbd_group_image_info_t),
+                                           &self.num_images)
+
+            if ret >= 0:
+                break
+            elif ret != -errno.ERANGE:
+                raise make_ex(ret, 'error listing images for group %s' % group.name, group_errno_to_exception)
+
+    def __iter__(self):
+        for i in range(self.num_images):
+            yield {
+                'name'  : decode_cstr(self.images[i].name),
+                'pool'  : self.images[i].pool,
+                'state' : self.images[i].state,
+                }
+
+    def __dealloc__(self):
+        if self.images:
+            rbd_group_image_list_cleanup(self.images,
+                                         sizeof(rbd_group_image_info_t),
+                                         self.num_images)
+            free(self.images)
+
+cdef class GroupSnapIterator(object):
+    """
+    Iterator over snaps specs for a group.
+
+    Yields a dictionary containing information about a snapshot.
+
+    Keys are:
+
+    * ``name`` (str) - name of the snapshot
+
+    * ``state`` (int) - state of the snapshot
+    """
+
+    cdef rbd_group_snap_info_t *snaps
+    cdef size_t num_snaps
+    cdef object group
+
+    def __init__(self, Group group):
+        self.group = group
+        self.snaps = NULL
+        self.num_snaps = 10
+        while True:
+            self.snaps = <rbd_group_snap_info_t*>realloc_chk(self.snaps,
+                                                             self.num_snaps *
+                                                             sizeof(rbd_group_snap_info_t))
+            with nogil:
+                ret = rbd_group_snap_list(group._ioctx, group._name, self.snaps,
+                                          sizeof(rbd_group_snap_info_t),
+                                          &self.num_snaps)
+
+            if ret >= 0:
+                break
+            elif ret != -errno.ERANGE:
+                raise make_ex(ret, 'error listing snapshots for group %s' % group.name, group_errno_to_exception)
+
+    def __iter__(self):
+        for i in range(self.num_snaps):
+            yield {
+                'name'  : decode_cstr(self.snaps[i].name),
+                'state' : self.snaps[i].state,
+                }
+
+    def __dealloc__(self):
+        if self.snaps:
+            rbd_group_snap_list_cleanup(self.snaps,
+                                        sizeof(rbd_group_snap_info_t),
+                                        self.num_snaps)
+            free(self.snaps)

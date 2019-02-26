@@ -1,4 +1,0 @@
-overrides:
-   ceph-deploy:
-      dmcrypt: yes
-      separate_journal_disk: yes

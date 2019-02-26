@@ -8,12 +8,6 @@
 
 #include "cls_timeindex_ops.h"
 
-namespace librados {
-  class ObjectWriteOperation;
-  class ObjectReadOperation;
-  class IoCtx;
-}
-
 /**
  * timeindex objclass
  */
@@ -37,8 +31,8 @@ public:
     if (r >= 0) {
       cls_timeindex_list_ret ret;
       try {
-        bufferlist::iterator iter = bl.begin();
-        ::decode(ret, iter);
+        auto iter = bl.cbegin();
+        decode(ret, iter);
         if (entries)
           *entries = ret.entries;
         if (truncated)

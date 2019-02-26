@@ -13,9 +13,7 @@
 
 void RGWLoadGenRequestEnv::set_date(utime_t& tm)
 {
-  stringstream s;
-  tm.asctime(s);
-  date_str = s.str();
+  date_str = rgw_to_asctime(tm);
 }
 
 int RGWLoadGenRequestEnv::sign(RGWAccessKey& access_key)
@@ -31,6 +29,7 @@ int RGWLoadGenRequestEnv::sign(RGWAccessKey& access_key)
                                  content_type.c_str(),
                                  date_str.c_str(),
                                  meta_map,
+				 map<string, string>{},
                                  uri.c_str(),
                                  sub_resources,
                                  canonical_header);
@@ -73,7 +72,7 @@ size_t RGWLoadGenIO::complete_request()
   return 0;
 }
 
-void RGWLoadGenIO::init_env(CephContext *cct)
+int RGWLoadGenIO::init_env(CephContext *cct)
 {
   env.init(cct);
 
@@ -98,6 +97,7 @@ void RGWLoadGenIO::init_env(CephContext *cct)
   char port_buf[16];
   snprintf(port_buf, sizeof(port_buf), "%d", req->port);
   env.set("SERVER_PORT", port_buf);
+  return 0;
 }
 
 size_t RGWLoadGenIO::send_status(const int status,

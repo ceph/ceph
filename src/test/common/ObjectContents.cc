@@ -7,11 +7,11 @@
 bool test_object_contents()
 {
   ObjectContents c, d;
-  assert(!c.exists());
+  ceph_assert(!c.exists());
   c.debug(std::cerr);
   c.write(10, 10, 10);
-  assert(c.exists());
-  assert(c.size() == 20);
+  ceph_assert(c.exists());
+  ceph_assert(c.size() == 20);
 
   c.debug(std::cerr);
   bufferlist bl;
@@ -20,7 +20,7 @@ bool test_object_contents()
        ++iter) {
     bl.append(*iter);
   }
-  assert(bl.length() == 20);
+  ceph_assert(bl.length() == 20);
 
   bufferlist bl2;
   for (unsigned i = 0; i < 8; ++i) bl2.append(bl[i]);
@@ -34,21 +34,21 @@ bool test_object_contents()
     bl2.append(*iter);
   }
   for (unsigned i = 12; i < 20; ++i) bl2.append(bl[i]);
-  assert(bl2.length() == 20);
+  ceph_assert(bl2.length() == 20);
 
   for (ObjectContents::Iterator iter3 = c.get_iterator();
        iter.valid();
        ++iter) {
-    assert(bl2[iter3.get_pos()] == *iter3);
+    ceph_assert(bl2[iter3.get_pos()] == *iter3);
   }
 
-  assert(bl2[0] == '\0');
-  assert(bl2[7] == '\0');
+  ceph_assert(bl2[0] == '\0');
+  ceph_assert(bl2[7] == '\0');
 
   interval_set<uint64_t> to_clone;
   to_clone.insert(5, 10);
   d.clone_range(c, to_clone);
-  assert(d.size() == 15);
+  ceph_assert(d.size() == 15);
 
   c.debug(std::cerr);
   d.debug(std::cerr);
@@ -57,8 +57,8 @@ bool test_object_contents()
   iter2.seek_to(5);
   for (uint64_t i = 5; i < 15; ++i, ++iter2) {
     std::cerr << "i is " << i << std::endl;
-    assert(iter2.get_pos() == i);
-    assert(*iter2 == bl2[i]);
+    ceph_assert(iter2.get_pos() == i);
+    ceph_assert(*iter2 == bl2[i]);
   }
   return true;
 }

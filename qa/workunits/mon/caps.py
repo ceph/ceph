@@ -220,7 +220,7 @@ def test_all():
       'auth':[
         {
           'pre':'',
-          'cmd':('auth list', '', 'r'),
+          'cmd':('auth ls', '', 'r'),
           'post':''
           },
         {
@@ -237,10 +237,6 @@ def test_all():
       'mds':[
         {
           'cmd':('mds getmap', '', 'r'),
-          },
-        {
-          'cmd':('mds cluster_down', '', 'rw'),
-          'post':'mds cluster_up'
           },
         ],
       'mon':[
@@ -265,11 +261,11 @@ def test_all():
         ],
       'config-key':[
           {
-            'pre':'config-key put foo bar',
+            'pre':'config-key set foo bar',
             'cmd':('config-key get', 'key=foo', 'r')
             },
           {
-            'pre':'config-key put foo bar',
+            'pre':'config-key set foo bar',
             'cmd':('config-key del', 'key=foo', 'rw')
             }
           ]

@@ -1,0 +1,5 @@
+tasks:
+- cram:
+    clients:
+      client.0:
+      - qa/rbd/krbd_whole_object_zeroout.t

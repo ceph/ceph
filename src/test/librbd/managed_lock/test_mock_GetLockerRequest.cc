@@ -62,15 +62,15 @@ public:
 
       cls_lock_get_info_reply reply;
       if (r != -ENOENT) {
-        reply.lockers = decltype(reply.lockers){
-          {rados::cls::lock::locker_id_t(entity, locker_cookie),
-           rados::cls::lock::locker_info_t(utime_t(), entity_addr, "")}};
+        reply.lockers.emplace(
+          rados::cls::lock::locker_id_t(entity, locker_cookie),
+          rados::cls::lock::locker_info_t(utime_t(), entity_addr, ""));
         reply.tag = lock_tag;
         reply.lock_type = lock_type;
       }
 
       bufferlist bl;
-      ::encode(reply, bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
+      encode(reply, bl, CEPH_FEATURES_SUPPORTED_DEFAULT);
 
       std::string str(bl.c_str(), bl.length());
       expect.WillOnce(DoAll(WithArg<5>(CopyInBufferlist(str)), Return(0)));

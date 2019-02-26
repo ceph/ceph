@@ -358,10 +358,9 @@ public:
    */
   void check_overlapped_rules() const;
   int test();
-  int test_with_crushtool(const char *crushtool_cmd = "crushtool",
-			  int max_id = -1,
-			  int timeout = 0,
-			  int ruleset = -1);
+  int test_with_fork(int timeout);
+
+  int compare(CrushWrapper& other);
 };
 
 #endif

@@ -33,7 +33,8 @@ SnapshotProtectRequest<I>::SnapshotProtectRequest(I &image_ctx,
                                                   Context *on_finish,
 						  const cls::rbd::SnapshotNamespace &snap_namespace,
 						  const std::string &snap_name)
-  : Request<I>(image_ctx, on_finish), m_snap_namespace(snap_namespace), m_snap_name(snap_name) {
+  : Request<I>(image_ctx, on_finish), m_snap_namespace(snap_namespace),
+    m_snap_name(snap_name), m_state(STATE_PROTECT_SNAP) {
 }
 
 template <typename I>
@@ -60,12 +61,10 @@ bool SnapshotProtectRequest<I>::should_complete(int r) {
 template <typename I>
 void SnapshotProtectRequest<I>::send_protect_snap() {
   I &image_ctx = this->m_image_ctx;
-  assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(image_ctx.owner_lock.is_locked());
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
-
-  m_state = STATE_PROTECT_SNAP;
 
   int r = verify_and_send_protect_snap();
   if (r < 0) {
@@ -109,7 +108,7 @@ int SnapshotProtectRequest<I>::verify_and_send_protect_snap() {
     this->create_callback_completion();
   r = image_ctx.md_ctx.aio_operate(image_ctx.header_oid, rados_completion,
                                      &op);
-  assert(r == 0);
+  ceph_assert(r == 0);
   rados_completion->release();
   return 0;
 }

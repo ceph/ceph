@@ -199,7 +199,7 @@ sub delete_keys {
    (($bucket->delete_key($_[0])) and return 0) or return 1;
 }
 
-# Readd the file back to bucket 
+# Read the file back to bucket 
 sub readd_file {
     system("dd if=/dev/zero of=/tmp/10MBfile1 bs=10485760 count=1");
     $mytestfilename1 = '10MBfile1';

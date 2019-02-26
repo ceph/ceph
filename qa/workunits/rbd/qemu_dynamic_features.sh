@@ -1,4 +1,5 @@
-#!/bin/bash -x
+#!/usr/bin/env bash
+set -x
 
 if [[ -z "${IMAGE_NAME}" ]]; then
   echo image name must be provided
@@ -27,7 +28,6 @@ while is_qemu_running ; do
   rbd feature enable ${IMAGE_NAME} exclusive-lock || break
   rbd feature enable ${IMAGE_NAME} journaling || break
   rbd feature enable ${IMAGE_NAME} object-map || break
-  rbd feature enable ${IMAGE_NAME} fast-diff || break
   if is_qemu_running ; then
     sleep 60
   fi

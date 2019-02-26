@@ -20,7 +20,7 @@ Description
 system. It is responsible for storing objects on a local file system
 and providing access to them over the network.
 
-The datapath argument should be a directory on a btrfs file system
+The datapath argument should be a directory on a xfs file system
 where the object data resides. The journal is optional, and is only
 useful performance-wise when it resides on a different disk than
 datapath with low latency (ideally, an NVRAM device).

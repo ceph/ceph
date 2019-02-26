@@ -1,4 +1,6 @@
 #!/usr/bin/env python
+from __future__ import print_function
+
 import re
 import sys
 
@@ -82,14 +84,22 @@ class StateMachineRenderer(object):
             )
 
     def read_input(self, input_lines):
+        previous_line = None
         for line in input_lines:
             self.get_state(line)
             self.get_event(line)
-            self.get_context(line)
+            # pass two lines at a time to get the context so that regexes can
+            # match on split signatures
+            self.get_context(line, previous_line)
+            previous_line = line
 
-    def get_context(self, line):
-        match = re.search(r"(\w+::)*::(?P<tag>\w+)::\w+\(const (?P<event>\w+)",
-                          line)
+    def get_context(self, line, previous_line):
+        match = re.search(r"(\w+::)*::(?P<tag>\w+)::\w+\(const (?P<event>\w+)", line)
+        if match is None and previous_line is not None:
+            # it is possible that we need to match on the previous line as well, so join
+            # them to make them one line and try and get this matching
+            joined_line = ' '.join([previous_line, line])
+            match = re.search(r"(\w+::)*::(?P<tag>\w+)::\w+\(\s*const (?P<event>\w+)", joined_line)
         if match is not None:
             self.context.append((match.group('tag'), self.context_depth, match.group('event')))
         if '{' in line:
@@ -105,7 +115,7 @@ class StateMachineRenderer(object):
                 r"boost::statechart::state_machine<\s*(\w*),\s*(\w*)\s*>",
                 line)
             if tokens is None:
-                raise "Error: malformed state_machine line: " + line
+                raise Exception("Error: malformed state_machine line: " + line)
             self.machines[tokens.group(1)] = tokens.group(2)
             self.context.append((tokens.group(1), self.context_depth, ""))
             return
@@ -114,7 +124,7 @@ class StateMachineRenderer(object):
                 r"boost::statechart::state<\s*(\w*),\s*(\w*)\s*,?\s*(\w*)\s*>",
                 line)
             if tokens is None:
-                raise "Error: malformed state line: " + line
+                raise Exception("Error: malformed state line: " + line)
             self.states[tokens.group(1)] = tokens.group(2)
             if tokens.group(2) not in self.state_contents.keys():
                 self.state_contents[tokens.group(2)] = []
@@ -131,14 +141,14 @@ class StateMachineRenderer(object):
                 if i.group(1) not in self.edges.keys():
                     self.edges[i.group(1)] = []
                 if len(self.context) is 0:
-                    raise "no context at line: " + line
+                    raise Exception("no context at line: " + line)
                 self.edges[i.group(1)].append((self.context[-1][0], i.group(2)))
         i = re.search("return\s+transit<\s*(\w*)\s*>()", line)
         if i is not None:
             if len(self.context) is 0:
-                raise "no context at line: " + line
+                raise Exception("no context at line: " + line)
             if self.context[-1][2] is "":
-                raise "no event in context at line: " + line
+                raise Exception("no event in context at line: " + line)
             if self.context[-1][2] not in self.edges.keys():
                 self.edges[self.context[-1][2]] = []
             self.edges[self.context[-1][2]].append((self.context[-1][0], i.group(1)))
@@ -148,16 +158,16 @@ class StateMachineRenderer(object):
         for state in self.machines.keys():
             if state not in self.states.keys():
                 top_level.append(state)
-        print >> sys.stderr, "Top Level States: ", str(top_level)
-        print """digraph G {"""
-        print '\tsize="7,7"'
-        print """\tcompound=true;"""
+        print('Top Level States: ', top_level, file=sys.stderr)
+        print('digraph G {')
+        print('\tsize="7,7"')
+        print('\tcompound=true;')
         for i in self.emit_state(top_level[0]):
-            print '\t' + i
+            print('\t' + i)
         for i in self.edges.keys():
             for j in self.emit_event(i):
-                print j
-        print """}"""
+                print(j)
+        print('}')
 
     def emit_state(self, state):
         if state in self.state_contents.keys():
@@ -200,7 +210,7 @@ class StateMachineRenderer(object):
             yield("%s -> %s %s;" % (fro, to, append(appendix)))
 
 
-INPUT_GENERATOR = do_filter(sys.stdin.xreadlines())
+INPUT_GENERATOR = do_filter(line for line in sys.stdin)
 RENDERER = StateMachineRenderer()
 RENDERER.read_input(INPUT_GENERATOR)
 RENDERER.emit_dot()

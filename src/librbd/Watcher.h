@@ -54,19 +54,21 @@ public:
 
   bool is_registered() const {
     RWLock::RLocker locker(m_watch_lock);
-    return m_watch_state == WATCH_STATE_REGISTERED;
+    return is_registered(m_watch_lock);
   }
   bool is_unregistered() const {
     RWLock::RLocker locker(m_watch_lock);
-    return m_watch_state == WATCH_STATE_UNREGISTERED;
+    return is_unregistered(m_watch_lock);
+  }
+  bool is_blacklisted() const {
+    RWLock::RLocker locker(m_watch_lock);
+    return m_watch_blacklisted;
   }
 
 protected:
   enum WatchState {
-    WATCH_STATE_UNREGISTERED,
+    WATCH_STATE_IDLE,
     WATCH_STATE_REGISTERING,
-    WATCH_STATE_REGISTERED,
-    WATCH_STATE_ERROR,
     WATCH_STATE_REWATCHING
   };
 
@@ -77,8 +79,18 @@ protected:
   mutable RWLock m_watch_lock;
   uint64_t m_watch_handle;
   watcher::Notifier m_notifier;
+
   WatchState m_watch_state;
+  bool m_watch_blacklisted = false;
+
   AsyncOpTracker m_async_op_tracker;
+
+  bool is_registered(const RWLock&) const {
+    return (m_watch_state == WATCH_STATE_IDLE && m_watch_handle != 0);
+  }
+  bool is_unregistered(const RWLock&) const {
+    return (m_watch_state == WATCH_STATE_IDLE && m_watch_handle == 0);
+  }
 
   void send_notify(bufferlist &payload,
                    watcher::NotifyResponse *response = nullptr,
@@ -155,12 +167,15 @@ private:
   WatchCtx m_watch_ctx;
   Context *m_unregister_watch_ctx = nullptr;
 
+  bool m_watch_error = false;
+
   uint32_t m_blocked_count = 0;
 
   void handle_register_watch(int r, Context *on_finish);
 
   void rewatch();
   void handle_rewatch(int r);
+  void handle_rewatch_callback(int r);
 
 };
 

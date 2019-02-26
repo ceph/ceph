@@ -29,6 +29,7 @@ public:
   void set_status(int status, const char* status_name) override {};
   void output_header() override {};
   void output_footer() override {};
+  void enable_line_break() override {};
   void flush(ostream& os) override;
   void reset() override;
 
@@ -40,7 +41,7 @@ public:
   void dump_unsigned(const char *name, uint64_t u) override;
   void dump_int(const char *name, int64_t u) override;
   void dump_float(const char *name, double d) override;
-  void dump_string(const char *name, const std::string& s) override;
+  void dump_string(const char *name, std::string_view s) override;
   std::ostream& dump_stream(const char *name) override;
   void dump_format_va(const char *name, const char *ns, bool quoted, const char *fmt, va_list ap) override;
   int get_len() const override;
@@ -122,6 +123,14 @@ protected:
   }
 public:
   RGWStreamFlusher(Formatter *f, ostream& _os) : RGWFormatterFlusher(f), os(_os) {}
+};
+
+class RGWNullFlusher : public RGWFormatterFlusher {
+protected:
+  void do_flush() override {
+  }
+public:
+  RGWNullFlusher() : RGWFormatterFlusher(nullptr) {}
 };
 
 #endif

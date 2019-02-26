@@ -15,21 +15,26 @@
 #ifndef MDS_RANK_H_
 #define MDS_RANK_H_
 
+#include <string_view>
+
 #include "common/DecayCounter.h"
 #include "common/LogClient.h"
 #include "common/Timer.h"
 #include "common/TrackedOp.h"
 
+#include "messages/MClientRequest.h"
 #include "messages/MCommand.h"
+#include "messages/MMDSMap.h"
 
 #include "Beacon.h"
 #include "DamageTable.h"
 #include "MDSMap.h"
 #include "SessionMap.h"
 #include "MDCache.h"
-#include "Migrator.h"
 #include "MDLog.h"
+#include "MDSContext.h"
 #include "PurgeQueue.h"
+#include "Server.h"
 #include "osdc/Journaler.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
@@ -69,6 +74,9 @@ enum {
   l_mds_exported_inodes,
   l_mds_imported,
   l_mds_imported_inodes,
+  l_mds_openino_dir_fetch,
+  l_mds_openino_backtrace_fetch,
+  l_mds_openino_peer_discover,
   l_mds_last,
 };
 
@@ -89,7 +97,6 @@ enum {
   l_mdm_caps,
   l_mdm_rss,
   l_mdm_heap,
-  l_mdm_buf,
   l_mdm_last,
 };
 
@@ -97,7 +104,6 @@ namespace ceph {
   struct heartbeat_handle_d;
 }
 
-class Server;
 class Locker;
 class MDCache;
 class MDLog;
@@ -111,8 +117,9 @@ class Messenger;
 class Objecter;
 class MonClient;
 class Finisher;
-class MMDSMap;
 class ScrubStack;
+class C_MDS_Send_Command_Reply;
+class C_ExecAndReply;
 
 /**
  * The public part of this class's interface is what's exposed to all
@@ -128,6 +135,14 @@ class MDSRank {
     int incarnation;
 
   public:
+
+    friend class C_Flush_Journal;
+    friend class C_Drop_Cache;
+
+    friend class C_CacheDropExecAndReply;
+    friend class C_ScrubExecAndReply;
+    friend class C_ScrubControlExecAndReply;
+
     mds_rank_t get_nodeid() const { return whoami; }
     int64_t get_metadata_pool();
 
@@ -135,6 +150,16 @@ class MDSRank {
     // carry around references to the outer MDS, and we can substitute
     // a separate lock here in future potentially.
     Mutex &mds_lock;
+
+    mono_time get_starttime() const {
+      return starttime;
+    }
+    chrono::duration<double> get_uptime() const {
+      mono_time now = mono_clock::now();
+      return chrono::duration<double>(now-starttime);
+    }
+
+    class CephContext *cct;
 
     bool is_daemon_stopping() const;
 
@@ -147,7 +172,7 @@ class MDSRank {
     // to share a timer.
     SafeTimer &timer;
 
-    MDSMap *&mdsmap;
+    std::unique_ptr<MDSMap> &mdsmap; /* MDSDaemon::mdsmap */
 
     Objecter     *objecter;
 
@@ -173,6 +198,7 @@ class MDSRank {
     Session *get_session(client_t client) {
       return sessionmap.get_session(entity_name_t::CLIENT(client.v));
     }
+    Session *get_session(const Message::const_ref &m);
 
     PerfCounters       *logger, *mlogger;
     OpTracker    op_tracker;
@@ -201,15 +227,20 @@ class MDSRank {
     bool is_any_replay() const { return (is_replay() || is_standby_replay()); }
     bool is_stopped() const { return mdsmap->is_stopped(whoami); }
     bool is_cluster_degraded() const { return cluster_degraded; }
+    bool allows_multimds_snaps() const { return mdsmap->allows_multimds_snaps(); }
 
     void handle_write_error(int err);
 
-    void handle_conf_change(const struct md_config_t *conf,
+    void handle_conf_change(const ConfigProxy& conf,
                             const std::set <std::string> &changed)
     {
+      sessionmap.handle_conf_change(conf, changed);
+      server->handle_conf_change(conf, changed);
+      mdcache->handle_conf_change(conf, changed, *mdsmap);
       purge_queue.handle_conf_change(conf, changed, *mdsmap);
     }
 
+    void update_mlogger();
   protected:
     // Flag to indicate we entered shutdown: anyone seeing this to be true
     // after taking mds_lock must drop out.
@@ -229,29 +260,31 @@ class MDSRank {
       void signal() {cond.Signal();}
     } progress_thread;
 
-    list<Message*> waiting_for_nolaggy;
-    list<MDSInternalContextBase*> finished_queue;
+    list<Message::const_ref> waiting_for_nolaggy;
+    MDSContext::que finished_queue;
     // Dispatch, retry, queues
     int dispatch_depth;
     void inc_dispatch_depth() { ++dispatch_depth; }
     void dec_dispatch_depth() { --dispatch_depth; }
-    void retry_dispatch(Message *m);
-    bool handle_deferrable_message(Message *m);
+    void retry_dispatch(const Message::const_ref &m);
+    bool handle_deferrable_message(const Message::const_ref &m);
     void _advance_queues();
-    bool _dispatch(Message *m, bool new_msg);
+    bool _dispatch(const Message::const_ref &m, bool new_msg);
 
     ceph::heartbeat_handle_d *hb;  // Heartbeat for threads using mds_lock
 
-    bool is_stale_message(Message *m) const;
+    bool is_stale_message(const Message::const_ref &m) const;
 
     map<mds_rank_t, version_t> peer_mdsmap_epoch;
 
     ceph_tid_t last_tid;    // for mds-initiated requests (e.g. stray rename)
 
-    list<MDSInternalContextBase*> waiting_for_active, waiting_for_replay, waiting_for_reconnect, waiting_for_resolve;
-    list<MDSInternalContextBase*> replay_queue;
-    map<mds_rank_t, list<MDSInternalContextBase*> > waiting_for_active_peer;
-    map<epoch_t, list<MDSInternalContextBase*> > waiting_for_mdsmap;
+    MDSContext::vec waiting_for_active, waiting_for_replay, waiting_for_rejoin,
+				waiting_for_reconnect, waiting_for_resolve;
+    MDSContext::vec waiting_for_any_client_connection;
+    MDSContext::que replay_queue;
+    map<mds_rank_t, MDSContext::vec > waiting_for_active_peer;
+    map<epoch_t, MDSContext::vec > waiting_for_mdsmap;
 
     epoch_t osd_epoch_barrier;
 
@@ -277,12 +310,20 @@ class MDSRank {
     void create_logger();
   public:
 
-    void queue_waiter(MDSInternalContextBase *c) {
+    void queue_waiter(MDSContext *c) {
       finished_queue.push_back(c);
       progress_thread.signal();
     }
-    void queue_waiters(list<MDSInternalContextBase*>& ls) {
-      finished_queue.splice( finished_queue.end(), ls );
+    void queue_waiters(MDSContext::vec& ls) {
+      MDSContext::vec v;
+      v.swap(ls);
+      std::copy(v.begin(), v.end(), std::back_inserter(finished_queue));
+      progress_thread.signal();
+    }
+    void queue_waiters_front(MDSContext::vec& ls) {
+      MDSContext::vec v;
+      v.swap(ls);
+      std::copy(v.rbegin(), v.rend(), std::front_inserter(finished_queue));
       progress_thread.signal();
     }
 
@@ -292,7 +333,7 @@ class MDSRank {
         LogChannelRef &clog_,
         SafeTimer &timer_,
         Beacon &beacon_,
-        MDSMap *& mdsmap_,
+        std::unique_ptr<MDSMap> & mdsmap_,
         Messenger *msgr,
         MonClient *monc_,
         Context *respawn_hook_,
@@ -338,51 +379,58 @@ class MDSRank {
      */
     void damaged_unlocked();
 
-    utime_t get_laggy_until() const;
-
-    void send_message_mds(Message *m, mds_rank_t mds);
-    void forward_message_mds(Message *req, mds_rank_t mds);
-
-    void send_message_client_counted(Message *m, client_t client);
-    void send_message_client_counted(Message *m, Session *session);
-    void send_message_client_counted(Message *m, Connection *connection);
-    void send_message_client_counted(Message *m, const ConnectionRef& con) {
-      send_message_client_counted(m, con.get());
-    }
-    void send_message_client(Message *m, Session *session);
-    void send_message(Message *m, Connection *c);
-    void send_message(Message *m, const ConnectionRef& c) {
-      send_message(m, c.get());
+    double last_cleared_laggy() const {
+      return beacon.last_cleared_laggy();
     }
 
-    void wait_for_active_peer(mds_rank_t who, MDSInternalContextBase *c) { 
+    double get_dispatch_queue_max_age(utime_t now) const;
+
+    void send_message_mds(const Message::ref& m, mds_rank_t mds);
+    void forward_message_mds(const MClientRequest::const_ref& req, mds_rank_t mds);
+    void send_message_client_counted(const Message::ref& m, client_t client);
+    void send_message_client_counted(const Message::ref& m, Session* session);
+    void send_message_client_counted(const Message::ref& m, const ConnectionRef& connection);
+    void send_message_client(const Message::ref& m, Session* session);
+    void send_message(const Message::ref& m, const ConnectionRef& c);
+
+    void wait_for_active_peer(mds_rank_t who, MDSContext *c) { 
       waiting_for_active_peer[who].push_back(c);
     }
-    void wait_for_cluster_recovered(MDSInternalContextBase *c) {
-      assert(cluster_degraded);
+    void wait_for_cluster_recovered(MDSContext *c) {
+      ceph_assert(cluster_degraded);
       waiting_for_active_peer[MDS_RANK_NONE].push_back(c);
     }
 
-    void wait_for_active(MDSInternalContextBase *c) {
+    void wait_for_any_client_connection(MDSContext *c) {
+      waiting_for_any_client_connection.push_back(c);
+    }
+    void kick_waiters_for_any_client_connection(void) {
+      finish_contexts(g_ceph_context, waiting_for_any_client_connection);
+    }
+    void wait_for_active(MDSContext *c) {
       waiting_for_active.push_back(c);
     }
-    void wait_for_replay(MDSInternalContextBase *c) { 
+    void wait_for_replay(MDSContext *c) { 
       waiting_for_replay.push_back(c); 
     }
-    void wait_for_reconnect(MDSInternalContextBase *c) {
+    void wait_for_rejoin(MDSContext *c) {
+      waiting_for_rejoin.push_back(c);
+    }
+    void wait_for_reconnect(MDSContext *c) {
       waiting_for_reconnect.push_back(c);
     }
-    void wait_for_resolve(MDSInternalContextBase *c) {
+    void wait_for_resolve(MDSContext *c) {
       waiting_for_resolve.push_back(c);
     }
-    void wait_for_mdsmap(epoch_t e, MDSInternalContextBase *c) {
+    void wait_for_mdsmap(epoch_t e, MDSContext *c) {
       waiting_for_mdsmap[e].push_back(c);
     }
-    void enqueue_replay(MDSInternalContextBase *c) {
+    void enqueue_replay(MDSContext *c) {
       replay_queue.push_back(c);
     }
 
     bool queue_one_replay();
+    void maybe_clientreplay_done();
 
     void set_osd_epoch_barrier(epoch_t e);
     epoch_t get_osd_epoch_barrier() const {return osd_epoch_barrier;}
@@ -392,33 +440,43 @@ class MDSRank {
 
     Finisher     *finisher;
 
-    MDSMap *get_mds_map() { return mdsmap; }
+    MDSMap *get_mds_map() { return mdsmap.get(); }
 
-    int get_req_rate() const { return logger->get(l_mds_request); }
+    uint64_t get_num_requests() const { return logger->get(l_mds_request); }
   
     int get_mds_slow_req_count() const { return mds_slow_req_count; }
 
     void dump_status(Formatter *f) const;
 
-    void hit_export_target(utime_t now, mds_rank_t rank, double amount=-1.0);
+    void hit_export_target(mds_rank_t rank, double amount=-1.0);
     bool is_export_target(mds_rank_t rank) {
       const set<mds_rank_t>& map_targets = mdsmap->get_mds_info(get_nodeid()).export_targets;
       return map_targets.count(rank);
     }
 
     bool evict_client(int64_t session_id, bool wait, bool blacklist,
-                      std::stringstream& ss, Context *on_killed=nullptr);
+                      std::ostream& ss, Context *on_killed=nullptr);
+
+    void mark_base_recursively_scrubbed(inodeno_t ino);
 
   protected:
     void dump_clientreplay_status(Formatter *f) const;
-    void command_scrub_path(Formatter *f, const string& path, vector<string>& scrubop_vec);
-    void command_tag_path(Formatter *f, const string& path,
-                          const string &tag);
-    void command_flush_path(Formatter *f, const string& path);
+    void command_scrub_start(Formatter *f,
+                             std::string_view path, std::string_view tag,
+                             const vector<string>& scrubop_vec, Context *on_finish);
+    void command_tag_path(Formatter *f, std::string_view path,
+                          std::string_view tag);
+    // scrub control commands
+    void command_scrub_abort(Formatter *f, Context *on_finish);
+    void command_scrub_pause(Formatter *f, Context *on_finish);
+    void command_scrub_resume(Formatter *f);
+    void command_scrub_status(Formatter *f);
+
+    void command_flush_path(Formatter *f, std::string_view path);
     void command_flush_journal(Formatter *f);
     void command_get_subtrees(Formatter *f);
     void command_export_dir(Formatter *f,
-        const std::string &path, mds_rank_t dest);
+        std::string_view path, mds_rank_t dest);
     bool command_dirfrag_split(
         cmdmap_t cmdmap,
         std::ostream &ss);
@@ -429,11 +487,14 @@ class MDSRank {
         cmdmap_t cmdmap,
         std::ostream &ss,
         Formatter *f);
-    int _command_export_dir(const std::string &path, mds_rank_t dest);
-    int _command_flush_journal(std::stringstream *ss);
+    int _command_export_dir(std::string_view path, mds_rank_t dest);
     CDir *_command_dirfrag_get(
         const cmdmap_t &cmdmap,
         std::ostream &ss);
+    void command_openfiles_ls(Formatter *f);
+    void command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f);
+    void command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
+    void command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish);
 
   protected:
     Messenger    *messenger;
@@ -502,25 +563,44 @@ class MDSRank {
     // <<<
 
     /* Update MDSMap export_targets for this rank. Called on ::tick(). */
-    void update_targets(utime_t now);
+    void update_targets();
+
+    friend class C_MDS_MonCommand;
+    void _mon_command_finish(int r, std::string_view cmd, std::string_view outs);
+    void set_mdsmap_multimds_snaps_allowed();
+private:
+    mono_time starttime = mono_clock::zero();
+
+protected:
+  Context *create_async_exec_context(C_ExecAndReply *ctx);
 };
 
 /* This expects to be given a reference which it is responsible for.
  * The finish function calls functions which
  * will put the Message exactly once.*/
 class C_MDS_RetryMessage : public MDSInternalContext {
-protected:
-  Message *m;
 public:
-  C_MDS_RetryMessage(MDSRank *mds, Message *m)
-    : MDSInternalContext(mds)
-  {
-    assert(m);
-    this->m = m;
-  }
+  C_MDS_RetryMessage(MDSRank *mds, const Message::const_ref &m)
+    : MDSInternalContext(mds), m(m) {}
   void finish(int r) override {
-    mds->retry_dispatch(m);
+    get_mds()->retry_dispatch(m);
   }
+protected:
+  Message::const_ref m;
+};
+
+class CF_MDS_RetryMessageFactory : public MDSContextFactory {
+public:
+  CF_MDS_RetryMessageFactory(MDSRank *mds, const Message::const_ref &m)
+    : mds(mds), m(m) {}
+
+  MDSContext *build() {
+    return new C_MDS_RetryMessage(mds, m);
+  }
+
+private:
+  MDSRank *mds;
+  Message::const_ref m;
 };
 
 /**
@@ -534,25 +614,26 @@ public:
   void init();
   void tick();
   void shutdown();
-  bool handle_asok_command(std::string command, cmdmap_t& cmdmap,
+  bool handle_asok_command(std::string_view command, const cmdmap_t& cmdmap,
                            Formatter *f, std::ostream& ss);
-  void handle_mds_map(MMDSMap *m, MDSMap *oldmap);
+  void handle_mds_map(const MMDSMap::const_ref &m, const MDSMap &oldmap);
   void handle_osd_map();
   void update_log_config();
 
   bool handle_command(
     const cmdmap_t &cmdmap,
-    MCommand *m,
+    const MCommand::const_ref &m,
     int *r,
     std::stringstream *ds,
     std::stringstream *ss,
+    Context **run_later,
     bool *need_reply);
 
   void dump_sessions(const SessionFilter &filter, Formatter *f) const;
-  void evict_clients(const SessionFilter &filter, MCommand *m);
+  void evict_clients(const SessionFilter &filter, const MCommand::const_ref &m);
 
   // Call into me from MDS::ms_dispatch
-  bool ms_dispatch(Message *m);
+  bool ms_dispatch(const Message::const_ref &m);
 
   MDSRankDispatcher(
       mds_rank_t whoami_,
@@ -560,7 +641,7 @@ public:
       LogChannelRef &clog_,
       SafeTimer &timer_,
       Beacon &beacon_,
-      MDSMap *& mdsmap_,
+      std::unique_ptr<MDSMap> &mdsmap_,
       Messenger *msgr,
       MonClient *monc_,
       Context *respawn_hook_,
@@ -573,7 +654,6 @@ do { \
   if (m->get_connection() && (m->get_connection()->get_peer_type() & (peers)) == 0) { \
     dout(0) << __FILE__ << "." << __LINE__ << ": filtered out request, peer=" << m->get_connection()->get_peer_type() \
            << " allowing=" << #peers << " message=" << *m << dendl; \
-    m->put();							    \
     return true; \
   } \
 } while (0)

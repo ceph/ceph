@@ -54,7 +54,7 @@ class EventCenter;
 class EventCallback {
 
  public:
-  virtual void do_request(int fd_or_id) = 0;
+  virtual void do_request(uint64_t fd_or_id) = 0;
   virtual ~EventCallback() {}       // we want a virtual destructor!!!
 };
 
@@ -94,7 +94,7 @@ class EventCenter {
 
   struct AssociatedCenters {
     EventCenter *centers[MAX_EVENTCENTER];
-    AssociatedCenters(CephContext *c) {
+    AssociatedCenters() {
       memset(centers, 0, MAX_EVENTCENTER * sizeof(EventCenter*));
     }
   };
@@ -155,7 +155,7 @@ class EventCenter {
   std::string type;
   int nevent;
   // Used only to external event
-  pthread_t owner;
+  pthread_t owner = 0;
   std::mutex external_lock;
   std::atomic_ulong external_num_events;
   deque<EventCallbackRef> external_events;
@@ -177,7 +177,7 @@ class EventCenter {
 
   int process_time_events();
   FileEvent *_get_file_event(int fd) {
-    assert(fd < nevent);
+    ceph_assert(fd < nevent);
     return &file_events[fd];
   }
 
@@ -203,7 +203,7 @@ class EventCenter {
   uint64_t create_time_event(uint64_t milliseconds, EventCallbackRef ctxt);
   void delete_file_event(int fd, int mask);
   void delete_time_event(uint64_t id);
-  int process_events(int timeout_microseconds, ceph::timespan *working_dur = nullptr);
+  int process_events(unsigned timeout_microseconds, ceph::timespan *working_dur = nullptr);
   void wakeup();
 
   // Used by external thread
@@ -223,7 +223,7 @@ class EventCenter {
    public:
     C_submit_event(func &&_f, bool nw)
       : f(std::move(_f)), nonwait(nw) {}
-    void do_request(int id) override {
+    void do_request(uint64_t id) override {
       f();
       lock.lock();
       cond.notify_all();
@@ -234,7 +234,7 @@ class EventCenter {
         delete this;
     }
     void wait() {
-      assert(!nonwait);
+      ceph_assert(!nonwait);
       std::unique_lock<std::mutex> l(lock);
       while (!done)
         cond.wait(l);
@@ -244,9 +244,9 @@ class EventCenter {
  public:
   template <typename func>
   void submit_to(int i, func &&f, bool nowait = false) {
-    assert(i < MAX_EVENTCENTER && global_centers);
+    ceph_assert(i < MAX_EVENTCENTER && global_centers);
     EventCenter *c = global_centers->centers[i];
-    assert(c);
+    ceph_assert(c);
     if (!nowait && c->in_thread()) {
       f();
       return ;

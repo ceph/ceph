@@ -17,6 +17,7 @@
 #include "include/Context.h"
 #include "include/buffer.h"
 #include "include/types.h"
+#include "include/stringify.h"
 #include "osd/osd_types.h"
 #include "common/TrackedOp.h"
 #include "common/WorkQueue.h"
@@ -27,11 +28,11 @@
 #include <vector>
 #include <map>
 
-#if defined(DARWIN) || defined(__FreeBSD__) || defined(__sun)
+#if defined(__APPLE__) || defined(__FreeBSD__) || defined(__sun)
 #include <sys/statvfs.h>
 #else
 #include <sys/vfs.h>    /* or <sys/statfs.h> */
-#endif /* DARWIN */
+#endif
 
 #define OPS_PER_PTR 32
 
@@ -50,15 +51,15 @@ namespace ceph {
  */
 
 class Logger;
-
+class ContextQueue;
 
 static inline void encode(const map<string,bufferptr> *attrset, bufferlist &bl) {
-  ::encode(*attrset, bl);
+  encode(*attrset, bl);
 }
 
 // this isn't the best place for these, but...
-void decode_str_str_map_to_bl(bufferlist::iterator& p, bufferlist *out);
-void decode_str_set_to_bl(bufferlist::iterator& p, bufferlist *out);
+void decode_str_str_map_to_bl(bufferlist::const_iterator& p, bufferlist *out);
+void decode_str_set_to_bl(bufferlist::const_iterator& p, bufferlist *out);
 
 // Flag bits
 typedef uint32_t osflagbits_t;
@@ -117,101 +118,46 @@ public:
   virtual const PerfCounters* get_perf_counters() const = 0;
 
   /**
-   * a sequencer orders transactions
+   * a collection also orders transactions
    *
-   * Any transactions queued under a given sequencer will be applied in
-   * sequence.  Transactions queued under different sequencers may run
+   * Any transactions queued under a given collection will be applied in
+   * sequence.  Transactions queued under different collections may run
    * in parallel.
    *
-   * Clients of ObjectStore create and maintain their own Sequencer objects.
-   * When a list of transactions is queued the caller specifies a Sequencer to be used.
-   *
+   * ObjectStore users my get collection handles with open_collection() (or,
+   * for bootstrapping a new collection, create_new_collection()).
    */
+  struct CollectionImpl : public RefCountedObject {
+    const coll_t cid;
 
-  /**
-   * ABC for Sequencer implementation, private to the ObjectStore derived class.
-   * created in ...::queue_transaction(s)
-   */
-  struct Sequencer_impl : public RefCountedObject {
-    CephContext* cct;
+    CollectionImpl(const coll_t& c)
+      : RefCountedObject(NULL, 0),
+	cid(c) {}
 
+    /// wait for any queued transactions to apply
     // block until any previous transactions are visible.  specifically,
     // collection_list and collection_empty need to reflect prior operations.
     virtual void flush() = 0;
-
-    // called when we are done with the impl.  the impl may have a different
-    // (longer) lifecycle than the Sequencer.
-    virtual void discard() {}
 
     /**
      * Async flush_commit
      *
      * There are two cases:
-     * 1) sequencer is currently idle: the method returns true.  c is
+     * 1) collection is currently idle: the method returns true.  c is
      *    not touched.
-     * 2) sequencer is not idle: the method returns false and c is
-     *    called asyncronously with a value of 0 once all transactions
-     *    queued on this sequencer prior to the call have been applied
+     * 2) collection is not idle: the method returns false and c is
+     *    called asynchronously with a value of 0 once all transactions
+     *    queued on this collection prior to the call have been applied
      *    and committed.
      */
-    virtual bool flush_commit(
-      Context *c ///< [in] context to call upon flush/commit
-      ) = 0; ///< @return true if idle, false otherwise
+    virtual bool flush_commit(Context *c) = 0;
 
-    Sequencer_impl(CephContext* cct) : RefCountedObject(NULL, 0), cct(cct)  {}
-    ~Sequencer_impl() override {}
-  };
-  typedef boost::intrusive_ptr<Sequencer_impl> Sequencer_implRef;
-
-  /**
-   * External (opaque) sequencer implementation
-   */
-  struct Sequencer {
-    string name;
-    spg_t shard_hint;
-    Sequencer_implRef p;
-
-    explicit Sequencer(string n)
-      : name(n), shard_hint(spg_t()), p(NULL) {
-    }
-    ~Sequencer() {
-      if (p)
-	p->discard();  // tell impl we are done with it
-    }
-
-    /// return a unique string identifier for this sequencer
-    const string& get_name() const {
-      return name;
-    }
-    /// wait for any queued transactions on this sequencer to apply
-    void flush() {
-      if (p)
-	p->flush();
-    }
-
-    /// @see Sequencer_impl::flush_commit()
-    bool flush_commit(Context *c) {
-      if (!p) {
-	return true;
-      } else {
-	return p->flush_commit(c);
-      }
-    }
-  };
-
-  struct CollectionImpl : public RefCountedObject {
-    virtual const coll_t &get_cid() = 0;
-    CollectionImpl() : RefCountedObject(NULL, 0) {}
-  };
-  typedef boost::intrusive_ptr<CollectionImpl> CollectionHandle;
-
-  struct CompatCollectionHandle : public CollectionImpl {
-    coll_t cid;
-    explicit CompatCollectionHandle(coll_t c) : cid(c) {}
-    const coll_t &get_cid() override {
+    const coll_t &get_cid() {
       return cid;
     }
   };
+  typedef boost::intrusive_ptr<CollectionImpl> CollectionHandle;
+
 
   /*********************************
    *
@@ -323,14 +269,14 @@ public:
    *   sobject_encoding detects an older/simpler version of oid
    *   present in pre-bobtail versions of ceph.  use_pool_override
    *   also detects a situation where the pool of an oid can be
-   *   override for legacy operations/buffers.  For non-legacy
-   *   implementation of ObjectStore, neither of these fields is
+   *   overridden for legacy operations/buffers.  For non-legacy
+   *   implementations of ObjectStore, neither of these fields are
    *   relevant.
    *
    *
    * TRANSACTION ISOLATION
    *
-   * Except as noted below, isolation is the responsibility of the
+   * Except as noted above, isolation is the responsibility of the
    * caller. In other words, if any storage element (storage element
    * == any of the four portions of an object as described above) is
    * altered by a transaction (including deletion), the caller
@@ -352,7 +298,7 @@ public:
    * applies independently to each transaction element. For example,
    * if a transaction contains two mutating elements "create A" and
    * "delete B". And an enumeration operation is performed while this
-   * transaction is pending. It is permissable for ObjectStore to
+   * transaction is pending. It is permissible for ObjectStore to
    * report any of the four possible combinations of the existence of
    * A and B.
    *
@@ -384,8 +330,6 @@ public:
       OP_COLL_SETATTRS = 26,  // cid, attrset
       OP_COLL_MOVE =    8,   // newcid, oldcid, oid
 
-      OP_STARTSYNC =    27,  // start a sync
-
       OP_RMATTRS =      28,  // cid, oid
       OP_COLL_RENAME =       29,  // cid, newcid
 
@@ -405,6 +349,8 @@ public:
       OP_TRY_RENAME = 41,   // oldcid, oldoid, newoid
 
       OP_COLL_SET_BITS = 42, // cid, bits
+
+      OP_MERGE_COLLECTION = 43, // cid, destination
     };
 
     // Transaction hint type
@@ -483,15 +429,13 @@ public:
       void encode(bufferlist& bl) const {
         bl.append((char*)this, sizeof(TransactionData));
       }
-      void decode(bufferlist::iterator &bl) {
+      void decode(bufferlist::const_iterator &bl) {
         bl.copy(sizeof(TransactionData), (char*)this);
       }
     } __attribute__ ((packed)) ;
 
   private:
     TransactionData data;
-
-    void *osr {nullptr}; // NULL on replay
 
     map<coll_t, __le32> coll_index;
     map<ghobject_t, __le32> object_index;
@@ -502,8 +446,6 @@ public:
     bufferlist data_bl;
     bufferlist op_bl;
 
-    bufferptr op_ptr;
-
     list<Context *> on_applied;
     list<Context *> on_commit;
     list<Context *> on_applied_sync;
@@ -511,47 +453,41 @@ public:
   public:
     Transaction() = default;
 
-    explicit Transaction(bufferlist::iterator &dp) {
+    explicit Transaction(bufferlist::const_iterator &dp) {
       decode(dp);
     }
     explicit Transaction(bufferlist &nbl) {
-      bufferlist::iterator dp = nbl.begin();
+      auto dp = nbl.cbegin();
       decode(dp);
     }
 
     // override default move operations to reset default values
     Transaction(Transaction&& other) noexcept :
       data(std::move(other.data)),
-      osr(other.osr),
       coll_index(std::move(other.coll_index)),
       object_index(std::move(other.object_index)),
       coll_id(other.coll_id),
       object_id(other.object_id),
       data_bl(std::move(other.data_bl)),
       op_bl(std::move(other.op_bl)),
-      op_ptr(std::move(other.op_ptr)),
       on_applied(std::move(other.on_applied)),
       on_commit(std::move(other.on_commit)),
       on_applied_sync(std::move(other.on_applied_sync)) {
-      other.osr = nullptr;
       other.coll_id = 0;
       other.object_id = 0;
     }
 
     Transaction& operator=(Transaction&& other) noexcept {
       data = std::move(other.data);
-      osr = other.osr;
       coll_index = std::move(other.coll_index);
       object_index = std::move(other.object_index);
       coll_id = other.coll_id;
       object_id = other.object_id;
       data_bl = std::move(other.data_bl);
       op_bl = std::move(other.op_bl);
-      op_ptr = std::move(other.op_ptr);
       on_applied = std::move(other.on_applied);
       on_commit = std::move(other.on_commit);
       on_applied_sync = std::move(other.on_applied_sync);
-      other.osr = nullptr;
       other.coll_id = 0;
       other.object_id = 0;
       return *this;
@@ -559,6 +495,11 @@ public:
 
     Transaction(const Transaction& other) = default;
     Transaction& operator=(const Transaction& other) = default;
+
+    // expose object_index for FileStore::Op's benefit
+    const map<ghobject_t, __le32>& get_object_index() const {
+      return object_index;
+    }
 
     /* Operations on callback contexts */
     void register_on_applied(Context *c) {
@@ -579,26 +520,45 @@ public:
       register_on_applied(new ContainerContext<RunOnDeleteRef>(_complete));
       register_on_commit(new ContainerContext<RunOnDeleteRef>(_complete));
     }
+    bool has_contexts() const {
+      return
+	!on_commit.empty() ||
+	!on_applied.empty() ||
+	!on_applied_sync.empty();
+    }
 
     static void collect_contexts(
       vector<Transaction>& t,
       Context **out_on_applied,
       Context **out_on_commit,
       Context **out_on_applied_sync) {
-      assert(out_on_applied);
-      assert(out_on_commit);
-      assert(out_on_applied_sync);
+      ceph_assert(out_on_applied);
+      ceph_assert(out_on_commit);
+      ceph_assert(out_on_applied_sync);
       list<Context *> on_applied, on_commit, on_applied_sync;
-      for (vector<Transaction>::iterator i = t.begin();
-	   i != t.end();
-	   ++i) {
-	on_applied.splice(on_applied.end(), (*i).on_applied);
-	on_commit.splice(on_commit.end(), (*i).on_commit);
-	on_applied_sync.splice(on_applied_sync.end(), (*i).on_applied_sync);
+      for (auto& i : t) {
+	on_applied.splice(on_applied.end(), i.on_applied);
+	on_commit.splice(on_commit.end(), i.on_commit);
+	on_applied_sync.splice(on_applied_sync.end(), i.on_applied_sync);
       }
       *out_on_applied = C_Contexts::list_to_context(on_applied);
       *out_on_commit = C_Contexts::list_to_context(on_commit);
       *out_on_applied_sync = C_Contexts::list_to_context(on_applied_sync);
+    }
+    static void collect_contexts(
+      vector<Transaction>& t,
+      list<Context*> *out_on_applied,
+      list<Context*> *out_on_commit,
+      list<Context*> *out_on_applied_sync) {
+      ceph_assert(out_on_applied);
+      ceph_assert(out_on_commit);
+      ceph_assert(out_on_applied_sync);
+      for (auto& i : t) {
+	out_on_applied->splice(out_on_applied->end(), i.on_applied);
+	out_on_commit->splice(out_on_commit->end(), i.on_commit);
+	out_on_applied_sync->splice(out_on_applied_sync->end(),
+				    i.on_applied_sync);
+      }
     }
 
     Context *get_on_applied() {
@@ -639,7 +599,6 @@ public:
 
       switch (op->op) {
       case OP_NOP:
-      case OP_STARTSYNC:
         break;
 
       case OP_TOUCH:
@@ -658,17 +617,17 @@ public:
       case OP_ZERO:
       case OP_TRUNCATE:
       case OP_SETALLOCHINT:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         break;
 
       case OP_CLONERANGE2:
       case OP_CLONE:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         op->dest_oid = om[op->dest_oid];
@@ -681,24 +640,24 @@ public:
       case OP_COLL_SETATTRS:
       case OP_COLL_HINT:
       case OP_COLL_SET_BITS:
-        assert(op->cid < cm.size());
+        ceph_assert(op->cid < cm.size());
         op->cid = cm[op->cid];
         break;
 
       case OP_COLL_ADD:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_cid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_cid < om.size());
         op->cid = cm[op->cid];
         op->dest_cid = cm[op->dest_cid];
         op->oid = om[op->oid];
         break;
 
       case OP_COLL_MOVE_RENAME:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_cid < cm.size());
-        assert(op->dest_oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_cid < cm.size());
+        ceph_assert(op->dest_oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         op->dest_cid = cm[op->dest_cid];
@@ -706,38 +665,41 @@ public:
         break;
 
       case OP_TRY_RENAME:
-        assert(op->cid < cm.size());
-        assert(op->oid < om.size());
-        assert(op->dest_oid < om.size());
+        ceph_assert(op->cid < cm.size());
+        ceph_assert(op->oid < om.size());
+        ceph_assert(op->dest_oid < om.size());
         op->cid = cm[op->cid];
         op->oid = om[op->oid];
         op->dest_oid = om[op->dest_oid];
 	break;
 
       case OP_SPLIT_COLLECTION2:
-        assert(op->cid < cm.size());
-	assert(op->dest_cid < cm.size());
+        ceph_assert(op->cid < cm.size());
+	ceph_assert(op->dest_cid < cm.size());
+        op->cid = cm[op->cid];
+        op->dest_cid = cm[op->dest_cid];
+        break;
+
+      case OP_MERGE_COLLECTION:
+        ceph_assert(op->cid < cm.size());
+	ceph_assert(op->dest_cid < cm.size());
         op->cid = cm[op->cid];
         op->dest_cid = cm[op->dest_cid];
         break;
 
       default:
-        assert(0 == "Unkown OP");
+        ceph_abort_msg("Unknown OP");
       }
     }
     void _update_op_bl(
       bufferlist& bl,
       vector<__le32> &cm,
       vector<__le32> &om) {
+      for (auto& bp : bl.buffers()) {
+        ceph_assert(bp.length() % sizeof(Op) == 0);
 
-      list<bufferptr> list = bl.buffers();
-      std::list<bufferptr>::iterator p;
-
-      for(p = list.begin(); p != list.end(); ++p) {
-        assert(p->length() % sizeof(Op) == 0);
-
-        char* raw_p = p->c_str();
-        char* raw_end = raw_p + p->length();
+        char* raw_p = const_cast<char*>(bp.c_str());
+        char* raw_end = raw_p + bp.length();
         while (raw_p < raw_end) {
           _update_op(reinterpret_cast<Op*>(raw_p), cm, om);
           raw_p += sizeof(Op);
@@ -777,10 +739,12 @@ public:
 
       //the other.op_bl SHOULD NOT be changes during append operation,
       //we use additional bufferlist to avoid this problem
-      bufferptr other_op_bl_ptr(other.op_bl.length());
-      other.op_bl.copy(0, other.op_bl.length(), other_op_bl_ptr.c_str());
       bufferlist other_op_bl;
-      other_op_bl.append(other_op_bl_ptr);
+      {
+        bufferptr other_op_bl_ptr(other.op_bl.length());
+        other.op_bl.copy(0, other.op_bl.length(), other_op_bl_ptr.c_str());
+        other_op_bl.append(std::move(other_op_bl_ptr));
+      }
 
       //update other_op_bl with cm & om
       //When the other is appended to current transaction, all coll_index and
@@ -824,10 +788,11 @@ public:
 
     /// Retain old version for regression testing purposes
     uint64_t get_encoded_bytes_test() {
+      using ceph::encode;
       //layout: data_bl + op_bl + coll_index + object_index + data
       bufferlist bl;
-      ::encode(coll_index, bl);
-      ::encode(object_index, bl);
+      encode(coll_index, bl);
+      encode(object_index, bl);
 
       return data_bl.length() +
 	op_bl.length() +
@@ -856,24 +821,16 @@ public:
     /// offset of buffer as aligned to destination within object.
     int get_data_alignment() {
       if (!data.largest_data_len)
-	return -1;
+	return 0;
       return (0 - get_data_offset()) & ~CEPH_PAGE_MASK;
     }
     /// Is the Transaction empty (no operations)
     bool empty() {
       return !data.ops;
     }
-    /// Number of operations in the transation
+    /// Number of operations in the transaction
     int get_num_ops() {
       return data.ops;
-    }
-
-    void set_osr(void *s) {
-      osr = s;
-    }
-
-    void *get_osr() {
-      return osr;
     }
 
     /**
@@ -891,7 +848,7 @@ public:
       uint64_t ops;
       char* op_buffer_p;
 
-      bufferlist::iterator data_bl_p;
+      bufferlist::const_iterator data_bl_p;
 
     public:
       vector<coll_t> colls;
@@ -900,12 +857,12 @@ public:
     private:
       explicit iterator(Transaction *t)
         : t(t),
-	  data_bl_p(t->data_bl.begin()),
+	  data_bl_p(t->data_bl.cbegin()),
           colls(t->coll_index.size()),
           objects(t->object_index.size()) {
 
         ops = t->data.ops;
-        op_buffer_p = t->op_bl.get_contiguous(0, t->data.ops * sizeof(Op));
+        op_buffer_p = t->op_bl.c_str();
 
         map<coll_t, __le32>::iterator coll_index_p;
         for (coll_index_p = t->coll_index.begin();
@@ -930,7 +887,7 @@ public:
         return ops > 0;
       }
       Op* decode_op() {
-        assert(ops > 0);
+        ceph_assert(ops > 0);
 
         Op* op = reinterpret_cast<Op*>(op_buffer_p);
         op_buffer_p += sizeof(Op);
@@ -939,38 +896,44 @@ public:
         return op;
       }
       string decode_string() {
+	using ceph::decode;
         string s;
-        ::decode(s, data_bl_p);
+        decode(s, data_bl_p);
         return s;
       }
       void decode_bp(bufferptr& bp) {
-        ::decode(bp, data_bl_p);
+	using ceph::decode;
+        decode(bp, data_bl_p);
       }
       void decode_bl(bufferlist& bl) {
-        ::decode(bl, data_bl_p);
+	using ceph::decode;
+        decode(bl, data_bl_p);
       }
       void decode_attrset(map<string,bufferptr>& aset) {
-        ::decode(aset, data_bl_p);
+	using ceph::decode;
+        decode(aset, data_bl_p);
       }
       void decode_attrset(map<string,bufferlist>& aset) {
-        ::decode(aset, data_bl_p);
+	using ceph::decode;
+        decode(aset, data_bl_p);
       }
       void decode_attrset_bl(bufferlist *pbl) {
 	decode_str_str_map_to_bl(data_bl_p, pbl);
       }
       void decode_keyset(set<string> &keys){
-        ::decode(keys, data_bl_p);
+	using ceph::decode;
+        decode(keys, data_bl_p);
       }
       void decode_keyset_bl(bufferlist *pbl){
         decode_str_set_to_bl(data_bl_p, pbl);
       }
 
       const ghobject_t &get_oid(__le32 oid_id) {
-        assert(oid_id < objects.size());
+        ceph_assert(oid_id < objects.size());
         return objects[oid_id];
       }
       const coll_t &get_cid(__le32 cid_id) {
-        assert(cid_id < colls.size());
+        ceph_assert(cid_id < colls.size());
         return colls[cid_id];
       }
       uint32_t get_fadvise_flags() const {
@@ -994,15 +957,12 @@ private:
      * form of seat belts for the decoder.
      */
     Op* _get_next_op() {
-      if (op_ptr.length() == 0 || op_ptr.offset() >= op_ptr.length()) {
-        op_ptr = bufferptr(sizeof(Op) * OPS_PER_PTR);
+      if (op_bl.get_append_buffer_unused_tail_length() < sizeof(Op)) {
+        op_bl.reserve(sizeof(Op) * OPS_PER_PTR);
       }
-      bufferptr ptr(op_ptr, 0, sizeof(Op));
-      op_bl.append(ptr);
-
-      op_ptr.set_offset(op_ptr.offset() + sizeof(Op));
-
-      char* p = ptr.c_str();
+      // append_hole ensures bptr merging. Even huge number of ops
+      // shouldn't result in overpopulating bl::_buffers.
+      char* const p = op_bl.append_hole(sizeof(Op)).c_str();
       memset(p, 0, sizeof(Op));
       return reinterpret_cast<Op*>(p);
     }
@@ -1026,12 +986,6 @@ private:
     }
 
 public:
-    /// Commence a global file system sync operation.
-    void start_sync() {
-      Op* _op = _get_next_op();
-      _op->op = OP_STARTSYNC;
-      data.ops++;
-    }
     /// noop. 'nuf said
     void nop() {
       Op* _op = _get_next_op();
@@ -1060,9 +1014,12 @@ public:
      * newly provided data. More sophisticated implementations of
      * ObjectStore will omit the untouched data and store it as a
      * "hole" in the file.
+     *
+     * Note that a 0-length write does not affect the size of the object.
      */
     void write(const coll_t& cid, const ghobject_t& oid, uint64_t off, uint64_t len,
 	       const bufferlist& write_data, uint32_t flags = 0) {
+      using ceph::encode;
       uint32_t orig_len = data_bl.length();
       Op* _op = _get_next_op();
       _op->op = OP_WRITE;
@@ -1070,9 +1027,9 @@ public:
       _op->oid = _get_object_id(oid);
       _op->off = off;
       _op->len = len;
-      ::encode(write_data, data_bl);
+      encode(write_data, data_bl);
 
-      assert(len == write_data.length());
+      ceph_assert(len == write_data.length());
       data.fadvise_flags = data.fadvise_flags | flags;
       if (write_data.length() > data.largest_data_len) {
 	data.largest_data_len = write_data.length();
@@ -1085,6 +1042,11 @@ public:
      * zero out the indicated byte range within an object. Some
      * ObjectStore instances may optimize this to release the
      * underlying storage space.
+     *
+     * If the zero range extends beyond the end of the object, the object
+     * size is extended, just as if we were writing a buffer full of zeros.
+     * EXCEPT if the length is 0, in which case (just like a 0-length write)
+     * we do not adjust the object size.
      */
     void zero(const coll_t& cid, const ghobject_t& oid, uint64_t off, uint64_t len) {
       Op* _op = _get_next_op();
@@ -1119,30 +1081,33 @@ public:
     }
     /// Set an xattr of an object
     void setattr(const coll_t& cid, const ghobject_t& oid, const string& s, bufferlist& val) {
+      using ceph::encode;
       Op* _op = _get_next_op();
       _op->op = OP_SETATTR;
       _op->cid = _get_coll_id(cid);
       _op->oid = _get_object_id(oid);
-      ::encode(s, data_bl);
-      ::encode(val, data_bl);
+      encode(s, data_bl);
+      encode(val, data_bl);
       data.ops++;
     }
     /// Set multiple xattrs of an object
     void setattrs(const coll_t& cid, const ghobject_t& oid, const map<string,bufferptr>& attrset) {
+      using ceph::encode;
       Op* _op = _get_next_op();
       _op->op = OP_SETATTRS;
       _op->cid = _get_coll_id(cid);
       _op->oid = _get_object_id(oid);
-      ::encode(attrset, data_bl);
+      encode(attrset, data_bl);
       data.ops++;
     }
     /// Set multiple xattrs of an object
     void setattrs(const coll_t& cid, const ghobject_t& oid, const map<string,bufferlist>& attrset) {
+      using ceph::encode;
       Op* _op = _get_next_op();
       _op->op = OP_SETATTRS;
       _op->cid = _get_coll_id(cid);
       _op->oid = _get_object_id(oid);
-      ::encode(attrset, data_bl);
+      encode(attrset, data_bl);
       data.ops++;
     }
     /// remove an xattr from an object
@@ -1152,11 +1117,12 @@ public:
     }
     /// remove an xattr from an object
     void rmattr(const coll_t& cid, const ghobject_t& oid, const string& s) {
+      using ceph::encode;
       Op* _op = _get_next_op();
       _op->op = OP_RMATTR;
       _op->cid = _get_coll_id(cid);
       _op->oid = _get_object_id(oid);
-      ::encode(s, data_bl);
+      encode(s, data_bl);
       data.ops++;
     }
     /// remove all xattrs from an object
@@ -1231,11 +1197,12 @@ public:
      *               data along with the hint type.
      */
     void collection_hint(const coll_t& cid, uint32_t type, const bufferlist& hint) {
+      using ceph::encode;
       Op* _op = _get_next_op();
       _op->op = OP_COLL_HINT;
       _op->cid = _get_coll_id(cid);
       _op->hint_type = type;
-      ::encode(hint, data_bl);
+      encode(hint, data_bl);
       data.ops++;
     }
 
@@ -1246,7 +1213,7 @@ public:
       _op->cid = _get_coll_id(cid);
       data.ops++;
     }
-    void collection_move(const coll_t& cid, coll_t oldcid, const ghobject_t& oid)
+    void collection_move(const coll_t& cid, const coll_t &oldcid, const ghobject_t& oid)
       __attribute__ ((deprecated)) {
 	// NOTE: we encode this as a fixed combo of ADD + REMOVE.  they
 	// always appear together, so this is effectively a single MOVE.
@@ -1264,7 +1231,7 @@ public:
 	data.ops++;
       }
     void collection_move_rename(const coll_t& oldcid, const ghobject_t& oldoid,
-				coll_t cid, const ghobject_t& oid) {
+				const coll_t &cid, const ghobject_t& oid) {
       Op* _op = _get_next_op();
       _op->op = OP_COLL_MOVE_RENAME;
       _op->cid = _get_coll_id(oldcid);
@@ -1273,7 +1240,7 @@ public:
       _op->dest_oid = _get_object_id(oid);
       data.ops++;
     }
-    void try_rename(coll_t cid, const ghobject_t& oldoid,
+    void try_rename(const coll_t &cid, const ghobject_t& oldoid,
                     const ghobject_t& oid) {
       Op* _op = _get_next_op();
       _op->op = OP_TRY_RENAME;
@@ -1285,7 +1252,7 @@ public:
 
     /// Remove omap from oid
     void omap_clear(
-      coll_t cid,           ///< [in] Collection containing oid
+      const coll_t &cid,           ///< [in] Collection containing oid
       const ghobject_t &oid  ///< [in] Object from which to remove omap
       ) {
       Op* _op = _get_next_op();
@@ -1300,17 +1267,18 @@ public:
       const ghobject_t &oid,                ///< [in] Object to update
       const map<string, bufferlist> &attrset ///< [in] Replacement keys and values
       ) {
+      using ceph::encode;
       Op* _op = _get_next_op();
       _op->op = OP_OMAP_SETKEYS;
       _op->cid = _get_coll_id(cid);
       _op->oid = _get_object_id(oid);
-      ::encode(attrset, data_bl);
+      encode(attrset, data_bl);
       data.ops++;
     }
 
     /// Set keys on an oid omap (bufferlist variant).
     void omap_setkeys(
-      coll_t cid,                           ///< [in] Collection containing oid
+      const coll_t &cid,                           ///< [in] Collection containing oid
       const ghobject_t &oid,                ///< [in] Object to update
       const bufferlist &attrset_bl          ///< [in] Replacement keys and values
       ) {
@@ -1324,21 +1292,22 @@ public:
 
     /// Remove keys from oid omap
     void omap_rmkeys(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object from which to remove the omap
       const set<string> &keys ///< [in] Keys to clear
       ) {
+      using ceph::encode;
       Op* _op = _get_next_op();
       _op->op = OP_OMAP_RMKEYS;
       _op->cid = _get_coll_id(cid);
       _op->oid = _get_object_id(oid);
-      ::encode(keys, data_bl);
+      encode(keys, data_bl);
       data.ops++;
     }
 
     /// Remove keys from oid omap
     void omap_rmkeys(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object from which to remove the omap
       const bufferlist &keys_bl ///< [in] Keys to clear
       ) {
@@ -1352,41 +1321,43 @@ public:
 
     /// Remove key range from oid omap
     void omap_rmkeyrange(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object from which to remove the omap keys
       const string& first,    ///< [in] first key in range
       const string& last      ///< [in] first key past range, range is [first,last)
       ) {
+        using ceph::encode;
 	Op* _op = _get_next_op();
 	_op->op = OP_OMAP_RMKEYRANGE;
 	_op->cid = _get_coll_id(cid);
 	_op->oid = _get_object_id(oid);
-	::encode(first, data_bl);
-	::encode(last, data_bl);
+	encode(first, data_bl);
+	encode(last, data_bl);
 	data.ops++;
       }
 
     /// Set omap header
     void omap_setheader(
-      coll_t cid,             ///< [in] Collection containing oid
+      const coll_t &cid,             ///< [in] Collection containing oid
       const ghobject_t &oid,  ///< [in] Object
       const bufferlist &bl    ///< [in] Header value
       ) {
+      using ceph::encode;
       Op* _op = _get_next_op();
       _op->op = OP_OMAP_SETHEADER;
       _op->cid = _get_coll_id(cid);
       _op->oid = _get_object_id(oid);
-      ::encode(bl, data_bl);
+      encode(bl, data_bl);
       data.ops++;
     }
 
     /// Split collection based on given prefixes, objects matching the specified bits/rem are
     /// moved to the new collection
     void split_collection(
-      coll_t cid,
+      const coll_t &cid,
       uint32_t bits,
       uint32_t rem,
-      coll_t destination) {
+      const coll_t &destination) {
       Op* _op = _get_next_op();
       _op->op = OP_SPLIT_COLLECTION2;
       _op->cid = _get_coll_id(cid);
@@ -1396,8 +1367,21 @@ public:
       data.ops++;
     }
 
-    void collection_set_bits(
+    /// Merge collection into another.
+    void merge_collection(
       coll_t cid,
+      coll_t destination,
+      uint32_t bits) {
+      Op* _op = _get_next_op();
+      _op->op = OP_MERGE_COLLECTION;
+      _op->cid = _get_coll_id(cid);
+      _op->dest_cid = _get_coll_id(destination);
+      _op->split_bits = bits;
+      data.ops++;
+    }
+
+    void collection_set_bits(
+      const coll_t &cid,
       int bits) {
       Op* _op = _get_next_op();
       _op->op = OP_COLL_SET_BITS;
@@ -1409,7 +1393,7 @@ public:
     /// Set allocation hint for an object
     /// make 0 values(expected_object_size, expected_write_size) noops for all implementations
     void set_alloc_hint(
-      coll_t cid,
+      const coll_t &cid,
       const ghobject_t &oid,
       uint64_t expected_object_size,
       uint64_t expected_write_size,
@@ -1428,22 +1412,22 @@ public:
     void encode(bufferlist& bl) const {
       //layout: data_bl + op_bl + coll_index + object_index + data
       ENCODE_START(9, 9, bl);
-      ::encode(data_bl, bl);
-      ::encode(op_bl, bl);
-      ::encode(coll_index, bl);
-      ::encode(object_index, bl);
+      encode(data_bl, bl);
+      encode(op_bl, bl);
+      encode(coll_index, bl);
+      encode(object_index, bl);
       data.encode(bl);
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::iterator &bl) {
+    void decode(bufferlist::const_iterator &bl) {
       DECODE_START(9, bl);
       DECODE_OLDEST(9);
 
-      ::decode(data_bl, bl);
-      ::decode(op_bl, bl);
-      ::decode(coll_index, bl);
-      ::decode(object_index, bl);
+      decode(data_bl, bl);
+      decode(op_bl, bl);
+      decode(coll_index, bl);
+      decode(object_index, bl);
       data.decode(bl);
       coll_id = coll_index.size();
       object_id = object_index.size();
@@ -1455,65 +1439,20 @@ public:
     static void generate_test_instances(list<Transaction*>& o);
   };
 
-  // synchronous wrappers
-  unsigned apply_transaction(Sequencer *osr, Transaction&& t, Context *ondisk=0) {
+  int queue_transaction(CollectionHandle& ch,
+			Transaction&& t,
+			TrackedOpRef op = TrackedOpRef(),
+			ThreadPool::TPHandle *handle = NULL) {
     vector<Transaction> tls;
     tls.push_back(std::move(t));
-    return apply_transactions(osr, tls, ondisk);
-  }
-  unsigned apply_transactions(Sequencer *osr, vector<Transaction>& tls, Context *ondisk=0);
-
-  int queue_transaction(Sequencer *osr, Transaction&& t, Context *onreadable, Context *ondisk=0,
-				Context *onreadable_sync=0,
-				TrackedOpRef op = TrackedOpRef(),
-				ThreadPool::TPHandle *handle = NULL) {
-    vector<Transaction> tls;
-    tls.push_back(std::move(t));
-    return queue_transactions(osr, tls, onreadable, ondisk, onreadable_sync,
-	                      op, handle);
-  }
-
-  int queue_transactions(Sequencer *osr, vector<Transaction>& tls,
-			 Context *onreadable, Context *ondisk=0,
-			 Context *onreadable_sync=0,
-			 TrackedOpRef op = TrackedOpRef(),
-			 ThreadPool::TPHandle *handle = NULL) {
-    assert(!tls.empty());
-    tls.back().register_on_applied(onreadable);
-    tls.back().register_on_commit(ondisk);
-    tls.back().register_on_applied_sync(onreadable_sync);
-    return queue_transactions(osr, tls, op, handle);
+    return queue_transactions(ch, tls, op, handle);
   }
 
   virtual int queue_transactions(
-    Sequencer *osr, vector<Transaction>& tls,
+    CollectionHandle& ch, vector<Transaction>& tls,
     TrackedOpRef op = TrackedOpRef(),
     ThreadPool::TPHandle *handle = NULL) = 0;
 
-
-  int queue_transactions(
-    Sequencer *osr,
-    vector<Transaction>& tls,
-    Context *onreadable,
-    Context *oncommit,
-    Context *onreadable_sync,
-    Context *oncomplete,
-    TrackedOpRef op);
-
-  int queue_transaction(
-    Sequencer *osr,
-    Transaction&& t,
-    Context *onreadable,
-    Context *oncommit,
-    Context *onreadable_sync,
-    Context *oncomplete,
-    TrackedOpRef op) {
-
-    vector<Transaction> tls;
-    tls.push_back(std::move(t));
-    return queue_transactions(
-      osr, tls, onreadable, oncommit, onreadable_sync, oncomplete, op);
-  }
 
  public:
   ObjectStore(CephContext* cct,
@@ -1531,8 +1470,10 @@ public:
 
   virtual void get_db_statistics(Formatter *f) { }
   virtual void generate_db_histogram(Formatter *f) { }
-  virtual void flush_cache() { }
+  virtual int flush_cache(ostream *os = NULL) { return -1; }
   virtual void dump_perf_counters(Formatter *f) {}
+  virtual void dump_cache_stats(Formatter *f) {}
+  virtual void dump_cache_stats(ostream& os) {}
 
   virtual string get_type() = 0;
 
@@ -1541,6 +1482,9 @@ public:
   virtual int mount() = 0;
   virtual int umount() = 0;
   virtual int fsck(bool deep) {
+    return -EOPNOTSUPP;
+  }
+  virtual int repair(bool deep) {
     return -EOPNOTSUPP;
   }
 
@@ -1561,6 +1505,16 @@ public:
   virtual bool wants_journal() = 0;  //< prefers a journal
   virtual bool allows_journal() = 0; //< allows a journal
 
+  /// enumerate hardware devices (by 'devname', e.g., 'sda' as in /sys/block/sda)
+  virtual int get_devices(std::set<string> *devls) {
+    return -EOPNOTSUPP;
+  }
+
+  /// true if a txn is readable immediately after it is queued.
+  virtual bool is_sync_onreadable() const {
+    return true;
+  }
+
   /**
    * is_rotational
    *
@@ -1575,11 +1529,38 @@ public:
     return true;
   }
 
+  /**
+   * is_journal_rotational
+   *
+   * Check whether journal is backed by a rotational (HDD) or non-rotational
+   * (SSD) device.
+   *
+   *
+   * @return true for HDD, false for SSD
+   */
+  virtual bool is_journal_rotational() {
+    return true;
+  }
+
+  virtual string get_default_device_class() {
+    return is_rotational() ? "hdd" : "ssd";
+  }
+
+  virtual int get_numa_node(
+    int *numa_node,
+    set<int> *nodes,
+    set<string> *failed) {
+    return -EOPNOTSUPP;
+  }
+
+
   virtual bool can_sort_nibblewise() {
     return false;   // assume a backend cannot, unless it says otherwise
   }
 
-  virtual int statfs(struct store_statfs_t *buf) = 0;
+  virtual int statfs(struct store_statfs_t *buf,
+		     osd_alert_list_t* alerts = nullptr) = 0;
+  virtual int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) = 0;
 
   virtual void collect_metadata(map<string,string> *pm) { }
 
@@ -1628,10 +1609,24 @@ public:
    * Provide a trivial handle as a default to avoid converting legacy
    * implementations.
    */
-  virtual CollectionHandle open_collection(const coll_t &cid) {
-    return new CompatCollectionHandle(cid);
-  }
+  virtual CollectionHandle open_collection(const coll_t &cid) = 0;
 
+  /**
+   * get a collection handle for a soon-to-be-created collection
+   *
+   * This handle must be used by queue_transaction that includes a
+   * create_collection call in order to become valid.  It will become the
+   * reference to the created collection.
+   */
+  virtual CollectionHandle create_new_collection(const coll_t &cid) = 0;
+
+  /**
+   * set ContextQueue for a collection
+   *
+   * After that, oncommits of Transaction will queue into commit_queue.
+   * And osd ShardThread will call oncommits.
+   */
+  virtual void set_collection_commit_queue(const coll_t &cid, ContextQueue *commit_queue) = 0;
 
   /**
    * Synchronous read operations
@@ -1644,10 +1639,7 @@ public:
    * @param oid oid of object
    * @returns true if object exists, false otherwise
    */
-  virtual bool exists(const coll_t& cid, const ghobject_t& oid) = 0; // useful?
-  virtual bool exists(CollectionHandle& c, const ghobject_t& oid) {
-    return exists(c->get_cid(), oid);
-  }
+  virtual bool exists(CollectionHandle& c, const ghobject_t& oid) = 0;
   /**
    * set_collection_opts -- set pool options for a collectioninformation for an object
    *
@@ -1656,7 +1648,7 @@ public:
    * @returns 0 on success, negative error code on failure.
    */
   virtual int set_collection_opts(
-    const coll_t& cid,
+    CollectionHandle& c,
     const pool_opts_t& opts) = 0;
 
   /**
@@ -1669,18 +1661,10 @@ public:
    * @returns 0 on success, negative error code on failure.
    */
   virtual int stat(
-    const coll_t& cid,
-    const ghobject_t& oid,
-    struct stat *st,
-    bool allow_eio = false) = 0; // struct stat?
-  virtual int stat(
     CollectionHandle &c,
     const ghobject_t& oid,
     struct stat *st,
-    bool allow_eio = false) {
-    return stat(c->get_cid(), oid, st, allow_eio);
-  }
-
+    bool allow_eio = false) = 0;
   /**
    * read -- read a byte range of data from an object
    *
@@ -1693,27 +1677,15 @@ public:
    * @param len number of bytes to be read
    * @param bl output bufferlist
    * @param op_flags is CEPH_OSD_OP_FLAG_*
-   * @param allow_eio if false, assert on -EIO operation failure
    * @returns number of bytes read on success, or negative error code on failure.
    */
-   virtual int read(
-    const coll_t& cid,
-    const ghobject_t& oid,
-    uint64_t offset,
-    size_t len,
-    bufferlist& bl,
-    uint32_t op_flags = 0,
-    bool allow_eio = false) = 0;
    virtual int read(
      CollectionHandle &c,
      const ghobject_t& oid,
      uint64_t offset,
      size_t len,
      bufferlist& bl,
-     uint32_t op_flags = 0,
-     bool allow_eio = false) {
-     return read(c->get_cid(), oid, offset, len, bl, op_flags, allow_eio);
-   }
+     uint32_t op_flags = 0) = 0;
 
   /**
    * fiemap -- get extent map of data of an object
@@ -1731,19 +1703,10 @@ public:
    * @param bl output bufferlist for extent map information.
    * @returns 0 on success, negative error code on failure.
    */
-   virtual int fiemap(const coll_t& cid, const ghobject_t& oid,
- 		     uint64_t offset, size_t len, bufferlist& bl) = 0;
-   virtual int fiemap(const coll_t& cid, const ghobject_t& oid,
- 		     uint64_t offset, size_t len,
- 		     map<uint64_t, uint64_t>& destmap) = 0;
    virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
- 		     uint64_t offset, size_t len, bufferlist& bl) {
-     return fiemap(c->get_cid(), oid, offset, len, bl);
-   }
+		      uint64_t offset, size_t len, bufferlist& bl) = 0;
    virtual int fiemap(CollectionHandle& c, const ghobject_t& oid,
- 		     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) {
-     return fiemap(c->get_cid(), oid, offset, len, destmap);
-   }
+		      uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) = 0;
 
   /**
    * getattr -- get an xattr of an object
@@ -1754,12 +1717,8 @@ public:
    * @param value place to put output result.
    * @returns 0 on success, negative error code on failure.
    */
-  virtual int getattr(const coll_t& cid, const ghobject_t& oid,
-		      const char *name, bufferptr& value) = 0;
   virtual int getattr(CollectionHandle &c, const ghobject_t& oid,
-		      const char *name, bufferptr& value) {
-    return getattr(c->get_cid(), oid, name, value);
-  }
+		      const char *name, bufferptr& value) = 0;
 
   /**
    * getattr -- get an xattr of an object
@@ -1770,21 +1729,6 @@ public:
    * @param value place to put output result.
    * @returns 0 on success, negative error code on failure.
    */
-  int getattr(const coll_t& cid, const ghobject_t& oid, const char *name, bufferlist& value) {
-    bufferptr bp;
-    int r = getattr(cid, oid, name, bp);
-    if (bp.length())
-      value.push_back(bp);
-    return r;
-  }
-  int getattr(
-    coll_t cid, const ghobject_t& oid,
-    const string& name, bufferlist& value) {
-    bufferptr bp;
-    int r = getattr(cid, oid, name.c_str(), bp);
-    value.push_back(bp);
-    return r;
-  }
   int getattr(
     CollectionHandle &c, const ghobject_t& oid,
     const string& name, bufferlist& value) {
@@ -1802,12 +1746,8 @@ public:
    * @param aset place to put output result.
    * @returns 0 on success, negative error code on failure.
    */
-  virtual int getattrs(const coll_t& cid, const ghobject_t& oid,
-		       map<string,bufferptr>& aset) = 0;
   virtual int getattrs(CollectionHandle &c, const ghobject_t& oid,
-		       map<string,bufferptr>& aset) {
-    return getattrs(c->get_cid(), oid, aset);
-  }
+		       map<string,bufferptr>& aset) = 0;
 
   /**
    * getattrs -- get all of the xattrs of an object
@@ -1817,16 +1757,6 @@ public:
    * @param aset place to put output result.
    * @returns 0 on success, negative error code on failure.
    */
-  int getattrs(const coll_t& cid, const ghobject_t& oid, map<string,bufferlist>& aset) {
-    map<string,bufferptr> bmap;
-    int r = getattrs(cid, oid, bmap);
-    for (map<string,bufferptr>::iterator i = bmap.begin();
-	i != bmap.end();
-	++i) {
-      aset[i->first].append(i->second);
-    }
-    return r;
-  }
   int getattrs(CollectionHandle &c, const ghobject_t& oid,
 	       map<string,bufferlist>& aset) {
     map<string,bufferptr> bmap;
@@ -1865,7 +1795,7 @@ public:
    * @param empty true if the specified collection is empty, false otherwise
    * @returns 0 on success, negative error code on failure.
    */
-  virtual int collection_empty(const coll_t& c, bool *empty) = 0;
+  virtual int collection_empty(CollectionHandle& c, bool *empty) = 0;
 
   /**
    * return the number of significant bits of the coll_t::pgid.
@@ -1874,7 +1804,7 @@ public:
    * set.  A legacy backend may return -EAGAIN if the value is unavailable
    * (because we upgraded from an older version, e.g., FileStore).
    */
-  virtual int collection_bits(const coll_t& c) = 0;
+  virtual int collection_bits(CollectionHandle& c) = 0;
 
 
   /**
@@ -1889,96 +1819,51 @@ public:
    * @param next [out] next item sorts >= this value
    * @return zero on success, or negative error
    */
-  virtual int collection_list(const coll_t& c,
-			      const ghobject_t& start, const ghobject_t& end,
-			      int max,
-			      vector<ghobject_t> *ls, ghobject_t *next) = 0;
   virtual int collection_list(CollectionHandle &c,
 			      const ghobject_t& start, const ghobject_t& end,
 			      int max,
-			      vector<ghobject_t> *ls, ghobject_t *next) {
-    return collection_list(c->get_cid(), start, end, max, ls, next);
-  }
+			      vector<ghobject_t> *ls, ghobject_t *next) = 0;
 
 
   /// OMAP
   /// Get omap contents
   virtual int omap_get(
-    const coll_t& c,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    map<string, bufferlist> *out /// < [out] Key to value map
-    ) = 0;
-  virtual int omap_get(
     CollectionHandle &c,     ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
     map<string, bufferlist> *out /// < [out] Key to value map
-    ) {
-    return omap_get(c->get_cid(), oid, header, out);
-  }
+    ) = 0;
 
   /// Get omap header
   virtual int omap_get_header(
-    const coll_t& c,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    bufferlist *header,      ///< [out] omap header
-    bool allow_eio = false ///< [in] don't assert on eio
-    ) = 0;
-  virtual int omap_get_header(
     CollectionHandle &c,     ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     bufferlist *header,      ///< [out] omap header
     bool allow_eio = false ///< [in] don't assert on eio
-    ) {
-    return omap_get_header(c->get_cid(), oid, header, allow_eio);
-  }
+    ) = 0;
 
   /// Get keys defined on oid
-  virtual int omap_get_keys(
-    const coll_t& c,              ///< [in] Collection containing oid
-    const ghobject_t &oid, ///< [in] Object containing omap
-    set<string> *keys      ///< [out] Keys defined on oid
-    ) = 0;
   virtual int omap_get_keys(
     CollectionHandle &c,   ///< [in] Collection containing oid
     const ghobject_t &oid, ///< [in] Object containing omap
     set<string> *keys      ///< [out] Keys defined on oid
-    ) {
-    return omap_get_keys(c->get_cid(), oid, keys);
-  }
+    ) = 0;
 
   /// Get key values
-  virtual int omap_get_values(
-    const coll_t& c,                    ///< [in] Collection containing oid
-    const ghobject_t &oid,       ///< [in] Object containing omap
-    const set<string> &keys,     ///< [in] Keys to get
-    map<string, bufferlist> *out ///< [out] Returned keys and values
-    ) = 0;
   virtual int omap_get_values(
     CollectionHandle &c,         ///< [in] Collection containing oid
     const ghobject_t &oid,       ///< [in] Object containing omap
     const set<string> &keys,     ///< [in] Keys to get
     map<string, bufferlist> *out ///< [out] Returned keys and values
-    ) {
-    return omap_get_values(c->get_cid(), oid, keys, out);
-  }
+    ) = 0;
 
   /// Filters keys into out which are defined on oid
-  virtual int omap_check_keys(
-    const coll_t& c,                ///< [in] Collection containing oid
-    const ghobject_t &oid,   ///< [in] Object containing omap
-    const set<string> &keys, ///< [in] Keys to check
-    set<string> *out         ///< [out] Subset of keys defined on oid
-    ) = 0;
   virtual int omap_check_keys(
     CollectionHandle &c,     ///< [in] Collection containing oid
     const ghobject_t &oid,   ///< [in] Object containing omap
     const set<string> &keys, ///< [in] Keys to check
     set<string> *out         ///< [out] Subset of keys defined on oid
-    ) {
-    return omap_check_keys(c->get_cid(), oid, keys, out);
-  }
+    ) = 0;
 
   /**
    * Returns an object map iterator
@@ -1990,15 +1875,9 @@ public:
    * @return iterator, null on error
    */
   virtual ObjectMap::ObjectMapIterator get_omap_iterator(
-    const coll_t& c,              ///< [in] collection
-    const ghobject_t &oid  ///< [in] object
-    ) = 0;
-  virtual ObjectMap::ObjectMapIterator get_omap_iterator(
     CollectionHandle &c,   ///< [in] collection
     const ghobject_t &oid  ///< [in] object
-    ) {
-    return get_omap_iterator(c->get_cid(), oid);
-  }
+    ) = 0;
 
   virtual int flush_journal() { return -EOPNOTSUPP; }
 
@@ -2022,18 +1901,15 @@ public:
   // DEBUG
   virtual void inject_data_error(const ghobject_t &oid) {}
   virtual void inject_mdata_error(const ghobject_t &oid) {}
+
+  virtual void compact() {}
+  virtual bool has_builtin_csum() const {
+    return false;
+  }
 };
 WRITE_CLASS_ENCODER(ObjectStore::Transaction)
 WRITE_CLASS_ENCODER(ObjectStore::Transaction::TransactionData)
 
-static inline void intrusive_ptr_add_ref(ObjectStore::Sequencer_impl *s) {
-  s->get();
-}
-static inline void intrusive_ptr_release(ObjectStore::Sequencer_impl *s) {
-  s->put();
-}
-
-ostream& operator<<(ostream& out, const ObjectStore::Sequencer& s);
 ostream& operator<<(ostream& out, const ObjectStore::Transaction& tx);
 
 #endif

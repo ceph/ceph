@@ -62,7 +62,7 @@ def task(ctx, config):
               name: teuthologyprofile
               k: 2
               m: 1
-              ruleset-failure-domain: osd
+              crush-failure-domain: osd
             pool_snaps: true
 	    write_fadvise_dontneed: true
             runs: 10
@@ -145,6 +145,10 @@ def task(ctx, config):
         args.extend(['--write-fadvise-dontneed'])
     if config.get('set_redirect', False):
         args.extend(['--set_redirect'])
+    if config.get('set_chunk', False):
+        args.extend(['--set_chunk'])
+    if config.get('low_tier_pool', None):
+        args.extend(['--low_tier_pool', config.get('low_tier_pool', None)])
     if config.get('pool_snaps', False):
         args.extend(['--pool-snaps'])
     args.extend([

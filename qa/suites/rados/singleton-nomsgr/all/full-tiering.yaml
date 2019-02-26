@@ -1,10 +1,19 @@
 # verify #13098 fix
+openstack:
+  - volumes: # attached to each instance
+      count: 3
+      size: 10 # GB
 roles:
 - [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
 overrides:
   ceph:
     log-whitelist:
       - is full
+      - overall HEALTH_
+      - \(POOL_FULL\)
+      - \(POOL_NEAR_FULL\)
+      - \(CACHE_POOL_NO_HIT_SET\)
+      - \(CACHE_POOL_NEAR_FULL\)
 tasks:
 - install:
 - ceph:
@@ -16,6 +25,7 @@ tasks:
     client.0:
       - ceph osd pool create ec-ca 1 1
       - ceph osd pool create ec 1 1 erasure default
+      - ceph osd pool application enable ec rados
       - ceph osd tier add ec ec-ca
       - ceph osd tier cache-mode ec-ca readproxy
       - ceph osd tier set-overlay ec ec-ca

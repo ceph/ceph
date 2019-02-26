@@ -18,47 +18,51 @@
 #include "msg/Message.h"
 #include "include/types.h"
 
-class MExportDirDiscover : public Message {
-  mds_rank_t from;
+class MExportDirDiscover : public MessageInstance<MExportDirDiscover> {
+public:
+  friend factory;
+private:
+  mds_rank_t from = -1;
   dirfrag_t dirfrag;
   filepath path;
 
  public:
-  mds_rank_t get_source_mds() { return from; }
-  inodeno_t get_ino() { return dirfrag.ino; }
-  dirfrag_t get_dirfrag() { return dirfrag; }
-  filepath& get_path() { return path; }
+  mds_rank_t get_source_mds() const { return from; }
+  inodeno_t get_ino() const { return dirfrag.ino; }
+  dirfrag_t get_dirfrag() const { return dirfrag; }
+  const filepath& get_path() const { return path; }
 
   bool started;
 
+protected:
   MExportDirDiscover() :     
-    Message(MSG_MDS_EXPORTDIRDISCOVER),
+    MessageInstance(MSG_MDS_EXPORTDIRDISCOVER),
     started(false) { }
   MExportDirDiscover(dirfrag_t df, filepath& p, mds_rank_t f, uint64_t tid) :
-    Message(MSG_MDS_EXPORTDIRDISCOVER),
+    MessageInstance(MSG_MDS_EXPORTDIRDISCOVER),
     from(f), dirfrag(df), path(p), started(false) {
     set_tid(tid);
   }
-private:
   ~MExportDirDiscover() override {}
 
 public:
-  const char *get_type_name() const override { return "ExDis"; }
+  std::string_view get_type_name() const override { return "ExDis"; }
   void print(ostream& o) const override {
     o << "export_discover(" << dirfrag << " " << path << ")";
   }
 
   void decode_payload() override {
-    bufferlist::iterator p = payload.begin();
-    ::decode(from, p);
-    ::decode(dirfrag, p);
-    ::decode(path, p);
+    auto p = payload.cbegin();
+    decode(from, p);
+    decode(dirfrag, p);
+    decode(path, p);
   }
 
   void encode_payload(uint64_t features) override {
-    ::encode(from, payload);
-    ::encode(dirfrag, payload);
-    ::encode(path, payload);
+    using ceph::encode;
+    encode(from, payload);
+    encode(dirfrag, payload);
+    encode(path, payload);
   }
 };
 

@@ -13,7 +13,7 @@ log = logging.getLogger(__name__)
 
 def check_stuck(manager, num_inactive, num_unclean, num_stale, timeout=10):
     """
-    Do checks.  Make sure get_stuck_pgs return the right amout of information, then
+    Do checks.  Make sure get_stuck_pgs return the right amount of information, then
     extract health information from the raw_cluster_cmd and compare the results with
     values passed in.  This passes if all asserts pass.
  
@@ -63,6 +63,7 @@ def task(ctx, config):
 #                            '--mon-osd-report-timeout 90',
                             '--mon-pg-stuck-threshold 10')
 
+    # all active+clean
     check_stuck(
         manager,
         num_inactive=0,
@@ -76,10 +77,11 @@ def task(ctx, config):
     manager.flush_pg_stats([1])
     manager.wait_for_recovery(timeout)
 
+    # all active+clean+remapped
     check_stuck(
         manager,
         num_inactive=0,
-        num_unclean=num_pgs,
+        num_unclean=0,
         num_stale=0,
         )
 
@@ -87,6 +89,7 @@ def task(ctx, config):
     manager.flush_pg_stats([0, 1])
     manager.wait_for_clean(timeout)
 
+    # all active+clean
     check_stuck(
         manager,
         num_inactive=0,
@@ -97,6 +100,7 @@ def task(ctx, config):
     log.info('stopping first osd')
     manager.kill_osd(0)
     manager.mark_down_osd(0)
+    manager.wait_for_active(timeout)
 
     log.info('waiting for all to be unclean')
     starttime = time.time()

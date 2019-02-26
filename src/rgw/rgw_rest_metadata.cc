@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -11,6 +12,7 @@
  * Foundation. See file COPYING.
  *
  */
+
 #include "include/page.h"
 
 #include "rgw_rest.h"
@@ -20,14 +22,11 @@
 #include "rgw_client_io.h"
 #include "common/errno.h"
 #include "common/strtol.h"
-#include "include/assert.h"
+#include "rgw/rgw_b64.h"
+#include "include/ceph_assert.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
-
-const string RGWOp_Metadata_Get::name() {
-  return "get_metadata";
-}
 
 static inline void frame_metadata_key(req_state *s, string& out) {
   bool exists;
@@ -63,11 +62,50 @@ void RGWOp_Metadata_Get::execute() {
   http_ret = 0;
 }
 
-const string RGWOp_Metadata_List::name() {
-  return "list_metadata";
+void RGWOp_Metadata_Get_Myself::execute() {
+  string owner_id;
+
+  owner_id = s->owner.get_id().to_str();
+  s->info.args.append("key", owner_id);
+
+  return RGWOp_Metadata_Get::execute();
 }
 
 void RGWOp_Metadata_List::execute() {
+  string marker;
+  ldout(s->cct, 16) << __func__
+		    << " raw marker " << s->info.args.get("marker")
+		    << dendl;
+
+  try {
+    marker = s->info.args.get("marker");
+    if (!marker.empty()) {
+      marker = rgw::from_base64(marker);
+    }
+    ldout(s->cct, 16) << __func__
+	     << " marker " << marker << dendl;
+  } catch (...) {
+    marker = std::string("");
+  }
+
+  bool max_entries_specified;
+  string max_entries_str =
+    s->info.args.get("max-entries", &max_entries_specified);
+
+  bool extended_response = (max_entries_specified); /* for backward compatibility, if max-entries is not specified
+                                                    we will send the old response format */
+  uint64_t max_entries = 0;
+
+  if (max_entries_specified) {
+    string err;
+    max_entries = (unsigned)strict_strtol(max_entries_str.c_str(), 10, &err);
+    if (!err.empty()) {
+      dout(5) << "Error parsing max-entries " << max_entries_str << dendl;
+      http_ret = -EINVAL;
+      return;
+    }
+  }
+
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);
@@ -75,19 +113,32 @@ void RGWOp_Metadata_List::execute() {
   void *handle;
   int max = 1000;
 
-  http_ret = store->meta_mgr->list_keys_init(metadata_key, &handle);
+  /* example markers:
+     marker = "3:b55a9110:root::bu_9:head";
+     marker = "3:b9a8b2a6:root::sorry_janefonda_890:head";
+     marker = "3:bf885d8f:root::sorry_janefonda_665:head";
+  */
+
+  http_ret = store->meta_mgr->list_keys_init(metadata_key, marker, &handle);
   if (http_ret < 0) {
     dout(5) << "ERROR: can't get key: " << cpp_strerror(http_ret) << dendl;
     return;
   }
 
   bool truncated;
+  uint64_t count = 0;
+
+  if (extended_response) {
+    s->formatter->open_object_section("result");
+  }
 
   s->formatter->open_array_section("keys");
 
+  uint64_t left;
   do {
     list<string> keys;
-    http_ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
+    left = (max_entries_specified ? max_entries - count : max);
+    http_ret = store->meta_mgr->list_keys_next(handle, left, keys, &truncated);
     if (http_ret < 0) {
       dout(5) << "ERROR: lists_keys_next(): " << cpp_strerror(http_ret)
 	      << dendl;
@@ -97,12 +148,23 @@ void RGWOp_Metadata_List::execute() {
     for (list<string>::iterator iter = keys.begin(); iter != keys.end();
 	 ++iter) {
       s->formatter->dump_string("key", *iter);
+      ++count;
     }
 
-  } while (truncated);
+  } while (truncated && left > 0);
 
   s->formatter->close_section();
 
+  if (extended_response) {
+    encode_json("truncated", truncated, s->formatter);
+    encode_json("count", count, s->formatter);
+    if (truncated) {
+      string esc_marker =
+	rgw::to_base64(store->meta_mgr->get_marker(handle));
+      encode_json("marker", esc_marker, s->formatter);
+    }
+    s->formatter->close_section();
+  }
   store->meta_mgr->list_keys_complete(handle);
 
   http_ret = 0;
@@ -275,6 +337,8 @@ void RGWOp_Metadata_Unlock::execute() {
 }
 
 RGWOp *RGWHandler_Metadata::op_get() {
+  if (s->info.args.exists("myself"))
+    return new RGWOp_Metadata_Get_Myself;
   if (s->info.args.exists("key"))
     return new RGWOp_Metadata_Get;
   else

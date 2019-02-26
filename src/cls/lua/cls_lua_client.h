@@ -2,11 +2,7 @@
 #define CLS_LUA_CLIENT_HPP
 #include <string>
 
-#include "include/buffer_fwd.h"  // for bufferlist
-
-namespace librados {
-  class IoCtx;
-}
+#include "include/rados/librados.hpp"
 
 namespace cls_lua_client {
   int exec(librados::IoCtx& ioctx, const std::string& oid,

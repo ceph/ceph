@@ -4,5 +4,3 @@ overrides:
     conf:
       client:
         debug rgw: 20
-  rgw:
-    frontend: civetweb

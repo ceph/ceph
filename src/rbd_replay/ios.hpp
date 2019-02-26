@@ -94,7 +94,7 @@ public:
   virtual void write_debug(std::ostream& out) const = 0;
 
 protected:
-  void write_debug_base(std::ostream& out, std::string iotype) const;
+  void write_debug_base(std::ostream& out, const std::string &iotype) const;
 
 private:
   action_id_t m_ionum;

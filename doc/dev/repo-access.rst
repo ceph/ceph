@@ -5,23 +5,21 @@ Special branches
 ----------------
 
 * ``master``: current tip (integration branch)
-* ``next``: pending release (feature frozen, bugfixes only)
-* ``last``: last/previous release
-* ``dumpling``, ``cuttlefish``, ``bobtail``, ``argonaut``, etc.: stable release branches
-* ``dumpling-next``: backports for stable release, pending testing
+* Release branches (for example ``luminous``) corresponding to the releases
+  listed at :ref:`ceph-releases`
 
 Rules
 -----
 
 The source repos are all on github.
 
-* Any branch pushed to ceph.git will kick off builds that will either
-  run unit tests or generate packages for gitbuilder.ceph.com.  Try
+* Any branch pushed to ceph-ci.git will kick off builds that will
+  generate packages and repositories on shaman.ceph.com. Try
   not to generate unnecessary load.  For private, unreviewed work,
   only push to branches named ``wip-*``.  This avoids colliding with
   any special branches.
 
-* Nothing should every reach a special branch unless it has been
+* Nothing should reach a special branch unless it has been
   reviewed.
 
 * Preferred means of review is via github pull requests to capture any

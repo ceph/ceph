@@ -5,6 +5,8 @@
 #include <fnmatch.h>
 
 #include <boost/algorithm/string/predicate.hpp>
+#include <boost/algorithm/string.hpp>
+#include <fstream>
 
 #include "common/errno.h"
 #include "common/ceph_json.h"
@@ -16,6 +18,7 @@
 #include "common/ceph_crypto_cms.h"
 #include "common/armor.h"
 #include "common/Cond.h"
+#include "rgw_perf_counters.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -113,7 +116,7 @@ void rgw_get_token_id(const string& token, string& token_id)
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
 
   MD5 hash;
-  hash.Update((const byte *)token.c_str(), token.size());
+  hash.Update((const unsigned char *)token.c_str(), token.size());
   hash.Final(m);
 
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
@@ -170,6 +173,61 @@ std::string CephCtxConfig::get_endpoint_url() const noexcept
   }
 }
 
+/* secrets */
+const std::string CephCtxConfig::empty{""};
+
+static inline std::string read_secret(const std::string& file_path)
+{
+  using namespace std;
+
+  constexpr int16_t size{1024};
+  char buf[size];
+  string s;
+
+  s.reserve(size);
+  ifstream ifs(file_path, ios::in | ios::binary);
+  if (ifs) {
+    while (true) {
+      auto sbuf = ifs.rdbuf();
+      auto len =  sbuf->sgetn(buf, size);
+      if (!len)
+	break;
+      s.append(buf, len);
+    }
+    boost::algorithm::trim(s);
+    if (s.back() == '\n')
+      s.pop_back();
+  }
+  return s;
+}
+
+std::string CephCtxConfig::get_admin_token() const noexcept
+{
+  auto& atv = g_ceph_context->_conf->rgw_keystone_admin_token_path;
+  if (!atv.empty()) {
+    return read_secret(atv);
+  } else {
+    auto& atv = g_ceph_context->_conf->rgw_keystone_admin_token;
+    if (!atv.empty()) {
+      return atv;
+    }
+  }
+  return empty;
+}
+
+std::string CephCtxConfig::get_admin_password() const noexcept  {
+  auto& apv = g_ceph_context->_conf->rgw_keystone_admin_password_path;
+  if (!apv.empty()) {
+    return read_secret(apv);
+  } else {
+    auto& apv = g_ceph_context->_conf->rgw_keystone_admin_password;
+    if (!apv.empty()) {
+      return apv;
+    }
+  }
+  return empty;
+}
+
 int Service::get_admin_token(CephContext* const cct,
                              TokenCache& token_cache,
                              const Config& config,
@@ -212,7 +270,7 @@ int Service::issue_admin_token_request(CephContext* const cct,
   }
 
   bufferlist token_bl;
-  RGWGetKeystoneAdminToken token_req(cct, &token_bl);
+  RGWGetKeystoneAdminToken token_req(cct, "POST", "", &token_bl);
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
 
@@ -240,7 +298,9 @@ int Service::issue_admin_token_request(CephContext* const cct,
     return -ENOTSUP;
   }
 
-  const int ret = token_req.process("POST", token_url.c_str());
+  token_req.set_url(token_url);
+
+  const int ret = token_req.process();
   if (ret < 0) {
     return ret;
   }
@@ -283,7 +343,7 @@ int Service::get_keystone_barbican_token(CephContext * const cct,
   }
 
   bufferlist token_bl;
-  RGWKeystoneHTTPTransceiver token_req(cct, &token_bl);
+  RGWKeystoneHTTPTransceiver token_req(cct, "POST", "", &token_bl);
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
 
@@ -311,8 +371,10 @@ int Service::get_keystone_barbican_token(CephContext * const cct,
     return -ENOTSUP;
   }
 
+  token_req.set_url(token_url);
+
   ldout(cct, 20) << "Requesting secret from barbican url=" << token_url << dendl;
-  const int ret = token_req.process("POST", token_url.c_str());
+  const int ret = token_req.process();
   if (ret < 0) {
     ldout(cct, 20) << "Barbican process error:" << token_bl.c_str() << dendl;
     return ret;
@@ -411,7 +473,7 @@ bool TokenCache::find(const std::string& token_id,
 bool TokenCache::find_locked(const std::string& token_id,
                              rgw::keystone::TokenEnvelope& token)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
   map<string, token_entry>::iterator iter = tokens.find(token_id);
   if (iter == tokens.end()) {
     if (perfcounter) perfcounter->inc(l_rgw_keystone_token_cache_miss);
@@ -460,7 +522,7 @@ void TokenCache::add(const std::string& token_id,
 void TokenCache::add_locked(const std::string& token_id,
                             const rgw::keystone::TokenEnvelope& token)
 {
-  assert(lock.is_locked_by_me());
+  ceph_assert(lock.is_locked_by_me());
   map<string, token_entry>::iterator iter = tokens.find(token_id);
   if (iter != tokens.end()) {
     token_entry& e = iter->second;
@@ -475,7 +537,7 @@ void TokenCache::add_locked(const std::string& token_id,
   while (tokens_lru.size() > max) {
     list<string>::reverse_iterator riter = tokens_lru.rbegin();
     iter = tokens.find(*riter);
-    assert(iter != tokens.end());
+    ceph_assert(iter != tokens.end());
     tokens.erase(iter);
     tokens_lru.pop_back();
   }
@@ -516,7 +578,7 @@ int TokenCache::RevokeThread::check_revoked()
   std::string token;
 
   bufferlist bl;
-  RGWGetRevokedTokens req(cct, &bl);
+  RGWGetRevokedTokens req(cct, "GET", "", &bl);
 
   if (rgw::keystone::Service::get_admin_token(cct, *cache, config, token) < 0) {
     return -EINVAL;
@@ -536,8 +598,10 @@ int TokenCache::RevokeThread::check_revoked()
     url.append("v3/auth/tokens/OS-PKI/revoked");
   }
 
+  req.set_url(url);
+
   req.set_send_length(0);
-  int ret = req.process(url.c_str());
+  int ret = req.process();
   if (ret < 0) {
     return ret;
   }

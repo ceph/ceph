@@ -26,7 +26,23 @@ sensible.
     :maxdepth: 1
 
     Installation and Configuration <administrator>
-    Dashboard <dashboard>
-    RESTful <restful>
     Writing plugins <plugins>
-
+    Writing orchestrator plugins <orchestrator_modules>
+    Dashboard plugin <dashboard>
+    DiskPrediction plugin <diskprediction>
+    Local pool plugin <localpool>
+    RESTful plugin <restful>
+    Zabbix plugin <zabbix>
+    Prometheus plugin <prometheus>
+    Influx plugin <influx>
+    Hello plugin <hello>
+    Telegraf plugin <telegraf>
+    Telemetry plugin <telemetry>
+    Iostat plugin <iostat>
+    Crash plugin <crash>
+    Orchestrator CLI plugin <orchestrator_cli>
+    Rook plugin <rook>
+    DeepSea plugin <deepsea>
+    Insights plugin <insights>
+    Ansible plugin <ansible>
+    SSH orchestrator <ssh>

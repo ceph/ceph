@@ -1,9 +1,9 @@
 #include <errno.h>
 #include <lua.hpp>
 #include "include/types.h"
-#include "include/rados/librados.h"
+#include "include/rados/librados.hpp"
 #include "gtest/gtest.h"
-#include "test/librados/test.h"
+#include "test/librados/test_cxx.h"
 #include "cls/lua/cls_lua_client.h"
 #include "cls/lua/cls_lua.h"
 
@@ -595,7 +595,7 @@ TEST_F(ClsLua, Write) {
   /* write some data into object */
   string written = "Hello World";
   bufferlist inbl;
-  ::encode(written, inbl);
+  encode(written, inbl);
   ASSERT_EQ(0, clslua_exec(test_script, &inbl, "write"));
 
   /* have Lua read out of the object */
@@ -606,7 +606,7 @@ TEST_F(ClsLua, Write) {
 
   /* compare what Lua read to what we wrote */
   string read;
-  ::decode(read, outbl);
+  decode(read, outbl);
   ASSERT_EQ(read, written);
 }
 
@@ -735,7 +735,7 @@ TEST_F(ClsLua, MapClear) {
 TEST_F(ClsLua, MapSetVal) {
   /* build some input value */
   bufferlist orig_val;
-  ::encode("this is the original value yay", orig_val);
+  encode("this is the original value yay", orig_val);
 
   /* have the lua script stuff the data into a map value */
   ASSERT_EQ(0, clslua_exec(test_script, &orig_val, "map_set_val"));
@@ -747,7 +747,7 @@ TEST_F(ClsLua, MapSetVal) {
   ASSERT_EQ(0, ioctx.omap_get_vals_by_keys(oid, out_keys, &out_map));
   bufferlist out_bl = out_map["foo"];
   string out_val;
-  ::decode(out_val, out_bl);
+  decode(out_val, out_bl);
   ASSERT_EQ(out_val, "this is the original value yay");
 }
 

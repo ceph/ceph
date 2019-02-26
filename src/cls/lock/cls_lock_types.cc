@@ -20,7 +20,7 @@ using namespace rados::cls::lock;
 
 static void generate_lock_id(locker_id_t& i, int n, const string& cookie)
 {
-  i.locker = entity_name_t(entity_name_t::CLIENT(n));
+  i.locker = entity_name_t::CLIENT(n);
   i.cookie = cookie;
 }
 
@@ -41,7 +41,7 @@ void locker_id_t::generate_test_instances(list<locker_id_t*>& o)
 void locker_info_t::dump(Formatter *f) const
 {
   f->dump_stream("expiration") << expiration;
-  f->dump_stream("addr") << addr;
+  f->dump_string("addr", addr.get_legacy_str());
   f->dump_string("description", description);
 }
 
@@ -67,3 +67,32 @@ void locker_info_t::generate_test_instances(list<locker_info_t*>& o)
   o.push_back(new locker_info_t);
 }
 
+void lock_info_t::dump(Formatter *f) const
+{
+  f->dump_int("lock_type", lock_type);
+  f->dump_string("tag", tag);
+  f->open_array_section("lockers");
+  for (auto &i : lockers) {
+    f->open_object_section("locker");
+    f->dump_object("id", i.first);
+    f->dump_object("info", i.second);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+void lock_info_t::generate_test_instances(list<lock_info_t *>& o)
+{
+  lock_info_t *i = new lock_info_t;
+  locker_id_t id;
+  locker_info_t info;
+  generate_lock_id(id, 1, "cookie");
+  info.expiration = utime_t(5, 0);
+  generate_test_addr(info.addr, 1, 2);
+  info.description = "description";
+  i->lockers[id] = info;
+  i->lock_type = LOCK_EXCLUSIVE;
+  i->tag = "tag";
+  o.push_back(i);
+  o.push_back(new lock_info_t);
+}

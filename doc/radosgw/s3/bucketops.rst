@@ -91,18 +91,19 @@ Syntax
 Parameters
 ~~~~~~~~~~
 
-+-----------------+-----------+-----------------------------------------------------------------------+
-| Name            | Type      | Description                                                           |
-+=================+===========+=======================================================================+
-| ``prefix``      | String    | Only returns objects that contain the specified prefix.               |
-+-----------------+-----------+-----------------------------------------------------------------------+
-| ``delimiter``   | String    | The delimiter between the prefix and the rest of the object name.     |
-+-----------------+-----------+-----------------------------------------------------------------------+
-| ``marker``      | String    | A beginning index for the list of objects returned.                   |
-+-----------------+-----------+-----------------------------------------------------------------------+
-| ``max-keys``    | Integer   | The maximum number of keys to return. Default is 1000.                |
-+-----------------+-----------+-----------------------------------------------------------------------+
-
++---------------------+-----------+-------------------------------------------------------------------------------------------------+
+| Name                | Type      | Description                                                                                     |
++=====================+===========+=================================================================================================+
+| ``prefix``          | String    | Only returns objects that contain the specified prefix.                                         |
++---------------------+-----------+-------------------------------------------------------------------------------------------------+
+| ``delimiter``       | String    | The delimiter between the prefix and the rest of the object name.                               |
++---------------------+-----------+-------------------------------------------------------------------------------------------------+
+| ``marker``          | String    | A beginning index for the list of objects returned.                                             |
++---------------------+-----------+-------------------------------------------------------------------------------------------------+
+| ``max-keys``        | Integer   | The maximum number of keys to return. Default is 1000.                                          |
++---------------------+-----------+-------------------------------------------------------------------------------------------------+
+| ``allow-unordered`` | Boolean   | Non-standard extension. Allows results to be returned unordered. Cannot be used with delimiter. |
++---------------------+-----------+-------------------------------------------------------------------------------------------------+
 
 HTTP Response
 ~~~~~~~~~~~~~
@@ -156,6 +157,8 @@ The ``ListBucketResult`` contains objects, where each object is within a ``Conte
 +------------------------+-----------+------------------------------------------+
 | ``StorageClass``       | String    | Should always return ``STANDARD``.       |
 +------------------------+-----------+------------------------------------------+
+| ``Type``               | String    | ``Appendable`` or ``Normal``.            |
++------------------------+-----------+------------------------------------------+
 
 Get Bucket Location
 -------------------
@@ -181,7 +184,7 @@ Response Entities
 | Name                   | Type      | Description                              |
 +========================+===========+==========================================+
 | ``LocationConstraint`` | String    | The region where bucket resides, empty   |
-|                        |           | string for defult region                 |
+|                        |           | string for default region                |
 +------------------------+-----------+------------------------------------------+
 
 
@@ -292,7 +295,7 @@ You may specify parameters for ``GET /{bucket}?uploads``, but none of them are r
 +------------------------+-----------+--------------------------------------------------------------------------------------+
 | ``max-uploads``        | Integer   | The maximum number of multipart uploads. The range from 1-1000. The default is 1000. |
 +------------------------+-----------+--------------------------------------------------------------------------------------+
-| ``upload-id-marker``   | String    | Ignored if ``key-marker`` isn't specified. Specifies the ``ID`` of first             |
+| ``upload-id-marker``   | String    | Ignored if ``key-marker`` is not specified. Specifies the ``ID`` of first            |
 |                        |           | upload to list in lexicographical order at or following the ``ID``.                  |
 +------------------------+-----------+--------------------------------------------------------------------------------------+
 

@@ -1,0 +1,53 @@
+<!-- Embed dashboard -->
+<cd-loading-panel *ngIf="loading && grafanaExist"
+                  i18n>Loading panel data...</cd-loading-panel>
+
+<cd-info-panel *ngIf="!grafanaExist"
+               i18n>Please consult the
+  <a href="{{ docsUrl }}" target="_blank">documentation</a> on how to
+  configure and enable the monitoring functionality.</cd-info-panel>
+
+<cd-info-panel *ngIf="!dashboardExist"
+               i18n>Grafana Dashboard doesn't exist. Please refer to
+  <a href="{{ docsUrl }}" target="_blank">documentation</a> on how to
+  add dashboards to Grafana.</cd-info-panel>
+
+<div class="row"
+     *ngIf="grafanaExist && dashboardExist">
+  <div class="col-md-12 timepicker">
+    <label class="control-label col-sm-1"
+           for="timepicker-control">
+      <ng-container i18n>Grafana Time Picker</ng-container>
+    </label>
+    <div class="col-sm-9">
+      <select id="timepicker"
+              name="timepicker-control"
+              class="form-control "
+              [(ngModel)]="time"
+              (ngModelChange)="onTimepickerChange($event)">
+        <option *ngFor="let key of grafanaTimes"
+                [ngValue]="key.value">{{ key.name }}
+        </option>
+      </select>
+    </div>
+    <button class="btn btn-sm"
+            i18n-title
+            title="Reset Settings"
+            (click)="reset()">
+      <i class="fa fa-undo"></i>
+    </button>
+    <br>
+  </div>
+  <div class="col-md-12">
+    <div class="grafana-container">
+      <iframe #iframe
+              id="iframe"
+              [src]="grafanaSrc"
+              class="grafana"
+              [ngClass]="panelStyle"
+              frameborder="0"
+              scrolling="no">
+      </iframe>
+    </div>
+  </div>
+</div>

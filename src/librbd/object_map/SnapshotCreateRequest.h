@@ -56,7 +56,7 @@ protected:
   bool should_complete(int r) override;
 
 private:
-  State m_state;
+  State m_state = STATE_READ_MAP;
   ceph::BitVector<2> &m_object_map;
 
   bufferlist m_read_bl;

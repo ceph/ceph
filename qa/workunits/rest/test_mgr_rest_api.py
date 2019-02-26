@@ -56,7 +56,7 @@ screenplay = [
     ('get',    '/osd', {}),
     ('get',    '/osd/0', {}),
     ('get',    '/osd/0/command', {}),
-    ('get',    '/pool/0', {}),
+    ('get',    '/pool/1', {}),
     ('get',    '/server', {}),
     ('get',    '/server/' + aserver, {}),
     ('post',   '/osd/0/command', {'command': 'scrub'}),
@@ -72,6 +72,8 @@ screenplay = [
     ('get',    '/request?page=0', {}),
     ('delete', '/request', {}),
     ('get',    '/request', {}),
+    ('patch', '/pool/1', {'pg_num': 128}),
+    ('patch', '/pool/1', {'pgp_num': 128}),
 ]
 
 for method, endpoint, args in screenplay:

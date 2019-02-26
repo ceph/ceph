@@ -16,6 +16,7 @@
 #include "common/Formatter.h"
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_rados.h"
+#include "rgw/rgw_zone.h"
 
 #ifndef CEPH_TEST_RGW_COMMON_H
 #define CEPH_TEST_RGW_COMMON_H
@@ -39,7 +40,7 @@ struct old_rgw_bucket {
     data_pool = index_pool = s;
     marker = "";
   }
-  old_rgw_bucket(const char *n) : name(n) {
+  explicit old_rgw_bucket(const char *n) : name(n) {
     data_pool = index_pool = n;
     marker = "";
   }
@@ -48,41 +49,41 @@ struct old_rgw_bucket {
 
   void encode(bufferlist& bl) const {
      ENCODE_START(8, 3, bl);
-    ::encode(name, bl);
-    ::encode(data_pool, bl);
-    ::encode(marker, bl);
-    ::encode(bucket_id, bl);
-    ::encode(index_pool, bl);
-    ::encode(data_extra_pool, bl);
-    ::encode(tenant, bl);
+    encode(name, bl);
+    encode(data_pool, bl);
+    encode(marker, bl);
+    encode(bucket_id, bl);
+    encode(index_pool, bl);
+    encode(data_extra_pool, bl);
+    encode(tenant, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
-    ::decode(name, bl);
-    ::decode(data_pool, bl);
+    decode(name, bl);
+    decode(data_pool, bl);
     if (struct_v >= 2) {
-      ::decode(marker, bl);
+      decode(marker, bl);
       if (struct_v <= 3) {
         uint64_t id;
-        ::decode(id, bl);
+        decode(id, bl);
         char buf[16];
         snprintf(buf, sizeof(buf), "%llu", (long long)id);
         bucket_id = buf;
       } else {
-        ::decode(bucket_id, bl);
+        decode(bucket_id, bl);
       }
     }
     if (struct_v >= 5) {
-      ::decode(index_pool, bl);
+      decode(index_pool, bl);
     } else {
       index_pool = data_pool;
     }
     if (struct_v >= 7) {
-      ::decode(data_extra_pool, bl);
+      decode(data_extra_pool, bl);
     }
     if (struct_v >= 8) {
-      ::decode(tenant, bl);
+      decode(tenant, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -380,27 +381,27 @@ public:
 
   void encode(bufferlist& bl) const {
     ENCODE_START(5, 3, bl);
-    ::encode(bucket.name, bl);
-    ::encode(loc, bl);
-    ::encode(ns, bl);
-    ::encode(object, bl);
-    ::encode(bucket, bl);
-    ::encode(instance, bl);
+    encode(bucket.name, bl);
+    encode(loc, bl);
+    encode(ns, bl);
+    encode(object, bl);
+    encode(bucket, bl);
+    encode(instance, bl);
     if (!ns.empty() || !instance.empty()) {
-      ::encode(orig_obj, bl);
+      encode(orig_obj, bl);
     }
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::iterator& bl) {
+  void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
-    ::decode(bucket.name, bl);
-    ::decode(loc, bl);
-    ::decode(ns, bl);
-    ::decode(object, bl);
+    decode(bucket.name, bl);
+    decode(loc, bl);
+    decode(ns, bl);
+    decode(object, bl);
     if (struct_v >= 2)
-      ::decode(bucket, bl);
+      decode(bucket, bl);
     if (struct_v >= 4)
-      ::decode(instance, bl);
+      decode(instance, bl);
     if (ns.empty() && instance.empty()) {
       if (object[0] != '_') {
         orig_obj = object;
@@ -409,7 +410,7 @@ public:
       }
     } else {
       if (struct_v >= 5) {
-        ::decode(orig_obj, bl);
+        decode(orig_obj, bl);
       } else {
         ssize_t pos = object.find('_', 1);
         if (pos < 0) {
@@ -467,15 +468,15 @@ struct test_rgw_env {
 
   test_rgw_env() {
     test_rgw_init_env(&zonegroup, &zone_params);
-    default_placement.data_pool = rgw_pool(zone_params.placement_pools[zonegroup.default_placement].data_pool);
-    default_placement.data_extra_pool =  rgw_pool(zone_params.placement_pools[zonegroup.default_placement].data_extra_pool);
+    default_placement.data_pool = rgw_pool(zone_params.placement_pools[zonegroup.default_placement.name].get_standard_data_pool());
+    default_placement.data_extra_pool =  rgw_pool(zone_params.placement_pools[zonegroup.default_placement.name].data_extra_pool);
   }
 
   rgw_data_placement_target get_placement(const std::string& placement_id) {
     const RGWZonePlacementInfo& pi = zone_params.placement_pools[placement_id];
     rgw_data_placement_target pt;
     pt.index_pool = pi.index_pool;
-    pt.data_pool = pi.data_pool;
+    pt.data_pool = pi.get_standard_data_pool();
     pt.data_extra_pool = pi.data_extra_pool;
     return pt;
   }

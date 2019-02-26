@@ -49,7 +49,7 @@ Initial Troubleshooting
 
   For those running on Emperor 0.72-rc1 and forward, you will be able to
   contact each monitor individually asking them for their status, regardless
-  of a quorum being formed. This an be achieved using ``ceph ping mon.ID``,
+  of a quorum being formed. This can be achieved using ``ceph ping mon.ID``,
   ID being the monitor's identifier. You should perform this for each monitor
   in the cluster. In section `Understanding mon_status`_ we will explain how
   to interpret the output of this command.
@@ -172,7 +172,7 @@ How to troubleshoot this?
 
   Second, make sure you are able to connect to ``mon.a``'s server from the
   other monitors' servers. Check the ports as well. Check ``iptables`` on
-  all your monitor nodes and make sure you're not dropping/rejecting
+  all your monitor nodes and make sure you are not dropping/rejecting
   connections.
 
   If this initial troubleshooting doesn't solve your problems, then it's
@@ -200,11 +200,11 @@ What if the state is ``probing``?
   multi-monitor cluster, the monitors will stay in this state until they
   find enough monitors to form a quorum -- this means that if you have 2 out
   of 3 monitors down, the one remaining monitor will stay in this state
-  indefinitively until you bring one of the other monitors up.
+  indefinitely until you bring one of the other monitors up.
 
   If you have a quorum, however, the monitor should be able to find the
   remaining monitors pretty fast, as long as they can be reached. If your
-  monitor is stuck probing and you've gone through with all the communication
+  monitor is stuck probing and you have gone through with all the communication
   troubleshooting, then there is a fair chance that the monitor is trying
   to reach the other monitors on a wrong address. ``mon_status`` outputs the
   ``monmap`` known to the monitor: check if the other monitor's locations
@@ -224,7 +224,7 @@ What if state is ``electing``?
   `Clock Skews`_ for more infos on that. If all your clocks are properly
   synchronized, it is best if you prepare some logs and reach out to the
   community. This is not a state that is likely to persist and aside from
-  (*really*) old bugs there isn't an obvious reason besides clock skews on
+  (*really*) old bugs there is not an obvious reason besides clock skews on
   why this would happen.
 
 What if state is ``synchronizing``?
@@ -246,7 +246,7 @@ What if state is ``synchronizing``?
 What if state is ``leader`` or ``peon``?
 
   This should not happen. There is a chance this might happen however, and
-  it has a lot to do with clock skews -- see `Clock Skews`_. If you're not
+  it has a lot to do with clock skews -- see `Clock Skews`_. If you are not
   suffering from clock skews, then please prepare your logs (see
   `Preparing your logs`_) and reach out to us.
 
@@ -300,12 +300,12 @@ Inject a monmap into the monitor
       $ ceph mon getmap -o /tmp/monmap
 
   2. No quorum? Grab the monmap directly from another monitor (this
-     assumes the monitor you're grabbing the monmap from has id ID-FOO
+     assumes the monitor you are grabbing the monmap from has id ID-FOO
      and has been stopped)::
 
       $ ceph-mon -i ID-FOO --extract-monmap /tmp/monmap
 
-  3. Stop the monitor you're going to inject the monmap into.
+  3. Stop the monitor you are going to inject the monmap into.
 
   4. Inject the monmap::
 
@@ -337,7 +337,7 @@ Can I increase the maximum tolerated clock skew?
   This value is configurable via the ``mon-clock-drift-allowed`` option, and
   although you *CAN* it doesn't mean you *SHOULD*. The clock skew mechanism
   is in place because clock skewed monitor may not properly behave. We, as
-  developers and QA afficcionados, are comfortable with the current default
+  developers and QA aficionados, are comfortable with the current default
   value, as it will alert the user before the monitors get out hand. Changing
   this value without testing it first may cause unforeseen effects on the
   stability of the monitors and overall cluster healthiness, although there is
@@ -389,7 +389,7 @@ Monitor Store Failures
 Symptoms of store corruption
 ----------------------------
 
-Ceph monitor stores the `cluster map`_ in a key/value store such as LevelDB. If
+Ceph monitor stores the :term:`cluster map` in a key/value store such as LevelDB. If
 a monitor fails due to the key/value store corruption, following error messages
 might be found in the monitor log::
 
@@ -397,58 +397,64 @@ might be found in the monitor log::
 
 or::
 
-  Corruption: 1 missing files; e.g.: /var/lib/ceph/mon/mon.0/store.db/1234567.ldb
+  Corruption: 1 missing files; e.g.: /var/lib/ceph/mon/mon.foo/store.db/1234567.ldb
 
 Recovery using healthy monitor(s)
 ---------------------------------
 
-If there is any survivers, we can always `replace`_ the corrupted one with a
-new one. And after booting up, the new joiner will sync up with a healthy
+If there are any survivors, we can always :ref:`replace <adding-and-removing-monitors>` the corrupted one with a
+new one. After booting up, the new joiner will sync up with a healthy
 peer, and once it is fully sync'ed, it will be able to serve the clients.
 
 Recovery using OSDs
 -------------------
 
 But what if all monitors fail at the same time? Since users are encouraged to
-deploy at least three monitors in a Ceph cluster, the chance of simultaneous
+deploy at least three (and preferably five) monitors in a Ceph cluster, the chance of simultaneous
 failure is rare. But unplanned power-downs in a data center with improperly
 configured disk/fs settings could fail the underlying filesystem, and hence
 kill all the monitors. In this case, we can recover the monitor store with the
 information stored in OSDs.::
 
-  ms=/tmp/mon-store
+  ms=/root/mon-store
   mkdir $ms
+  
   # collect the cluster map from OSDs
   for host in $hosts; do
-    rsync -avz $ms user@host:$ms
+    rsync -avz $ms/. user@host:$ms.remote
     rm -rf $ms
     ssh user@host <<EOF
-      for osd in /var/lib/osd/osd-*; do
-        ceph-objectstore-tool --data-path \$osd --op update-mon-db --mon-store-path $ms
+      for osd in /var/lib/ceph/osd/ceph-*; do
+        ceph-objectstore-tool --data-path \$osd --op update-mon-db --mon-store-path $ms.remote
       done
     EOF
-    rsync -avz user@host:$ms $ms
+    rsync -avz user@host:$ms.remote/. $ms
   done
+  
   # rebuild the monitor store from the collected map, if the cluster does not
   # use cephx authentication, we can skip the following steps to update the
   # keyring with the caps, and there is no need to pass the "--keyring" option.
-  # i.e. just use "ceph-monstore-tool /tmp/mon-store rebuild" instead
+  # i.e. just use "ceph-monstore-tool $ms rebuild" instead
   ceph-authtool /path/to/admin.keyring -n mon. \
-    --cap mon allow 'allow *'
+    --cap mon 'allow *'
   ceph-authtool /path/to/admin.keyring -n client.admin \
-    --cap mon allow 'allow *' --cap osd 'allow *' --cap mds 'allow *'
-  ceph-monstore-tool /tmp/mon-store rebuild -- --keyring /path/to/admin.keyring
-  # backup corrupted store.db just in case
-  mv /var/lib/ceph/mon/mon.0/store.db /var/lib/ceph/mon/mon.0/store.db.corrupted
-  mv /tmp/mon-store/store.db /var/lib/ceph/mon/mon.0/store.db
-  chown -R ceph:ceph /var/lib/ceph/mon/mon.0/store.db
+    --cap mon 'allow *' --cap osd 'allow *' --cap mds 'allow *'
+  ceph-monstore-tool $ms rebuild -- --keyring /path/to/admin.keyring
+  
+  # make a backup of the corrupted store.db just in case!  repeat for
+  # all monitors.
+  mv /var/lib/ceph/mon/mon.foo/store.db /var/lib/ceph/mon/mon.foo/store.db.corrupted
+
+  # move rebuild store.db into place.  repeat for all monitors.
+  mv $ms/store.db /var/lib/ceph/mon/mon.foo/store.db
+  chown -R ceph:ceph /var/lib/ceph/mon/mon.foo/store.db
 
 The steps above
 
 #. collect the map from all OSD hosts,
 #. then rebuild the store,
 #. fill the entities in keyring file with appropriate caps
-#. replace the corrupted store on ``mon.0`` with the recovered copy.
+#. replace the corrupted store on ``mon.foo`` with the recovered copy.
 
 Known limitations
 ~~~~~~~~~~~~~~~~~
@@ -460,10 +466,10 @@ Following information are not recoverable using the steps above:
   using ``ceph-monstore-tool``. But the MDS keyrings and other keyrings are missing
   in the recovered monitor store. You might need to re-add them manually.
 
-- **pg settings**: the ``full ratio`` and ``nearfull ratio`` settings configured using
-  ``ceph pg set_full_ratio`` and ``ceph pg set_nearfull_ratio`` will be lost.
+- **creating pools**: If any RADOS pools were in the process of being creating, that state is lost.  The recovery tool assumes that all pools have been created.  If there are PGs that are stuck in the 'unknown' after the recovery for a partially created pool, you can force creation of the *empty* PG with the ``ceph osd force-create-pg`` command.  Note that this will create an *empty* PG, so only do this if you know the pool is empty.
 
 - **MDS Maps**: the MDS maps are lost.
+
 
 
 Everything Failed! Now What?
@@ -521,13 +527,13 @@ You have quorum
 
   Either inject the debug option into the monitor you want to debug::
 
-        ceph tell mon.FOO injectargs --debug_mon 10/10
+        ceph tell mon.FOO config set debug_mon 10/10
 
   or into all monitors at once::
 
-        ceph tell mon.* injectargs --debug_mon 10/10
+        ceph tell mon.* config set debug_mon 10/10
 
-No quourm
+No quorum
 
   Use the monitor's admin socket and directly adjust the configuration
   options::
@@ -562,6 +568,4 @@ based on that.
 Finally, you should reach out to us on the mailing lists, on IRC or file
 a new issue on the `tracker`_.
 
-.. _cluster map: ../../architecture#cluster-map
-.. _replace: ../operation/add-or-rm-mons
 .. _tracker: http://tracker.ceph.com/projects/ceph/issues/new

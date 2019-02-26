@@ -1,14 +1,14 @@
 from pecan import expose
 from pecan.rest import RestController
 
-from config import Config
-from crush import Crush
-from doc import Doc
-from mon import Mon
-from osd import Osd
-from pool import Pool
-from request import Request
-from server import Server
+from .config import Config
+from .crush import Crush
+from .doc import Doc
+from .mon import Mon
+from .osd import Osd
+from .pool import Pool
+from .request import Request
+from .server import Server
 
 
 class Root(RestController):
@@ -30,7 +30,7 @@ class Root(RestController):
         return {
             'api_version': 1,
             'auth':
-                'Use "ceph tell mgr restful create_key <key>" to create a key pair, '
+                'Use "ceph restful create-key <key>" to create a key pair, '
                 'pass it as HTTP Basic auth to authenticate',
             'doc': 'See /doc endpoint',
             'info': "Ceph Manager RESTful API server",

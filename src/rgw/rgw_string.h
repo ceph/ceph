@@ -223,4 +223,14 @@ std::string string_join_reserve(char delim, const Args&... args)
   return string_join_reserve(boost::string_view{&delim, 1}, args...);
 }
 
+
+/// use case-insensitive comparison in match_wildcards()
+static constexpr uint32_t MATCH_CASE_INSENSITIVE = 0x01;
+
+/// attempt to match the given input string with the pattern, which may contain
+/// the wildcard characters * and ?
+extern bool match_wildcards(boost::string_view pattern,
+                            boost::string_view input,
+                            uint32_t flags = 0);
+
 #endif

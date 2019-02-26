@@ -1,5 +1,6 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
+
 /*
  * Ceph - scalable distributed file system
  *
@@ -11,6 +12,7 @@
  * Foundation. See file COPYING.
  *
  */
+
 #include <string.h>
 
 #include <iostream>
@@ -27,7 +29,6 @@
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
-using namespace std;
 
 void RGWCORSRule::dump_origins() {
   unsigned num_origins = allowed_origins.size();

@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/journal/TypeTraits.h"
+#include "librbd/journal/Types.h"
 #include "common/Mutex.h"
 #include "tools/rbd_mirror/BaseRequest.h"
 #include <map>
@@ -14,9 +15,9 @@
 
 class Context;
 class ContextWQ;
-class Mutex;
-class SafeTimer;
 namespace journal { class Journaler; }
+namespace librbd { class ProgressContext; }
+namespace librbd { template <typename> class DeepCopyRequest; }
 namespace librbd { namespace journal { struct MirrorPeerClientMeta; } }
 
 namespace rbd {
@@ -26,9 +27,6 @@ class ProgressContext;
 
 template <typename> class InstanceWatcher;
 
-namespace image_sync { template <typename> class ImageCopyRequest; }
-namespace image_sync { template <typename> class SnapshotCopyRequest; }
-
 template <typename ImageCtxT = librbd::ImageCtx>
 class ImageSync : public BaseRequest {
 public:
@@ -37,8 +35,9 @@ public:
   typedef librbd::journal::MirrorPeerClientMeta MirrorPeerClientMeta;
 
   static ImageSync* create(ImageCtxT *local_image_ctx,
-                           ImageCtxT *remote_image_ctx, SafeTimer *timer,
-                           Mutex *timer_lock, const std::string &mirror_uuid,
+                           ImageCtxT *remote_image_ctx,
+                           SafeTimer *timer, Mutex *timer_lock,
+                           const std::string &mirror_uuid,
                            Journaler *journaler,
                            MirrorPeerClientMeta *client_meta,
                            ContextWQ *work_queue,
@@ -79,19 +78,13 @@ private:
    * CREATE_SYNC_POINT (skip if already exists and
    *    |               not disconnected)
    *    v
-   * COPY_SNAPSHOTS
-   *    |
-   *    v
    * COPY_IMAGE . . . . . . . . . . . . . .
    *    |                                 .
    *    v                                 .
-   * COPY_OBJECT_MAP (skip if object      .
-   *    |             map disabled)       .
+   * FLUSH_SYNC_POINT                     .
+   *    |                                 . (image sync canceled)
    *    v                                 .
-   * REFRESH_OBJECT_MAP (skip if object   .
-   *    |                map disabled)    .
-   *    v
-   * PRUNE_SYNC_POINTS                    . (image sync canceled)
+   * PRUNE_SYNC_POINTS                    .
    *    |                                 .
    *    v                                 .
    * <finish> < . . . . . . . . . . . . . .
@@ -101,6 +94,7 @@ private:
 
   typedef std::vector<librados::snap_t> SnapIds;
   typedef std::map<librados::snap_t, SnapIds> SnapMap;
+  class ImageCopyProgressContext;
 
   ImageCtxT *m_local_image_ctx;
   ImageCtxT *m_remote_image_ctx;
@@ -118,9 +112,17 @@ private:
   Mutex m_lock;
   bool m_canceled = false;
 
-  image_sync::SnapshotCopyRequest<ImageCtxT> *m_snapshot_copy_request = nullptr;
-  image_sync::ImageCopyRequest<ImageCtxT> *m_image_copy_request = nullptr;
-  decltype(ImageCtxT::object_map) m_object_map = nullptr;
+  librbd::DeepCopyRequest<ImageCtxT> *m_image_copy_request = nullptr;
+  librbd::ProgressContext *m_image_copy_prog_ctx = nullptr;
+
+  bool m_updating_sync_point = false;
+  Context *m_update_sync_ctx = nullptr;
+  double m_update_sync_point_interval;
+  uint64_t m_image_copy_object_no = 0;
+  uint64_t m_image_copy_object_count = 0;
+  MirrorPeerClientMeta m_client_meta_copy;
+
+  int m_ret_val = 0;
 
   void send_notify_sync_request();
   void handle_notify_sync_request(int r);
@@ -131,17 +133,18 @@ private:
   void send_create_sync_point();
   void handle_create_sync_point(int r);
 
-  void send_copy_snapshots();
-  void handle_copy_snapshots(int r);
+  void send_update_max_object_count();
+  void handle_update_max_object_count(int r);
 
   void send_copy_image();
   void handle_copy_image(int r);
+  void handle_copy_image_update_progress(uint64_t object_no,
+                                         uint64_t object_count);
+  void send_update_sync_point();
+  void handle_update_sync_point(int r);
 
-  void send_copy_object_map();
-  void handle_copy_object_map(int r);
-
-  void send_refresh_object_map();
-  void handle_refresh_object_map(int r);
+  void send_flush_sync_point();
+  void handle_flush_sync_point(int r);
 
   void send_prune_sync_points();
   void handle_prune_sync_points(int r);

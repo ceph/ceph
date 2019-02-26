@@ -1,5 +1,6 @@
-#!/bin/bash  -x
+#!/usr/bin/env bash
 # can't use -e because of background process
+set -x
 
 IMAGE=rbdrw-image
 LOCKID=rbdrw
@@ -13,8 +14,8 @@ python $RBDRW $IMAGE $LOCKID &
 iochild=$!
 
 # give client time to lock and start reading/writing
-LOCKS='{}'
-while [ "$LOCKS" == "{}" ]
+LOCKS='[]'
+while [ "$LOCKS" == '[]' ]
 do
     LOCKS=$(rbd lock list $IMAGE --format json)
     sleep 1

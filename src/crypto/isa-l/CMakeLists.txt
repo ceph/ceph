@@ -24,15 +24,12 @@ set(isal_crypto_plugin_srcs
 
 add_library(isal_crypto_plugin_objs OBJECT ${isal_crypto_plugin_srcs})
 target_include_directories(isal_crypto_plugin_objs PRIVATE ${isal_dir}/include)
-set(isal_crypto_plugin_dir ${CMAKE_INSTALL_PKGLIBDIR}/crypto)
 
-add_custom_target(crypto_plugins)
 if(HAVE_GOOD_YASM_ELF64)
 add_dependencies(crypto_plugins ceph_crypto_isal)
 endif(HAVE_GOOD_YASM_ELF64)
 
 add_library(ceph_crypto_isal SHARED ${isal_crypto_plugin_srcs})
 target_include_directories(ceph_crypto_isal PRIVATE ${isal_dir}/include)
-add_dependencies(ceph_crypto_isal ${CMAKE_SOURCE_DIR}/src/ceph_ver.h)
 set_target_properties(ceph_crypto_isal PROPERTIES VERSION 1.0.0 SOVERSION 1)
-install(TARGETS ceph_crypto_isal DESTINATION ${isal_crypto_plugin_dir})
+install(TARGETS ceph_crypto_isal DESTINATION ${crypto_plugin_dir})

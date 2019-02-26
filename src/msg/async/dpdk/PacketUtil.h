@@ -19,19 +19,6 @@
 /*
  * Copyright (C) 2014 Cloudius Systems, Ltd.
  */
-/*
- * Ceph - scalable distributed file system
- *
- * Copyright (C) 2015 XSky <haomai@xsky.com>
- *
- * Author: Haomai Wang <haomaiwang@gmail.com>
- *
- * This is free software; you can redistribute it and/or
- * modify it under the terms of the GNU Lesser General Public
- * License version 2.1, as published by the Free Software
- * Foundation.  See file COPYING.
- *
- */
 
 #ifndef CEPH_MSG_PACKET_UTIL_H_
 #define CEPH_MSG_PACKET_UTIL_H_
@@ -59,7 +46,7 @@ class packet_merger {
     bool insert = true;
     auto beg = offset;
     auto end = beg + p.len();
-    // Fisrt, try to merge the packet with existing segment
+    // First, try to merge the packet with existing segment
     for (auto it = map.begin(); it != map.end();) {
       auto& seg_pkt = it->second;
       auto seg_beg = it->first;
@@ -114,7 +101,7 @@ class packet_merger {
     }
 
     // Second, merge adjacent segments after this packet has been merged,
-    // becasue this packet might fill a "whole" and make two adjacent
+    // because this packet might fill a "whole" and make two adjacent
     // segments mergable
     for (auto it = map.begin(); it != map.end();) {
       // The first segment
@@ -159,7 +146,6 @@ class packet_merger {
         // If we reach here, we have a bug with merge.
         std::cout << "packet_merger: merge error\n";
         abort();
-        break;
       }
     }
   }

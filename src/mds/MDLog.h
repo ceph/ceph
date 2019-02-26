@@ -41,6 +41,7 @@ enum {
 #include "include/types.h"
 #include "include/Context.h"
 
+#include "MDSContext.h"
 #include "common/Thread.h"
 #include "common/Cond.h"
 
@@ -99,7 +100,7 @@ protected:
   friend class ReplayThread;
   friend class C_MDL_Replay;
 
-  list<MDSInternalContextBase*> waitfor_replay;
+  MDSContext::vec waitfor_replay;
 
   void _replay();         // old way
   void _replay_thread();  // new way
@@ -107,17 +108,17 @@ protected:
   // Journal recovery/rewrite logic
   class RecoveryThread : public Thread {
     MDLog *log;
-    MDSInternalContextBase *completion;
+    MDSContext *completion;
   public:
-    void set_completion(MDSInternalContextBase *c) {completion = c;}
+    void set_completion(MDSContext *c) {completion = c;}
     explicit RecoveryThread(MDLog *l) : log(l), completion(NULL) {}
     void* entry() override {
       log->_recovery_thread(completion);
       return 0;
     }
   } recovery_thread;
-  void _recovery_thread(MDSInternalContextBase *completion);
-  void _reformat_journal(JournalPointer const &jp, Journaler *old_journal, MDSInternalContextBase *completion);
+  void _recovery_thread(MDSContext *completion);
+  void _reformat_journal(JournalPointer const &jp, Journaler *old_journal, MDSContext *completion);
 
   // -- segments --
   map<uint64_t,LogSegment*> segments;
@@ -141,8 +142,8 @@ protected:
 
   void set_safe_pos(uint64_t pos)
   {
-    Mutex::Locker l(submit_mutex);
-    assert(pos >= safe_pos);
+    std::lock_guard l(submit_mutex);
+    ceph_assert(pos >= safe_pos);
     safe_pos = pos;
   }
   friend class MDSLogContextBase;
@@ -171,7 +172,7 @@ protected:
   friend class MDCache;
 
   uint64_t get_last_segment_seq() const {
-    assert(!segments.empty());
+    ceph_assert(!segments.empty());
     return segments.rbegin()->first;
   }
   LogSegment *get_oldest_segment() {
@@ -214,17 +215,17 @@ private:
   // -- segments --
   void _start_new_segment();
   void _prepare_new_segment();
-  void _journal_segment_subtree_map(MDSInternalContextBase *onsync);
+  void _journal_segment_subtree_map(MDSContext *onsync);
 public:
   void start_new_segment() {
-    Mutex::Locker l(submit_mutex);
+    std::lock_guard l(submit_mutex);
     _start_new_segment();
   }
   void prepare_new_segment() {
-    Mutex::Locker l(submit_mutex);
+    std::lock_guard l(submit_mutex);
     _prepare_new_segment();
   }
-  void journal_segment_subtree_map(MDSInternalContextBase *onsync=NULL) {
+  void journal_segment_subtree_map(MDSContext *onsync=NULL) {
     submit_mutex.Lock();
     _journal_segment_subtree_map(onsync);
     submit_mutex.Unlock();
@@ -237,7 +238,7 @@ public:
   }
 
   LogSegment *get_current_segment() { 
-    assert(!segments.empty());
+    ceph_assert(!segments.empty());
     return segments.rbegin()->second;
   }
 
@@ -274,25 +275,25 @@ private:
 public:
   void _start_entry(LogEvent *e);
   void start_entry(LogEvent *e) {
-    Mutex::Locker l(submit_mutex);
+    std::lock_guard l(submit_mutex);
     _start_entry(e);
   }
   void cancel_entry(LogEvent *e);
   void _submit_entry(LogEvent *e, MDSLogContextBase *c);
   void submit_entry(LogEvent *e, MDSLogContextBase *c = 0) {
-    Mutex::Locker l(submit_mutex);
+    std::lock_guard l(submit_mutex);
     _submit_entry(e, c);
     submit_cond.Signal();
   }
   void start_submit_entry(LogEvent *e, MDSLogContextBase *c = 0) {
-    Mutex::Locker l(submit_mutex);
+    std::lock_guard l(submit_mutex);
     _start_entry(e);
     _submit_entry(e, c);
     submit_cond.Signal();
   }
   bool entry_is_open() const { return cur_event != NULL; }
 
-  void wait_for_safe( MDSInternalContextBase *c );
+  void wait_for_safe( MDSContext *c );
   void flush();
   bool is_flushed() const {
     return unflushed == 0;
@@ -306,6 +307,7 @@ private:
 
   friend class C_MaybeExpiredSegment;
   friend class C_MDL_Flushed;
+  friend class C_OFT_Committed;
 
 public:
   void trim_expired_segments();
@@ -317,14 +319,14 @@ public:
   };
 
 private:
-  void write_head(MDSInternalContextBase *onfinish);
+  void write_head(MDSContext *onfinish);
 
 public:
-  void create(MDSInternalContextBase *onfinish);  // fresh, empty log! 
-  void open(MDSInternalContextBase *onopen);      // append() or replay() to follow!
-  void reopen(MDSInternalContextBase *onopen);
+  void create(MDSContext *onfinish);  // fresh, empty log! 
+  void open(MDSContext *onopen);      // append() or replay() to follow!
+  void reopen(MDSContext *onopen);
   void append();
-  void replay(MDSInternalContextBase *onfinish);
+  void replay(MDSContext *onfinish);
 
   void standby_trim_segments();
 

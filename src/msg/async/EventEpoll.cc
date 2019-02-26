@@ -15,6 +15,7 @@
  */
 
 #include "common/errno.h"
+#include <fcntl.h>
 #include "EventEpoll.h"
 
 #define dout_subsys ceph_subsys_ms
@@ -36,6 +37,14 @@ int EpollDriver::init(EventCenter *c, int nevent)
     lderr(cct) << __func__ << " unable to do epoll_create: "
                        << cpp_strerror(errno) << dendl;
     return -errno;
+  }
+  if (::fcntl(epfd, F_SETFD, FD_CLOEXEC) == -1) {
+    int e = errno;
+    ::close(epfd);
+    lderr(cct) << __func__ << " unable to set cloexec: "
+                       << cpp_strerror(e) << dendl;
+
+    return -e;
   }
 
   size = nevent;
