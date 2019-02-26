@@ -11,207 +11,148 @@
 namespace ceph {
 namespace immutable_obj_cache {
 
-void ObjectCacheRegData::encode(bufferlist& bl) {
-  ENCODE_START(1, 1, bl);
-  ceph::encode(type, bl);
-  ceph::encode(seq, bl);
-  ENCODE_FINISH(bl);
+ObjectCacheRequest::ObjectCacheRequest(){}
+ObjectCacheRequest::ObjectCacheRequest(uint16_t t, uint64_t s)
+  : type(t), seq(s) {}
+ObjectCacheRequest::~ObjectCacheRequest(){}
+
+void ObjectCacheRequest::encode() {
+  ENCODE_START(1, 1, m_payload);
+  ceph::encode(type, m_payload);
+  ceph::encode(seq, m_payload);
+  if (!payload_empty()) {
+    encode_payload();
+  }
+  ENCODE_FINISH(m_payload);
 }
 
-void ObjectCacheRegData::decode(bufferlist& bl) {
+void ObjectCacheRequest::decode(bufferlist& bl) {
   auto i = bl.cbegin();
   DECODE_START(1, i);
   ceph::decode(type, i);
   ceph::decode(seq, i);
+  if (!payload_empty()) {
+    decode_payload(i);
+  }
   DECODE_FINISH(i);
 }
 
-void ObjectCacheRegReplyData::encode(bufferlist& bl) {
-  ENCODE_START(1, 1, bl);
-  ceph::encode(type, bl);
-  ceph::encode(seq, bl);
-  ENCODE_FINISH(bl);
+ObjectCacheRegData::ObjectCacheRegData() {}
+ObjectCacheRegData::ObjectCacheRegData(uint16_t t, uint64_t s)
+  : ObjectCacheRequest(t, s) {}
+
+ObjectCacheRegData::~ObjectCacheRegData() {}
+
+void ObjectCacheRegData::encode_payload() {}
+
+void ObjectCacheRegData::decode_payload(bufferlist::const_iterator i) {}
+
+ObjectCacheRegReplyData::ObjectCacheRegReplyData() {}
+ObjectCacheRegReplyData::ObjectCacheRegReplyData(uint16_t t, uint64_t s)
+  : ObjectCacheRequest(t, s) {}
+
+ObjectCacheRegReplyData::~ObjectCacheRegReplyData() {}
+
+void ObjectCacheRegReplyData::encode_payload() {}
+
+void ObjectCacheRegReplyData::decode_payload(bufferlist::const_iterator bl) {}
+
+ObjectCacheReadData::ObjectCacheReadData(uint16_t t, uint64_t s,
+                                         uint64_t read_offset, uint64_t read_len,
+                                         uint64_t pool_id, uint64_t snap_id,
+                                         std::string oid, std::string pool_namespace)
+  : ObjectCacheRequest(t, s), m_read_offset(read_offset),
+    m_read_len(read_len), m_pool_id(pool_id), m_snap_id(snap_id),
+    m_oid(oid), m_pool_namespace(pool_namespace)
+{}
+
+ObjectCacheReadData::ObjectCacheReadData(uint16_t t, uint64_t s)
+  : ObjectCacheRequest(t, s) {}
+
+ObjectCacheReadData::~ObjectCacheReadData() {}
+
+void ObjectCacheReadData::encode_payload() {
+  ceph::encode(m_read_offset, m_payload);
+  ceph::encode(m_read_len, m_payload);
+  ceph::encode(m_pool_id, m_payload);
+  ceph::encode(m_snap_id, m_payload);
+  ceph::encode(m_oid, m_payload);
+  ceph::encode(m_pool_namespace, m_payload);
 }
 
-void ObjectCacheRegReplyData::decode(bufferlist& bl) {
-  auto i = bl.cbegin();
-  DECODE_START(1, i);
-  ceph::decode(type, i);
-  ceph::decode(seq, i);
-  DECODE_FINISH(i);
-}
-
-void ObjectCacheReadData::encode(bufferlist& bl) {
-  ENCODE_START(1, 1, bl);
-  ceph::encode(type, bl);
-  ceph::encode(seq, bl);
-  ceph::encode(m_read_offset, bl);
-  ceph::encode(m_read_len, bl);
-  ceph::encode(m_pool_id, bl);
-  ceph::encode(m_snap_id, bl);
-  ceph::encode(m_oid, bl);
-  ceph::encode(m_pool_namespace, bl);
-  ENCODE_FINISH(bl);
-}
-
-void ObjectCacheReadData::decode(bufferlist& bl) {
-  auto i = bl.cbegin();
-  DECODE_START(1, i);
-  ceph::decode(type, i);
-  ceph::decode(seq, i);
+void ObjectCacheReadData::decode_payload(bufferlist::const_iterator i) {
   ceph::decode(m_read_offset, i);
   ceph::decode(m_read_len, i);
   ceph::decode(m_pool_id, i);
   ceph::decode(m_snap_id, i);
   ceph::decode(m_oid, i);
   ceph::decode(m_pool_namespace, i);
-  DECODE_FINISH(i);
 }
 
-void ObjectCacheReadReplyData::encode(bufferlist& bl) {
-  ENCODE_START(1, 1, bl);
-  ceph::encode(type, bl);
-  ceph::encode(seq, bl);
-  ceph::encode(m_cache_path, bl);
-  ENCODE_FINISH(bl);
+ObjectCacheReadReplyData::ObjectCacheReadReplyData(uint16_t t, uint64_t s, string cache_path)
+  : ObjectCacheRequest(t, s), m_cache_path(cache_path) {}
+ObjectCacheReadReplyData::ObjectCacheReadReplyData(uint16_t t, uint64_t s)
+  : ObjectCacheRequest(t, s) {}
+
+ObjectCacheReadReplyData::~ObjectCacheReadReplyData() {}
+
+void ObjectCacheReadReplyData::encode_payload() {
+  ceph::encode(m_cache_path, m_payload);
 }
 
-void ObjectCacheReadReplyData::decode(bufferlist& bl) {
-  auto i = bl.cbegin();
-  DECODE_START(1, i);
-  ceph::decode(type, i);
-  ceph::decode(seq, i);
+void ObjectCacheReadReplyData::decode_payload(bufferlist::const_iterator i) {
   ceph::decode(m_cache_path, i);
-  DECODE_FINISH(i);
 }
 
-void ObjectCacheReadRadosData::encode(bufferlist& bl) {
-  ENCODE_START(1, 1, bl);
-  ceph::encode(type, bl);
-  ceph::encode(seq, bl);
-  ENCODE_FINISH(bl);
-}
+ObjectCacheReadRadosData::ObjectCacheReadRadosData() {}
+ObjectCacheReadRadosData::ObjectCacheReadRadosData(uint16_t t, uint64_t s)
+  : ObjectCacheRequest(t, s) {}
 
-void ObjectCacheReadRadosData::decode(bufferlist& bl) {
-  auto i = bl.cbegin();
+ObjectCacheReadRadosData::~ObjectCacheReadRadosData() {}
+
+void ObjectCacheReadRadosData::encode_payload() {}
+
+void ObjectCacheReadRadosData::decode_payload(bufferlist::const_iterator i) {}
+
+ObjectCacheRequest* decode_object_cache_request(bufferlist payload_buffer) 
+{
+  ObjectCacheRequest* req = nullptr;
+
+  uint16_t type;
+  uint64_t seq;
+  auto i = payload_buffer.cbegin();
   DECODE_START(1, i);
   ceph::decode(type, i);
   ceph::decode(seq, i);
   DECODE_FINISH(i);
-}
-
-uint8_t get_header_size() {
-  return 6; //uint8_t + uint8_t + uint32_t
-}
-
-struct encode_header{
-  uint8_t v;
-  uint8_t c_v;
-  uint32_t len;
-}__attribute__((packed));
-
-uint32_t get_data_len(char* buf) {
-  encode_header* header = (encode_header*)buf;
-  return header->len;
-}
-
-uint16_t get_data_type(bufferlist buf) {
-  uint16_t type;
-  auto i = buf.cbegin();
-  DECODE_START(1, i);
-  decode(type, i);
-  DECODE_FINISH(i);
-  return type;
-}
-
-bufferlist ObjectCacheRequest::get_data_buffer() {
-  return m_data_buffer;
-}
-
-ObjectCacheRequest* encode_object_cache_request(void* m_data, uint16_t type) {
-  ObjectCacheRequest* req = new ObjectCacheRequest();
 
   switch(type) {
     case RBDSC_REGISTER: {
-      ObjectCacheRegData* data = (ObjectCacheRegData*)m_data;
-      data->encode(req->m_data_buffer);
-      break;
-    }
-    case RBDSC_REGISTER_REPLY: {
-      ObjectCacheRegReplyData* data = (ObjectCacheRegReplyData*)m_data;
-      data->encode(req->m_data_buffer);
+      req = new ObjectCacheRegData(type, seq);
       break;
     }
     case RBDSC_READ: {
-      ObjectCacheReadData* data = (ObjectCacheReadData*)m_data;
-      data->encode(req->m_data_buffer);
+      req = new ObjectCacheReadData(type, seq);
       break;
     }
-    case RBDSC_READ_RADOS: {
-      ObjectCacheReadRadosData* data = (ObjectCacheReadRadosData*)m_data;
-      data->encode(req->m_data_buffer);
+    case RBDSC_REGISTER_REPLY: {
+      req = new ObjectCacheRegReplyData(type, seq);
       break;
     }
     case RBDSC_READ_REPLY: {
-      ObjectCacheReadReplyData* data = (ObjectCacheReadReplyData*)m_data;
-      data->encode(req->m_data_buffer);
+      req = new ObjectCacheReadReplyData(type, seq);
+      break;
+    }
+    case RBDSC_READ_RADOS: {
+      req = new ObjectCacheReadRadosData(type, seq);
       break;
     }
     default:
       ceph_assert(0);
   }
 
-  req->type = type;
-  return req;
-}
+  req->decode(payload_buffer);
 
-ObjectCacheRequest* decode_object_cache_request(bufferlist data_buffer) {
-  ObjectCacheRequest* req = new ObjectCacheRequest();
-  uint16_t type = get_data_type(data_buffer);
-  uint64_t seq;
-
-  switch(type) {
-    case RBDSC_REGISTER: {
-      ObjectCacheRegData* data = new ObjectCacheRegData();
-      data->decode(data_buffer);
-      seq = data->seq;
-      req->m_data = data;
-      break;
-    }
-    case RBDSC_READ: {
-      ObjectCacheReadData* data = new ObjectCacheReadData();
-      data->decode(data_buffer);
-      seq = data->seq;
-      req->m_data = data;
-      break;
-    }
-    case RBDSC_REGISTER_REPLY: {
-      ObjectCacheRegReplyData* data = new ObjectCacheRegReplyData();
-      data->decode(data_buffer);
-      seq = data->seq;
-      req->m_data = data;
-      break;
-    }
-    case RBDSC_READ_REPLY: {
-      ObjectCacheReadReplyData* data = new ObjectCacheReadReplyData();
-      data->decode(data_buffer);
-      seq = data->seq;
-      req->m_data = data;
-      break;
-    }
-    case RBDSC_READ_RADOS: {
-      ObjectCacheReadRadosData* data = new ObjectCacheReadRadosData();
-      data->decode(data_buffer);
-      seq = data->seq;
-      req->m_data = data;
-      break;
-    }
-    default:
-      ceph_assert(0);
-  }
-
-  req->type = type;
-  req->seq = seq;
   return req;
 }
 

@@ -79,28 +79,21 @@ public:
 
   void handle_request(uint64_t session_id, ObjectCacheRequest* req) {
 
-    switch (req->type) {
+    switch (req->get_request_type()) {
       case RBDSC_REGISTER: {
-        ObjectCacheRegReplyData* data = new ObjectCacheRegReplyData();
-        data->type = RBDSC_REGISTER_REPLY;
-        req = encode_object_cache_request(data, RBDSC_REGISTER_REPLY);
-        m_cache_server->send(session_id, req);
+        ObjectCacheRequest* reply = new ObjectCacheRegReplyData(RBDSC_REGISTER_REPLY, req->seq);
+        m_cache_server->send(session_id, reply);
         break;
       }
       case RBDSC_READ: {
-        ObjectCacheReadData* req_data = (ObjectCacheReadData*)req->m_data;
-        if (m_hit_entry_set.find(req_data->m_oid) == m_hit_entry_set.end()) {
-          ObjectCacheReadRadosData* data = new ObjectCacheReadRadosData();
-          data->type = RBDSC_READ_RADOS;
-          data->seq = req_data->seq;
-          req = encode_object_cache_request(data, RBDSC_READ_RADOS);
+        ObjectCacheReadData* read_req = (ObjectCacheReadData*)req;
+        ObjectCacheRequest* reply = nullptr;
+        if (m_hit_entry_set.find(read_req->m_oid) == m_hit_entry_set.end()) {
+          reply = new ObjectCacheReadRadosData(RBDSC_READ_RADOS, req->seq);
         } else {
-          ObjectCacheReadReplyData* data = new ObjectCacheReadReplyData();
-          data->type = RBDSC_READ_REPLY;
-          data->seq = req_data->seq;
-          req = encode_object_cache_request(data, RBDSC_READ_REPLY);
+          reply = new ObjectCacheReadReplyData(RBDSC_READ_REPLY, req->seq, "/temp/cache/path");
         }
-        m_cache_server->send(session_id, req);
+        m_cache_server->send(session_id, reply);
         break;
       }
     }
