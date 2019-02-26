@@ -1098,7 +1098,6 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
 
     rx_segments_desc.clear();
     rx_segments_data.clear();
-    next_payload_len = 0;
 
     if (main_preamble.num_segments > MAX_NUM_SEGMENTS) {
       ldout(cct, 30) << __func__
@@ -1115,14 +1114,6 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
 	get_onwire_size(main_preamble.segments[idx].length),
 	main_preamble.segments[idx]
       });
-      next_payload_len += rx_segments_desc.back().onwire_length;
-    }
-
-    if (session_stream_handlers.rx) {
-      rx_segments_desc.back().onwire_length += \
-	session_stream_handlers.rx->get_extra_size_at_final();
-      next_payload_len += \
-	session_stream_handlers.rx->get_extra_size_at_final();
     }
   }
 
@@ -1136,7 +1127,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
 }
 
 CtPtr ProtocolV2::handle_read_frame_dispatch() {
-  ldout(cct, 10) << __func__ << " next payload_len=" << next_payload_len
+  ldout(cct, 10) << __func__
                  << " tag=" << static_cast<uint32_t>(next_tag) << dendl;
 
   switch (next_tag) {
@@ -1238,8 +1229,12 @@ CtPtr ProtocolV2::handle_read_frame_segment(char *buffer, int r) {
   }
 
   if (rx_segments_desc.size() == rx_segments_data.size()) {
-    // OK, all segments planned to read are read. Can go with dispatch.
-    return handle_read_frame_dispatch();
+    // OK, all segments planned to read are read. Can go with epilogue.
+    if (session_stream_handlers.rx) {
+      return READ(FRAME_EPILOGUE_SIZE, handle_read_frame_epilogue_main);
+    } else {
+      return handle_read_frame_dispatch();
+    }
   } else {
     // TODO: for makeshift only. This will be more generic and throttled
     return read_frame_segment();
@@ -1378,7 +1373,7 @@ CtPtr ProtocolV2::handle_message() {
   front.clear();
   middle.clear();
   data.clear();
-  extra.clear();
+  epilogue.clear();
   current_header = header;
 
   // front
@@ -1389,9 +1384,6 @@ CtPtr ProtocolV2::handle_message() {
   ceph_assert(!middle.length());
   middle = std::move(rx_segments_data[SegmentIndex::Msg::MIDDLE]);
 
-  next_payload_len -= sizeof(ceph_msg_header2);
-  next_payload_len -= front.length();
-  next_payload_len -= middle.length();
   return read_message_data_prepare();
 }
 
@@ -1438,19 +1430,39 @@ CtPtr ProtocolV2::read_message_data() {
     return READB(read_len, bp.c_str(), handle_message_data);
   }
 
-  next_payload_len -= rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
-  if (next_payload_len) {
-    // if we still have more bytes to read is because we signed or encrypted
-    // the message payload
-    ldout(cct, 1) << __func__ << " reading message payload extra bytes left="
-                  << next_payload_len << dendl;
-    ceph_assert(session_stream_handlers.rx && session_stream_handlers.tx &&
-		auth_meta->is_mode_secure());
-    extra.push_back(buffer::create(next_payload_len));
-    return READB(next_payload_len, extra.c_str(), handle_message_extra_bytes);
+  state = READ_MESSAGE_COMPLETE;
+  // TODO: implement epilogue for non-secure frames
+  if (session_stream_handlers.rx) {
+    return READ(FRAME_EPILOGUE_SIZE, handle_read_frame_epilogue_main);
+  } else {
+    return handle_read_frame_dispatch();
+  }
+}
+
+CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r) {
+  ldout(cct, 20) << __func__ << " r=" << r << dendl;
+
+  if (r < 0) {
+    ldout(cct, 1) << __func__ << " read data error " << dendl;
+    return _fault();
   }
 
-  state = READ_MESSAGE_COMPLETE;
+  if (session_stream_handlers.rx) {
+    // if we still have more bytes to read is because we signed or encrypted
+    // the message payload
+    ldout(cct, 1) << __func__ << " read frame epilogue bytes="
+                  << FRAME_EPILOGUE_SIZE << dendl;
+    ceph_assert(session_stream_handlers.rx && session_stream_handlers.tx &&
+		auth_meta->is_mode_secure());
+    ceph_assert(FRAME_EPILOGUE_SIZE == \
+      session_stream_handlers.rx->get_extra_size_at_final());
+
+    // I expect that ::temp_buffer is being used here.
+    epilogue.push_back(buffer::create_static(FRAME_EPILOGUE_SIZE, buffer));
+  }
+
+  // FIXME
+  rx_segments_data.back().claim_append(epilogue);
   return handle_read_frame_dispatch();
 }
 
@@ -1470,18 +1482,6 @@ CtPtr ProtocolV2::handle_message_data(char *buffer, int r) {
   msg_left -= read_len;
 
   return CONTINUE(read_message_data);
-}
-
-CtPtr ProtocolV2::handle_message_extra_bytes(char *buffer, int r) {
-  ldout(cct, 20) << __func__ << " r=" << r << dendl;
-
-  if (r < 0) {
-    ldout(cct, 1) << __func__ << " read message extra bytes error " << dendl;
-    return _fault();
-  }
-
-  state = READ_MESSAGE_COMPLETE;
-  return handle_read_frame_dispatch();
 }
 
 CtPtr ProtocolV2::handle_message_complete() {
@@ -1517,8 +1517,6 @@ CtPtr ProtocolV2::handle_message_complete() {
                          current_header.data_crc, 0, current_header.flags};
 
   if (auth_meta->is_mode_secure()) {
-    //msg_payload.claim_append(extra);
-
     if (front.length()) {
       front = session_stream_handlers.rx->authenticated_decrypt_update(
         std::move(front), segment_t::DEFAULT_ALIGNMENT);
@@ -1527,13 +1525,11 @@ CtPtr ProtocolV2::handle_message_complete() {
       middle = session_stream_handlers.rx->authenticated_decrypt_update(
         std::move(middle), segment_t::DEFAULT_ALIGNMENT);
     }
-    if (data.length()) {
-      data = session_stream_handlers.rx->authenticated_decrypt_update(
-        std::move(data), segment_t::DEFAULT_ALIGNMENT);
-    }
+    // FIXME: append epilogue. This is really ugly.
+    data.claim_append(rx_segments_data[SegmentIndex::Msg::DATA]);
     try {
-      session_stream_handlers.rx->authenticated_decrypt_update_final(
-	std::move(extra), segment_t::DEFAULT_ALIGNMENT);
+      data = session_stream_handlers.rx->authenticated_decrypt_update_final(
+	std::move(data), segment_t::DEFAULT_ALIGNMENT);
     } catch (ceph::crypto::onwire::MsgAuthError &e) {
       ldout(cct, 5) << __func__ << " message authentication failed: "
 		    << e.what() << dendl;
@@ -1662,7 +1658,7 @@ CtPtr ProtocolV2::handle_message_complete() {
   front.clear();
   middle.clear();
   data.clear();
-  extra.clear();
+  epilogue.clear();
 
   // we might have been reused by another connection
   // let's check if that is the case

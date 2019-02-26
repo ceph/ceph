@@ -114,6 +114,7 @@ public:
   boost::container::static_vector<ceph::bufferlist,
 				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_data;
 
+  ceph::bufferlist epilogue;
 private:
 
   ceph::msgr::v2::Tag sent_tag;
@@ -125,7 +126,7 @@ private:
   unsigned msg_left;
   bufferlist data_buf;
   bufferlist::iterator data_blp;
-  bufferlist front, middle, data, extra;
+  bufferlist front, middle, data;
 
   bool keepalive;
 
@@ -170,18 +171,19 @@ private:
   CONTINUATION_DECL(ProtocolV2, read_frame);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_preamble_main);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_segment);
+  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_read_frame_epilogue_main);
   CONTINUATION_DECL(ProtocolV2, throttle_message);
   CONTINUATION_DECL(ProtocolV2, throttle_bytes);
   CONTINUATION_DECL(ProtocolV2, throttle_dispatch_queue);
   CONTINUATION_DECL(ProtocolV2, read_message_data);
   READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_data);
-  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_extra_bytes);
 
   Ct<ProtocolV2> *read_frame();
   Ct<ProtocolV2> *handle_read_frame_preamble_main(char *buffer, int r);
-  Ct<ProtocolV2> *handle_read_frame_dispatch();
   Ct<ProtocolV2> *read_frame_segment();
   Ct<ProtocolV2> *handle_read_frame_segment(char *buffer, int r);
+  Ct<ProtocolV2> *handle_read_frame_epilogue_main(char *buffer, int r);
+  Ct<ProtocolV2> *handle_read_frame_dispatch();
   Ct<ProtocolV2> *handle_frame_payload();
 
   Ct<ProtocolV2> *ready();
@@ -193,7 +195,6 @@ private:
   Ct<ProtocolV2> *read_message_data_prepare();
   Ct<ProtocolV2> *read_message_data();
   Ct<ProtocolV2> *handle_message_data(char *buffer, int r);
-  Ct<ProtocolV2> *handle_message_extra_bytes(char *buffer, int r);
   Ct<ProtocolV2> *handle_message_complete();
 
   Ct<ProtocolV2> *handle_keepalive2(ceph::bufferlist &payload);
