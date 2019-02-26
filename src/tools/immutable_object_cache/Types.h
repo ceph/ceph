@@ -6,78 +6,119 @@
 
 #include "include/encoding.h"
 #include "include/Context.h"
+#include "SocketCommon.h"
 
 namespace ceph {
 namespace immutable_obj_cache {
 
-class ObjectCacheRegData {
+namespace {
+struct HeaderHelper {
+  uint8_t v;
+  uint8_t c_v;
+  uint32_t len;
+}__attribute__((packed));
+
+inline uint8_t get_header_size() {
+  return sizeof(HeaderHelper);
+}
+
+inline uint32_t get_data_len(char* buf) {
+  HeaderHelper* header = (HeaderHelper*)buf;
+  return header->len;
+}
+}
+
+class ObjectCacheRequest {
 public:
   uint16_t type;
   uint64_t seq;
 
-  void encode(bufferlist& bl);
+  bufferlist m_payload;
+
+  GenContext<ObjectCacheRequest*>* m_process_msg;
+
+  ObjectCacheRequest();
+  ObjectCacheRequest(uint16_t type, uint64_t seq);
+  virtual ~ObjectCacheRequest();
+
+  // encode consists of two steps
+  // step 1 : directly encode common bits using encode method of base classs.
+  // step 2 : according to payload_empty, determine whether addtional bits need to
+  //          be encoded which be implements by child class.
+  void encode();
   void decode(bufferlist& bl);
+  bufferlist get_payload_bufferlist() { return m_payload; }
+
+  virtual void encode_payload() = 0;
+  virtual void decode_payload(bufferlist::const_iterator bl_it) = 0;
+  virtual uint16_t get_request_type() = 0;
+  virtual bool payload_empty() = 0;
 };
 
-class ObjectCacheRegReplyData {
+class ObjectCacheRegData : public ObjectCacheRequest {
 public:
-  uint16_t type;
-  uint64_t seq;
-
-  void encode(bufferlist& bl);
-  void decode(bufferlist& bl);
+  ObjectCacheRegData();
+  ObjectCacheRegData(uint16_t t, uint64_t s);
+  ~ObjectCacheRegData() override;
+  void encode_payload() override;
+  void decode_payload(bufferlist::const_iterator bl) override;
+  uint16_t get_request_type() override { return RBDSC_REGISTER; }
+  bool payload_empty() override { return true; }
 };
 
-class ObjectCacheReadData {
+class ObjectCacheRegReplyData : public ObjectCacheRequest {
 public:
-  uint16_t type;
-  uint64_t seq;
+  ObjectCacheRegReplyData();
+  ObjectCacheRegReplyData(uint16_t t, uint64_t s);
+  ~ObjectCacheRegReplyData() override;
+  void encode_payload() override;
+  void decode_payload(bufferlist::const_iterator iter) override;
+  uint16_t get_request_type() override { return RBDSC_REGISTER_REPLY; }
+  bool payload_empty() override { return true; }
+};
+
+class ObjectCacheReadData : public ObjectCacheRequest {
+public:
   uint64_t m_read_offset;
   uint64_t m_read_len;
   uint64_t m_pool_id;
   uint64_t m_snap_id;
   std::string m_oid;
   std::string m_pool_namespace;
-
-  void encode(bufferlist& bl);
-  void decode(bufferlist& bl);
+  ObjectCacheReadData(uint16_t t, uint64_t s, uint64_t read_offset, uint64_t read_len, uint64_t pool_id,
+                      uint64_t snap_id, std::string oid, std::string pool_namespace );
+  ObjectCacheReadData(uint16_t t, uint64_t s);
+  ~ObjectCacheReadData() override;
+  void encode_payload() override;
+  void decode_payload(bufferlist::const_iterator bl) override;
+  uint16_t get_request_type() override { return RBDSC_READ; }
+  bool payload_empty() override { return false; }
 };
 
-class ObjectCacheReadReplyData {
+class ObjectCacheReadReplyData : public ObjectCacheRequest {
 public:
-  uint16_t type;
-  uint64_t seq;
   std::string m_cache_path;
-
-  void encode(bufferlist& bl);
-  void decode(bufferlist& bl);
+  ObjectCacheReadReplyData(uint16_t t, uint64_t s, std::string cache_path);
+  ObjectCacheReadReplyData(uint16_t t, uint64_t s);
+  ~ObjectCacheReadReplyData() override;
+  void encode_payload() override;
+  void decode_payload(bufferlist::const_iterator bl) override;
+  uint16_t get_request_type() override { return RBDSC_READ_REPLY; }
+  bool payload_empty() override { return false; }
 };
 
-class ObjectCacheReadRadosData {
+class ObjectCacheReadRadosData : public ObjectCacheRequest {
 public:
-  uint16_t type;
-  uint64_t seq;
-
-  void encode(bufferlist& bl);
-  void decode(bufferlist& bl);
+  ObjectCacheReadRadosData();
+  ObjectCacheReadRadosData(uint16_t t, uint64_t s);
+  ~ObjectCacheReadRadosData() override;
+  void encode_payload() override;
+  void decode_payload(bufferlist::const_iterator bl) override;
+  uint16_t get_request_type() override { return RBDSC_READ_RADOS; }
+  bool payload_empty() override { return true; }
 };
 
-class ObjectCacheRequest {
-public:
-    uint64_t seq;
-    uint16_t type;
-    void* m_data;
-    bufferlist m_data_buffer;
-    GenContext<ObjectCacheRequest*>* m_process_msg;
-
-    bufferlist get_data_buffer();
-};
-
-uint8_t get_header_size();
-uint32_t get_data_len(char* buf);
-
-ObjectCacheRequest* encode_object_cache_request(void* data, uint16_t type);
-ObjectCacheRequest* decode_object_cache_request(bufferlist data_buffer);
+ObjectCacheRequest* decode_object_cache_request(bufferlist payload_buffer);
 
 } // namespace immutable_obj_cache
 } // namespace ceph
