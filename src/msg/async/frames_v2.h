@@ -91,8 +91,20 @@ struct preamble_block_t {
 static_assert(sizeof(preamble_block_t) % CRYPTO_BLOCK_SIZE == 0);
 static_assert(std::is_standard_layout<preamble_block_t>::value);
 
+// V2 epilogue conveys integrity/authentication information. It's added
+// at the end of each frame holds:
+//  * CRC32 for MAX_NUM_SEGMENTS -- in plain mode,
+//  * cipher-specific data (e.g. auth tag for AES-GCM).
+union epilogue_block_t {
+  // TODO: add crc32 for plain mode
+  std::array<uint8_t, CRYPTO_BLOCK_SIZE> auth_tag;
+};
+static_assert(sizeof(epilogue_block_t) % CRYPTO_BLOCK_SIZE == 0);
+static_assert(std::is_standard_layout<epilogue_block_t>::value);
+
 
 static constexpr uint32_t FRAME_PREAMBLE_SIZE = sizeof(preamble_block_t);
+static constexpr uint32_t FRAME_EPILOGUE_SIZE = sizeof(epilogue_block_t);
 
 template <class T>
 struct Frame {
