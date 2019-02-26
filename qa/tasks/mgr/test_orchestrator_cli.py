@@ -17,6 +17,9 @@ class TestOrchestratorCli(MgrTestCase):
     def _orch_cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd("orchestrator", *args)
 
+    def _progress_cmd(self, *args):
+        return self.mgr_cluster.mon_manager.raw_cluster_cmd("progress", *args)
+
     def _orch_cmd_result(self, *args, **kwargs):
         """
         raw_cluster_cmd doesn't support kwargs.
@@ -141,3 +144,12 @@ class TestOrchestratorCli(MgrTestCase):
         self.assertEqual(ret, errno.ENOENT)
         ret = self._orch_cmd_result("host", "add", "raise_import_error")
         self.assertEqual(ret, errno.ENOENT)
+
+    def test_progress(self):
+        self._progress_cmd('clear')
+        evs = json.loads(self._progress_cmd('json'))['completed']
+        self.assertEqual(len(evs), 0)
+        self._orch_cmd("mgr", "update", "4")
+        evs = json.loads(self._progress_cmd('json'))['completed']
+        self.assertEqual(len(evs), 1)
+        self.assertIn('update_mgrs', evs[0]['message'])
