@@ -2132,7 +2132,8 @@ private:
   int _reconcile_bluefs_freespace();
   int _balance_bluefs_freespace(PExtentVector *extents);
   void _commit_bluefs_freespace(const PExtentVector& extents);
-
+  int _balance_bluefs_freespace_standalone();
+  
   CollectionRef _get_collection(const coll_t& cid);
   void _queue_reap_collection(CollectionRef& c);
   void _reap_collections();

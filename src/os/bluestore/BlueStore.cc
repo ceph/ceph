@@ -5245,6 +5245,41 @@ void BlueStore::_commit_bluefs_freespace(
   }
 }
 
+int BlueStore::_balance_bluefs_freespace_standalone()
+{
+  PExtentVector bluefs_gift_extents;
+  int r = _balance_bluefs_freespace(&bluefs_gift_extents);
+  assert(r >= 0);
+  if (r > 0) {
+    KeyValueDB::Transaction synct = db->get_transaction();
+    for (auto& p : bluefs_gift_extents) {
+      bluefs_extents.insert(p.offset, p.length);
+    }
+    bufferlist bl;
+    ::encode(bluefs_extents, bl);
+    dout(10) << __func__ << " bluefs_extents now 0x" << std::hex
+	     << bluefs_extents << std::dec << dendl;
+    synct->set(PREFIX_SUPER, "bluefs_extents", bl);
+  
+    r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction_sync(synct);
+    assert(r == 0);
+  
+    if (!bluefs_gift_extents.empty()) {
+      _commit_bluefs_freespace(bluefs_gift_extents);
+    }
+    for (auto p = bluefs_extents_reclaiming.begin();
+	 p != bluefs_extents_reclaiming.end();
+	 ++p) {
+      dout(20) << __func__ << " releasing old bluefs 0x" << std::hex
+	       << p.get_start() << "~" << p.get_len() << std::dec
+	       << dendl;
+      alloc->release(p.get_start(), p.get_len());
+    }
+    bluefs_extents_reclaiming.clear();
+  }
+  return r;
+}
+
 int BlueStore::_open_collections(int *errors)
 {
   dout(10) << __func__ << dendl;
@@ -8702,8 +8737,13 @@ void BlueStore::_kv_sync_thread()
       if (kv_stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
-      kv_cond.wait(l);
+      std::cv_status status = kv_cond.wait_for(l,
+        std::chrono::milliseconds(int64_t(cct->_conf->bluestore_bluefs_balance_interval * 1000)));
       dout(20) << __func__ << " wake" << dendl;
+      if (status == std::cv_status::timeout) {
+	_balance_bluefs_freespace_standalone();
+      }
+
     } else {
       deque<TransContext*> kv_submitting;
       deque<DeferredBatch*> deferred_done, deferred_stable;
