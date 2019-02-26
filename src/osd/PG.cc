@@ -192,7 +192,10 @@ uint64_t PG::get_with_id()
   BackTrace bt(0);
   stringstream ss;
   bt.print(ss);
-  dout(20) << __func__ << ": " << info.pgid << " got id " << id << " (new) ref==" << ref << dendl;
+  lgeneric_subdout(cct, refs, 5) << "PG::get " << this << " " << info.pgid
+				 << " got id " << id << " "
+				 << (ref - 1) << " -> " << ref
+				 << dendl;
   ceph_assert(!_live_ids.count(id));
   _live_ids.insert(make_pair(id, ss.str()));
   return id;
@@ -200,13 +203,17 @@ uint64_t PG::get_with_id()
 
 void PG::put_with_id(uint64_t id)
 {
-  dout(20) << __func__ << ": " << info.pgid << " put id " << id << " (current) ref==" << ref << dendl;
+  int newref = --ref;
+  lgeneric_subdout(cct, refs, 5) << "PG::put " << this << " " << info.pgid
+				 << " put id " << id << " "
+				 << (newref + 1) << " -> " << newref
+				 << dendl;
   {
     std::lock_guard l(_ref_id_lock);
     ceph_assert(_live_ids.count(id));
     _live_ids.erase(id);
   }
-  if (--ref == 0)
+  if (newref)
     delete this;
 }
 
