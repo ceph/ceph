@@ -1876,6 +1876,8 @@ protected:
   void consume_map();
   void activate_map();
 
+  void _prime_pg_splits_and_merges(PGRef& pg);
+
   // osd map cache (past osd maps)
   OSDMapRef get_map(epoch_t e) {
     return service.get_map(e);

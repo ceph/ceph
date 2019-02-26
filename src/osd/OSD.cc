@@ -404,6 +404,8 @@ void OSDService::identify_splits_and_merges(
 	      for (auto c : children) {
 		merge_pgs->insert(make_pair(c, q->first));
 	      }
+
+	      // does this (new?) merge parent
 	    }
 	  } else {
 	    dout(20) << __func__ << " " << cur << " e" << q->first
@@ -3113,22 +3115,7 @@ int OSD::init()
     }
     for (auto pg : pgs) {
       pg->lock();
-      set<pair<spg_t,epoch_t>> new_children;
-      set<pair<spg_t,epoch_t>> merge_pgs;
-      service.identify_splits_and_merges(pg->get_osdmap(), osdmap, pg->pg_id,
-					 &new_children, &merge_pgs);
-      if (!new_children.empty()) {
-	for (auto shard : shards) {
-	  shard->prime_splits(osdmap, &new_children);
-	}
-	assert(new_children.empty());
-      }
-      if (!merge_pgs.empty()) {
-	for (auto shard : shards) {
-	  shard->prime_merges(osdmap, &merge_pgs);
-	}
-	assert(merge_pgs.empty());
-      }
+      _prime_pg_splits_and_merges(pg);
       pg->unlock();
     }
   }
@@ -10217,6 +10204,29 @@ void OSD::get_perf_reports(
   dout(20) << "reports for " << reports->size() << " queries" << dendl;
 }
 
+
+
+void OSD::_prime_pg_splits_and_merges(PGRef& pg)
+{
+  dout(10) << __func__ << " " << pg->pg_id << dendl;
+  set<pair<spg_t,epoch_t>> new_children;
+  set<pair<spg_t,epoch_t>> merge_pgs;
+  service.identify_splits_and_merges(pg->get_osdmap(), osdmap, pg->pg_id,
+				     &new_children, &merge_pgs);
+  if (!new_children.empty()) {
+    for (auto shard : shards) {
+      shard->prime_splits(osdmap, &new_children);
+    }
+    assert(new_children.empty());
+  }
+  if (!merge_pgs.empty()) {
+    for (auto shard : shards) {
+      shard->prime_merges(osdmap, &merge_pgs);
+    }
+    assert(merge_pgs.empty());
+  }
+}
+
 // =============================================================
 
 #undef dout_context
@@ -10547,6 +10557,7 @@ void OSDShard::prime_merges(const OSDMapRef& as_of_osdmap,
       PGRef pg = osd->handle_pg_create_info(shard_osdmap, &cinfo);
       _attach_pg(r.first->second.get(), pg.get());
       _wake_pg_slot(pgid, slot);
+      osd->_prime_pg_splits_and_merges(pg);
       pg->unlock();
     }
     // mark slot for merge
