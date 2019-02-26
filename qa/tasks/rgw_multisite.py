@@ -249,8 +249,9 @@ def extract_clusters_and_gateways(ctx, role_endpoints):
             raise ConfigError('no daemon for role=%s cluster=%s type=rgw id=%s' % \
                               (role, cluster_name, client_id))
         (remote,) = ctx.cluster.only(role).remotes.keys()
+        proto = 'https' if endpoint.cert else 'http'
         gateways[role] = Gateway(role, remote, daemon, endpoint.hostname,
-                endpoint.port, cluster)
+                endpoint.port, cluster, proto=proto)
     return clusters, gateways
 
 def create_realm(cluster, config):
