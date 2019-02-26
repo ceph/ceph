@@ -9213,7 +9213,8 @@ void OSD::do_queries(map<int, map<spg_t,pg_query_t> >& query_map,
     service.share_map_peer(who, con.get(), curmap);
     dout(7) << __func__ << " querying osd." << who
 	    << " on " << pit->second.size() << " PGs" << dendl;
-    MOSDPGQuery *m = new MOSDPGQuery(curmap->get_epoch(), pit->second);
+    MOSDPGQuery *m = new MOSDPGQuery(curmap->get_epoch(),
+				     std::move(pit->second));
     con->send_message(m);
   }
 }
