@@ -139,7 +139,10 @@ effect.  Second, the completion becomes *effective*, meaning that the operation 
    :members:
 
 .. autoclass:: ReadCompletion
+   :members:
+
 .. autoclass:: WriteCompletion
+   :members:
 
 Placement
 ---------
