@@ -372,7 +372,7 @@ void Server::handle_client_session(MClientSession *m)
       session->set_client_metadata(m->client_meta);
       auto& client_metadata = session->info.client_metadata;
 
-      auto log_session_status = [this, m, session](boost::string_view status, boost::string_view err) {
+      auto log_session_status = [this, m = m->get(), session](boost::string_view status, boost::string_view err) {
         auto now = ceph_clock_now();
         auto throttle_elapsed = m->get_recv_complete_stamp() - m->get_throttle_stamp();
         auto elapsed = now - m->get_recv_stamp();
@@ -391,6 +391,7 @@ void Server::handle_client_session(MClientSession *m)
           ss << ",root=\"" << it->second << "\"";
         }
         dout(2) << ss.str() << dendl;
+        m->put();
       };
 
       if (blacklisted) {
