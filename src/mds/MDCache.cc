@@ -2016,14 +2016,15 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
   }
 }
 
-void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct)
+void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct, bool quota_change)
 {
   if (!in->is_auth() || in->is_frozen())
     return;
 
   auto i = in->get_projected_inode();
-
-  if (!i->quota.is_enable())
+  
+  if (!i->quota.is_enable() &&
+  	  !quota_change)
     return;
 
   for (map<client_t,Capability*>::iterator it = in->client_caps.begin();
