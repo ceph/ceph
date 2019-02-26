@@ -658,9 +658,8 @@ class StatelessServiceSpec(object):
         # within one ceph cluster.
         self.name = ""
 
-        # Minimum and maximum number of service instances
-        self.min_size = 1
-        self.max_size = 1
+        # Count of service instances
+        self.count = 1
 
         # Arbitrary JSON-serializable object.
         # Maybe you're using e.g. kubenetes and you want to pass through
