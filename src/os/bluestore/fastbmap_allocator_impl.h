@@ -335,13 +335,14 @@ protected:
     auto pos = l0_pos_start;
     slot_t bits = (slot_t)1 << (l0_pos_start % d0);
     slot_t& val_s = l0[pos / d0];
-    int64_t pos_e = std::min(l0_pos_end, (int64_t)p2roundup(l0_pos_start + 1, d0));
+    int64_t pos_e = std::min(l0_pos_end,
+                             p2roundup<int64_t>(l0_pos_start + 1, d0));
     while (pos < pos_e) {
       val_s |= bits;
       bits <<= 1;
       pos++;
     }
-    pos_e = std::min(l0_pos_end, (int64_t)p2align(l0_pos_end, d0));
+    pos_e = std::min(l0_pos_end, p2align<int64_t>(l0_pos_end, d0));
     auto idx = pos / d0;
     while (pos < pos_e) {
       l0[idx++] = all_slot_set;
