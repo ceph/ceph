@@ -38,15 +38,30 @@ Major Changes from Mimic
 
 - *RADOS*:
 
-  * The new *msgr2* wire protocol brings support for encryption on the wire.
   * The number of placement groups (PGs) per pool can now be decreased
     at any time, and the cluster can automatically tune the PG count
     based on cluster utilization or administrator hints.
+  * The new *v2* wire protocol brings support for encryption on the wire.
   * Physical storage devices consumed by OSD and Monitor daemons are
     now tracked by the cluster along with health metrics (i.e.,
     SMART), and the cluster can apply a pre-trained prediction model
     or a cloud-based prediction service to warn about expected
     HDD or SSD failures.
+  * The NUMA node for OSD daemons can easily be monitored via the
+    ``ceph osd numa-status`` command, and configured via the
+    ``osd_numa_node`` config option.
+  * When BlueStore OSDs are used, space utilization is now broken down
+    by object data, omap data, and internal metadata, by pool, and by
+    pre- and post- compression sizes.
+  * OSDs more effectively prioritize the most important PGs and
+    objects when performing recovery and backfill.
+  * Progress for long-running background processes--like recovery
+    after a device failure--is not reported as part of ``ceph
+    status``.
+  * An experimental `Coupled-Layer "Clay" erasure code
+    <https://www.usenix.org/conference/fast18/presentation/vajha>`_
+    plugin has been added that reduces network bandwidth and IO needed
+    for most recovery operations.
 
 - *RGW*:
 
@@ -78,9 +93,8 @@ Major Changes from Mimic
 
   * Ceph has a new set of :ref:`orchestrator modules
     <orchestrator-cli-module>` to directly interact with external
-    orchestrators like ceph-ansible, DeepSea and Rook via a consistent
-    CLI (and, eventually, Dashboard) interface.  It also contains an
-    ssh orchestrator to directly deploy services via ssh.
+    orchestrators like ceph-ansible, DeepSea, Rook, or simply ssh via
+    a consistent CLI (and, eventually, Dashboard) interface.
 
 
 Upgrading from Mimic or Luminous
