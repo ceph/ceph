@@ -1,12 +1,4 @@
-import {
-  Component,
-  Input,
-  OnChanges,
-  OnInit,
-  SimpleChanges,
-  TemplateRef,
-  ViewChild
-} from '@angular/core';
+import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -51,7 +43,7 @@ export class RbdConfigurationListComponent implements OnInit, OnChanges {
     ];
   }
 
-  ngOnChanges(changes: SimpleChanges): void {
+  ngOnChanges(): void {
     if (!this.data) {
       return;
     }

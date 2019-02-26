@@ -104,7 +104,7 @@ describe('CriticalConfirmationModalComponent', () => {
     mockFixture = TestBed.createComponent(MockComponent);
     mockComponent = mockFixture.componentInstance;
     // Mocking the modals as a lot would be left over
-    spyOn(mockComponent.modalService, 'show').and.callFake((modalComp, config) => {
+    spyOn(mockComponent.modalService, 'show').and.callFake((_modalComp, config) => {
       const ref = new BsModalRef();
       fixture = TestBed.createComponent(CriticalConfirmationModalComponent);
       component = fixture.componentInstance;

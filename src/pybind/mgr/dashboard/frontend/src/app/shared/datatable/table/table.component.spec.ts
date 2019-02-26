@@ -125,7 +125,7 @@ describe('TableComponent', () => {
 
       it('should test search manipulation', () => {
         let searchTerms = [];
-        spyOn(component, 'subSearch').and.callFake((d, search) => {
+        spyOn(component, 'subSearch').and.callFake((_d, search) => {
           expect(search).toEqual(searchTerms);
         });
         const searchTest = (s: string, st: string[]) => {

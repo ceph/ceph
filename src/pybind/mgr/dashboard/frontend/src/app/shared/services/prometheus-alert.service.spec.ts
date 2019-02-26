@@ -42,7 +42,7 @@ describe('PrometheusAlertService', () => {
     const resp = { status: 500, error: {} };
     service = new PrometheusAlertService(null, <PrometheusService>{
       ifAlertmanagerConfigured: (fn) => fn(),
-      list: () => ({ subscribe: (fn, err) => err(resp) })
+      list: () => ({ subscribe: (_fn, err) => err(resp) })
     });
 
     expect(service['connected']).toBe(true);

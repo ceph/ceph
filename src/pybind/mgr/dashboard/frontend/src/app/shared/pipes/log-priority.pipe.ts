@@ -4,7 +4,7 @@ import { Pipe, PipeTransform } from '@angular/core';
   name: 'logPriority'
 })
 export class LogPriorityPipe implements PipeTransform {
-  transform(value: any, args?: any): any {
+  transform(value: any): any {
     if (value === '[INF]') {
       return 'info';
     } else if (value === '[WRN]') {

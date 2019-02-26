@@ -103,7 +103,7 @@ export class PoolListComponent implements OnInit {
         name: this.i18n('PG Status'),
         flexGrow: 3,
         cellClass: ({ row, column, value }): any => {
-          return this.getPgStatusCellClass({ row, column, value });
+          return this.getPgStatusCellClass(row, column, value);
         }
       },
       {
@@ -190,7 +190,7 @@ export class PoolListComponent implements OnInit {
     });
   }
 
-  getPgStatusCellClass({ row, column, value }): object {
+  getPgStatusCellClass(_row, _column, value): object {
     return {
       'text-right': true,
       [`pg-${this.pgCategoryService.getTypeByStates(value)}`]: true

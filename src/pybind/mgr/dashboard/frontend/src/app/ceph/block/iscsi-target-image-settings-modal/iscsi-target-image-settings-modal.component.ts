@@ -27,7 +27,7 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
     const currentSettings = this.imagesSettings[this.image];
     this.helpText = this.iscsiService.imageAdvancedSettings;
 
-    _.forIn(this.disk_default_controls, (value, key) => {
+    _.forIn(this.disk_default_controls, (_value, key) => {
       fg[key] = new FormControl(currentSettings[key]);
     });
 

@@ -177,7 +177,7 @@ describe('PoolListComponent', () => {
 
   describe('getPgStatusCellClass', () => {
     const testMethod = (value, expected) =>
-      expect(component.getPgStatusCellClass({ row: '', column: '', value: value })).toEqual({
+      expect(component.getPgStatusCellClass('', '', value)).toEqual({
         'text-right': true,
         [expected]: true
       });

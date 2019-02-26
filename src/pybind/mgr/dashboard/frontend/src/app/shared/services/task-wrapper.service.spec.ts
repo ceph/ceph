@@ -76,7 +76,7 @@ describe('TaskWrapperService', () => {
 
     it('should call notifyTask if asynchronous task would have been finished', () => {
       const taskManager = TestBed.get(TaskManagerService);
-      spyOn(taskManager, 'subscribe').and.callFake((name, metadata, onTaskFinished) => {
+      spyOn(taskManager, 'subscribe').and.callFake((_name, _metadata, onTaskFinished) => {
         onTaskFinished();
       });
       callWrapTaskAroundCall(202, 'async').subscribe(null, null, () => (passed = true));

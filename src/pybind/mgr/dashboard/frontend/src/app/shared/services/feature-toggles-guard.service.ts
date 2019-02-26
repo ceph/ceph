@@ -1,11 +1,5 @@
 import { Injectable } from '@angular/core';
-import {
-  ActivatedRouteSnapshot,
-  CanActivate,
-  CanActivateChild,
-  Router,
-  RouterStateSnapshot
-} from '@angular/router';
+import { ActivatedRouteSnapshot, CanActivate, CanActivateChild, Router } from '@angular/router';
 
 import { map } from 'rxjs/operators';
 
@@ -18,7 +12,7 @@ import { ServicesModule } from './services.module';
 export class FeatureTogglesGuardService implements CanActivate, CanActivateChild {
   constructor(private router: Router, private featureToggles: FeatureTogglesService) {}
 
-  canActivate(route: ActivatedRouteSnapshot, state: RouterStateSnapshot) {
+  canActivate(route: ActivatedRouteSnapshot) {
     return this.featureToggles.get().pipe(
       map((enabledFeatures: FeatureTogglesMap) => {
         if (enabledFeatures[route.routeConfig.path] === false) {
@@ -30,7 +24,7 @@ export class FeatureTogglesGuardService implements CanActivate, CanActivateChild
     );
   }
 
-  canActivateChild(route: ActivatedRouteSnapshot, state: RouterStateSnapshot) {
-    return this.canActivate(route.parent, state);
+  canActivateChild(route: ActivatedRouteSnapshot) {
+    return this.canActivate(route.parent);
   }
 }

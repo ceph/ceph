@@ -6,12 +6,12 @@
     "module": "commonjs",
     "target": "es5",
     "types": [
-      "jasmine",
+      "jest",
       "node"
-    ]
+    ],
+    "noEmit": true
   },
   "files": [
-    "test.ts",
     "polyfills.ts"
   ],
   "include": [
