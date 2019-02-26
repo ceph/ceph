@@ -1244,6 +1244,14 @@ CtPtr ProtocolV2::handle_frame_payload() {
   ceph_assert(!rx_segments_data.empty());
   auto& payload = rx_segments_data.back();
 
+  if (session_stream_handlers.rx) {
+    const auto length = payload.length();
+    payload = session_stream_handlers.rx->authenticated_decrypt_update_final(
+        std::move(payload), segment_t::DEFAULT_ALIGNMENT);
+    ceph_assert(payload.length() ==
+        length - session_stream_handlers.rx->get_extra_size_at_final());
+  }
+
   ldout(cct, 30) << __func__ << "\n";
   payload.hexdump(*_dout);
   *_dout << dendl;

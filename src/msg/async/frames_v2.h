@@ -356,19 +356,7 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
 
   static T Decode(ceph::crypto::onwire::rxtx_t &session_stream_handlers,
                   ceph::bufferlist &payload) {
-    if (!session_stream_handlers.rx) {
-      return PayloadFrame<T, Args...>::Decode(payload);
-    }
-
-    T c;
-    const auto length = payload.length();
-    ceph::bufferlist plain_bl =
-        session_stream_handlers.rx->authenticated_decrypt_update_final(
-            std::move(payload), segment_t::DEFAULT_ALIGNMENT);
-    ceph_assert(plain_bl.length() ==
-                length - session_stream_handlers.rx->get_extra_size_at_final());
-    c.decode_frame(plain_bl);
-    return c;
+    return PayloadFrame<T, Args...>::Decode(payload);
   }
 
 protected:
