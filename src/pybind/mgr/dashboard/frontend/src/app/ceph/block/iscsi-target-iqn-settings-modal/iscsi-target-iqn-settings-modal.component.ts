@@ -25,7 +25,7 @@ export class IscsiTargetIqnSettingsModalComponent implements OnInit {
     const fg = {};
     this.helpText = this.iscsiService.targetAdvancedSettings;
 
-    _.forIn(this.target_default_controls, (value, key) => {
+    _.forIn(this.target_default_controls, (_value, key) => {
       fg[key] = new FormControl(this.target_controls.value[key]);
     });
 

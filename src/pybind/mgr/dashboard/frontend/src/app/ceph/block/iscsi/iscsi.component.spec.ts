@@ -20,7 +20,7 @@ describe('IscsiComponent', () => {
 
   const fakeService = {
     tcmuiscsi: () => {
-      return new Promise(function(resolve, reject) {
+      return new Promise(function() {
         return;
       });
     }

@@ -4,7 +4,7 @@ import { Pipe, PipeTransform } from '@angular/core';
   name: 'list'
 })
 export class ListPipe implements PipeTransform {
-  transform(value: any, args?: any): any {
+  transform(value: any): any {
     return value.join(', ');
   }
 }

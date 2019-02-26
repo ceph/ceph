@@ -36,7 +36,7 @@ export class NotificationService {
     let notifications: CdNotification[] = [];
 
     if (_.isString(stringNotifications)) {
-      notifications = JSON.parse(stringNotifications, (key, value) => {
+      notifications = JSON.parse(stringNotifications, (_key, value) => {
         if (_.isPlainObject(value)) {
           return _.assign(new CdNotification(), value);
         }

@@ -7,7 +7,7 @@ import { Pipe, PipeTransform } from '@angular/core';
 export class CdDatePipe implements PipeTransform {
   constructor(private datePipe: DatePipe) {}
 
-  transform(value: any, args?: any): any {
+  transform(value: any): any {
     if (value === null || value === '') {
       return '';
     }

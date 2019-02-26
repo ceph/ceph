@@ -57,9 +57,8 @@ export class PoolListComponent implements OnInit, OnDestroy {
       icon: 'fa-plus',
       name: this.i18n('Add Peer'),
       click: () => this.editPeersModal('add'),
-      disable: (selection: CdTableSelection) =>
-        !this.selection.first() || this.selection.first().mirror_mode === 'disabled',
-      visible: (selection: CdTableSelection) => !this.getPeerUUID(),
+      disable: () => !this.selection.first() || this.selection.first().mirror_mode === 'disabled',
+      visible: () => !this.getPeerUUID(),
       canBePrimary: () => false
     };
     const editPeerAction: CdTableAction = {
@@ -67,14 +66,14 @@ export class PoolListComponent implements OnInit, OnDestroy {
       icon: 'fa-exchange',
       name: this.i18n('Edit Peer'),
       click: () => this.editPeersModal('edit'),
-      visible: (selection: CdTableSelection) => !!this.getPeerUUID()
+      visible: () => !!this.getPeerUUID()
     };
     const deletePeerAction: CdTableAction = {
       permission: 'delete',
       icon: 'fa-times',
       name: this.i18n('Delete Peer'),
       click: () => this.deletePeersModal(),
-      visible: (selection: CdTableSelection) => !!this.getPeerUUID()
+      visible: () => !!this.getPeerUUID()
     };
     this.tableActions = [editModeAction, addPeerAction, editPeerAction, deletePeerAction];
   }

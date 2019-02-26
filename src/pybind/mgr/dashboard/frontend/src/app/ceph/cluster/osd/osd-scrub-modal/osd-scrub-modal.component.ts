@@ -33,7 +33,7 @@ export class OsdScrubModalComponent implements OnInit {
     const id = this.selected[0].id;
 
     this.osdService.scrub(id, this.deep).subscribe(
-      (res) => {
+      () => {
         const operation = this.deep ? 'Deep scrub' : 'Scrub';
 
         this.notificationService.show(
