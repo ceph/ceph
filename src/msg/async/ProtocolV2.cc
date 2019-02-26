@@ -1245,11 +1245,20 @@ CtPtr ProtocolV2::handle_frame_payload() {
   auto& payload = rx_segments_data.back();
 
   if (session_stream_handlers.rx) {
-    const auto length = payload.length();
-    payload = session_stream_handlers.rx->authenticated_decrypt_update_final(
+    ceph_assert(epilogue.length() == FRAME_EPILOGUE_SIZE);
+    ceph_assert(session_stream_handlers.rx->get_extra_size_at_final() ==
+        FRAME_EPILOGUE_SIZE);
+
+    payload = session_stream_handlers.rx->authenticated_decrypt_update(
         std::move(payload), segment_t::DEFAULT_ALIGNMENT);
-    ceph_assert(payload.length() ==
-        length - session_stream_handlers.rx->get_extra_size_at_final());
+    try {
+      session_stream_handlers.rx->authenticated_decrypt_update_final(
+	std::move(epilogue), segment_t::DEFAULT_ALIGNMENT);
+    } catch (ceph::crypto::onwire::MsgAuthError &e) {
+      ldout(cct, 5) << __func__ << " message authentication failed: "
+		    << e.what() << dendl;
+      return _fault();
+    }
   }
 
   ldout(cct, 30) << __func__ << "\n";
@@ -1470,8 +1479,6 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r) {
     epilogue.push_back(buffer::create_static(FRAME_EPILOGUE_SIZE, buffer));
   }
 
-  // FIXME
-  rx_segments_data.back().claim_append(epilogue);
   return handle_read_frame_dispatch();
 }
 
@@ -1534,11 +1541,14 @@ CtPtr ProtocolV2::handle_message_complete() {
       middle = session_stream_handlers.rx->authenticated_decrypt_update(
         std::move(middle), segment_t::DEFAULT_ALIGNMENT);
     }
-    // FIXME: append epilogue. This is really ugly.
-    data.claim_append(rx_segments_data[SegmentIndex::Msg::DATA]);
-    try {
-      data = session_stream_handlers.rx->authenticated_decrypt_update_final(
+    if (data.length()) {
+      data = session_stream_handlers.rx->authenticated_decrypt_update(
 	std::move(data), segment_t::DEFAULT_ALIGNMENT);
+    }
+
+    try {
+      session_stream_handlers.rx->authenticated_decrypt_update_final(
+	std::move(epilogue), segment_t::DEFAULT_ALIGNMENT);
     } catch (ceph::crypto::onwire::MsgAuthError &e) {
       ldout(cct, 5) << __func__ << " message authentication failed: "
 		    << e.what() << dendl;
