@@ -1148,9 +1148,8 @@ CtPtr ProtocolV2::handle_read_frame_dispatch() {
     case Tag::KEEPALIVE2:
     case Tag::KEEPALIVE2_ACK:
     case Tag::ACK:
-      return handle_frame_payload();
     case Tag::WAIT:
-      return handle_wait();
+      return handle_frame_payload();
     case Tag::MESSAGE:
       // see the comment in ::read_frame_segment().
       return handle_message_complete();
@@ -1284,6 +1283,8 @@ CtPtr ProtocolV2::handle_frame_payload() {
       return handle_keepalive2_ack(payload);
     case Tag::ACK:
       return handle_message_ack(payload);
+    case Tag::WAIT:
+      return handle_wait(payload);
     default:
       ceph_abort();
   }
@@ -2123,14 +2124,14 @@ CtPtr ProtocolV2::handle_session_retry_global(ceph::bufferlist &payload)
   return send_reconnect();
 }
 
-CtPtr ProtocolV2::handle_wait() {
-  ldout(cct, 20) << __func__ << dendl;
-  ldout(cct, 1) << __func__ << " received WAIT (connection race)" << dendl;
+CtPtr ProtocolV2::handle_wait(ceph::bufferlist &payload) {
+  ldout(cct, 20) << __func__
+		 << " received WAIT (connection race)"
+		 << " payload.length()=" << payload.length()
+		 << dendl;
+
   state = WAIT;
-  ceph_assert(rx_segments_data.size() == 1);
-  ceph_assert(rx_segments_desc.size() == 1);
-  WaitFrame::Decode(session_stream_handlers,
-                    rx_segments_data[SegmentIndex::Frame::PAYLOAD]);
+  WaitFrame::Decode(session_stream_handlers, payload);
   return _fault();
 }
 
