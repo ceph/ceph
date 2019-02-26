@@ -9184,7 +9184,7 @@ void OSD::do_notifies(
     dout(7) << __func__ << " osd." << it->first
 	    << " on " << it->second.size() << " PGs" << dendl;
     MOSDPGNotify *m = new MOSDPGNotify(curmap->get_epoch(),
-				       it->second);
+				       std::move(it->second));
     con->send_message(m);
   }
 }
@@ -9478,7 +9478,7 @@ void OSD::handle_pg_query_nopg(const MQuery& q)
 	    osdmap->get_epoch(),
 	    empty),
 	  PastIntervals()));
-      m = new MOSDPGNotify(osdmap->get_epoch(), ls);
+      m = new MOSDPGNotify(osdmap->get_epoch(), std::move(ls));
     }
     service.share_map_peer(q.from.osd, con.get(), osdmap);
     con->send_message(m);
