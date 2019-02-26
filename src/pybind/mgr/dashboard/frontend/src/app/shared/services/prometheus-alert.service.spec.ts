@@ -51,8 +51,8 @@ describe('PrometheusAlertService', () => {
       expect(disabledSetting).toBe(expectation);
     };
 
-    it('disables on 500 error which is thrown if the mgr failed', () => {
-      expectDisabling(500, true);
+    it('disables on 504 error which is thrown if the mgr failed', () => {
+      expectDisabling(504, true);
     });
 
     it('disables on 404 error which is thrown if the external api cannot be reached', () => {

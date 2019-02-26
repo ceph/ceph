@@ -24,7 +24,7 @@ export class PrometheusAlertService {
       this.prometheusService.list().subscribe(
         (alerts) => this.handleAlerts(alerts),
         (resp) => {
-          if (resp.status === 404 || resp.status === 500) {
+          if ([404, 504].includes(resp.status)) {
             this.prometheusService.disableAlertmanagerConfig();
           }
         }

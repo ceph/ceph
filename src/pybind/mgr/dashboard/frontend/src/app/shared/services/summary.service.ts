@@ -29,19 +29,21 @@ export class SummaryService {
 
     this.ngZone.runOutsideAngular(() => {
       this.polling = window.setInterval(() => {
-        this.ngZone.run(() => {
-          this.refresh();
-        });
+        this.ngZone.run(() => this.refresh());
       }, 5000);
     });
   }
 
   refresh() {
     if (this.router.url !== '/login') {
-      this.http.get('api/summary').subscribe((data) => {
-        this.summaryDataSource.next(data);
-      });
+      this.http
+        .get('api/summary')
+        .subscribe((data) => this.summaryDataSource.next(data), () => this.disablePolling());
     }
+  }
+
+  disablePolling() {
+    window.clearInterval(this.polling);
   }
 
   /**
