@@ -209,7 +209,6 @@ class RookCluster(object):
 
     def add_filesystem(self, spec):
         # TODO use spec.placement
-        # TODO use spec.min_size (and use max_size meaningfully)
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
 
@@ -223,7 +222,7 @@ class RookCluster(object):
             "spec": {
                 "onlyManageDaemons": True,
                 "metadataServer": {
-                    "activeCount": spec.max_size,
+                    "activeCount": spec.count,
                     "activeStandby": True
 
                 }
@@ -235,7 +234,6 @@ class RookCluster(object):
 
     def add_nfsgw(self, spec):
         # TODO use spec.placement
-        # TODO use spec.min_size (and use max_size meaningfully)
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
 
@@ -251,7 +249,7 @@ class RookCluster(object):
                     "pool": spec.extended["pool"]
                 },
                 "server": {
-                    "active": spec.max_size,
+                    "active": spec.count,
                 }
             }
         }
@@ -263,7 +261,6 @@ class RookCluster(object):
             self.rook_api_post("cephnfses/", body=rook_nfsgw)
 
     def add_objectstore(self, spec):
-  
         rook_os = {
             "apiVersion": ROOK_API_NAME,
             "kind": "CephObjectStore",
