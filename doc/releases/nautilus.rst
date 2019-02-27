@@ -34,7 +34,8 @@ Major Changes from Mimic
   * NFS Ganesha management
   * iSCSI target management (via ceph-iscsi)
   * RBD QoS configuration
-  * Prometheus Alert Management
+  * Ceph Manager (ceph-mgr) module management
+  * Prometheus alert Management
 
 - *RADOS*:
 
