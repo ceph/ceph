@@ -1374,19 +1374,8 @@ CtPtr ProtocolV2::handle_message() {
 
   // Reset state
   data_buf.clear();
-  front.clear();
-  middle.clear();
-  data.clear();
+
   current_header = header;
-
-  // front
-  ceph_assert(!front.length());
-  front = std::move(rx_segments_data[SegmentIndex::Msg::FRONT]);
-
-  // middle
-  ceph_assert(!middle.length());
-  middle = std::move(rx_segments_data[SegmentIndex::Msg::MIDDLE]);
-
   return read_message_data_prepare();
 }
 
@@ -1435,9 +1424,12 @@ CtPtr ProtocolV2::read_message_data() {
 
   // FIXME: if (auth_meta->is_mode_secure()) {
   //  ceph_assert(session_stream_handlers.rx);
-  if (session_stream_handlers.rx && data.length()) {
-    data = session_stream_handlers.rx->authenticated_decrypt_update(
-	std::move(data), segment_t::DEFAULT_ALIGNMENT);
+  if (session_stream_handlers.rx && \
+      rx_segments_data[SegmentIndex::Msg::DATA].length()) {
+    rx_segments_data[SegmentIndex::Msg::DATA] =
+        session_stream_handlers.rx->authenticated_decrypt_update(
+	    std::move(rx_segments_data[SegmentIndex::Msg::DATA]),
+            segment_t::DEFAULT_ALIGNMENT);
   }
 
   state = READ_MESSAGE_COMPLETE;
@@ -1497,7 +1489,7 @@ CtPtr ProtocolV2::handle_message_data(char *buffer, int r) {
   unsigned read_len = std::min(bp.length(), msg_left);
   ceph_assert(read_len < std::numeric_limits<int>::max());
   data_blp.advance(read_len);
-  data.append(bp, 0, read_len);
+  rx_segments_data[SegmentIndex::Msg::DATA].append(bp, 0, read_len);
   msg_left -= read_len;
 
   return CONTINUE(read_message_data);
@@ -1506,18 +1498,18 @@ CtPtr ProtocolV2::handle_message_data(char *buffer, int r) {
 CtPtr ProtocolV2::handle_message_complete() {
   ldout(cct, 20) << __func__ << dendl;
 
-  ldout(cct, 5) << __func__
-		<< " got " << front.length()
-		<< " + " << middle.length()
-		<< " + " << data.length()
-		<< " byte message" << dendl;
-
   const auto front_len = \
     rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length;
   const auto middle_len = \
     rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length;
   const auto data_len = \
     rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+
+  ldout(cct, 5) << __func__
+		<< " got " << front_len
+		<< " + " << middle_len
+		<< " + " << data_len
+		<< " byte message" << dendl;
 
   ceph_msg_header header{current_header.seq,
                          current_header.tid,
@@ -1536,7 +1528,10 @@ CtPtr ProtocolV2::handle_message_complete() {
                          current_header.data_crc, 0, current_header.flags};
 
   Message *message = decode_message(cct, messenger->crcflags, header, footer,
-                                    front, middle, data, connection);
+      rx_segments_data[SegmentIndex::Msg::FRONT],
+      rx_segments_data[SegmentIndex::Msg::MIDDLE],
+      rx_segments_data[SegmentIndex::Msg::DATA],
+      connection);
   if (!message) {
     ldout(cct, 1) << __func__ << " decode message failed " << dendl;
     return _fault();
@@ -1653,9 +1648,6 @@ CtPtr ProtocolV2::handle_message_complete() {
 
   // clean up local buffer references
   data_buf.clear();
-  front.clear();
-  middle.clear();
-  data.clear();
 
   // we might have been reused by another connection
   // let's check if that is the case
