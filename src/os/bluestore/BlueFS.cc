@@ -42,6 +42,18 @@ static void slow_discard_cb(BlockDevice::discard_t discard_mode, void *priv, voi
   bluefs->handle_discard(discard_mode, BlueFS::BDEV_SLOW, *tmp);
 }
 
+static void newwal_discard_cb(BlockDevice::discard_t discard_mode, void *priv, void* priv2) {
+  BlueFS *bluefs = static_cast<BlueFS*>(priv);
+  interval_set<uint64_t> *tmp = static_cast<interval_set<uint64_t>*>(priv2);
+  bluefs->handle_discard(discard_mode, BlueFS::BDEV_NEWWAL, *tmp);
+}
+
+static void newdb_discard_cb(BlockDevice::discard_t discard_mode, void *priv, void* priv2) {
+  BlueFS *bluefs = static_cast<BlueFS*>(priv);
+  interval_set<uint64_t> *tmp = static_cast<interval_set<uint64_t>*>(priv2);
+  bluefs->handle_discard(discard_mode, BlueFS::BDEV_NEWDB, *tmp);
+}
+
 BlueFS::BlueFS(CephContext* cct)
   : cct(cct),
     bdev(MAX_BDEV),
@@ -51,6 +63,9 @@ BlueFS::BlueFS(CephContext* cct)
   discard_cb[BDEV_WAL] = wal_discard_cb;
   discard_cb[BDEV_DB] = db_discard_cb;
   discard_cb[BDEV_SLOW] = slow_discard_cb;
+  discard_cb[BDEV_NEWWAL] = newwal_discard_cb;
+  discard_cb[BDEV_NEWDB] = newdb_discard_cb;
+
   discard_mode = BlockDevice::get_discard_t(cct->_conf->bluefs_bdev_discard);
 }
 

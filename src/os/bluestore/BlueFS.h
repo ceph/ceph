@@ -283,7 +283,7 @@ private:
   vector<interval_set<uint64_t>> pending_release; ///< extents to release
 
   BlockDevice::discard_t discard_mode;
-  BlockDevice::discard_callback_t discard_cb[3]; //discard callbacks for each dev
+  BlockDevice::discard_callback_t discard_cb[MAX_BDEV]; //discard callbacks for each dev
 
   BlueFSDeviceExpander* slow_dev_expander = nullptr;
 
