@@ -3,7 +3,7 @@
 iostat
 ======
 
-This plugin shows the current throughput and IOPS done on the Ceph cluster.
+This module shows the current throughput and IOPS done on the Ceph cluster.
 
 Enabling
 --------

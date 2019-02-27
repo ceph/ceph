@@ -1,7 +1,7 @@
-restful plugin
+Restful Module
 ==============
 
-RESTful plugin offers the REST API access to the status of the cluster
+RESTful module offers the REST API access to the status of the cluster
 over an SSL-secured connection.
 
 Enabling
