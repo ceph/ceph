@@ -348,14 +348,14 @@ if(WITH_TESTS)
   add_executable(ceph_rgw_jsonparser
     rgw_jsonparser.cc)
   target_link_libraries(ceph_rgw_jsonparser
-    rgw_a
-    global rabbitmq)
+    ${rgw_libs}
+    global)
 
   add_executable(ceph_rgw_multiparser
     rgw_multiparser.cc)
   target_link_libraries(ceph_rgw_multiparser
-    rgw_a
-    global rabbitmq)
+    ${rgw_libs}
+    global)
 
   install(TARGETS
     ceph_rgw_jsonparser
