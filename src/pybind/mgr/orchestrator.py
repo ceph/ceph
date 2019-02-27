@@ -565,10 +565,10 @@ class DriveGroupSpec(object):
     Describe a drive group in the same form that ceph-volume
     understands.
     """
-    def __init__(self, host_pattern, data_devices, db_devices=None, wal_devices=None, journal_devices=None,
-                 osds_per_device=None, objectstore='bluestore', encrypted=False, db_slots=None,
-                 wal_slots=None):
-        # type: (str, DeviceSelection, Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], int, str, bool, int, int) -> ()
+    def __init__(self, host_pattern, data_devices=None, db_devices=None, wal_devices=None, journal_devices=None,
+                 data_directories=None, osds_per_device=None, objectstore='bluestore', encrypted=False,
+                 db_slots=None, wal_slots=None):
+        # type: (str, Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[List[str]], int, str, bool, int, int) -> ()
 
         # concept of applying a drive group to a (set) of hosts is tightly
         # linked to the drive group itself
@@ -591,6 +591,9 @@ class DriveGroupSpec(object):
         #: Number of osd daemons per "DATA" device.
         #: To fully utilize nvme devices multiple osds are required.
         self.osds_per_device = osds_per_device
+
+        #: A list of strings, containing paths which should back OSDs
+        self.data_directories = data_directories
 
         #: ``filestore`` or ``bluestore``
         self.objectstore = objectstore
