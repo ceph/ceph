@@ -4721,8 +4721,12 @@ std::vector<Option> get_global_options() {
     .set_description("Enable health indication on bluefs slow device usage"),
 
     Option("bluestore_log_op_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(1)
+    .set_default(5)
     .set_description("log operation if it's slower than this age (seconds)"),
+
+    Option("bluestore_log_omap_iterator_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("log omap iteration operation if it's slower than this age (seconds)"),
 
     // -----------------------------------------
     // kstore
