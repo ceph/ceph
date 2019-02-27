@@ -19,6 +19,7 @@
 #include "include/types.h"
 #include "include/health.h"
 #include "mon/health_check.h"
+#include "mon/PGMap.h"
 
 class MMonMgrReport : public PaxosServiceMessage {
 
@@ -48,6 +49,22 @@ public:
     paxos_encode();
     encode(health_checks, payload);
     encode(service_map_bl, payload);
+
+    if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
+      // PGMapDigest had a backwards-incompatible change between
+      // luminous and mimic, and conditionally encodes based on
+      // provided features, so reencode the one in our data payload.
+      // The mgr isn't able to do this at the time the encoded
+      // PGMapDigest is constructed because we don't know which mon we
+      // will target.  Note that this only triggers if the user
+      // upgrades ceph-mgr before ceph-mon (tsk tsk).
+      PGMapDigest digest;
+      auto p = data.begin();
+      decode(digest, p);
+      bufferlist bl;
+      encode(digest, bl, features);
+      set_data(bl);
+    }
   }
   void decode_payload() override {
     bufferlist::iterator p = payload.begin();
