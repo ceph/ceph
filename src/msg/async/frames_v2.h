@@ -128,14 +128,7 @@ protected:
     }
   }
 
-public:
   Frame() : preamble_filler(payload.append_hole(FRAME_PREAMBLE_SIZE)) {}
-
-  ceph::bufferlist &get_buffer() {
-    fill_preamble({segment_t{payload.length() - FRAME_PREAMBLE_SIZE,
-                   segment_t::DEFAULT_ALIGNMENT}});
-    return payload;
-  }
 
   void decode_frame(const ceph::bufferlist &bl) {
     auto ti = bl.cbegin();
@@ -143,14 +136,17 @@ public:
   }
 
   void decode_payload(bufferlist::const_iterator &ti) {}
+
+public:
+  ceph::bufferlist &get_buffer() {
+    fill_preamble({segment_t{payload.length() - FRAME_PREAMBLE_SIZE,
+                   segment_t::DEFAULT_ALIGNMENT}});
+    return payload;
+  }
 };
 
-// TODO, FIXME: fix this altogether with the Frame hierarchy rework
-struct do_not_encode_tag_t {};
-struct dummy_ctor_conflict_helper {};
-
 template <class C, typename... Args>
-struct PayloadFrame : public Frame<C> {
+class PayloadFrame : public Frame<C> {
 protected:
   // this tuple is only used when decoding values from a payload buffer
   std::tuple<Args...> _values;
@@ -170,8 +166,6 @@ protected:
       }
     } else if constexpr (std::is_same<T, ceph_msg_header2 const>()) {
       this->payload.append((char *)&t, sizeof(t));
-    } else if constexpr (std::is_same<T, dummy_ctor_conflict_helper const>()) {
-      /* NOP, only to discriminate ctors for decode/encode. FIXME. */
     } else {
       encode(t, this->payload, features);
     }
@@ -194,8 +188,6 @@ protected:
       auto ptr = ti.get_current_ptr();
       ti.advance(sizeof(T));
       t = *(T *)ptr.raw_c_str();
-    } else if constexpr (std::is_same<T, dummy_ctor_conflict_helper>()) {
-      /* NOP, only to discriminate ctors for decode/encode. FIXME. */
     } else {
       decode(t, ti);
     }
@@ -212,12 +204,24 @@ protected:
     return std::get<N>(_values);
   }
 
+  PayloadFrame() : Frame<C>() {}
+
+  void _encode(const Args &... args) {
+    (_encode_payload_each(args), ...);
+  }
+
 public:
-  PayloadFrame(const Args &... args) { (_encode_payload_each(args), ...); }
+  static C Encode(const Args &... args) {
+    C c;
+    c._encode(args...);
+    return c;
+  }
 
-  PayloadFrame(do_not_encode_tag_t) {}
-
-  PayloadFrame(const ceph::bufferlist &payload) { this->decode_frame(payload); }
+  static C Decode(const ceph::bufferlist &payload) {
+    C c;
+    c.decode_frame(payload);
+    return c;
+  }
 
   void decode_payload(bufferlist::const_iterator &ti) {
     _decode_payload(ti, std::index_sequence_for<Args...>());
@@ -228,10 +232,14 @@ struct HelloFrame : public PayloadFrame<HelloFrame,
                                         uint8_t,          // entity type
                                         entity_addr_t> {  // peer address
   static const Tag tag = Tag::HELLO;
-  using PayloadFrame::PayloadFrame;
+  using PayloadFrame::Encode;
+  using PayloadFrame::Decode;
 
   inline uint8_t &entity_type() { return get_val<0>(); }
   inline entity_addr_t &peer_addr() { return get_val<1>(); }
+
+protected:
+  using PayloadFrame::PayloadFrame;
 };
 
 struct AuthRequestFrame : public PayloadFrame<AuthRequestFrame,
@@ -239,11 +247,15 @@ struct AuthRequestFrame : public PayloadFrame<AuthRequestFrame,
                                               vector<uint32_t>, // preferred modes
                                               bufferlist> { // auth payload
   static const Tag tag = Tag::AUTH_REQUEST;
-  using PayloadFrame::PayloadFrame;
+  using PayloadFrame::Encode;
+  using PayloadFrame::Decode;
 
   inline uint32_t &method() { return get_val<0>(); }
   inline vector<uint32_t> &preferred_modes() { return get_val<1>(); }
   inline bufferlist &auth_payload() { return get_val<2>(); }
+
+protected:
+  using PayloadFrame::PayloadFrame;
 };
 
 struct AuthBadMethodFrame : public PayloadFrame<AuthBadMethodFrame,
@@ -252,30 +264,40 @@ struct AuthBadMethodFrame : public PayloadFrame<AuthBadMethodFrame,
                                                 std::vector<uint32_t>,   // allowed methods
                                                 std::vector<uint32_t>> { // allowed modes
   static const Tag tag = Tag::AUTH_BAD_METHOD;
-  using PayloadFrame::PayloadFrame;
+  using PayloadFrame::Encode;
+  using PayloadFrame::Decode;
 
   inline uint32_t &method() { return get_val<0>(); }
   inline int32_t &result() { return get_val<1>(); }
   inline std::vector<uint32_t> &allowed_methods() { return get_val<2>(); }
   inline std::vector<uint32_t> &allowed_modes() { return get_val<3>(); }
+
+protected:
+  using PayloadFrame::PayloadFrame;
 };
 
 struct AuthReplyMoreFrame : public PayloadFrame<AuthReplyMoreFrame,
-			                                          dummy_ctor_conflict_helper,
                                                 bufferlist> { // auth payload
   static const Tag tag = Tag::AUTH_REPLY_MORE;
-  using PayloadFrame::PayloadFrame;
+  using PayloadFrame::Encode;
+  using PayloadFrame::Decode;
 
-  inline bufferlist &auth_payload() { return get_val<1>(); }
+  inline bufferlist &auth_payload() { return get_val<0>(); }
+
+protected:
+  using PayloadFrame::PayloadFrame;
 };
 
 struct AuthRequestMoreFrame : public PayloadFrame<AuthRequestMoreFrame,
-			                                            dummy_ctor_conflict_helper,
                                                   bufferlist> { // auth payload
   static const Tag tag = Tag::AUTH_REQUEST_MORE;
-  using PayloadFrame::PayloadFrame;
+  using PayloadFrame::Encode;
+  using PayloadFrame::Decode;
 
-  inline bufferlist &auth_payload() { return get_val<1>(); }
+  inline bufferlist &auth_payload() { return get_val<0>(); }
+
+protected:
+  using PayloadFrame::PayloadFrame;
 };
 
 struct AuthDoneFrame : public PayloadFrame<AuthDoneFrame,
@@ -283,11 +305,15 @@ struct AuthDoneFrame : public PayloadFrame<AuthDoneFrame,
                                            uint32_t, // connection mode
                                            bufferlist> { // auth method payload
   static const Tag tag = Tag::AUTH_DONE;
-  using PayloadFrame::PayloadFrame;
+  using PayloadFrame::Encode;
+  using PayloadFrame::Decode;
 
   inline uint64_t &global_id() { return get_val<0>(); }
   inline uint32_t &con_mode() { return get_val<1>(); }
   inline bufferlist &auth_payload() { return get_val<2>(); }
+
+protected:
+  using PayloadFrame::PayloadFrame;
 };
 
 template <class T, typename... Args>
@@ -297,40 +323,44 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
     return this->payload;
   }
 
-  SignedEncryptedFrame(ceph::crypto::onwire::rxtx_t &session_stream_handlers,
-                       const Args &... args)
-      : PayloadFrame<T, Args...>(args...) {
+  static T Encode(ceph::crypto::onwire::rxtx_t &session_stream_handlers,
+                  const Args &... args) {
+    T c = PayloadFrame<T, Args...>::Encode(args...);
     // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart
     // from auth tag size
-    this->fill_preamble({segment_t{this->payload.length() - FRAME_PREAMBLE_SIZE,
-                         segment_t::DEFAULT_ALIGNMENT}});
+    c.fill_preamble({segment_t{c.payload.length() - FRAME_PREAMBLE_SIZE,
+                     segment_t::DEFAULT_ALIGNMENT}});
 
     if (session_stream_handlers.tx) {
       ceph_assert(session_stream_handlers.tx);
-      session_stream_handlers.tx->reset_tx_handler({this->payload.length()});
+      session_stream_handlers.tx->reset_tx_handler({c.payload.length()});
 
       session_stream_handlers.tx->authenticated_encrypt_update(
-          std::move(this->payload));
-      this->payload = session_stream_handlers.tx->authenticated_encrypt_final();
+          std::move(c.payload));
+      c.payload = session_stream_handlers.tx->authenticated_encrypt_final();
     }
+    return c;
   }
 
-  SignedEncryptedFrame(ceph::crypto::onwire::rxtx_t &session_stream_handlers,
-                       ceph::bufferlist &bl)
-      : PayloadFrame<T, Args...>(do_not_encode_tag_t{}) {
+  static T Decode(ceph::crypto::onwire::rxtx_t &session_stream_handlers,
+                  ceph::bufferlist &payload) {
     if (!session_stream_handlers.rx) {
-      this->decode_frame(bl);
-      return;
+      return PayloadFrame<T, Args...>::Decode(payload);
     }
 
-    const auto length = bl.length();
+    T c;
+    const auto length = payload.length();
     ceph::bufferlist plain_bl =
         session_stream_handlers.rx->authenticated_decrypt_update_final(
-            std::move(bl), segment_t::DEFAULT_ALIGNMENT);
+            std::move(payload), segment_t::DEFAULT_ALIGNMENT);
     ceph_assert(plain_bl.length() ==
                 length - session_stream_handlers.rx->get_extra_size_at_final());
-    this->decode_frame(plain_bl);
+    c.decode_frame(plain_bl);
+    return c;
   }
+
+protected:
+  SignedEncryptedFrame() : PayloadFrame<T, Args...>() {}
 };
 
 struct ClientIdentFrame
@@ -344,7 +374,8 @@ struct ClientIdentFrame
                                   uint64_t,  // flags
                                   uint64_t> {  // client cookie
   static const Tag tag = Tag::CLIENT_IDENT;
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using SignedEncryptedFrame::Encode;
+  using SignedEncryptedFrame::Decode;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
   inline entity_addr_t &target_addr() { return get_val<1>(); }
@@ -354,6 +385,9 @@ struct ClientIdentFrame
   inline uint64_t &required_features() { return get_val<5>(); }
   inline uint64_t &flags() { return get_val<6>(); }
   inline uint64_t &cookie() { return get_val<7>(); }
+
+protected:
+  using SignedEncryptedFrame::SignedEncryptedFrame;
 };
 
 struct ServerIdentFrame
@@ -366,7 +400,8 @@ struct ServerIdentFrame
                                   uint64_t,  // flags
                                   uint64_t> {  // server cookie
   static const Tag tag = Tag::SERVER_IDENT;
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using SignedEncryptedFrame::Encode;
+  using SignedEncryptedFrame::Decode;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
   inline int64_t &gid() { return get_val<1>(); }
@@ -375,6 +410,9 @@ struct ServerIdentFrame
   inline uint64_t &required_features() { return get_val<4>(); }
   inline uint64_t &flags() { return get_val<5>(); }
   inline uint64_t &cookie() { return get_val<6>(); }
+
+protected:
+  using SignedEncryptedFrame::SignedEncryptedFrame;
 };
 
 struct ReconnectFrame
@@ -386,7 +424,8 @@ struct ReconnectFrame
                                   uint64_t,  // connect sequence
                                   uint64_t> { // message sequence
   static const Tag tag = Tag::SESSION_RECONNECT;
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using SignedEncryptedFrame::Encode;
+  using SignedEncryptedFrame::Decode;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
   inline uint64_t &client_cookie() { return get_val<1>(); }
@@ -394,79 +433,120 @@ struct ReconnectFrame
   inline uint64_t &global_seq() { return get_val<3>(); }
   inline uint64_t &connect_seq() { return get_val<4>(); }
   inline uint64_t &msg_seq() { return get_val<5>(); }
+
+protected:
+  using SignedEncryptedFrame::SignedEncryptedFrame;
 };
 
 struct ResetFrame : public SignedEncryptedFrame<ResetFrame,
                                                 bool> {  // full reset
   static const Tag tag = Tag::SESSION_RESET;
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using SignedEncryptedFrame::Encode;
+  using SignedEncryptedFrame::Decode;
 
   inline bool &full() { return get_val<0>(); }
+
+protected:
+  using SignedEncryptedFrame::SignedEncryptedFrame;
 };
 
 struct RetryFrame : public SignedEncryptedFrame<RetryFrame,
                                                 uint64_t> {  // connection seq
   static const Tag tag = Tag::SESSION_RETRY;
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using SignedEncryptedFrame::Encode;
+  using SignedEncryptedFrame::Decode;
 
   inline uint64_t &connect_seq() { return get_val<0>(); }
+
+protected:
+  using SignedEncryptedFrame::SignedEncryptedFrame;
 };
 
 struct RetryGlobalFrame : public SignedEncryptedFrame<RetryGlobalFrame,
                                                       uint64_t> { // global seq
   static const Tag tag = Tag::SESSION_RETRY_GLOBAL;
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using SignedEncryptedFrame::Encode;
+  using SignedEncryptedFrame::Decode;
 
   inline uint64_t &global_seq() { return get_val<0>(); }
+
+protected:
+  using SignedEncryptedFrame::SignedEncryptedFrame;
 };
 
 struct WaitFrame : public SignedEncryptedFrame<WaitFrame> {
   static const Tag tag = Tag::WAIT;
+  using SignedEncryptedFrame::Encode;
+  using SignedEncryptedFrame::Decode;
+
+protected:
   using SignedEncryptedFrame::SignedEncryptedFrame;
 };
 
 struct ReconnectOkFrame : public SignedEncryptedFrame<ReconnectOkFrame,
                                                       uint64_t> { // message seq
   static const Tag tag = Tag::SESSION_RECONNECT_OK;
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using SignedEncryptedFrame::Encode;
+  using SignedEncryptedFrame::Decode;
 
   inline uint64_t &msg_seq() { return get_val<0>(); }
+
+protected:
+  using SignedEncryptedFrame::SignedEncryptedFrame;
 };
 
 struct IdentMissingFeaturesFrame 
     : public SignedEncryptedFrame<IdentMissingFeaturesFrame,
                                   uint64_t> { // missing features mask
   static const Tag tag = Tag::IDENT_MISSING_FEATURES;
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using SignedEncryptedFrame::Encode;
+  using SignedEncryptedFrame::Decode;
 
   inline uint64_t &features() { return get_val<0>(); }
+
+protected:
+  using SignedEncryptedFrame::SignedEncryptedFrame;
 };
 
 struct KeepAliveFrame : public SignedEncryptedFrame<KeepAliveFrame,
                                                     utime_t> {  // timestamp
   static const Tag tag = Tag::KEEPALIVE2;
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using SignedEncryptedFrame::Encode;
+  using SignedEncryptedFrame::Decode;
 
-  KeepAliveFrame(ceph::crypto::onwire::rxtx_t &session_stream_handlers)
-      : KeepAliveFrame(session_stream_handlers, ceph_clock_now()) {}
+  static KeepAliveFrame Encode(
+      ceph::crypto::onwire::rxtx_t &session_stream_handlers) {
+    return KeepAliveFrame::Encode(session_stream_handlers, ceph_clock_now());
+  }
 
   inline utime_t &timestamp() { return get_val<0>(); }
+
+protected:
+  using SignedEncryptedFrame::SignedEncryptedFrame;
 };
 
 struct KeepAliveFrameAck : public SignedEncryptedFrame<KeepAliveFrameAck,
                                                        utime_t> { // ack timestamp
   static const Tag tag = Tag::KEEPALIVE2_ACK;
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using SignedEncryptedFrame::Encode;
+  using SignedEncryptedFrame::Decode;
 
   inline utime_t &timestamp() { return get_val<0>(); }
+
+protected:
+  using SignedEncryptedFrame::SignedEncryptedFrame;
 };
 
 struct AckFrame : public SignedEncryptedFrame<AckFrame,
                                               uint64_t> { // message sequence
   static const Tag tag = Tag::ACK;
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using SignedEncryptedFrame::Encode;
+  using SignedEncryptedFrame::Decode;
 
   inline uint64_t &seq() { return get_val<0>(); }
+
+protected:
+  using SignedEncryptedFrame::SignedEncryptedFrame;
 };
 
 // This class is used for encoding/decoding header of the message frame.
@@ -481,29 +561,33 @@ struct MessageHeaderFrame
     return this->payload;
   }
 
-  MessageHeaderFrame(const ceph_msg_header2 &msghdr,
-		     const uint32_t front_len,
-		     const uint32_t middle_len,
-		     const uint32_t data_len)
-      : PayloadFrame<MessageHeaderFrame, ceph_msg_header2>(msghdr)
-  {
+  static MessageHeaderFrame Encode(const ceph_msg_header2 &msg_header,
+                                   const uint32_t front_len,
+                                   const uint32_t middle_len,
+                                   const uint32_t data_len)  {
+    MessageHeaderFrame f =
+        PayloadFrame<MessageHeaderFrame, ceph_msg_header2>::Encode(msg_header);
     // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart from auth tag size
-    fill_preamble({
-      segment_t{ this->payload.length() - FRAME_PREAMBLE_SIZE,
-		 segment_t::DEFAULT_ALIGNMENT },
+    f.fill_preamble({
+      segment_t{ f.payload.length() - FRAME_PREAMBLE_SIZE,
+                 segment_t::DEFAULT_ALIGNMENT },
       segment_t{ front_len, segment_t::DEFAULT_ALIGNMENT },
       segment_t{ middle_len, segment_t::DEFAULT_ALIGNMENT },
       segment_t{ data_len, segment_t::DEFERRED_ALLOCATION },
     });
+    return f;
   }
 
-  MessageHeaderFrame(ceph::bufferlist&& text)
-      : PayloadFrame<MessageHeaderFrame, ceph_msg_header2>(do_not_encode_tag_t{})
-  {
-    this->decode_frame(text);
+  static MessageHeaderFrame Decode(ceph::bufferlist&& text) {
+    MessageHeaderFrame f;
+    f.decode_frame(text);
+    return f;
   }
 
   inline ceph_msg_header2 &header() { return get_val<0>(); }
+
+protected:
+  using PayloadFrame::PayloadFrame;
 };
 
 } // namespace ceph::msgr::v2
