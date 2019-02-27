@@ -498,15 +498,14 @@ class Module(MgrModule):
                     'osd.{}'.format(id_),
                 ))
 
-            osd_objectstore = osd_metadata.get('osd_objectstore', None)
-            if osd_objectstore == "filestore":
+            if obj_store == "filestore":
                 # collect filestore backend device
                 osd_dev_node = osd_metadata.get(
                     'backend_filestore_dev_node', None)
                 # collect filestore journal device
                 osd_wal_dev_node = osd_metadata.get('osd_journal', '')
                 osd_db_dev_node = ''
-            elif osd_objectstore == "bluestore":
+            elif obj_store == "bluestore":
                 # collect bluestore backend device
                 osd_dev_node = osd_metadata.get(
                     'bluestore_bdev_dev_node', None)
