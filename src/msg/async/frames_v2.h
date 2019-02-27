@@ -647,10 +647,6 @@ struct MessageHeaderFrame
       // auth tag will be appended at the end
       f.payload = session_stream_handlers.tx->authenticated_encrypt_final();
     } else {
-      f.payload.append(front);
-      f.payload.append(middle);
-      f.payload.append(data);
-
       epilogue_block_t epilogue;
       ceph::bufferlist::const_iterator hdriter(&f.payload, FRAME_PREAMBLE_SIZE);
       epilogue.crc_values[SegmentIndex::Msg::HEADER] =
@@ -659,6 +655,9 @@ struct MessageHeaderFrame
       epilogue.crc_values[SegmentIndex::Msg::MIDDLE] = middle.crc32c(-1),
       epilogue.crc_values[SegmentIndex::Msg::DATA] = data.crc32c(-1),
 
+      f.payload.append(front);
+      f.payload.append(middle);
+      f.payload.append(data);
       f.payload.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
     }
 

@@ -399,7 +399,7 @@ void ProtocolV2::prepare_send_message(uint64_t features,
   }
 
   // encode and copy out of *m
-  m->encode(features, messenger->crcflags);
+  m->encode(features, 0);
 }
 
 void ProtocolV2::send_message(Message *m) {
@@ -509,16 +509,9 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
                            header.type,       header.priority,
                            header.version,
                            0,                 header.data_off,
-                           ack_seq,           footer.front_crc,
-                           footer.middle_crc, footer.data_crc,
+                           ack_seq,
                            footer.flags,      header.compat_version,
-                           header.reserved,   0};
-
-  if (messenger->crcflags & MSG_CRC_HEADER) {
-    header2.header_crc =
-        ceph_crc32c(0, (unsigned char *)&header2,
-                    sizeof(header2) - sizeof(header2.header_crc));
-  }
+                           header.reserved};
 
   auto message = MessageHeaderFrame::Encode(session_stream_handlers,
 			     header2,
@@ -1316,18 +1309,6 @@ CtPtr ProtocolV2::handle_message() {
 		 << " off " << header.data_off
                  << dendl;
 
-  if (messenger->crcflags & MSG_CRC_HEADER) {
-    __u32 header_crc = 0;
-    header_crc = ceph_crc32c(0, (unsigned char *)&header,
-                             sizeof(header) - sizeof(header.header_crc));
-    // verify header crc
-    if (header_crc != header.header_crc) {
-      ldout(cct, 0) << __func__ << " got bad header crc " << header_crc
-                    << " != " << header.header_crc << dendl;
-      return _fault();
-    }
-  }
-
   INTERCEPT(16);
 
   // Reset state
@@ -1497,10 +1478,9 @@ CtPtr ProtocolV2::handle_message_complete() {
                          current_header.compat_version,
                          current_header.reserved,
                          0};
-  ceph_msg_footer footer{current_header.front_crc, current_header.middle_crc,
-                         current_header.data_crc, 0, current_header.flags};
+  ceph_msg_footer footer{0, 0, 0, 0, current_header.flags};
 
-  Message *message = decode_message(cct, messenger->crcflags, header, footer,
+  Message *message = decode_message(cct, 0, header, footer,
       rx_segments_data[SegmentIndex::Msg::FRONT],
       rx_segments_data[SegmentIndex::Msg::MIDDLE],
       rx_segments_data[SegmentIndex::Msg::DATA],
