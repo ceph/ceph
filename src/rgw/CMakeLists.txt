@@ -1,22 +1,3 @@
-if(WITH_TESTS)
-add_executable(ceph_rgw_jsonparser
-  rgw_jsonparser.cc)
-target_link_libraries(ceph_rgw_jsonparser
-  rgw_a
-  global rabbitmq)
-
-add_executable(ceph_rgw_multiparser
-  rgw_multiparser.cc)
-target_link_libraries(ceph_rgw_multiparser
-  rgw_a
-  global rabbitmq)
-
-install(TARGETS
-  ceph_rgw_jsonparser
-  ceph_rgw_multiparser
-  DESTINATION bin)
-endif(WITH_TESTS)
-
 add_custom_target(civetweb_h
   COMMAND ${CMAKE_COMMAND} -E make_directory
   "${CMAKE_BINARY_DIR}/src/include/civetweb"
@@ -372,3 +353,22 @@ endif()
 if(WITH_BOOST_CONTEXT)
   target_link_libraries(rgw_admin_user PRIVATE Boost::coroutine Boost::context)
 endif()
+
+if(WITH_TESTS)
+  add_executable(ceph_rgw_jsonparser
+    rgw_jsonparser.cc)
+  target_link_libraries(ceph_rgw_jsonparser
+    rgw_a
+    global rabbitmq)
+
+  add_executable(ceph_rgw_multiparser
+    rgw_multiparser.cc)
+  target_link_libraries(ceph_rgw_multiparser
+    rgw_a
+    global rabbitmq)
+
+  install(TARGETS
+    ceph_rgw_jsonparser
+    ceph_rgw_multiparser
+    DESTINATION bin)
+endif(WITH_TESTS)
