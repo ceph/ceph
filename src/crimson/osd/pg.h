@@ -50,6 +50,8 @@ public:
   pg_shard_t get_whoami() const;
   epoch_t get_last_peering_reset() const;
   void update_last_peering_reset();
+  epoch_t get_need_up_thru() const;
+  void update_need_up_thru(const OSDMap* o = nullptr);
 
   seastar::future<> read_state(ceph::os::CyanStore* store);
 
@@ -69,6 +71,8 @@ private:
   pg_pool_t pool;
 
   epoch_t last_peering_reset = 0;
+  epoch_t need_up_thru = 0;
+
   //< pg state
   pg_info_t info;
   //< last written info, for fast info persistence
