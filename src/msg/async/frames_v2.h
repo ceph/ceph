@@ -63,6 +63,29 @@ struct segment_t {
   __le16 alignment;
 } __attribute__((packed));
 
+struct onwire_segment_t {
+  // crypto-processed segment can be expanded on-wire because of:
+  //  * padding to achieve CRYPTO_BLOCK_SIZE alignment,
+  //  * authentication tag. It's appended at the end of message.
+  //    See RxHandler::get_extra_size_at_final().
+  __le32 onwire_length;
+
+  struct ceph::msgr::v2::segment_t logical;
+} __attribute__((packed));
+
+struct SegmentIndex {
+  struct Msg {
+    static constexpr std::size_t HEADER = 0;
+    static constexpr std::size_t FRONT = 1;
+    static constexpr std::size_t MIDDLE = 2;
+    static constexpr std::size_t DATA = 3;
+  };
+
+  struct Frame {
+    static constexpr std::size_t PAYLOAD = 0;
+  };
+};
+
 static constexpr uint8_t CRYPTO_BLOCK_SIZE { 16 };
 
 static constexpr std::size_t MAX_NUM_SEGMENTS = 4;
@@ -96,8 +119,8 @@ static_assert(std::is_standard_layout<preamble_block_t>::value);
 //  * CRC32 for MAX_NUM_SEGMENTS -- in plain mode,
 //  * cipher-specific data (e.g. auth tag for AES-GCM).
 union epilogue_block_t {
-  // TODO: add crc32 for plain mode
-  std::array<uint8_t, CRYPTO_BLOCK_SIZE> auth_tag;
+  char auth_tag[CRYPTO_BLOCK_SIZE];
+  std::array<__le32, MAX_NUM_SEGMENTS> crc_values;
 };
 static_assert(sizeof(epilogue_block_t) % CRYPTO_BLOCK_SIZE == 0);
 static_assert(std::is_standard_layout<epilogue_block_t>::value);
@@ -153,6 +176,15 @@ public:
   ceph::bufferlist &get_buffer() {
     fill_preamble({segment_t{payload.length() - FRAME_PREAMBLE_SIZE,
                    segment_t::DEFAULT_ALIGNMENT}});
+
+    epilogue_block_t epilogue;
+    ::memset(&epilogue, 0, sizeof(epilogue));
+
+    ceph::bufferlist::const_iterator hdriter(&this->payload, FRAME_PREAMBLE_SIZE);
+    epilogue.crc_values[SegmentIndex::Frame::PAYLOAD] =
+        hdriter.crc32c(hdriter.get_remaining(), -1);
+    this->payload.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
+
     return payload;
   }
 };
@@ -350,6 +382,14 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
       session_stream_handlers.tx->authenticated_encrypt_update(
           std::move(c.payload));
       c.payload = session_stream_handlers.tx->authenticated_encrypt_final();
+    } else {
+      epilogue_block_t epilogue;
+      ::memset(&epilogue, 0, sizeof(epilogue));
+
+      ceph::bufferlist::const_iterator hdriter(&c.payload, FRAME_PREAMBLE_SIZE);
+      epilogue.crc_values[SegmentIndex::Frame::PAYLOAD] =
+          hdriter.crc32c(hdriter.get_remaining(), -1);
+      c.payload.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
     }
     return c;
   }
@@ -561,20 +601,67 @@ struct MessageHeaderFrame
     return this->payload;
   }
 
-  static MessageHeaderFrame Encode(const ceph_msg_header2 &msg_header,
-                                   const uint32_t front_len,
-                                   const uint32_t middle_len,
-                                   const uint32_t data_len)  {
+  static MessageHeaderFrame Encode(ceph::crypto::onwire::rxtx_t &session_stream_handlers,
+                                   const ceph_msg_header2 &msg_header,
+                                   const ceph::bufferlist& front,
+                                   const ceph::bufferlist& middle,
+                                   const ceph::bufferlist& data) {
     MessageHeaderFrame f =
         PayloadFrame<MessageHeaderFrame, ceph_msg_header2>::Encode(msg_header);
     // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart from auth tag size
     f.fill_preamble({
       segment_t{ f.payload.length() - FRAME_PREAMBLE_SIZE,
-                 segment_t::DEFAULT_ALIGNMENT },
-      segment_t{ front_len, segment_t::DEFAULT_ALIGNMENT },
-      segment_t{ middle_len, segment_t::DEFAULT_ALIGNMENT },
-      segment_t{ data_len, segment_t::DEFERRED_ALLOCATION },
+		 segment_t::DEFAULT_ALIGNMENT },
+      segment_t{ front.length(), segment_t::DEFAULT_ALIGNMENT },
+      segment_t{ middle.length(), segment_t::DEFAULT_ALIGNMENT },
+      segment_t{ data.length(), segment_t::DEFERRED_ALLOCATION },
     });
+
+    // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart from auth tag size
+    if (session_stream_handlers.tx) {
+      // let's cipher allocate one huge buffer for entire ciphertext.
+      // NOTE: ultimately we'll align these sizes to cipher's block size.
+      // AES-GCM can live without that as it's basically stream cipher.
+      session_stream_handlers.tx->reset_tx_handler({
+        f.payload.length(),
+        front.length(),
+        middle.length(),
+        data.length()
+      });
+
+      ceph_assert(f.payload.length());
+      session_stream_handlers.tx->authenticated_encrypt_update(
+        std::move(f.payload));
+
+      // TODO: switch TxHandler from `bl&&` to `const bl&`.
+      if (front.length()) {
+        session_stream_handlers.tx->authenticated_encrypt_update(front);
+      }
+      if (middle.length()) {
+        session_stream_handlers.tx->authenticated_encrypt_update(middle);
+      }
+      if (data.length()) {
+        session_stream_handlers.tx->authenticated_encrypt_update(data);
+      }
+
+      // auth tag will be appended at the end
+      f.payload = session_stream_handlers.tx->authenticated_encrypt_final();
+    } else {
+      f.payload.append(front);
+      f.payload.append(middle);
+      f.payload.append(data);
+
+      epilogue_block_t epilogue;
+      ceph::bufferlist::const_iterator hdriter(&f.payload, FRAME_PREAMBLE_SIZE);
+      epilogue.crc_values[SegmentIndex::Msg::HEADER] =
+          hdriter.crc32c(hdriter.get_remaining(), -1);
+      epilogue.crc_values[SegmentIndex::Msg::FRONT] = front.crc32c(-1),
+      epilogue.crc_values[SegmentIndex::Msg::MIDDLE] = middle.crc32c(-1),
+      epilogue.crc_values[SegmentIndex::Msg::DATA] = data.crc32c(-1),
+
+      f.payload.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
+    }
+
     return f;
   }
 

@@ -86,30 +86,7 @@ private:
 
 public:
 
-  struct onwire_segment_t {
-    // crypto-processed segment can be expanded on-wire because of:
-    //  * padding to achieve CRYPTO_BLOCK_SIZE alignment,
-    //  * authentication tag. It's appended at the end of message.
-    //    See RxHandler::get_extra_size_at_final().
-    __le32 onwire_length;
-
-    struct ceph::msgr::v2::segment_t logical;
-  } __attribute__((packed));
-
-  struct SegmentIndex {
-    struct Msg {
-      static constexpr std::size_t HEADER = 0;
-      static constexpr std::size_t FRONT = 1;
-      static constexpr std::size_t MIDDLE = 2;
-      static constexpr std::size_t DATA = 3;
-    };
-
-    struct Frame {
-      static constexpr std::size_t PAYLOAD = 0;
-    };
-  };
-
-  boost::container::static_vector<onwire_segment_t,
+  boost::container::static_vector<ceph::msgr::v2::onwire_segment_t,
 				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_desc;
   boost::container::static_vector<ceph::bufferlist,
 				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_data;
