@@ -30,10 +30,10 @@ public:
   };
 
   struct Discard {
-    bool skip_partial_discard;
+    uint32_t discard_granularity_bytes;
 
-    Discard(bool skip_partial_discard)
-      : skip_partial_discard(skip_partial_discard) {
+    Discard(uint32_t discard_granularity_bytes)
+      : discard_granularity_bytes(discard_granularity_bytes) {
     }
   };
 
@@ -82,10 +82,10 @@ public:
 
   static ImageDispatchSpec* create_discard_request(
       ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off, uint64_t len,
-      bool skip_partial_discard, const ZTracer::Trace &parent_trace) {
+      uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx, aio_comp, {{off, len}},
-                                 Discard{skip_partial_discard}, 0,
-                                 parent_trace);
+                                 Discard{discard_granularity_bytes},
+                                 0, parent_trace);
   }
 
   static ImageDispatchSpec* create_write_request(

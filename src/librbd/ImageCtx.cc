@@ -788,6 +788,7 @@ public:
 #define ASSIGN_OPTION(param, type)              \
     param = config.get_val<type>("rbd_"#param)
 
+    bool skip_partial_discard = true;
     ASSIGN_OPTION(non_blocking_aio, bool);
     ASSIGN_OPTION(cache, bool);
     ASSIGN_OPTION(cache_writethrough_until_flush, bool);
@@ -801,12 +802,16 @@ public:
     ASSIGN_OPTION(mtime_update_interval, uint64_t);
     ASSIGN_OPTION(atime_update_interval, uint64_t);
     ASSIGN_OPTION(skip_partial_discard, bool);
+    ASSIGN_OPTION(discard_granularity_bytes, uint64_t);
     ASSIGN_OPTION(blkin_trace_all, bool);
 
 #undef ASSIGN_OPTION
 
     if (sparse_read_threshold_bytes == 0) {
       sparse_read_threshold_bytes = get_object_size();
+    }
+    if (!skip_partial_discard) {
+      discard_granularity_bytes = 0;
     }
 
     io_work_queue->apply_qos_schedule_tick_min(

@@ -28,7 +28,7 @@ struct MockImageCache {
     aio_write_mock(image_extents, bl, fadvise_flags, on_finish);
   }
 
-  MOCK_METHOD4(aio_discard, void(uint64_t, uint64_t, bool, Context *));
+  MOCK_METHOD4(aio_discard, void(uint64_t, uint64_t, uint32_t, Context *));
   MOCK_METHOD1(aio_flush, void(Context *));
   MOCK_METHOD5(aio_writesame_mock, void(uint64_t, uint64_t, ceph::bufferlist& bl,
                                         int, Context *));

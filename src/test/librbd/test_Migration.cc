@@ -157,6 +157,7 @@ struct TestMigration : public TestFixture {
     m_ictxs.insert(*ictx);
 
     ASSERT_EQ(0, (*ictx)->state->open(flags));
+    (*ictx)->discard_granularity_bytes = 0;
   }
 
   void open_image(librados::IoCtx& io_ctx, const std::string &name,

@@ -34,7 +34,8 @@ public:
   ssize_t read(uint64_t off, uint64_t len, ReadResult &&read_result,
                int op_flags);
   ssize_t write(uint64_t off, uint64_t len, bufferlist &&bl, int op_flags);
-  ssize_t discard(uint64_t off, uint64_t len, bool skip_partial_discard);
+  ssize_t discard(uint64_t off, uint64_t len,
+                  uint32_t discard_granularity_bytes);
   ssize_t writesame(uint64_t off, uint64_t len, bufferlist &&bl, int op_flags);
   ssize_t compare_and_write(uint64_t off, uint64_t len,
                             bufferlist &&cmp_bl, bufferlist &&bl,
@@ -46,7 +47,7 @@ public:
   void aio_write(AioCompletion *c, uint64_t off, uint64_t len,
                  bufferlist &&bl, int op_flags, bool native_async=true);
   void aio_discard(AioCompletion *c, uint64_t off, uint64_t len,
-                   bool skip_partial_discard, bool native_async=true);
+                   uint32_t discard_granularity_bytes, bool native_async=true);
   void aio_flush(AioCompletion *c, bool native_async=true);
   void aio_writesame(AioCompletion *c, uint64_t off, uint64_t len,
                      bufferlist &&bl, int op_flags, bool native_async=true);
