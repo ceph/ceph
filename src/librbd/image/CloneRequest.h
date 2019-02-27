@@ -4,8 +4,8 @@
 #ifndef CEPH_LIBRBD_IMAGE_CLONE_REQUEST_H
 #define CEPH_LIBRBD_IMAGE_CLONE_REQUEST_H
 
-#include "cls/rbd/cls_rbd_types.h"
 #include "include/rbd/librbd.hpp"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/internal.h"
 
 class ConfigProxy;
