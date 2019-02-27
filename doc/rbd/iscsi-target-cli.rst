@@ -203,9 +203,6 @@ to create a iSCSI target and export a RBD image as LUN 0.
        > /iscsi-target...-igw/gateways> cd /disks
        > /disks> create pool=rbd image=disk_1 size=90G
 
-   .. warning::
-       There can not be any periods (.) in the pool name or in the image name.
-
 #. Create a client with the initiator name iqn.1994-05.com.redhat:rh7-client:
 
    ::
@@ -228,6 +225,6 @@ to create a iSCSI target and export a RBD image as LUN 0.
 
    ::
 
-       > /iscsi-target...at:rh7-client> disk add rbd.disk_1
+       > /iscsi-target...at:rh7-client> disk add rbd/disk_1
 
 The next step is to configure the iSCSI initiators.
