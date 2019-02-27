@@ -546,7 +546,7 @@ void KernelDevice::_aio_thread()
       if (debug_oldest) {
 	if (debug_stall_since == utime_t()) {
 	  debug_stall_since = now;
-	} else {
+	} else if (cct->_conf->bdev_debug_aio_suicide_timeout) {
 	  utime_t cutoff = now;
 	  cutoff -= cct->_conf->bdev_debug_aio_suicide_timeout;
 	  if (debug_stall_since < cutoff) {
