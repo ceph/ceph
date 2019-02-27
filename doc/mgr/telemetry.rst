@@ -1,6 +1,6 @@
-Telemetry plugin
+Telemetry Module
 ================
-The telemetry plugin sends anonymous data about the cluster, in which it is running, back to the Ceph project.
+The telemetry module sends anonymous data about the cluster, in which it is running, back to the Ceph project.
 
 The data being sent back to the project does not contain any sensitive data like pool names, object names, object contents or hostnames.
 
