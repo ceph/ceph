@@ -4096,6 +4096,10 @@ std::vector<Option> get_global_options() {
     .set_default(60.0)
     .set_description(""),
 
+    Option("bdev_debug_aio_log_age", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(5.0)
+    .set_description(""),
+
     Option("bdev_nvme_unbind_from_kernel", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description(""),
@@ -4111,11 +4115,6 @@ std::vector<Option> get_global_options() {
     Option("bdev_async_discard", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description(""),
-
-    Option("bdev_log_op_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(1)
-    .set_description("log operation details if it's slower than this age (seconds)"),
-
 
     Option("bluefs_alloc_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(1_M)
