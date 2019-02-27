@@ -1157,7 +1157,7 @@ class Orch(DeepSea):
         stage = 3
         self.__log_stage_start(stage)
         self._run_orch(("stage", stage))
-        self.__mgr_dashboard_module_deploy()
+        # self.__mgr_dashboard_module_deploy()
         self.sm.all_minions_cmd_run(
             'cat /etc/ceph/ceph.conf',
             abort_on_fail=False
