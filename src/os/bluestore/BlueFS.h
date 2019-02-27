@@ -280,6 +280,9 @@ private:
   vector<IOContext*> ioc;                     ///< IOContexts for bdevs
   vector<interval_set<uint64_t> > block_all;  ///< extents in bdev we own
   vector<Allocator*> alloc;                   ///< allocators for bdevs
+  vector<ceph::mutex*> alloc_lock;            ///< lock for alloc pointers
+  const string alloc_lock_name_prefix = "BlueFS::alloc_lock_";
+
   vector<interval_set<uint64_t>> pending_release; ///< extents to release
 
   BlockDevice::discard_t discard_mode;

@@ -1889,6 +1889,7 @@ private:
   BlockDevice::discard_t discard_mode;
   std::string freelist_type;
   FreelistManager *fm = nullptr;
+  ceph::mutex alloc_lock = ceph::make_mutex("BlueStore::alloc_lock");
   Allocator *alloc = nullptr;
   uuid_d fsid;
   int path_fd = -1;  ///< open handle to $path

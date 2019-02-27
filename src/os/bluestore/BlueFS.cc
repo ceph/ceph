@@ -58,7 +58,8 @@ BlueFS::BlueFS(CephContext* cct)
   : cct(cct),
     bdev(MAX_BDEV),
     ioc(MAX_BDEV),
-    block_all(MAX_BDEV)
+    block_all(MAX_BDEV),
+    alloc_lock(MAX_BDEV)
 {
   discard_cb[BDEV_WAL] = wal_discard_cb;
   discard_cb[BDEV_DB] = db_discard_cb;
@@ -67,6 +68,10 @@ BlueFS::BlueFS(CephContext* cct)
   discard_cb[BDEV_NEWDB] = newdb_discard_cb;
 
   discard_mode = BlockDevice::get_discard_t(cct->_conf->bluefs_bdev_discard);
+  for (int id = 0; id < MAX_BDEV; id++) {
+    string name = alloc_lock_name_prefix + std::to_string(id);
+    alloc_lock[id] = new ceph::mutex(name);
+  }
 }
 
 BlueFS::~BlueFS()
@@ -82,6 +87,9 @@ BlueFS::~BlueFS()
     }
   }
   for (auto p : ioc) {
+    delete p;
+  }
+  for (auto p : alloc_lock) {
     delete p;
   }
 }
@@ -273,18 +281,24 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
 void BlueFS::handle_discard(BlockDevice::discard_t mode, unsigned id, interval_set<uint64_t>& to_discard)
 {
   dout(10) << __func__ << " bdev " << id << " discard mode " << mode << dendl;
-  ceph_assert(alloc[id]);
 
   if (mode == BlockDevice::DISCARD_ASYNC) {
+    ceph_assert(alloc[id]);
     for (auto p = to_discard.begin();p != to_discard.end(); ++p)
       bdev[id]->discard(p.get_start(), p.get_len());
     alloc[id]->release(to_discard);
   } else if (mode == BlockDevice::DISCARD_PERIODIC) {
     float free_ratio = cct->_conf->bluefs_bdev_periodic_discard_free_ratio;
-    alloc[id]->allocate_for_discard(free_ratio, to_discard);
-    for (auto p = to_discard.begin();p != to_discard.end(); ++p)
-      bdev[id]->discard(p.get_start(), p.get_len());
-    alloc[id]->release_for_discarded(to_discard);
+    {
+      std::lock_guard l(*alloc_lock[id]);
+      if (!alloc[id])
+	return;
+
+      alloc[id]->allocate_for_discard(free_ratio, to_discard);
+      for (auto p = to_discard.begin();p != to_discard.end(); ++p)
+        bdev[id]->discard(p.get_start(), p.get_len());
+      alloc[id]->release_for_discarded(to_discard);
+    }
   }
 }
 
@@ -438,6 +452,7 @@ void BlueFS::_init_alloc()
     if (!bdev[id]) {
       continue;
     }
+    std::lock_guard l(*alloc_lock[id]);
     ceph_assert(bdev[id]->get_size());
     alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
 				  bdev[id]->get_size(),
@@ -458,11 +473,14 @@ void BlueFS::_stop_alloc()
       p->discard_drain();
   }
 
+  int id = 0;
   for (auto p : alloc) {
+    std::lock_guard l(*alloc_lock[id]);
     if (p != nullptr)  {
       p->shutdown();
       delete p;
     }
+    id++;
   }
   alloc.clear();
 }

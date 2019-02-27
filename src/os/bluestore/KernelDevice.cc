@@ -461,6 +461,11 @@ void KernelDevice::discard_drain()
   while (!discard_queued.empty() || discard_running) {
     discard_cond.wait(l);
   }
+  if (discard_mode == DISCARD_PERIODIC) {
+    // to prevent periodic thread from using allocator after deleting it
+    discard_stop = true;
+    discard_cond.notify_all();
+  }
 }
 
 static bool is_expected_ioerr(const int r)

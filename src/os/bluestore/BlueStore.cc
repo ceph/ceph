@@ -3869,18 +3869,24 @@ static void discard_cb(BlockDevice::discard_t discard_mode, void *priv, void *pr
 void BlueStore::handle_discard(BlockDevice::discard_t mode, interval_set<uint64_t>& to_discard)
 {
   dout(10) << __func__ << " discard mode " << mode << dendl;
-  ceph_assert(alloc);
 
   if (mode == BlockDevice::DISCARD_ASYNC) {
+    ceph_assert(alloc);
     for (auto p = to_discard.begin();p != to_discard.end(); ++p)
       bdev->discard(p.get_start(), p.get_len());
     alloc->release(to_discard);
   } else if (mode == BlockDevice::DISCARD_PERIODIC) {
     float free_ratio = cct->_conf->bluestore_bdev_periodic_discard_free_ratio;
-    alloc->allocate_for_discard(free_ratio, to_discard);
-    for (auto p = to_discard.begin();p != to_discard.end(); ++p)
-      bdev->discard(p.get_start(), p.get_len());
-    alloc->release_for_discarded(to_discard);
+    {
+      std::lock_guard l(alloc_lock);
+      if (alloc == NULL)
+	return;
+
+      alloc->allocate_for_discard(free_ratio, to_discard);
+      for (auto p = to_discard.begin();p != to_discard.end(); ++p)
+        bdev->discard(p.get_start(), p.get_len());
+      alloc->release_for_discarded(to_discard);
+    }
   }
 }
 
@@ -4756,10 +4762,12 @@ int BlueStore::_open_alloc()
 	     << dendl;
   }
 
+  std::lock_guard l(alloc_lock);
   alloc = Allocator::create(cct, cct->_conf->bluestore_allocator,
                             bdev->get_size(),
                             min_alloc_size,
                             discard_mode == BlockDevice::DISCARD_PERIODIC);
+
   if (!alloc) {
     lderr(cct) << __func__ << " Allocator::unknown alloc type "
                << cct->_conf->bluestore_allocator
@@ -4797,9 +4805,12 @@ void BlueStore::_close_alloc()
   bdev->discard_drain();
 
   ceph_assert(alloc);
-  alloc->shutdown();
-  delete alloc;
-  alloc = NULL;
+  {
+    std::lock_guard l(alloc_lock);
+    alloc->shutdown();
+    delete alloc;
+    alloc = NULL;
+  }
   bluefs_extents.clear();
 }
 
