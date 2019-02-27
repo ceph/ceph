@@ -149,3 +149,9 @@ add_ceph_unittest(unittest_rgw_amqp)
 
 target_link_libraries(unittest_rgw_amqp rgw_a amqp_mock)
 
+# unittest_rgw_xml
+add_executable(unittest_rgw_xml test_rgw_xml.cc)
+add_ceph_unittest(unittest_rgw_xml)
+
+target_link_libraries(unittest_rgw_xml rgw_a ${EXPAT_LIBRARIES})
+
