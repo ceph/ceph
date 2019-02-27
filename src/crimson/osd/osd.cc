@@ -6,6 +6,8 @@
 #include <fmt/format.h>
 #include <fmt/ostream.h>
 #include "common/pick_address.h"
+
+#include "messages/MOSDAlive.h"
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDMap.h"
@@ -279,6 +281,19 @@ seastar::future<> OSD::_send_boot()
                                   cluster_msgr.get_myaddrs(),
                                   CEPH_FEATURES_ALL);
   return monc->send_message(m);
+}
+
+seastar::future<> OSD::_send_alive(epoch_t want)
+{
+  if (!osdmap->exists(whoami)) {
+    return seastar::now();
+  } else if (want <= up_thru_wanted){
+    return seastar::now();
+  } else {
+    up_thru_wanted = want;
+    auto m = make_message<MOSDAlive>(osdmap->get_epoch(), want);
+    return monc->send_message(std::move(m));
+  }
 }
 
 seastar::future<> OSD::stop()
@@ -796,7 +811,9 @@ OSD::do_peering_event(spg_t pgid,
     return advance_pg_to(pg->second, osdmap->get_epoch()).then(
       [pg, evt=std::move(evt)]() mutable {
         return pg->second->do_peering_event(std::move(evt));
-      });
+    }).then([pg=pg->second, this] {
+        return _send_alive(pg->get_need_up_thru());
+    });
   } else {
     // todo: handle_pg_query_nopg()
     return seastar::now();

@@ -110,6 +110,9 @@ private:
   seastar::future<Ref<PG>> load_pg(spg_t pgid);
   seastar::future<> load_pgs();
 
+  epoch_t up_thru_wanted = 0;
+  seastar::future<> _send_alive(epoch_t want);
+
   // OSDMapService methods
   seastar::future<cached_map_t> get_map(epoch_t e) override;
   cached_map_t get_map() const override;
