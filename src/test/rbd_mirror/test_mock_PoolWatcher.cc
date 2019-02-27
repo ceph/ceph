@@ -498,7 +498,7 @@ TEST_F(TestMockPoolWatcher, RegisterWatcherMissing) {
                                     mock_listener);
   C_SaferCond ctx;
   mock_pool_watcher.init(&ctx);
-  ASSERT_EQ(0, ctx.wait());
+  ASSERT_EQ(-ENOENT, ctx.wait());
 
   ASSERT_TRUE(wait_for_update(1));
   expect_mirroring_watcher_unregister(mock_mirroring_watcher, 0);

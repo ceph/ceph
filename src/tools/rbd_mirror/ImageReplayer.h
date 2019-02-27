@@ -199,6 +199,7 @@ protected:
 
   virtual void on_start_fail(int r, const std::string &desc);
   virtual bool on_start_interrupted();
+  virtual bool on_start_interrupted(Mutex& lock);
 
   virtual void on_stop_journal_replay(int r = 0, const std::string &desc = "");
 
