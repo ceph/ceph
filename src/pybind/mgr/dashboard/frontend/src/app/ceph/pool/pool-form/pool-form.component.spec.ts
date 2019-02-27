@@ -37,9 +37,7 @@ describe('PoolFormComponent', () => {
   let ecpService: ErasureCodeProfileService;
 
   const setPgNum = (pgs): AbstractControl => {
-    formHelper.setValue('poolType', 'erasure');
     const control = formHelper.setValue('pgNum', pgs);
-    fixture.detectChanges();
     fixture.debugElement.query(By.css('#pgNum')).nativeElement.dispatchEvent(new Event('blur'));
     return control;
   };
@@ -212,7 +210,7 @@ describe('PoolFormComponent', () => {
 
   describe('pool form validation', () => {
     beforeEach(() => {
-      component.ngOnInit();
+      fixture.detectChanges();
     });
 
     it('is invalid at the beginning all sub forms are valid', () => {
@@ -244,38 +242,24 @@ describe('PoolFormComponent', () => {
       formHelper.expectValidChange('poolType', 'replicated');
     });
 
-    it('validates pgNum in creation mode', () => {
+    it('validates that pgNum is required creation mode', () => {
       formHelper.expectError(form.get('pgNum'), 'required');
-      formHelper.setValue('poolType', 'erasure');
-      formHelper.expectValid(setPgNum(-28));
-      expect(form.getValue('pgNum')).toBe(1);
-      formHelper.expectValid(setPgNum(15));
-      expect(form.getValue('pgNum')).toBe(16);
-    });
-
-    it('increases pgNum by the power of two for if the value has changed by one', () => {
-      setPgNum('16');
-      expect(setPgNum(17).value).toBe(32);
-      expect(setPgNum(31).value).toBe(16);
-    });
-
-    it('not increases pgNum by more than one but lower than the next pg update change', () => {
-      setPgNum('16');
-      expect(setPgNum('18').value).toBe(16);
-      expect(setPgNum('14').value).toBe(16);
     });
 
     it('validates pgNum in edit mode', () => {
       component.data.pool = new Pool('test');
       component.data.pool.pg_num = 16;
       component.editing = true;
-      component.ngOnInit();
+      component.ngOnInit(); // Switches form into edit mode
+      formHelper.setValue('poolType', 'erasure');
+      fixture.detectChanges();
       formHelper.expectError(setPgNum('8'), 'noDecrease');
     });
 
     it('is valid if pgNum, poolType and name are valid', () => {
       formHelper.setValue('name', 'some-name');
       formHelper.setValue('poolType', 'erasure');
+      fixture.detectChanges();
       setPgNum(1);
       expect(form.valid).toBeTruthy();
     });
@@ -588,14 +572,82 @@ describe('PoolFormComponent', () => {
   });
 
   describe('pg number changes', () => {
+    const setPgs = (pgs) => {
+      formHelper.setValue('pgNum', pgs);
+      fixture.debugElement.query(By.css('#pgNum')).nativeElement.dispatchEvent(new Event('blur'));
+    };
+
+    const testPgUpdate = (pgs, jump, returnValue) => {
+      if (pgs) {
+        setPgs(pgs);
+      }
+      if (jump) {
+        setPgs(form.getValue('pgNum') + jump);
+      }
+      expect(form.getValue('pgNum')).toBe(returnValue);
+    };
+
     beforeEach(() => {
       formHelper.setValue('crushRule', {
         min_size: 1,
         max_size: 20
       });
-      component.ngOnInit();
-      // triggers pgUpdate
+      formHelper.setValue('poolType', 'erasure');
+      fixture.detectChanges();
       setPgNum(256);
+    });
+
+    it('updates by value', () => {
+      testPgUpdate(10, undefined, 8);
+      testPgUpdate(22, undefined, 16);
+      testPgUpdate(26, undefined, 32);
+      testPgUpdate(200, undefined, 256);
+      testPgUpdate(300, undefined, 256);
+      testPgUpdate(350, undefined, 256);
+    });
+
+    it('updates by jump -> a magnitude of the power of 2', () => {
+      testPgUpdate(undefined, 1, 512);
+      testPgUpdate(undefined, -1, 256);
+    });
+
+    it('returns 1 as minimum for false numbers', () => {
+      testPgUpdate(-26, undefined, 1);
+      testPgUpdate(0, undefined, 1);
+      testPgUpdate(0, -1, 1);
+      testPgUpdate(undefined, -20, 1);
+    });
+
+    it('changes the value and than jumps', () => {
+      testPgUpdate(230, 1, 512);
+      testPgUpdate(3500, -1, 2048);
+    });
+
+    describe('pg power jump', () => {
+      it('should jump correctly at the beginning', () => {
+        testPgUpdate(1, -1, 1);
+        testPgUpdate(1, 1, 2);
+        testPgUpdate(2, -1, 1);
+        testPgUpdate(2, 1, 4);
+        testPgUpdate(4, -1, 2);
+        testPgUpdate(4, 1, 8);
+        testPgUpdate(4, 1, 8);
+      });
+
+      it('increments pg power if difference to the current number is 1', () => {
+        testPgUpdate(undefined, 1, 512);
+        testPgUpdate(undefined, 1, 1024);
+        testPgUpdate(undefined, 1, 2048);
+        testPgUpdate(undefined, 1, 4096);
+      });
+
+      it('decrements pg power if difference to the current number is -1', () => {
+        testPgUpdate(undefined, -1, 128);
+        testPgUpdate(undefined, -1, 64);
+        testPgUpdate(undefined, -1, 32);
+        testPgUpdate(undefined, -1, 16);
+        testPgUpdate(undefined, -1, 8);
+      });
     });
 
     describe('pgCalc', () => {
@@ -681,68 +733,6 @@ describe('PoolFormComponent', () => {
         const test = getValidCase();
         test.expected = PGS;
         testPgCalc(test);
-      });
-    });
-
-    describe('pgUpdate', () => {
-      const testPgUpdate = (pgs, jump, returnValue) => {
-        component['pgUpdate'](pgs, jump);
-        expect(form.getValue('pgNum')).toBe(returnValue);
-      };
-
-      it('updates by value', () => {
-        testPgUpdate(10, undefined, 8);
-        testPgUpdate(22, undefined, 16);
-        testPgUpdate(26, undefined, 32);
-      });
-
-      it('updates by jump -> a magnitude of the power of 2', () => {
-        testPgUpdate(undefined, 1, 512);
-        testPgUpdate(undefined, -1, 256);
-        testPgUpdate(undefined, -2, 64);
-        testPgUpdate(undefined, -10, 1);
-      });
-
-      it('returns 1 as minimum for false numbers', () => {
-        testPgUpdate(-26, undefined, 1);
-        testPgUpdate(0, undefined, 1);
-        testPgUpdate(undefined, -20, 1);
-      });
-
-      it('uses by value and jump', () => {
-        testPgUpdate(330, 0, 256);
-        testPgUpdate(230, 2, 1024);
-        testPgUpdate(230, 3, 2048);
-      });
-    });
-
-    describe('pgKeyUp', () => {
-      const testPgKeyUp = (keyName, returnValue) => {
-        component.pgKeyUp({ key: keyName });
-        expect(form.getValue('pgNum')).toBe(returnValue);
-      };
-
-      it('does nothing with unrelated keys', () => {
-        testPgKeyUp('0', 256);
-        testPgKeyUp(',', 256);
-        testPgKeyUp('a', 256);
-        testPgKeyUp('Space', 256);
-        testPgKeyUp('ArrowLeft', 256);
-        testPgKeyUp('ArrowRight', 256);
-      });
-
-      it('increments by jump with plus or ArrowUp', () => {
-        testPgKeyUp('ArrowUp', 512);
-        testPgKeyUp('ArrowUp', 1024);
-        testPgKeyUp('+', 2048);
-        testPgKeyUp('+', 4096);
-      });
-
-      it('decrement by jump with minus or ArrowDown', () => {
-        testPgKeyUp('ArrowDown', 128);
-        testPgKeyUp('ArrowDown', 64);
-        testPgKeyUp('-', 32);
-        testPgKeyUp('-', 16);
       });
     });
   });
@@ -1018,7 +1008,7 @@ describe('PoolFormComponent', () => {
     describe('after ngOnInit', () => {
       beforeEach(() => {
         component.editing = true;
-        component.ngOnInit();
+        fixture.detectChanges();
       });
 
       it('disabled inputs', () => {
