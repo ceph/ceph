@@ -237,10 +237,27 @@ export class PoolFormComponent implements OnInit {
   private listenToChangesDuringAddEdit() {
     this.form.get('pgNum').valueChanges.subscribe((pgs) => {
       const change = pgs - this.data.pgs;
-      if (Math.abs(change) === 1) {
-        this.pgUpdate(undefined, change);
+      if (Math.abs(change) !== 1 || pgs === 2) {
+        this.data.pgs = pgs;
+        return;
       }
+      this.doPgPowerJump(change as 1 | -1);
     });
+  }
+
+  private doPgPowerJump(jump: 1 | -1) {
+    const power = this.calculatePgPower() + jump;
+    this.setPgs(jump === -1 ? Math.round(power) : Math.floor(power));
+  }
+
+  private calculatePgPower(pgs = this.form.getValue('pgNum')): number {
+    return Math.log(pgs) / Math.log(2);
+  }
+
+  private setPgs(power: number) {
+    const pgs = Math.pow(2, power < 0 ? 0 : power); // Set size the nearest accurate size.
+    this.data.pgs = pgs;
+    this.form.silentSet('pgNum', pgs);
   }
 
   private listenToChangesDuringAdd() {
@@ -350,7 +367,7 @@ export class PoolFormComponent implements OnInit {
       return;
     }
     const oldValue = this.data.pgs;
-    this.pgUpdate(pgs);
+    this.alignPgs(pgs);
     const newValue = this.data.pgs;
     if (!this.externalPgChange) {
       this.externalPgChange = oldValue !== newValue;
@@ -373,21 +390,8 @@ export class PoolFormComponent implements OnInit {
     }
   }
 
-  private pgUpdate(pgs?, jump?) {
-    pgs = _.isNumber(pgs) ? pgs : this.form.getValue('pgNum');
-    if (pgs < 1) {
-      pgs = 1;
-    }
-    let power = Math.round(Math.log(pgs) / Math.log(2));
-    if (_.isNumber(jump)) {
-      power += jump;
-    }
-    if (power < 0) {
-      power = 0;
-    }
-    pgs = Math.pow(2, power); // Set size the nearest accurate size.
-    this.data.pgs = pgs;
-    this.form.silentSet('pgNum', pgs);
+  private alignPgs(pgs = this.form.getValue('pgNum')) {
+    this.setPgs(Math.round(this.calculatePgPower(pgs < 1 ? 1 : pgs)));
   }
 
   private setComplexValidators() {
@@ -466,15 +470,6 @@ export class PoolFormComponent implements OnInit {
 
   hasCompressionEnabled() {
     return this.form.getValue('mode') && this.form.get('mode').value.toLowerCase() !== 'none';
-  }
-
-  pgKeyUp($e) {
-    const key = $e.key;
-    const included = (arr: string[]): number => (arr.indexOf(key) !== -1 ? 1 : 0);
-    const jump = included(['ArrowUp', '+']) - included(['ArrowDown', '-']);
-    if (jump) {
-      this.pgUpdate(undefined, jump);
-    }
   }
 
   describeCrushStep(step: CrushStep) {
