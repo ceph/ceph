@@ -1,11 +1,11 @@
 =============
-Influx Plugin 
+Influx Module 
 =============
 
-The influx plugin continuously collects and sends time series data to an
+The influx module continuously collects and sends time series data to an
 influxdb database.
 
-The influx plugin was introduced in the 13.x *Mimic* release.
+The influx module was introduced in the 13.x *Mimic* release.
 
 --------
 Enabling 

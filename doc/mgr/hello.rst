@@ -1,5 +1,5 @@
-hello world
-===========
+Hello World Module
+==================
 
 This is a simple module skeleton for documentation purposes.
 
@@ -35,5 +35,5 @@ The log is found at::
 Documenting
 -----------
 
-After adding a new mgr module/plugin, be sure to add its documentation to ``doc/mgr/plugin_name.rst``.
-Also, add a link to your new plugin into ``doc/mgr/index.rst``.
+After adding a new mgr module, be sure to add its documentation to ``doc/mgr/module_name.rst``.
+Also, add a link to your new module into ``doc/mgr/index.rst``.
