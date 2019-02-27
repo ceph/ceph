@@ -9773,7 +9773,8 @@ void OSD::dequeue_peering_evt(
 {
   PG::RecoveryCtx rctx = create_context();
   auto curmap = sdata->get_osdmap();
-  epoch_t need_up_thru = 0, same_interval_since = 0;
+  bool need_up_thru = false;
+  epoch_t same_interval_since = 0;
   if (!pg) {
     if (const MQuery *q = dynamic_cast<const MQuery*>(evt->evt.get())) {
       handle_pg_query_nopg(*q);
