@@ -520,50 +520,12 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
                     sizeof(header2) - sizeof(header2.header_crc));
   }
 
-  auto message = MessageHeaderFrame::Encode(header2,
-                                            m->get_payload().length(),
-                                            m->get_middle().length(),
-                                            m->get_data().length());
-  if (auth_meta->is_mode_secure()) {
-    ceph_assert(session_stream_handlers.tx);
-
-    // let's cipher allocate one huge buffer for entire ciphertext.
-    // NOTE: ultimately we'll align these sizes to cipher's block size.
-    // AES-GCM can live without that as it's basically stream cipher.
-    session_stream_handlers.tx->reset_tx_handler({
-      message.get_buffer().length(),
-      m->get_payload().length(),
-      m->get_middle().length(),
-      m->get_data().length()
-    });
-
-    ceph_assert(message.get_buffer().length());
-    session_stream_handlers.tx->authenticated_encrypt_update(
-      std::move(message.get_buffer()));
-
-    // receiver uses "front" for "payload"
-    // TODO: switch TxHandler from `bl&&` to `const bl&`.
-    if (m->get_payload().length()) {
-      session_stream_handlers.tx->authenticated_encrypt_update(
-	m->get_payload());
-    }
-    if (m->get_middle().length()) {
-      session_stream_handlers.tx->authenticated_encrypt_update(
-	m->get_middle());
-    }
-    if (m->get_data().length()) {
-      session_stream_handlers.tx->authenticated_encrypt_update(
-	m->get_data());
-    }
-
-    auto cipherbl = session_stream_handlers.tx->authenticated_encrypt_final();
-    connection->outcoming_bl.claim_append(cipherbl);
-  } else {
-    connection->outcoming_bl.claim_append(message.get_buffer());
-    connection->outcoming_bl.append(m->get_payload());
-    connection->outcoming_bl.append(m->get_middle());
-    connection->outcoming_bl.append(m->get_data());
-  }
+  auto message = MessageHeaderFrame::Encode(session_stream_handlers,
+			     header2,
+			     m->get_payload(),
+			     m->get_middle(),
+			     m->get_data());
+  connection->outcoming_bl.claim_append(message.get_buffer());
 
   ldout(cct, 5) << __func__ << " sending message m=" << m
                 << " seq=" << m->get_seq() << " " << *m << dendl;
@@ -1241,11 +1203,7 @@ CtPtr ProtocolV2::handle_read_frame_segment(char *buffer, int r) {
 
   if (rx_segments_desc.size() == rx_segments_data.size()) {
     // OK, all segments planned to read are read. Can go with epilogue.
-    if (session_stream_handlers.rx) {
-      return READ(FRAME_EPILOGUE_SIZE, handle_read_frame_epilogue_main);
-    } else {
-      return handle_read_frame_dispatch();
-    }
+    return READ(FRAME_EPILOGUE_SIZE, handle_read_frame_epilogue_main);
   } else {
     // TODO: for makeshift only. This will be more generic and throttled
     return read_frame_segment();
@@ -1433,15 +1391,11 @@ CtPtr ProtocolV2::read_message_data() {
   }
 
   state = READ_MESSAGE_COMPLETE;
-  // TODO: implement epilogue for non-secure frames
-  if (session_stream_handlers.rx) {
-    return READ(FRAME_EPILOGUE_SIZE, handle_read_frame_epilogue_main);
-  } else {
-    return handle_read_frame_dispatch();
-  }
+  return READ(FRAME_EPILOGUE_SIZE, handle_read_frame_epilogue_main);
 }
 
-CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r) {
+CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r)
+{
   ldout(cct, 20) << __func__ << " r=" << r << dendl;
 
   if (r < 0) {
@@ -1449,10 +1403,7 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r) {
     return _fault();
   }
 
-  // I expect that ::temp_buffer is being used here.
-  ceph::bufferlist epilogue;
-  epilogue.push_back(buffer::create_static(FRAME_EPILOGUE_SIZE, buffer));
-
+  auto& epilogue = reinterpret_cast<epilogue_block_t&>(*buffer);
 
   // FIXME: if (auth_meta->is_mode_secure()) {
   if (session_stream_handlers.rx) {
@@ -1464,13 +1415,35 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r) {
     ceph_assert(session_stream_handlers.rx);
     ceph_assert(FRAME_EPILOGUE_SIZE == \
       session_stream_handlers.rx->get_extra_size_at_final());
+
+    // I expect that ::temp_buffer is being used here.
+    ceph::bufferlist epilogue_bl;
+    epilogue_bl.push_back(buffer::create_static(FRAME_EPILOGUE_SIZE,
+        epilogue.auth_tag));
     try {
       session_stream_handlers.rx->authenticated_decrypt_update_final(
-	std::move(epilogue), segment_t::DEFAULT_ALIGNMENT);
+	std::move(epilogue_bl), segment_t::DEFAULT_ALIGNMENT);
     } catch (ceph::crypto::onwire::MsgAuthError &e) {
       ldout(cct, 5) << __func__ << " message authentication failed: "
 		    << e.what() << dendl;
       return _fault();
+    }
+  } else {
+    for (std::uint8_t idx = 0; idx < rx_segments_data.size(); idx++) {
+      const __u32 expected_crc = epilogue.crc_values[idx];
+      const __u32 calculated_crc = rx_segments_data[idx].crc32c(-1);
+      if (expected_crc != calculated_crc) {
+	ldout(cct, 5) << __func__ << " message integrity check failed: "
+		      << " expected_crc=" << expected_crc
+		      << " calculated_crc=" << calculated_crc
+		      << dendl;
+	return _fault();
+      } else {
+	ldout(cct, 20) << __func__ << " message integrity check success: "
+		       << " expected_crc=" << expected_crc
+		       << " calculated_crc=" << calculated_crc
+		       << dendl;
+      }
     }
   }
 
