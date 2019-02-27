@@ -13,7 +13,7 @@ Synopsis
 
 | **ceph** **compact**
 
-| **ceph** **config-key** [ *del* | *exists* | *get* | *list* | *dump* | *put* ] ...
+| **ceph** **config-key** [ *rm* | *exists* | *get* | *ls* | *dump* | *set* ] ...
 
 | **ceph** **daemon** *<name>* \| *<path>* *<command>* ...
 
@@ -179,11 +179,11 @@ config-key
 
 Manage configuration key. It uses some additional subcommands.
 
-Subcommand ``del`` deletes configuration key.
+Subcommand ``rm`` deletes configuration key.
 
 Usage::
 
-	ceph config-key del <key>
+	ceph config-key rm <key>
 
 Subcommand ``exists`` checks for configuration keys existence.
 
@@ -197,7 +197,7 @@ Usage::
 
 	ceph config-key get <key>
 
-Subcommand ``list`` lists configuration keys.
+Subcommand ``ls`` lists configuration keys.
 
 Usage::
 
