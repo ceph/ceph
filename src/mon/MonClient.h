@@ -34,7 +34,6 @@ class MMonGetVersionReply;
 struct MMonSubscribeAck;
 class MMonCommandAck;
 struct MAuthReply;
-class MAuthRotating;
 class LogClient;
 class AuthAuthorizer;
 class AuthClientHandler;
