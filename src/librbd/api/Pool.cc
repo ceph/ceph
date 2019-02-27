@@ -8,10 +8,12 @@
 #include "common/Throttle.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "osd/osd_types.h"
+#include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Config.h"
 #include "librbd/api/Image.h"
 #include "librbd/api/Trash.h"
+#include "librbd/image/ValidatePoolRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
 
@@ -242,9 +244,15 @@ int Pool<I>::init(librados::IoCtx& io_ctx, bool force) {
     return r;
   }
 
-  // TODO configure self-managed snapshots (and other one-time pool checks)
+  ThreadPool *thread_pool;
+  ContextWQ *op_work_queue;
+  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
 
-  return 0;
+  C_SaferCond ctx;
+  auto req = image::ValidatePoolRequest<I>::create(io_ctx, op_work_queue, &ctx);
+  req->send();
+
+  return ctx.wait();
 }
 
 template <typename I>
