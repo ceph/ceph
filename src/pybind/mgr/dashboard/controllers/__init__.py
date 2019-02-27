@@ -27,6 +27,111 @@ from ..services.auth import AuthManager, JwtManager
 from ..plugins import PLUGIN_MANAGER
 
 
+def EndpointDoc(description="", group="", parameters=None, responses=None):
+    if not isinstance(description, str):
+        raise Exception("%s has been called with a description that is not a string: %s"
+                        % (EndpointDoc.__name__, description))
+    elif not isinstance(group, str):
+        raise Exception("%s has been called with a groupname that is not a string: %s"
+                        % (EndpointDoc.__name__, group))
+    elif parameters and not isinstance(parameters, dict):
+        raise Exception("%s has been called with parameters that is not a dict: %s"
+                        % (EndpointDoc.__name__, parameters))
+    elif responses and not isinstance(responses, dict):
+        raise Exception("%s has been called with responses that is not a dict: %s"
+                        % (EndpointDoc.__name__, responses))
+
+    if not parameters:
+        parameters = {}
+
+    def _split_param(name, p_type, description, optional=False, default_value=None, nested=False):
+        param = {
+            'name': name,
+            'description': description,
+            'required': not optional,
+            'nested': nested,
+        }
+        if default_value:
+            param['default'] = default_value
+        if isinstance(p_type, type):
+            param['type'] = p_type
+        else:
+            nested_params = _split_parameters(p_type, nested=True)
+            if nested_params:
+                param['type'] = type(p_type)
+                param['nested_params'] = nested_params
+            else:
+                param['type'] = p_type
+        return param
+
+    #  Optional must be set to True in order to set default value and parameters format must be:
+    # 'name: (type or nested parameters, description, [optional], [default value])'
+    def _split_dict(data, nested):
+        splitted = []
+        for name, props in data.items():
+            if isinstance(name, str) and isinstance(props, tuple):
+                if len(props) == 2:
+                    param = _split_param(name, props[0], props[1], nested=nested)
+                elif len(props) == 3:
+                    param = _split_param(name, props[0], props[1], optional=props[2], nested=nested)
+                if len(props) == 4:
+                    param = _split_param(name, props[0], props[1], props[2], props[3], nested)
+                splitted.append(param)
+            else:
+                raise Exception(
+                    """Parameter %s in %s has not correct format. Valid formats are:
+                    <name>: (<type>, <description>, [optional], [default value])
+                    <name>: (<[type]>, <description>, [optional], [default value])
+                    <name>: (<[nested parameters]>, <description>, [optional], [default value])
+                    <name>: (<{nested parameters}>, <description>, [optional], [default value])"""
+                    % (name, EndpointDoc.__name__))
+        return splitted
+
+    def _split_list(data, nested):
+        splitted = []
+        for item in data:
+            splitted.extend(_split_parameters(item, nested))
+        return splitted
+
+    # nested = True means parameters are inside a dict or array
+    def _split_parameters(data, nested=False):
+        param_list = []
+        if isinstance(data, dict):
+            param_list.extend(_split_dict(data, nested))
+        elif isinstance(data, (list, tuple)):
+            param_list.extend(_split_list(data, True))
+        return param_list
+
+    resp = {}
+    if responses:
+        for status_code, response_body in responses.items():
+            resp[str(status_code)] = _split_parameters(response_body)
+
+    def _wrapper(func):
+        func.doc_info = {
+            'summary': description,
+            'tag': group,
+            'parameters': _split_parameters(parameters),
+            'response': resp
+        }
+        return func
+
+    return _wrapper
+
+
+class ControllerDoc(object):
+    def __init__(self, description="", group=""):
+        self.tag = group
+        self.tag_descr = description
+
+    def __call__(self, cls):
+        cls.doc_info = {
+            'tag': self.tag,
+            'tag_descr': self.tag_descr
+        }
+        return cls
+
+
 class Controller(object):
     def __init__(self, path, base_url=None, security_scope=None, secure=True):
         if security_scope and not Scope.valid_scope(security_scope):
