@@ -8,6 +8,7 @@
 
 #include "Protocol.h"
 #include "crypto_onwire.h"
+#include "frames_v2.h"
 
 class ProtocolV2 : public Protocol {
 private:
@@ -49,28 +50,6 @@ private:
   }
 
 public:
-  enum class Tag : __u8 {
-    HELLO = 1,
-    AUTH_REQUEST,
-    AUTH_BAD_METHOD,
-    AUTH_REPLY_MORE,
-    AUTH_REQUEST_MORE,
-    AUTH_DONE,
-    CLIENT_IDENT,
-    SERVER_IDENT,
-    IDENT_MISSING_FEATURES,
-    SESSION_RECONNECT,
-    SESSION_RESET,
-    SESSION_RETRY,
-    SESSION_RETRY_GLOBAL,
-    SESSION_RECONNECT_OK,
-    WAIT,
-    MESSAGE,
-    KEEPALIVE2,
-    KEEPALIVE2_ACK,
-    ACK
-  };
-
   // TODO: move into auth_meta?
   ceph::crypto::onwire::rxtx_t session_stream_handlers;
 private:
@@ -106,16 +85,6 @@ private:
   uint32_t next_payload_len;
 
 public:
-  struct segment_t {
-    // TODO: this will be dropped with support for `allocation policies`.
-    // We need them because of the rx_buffers zero-copy optimization.
-    static constexpr __le16 DEFERRED_ALLOCATION { 0x0000 };
-
-    static constexpr __le16 DEFAULT_ALIGNMENT = sizeof(void*);
-
-    __le32 length;
-    __le16 alignment;
-  } __attribute__((packed));
 
   struct onwire_segment_t {
     // crypto-processed segment can be expanded on-wire because of:
@@ -124,10 +93,8 @@ public:
     //    See RxHandler::get_extra_size_at_final().
     __le32 onwire_length;
 
-    struct segment_t logical;
+    struct ceph::msgr::v2::segment_t logical;
   } __attribute__((packed));
-
-  static constexpr std::size_t MAX_NUM_SEGMENTS = 4;
 
   struct SegmentIndex {
     struct Msg {
@@ -143,13 +110,14 @@ public:
   };
 
   boost::container::static_vector<onwire_segment_t,
-				  MAX_NUM_SEGMENTS> rx_segments_desc;
+				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_desc;
   boost::container::static_vector<ceph::bufferlist,
-				  MAX_NUM_SEGMENTS> rx_segments_data;
+				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_data;
 
 private:
 
-  Tag next_tag;
+  ceph::msgr::v2::Tag sent_tag;
+  ceph::msgr::v2::Tag next_tag;
   ceph_msg_header2 current_header;
   utime_t backoff;  // backoff time
   utime_t recv_stamp;
@@ -166,9 +134,15 @@ private:
 
   Ct<ProtocolV2> *read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
                        int len, char *buffer = nullptr);
+  template <class F>
+  Ct<ProtocolV2> *write(const std::string &desc,
+                        CONTINUATION_PARAM(next, ProtocolV2), F &frame);
   Ct<ProtocolV2> *write(const std::string &desc,
                         CONTINUATION_PARAM(next, ProtocolV2),
                         bufferlist &buffer);
+
+  uint64_t expected_tags(ceph::msgr::v2::Tag sent_tag,
+                         ceph::msgr::v2::Tag received_tag);
 
   void requeue_sent();
   uint64_t discard_requeued_up_to(uint64_t out_seq, uint64_t seq);
