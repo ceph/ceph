@@ -29,6 +29,121 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         {'name': 'orchestrator'}
     ]
 
+    def __init__(self, *args, **kwargs):
+        super(OrchestratorCli, self).__init__(*args, **kwargs)
+        self.ident = set([])
+        self.fault = set([])
+        self.devs = {}
+        self._load()
+        self._refresh_health()
+
+    def _load(self):
+        active = self.get_store('active_devices')
+        if active:
+            decoded = json.loads(active)
+            self.ident = set(decoded.get('ident', []))
+            self.fault = set(decoded.get('fault', []))
+        self.log.debug('ident %s, fault %s' % (self.ident, self.fault))
+
+    def _save(self):
+        encoded = json.dumps({
+            'ident': list(self.ident),
+            'fault': list(self.fault),
+            })
+        self.set_store('active_devices', encoded)
+
+    def _refresh_health(self):
+        h = {}
+        if self.ident:
+            h['DEVICE_IDENT_ON'] = {
+                'severity': 'warning',
+                'summary': '%d devices have ident light turned on' % len(
+                    self.ident),
+                'detail': ['%s ident light enabled' % d for d in self.ident]
+            }
+        if self.fault:
+            h['DEVICE_FAULT_ON'] = {
+                'severity': 'warning',
+                'summary': '%d devices have fault light turned on' % len(
+                    self.fault),
+                'detail': ['%s fault light enabled' % d for d in self.fault]
+            }
+        self.set_health_checks(h)
+
+    def _get_devices(self):
+        d = self.get('devices')
+        dm = {}
+        for i in d['devices']:
+            dm[i['devid']] = i['location']
+        return dm
+
+    @CLIReadCommand(prefix='device ls-lights',
+                    desc='List currently active device indicator lights')
+    def _command_ls(self):
+        return HandleCommandResult(
+            stdout=json.dumps({
+                'ident': list(self.ident),
+                'fault': list(self.fault)
+                }, indent=4))
+
+    @CLIWriteCommand(prefix='device fault-light-on',
+                     args='name=devid,type=CephString',
+                     desc='Enable device *fault* light')
+    def _command_fault_on(self, devid):
+        self.log.debug('fault-on %s' % devid)
+        devs = self._get_devices()
+        if devid not in devs:
+            return HandleCommandResult(stderr='device %s not found' % devid,
+                                       retval=-errno.ENOENT)
+        self.fault.add(devid)
+        self._save()
+        self._refresh_health()
+        #self.remote('orchestrator', '_device_fault_on', devs[devid])
+        return HandleCommandResult(stdout='')
+
+    @CLIWriteCommand(prefix='device ident-light-on',
+                     args='name=devid,type=CephString',
+                     desc='Enable device *ident* light')
+    def _command_ident_on(self, devid):
+        self.log.debug('ident-on %s' % devid)
+        devs = self._get_devices()
+        if devid not in devs:
+            return HandleCommandResult(stderr='device %s not found' % devid,
+                                       retval=-errno.ENOENT)
+        self.ident.add(devid)
+        self._save()
+        self._refresh_health()
+        #self.remote('orchestrator', '_device_ident_on', devs[devid])
+        return HandleCommandResult(stdout='')
+
+    @CLIWriteCommand(prefix='device fault-light-off',
+                     args='name=devid,type=CephString name=force,type=CephBool,req=false',
+                     desc='Disable device *fault* light')
+    def _command_fault_off(self, devid, force=False):
+        self.log.debug('fault-off %s' % devid)
+        devs = self._get_devices()
+#        if devid in devs:
+#            self.remote('orchestrator', '_device_fault_off', devs[devid])
+        if devid in self.fault:
+            self.fault.remove(devid)
+            self._save()
+            self._refresh_health()
+        return HandleCommandResult(stdout='')
+
+    @CLIWriteCommand(prefix='device ident-light-off',
+                     args='name=devid,type=CephString name=force,type=CephBool,req=false',
+                     desc='Disable device *ident* light')
+    def _command_ident_off(self, devid, force=False):
+        self.log.debug('ident-off %s' % devid)
+        devs = self._get_devices()
+#        if devid in devs:
+#            self.remote('orchestrator', '_device_ident_off', devs[devid])
+        if devid in self.ident:
+            self.ident.remove(devid)
+            self._save()
+            self._refresh_health()
+        return HandleCommandResult(stdout='')
+
     def _select_orchestrator(self):
         return self.get_module_option("orchestrator")
 
