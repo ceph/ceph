@@ -234,8 +234,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
        const eversion_t &trim_to,
        const eversion_t &roll_forward_to,
        bool transaction_applied,
-       ObjectStore::Transaction &t,
-       bool async = false) = 0;
+       ObjectStore::Transaction &t) = 0;
 
      virtual void pgb_set_object_snap_mapping(
        const hobject_t &soid,

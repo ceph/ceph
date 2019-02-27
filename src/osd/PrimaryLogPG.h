@@ -436,12 +436,11 @@ public:
     const eversion_t &trim_to,
     const eversion_t &roll_forward_to,
     bool transaction_applied,
-    ObjectStore::Transaction &t,
-    bool async = false) override {
+    ObjectStore::Transaction &t) override {
     if (hset_history) {
       info.hit_set = *hset_history;
     }
-    append_log(logv, trim_to, roll_forward_to, t, transaction_applied, async);
+    append_log(logv, trim_to, roll_forward_to, t, transaction_applied);
   }
 
   void op_applied(const eversion_t &applied_version) override;

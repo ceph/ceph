@@ -181,8 +181,7 @@ void PGLog::clear_info_log(
 void PGLog::trim(
   eversion_t trim_to,
   pg_info_t &info,
-  bool transaction_applied,
-  bool async)
+  bool transaction_applied)
 {
   dout(10) << __func__ << " proposed trim_to = " << trim_to << dendl;
   // trim?
@@ -190,7 +189,7 @@ void PGLog::trim(
     dout(10) << __func__ << " missing = " << missing.num_missing() << dendl;
     // Don't assert for async_recovery_targets or backfill_targets
     // or whenever there are missing items
-    if (transaction_applied && !async && (missing.num_missing() == 0))
+    if (transaction_applied && (missing.num_missing() == 0))
       ceph_assert(trim_to <= info.last_complete);
 
     dout(10) << "trim " << log << " to " << trim_to << dendl;

@@ -1052,10 +1052,8 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
   }
 
   // flag set to true during async recovery
-  bool async = false;
   pg_missing_tracker_t pmissing = get_parent()->get_local_missing();
   if (pmissing.is_missing(soid)) {
-    async = true;
     dout(30) << __func__ << " is_missing " << pmissing.is_missing(soid) << dendl;
     for (auto &&e: log) {
       dout(30) << " add_next_event entry " << e << dendl;
@@ -1071,8 +1069,7 @@ void ReplicatedBackend::do_repop(OpRequestRef op)
     m->pg_trim_to,
     m->pg_roll_forward_to,
     update_snaps,
-    rm->localt,
-    async);
+    rm->localt);
 
   rm->opt.register_on_commit(
     parent->bless_context(
