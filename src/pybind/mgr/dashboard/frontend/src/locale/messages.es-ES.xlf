@@ -1,5 +1,5 @@
 <?xml version="1.0"?><xliff version="1.2" xmlns="urn:oasis:names:tc:xliff:document:1.2">
-  <file datatype="plaintext" original="ng2.template" source-language="en-US" target-language="pt-PT">
+  <file datatype="plaintext" original="ng2.template" source-language="en-US" target-language="es-ES">
     <body>
       <trans-unit datatype="html" id="319e0745bcbc132451569294fa2fa21bf10f555a">
         <source>Toggle navigation</source>
@@ -10,21 +10,21 @@
         </context-group>
       </trans-unit><trans-unit datatype="html" id="f65253954b66e929a8b4d5ecaf61f9129f8cec64">
         <source>Dashboard</source>
-        <target state="translated">Dashboard</target>
+        <target>Dashboard</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">35</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="f4d1dd59b039ad818d9da7e29a773e10e41d9821">
         <source>Cluster</source>
-        <target state="translated">Cluster</target>
+        <target>Cluster</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">47</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="099b441d49333b3c6d30b36dc0a4763e64c78920">
         <source>Hosts</source>
-        <target state="translated">Hosts</target>
+        <target>Nodos</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">57</context>
@@ -35,7 +35,7 @@
         </context-group>
       </trans-unit><trans-unit datatype="html" id="624f596cc3320f5e0a0d7c7346c364e5af9bdd8c">
         <source>Monitors</source>
-        <target state="translated">Monitors</target>
+        <target>Monitores</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">64</context>
@@ -46,7 +46,7 @@
         </context-group>
       </trans-unit><trans-unit datatype="html" id="1a9183778f2c6473d7ccb080f651caa01faaf70c">
         <source>OSDs</source>
-        <target state="translated">OSDs</target>
+        <target>OSDs</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">71</context>
@@ -57,14 +57,14 @@
         </context-group>
       </trans-unit><trans-unit datatype="html" id="4a41f824a35ba01d5bd7be61aa06b3e8145209d0">
         <source>Configuration</source>
-        <target>Configuração</target>
+        <target>Configuración</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">78</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="8c95898abff46bfac3ed6eb2afef74597e60b15c">
         <source>CRUSH map</source>
-        <target state="translated">CRUSH map</target>
+        <target>CRUSH map</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">85</context>
@@ -85,7 +85,7 @@
         </context-group>
       </trans-unit><trans-unit datatype="html" id="92899fa68e8ca108912163ff58edc8540e453787">
         <source>Pools</source>
-        <target state="translated">Pools</target>
+        <target>Pooles</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">108</context>
@@ -104,14 +104,14 @@
         </context-group>
       </trans-unit><trans-unit datatype="html" id="7f5d0c10614e8a34f0e2dad33a0568277c50cf69">
         <source>Block</source>
-        <target state="translated">Block</target>
+        <target>Bloques</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">122</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="b73f7f5060fb22a1e9ec462b1bb02493fa3ab866">
         <source>Images</source>
-        <target state="translated">Images</target>
+        <target>Imágenes</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">131</context>
@@ -142,35 +142,35 @@
         </context-group>
       </trans-unit><trans-unit datatype="html" id="3c2562ba992127203dcfd014010b03cb7b8113c6">
         <source>Mirroring</source>
-        <target state="translated">Mirroring</target>
+        <target>Mirroring</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">139</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="811c241d56601b91ef26735b770e64428089b950">
         <source>iSCSI</source>
-        <target state="translated">iSCSI</target>
+        <target>iSCSI</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">151</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="a4eff72d97b7ced051398d581f10968218057ddc">
         <source>Filesystems</source>
-        <target>Sistema de Ficheiros</target>
+        <target>Sistemas de Ficheros</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">162</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="2190548d236ca5f7bc7ab2bca334b860c5ff2ad4">
         <source>Object Gateway</source>
-        <target state="translated">Object Gateway</target>
+        <target>Gateway de Objetos</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">173</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="9e24f9e2d42104ffc01599db4d566d1cc518f9e6">
         <source>Daemons</source>
-        <target state="translated">Daemons</target>
+        <target>Daemons</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">182</context>
@@ -185,7 +185,7 @@
         </context-group>
       </trans-unit><trans-unit datatype="html" id="4d13a9cd5ed3dcee0eab22cb25198d43886942be">
         <source>Users</source>
-        <target>Utilizador</target>
+        <target>Usuarios</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">188</context>
@@ -196,7 +196,7 @@
         </context-group>
       </trans-unit><trans-unit datatype="html" id="9515520496da83179d8b08132f00f575512a1f40">
         <source>Buckets</source>
-        <target state="translated">Buckets</target>
+        <target>Buckets</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">194</context>
@@ -204,8 +204,8 @@
       </trans-unit><trans-unit datatype="html" id="797f8214e8148f4bf0d244baaa7341706b419549">
         <source>Retrieving data<x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN_1"/> for
   <x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/>. Please wait...</source>
-        <target>Obtendo dados <x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN_1"/> para
- <x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/>. Por favor aguarde...</target>
+        <target>Obteniendo datos <x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN_1"/>
+para <x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/>. Por favor, espere...</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/shared/components/view-cache/view-cache.component.html</context>
           <context context-type="linenumber">2</context>
@@ -213,7 +213,7 @@
       </trans-unit><trans-unit datatype="html" id="5a870dc77b9f6f33ee671ea2d856021276933339">
         <source>Displaying previously cached data<x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN_1"/>
   for <x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/>.</source>
-        <target>Mostrando dados previamente guardados em cache <x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN_1"/>
+        <target>Mostrando datos <x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN_1"/> previamente guardados en caché
 para <x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/>.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/shared/components/view-cache/view-cache.component.html</context>
@@ -223,16 +223,16 @@ para <x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN"/><x ctype="
         <source>Could not load data<x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN_1"/> for
   <x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/>.
   Please check the cluster health.</source>
-        <target>Não foi possível carregar os dados <x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN_1"/> para
-  <x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/>.
-Por favor, consulte a saúde do cluster.</target>
+        <target>No se pudieron cargar los datos <x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN_1"/> para
+<x ctype="x-span" equiv-text="&lt;span&gt;" id="START_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/><x ctype="x-span" equiv-text="&lt;/span&gt;" id="CLOSE_TAG_SPAN"/>.
+Por favor, consulte el estado del clúster.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/shared/components/view-cache/view-cache.component.html</context>
           <context context-type="linenumber">12</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="cda31dbd724cf5f4fa7a4274d9120651490c8a8c">
         <source>Back</source>
-        <target>Voltar</target>
+        <target>Volver</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/shared/components/error-panel/error-panel.component.html</context>
           <context context-type="linenumber">27</context>
@@ -271,14 +271,14 @@ Por favor, consulte a saúde do cluster.</target>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="3fb5709e10166cbc85970cbff103db227dbeb813">
         <source>Select a Language</source>
-        <target>Escolha uma língua</target>
+        <target>Seleccione un idioma</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/shared/components/language-selector/language-selector.component.html</context>
           <context context-type="linenumber">7</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="c5109325fb160b543f71a51e7511c00575057431">
         <source>Loading panel data...</source>
-        <target>Carregando os dados do painel...</target>
+        <target>Cargando datos del panel...</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/shared/components/grafana/grafana.component.html</context>
           <context context-type="linenumber">3</context>
@@ -287,8 +287,9 @@ Por favor, consulte a saúde do cluster.</target>
         <source>Please consult the
   <x ctype="x-a" equiv-text="&lt;a&gt;" id="START_LINK"/>documentation<x ctype="x-a" equiv-text="&lt;/a&gt;" id="CLOSE_LINK"/> on how to
   configure and enable the monitoring functionality.</source>
-        <target>Por favor, consulte a
-<x ctype="x-a" equiv-text="&lt;a&gt;" id="START_LINK"/>documentação<x ctype="x-a" equiv-text="&lt;/a&gt;" id="CLOSE_LINK"/> sobre como configurar e activar as funções de monitorização.</target>
+        <target>Por favor, consulte
+la <x ctype="x-a" equiv-text="&lt;a&gt;" id="START_LINK"/>documentación<x ctype="x-a" equiv-text="&lt;/a&gt;" id="CLOSE_LINK"/> sobe cómo
+configurar y activar la monitorización.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/shared/components/grafana/grafana.component.html</context>
           <context context-type="linenumber">6</context>
@@ -320,14 +321,14 @@ Por favor, consulte a saúde do cluster.</target>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="012741ee52b3c050e4a977c37cc2334f7974f141">
         <source>Failed to load data.</source>
-        <target>Falha a carregar dados.</target>
+        <target>Error al cargar los datos.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/shared/datatable/table/table.component.html</context>
           <context context-type="linenumber">2</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="80cc9a12d4bf6fe454ed94b379eeaf915f920bb7">
         <source>selected</source>
-        <target>seleccionar</target>
+        <target>seleccionado/s</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/shared/datatable/table/table.component.html</context>
           <context context-type="linenumber">112</context>
@@ -335,7 +336,7 @@ Por favor, consulte a saúde do cluster.</target>
         <note from="description" priority="1">X selected</note>
       </trans-unit><trans-unit datatype="html" id="0cb77511a9a148e05b9adf36cc07269956fbb29d">
         <source>found</source>
-        <target>encontrado</target>
+        <target>encontrado/s</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/shared/datatable/table/table.component.html</context>
           <context context-type="linenumber">115</context>
@@ -343,7 +344,7 @@ Por favor, consulte a saúde do cluster.</target>
         <note from="description" priority="1">X found</note>
       </trans-unit><trans-unit datatype="html" id="79347388740c50b7ac97e144c2494bb62912f312">
         <source>total</source>
-        <target>total</target>
+        <target>total/es</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/shared/datatable/table/table.component.html</context>
           <context context-type="linenumber">118</context>
@@ -460,7 +461,7 @@ Por favor, consulte a saúde do cluster.</target>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="7cbdabcece469fab89cfa687ab152bca18b97498">
         <source>This field is required.</source>
-        <target>Este campo é mandatório.</target>
+        <target>Campo obligatorio.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">43</context>
@@ -846,7 +847,7 @@ Por favor, consulte a saúde do cluster.</target>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="cff1428d10d59d14e45edec3c735a27b5482db59">
         <source>Name</source>
-        <target>Nome</target>
+        <target>Nombre</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">422</context>
@@ -937,21 +938,21 @@ Por favor, consulte a saúde do cluster.</target>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="beb1391a148bd032914f49a2665dcc414a5d56d0">
         <source>{VAR_SELECT, select, editing {Edit} cloning {Clone} copying {Copy} other {Add} }</source>
-        <target>{VAR_SELECT, select, editing {Editar} cloning {Clonar} copying {Copiar} other {Adicionar} }</target>
+        <target>{VAR_SELECT, select, editing {Editar} cloning {Clonar} copying {Copiar} other {Añadir} }</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">10</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="52dd89f49fc440660cbbb3665b88d80f5baa7437">
         <source>{VAR_SELECT, select, cloning {Clone from} copying {Copy from} other {Parent} }</source>
-        <target>{VAR_SELECT, select, cloning {Clonar de} copying {Copiar de} other {Parente} }</target>
+        <target>{VAR_SELECT, select, cloning {Clonar de} copying {Copiar de} other {Padre} }</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">20</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="94516fa213706c67ce5a5b5765681d7fb032033a">
         <source>Loading...</source>
-        <target>A carregar...</target>
+        <target>Cargando...</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">79</context>
@@ -990,49 +991,49 @@ Por favor, consulte a saúde do cluster.</target>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="b99417c4dd46286ffd37c8d2e987c8b512ec7052">
         <source>-- No rbd pools available --</source>
-        <target>-- Nenhuma pool rbd disponível --</target>
+        <target>-- No hay pooles RBD disponibles --</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">82</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="ef83ec9c304a89d45650e580dcdc2978c37b3a83">
         <source>-- Select a pool --</source>
-        <target>-- Seleccione uma pool --</target>
+        <target>-- Seleccione un pool --</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">85</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="49449943d8cbf59d8c401c8bd2e76f92e207cc5f">
         <source>Use a dedicated data pool</source>
-        <target>Use uma pool dedicada para dados</target>
+        <target>Usar un pool dedicado para datos</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">105</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="870aee0dd31a9643bf62007beb8f1ae1deb34d42">
         <source>Data pool</source>
-        <target>Pool de dados</target>
+        <target>Pool de datos</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">116</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="3792ca829d9b9f687e1f5d7733d30e9bb0bfec47">
         <source>Dedicated pool that stores the object-data of the RBD.</source>
-        <target>Pool dedicada a guardar os dados dos objectos de um RBD.</target>
+        <target>Pool dedicado para almacenar los datos de RBD</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">120</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="151c80ea931037cd92e854442927f8a0f6ae7795">
         <source>-- No data pools available --</source>
-        <target>-- Nenhuma pool de dados disponível --</target>
+        <target>-- No hay pooles de datos disponibles --</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">142</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="7faaaa08f56427999f3be41df1093ce4089bbd75">
         <source>Size</source>
-        <target>Tamanho</target>
+        <target>Tamaño</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">160</context>
@@ -1043,14 +1044,14 @@ Por favor, consulte a saúde do cluster.</target>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="f0016bd458baa88284a658ce9eeda42d8ad88d2c">
         <source>e.g., 10GiB</source>
-        <target>e.g., 10GiB</target>
+        <target>ej: 10GiB</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">170</context>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="0a88bbee20570aaf9615332fb27020627044874d">
         <source>You have to increase the size.</source>
-        <target>Tem de aumentar o tamanho.</target>
+        <target>Debe aumentar el tamaño.</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-form/rbd-form.component.html</context>
           <context context-type="linenumber">178</context>
@@ -1598,7 +1599,7 @@ Por favor, consulte a saúde do cluster.</target>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="4f8b2bb476981727ab34ed40fde1218361f92c45">
         <source>Details</source>
-        <target>Detalhes</target>
+        <target state="translated">Details</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/prometheus/prometheus-list/prometheus-list.component.html</context>
           <context context-type="linenumber">10</context>
@@ -1796,7 +1797,7 @@ Por favor, consulte a saúde do cluster.</target>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="f6755cff4957d5c3c89bafce5651f1b6fa2b1fd9">
         <source>Add</source>
-        <target>Adicionar</target>
+        <target state="translated">Add</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
           <context context-type="linenumber">326</context>
@@ -1807,7 +1808,7 @@ Por favor, consulte a saúde do cluster.</target>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="f4e529ae5ffd73001d1ff4bbdeeb0a72e342e5c8">
         <source>Close</source>
-        <target>Fechar</target>
+        <target state="translated">Close</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/pool/erasure-code-profile-form/erasure-code-profile-form.component.html</context>
           <context context-type="linenumber">330</context>
@@ -2208,7 +2209,7 @@ Por favor, consulte a saúde do cluster.</target>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="2798cc1e152b1ec07fd8daf94a2a073d1ba1ebcc">
         <source>Id</source>
-        <target>Id</target>
+        <target state="translated">Id</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.html</context>
           <context context-type="linenumber">26</context>
@@ -2489,7 +2490,7 @@ Por favor, consulte a saúde do cluster.</target>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="b760f123248930122fc7e7b6b6bf94e376e959c8">
         <source>Full name</source>
-        <target>Nome completo</target>
+        <target state="translated">Full name</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
           <context context-type="linenumber">50</context>
@@ -3834,7 +3835,7 @@ Por favor, consulte a saúde do cluster.</target>
         </context-group>
       </trans-unit><trans-unit datatype="html" id="0b0901877d837d3fda16ba161eb74368d1c75b7a">
         <source>Ready</source>
-        <target>Pronto</target>
+        <target>Listo</target>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/mirroring/image-list/image-list.component.html</context>
           <context context-type="linenumber">20</context>
