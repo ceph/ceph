@@ -204,13 +204,10 @@ struct ceph_msg_header2 {
 			     receiver: mask against ~PAGE_MASK */
 
 	__le64 ack_seq;
-
-	__le32 front_crc, middle_crc, data_crc;
 	__u8 flags;
 	/* oldest code we think can decode this.  unknown if zero. */
 	__le16 compat_version;
 	__le16 reserved;
-	__le32 header_crc;
 } __attribute__ ((packed));
 
 #define CEPH_MSG_PRIO_LOW     64
