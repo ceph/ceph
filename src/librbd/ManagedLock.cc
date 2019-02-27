@@ -454,9 +454,17 @@ template <typename I>
 bool ManagedLock<I>::is_state_shutdown() const {
   ceph_assert(m_lock.is_locked());
 
-  return ((m_state == STATE_SHUTDOWN) ||
-          (!m_actions_contexts.empty() &&
-           m_actions_contexts.back().first == ACTION_SHUT_DOWN));
+  switch (m_state) {
+  case STATE_PRE_SHUTTING_DOWN:
+  case STATE_SHUTTING_DOWN:
+  case STATE_SHUTDOWN:
+    return true;
+  default:
+    break;
+  }
+
+  return (!m_actions_contexts.empty() &&
+          m_actions_contexts.back().first == ACTION_SHUT_DOWN);
 }
 
 template <typename I>

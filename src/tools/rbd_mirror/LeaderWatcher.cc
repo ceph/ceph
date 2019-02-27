@@ -902,8 +902,10 @@ void LeaderWatcher<I>::handle_notify_lock_acquired(int r) {
     ceph_assert(m_on_finish != nullptr);
     std::swap(m_on_finish, on_finish);
 
-    // listener should be ready for instance add/remove events now
-    m_instances->unblock_listener();
+    if (m_ret_val == 0) {
+      // listener should be ready for instance add/remove events now
+      m_instances->unblock_listener();
+    }
   }
   on_finish->complete(0);
 }
@@ -1090,7 +1092,9 @@ template <typename I>
 void LeaderWatcher<I>::handle_rewatch_complete(int r) {
   dout(5) << "r=" << r << dendl;
 
-  m_leader_lock->reacquire_lock(nullptr);
+  if (r != -EBLACKLISTED) {
+    m_leader_lock->reacquire_lock(nullptr);
+  }
 }
 
 template <typename I>
