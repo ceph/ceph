@@ -57,4 +57,10 @@ describe('MgrModuleService', () => {
     const req = httpTesting.expectOne('api/mgr/module/bar/disable');
     expect(req.request.method).toBe('POST');
   });
+
+  it('should call getOptions', () => {
+    service.getOptions('foo').subscribe();
+    const req = httpTesting.expectOne('api/mgr/module/foo/options');
+    expect(req.request.method).toBe('GET');
+  });
 });

@@ -19,6 +19,7 @@ import { CrushmapComponent } from './crushmap/crushmap.component';
 import { HostDetailsComponent } from './hosts/host-details/host-details.component';
 import { HostsComponent } from './hosts/hosts.component';
 import { LogsComponent } from './logs/logs.component';
+import { MgrModulesModule } from './mgr-modules/mgr-modules.module';
 import { MonitorComponent } from './monitor/monitor.component';
 import { OsdDetailsComponent } from './osd/osd-details/osd-details.component';
 import { OsdFlagsModalComponent } from './osd/osd-flags-modal/osd-flags-modal.component';
@@ -49,7 +50,8 @@ import { PrometheusListComponent } from './prometheus/prometheus-list/prometheus
     ModalModule.forRoot(),
     AlertModule.forRoot(),
     TooltipModule.forRoot(),
-    TreeModule
+    TreeModule,
+    MgrModulesModule
   ],
   declarations: [
     HostsComponent,
