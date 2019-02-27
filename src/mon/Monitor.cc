@@ -6240,6 +6240,11 @@ int Monitor::handle_auth_request(
       &auth_meta->connection_secret);
   } else {
     priv = con->get_priv();
+    if (!priv) {
+      // this can happen if the async ms_handle_reset event races with
+      // the unlocked call into handle_auth_request
+      return -EACCES;
+    }
     s = static_cast<MonSession*>(priv.get());
     r = s->auth_handler->handle_request(
       p,
