@@ -176,6 +176,31 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     } else {
       odata.append(ss.str());
     }
+  } else if (prefix == "config ls") {
+    ostringstream ss;
+    if (f) {
+      f->open_array_section("options");
+    }
+    for (auto& i : ceph_options) {
+      if (f) {
+	f->dump_string("option", i.name);
+      } else {
+	ss << i.name << "\n";
+      }
+    }
+    for (auto& i : mon->mgrmon()->get_mgr_module_options()) {
+      if (f) {
+	f->dump_string("option", i.first);
+      } else {
+	ss << i.first << "\n";
+      }
+    }
+    if (f) {
+      f->close_section();
+      f->flush(odata);
+    } else {
+      odata.append(ss.str());
+    }
   } else if (prefix == "config dump") {
     list<pair<string,Section*>> sections = {
       make_pair("global", &config_map.global)
