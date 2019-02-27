@@ -74,8 +74,8 @@
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">85</context>
         </context-group>
-      </trans-unit><trans-unit id="e7b2bc4b86de6e96d353f6bf2b4d793ea3a19ba0" datatype="html">
-        <source>Manager Modules</source>
+      </trans-unit><trans-unit id="33da4dbeb076159510801ea764a218fd341269d2" datatype="html">
+        <source>Manager modules</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/navigation/navigation/navigation.component.html</context>
           <context context-type="linenumber">92</context>
@@ -255,6 +255,10 @@
           <context context-type="linenumber">159</context>
         </context-group>
         <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.html</context>
+          <context context-type="linenumber">118</context>
+        </context-group>
+        <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/nfs/nfs-form/nfs-form.component.html</context>
           <context context-type="linenumber">520</context>
         </context-group>
@@ -277,10 +281,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/auth/user-form/user-form.component.html</context>
           <context context-type="linenumber">151</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">139</context>
         </context-group>
       </trans-unit><trans-unit id="3fb5709e10166cbc85970cbff103db227dbeb813" datatype="html">
         <source>Select a Language</source>
@@ -516,6 +516,14 @@
           <context context-type="linenumber">181</context>
         </context-group>
         <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.html</context>
+          <context context-type="linenumber">79</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.html</context>
+          <context context-type="linenumber">100</context>
+        </context-group>
+        <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/osd/osd-recv-speed-modal/osd-recv-speed-modal.component.html</context>
           <context context-type="linenumber">31</context>
         </context-group>
@@ -614,10 +622,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/auth/user-form/user-form.component.html</context>
           <context context-type="linenumber">87</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">118</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-snapshot-form/rbd-snapshot-form.component.html</context>
@@ -1289,10 +1293,6 @@
           <context context-type="linenumber">46</context>
         </context-group>
         <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">80</context>
-        </context-group>
-        <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/configuration/configuration-details/configuration-details.component.html</context>
           <context context-type="linenumber">13</context>
         </context-group>
@@ -1393,6 +1393,70 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/logs/logs.component.html</context>
           <context context-type="linenumber">20</context>
+        </context-group>
+      </trans-unit><trans-unit id="2447796ddbda942f4e2c46619cb84d69f066e568" datatype="html">
+        <source>Loading configuration...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.html</context>
+          <context context-type="linenumber">2</context>
+        </context-group>
+      </trans-unit><trans-unit id="b42c0b347a841bed8859ee83de05080ee28c803b" datatype="html">
+        <source>The configuration could not be loaded.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.html</context>
+          <context context-type="linenumber">4</context>
+        </context-group>
+      </trans-unit><trans-unit id="31a9c2870a934b594d1390146c489f76440859ea" datatype="html">
+        <source>Edit Manager module</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.html</context>
+          <context context-type="linenumber">15</context>
+        </context-group>
+      </trans-unit><trans-unit id="46e09b8290d3d0afdb6baa2021395b0570606a31" datatype="html">
+        <source>The entered value is not a valid UUID, e.g.: 67dcac9f-2c03-4d6c-b7bd-1210b3a259a8</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.html</context>
+          <context context-type="linenumber">62</context>
+        </context-group>
+      </trans-unit><trans-unit id="7aacd038b39cfd347107d01d1dc27f5cb3e0951c" datatype="html">
+        <source>The entered value needs to be a valid IP address.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.html</context>
+          <context context-type="linenumber">65</context>
+        </context-group>
+      </trans-unit><trans-unit id="f19106149f4b07a0d721f9d317afed393cb7bd93" datatype="html">
+        <source>The entered value is too high! It must be lower or equal to <x id="INTERPOLATION" equiv-text="{{ moduleOption.value.max }}"/>.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.html</context>
+          <context context-type="linenumber">82</context>
+        </context-group>
+      </trans-unit><trans-unit id="6d33c40ef9a6c3bf0888df831b25e41e65f9d15b" datatype="html">
+        <source>The entered value is too low! It must be greater or equal to <x id="INTERPOLATION" equiv-text="{{ moduleOption.value.min }}"/>.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.html</context>
+          <context context-type="linenumber">85</context>
+        </context-group>
+      </trans-unit><trans-unit id="eae7086660cf1e38c7194a2c49ff52cc656f90f5" datatype="html">
+        <source>The entered value needs to be a number.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.html</context>
+          <context context-type="linenumber">88</context>
+        </context-group>
+      </trans-unit><trans-unit id="a73376e04b4fb3a20734c8c39743fba32e6676ce" datatype="html">
+        <source>The entered value needs to be a number or decimal.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.html</context>
+          <context context-type="linenumber">103</context>
+        </context-group>
+      </trans-unit><trans-unit id="047f50bc5b5d17b5bec0196355953e1a5c590ddb" datatype="html">
+        <source>Update</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.html</context>
+          <context context-type="linenumber">113</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/block/mirroring/pool-edit-mode-modal/pool-edit-mode-modal.component.html</context>
+          <context context-type="linenumber">41</context>
         </context-group>
       </trans-unit><trans-unit id="81b97b8ea996ad1e4f9fca8415021850214884b1" datatype="html">
         <source>Status</source>
@@ -1644,6 +1708,10 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/cluster/configuration/configuration-details/configuration-details.component.html</context>
           <context context-type="linenumber">3</context>
+        </context-group>
+        <context-group purpose="location">
+          <context context-type="sourcefile">app/ceph/cluster/mgr-modules/mgr-module-details/mgr-module-details.component.html</context>
+          <context context-type="linenumber">2</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/rbd-details/rbd-details.component.html</context>
@@ -2822,10 +2890,6 @@
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
           <context context-type="linenumber">79</context>
         </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">58</context>
-        </context-group>
       </trans-unit><trans-unit id="ca271adf154956b8fcb28f4f50a37acb3057ff7c" datatype="html">
         <source>The chosen email address is already in use.</source>
         <context-group purpose="location">
@@ -2991,10 +3055,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-user-form/rgw-user-form.component.html</context>
           <context context-type="linenumber">506</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">27</context>
         </context-group>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/rgw/rgw-bucket-details/rgw-bucket-details.component.html</context>
@@ -3218,76 +3278,6 @@
         <context-group purpose="location">
           <context context-type="sourcefile">app/core/forbidden/forbidden.component.html</context>
           <context context-type="linenumber">7</context>
-        </context-group>
-      </trans-unit><trans-unit id="2447796ddbda942f4e2c46619cb84d69f066e568" datatype="html">
-        <source>Loading configuration...</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">2</context>
-        </context-group>
-      </trans-unit><trans-unit id="b42c0b347a841bed8859ee83de05080ee28c803b" datatype="html">
-        <source>The configuration could not be loaded.</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">4</context>
-        </context-group>
-      </trans-unit><trans-unit id="30b9c9863aac7b725b5c028b67c217981474aab4" datatype="html">
-        <source>Telemetry</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">15</context>
-        </context-group>
-      </trans-unit><trans-unit id="49c5da085adc2bdeef21fe3d6739ac7a9403668a" datatype="html">
-        <source>Leaderboard</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">40</context>
-        </context-group>
-      </trans-unit><trans-unit id="34746fb1c7f3d2194d99652bdff89e6e14c9c4f4" datatype="html">
-        <source>Contact</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">50</context>
-        </context-group>
-      </trans-unit><trans-unit id="f3a58c8a81b9ffda26a154eae25a422c9f7de37b" datatype="html">
-        <source>Organization</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">66</context>
-        </context-group>
-      </trans-unit><trans-unit id="a92e437fac14b4010c4515b31c55a311d026a57f" datatype="html">
-        <source>Proxy</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">94</context>
-        </context-group>
-      </trans-unit><trans-unit id="7d49310535abb3792d8c9c991dd0d990d73d29af" datatype="html">
-        <source>Interval</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">109</context>
-        </context-group>
-      </trans-unit><trans-unit id="7717ce40086b2c8d87ddfb180acf35b5f7dca14b" datatype="html">
-        <source>The entered value must be at least 24 hours.</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">121</context>
-        </context-group>
-      </trans-unit><trans-unit id="eae7086660cf1e38c7194a2c49ff52cc656f90f5" datatype="html">
-        <source>The entered value needs to be a number.</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">124</context>
-        </context-group>
-      </trans-unit><trans-unit id="047f50bc5b5d17b5bec0196355953e1a5c590ddb" datatype="html">
-        <source>Update</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/core/mgr-modules/telemetry/telemetry.component.html</context>
-          <context context-type="linenumber">134</context>
-        </context-group>
-        <context-group purpose="location">
-          <context context-type="sourcefile">app/ceph/block/mirroring/pool-edit-mode-modal/pool-edit-mode-modal.component.html</context>
-          <context context-type="linenumber">41</context>
         </context-group>
       </trans-unit><trans-unit id="e3c028c58f92453d46f09b5adf95b2f013ee0300" datatype="html">
         <source>Sorry, we could not find what you were looking for</source>
@@ -4843,6 +4833,34 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="1a6e6ad05508130b7a99ce5b15daf3227c2a930c" datatype="html">
+        <source>Updated options for module &quot;<x id="INTERPOLATION" equiv-text="{{name}}"/>&quot;.</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/cluster/mgr-modules/mgr-module-form/mgr-module-form.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="ac6c9212896d39b23811ed2dadab7d07336ec559" datatype="html">
+        <source>Enable</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6766a926d80bb7763785621098dae459d6226429" datatype="html">
+        <source>Disable</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="6a0b3657745dd7a2f2162f1cc790bf9004d0845d" datatype="html">
+        <source>Reconnecting, please wait ...</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="7099a8878af7a0a26fe5663c4f46cfe87142b75d" datatype="html">
         <source>Public Address</source>
         <context-group purpose="location">
@@ -5768,27 +5786,6 @@
         <source>You are currently logged in as &quot;<x id="INTERPOLATION" equiv-text="{{username}}"/>&quot;.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/core/auth/user-list/user-list.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="ac6c9212896d39b23811ed2dadab7d07336ec559" datatype="html">
-        <source>Enable</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/core/mgr-modules/mgr-modules-list/mgr-modules-list.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="6766a926d80bb7763785621098dae459d6226429" datatype="html">
-        <source>Disable</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/core/mgr-modules/mgr-modules-list/mgr-modules-list.component.ts</context>
-          <context context-type="linenumber">1</context>
-        </context-group>
-      </trans-unit>
-      <trans-unit id="6a0b3657745dd7a2f2162f1cc790bf9004d0845d" datatype="html">
-        <source>Reconnecting, please wait ...</source>
-        <context-group purpose="location">
-          <context context-type="sourcefile">src/app/core/mgr-modules/mgr-modules-list/mgr-modules-list.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
