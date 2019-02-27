@@ -1,7 +1,7 @@
 ===============
-Telegraf Plugin 
+Telegraf Module 
 ===============
-The Telegraf plugin collects and sends statistics series to a Telegraf agent.
+The Telegraf module collects and sends statistics series to a Telegraf agent.
 
 The Telegraf agent can buffer, aggregate, parse and process the data before
 sending it to an output which can be InfluxDB, ElasticSearch and many more.
@@ -10,7 +10,7 @@ Currently the only way to send statistics to Telegraf from this module is to
 use the socket listener. The module can send statistics over UDP, TCP or
 a UNIX socket.
 
-The Telegraf plugin was introduced in the 13.x *Mimic* release.
+The Telegraf module was introduced in the 13.x *Mimic* release.
 
 --------
 Enabling 

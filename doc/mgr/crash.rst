@@ -1,13 +1,13 @@
-Crash plugin
+Crash Module
 ============
-The crash plugin collects information about daemon crashdumps and stores
+The crash module collects information about daemon crashdumps and stores
 it in the Ceph cluster for later analysis.
 
 Daemon crashdumps are dumped in /var/lib/ceph/crash by default; this can
 be configured with the option 'crash dir'.  Crash directories are named by
 time and date and a randomly-generated UUID, and contain a metadata file
 'meta' and a recent log file, with a "crash_id" that is the same.
-This plugin allows the metadata about those dumps to be persisted in
+This module allows the metadata about those dumps to be persisted in
 the monitors' storage.
 
 Enabling

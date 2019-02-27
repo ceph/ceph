@@ -10,7 +10,7 @@ ceph-mgr module developer's guide
     This is developer documentation, describing Ceph internals that
     are only relevant to people writing ceph-mgr modules.
 
-Creating a plugin
+Creating a module
 -----------------
 
 In pybind/mgr/, create a python module.  Within your module, create a class
@@ -32,7 +32,7 @@ additional methods to the base ``MgrModule`` class.  See
 :ref:`Orchestrator modules <orchestrator-modules>` for more on
 creating these modules.
 
-Installing a plugin
+Installing a module
 -------------------
 
 Once your module is present in the location set by the
@@ -59,7 +59,7 @@ severities 20, 4, 1 and 0 respectively.
 Exposing commands
 -----------------
 
-Set the ``COMMANDS`` class attribute of your plugin to a list of dicts
+Set the ``COMMANDS`` class attribute of your module to a list of dicts
 like this::
 
     COMMANDS = [
@@ -197,7 +197,7 @@ an SQL database.
 There are no consistency rules about access to cluster structures or
 daemon metadata.  For example, an OSD might exist in OSDMap but
 have no metadata, or vice versa.  On a healthy cluster these
-will be very rare transient states, but plugins should be written
+will be very rare transient states, but modules should be written
 to cope with the possibility.
 
 Note that these accessors must not be called in the modules ``__init__``
