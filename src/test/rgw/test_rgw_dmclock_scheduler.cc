@@ -37,58 +37,6 @@ auto capture(std::optional<error_code>& opt_ec,
   };
 }
 
-TEST(Queue, AsyncRequest)
-{
-  boost::asio::io_context context;
-  ClientCounters counters(g_ceph_context);
-  AsyncScheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
-                  [] (client_id client) -> ClientInfo* {
-      static ClientInfo clients[] = {
-        {1, 1, 1}, // admin: satisfy by reservation
-        {0, 1, 1}, // auth: satisfy by priority
-      };
-      return &clients[static_cast<size_t>(client)];
-		  }, AtLimit::Reject
-		  );
-
-  std::optional<error_code> ec1, ec2;
-  std::optional<PhaseType> p1, p2;
-
-  auto now = get_time();
-  queue.async_request(client_id::admin, {}, now, 1, capture(ec1, p1));
-  queue.async_request(client_id::auth, {}, now, 1, capture(ec2, p2));
-  EXPECT_FALSE(ec1);
-  EXPECT_FALSE(ec2);
-
-  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_qlen));
-  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_qlen));
-
-  context.poll();
-  EXPECT_TRUE(context.stopped());
-
-  ASSERT_TRUE(ec1);
-  EXPECT_EQ(boost::system::errc::success, *ec1);
-  ASSERT_TRUE(p1);
-  EXPECT_EQ(PhaseType::reservation, *p1);
-
-  ASSERT_TRUE(ec2);
-  EXPECT_EQ(boost::system::errc::success, *ec2);
-  ASSERT_TRUE(p2);
-  EXPECT_EQ(PhaseType::priority, *p2);
-
-  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_qlen));
-  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_res));
-  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_prio));
-  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_limit));
-  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_cancel));
-
-  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_qlen));
-  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_res));
-  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_prio));
-  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_limit));
-  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_cancel));
-}
-
 TEST(Queue, SyncRequest)
 {
   ClientCounters counters(g_ceph_context);
@@ -128,6 +76,7 @@ TEST(Queue, SyncRequest)
   EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_cancel));
 }
 
+#ifdef HAVE_BOOST_CONTEXT
 TEST(Queue, RateLimit)
 {
   boost::asio::io_context context;
@@ -188,6 +137,59 @@ TEST(Queue, RateLimit)
   EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_limit));
   EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_cancel));
 }
+
+TEST(Queue, AsyncRequest)
+{
+  boost::asio::io_context context;
+  ClientCounters counters(g_ceph_context);
+  AsyncScheduler queue(g_ceph_context, context, std::ref(counters), nullptr,
+                  [] (client_id client) -> ClientInfo* {
+      static ClientInfo clients[] = {
+        {1, 1, 1}, // admin: satisfy by reservation
+        {0, 1, 1}, // auth: satisfy by priority
+      };
+      return &clients[static_cast<size_t>(client)];
+		  }, AtLimit::Reject
+		  );
+
+  std::optional<error_code> ec1, ec2;
+  std::optional<PhaseType> p1, p2;
+
+  auto now = get_time();
+  queue.async_request(client_id::admin, {}, now, 1, capture(ec1, p1));
+  queue.async_request(client_id::auth, {}, now, 1, capture(ec2, p2));
+  EXPECT_FALSE(ec1);
+  EXPECT_FALSE(ec2);
+
+  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_qlen));
+
+  context.poll();
+  EXPECT_TRUE(context.stopped());
+
+  ASSERT_TRUE(ec1);
+  EXPECT_EQ(boost::system::errc::success, *ec1);
+  ASSERT_TRUE(p1);
+  EXPECT_EQ(PhaseType::reservation, *p1);
+
+  ASSERT_TRUE(ec2);
+  EXPECT_EQ(boost::system::errc::success, *ec2);
+  ASSERT_TRUE(p2);
+  EXPECT_EQ(PhaseType::priority, *p2);
+
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_qlen));
+  EXPECT_EQ(1u, counters(client_id::admin)->get(queue_counters::l_res));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_prio));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_limit));
+  EXPECT_EQ(0u, counters(client_id::admin)->get(queue_counters::l_cancel));
+
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_qlen));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_res));
+  EXPECT_EQ(1u, counters(client_id::auth)->get(queue_counters::l_prio));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_limit));
+  EXPECT_EQ(0u, counters(client_id::auth)->get(queue_counters::l_cancel));
+}
+
 
 TEST(Queue, Cancel)
 {
@@ -394,8 +396,6 @@ TEST(Queue, CrossExecutorRequest)
   ASSERT_TRUE(p2);
   EXPECT_EQ(PhaseType::priority, *p2);
 }
-
-#ifdef HAVE_BOOST_CONTEXT
 
 TEST(Queue, SpawnAsyncRequest)
 {
