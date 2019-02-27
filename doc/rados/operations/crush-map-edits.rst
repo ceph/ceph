@@ -372,7 +372,7 @@ A rule takes the following form::
 
 	rule <rulename> {
 
-		ruleset <ruleset>
+		id [a unique whole numeric ID]
 		type [ replicated | erasure ]
 		min_size <min-size>
 		max_size <max-size>
@@ -382,11 +382,9 @@ A rule takes the following form::
 	}
 
 
-``ruleset``
+``id``
 
-:Description: A unique whole number for identifying the rule. The name ``ruleset``
-              is a carry-over from the past, when it was possible to have multiple
-              CRUSH rules per pool.
+:Description: A unique whole number for identifying the rule.
 
 :Purpose: A component of the rule mask.
 :Type: Integer
