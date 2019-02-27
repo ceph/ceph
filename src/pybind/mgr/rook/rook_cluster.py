@@ -357,7 +357,8 @@ class RookCluster(object):
         Rook currently (0.8) can only do single-drive OSDs, so we
         treat all drive groups as just a list of individual OSDs.
         """
-        block_devices = drive_group.data_devices.paths
+        block_devices = drive_group.data_devices.paths if drive_group.data_devices else None
+        directories = drive_group.data_directories
 
         assert drive_group.objectstore in ("bluestore", "filestore")
 
@@ -386,15 +387,15 @@ class RookCluster(object):
         current_nodes = current_cluster['spec']['storage'].get('nodes', [])
 
         if drive_group.hosts(all_hosts)[0] not in [n['name'] for n in current_nodes]:
-            patch.append({
-                "op": "add", "path": "/spec/storage/nodes/-", "value": {
-                    "name": drive_group.hosts(all_hosts)[0],
-                    "devices": [{'name': d} for d in block_devices],
-                    "storeConfig": {
-                        "storeType": drive_group.objectstore
-                    }
-                }
-            })
+            pd = { "name": drive_group.hosts(all_hosts)[0],
+                   "storeConfig": { "storeType": drive_group.objectstore }}
+
+            if block_devices:
+                pd["devices"] = [{'name': d} for d in block_devices]
+            if directories:
+                pd["directories"] = [{'path': p} for p in directories]
+
+            patch.append({ "op": "add", "path": "/spec/storage/nodes/-", "value": pd })
         else:
             # Extend existing node
             node_idx = None
@@ -409,12 +410,19 @@ class RookCluster(object):
             assert current_node is not None
 
             new_devices = list(set(block_devices) - set([d['name'] for d in current_node['devices']]))
-
             for n in new_devices:
                 patch.append({
                     "op": "add",
                     "path": "/spec/storage/nodes/{0}/devices/-".format(node_idx),
                     "value": {'name': n}
+                })
+
+            new_dirs = list(set(directories) - set(current_node['directories']))
+            for p in new_dirs:
+                patch.append({
+                    "op": "add",
+                    "path": "/spec/storage/nodes/{0}/directories/-".format(node_idx),
+                    "value": {'path': p}
                 })
 
         if len(patch) == 0:
