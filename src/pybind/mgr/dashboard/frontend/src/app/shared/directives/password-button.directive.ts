@@ -6,7 +6,7 @@ import { Directive, ElementRef, HostListener, Input, OnInit, Renderer2 } from '@
 export class PasswordButtonDirective implements OnInit {
   private iElement: HTMLElement;
 
-  @Input('cdPasswordButton') private cdPasswordButton: string;
+  @Input() private cdPasswordButton: string;
 
   constructor(private elementRef: ElementRef,
               private renderer: Renderer2) {}
