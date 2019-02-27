@@ -520,10 +520,10 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
                     sizeof(header2) - sizeof(header2.header_crc));
   }
 
-  MessageHeaderFrame message(header2,
-			     m->get_payload().length(),
-			     m->get_middle().length(),
-			     m->get_data().length());
+  auto message = MessageHeaderFrame::Encode(header2,
+                                            m->get_payload().length(),
+                                            m->get_middle().length(),
+                                            m->get_data().length());
   if (auth_meta->is_mode_secure()) {
     ceph_assert(session_stream_handlers.tx);
 
@@ -597,12 +597,13 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
 
 void ProtocolV2::append_keepalive() {
   ldout(cct, 10) << __func__ << dendl;
-  KeepAliveFrame keepalive_frame(session_stream_handlers);
+  auto keepalive_frame = KeepAliveFrame::Encode(session_stream_handlers);
   connection->outcoming_bl.claim_append(keepalive_frame.get_buffer());
 }
 
 void ProtocolV2::append_keepalive_ack(utime_t &timestamp) {
-  KeepAliveFrameAck keepalive_ack_frame(session_stream_handlers, timestamp);
+  auto keepalive_ack_frame = KeepAliveFrameAck::Encode(session_stream_handlers,
+                                                       timestamp);
   connection->outcoming_bl.claim_append(keepalive_ack_frame.get_buffer());
 }
 
@@ -682,7 +683,7 @@ void ProtocolV2::write_event() {
       if (left) {
         ceph_le64 s;
         s = in_seq;
-        AckFrame ack(session_stream_handlers, in_seq);
+        auto ack = AckFrame::Encode(session_stream_handlers, in_seq);
         connection->outcoming_bl.claim_append(ack.get_buffer());
         sent_tag = ack.tag;
         ldout(cct, 10) << __func__ << " try send msg ack, acked " << left
@@ -911,7 +912,8 @@ CtPtr ProtocolV2::_handle_peer_banner_payload(char *buffer, int r) {
     this->connection_features = msgr2_required;
   }
 
-  HelloFrame hello(messenger->get_mytype(), connection->target_addr);
+  auto hello = HelloFrame::Encode(messenger->get_mytype(),
+                                  connection->target_addr);
 
   INTERCEPT(state == CONNECTING ? 7 : 8);
 
@@ -923,7 +925,7 @@ CtPtr ProtocolV2::handle_hello(ceph::bufferlist &payload)
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
 
-  HelloFrame hello(payload);
+  auto hello = HelloFrame::Decode(payload);
 
   ldout(cct, 5) << __func__ << " received hello:"
                 << " peer_type=" << (int)hello.entity_type()
@@ -1061,7 +1063,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
 
   {
     // I expect ceph_le32 will make the endian conversion for me. Passing
-    // everything through ::decode is unnecessary.
+    // everything through ::Decode is unnecessary.
     const auto& main_preamble = \
       reinterpret_cast<preamble_block_t&>(*preamble.c_str());
 
@@ -1326,7 +1328,7 @@ CtPtr ProtocolV2::handle_message() {
 	std::move(rx_segments_data[SegmentIndex::Msg::HEADER]),
 	segment_t::DEFAULT_ALIGNMENT);
   }
-  MessageHeaderFrame header_frame(
+  auto header_frame = MessageHeaderFrame::Decode(
     std::move(rx_segments_data[SegmentIndex::Msg::HEADER]));
   ceph_msg_header2 &header = header_frame.header();
 
@@ -1761,7 +1763,8 @@ CtPtr ProtocolV2::handle_keepalive2(ceph::bufferlist &payload)
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
 
-  KeepAliveFrame keepalive_frame(session_stream_handlers, payload);
+  auto keepalive_frame = KeepAliveFrame::Decode(session_stream_handlers,
+                                                payload);
 
   ldout(cct, 30) << __func__ << " got KEEPALIVE2 tag ..." << dendl;
 
@@ -1785,7 +1788,8 @@ CtPtr ProtocolV2::handle_keepalive2_ack(ceph::bufferlist &payload)
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
 
-  KeepAliveFrameAck keepalive_ack_frame(session_stream_handlers, payload);
+  auto keepalive_ack_frame = KeepAliveFrameAck::Decode(session_stream_handlers,
+                                                       payload);
   connection->set_last_keepalive_ack(keepalive_ack_frame.timestamp());
   ldout(cct, 20) << __func__ << " got KEEPALIVE_ACK" << dendl;
 
@@ -1797,7 +1801,7 @@ CtPtr ProtocolV2::handle_message_ack(ceph::bufferlist &payload)
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
 
-  AckFrame ack(session_stream_handlers, payload);
+  auto ack = AckFrame::Decode(session_stream_handlers, payload);
   handle_message_ack(ack.seq());
   return CONTINUE(read_frame);
 }
@@ -1851,7 +1855,8 @@ CtPtr ProtocolV2::send_auth_request(std::vector<uint32_t> &allowed_methods) {
 
   INTERCEPT(9);
 
-  AuthRequestFrame frame(auth_meta->auth_method, preferred_modes, bl);
+  auto frame = AuthRequestFrame::Encode(auth_meta->auth_method, preferred_modes,
+                                        bl);
   return WRITE(frame, "auth request", read_frame);
 }
 
@@ -1859,7 +1864,7 @@ CtPtr ProtocolV2::handle_auth_bad_method(ceph::bufferlist &payload) {
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
 
-  AuthBadMethodFrame bad_method(payload);
+  auto bad_method = AuthBadMethodFrame::Decode(payload);
   ldout(cct, 1) << __func__ << " method=" << bad_method.method()
 		<< " result " << cpp_strerror(bad_method.result())
                 << ", allowed methods=" << bad_method.allowed_methods()
@@ -1886,7 +1891,7 @@ CtPtr ProtocolV2::handle_auth_reply_more(ceph::bufferlist &payload)
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
 
-  AuthReplyMoreFrame auth_more(payload);
+  auto auth_more = AuthReplyMoreFrame::Decode(payload);
   ldout(cct, 5) << __func__
                 << " auth reply more len=" << auth_more.auth_payload().length()
                 << dendl;
@@ -1905,7 +1910,7 @@ CtPtr ProtocolV2::handle_auth_reply_more(ceph::bufferlist &payload)
 	       << r << dendl;
     return _fault();
   }
-  AuthRequestMoreFrame more_reply(dummy_ctor_conflict_helper{}, reply);
+  auto more_reply = AuthRequestMoreFrame::Encode(reply);
   return WRITE(more_reply, "auth request more", read_frame);
 }
 
@@ -1914,7 +1919,7 @@ CtPtr ProtocolV2::handle_auth_done(ceph::bufferlist &payload)
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
 
-  AuthDoneFrame auth_done(payload);
+  auto auth_done = AuthDoneFrame::Decode(payload);
 
   ceph_assert(messenger->auth_client);
   auto am = auth_meta;
@@ -1991,12 +1996,12 @@ CtPtr ProtocolV2::send_client_ident() {
     }
   }
 
-  ClientIdentFrame client_ident(session_stream_handlers, messenger->get_myaddrs(),
-                                connection->target_addr,
-                                messenger->get_myname().num(), global_seq,
-                                connection->policy.features_supported,
-                                connection->policy.features_required | msgr2_required,
-				                        flags, client_cookie);
+  auto client_ident = ClientIdentFrame::Encode(
+      session_stream_handlers, messenger->get_myaddrs(),
+      connection->target_addr, messenger->get_myname().num(), global_seq,
+      connection->policy.features_supported,
+      connection->policy.features_required | msgr2_required, flags,
+      client_cookie);
 
   ldout(cct, 5) << __func__ << " sending identification: "
                 << "addrs=" << messenger->get_myaddrs()
@@ -2018,12 +2023,13 @@ CtPtr ProtocolV2::send_client_ident() {
 CtPtr ProtocolV2::send_reconnect() {
   ldout(cct, 20) << __func__ << dendl;
 
-  ReconnectFrame reconnect(session_stream_handlers, messenger->get_myaddrs(),
-                           client_cookie,
-                           server_cookie,
-                           global_seq,
-                           connect_seq,
-                           in_seq);
+  auto reconnect = ReconnectFrame::Encode(session_stream_handlers,
+                                          messenger->get_myaddrs(),
+                                          client_cookie,
+                                          server_cookie,
+                                          global_seq,
+                                          connect_seq,
+                                          in_seq);
 
   ldout(cct, 5) << __func__ << " reconnect to session: client_cookie="
                 << std::hex << client_cookie << " server_cookie="
@@ -2041,7 +2047,8 @@ CtPtr ProtocolV2::handle_ident_missing_features(ceph::bufferlist &payload)
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
 
-  IdentMissingFeaturesFrame ident_missing(session_stream_handlers, payload);
+  auto ident_missing =
+      IdentMissingFeaturesFrame::Decode(session_stream_handlers, payload);
   lderr(cct) << __func__
              << " client does not support all server features: " << std::hex
              << ident_missing.features() << std::dec << dendl;
@@ -2054,7 +2061,7 @@ CtPtr ProtocolV2::handle_session_reset(ceph::bufferlist &payload)
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
 
-  ResetFrame reset(session_stream_handlers, payload);
+  auto reset = ResetFrame::Decode(session_stream_handlers, payload);
 
   ldout(cct, 1) << __func__ << " received session reset full=" << reset.full()
                 << dendl;
@@ -2074,7 +2081,7 @@ CtPtr ProtocolV2::handle_session_retry(ceph::bufferlist &payload)
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
 
-  RetryFrame retry(session_stream_handlers, payload);
+  auto retry = RetryFrame::Decode(session_stream_handlers, payload);
   connect_seq = retry.connect_seq() + 1;
 
   ldout(cct, 1) << __func__
@@ -2089,7 +2096,7 @@ CtPtr ProtocolV2::handle_session_retry_global(ceph::bufferlist &payload)
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
 
-  RetryGlobalFrame retry(session_stream_handlers, payload);
+  auto retry = RetryGlobalFrame::Decode(session_stream_handlers, payload);
   global_seq = messenger->get_global_seq(retry.global_seq());
 
   ldout(cct, 1) << __func__ << " received session retry global global_seq="
@@ -2105,7 +2112,8 @@ CtPtr ProtocolV2::handle_wait() {
   state = WAIT;
   ceph_assert(rx_segments_data.size() == 1);
   ceph_assert(rx_segments_desc.size() == 1);
-  WaitFrame(session_stream_handlers, rx_segments_data[SegmentIndex::Frame::PAYLOAD]);
+  WaitFrame::Decode(session_stream_handlers,
+                    rx_segments_data[SegmentIndex::Frame::PAYLOAD]);
   return _fault();
 }
 
@@ -2114,7 +2122,8 @@ CtPtr ProtocolV2::handle_reconnect_ok(ceph::bufferlist &payload)
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
 
-  ReconnectOkFrame reconnect_ok(session_stream_handlers, payload);
+  auto reconnect_ok = ReconnectOkFrame::Decode(session_stream_handlers,
+                                               payload);
   ldout(cct, 5) << __func__
                 << " reconnect accepted: sms=" << reconnect_ok.msg_seq()
                 << dendl;
@@ -2141,7 +2150,8 @@ CtPtr ProtocolV2::handle_server_ident(ceph::bufferlist &payload)
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
 
-  ServerIdentFrame server_ident(session_stream_handlers, payload);
+  auto server_ident = ServerIdentFrame::Decode(session_stream_handlers,
+                                               payload);
   ldout(cct, 5) << __func__ << " received server identification:"
                 << " addrs=" << server_ident.addrs()
                 << " gid=" << server_ident.gid()
@@ -2208,7 +2218,7 @@ CtPtr ProtocolV2::post_server_banner_exchange() {
 }
 
 CtPtr ProtocolV2::handle_auth_request(ceph::bufferlist &payload) {
-  AuthRequestFrame request(payload);
+  auto request = AuthRequestFrame::Decode(payload);
   ldout(cct, 10) << __func__ << " AuthRequest(method=" << request.method()
 		 << ", preferred_modes=" << request.preferred_modes()
                  << ", payload_len=" << request.auth_payload().length() << ")"
@@ -2235,8 +2245,8 @@ CtPtr ProtocolV2::_auth_bad_method(int r)
 		<< ", allowed_methods " << allowed_methods
 		<< ", allowed_modes " << allowed_modes
 		<< dendl;
-  AuthBadMethodFrame bad_method(auth_meta->auth_method, r, allowed_methods,
-				allowed_modes);
+  auto bad_method = AuthBadMethodFrame::Encode(auth_meta->auth_method, r,
+                                               allowed_methods, allowed_modes);
   return WRITE(bad_method, "bad auth method", read_frame);
 }
 
@@ -2255,8 +2265,8 @@ CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
   connection->lock.lock();
   if (state != ACCEPTING) {
     ldout(cct, 1) << __func__
-		  << " state changed while accept, it must be mark_down"
-		  << dendl;
+                  << " state changed while accept, it must be mark_down"
+                  << dendl;
     ceph_assert(state == CLOSED);
     return _fault();
   }
@@ -2266,11 +2276,12 @@ CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
     ceph_assert(auth_meta);
     session_stream_handlers = \
       ceph::crypto::onwire::rxtx_t::create_handler_pair(cct, *auth_meta, true);
-    AuthDoneFrame auth_done(connection->peer_global_id, auth_meta->con_mode,
-			    reply);
+    auto auth_done = AuthDoneFrame::Encode(connection->peer_global_id,
+                                           auth_meta->con_mode,
+                                           reply);
     return WRITE(auth_done, "auth done", read_frame);
   } else if (r == 0) {
-    AuthReplyMoreFrame more(dummy_ctor_conflict_helper{}, reply);
+    auto more = AuthReplyMoreFrame::Encode(reply);
     return WRITE(more, "auth reply more", read_frame);
   } else if (r == -EBUSY) {
     // kick the client and maybe they'll come back later
@@ -2284,7 +2295,7 @@ CtPtr ProtocolV2::handle_auth_request_more(ceph::bufferlist &payload)
 {
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
-  AuthRequestMoreFrame auth_more(payload);
+  auto auth_more = AuthRequestMoreFrame::Decode(payload);
   return _handle_auth_request(auth_more.auth_payload(), true);
 }
 
@@ -2293,7 +2304,8 @@ CtPtr ProtocolV2::handle_client_ident(ceph::bufferlist &payload)
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
 
-  ClientIdentFrame client_ident(session_stream_handlers, payload);
+  auto client_ident = ClientIdentFrame::Decode(session_stream_handlers,
+                                               payload);
 
   ldout(cct, 5) << __func__ << " received client identification:"
                 << " addrs=" << client_ident.addrs()
@@ -2333,7 +2345,8 @@ CtPtr ProtocolV2::handle_client_ident(ceph::bufferlist &payload)
   if (feat_missing) {
     ldout(cct, 1) << __func__ << " peer missing required features " << std::hex
                   << feat_missing << std::dec << dendl;
-    IdentMissingFeaturesFrame ident_missing_features(session_stream_handlers, feat_missing);
+    auto ident_missing_features = IdentMissingFeaturesFrame::Encode(
+      session_stream_handlers, feat_missing);
 
     return WRITE(ident_missing_features, "ident missing features", read_frame);
   }
@@ -2383,7 +2396,7 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
   ldout(cct, 20) << __func__
 		 << " payload.length()=" << payload.length() << dendl;
 
-  ReconnectFrame reconnect(session_stream_handlers, payload);
+  auto reconnect = ReconnectFrame::Decode(session_stream_handlers, payload);
 
   ldout(cct, 5) << __func__
                 << " received reconnect:" 
@@ -2428,7 +2441,7 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
     // session
     ldout(cct, 0) << __func__
                   << " no existing connection exists, reseting client" << dendl;
-    ResetFrame reset(session_stream_handlers, true);
+    auto reset = ResetFrame::Encode(session_stream_handlers, true);
     return WRITE(reset, "session reset", read_frame);
   }
 
@@ -2443,7 +2456,7 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
   if (exproto->state == CLOSED) {
     ldout(cct, 5) << __func__ << " existing " << existing
                   << " already closed. Reseting client" << dendl;
-    ResetFrame reset(session_stream_handlers, true);
+    auto reset = ResetFrame::Encode(session_stream_handlers, true);
     return WRITE(reset, "session reset", read_frame);
   }
 
@@ -2451,7 +2464,8 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
     ldout(cct, 1) << __func__
                   << " existing racing replace happened while replacing."
                   << " existing=" << existing << dendl;
-    RetryGlobalFrame retry(session_stream_handlers, exproto->peer_global_seq);
+    auto retry = RetryGlobalFrame::Encode(session_stream_handlers,
+                                          exproto->peer_global_seq);
     return WRITE(retry, "session retry", read_frame);
   }
 
@@ -2462,7 +2476,8 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
                   << " rcc=" << reconnect.client_cookie()
                   << ", reseting client."
                   << dendl;
-    ResetFrame reset(session_stream_handlers, connection->policy.resetcheck);
+    auto reset = ResetFrame::Encode(session_stream_handlers,
+                                    connection->policy.resetcheck);
     return WRITE(reset, "session reset", read_frame);
   } else if (exproto->server_cookie == 0) {
     // this happens when:
@@ -2475,7 +2490,7 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
     ldout(cct, 1) << __func__ << " I was a client and didn't received the"
                   << " server_ident. Asking peer to resume session"
                   << " establishment" << dendl;
-    ResetFrame reset(session_stream_handlers, false);
+    auto reset = ResetFrame::Encode(session_stream_handlers, false);
     return WRITE(reset, "session reset", read_frame);
   }
 
@@ -2484,7 +2499,8 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
                   << " stale global_seq: sgs=" << exproto->peer_global_seq
                   << " cgs=" << reconnect.global_seq()
                   << ", ask client to retry global" << dendl;
-    RetryGlobalFrame retry(session_stream_handlers, exproto->peer_global_seq);
+    auto retry = RetryGlobalFrame::Encode(session_stream_handlers,
+                                          exproto->peer_global_seq);
 
     INTERCEPT(18);
 
@@ -2496,7 +2512,8 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
                   << " stale connect_seq scs=" << exproto->connect_seq
                   << " ccs=" << reconnect.connect_seq()
                   << " , ask client to retry" << dendl;
-    RetryFrame retry(session_stream_handlers, exproto->connect_seq);
+    auto retry = RetryFrame::Encode(session_stream_handlers,
+                                    exproto->connect_seq);
     return WRITE(retry, "session retry", read_frame);
   }
 
@@ -2511,7 +2528,7 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
           << " reconnect race detected, this connection loses to existing="
           << existing << dendl;
 
-      WaitFrame wait(session_stream_handlers);
+      auto wait = WaitFrame::Encode(session_stream_handlers);
       return WRITE(wait, "wait", read_frame);
     } else {
       // this connection wins
@@ -2554,7 +2571,7 @@ CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
     ldout(cct, 1) << __func__
                   << " existing racing replace happened while replacing."
                   << " existing=" << existing << dendl;
-    WaitFrame wait(session_stream_handlers);
+    auto wait = WaitFrame::Encode(session_stream_handlers);
     return WRITE(wait, "wait", read_frame);
   }
 
@@ -2631,7 +2648,7 @@ CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
 		// has something to send to us.
     existing->send_keepalive();
     existing->lock.lock();
-    WaitFrame wait(session_stream_handlers);
+    auto wait = WaitFrame::Encode(session_stream_handlers);
     return WRITE(wait, "wait", read_frame);
   }
 }
@@ -2768,12 +2785,15 @@ CtPtr ProtocolV2::send_server_ident() {
   }
 
   uint64_t gs = messenger->get_global_seq();
-  ServerIdentFrame server_ident(
-      session_stream_handlers, messenger->get_myaddrs(), messenger->get_myname().num(), gs,
-      connection->policy.features_supported,
-      connection->policy.features_required | msgr2_required,
-      flags,
-      server_cookie);
+  auto server_ident = ServerIdentFrame::Encode(
+          session_stream_handlers,
+          messenger->get_myaddrs(),
+          messenger->get_myname().num(),
+          gs,
+          connection->policy.features_supported,
+          connection->policy.features_required | msgr2_required,
+          flags,
+          server_cookie);
 
   ldout(cct, 5) << __func__ << " sending identification:"
                 << " addrs=" << messenger->get_myaddrs()
@@ -2838,7 +2858,7 @@ CtPtr ProtocolV2::send_reconnect_ok() {
   out_seq = discard_requeued_up_to(out_seq, message_seq);
 
   uint64_t ms = in_seq;
-  ReconnectOkFrame reconnect_ok(session_stream_handlers, ms);
+  auto reconnect_ok = ReconnectOkFrame::Encode(session_stream_handlers, ms);
 
   ldout(cct, 5) << __func__ << " sending reconnect_ok: msg_seq=" << ms << dendl;
 
