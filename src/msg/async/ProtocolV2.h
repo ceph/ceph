@@ -124,7 +124,6 @@ private:
   unsigned msg_left;
   bufferlist data_buf;
   bufferlist::iterator data_blp;
-  bufferlist front, middle, data;
 
   bool keepalive;
 
