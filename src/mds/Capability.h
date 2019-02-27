@@ -122,14 +122,17 @@ public:
   const Capability& operator=(const Capability& other) = delete;
 
   int pending() const {
-    return is_valid() ? _pending : (_pending & CEPH_CAP_PIN);
+    return _pending;
   }
   int issued() const {
-    return is_valid() ? _issued : (_issued & CEPH_CAP_PIN);
+    return _issued;
   }
-
-  ceph_seq_t issue(unsigned c) {
-    revalidate();
+  int revoking() const {
+    return _issued & ~_pending;
+  }
+  ceph_seq_t issue(unsigned c, bool reval=false) {
+    if (reval)
+      revalidate();
 
     if (_pending & ~c) {
       // revoking (and maybe adding) bits.  note caps prior to this revocation
@@ -154,12 +157,14 @@ public:
     inc_last_seq();
     return last_sent;
   }
-  ceph_seq_t issue_norevoke(unsigned c) {
-    revalidate();
+  ceph_seq_t issue_norevoke(unsigned c, bool reval=false) {
+    if (reval)
+      revalidate();
 
     _pending |= c;
     _issued |= c;
-    //check_rdcaps_list();
+    clear_new();
+
     inc_last_seq();
     return last_sent;
   }
@@ -237,6 +242,7 @@ public:
   bool is_notable() const { return state & STATE_NOTABLE; }
 
   bool is_stale() const;
+  bool is_valid() const;
   bool is_new() const { return state & STATE_NEW; }
   void mark_new() { state |= STATE_NEW; }
   void clear_new() { state &= ~STATE_NEW; }
@@ -272,8 +278,6 @@ public:
 
   void inc_last_seq() { last_sent++; }
   ceph_seq_t get_last_seq() const {
-    if (!is_valid() && (_pending & ~CEPH_CAP_PIN))
-      return last_sent + 1;
     return last_sent;
   }
   ceph_seq_t get_last_issue() const { return last_issue; }
@@ -288,17 +292,13 @@ public:
     return Export(cap_id, wanted(), issued(), pending(), client_follows, get_last_seq(), mseq+1, last_issue_stamp);
   }
   void merge(const Export& other, bool auth_cap) {
-    if (!is_stale()) {
-      // issued + pending
-      int newpending = other.pending | pending();
-      if (other.issued & ~newpending)
-	issue(other.issued | newpending);
-      else
-	issue(newpending);
-      last_issue_stamp = other.last_issue_stamp;
-    } else {
-      issue(CEPH_CAP_PIN);
-    }
+    // issued + pending
+    int newpending = other.pending | pending();
+    if (other.issued & ~newpending)
+      issue(other.issued | newpending);
+    else
+      issue(newpending);
+    last_issue_stamp = other.last_issue_stamp;
 
     client_follows = other.client_follows;
 
@@ -308,25 +308,20 @@ public:
       mseq = other.mseq;
   }
   void merge(int otherwanted, int otherissued) {
-    if (!is_stale()) {
-      // issued + pending
-      int newpending = pending();
-      if (otherissued & ~newpending)
-	issue(otherissued | newpending);
-      else
-	issue(newpending);
-    } else {
-      issue(CEPH_CAP_PIN);
-    }
+    // issued + pending
+    int newpending = pending();
+    if (otherissued & ~newpending)
+      issue(otherissued | newpending);
+    else
+      issue(newpending);
 
     // wanted
     set_wanted(wanted() | otherwanted);
   }
 
   void revoke() {
-    if (pending() & ~CEPH_CAP_PIN)
-      issue(CEPH_CAP_PIN);
-    confirm_receipt(last_sent, CEPH_CAP_PIN);
+    if (revoking())
+      confirm_receipt(last_sent, pending());
   }
 
   // serializers
@@ -379,7 +374,6 @@ private:
     }
   }
 
-  bool is_valid() const;
   void revalidate();
 
   void mark_notable();
