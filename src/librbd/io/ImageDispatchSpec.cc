@@ -28,7 +28,7 @@ struct ImageDispatchSpec<I>::SendVisitor
   void operator()(Discard& discard) const {
     ImageRequest<I>::aio_discard(
       &spec->m_image_ctx, spec->m_aio_comp, std::move(spec->m_image_extents),
-      discard.skip_partial_discard, spec->m_parent_trace);
+      discard.discard_granularity_bytes, spec->m_parent_trace);
   }
 
   void operator()(Write& write) const {

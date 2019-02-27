@@ -353,7 +353,7 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
   if (!clipped_io(event.offset, aio_comp)) {
     io::ImageRequest<I>::aio_discard(&m_image_ctx, aio_comp,
                                      {{event.offset, event.length}},
-                                     event.skip_partial_discard, {});
+                                     event.discard_granularity_bytes, {});
   }
 
   if (flush_required) {

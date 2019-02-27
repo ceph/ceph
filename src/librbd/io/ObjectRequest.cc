@@ -664,21 +664,6 @@ void ObjectWriteRequest<I>::add_write_ops(librados::ObjectWriteOperation *wr) {
 }
 
 template <typename I>
-void ObjectDiscardRequest<I>::send() {
-  I *image_ctx = this->m_ictx;
-  auto cct = image_ctx->cct;
-  if ((m_discard_flags & OBJECT_DISCARD_FLAG_SKIP_PARTIAL) != 0 &&
-      this->m_object_off + this->m_object_len < image_ctx->layout.object_size) {
-    ldout(cct, 20) << "oid " << this->m_oid << " " << this->m_object_off << "~"
-		   << this->m_object_len << ": skip partial discard" << dendl;
-    this->async_finish(0);
-    return;
-  }
-
-  AbstractObjectWriteRequest<I>::send();
-}
-
-template <typename I>
 void ObjectWriteSameRequest<I>::add_write_ops(
     librados::ObjectWriteOperation *wr) {
   wr->writesame(this->m_object_off, this->m_object_len, m_write_data);

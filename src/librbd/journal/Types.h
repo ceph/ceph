@@ -51,14 +51,16 @@ enum EventType {
 struct AioDiscardEvent {
   static const EventType TYPE = EVENT_TYPE_AIO_DISCARD;
 
-  uint64_t offset;
-  uint64_t length;
-  bool skip_partial_discard;
+  uint64_t offset = 0;
+  uint64_t length = 0;
+  uint32_t discard_granularity_bytes = 0;
 
-  AioDiscardEvent() : offset(0), length(0), skip_partial_discard(false) {
+  AioDiscardEvent() {
   }
-  AioDiscardEvent(uint64_t _offset, uint64_t _length, bool _skip_partial_discard)
-    : offset(_offset), length(_length), skip_partial_discard(_skip_partial_discard) {
+  AioDiscardEvent(uint64_t _offset, uint64_t _length,
+                  uint32_t discard_granularity_bytes)
+    : offset(_offset), length(_length),
+      discard_granularity_bytes(discard_granularity_bytes) {
   }
 
   void encode(bufferlist& bl) const;

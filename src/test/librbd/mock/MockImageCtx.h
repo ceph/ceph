@@ -93,6 +93,7 @@ struct MockImageCtx {
       exclusive_lock(NULL), journal(NULL),
       trace_endpoint(image_ctx.trace_endpoint),
       sparse_read_threshold_bytes(image_ctx.sparse_read_threshold_bytes),
+      discard_granularity_bytes(image_ctx.discard_granularity_bytes),
       mirroring_replay_delay(image_ctx.mirroring_replay_delay),
       non_blocking_aio(image_ctx.non_blocking_aio),
       blkin_trace_all(image_ctx.blkin_trace_all),
@@ -299,6 +300,7 @@ struct MockImageCtx {
   ZTracer::Endpoint trace_endpoint;
 
   uint64_t sparse_read_threshold_bytes;
+  uint32_t discard_granularity_bytes;
   int mirroring_replay_delay;
   bool non_blocking_aio;
   bool blkin_trace_all;

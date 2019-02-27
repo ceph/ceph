@@ -158,7 +158,7 @@ ssize_t ImageRequestWQ<I>::write(uint64_t off, uint64_t len,
 
 template <typename I>
 ssize_t ImageRequestWQ<I>::discard(uint64_t off, uint64_t len,
-				   bool skip_partial_discard) {
+				   uint32_t discard_granularity_bytes) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", off=" << off << ", "
                  << "len = " << len << dendl;
@@ -173,7 +173,7 @@ ssize_t ImageRequestWQ<I>::discard(uint64_t off, uint64_t len,
 
   C_SaferCond cond;
   AioCompletion *c = AioCompletion::create(&cond);
-  aio_discard(c, off, len, skip_partial_discard, false);
+  aio_discard(c, off, len, discard_granularity_bytes, false);
 
   r = cond.wait();
   if (r < 0) {
@@ -338,7 +338,8 @@ void ImageRequestWQ<I>::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
 
 template <typename I>
 void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
-				    uint64_t len, bool skip_partial_discard,
+				    uint64_t len,
+                                    uint32_t discard_granularity_bytes,
 				    bool native_async) {
   CephContext *cct = m_image_ctx.cct;
   FUNCTRACE(cct);
@@ -364,11 +365,11 @@ void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
     queue(ImageDispatchSpec<I>::create_discard_request(
-            m_image_ctx, c, off, len, skip_partial_discard, trace));
+            m_image_ctx, c, off, len, discard_granularity_bytes, trace));
   } else {
     c->start_op();
     ImageRequest<I>::aio_discard(&m_image_ctx, c, {{off, len}},
-				 skip_partial_discard, trace);
+                                 discard_granularity_bytes, trace);
     finish_in_flight_io();
   }
   trace.event("finish");
