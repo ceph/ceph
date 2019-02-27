@@ -175,7 +175,7 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
     delete b;
     return r;
   }
-  if (trim) {
+  if (trim && discard_mode != BlockDevice::DISCARD_NONE) {
     b->discard(0, b->get_size());
   }
 
