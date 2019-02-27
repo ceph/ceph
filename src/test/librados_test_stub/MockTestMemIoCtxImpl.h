@@ -27,7 +27,8 @@ public:
     return m_mock_client;
   }
 
-  TestIoCtxImpl *clone() override {
+  MOCK_METHOD0(clone, TestIoCtxImpl*());
+  TestIoCtxImpl *do_clone() {
     TestIoCtxImpl *io_ctx_impl = new ::testing::NiceMock<MockTestMemIoCtxImpl>(
       m_mock_client, m_client, get_pool_id(), get_pool_name(), get_pool());
     io_ctx_impl->set_snap_read(get_snap_read());
@@ -194,6 +195,7 @@ public:
   void default_to_parent() {
     using namespace ::testing;
 
+    ON_CALL(*this, clone()).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_clone));
     ON_CALL(*this, aio_notify(_, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_notify));
     ON_CALL(*this, aio_watch(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_watch));
     ON_CALL(*this, aio_unwatch(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_unwatch));
