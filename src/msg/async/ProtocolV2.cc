@@ -1377,7 +1377,6 @@ CtPtr ProtocolV2::handle_message() {
   front.clear();
   middle.clear();
   data.clear();
-  epilogue.clear();
   current_header = header;
 
   // front
@@ -1458,15 +1457,10 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r) {
     return _fault();
   }
 
-  if (session_stream_handlers.rx) {
-    ceph_assert(session_stream_handlers.rx && session_stream_handlers.tx &&
-		auth_meta->is_mode_secure());
-    ceph_assert(FRAME_EPILOGUE_SIZE == \
-      session_stream_handlers.rx->get_extra_size_at_final());
+  // I expect that ::temp_buffer is being used here.
+  ceph::bufferlist epilogue;
+  epilogue.push_back(buffer::create_static(FRAME_EPILOGUE_SIZE, buffer));
 
-    // I expect that ::temp_buffer is being used here.
-    epilogue.push_back(buffer::create_static(FRAME_EPILOGUE_SIZE, buffer));
-  }
 
   // FIXME: if (auth_meta->is_mode_secure()) {
   if (session_stream_handlers.rx) {
@@ -1476,6 +1470,8 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r) {
                   << FRAME_EPILOGUE_SIZE << dendl;
 
     ceph_assert(session_stream_handlers.rx);
+    ceph_assert(FRAME_EPILOGUE_SIZE == \
+      session_stream_handlers.rx->get_extra_size_at_final());
     try {
       session_stream_handlers.rx->authenticated_decrypt_update_final(
 	std::move(epilogue), segment_t::DEFAULT_ALIGNMENT);
@@ -1660,7 +1656,6 @@ CtPtr ProtocolV2::handle_message_complete() {
   front.clear();
   middle.clear();
   data.clear();
-  epilogue.clear();
 
   // we might have been reused by another connection
   // let's check if that is the case

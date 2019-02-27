@@ -113,8 +113,6 @@ public:
 				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_desc;
   boost::container::static_vector<ceph::bufferlist,
 				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_data;
-
-  ceph::bufferlist epilogue;
 private:
 
   ceph::msgr::v2::Tag sent_tag;
