@@ -11,11 +11,13 @@
 #include "osdc/Striper.h"
 #include "librbd/Journal.h"
 #include "librbd/MirroringWatcher.h"
+#include "librbd/image/ValidatePoolRequest.h"
 #include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/RemoveRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/io/AioCompletion.h"
 #include "journal/Journaler.h"
+
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
@@ -266,80 +268,23 @@ void CreateRequest<I>::validate_data_pool() {
 
   ldout(m_cct, 20) << dendl;
 
-  using klass = CreateRequest<I>;
-  librados::AioCompletion *comp =
-    create_rados_callback<klass, &klass::handle_validate_data_pool>(this);
-
-  librados::ObjectReadOperation op;
-  op.read(0, 0, nullptr, nullptr);
-
-  m_outbl.clear();
-  int r = m_data_io_ctx.aio_operate(RBD_INFO, comp, &op, &m_outbl);
-  assert(r == 0);
-  comp->release();
+  auto ctx = create_context_callback<
+    CreateRequest<I>, &CreateRequest<I>::handle_validate_data_pool>(this);
+  auto req = ValidatePoolRequest<I>::create(m_data_io_ctx, m_op_work_queue,
+                                            ctx);
+  req->send();
 }
 
 template <typename I>
 void CreateRequest<I>::handle_validate_data_pool(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  bufferlist bl;
-  bl.append("overwrite validated");
-
-  if (r >= 0 && m_outbl.contents_equal(bl)) {
-    create_id_object();
-    return;
-  } else if ((r < 0) && (r != -ENOENT)) {
-    lderr(m_cct) << "failed to read RBD info: " << cpp_strerror(r) << dendl;
-    complete(r);
-    return;
-  }
-
-  // allocate a self-managed snapshot id if this a new pool to force
-  // self-managed snapshot mode
-  // This call is executed just once per (fresh) pool, hence we do not
-  // try hard to make it asynchronous (and it's pretty safe not to cause
-  // deadlocks).
-
-  ldout(m_cct, 10) << "validating self-managed RBD snapshot support" << dendl;
-
-  uint64_t snap_id;
-  r = m_data_io_ctx.selfmanaged_snap_create(&snap_id);
   if (r == -EINVAL) {
-    lderr(m_cct) << "pool not configured for self-managed RBD snapshot support"
-                 << dendl;
+    lderr(m_cct) << "pool does not support RBD images" << dendl;
     complete(r);
     return;
   } else if (r < 0) {
-    lderr(m_cct) << "failed to allocate self-managed snapshot: "
-                 << cpp_strerror(r) << dendl;
-    complete(r);
-    return;
-  }
-
-  r = m_data_io_ctx.selfmanaged_snap_remove(snap_id);
-  if (r < 0) {
-    // we've already switched to self-managed snapshots -- no need to
-    // error out in case of failure here.
-    ldout(m_cct, 10) << "failed to release self-managed snapshot " << snap_id
-                     << ": " << cpp_strerror(r) << dendl;
-  }
-
-  ldout(m_cct, 10) << "validating overwrite support" << dendl;
-
-  bufferlist initial_bl;
-  initial_bl.append("validate");
-  r = m_data_io_ctx.write(RBD_INFO, initial_bl, initial_bl.length(), 0);
-  if (r >= 0) {
-    r = m_data_io_ctx.write(RBD_INFO, bl, bl.length(), 0);
-  }
-  if (r == -EOPNOTSUPP) {
-    lderr(m_cct) << "pool missing required overwrite support" << dendl;
-    complete(-EINVAL);
-    return;
-  } else if (r < 0) {
-    lderr(m_cct) << "failed to validate overwrite support: " << cpp_strerror(r)
-                 << dendl;
+    lderr(m_cct) << "failed to validate pool: " << cpp_strerror(r) << dendl;
     complete(r);
     return;
   }
