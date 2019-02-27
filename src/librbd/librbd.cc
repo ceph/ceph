@@ -5882,6 +5882,7 @@ extern "C" int rbd_group_image_list(rados_ioctx_t group_p,
 
   if (r == -ENOENT) {
     tracepoint(librbd, group_image_list_exit, 0);
+    *image_size = 0;
     return 0;
   }
 
