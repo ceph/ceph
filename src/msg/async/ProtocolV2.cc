@@ -1227,6 +1227,18 @@ CtPtr ProtocolV2::handle_read_frame_segment(char *buffer, int r) {
     return _fault();
   }
 
+  // decrypt incoming data
+  // FIXME: if (auth_meta->is_mode_secure()) {
+  if (session_stream_handlers.rx) {
+    ceph_assert(session_stream_handlers.rx);
+
+    auto& new_seg = rx_segments_data.back();
+    if (new_seg.length()) {
+      new_seg = session_stream_handlers.rx->authenticated_decrypt_update(
+          std::move(new_seg), segment_t::DEFAULT_ALIGNMENT);
+    }
+  }
+
   if (rx_segments_desc.size() == rx_segments_data.size()) {
     // OK, all segments planned to read are read. Can go with epilogue.
     if (session_stream_handlers.rx) {
@@ -1243,23 +1255,6 @@ CtPtr ProtocolV2::handle_read_frame_segment(char *buffer, int r) {
 CtPtr ProtocolV2::handle_frame_payload() {
   ceph_assert(!rx_segments_data.empty());
   auto& payload = rx_segments_data.back();
-
-  if (session_stream_handlers.rx) {
-    ceph_assert(epilogue.length() == FRAME_EPILOGUE_SIZE);
-    ceph_assert(session_stream_handlers.rx->get_extra_size_at_final() ==
-        FRAME_EPILOGUE_SIZE);
-
-    payload = session_stream_handlers.rx->authenticated_decrypt_update(
-        std::move(payload), segment_t::DEFAULT_ALIGNMENT);
-    try {
-      session_stream_handlers.rx->authenticated_decrypt_update_final(
-	std::move(epilogue), segment_t::DEFAULT_ALIGNMENT);
-    } catch (ceph::crypto::onwire::MsgAuthError &e) {
-      ldout(cct, 5) << __func__ << " message authentication failed: "
-		    << e.what() << dendl;
-      return _fault();
-    }
-  }
 
   ldout(cct, 30) << __func__ << "\n";
   payload.hexdump(*_dout);
@@ -1353,15 +1348,6 @@ CtPtr ProtocolV2::handle_message() {
 #endif
   recv_stamp = ceph_clock_now();
 
-  // TODO: move crypto processing to segment reader
-  if (auth_meta->is_mode_secure()) {
-    ceph_assert(session_stream_handlers.rx);
-
-    rx_segments_data[SegmentIndex::Msg::HEADER] = \
-      session_stream_handlers.rx->authenticated_decrypt_update(
-	std::move(rx_segments_data[SegmentIndex::Msg::HEADER]),
-	segment_t::DEFAULT_ALIGNMENT);
-  }
   auto header_frame = MessageHeaderFrame::Decode(
     std::move(rx_segments_data[SegmentIndex::Msg::HEADER]));
   ceph_msg_header2 &header = header_frame.header();
@@ -1448,6 +1434,13 @@ CtPtr ProtocolV2::read_message_data() {
     return READB(read_len, bp.c_str(), handle_message_data);
   }
 
+  // FIXME: if (auth_meta->is_mode_secure()) {
+  //  ceph_assert(session_stream_handlers.rx);
+  if (session_stream_handlers.rx && data.length()) {
+    data = session_stream_handlers.rx->authenticated_decrypt_update(
+	std::move(data), segment_t::DEFAULT_ALIGNMENT);
+  }
+
   state = READ_MESSAGE_COMPLETE;
   // TODO: implement epilogue for non-secure frames
   if (session_stream_handlers.rx) {
@@ -1466,10 +1459,6 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r) {
   }
 
   if (session_stream_handlers.rx) {
-    // if we still have more bytes to read is because we signed or encrypted
-    // the message payload
-    ldout(cct, 1) << __func__ << " read frame epilogue bytes="
-                  << FRAME_EPILOGUE_SIZE << dendl;
     ceph_assert(session_stream_handlers.rx && session_stream_handlers.tx &&
 		auth_meta->is_mode_secure());
     ceph_assert(FRAME_EPILOGUE_SIZE == \
@@ -1477,6 +1466,24 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r) {
 
     // I expect that ::temp_buffer is being used here.
     epilogue.push_back(buffer::create_static(FRAME_EPILOGUE_SIZE, buffer));
+  }
+
+  // FIXME: if (auth_meta->is_mode_secure()) {
+  if (session_stream_handlers.rx) {
+    // if we still have more bytes to read is because we signed or encrypted
+    // the message payload
+    ldout(cct, 1) << __func__ << " read frame epilogue bytes="
+                  << FRAME_EPILOGUE_SIZE << dendl;
+
+    ceph_assert(session_stream_handlers.rx);
+    try {
+      session_stream_handlers.rx->authenticated_decrypt_update_final(
+	std::move(epilogue), segment_t::DEFAULT_ALIGNMENT);
+    } catch (ceph::crypto::onwire::MsgAuthError &e) {
+      ldout(cct, 5) << __func__ << " message authentication failed: "
+		    << e.what() << dendl;
+      return _fault();
+    }
   }
 
   return handle_read_frame_dispatch();
@@ -1531,30 +1538,6 @@ CtPtr ProtocolV2::handle_message_complete() {
                          0};
   ceph_msg_footer footer{current_header.front_crc, current_header.middle_crc,
                          current_header.data_crc, 0, current_header.flags};
-
-  if (auth_meta->is_mode_secure()) {
-    if (front.length()) {
-      front = session_stream_handlers.rx->authenticated_decrypt_update(
-        std::move(front), segment_t::DEFAULT_ALIGNMENT);
-    }
-    if (middle.length()) {
-      middle = session_stream_handlers.rx->authenticated_decrypt_update(
-        std::move(middle), segment_t::DEFAULT_ALIGNMENT);
-    }
-    if (data.length()) {
-      data = session_stream_handlers.rx->authenticated_decrypt_update(
-	std::move(data), segment_t::DEFAULT_ALIGNMENT);
-    }
-
-    try {
-      session_stream_handlers.rx->authenticated_decrypt_update_final(
-	std::move(epilogue), segment_t::DEFAULT_ALIGNMENT);
-    } catch (ceph::crypto::onwire::MsgAuthError &e) {
-      ldout(cct, 5) << __func__ << " message authentication failed: "
-		    << e.what() << dendl;
-      return _fault();
-    }
-  }
 
   Message *message = decode_message(cct, messenger->crcflags, header, footer,
                                     front, middle, data, connection);
