@@ -113,7 +113,7 @@ For example:
 
 ::
 
-ceph zabbix config-set zabbix_host "zabbix1,zabbix2:2222,zabbix3:3333"
+    ceph zabbix config-set zabbix_host "zabbix1,zabbix2:2222,zabbix3:3333"
 
 
 Manually sending data
