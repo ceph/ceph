@@ -141,9 +141,14 @@
                 </span>
 
               </div>
-              <span class="help-block"
-                    *ngIf="hasAdvancedSettings(imagesSettings[image])"
-                    i18n>This image has modified settings.</span>
+
+              <span class="help-block">
+                <ng-container *ngIf="backstores.length > 1"
+                              i18n>Backstore: {{ imagesSettings[image].backstore }}.&nbsp;</ng-container>
+
+                <ng-container *ngIf="hasAdvancedSettings(imagesSettings[image][imagesSettings[image].backstore])"
+                              i18n>This image has modified settings.</ng-container>
+              </span>
             </ng-container>
 
             <span class="help-block"

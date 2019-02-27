@@ -5,40 +5,55 @@
   </ng-container>
 
   <ng-container class="modal-content">
-    <form name="settingsForm"
-          class="form"
-          #formDir="ngForm"
-          [formGroup]="settingsForm"
-          novalidate>
-      <div class="modal-body">
-        <p class="alert-warning"
-           i18n>Changing these parameters from their default values is usually not necessary.</p>
+    <div class="modal-body">
+      <p class="alert-warning"
+         i18n>Changing these parameters from their default values is usually not necessary.</p>
 
-        <div class="form-group row"
-             *ngFor="let setting of disk_default_controls | keyvalue"
-             [ngClass]="{'has-error': settingsForm.showError(setting.key, formDir)}">
-          <div class="col-sm-12">
-            <label class="control-label"
-                   for="{{ setting.key }}">{{ setting.key }}</label>
-            <input type="number"
-                   class="form-control"
-                   [formControlName]="setting.key">
-            <span class="help-block">{{ helpText[setting.key]?.help }}</span>
+      <!-- BACKSTORE -->
+      <div class="form-group row"
+           *ngIf="backstores.length > 1">
+        <div class="col-sm-12">
+          <label class="control-label"
+                 i18n>Backstore</label>
+          <select id="backstore"
+                  name="backstore"
+                  class="form-control"
+                  [(ngModel)]="model.backstore">
+            <option *ngFor="let bs of backstores"
+                    [value]="bs">{{ bs }}</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- CONTROLS -->
+      <ng-container *ngFor="let bs of backstores">
+        <ng-container *ngIf="model.backstore === bs">
+          <div class="form-group row"
+               *ngFor="let setting of disk_default_controls[bs] | keyvalue">
+            <div class="col-sm-12">
+              <label class="control-label"
+                     for="{{ setting.key }}">{{ setting.key }}</label>
+              <input type="number"
+                     class="form-control"
+                     [(ngModel)]="model[bs][setting.key]">
+              <span class="help-block">{{ helpText[setting.key]?.help }}</span>
+            </div>
           </div>
-        </div>
-      </div>
+        </ng-container>
+      </ng-container>
+    </div>
 
-      <div class="modal-footer">
-        <div class="button-group text-right">
-          <cd-submit-button i18n
-                            [form]="settingsForm"
-                            (submitAction)="save()">Confirm</cd-submit-button>
-          <button i18n
-                  type="button"
-                  class="btn btn-sm btn-default"
-                  (click)="modalRef.hide()">Cancel</button>
-        </div>
+    <div class="modal-footer">
+      <div class="button-group text-right">
+        <button class="btn btn-sm btn-primary"
+                (click)="save()"
+                i18n>Confirm</button>
+
+        <button i18n
+                type="button"
+                class="btn btn-sm btn-default"
+                (click)="modalRef.hide()">Cancel</button>
       </div>
-    </form>
+    </div>
   </ng-container>
 </cd-modal>
