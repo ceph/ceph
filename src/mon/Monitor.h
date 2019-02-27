@@ -102,18 +102,6 @@ class PaxosService;
 class PerfCounters;
 class AdminSocketHook;
 
-class MMonGetMap;
-class MMonGetVersion;
-class MMonMetadata;
-class MMonSync;
-class MMonScrub;
-class MMonProbe;
-struct MMonSubscribe;
-struct MRoute;
-struct MForward;
-struct MTimeCheck2;
-struct MMonHealth;
-
 #define COMPAT_SET_LOC "feature_set"
 
 class C_MonContext final : public FunctionContext {
