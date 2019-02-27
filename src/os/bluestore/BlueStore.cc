@@ -3791,20 +3791,38 @@ BlueStore::OmapIteratorImpl::OmapIteratorImpl(
   }
 }
 
+string BlueStore::OmapIteratorImpl::_stringify() const
+{
+  stringstream s;
+  s << " omap_iterator(cid = " << c->cid
+    <<", oid = " << o->oid << ")";
+  return s.str();
+}
+
 int BlueStore::OmapIteratorImpl::seek_to_first()
 {
   RWLock::RLocker l(c->lock);
+  auto start1 = mono_clock::now();
   if (o->onode.has_omap()) {
     it->lower_bound(head);
   } else {
     it = KeyValueDB::Iterator();
   }
+  c->store->log_latency_fn(
+    l_bluestore_omap_seek_to_first_lat,
+    mono_clock::now() - start1,
+    [&] (const ceph::timespan& lat) {
+      return ", lat = " + timespan_str(lat) + _stringify();
+    }
+  );
+
   return 0;
 }
 
 int BlueStore::OmapIteratorImpl::upper_bound(const string& after)
 {
   RWLock::RLocker l(c->lock);
+  auto start1 = mono_clock::now();
   if (o->onode.has_omap()) {
     string key;
     get_omap_key(o->onode.nid, after, &key);
@@ -3814,12 +3832,21 @@ int BlueStore::OmapIteratorImpl::upper_bound(const string& after)
   } else {
     it = KeyValueDB::Iterator();
   }
+  c->store->log_latency_fn(
+    l_bluestore_omap_upper_bound_lat,
+    mono_clock::now() - start1,
+    [&] (const ceph::timespan& lat) {
+      return ", after = " + after + ", lat = " + timespan_str(lat) +
+	_stringify();
+    }
+  );
   return 0;
 }
 
 int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
 {
   RWLock::RLocker l(c->lock);
+  auto start1 = mono_clock::now();
   if (o->onode.has_omap()) {
     string key;
     get_omap_key(o->onode.nid, to, &key);
@@ -3829,6 +3856,14 @@ int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
   } else {
     it = KeyValueDB::Iterator();
   }
+  c->store->log_latency_fn(
+    l_bluestore_omap_lower_bound_lat,
+    mono_clock::now() - start1,
+    [&] (const ceph::timespan& lat) {
+      return ", to = " + to + ", lat = " + timespan_str(lat) +
+	_stringify();
+    }
+  );
   return 0;
 }
 
@@ -3847,13 +3882,22 @@ bool BlueStore::OmapIteratorImpl::valid()
 
 int BlueStore::OmapIteratorImpl::next()
 {
+  int r = -1;
   RWLock::RLocker l(c->lock);
+  auto start1 = mono_clock::now();
   if (o->onode.has_omap()) {
     it->next();
-    return 0;
-  } else {
-    return -1;
+    r = 0;
   }
+  c->store->log_latency_fn(
+    l_bluestore_omap_next_lat,
+    mono_clock::now() - start1,
+    [&] (const ceph::timespan& lat) {
+      return ", lat = " + timespan_str(lat) + _stringify();
+    }
+  );
+
+  return r;
 }
 
 string BlueStore::OmapIteratorImpl::key()
@@ -4387,6 +4431,14 @@ void BlueStore::_init_logger()
                     "Read operations that required at least one retry due to failed checksum validation");
   b.add_u64(l_bluestore_fragmentation, "bluestore_fragmentation_micros",
             "How fragmented bluestore free space is (free extents / max possible number of free extents) * 1000");
+  b.add_time_avg(l_bluestore_omap_seek_to_first_lat, "omap_seek_to_first_lat",
+    "Average omap iterator seek_to_first call latency");
+  b.add_time_avg(l_bluestore_omap_upper_bound_lat, "omap_upper_bound_lat",
+    "Average omap iterator upper_bound call latency");
+  b.add_time_avg(l_bluestore_omap_lower_bound_lat, "omap_lower_bound_lat",
+    "Average omap iterator lower_bound call latency");
+  b.add_time_avg(l_bluestore_omap_next_lat, "omap_next_lat",
+    "Average omap iterator next call latency");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -13393,6 +13445,13 @@ int BlueStore::_merge_collection(
   return r;
 }
 
+void BlueStore::log_latency_fn(
+  int idx,
+  const ceph::timespan& l,
+  std::function<string (const ceph::timespan& lat)> fn)
+{
+  LOG_LATENCY_FN(logger, cct, idx, l, fn);
+}
 
 
 // DB key value Histogram
