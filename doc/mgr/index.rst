@@ -1,4 +1,4 @@
-
+.. _ceph-manager-daemon:
 
 ===================
 Ceph Manager Daemon

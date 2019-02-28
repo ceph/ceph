@@ -3,7 +3,7 @@
 Feature Toggles
 ^^^^^^^^^^^^^^^
 
-This plug-in allows to enable or disable some features from the Ceph-Dashboard
+This plug-in allows to enable or disable some features from the Ceph Dashboard
 on-demand. When a feature becomes disabled:
 
 - Its front-end elements (web pages, menu entries, charts, etc.) will become hidden.

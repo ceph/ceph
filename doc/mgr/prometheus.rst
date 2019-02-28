@@ -1,3 +1,5 @@
+.. _mgr-prometheus:
+
 =================
 Prometheus Module
 =================
