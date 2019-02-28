@@ -21,6 +21,7 @@ case "$ID" in
         ;;
     opensuse*|suse|sles)
         PYBUILD="3"
+        WITH_RADOSGW_AMQP_ENDPOINT="OFF"
         ;;
 esac
 if [ "$PYBUILD" = "3" ] ; then
@@ -30,6 +31,9 @@ fi
 if type ccache > /dev/null 2>&1 ; then
     echo "enabling ccache"
     ARGS="$ARGS -DWITH_CCACHE=ON"
+fi
+if [ -n "$WITH_RADOSGW_AMQP_ENDPOINT" ] ; then
+    ARGS="$ARGS -DWITH_RADOSGW_AMQP_ENDPOINT=$WITH_RADOSGW_AMQP_ENDPOINT"
 fi
 
 mkdir build
