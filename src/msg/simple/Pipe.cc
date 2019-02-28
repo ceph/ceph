@@ -2143,7 +2143,7 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 
     bufferlist newbuf, rxbuf;
     bufferlist::iterator blp;
-    int rxbuf_version = 0;
+//    int rxbuf_version = 0;
 	
     while (left > 0) {
       // wait for data
@@ -2151,6 +2151,24 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
 	goto out_dethrottle;
 
       // get a buffer
+#if 0
+      // The rx_buffers implementation is buggy:
+      // - see http://tracker.ceph.com/issues/22480
+      //
+      // - From inspection, I think that we have problems if we read *part*
+      // of the message into an rx_buffer, then drop the lock, someone revokes,
+      // and then later try to read the rest.  In that case our final bufferlist
+      // will have part of the original static_buffer from the first chunk and
+      // partly a piece that we allocated.  I think that to make this correct,
+      // we need to keep the bufferlist we are reading into in Connection under
+      // the lock, and on revoke, if the data is partly read, rebuild() to copy
+      // into fresh buffers so that all references to our static buffer are
+      // cleared up.
+      //
+      // - Also... what happens if we fully read into the static
+      // buffer, then revoke?  We still have some bufferlist out there
+      // in the process of getting dispatched back to objecter or
+      // librados that references the static buffer.
       connection_state->lock.Lock();
       map<ceph_tid_t,pair<bufferlist,int> >::iterator p = connection_state->rx_buffers.find(header.tid);
       if (p != connection_state->rx_buffers.end()) {
@@ -2180,6 +2198,23 @@ int Pipe::read_message(Message **pm, AuthSessionHandler* auth_handler)
       ssize_t got = tcp_read_nonblocking(bp.c_str(), read);
       ldout(msgr->cct,30) << "reader read " << got << " of " << read << dendl;
       connection_state->lock.Unlock();
+#else
+      // rx_buffer-less implementation
+      if (!newbuf.length()) {
+	ldout(msgr->cct,20) << "reader allocating new rx buffer at offset "
+			    << offset << dendl;
+	alloc_aligned_buffer(newbuf, data_len, data_off);
+	blp = newbuf.begin();
+	blp.advance(offset);
+      }
+      bufferptr bp = blp.get_current_ptr();
+      int read = std::min(bp.length(), left);
+      ldout(msgr->cct,20) << "reader reading nonblocking into "
+			  << (void*)bp.c_str() << " len " << bp.length()
+			  << dendl;
+      ssize_t got = tcp_read_nonblocking(bp.c_str(), read);
+      ldout(msgr->cct,30) << "reader read " << got << " of " << read << dendl;
+#endif
       if (got < 0)
 	goto out_dethrottle;
       if (got > 0) {
