@@ -237,8 +237,16 @@ static int fill_in_one_address(
   const struct sockaddr *found = find_ip_in_subnet_list(cct, ifa, ipv, networks,
 							interfaces, numa_node);
   if (!found) {
-    lderr(cct) << "unable to find any IP address in networks '" << networks
-	       << "' interfaces '" << interfaces << "'" << dendl;
+    std::string ip_type = "";
+    if ((ipv & CEPH_PICK_ADDRESS_IPV4) && (ipv & CEPH_PICK_ADDRESS_IPV6)) {
+      ip_type = "IPv4 or IPv6";
+    } else if (ipv & CEPH_PICK_ADDRESS_IPV4) {
+      ip_type = "IPv4";
+    } else {
+      ip_type = "IPv6";
+    }
+    lderr(cct) << "unable to find any " << ip_type << " address in networks '"
+               << networks << "' interfaces '" << interfaces << "'" << dendl;
     return -1;
   }
 
