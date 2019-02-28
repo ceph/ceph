@@ -100,8 +100,7 @@ export class IscsiTargetDiscoveryModalComponent implements OnInit {
       () => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n('Discovery authentication was updated.'),
-          this.i18n('Discovery authentication')
+          this.i18n('Updated discovery authentication')
         );
         this.bsModalRef.hide();
       },
