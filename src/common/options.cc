@@ -1559,7 +1559,7 @@ std::vector<Option> get_global_options() {
 
     Option("mon_data_avail_warn", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(30)
-    .set_description(""),
+    .set_description("issue MON_DISK_LOW health warning when mon available space below this percentage"),
 
     Option("mon_data_size_warn", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(15_G)
