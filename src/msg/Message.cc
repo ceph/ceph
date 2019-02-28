@@ -206,7 +206,7 @@
 
 #define dout_subsys ceph_subsys_ms
 
-void Message::encode(uint64_t features, int crcflags)
+void Message::encode(uint64_t features, int crcflags, bool skip_header_crc)
 {
   // encode and copy out of *m
   if (empty_payload()) {
@@ -229,7 +229,7 @@ void Message::encode(uint64_t features, int crcflags)
   header.front_len = get_payload().length();
   header.middle_len = get_middle().length();
   header.data_len = get_data().length();
-  if (crcflags & MSG_CRC_HEADER)
+  if (!skip_header_crc && (crcflags & MSG_CRC_HEADER))
     calc_header_crc();
 
   footer.flags = CEPH_MSG_FOOTER_COMPLETE;

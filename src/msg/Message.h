@@ -504,7 +504,7 @@ public:
 
   virtual void dump(Formatter *f) const;
 
-  void encode(uint64_t features, int crcflags);
+  void encode(uint64_t features, int crcflags, bool skip_header_crc = false);
 };
 
 extern Message *decode_message(CephContext *cct, int crcflags,
