@@ -2,12 +2,13 @@ import docopt
 import sys
 
 import teuthology.suite
+from teuthology.suite import override_arg_defaults as defaults
 from teuthology.config import config
 
 doc = """
 usage: teuthology-suite --help
-       teuthology-suite [-v | -vv ] --machine-type <type> --ceph <ceph> --suite <suite> [options] [<config_yaml>...]
-       teuthology-suite [-v | -vv ] --machine-type <type> --ceph <ceph> --rerun <name>  [options] [<config_yaml>...]
+       teuthology-suite [-v | -vv ] --machine-type <type> --suite <suite> [options] [<config_yaml>...]
+       teuthology-suite [-v | -vv ] --machine-type <type> --rerun <name>  [options] [<config_yaml>...]
 
 Run a suite of ceph integration tests. A suite is a directory containing
 facets. A facet is a directory containing config snippets. Running a suite
@@ -31,6 +32,7 @@ Standard arguments:
                               The suite to schedule
   --wait                      Block until the suite is finished
   -c <ceph>, --ceph <ceph>    The ceph branch to run against
+                              [default: {default_ceph_branch}]
   -S <sha1>, --sha1 <sha1>    The ceph sha1 to run against (overrides -c)
                               If both -S and -c are supplied, -S wins, and
                               there is no validation that sha1 is contained
@@ -49,7 +51,7 @@ Standard arguments:
                               [default: basic]
   -t <branch>, --teuthology-branch <branch>
                               The teuthology branch to run against.
-                              [default: master]
+                              [default: {default_teuthology_branch}]
   -m <type>, --machine-type <type>
                               Machine type [default: {default_machine_type}]
   -d <distro>, --distro <distro>
@@ -66,6 +68,7 @@ Standard arguments:
                               [default: qa]
   --suite-branch <suite_branch>
                               Use this suite branch instead of the ceph branch
+                              [default: {default_suite_branch}]
   --suite-dir <suite_dir>     Use this alternative directory as-is when
                               assembling jobs from yaml fragments. This causes
                               <suite_branch> to be ignored for scheduling
@@ -136,8 +139,13 @@ Scheduler arguments:
 """.format(
     default_machine_type=config.default_machine_type,
     default_results_timeout=config.results_timeout,
-    default_ceph_repo=config.get_ceph_git_url(),
-    default_suite_repo=config.get_ceph_qa_suite_git_url(),
+    default_ceph_repo=defaults('--ceph-repo',
+                            config.get_ceph_git_url()),
+    default_suite_repo=defaults('--suite-repo',
+                            config.get_ceph_qa_suite_git_url()),
+    default_ceph_branch=defaults('--ceph-branch', 'master'),
+    default_suite_branch=defaults('--suite-branch', 'master'),
+    default_teuthology_branch=defaults('--teuthology-branch', 'master'),
 )
 
 

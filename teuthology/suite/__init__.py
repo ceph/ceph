@@ -19,6 +19,25 @@ from .util import schedule_fail
 log = logging.getLogger(__name__)
 
 
+def override_arg_defaults(name, default, env=os.environ):
+    env_arg = {
+        '--ceph-repo'         : 'TEUTH_CEPH_REPO',
+        '--suite-repo'        : 'TEUTH_SUITE_REPO',
+        '--ceph-branch'       : 'TEUTH_CEPH_BRANCH',
+        '--suite-branch'      : 'TEUTH_SUITE_BRANCH',
+        '--teuthology-branch' : 'TEUTH_BRANCH',
+    }
+    if name in env_arg and env_arg[name] in env.keys():
+        variable = env_arg[name]
+        value = env[variable]
+        log.debug("Default value for '{arg}' is overridden "
+                  "from environment with: {val}"
+                  .format(arg=name, val=value))
+        return value
+    else:
+        return default
+
+
 def process_args(args):
     conf = YamlConfig()
     rename_args = {
