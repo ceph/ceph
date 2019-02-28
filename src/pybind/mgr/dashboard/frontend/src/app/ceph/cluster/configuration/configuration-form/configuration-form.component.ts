@@ -177,8 +177,7 @@ export class ConfigurationFormComponent implements OnInit {
         () => {
           this.notificationService.show(
             NotificationType.success,
-            this.i18n('Config option {{name}} has been updated.', { name: request.name }),
-            this.i18n('Update config option')
+            this.i18n('Updated config option {{name}}', { name: request.name })
           );
           this.router.navigate(['/configuration']);
         },
