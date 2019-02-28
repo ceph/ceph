@@ -332,8 +332,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def update_stateless_service(self, service_type, id_, spec):
-        # type: (str, str, StatelessServiceSpec) -> WriteCompletion
+    def update_stateless_service(self, service_type, spec):
+        # type: (str, StatelessServiceSpec) -> WriteCompletion
         """
         This is about changing / redeploying existing services. Like for
         example changing the number of service instances.
