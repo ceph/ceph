@@ -128,7 +128,7 @@ std::string TempURLEngine::convert_from_iso8601(std::string expires) const
    * for the HMAC calculations. We need to make the conversion. */
   struct tm date_t;
   if (!parse_iso8601(expires.c_str(), &date_t, nullptr, true)) {
-    return std::move(expires);
+    return expires;
   } else {
     return std::to_string(internal_timegm(&date_t));
   }
