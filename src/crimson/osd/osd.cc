@@ -534,8 +534,9 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
 {
   logger().info("osd.{}: committed_osd_maps({}, {})", whoami, first, last);
   // advance through the new maps
-  return seastar::parallel_for_each(boost::irange(first, last + 1),
-                                    [this](epoch_t cur) {
+  return seastar::do_for_each(boost::make_counting_iterator(first),
+                              boost::make_counting_iterator(last + 1),
+                              [this](epoch_t cur) {
     return get_map(cur).then([this](cached_map_t&& o) {
       osdmap = std::move(o);
       if (up_epoch != 0 &&
