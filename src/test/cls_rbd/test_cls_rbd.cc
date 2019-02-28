@@ -5,6 +5,7 @@
 #include "common/config.h"
 #include "common/snap_types.h"
 #include "common/Clock.h"
+#include "common/bit_vector.hpp"
 #include "include/encoding.h"
 #include "include/types.h"
 #include "include/rados/librados.h"

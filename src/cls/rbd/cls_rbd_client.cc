@@ -7,6 +7,7 @@
 #include "include/encoding.h"
 #include "include/rbd_types.h"
 #include "include/rados/librados.hpp"
+#include "common/bit_vector.hpp"
 
 #include <errno.h>
 
