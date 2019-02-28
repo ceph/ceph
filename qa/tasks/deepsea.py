@@ -1190,42 +1190,44 @@ class Orch(DeepSea):
         self._run_orch(("stage", 5))
 
     def begin(self):
+        self.master_remote.sh('sudo salt-run jobs.active 2>/dev/null')
         if self.state_orch:
             self.log.info(anchored(
                 "running orchestration {}".format(self.state_orch)
                 ))
             self._run_orch(("orch", self.state_orch))
-            return None
-        # it's not an orch, so it must be a stage
-        assert self.stage, "Neither state_orch, nor stage"
-        if self.__is_stage_between_0_and_5():
-            exec('self._run_stage_{}()'.format(self.stage))
-        elif self.stage == 'prep':
-            self.log.info("Running Stage 0 instead of Stage \"prep\"")
-            self._run_stage_0()
-        elif self.stage == 'discovery':
-            self.log.info("Running Stage 1 instead of Stage \"discovery\"")
-            self._run_stage_1()
-        elif self.stage == 'configure':
-            self.log.info("Running Stage 2 instead of Stage \"configure\"")
-            self._run_stage_2()
-        elif self.stage == 'deploy':
-            self.log.info("Running Stage 3 instead of Stage \"deploy\"")
-            self._run_stage_3()
-        elif self.stage == 'services':
-            self.log.info("Running Stage 4 instead of Stage \"services\"")
-            self._run_stage_4()
-        elif self.stage == 'removal':
-            self.log.info("Running Stage 5 instead of Stage \"removal\"")
-            self._run_stage_5()
-        elif self.stage in self.all_stages:
-            self.log.info("Running non-numeric Stage \"{}\"".format(self.stage))
-            self._run_orch(("stage", self.stage))
         else:
-            raise ConfigError(
-                self.err_prefix +
-                'unsupported stage ->{}<-'.format(self.stage)
-                )
+            # it's not an orch, so it must be a stage
+            assert self.stage, "Neither state_orch, nor stage"
+            if self.__is_stage_between_0_and_5():
+                exec('self._run_stage_{}()'.format(self.stage))
+            elif self.stage == 'prep':
+                self.log.info("Running Stage 0 instead of Stage \"prep\"")
+                self._run_stage_0()
+            elif self.stage == 'discovery':
+                self.log.info("Running Stage 1 instead of Stage \"discovery\"")
+                self._run_stage_1()
+            elif self.stage == 'configure':
+                self.log.info("Running Stage 2 instead of Stage \"configure\"")
+                self._run_stage_2()
+            elif self.stage == 'deploy':
+                self.log.info("Running Stage 3 instead of Stage \"deploy\"")
+                self._run_stage_3()
+            elif self.stage == 'services':
+                self.log.info("Running Stage 4 instead of Stage \"services\"")
+                self._run_stage_4()
+            elif self.stage == 'removal':
+                self.log.info("Running Stage 5 instead of Stage \"removal\"")
+                self._run_stage_5()
+            elif self.stage in self.all_stages:
+                self.log.info("Running non-numeric Stage \"{}\"".format(self.stage))
+                self._run_orch(("stage", self.stage))
+            else:
+                raise ConfigError(
+                    self.err_prefix +
+                    'unsupported stage ->{}<-'.format(self.stage)
+                    )
+        self.master_remote.sh('sudo salt-run jobs.active 2>/dev/null')
 
     def end(self):
         pass
