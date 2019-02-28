@@ -594,10 +594,11 @@ int RGWRemoteDataLog::read_source_log_shards_next(map<int, string> shard_markers
 }
 
 int RGWRemoteDataLog::init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger,
-                           RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& _sync_module)
+                           RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& _sync_module,
+                           PerfCounters* counters)
 {
   sync_env.init(dpp, store->ctx(), store, _conn, async_rados, &http_manager, _error_logger,
-                _sync_tracer, _source_zone, _sync_module);
+                _sync_tracer, _source_zone, _sync_module, counters);
 
   if (initialized) {
     return 0;
@@ -1862,7 +1863,8 @@ int RGWDataSyncStatusManager::init()
 
   error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
 
-  int r = source_log.init(source_zone, conn, error_logger, store->get_sync_tracer(), sync_module);
+  int r = source_log.init(source_zone, conn, error_logger, store->get_sync_tracer(),
+                          sync_module, counters);
   if (r < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to init remote log, r=" << r << dendl;
     finalize();
@@ -1931,7 +1933,7 @@ int RGWRemoteBucketLog::init(const string& _source_zone, RGWRESTConn *_conn,
   bs.shard_id = shard_id;
 
   sync_env.init(dpp, store->ctx(), store, conn, async_rados, http_manager,
-                _error_logger, _sync_tracer, source_zone, _sync_module);
+                _error_logger, _sync_tracer, source_zone, _sync_module, nullptr);
 
   return 0;
 }
@@ -3462,7 +3464,7 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp, RGWRados *store, const
   RGWDataSyncEnv env;
   RGWSyncModuleInstanceRef module; // null sync module
   env.init(dpp, store->ctx(), store, nullptr, store->get_async_rados(),
-           nullptr, nullptr, nullptr, source_zone, module);
+           nullptr, nullptr, nullptr, source_zone, module, nullptr);
 
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());
   return crs.run(new RGWCollectBucketSyncStatusCR(store, &env, num_shards,

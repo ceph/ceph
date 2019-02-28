@@ -244,13 +244,15 @@ struct RGWDataSyncEnv {
   RGWSyncTraceManager *sync_tracer{nullptr};
   string source_zone;
   RGWSyncModuleInstanceRef sync_module{nullptr};
+  PerfCounters* counters{nullptr};
 
   RGWDataSyncEnv() {}
 
   void init(const DoutPrefixProvider *_dpp, CephContext *_cct, RGWRados *_store, RGWRESTConn *_conn,
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
             RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer,
-            const string& _source_zone, RGWSyncModuleInstanceRef& _sync_module) {
+            const string& _source_zone, RGWSyncModuleInstanceRef& _sync_module,
+            PerfCounters* _counters) {
     dpp = _dpp;
     cct = _cct;
     store = _store;
@@ -261,6 +263,7 @@ struct RGWDataSyncEnv {
     sync_tracer = _sync_tracer;
     source_zone = _source_zone;
     sync_module = _sync_module;
+    counters = _counters;
   }
 
   string shard_obj_name(int shard_id);
@@ -291,7 +294,8 @@ public:
       lock("RGWRemoteDataLog::lock"), data_sync_cr(NULL),
       initialized(false) {}
   int init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger,
-           RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& module);
+           RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& module,
+           PerfCounters* _counters);
   void finish();
 
   int read_log_info(rgw_datalog_info *log_info);
@@ -314,6 +318,7 @@ class RGWDataSyncStatusManager : public DoutPrefixProvider {
   RGWRESTConn *conn;
   RGWSyncErrorLogger *error_logger;
   RGWSyncModuleInstanceRef sync_module;
+  PerfCounters* counters;
 
   RGWRemoteDataLog source_log;
 
@@ -326,14 +331,15 @@ class RGWDataSyncStatusManager : public DoutPrefixProvider {
 
 public:
   RGWDataSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
-                           const string& _source_zone)
+                           const string& _source_zone, PerfCounters* counters)
     : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
-      sync_module(nullptr),
+      sync_module(nullptr), counters(counters),
       source_log(this, store, async_rados), num_shards(0) {}
   RGWDataSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
-                           const string& _source_zone, const RGWSyncModuleInstanceRef& _sync_module)
+                           const string& _source_zone, PerfCounters* counters,
+                           const RGWSyncModuleInstanceRef& _sync_module)
     : store(_store), source_zone(_source_zone), conn(NULL), error_logger(NULL),
-      sync_module(_sync_module),
+      sync_module(_sync_module), counters(counters),
       source_log(this, store, async_rados), num_shards(0) {}
   ~RGWDataSyncStatusManager() {
     finalize();

@@ -66,6 +66,7 @@ using namespace librados;
 
 #include "rgw_object_expirer_core.h"
 #include "rgw_sync.h"
+#include "rgw_sync_counters.h"
 #include "rgw_sync_trace.h"
 #include "rgw_data_sync.h"
 #include "rgw_realm_watcher.h"
@@ -815,6 +816,7 @@ public:
 
 class RGWDataSyncProcessorThread : public RGWSyncProcessorThread
 {
+  PerfCountersRef counters;
   RGWDataSyncStatusManager sync;
   bool initialized;
 
@@ -833,7 +835,8 @@ public:
   RGWDataSyncProcessorThread(RGWRados *_store, RGWAsyncRadosProcessor *async_rados,
                              const RGWZone* source_zone)
     : RGWSyncProcessorThread(_store, "data-sync"),
-      sync(_store, async_rados, source_zone->id),
+      counters(sync_counters::build(store->ctx(), std::string("data-sync-from-") + source_zone->name)),
+      sync(_store, async_rados, source_zone->id, counters.get()),
       initialized(false) {}
 
   void wakeup_sync_shards(map<int, set<string> >& shard_ids) {
