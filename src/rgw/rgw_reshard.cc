@@ -677,8 +677,6 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
                               bool verbose, ostream *out, Formatter *formatter,
 			      RGWReshard* reshard_log)
 {
-  Clock::time_point now;
-
   int ret = reshard_lock.lock();
   if (ret < 0) {
     return ret;
