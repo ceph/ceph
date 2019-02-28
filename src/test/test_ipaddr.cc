@@ -861,3 +861,70 @@ TEST(pick_address, filtering)
     ASSERT_EQ(string("v1:0.0.0.0:0/0"), stringify(av.v[1]));
   }
 }
+
+TEST(pick_address, ipv4_ipv6_enabled)
+{
+  struct ifaddrs one;
+  struct sockaddr_in a_one;
+
+  one.ifa_next = NULL;
+  one.ifa_addr = (struct sockaddr*)&a_one;
+  one.ifa_name = eth0;
+
+  ipv4(&a_one, "10.1.1.2");
+
+  CephContext *cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
+  cct->_conf._clear_safe_to_start_threads();  // so we can set configs
+
+  cct->_conf.set_val("public_addr", "");
+  cct->_conf.set_val("public_network", "10.1.1.0/24");
+  cct->_conf.set_val("public_network_interface", "");
+  cct->_conf.set_val("cluster_addr", "");
+  cct->_conf.set_val("cluster_network", "");
+  cct->_conf.set_val("cluster_network_interface", "");
+  cct->_conf.set_val("ms_bind_ipv6", "true");
+
+  entity_addrvec_t av;
+  {
+    int r = pick_addresses(cct,
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_MSGR1,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(-1, r);
+  }
+}
+
+TEST(pick_address, ipv4_ipv6_enabled2)
+{
+  struct ifaddrs one;
+  struct sockaddr_in6 a_one;
+
+  one.ifa_next = NULL;
+  one.ifa_addr = (struct sockaddr*)&a_one;
+  one.ifa_name = eth0;
+
+  ipv6(&a_one, "2001:1234:5678:90ab::cdef");
+
+  CephContext *cct = new CephContext(CEPH_ENTITY_TYPE_OSD);
+  cct->_conf._clear_safe_to_start_threads();  // so we can set configs
+
+  cct->_conf.set_val("public_addr", "");
+  cct->_conf.set_val("public_network", "2001::/16");
+  cct->_conf.set_val("public_network_interface", "");
+  cct->_conf.set_val("cluster_addr", "");
+  cct->_conf.set_val("cluster_network", "");
+  cct->_conf.set_val("cluster_network_interface", "");
+  cct->_conf.set_val("ms_bind_ipv6", "true");
+
+  entity_addrvec_t av;
+  {
+    int r = pick_addresses(cct,
+			   CEPH_PICK_ADDRESS_PUBLIC |
+			   CEPH_PICK_ADDRESS_MSGR1,
+			   &one, &av);
+    cout << av << std::endl;
+    ASSERT_EQ(-1, r);
+  }
+}
+
