@@ -435,7 +435,14 @@ struct entity_addr_t {
     __u32 elen = get_sockaddr_len();
     ::encode(elen, bl);
     if (elen) {
+#if (__FreeBSD__) || defined(__APPLE__)
+      __le16 ss_family = u.sa.sa_family;
+      ::encode(ss_family, bl);
+      bl.append(u.sa.sa_data,
+		elen - sizeof(u.sa.sa_len) - sizeof(u.sa.sa_family));
+#else
       bl.append((char*)get_sockaddr(), elen);
+#endif
     }
     ENCODE_FINISH(bl);
   }
@@ -454,7 +461,30 @@ struct entity_addr_t {
     __u32 elen;
     ::decode(elen, bl);
     if (elen) {
-      bl.copy(elen, (char*)get_sockaddr());
+#if defined(__FreeBSD__) || defined(__APPLE__)
+      u.sa.sa_len = 0;
+      __le16 ss_family;
+      if (elen < sizeof(ss_family)) {
+	throw buffer::malformed_input("elen smaller than family len");
+      }
+      ::decode(ss_family, bl);
+      u.sa.sa_family = ss_family;
+      elen -= sizeof(ss_family);
+      if (elen > get_sockaddr_len() - sizeof(u.sa.sa_family)) {
+	throw buffer::malformed_input("elen exceeds sockaddr len");
+      }
+      bl.copy(elen, u.sa.sa_data);
+#else
+      if (elen < sizeof(u.sa.sa_family)) {
+	throw buffer::malformed_input("elen smaller than family len");
+      }
+      bl.copy(sizeof(u.sa.sa_family), (char*)&u.sa.sa_family);
+      if (elen > get_sockaddr_len()) {
+	throw buffer::malformed_input("elen exceeds sockaddr len");
+      }
+      elen -= sizeof(u.sa.sa_family);
+      bl.copy(elen, u.sa.sa_data);
+#endif
     }
     DECODE_FINISH(bl);
   }

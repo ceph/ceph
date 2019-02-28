@@ -412,9 +412,13 @@ int Pipe::accept()
     ldout(msgr->cct,10) << "accept couldn't read peer_addr" << dendl;
     goto fail_unlocked;
   }
-  {
+  try {
     bufferlist::iterator ti = addrbl.begin();
     ::decode(peer_addr, ti);
+  } catch (const buffer::error& e) {
+    ldout(msgr->cct,2) << __func__ <<  " decode peer_addr failed: " << e.what()
+			<< dendl;
+    goto fail_unlocked;
   }
 
   ldout(msgr->cct,10) << "accept peer addr is " << peer_addr << dendl;
