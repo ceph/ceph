@@ -7,6 +7,7 @@
 #include <seastar/core/future.hh>
 #include <seastar/core/gate.hh>
 #include <seastar/core/shared_ptr.hh>
+#include <seastar/core/shared_future.hh>
 #include <seastar/core/timer.hh>
 
 #include "crimson/common/simple_lru.h"
@@ -142,6 +143,15 @@ private:
                                        version_t last,
                                        Ref<MOSDMap> m);
 
+  // order the promises in descending order of the waited osdmap epoch,
+  // so we can access all the waiters expecting a map whose epoch is less
+  // than a given epoch
+  using waiting_peering_t = std::map<epoch_t, seastar::shared_promise<epoch_t>,
+				     std::greater<epoch_t>>;
+  waiting_peering_t waiting_peering;
+  // wait for an osdmap whose epoch is greater or equal to given epoch
+  seastar::future<epoch_t> wait_for_map(epoch_t epoch);
+  void consume_map(epoch_t epoch);
   seastar::future<> do_peering_event(spg_t pgid,
 				     std::unique_ptr<PGPeeringEvent> evt);
   seastar::future<> advance_pg_to(Ref<PG> pg, epoch_t to);
