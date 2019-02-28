@@ -360,7 +360,6 @@ int RGWSI_RADOS::Pool::List::get_next(int max,
     return r;
   }
 
-  vector<rgw_bucket_dir_entry>::iterator iter;
   for (auto& o : objs) {
     oids->push_back(o.key.name);
   }
