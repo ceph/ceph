@@ -69,7 +69,7 @@ namespace crimson {
     constexpr auto standard_erase_age = std::chrono::seconds(600);
     constexpr auto standard_check_time = std::chrono::seconds(60);
     constexpr auto aggressive_check_time = std::chrono::seconds(5);
-    constexpr uint standard_erase_max = 100;
+    constexpr uint standard_erase_max = 2000;
 
     enum class AtLimit {
       // requests are delayed until the limit is restored
@@ -1256,7 +1256,7 @@ namespace crimson {
       template<IndIntruHeapData ClientRec::*C1,typename C2>
       void delete_from_heap(ClientRecRef& client,
 			    c::IndIntruHeap<ClientRecRef,ClientRec,C1,C2,B>& heap) {
-	auto i = heap.rfind(client);
+	auto i = heap.at(client);
 	heap.remove(i);
       }
 
