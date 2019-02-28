@@ -292,6 +292,18 @@ Instructions
    Nautilus, since pre-nautilus versions of Ceph to not understand the
    syntax.
 
+#. Consider enabling the :ref:`telemetry module <telemetry>` to send
+   anonymized usage statistics and crash information to the Ceph
+   upstream developers.  To see what would be reported (without actually
+   sending any information to anyone),::
+
+     ceph mgr module enable telemetry
+     ceph telemetry show
+
+   If you are comfortable with the data that is reported, you can opt-in to
+   automatically report the high-level cluster metadata with::
+
+     ceph telemetry on
 
 Upgrading from pre-Luminous releases (like Jewel)
 -------------------------------------------------
