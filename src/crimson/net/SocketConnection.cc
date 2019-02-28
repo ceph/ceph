@@ -16,6 +16,7 @@
 
 #include "Config.h"
 #include "ProtocolV1.h"
+#include "ProtocolV2.h"
 #include "SocketMessenger.h"
 
 using namespace ceph::net;
@@ -33,8 +34,7 @@ SocketConnection::SocketConnection(SocketMessenger& messenger,
 {
   ceph_assert(&messenger.container().local() == &messenger);
   if (is_msgr2) {
-    // TODO: ProtocolV2
-    ceph_assert(false);
+    protocol = std::make_unique<ProtocolV2>(dispatcher, *this, messenger);
   } else {
     protocol = std::make_unique<ProtocolV1>(dispatcher, *this, messenger);
   }
