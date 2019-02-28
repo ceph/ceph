@@ -37,7 +37,7 @@ int RGWSI_SysObj_Core::get_rados_obj(RGWSI_Zone *zone_svc,
     return -EINVAL;
   }
 
-  *pobj = std::move(rados_svc->obj(obj));
+  *pobj = rados_svc->obj(obj);
   int r = pobj->open();
   if (r < 0) {
     return r;
