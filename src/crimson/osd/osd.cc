@@ -621,7 +621,8 @@ seastar::future<> OSD::committed_osd_maps(version_t first,
           std::chrono::seconds(TICK_INTERVAL));
       }
     }
-
+    // yay!
+    consume_map(osdmap->get_epoch());
     if (state.is_active()) {
       logger().info("osd.{}: now active", whoami);
       if (!osdmap->exists(whoami)) {
@@ -803,13 +804,28 @@ seastar::future<> OSD::handle_pg_log(ceph::net::ConnectionRef conn,
   return do_peering_event(m->get_spg(), std::move(evt));
 }
 
+
+void OSD::consume_map(epoch_t epoch)
+{
+  // todo: m-to-n: broadcast this news to all shards
+  auto first = waiting_peering.lower_bound(epoch);
+  auto last = waiting_peering.end();
+  std::for_each(first, last,
+                [epoch, this](auto& blocked_requests) {
+                  blocked_requests.second.set_value(epoch);
+                });
+  waiting_peering.erase(first, last);
+}
+
 seastar::future<>
 OSD::do_peering_event(spg_t pgid,
                       std::unique_ptr<PGPeeringEvent> evt)
 {
   if (auto pg = pgs.find(pgid); pg != pgs.end()) {
-    return advance_pg_to(pg->second, osdmap->get_epoch()).then(
-      [pg, evt=std::move(evt)]() mutable {
+    return wait_for_map(evt->get_epoch_sent()).then(
+      [pg=pg->second, this](epoch_t epoch) {
+        return advance_pg_to(pg, epoch);
+    }).then([pg, evt=std::move(evt)]() mutable {
         return pg->second->do_peering_event(std::move(evt));
     }).then([pg=pg->second, this] {
         return _send_alive(pg->get_need_up_thru());
@@ -817,6 +833,17 @@ OSD::do_peering_event(spg_t pgid,
   } else {
     // todo: handle_pg_query_nopg()
     return seastar::now();
+  }
+}
+
+seastar::future<epoch_t> OSD::wait_for_map(epoch_t epoch)
+{
+  const auto mine = osdmap->get_epoch();
+  if (mine >= epoch) {
+    return seastar::make_ready_future<epoch_t>(mine);
+  } else {
+    logger().info("evt epoch is {}, i have {}, will wait", epoch, mine);
+    return waiting_peering[epoch].get_shared_future();
   }
 }
 
