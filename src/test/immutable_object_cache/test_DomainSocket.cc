@@ -88,10 +88,10 @@ public:
       case RBDSC_READ: {
         ObjectCacheReadData* read_req = (ObjectCacheReadData*)req;
         ObjectCacheRequest* reply = nullptr;
-        if (m_hit_entry_set.find(read_req->m_oid) == m_hit_entry_set.end()) {
+        if (m_hit_entry_set.find(read_req->oid) == m_hit_entry_set.end()) {
           reply = new ObjectCacheReadRadosData(RBDSC_READ_RADOS, req->seq);
         } else {
-          reply = new ObjectCacheReadReplyData(RBDSC_READ_REPLY, req->seq, "/temp/cache/path");
+          reply = new ObjectCacheReadReplyData(RBDSC_READ_REPLY, req->seq, "/fakepath");
         }
         m_cache_server->send(session_id, reply);
         break;
