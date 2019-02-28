@@ -523,8 +523,9 @@ public:
   }
   void put_xlock() {
     ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE ||
-	   state == LOCK_XLOCKSNAP || is_locallock() ||
-	   state == LOCK_LOCK /* if we are a master of a slave */);
+	   state == LOCK_XLOCKSNAP || state == LOCK_LOCK_XLOCK ||
+	   state == LOCK_LOCK  || /* if we are a master of a slave */
+	   is_locallock());
     --more()->num_xlock;
     parent->put(MDSCacheObject::PIN_LOCK);
     if (more()->num_xlock == 0) {
