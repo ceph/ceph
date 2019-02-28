@@ -94,15 +94,19 @@ TYPED_TEST(BitVectorTest, get_buffer_extents) {
 
   uint64_t offset = (bit_vector.BLOCK_SIZE + 11) * elements_per_byte;
   uint64_t length = (bit_vector.BLOCK_SIZE + 31) * elements_per_byte;
-  uint64_t byte_offset;
+  uint64_t data_byte_offset;
+  uint64_t object_byte_offset;
   uint64_t byte_length;
-  bit_vector.get_data_extents(offset, length, &byte_offset, &byte_length);
-  ASSERT_EQ(bit_vector.BLOCK_SIZE, byte_offset);
+  bit_vector.get_data_extents(offset, length, &data_byte_offset,
+                              &object_byte_offset, &byte_length);
+  ASSERT_EQ(bit_vector.BLOCK_SIZE, data_byte_offset);
   ASSERT_EQ(bit_vector.BLOCK_SIZE + (element_count % bit_vector.BLOCK_SIZE),
             byte_length);
 
-  bit_vector.get_data_extents(1, 1, &byte_offset, &byte_length);
-  ASSERT_EQ(0U, byte_offset);
+  bit_vector.get_data_extents(1, 1, &data_byte_offset, &object_byte_offset,
+                              &byte_length);
+  ASSERT_EQ(0U, data_byte_offset);
+  ASSERT_EQ(bit_vector.get_header_length(), object_byte_offset);
   ASSERT_EQ(bit_vector.BLOCK_SIZE, byte_length);
 }
 
@@ -119,9 +123,11 @@ TYPED_TEST(BitVectorTest, get_footer_offset) {
 
   bit_vector.resize(5111);
 
-  uint64_t byte_offset;
+  uint64_t data_byte_offset;
+  uint64_t object_byte_offset;
   uint64_t byte_length;
-  bit_vector.get_data_extents(0, bit_vector.size(), &byte_offset, &byte_length);
+  bit_vector.get_data_extents(0, bit_vector.size(), &data_byte_offset,
+                              &object_byte_offset, &byte_length);
 
   ASSERT_EQ(bit_vector.get_header_length() + byte_length,
 	    bit_vector.get_footer_offset());
@@ -145,11 +151,11 @@ TYPED_TEST(BitVectorTest, partial_decode_encode) {
   auto header_it = header_bl.cbegin();
   bit_vector.decode_header(header_it);
 
-  bufferlist footer_bl;
-  footer_bl.substr_of(bl, bit_vector.get_footer_offset(),
-		      bl.length() - bit_vector.get_footer_offset());
-  auto footer_it = footer_bl.cbegin();
-  bit_vector.decode_footer(footer_it);
+  uint64_t object_byte_offset;
+  uint64_t byte_length;
+  bit_vector.get_header_crc_extents(&object_byte_offset, &byte_length);
+  ASSERT_EQ(bit_vector.get_footer_offset() + 4, object_byte_offset);
+  ASSERT_EQ(4ULL, byte_length);
 
   typedef std::pair<uint64_t, uint64_t> Extent;
   typedef std::list<Extent> Extents;
@@ -162,38 +168,61 @@ TYPED_TEST(BitVectorTest, partial_decode_encode) {
     std::make_pair((2 * bit_vector.BLOCK_SIZE * elements_per_byte) + 2, 2))(
     std::make_pair(2, 2 * bit_vector.BLOCK_SIZE));
   for (Extents::iterator it = extents.begin(); it != extents.end(); ++it) {
+    bufferlist footer_bl;
+    uint64_t footer_byte_offset;
+    uint64_t footer_byte_length;
+    bit_vector.get_data_crcs_extents(it->first, it->second, &footer_byte_offset,
+                                     &footer_byte_length);
+    ASSERT_TRUE(footer_byte_offset + footer_byte_length <= bl.length());
+    footer_bl.substr_of(bl, footer_byte_offset, footer_byte_length);
+    auto footer_it = footer_bl.cbegin();
+    bit_vector.decode_data_crcs(footer_it, it->first);
+
     uint64_t element_offset = it->first;
     uint64_t element_length = it->second;
-    uint64_t byte_offset;
-    uint64_t byte_length;
-    bit_vector.get_data_extents(element_offset, element_length, &byte_offset,
+    uint64_t data_byte_offset;
+    bit_vector.get_data_extents(element_offset, element_length,
+                                &data_byte_offset, &object_byte_offset,
                                 &byte_length);
 
     bufferlist data_bl;
-    data_bl.substr_of(bl, bit_vector.get_header_length() + byte_offset,
+    data_bl.substr_of(bl, bit_vector.get_header_length() + data_byte_offset,
 		      byte_length);
     auto data_it = data_bl.cbegin();
-    bit_vector.decode_data(data_it, byte_offset);
+    bit_vector.decode_data(data_it, data_byte_offset);
 
     data_bl.clear();
-    bit_vector.encode_data(data_bl, byte_offset, byte_length);
+    bit_vector.encode_data(data_bl, data_byte_offset, byte_length);
 
     footer_bl.clear();
-    bit_vector.encode_footer(footer_bl);
+    bit_vector.encode_data_crcs(footer_bl, it->first, it->second);
 
     bufferlist updated_bl;
-    updated_bl.substr_of(bl, 0, bit_vector.get_header_length() + byte_offset);
+    updated_bl.substr_of(bl, 0,
+                         bit_vector.get_header_length() + data_byte_offset);
     updated_bl.append(data_bl);
 
-    if (byte_offset + byte_length < bit_vector.get_footer_offset()) {
-      uint64_t tail_data_offset = bit_vector.get_header_length() + byte_offset +
-                                  byte_length;
+    if (data_byte_offset + byte_length < bit_vector.get_footer_offset()) {
+      uint64_t tail_data_offset = bit_vector.get_header_length() +
+                                  data_byte_offset + byte_length;
       data_bl.substr_of(bl, tail_data_offset,
 		        bit_vector.get_footer_offset() - tail_data_offset);
       updated_bl.append(data_bl);
     }
 
-    updated_bl.append(footer_bl);
+    bufferlist full_footer;
+    full_footer.substr_of(bl, bit_vector.get_footer_offset(),
+                          footer_byte_offset - bit_vector.get_footer_offset());
+    full_footer.append(footer_bl);
+
+    if (footer_byte_offset + footer_byte_length < bl.length()) {
+      bufferlist footer_bit;
+      auto footer_offset = footer_byte_offset + footer_byte_length;
+      footer_bit.substr_of(bl, footer_offset, bl.length() - footer_offset);
+      full_footer.append(footer_bit);
+    }
+
+    updated_bl.append(full_footer);
     ASSERT_EQ(bl, updated_bl);
 
     auto updated_it = updated_bl.cbegin();
@@ -228,24 +257,25 @@ TYPED_TEST(BitVectorTest, data_crc) {
   bit_vector1.resize((bit_vector1.BLOCK_SIZE + 1) * elements_per_byte);
   bit_vector2.resize((bit_vector2.BLOCK_SIZE + 1) * elements_per_byte);
 
-  uint64_t byte_offset;
+  uint64_t data_byte_offset;
+  uint64_t object_byte_offset;
   uint64_t byte_length;
-  bit_vector1.get_data_extents(0, bit_vector1.size(), &byte_offset,
-			       &byte_length);
+  bit_vector1.get_data_extents(0, bit_vector1.size(), &data_byte_offset,
+                               &object_byte_offset, &byte_length);
 
   bufferlist data;
-  bit_vector1.encode_data(data, byte_offset, byte_length);
+  bit_vector1.encode_data(data, data_byte_offset, byte_length);
 
   auto data_it = data.cbegin();
-  bit_vector1.decode_data(data_it, byte_offset);
+  bit_vector1.decode_data(data_it, data_byte_offset);
 
   bit_vector2[bit_vector2.size() - 1] = 1;
 
   bufferlist dummy_data;
-  bit_vector2.encode_data(dummy_data, byte_offset, byte_length);
+  bit_vector2.encode_data(dummy_data, data_byte_offset, byte_length);
 
   data_it = data.begin();
-  ASSERT_THROW(bit_vector2.decode_data(data_it, byte_offset),
+  ASSERT_THROW(bit_vector2.decode_data(data_it, data_byte_offset),
 	       buffer::malformed_input);
 }
 
