@@ -17,13 +17,13 @@ ObjectCacheRequest::ObjectCacheRequest(uint16_t t, uint64_t s)
 ObjectCacheRequest::~ObjectCacheRequest(){}
 
 void ObjectCacheRequest::encode() {
-  ENCODE_START(1, 1, m_payload);
-  ceph::encode(type, m_payload);
-  ceph::encode(seq, m_payload);
+  ENCODE_START(1, 1, payload);
+  ceph::encode(type, payload);
+  ceph::encode(seq, payload);
   if (!payload_empty()) {
     encode_payload();
   }
-  ENCODE_FINISH(m_payload);
+  ENCODE_FINISH(payload);
 }
 
 void ObjectCacheRequest::decode(bufferlist& bl) {
@@ -61,9 +61,9 @@ ObjectCacheReadData::ObjectCacheReadData(uint16_t t, uint64_t s,
                                          uint64_t read_offset, uint64_t read_len,
                                          uint64_t pool_id, uint64_t snap_id,
                                          std::string oid, std::string pool_namespace)
-  : ObjectCacheRequest(t, s), m_read_offset(read_offset),
-    m_read_len(read_len), m_pool_id(pool_id), m_snap_id(snap_id),
-    m_oid(oid), m_pool_namespace(pool_namespace)
+  : ObjectCacheRequest(t, s), read_offset(read_offset),
+    read_len(read_len), pool_id(pool_id), snap_id(snap_id),
+    oid(oid), pool_namespace(pool_namespace)
 {}
 
 ObjectCacheReadData::ObjectCacheReadData(uint16_t t, uint64_t s)
@@ -72,36 +72,36 @@ ObjectCacheReadData::ObjectCacheReadData(uint16_t t, uint64_t s)
 ObjectCacheReadData::~ObjectCacheReadData() {}
 
 void ObjectCacheReadData::encode_payload() {
-  ceph::encode(m_read_offset, m_payload);
-  ceph::encode(m_read_len, m_payload);
-  ceph::encode(m_pool_id, m_payload);
-  ceph::encode(m_snap_id, m_payload);
-  ceph::encode(m_oid, m_payload);
-  ceph::encode(m_pool_namespace, m_payload);
+  ceph::encode(read_offset, payload);
+  ceph::encode(read_len, payload);
+  ceph::encode(pool_id, payload);
+  ceph::encode(snap_id, payload);
+  ceph::encode(oid, payload);
+  ceph::encode(pool_namespace, payload);
 }
 
 void ObjectCacheReadData::decode_payload(bufferlist::const_iterator i) {
-  ceph::decode(m_read_offset, i);
-  ceph::decode(m_read_len, i);
-  ceph::decode(m_pool_id, i);
-  ceph::decode(m_snap_id, i);
-  ceph::decode(m_oid, i);
-  ceph::decode(m_pool_namespace, i);
+  ceph::decode(read_offset, i);
+  ceph::decode(read_len, i);
+  ceph::decode(pool_id, i);
+  ceph::decode(snap_id, i);
+  ceph::decode(oid, i);
+  ceph::decode(pool_namespace, i);
 }
 
 ObjectCacheReadReplyData::ObjectCacheReadReplyData(uint16_t t, uint64_t s, string cache_path)
-  : ObjectCacheRequest(t, s), m_cache_path(cache_path) {}
+  : ObjectCacheRequest(t, s), cache_path(cache_path) {}
 ObjectCacheReadReplyData::ObjectCacheReadReplyData(uint16_t t, uint64_t s)
   : ObjectCacheRequest(t, s) {}
 
 ObjectCacheReadReplyData::~ObjectCacheReadReplyData() {}
 
 void ObjectCacheReadReplyData::encode_payload() {
-  ceph::encode(m_cache_path, m_payload);
+  ceph::encode(cache_path, payload);
 }
 
 void ObjectCacheReadReplyData::decode_payload(bufferlist::const_iterator i) {
-  ceph::decode(m_cache_path, i);
+  ceph::decode(cache_path, i);
 }
 
 ObjectCacheReadRadosData::ObjectCacheReadRadosData() {}

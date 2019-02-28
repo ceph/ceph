@@ -33,9 +33,9 @@ public:
   uint16_t type;
   uint64_t seq;
 
-  bufferlist m_payload;
+  bufferlist payload;
 
-  GenContext<ObjectCacheRequest*>* m_process_msg;
+  GenContext<ObjectCacheRequest*>* process_msg;
 
   ObjectCacheRequest();
   ObjectCacheRequest(uint16_t type, uint64_t seq);
@@ -47,7 +47,7 @@ public:
   //          be encoded which be implements by child class.
   void encode();
   void decode(bufferlist& bl);
-  bufferlist get_payload_bufferlist() { return m_payload; }
+  bufferlist get_payload_bufferlist() { return payload; }
 
   virtual void encode_payload() = 0;
   virtual void decode_payload(bufferlist::const_iterator bl_it) = 0;
@@ -79,12 +79,12 @@ public:
 
 class ObjectCacheReadData : public ObjectCacheRequest {
 public:
-  uint64_t m_read_offset;
-  uint64_t m_read_len;
-  uint64_t m_pool_id;
-  uint64_t m_snap_id;
-  std::string m_oid;
-  std::string m_pool_namespace;
+  uint64_t read_offset;
+  uint64_t read_len;
+  uint64_t pool_id;
+  uint64_t snap_id;
+  std::string oid;
+  std::string pool_namespace;
   ObjectCacheReadData(uint16_t t, uint64_t s, uint64_t read_offset, uint64_t read_len, uint64_t pool_id,
                       uint64_t snap_id, std::string oid, std::string pool_namespace );
   ObjectCacheReadData(uint16_t t, uint64_t s);
@@ -97,7 +97,7 @@ public:
 
 class ObjectCacheReadReplyData : public ObjectCacheRequest {
 public:
-  std::string m_cache_path;
+  std::string cache_path;
   ObjectCacheReadReplyData(uint16_t t, uint64_t s, std::string cache_path);
   ObjectCacheReadReplyData(uint16_t t, uint64_t s);
   ~ObjectCacheReadReplyData() override;

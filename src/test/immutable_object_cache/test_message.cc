@@ -36,12 +36,12 @@ TEST(test_for_message, test_1)
   ASSERT_EQ(req_decode->seq, 123456UL);
   ASSERT_EQ(((ObjectCacheReadData*)req_decode)->type, RBDSC_READ);
   ASSERT_EQ(((ObjectCacheReadData*)req_decode)->seq, 123456UL);
-  ASSERT_EQ(((ObjectCacheReadData*)req_decode)->m_read_offset, 222222UL);
-  ASSERT_EQ(((ObjectCacheReadData*)req_decode)->m_read_len, 333333UL);
-  ASSERT_EQ(((ObjectCacheReadData*)req_decode)->m_pool_id, 444444UL);
-  ASSERT_EQ(((ObjectCacheReadData*)req_decode)->m_snap_id, 555555UL);
-  ASSERT_EQ(((ObjectCacheReadData*)req_decode)->m_pool_namespace, pool_nspace);
-  ASSERT_EQ(((ObjectCacheReadData*)req_decode)->m_oid, oid_name);
+  ASSERT_EQ(((ObjectCacheReadData*)req_decode)->read_offset, 222222UL);
+  ASSERT_EQ(((ObjectCacheReadData*)req_decode)->read_len, 333333UL);
+  ASSERT_EQ(((ObjectCacheReadData*)req_decode)->pool_id, 444444UL);
+  ASSERT_EQ(((ObjectCacheReadData*)req_decode)->snap_id, 555555UL);
+  ASSERT_EQ(((ObjectCacheReadData*)req_decode)->pool_namespace, pool_nspace);
+  ASSERT_EQ(((ObjectCacheReadData*)req_decode)->oid, oid_name);
 
   delete req;
   delete req_decode;
