@@ -37,7 +37,8 @@ set(librbd_internal_srcs
   api/Trash.cc
   cache/ImageWriteback.cc
   cache/ObjectCacherObjectDispatch.cc
-  cache/PassthroughImageCache.cc
+  cache/SharedReadOnlyObjectDispatch.cc
+  cache/SharedPersistentObjectCacher.cc
   deep_copy/ImageCopyRequest.cc
   deep_copy/MetadataCopyRequest.cc
   deep_copy/ObjectCopyRequest.cc
@@ -153,6 +154,7 @@ if(WITH_LTTNG AND WITH_EVENTTRACE)
   add_dependencies(rbd_internal eventtrace_tp)
 endif()
 target_link_libraries(rbd_internal PRIVATE
+  ceph_immutable_object_cache_lib
   osdc)
 
 add_library(librbd ${CEPH_SHARED}

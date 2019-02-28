@@ -6980,6 +6980,10 @@ static std::vector<Option> get_rbd_options() {
     .set_default(false)
     .set_description("whether to block writes to the cache before the aio_write call completes"),
 
+    Option("rbd_shared_cache_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("whether to enable rbd shared ro cache"),
+
     Option("rbd_concurrent_management_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)
     .set_min(1)
