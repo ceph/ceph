@@ -129,7 +129,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
     recv_start(0), recv_end(0),
     last_active(ceph::coarse_mono_clock::now()),
     inactive_timeout_us(cct->_conf->ms_tcp_read_timeout*1000*1000),
-    got_bad_auth(false), authorizer(NULL), replacing(false),
+    authorizer(NULL), replacing(false),
     is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0),
     worker(w), center(&w->center)
 {
@@ -879,7 +879,6 @@ ssize_t AsyncConnection::_process_connection()
         assert(!policy.server);
 
         // reset connect state variables
-        got_bad_auth = false;
         delete authorizer;
         authorizer = NULL;
         authorizer_buf.clear();
@@ -1426,12 +1425,7 @@ int AsyncConnection::handle_connect_reply(ceph_msg_connect &connect, ceph_msg_co
 
   if (reply.tag == CEPH_MSGR_TAG_BADAUTHORIZER) {
     ldout(async_msgr->cct,0) << __func__ << " connect got BADAUTHORIZER" << dendl;
-    if (got_bad_auth)
-      goto fail;
-    got_bad_auth = true;
-    delete authorizer;
-    authorizer = async_msgr->get_authorizer(peer_type, true);  // try harder
-    state = STATE_CONNECTING_SEND_CONNECT_MSG;
+    goto fail;
   }
   if (reply.tag == CEPH_MSGR_TAG_RESETSESSION) {
     ldout(async_msgr->cct, 0) << __func__ << " connect got RESETSESSION" << dendl;
@@ -1545,6 +1539,14 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
 	need_challenge ? &authorizer_challenge : nullptr) ||
       !authorizer_valid) {
     lock.lock();
+    if (state != STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
+      ldout(async_msgr->cct, 1) << __func__
+                                << " state changed while verify_authorizer,"
+                                << " it must be mark_down"
+                                << dendl;
+      ceph_assert(state == STATE_CLOSED);
+      return -1;
+    }
     char tag;
     if (need_challenge && !had_challenge && authorizer_challenge) {
       ldout(async_msgr->cct,10) << __func__ << ": challenging authorizer"
@@ -1878,6 +1880,7 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
   if (state != STATE_ACCEPTING_WAIT_CONNECT_MSG_AUTH) {
     ldout(async_msgr->cct, 1) << __func__ << " state changed while accept_conn, it must be mark_down" << dendl;
     assert(state == STATE_CLOSED || state == STATE_NONE);
+    async_msgr->unregister_conn(this);
     goto fail_registered;
   }
 
@@ -2340,7 +2343,6 @@ void AsyncConnection::reset_recv_state()
       state <= STATE_CONNECTING_READY) {
     delete authorizer;
     authorizer = NULL;
-    got_bad_auth = false;
   }
 
   if (state > STATE_OPEN_MESSAGE_THROTTLE_MESSAGE &&
