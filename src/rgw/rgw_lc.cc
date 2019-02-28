@@ -85,7 +85,7 @@ void RGWLifecycleConfiguration::add_rule(const LCRule& rule)
 
 bool RGWLifecycleConfiguration::_add_rule(const LCRule& rule)
 {
-  lc_op op;
+  lc_op op(rule.get_id());
   op.status = rule.is_enabled();
   if (rule.get_expiration().has_days()) {
     op.expiration = rule.get_expiration().get_days();
@@ -388,6 +388,25 @@ static bool is_valid_op(const lc_op& op)
                || !op.noncur_transitions.empty()));
 }
 
+static inline bool has_all_tags(const lc_op& rule_action,
+				const RGWObjTags& object_tags)
+{
+  for (const auto& tag : object_tags.get_tags()) {
+
+    if (! rule_action.obj_tags)
+      return false;
+
+    const auto& rule_tags = rule_action.obj_tags->get_tags();
+    const auto& iter = rule_tags.find(tag.first);
+
+    if ((iter == rule_tags.end()) ||
+	(iter->second != tag.second))
+      return false;
+  }
+  /* all tags matched */
+  return true;
+}
+
 class LCObjsLister {
   RGWRados *store;
   RGWBucketInfo& bucket_info;
@@ -613,10 +632,7 @@ static int check_tags(lc_op_ctx& oc, bool *skip)
       return -EIO;
     }
 
-    if (!includes(dest_obj_tags.get_tags().begin(),
-                  dest_obj_tags.get_tags().end(),
-                  op.obj_tags->get_tags().begin(),
-                  op.obj_tags->get_tags().end())){
+    if (! has_all_tags(op, dest_obj_tags)) {
       ldout(oc.cct, 20) << __func__ << "() skipping obj " << oc.obj << " as tags do not match" << dendl;
       return 0;
     }
@@ -920,7 +936,6 @@ int LCOpRule::process(rgw_bucket_dir_entry& o, const DoutPrefixProvider *dpp)
 
 }
 
-
 int RGWLC::bucket_lc_process(string& shard_id)
 {
   RGWLifecycleConfiguration  config(cct);
@@ -948,7 +963,6 @@ int RGWLC::bucket_lc_process(string& shard_id)
   }
 
   RGWRados::Bucket target(store, bucket_info);
-  LCObjsLister ol(store, bucket_info);
 
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_LC);
   if (aiter == bucket_attrs.end())
@@ -982,6 +996,8 @@ int RGWLC::bucket_lc_process(string& shard_id)
     } else {
       pre_marker = next_marker;
     }
+
+    LCObjsLister ol(store, bucket_info);
     ol.set_prefix(prefix_iter->first);
 
     ret = ol.init();
@@ -1004,7 +1020,9 @@ int RGWLC::bucket_lc_process(string& shard_id)
       ldpp_dout(this, 20) << __func__ << "(): key=" << o.key << dendl;
       int ret = orule.process(o, this);
       if (ret < 0) {
-        ldpp_dout(this, 20) << "ERROR: orule.process() returned ret=" << ret << dendl;
+        ldpp_dout(this, 20) << "ERROR: orule.process() returned ret="
+			    << ret
+			    << dendl;
       }
 
       if (going_down()) {
