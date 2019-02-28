@@ -1,5 +1,6 @@
 #include "osd.h"
 
+#include <boost/iterator/counting_iterator.hpp>
 #include <boost/range/join.hpp>
 #include <boost/smart_ptr/make_local_shared.hpp>
 
@@ -418,8 +419,8 @@ seastar::future<bufferlist> OSD::load_map_bl(epoch_t e)
 seastar::future<> OSD::store_maps(ceph::os::Transaction& t,
                                   epoch_t start, Ref<MOSDMap> m)
 {
-  return seastar::do_for_each(boost::counting_iterator<epoch_t>(start),
-                              boost::counting_iterator<epoch_t>(m->get_last() + 1),
+  return seastar::do_for_each(boost::make_counting_iterator(start),
+                              boost::make_counting_iterator(m->get_last() + 1),
                               [&t, m, this](epoch_t e) {
     if (auto p = m->maps.find(e); p != m->maps.end()) {
       auto o = std::make_unique<OSDMap>();
