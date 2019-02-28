@@ -759,8 +759,7 @@ void Locker::cancel_locking(MutationImpl *mut, set<CInode*> *pneed_issue)
     bool need_issue = false;
     if (lock->get_state() == LOCK_PREXLOCK) {
       _finish_xlock(lock, -1, &need_issue);
-    } else if (lock->get_state() == LOCK_LOCK_XLOCK &&
-	       lock->get_num_xlocks() == 0) {
+    } else if (lock->get_state() == LOCK_LOCK_XLOCK) {
       lock->set_state(LOCK_XLOCKDONE);
       eval_gather(lock, true, &need_issue);
     }
@@ -1644,11 +1643,17 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
   dout(7) << "xlock_start on " << *lock << " on " << *lock->get_parent() << dendl;
   client_t client = mut->get_client();
 
+  CInode *in = nullptr;
+  if (lock->get_cap_shift())
+    in = static_cast<CInode *>(lock->get_parent());
+
   // auth?
   if (lock->get_parent()->is_auth()) {
     // auth
     while (1) {
-      if (lock->can_xlock(client)) {
+      if (lock->can_xlock(client) &&
+	  !(lock->get_state() == LOCK_LOCK_XLOCK &&	// client is not xlocker or
+	    in && in->issued_caps_need_gather(lock))) { // xlocker does not hold shared cap
 	lock->set_state(LOCK_XLOCK);
 	lock->get_xlock(mut, client);
 	mut->xlocks.insert(lock);
@@ -1657,11 +1662,9 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
 	return true;
       }
       
-      if (lock->get_type() == CEPH_LOCK_IFILE) {
-	CInode *in = static_cast<CInode*>(lock->get_parent());
-	if (in->state_test(CInode::STATE_RECOVERING)) {
-	  mds->mdcache->recovery_queue.prioritize(in);
-	}
+      if (lock->get_type() == CEPH_LOCK_IFILE &&
+	  in->state_test(CInode::STATE_RECOVERING)) {
+	mds->mdcache->recovery_queue.prioritize(in);
       }
 
       if (!lock->is_stable() && (lock->get_state() != LOCK_XLOCKDONE ||
@@ -1782,9 +1785,8 @@ void Locker::xlock_finish(SimpleLock *lock, MutationImpl *mut, bool *pneed_issue
 			 SimpleLock::WAIT_WR | 
 			 SimpleLock::WAIT_RD, 0); 
   } else {
-    if (lock->get_num_xlocks() == 0) {
-      if (lock->get_state() == LOCK_LOCK_XLOCK)
-	lock->set_state(LOCK_XLOCKDONE);
+    if (lock->get_num_xlocks() == 0 &&
+        lock->get_state() != LOCK_LOCK_XLOCK) { // no one is taking xlock
       _finish_xlock(lock, xlocker, &do_issue);
     }
   }
