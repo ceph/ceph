@@ -8,6 +8,7 @@
 #include "common/strtol.h"
 #include "common/Cond.h"
 #include "common/Mutex.h"
+#include "global/signal_handler.h"
 #include <iostream>
 #include <boost/accumulators/accumulators.hpp>
 #include <boost/accumulators/statistics/stats.hpp>
@@ -15,6 +16,13 @@
 #include <boost/program_options.hpp>
 
 using namespace std::chrono;
+
+static std::atomic<bool> terminating;
+static void handle_signal(int signum)
+{
+  ceph_assert(signum == SIGINT || signum == SIGTERM);
+  terminating = true;
+}
 
 namespace rbd {
 namespace action {
@@ -128,7 +136,7 @@ struct rbd_bencher {
       write_bl.push_back(bp);
     }
   }
-    
+
   void start_io(int max, uint64_t off, uint64_t len, int op_flags, bool read_flag)
   {
     {
@@ -149,13 +157,15 @@ struct rbd_bencher {
     }
   }
 
-  void wait_for(int max) {
+  int wait_for(int max) {
     Mutex::Locker l(lock);
-    while (in_flight > max) {
+    while (in_flight > max && !terminating) {
       utime_t dur;
       dur.set_from_double(.2);
       cond.WaitInterval(lock, dur);
     }
+
+    return terminating ? -EINTR : 0;
   }
 
 };
@@ -278,10 +288,14 @@ int do_bench(librbd::Image& image, io_type_t io_type,
   for (off = 0; off < io_bytes; ) {
     // Issue I/O
     i = 0;
+    int r = 0;
     while (i < io_threads && off < io_bytes) {
       bool read_flag = should_read(read_proportion);
 
-      b.wait_for(io_threads - 1);
+      r = b.wait_for(io_threads - 1);
+      if (r < 0) {
+        break;
+      }
       b.start_io(io_threads, thread_offset[i], io_size, op_flags, read_flag);
 
       ++i;
@@ -295,6 +309,10 @@ int do_bench(librbd::Image& image, io_type_t io_type,
         read_ops++;
       else
         write_ops++;
+    }
+
+    if (r < 0) {
+      break;
     }
 
     // Set the thread_offsets of next I/O
@@ -468,8 +486,19 @@ int bench_execute(const po::variables_map &vm, io_type_t bench_io_type) {
     return r;
   }
 
+  init_async_signal_handler();
+  register_async_signal_handler(SIGHUP, sighup_handler);
+  register_async_signal_handler_oneshot(SIGINT, handle_signal);
+  register_async_signal_handler_oneshot(SIGTERM, handle_signal);
+
   r = do_bench(image, bench_io_type, bench_io_size, bench_io_threads,
 		     bench_bytes, bench_random, bench_read_proportion);
+
+  unregister_async_signal_handler(SIGHUP, sighup_handler);
+  unregister_async_signal_handler(SIGINT, handle_signal);
+  unregister_async_signal_handler(SIGTERM, handle_signal);
+  shutdown_async_signal_handler();
+
   if (r < 0) {
     std::cerr << "bench failed: " << cpp_strerror(r) << std::endl;
     return r;
