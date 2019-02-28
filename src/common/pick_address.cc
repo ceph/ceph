@@ -339,31 +339,33 @@ int pick_addresses(
   }
   if (addr.is_blank_ip() &&
       !networks.empty()) {
+    int ipv4_r = !(ipv & CEPH_PICK_ADDRESS_IPV4) ? 0 : -1;
+    int ipv6_r = !(ipv & CEPH_PICK_ADDRESS_IPV6) ? 0 : -1;
     // first try on preferred numa node (if >= 0), then anywhere.
     while (true) {
       // note: pass in ipv to filter the matching addresses
-      int r = 0;
       if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
 	  (flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
-	r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4, networks,
-				interfaces, addrs, preferred_numa_node);
+	ipv4_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4,
+                                     networks, interfaces, addrs,
+                                     preferred_numa_node);
       }
-      if (r >= 0 &&
-	  (ipv & CEPH_PICK_ADDRESS_IPV6)) {
-	r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV6, networks,
-				interfaces, addrs, preferred_numa_node);
+      if (ipv & CEPH_PICK_ADDRESS_IPV6) {
+	ipv6_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV6,
+                                     networks, interfaces, addrs,
+                                     preferred_numa_node);
       }
-      if (r >= 0 &&
-	  (ipv & CEPH_PICK_ADDRESS_IPV4) &&
+      if ((ipv & CEPH_PICK_ADDRESS_IPV4) &&
 	  !(flags & CEPH_PICK_ADDRESS_PREFER_IPV4)) {
-	r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4, networks,
-				interfaces, addrs, preferred_numa_node);
+	ipv4_r = fill_in_one_address(cct, ifa, CEPH_PICK_ADDRESS_IPV4,
+                                     networks, interfaces, addrs,
+                                     preferred_numa_node);
       }
-      if (r >= 0) {
+      if (ipv4_r >= 0 && ipv6_r >= 0) {
 	break;
       }
       if (preferred_numa_node < 0) {
-	return r;
+	return ipv4_r >= 0 && ipv6_r >= 0 ? 0 : -1;
       }
       preferred_numa_node = -1;      // try any numa node
     }
