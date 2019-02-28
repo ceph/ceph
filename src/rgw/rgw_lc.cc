@@ -61,7 +61,7 @@ void RGWLifecycleConfiguration::add_rule(LCRule *rule)
 
 bool RGWLifecycleConfiguration::_add_rule(LCRule *rule)
 {
-  lc_op op;
+  lc_op op(rule->get_id());
   op.status = rule->is_enabled();
   if (rule->get_expiration().has_days()) {
     op.expiration = rule->get_expiration().get_days();
@@ -332,6 +332,24 @@ static int read_obj_tags(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& o
   return read_op.get_attr(RGW_ATTR_TAGS, tags_bl);
 }
 
+static inline bool has_all_tags(const lc_op& rule_action,
+				const RGWObjTags& object_tags)
+{
+  for (const auto& tag : object_tags.get_tags()) {
+
+    if (! rule_action.obj_tags)
+      return false;
+
+    const auto& rule_tags = rule_action.obj_tags->get_tags();
+    const auto& iter = rule_tags.find(tag.first);
+
+    if ((iter == rule_tags.end()) ||
+	(iter->second != tag.second))
+      return false;
+  }
+  /* all tags matched */
+  return true;
+}
 
 int RGWLC::bucket_lc_process(string& shard_id)
 {
@@ -360,7 +378,6 @@ int RGWLC::bucket_lc_process(string& shard_id)
   }
 
   RGWRados::Bucket target(store, bucket_info);
-  RGWRados::Bucket::List list_op(&target);
 
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_LC);
   if (aiter == bucket_attrs.end())
@@ -380,9 +397,25 @@ int RGWLC::bucket_lc_process(string& shard_id)
 		 << prefix_map.size()
 		 << dendl;
 
-  list_op.params.list_versions = bucket_info.versioned();
-  if (!bucket_info.versioned()) {
-    for(auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
+  for(auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
+    ldout(cct, 16) << __func__
+		   << "() prefix iter: " << prefix_iter->first
+		   << " rule-id: " << prefix_iter->second.id
+		   << dendl;
+  }
+
+  if (! bucket_info.versioned()) {
+    for(auto prefix_iter = prefix_map.begin();
+	prefix_iter != prefix_map.end(); ++prefix_iter) {
+
+      RGWRados::Bucket::List list_op(&target);
+      list_op.params.list_versions = false;
+
+      ldout(cct, 16) << __func__
+		     << "() prefix iter: " << prefix_iter->first
+		     << " rule-id: " << prefix_iter->second.id
+		     << dendl;
+
       if (!prefix_iter->second.status || 
         (prefix_iter->second.expiration <=0 && prefix_iter->second.expiration_date == boost::none)) {
         continue;
@@ -428,11 +461,8 @@ int RGWLC::bucket_lc_process(string& shard_id)
               return -EIO;
             }
 
-            if (!includes(dest_obj_tags.get_tags().begin(),
-                          dest_obj_tags.get_tags().end(),
-                          prefix_iter->second.obj_tags->get_tags().begin(),
-                          prefix_iter->second.obj_tags->get_tags().end())){
-              ldout(cct, 20) << __func__ << "() skipping obj " << key << " as tags do not match" << dendl;
+	    if (! has_all_tags(prefix_iter->second, dest_obj_tags)) {
+              ldout(cct, 16) << __func__ << "() skipping obj " << key << " as tags do not match" << dendl;
               continue;
             }
           }
@@ -470,9 +500,13 @@ int RGWLC::bucket_lc_process(string& shard_id)
       } while (is_truncated);
     }
   } else {
-  //bucket versioning is enabled or suspended
+    /* bucket versioning is enabled or suspended */
+    RGWRados::Bucket::List list_op(&target);
+    list_op.params.list_versions = true;
+
     rgw_obj_key pre_marker;
-    for(auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
+    for(auto prefix_iter = prefix_map.begin();
+	prefix_iter != prefix_map.end(); ++prefix_iter) {
       if (!prefix_iter->second.status || (prefix_iter->second.expiration <= 0 
         && prefix_iter->second.expiration_date == boost::none
         && prefix_iter->second.noncur_expiration <= 0 && !prefix_iter->second.dm_expiration)) {

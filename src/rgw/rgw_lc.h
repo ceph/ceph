@@ -279,8 +279,10 @@ public:
 };
 WRITE_CLASS_ENCODER(LCRule)
 
+/* XXX why not LCRule? */
 struct lc_op
 {
+  string id;
   bool status{false};
   bool dm_expiration{false};
   int expiration{0};
@@ -288,7 +290,13 @@ struct lc_op
   int mp_expiration{0};
   boost::optional<ceph::real_time> expiration_date;
   boost::optional<RGWObjTags> obj_tags;
-  
+
+  /* ctors are nice */
+  lc_op() = delete;
+
+  lc_op(const std::string id) : id(id)
+    {}
+
   void dump(Formatter *f) const;
 };
 
