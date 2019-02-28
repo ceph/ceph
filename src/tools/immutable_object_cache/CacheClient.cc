@@ -90,7 +90,7 @@ namespace immutable_obj_cache {
 
     ObjectCacheRequest* req = new ObjectCacheReadData(RBDSC_READ, ++m_sequence_id, 0, 0,
                                                       pool_id, snap_id, oid, pool_nspace);
-    req->m_process_msg = on_finish;
+    req->process_msg = on_finish;
     req->encode();
 
     {
@@ -251,7 +251,7 @@ namespace immutable_obj_cache {
        if (dedicated) {
          // dedicated thrad to execute this context.
        }
-       current_request->m_process_msg->complete(reply);
+       current_request->process_msg->complete(reply);
        delete current_request;
        delete reply;
     });
@@ -326,7 +326,7 @@ namespace immutable_obj_cache {
       Mutex::Locker locker(m_lock);
       for (auto it : m_seq_to_req) {
         it.second->type = RBDSC_READ_RADOS;
-        it.second->m_process_msg->complete(it.second);
+        it.second->process_msg->complete(it.second);
       }
       m_seq_to_req.clear();
     }

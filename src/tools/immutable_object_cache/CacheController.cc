@@ -95,10 +95,10 @@ void CacheController::handle_request(uint64_t session_id, ObjectCacheRequest* re
       // lookup object in local cache store
       std::string cache_path;
       ObjectCacheReadData* req_read_data = (ObjectCacheReadData*)req;
-      int ret = m_object_cache_store->lookup_object(req_read_data->m_pool_namespace,
-                                                    req_read_data->m_pool_id,
-                                                    req_read_data->m_snap_id,
-                                                    req_read_data->m_oid,
+      int ret = m_object_cache_store->lookup_object(req_read_data->pool_namespace,
+                                                    req_read_data->pool_id,
+                                                    req_read_data->snap_id,
+                                                    req_read_data->oid,
                                                     cache_path);
       ObjectCacheRequest* reply = nullptr;
       if (ret != OBJ_CACHE_PROMOTED) {
