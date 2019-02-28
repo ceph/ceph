@@ -171,9 +171,9 @@ int RGWSI_Zone::do_start()
     ldout(cct, 0) << "WARNING: could not find zone config in zonegroup for local zone (" << zone_id() << "), will use defaults" << dendl;
   }
   *zone_public_config = zone_by_id[zone_id()];
-  for (auto ziter : zonegroup->zones) {
+  for (const auto& ziter : zonegroup->zones) {
     const string& id = ziter.first;
-    RGWZone& z = ziter.second;
+    const RGWZone& z = ziter.second;
     if (id == zone_id()) {
       continue;
     }
@@ -187,7 +187,7 @@ int RGWSI_Zone::do_start()
     if (zone_syncs_from(*zone_public_config, z) ||
         zone_syncs_from(z, *zone_public_config)) {
       if (zone_syncs_from(*zone_public_config, z)) {
-        zone_data_sync_from_map[id] = conn;
+        data_sync_source_zones.push_back(&z);
       }
       if (zone_syncs_from(z, *zone_public_config)) {
         zone_data_notify_to_map[id] = conn;
