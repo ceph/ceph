@@ -372,8 +372,10 @@ struct transition_action
   transition_action() : days(0) {}
 };
 
+/* XXX why not LCRule? */
 struct lc_op
 {
+  string id;
   bool status{false};
   bool dm_expiration{false};
   int expiration{0};
@@ -383,7 +385,13 @@ struct lc_op
   boost::optional<RGWObjTags> obj_tags;
   map<string, transition_action> transitions;
   map<string, transition_action> noncur_transitions;
-  
+
+  /* ctors are nice */
+  lc_op() = delete;
+
+  lc_op(const std::string id) : id(id)
+    {}
+
   void dump(Formatter *f) const;
 };
 
