@@ -5,12 +5,12 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
 import { UserService } from '../../../shared/api/user.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
-import { EmptyPipe } from '../../../shared/empty.pipe';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
+import { EmptyPipe } from '../../../shared/pipes/empty.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 
