@@ -22,7 +22,7 @@
           <tr>
             <td i18n
                 class="bold col-sm-1">Suspended</td>
-            <td class="col-sm-3">{{ user.suspended ? "Yes" : "No" }}</td>
+            <td class="col-sm-3">{{ user.suspended | booleanText }}</td>
           </tr>
           <tr>
             <td i18n
@@ -64,7 +64,7 @@
             <tr>
               <td i18n
                   class="bold col-sm-1">Enabled</td>
-              <td class="col-sm-3">{{ user.user_quota.enabled ? "Yes" : "No" }}</td>
+              <td class="col-sm-3">{{ user.user_quota.enabled | booleanText }}</td>
             </tr>
             <tr>
               <td i18n
@@ -100,7 +100,7 @@
             <tr>
               <td i18n
                   class="bold col-sm-1">Enabled</td>
-              <td class="col-sm-3">{{ user.bucket_quota.enabled ? "Yes" : "No" }}</td>
+              <td class="col-sm-3">{{ user.bucket_quota.enabled | booleanText }}</td>
             </tr>
             <tr>
               <td i18n

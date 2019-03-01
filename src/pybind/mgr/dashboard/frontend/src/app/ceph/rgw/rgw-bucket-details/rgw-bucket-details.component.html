@@ -69,7 +69,7 @@
             <tr>
               <td i18n
                   class="bold col-sm-1">Enabled</td>
-              <td class="col-sm-3">{{ bucket.bucket_quota.enabled ? "Yes" : "No" }}</td>
+              <td class="col-sm-3">{{ bucket.bucket_quota.enabled | booleanText }}</td>
             </tr>
             <tr>
               <td i18n
