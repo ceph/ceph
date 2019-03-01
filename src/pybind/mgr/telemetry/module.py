@@ -342,7 +342,7 @@ class Module(MgrModule):
             report = self.last_report
             if not report:
                 report = self.compile_report()
-            return 0, json.dumps(report), ''
+            return 0, json.dumps(report, indent=4), ''
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
