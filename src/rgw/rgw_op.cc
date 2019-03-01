@@ -424,7 +424,7 @@ static int get_multipart_info(RGWRados *store, struct req_state *s,
 }
 
 static int get_multipart_info(RGWRados *store, struct req_state *s,
-			      string& meta_oid,
+			      const string& meta_oid,
                               RGWAccessControlPolicy *policy,
 			      map<string, bufferlist> *attrs,
                               multipart_upload_info *upload_info)
