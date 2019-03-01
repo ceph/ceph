@@ -1145,6 +1145,10 @@ std::vector<Option> get_global_options() {
     .set_default(8192)
     .set_description(""),
 
+    Option("ms_uepoll", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Uses polling from userspace"),
+
     Option("inject_early_sigterm", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("send ourselves a SIGTERM early during startup"),
