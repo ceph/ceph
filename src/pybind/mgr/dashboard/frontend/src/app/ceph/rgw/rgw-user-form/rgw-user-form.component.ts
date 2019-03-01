@@ -2,15 +2,18 @@ import { Component, OnInit } from '@angular/core';
 import { AbstractControl, ValidationErrors, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
+import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators, isEmptyInputValue } from '../../../shared/forms/cd-validators';
 import { FormatterService } from '../../../shared/services/formatter.service';
+import { NotificationService } from '../../../shared/services/notification.service';
 import { RgwUserCapability } from '../models/rgw-user-capability';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserSubuser } from '../models/rgw-user-subuser';
@@ -42,7 +45,9 @@ export class RgwUserFormComponent implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private rgwUserService: RgwUserService,
-    private bsModalService: BsModalService
+    private bsModalService: BsModalService,
+    private notificationService: NotificationService,
+    private i18n: I18n
   ) {
     this.createForm();
     this.listenToChanges();
@@ -225,9 +230,11 @@ export class RgwUserFormComponent implements OnInit {
   }
 
   onSubmit() {
+    let notificationTitle: string;
     // Exit immediately if the form isn't dirty.
     if (this.userForm.pristine) {
       this.goToListView();
+      return;
     }
     const uid = this.userForm.getValue('uid');
     if (this.editing) {
@@ -236,10 +243,12 @@ export class RgwUserFormComponent implements OnInit {
         const args = this._getUpdateArgs();
         this.submitObservables.push(this.rgwUserService.update(uid, args));
       }
+      notificationTitle = this.i18n('Updated Object Gateway user "{{uid}}"', { uid: uid });
     } else {
       // Add
       const args = this._getCreateArgs();
       this.submitObservables.push(this.rgwUserService.create(args));
+      notificationTitle = this.i18n('Created Object Gateway user "{{uid}}"', { uid: uid });
     }
     // Check if user quota has been modified.
     if (this._isUserQuotaDirty()) {
@@ -254,6 +263,7 @@ export class RgwUserFormComponent implements OnInit {
     // Finally execute all observables.
     observableForkJoin(this.submitObservables).subscribe(
       () => {
+        this.notificationService.show(NotificationType.success, notificationTitle);
         this.goToListView();
       },
       () => {

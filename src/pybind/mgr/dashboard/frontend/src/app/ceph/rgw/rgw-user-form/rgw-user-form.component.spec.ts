@@ -1,13 +1,17 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { FormControl, ReactiveFormsModule } from '@angular/forms';
+import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import { ToastModule } from 'ng2-toastr';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { of as observableOf } from 'rxjs';
 
-import { configureTestBed, FormHelper } from '../../../../testing/unit-test-helper';
+import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
+import { NotificationType } from '../../../shared/enum/notification-type.enum';
+import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwUserS3Key } from '../models/rgw-user-s3-key';
 import { RgwUserFormComponent } from './rgw-user-form.component';
@@ -20,8 +24,14 @@ describe('RgwUserFormComponent', () => {
 
   configureTestBed({
     declarations: [RgwUserFormComponent],
-    imports: [HttpClientTestingModule, ReactiveFormsModule, RouterTestingModule, SharedModule],
-    providers: [BsModalService]
+    imports: [
+      HttpClientTestingModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      SharedModule,
+      ToastModule.forRoot()
+    ],
+    providers: [BsModalService, i18nProviders]
   });
 
   beforeEach(() => {
@@ -135,7 +145,15 @@ describe('RgwUserFormComponent', () => {
     }));
   });
 
-  describe('onSubmit', () => {
+  describe('submit form', () => {
+    let notificationService: NotificationService;
+
+    beforeEach(() => {
+      spyOn(TestBed.get(Router), 'navigate').and.stub();
+      notificationService = TestBed.get(NotificationService);
+      spyOn(notificationService, 'show');
+    });
+
     it('should be able to clear the mail field on update', () => {
       spyOn(rgwUserService, 'update');
       component.editing = true;
@@ -147,6 +165,28 @@ describe('RgwUserFormComponent', () => {
         max_buckets: 1000,
         suspended: false
       });
+    });
+
+    it('tests create success notification', () => {
+      spyOn(rgwUserService, 'create').and.returnValue(observableOf([]));
+      component.editing = false;
+      formHelper.setValue('suspended', true, true);
+      component.onSubmit();
+      expect(notificationService.show).toHaveBeenCalledWith(
+        NotificationType.success,
+        'Created Object Gateway user ""'
+      );
+    });
+
+    it('tests update success notification', () => {
+      spyOn(rgwUserService, 'update').and.returnValue(observableOf([]));
+      component.editing = true;
+      formHelper.setValue('suspended', true, true);
+      component.onSubmit();
+      expect(notificationService.show).toHaveBeenCalledWith(
+        NotificationType.success,
+        'Updated Object Gateway user ""'
+      );
     });
   });
 });
