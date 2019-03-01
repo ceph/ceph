@@ -695,6 +695,16 @@ uint32_t ProtocolV2::get_onwire_size(uint32_t logical_size) const {
   return logical_size;
 }
 
+uint32_t ProtocolV2::get_epilogue_size() const {
+  // In secure mode size of epilogue is flexible and depends on particular
+  // cipher implementation. See the comment for epilogue_crc_block_t.
+  if (session_stream_handlers.rx) {
+    return session_stream_handlers.rx->get_extra_size_at_final();
+  } else {
+    return FRAME_CRC_EPILOGUE_SIZE;
+  }
+}
+
 CtPtr ProtocolV2::read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
                        int len, char *buffer) {
   if (!buffer) {
@@ -1163,7 +1173,7 @@ CtPtr ProtocolV2::handle_read_frame_segment(char *buffer, int r) {
 
   if (rx_segments_desc.size() == rx_segments_data.size()) {
     // OK, all segments planned to read are read. Can go with epilogue.
-    return READ(FRAME_EPILOGUE_SIZE, handle_read_frame_epilogue_main);
+    return READ(get_epilogue_size(), handle_read_frame_epilogue_main);
   } else {
     // TODO: for makeshift only. This will be more generic and throttled
     return read_frame_segment();
@@ -1264,23 +1274,17 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r)
     return _fault();
   }
 
-  auto& epilogue = reinterpret_cast<epilogue_block_t&>(*buffer);
-
   // FIXME: if (auth_meta->is_mode_secure()) {
   if (session_stream_handlers.rx) {
     // if we still have more bytes to read is because we signed or encrypted
     // the message payload
     ldout(cct, 1) << __func__ << " read frame epilogue bytes="
-                  << FRAME_EPILOGUE_SIZE << dendl;
-
-    ceph_assert(session_stream_handlers.rx);
-    ceph_assert(FRAME_EPILOGUE_SIZE == \
-      session_stream_handlers.rx->get_extra_size_at_final());
+                  << get_epilogue_size() << dendl;
 
     // I expect that ::temp_buffer is being used here.
     ceph::bufferlist epilogue_bl;
-    epilogue_bl.push_back(buffer::create_static(FRAME_EPILOGUE_SIZE,
-        epilogue.auth_tag));
+    epilogue_bl.push_back(buffer::create_static(get_epilogue_size(),
+        buffer));
     try {
       session_stream_handlers.rx->authenticated_decrypt_update_final(
 	std::move(epilogue_bl), segment_t::DEFAULT_ALIGNMENT);
@@ -1291,6 +1295,8 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r)
       return _fault();
     }
   } else {
+    auto& epilogue = reinterpret_cast<epilogue_crc_block_t&>(*buffer);
+
     for (std::uint8_t idx = 0; idx < rx_segments_data.size(); idx++) {
       const __u32 expected_crc = epilogue.crc_values[idx];
       const __u32 calculated_crc = rx_segments_data[idx].crc32c(-1);
