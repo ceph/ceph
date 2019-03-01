@@ -865,7 +865,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
   bufferlist rdata;
   stringstream ss, ds;
 
-  const auto &fsmap = get_fsmap();
+  FSMap fsmap = get_fsmap();
 
   cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
@@ -886,6 +886,8 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
     mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
     return true;
   }
+
+  fsmap.filter(session->get_allowed_fsids());
 
   if (prefix == "mds stat") {
     if (f) {
@@ -1202,15 +1204,11 @@ mds_gid_t MDSMonitor::gid_from_arg(const FSMap &fsmap, const std::string &arg, s
   return MDS_GID_NONE;
 }
 
-int MDSMonitor::fail_mds(FSMap &fsmap, std::ostream &ss,
-    const std::string &arg, MDSMap::mds_info_t *failed_info)
+int MDSMonitor::fail_mds(FSMap &fsmap, std::ostream &ss, const mds_gid_t gid,
+			 MDSMap::mds_info_t *failed_info)
 {
   ceph_assert(failed_info != nullptr);
 
-  mds_gid_t gid = gid_from_arg(fsmap, arg, ss);
-  if (gid == MDS_GID_NONE) {
-    return 0;
-  }
   if (!mon->osdmon()->is_writeable()) {
     return -EAGAIN;
   }
@@ -1342,7 +1340,7 @@ int MDSMonitor::filesystem_command(
          << cmd_vartype_stringify(cmdmap.at("state")) << "'";
       return -EINVAL;
     }
-    if (fsmap.gid_exists(gid)) {
+    if (fsmap.gid_exists(gid, op->get_session()->get_allowed_fsids())) {
       fsmap.modify_daemon(gid, [state](auto& info) {
         info.state = state;
       });
@@ -1355,7 +1353,23 @@ int MDSMonitor::filesystem_command(
     cmd_getval(g_ceph_context, cmdmap, "role_or_gid", who);
 
     MDSMap::mds_info_t failed_info;
-    r = fail_mds(fsmap, ss, who, &failed_info);
+    mds_gid_t gid = gid_from_arg(fsmap, who, ss);
+    if (gid == MDS_GID_NONE) {
+      return -EINVAL;
+    }
+    if(!fsmap.gid_exists(gid, op->get_session()->get_allowed_fsids())) {
+      // a lie; you just don't have permission to see this MDS
+      ss << "MDS named '" << who
+	 << "' does not exist, or is not up";
+      return -EINVAL;
+    }
+    fs_cluster_id_t fscid = fsmap.fscid_from_gid(gid);
+    if (!op->get_session()->fsid_capable(fscid, MON_CAP_W)) {
+      ss << "Permission denied.";
+      return -EPERM;
+    }
+
+    r = fail_mds(fsmap, ss, gid, &failed_info);
     if (r < 0 && r == -EAGAIN) {
       mon->osdmon()->wait_for_writeable(op, new C_RetryMessage(this, op));
       return -EAGAIN; // don't propose yet; wait for message to be retried
@@ -1373,21 +1387,25 @@ int MDSMonitor::filesystem_command(
          << cmd_vartype_stringify(cmdmap.at("gid")) << "'";
       return -EINVAL;
     }
-    if (!fsmap.gid_exists(gid)) {
+    if (!fsmap.gid_exists(gid, op->get_session()->get_allowed_fsids())) {
       ss << "mds gid " << gid << " does not exist";
-      r = 0;
+      return 0;
+    }
+    fs_cluster_id_t fscid = fsmap.fscid_from_gid(gid);
+    if (!op->get_session()->fsid_capable(fscid, MON_CAP_W)) {
+      ss << "Permission denied.";
+      return -EPERM;
+    }
+    const auto &info = fsmap.get_info_gid(gid);
+    MDSMap::DaemonState state = info.state;
+    if (state > 0) {
+    ss << "cannot remove active mds." << info.name
+	<< " rank " << info.rank;
+    return -EBUSY;
     } else {
-      const auto &info = fsmap.get_info_gid(gid);
-      MDSMap::DaemonState state = info.state;
-      if (state > 0) {
-        ss << "cannot remove active mds." << info.name
-           << " rank " << info.rank;
-        return -EBUSY;
-      } else {
-        fsmap.erase(gid, {});
-        ss << "removed mds gid " << gid;
-        return 0;
-      }
+    fsmap.erase(gid, {});
+    ss << "removed mds gid " << gid;
+    return 0;
     }
   } else if (prefix == "mds rmfailed") {
     bool confirm = false;
@@ -1401,10 +1419,15 @@ int MDSMonitor::filesystem_command(
     std::string role_str;
     cmd_getval(g_ceph_context, cmdmap, "role", role_str);
     mds_role_t role;
-    int r = fsmap.parse_role(role_str, &role, ss);
+    const auto& ids = op->get_session()->get_allowed_fsids();
+    int r = fsmap.parse_role(role_str, &role, ss, ids);
     if (r < 0) {
       ss << "invalid role '" << role_str << "'";
       return -EINVAL;
+    }
+    if (!op->get_session()->fsid_capable(role.fscid, MON_CAP_W)) {
+      ss << "Permission denied.";
+      return -EPERM;
     }
 
     fsmap.modify_filesystem(
@@ -1452,9 +1475,14 @@ int MDSMonitor::filesystem_command(
     std::string role_str;
     cmd_getval(g_ceph_context, cmdmap, "role", role_str);
     mds_role_t role;
-    r = fsmap.parse_role(role_str, &role, ss);
+    const auto &ids = op->get_session()->get_allowed_fsids();
+    r = fsmap.parse_role(role_str, &role, ss, ids);
     if (r < 0) {
       return r;
+    }
+    if (!op->get_session()->fsid_capable(role.fscid, MON_CAP_W)) {
+      ss << "Permission denied.";
+      return -EPERM;
     }
 
     bool modified = fsmap.undamaged(role.fscid, role.rank);
@@ -1471,6 +1499,12 @@ int MDSMonitor::filesystem_command(
     mds_gid_t gid = gid_from_arg(fsmap, who, ss);
     if (gid == MDS_GID_NONE) {
       return -EINVAL;
+    }
+
+    fs_cluster_id_t fscid = fsmap.fscid_from_gid(gid);
+    if (!op->get_session()->fsid_capable(fscid, MON_CAP_W)) {
+      ss << "Permission denied.";
+      return -EPERM;
     }
 
     bool freeze = false;
@@ -1535,7 +1569,8 @@ void MDSMonitor::check_sub(Subscription *sub)
 {
   dout(20) << __func__ << ": " << sub->type << dendl;
 
-  const auto &fsmap = get_fsmap();
+  FSMap fsmap = get_fsmap();
+  fsmap.filter(sub->session->get_allowed_fsids());
 
   if (sub->type == "fsmap") {
     if (sub->next <= fsmap.get_epoch()) {

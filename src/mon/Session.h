@@ -107,6 +107,14 @@ struct MonSession : public RefCountedObject {
       get_peer_socket_addr());
   }
 
+  std::vector<fs_cluster_id_t> get_allowed_fsids() const {
+    return caps.allowed_fsids();
+  }
+
+  bool fsid_capable(fs_cluster_id_t fsid, __u8 mask) {
+    return caps.fsid_capable(fsid, mask);
+  }
+
   const entity_addr_t& get_peer_socket_addr() {
     return socket_addr;
   }

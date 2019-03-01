@@ -8,6 +8,7 @@
 
 #include "include/types.h"
 #include "common/entity_name.h"
+#include "mds/mdstypes.h"
 
 class CephContext;
 
@@ -54,7 +55,7 @@ std::ostream& operator<<(std::ostream& out, const StringConstraint& c);
 
 struct MonCapGrant {
   /*
-   * A grant can come in one of four forms:
+   * A grant can come in one of five forms:
    *
    *  - a blanket allow ('allow rw', 'allow *')
    *    - this will match against any service and the read/write/exec flags
@@ -73,11 +74,16 @@ struct MonCapGrant {
    *      of key/value pairs that constrain use of that command.  if no pairs
    *      are specified, any arguments are allowed; if a pair is specified, that
    *      argument must be present and equal or match a prefix.
+   *
+   *  - an fsid ('allow fsid 1')
+   *    - this will restrict access to MDSMaps in the FSMap to the provided
+   *      fsid.
    */
   std::string service;
   std::string profile;
   std::string command;
   std::map<std::string, StringConstraint> command_args;
+  fs_cluster_id_t fsid = FS_CLUSTER_ID_NONE;
 
   // restrict by network
   std::string network;
@@ -108,6 +114,7 @@ struct MonCapGrant {
   MonCapGrant(std::string c, std::string a, StringConstraint co) : command(std::move(c)) {
     command_args[a] = co;
   }
+  MonCapGrant(mon_rwxa_t a, fs_cluster_id_t id) : fsid(id), allow(a) {}
 
   /**
    * check if given request parameters match our constraints
@@ -131,7 +138,8 @@ struct MonCapGrant {
       allow == MON_CAP_ANY &&
       service.length() == 0 &&
       profile.length() == 0 &&
-      command.length() == 0;
+      command.length() == 0 &&
+      fsid == FS_CLUSTER_ID_NONE;
   }
 };
 
@@ -180,6 +188,33 @@ struct MonCap {
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<MonCap*>& ls);
+  std::vector<fs_cluster_id_t> allowed_fsids() const {
+    std::vector<fs_cluster_id_t> ret;
+    for (auto g : grants) {
+      if (g.fsid != FS_CLUSTER_ID_NONE) {
+	ret.push_back(g.fsid);
+      } else {
+	return {};
+      }
+    }
+    return ret;
+  }
+
+  bool fsid_capable(fs_cluster_id_t fsid, __u8 mask) {
+    for (const MonCapGrant& g: grants) {
+      if (g.is_allow_all()) {
+	return true;
+      }
+      if (g.fsid == FS_CLUSTER_ID_NONE
+	  || g.fsid == fsid) {
+	if (mask & g.allow) {
+	  return true;
+	}
+      }
+    }
+    return false;
+  }
+      
 };
 WRITE_CLASS_ENCODER(MonCap)
 

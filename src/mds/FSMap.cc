@@ -947,6 +947,26 @@ std::vector<mds_gid_t> FSMap::stop(mds_gid_t who)
  * Parse into a mds_role_t.  The rank-only form is only valid
  * if legacy_client_ns is set.
  */
+
+int FSMap::parse_role(
+    std::string_view role_str,
+    mds_role_t *role,
+    std::ostream &ss,
+    const std::vector<fs_cluster_id_t> &filter) const
+{
+  int r = parse_role(role_str, role, ss);
+
+  if (!filter.empty() &&
+      std::find(filter.begin(), filter.end(), role->fscid) == filter.end()) {
+    if (r >= 0) {
+      ss << "Invalid filesystem";
+    }
+    return -ENOENT;
+  }
+
+  return r;
+}
+
 int FSMap::parse_role(
     std::string_view role_str,
     mds_role_t *role,

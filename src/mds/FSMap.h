@@ -161,6 +161,29 @@ public:
 
   const CompatSet &get_compat() const {return compat;}
 
+  void filter(std::vector<fs_cluster_id_t> allowed)
+  {
+    if (allowed.empty()) {
+      return;
+    }
+
+    for (auto &f : filesystems) {
+      if (std::find(allowed.begin(), allowed.end(), f.first) == allowed.end()) {
+	filesystems.erase(f.first);
+      }
+    }
+
+    for (auto &r : mds_roles) {
+      if (r.second != FS_CLUSTER_ID_NONE
+	  && std::find(allowed.begin(),
+		       allowed.end(), r.second) == allowed.end()) {
+	mds_roles.erase(r.first);
+      }
+    }
+
+    legacy_client_fscid = filesystems.begin()->first;
+  }
+
   void set_enable_multiple(const bool v)
   {
     enable_multiple = v;
@@ -261,9 +284,15 @@ public:
   /**
    * Does a daemon exist with this GID?
    */
-  bool gid_exists(mds_gid_t gid) const
+  bool gid_exists(mds_gid_t gid,
+		  const std::vector<fs_cluster_id_t>& in = {}) const
   {
-    return mds_roles.count(gid) > 0;
+    try {
+      fs_cluster_id_t m = mds_roles.at(gid);
+      return in.empty() || std::find(in.begin(), in.end(), m) != in.end();
+    } catch (const std::out_of_range&) {
+      return false;
+    }
   }
 
   /**
@@ -272,6 +301,16 @@ public:
   bool gid_has_rank(mds_gid_t gid) const
   {
     return gid_exists(gid) && mds_roles.at(gid) != FS_CLUSTER_ID_NONE;
+  }
+
+  /**
+   * Which filesystem owns this GID?
+   */
+  fs_cluster_id_t fscid_from_gid(mds_gid_t gid) const {
+    if (!gid_exists(gid)) {
+      return FS_CLUSTER_ID_NONE;
+    }
+    return mds_roles.at(gid);
   }
 
   /**
@@ -474,6 +513,12 @@ public:
       std::string_view ns_str,
       Filesystem::const_ref *result
       ) const;
+
+  int parse_role(
+      std::string_view role_str,
+      mds_role_t *role,
+      std::ostream &ss,
+      const std::vector<fs_cluster_id_t> &filter) const;
 
   int parse_role(
       std::string_view role_str,

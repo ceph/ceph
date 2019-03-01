@@ -767,7 +767,8 @@ protected:
 
 public:
 
-  void get_cluster_status(stringstream &ss, Formatter *f);
+  void get_cluster_status(stringstream &ss, Formatter *f,
+			  const vector<fs_cluster_id_t> &fsids = {});
 
   void reply_command(MonOpRequestRef op, int rc, const string &rs, version_t version);
   void reply_command(MonOpRequestRef op, int rc, const string &rs, bufferlist& rdata, version_t version);

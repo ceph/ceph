@@ -138,7 +138,8 @@ BOOST_FUSION_ADAPT_STRUCT(MonCapGrant,
 			  (std::string, command)
 			  (kvmap, command_args)
 			  (mon_rwxa_t, allow)
-			  (std::string, network))
+			  (std::string, network)
+                          (fs_cluster_id_t, fsid))
 
 BOOST_FUSION_ADAPT_STRUCT(StringConstraint,
                           (StringConstraint::MatchType, match_type)
@@ -567,12 +568,17 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
 			     >> qi::attr(0)
 			     >> -(spaces >> lit("network") >> spaces >> network_str);
 
+    // fsid id
+    fsid %= -spaces >> lit("fsid") >> (lit('=') | spaces)
+		    >> int_;
+
     // rwxa
     rwxa_match %= -spaces >> lit("allow") >> spaces
 			  >> qi::attr(string()) >> qi::attr(string()) >> qi::attr(string())
 			  >> qi::attr(map<string,StringConstraint>())
 			  >> rwxa
-			  >> -(spaces >> lit("network") >> spaces >> network_str);
+			  >> -(spaces >> lit("network") >> spaces >> network_str)
+			  >> -(fsid);
 
     // rwxa := * | [r][w][x]
     rwxa =
@@ -594,6 +600,7 @@ struct MonCapParser : qi::grammar<Iterator, MonCap()>
 
   }
   qi::rule<Iterator> spaces;
+  qi::rule<Iterator, unsigned()> fsid;
   qi::rule<Iterator, unsigned()> rwxa;
   qi::rule<Iterator, string()> quoted_string;
   qi::rule<Iterator, string()> unquoted_word;
