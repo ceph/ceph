@@ -65,6 +65,8 @@ class RGWSysObjectCtx;
 #define RGW_SHARDS_PRIME_0 7877
 #define RGW_SHARDS_PRIME_1 65521
 
+extern const std::string MP_META_SUFFIX;
+
 // only called by rgw_shard_id and rgw_bucket_shard_index
 static inline int rgw_shards_mod(unsigned hval, int max_shards)
 {
@@ -2201,14 +2203,16 @@ public:
   int cls_obj_complete_cancel(BucketShard& bs, string& tag, rgw_obj& obj, uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr);
   int cls_obj_set_bucket_tag_timeout(RGWBucketInfo& bucket_info, uint64_t timeout);
   int cls_bucket_list_ordered(RGWBucketInfo& bucket_info, int shard_id,
-			      rgw_obj_index_key& start, const string& prefix,
+			      const rgw_obj_index_key& start,
+			      const string& prefix,
 			      uint32_t num_entries, bool list_versions,
 			      map<string, rgw_bucket_dir_entry>& m,
 			      bool *is_truncated,
 			      rgw_obj_index_key *last_entry,
 			      bool (*force_check_filter)(const string& name) = nullptr);
   int cls_bucket_list_unordered(RGWBucketInfo& bucket_info, int shard_id,
-				rgw_obj_index_key& start, const string& prefix,
+				const rgw_obj_index_key& start,
+				const string& prefix,
 				uint32_t num_entries, bool list_versions,
 				vector<rgw_bucket_dir_entry>& ent_list,
 				bool *is_truncated, rgw_obj_index_key *last_entry,
@@ -2479,8 +2483,6 @@ public:
 
 };
 
-#define MP_META_SUFFIX ".meta"
-
 class RGWMPObj {
   string oid;
   string prefix;
@@ -2505,24 +2507,24 @@ public:
     meta = prefix + upload_id + MP_META_SUFFIX;
     prefix.append(part_unique_str);
   }
-  string& get_meta() { return meta; }
-  string get_part(int num) {
+  const string& get_meta() const { return meta; }
+  string get_part(int num) const {
     char buf[16];
     snprintf(buf, 16, ".%d", num);
     string s = prefix;
     s.append(buf);
     return s;
   }
-  string get_part(string& part) {
+  string get_part(const string& part) const {
     string s = prefix;
     s.append(".");
     s.append(part);
     return s;
   }
-  string& get_upload_id() {
+  const string& get_upload_id() const {
     return upload_id;
   }
-  string& get_key() {
+  const string& get_key() const {
     return oid;
   }
   bool from_meta(string& meta) {
@@ -2543,7 +2545,7 @@ public:
     meta = "";
     upload_id = "";
   }
-};
+}; // class RGWMPObj
 
 
 class RGWRadosThread {
