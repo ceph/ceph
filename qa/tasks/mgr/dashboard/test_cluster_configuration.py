@@ -282,6 +282,57 @@ class ClusterConfigurationTest(DashboardTestCase):
                                                         value)
             self.assertEqual(result, value)
 
+    def test_check_existence(self):
+        """
+        This test case is intended to check the existence of all hard coded config options used by
+        the dashboard.
+
+        If you include further hard coded options in the dashboard, feel free to add them to the
+        list.
+        """
+        hard_coded_options = [
+            'osd_max_backfills',  # osd-recv-speed
+            'osd_recovery_max_active',  # osd-recv-speed
+            'osd_recovery_max_single_start',  # osd-recv-speed
+            'osd_recovery_sleep',  # osd-recv-speed
+            'osd_scrub_during_recovery',  # osd-pg-scrub
+            'osd_scrub_begin_hour',  # osd-pg-scrub
+            'osd_scrub_end_hour',  # osd-pg-scrub
+            'osd_scrub_begin_week_day',  # osd-pg-scrub
+            'osd_scrub_end_week_day',  # osd-pg-scrub
+            'osd_scrub_min_interval',  # osd-pg-scrub
+            'osd_scrub_max_interval',  # osd-pg-scrub
+            'osd_deep_scrub_interval',  # osd-pg-scrub
+            'osd_scrub_auto_repair',  # osd-pg-scrub
+            'osd_max_scrubs',  # osd-pg-scrub
+            'osd_scrub_priority',  # osd-pg-scrub
+            'osd_scrub_sleep',  # osd-pg-scrub
+            'osd_scrub_auto_repair_num_errors',  # osd-pg-scrub
+            'osd_debug_deep_scrub_sleep',  # osd-pg-scrub
+            'osd_deep_scrub_keys',  # osd-pg-scrub
+            'osd_deep_scrub_large_omap_object_key_threshold',  # osd-pg-scrub
+            'osd_deep_scrub_large_omap_object_value_sum_threshold',  # osd-pg-scrub
+            'osd_deep_scrub_randomize_ratio',  # osd-pg-scrub
+            'osd_deep_scrub_stride',  # osd-pg-scrub
+            'osd_deep_scrub_update_digest_min_age',  # osd-pg-scrub
+            'osd_op_queue_mclock_scrub_lim',  # osd-pg-scrub
+            'osd_op_queue_mclock_scrub_res',  # osd-pg-scrub
+            'osd_op_queue_mclock_scrub_wgt',  # osd-pg-scrub
+            'osd_requested_scrub_priority',  # osd-pg-scrub
+            'osd_scrub_backoff_ratio',  # osd-pg-scrub
+            'osd_scrub_chunk_max',  # osd-pg-scrub
+            'osd_scrub_chunk_min',  # osd-pg-scrub
+            'osd_scrub_cost',  # osd-pg-scrub
+            'osd_scrub_interval_randomize_ratio',  # osd-pg-scrub
+            'osd_scrub_invalid_stats',  # osd-pg-scrub
+            'osd_scrub_load_threshold',  # osd-pg-scrub
+            'osd_scrub_max_preemptions'  # osd-pg-scrub
+        ]
+
+        for config_option in hard_coded_options:
+            self._get('/api/cluster_conf/{}'.format(config_option))
+            self.assertStatus(200)
+
     def _validate_single(self, data):
         self.assertIn('name', data)
         self.assertIn('daemon_default', data)

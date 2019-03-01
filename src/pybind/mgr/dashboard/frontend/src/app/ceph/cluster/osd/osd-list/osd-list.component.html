@@ -32,15 +32,17 @@
           <ul *dropdownMenu
               class="dropdown-menu"
               role="menu">
-            <li role="menuitem">
-              <a class="dropdown-item"
-                 (click)="configureQosParamsAction()">
-                <i class="fa fa-fw fa-cog"
-                   aria-hidden="true">
-                </i>
-                <ng-container i18n>Set Cluster-wide Recovery Priority</ng-container>
-              </a>
-            </li>
+            <ng-container *ngFor="let action of generalTableActions">
+              <li role="menuitem">
+                <a class="dropdown-item"
+                   (click)="action.click()">
+                  <i class="fa fa-fw {{ action.icon }}"
+                     aria-hidden="true">
+                  </i>
+                  <ng-container>{{ action.name }}</ng-container>
+                </a>
+              </li>
+            </ng-container>
           </ul>
         </div>
       </div>
