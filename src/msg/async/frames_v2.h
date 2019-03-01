@@ -108,22 +108,12 @@ static_assert(std::is_standard_layout<preamble_block_t>::value);
 // at the end of each frame holds:
 //  * CRC32 for MAX_NUM_SEGMENTS -- in plain mode,
 //  * cipher-specific data (e.g. auth tag for AES-GCM).
-// Additionally, it consists flags field used currently to abort message
-// processing. It can be set by transceiver even very lately without any
-// need for introducing buffering.
-struct epilogue_block_t {
-  union {
-    char auth_tag[CRYPTO_BLOCK_SIZE];
-    std::array<__le32, MAX_NUM_SEGMENTS> crc;
-  } integrity;
-  static_assert(sizeof(integrity.auth_tag) == CRYPTO_BLOCK_SIZE);
-  static_assert(sizeof(integrity.auth_tag) == sizeof(integrity.crc));
-
-  __u8 flags;
-} __attribute__((packed));
+union epilogue_block_t {
+  char auth_tag[CRYPTO_BLOCK_SIZE];
+  std::array<__le32, MAX_NUM_SEGMENTS> crc_values;
+};
+static_assert(sizeof(epilogue_block_t) % CRYPTO_BLOCK_SIZE == 0);
 static_assert(std::is_standard_layout<epilogue_block_t>::value);
-
-static constexpr __u8 FRAME_FLAGS_LATE_ABORT = 0x1;
 
 
 static constexpr uint32_t FRAME_PREAMBLE_SIZE = sizeof(preamble_block_t);
@@ -181,7 +171,7 @@ public:
     ::memset(&epilogue, 0, sizeof(epilogue));
 
     ceph::bufferlist::const_iterator hdriter(&this->payload, FRAME_PREAMBLE_SIZE);
-    epilogue.integrity.crc[SegmentIndex::Frame::PAYLOAD] =
+    epilogue.crc_values[SegmentIndex::Frame::PAYLOAD] =
         hdriter.crc32c(hdriter.get_remaining(), -1);
     this->payload.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
 
@@ -382,14 +372,12 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
       session_stream_handlers.tx->authenticated_encrypt_update(
           std::move(c.payload));
       c.payload = session_stream_handlers.tx->authenticated_encrypt_final();
-      // append zeroized epilogue flags. CLEANME.
-      c.payload.append_zero(1);
     } else {
       epilogue_block_t epilogue;
       ::memset(&epilogue, 0, sizeof(epilogue));
 
       ceph::bufferlist::const_iterator hdriter(&c.payload, FRAME_PREAMBLE_SIZE);
-      epilogue.integrity.crc[SegmentIndex::Frame::PAYLOAD] =
+      epilogue.crc_values[SegmentIndex::Frame::PAYLOAD] =
           hdriter.crc32c(hdriter.get_remaining(), -1);
       c.payload.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
     }
@@ -648,18 +636,14 @@ struct MessageHeaderFrame
 
       // auth tag will be appended at the end
       f.payload = session_stream_handlers.tx->authenticated_encrypt_final();
-      // append zeroized epilogue flags. CLEANME.
-      f.payload.append_zero(1);
     } else {
       epilogue_block_t epilogue;
-      ::memset(&epilogue, 0, sizeof(epilogue));
-
       ceph::bufferlist::const_iterator hdriter(&f.payload, FRAME_PREAMBLE_SIZE);
-      epilogue.integrity.crc[SegmentIndex::Msg::HEADER] =
+      epilogue.crc_values[SegmentIndex::Msg::HEADER] =
           hdriter.crc32c(hdriter.get_remaining(), -1);
-      epilogue.integrity.crc[SegmentIndex::Msg::FRONT] = front.crc32c(-1),
-      epilogue.integrity.crc[SegmentIndex::Msg::MIDDLE] = middle.crc32c(-1),
-      epilogue.integrity.crc[SegmentIndex::Msg::DATA] = data.crc32c(-1),
+      epilogue.crc_values[SegmentIndex::Msg::FRONT] = front.crc32c(-1),
+      epilogue.crc_values[SegmentIndex::Msg::MIDDLE] = middle.crc32c(-1),
+      epilogue.crc_values[SegmentIndex::Msg::DATA] = data.crc32c(-1),
 
       f.payload.append(front);
       f.payload.append(middle);
