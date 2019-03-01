@@ -152,3 +152,8 @@
 
   - ``ceph osd dump``
   - ``ceph <tell|daemon> osd.<N> dump_blocklist``
+
+* caps: MON and MDS caps can now be used to restrict client's ability to view
+  and operate on specific Ceph file systems. The FS can be specificed using
+  ``fsname`` in caps. This also affects subcommand ``fs authorize``, the caps
+  produce by it will be specific to the FS name passed in its arguments.

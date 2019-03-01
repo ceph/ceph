@@ -81,9 +81,8 @@ the overall amount of space used on the cluster.
 
 If you would like the client to report the overall usage of the file system,
 and not just the quota usage on the sub-directory mounted, then set the
-following config option on the client:
+following config option on the client::
 
-::
 
     client quota df = false
 
@@ -100,9 +99,7 @@ with a "ceph." prefix, as well as restricting other means of setting
 these fields (such as openc operations with layouts).
 
 For example, in the following snippet client.0 can modify layouts and quotas
-on the file system cephfs_a, but client.1 cannot.
-
-::
+on the file system cephfs_a, but client.1 cannot::
 
     client.0
         key: AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==
@@ -125,9 +122,7 @@ Note that when capability string also contains the 'p' flag, the 's' flag must
 appear after it (all flags except 'rw' must be specified in alphabetical order).
 
 For example, in the following snippet client.0 can create or delete snapshots
-in the ``bar`` directory of file system ``cephfs_a``.
-
-::
+in the ``bar`` directory of file system ``cephfs_a``::
 
     client.0
         key: AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==
@@ -153,3 +148,39 @@ The optional ``{network/prefix}`` is a standard network name and
 prefix length in CIDR notation (e.g., ``10.3.0.0/16``).  If present,
 the use of this capability is restricted to clients connecting from
 this network.
+
+File system Information Restriction
+===================================
+
+If desired, the monitor cluster can present a limited view of the file systems
+available. In this case, the monitor cluster will only inform clients about
+file systems specified by the administrator. Other file systems will not be
+reported and commands affecting them will fail as if the file systems do
+not exist.
+
+Consider following example. The Ceph cluster has 2 FSs::
+
+    $ ceph fs ls
+    name: cephfs, metadata pool: cephfs_metadata, data pools: [cephfs_data ]
+    name: cephfs2, metadata pool: cephfs2_metadata, data pools: [cephfs2_data ]
+
+But we authorize client ``someuser`` for only one FS::
+
+    $ ceph fs authorize cephfs client.someuser / rw
+    [client.someuser]
+        key = AQAmthpf89M+JhAAiHDYQkMiCq3x+J0n9e8REQ==
+    $ cat ceph.client.someuser.keyring
+    [client.someuser]
+        key = AQAmthpf89M+JhAAiHDYQkMiCq3x+J0n9e8REQ==
+        caps mds = "allow rw fsname=cephfs"
+        caps mon = "allow r fsname=cephfs"
+        caps osd = "allow rw tag cephfs data=cephfs"
+
+And the client can only see the FS that it has authorization for::
+
+    $ ceph fs ls -n client.someuser -k ceph.client.someuser.keyring
+    name: cephfs, metadata pool: cephfs_metadata, data pools: [cephfs_data ]
+
+Standby MDS daemons will always be displayed. Note that the information about
+restricted MDS daemons and file systems may become available by other means,
+such as ``ceph health detail``.
