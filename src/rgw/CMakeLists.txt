@@ -1,22 +1,3 @@
-if(WITH_TESTS)
-add_executable(ceph_rgw_jsonparser
-  rgw_jsonparser.cc)
-target_link_libraries(ceph_rgw_jsonparser
-  rgw_a
-  global rabbitmq)
-
-add_executable(ceph_rgw_multiparser
-  rgw_multiparser.cc)
-target_link_libraries(ceph_rgw_multiparser
-  rgw_a
-  global rabbitmq)
-
-install(TARGETS
-  ceph_rgw_jsonparser
-  ceph_rgw_multiparser
-  DESTINATION bin)
-endif(WITH_TESTS)
-
 add_custom_target(civetweb_h
   COMMAND ${CMAKE_COMMAND} -E make_directory
   "${CMAKE_BINARY_DIR}/src/include/civetweb"
@@ -221,6 +202,12 @@ if(WITH_BOOST_CONTEXT)
   target_link_libraries(rgw_a PRIVATE Boost::coroutine Boost::context)
 endif()
 
+set(rgw_libs rgw_a)
+if(WITH_RADOSGW_AMQP_ENDPOINT)
+  # used by rgw_amqp.cc
+  list(APPEND rgw_libs RabbitMQ::RabbitMQ)
+endif()
+
 set(radosgw_srcs
   rgw_loadgen_process.cc
   rgw_civetweb.cc
@@ -239,14 +226,10 @@ endif()
 
 add_library(radosgw_a STATIC ${radosgw_srcs}
   $<TARGET_OBJECTS:civetweb_common_objs>)
-target_link_libraries(radosgw_a PRIVATE rgw_a)
+target_link_libraries(radosgw_a PRIVATE ${rgw_libs})
 if(WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL)
   # used by rgw_asio_frontend.cc
   target_link_libraries(radosgw_a PRIVATE OpenSSL::SSL)
-endif()
-if(WITH_RADOSGW_AMQP_ENDPOINT)
-  # used by rgw_amqp.cc
-  target_link_libraries(radosgw_a PRIVATE RabbitMQ::RabbitMQ)
 endif()
 
 add_executable(radosgw rgw_main.cc)
@@ -264,29 +247,23 @@ set(radosgw_admin_srcs
   rgw_admin.cc
   rgw_orphan.cc)
 add_executable(radosgw-admin ${radosgw_admin_srcs})
-target_link_libraries(radosgw-admin rgw_a librados
+target_link_libraries(radosgw-admin ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
-if(WITH_RADOSGW_AMQP_ENDPOINT)
-  target_link_libraries(radosgw-admin RabbitMQ::RabbitMQ)
-endif()
 install(TARGETS radosgw-admin DESTINATION bin)
 
 set(radosgw_es_srcs
   rgw_es_main.cc)
 add_executable(radosgw-es ${radosgw_es_srcs})
-target_link_libraries(radosgw-es rgw_a librados
+target_link_libraries(radosgw-es ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES})
-if(WITH_RADOSGW_AMQP_ENDPOINT)
-  target_link_libraries(radosgw-es RabbitMQ::RabbitMQ)
-endif()
 install(TARGETS radosgw-es DESTINATION bin)
 
 set(radosgw_token_srcs
@@ -299,15 +276,12 @@ install(TARGETS radosgw-token DESTINATION bin)
 set(radosgw_object_expirer_srcs
   rgw_object_expirer.cc)
 add_executable(radosgw-object-expirer ${radosgw_object_expirer_srcs})
-target_link_libraries(radosgw-object-expirer rgw_a librados
+target_link_libraries(radosgw-object-expirer ${rgw_libs} librados
   cls_rgw_client cls_otp_client cls_lock_client cls_refcount_client
   cls_log_client cls_timeindex_client
   cls_version_client cls_user_client
   global ${FCGI_LIBRARY} ${LIB_RESOLV}
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES})
-if(WITH_RADOSGW_AMQP_ENDPOINT)
-  target_link_libraries(radosgw-object-expirer RabbitMQ::RabbitMQ)
-endif()
 install(TARGETS radosgw-object-expirer DESTINATION bin)
 
 set(librgw_srcs
@@ -317,7 +291,7 @@ add_library(rgw SHARED ${librgw_srcs})
 target_link_libraries(rgw
   PUBLIC dmclock::dmclock
   PRIVATE
-  rgw_a
+  ${rgw_libs}
   librados
   cls_rgw_client
   cls_otp_client
@@ -331,9 +305,6 @@ target_link_libraries(rgw
   ${LIB_RESOLV}
   ${CURL_LIBRARIES}
   ${EXPAT_LIBRARIES})
-if(WITH_RADOSGW_AMQP_ENDPOINT)
-  target_link_libraries(rgw PRIVATE RabbitMQ::RabbitMQ)
-endif()
 set_target_properties(rgw PROPERTIES OUTPUT_NAME rgw VERSION 2.0.0
   SOVERSION 2)
 install(TARGETS rgw DESTINATION ${CMAKE_INSTALL_LIBDIR})
@@ -372,3 +343,22 @@ endif()
 if(WITH_BOOST_CONTEXT)
   target_link_libraries(rgw_admin_user PRIVATE Boost::coroutine Boost::context)
 endif()
+
+if(WITH_TESTS)
+  add_executable(ceph_rgw_jsonparser
+    rgw_jsonparser.cc)
+  target_link_libraries(ceph_rgw_jsonparser
+    ${rgw_libs}
+    global)
+
+  add_executable(ceph_rgw_multiparser
+    rgw_multiparser.cc)
+  target_link_libraries(ceph_rgw_multiparser
+    ${rgw_libs}
+    global)
+
+  install(TARGETS
+    ceph_rgw_jsonparser
+    ceph_rgw_multiparser
+    DESTINATION bin)
+endif(WITH_TESTS)
