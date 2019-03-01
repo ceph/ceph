@@ -1,5 +1,5 @@
-Dashboard Developer Documentation
-====================================
+Ceph Dashboard Developer Documentation
+======================================
 
 .. contents:: Table of Contents
 
@@ -1030,7 +1030,7 @@ The value of the class attribute is a pair composed by the default value for tha
 setting, and the python type of the value.
 
 By declaring the ``ADMIN_EMAIL_ADDRESS`` class attribute, when you restart the
-dashboard plugin, you will automatically gain two additional CLI commands to
+dashboard module, you will automatically gain two additional CLI commands to
 get and set that setting::
 
   $ ceph dashboard get-admin-email-address
@@ -1585,12 +1585,12 @@ Plug-ins
 
 New functionality can be provided by means of a plug-in architecture. Among the
 benefits this approach brings in, loosely coupled development is one of the most
-notable. As the Ceph-Dashboard grows in feature richness, its code-base becomes
+notable. As the Ceph Dashboard grows in feature richness, its code-base becomes
 more and more complex. The hook-based nature of a plug-in architecture allows to
 extend functionality in a controlled manner, and isolate the scope of the
 changes.
 
-Ceph-Dashboard relies on `Pluggy <https://pluggy.readthedocs.io>`_ to provide
+Ceph Dashboard relies on `Pluggy <https://pluggy.readthedocs.io>`_ to provide
 for plug-ing support. On top of pluggy, an interface-based approach has been
 implemented, with some safety checks (method override and abstract method
 checks).
@@ -1601,13 +1601,13 @@ In order to create a new plugin, the following steps are required:
 #. Import the ``PLUGIN_MANAGER`` instance and the ``Interfaces``.
 #. Create a class extending the desired interfaces. The plug-in library will check if all the methods of the interfaces have been properly overridden.
 #. Register the plugin in the ``PLUGIN_MANAGER`` instance.
-#. Import the plug-in from within the Ceph-Dashboard ``module.py`` (currently no dynamic loading is implemented).
+#. Import the plug-in from within the Ceph Dashboard ``module.py`` (currently no dynamic loading is implemented).
 
 The available interfaces are the following:
 
 - ``CanMgr``: provides the plug-in with access to the ``mgr`` instance under ``self.mgr``.
-- ``CanLog``: provides the plug-in with access to the Ceph-Dashboard logger under ``self.log``.
-- ``Setupable``: requires overriding ``setup()`` hook. This method is run in the Ceph-Dashboard ``serve()`` method, right after CherryPy has been configured, but before it is started. It's a placeholder for the plug-in initialization logic.
+- ``CanLog``: provides the plug-in with access to the Ceph Dashboard logger under ``self.log``.
+- ``Setupable``: requires overriding ``setup()`` hook. This method is run in the Ceph Dashboard ``serve()`` method, right after CherryPy has been configured, but before it is started. It's a placeholder for the plug-in initialization logic.
 - ``HasOptions``: requires overriding ``get_options()`` hook by returning a list of ``Options()``. The options returned here are added to the ``MODULE_OPTIONS``.
 - ``HasCommands``: requires overriding ``register_commands()`` hook by defining the commands the plug-in can handle and decorating them with ``@CLICommand`. The commands can be optionally returned, so that they can be invoked externally (which makes unit testing easier).
 - ``HasControllers``: requires overriding ``get_controllers()`` hook by defining and returning the controllers as usual.
