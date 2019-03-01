@@ -493,8 +493,18 @@ BuildArch:      noarch
 Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
+%if 0%{?fedora} || 0%{?rhel} > 7 || 0%{?suse_version}
+Requires:       python%{_python_buildid}-numpy
+%if 0%{without python2}
+Requires:       python3-scipy
+%else
+Requires:       python2-scipy
+%endif
+%endif
+%if 0%{?rhel} <= 7
 Requires:       numpy
 Requires:       scipy
+%endif
 %description mgr-diskprediction-local
 ceph-mgr-diskprediction-local is a ceph-mgr plugin that tries to predict
 disk failures using local algorithms and machine-learning databases.
