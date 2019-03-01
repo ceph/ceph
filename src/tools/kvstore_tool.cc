@@ -179,6 +179,19 @@ bool StoreTool::rm_prefix(const string& prefix)
   return (ret == 0);
 }
 
+void StoreTool::print_summary(const uint64_t total_keys, const uint64_t total_size,
+                              const uint64_t total_txs, const string& store_path,
+                              const string& other_path, const int duration) const
+{
+  std::cout << "summary:" << std::endl;
+  std::cout << "  copied " << total_keys << " keys" << std::endl;
+  std::cout << "  used " << total_txs << " transactions" << std::endl;
+  std::cout << "  total size " << byte_u_t(total_size) << std::endl;
+  std::cout << "  from '" << store_path << "' to '" << other_path << "'"
+            << std::endl;
+  std::cout << "  duration " << duration << " seconds" << std::endl;
+}
+
 int StoreTool::copy_store_to(const string& type, const string& other_path,
                              const int num_keys_per_tx,
                              const string& other_type)
@@ -238,13 +251,8 @@ int StoreTool::copy_store_to(const string& type, const string& other_path,
 
   } while (it->valid());
 
-  std::cout << "summary:" << std::endl;
-  std::cout << "  copied " << total_keys << " keys" << std::endl;
-  std::cout << "  used " << total_txs << " transactions" << std::endl;
-  std::cout << "  total size " << byte_u_t(total_size) << std::endl;
-  std::cout << "  from '" << store_path << "' to '" << other_path << "'"
-            << std::endl;
-  std::cout << "  duration " << duration() << " seconds" << std::endl;
+  print_summary(total_keys, total_size, total_txs, store_path, other_path,
+                duration());
 
   return 0;
 }
