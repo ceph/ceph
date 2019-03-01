@@ -81,6 +81,9 @@ public:
 
   const MgrMap &get_map() const { return map; }
 
+  const std::map<std::string,Option>& get_mgr_module_options() {
+    return mgr_module_options;
+  }
   const Option *find_module_option(const string& name);
 
   bool in_use() const { return map.epoch > 0; }

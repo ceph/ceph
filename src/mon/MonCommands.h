@@ -1162,6 +1162,9 @@ COMMAND("config help " \
 	"name=key,type=CephString",
 	"Describe a configuration option",
 	"config", "r")
+COMMAND("config ls",
+	"List available configuration options",
+	"config", "r")
 COMMAND("config assimilate-conf",
 	"Assimilate options from a conf, and return a new, minimal conf file",
 	"config", "rw")
