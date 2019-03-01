@@ -651,9 +651,9 @@ struct MessageHeaderFrame
       ceph::bufferlist::const_iterator hdriter(&f.payload, FRAME_PREAMBLE_SIZE);
       epilogue.crc_values[SegmentIndex::Msg::HEADER] =
           hdriter.crc32c(hdriter.get_remaining(), -1);
-      epilogue.crc_values[SegmentIndex::Msg::FRONT] = front.crc32c(-1),
-      epilogue.crc_values[SegmentIndex::Msg::MIDDLE] = middle.crc32c(-1),
-      epilogue.crc_values[SegmentIndex::Msg::DATA] = data.crc32c(-1),
+      epilogue.crc_values[SegmentIndex::Msg::FRONT] = front.crc32c(-1);
+      epilogue.crc_values[SegmentIndex::Msg::MIDDLE] = middle.crc32c(-1);
+      epilogue.crc_values[SegmentIndex::Msg::DATA] = data.crc32c(-1);
 
       f.payload.append(front);
       f.payload.append(middle);
