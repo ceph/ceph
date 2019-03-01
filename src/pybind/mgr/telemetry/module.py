@@ -40,7 +40,7 @@ class Module(MgrModule):
         {
             'name': 'enabled',
             'type': 'bool',
-            'default': True
+            'default': False
         },
         {
             'name': 'leaderboard',
