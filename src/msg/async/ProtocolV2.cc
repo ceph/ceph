@@ -1391,16 +1391,16 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r)
                   << FRAME_EPILOGUE_SIZE << dendl;
 
     ceph_assert(session_stream_handlers.rx);
-    ceph_assert(FRAME_EPILOGUE_SIZE == \
+    ceph_assert(sizeof(epilogue.integrity.auth_tag) == \
       session_stream_handlers.rx->get_extra_size_at_final());
 
     // I expect that ::temp_buffer is being used here.
-    ceph::bufferlist epilogue_bl;
-    epilogue_bl.push_back(buffer::create_static(FRAME_EPILOGUE_SIZE,
-        epilogue.auth_tag));
+    ceph::bufferlist auth_tag_bl;
+    auth_tag_bl.push_back(buffer::create_static(
+        sizeof(epilogue.integrity.auth_tag), epilogue.integrity.auth_tag));
     try {
       session_stream_handlers.rx->authenticated_decrypt_update_final(
-	std::move(epilogue_bl), segment_t::DEFAULT_ALIGNMENT);
+	std::move(auth_tag_bl), segment_t::DEFAULT_ALIGNMENT);
     } catch (ceph::crypto::onwire::MsgAuthError &e) {
       ldout(cct, 5) << __func__ << " message authentication failed: "
 		    << e.what() << dendl;
@@ -1408,7 +1408,7 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r)
     }
   } else {
     for (std::uint8_t idx = 0; idx < rx_segments_data.size(); idx++) {
-      const __u32 expected_crc = epilogue.crc_values[idx];
+      const __u32 expected_crc = epilogue.integrity.crc[idx];
       const __u32 calculated_crc = rx_segments_data[idx].crc32c(-1);
       if (expected_crc != calculated_crc) {
 	ldout(cct, 5) << __func__ << " message integrity check failed: "
@@ -1423,6 +1423,13 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r)
 		       << dendl;
       }
     }
+  }
+
+  // verify the late abort bit
+  if (epilogue.flags & FRAME_FLAGS_LATE_ABORT) {
+    ldout(cct, 5) << __func__ << " got LATE_ABORT request. Dropping frame"
+                  << dendl;
+    return CONTINUE(read_frame);
   }
 
   return handle_read_frame_dispatch();
