@@ -17,6 +17,7 @@ import { Permissions } from '../../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { OsdFlagsModalComponent } from '../osd-flags-modal/osd-flags-modal.component';
+import { OsdPgScrubModalComponent } from '../osd-pg-scrub-modal/osd-pg-scrub-modal.component';
 import { OsdRecvSpeedModalComponent } from '../osd-recv-speed-modal/osd-recv-speed-modal.component';
 import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
 import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.component';
@@ -46,6 +47,7 @@ export class OsdListComponent implements OnInit {
   tableActions: CdTableAction[];
   bsModalRef: BsModalRef;
   columns: CdTableColumn[];
+  generalTableActions: any[];
 
   osds = [];
   selection = new CdTableSelection();
@@ -144,6 +146,18 @@ export class OsdListComponent implements OnInit {
           ),
         disable: () => this.isNotSelectedOrInState('up'),
         icon: 'fa-remove'
+      }
+    ];
+    this.generalTableActions = [
+      {
+        name: this.i18n('Set Cluster-wide Recovery Priority'),
+        icon: 'fa-cog',
+        click: () => this.configureQosParamsAction()
+      },
+      {
+        name: this.i18n('PG scrub configuration'),
+        icon: 'fa-stethoscope',
+        click: () => this.configurePgScrubAction()
       }
     ];
   }
@@ -307,5 +321,9 @@ export class OsdListComponent implements OnInit {
 
   configureQosParamsAction() {
     this.bsModalRef = this.modalService.show(OsdRecvSpeedModalComponent, {});
+  }
+
+  configurePgScrubAction() {
+    this.bsModalRef = this.modalService.show(OsdPgScrubModalComponent, { class: 'modal-lg' });
   }
 }
