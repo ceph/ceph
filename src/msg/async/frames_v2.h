@@ -55,7 +55,7 @@ enum class Tag : __u8 {
 struct segment_t {
   // TODO: this will be dropped with support for `allocation policies`.
   // We need them because of the rx_buffers zero-copy optimization.
-  static constexpr __le16 DEFERRED_ALLOCATION{0x0000};
+  static constexpr __le16 PAGE_SIZE_ALIGNMENT{4096};
 
   static constexpr __le16 DEFAULT_ALIGNMENT = sizeof(void *);
 
@@ -604,7 +604,7 @@ struct MessageHeaderFrame
 		 segment_t::DEFAULT_ALIGNMENT },
       segment_t{ front.length(), segment_t::DEFAULT_ALIGNMENT },
       segment_t{ middle.length(), segment_t::DEFAULT_ALIGNMENT },
-      segment_t{ data.length(), segment_t::DEFERRED_ALLOCATION },
+      segment_t{ data.length(), segment_t::PAGE_SIZE_ALIGNMENT },
     });
 
     // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart from auth tag size

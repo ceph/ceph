@@ -94,13 +94,9 @@ private:
 
   ceph::msgr::v2::Tag sent_tag;
   ceph::msgr::v2::Tag next_tag;
-  ceph_msg_header2 current_header;
   utime_t backoff;  // backoff time
   utime_t recv_stamp;
   utime_t throttle_stamp;
-  unsigned msg_left;
-  bufferlist data_buf;
-  bufferlist::iterator data_blp;
 
   bool keepalive;
 
@@ -149,8 +145,6 @@ private:
   CONTINUATION_DECL(ProtocolV2, throttle_message);
   CONTINUATION_DECL(ProtocolV2, throttle_bytes);
   CONTINUATION_DECL(ProtocolV2, throttle_dispatch_queue);
-  CONTINUATION_DECL(ProtocolV2, read_message_data);
-  READ_HANDLER_CONTINUATION_DECL(ProtocolV2, handle_message_data);
 
   Ct<ProtocolV2> *read_frame();
   Ct<ProtocolV2> *handle_read_frame_preamble_main(char *buffer, int r);
@@ -167,9 +161,6 @@ private:
   Ct<ProtocolV2> *throttle_bytes();
   Ct<ProtocolV2> *throttle_dispatch_queue();
   Ct<ProtocolV2> *read_message_data_prepare();
-  Ct<ProtocolV2> *read_message_data();
-  Ct<ProtocolV2> *handle_message_data(char *buffer, int r);
-  Ct<ProtocolV2> *handle_message_complete();
 
   Ct<ProtocolV2> *handle_keepalive2(ceph::bufferlist &payload);
   Ct<ProtocolV2> *handle_keepalive2_ack(ceph::bufferlist &payload);
