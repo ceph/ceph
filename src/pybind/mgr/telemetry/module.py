@@ -335,7 +335,7 @@ class Module(MgrModule):
             report = self.last_report
             if not report:
                 report = self.compile_report()
-            return 0, json.dumps(report), ''
+            return 0, json.dumps(report, indent=4), ''
         elif command['prefix'] == 'telemetry self-test':
             self.self_test()
             return 0, 'Self-test succeeded', ''
