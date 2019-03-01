@@ -23,8 +23,10 @@
 #
 import copy
 import datetime
+import functools
 import json
 import logging
+import operator
 import os
 import paramiko
 import re
@@ -610,6 +612,44 @@ class TeuthologyOpenStack(OpenStack):
         misc.sh(command) # will throw exception on failure
         return remote_fp
 
+    def _repos_from_file(self, path):
+        def __check_repo_dict(obj):
+            if not isinstance(obj, dict):
+                raise Exception(
+                    'repo item must be a dict, %s instead' % type(obj))
+            required = ['name', 'url']
+            if not all(x in obj.keys() for x in required):
+                raise Exception(
+                    'repo spec must have at least %s elements' % required)
+
+        def __check_repo_list(obj):
+            if not isinstance(obj, list):
+                raise Exception(
+                    'repo data must be a list, %s instead' % type(obj))
+            for i in obj:
+                __check_repo_dict(i)
+
+        with open(path) as f:
+            if path.endswith('.yaml') or path.endswith('.yml'):
+                data = yaml.load(f)
+            elif path.endswith('.json') or path.endswith('.jsn'):
+                data = json.load(f)
+            else:
+                raise Exception(
+                    'Cannot detect file type from name {name}. '
+                    'Supported: .yaml, .yml, .json, .jsn'
+                        .format(name=f.name))
+        __check_repo_list(data)
+        return data
+
+    def _repo_from_arg(self, value):
+        (name, url) = value.split(':', 1)
+        if '!' in name:
+            n, p = name.split('!', 1)
+            return {'name': n, 'priority': int(p), 'url': url}
+        else:
+            return {'name': name, 'url': url}
+
     def run_suite(self):
         """
         Delegate running teuthology-suite to the OpenStack instance
@@ -638,16 +678,12 @@ class TeuthologyOpenStack(OpenStack):
             else:
                 argv.append(original_argv.pop(0))
         if self.args.test_repo:
-            def repo(name, url):
-                if '!' in name:
-                    n, p = name.split('!', 1)
-                    return {'name': n, 'priority': int(p), 'url': url}
-                else:
-                    return {'name': name, 'url': url}
-            repos = [repo(k, v)
-                     for k, v in [x.split(':', 1)
-                     for x in self.args.test_repo]]
             log.info("Using repos: %s" % self.args.test_repo)
+            repos = functools.reduce(operator.concat, (
+                self._repos_from_file(it.lstrip('@'))
+                    if it.startswith('@') else
+                        [self._repo_from_arg(it)]
+                            for it in self.args.test_repo))
 
             overrides = {
                 'overrides': {
