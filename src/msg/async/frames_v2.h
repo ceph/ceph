@@ -2,6 +2,7 @@
 #define _MSG_ASYNC_FRAMES_V2_
 
 #include "include/types.h"
+#include "common/Clock.h"
 #include "crypto_onwire.h"
 #include <array>
 
