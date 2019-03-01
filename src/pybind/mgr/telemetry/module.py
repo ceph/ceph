@@ -97,6 +97,16 @@ class Module(MgrModule):
             "desc": "Show last report or report to be sent",
             "perm": "r"
         },
+        {
+            "cmd": "telemetry on",
+            "desc": "Enable telemetry reports from this cluster",
+            "perm": "rw",
+        },
+        {
+            "cmd": "telemetry off",
+            "desc": "Disable telemetry reports from this cluster",
+            "perm": "rw",
+        },
     ]
 
     @property
@@ -318,6 +328,12 @@ class Module(MgrModule):
             self.set_config_option(key, value)
             self.set_module_option(key, value)
             return 0, 'Configuration option {0} updated'.format(key), ''
+        elif command['prefix'] == 'telemetry on':
+            self.set_config('active', True)
+            return 0, '', ''
+        elif command['prefix'] == 'telemetry off':
+            self.set_config('active', False)
+            return 0, '', ''
         elif command['prefix'] == 'telemetry send':
             self.last_report = self.compile_report()
             self.send(self.last_report)
