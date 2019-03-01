@@ -21,6 +21,7 @@
 #include "rgw_http_client.h"
 #include "rgw_bucket.h"
 #include "rgw_metadata.h"
+#include "rgw_sync_counters.h"
 #include "rgw_sync_module.h"
 #include "rgw_sync_log_trim.h"
 
@@ -257,6 +258,7 @@ class RGWReadRemoteDataLogShardCR : public RGWCoroutine {
   bool *truncated;
 
   read_remote_data_log_response response;
+  std::optional<PerfGuard> timer;
 
 public:
   RGWReadRemoteDataLogShardCR(RGWDataSyncEnv *_sync_env,
@@ -291,18 +293,28 @@ public:
 
         init_new_io(http_op);
 
+        if (sync_env->counters) {
+          timer.emplace(sync_env->counters, sync_counters::l_poll);
+        }
         int ret = http_op->aio_read();
         if (ret < 0) {
           ldout(sync_env->cct, 0) << "ERROR: failed to read from " << p << dendl;
           log_error() << "failed to send http operation: " << http_op->to_str() << " ret=" << ret << std::endl;
+          if (sync_env->counters) {
+            sync_env->counters->inc(sync_counters::l_poll_err);
+          }
           return set_cr_error(ret);
         }
 
         return io_block(0);
       }
       yield {
+        timer.reset();
         int ret = http_op->wait(&response);
         if (ret < 0) {
+          if (sync_env->counters && ret != -ENOENT) {
+            sync_env->counters->inc(sync_counters::l_poll_err);
+          }
           return set_cr_error(ret);
         }
         entries->clear();
