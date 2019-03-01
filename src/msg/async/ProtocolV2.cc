@@ -2646,12 +2646,10 @@ CtPtr ProtocolV2::handle_existing_connection(AsyncConnectionRef existing) {
     ceph_assert(connection->peer_addrs->msgr2_addr() >
                 messenger->get_myaddrs().msgr2_addr());
 
-    existing->lock.unlock();
     // make sure we follow through with opening the existing
-		// connection (if it isn't yet open) since we know the peer
-		// has something to send to us.
+    // connection (if it isn't yet open) since we know the peer
+    // has something to send to us.
     existing->send_keepalive();
-    existing->lock.lock();
     auto wait = WaitFrame::Encode(session_stream_handlers);
     return WRITE(wait, "wait", read_frame);
   }
