@@ -5643,6 +5643,20 @@
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
+      <trans-unit id="364cc3f92837b6000e686aab6d03bd2ad8007b50" datatype="html">
+        <source>Updated Object Gateway bucket &quot;<x id="INTERPOLATION" equiv-text="{{bid}}"/>&quot;</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="2d7a43674f0bbc131c9e555ec16ac37fa0445d76" datatype="html">
+        <source>Created Object Gateway bucket &quot;<x id="INTERPOLATION" equiv-text="{{bid}}"/>&quot;</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/rgw/rgw-bucket-form/rgw-bucket-form.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
       <trans-unit id="44939fd05cedfd077db886528b755e77d5fa3885" datatype="html">
         <source>bucket</source>
         <context-group purpose="location">
@@ -5654,6 +5668,20 @@
         <source>buckets</source>
         <context-group purpose="location">
           <context context-type="sourcefile">src/app/ceph/rgw/rgw-bucket-list/rgw-bucket-list.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="854a763265e92f91ba3ccee1a0e8d823be584f7c" datatype="html">
+        <source>Updated Object Gateway user &quot;<x id="INTERPOLATION" equiv-text="{{uid}}"/>&quot;</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/rgw/rgw-user-form/rgw-user-form.component.ts</context>
+          <context context-type="linenumber">1</context>
+        </context-group>
+      </trans-unit>
+      <trans-unit id="84ab3fd641e65e39cffee0ec722a059ed284229e" datatype="html">
+        <source>Created Object Gateway user &quot;<x id="INTERPOLATION" equiv-text="{{uid}}"/>&quot;</source>
+        <context-group purpose="location">
+          <context context-type="sourcefile">src/app/ceph/rgw/rgw-user-form/rgw-user-form.component.ts</context>
           <context context-type="linenumber">1</context>
         </context-group>
       </trans-unit>
