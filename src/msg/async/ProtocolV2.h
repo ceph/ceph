@@ -86,7 +86,7 @@ private:
 
 public:
 
-  boost::container::static_vector<ceph::msgr::v2::onwire_segment_t,
+  boost::container::static_vector<ceph::msgr::v2::segment_t,
 				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_desc;
   boost::container::static_vector<ceph::bufferlist,
 				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_data;

@@ -260,9 +260,9 @@ void ProtocolV2::reset_recv_state() {
   if (state > THROTTLE_BYTES && state <= THROTTLE_DONE) {
     if (connection->policy.throttler_bytes) {
       const uint32_t cur_msg_size = \
-	rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length + \
-	rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length + \
-	rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+	rx_segments_desc[SegmentIndex::Msg::FRONT].length + \
+	rx_segments_desc[SegmentIndex::Msg::MIDDLE].length + \
+	rx_segments_desc[SegmentIndex::Msg::DATA].length;
 
       ldout(cct, 10) << __func__ << " releasing " << cur_msg_size
                      << " bytes to policy throttler "
@@ -273,9 +273,9 @@ void ProtocolV2::reset_recv_state() {
   }
   if (state > THROTTLE_DISPATCH_QUEUE && state <= THROTTLE_DONE) {
     const uint32_t cur_msg_size = \
-      rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length + \
-      rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length + \
-      rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+      rx_segments_desc[SegmentIndex::Msg::FRONT].length + \
+      rx_segments_desc[SegmentIndex::Msg::MIDDLE].length + \
+      rx_segments_desc[SegmentIndex::Msg::DATA].length;
 
     ldout(cct, 10)
         << __func__ << " releasing " << cur_msg_size
@@ -1065,10 +1065,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
 		     << " len=" << main_preamble.segments[idx].length
 		     << " align=" << main_preamble.segments[idx].alignment
 		     << dendl;
-      rx_segments_desc.emplace_back(onwire_segment_t{
-	get_onwire_size(main_preamble.segments[idx].length),
-	main_preamble.segments[idx]
-      });
+      rx_segments_desc.emplace_back(main_preamble.segments[idx]);
     }
   }
 
@@ -1126,7 +1123,7 @@ CtPtr ProtocolV2::read_frame_segment() {
   // description of current segment to read
   const auto& cur_rx_desc = rx_segments_desc.at(rx_segments_data.size());
 
-  if (cur_rx_desc.logical.alignment == segment_t::DEFERRED_ALLOCATION) {
+  if (cur_rx_desc.alignment == segment_t::DEFERRED_ALLOCATION) {
     // This is a special case for the rx_buffers zero-copy optimization
     // used for Message's data field. It might be dangerous and will be
     // ultimately replaced by `allocation policies`.
@@ -1157,12 +1154,12 @@ CtPtr ProtocolV2::read_frame_segment() {
   std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer> rx_buffer;
   try {
     rx_buffer = ceph::buffer::ptr_node::create(buffer::create_aligned(
-      cur_rx_desc.onwire_length, cur_rx_desc.logical.alignment));
+      get_onwire_size(cur_rx_desc.length), cur_rx_desc.alignment));
   } catch (std::bad_alloc&) {
     // Catching because of potential issues with satisfying alignment.
     ldout(cct, 20) << __func__ << " can't allocate aligned rx_buffer "
-		   << " len=" << cur_rx_desc.onwire_length
-		   << " align=" << cur_rx_desc.logical.alignment
+		   << " len=" << get_onwire_size(cur_rx_desc.length)
+		   << " align=" << cur_rx_desc.alignment
 		   << dendl;
     return _fault();
   }
@@ -1322,7 +1319,7 @@ CtPtr ProtocolV2::read_message_data_prepare() {
   ldout(cct, 20) << __func__ << dendl;
 
   const auto data_len = \
-    rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+    rx_segments_desc[SegmentIndex::Msg::DATA].length;
   const unsigned data_off = le32_to_cpu(current_header.data_off);
 
   if (data_len) {
@@ -1453,11 +1450,11 @@ CtPtr ProtocolV2::handle_message_complete() {
   ldout(cct, 20) << __func__ << dendl;
 
   const auto front_len = \
-    rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length;
+    rx_segments_desc[SegmentIndex::Msg::FRONT].length;
   const auto middle_len = \
-    rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length;
+    rx_segments_desc[SegmentIndex::Msg::MIDDLE].length;
   const auto data_len = \
-    rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+    rx_segments_desc[SegmentIndex::Msg::DATA].length;
 
   ldout(cct, 5) << __func__
 		<< " got " << front_len
@@ -1496,9 +1493,9 @@ CtPtr ProtocolV2::handle_message_complete() {
   message->set_message_throttler(connection->policy.throttler_messages);
 
   const uint32_t cur_msg_size = \
-    rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length + \
-    rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length + \
-    rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+    rx_segments_desc[SegmentIndex::Msg::FRONT].length + \
+    rx_segments_desc[SegmentIndex::Msg::MIDDLE].length + \
+    rx_segments_desc[SegmentIndex::Msg::DATA].length;
 
   // store reservation size in message, so we don't get confused
   // by messages entering the dispatch queue through other paths.
@@ -1651,9 +1648,9 @@ CtPtr ProtocolV2::throttle_bytes() {
 
   ceph_assert(rx_segments_desc.size() == 4);
   uint32_t cur_msg_size = \
-    rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length + \
-    rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length + \
-    rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+    rx_segments_desc[SegmentIndex::Msg::FRONT].length + \
+    rx_segments_desc[SegmentIndex::Msg::MIDDLE].length + \
+    rx_segments_desc[SegmentIndex::Msg::DATA].length;
   if (cur_msg_size) {
     if (connection->policy.throttler_bytes) {
       ldout(cct, 10) << __func__ << " wants " << cur_msg_size
@@ -1687,9 +1684,9 @@ CtPtr ProtocolV2::throttle_dispatch_queue() {
 
   ceph_assert(rx_segments_desc.size() == 4);
   uint32_t cur_msg_size =
-    rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length + \
-    rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length + \
-    rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+    rx_segments_desc[SegmentIndex::Msg::FRONT].length + \
+    rx_segments_desc[SegmentIndex::Msg::MIDDLE].length + \
+    rx_segments_desc[SegmentIndex::Msg::DATA].length;
 
   if (cur_msg_size) {
     if (!connection->dispatch_queue->dispatch_throttler.get_or_fail(
