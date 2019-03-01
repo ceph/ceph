@@ -137,6 +137,9 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
 
   auto c = new MonCommandCompletion(self->py_modules,
       completion, tag, PyThreadState_Get());
+
+  PyThreadState *tstate = PyEval_SaveThread();
+
   if (std::string(type) == "mon") {
     self->py_modules->get_monc().start_mon_command(
         {cmd_json},
@@ -151,6 +154,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
       delete c;
       string msg("invalid osd_id: ");
       msg.append("\"").append(name).append("\"");
+      PyEval_RestoreThread(tstate);
       PyErr_SetString(PyExc_ValueError, msg.c_str());
       return nullptr;
     }
@@ -175,6 +179,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
     if (r != 0) {
       string msg("failed to send command to mds: ");
       msg.append(cpp_strerror(r));
+      PyEval_RestoreThread(tstate);
       PyErr_SetString(PyExc_RuntimeError, msg.c_str());
       return nullptr;
     }
@@ -184,6 +189,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
       delete c;
       string msg("invalid pgid: ");
       msg.append("\"").append(name).append("\"");
+      PyEval_RestoreThread(tstate);
       PyErr_SetString(PyExc_ValueError, msg.c_str());
       return nullptr;
     }
@@ -197,15 +203,18 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
         &c->outbl,
         &c->outs,
         c);
+    PyEval_RestoreThread(tstate);
     return nullptr;
   } else {
     delete c;
     string msg("unknown service type: ");
     msg.append(type);
+    PyEval_RestoreThread(tstate);
     PyErr_SetString(PyExc_ValueError, msg.c_str());
     return nullptr;
   }
 
+  PyEval_RestoreThread(tstate);
   Py_RETURN_NONE;
 }
 
