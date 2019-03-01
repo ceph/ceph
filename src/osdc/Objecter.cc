@@ -2485,11 +2485,13 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
     return -ENOENT;
   }
 
+#if 0
   if (s->con) {
     ldout(cct, 20) << " revoking rx buffer for " << tid
 		   << " on " << s->con << dendl;
     s->con->revoke_rx_buffer(tid);
   }
+#endif
 
   ldout(cct, 10) << __func__ << " tid " << tid << " in session " << s->osd
 		 << dendl;
@@ -3246,6 +3248,7 @@ void Objecter::_send_op(Op *op)
   ConnectionRef con = op->session->con;
   ceph_assert(con);
 
+#if 0
   // preallocated rx buffer?
   if (op->con) {
     ldout(cct, 20) << " revoking rx buffer for " << op->tid << " on "
@@ -3261,6 +3264,7 @@ void Objecter::_send_op(Op *op)
     op->con = con;
     op->con->post_rx_buffer(op->tid, *op->outbl);
   }
+#endif
 
   op->incarnation = op->session->incarnation;
 
@@ -3450,9 +3454,10 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   // got data?
   if (op->outbl) {
+#if 0
     if (op->con)
       op->con->revoke_rx_buffer(op->tid);
-    m->claim_data(*op->outbl);
+#endif
     op->outbl = 0;
   }
 
