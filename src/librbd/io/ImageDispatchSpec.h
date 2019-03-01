@@ -140,7 +140,7 @@ public:
   }
 
   bool were_all_throttled() {
-    return m_throttled_flag & RBD_QOS_MASK;
+    return (m_throttled_flag & RBD_QOS_MASK) == RBD_QOS_MASK;
   }
 
 private:
