@@ -4232,6 +4232,16 @@ int main(int argc, char **argv)
   }
 
 out:
+  if (debug) {
+    ostringstream ostr;
+    Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
+    cct->get_perfcounters_collection()->dump_formatted(f, false);
+    ostr << "ceph-objectstore-tool ";
+    f->flush(ostr);
+    delete f;
+    cout <<  ostr.str() << std::endl;
+  }
+
   int r = fs->umount();
   if (r < 0) {
     cerr << "umount failed: " << cpp_strerror(r) << std::endl;
