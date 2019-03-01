@@ -103,8 +103,9 @@ static string log_lock_name = "rgw_log_lock";
 static RGWObjCategory main_category = RGWObjCategory::Main;
 #define RGW_USAGE_OBJ_PREFIX "usage."
 
-
 #define dout_subsys ceph_subsys_rgw
+
+const std::string MP_META_SUFFIX = ".meta";
 
 
 static bool rgw_get_obj_data_pool(const RGWZoneGroup& zonegroup, const RGWZoneParams& zone_params,
@@ -9022,7 +9023,7 @@ int RGWRados::cls_obj_set_bucket_tag_timeout(RGWBucketInfo& bucket_info, uint64_
 
 int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 				      int shard_id,
-				      rgw_obj_index_key& start,
+				      const rgw_obj_index_key& start,
 				      const string& prefix,
 				      uint32_t num_entries,
 				      bool list_versions,
@@ -9146,7 +9147,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 
 int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 					int shard_id,
-					rgw_obj_index_key& start,
+					const rgw_obj_index_key& start,
 					const string& prefix,
 					uint32_t num_entries,
 					bool list_versions,

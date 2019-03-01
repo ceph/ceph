@@ -2763,10 +2763,10 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
   s->formatter->dump_string("Bucket", s->bucket_name);
   if (!prefix.empty())
     s->formatter->dump_string("ListMultipartUploadsResult.Prefix", prefix);
-  string& key_marker = marker.get_key();
+  const string& key_marker = marker.get_key();
   if (!key_marker.empty())
     s->formatter->dump_string("KeyMarker", key_marker);
-  string& upload_id_marker = marker.get_upload_id();
+  const string& upload_id_marker = marker.get_upload_id();
   if (!upload_id_marker.empty())
     s->formatter->dump_string("UploadIdMarker", upload_id_marker);
   string next_key = next_marker.mp.get_key();

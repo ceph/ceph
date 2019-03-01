@@ -10,14 +10,14 @@
 class RGWAccessListFilter {
 public:
   virtual ~RGWAccessListFilter() {}
-  virtual bool filter(string& name, string& key) = 0;
+  virtual bool filter(const string& name, string& key) = 0;
 };
 
 struct RGWAccessListFilterPrefix : public RGWAccessListFilter {
   string prefix;
 
   explicit RGWAccessListFilterPrefix(const string& _prefix) : prefix(_prefix) {}
-  bool filter(string& name, string& key) override {
+  bool filter(const string& name, string& key) override {
     return (prefix.compare(key.substr(0, prefix.size())) == 0);
   }
 };
