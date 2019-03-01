@@ -1577,6 +1577,8 @@ void PGMap::dump_pg_stats_plain(
     tab.define_column("MISPLACED", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("BYTES", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("OMAP_BYTES*", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("OMAP_KEYS*", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DISK_LOG", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("STATE", TextTable::LEFT, TextTable::RIGHT);
@@ -1616,6 +1618,8 @@ void PGMap::dump_pg_stats_plain(
           << st.stats.sum.num_objects_misplaced
           << st.stats.sum.num_objects_unfound
           << st.stats.sum.num_bytes
+          << st.stats.sum.num_omap_bytes
+          << st.stats.sum.num_omap_keys
           << st.log_size
           << st.ondisk_log_size
           << pg_state_string(st.state)
@@ -1672,10 +1676,14 @@ void PGMap::dump_pool_stats(ostream& ss, bool header) const
     tab.define_column("MISPLACED", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("BYTES", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("OMAP_BYTES*", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("OMAP_KEYS*", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DISK_LOG", TextTable::LEFT, TextTable::RIGHT);
   } else {
     tab.define_column("", TextTable::LEFT, TextTable::LEFT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
@@ -1696,6 +1704,8 @@ void PGMap::dump_pool_stats(ostream& ss, bool header) const
         << p->second.stats.sum.num_objects_misplaced
         << p->second.stats.sum.num_objects_unfound
         << p->second.stats.sum.num_bytes
+        << p->second.stats.sum.num_omap_bytes
+        << p->second.stats.sum.num_omap_keys
         << p->second.log_size
         << p->second.ondisk_log_size
         << TextTable::endrow;
@@ -1716,10 +1726,14 @@ void PGMap::dump_pg_sum_stats(ostream& ss, bool header) const
     tab.define_column("MISPLACED", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("BYTES", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("OMAP_BYTES*", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("OMAP_KEYS*", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("DISK_LOG", TextTable::LEFT, TextTable::RIGHT);
   } else {
     tab.define_column("", TextTable::LEFT, TextTable::LEFT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
+    tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
     tab.define_column("", TextTable::LEFT, TextTable::RIGHT);
@@ -1737,6 +1751,8 @@ void PGMap::dump_pg_sum_stats(ostream& ss, bool header) const
       << pg_sum.stats.sum.num_objects_misplaced
       << pg_sum.stats.sum.num_objects_unfound
       << pg_sum.stats.sum.num_bytes
+      << pg_sum.stats.sum.num_omap_bytes
+      << pg_sum.stats.sum.num_omap_keys
       << pg_sum.log_size
       << pg_sum.ondisk_log_size
       << TextTable::endrow;
@@ -2189,6 +2205,8 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
   tab.define_column("MISPLACED", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("UNFOUND", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("BYTES", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("OMAP_BYTES*", TextTable::LEFT, TextTable::RIGHT);
+  tab.define_column("OMAP_KEYS*", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("LOG", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("STATE", TextTable::LEFT, TextTable::RIGHT);
   tab.define_column("SINCE", TextTable::LEFT, TextTable::RIGHT);
@@ -2214,6 +2232,8 @@ void PGMap::dump_filtered_pg_stats(ostream& ss, set<pg_t>& pgs) const
         << st.stats.sum.num_objects_misplaced
         << st.stats.sum.num_objects_unfound
         << st.stats.sum.num_bytes
+        << st.stats.sum.num_omap_bytes
+        << st.stats.sum.num_omap_keys
         << st.log_size
         << pg_state_string(st.state)
         << utimespan_str(now - st.last_change)
@@ -3170,6 +3190,13 @@ int process_pg_map_command(
   string prefix = orig_prefix;
   auto cmdmap = orig_cmdmap;
 
+  string omap_stats_note =
+      "\n* NOTE: Omap statistics are gathered during deep scrub and "
+      "may be inaccurate soon afterwards depending on utilisation. See "
+      "http://docs.ceph.com/docs/master/dev/placement-group/#omap-statistics "
+      "for further details.\n";
+  bool omap_stats_note_required = false;
+
   // perhaps these would be better in the parsing, but it's weird
   bool primary = false;
   if (prefix == "pg dump_json") {
@@ -3263,10 +3290,12 @@ int process_pg_map_command(
     } else {
       if (what.count("all")) {
 	pg_map.dump(ds);
+        omap_stats_note_required = true;
       } else if (what.count("summary") || what.count("sum")) {
 	pg_map.dump_basic(ds);
 	pg_map.dump_pg_sum_stats(ds, true);
 	pg_map.dump_osd_sum_stats(ds);
+        omap_stats_note_required = true;
       } else {
 	if (what.count("pgs_brief")) {
 	  pg_map.dump_pg_stats(ds, true);
@@ -3275,15 +3304,20 @@ int process_pg_map_command(
 	if (what.count("pgs")) {
 	  pg_map.dump_pg_stats(ds, false);
 	  header = false;
+          omap_stats_note_required = true;
 	}
 	if (what.count("pools")) {
 	  pg_map.dump_pool_stats(ds, header);
+          omap_stats_note_required = true;
 	}
 	if (what.count("osds")) {
 	  pg_map.dump_osd_stats(ds);
 	}
       }
       odata->append(ds);
+      if (omap_stats_note_required) {
+        odata->append(omap_stats_note);
+      }
     }
     *ss << "dumped " << what;
     return 0;
@@ -3337,6 +3371,7 @@ int process_pg_map_command(
     } else if (!pgs.empty()) {
       pg_map.dump_filtered_pg_stats(ds, pgs);
       odata->append(ds);
+      odata->append(omap_stats_note);
     }
     return 0;
   }

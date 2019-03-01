@@ -1227,32 +1227,34 @@ out:
   }
 }
 
-void PGBackend::be_large_omap_check(const map<pg_shard_t,ScrubMap*> &maps,
+void PGBackend::be_omap_checks(const map<pg_shard_t,ScrubMap*> &maps,
   const set<hobject_t> &master_set,
-  int& large_omap_objects,
+  omap_stat_t& omap_stats,
   ostream &warnstream) const
 {
-  bool needs_check = false;
+  bool needs_omap_check = false;
   for (const auto& map : maps) {
-    if (map.second->has_large_omap_object_errors) {
-      needs_check = true;
+    if (map.second->has_large_omap_object_errors || map.second->has_omap_keys) {
+      needs_omap_check = true;
       break;
     }
   }
 
-  if (!needs_check) {
-    return;
+  if (!needs_omap_check) {
+    return; // Nothing to do
   }
 
-  // Iterate through objects and check large omap object flag
+  // Iterate through objects and update omap stats
   for (const auto& k : master_set) {
     for (const auto& map : maps) {
       auto it = map.second->objects.find(k);
       if (it == map.second->objects.end())
         continue;
       ScrubMap::object& obj = it->second;
+      omap_stats.omap_bytes += obj.object_omap_bytes;
+      omap_stats.omap_keys += obj.object_omap_keys;
       if (obj.large_omap_object_found) {
-        large_omap_objects++;
+        omap_stats.large_omap_objects++;
         warnstream << "Large omap object found. Object: " << k << " Key count: "
                    << obj.large_omap_object_key_count << " Size (bytes): "
                    << obj.large_omap_object_value_size << '\n';

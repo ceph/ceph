@@ -719,6 +719,15 @@ int ReplicatedBackend::be_deep_scrub(
   dout(20) << __func__ << " done with " << poid << " omap_digest "
 	   << std::hex << o.omap_digest << std::dec << dendl;
 
+  // Sum up omap usage
+  if (pos.omap_keys > 0 || pos.omap_bytes > 0) {
+    dout(25) << __func__ << " adding " << pos.omap_keys << " keys and "
+             << pos.omap_bytes << " bytes to pg_stats sums" << dendl;
+    map.has_omap_keys = true;
+    o.object_omap_bytes = pos.omap_bytes;
+    o.object_omap_keys = pos.omap_keys;
+  }
+
   // done!
   return 0;
 }

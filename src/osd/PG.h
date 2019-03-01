@@ -1678,7 +1678,6 @@ public:
     set<pg_shard_t> waiting_on_whom;
     int shallow_errors;
     int deep_errors;
-    int large_omap_objects = 0;
     int fixed;
     ScrubMap primary_scrubmap;
     ScrubMapBuilder primary_scrubmap_pos;
@@ -1688,6 +1687,8 @@ public:
     map<pg_shard_t, ScrubMap> received_maps;
     OpRequestRef active_rep_scrub;
     utime_t scrub_reg_stamp;  // stamp we registered for
+
+    omap_stat_t omap_stats  = (const struct omap_stat_t){ 0 };
 
     // For async sleep
     bool sleeping = false;
@@ -1822,8 +1823,8 @@ public:
       subset_last_update = eversion_t();
       shallow_errors = 0;
       deep_errors = 0;
-      large_omap_objects = 0;
       fixed = 0;
+      omap_stats = (const struct omap_stat_t){ 0 };
       deep = false;
       run_callbacks();
       inconsistent.clear();

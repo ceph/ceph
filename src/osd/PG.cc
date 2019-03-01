@@ -5528,8 +5528,9 @@ void PG::scrub_compare_maps()
   }
 
   stringstream ss;
-  get_pgbackend()->be_large_omap_check(maps, master_set,
-                                       scrubber.large_omap_objects, ss);
+  get_pgbackend()->be_omap_checks(maps, master_set,
+                                  scrubber.omap_stats, ss);
+
   if (!ss.str().empty()) {
     osd->clog->warn(ss);
   }
@@ -5728,7 +5729,13 @@ void PG::scrub_finish()
       info.history.last_clean_scrub_stamp = now;
     info.stats.stats.sum.num_shallow_scrub_errors = scrubber.shallow_errors;
     info.stats.stats.sum.num_deep_scrub_errors = scrubber.deep_errors;
-    info.stats.stats.sum.num_large_omap_objects = scrubber.large_omap_objects;
+    info.stats.stats.sum.num_large_omap_objects = scrubber.omap_stats.large_omap_objects;
+    info.stats.stats.sum.num_omap_bytes = scrubber.omap_stats.omap_bytes;
+    info.stats.stats.sum.num_omap_keys = scrubber.omap_stats.omap_keys;
+    dout(25) << __func__ << " shard " << pg_whoami << " num_omap_bytes = "
+             << info.stats.stats.sum.num_omap_bytes << " num_omap_keys = "
+             << info.stats.stats.sum.num_omap_keys << dendl;
+    publish_stats_to_osd();
   } else {
     info.stats.stats.sum.num_shallow_scrub_errors = scrubber.shallow_errors;
     // XXX: last_clean_scrub_stamp doesn't mean the pg is not inconsistent
