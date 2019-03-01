@@ -104,20 +104,30 @@ struct preamble_block_t {
 static_assert(sizeof(preamble_block_t) % CRYPTO_BLOCK_SIZE == 0);
 static_assert(std::is_standard_layout<preamble_block_t>::value);
 
-// V2 epilogue conveys integrity/authentication information. It's added
-// at the end of each frame holds:
-//  * CRC32 for MAX_NUM_SEGMENTS -- in plain mode,
-//  * cipher-specific data (e.g. auth tag for AES-GCM).
-union epilogue_block_t {
-  char auth_tag[CRYPTO_BLOCK_SIZE];
+// Each Frame has an epilogue for integrity or authenticity validation.
+// For plain mode it's quite straightforward - the structure stores up
+// to MAX_NUM_SEGMENTS crc32 checksums, one per each segment.
+// For secure mode things become very different. The fundamental thing
+// is that epilogue format is **an implementation detail of particular
+// cipher**. ProtocolV2 only knows:
+//   * where the data is placed (always at the end of ciphertext),
+//   * how long it is. RxHandler provides get_extra_size_at_final() but
+//     ProtocolV2 has NO WAY to alter this.
+//
+// The intention behind the contract is to provide flexibility of cipher
+// selection. Currently AES in GCM mode is used and epilogue conveys its
+// *auth tag* (following OpenSSL's terminology). However, it would be OK
+// to switch to e.g. AES128-CBC + HMAC-SHA512 without affecting protocol
+// (expect the cipher negotiation, of course).
+struct epilogue_crc_block_t {
   std::array<__le32, MAX_NUM_SEGMENTS> crc_values;
 };
-static_assert(sizeof(epilogue_block_t) % CRYPTO_BLOCK_SIZE == 0);
-static_assert(std::is_standard_layout<epilogue_block_t>::value);
+static_assert(sizeof(epilogue_crc_block_t) % CRYPTO_BLOCK_SIZE == 0);
+static_assert(std::is_standard_layout<epilogue_crc_block_t>::value);
 
 
 static constexpr uint32_t FRAME_PREAMBLE_SIZE = sizeof(preamble_block_t);
-static constexpr uint32_t FRAME_EPILOGUE_SIZE = sizeof(epilogue_block_t);
+static constexpr uint32_t FRAME_CRC_EPILOGUE_SIZE = sizeof(epilogue_crc_block_t);
 
 template <class T>
 struct Frame {
@@ -167,7 +177,7 @@ public:
     fill_preamble({segment_t{payload.length() - FRAME_PREAMBLE_SIZE,
                    segment_t::DEFAULT_ALIGNMENT}});
 
-    epilogue_block_t epilogue;
+    epilogue_crc_block_t epilogue;
     ::memset(&epilogue, 0, sizeof(epilogue));
 
     ceph::bufferlist::const_iterator hdriter(&this->payload, FRAME_PREAMBLE_SIZE);
@@ -373,7 +383,7 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
           std::move(c.payload));
       c.payload = session_stream_handlers.tx->authenticated_encrypt_final();
     } else {
-      epilogue_block_t epilogue;
+      epilogue_crc_block_t epilogue;
       ::memset(&epilogue, 0, sizeof(epilogue));
 
       ceph::bufferlist::const_iterator hdriter(&c.payload, FRAME_PREAMBLE_SIZE);
@@ -637,7 +647,7 @@ struct MessageHeaderFrame
       // auth tag will be appended at the end
       f.payload = session_stream_handlers.tx->authenticated_encrypt_final();
     } else {
-      epilogue_block_t epilogue;
+      epilogue_crc_block_t epilogue;
       ceph::bufferlist::const_iterator hdriter(&f.payload, FRAME_PREAMBLE_SIZE);
       epilogue.crc_values[SegmentIndex::Msg::HEADER] =
           hdriter.crc32c(hdriter.get_remaining(), -1);

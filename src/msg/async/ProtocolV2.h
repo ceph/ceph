@@ -232,6 +232,7 @@ private:
   Ct<ProtocolV2> *server_ready();
 
   uint32_t get_onwire_size(uint32_t logical_size) const;
+  uint32_t get_epilogue_size() const;
 };
 
 #endif /* _MSG_ASYNC_PROTOCOL_V2_ */
