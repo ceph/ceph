@@ -52,6 +52,9 @@ class TestMisc(CephFSTestCase):
         self.assertGreaterEqual(rctime, t-10)
 
     def test_fs_new(self):
+        self.mount_a.umount_wait()
+        self.mount_b.umount_wait()
+
         data_pool_name = self.fs.get_data_pool_name()
 
         self.fs.mds_stop()
