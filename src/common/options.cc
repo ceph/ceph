@@ -1593,11 +1593,6 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("time before OSDs who do not report to the mons are marked down (seconds)"),
 
-    Option("mon_force_standby_active", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(true)
-    .add_service("mon")
-    .set_description("allow use of MDS daemons in standby-replay as replacements"),
-
     Option("mon_warn_on_msgr2_not_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .add_service("mon")
@@ -7740,22 +7735,6 @@ std::vector<Option> get_mds_options() {
     Option("mds_skip_ino", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),
-
-    Option("mds_standby_for_name", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("")
-    .set_description("standby for named MDS daemon when not active"),
-
-    Option("mds_standby_for_rank", Option::TYPE_INT, Option::LEVEL_BASIC)
-    .set_default(-1)
-    .set_description("allow MDS to become a standby:replay daemon"),
-
-    Option("mds_standby_for_fscid", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(-1)
-    .set_description("standby only for the file system with the given fscid"),
-
-    Option("mds_standby_replay", Option::TYPE_BOOL, Option::LEVEL_BASIC)
-    .set_default(false)
-    .set_description("allow MDS to standby replay for an active MDS"),
 
     Option("mds_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)

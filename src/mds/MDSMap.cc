@@ -82,10 +82,6 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   if (laggy_since != utime_t())
     f->dump_stream("laggy_since") << laggy_since;
   
-  f->dump_int("standby_for_rank", standby_for_rank);
-  f->dump_int("standby_for_fscid", standby_for_fscid);
-  f->dump_string("standby_for_name", standby_for_name);
-  f->dump_bool("standby_replay", standby_replay);
   f->open_array_section("export_targets");
   for (set<mds_rank_t>::iterator p = export_targets.begin();
        p != export_targets.end(); ++p) {
@@ -93,6 +89,7 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   }
   f->close_section();
   f->dump_unsigned("features", mds_features);
+  f->dump_unsigned("flags", flags);
 }
 
 void MDSMap::mds_info_t::print_summary(ostream &out) const
@@ -107,18 +104,11 @@ void MDSMap::mds_info_t::print_summary(ostream &out) const
   if (laggy()) {
     out << " laggy since " << laggy_since;
   }
-  if (standby_for_rank != -1 ||
-      !standby_for_name.empty()) {
-    out << " (standby for";
-    //if (standby_for_rank >= 0)
-      out << " rank " << standby_for_rank;
-    if (!standby_for_name.empty()) {
-      out << " '" << standby_for_name << "'";
-    }
-    out << ")";
-  }
   if (!export_targets.empty()) {
     out << " export_targets=" << export_targets;
+  }
+  if (is_frozen()) {
+    out << " frozen";
   }
 }
 
@@ -518,7 +508,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
 
 void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) const
 {
-  __u8 v = 8;
+  __u8 v = 9;
   if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
     v = 7;
   }
@@ -535,12 +525,13 @@ void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) con
     encode(addrs, bl, features);
   }
   encode(laggy_since, bl);
-  encode(standby_for_rank, bl);
-  encode(standby_for_name, bl);
+  encode(MDS_RANK_NONE, bl); /* standby_for_rank */
+  encode(std::string(), bl); /* standby_for_name */
   encode(export_targets, bl);
   encode(mds_features, bl);
-  encode(standby_for_fscid, bl);
-  encode(standby_replay, bl);
+  encode(FS_CLUSTER_ID_NONE, bl); /* standby_for_fscid */
+  encode(false, bl);
+  encode(flags, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -557,8 +548,8 @@ void MDSMap::mds_info_t::encode_unversioned(bufferlist& bl) const
   encode(state_seq, bl);
   encode(addrs.legacy_addr(), bl, 0);
   encode(laggy_since, bl);
-  encode(standby_for_rank, bl);
-  encode(standby_for_name, bl);
+  encode(MDS_RANK_NONE, bl);
+  encode(std::string(), bl);
   encode(export_targets, bl);
 }
 
@@ -573,17 +564,28 @@ void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
   decode(state_seq, bl);
   decode(addrs, bl);
   decode(laggy_since, bl);
-  decode(standby_for_rank, bl);
-  decode(standby_for_name, bl);
+  {
+    mds_rank_t standby_for_rank;
+    decode(standby_for_rank, bl);
+  }
+  {
+    std::string standby_for_name;
+    decode(standby_for_name, bl);
+  }
   if (struct_v >= 2)
     decode(export_targets, bl);
   if (struct_v >= 5)
     decode(mds_features, bl);
   if (struct_v >= 6) {
+    fs_cluster_id_t standby_for_fscid;
     decode(standby_for_fscid, bl);
   }
   if (struct_v >= 7) {
+    bool standby_replay;
     decode(standby_replay, bl);
+  }
+  if (struct_v >= 8) {
+    decode(flags, bl);
   }
   DECODE_FINISH(bl);
 }

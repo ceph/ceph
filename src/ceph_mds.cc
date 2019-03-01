@@ -54,30 +54,14 @@
 
 static void usage()
 {
-  cout << "usage: ceph-mds -i <ID> [flags] [--hot-standby <rank>]\n"
+  cout << "usage: ceph-mds -i <ID> [flags]\n"
        << "  -m monitorip:port\n"
        << "        connect to monitor at given address\n"
        << "  --debug_mds n\n"
        << "        debug MDS level (e.g. 10)\n"
-       << "  --hot-standby rank\n"
-       << "        start up as a hot standby for rank\n"
        << std::endl;
   generic_server_usage();
 }
-
-
-static int parse_rank(const char *opt_name, const std::string &val)
-{
-  std::string err;
-  int ret = strict_strtol(val.c_str(), 10, &err);
-  if (!err.empty()) {
-    derr << "error parsing " << opt_name << ": failed to parse rank. "
-	 << "It must be an int." << "\n" << dendl;
-    exit(1);
-  }
-  return ret;
-}
-
 
 
 MDSDaemon *mds = NULL;
@@ -115,13 +99,7 @@ int main(int argc, const char **argv)
       break;
     }
     else if (ceph_argparse_witharg(args, i, &val, "--hot-standby", (char*)NULL)) {
-      int r = parse_rank("hot-standby", val);
-      dout(0) << "requesting standby_replay for mds." << r << dendl;
-      char rb[32];
-      snprintf(rb, sizeof(rb), "%d", r);
-      g_conf().set_val("mds_standby_for_rank", rb);
-      g_conf().set_val("mds_standby_replay", "true");
-      g_conf().apply_changes(nullptr);
+      dout(0) << "--hot-standby is obsolete and has no effect" << dendl;
     }
     else {
       derr << "Error: can't understand argument: " << *i << "\n" << dendl;

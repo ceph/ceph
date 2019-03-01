@@ -6,7 +6,6 @@
 #include "common/Formatter.h"
 
 const mds_gid_t MDS_GID_NONE = mds_gid_t(0);
-const mds_rank_t MDS_RANK_NONE = mds_rank_t(-1);
 
 
 /*

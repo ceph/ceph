@@ -98,10 +98,6 @@ private:
   std::string name;
   version_t epoch = 0;
   CompatSet compat;
-  mds_rank_t standby_for_rank = MDS_RANK_NONE;
-  std::string standby_for_name;
-  fs_cluster_id_t standby_for_fscid = FS_CLUSTER_ID_NONE;
-  bool standby_replay = false;
   MDSMap::DaemonState want_state = MDSMap::STATE_BOOT;
 
   // Internal beacon state
