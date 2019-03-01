@@ -3458,6 +3458,26 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     if (op->con)
       op->con->revoke_rx_buffer(op->tid);
 #endif
+    auto& bl = m->get_data();
+    if (op->outbl->length() == bl.length() &&
+	bl.get_num_buffers() <= 1) {
+      // this is here to keep previous users to *relied* on getting data
+      // read into existing buffers happy.  Notably,
+      // libradosstriper::RadosStriperImpl::aio_read().
+      ldout(cct,10) << __func__ << " copying resulting " << bl.length()
+		    << " into existing buffer of length " << op->outbl->length()
+		    << dendl;
+      bufferlist t;
+      t.claim(*op->outbl);
+      t.invalidate_crc();  // we're overwriting the raw buffers via c_str()
+      bl.copy(0, bl.length(), t.c_str());
+      op->outbl->substr_of(t, 0, bl.length());
+    } else {
+      m->claim_data(*op->outbl);
+    }
+    lderr(cct) << __func__ << " data:\n";
+    op->outbl->hexdump(*_dout);
+    *_dout << dendl;
     op->outbl = 0;
   }
 
