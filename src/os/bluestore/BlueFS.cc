@@ -1342,8 +1342,9 @@ int BlueFS::_read_random(
 	     << std::hex << len << std::dec << dendl;
   }
   bool read_done = false;
+  auto trigger_seq_num = cct->_conf->bluefs_trigger_prefetch_seq_num;
   if (h->buf.max_prefetch >= len && h->lock.try_lock()) {
-    if (h->track_read(off, len)) {
+    if (h->track_read(off, len, trigger_seq_num)) {
       dout(5) << __func__ << " new sequence: ino "
 	      << h->file->fnode.ino << " "
 	      << h->seq_cnt_last << ","
@@ -1351,7 +1352,7 @@ int BlueFS::_read_random(
 	      << (double)h->seq_len_last / h->seq_cnt_last
 	      << dendl;
     }
-    if (h->seq_cnt > 2) { //FIXME: make configurable
+    if (h->seq_cnt >= trigger_seq_num) {
       dout(5) << __func__ << " buf read: ino "
 	      << h->file->fnode.ino
 	      << " 0x" << std::hex << off << "~" << len << std::dec
@@ -1474,11 +1475,9 @@ void BlueFS::_got_hint(FileReader* h, bool random)
   dout(5) << __func__ << " " << random << " ino "
             << h->file->fnode.ino
 	    << dendl;
-  if (random) {
-    h->buf.max_prefetch = 65536; //FIXME: make configurable
-  } else {
-    h->buf.max_prefetch = cct->_conf->bluefs_max_prefetch;
-  }
+  h->buf.max_prefetch = random ?
+   cct->_conf->bluefs_semi_random_max_prefetch :
+   cct->_conf->bluefs_max_prefetch;
 }
 
 int BlueFS::_read(
@@ -2777,7 +2776,7 @@ BlueFS::FileWriter *BlueFS::_create_writer(FileRef f)
 
 void BlueFS::close_reader(FileReader *h)
 {
-  if (h->seq_found()) {
+  if (h->seq_found(cct->_conf->bluefs_trigger_prefetch_seq_num)) {
     dout(5) << __func__ << " new sequence: ino "
             << h->file->fnode.ino << " "
             << h->seq_cnt_last << ","
@@ -2828,7 +2827,9 @@ int BlueFS::open_for_read(
   File *file = q->second.get();
 
   *h = new FileReader(file,
-		      random ? 65536 : cct->_conf->bluefs_max_prefetch, // FIXME: make configurable
+		      random ?
+		        cct->_conf->bluefs_semi_random_max_prefetch :
+		        cct->_conf->bluefs_max_prefetch,
 		      random, false);
   dout(10) << __func__ << " h " << *h << " on " << file->fnode << dendl;
   return 0;

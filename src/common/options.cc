@@ -4160,6 +4160,14 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("bluefs_trigger_prefetch_seq_num", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(3)
+    .set_description(""),
+
+    Option("bluefs_semi_random_max_prefetch", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(65536)
+    .set_description(""),
+
     Option("bluestore_bluefs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
     .set_flag(Option::FLAG_CREATE)

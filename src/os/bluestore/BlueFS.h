@@ -241,8 +241,8 @@ public:
     ~FileReader() {
       --file->num_readers;
     }
-    bool seq_found() {
-      bool f = seq_cnt > 3;
+    bool seq_found(uint64_t trigger_seq_cnt) {
+      bool f = seq_cnt >= trigger_seq_cnt;
       if (f) {
 	seq_cnt_last = seq_cnt;
 	seq_len_last = seq_len;
@@ -250,13 +250,13 @@ public:
       }
       return f;
     }
-    bool track_read(uint64_t offset, uint64_t len) {
+    bool track_read(uint64_t offset, uint64_t len, uint64_t trigger_seq_cnt) {
       bool found = false;
       if (prev_offset == offset) {
 	seq_len += len;
 	++seq_cnt;
       } else {
-	found = seq_found();
+	found = seq_found(trigger_seq_cnt);
 	seq_len = len;
 	seq_cnt = 1;
      }
