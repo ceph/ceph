@@ -1,9 +1,9 @@
 tasks:
 - ssh-keys: null
 - ceph-ansible:
-    cluster: c1
+      cluster: c1
 - ceph-ansible:
-    cluster: c2
+      cluster: c2
 - install.ship_utilities: null
 - new-rgw-multisite:
    realm:
@@ -17,22 +17,18 @@ tasks:
          - name: test-zone
            is_master: true
            is_default: true
-           endpoints: [c1.rgw.0]
+           endpoints: [c1.rgw.0, c1.rgw.1]
          - name: test-zone2
            is_default: true
-           endpoints: [c2.rgw.1]
+           endpoints: [c2.rgw.1, c2.rgw.0]
 - netem:
     clients: [c1.rgw.0]
     iface: eno1
     dst_client: c2.rgw.1
     delay_range: [30ms, 100ms]
 - multisite-test:
-     test_name: test_Mbuckets_with_Nobjects_sharding
+     test_name: test_Mbuckets_with_Nobjects_download
      script_name: test_Mbuckets_with_Nobjects
      test_dir_version: v2
-     test_client: c2.rgw.1
-- sleep:
-      duration: 120
-- multisite-test.pull-io-info:
-- verify-io:
-      verification_script: read_io_info
+     test_client: c1.haproxy.0
+

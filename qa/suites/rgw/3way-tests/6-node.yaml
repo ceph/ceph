@@ -1,21 +1,35 @@
 roles:
 - - c1.mon.a
   - c1.mgr.x
+  - c1.mon.b
   - c1.osd.0
   - c1.osd.1
   - c1.osd.2
 - - c1.osd.3
   - c1.osd.4
   - c1.osd.5
-- - c1.rgw.0
+  - c1.rgw.0
   - c1.client.0
 - - c2.mon.a
   - c2.mgr.y
+  - c2.mon.b
   - c2.osd.0
   - c2.osd.1
   - c2.osd.2
 - - c2.osd.3
   - c2.osd.4
   - c2.osd.5
-- - c2.rgw.1
+  - c2.rgw.1
   - c2.client.1
+- - c3.mon.a
+  - c3.mgr.y
+  - c3.mon.b
+  - c3.osd.0
+  - c3.osd.1
+  - c3.osd.2
+- - c3.osd.3
+  - c3.osd.4
+  - c3.osd.5
+  - c3.rgw.2
+  - c3.client.2
+

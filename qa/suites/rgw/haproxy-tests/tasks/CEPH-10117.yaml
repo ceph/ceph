@@ -5,7 +5,8 @@ tasks:
 - ceph-ansible:
     cluster: c2
 - install.ship_utilities: null
-- new_rgw_multisite:
+- new-rgw-multisite:
+   migrate: true
    realm:
      name: test-realm
      is_default: true
@@ -17,39 +18,39 @@ tasks:
          - name: test-zone
            is_master: true
            is_default: true
-           endpoints: [c1.rgw.0]
+           endpoints: [c1.rgw.0, c1.rgw.1]
          - name: test-zone2
            is_default: true
-           endpoints: [c2.rgw.1]
+           endpoints: [c2.rgw.0, c2.rgw.1]
 - netem:
     clients: [c1.rgw.0]
     iface: eno1
     dst_client: c2.rgw.1
-    delay_range: [30ms, 100ms]
+    delay: 30ms
 - multisite-test.userexec:
       test_dir_version: v2
       master_client: c1.rgw.0
       master_config:
-        user_count: 1
+        user_count: 3
 - sleep:
       duration: 60
 - multisite-test:
-     test_name: test_Mbuckets_basic
-     script_name: test_Mbuckets_basic
-     test_dir_version: v2
-     test_client: c2.rgw.1
+      test_name: test_Mbuckets_basic
+      script_name: test_Mbuckets_basic
+      master_client: c1.haproxy.0
+      test_dir_version: v2
 - sleep:
-   duration: 120
+      duration: 120
 - multisite-test.pull-io-info:
-- ceph-ipmi.poweroff: [c1.rgw.0]
+- verify-io:
+      verification_script: read_io_info
 - multisite-test:
-     test_name: Mbuckets_with_Nobjects_basic
-     script_name: test_Mbuckets_with_Nobjects_basic
-     test_dir_version: v2
-     test_client: c2.rgw.1
+      script_name: test_Mbuckets_with_Nobjects_basic
+      test_name: test_Mbuckets_with_Nobjects_basic
+      test_dir_version: v2
+      test_client: c1.haproxy.1
 - sleep:
-   duration: 120
-- ceph-ipmi.poweron: [c1.rgw.0]
+      duration: 120
 - multisite-test.pull-io-info:
 - verify-io:
       verification_script: read_io_info

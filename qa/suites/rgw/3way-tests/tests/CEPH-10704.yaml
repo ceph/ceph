@@ -4,6 +4,8 @@ tasks:
     cluster: c1
 - ceph-ansible:
     cluster: c2
+- ceph-ansible:
+    cluster: c3
 - install.ship_utilities: null
 - new-rgw-multisite:
    realm:
@@ -14,59 +16,56 @@ tasks:
        is_master: true
        is_default: true
        zones:
-         - name: test-zone
+         - name: zone1
            is_master: true
            is_default: true
            endpoints: [c1.rgw.0]
-         - name: test-zone2
+         - name: zone2
            is_default: true
            endpoints: [c2.rgw.1]
+- new-rgw-multisite.addzone:
+      name: zone3
+      endpoints: c3.rgw.2
 - netem:
     clients: [c1.rgw.0]
-    iface: eno1
     dst_client: c2.rgw.1
-    delay_range: [30ms, 100ms]
+    iface: eno1
+    delay_range: [20ms, 200ms]
+- netem:
+    clients: [c1.rgw.0]
+    dst_client: c3.rgw.2
+    iface: eno1
+    delay_range: [10ms, 100ms]
 - multisite-test.userexec:
       master_client: c1.rgw.0
       test_dir_version: v1
       master_config:
         user_count: 3
 - sleep:
-   duration: 60
-- ceph-ipmi.poweroff: [c1.rgw.0]
-- new-rgw-multisite.failover:
-      new_master_zone: test-zone2
-      new_master: c2.rgw.1
-- sleep:
-   duration: 30
+      duration: 60
 - multisite-test:
       test-name: test_Mbuckets_with_Nobjects
       test_dir_version: v1
       test_client: c2.rgw.1
-      bucket_count: 2
-      objects_count: 5
-      min_file_size: 5
-      max_file_size: 10
-- ceph-ipmi.poweron: [c1.rgw.0]
+      bucket_count: 20
+      objects_count: 100
+      min_file_size: 50
+      max_file_size: 100
 - sleep:
-   duration: 60
-- new-rgw-multisite.failback:
-- sleep:
-   duration: 100
+      duration: 60
 - multisite-test.pull-io-info:
 - verify-io:
       verification_script: read_io_info
 - multisite-test:
-      test-name: test_Mbuckets_with_Nobjects
+      test-name: test_multipart_upload_download
       test_dir_version: v1
-      test_client: c1.rgw.0
+      test_client: c3.rgw.2
       target_config:
-        bucket_count: 5
-        objects_count: 5
-        min_file_size: 5
-        max_file_size: 10
+          bucket_count: 5
+          min_file_size: 100
+          max_file_size: 200
 - sleep:
-   duration: 120
+      duration: 60
 - multisite-test.pull-io-info:
 - verify-io:
       verification_script: read_io_info

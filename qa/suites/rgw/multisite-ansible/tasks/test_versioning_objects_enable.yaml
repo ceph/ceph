@@ -27,10 +27,10 @@ tasks:
     dst_client: c2.rgw.1
     delay_range: [30ms, 100ms]
 - multisite-test:
-     test_name: test_Mbuckets_with_Nobjects_sharding
-     script_name: test_Mbuckets_with_Nobjects
-     test_dir_version: v2
-     test_client: c2.rgw.1
+      test_name: test_versioning_objects_enable
+      script_name: test_versioning_with_objects
+      test_dir_version: v2
+      test_client: c1.rgw.0
 - sleep:
       duration: 120
 - multisite-test.pull-io-info:

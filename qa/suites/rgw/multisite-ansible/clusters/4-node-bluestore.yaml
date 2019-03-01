@@ -4,11 +4,14 @@ roles:
   - c1.osd.0
   - c1.osd.1
   - c1.osd.2
+  - c1.rgw.0
+  - c1.client.0
 - - c1.osd.3
   - c1.osd.4
   - c1.osd.5
-- - c1.rgw.0
-  - c1.client.0
+- - c1.osd.6
+  - c1.osd.7
+  - c1.osd.8
 - - c2.mon.a
   - c2.mgr.y
   - c2.osd.0
@@ -17,5 +20,8 @@ roles:
 - - c2.osd.3
   - c2.osd.4
   - c2.osd.5
-- - c2.rgw.1
+- - c2.osd.6
+  - c2.osd.7
+  - c2.osd.8
+  - c2.rgw.1
   - c2.client.1
