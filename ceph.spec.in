@@ -47,15 +47,14 @@
 %global _fillupdir /var/adm/fillup-templates
 %endif
 %if 0%{?is_opensuse}
-%bcond_without lttng
 %bcond_without libradosstriper
 %else
 %bcond_with libradosstriper
-%ifarch x86_64 aarch64
+%endif
+%ifarch x86_64 aarch64 ppc64le
 %bcond_without lttng
 %else
 %bcond_with lttng
-%endif
 %endif
 %endif
 %bcond_with seastar
