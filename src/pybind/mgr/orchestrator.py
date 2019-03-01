@@ -710,7 +710,7 @@ class InventoryDevice(object):
     def __init__(self, blank=False, type=None, id=None, size=None,
                  rotates=False, available=False, dev_id=None, extended=None,
                  metadata_space_free=None):
-        # type: (bool, str, str, int, bool, bool. str, dict, bool) -> None
+        # type: (bool, str, str, int, bool, bool, str, dict, bool) -> None
 
         self.blank = blank
 
