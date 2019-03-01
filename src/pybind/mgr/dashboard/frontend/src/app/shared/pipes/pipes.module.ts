@@ -1,6 +1,7 @@
 import { CommonModule, DatePipe } from '@angular/common';
 import { NgModule } from '@angular/core';
 
+import { BooleanTextPipe } from './boolean-text.pipe';
 import { CdDatePipe } from './cd-date.pipe';
 import { CephReleaseNamePipe } from './ceph-release-name.pipe';
 import { CephShortVersionPipe } from './ceph-short-version.pipe';
@@ -23,6 +24,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
 @NgModule({
   imports: [CommonModule],
   declarations: [
+    BooleanTextPipe,
     DimlessBinaryPipe,
     DimlessBinaryPerSecondPipe,
     HealthColorPipe,
@@ -43,6 +45,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     UpperFirstPipe
   ],
   exports: [
+    BooleanTextPipe,
     DimlessBinaryPipe,
     DimlessBinaryPerSecondPipe,
     HealthColorPipe,
@@ -63,6 +66,7 @@ import { UpperFirstPipe } from './upper-first.pipe';
     UpperFirstPipe
   ],
   providers: [
+    BooleanTextPipe,
     DatePipe,
     CephShortVersionPipe,
     CephReleaseNamePipe,
