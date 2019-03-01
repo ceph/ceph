@@ -96,3 +96,7 @@
   this value may want to consider whether they have set this to a
   value similar to the new defaults (3 for HDDs and 10 for SSDs) and,
   if so, remove the option from their configuration entirely.
+
+* monitors now have a `ceph osd info` command that will provide information
+  on all osds, or provided osds, thus simplifying the process of having to
+  parse `osd dump` for the same information.
