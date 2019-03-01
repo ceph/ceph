@@ -38,7 +38,7 @@ class Module(MgrModule):
         },
         {
             'name': 'enabled',
-            'default': True
+            'default': False
         },
         {
             'name': 'leaderboard',
