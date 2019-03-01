@@ -383,8 +383,7 @@ void FSMap::get_health_checks(health_check_map_t *checks) const
     std::set<mds_rank_t> stuck_failed;
 
     for (const auto &rank : fs->mds_map.failed) {
-      const mds_gid_t replacement = find_replacement_for(
-          {fs->fscid, rank}, {}, g_conf()->mon_force_standby_active);
+      auto&& replacement = find_replacement_for({fs->fscid, rank}, {});
       if (replacement == MDS_GID_NONE) {
         stuck_failed.insert(rank);
       }
@@ -598,22 +597,20 @@ void FSMap::decode(bufferlist::const_iterator& p)
 
       // Construct mds_roles, standby_daemons, and remove
       // standbys from the MDSMap in the Filesystem.
-      for (auto &p : migrate_fs->mds_map.mds_info) {
-        if (p.second.state == MDSMap::STATE_STANDBY_REPLAY) {
-          // In legacy MDSMap, standby replay daemons don't have
-          // rank set, but since FSMap they do.
-          p.second.rank = p.second.standby_for_rank;
-        }
-        if (p.second.rank == MDS_RANK_NONE) {
-          if (p.second.state != MDSMap::STATE_STANDBY) {
+      for (const auto& [gid, info] : migrate_fs->mds_map.mds_info) {
+        if (info.state == MDSMap::STATE_STANDBY_REPLAY) {
+          /* drop any legacy standby-replay daemons */
+          drop_gids.insert(gid);
+        } else if (info.rank == MDS_RANK_NONE) {
+          if (info.state != MDSMap::STATE_STANDBY) {
             // Old MDSMaps can have down:dne here, which
             // is invalid in an FSMap (#17837)
-            drop_gids.insert(p.first);
+            drop_gids.insert(gid);
           } else {
-            insert(p.second); // into standby_daemons
+            insert(info); // into standby_daemons
           }
         } else {
-          mds_roles[p.first] = migrate_fs->fscid;
+          mds_roles[gid] = migrate_fs->fscid;
         }
       }
       for (const auto &p : standby_daemons) {
@@ -714,88 +711,38 @@ void Filesystem::print(std::ostream &out) const
   mds_map.print(out);
 }
 
-mds_gid_t FSMap::find_standby_for(mds_role_t role, std::string_view name) const
+mds_gid_t FSMap::get_available_standby() const
 {
-  mds_gid_t result = MDS_GID_NONE;
-
-  // First see if we have a STANDBY_REPLAY
-  auto fs = get_filesystem(role.fscid);
-  for (const auto &i : fs->mds_map.mds_info) {
-    const auto &info = i.second;
-    if (info.rank == role.rank && info.state == MDSMap::STATE_STANDBY_REPLAY) {
-      return info.global_id;
-    }
-  }
-
-  // See if there are any STANDBY daemons available
-  for (const auto &i : standby_daemons) {
-    const auto &gid = i.first;
-    const auto &info = i.second;
-    ceph_assert(info.state == MDSMap::STATE_STANDBY);
+  for (const auto& [gid, info] : standby_daemons) {
     ceph_assert(info.rank == MDS_RANK_NONE);
-
-    if (info.laggy()) {
-      continue;
-    }
-
-    // The mds_info_t may or may not tell us exactly which filesystem
-    // the standby_for_rank refers to: lookup via legacy_client_fscid
-    mds_role_t target_role = {
-      info.standby_for_fscid == FS_CLUSTER_ID_NONE ?
-        legacy_client_fscid : info.standby_for_fscid,
-      info.standby_for_rank};
-
-    if ((target_role.rank == role.rank && target_role.fscid == role.fscid)
-        || (name.length() && info.standby_for_name == name)) {
-      // It's a named standby for *me*, use it.
-      return gid;
-    } else if (
-        info.standby_for_rank < 0 && info.standby_for_name.length() == 0 &&
-        (info.standby_for_fscid == FS_CLUSTER_ID_NONE ||
-         info.standby_for_fscid == role.fscid)) {
-        // It's not a named standby for anyone, use it if we don't find
-        // a named standby for me later, unless it targets another FSCID.
-        result = gid;
-      }
-  }
-
-  return result;
-}
-
-mds_gid_t FSMap::find_unused_for(mds_role_t role,
-				 bool force_standby_active) const {
-  for (const auto &i : standby_daemons) {
-    const auto &gid = i.first;
-    const auto &info = i.second;
     ceph_assert(info.state == MDSMap::STATE_STANDBY);
 
-    if (info.laggy() || info.rank >= 0)
+    if (info.laggy() || info.is_frozen()) {
       continue;
-
-    if (info.standby_for_fscid != FS_CLUSTER_ID_NONE &&
-        info.standby_for_fscid != role.fscid)
-      continue;
-    if (info.standby_for_rank != MDS_RANK_NONE &&
-        info.standby_for_rank != role.rank)
-      continue;
-
-    // To be considered 'unused' a daemon must either not
-    // be selected for standby-replay or the force_standby_active
-    // setting must be enabled to use replay daemons anyway.
-    if (!info.standby_replay || force_standby_active) {
-      return gid;
     }
+
+    return gid;
   }
   return MDS_GID_NONE;
 }
 
-mds_gid_t FSMap::find_replacement_for(mds_role_t role, std::string_view name,
-                               bool force_standby_active) const {
-  const mds_gid_t standby = find_standby_for(role, name);
-  if (standby)
-    return standby;
-  else
-    return find_unused_for(role, force_standby_active);
+mds_gid_t FSMap::find_replacement_for(mds_role_t role, std::string_view name) const
+{
+  auto&& fs = get_filesystem(role.fscid);
+
+  // First see if we have a STANDBY_REPLAY
+  for (const auto& [gid, info] : fs->mds_map.mds_info) {
+    if (info.rank == role.rank && info.state == MDSMap::STATE_STANDBY_REPLAY) {
+      if (info.is_frozen()) {
+        /* the standby-replay is frozen, do nothing! */
+        return MDS_GID_NONE;
+      } else {
+        return gid;
+      }
+    }
+  }
+
+  return get_available_standby();
 }
 
 void FSMap::sanity() const
@@ -854,7 +801,7 @@ void FSMap::sanity() const
 
 void FSMap::promote(
     mds_gid_t standby_gid,
-    const Filesystem::ref& filesystem,
+    Filesystem& filesystem,
     mds_rank_t assigned_rank)
 {
   ceph_assert(gid_exists(standby_gid));
@@ -864,7 +811,7 @@ void FSMap::promote(
     ceph_assert(standby_daemons.at(standby_gid).state == MDSMap::STATE_STANDBY);
   }
 
-  MDSMap &mds_map = filesystem->mds_map;
+  MDSMap &mds_map = filesystem.mds_map;
 
   // Insert daemon state to Filesystem
   if (!is_standby_replay) {
@@ -889,7 +836,7 @@ void FSMap::promote(
   }
   info.rank = assigned_rank;
   info.inc = epoch;
-  mds_roles[standby_gid] = filesystem->fscid;
+  mds_roles[standby_gid] = filesystem.fscid;
 
   // Update the rank state in Filesystem
   mds_map.in.insert(assigned_rank);

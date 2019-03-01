@@ -322,6 +322,9 @@ COMMAND_WITH_FLAG("mds set " \
 	"name=val,type=CephString "					\
 	"name=yes_i_really_mean_it,type=CephBool,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", FLAG(OBSOLETE))
+COMMAND_WITH_FLAG("mds freeze name=role_or_gid,type=CephString"
+	" name=val,type=CephString",
+	"freeze MDS yes/no", "mds", "rw", FLAG(HIDDEN))
 // arbitrary limit 0-20 below; worth standing on head to make it
 // relate to actual state definitions?
 // #include "include/ceph_fs.h"
@@ -396,7 +399,7 @@ COMMAND("fs set " \
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
         "|allow_new_snaps|inline_data|cluster_down|allow_dirfrags|balancer" \
         "|standby_count_wanted|session_timeout|session_autoclose" \
-        "|down|joinable|min_compat_client " \
+        "|allow_standby_replay|down|joinable|min_compat_client " \
 	"name=val,type=CephString "					\
 	"name=yes_i_really_mean_it,type=CephBool,req=false",			\
 	"set fs parameter <var> to <val>", "mds", "rw")
