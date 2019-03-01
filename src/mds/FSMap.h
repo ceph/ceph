@@ -327,7 +327,8 @@ public:
    * Mutator helper for Filesystem objects: expose a non-const
    * Filesystem pointer to `fn` and update epochs appropriately.
    */
-  void modify_filesystem(fs_cluster_id_t fscid, auto&& fn)
+  template<typename T>
+  void modify_filesystem(fs_cluster_id_t fscid, T&& fn)
   {
     auto& fs = filesystems.at(fscid);
     fn(fs);
@@ -338,7 +339,8 @@ public:
    * Apply a mutation to the mds_info_t structure for a particular
    * daemon (identified by GID), and make appropriate updates to epochs.
    */
-  void modify_daemon(mds_gid_t who, auto&& fn)
+  template<typename T>
+  void modify_daemon(mds_gid_t who, T&& fn)
   {
     const auto& fscid = mds_roles.at(who);
     if (fscid == FS_CLUSTER_ID_NONE) {
