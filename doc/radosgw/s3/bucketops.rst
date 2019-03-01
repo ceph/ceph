@@ -29,11 +29,14 @@ Syntax
 Parameters
 ~~~~~~~~~~
 
+
 +---------------+----------------------+-----------------------------------------------------------------------------+------------+
 | Name          | Description          | Valid Values                                                                | Required   |
 +===============+======================+=============================================================================+============+
 | ``x-amz-acl`` | Canned ACLs.         | ``private``, ``public-read``, ``public-read-write``, ``authenticated-read`` | No         |
 +---------------+----------------------+-----------------------------------------------------------------------------+------------+
+| ``x-amz-bucket-object-lock-enabled`` | Enable object lock on bucket. | ``true``, ``false``                         | No         |
++--------------------------------------+-------------------------------+---------------------------------------------+------------+
 
 Request Entities
 ~~~~~~~~~~~~~~~~
@@ -387,6 +390,87 @@ REQUEST ENTITIES
 | ``Status``                  | String    | Sets the versioning state of the bucket.  Valid Values: Suspended/Enabled |
 +-----------------------------+-----------+---------------------------------------------------------------------------+
 
+PUT BUCKET OBJECT LOCK
+--------------------------------
+
+Places an Object Lock configuration on the specified bucket. The rule specified in the Object Lock configuration will be
+applied by default to every new object placed in the specified bucket.
+
+Syntax
+~~~~~~
+
+::
+
+    PUT /{bucket}?object-lock HTTP/1.1
+
+Request Entities
+~~~~~~~~~~~~~~~~
+
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
+| Name                        | Type        | Description                                                                            | Required |
++=============================+=============+========================================================================================+==========+
+| ``ObjectLockConfiguration`` | Container   | A container for the request.                                                           |   Yes    |
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
+| ``ObjectLockEnabled``       | String      | Indicates whether this bucket has an Object Lock configuration enabled.                |   Yes    |
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
+| ``Rule``                    | Container   | The Object Lock rule in place for the specified bucket.                                |   No     |
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
+| ``DefaultRetention``        | Container   | The default retention period applied to new objects placed in the specified bucket.    |   No     |
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
+| ``Mode``                    | String      | The default Object Lock retention mode. Valid Values:  GOVERNANCE/COMPLIANCE           |   Yes    |
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
+| ``Days``                    | Integer     | The number of days specified for the default retention period.                         |   No     |
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
+| ``Years``                   | Integer     | The number of years specified for the default retention period.                        |   No     |
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
+
+HTTP Response
+~~~~~~~~~~~~~
+
+If the bucket object lock is not enabled when creating the bucket, the operation will fail.
+
++---------------+-----------------------+----------------------------------------------------------+
+| HTTP Status   | Status Code           | Description                                              |
++===============+=======================+==========================================================+
+| ``400``       | MalformedXML          | The XML is not well-formed                               |
++---------------+-----------------------+----------------------------------------------------------+
+| ``409``       | InvalidBucketState    | The bucket object lock is not enabled                    |
++---------------+-----------------------+----------------------------------------------------------+
+
+GET BUCKET OBJECT LOCK
+--------------------------------
+
+Gets the Object Lock configuration for a bucket. The rule specified in the Object Lock configuration will be applied by
+default to every new object placed in the specified bucket.
+
+Syntax
+~~~~~~
+
+::
+
+    GET /{bucket}?object-lock HTTP/1.1
+
+
+Response Entities
+~~~~~~~~~~~~~~~~~
+
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
+| Name                        | Type        | Description                                                                            | Required |
++=============================+=============+========================================================================================+==========+
+| ``ObjectLockConfiguration`` | Container   | A container for the request.                                                           |   Yes    |
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
+| ``ObjectLockEnabled``       | String      | Indicates whether this bucket has an Object Lock configuration enabled.                |   Yes    |
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
+| ``Rule``                    | Container   | The Object Lock rule in place for the specified bucket.                                |   No     |
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
+| ``DefaultRetention``        | Container   | The default retention period applied to new objects placed in the specified bucket.    |   No     |
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
+| ``Mode``                    | String      | The default Object Lock retention mode. Valid Values:  GOVERNANCE/COMPLIANCE           |   Yes    |
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
+| ``Days``                    | Integer     | The number of days specified for the default retention period.                         |   No     |
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
+| ``Years``                   | Integer     | The number of years specified for the default retention period.                        |   No     |
++-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
 
 Create Notification
 -------------------
