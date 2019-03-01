@@ -826,7 +826,7 @@ CtPtr ProtocolV2::_handle_peer_banner(char *buffer, int r) {
   unsigned banner_prefix_len = strlen(CEPH_BANNER_V2_PREFIX);
 
   if (memcmp(buffer, CEPH_BANNER_V2_PREFIX, banner_prefix_len)) {
-    if (memcmp(buffer, CEPH_BANNER, strlen(CEPH_BANNER))) {
+    if (memcmp(buffer, CEPH_BANNER, strlen(CEPH_BANNER)) == 0) {
       lderr(cct) << __func__ << " peer " << *connection->peer_addrs
                  << " is using msgr V1 protocol" << dendl;
       return _fault();
