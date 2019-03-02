@@ -65,10 +65,10 @@ struct segment_t {
 
 struct SegmentIndex {
   struct Msg {
-    static constexpr std::size_t FRONT = 0;
-    static constexpr std::size_t MIDDLE = 1;
-    static constexpr std::size_t DATA = 2;
-    static constexpr std::size_t FOOTER = 3;
+    static constexpr std::size_t HEADER = 0;
+    static constexpr std::size_t FRONT = 1;
+    static constexpr std::size_t MIDDLE = 2;
+    static constexpr std::size_t DATA = 3;
   };
 
   struct Frame {
@@ -608,17 +608,13 @@ struct MessageHeaderFrame
                                    const ceph::bufferlist& data) {
     MessageHeaderFrame f =
         PayloadFrame<MessageHeaderFrame, ceph_msg_header2>::Encode(msg_header);
-
-    // FIXME. Together with the frame hierarchy.
-    ceph::bufferlist preamble;
-    f.payload.splice(0, FRAME_PREAMBLE_SIZE, &preamble);
-
     // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart from auth tag size
     f.fill_preamble({
+      segment_t{ f.payload.length() - FRAME_PREAMBLE_SIZE,
+		 segment_t::DEFAULT_ALIGNMENT },
       segment_t{ front.length(), segment_t::DEFAULT_ALIGNMENT },
       segment_t{ middle.length(), segment_t::DEFAULT_ALIGNMENT },
       segment_t{ data.length(), segment_t::PAGE_SIZE_ALIGNMENT },
-      segment_t{ f.payload.length(), segment_t::DEFAULT_ALIGNMENT },
     });
 
     // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart from auth tag size
@@ -627,15 +623,15 @@ struct MessageHeaderFrame
       // NOTE: ultimately we'll align these sizes to cipher's block size.
       // AES-GCM can live without that as it's basically stream cipher.
       session_stream_handlers.tx->reset_tx_handler({
-        preamble.length(),
+        f.payload.length(),
         front.length(),
         middle.length(),
-        data.length(),
-        f.payload.length()
+        data.length()
       });
 
+      ceph_assert(f.payload.length());
       session_stream_handlers.tx->authenticated_encrypt_update(
-        std::move(preamble));
+        std::move(f.payload));
 
       // TODO: switch TxHandler from `bl&&` to `const bl&`.
       if (front.length()) {
@@ -648,26 +644,21 @@ struct MessageHeaderFrame
         session_stream_handlers.tx->authenticated_encrypt_update(data);
       }
 
-      ceph_assert(f.payload.length());
-      session_stream_handlers.tx->authenticated_encrypt_update(
-        std::move(f.payload));
-
       // auth tag will be appended at the end
       f.payload = session_stream_handlers.tx->authenticated_encrypt_final();
     } else {
       epilogue_crc_block_t epilogue;
-      // fixme
+      ceph::bufferlist::const_iterator hdriter(&f.payload, FRAME_PREAMBLE_SIZE);
+      epilogue.crc_values[SegmentIndex::Msg::HEADER] =
+          hdriter.crc32c(hdriter.get_remaining(), -1);
       epilogue.crc_values[SegmentIndex::Msg::FRONT] = front.crc32c(-1);
       epilogue.crc_values[SegmentIndex::Msg::MIDDLE] = middle.crc32c(-1);
       epilogue.crc_values[SegmentIndex::Msg::DATA] = data.crc32c(-1);
-      epilogue.crc_values[SegmentIndex::Msg::FOOTER] = f.payload.crc32c(-1);
 
-      preamble.append(front);
-      preamble.append(middle);
-      preamble.append(data);
-      preamble.append(f.payload);
-      preamble.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
-      f.payload = std::move(preamble);
+      f.payload.append(front);
+      f.payload.append(middle);
+      f.payload.append(data);
+      f.payload.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
     }
 
     return f;

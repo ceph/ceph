@@ -1333,9 +1333,8 @@ CtPtr ProtocolV2::handle_message() {
 #endif
   recv_stamp = ceph_clock_now();
 
-  // yeah, footer is conveying header ;-). Renaming needed. FIXME.
   auto header_frame = MessageHeaderFrame::Decode(
-    std::move(rx_segments_data[SegmentIndex::Msg::FOOTER]));
+    std::move(rx_segments_data[SegmentIndex::Msg::HEADER]));
   // XXX: paranoid copy just to avoid oops
   ceph_msg_header2 current_header = header_frame.header();
 
