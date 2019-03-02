@@ -155,6 +155,29 @@ bool PG::is_primary() const
   return whoami == primary;
 }
 
+
+namespace {
+  bool has_shard(bool ec, const vector<int>& osds, pg_shard_t pg_shard)
+  {
+    if (ec) {
+      return (osds.size() > static_cast<unsigned>(pg_shard.shard) &&
+              osds[pg_shard.shard] == pg_shard.osd);
+    } else {
+      return std::find(osds.begin(), osds.end(), pg_shard.osd) != osds.end();
+    }
+  }
+}
+
+bool PG::is_acting(pg_shard_t pg_shard) const
+{
+  return has_shard(pool.is_erasure(), acting, pg_shard);
+}
+
+bool PG::is_up(pg_shard_t pg_shard) const
+{
+  return has_shard(pool.is_erasure(), up, pg_shard);
+}
+
 epoch_t PG::get_last_peering_reset() const
 {
   return last_peering_reset;

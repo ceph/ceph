@@ -47,6 +47,8 @@ public:
   const PastIntervals& get_past_intervals() const;
   pg_shard_t get_primary() const;
   bool is_primary() const;
+  bool is_acting(pg_shard_t pg_shard) const;
+  bool is_up(pg_shard_t pg_shard) const;
   pg_shard_t get_whoami() const;
   epoch_t get_last_peering_reset() const;
   void update_last_peering_reset();
