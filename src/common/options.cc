@@ -1023,6 +1023,10 @@ std::vector<Option> get_global_options() {
     .set_default(1_M)
     .set_description("Size of stack for SimpleMessenger read/write threads"),
 
+    Option("ms_connection_ready_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_description("Time before we declare a not yet ready connection as dead (seconds)"),
+
     Option("ms_connection_idle_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(900)
     .set_description("Time before an idle connection is closed (seconds)"),
