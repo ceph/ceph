@@ -17,20 +17,34 @@ tasks:
          - name: test-zone
            is_master: true
            is_default: true
-           endpoints: [c1.rgw.0]
+           endpoints: [c1.rgw.0, c1.rgw.1]
          - name: test-zone2
            is_default: true
-           endpoints: [c2.rgw.1]
+           endpoints: [c2.rgw.1, c2.rgw.0]
 - netem:
     clients: [c1.rgw.0]
     iface: eno1
     dst_client: c2.rgw.1
     delay_range: [30ms, 100ms]
+- multisite-test.userexec:
+      test_dir_version: v2
+      master_client: c1.rgw.0
+      master_config:
+        user_count: 2
+- sleep:
+      duration: 60
 - multisite-test:
-     test_name: test_Mbuckets_with_Nobjects_sharding
-     script_name: test_Mbuckets_with_Nobjects
-     test_dir_version: v2
-     test_client: c2.rgw.1
+      test_name: test_Mbuckets_basic
+      script_name: test_Mbuckets_basic
+      master_client: c1.haproxy.0
+      test_dir_version: v2
+- sleep:
+      duration: 120
+- multisite-test:
+      script_name: test_Mbuckets_with_Nobjects_basic
+      test_name: test_Mbuckets_with_Nobjects_basic
+      test_dir_version: v2
+      test_client: c1.haproxy.0
 - sleep:
       duration: 120
 - multisite-test.pull-io-info:

@@ -1,9 +1,9 @@
 tasks:
 - ssh-keys: null
 - ceph-ansible:
-    cluster: c1
+      cluster: c1
 - ceph-ansible:
-    cluster: c2
+      cluster: c2
 - install.ship_utilities: null
 - new-rgw-multisite:
    realm:
@@ -17,15 +17,10 @@ tasks:
          - name: test-zone
            is_master: true
            is_default: true
-           endpoints: [c1.rgw.0]
+           endpoints: [c1.rgw.0, c1.rgw.1]
          - name: test-zone2
            is_default: true
-           endpoints: [c2.rgw.1]
-- netem:
-    clients: [c1.rgw.0]
-    iface: eno1
-    dst_client: c2.rgw.1
-    link_toggle_interval: 10  # no need to mention units. Dafault takes seconds.
+           endpoints: [c2.rgw.0, c2.rgw.1]
 - multisite-test.userexec:
       master_client: c1.rgw.0
       test_dir_version: v1
@@ -33,14 +28,20 @@ tasks:
         user_count: 3
 - sleep:
       duration: 60
+- ceph-ipmi.poweroff: [c1.rgw.1]
+- sleep:
+      duration: 90
 - multisite-test:
-      test-name: test_Mbuckets
+      test-name: test_Mbuckets_with_Nobjects
       test_dir_version: v1
-      test_client: c2.rgw.1
+      test_client: c1.haproxy.0
       bucket_count: 5
+      objects_count: 5
+      min_file_size: 5
+      max_file_size: 10
 - sleep:
       duration: 60
-#- netem:
-#    clients: [c1.rgw.0]
-#    iface: eno1
-#    link_recover: true
+- multisite-test.pull-io-info:
+- verify-io:
+      verification_script: read_io_info
+- ceph-ipmi.poweron: [c1.rgw.1]

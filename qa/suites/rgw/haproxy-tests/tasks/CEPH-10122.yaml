@@ -17,29 +17,48 @@ tasks:
          - name: test-zone
            is_master: true
            is_default: true
-           endpoints: [c1.rgw.0]
+           endpoints: [c1.rgw.0, c1.rgw.1]
          - name: test-zone2
            is_default: true
-           endpoints: [c2.rgw.1]
+           endpoints: [c2.rgw.1, c2.rgw.0]
 - netem:
     clients: [c1.rgw.0]
-    iface: eno1
     dst_client: c2.rgw.1
-    delay: 30ms
+    iface: eno1
+    delay_range: [100ms, 200ms]
 - multisite-test.userexec:
       master_client: c1.rgw.0
       test_dir_version: v1
       master_config:
         user_count: 3
 - sleep:
-      duration: 60
+      duration: 120
+- multisite-test.pull-io-info:
 - multisite-test:
-      test-name: test_Mbuckets
+      test-name: test_Mbuckets_with_Nobjects
       test_dir_version: v1
-      test_client: c2.rgw.1
+      test_client: c1.haproxy.0
       bucket_count: 5
+      objects_count: 5
+      min_file_size: 5
+      max_file_size: 10
 - sleep:
-      duration: 60
+      duration: 120
 - multisite-test.pull-io-info:
 - verify-io:
       verification_script: read_io_info
+- multisite-test:
+      test-name: test_multipart_upload
+      test_dir_version: v1
+      test_client: c1.haproxy.0
+      target_config:
+          bucket_count: 5
+          min_file_size: 5
+          max_file_size: 10
+- sleep:
+      duration: 120
+- multisite-test.pull-io-info:
+- verify-io:
+      verification_script: read_io_info
+
+

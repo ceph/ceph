@@ -14,11 +14,11 @@ tasks:
        is_master: true
        is_default: true
        zones:
-         - name: test-zone
+         - name: zone1
            is_master: true
            is_default: true
            endpoints: [c1.rgw.0]
-         - name: test-zone2
+         - name: zone2
            is_default: true
            endpoints: [c2.rgw.1]
 - netem:
@@ -32,41 +32,47 @@ tasks:
       master_config:
         user_count: 3
 - sleep:
-   duration: 60
-- ceph-ipmi.poweroff: [c1.rgw.0]
-- new-rgw-multisite.failover:
-      new_master_zone: test-zone2
-      new_master: c2.rgw.1
-- sleep:
-   duration: 30
+      duration: 60
 - multisite-test:
       test-name: test_Mbuckets_with_Nobjects
       test_dir_version: v1
       test_client: c2.rgw.1
       bucket_count: 2
-      objects_count: 5
+      objects_count: 2
       min_file_size: 5
       max_file_size: 10
-- ceph-ipmi.poweron: [c1.rgw.0]
 - sleep:
-   duration: 60
-- new-rgw-multisite.failback:
-- sleep:
-   duration: 100
-- multisite-test.pull-io-info:
-- verify-io:
-      verification_script: read_io_info
+      duration: 60
+- new-rgw-multisite.addzone:
+      name: zone3
+      endpoints: c1.rgw.1
 - multisite-test:
       test-name: test_Mbuckets_with_Nobjects
       test_dir_version: v1
-      test_client: c1.rgw.0
-      target_config:
-        bucket_count: 5
-        objects_count: 5
-        min_file_size: 5
-        max_file_size: 10
+      test_client: c2.rgw.1
+      bucket_count: 2
+      objects_count: 2
+      min_file_size: 5
+      max_file_size: 10
 - sleep:
-   duration: 120
+      duration: 120
 - multisite-test.pull-io-info:
 - verify-io:
       verification_script: read_io_info
+- new-rgw-multisite.failover:
+      new_master_zone: zone3
+      new_master: c1.rgw.1
+- multisite-test:
+      test-name: test_Mbuckets_with_Nobjects
+      test_dir_version: v1
+      test_client: c2.rgw.1
+      bucket_count: 2
+      objects_count: 2
+      min_file_size: 5
+      max_file_size: 10
+- sleep:
+      duration: 120
+- multisite-test.pull-io-info:
+- verify-io:
+      verification_script: read_io_info
+

@@ -9,18 +9,56 @@ import pwd
 import time
 import argparse
 
-
+"""
 # Test yaml to test script mapper for boto3
 
-tests_mapper_v2 = {'Mbuckets': 'test_Mbuckets',
-                   'Mbuckets_sharding': 'test_Mbuckets',
-                   'Mbuckets_with_Nobjects_create': 'test_Mbuckets_with_Nobjects',
-                   'Mbuckets_with_Nobjects_delete': 'test_Mbuckets_with_Nobjects',
-                   'Mbuckets_with_Nobjects_download': 'test_Mbuckets_with_Nobjects',
-                   'Mbuckets_with_Nobjects_sharding': 'test_Mbuckets_with_Nobjects'
+tests_mapper_v2 = {'test_Mbuckets_basic': 'test_Mbuckets_basic',
+                   'test_Mbuckets_with_Nobjects_basic': 'test_Mbuckets_with_Nobjects_basic',
+                   'test_Mbuckets_with_Nobjects_delete': 'test_Mbuckets_with_Nobjects',
+                   'test_Mbuckets_with_Nobjects_download': 'test_Mbuckets_with_Nobjects',
+                   'test_Mbuckets_with_Nobjects_sharding': 'test_Mbuckets_with_Nobjects',
+                   'test_Mbuckets_with_Nobjects_encryption': 'test_Mbuckets_with_Nobjects',
+                   'test_bucket_lifecycle_config_disable': 'test_bucket_lifecycle_config_ops',
+                   'test_bucket_lifecycle_config_modify': 'test_bucket_lifecycle_config_ops',
+                   'test_bucket_lifecycle_config_read': 'test_bucket_lifecycle_config_ops',
+                   'test_bucket_lifecycle_config_versioning': 'test_bucket_lifecycle_config_ops',
+                   'test_acls': 'test_acls',
+                   'test_bucket_policy_delete': 'test_bucket_policy_ops',
+                   'test_bucket_policy_modify': 'test_bucket_policy_ops',
+                   'test_bucket_policy_replace': 'test_bucket_policy_ops',
+                   'test_bucket_request_payer': 'test_bucket_request_payer',
+                   'test_bucket_request_payer_download': 'test_bucket_request_payer',
+                   'test_dynamic_sharding_offline': 'test_dynamic_bucket_resharding',
+                   'test_dynamic_sharding_online': 'test_dynamic_bucket_resharding',
+                   'test_multitenant_access': 'test_multitenant_user_access',
+                   'test_storage_policy_s3': 'test_storage_policy',
+                   'test_storage_policy_swift': 'test_storage_policy',
+                   'test_swift_basic_ops': 'test_swift_basic_ops',
+                   'test_versioning_enable': 'test_versioning_with_objects',
+                   'test_versioning_objects_copy': 'test_versioning_copy_objects',
+                   'test_versioning_objects_delete': 'test_versioning_with_objects',
+                   'test_versioning_objects_enable': 'test_versioning_with_objects',
+                   'test_versioning_objects_suspend': 'test_versioning_with_objects',
+                   'test_versioning_objects_suspend_reupload': 'test_versioning_with_objects',
                    }
 
-def user_creation(user_config, mclient, tclient, version):
+"""
+
+
+def get_remotes(ctx):
+
+    rgws = ctx.cluster.only(teuthology.is_type('rgw'))
+    haproxys = ctx.cluster.only(teuthology.is_type('haproxy'))
+    remotes = []
+    for remote, roles_for_host in rgws.remotes.iteritems():
+        remotes.append(remote)
+    for remote, roles_for_host in haproxys.remotes.iteritems():
+        remotes.append(remote)
+
+    return remotes
+
+
+def user_creation(ctx, user_config, mclient, version):
 
     log.info('Create user on master client')
 
@@ -62,8 +100,15 @@ def user_creation(user_config, mclient, tclient, version):
 
     log.info('copy user_file to target client')
 
-    if mclient != tclient:
-        tclient.put_file(user_file, 'user_details')
+#    if mclient != tclient:
+#        tclient.put_file(user_file, 'user_details')
+
+    remotes = get_remotes(ctx)
+
+    for remote in remotes:
+        if remote != mclient:
+            log.info('copy user_details to {}'.format(remote))
+            remote.put_file(user_file, 'user_details')
 
 
 def test_data(tclient, test_name, script_name, version):
@@ -123,18 +168,56 @@ def pull_io_info(ctx, config):
     if config is None:
         config = {}
 
-    mclient = ctx.multisite_test.master
     tclient = ctx.multisite_test.target
 
-    if mclient != tclient:
-        mclient.run(args=[run.Raw('sudo mv io_info.yaml io_info_2.yaml')])
+    remotes = get_remotes(ctx)
 
-    clients = ctx.cluster.only(teuthology.is_type('rgw'))
-    for remote, roles_for_host in clients.remotes.iteritems():
+    for remote in remotes:
         if remote != tclient:
             copy_file_from(tclient, remote)
 
     yield
+
+
+def cleanup(ctx):
+
+    remotes = get_remotes(ctx)
+
+    for remote in remotes:
+        cleanup = lambda x: remote.run(args=[run.Raw('sudo rm -rf %s' % x)])
+
+        soot = ['venv', 'rgw-tests', '*.json', 'Download.*', 'Download', '*.mpFile', 'x*', 'key.*', 'Mp.*',
+                '*.key.*', 'user_details', 'io_info.yaml']
+
+        map(cleanup, soot)
+
+
+def clone_repo(ctx):
+    remotes = get_remotes(ctx)
+
+    for remote in remotes:
+        remote.run(args=['mkdir', 'rgw-tests'])
+        remote.run(
+            args=[
+                'cd',
+                'rgw-tests',
+                run.Raw(';'),
+                'git',
+                'clone',
+                '-b',
+                'add-encryption',
+                'http://gitlab.cee.redhat.com/ceph/ceph-qe-scripts.git',
+                ])
+
+        remote.run(args=['virtualenv', 'venv'])
+        remote.run(
+            args=[
+                'source',
+                'venv/bin/activate',
+                run.Raw(';'),
+                run.Raw('pip install boto boto3 names python-swiftclient PyYaml psutil ConfigParser simplejson'),
+                run.Raw(';'),
+                'deactivate'])
 
 
 @contextlib.contextmanager
@@ -147,9 +230,7 @@ def userexec(ctx, config):
         test_dir_version: v1
         master_client: source.rgw.0
         master_config:
-            cluster_name: source
             user_count: 3
-        target_client: target.rgw.1
     """
 
     log.info('starting the task')
@@ -159,49 +240,19 @@ def userexec(ctx, config):
     if config is None:
         config = {}
 
+    if not hasattr(ctx, 'userexec'):
+        ctx.userexec = argparse.Namespace()
+
     assert isinstance(config, dict), \
         "task userexec only supports a dictionary for configuration"
 
     log.info('cloning the repo to client machines')
 
-    remotes = ctx.cluster.only(teuthology.is_type('rgw'))
-    for remote, roles_for_host in remotes.remotes.iteritems():
-
-        cleanup = lambda x: remote.run(args=[run.Raw('sudo rm -rf %s' % x)])
-
-        soot = ['venv', 'rgw-tests', '*.json', 'Download.*', 'Download', '*.mpFile', 'x*', 'key.*', 'Mp.*',
-                '*.key.*', 'user_details', 'io_info.yaml', 'io_info_2.yaml']
-
-        map(cleanup, soot)
-
-        remote.run(args=['mkdir', 'rgw-tests'])
-        remote.run(
-            args=[
-                'cd',
-                'rgw-tests',
-                run.Raw(';'),
-                'git',
-                'clone',
-                '-b',
-                'multisite-boto3',
-                'http://gitlab.cee.redhat.com/ceph/ceph-qe-scripts.git',
-                ])
-
-        remote.run(args=['virtualenv', 'venv'])
-        remote.run(
-            args=[
-                'source',
-                'venv/bin/activate',
-                run.Raw(';'),
-                run.Raw('pip install boto boto3 names PyYaml psutil ConfigParser simplejson'),
-                run.Raw(';'),
-                'deactivate'])
+    cleanup(ctx)
+    clone_repo(ctx)
 
     master_client = config['master_client']
     (mclient,) = ctx.cluster.only(master_client).remotes.iterkeys()
-
-    target_client = config['target_client']
-    (tclient,) = ctx.cluster.only(target_client).remotes.iterkeys()
 
     user_config = config['master_config']
 
@@ -209,15 +260,14 @@ def userexec(ctx, config):
 
     user_data = dict(
         config=dict(
-            cluster_name=user_config['cluster_name'],
             user_count=user_config['user_count'],
         )
     )
 
     if config['test_dir_version'] == 'v1':
-        user_creation(user_data, mclient, tclient, version='v1')
+        user_creation(ctx, user_data, mclient, version='v1')
     elif config['test_dir_version'] == 'v2':
-        user_creation(user_data, mclient, tclient, version='v2')
+        user_creation(ctx, user_data, mclient, version='v2')
 
     yield
 
@@ -240,10 +290,10 @@ def execute_v2(tclient, config):
 
     # Tests using boto3 here
 
-    test_name = config['test-name'] + ".yaml"
-    script_name = tests_mapper_v2.get(config['test-name'], None) + ".py"
+    test_name = config['test_name'] + ".yaml"
+    script_name = config['script_name'] + ".py"
 
-    log.info('test name :%s' % config['test-name'])
+    log.info('test name :%s' % config['test_name'])
 
     # Execute  test
 
@@ -253,30 +303,44 @@ def execute_v2(tclient, config):
 @contextlib.contextmanager
 def task(ctx, config):
 
+    """
+    - multisite-test:
+      test-name: test_multipart_upload_download
+      test_dir_version: v1
+      test_client: c2.rgw.1
+      target_config:
+          bucket_count: 5
+          min_file_size: 100
+          max_file_size: 200
+
+    - multisite-test:
+      test_name: test_bucket_policy_replace
+      script_name: test_bucket_policy_ops
+      test_dir_version: v2
+      test_client: c1.rgw.0
+    """
+
     log.info('starting the task')
 
     log.info('config %s' % config)
 
-    if config is None:
-        config = {}
-
     assert isinstance(config, dict), \
         "task multisite_test only supports a dictionary for configuration"
 
-    # Master node for metadata
-
-    master_client = config['master_client']
-    (mclient,) = ctx.cluster.only(master_client).remotes.iterkeys()
-
     # Target node where the tests will be run. Can be primary or secondary multisite zones.
 
-    target_client = config['target_client']
+    target_client = config['test_client']
     (tclient,) = ctx.cluster.only(target_client).remotes.iterkeys()
 
-    ctx.multisite_test = argparse.Namespace()
-    ctx.multisite_test.master = mclient
+    if not hasattr(ctx, 'multisite_test'):
+        ctx.multisite_test = argparse.Namespace()
+
     ctx.multisite_test.target = tclient
     ctx.multisite_test.version = config['test_dir_version']
+
+    if not hasattr(ctx, 'userexec'):
+        cleanup(ctx)
+        clone_repo(ctx)
 
     log.info('test_dir_version: %s' % config['test_dir_version'])
 
@@ -286,29 +350,4 @@ def task(ctx, config):
     if config['test_dir_version'] == 'v2':
         execute_v2(tclient, config)
 
-    try:
-        yield
-    finally:
-
-        remotes = ctx.cluster.only(teuthology.is_type('rgw'))
-        for remote, roles_for_host in remotes.remotes.iteritems():
-
-            remote.run(
-                args=[
-                    'source',
-                    'venv/bin/activate',
-                    run.Raw(';'),
-                    run.Raw('pip uninstall boto boto3 names PyYaml -y'),
-                    run.Raw(';'),
-                    'deactivate'])
-
-            log.info('test completed')
-
-            log.info("Deleting repos")
-
-            cleanup = lambda x: remote.run(args=[run.Raw('sudo rm -rf %s' % x)])
-
-            soot = ['venv', 'rgw-tests', '*.json', 'Download.*', 'Download', '*.mpFile', 'x*', 'key.*', 'Mp.*',
-                    '*.key.*', 'user_details', 'io_info.yaml', 'io_info_2.yaml']
-
-            map(cleanup, soot)
+    yield

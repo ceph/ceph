@@ -1,0 +1,124 @@
+tasks:
+- ssh-keys: null
+- ceph-ansible:
+    cluster: c1
+- ceph-ansible:
+    cluster: c2
+- ceph-ansible:
+    cluster: c3
+- install.ship_utilities: null
+- new_rgw_multisite:
+   realm:
+     name: test-realm
+     is_default: true
+   zonegroups:
+     - name: test-zg
+       is_master: true
+       is_default: true
+       zones:
+         - name: test-zone
+           is_master: true
+           is_default: true
+           endpoints: [c1.rgw.0]
+         - name: test-zone2
+           is_default: true
+           endpoints: [c2.rgw.1]
+- new-rgw-multisite.addzone:
+      name: zone3
+      endpoints: c3.rgw.2
+- multisite-test.userexec:
+      master_client: c1.rgw.0
+      test_dir_version: v1
+      master_config:
+        user_count: 3
+- sleep:
+   duration: 60
+- multisite-test:
+     test-name: Mbuckets
+     test_dir_version: v2
+     test_client: c2.rgw.1
+     bucket_count: 5
+     test_ops:
+          create_bucket: true
+          sharding:
+            enable: false
+            max_shards: 0
+- sleep:
+   duration: 60
+- multisite-test.pull-io-info:
+- ceph-ipmi.poweroff: [c1.rgw.0]
+- ceph-ipmi.poweroff: [c2.rgw.1]
+- multisite-test:
+     test-name: Mbuckets_with_Nobjects_create
+     test_dir_version: v2
+     test_client: c3.rgw.2
+     objects_count: 10
+     objects_size_range:
+      min: 5
+      max: 15
+     test_ops:
+          create_object: true
+          download_object: false
+          delete_bucket_object: false
+- ceph-ipmi.poweron: [c1.rgw.0]
+- ceph-ipmi.poweron: [c2.rgw.1]
+- sleep:
+    duration: 120
+- multisite-test.pull-io-info:
+- verify-io:
+      verification_script: read_io_info
+- ceph-ipmi.poweroff: [c2.rgw.1]
+- ceph-ipmi.poweroff: [c3.rgw.2]
+- multisite-test:
+     test-name: Mbuckets_with_Nobjects_download
+     test_dir_version: v2
+     test_client: c2.rgw.1
+     objects_count: 5
+     objects_size_range:
+      min: 5
+      max: 15
+     test_ops:
+          create_object: true
+          download_object: true
+          delete_bucket_object: false
+- ceph-ipmi.poweron: [c2.rgw.1]
+- ceph-ipmi.poweron: [c3.rgw.2]
+- sleep:
+    duration: 120
+- multisite-test.pull-io-info:
+- verify-io:
+      verification_script: read_io_info
+- multisite-test:
+     test-name: Mbuckets
+     test_dir_version: v2
+     test_client: c1.rgw.0
+     bucket_count: 5
+     test_ops:
+          create_bucket: true
+          sharding:
+            enable: false
+            max_shards: 0
+- sleep:
+   duration: 60
+- multisite-test.pull-io-info:
+- ceph-ipmi.poweroff: [c1.rgw.0]
+- ceph-ipmi.poweroff: [c3.rgw.2]
+- multisite-test:
+     test-name: Mbuckets_with_Nobjects_delete
+     test_dir_version: v2
+     test_client: c2.rgw.1
+     objects_count: 5
+     objects_size_range:
+      min: 5
+      max: 15
+     test_ops:
+          create_object: true
+          download_object: false
+          delete_bucket_object: true
+- ceph-ipmi.poweron: [c1.rgw.0]
+- ceph-ipmi.poweron: [c3.rgw.2]
+- sleep:
+    duration: 120
+- multisite-test.pull-io-info:
+- verify-io:
+      verification_script: read_io_info

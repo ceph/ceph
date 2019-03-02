@@ -5,7 +5,7 @@ tasks:
 - ceph-ansible:
     cluster: c2
 - install.ship_utilities: null
-- new_rgw_multisite:
+- new-rgw-multisite:
    realm:
      name: test-realm
      is_default: true
@@ -25,31 +25,27 @@ tasks:
     clients: [c1.rgw.0]
     iface: eno1
     dst_client: c2.rgw.1
-    delay_range: [30ms, 100ms]
+    link_toggle_interval: 10  # no need to mention units. Dafault takes seconds.
 - multisite-test.userexec:
-      test_dir_version: v2
       master_client: c1.rgw.0
+      test_dir_version: v1
       master_config:
-        user_count: 1
+        user_count: 3
 - sleep:
       duration: 60
 - multisite-test:
-     test_name: test_Mbuckets_basic
-     script_name: test_Mbuckets_basic
-     test_dir_version: v2
-     test_client: c2.rgw.1
-- sleep:
-   duration: 120
-- multisite-test.pull-io-info:
-- ceph-ipmi.poweroff: [c1.rgw.0]
-- multisite-test:
-     test_name: Mbuckets_with_Nobjects_basic
-     script_name: test_Mbuckets_with_Nobjects_basic
-     test_dir_version: v2
-     test_client: c2.rgw.1
-- sleep:
-   duration: 120
-- ceph-ipmi.poweron: [c1.rgw.0]
-- multisite-test.pull-io-info:
-- verify-io:
-      verification_script: read_io_info
+      test-name: test_Mbuckets
+      test_dir_version: v1
+      test_client: c1.rgw.0
+      bucket_count: 5
+#- sleep:
+#      duration: 60
+#- netem:
+#    clients: [c1.rgw.0]
+#    iface: eno1
+#    link_recover: true
+#- multisite-test:
+#      test-name: test_Mbuckets
+#      test_dir_version: v1
+#      test_client: c2.rgw.1
+#      bucket_count: 5

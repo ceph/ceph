@@ -1,12 +1,11 @@
 tasks:
 - ssh-keys: null
 - ceph-ansible:
-    vars:
       cluster: c1
 - ceph-ansible:
-    vars:
       cluster: c2
-- new-rgw-multisite:
+- install.ship_utilities: null
+- new_rgw_multisite:
    realm:
      name: test-realm
      is_default: true
@@ -22,28 +21,25 @@ tasks:
          - name: test-zone2
            is_default: true
            endpoints: [c2.rgw.1]
+- netem:
+    clients: [c1.rgw.0]
+    iface: eno1
+    dst_client: c2.rgw.1
+    delay_range: [30ms, 100ms]
 - multisite-test.userexec:
       master_client: c1.rgw.0
       test_dir_version: v1
       master_config:
-        cluster_name: c1
         user_count: 3
-      target_client: c2.rgw.1
 - sleep:
       duration: 60
 - multisite-test:
-      test-name: test_basic_versioning
+      test-name: test_suspend_versioning
       test_dir_version: v1
-      master_client: c1.rgw.0
-      target_client: c2.rgw.1
+      test_client: c2.haproxy.0
       target_config:
           bucket_count: 5
           objects_count: 10
           version_count: 5
           min_file_size: 10
           max_file_size: 20
-- sleep:
-      duration: 60
-- multisite-test.pull-io-info:
-- verify-io:
-      verification_script: read_io_info

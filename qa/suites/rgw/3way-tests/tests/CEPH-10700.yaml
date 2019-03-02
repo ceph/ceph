@@ -1,11 +1,12 @@
 tasks:
 - ssh-keys: null
 - ceph-ansible:
-    vars:
-      cluster: c1
+    cluster: c1
 - ceph-ansible:
-    vars:
-      cluster: c2
+    cluster: c2
+- ceph-ansible:
+    cluster: c3
+- install.ship_utilities: null
 - new-rgw-multisite:
    realm:
      name: test-realm
@@ -15,31 +16,54 @@ tasks:
        is_master: true
        is_default: true
        zones:
-         - name: test-zone
+         - name: zone1
            is_master: true
            is_default: true
            endpoints: [c1.rgw.0]
-         - name: test-zone2
+         - name: zone2
            is_default: true
            endpoints: [c2.rgw.1]
+- new-rgw-multisite.addzone:
+      name: zone3
+      endpoints: c3.rgw.2
+- netem:
+    clients: [c1.rgw.0]
+    dst_client: c2.rgw.1
+    iface: eno1
+    delay: 20ms
+- netem:
+    clients: [c1.rgw.0]
+    dst_client: c3.rgw.2
+    iface: eno1
+    delay: 10ms
 - multisite-test.userexec:
       master_client: c1.rgw.0
       test_dir_version: v1
       master_config:
-        cluster_name: c1
         user_count: 3
-      target_client: c2.rgw.1
 - sleep:
       duration: 60
 - multisite-test:
       test-name: test_Mbuckets_with_Nobjects
       test_dir_version: v1
-      master_client: c1.rgw.0
-      target_client: c2.rgw.1
+      test_client: c1.rgw.0
       bucket_count: 5
       objects_count: 5
       min_file_size: 5
       max_file_size: 10
+- sleep:
+      duration: 60
+- multisite-test.pull-io-info:
+- verify-io:
+      verification_script: read_io_info
+- multisite-test:
+      test-name: test_multipart_upload_download
+      test_dir_version: v1
+      test_client: c3.rgw.2
+      target_config:
+          bucket_count: 5
+          min_file_size: 100
+          max_file_size: 200
 - sleep:
       duration: 60
 - multisite-test.pull-io-info:
