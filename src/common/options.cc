@@ -707,7 +707,7 @@ std::vector<Option> get_global_options() {
     .set_default(1_M)
     .set_description(""),
 
-    Option("ms_tcp_read_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("ms_connection_idle_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(900)
     .set_description(""),
 
