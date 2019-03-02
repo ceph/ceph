@@ -1328,7 +1328,6 @@ CtPtr ProtocolV2::handle_message() {
   ltt_recv_stamp = ceph_clock_now();
 #endif
   recv_stamp = ceph_clock_now();
-  state = READ_MESSAGE_COMPLETE;
 
   // yeah, footer is conveying header ;-). Renaming needed. FIXME.
   auto header_frame = MessageHeaderFrame::Decode(
@@ -1380,6 +1379,8 @@ CtPtr ProtocolV2::handle_message() {
   if (!message) {
     ldout(cct, 1) << __func__ << " decode message failed " << dendl;
     return _fault();
+  } else {
+    state = READ_MESSAGE_COMPLETE;
   }
 
   INTERCEPT(17);
