@@ -406,8 +406,7 @@ Operations
 
 ``osd client op priority``
 
-:Description: The priority set for client operations. It is relative to
-              ``osd recovery op priority``.
+:Description: The priority set for client operations.
 
 :Type: 32-bit Integer
 :Default: ``63``
@@ -416,8 +415,7 @@ Operations
 
 ``osd recovery op priority``
 
-:Description: The priority set for recovery operations. It is relative to
-              ``osd client op priority``.
+:Description: The priority set for recovery operations, if not specified by the pool's ``recovery_op_priority``.
 
 :Type: 32-bit Integer
 :Default: ``3``
@@ -426,18 +424,30 @@ Operations
 
 ``osd scrub priority``
 
-:Description: The priority set for scrub operations. It is relative to
-              ``osd client op priority``.
+:Description: The default priority set for a scheduled scrub work queue when the
+              pool doesn't specify a value of ``scrub_priority``.  This can be
+              boosted to the value of ``osd client op priority`` when scrub is
+              blocking client operations.
 
 :Type: 32-bit Integer
 :Default: ``5``
 :Valid Range: 1-63
 
 
+``osd requested scrub priority``
+
+:Description: The priority set for user requested scrub on the work queue.  If
+              this value were to be smaller than ``osd client op priority`` it
+              can be boosted to the value of ``osd client op priority`` when
+              scrub is blocking client operations.
+
+:Type: 32-bit Integer
+:Default: ``120``
+
+
 ``osd snap trim priority``
 
-:Description: The priority set for snap trim operations. It is relative to
-              ``osd client op priority``.
+:Description: The priority set for the snap trim work queue.
 
 :Type: 32-bit Integer
 :Default: ``5``
@@ -459,49 +469,6 @@ Operations
 :Type: Float
 :Default: ``30``
 
-
-``osd disk threads``
-
-:Description: The number of disk threads, which are used to perform background
-              disk intensive OSD operations such as scrubbing and snap
-              trimming.
-
-:Type: 32-bit Integer
-:Default: ``1``
-
-``osd disk thread ioprio class``
-
-:Description: Warning: it will only be used if both ``osd disk thread
-	      ioprio class`` and ``osd disk thread ioprio priority`` are
-	      set to a non default value.  Sets the ioprio_set(2) I/O
-	      scheduling ``class`` for the disk thread. Acceptable
-	      values are ``idle``, ``be`` or ``rt``. The ``idle``
-	      class means the disk thread will have lower priority
-	      than any other thread in the OSD. This is useful to slow
-	      down scrubbing on an OSD that is busy handling client
-	      operations. ``be`` is the default and is the same
-	      priority as all other threads in the OSD. ``rt`` means
-	      the disk thread will have precedence over all other
-	      threads in the OSD. Note: Only works with the Linux Kernel
-	      CFQ scheduler. Since Jewel scrubbing is no longer carried
-	      out by the disk iothread, see osd priority options instead.
-:Type: String
-:Default: the empty string
-
-``osd disk thread ioprio priority``
-
-:Description: Warning: it will only be used if both ``osd disk thread
-	      ioprio class`` and ``osd disk thread ioprio priority`` are
-	      set to a non default value. It sets the ioprio_set(2)
-	      I/O scheduling ``priority`` of the disk thread ranging
-	      from 0 (highest) to 7 (lowest). If all OSDs on a given
-	      host were in class ``idle`` and compete for I/O
-	      (i.e. due to controller congestion), it can be used to
-	      lower the disk thread priority of one OSD to 7 so that
-	      another OSD with priority 0 can have priority.
-	      Note: Only works with the Linux Kernel CFQ scheduler.
-:Type: Integer in the range of 0 to 7 or -1 if not to be used.
-:Default: ``-1``
 
 ``osd op history size``
 
@@ -975,6 +942,16 @@ perform well in a degraded state.
 
 :Type: Float
 :Default: ``0.025``
+
+
+``osd recovery priority``
+
+:Description: The default priority set for recovery work queue.  Not
+              related to a pool's ``recovery_priority``.
+
+:Type: 32-bit Integer
+:Default: ``5``
+
 
 Tiering
 =======

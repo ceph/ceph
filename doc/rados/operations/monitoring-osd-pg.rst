@@ -228,15 +228,15 @@ few cases:
    Placement group IDs consist of the pool number (not pool name) followed 
    by a period (.) and the placement group ID--a hexadecimal number. You
    can view pool numbers and their names from the output of ``ceph osd 
-   lspools``. For example, the default pool ``rbd`` corresponds to
-   pool number ``0``. A fully qualified placement group ID has the
+   lspools``. For example, the first pool created corresponds to
+   pool number ``1``. A fully qualified placement group ID has the
    following form::
    
    	{pool-num}.{pg-id}
    
    And it typically looks like this:: 
    
-   	0.1f
+	1.1f
    
 
 To retrieve a list of placement groups, execute the following:: 
@@ -380,19 +380,19 @@ requests when it is ready.
 
 During the backfill operations, you may see one of several states:
 ``backfill_wait`` indicates that a backfill operation is pending, but is not
-underway yet; ``backfill`` indicates that a backfill operation is underway;
-and, ``backfill_too_full`` indicates that a backfill operation was requested,
+underway yet; ``backfilling`` indicates that a backfill operation is underway;
+and, ``backfill_toofull`` indicates that a backfill operation was requested,
 but couldn't be completed due to insufficient storage capacity. When a 
 placement group cannot be backfilled, it may be considered ``incomplete``.
 
 Ceph provides a number of settings to manage the load spike associated with
 reassigning placement groups to an OSD (especially a new OSD). By default,
-``osd_max_backfills`` sets the maximum number of concurrent backfills to or from
-an OSD to 10. The ``backfill full ratio`` enables an OSD to refuse a
+``osd_max_backfills`` sets the maximum number of concurrent backfills to and from
+an OSD to 1. The ``backfill full ratio`` enables an OSD to refuse a
 backfill request if the OSD is approaching its full ratio (90%, by default) and
 change with ``ceph osd set-backfillfull-ratio`` command.
 If an OSD refuses a backfill request, the ``osd backfill retry interval``
-enables an OSD to retry the request (after 10 seconds, by default). OSDs can
+enables an OSD to retry the request (after 30 seconds, by default). OSDs can
 also set ``osd backfill scan min`` and ``osd backfill scan max`` to manage scan
 intervals (64 and 512, by default).
 
@@ -485,7 +485,7 @@ location, all you need is the object name and the pool name. For example::
    
 	Ceph should output the object's location. For example:: 
    
-		osdmap e537 pool 'data' (0) object 'test-object-1' -> pg 0.d1743484 (0.4) -> up ([1,0], p0) acting ([1,0], p0)
+		osdmap e537 pool 'data' (1) object 'test-object-1' -> pg 1.d1743484 (1.4) -> up ([0,1], p0) acting ([0,1], p0)
    
 	To remove the test object, simply delete it using the ``rados rm`` command.
 	For example:: 
