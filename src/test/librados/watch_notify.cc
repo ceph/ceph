@@ -462,10 +462,10 @@ TEST_F(LibRadosWatchNotify, Watch3Timeout) {
     // timer of timeout on OSD side will be reset by the new request.
     char conf[128];
     ASSERT_EQ(0, rados_conf_get(cluster,
-                                "ms_tcp_read_timeout",
+                                "ms_connection_idle_timeout",
                                 conf, sizeof(conf)));
-    auto tcp_read_timeout = std::stoll(conf);
-    ASSERT_LT(timeout, tcp_read_timeout);
+    auto connection_idle_timeout = std::stoll(conf);
+    ASSERT_LT(timeout, connection_idle_timeout);
   }
   ASSERT_EQ(0,
 	    rados_watch3(ioctx, notify_oid, &handle,
