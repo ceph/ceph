@@ -1023,9 +1023,9 @@ std::vector<Option> get_global_options() {
     .set_default(1_M)
     .set_description("Size of stack for SimpleMessenger read/write threads"),
 
-    Option("ms_tcp_read_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("ms_connection_idle_timeout", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(900)
-    .set_description("Time before an idle TCP connection is closed (seconds)"),
+    .set_description("Time before an idle connection is closed (seconds)"),
 
     Option("ms_pq_max_tokens_per_priority", Option::TYPE_UINT, Option::LEVEL_DEV)
     .set_default(16777216)

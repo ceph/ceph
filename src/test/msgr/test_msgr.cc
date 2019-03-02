@@ -1090,7 +1090,7 @@ TEST_P(MessengerTest, FeatureTest) {
 }
 
 TEST_P(MessengerTest, TimeoutTest) {
-  g_ceph_context->_conf.set_val("ms_tcp_read_timeout", "1");
+  g_ceph_context->_conf.set_val("ms_connection_idle_timeout", "1");
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
   if (string(GetParam()) == "simple")
@@ -1128,7 +1128,7 @@ TEST_P(MessengerTest, TimeoutTest) {
 
   client_msgr->shutdown();
   client_msgr->wait();
-  g_ceph_context->_conf.set_val("ms_tcp_read_timeout", "900");
+  g_ceph_context->_conf.set_val("ms_connection_idle_timeout", "900");
 }
 
 TEST_P(MessengerTest, StatefulTest) {
