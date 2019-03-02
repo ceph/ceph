@@ -7557,6 +7557,19 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	   << " > pg_num " << p.get_pg_num_target();
 	return -EINVAL;
       }
+    } else if (var == "recovery_priority") {
+      if (interr.length()) {
+        ss << "error parsing int value '" << val << "': " << interr;
+        return -EINVAL;
+      }
+      if (n < 0) {
+        ss << "pool recovery_priority can not be negative";
+        return -EINVAL;
+      } else if (n >= 30) {
+        ss << "pool recovery_priority should be less than 30 due to "
+           << "Ceph internal implementation restrictions";
+        return -EINVAL;
+      }
     }
 
     pool_opts_t::opt_desc_t desc = pool_opts_t::get_opt_desc(var);
