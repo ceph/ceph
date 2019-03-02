@@ -7,31 +7,35 @@ if test -e build; then
 fi
 
 PYBUILD="2"
-source /etc/os-release
-
-if [ "$(uname)" == FreeBSD ] ; then
-  DWITH_RADOSGW_AMQP_ENDPOINT="OFF"
-  DWITH_RADOSGW_KAFKA_ENDPOINT="OFF"
+if [ -r /etc/os-release ]; then
+  source /etc/os-release
+  case "$ID" in
+      fedora)
+          if [ "$VERSION_ID" -ge "29" ] ; then
+              PYBUILD="3"
+          fi
+          ;;
+      rhel|centos)
+          MAJOR_VER=$(echo "$VERSION_ID" | sed -e 's/\..*$//')
+          if [ "$MAJOR_VER" -ge "8" ] ; then
+              PYBUILD="3"
+          fi
+          ;;
+      opensuse*|suse|sles)
+          PYBUILD="3"
+          WITH_RADOSGW_AMQP_ENDPOINT="OFF"
+          WITH_RADOSGW_KAFKA_ENDPOINT="OFF"
+          ;;
+  esac
+elif [ "$(uname)" == FreeBSD ] ; then
+  PYBUILD="3"
+  WITH_RADOSGW_AMQP_ENDPOINT="OFF"
+  WITH_RADOSGW_KAFKA_ENDPOINT="OFF"
+else
+  echo Unknown release
+  exit 1
 fi
 
-case "$ID" in
-    fedora)
-        if [ "$VERSION_ID" -ge "29" ] ; then
-            PYBUILD="3"
-        fi
-        ;;
-    rhel|centos)
-        MAJOR_VER=$(echo "$VERSION_ID" | sed -e 's/\..*$//')
-        if [ "$MAJOR_VER" -ge "8" ] ; then
-            PYBUILD="3"
-        fi
-        ;;
-    opensuse*|suse|sles)
-        PYBUILD="3"
-        WITH_RADOSGW_AMQP_ENDPOINT="OFF"
-        WITH_RADOSGW_KAFKA_ENDPOINT="OFF"
-        ;;
-esac
 if [ "$PYBUILD" = "3" ] ; then
     ARGS="$ARGS -DWITH_PYTHON2=OFF -DWITH_PYTHON3=ON -DMGR_PYTHON_VERSION=3"
 fi
