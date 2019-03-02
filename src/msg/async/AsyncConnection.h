@@ -186,9 +186,11 @@ class AsyncConnection : public Connection {
   uint32_t recv_start;
   uint32_t recv_end;
   set<uint64_t> register_time_events; // need to delete it if stop
+  ceph::coarse_mono_clock::time_point last_connect_started;
   ceph::coarse_mono_clock::time_point last_active;
   ceph::mono_clock::time_point recv_start_time;
   uint64_t last_tick_id = 0;
+  const uint64_t connect_timeout_us;
   const uint64_t inactive_timeout_us;
 
   // Tis section are temp variables used by state transition
