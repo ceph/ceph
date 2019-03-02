@@ -546,8 +546,23 @@ private:
     epoch_t epoch,
     MonitorDBStore::TransactionRef t);
 
-  bool prepare_set_flag(MonOpRequestRef op, int flag);
-  bool prepare_unset_flag(MonOpRequestRef op, int flag);
+  bool _do_set_unset_flags(MonOpRequestRef op,
+			   uint64_t flags,
+			   bool is_set);
+
+  bool prepare_set_flag(MonOpRequestRef op, uint64_t flags);
+  bool prepare_unset_flag(MonOpRequestRef op, uint64_t flags);
+
+  int _handle_special_flag(string name,
+			   uint64_t flag,
+			   bool is_set,
+			   bool sure,
+			   stringstream &ss);
+  int prepare_set_unset_flags(MonOpRequestRef op,
+			      vector<string> flags,
+			      bool is_set,
+			      bool sure,
+			      stringstream &ss);
 
   void _pool_op_reply(MonOpRequestRef op,
                       int ret, epoch_t epoch, bufferlist *blp=NULL);

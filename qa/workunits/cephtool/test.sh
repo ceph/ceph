@@ -1495,6 +1495,37 @@ function test_mon_osd()
   expect_false ceph osd require-osd-release nautilus
   expect_false ceph osd require-osd-release mimic
   expect_false ceph osd require-osd-release luminous
+
+  # test bulk set/unset
+  ceph osd set noin noout nodown
+  # check flags were set
+  flags_found=0
+  for f in $(ceph osd dump --format=json | jq -cM '.flags_set[]' | \
+			 sed -ne 's/"//gp')
+  do
+	if [[ "$f" == "noin" ]] || \
+	   [[ "$f" == "noout" ]] || \
+	   [[ "$f" == "nodown" ]]; then
+		  flags_found=$((flags_found + 1))
+	fi
+  done
+  [[ $flags_found -eq 3 ]]
+
+  ceph osd unset noin noout nodown
+  # check flags were unset
+  flags_found=0
+  for f in $(ceph osd dump --format=json | jq -cM '.flags_set[]' | \
+			 sed -ne 's/"//gp')
+  do
+	if [[ "$f" == "noin" ]] || \
+	   [[ "$f" == "noout" ]] || \
+	   [[ "$f" == "nodown" ]]; then
+	  flags_found=1
+	  break
+	fi
+  done
+  [[ $flags_found -eq 0 ]]
+
   # these are no-ops but should succeed.
 
   ceph osd set noup
