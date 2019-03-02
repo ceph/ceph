@@ -148,3 +148,13 @@ bool PG::is_primary() const
 {
   return whoami == primary;
 }
+
+epoch_t PG::get_last_peering_reset() const
+{
+  return last_peering_reset;
+}
+
+void PG::update_last_peering_reset()
+{
+  last_peering_reset = get_osdmap_epoch();
+}
