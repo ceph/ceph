@@ -248,6 +248,10 @@ void ProtocolV2::reset_recv_state() {
   sent_tag = static_cast<Tag>(0);
   next_tag = static_cast<Tag>(0);
 
+  reset_throttle();
+}
+
+void ProtocolV2::reset_throttle() {
   if (state > THROTTLE_MESSAGE && state <= THROTTLE_DONE &&
       connection->policy.throttler_messages) {
     ldout(cct, 10) << __func__ << " releasing " << 1
@@ -1370,6 +1374,17 @@ CtPtr ProtocolV2::handle_message() {
                          current_header.reserved,
                          0};
   ceph_msg_footer footer{0, 0, 0, 0, current_header.flags};
+
+  // we do have a mechanism that allows transmitter to start sending message
+  // and abort after putting entire data field on wire. This will be used by
+  // the kernel client to avoid unnecessary buffering.
+  if (current_header.flags & CEPH_MSG_FOOTER_LATEABRT) {
+    ceph_assert(state == THROTTLE_DONE);
+
+    reset_throttle();
+    state = READY;
+    return CONTINUE(read_frame);
+  }
 
   Message *message = decode_message(cct, 0, header, footer,
       rx_segments_data[SegmentIndex::Msg::FRONT],
