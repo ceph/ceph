@@ -1719,7 +1719,7 @@ bool PG::choose_acting(pg_shard_t &auth_log_shard_id,
   set<pg_shard_t> want_backfill, want_acting_backfill;
   vector<int> want;
   stringstream ss;
-  if (!pool.info.is_erasure())
+  if (pool.info.is_replicated())
     calc_replicated_acting(
       auth_log_shard,
       cct->_conf.get_val<uint64_t>(
