@@ -142,6 +142,11 @@ class CephFSMount(object):
                 'sudo', 'touch', os.path.join(self.mountpoint, suffix)
             ])
 
+    def test_create_file(self, filename='testfile', dirname=None, user=None,
+                         check_status=True):
+        return self.create_file(filename=filename, dirname=dirname, user=user,
+                                check_status=False)
+
     def check_files(self):
         assert(self.is_mounted())
 
