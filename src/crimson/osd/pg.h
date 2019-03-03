@@ -55,6 +55,26 @@ public:
   epoch_t get_need_up_thru() const;
   void update_need_up_thru(const OSDMap* o = nullptr);
 
+  bool proc_replica_info(pg_shard_t from,
+			 const pg_info_t& pg_info,
+			 epoch_t send_epoch);
+  void proc_replica_log(pg_shard_t from,
+			const pg_info_t& pg_info,
+			const pg_log_t& pg_log,
+			const pg_missing_t& pg_missing);
+
+  using peer_info_t = std::map<pg_shard_t, pg_info_t>;
+  pg_shard_t find_best_info(const PG::peer_info_t& infos) const;
+  enum class choose_acting_t {
+    dont_change,
+    should_change,
+    pg_incomplete,
+  };
+  std::vector<int>
+  calc_acting(pg_shard_t auth_shard,
+	      const vector<int>& acting,
+	      const map<pg_shard_t, pg_info_t>& all_info) const;
+  std::pair<choose_acting_t, pg_shard_t> choose_acting();
   seastar::future<> read_state(ceph::os::CyanStore* store);
 
   // peering/recovery
@@ -75,6 +95,10 @@ private:
   epoch_t last_peering_reset = 0;
   epoch_t need_up_thru = 0;
 
+
+  // peer_info    -- projected (updates _before_ replicas ack)
+  peer_info_t peer_info; //< info from peers (stray or prior)
+
   //< pg state
   pg_info_t info;
   //< last written info, for fast info persistence
@@ -85,6 +109,8 @@ private:
   pg_shard_t primary, up_primary;
   std::vector<int> acting, up;
   pg_shard_set_t actingset, upset;
+  pg_shard_set_t acting_recovery_backfill;
+  std::vector<int> want_acting;
 
   cached_map_t osdmap;
   ceph::net::Messenger& msgr;
