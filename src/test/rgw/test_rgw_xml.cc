@@ -7,7 +7,7 @@
 #include <stdexcept>
 
 struct NameAndStatus {
-  NameAndStatus() = default;
+  // these are sub-tags
   std::string name;
   bool status;
   
@@ -26,21 +26,19 @@ struct NameAndStatus {
 };
 
 struct Item {
-  Item() = default;
-  Item(const NameAndStatus& _name, int _value, int _extra_value) {
-    name = _name;
-    value = _value;
-    extra_value = _extra_value;
-  }
-
-  NameAndStatus name;
+  // these are sub-tags
+  NameAndStatus name_and_status;
   int value;
   int extra_value;
+
+  // these are attributes
+  std::string date;
+  std::string comment;
  
   // intrusive XML decoding API
   bool decode_xml(XMLObj *obj) {
-    if (!RGWXMLDecoder::decode_xml("NameAndStatus", name, obj, true)) {
-      // name is mandatory
+    if (!RGWXMLDecoder::decode_xml("NameAndStatus", name_and_status, obj, true)) {
+      // name amd status are mandatory
       return false;
     }
     if (!RGWXMLDecoder::decode_xml("Value", value, obj, true)) {
@@ -51,11 +49,22 @@ struct Item {
       // extra value is optional and defaults to zero
       extra_value = 0;
     }
+
+    // date attribute is optional
+    if (!obj->get_attr("Date", date)) {
+      date = "no date";
+    }
+    // comment attribute is optional
+    if (!obj->get_attr("Comment", comment)) {
+      comment = "no comment";
+    }
+
     return true;
   }
 };
 
 struct Items {
+  // these are sub-tags
   std::list<Item> item_list;
   
   // intrusive XML decoding API
@@ -68,31 +77,66 @@ struct Items {
 // in case of non-intrusive decoding class
 // hierarchy should reflect the XML hierarchy
 
+class NameXMLObj: public XMLObj {
+protected:
+  void xml_handle_data(const char *s, int len) override {
+    // no need to set "data", setting "name" directly
+    value.append(s, len);
+  }
+
+public:
+  std::string value;
+  ~NameXMLObj() override = default;
+};
+
+class StatusXMLObj: public XMLObj {
+protected:
+  void xml_handle_data(const char *s, int len) override {
+    std::istringstream is(std::string(s, len));
+    is >> std::boolalpha >> value;
+  }
+
+public:
+  bool value;
+  ~StatusXMLObj() override = default;
+};
+
 class NameAndStatusXMLObj: public NameAndStatus, public XMLObj {
 public:
-  NameAndStatusXMLObj() = default;
-  virtual ~NameAndStatusXMLObj() = default;
-  
+  ~NameAndStatusXMLObj() override = default;
+
   bool xml_end(const char *el) override {
-    // mixing the 2 types
-    return decode_xml(this);
+    XMLObjIter iter = find("Name");
+    NameXMLObj* _name = static_cast<NameXMLObj*>(iter.get_next());
+    if (!_name) {
+      // name is mandatory
+      return false;
+    }
+    name = _name->value;
+    iter = find("Status");
+    StatusXMLObj* _status = static_cast<StatusXMLObj*>(iter.get_next());
+    if (!_status) {
+      // status is optional and defaults to True
+      status = true;
+    } else {
+      status = _status->value;
+    }
+    return true;
   }
 };
 
 class ItemXMLObj: public Item, public XMLObj {
 public:
-  ItemXMLObj() = default;
-  virtual ~ItemXMLObj() = default;
+  ~ItemXMLObj() override = default;
   
   bool xml_end(const char *el) override {
     XMLObjIter iter = find("NameAndStatus");
-    NameAndStatusXMLObj* _name = static_cast<NameAndStatusXMLObj*>(iter.get_next());
-    if (!_name) {
-      // name is mandatory
+    NameAndStatusXMLObj* _name_and_status = static_cast<NameAndStatusXMLObj*>(iter.get_next());
+    if (!_name_and_status) {
+      // name and status are mandatory
       return false;
     }
-    name.name = _name->name;
-    name.status = _name->status;
+    name_and_status = *static_cast<NameAndStatus*>(_name_and_status);
     iter = find("Value");
     XMLObj* _value = iter.get_next();
     if (!_value) {
@@ -118,23 +162,31 @@ public:
       extra_value = 0;
     }
 
+    // date attribute is optional
+    if (!get_attr("Date", date)) {
+      date = "no date";
+    }
+    // comment attribute is optional
+    if (!get_attr("Comment", comment)) {
+      comment = "no comment";
+    }
+
     return true;
   }
 };
 
 class ItemsXMLObj: public Items, public XMLObj {
 public:
-  ItemsXMLObj() = default;
-  virtual ~ItemsXMLObj() = default;
+  ~ItemsXMLObj() override = default;
 
   bool xml_end(const char *el) override {
     XMLObjIter iter = find("Item");
-    ItemXMLObj* item = static_cast<ItemXMLObj*>(iter.get_next());
+    ItemXMLObj* item_ptr = static_cast<ItemXMLObj*>(iter.get_next());
     // mandatory to have at least one item
     bool item_found = false;
-    while (item) {
-      item_list.emplace_back(item->name, item->value, item->extra_value);
-      item = static_cast<ItemXMLObj*>(iter.get_next());
+    while (item_ptr) {
+      item_list.push_back(*static_cast<Item*>(item_ptr));
+      item_ptr = static_cast<ItemXMLObj*>(iter.get_next());
       item_found = true;
     }
     return item_found;
@@ -152,6 +204,10 @@ public:
       return new ItemXMLObj;
     } else if (strncmp(el, "NameAndStatus", MAX_NAME_LEN) == 0) {
       return new NameAndStatusXMLObj;
+    } else if (strncmp(el, "Name", MAX_NAME_LEN) == 0) {
+      return new NameXMLObj;
+    } else if (strncmp(el, "Status", MAX_NAME_LEN) == 0) {
+      return new StatusXMLObj;
     }
     return nullptr;
   }
@@ -172,7 +228,16 @@ static const char* expected_output = "((hello,1),1,0),((world,1),2,99),((foo,1),
 std::string to_string(const Items& items) {
   std::stringstream ss;
   for (const auto& item : items.item_list) {
-    ss << "((" << item.name.name << "," << item.name.status << ")," << item.value << "," << item.extra_value << ")" << ",";
+    ss << "((" << item.name_and_status.name << "," << item.name_and_status.status << ")," << item.value << "," << item.extra_value << ")" << ",";
+  }
+  return ss.str();
+}
+
+std::string to_string_with_attributes(const Items& items) {
+  std::stringstream ss;
+  for (const auto& item : items.item_list) {
+    ss << "(" << item.date << "," << item.comment << ",(" << item.name_and_status.name << "," << item.name_and_status.status << ")," 
+      << item.value << "," << item.extra_value << ")" << ",";
   }
   return ss.str();
 }
@@ -269,6 +334,35 @@ TEST(TestParser, MultipleChunks)
   ASSERT_STREQ(to_string(*parser.items).c_str(), expected_output);
 }
 
+static const char* input_with_attributes = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>"
+                           "<Items>"
+                             "<Item Date=\"Tue Dec 27 17:21:29 2011\" Kaboom=\"just ignore\">"
+                               "<NameAndStatus><Name>hello</Name></NameAndStatus><Value>1</Value>"
+                             "</Item>"
+                             "<Item Comment=\"hello world\">"
+                               "<ExtraValue>99</ExtraValue><NameAndStatus><Name>world</Name></NameAndStatus><Value>2</Value>"
+                             "</Item>"
+                             "<Item><Value>3</Value><NameAndStatus><Name>foo</Name></NameAndStatus></Item>"
+                             "<Item Comment=\"goodbye\" Date=\"Thu Feb 28 10:00:18 UTC 2019 \">"
+                               "<Value>4</Value><ExtraValue>42</ExtraValue><NameAndStatus><Name>bar</Name><Status>False</Status></NameAndStatus>"
+                             "</Item>"
+                           "</Items>";
+
+static const char* expected_output_with_attributes = "(Tue Dec 27 17:21:29 2011,no comment,(hello,1),1,0),"
+                                                     "(no date,hello world,(world,1),2,99),"
+                                                     "(no date,no comment,(foo,1),3,0),"
+                                                     "(Thu Feb 28 10:00:18 UTC 2019 ,goodbye,(bar,0),4,42),";
+
+TEST(TestParser, Attributes)
+{  
+  ItemsXMLParser parser;
+  ASSERT_TRUE(parser.init());
+  ASSERT_TRUE(parser.parse(input_with_attributes, strlen(input_with_attributes), 1));
+  ASSERT_EQ(parser.items->item_list.size(), 4U);
+  ASSERT_STREQ(to_string_with_attributes(*parser.items).c_str(), 
+      expected_output_with_attributes);
+}
+
 TEST(TestDecoder, BasicParsing)
 {
   RGWXMLDecoder::XMLParser parser;
@@ -324,3 +418,18 @@ TEST(TestDecoder, MultipleChunks)
   ASSERT_EQ(result.item_list.size(), 4U);
   ASSERT_STREQ(to_string(result).c_str(), expected_output);
 }
+
+TEST(TestDecoder, Attributes)
+{  
+  RGWXMLDecoder::XMLParser parser;
+  ASSERT_TRUE(parser.init());
+  ASSERT_TRUE(parser.parse(input_with_attributes, strlen(input_with_attributes), 1));
+  Items result;
+  ASSERT_NO_THROW({
+    ASSERT_TRUE(RGWXMLDecoder::decode_xml("Items", result, &parser, true));
+  });
+  ASSERT_EQ(result.item_list.size(), 4U);
+  ASSERT_STREQ(to_string_with_attributes(result).c_str(), 
+      expected_output_with_attributes);
+}
+
