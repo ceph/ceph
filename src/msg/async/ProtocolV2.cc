@@ -497,7 +497,7 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
                            footer.flags,      header.compat_version,
                            header.reserved};
 
-  auto message = MessageHeaderFrame::Encode(session_stream_handlers,
+  auto message = MessageFrame::Encode(session_stream_handlers,
 			     header2,
 			     m->get_payload(),
 			     m->get_middle(),
@@ -1290,7 +1290,7 @@ CtPtr ProtocolV2::handle_message() {
 #endif
   recv_stamp = ceph_clock_now();
 
-  auto header_frame = MessageHeaderFrame::Decode(
+  auto header_frame = MessageFrame::Decode(
     std::move(rx_segments_data[SegmentIndex::Msg::HEADER]));
   // XXX: paranoid copy just to avoid oops
   ceph_msg_header2 current_header = header_frame.header();
