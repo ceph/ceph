@@ -58,7 +58,7 @@ public:
 				 uint32_t want_keys);
   seastar::future<> close();
   bool is_my_peer(const entity_addr_t& addr) const;
-
+  AuthAuthorizer* get_authorizer(peer_type_t peer) const;
   seastar::future<> renew_tickets();
   ceph::net::ConnectionRef get_conn();
 
@@ -103,6 +103,15 @@ seastar::future<> Connection::renew_tickets()
     });
   }
   return seastar::now();
+}
+
+AuthAuthorizer* Connection::get_authorizer(peer_type_t peer) const
+{
+  if (auth) {
+    return auth->build_authorizer(peer);
+  } else {
+    return nullptr;
+  }
 }
 
 std::unique_ptr<AuthClientHandler>
@@ -353,6 +362,16 @@ seastar::future<> Client::ms_handle_reset(ceph::net::ConnectionRef conn)
     return seastar::now();
   }
 }
+
+AuthAuthorizer* Client::ms_get_authorizer(peer_type_t peer) const
+{
+  if (active_con) {
+    return active_con->get_authorizer(peer);
+  } else {
+    return nullptr;
+  }
+}
+
 
 seastar::future<> Client::handle_monmap(ceph::net::ConnectionRef conn,
                                         Ref<MMonMap> m)
