@@ -69,7 +69,7 @@ class SocketConnection : public Connection {
   struct Handshake {
     ceph_msg_connect connect;
     ceph_msg_connect_reply reply;
-    std::unique_ptr<AuthAuthorizer> authorizer;
+    AuthAuthorizer* authorizer = nullptr;
     std::chrono::milliseconds backoff;
     uint32_t connect_seq = 0;
     uint32_t peer_global_seq = 0;
