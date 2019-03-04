@@ -646,22 +646,27 @@ protected:
 // This class is used for encoding/decoding header of the message frame.
 // Body is processed almost independently with the sole junction point
 // being the `extra_payload_len` passed to get_buffer().
-struct MessageHeaderFrame
-    : public ControlFrame<MessageHeaderFrame, ceph_msg_header2> {
+struct MessageFrame
+    : public Frame<MessageFrame, 4 /* four segments */> {
   static const Tag tag = Tag::MESSAGE;
+
+  ceph::bufferlist &get_payload_segment() {
+    return this->segments[SegmentIndex::Msg::HEADER];
+  }
 
   ceph::bufferlist &get_buffer() {
     // In contrast to Frame::get_buffer() we don't fill preamble here.
     return this->get_payload_segment();
   }
 
-  static MessageHeaderFrame Encode(ceph::crypto::onwire::rxtx_t &session_stream_handlers,
-                                   const ceph_msg_header2 &msg_header,
-                                   const ceph::bufferlist& front,
-                                   const ceph::bufferlist& middle,
-                                   const ceph::bufferlist& data) {
-    MessageHeaderFrame f =
-        ControlFrame<MessageHeaderFrame, ceph_msg_header2>::Encode(msg_header);
+  static MessageFrame Encode(ceph::crypto::onwire::rxtx_t &session_stream_handlers,
+                             const ceph_msg_header2 &msg_header,
+                             const ceph::bufferlist& front,
+                             const ceph::bufferlist& middle,
+                             const ceph::bufferlist& data) {
+    MessageFrame f;
+    f.segments[SegmentIndex::Msg::HEADER].append(
+        reinterpret_cast<const char*>(&msg_header), sizeof(msg_header));
 
     f.fill_preamble({
       segment_t{ f.get_payload_segment().length() - FRAME_PREAMBLE_SIZE,
@@ -736,16 +741,19 @@ struct MessageHeaderFrame
     return f;
   }
 
-  static MessageHeaderFrame Decode(ceph::bufferlist&& text) {
-    MessageHeaderFrame f;
-    f.decode_frame(text);
+  static MessageFrame Decode(ceph::bufferlist&& text) {
+    MessageFrame f;
+    f.segments[SegmentIndex::Msg::HEADER] = std::move(text);
     return f;
   }
 
-  inline ceph_msg_header2 &header() { return get_val<0>(); }
+  inline const ceph_msg_header2 &header() {
+    auto& hdrbl = segments[SegmentIndex::Msg::HEADER];
+    return reinterpret_cast<const ceph_msg_header2&>(*hdrbl.c_str());
+  }
 
 protected:
-  using ControlFrame::ControlFrame;
+  using Frame::Frame;
 };
 
 } // namespace ceph::msgr::v2
