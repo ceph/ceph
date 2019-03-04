@@ -170,13 +170,12 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
                 c_v_out = check_output(cmd.format(tmpdir='.'),shell=True)
 
         for out in c_v_out.splitlines():
-            if not out.startswith(b'-->') and not out.startswith(b' stderr'):
-                self.log.error(out)
-                devs = []
-                for device in json.loads(out):
-                    dev = orchestrator.InventoryDevice.from_ceph_volume_inventory(device)
-                    devs.append(dev)
-                return [orchestrator.InventoryNode('localhost', devs)]
+            self.log.error(out)
+            devs = []
+            for device in json.loads(out):
+                dev = orchestrator.InventoryDevice.from_ceph_volume_inventory(device)
+                devs.append(dev)
+            return [orchestrator.InventoryNode('localhost', devs)]
         self.log.error('c-v failed: ' + str(c_v_out))
         raise Exception('c-v failed')
 
