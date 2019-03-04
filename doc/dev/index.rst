@@ -1523,7 +1523,7 @@ When the build completes, and still in the top-level directory of the git
 clone where you built Ceph, do the following, for cmake builds::
 
     cd build/
-    RGW=1 ../vstart.sh -n
+    RGW=1 ../src/vstart.sh -n
 
 This will produce a lot of output as the vstart cluster is started up. At the
 end you should see a message like::
