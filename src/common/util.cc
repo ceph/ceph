@@ -164,6 +164,10 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
     (*m)["container_name"] = container_name;
     in_container = true;
   }
+  if (const char *container_image = getenv("CONTAINER_IMAGE")) {
+    (*m)["container_image"] = container_image;
+    in_container = true;
+  }
   if (in_container) {
     if (const char *node_name = getenv("NODE_NAME")) {
       (*m)["container_hostname"] = u.nodename;
