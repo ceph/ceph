@@ -49,7 +49,7 @@ function expect_false()
 }
 
 
-TEMP_DIR=$(mktemp -d ${TMPDIR-/tmp}/cephtool.XXX)
+TEMP_DIR=$(mktemp -d ${TMPDIR:-/tmp}/cephtool.XXX)
 trap "rm -fr $TEMP_DIR" 0
 
 TMPFILE=$(mktemp $TEMP_DIR/test_invalid.XXX)
