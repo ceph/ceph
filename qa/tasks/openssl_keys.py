@@ -26,7 +26,8 @@ class OpenSSLKeys(Task):
               # [required] make the private key and certificate available in this client's test directory
               client: client.0
 
-              # common name, defaults to `hostname`. chained certificates must not share a common name
+              # common name, defaults to `hostname`. chained certificates must not share a common name.
+              # if cn ends in a '.', the `hostname` is appended (ie 'foo.' -> 'foo.example.com')
               cn: teuthology
 
               # private key type for -newkey, defaults to rsa:2048
@@ -112,6 +113,8 @@ class OpenSSLKeys(Task):
 
         # provide the common name in -subj to avoid the openssl command prompts
         subject = '/CN={}'.format(config.get('cn', cert.remote.hostname))
+        if subject.endswith('.'):
+            subject += cert.remote.hostname
 
         # if a ca certificate is provided, use it to sign the new certificate
         ca = config.get('ca', None)
