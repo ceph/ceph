@@ -306,10 +306,10 @@ class Ansible(Task):
         with open(self.failure_log.name, 'r') as fail_log:
             try:
                 failures = yaml.safe_load(fail_log)
-            except yaml.parser.ParserError:
+            except yaml.YAMLError as e:
                 log.error(
-                    "Failed to parse ansible failure log: {0}".format(
-                        self.failure_log.name,
+                    "Failed to parse ansible failure log: {0} ({1})".format(
+                        self.failure_log.name, e
                     )
                 )
                 failures = fail_log.read().replace('\n', '')
