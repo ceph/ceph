@@ -235,7 +235,6 @@ struct ceph_msg_footer {
 #define CEPH_MSG_FOOTER_COMPLETE  (1<<0)   /* msg wasn't aborted */
 #define CEPH_MSG_FOOTER_NOCRC     (1<<1)   /* no data crc */
 #define CEPH_MSG_FOOTER_SIGNED	  (1<<2)   /* msg was signed */
-#define CEPH_MSG_FOOTER_LATEABRT  (1<<3)   /* msg was aborted after txing data */
 
 
 #endif

@@ -119,15 +119,33 @@ static_assert(std::is_standard_layout<preamble_block_t>::value);
 // *auth tag* (following OpenSSL's terminology). However, it would be OK
 // to switch to e.g. AES128-CBC + HMAC-SHA512 without affecting protocol
 // (expect the cipher negotiation, of course).
-struct epilogue_crc_block_t {
+//
+// In addition to integrity/authenticity data each variant of epilogue
+// conveys late_flags. The initial user of this field will be the late
+// frame abortion facility.
+struct epilogue_plain_block_t {
+  __u8 late_flags;
   std::array<__le32, MAX_NUM_SEGMENTS> crc_values;
-};
-static_assert(sizeof(epilogue_crc_block_t) % CRYPTO_BLOCK_SIZE == 0);
-static_assert(std::is_standard_layout<epilogue_crc_block_t>::value);
+} __attribute__((packed));
+static_assert(std::is_standard_layout<epilogue_plain_block_t>::value);
+
+struct epilogue_secure_block_t {
+  __u8 late_flags;
+  __u8 padding[CRYPTO_BLOCK_SIZE - sizeof(late_flags)];
+
+  __u8 ciphers_private_data[];
+} __attribute__((packed));
+static_assert(sizeof(epilogue_secure_block_t) % CRYPTO_BLOCK_SIZE == 0);
+static_assert(std::is_standard_layout<epilogue_secure_block_t>::value);
 
 
 static constexpr uint32_t FRAME_PREAMBLE_SIZE = sizeof(preamble_block_t);
-static constexpr uint32_t FRAME_CRC_EPILOGUE_SIZE = sizeof(epilogue_crc_block_t);
+static constexpr uint32_t FRAME_PLAIN_EPILOGUE_SIZE =
+    sizeof(epilogue_plain_block_t);
+static constexpr uint32_t FRAME_SECURE_EPILOGUE_SIZE =
+    sizeof(epilogue_secure_block_t);
+
+#define FRAME_FLAGS_LATEABRT      (1<<0)   /* frame was aborted after txing data */
 
 template <class T>
 struct Frame {
@@ -177,7 +195,7 @@ public:
     fill_preamble({segment_t{payload.length() - FRAME_PREAMBLE_SIZE,
                    segment_t::DEFAULT_ALIGNMENT}});
 
-    epilogue_crc_block_t epilogue;
+    epilogue_plain_block_t epilogue;
     ::memset(&epilogue, 0, sizeof(epilogue));
 
     ceph::bufferlist::const_iterator hdriter(&this->payload, FRAME_PREAMBLE_SIZE);
@@ -376,6 +394,10 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
                      segment_t::DEFAULT_ALIGNMENT}});
 
     if (session_stream_handlers.tx) {
+      epilogue_secure_block_t epilogue;
+      ::memset(&epilogue, 0, sizeof(epilogue));
+      c.payload.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
+
       ceph_assert(session_stream_handlers.tx);
       session_stream_handlers.tx->reset_tx_handler({c.payload.length()});
 
@@ -383,7 +405,7 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
           std::move(c.payload));
       c.payload = session_stream_handlers.tx->authenticated_encrypt_final();
     } else {
-      epilogue_crc_block_t epilogue;
+      epilogue_plain_block_t epilogue;
       ::memset(&epilogue, 0, sizeof(epilogue));
 
       ceph::bufferlist::const_iterator hdriter(&c.payload, FRAME_PREAMBLE_SIZE);
@@ -644,10 +666,22 @@ struct MessageHeaderFrame
         session_stream_handlers.tx->authenticated_encrypt_update(data);
       }
 
+      // craft the secure's mode epilogue
+      {
+        epilogue_secure_block_t epilogue;
+        ::memset(&epilogue, 0, sizeof(epilogue));
+        ceph::bufferlist epilogue_bl;
+        epilogue_bl.append(reinterpret_cast<const char*>(&epilogue),
+                                   sizeof(epilogue));
+        session_stream_handlers.tx->authenticated_encrypt_update(epilogue_bl);
+      }
+
       // auth tag will be appended at the end
       f.payload = session_stream_handlers.tx->authenticated_encrypt_final();
     } else {
-      epilogue_crc_block_t epilogue;
+      epilogue_plain_block_t epilogue;
+      ::memset(&epilogue, 0, sizeof(epilogue));
+
       ceph::bufferlist::const_iterator hdriter(&f.payload, FRAME_PREAMBLE_SIZE);
       epilogue.crc_values[SegmentIndex::Msg::HEADER] =
           hdriter.crc32c(hdriter.get_remaining(), -1);
