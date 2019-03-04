@@ -853,23 +853,10 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
 
   bufferlist op_bl;
   if (cancel) {
-    if (op.log_op && !header.syncstopped) {
-      rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime, entry.ver,
-                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
-      if (rc < 0)
-        return rc;
-    }
-
     if (op.tag.size()) {
       bufferlist new_key_bl;
       encode(entry, new_key_bl);
-      rc = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
-      if (rc < 0)
-        return rc;
-    }
-
-    if (op.log_op && !header.syncstopped) {
-      return write_bucket_header(hctx, &header);
+      return cls_cxx_map_set_val(hctx, idx, &new_key_bl);
     }
     return 0;
   }
