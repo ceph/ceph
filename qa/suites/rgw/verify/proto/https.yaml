@@ -9,10 +9,12 @@ overrides:
       client: client.0
       ca: root
       embed-key: true
+      cn: s3.
     rgw.client.1:
       client: client.1
       ca: root
       embed-key: true
+      cn: s3-website.
   rgw:
     client.0:
       ssl certificate: rgw.client.0
