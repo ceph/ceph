@@ -3475,9 +3475,6 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
     } else {
       m->claim_data(*op->outbl);
     }
-    lderr(cct) << __func__ << " data:\n";
-    op->outbl->hexdump(*_dout);
-    *_dout << dendl;
     op->outbl = 0;
   }
 
