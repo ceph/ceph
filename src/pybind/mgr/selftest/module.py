@@ -38,7 +38,8 @@ class Module(MgrModule):
         {'name': 'rwoption2', 'type': 'int'},
         {'name': 'rwoption3', 'type': 'float'},
         {'name': 'rwoption4', 'type': 'str'},
-        {'name': 'rwoption5', 'type': 'bool'}
+        {'name': 'rwoption5', 'type': 'bool'},
+        {'name': 'rwoption6', 'type': 'bool', 'default': True}
     ]
 
     COMMANDS = [
@@ -264,8 +265,13 @@ class Module(MgrModule):
         self.set_module_option("testkey", "testvalue")
         assert self.get_module_option("testkey") == "testvalue"
 
-        self.set_localized_module_option("testkey", "testvalue")
-        assert self.get_localized_module_option("testkey") == "testvalue"
+        self.set_localized_module_option("testkey", "foo")
+        assert self.get_localized_module_option("testkey") == "foo"
+
+        # Must return the default value defined in MODULE_OPTIONS.
+        value = self.get_localized_module_option("rwoption6")
+        assert isinstance(value, bool)
+        assert value is True
 
         # Use default value.
         assert self.get_module_option("roption1") is None
