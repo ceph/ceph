@@ -8,6 +8,8 @@
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDMap.h"
+#include "messages/MPGStats.h"
+
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/os/cyan_collection.h"
@@ -376,6 +378,23 @@ seastar::future<> OSD::ms_handle_remote_reset(ceph::net::ConnectionRef conn)
 {
   logger().warn("ms_handle_remote_reset");
   return seastar::now();
+}
+
+MessageRef OSD::get_stats() const
+{
+  // todo: m-to-n: collect stats using map-reduce
+  // MPGStats::had_map_for is not used since PGMonitor was removed
+  auto m = make_message<MPGStats>(monc->get_fsid(), osdmap->get_epoch());
+
+  for (auto [pgid, pg] : pgs) {
+    if (pg->is_primary()) {
+      auto stats = pg->get_stats();
+      // todo: update reported_epoch,reported_seq,last_fresh
+      stats.reported_epoch = osdmap->get_epoch();
+      m->pg_stat.emplace(pgid.pgid, std::move(stats));
+    }
+  }
+  return m;
 }
 
 OSD::cached_map_t OSD::get_map() const
