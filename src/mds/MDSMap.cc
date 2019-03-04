@@ -531,7 +531,9 @@ void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) con
   encode(mds_features, bl);
   encode(FS_CLUSTER_ID_NONE, bl); /* standby_for_fscid */
   encode(false, bl);
-  encode(flags, bl);
+  if (v >= 9) {
+    encode(flags, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
@@ -555,7 +557,7 @@ void MDSMap::mds_info_t::encode_unversioned(bufferlist& bl) const
 
 void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(8, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(9, 4, 4, bl);
   decode(global_id, bl);
   decode(name, bl);
   decode(rank, bl);
@@ -584,7 +586,7 @@ void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
     bool standby_replay;
     decode(standby_replay, bl);
   }
-  if (struct_v >= 8) {
+  if (struct_v >= 9) {
     decode(flags, bl);
   }
   DECODE_FINISH(bl);
