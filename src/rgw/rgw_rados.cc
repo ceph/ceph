@@ -3334,7 +3334,8 @@ int RGWRados::on_last_entry_in_listing(RGWBucketInfo& bucket_info,
 int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                                     const rgw_user& user,
                                     RGWBucketInfo& bucket_info,
-                                    rgw_obj& obj)
+                                    rgw_obj& obj, 
+                                    const DoutPrefixProvider *dpp)
 {
   if (! swift_versioning_enabled(bucket_info)) {
     return 0;
@@ -3411,7 +3412,8 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                NULL, /* string *ptag */
                NULL, /* string *petag */
                NULL, /* void (*progress_cb)(off_t, void *) */
-               NULL); /* void *progress_data */
+               NULL, /* void *progress_data */
+               dpp); 
   if (r == -ECANCELED || r == -ENOENT) {
     /* Has already been overwritten, meaning another rgw process already
      * copied it out */
@@ -3426,7 +3428,8 @@ int RGWRados::swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
                                        const rgw_user& user,
                                        RGWBucketInfo& bucket_info,
                                        rgw_obj& obj,
-                                       bool& restored)             /* out */
+                                       bool& restored,                  /* out */
+                                       const DoutPrefixProvider *dpp)
 {
   if (! swift_versioning_enabled(bucket_info)) {
     return 0;
@@ -3503,7 +3506,8 @@ int RGWRados::swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
                        nullptr,       /* string *ptag */
                        nullptr,       /* string *petag */
                        nullptr,       /* void (*progress_cb)(off_t, void *) */
-                       nullptr);      /* void *progress_data */
+                       nullptr,       /* void *progress_data */
+                       dpp);      
     if (ret == -ECANCELED || ret == -ENOENT) {
       /* Has already been overwritten, meaning another rgw process already
        * copied it out */
@@ -4260,6 +4264,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
                string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
+               const DoutPrefixProvider *dpp,
                rgw_zone_set *zones_trace,
                std::optional<uint64_t>* bytes_transferred)
 {
@@ -4277,7 +4282,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   using namespace rgw::putobj;
   const rgw_placement_rule *ptail_rule = (dest_placement_rule ? &(*dest_placement_rule) : nullptr);
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, ptail_rule, user_id,
-                                  obj_ctx, dest_obj, olh_epoch, tag);
+                                  obj_ctx, dest_obj, olh_epoch, tag, dpp);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
   auto& zonegroup_conn_map = svc.zone->get_zonegroup_conn_map();
@@ -4568,7 +4573,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                string *ptag,
                string *petag,
                void (*progress_cb)(off_t, void *),
-               void *progress_data)
+               void *progress_data,
+               const DoutprefixProvider *dpp)
 {
   int ret;
   uint64_t obj_size;
@@ -4587,11 +4593,11 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   remote_src = !zonegroup.equals(src_bucket_info.zonegroup);
 
   if (remote_src && remote_dest) {
-    ldout(cct, 0) << "ERROR: can't copy object when both src and dest buckets are remote" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: can't copy object when both src and dest buckets are remote" << dendl;
     return -EINVAL;
   }
 
-  ldout(cct, 5) << "Copy object " << src_obj.bucket << ":" << src_obj.get_oid() << " => " << dest_obj.bucket << ":" << dest_obj.get_oid() << dendl;
+  ldpp_dout(dpp, 5) << "Copy object " << src_obj.bucket << ":" << src_obj.get_oid() << " => " << dest_obj.bucket << ":" << dest_obj.get_oid() << dendl;
 
   if (remote_src || !source_zone.empty()) {
     return fetch_remote_obj(obj_ctx, user_id, info, source_zone,
@@ -4599,7 +4605,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                dest_placement, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
                if_match, if_nomatch, attrs_mod, copy_if_newer, attrs, category,
-               olh_epoch, delete_at, ptag, petag, progress_cb, progress_data);
+               olh_epoch, delete_at, ptag, petag, progress_cb, progress_data, dpp);
   }
 
   map<string, bufferlist> src_attrs;

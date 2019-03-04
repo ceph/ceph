@@ -1848,13 +1848,15 @@ public:
   int swift_versioning_copy(RGWObjectCtx& obj_ctx,              /* in/out */
                             const rgw_user& user,               /* in */
                             RGWBucketInfo& bucket_info,         /* in */
-                            rgw_obj& obj);                      /* in */
+                            rgw_obj& obj,                       /* in */
+                            const DoutPrefixProvider *dpp);     /* in/out */                
   int swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
                                RGWObjectCtx& obj_ctx,           /* in/out */
                                const rgw_user& user,            /* in */
                                RGWBucketInfo& bucket_info,      /* in */
                                rgw_obj& obj,                    /* in */
-                               bool& restored);                 /* out */
+                               bool& restored,                 /* out */
+                               const DoutPrefixProvider *dpp);     /* in/out */                
   int copy_obj_to_remote_dest(RGWObjState *astate,
                               map<string, bufferlist>& src_attrs,
                               RGWRados::Object::Read& read_op,
@@ -1915,6 +1917,7 @@ public:
                        string *petag,
                        void (*progress_cb)(off_t, void *),
                        void *progress_data,
+                       const DoutPrefixProvider *dpp,
                        rgw_zone_set *zones_trace= nullptr,
                        std::optional<uint64_t>* bytes_transferred = 0);
   /**
@@ -1957,7 +1960,8 @@ public:
                string *ptag,
                string *petag,
                void (*progress_cb)(off_t, void *),
-               void *progress_data);
+               void *progress_data,
+               const DoutPrefixProvider *dpp);
 
   int copy_obj_data(RGWObjectCtx& obj_ctx,
                RGWBucketInfo& dest_bucket_info,
