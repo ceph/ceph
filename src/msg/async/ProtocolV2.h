@@ -82,6 +82,8 @@ private:
 
   uint32_t next_payload_len;
 
+  bufferlist pre_auth_rx, pre_auth_tx;
+
 public:
 
   boost::container::static_vector<ceph::msgr::v2::segment_t,
@@ -102,13 +104,17 @@ private:
   void run_continuation(Ct<ProtocolV2> *continuation);
 
   Ct<ProtocolV2> *read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
-                       int len, char *buffer = nullptr);
+                       int len, char *buffer = nullptr,
+		       bool pre_auth=false);
   template <class F>
   Ct<ProtocolV2> *write(const std::string &desc,
-                        CONTINUATION_PARAM(next, ProtocolV2), F &frame);
+                        CONTINUATION_PARAM(next, ProtocolV2),
+			F &frame,
+			bool pre_auth=false);
   Ct<ProtocolV2> *write(const std::string &desc,
                         CONTINUATION_PARAM(next, ProtocolV2),
-                        bufferlist &buffer);
+                        bufferlist &buffer,
+			bool pre_auth=false);
 
   uint64_t expected_tags(ceph::msgr::v2::Tag sent_tag,
                          ceph::msgr::v2::Tag received_tag);

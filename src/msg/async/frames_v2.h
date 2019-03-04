@@ -38,6 +38,7 @@ enum class Tag : __u8 {
   AUTH_REPLY_MORE,
   AUTH_REQUEST_MORE,
   AUTH_DONE,
+  AUTH_DONE_ACK,
   CLIENT_IDENT,
   SERVER_IDENT,
   IDENT_MISSING_FEATURES,
@@ -398,6 +399,18 @@ struct AuthDoneFrame : public PayloadFrame<AuthDoneFrame,
   inline uint64_t &global_id() { return get_val<0>(); }
   inline uint32_t &con_mode() { return get_val<1>(); }
   inline bufferlist &auth_payload() { return get_val<2>(); }
+
+protected:
+  using PayloadFrame::PayloadFrame;
+};
+
+struct AuthDoneAckFrame : public PayloadFrame<AuthDoneAckFrame,
+	bufferlist> { // auth signature payload
+  static const Tag tag = Tag::AUTH_DONE_ACK;
+  using PayloadFrame::Encode;
+  using PayloadFrame::Decode;
+
+  inline bufferlist &pre_auth_sig() { return get_val<0>(); }
 
 protected:
   using PayloadFrame::PayloadFrame;

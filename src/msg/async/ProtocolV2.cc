@@ -49,8 +49,10 @@ void ProtocolV2::run_continuation(CtPtr continuation) {
 }
 
 #define WRITE(B, D, C) write(D, CONTINUATION(C), B)
+#define WRITE_PREAUTH(B, D, C) write(D, CONTINUATION(C), B, true)
 
 #define READ(L, C) read(CONTINUATION(C), L)
+#define READ_PREAUTH(L, C) read(CONTINUATION(C), L, nullptr, true)
 
 #define READB(L, B, C) read(CONTINUATION(C), L, B)
 
@@ -699,12 +701,16 @@ uint32_t ProtocolV2::get_epilogue_size() const {
 }
 
 CtPtr ProtocolV2::read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
-                       int len, char *buffer) {
+                       int len, char *buffer,
+		       bool pre_auth) {
   if (!buffer) {
     buffer = temp_buffer;
   }
   ssize_t r = connection->read(len, buffer,
-                               [CONTINUATION(next), this](char *buffer, int r) {
+                               [CONTINUATION(next), this, pre_auth](char *buffer, int r) {
+				 if (pre_auth && r > 1) {
+				   pre_auth_rx.append(buffer, r);
+				 }
                                  CONTINUATION(next)->setParams(buffer, r);
                                  run_continuation(CONTINUATION(next));
                                });
@@ -718,14 +724,19 @@ CtPtr ProtocolV2::read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
 template <class F>
 CtPtr ProtocolV2::write(const std::string &desc,
                         CONTINUATION_PARAM(next, ProtocolV2),
-                        F &frame) {
+                        F &frame,
+			bool pre_auth) {
   sent_tag = frame.tag;
   return write(desc, CONTINUATION(next), frame.get_buffer());
 }
 
 CtPtr ProtocolV2::write(const std::string &desc,
                         CONTINUATION_PARAM(next, ProtocolV2),
-                        bufferlist &buffer) {
+                        bufferlist &buffer,
+			bool pre_auth) {
+  if (pre_auth) {
+    pre_auth_tx.append(buffer);
+  }
   ssize_t r =
       connection->write(buffer, [CONTINUATION(next), desc, this](int r) {
         if (r < 0) {
@@ -764,7 +775,7 @@ CtPtr ProtocolV2::_banner_exchange(CtPtr callback) {
 
   INTERCEPT(state == CONNECTING ? 3 : 4);
 
-  return WRITE(bl, "banner", _wait_for_peer_banner);
+  return WRITE_PREAUTH(bl, "banner", _wait_for_peer_banner);
 }
 
 CtPtr ProtocolV2::_wait_for_peer_banner() {
@@ -875,7 +886,7 @@ CtPtr ProtocolV2::_handle_peer_banner_payload(char *buffer, int r) {
 
   INTERCEPT(state == CONNECTING ? 7 : 8);
 
-  return WRITE(hello, "hello frame", read_frame);
+  return WRITE_PREAUTH(hello, "hello frame", read_frame);
 }
 
 CtPtr ProtocolV2::handle_hello(ceph::bufferlist &payload)
@@ -1720,7 +1731,7 @@ CtPtr ProtocolV2::send_auth_request(std::vector<uint32_t> &allowed_methods) {
 
   auto frame = AuthRequestFrame::Encode(auth_meta->auth_method, preferred_modes,
                                         bl);
-  return WRITE(frame, "auth request", read_frame);
+  return WRITE_PREAUTH(frame, "auth request", read_frame);
 }
 
 CtPtr ProtocolV2::handle_auth_bad_method(ceph::bufferlist &payload) {
@@ -1774,7 +1785,7 @@ CtPtr ProtocolV2::handle_auth_reply_more(ceph::bufferlist &payload)
     return _fault();
   }
   auto more_reply = AuthRequestMoreFrame::Encode(reply);
-  return WRITE(more_reply, "auth request more", read_frame);
+  return WRITE_PREAUTH(more_reply, "auth request more", read_frame);
 }
 
 CtPtr ProtocolV2::handle_auth_done(ceph::bufferlist &payload)
@@ -1783,7 +1794,15 @@ CtPtr ProtocolV2::handle_auth_done(ceph::bufferlist &payload)
 		 << " payload.length()=" << payload.length() << dendl;
 
   auto auth_done = AuthDoneFrame::Decode(payload);
-
+  bufferlist& bl = auth_done.auth_payload();
+  auto p = bl.cbegin();
+  bufferlist auth_bl, preauth_sig;
+  try {
+    decode(auth_bl, p);
+    decode(preauth_sig, p);
+  } catch (buffer::error& e) {
+    return _fault();
+  }
   ceph_assert(messenger->auth_client);
   auto am = auth_meta;
   connection->lock.unlock();
@@ -1792,7 +1811,7 @@ CtPtr ProtocolV2::handle_auth_done(ceph::bufferlist &payload)
     am.get(),
     auth_done.global_id(),
     auth_done.con_mode(),
-    auth_done.auth_payload(),
+    auth_bl,
     &am->session_key,
     &am->connection_secret);
   connection->lock.lock();
@@ -1800,6 +1819,29 @@ CtPtr ProtocolV2::handle_auth_done(ceph::bufferlist &payload)
     return _fault();
   }
   if (r < 0) {
+    return _fault();
+  }
+  try {
+    bufferlist dec;
+    std::string err;
+    int r = auth_meta->session_key.decrypt(preauth_sig, dec, &err);
+    if (r < 0) {
+      return _fault();
+    }
+    auto p = dec.cbegin();
+    uint64_t confounder;
+    sha256_digest_t digest;
+    decode(confounder, p);
+    decode(digest, p);
+    decode(confounder, p);
+    sha256_digest_t actual = pre_auth_rx.sha256();
+    if (digest != actual) {
+      lderr(cct) << __func__ << " pre-auth digest check mismatch, peer sent "
+		 << digest << " but we saw " << actual << dendl;
+      return _fault();
+    }
+  } catch (buffer::err& e) {
+    lderr(cct) << __func__ << " failed to decode pre-auth digest" << dendl;
     return _fault();
   }
   auth_meta->con_mode = auth_done.con_mode();
@@ -2110,7 +2152,7 @@ CtPtr ProtocolV2::_auth_bad_method(int r)
 		<< dendl;
   auto bad_method = AuthBadMethodFrame::Encode(auth_meta->auth_method, r,
                                                allowed_methods, allowed_modes);
-  return WRITE(bad_method, "bad auth method", read_frame);
+  return WRITE_PREAUTH(bad_method, "bad auth method", read_frame);
 }
 
 CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
@@ -2139,13 +2181,33 @@ CtPtr ProtocolV2::_handle_auth_request(bufferlist& auth_payload, bool more)
     ceph_assert(auth_meta);
     session_stream_handlers = \
       ceph::crypto::onwire::rxtx_t::create_handler_pair(cct, *auth_meta, true);
+    bufferlist bl;
+    encode(reply, bl);
+    {
+      sha256_digest_t digest = pre_auth_tx.sha256();
+      uin64_t a = ceph::util::generate_random_number<uint64_t>(1, -1ll);
+      uin64_t b = ceph::util::generate_random_number<uint64_t>(1, -1ll);
+      bufferlist preauth_sig;
+      encode(a, preauth_sig);      // confounder
+      encode(digest, preauth_sig);
+      encode(b, preauth_sig);      // confounder
+      bufferlist enc;
+      std::string err;
+      int r = auth_meta->session_key.encrypt(preauth_sig, enc, &err);
+      if (r < 0) {
+	lderr(cct) << __func__ << " failed to encrypt preauth sig: " << err
+		   << dendl;
+	return _fault();
+      }
+      encode(enc, bl);
+    }
     auto auth_done = AuthDoneFrame::Encode(connection->peer_global_id,
                                            auth_meta->con_mode,
-                                           reply);
-    return WRITE(auth_done, "auth done", read_frame);
+                                           bl);
+    return WRITE_PREAUTH(auth_done, "auth done", read_frame);
   } else if (r == 0) {
     auto more = AuthReplyMoreFrame::Encode(reply);
-    return WRITE(more, "auth reply more", read_frame);
+    return WRITE_PREAUTH(more, "auth reply more", read_frame);
   } else if (r == -EBUSY) {
     // kick the client and maybe they'll come back later
     return _fault();
