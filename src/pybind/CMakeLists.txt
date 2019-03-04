@@ -36,6 +36,7 @@ foreach(python_version ${py_vers})
   endif()
   if(WITH_RADOSGW)
     add_subdirectory(rgw rgw${PYTHON_VERSION})
+    add_subdirectory(rgw_admin_user)
     add_dependencies(cython${PYTHON_VERSION}_modules cython${PYTHON_VERSION}_rgw)
   endif()
 
