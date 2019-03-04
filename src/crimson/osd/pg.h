@@ -83,13 +83,31 @@ public:
   bool is_last_activated_peer(pg_shard_t peer);
   void clear_primary_state();
 
+  bool should_restart_peering(int new_up_primary,
+			      int new_acting_primary,
+			      const std::vector<int>& new_up,
+			      const std::vector<int>& new_acting,
+			      cached_map_t last_map,
+			      cached_map_t osd_map) const;
+  void start_peering_interval(int new_up_primary,
+			      int new_acting_primary,
+			      const std::vector<int>& new_up,
+			      const std::vector<int>& new_acting,
+			      cached_map_t last_map);
+  void activate(epoch_t activation_epoch);
+  void on_activated();
+  void maybe_mark_clean();
+
   seastar::future<> do_peering_event(std::unique_ptr<PGPeeringEvent> evt);
   seastar::future<> handle_advance_map(cached_map_t next_map);
   seastar::future<> handle_activate_map();
+  seastar::future<> share_pg_info();
 
   void print(ostream& os) const;
 
 private:
+  seastar::future<> activate_peer(pg_shard_t peer);
+  seastar::future<> send_to_osd(int peer, Ref<Message> m, epoch_t from_epoch);
   void update_primary_state(const std::vector<int>& new_up,
 			    int new_up_primary,
 			    const std::vector<int>& new_acting,
