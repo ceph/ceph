@@ -175,10 +175,12 @@ void PG::put(const char* tag)
     }
   }
 #endif
+  auto local_cct = cct;
   int after = --ref;
-  lgeneric_subdout(cct, refs, 5) << "PG::put " << this << " "
-				 << "tag " << (tag ? tag : "(none") << " "
-				 << (after + 1) << " -> " << after << dendl;
+  lgeneric_subdout(local_cct, refs, 5) << "PG::put " << this << " "
+				       << "tag " << (tag ? tag : "(none") << " "
+				       << (after + 1) << " -> " << after
+				       << dendl;
   if (after == 0)
     delete this;
 }
