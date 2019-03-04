@@ -7,6 +7,7 @@
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 #include "librbd/ImageState.h"
+#include "librbd/Utils.h"
 #include "librbd/image/AttachChildRequest.h"
 #include "librbd/image/AttachParentRequest.h"
 #include "librbd/image/CloneRequest.h"
