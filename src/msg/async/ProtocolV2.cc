@@ -701,11 +701,13 @@ uint32_t ProtocolV2::get_onwire_size(uint32_t logical_size) const {
 
 uint32_t ProtocolV2::get_epilogue_size() const {
   // In secure mode size of epilogue is flexible and depends on particular
-  // cipher implementation. See the comment for epilogue_crc_block_t.
+  // cipher implementation. See the comment for epilogue_secure_block_t or
+  // epilogue_plain_block_t.
   if (session_stream_handlers.rx) {
-    return session_stream_handlers.rx->get_extra_size_at_final();
+    return FRAME_SECURE_EPILOGUE_SIZE + \
+        session_stream_handlers.rx->get_extra_size_at_final();
   } else {
-    return FRAME_CRC_EPILOGUE_SIZE;
+    return FRAME_PLAIN_EPILOGUE_SIZE;
   }
 }
 
@@ -1278,28 +1280,33 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r)
     return _fault();
   }
 
+  __u8 late_flags;
+
   // FIXME: if (auth_meta->is_mode_secure()) {
   if (session_stream_handlers.rx) {
-    // if we still have more bytes to read is because we signed or encrypted
-    // the message payload
     ldout(cct, 1) << __func__ << " read frame epilogue bytes="
                   << get_epilogue_size() << dendl;
 
-    // I expect that ::temp_buffer is being used here.
+    // decrypt epilogue and authenticate entire frame.
     ceph::bufferlist epilogue_bl;
-    epilogue_bl.push_back(buffer::create_static(get_epilogue_size(),
-        buffer));
-    try {
-      session_stream_handlers.rx->authenticated_decrypt_update_final(
-	std::move(epilogue_bl), segment_t::DEFAULT_ALIGNMENT);
-    } catch (ceph::crypto::onwire::MsgAuthError &e) {
-      ldout(cct, 5) << __func__ << " message authentication failed: "
-		    << e.what() << dendl;
-      ceph_assert("oops" == nullptr);
-      return _fault();
+    {
+      epilogue_bl.push_back(buffer::create_static(get_epilogue_size(),
+          buffer));
+      try {
+        epilogue_bl =
+            session_stream_handlers.rx->authenticated_decrypt_update_final(
+	        std::move(epilogue_bl), segment_t::DEFAULT_ALIGNMENT);
+      } catch (ceph::crypto::onwire::MsgAuthError &e) {
+        ldout(cct, 5) << __func__ << " message authentication failed: "
+                      << e.what() << dendl;
+        return _fault();
+      }
     }
+    auto& epilogue =
+        reinterpret_cast<epilogue_plain_block_t&>(*epilogue_bl.c_str());
+    late_flags = epilogue.late_flags;
   } else {
-    auto& epilogue = reinterpret_cast<epilogue_crc_block_t&>(*buffer);
+    auto& epilogue = reinterpret_cast<epilogue_plain_block_t&>(*buffer);
 
     for (std::uint8_t idx = 0; idx < rx_segments_data.size(); idx++) {
       const __u32 expected_crc = epilogue.crc_values[idx];
@@ -1317,9 +1324,19 @@ CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r)
 		       << dendl;
       }
     }
+    late_flags = epilogue.late_flags;
   }
 
-  return handle_read_frame_dispatch();
+  // we do have a mechanism that allows transmitter to start sending message
+  // and abort after putting entire data field on wire. This will be used by
+  // the kernel client to avoid unnecessary buffering.
+  if (late_flags & FRAME_FLAGS_LATEABRT) {
+    reset_throttle();
+    state = READY;
+    return CONTINUE(read_frame);
+  } else {
+    return handle_read_frame_dispatch();
+  }
 }
 
 CtPtr ProtocolV2::handle_message() {
@@ -1373,17 +1390,6 @@ CtPtr ProtocolV2::handle_message() {
                          current_header.reserved,
                          0};
   ceph_msg_footer footer{0, 0, 0, 0, current_header.flags};
-
-  // we do have a mechanism that allows transmitter to start sending message
-  // and abort after putting entire data field on wire. This will be used by
-  // the kernel client to avoid unnecessary buffering.
-  if (current_header.flags & CEPH_MSG_FOOTER_LATEABRT) {
-    ceph_assert(state == THROTTLE_DONE);
-
-    reset_throttle();
-    state = READY;
-    return CONTINUE(read_frame);
-  }
 
   Message *message = decode_message(cct, 0, header, footer,
       rx_segments_data[SegmentIndex::Msg::FRONT],
