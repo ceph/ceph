@@ -123,6 +123,7 @@ void ProtocolV2::discard_out_queue() {
   }
   sent.clear();
   for (auto& [ prio, entries ] : out_queue) {
+    static_cast<void>(prio);
     for (auto& entry : entries) {
       ldout(cct, 20) << __func__ << " discard " << *entry.m << dendl;
       entry.m->put();
