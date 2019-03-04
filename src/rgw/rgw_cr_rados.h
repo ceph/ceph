@@ -110,28 +110,34 @@ class RGWSimpleWriteOnlyAsyncCR : public RGWSimpleCoroutine {
   RGWRados *store;
 
   P params;
+  const DoutPrefixProvider *dpp;
 
   class Request : public RGWAsyncRadosRequest {
     RGWRados *store;
     P params;
+    const DoutPrefixProvider *dpp;
   protected:
     int _send_request() override;
   public:
     Request(RGWCoroutine *caller,
             RGWAioCompletionNotifier *cn,
             RGWRados *store,
-            const P& _params) : RGWAsyncRadosRequest(caller, cn),
+            const P& _params,
+            const DoutPrefixProvider *dpp) : RGWAsyncRadosRequest(caller, cn),
                                 store(store),
-                                params(_params) {}
+                                params(_params),
+                                dpp(dpp) {}
   } *req{nullptr};
 
  public:
   RGWSimpleWriteOnlyAsyncCR(RGWAsyncRadosProcessor *_async_rados,
 			    RGWRados *_store,
-			    const P& _params) : RGWSimpleCoroutine(_store->ctx()),
+			    const P& _params,
+                            const DoutPrefixProvider *_dpp) : RGWSimpleCoroutine(_store->ctx()),
                                                 async_rados(_async_rados),
                                                 store(_store),
-				                params(_params) {}
+				                params(_params),
+                                                dpp(_dpp) {}
 
   ~RGWSimpleWriteOnlyAsyncCR() override {
     request_cleanup();
@@ -147,7 +153,8 @@ class RGWSimpleWriteOnlyAsyncCR : public RGWSimpleCoroutine {
     req = new Request(this,
                       stack->create_completion_notifier(),
                       store,
-                      params);
+                      params,
+                      dpp);
 
     async_rados->queue(req);
     return 0;

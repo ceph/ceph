@@ -1870,7 +1870,7 @@ public:
     ATTRSMOD_MERGE   = 2
   };
 
-  int rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj);
+  int rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, const DoutPrefixProvider *dpp);
 
   int stat_remote_obj(RGWObjectCtx& obj_ctx,
                const rgw_user& user_id,
@@ -1973,14 +1973,16 @@ public:
                map<string, bufferlist>& attrs,
                uint64_t olh_epoch,
 	       ceph::real_time delete_at,
-               string *petag);
+               string *petag,
+               const DoutPrefixProvider *dpp);
   
   int transition_obj(RGWObjectCtx& obj_ctx,
                      RGWBucketInfo& bucket_info,
                      rgw_obj& obj,
                      const rgw_placement_rule& placement_rule,
                      const real_time& mtime,
-                     uint64_t olh_epoch);
+                     uint64_t olh_epoch,
+                     const DoutPrefixProvider *dpp);
 
   int check_bucket_empty(RGWBucketInfo& bucket_info);
 
