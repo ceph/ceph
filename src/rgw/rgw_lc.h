@@ -412,13 +412,18 @@ class RGWLC {
 				  const multimap<string, lc_op>& prefix_map);
 };
 
-using LCCheckExpiresResult = std::tuple<bool, std::string, std::string>;
-
 std::string rgwlc_s3_expiration_header(
   CephContext* cct,
   const rgw_obj_key& obj_key,
   const RGWObjTags& obj_tagset,
   const ceph::real_time& mtime,
   /* const */ std::map<std::string, buffer::list>& bucket_attrs);
+
+namespace rgw { namespace lc {
+
+int fix_lc_shard_entry(RGWRados *store, const RGWBucketInfo& bucket_info,
+		       const map<std::string,bufferlist>& battrs);
+    
+}} // namespace rgw::lc
 
 #endif
