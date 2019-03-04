@@ -4,8 +4,7 @@ import os
 
 @pytest.fixture()
 def node(host, request):
-    """
-    This fixture represents a single node in the ceph cluster. Using the
+    """ This fixture represents a single node in the ceph cluster. Using the
     host.ansible fixture provided by testinfra it can access all the ansible
     variables provided to it by the specific test scenario being ran.
 
@@ -14,18 +13,14 @@ def node(host, request):
     should run.
     """
     ansible_vars = host.ansible.get_variables()
-    # tox will pass in this environment variable. we need to do it this way
+    # tox/jenkins/user will pass in this environment variable. we need to do it this way
     # because testinfra does not collect and provide ansible config passed in
     # from using --extra-vars
-    ceph_stable_release = os.environ.get("CEPH_STABLE_RELEASE", "luminous")
+    ceph_dev_branch = os.environ.get("CEPH_DEV_BRANCH", "master")
     group_names = ansible_vars["group_names"]
-    ceph_release_num = {
-        'jewel': 10,
-        'kraken': 11,
-        'luminous': 12,
-        'mimic': 13,
-        'dev': 99
-    }
+    num_osd_ports = 4
+    if ceph_dev_branch in ['luminous', 'mimic']:
+        num_osd_ports = 2
 
     # capture the initial/default state
     test_is_applicable = False
@@ -76,12 +71,11 @@ def node(host, request):
         osd_ids=osd_ids,
         num_mons=num_mons,
         num_osds=num_osds,
+        num_osd_ports=num_osd_ports,
         cluster_name=cluster_name,
         conf_path=conf_path,
         cluster_address=cluster_address,
         osds=osds,
-        ceph_stable_release=ceph_stable_release,
-        ceph_release_num=ceph_release_num,
     )
     return data
 

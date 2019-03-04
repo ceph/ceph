@@ -1,4 +1,3 @@
-import pytest
 import json
 
 
@@ -9,13 +8,13 @@ class TestOSDs(object):
 
     def test_osds_listen_on_public_network(self, node, host):
         # TODO: figure out way to paramaterize this test
-        nb_port = (node["num_osds"] * 4)
+        nb_port = (node["num_osds"] * node["num_osd_ports"])
         assert host.check_output(
             "netstat -lntp | grep ceph-osd | grep %s | wc -l" % (node["address"])) == str(nb_port)  # noqa E501
 
     def test_osds_listen_on_cluster_network(self, node, host):
         # TODO: figure out way to paramaterize this test
-        nb_port = (node["num_osds"] * 4)
+        nb_port = (node["num_osds"] * node["num_osd_ports"])
         assert host.check_output("netstat -lntp | grep ceph-osd | grep %s | wc -l" %  # noqa E501
                                  (node["cluster_address"])) == str(nb_port)
 
