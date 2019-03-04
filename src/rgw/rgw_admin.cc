@@ -193,6 +193,7 @@ void usage()
   cout << "  lc list                    list all bucket lifecycle progress\n";
   cout << "  lc get                     get a lifecycle bucket configuration\n";
   cout << "  lc process                 manually process lifecycle\n";
+  cout << "  lc fix                     fix LC for a resharded bucket\n";
   cout << "  metadata get               get metadata info\n";
   cout << "  metadata put               put metadata info\n";
   cout << "  metadata rm                remove metadata info\n";
@@ -435,6 +436,7 @@ enum {
   OPT_LC_LIST,
   OPT_LC_GET,
   OPT_LC_PROCESS,
+  OPT_LC_FIX,
   OPT_ORPHANS_FIND,
   OPT_ORPHANS_FINISH,
   OPT_ORPHANS_LIST_JOBS,
@@ -888,6 +890,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_LC_GET;
     if (strcmp(cmd, "process") == 0)
       return OPT_LC_PROCESS;
+    if (strcmp(cmd, "fix") == 0)
+      return OPT_LC_FIX;
   } else if (strcmp(prev_cmd, "orphans") == 0) {
     if (strcmp(cmd, "find") == 0)
       return OPT_ORPHANS_FIND;
@@ -6575,6 +6579,23 @@ next:
     if (ret < 0) {
       cerr << "ERROR: lc processing returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
+    }
+  }
+
+
+  if (opt_cmd == OPT_LC_FIX) {
+    rgw_bucket bucket;
+    RGWBucketInfo bucket_info;
+    map<string, bufferlist> attrs;
+    ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
+    if (ret < 0) {
+      cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
+      return -ret;
+    }
+
+    ret = rgw::lc::fix_lc_shard_entry(store, bucket_info, attrs);
+    if (ret < 0) {
+      cerr << "ERROR: fixing lc shard entry failed with" << cpp_strerror(-ret) << std::endl;
     }
   }
 
