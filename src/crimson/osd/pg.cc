@@ -92,6 +92,48 @@ const pg_info_t& PG::get_info() const
   return info;
 }
 
+const pg_stat_t& PG::get_stats() const
+{
+  return info.stats;
+}
+
+void PG::clear_state(uint64_t mask)
+{
+  if (!test_state(mask))
+    return;
+  info.stats.state &= ~mask;
+  const auto now = utime_t{coarse_real_clock::now()};
+  info.stats.last_change = now;
+  if (mask & PG_STATE_ACTIVE) {
+    info.stats.last_active = now;
+  }
+}
+
+bool PG::test_state(uint64_t mask) const
+{
+  return info.stats.state & mask;
+}
+
+void PG::set_state(uint64_t mask)
+{
+  if (test_state(mask)) {
+    return;
+  }
+  info.stats.state |= mask;
+  const auto now = utime_t{coarse_real_clock::now()};
+  info.stats.last_change = now;
+  if (mask & PG_STATE_ACTIVE) {
+    info.stats.last_became_active = now;
+  }
+  if (mask & (PG_STATE_ACTIVE | PG_STATE_PEERED) &&
+      test_state(PG_STATE_ACTIVE | PG_STATE_PEERED)) {
+    info.stats.last_became_peered = now;
+  }
+  if (mask & PG_STATE_CLEAN) {
+    info.stats.last_epoch_clean = get_osdmap_epoch();
+  }
+}
+
 const PastIntervals& PG::get_past_intervals() const
 {
   return past_intervals;
