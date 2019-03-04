@@ -502,6 +502,11 @@ class RGWLC : public DoutPrefixProvider {
   int handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map);
 };
 
+namespace rgw::lc {
 
+int fix_lc_shard_entry(RGWRados *store, const RGWBucketInfo& bucket_info,
+		       const map<std::string,bufferlist>& battrs);
+
+} // namespace rgw::lc
 
 #endif
