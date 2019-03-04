@@ -252,6 +252,26 @@ TEST_F(LibRadosIoPP, Checksum) {
   ASSERT_EQ(bl.crc32c(-1), csum);
 }
 
+TEST_F(LibRadosIoPP, ReadIntoBufferlist) {
+
+  // here we test reading into a non-empty bufferlist referencing existing
+  // buffers
+
+  char buf[128];
+  Rados cluster;
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl;
+  bl.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo", bl, sizeof(buf), 0));
+  bufferlist bl2;
+  char buf2[sizeof(buf)];
+  memset(buf2, 0xbb, sizeof(buf2));
+  bl2.append(buffer::create_static(sizeof(buf2), buf2));
+  ASSERT_EQ((int)sizeof(buf), ioctx.read("foo", bl2, sizeof(buf), 0));
+  ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
+  ASSERT_EQ(0, memcmp(buf, bl2.c_str(), sizeof(buf)));
+}
+
 TEST_F(LibRadosIoPP, OverlappingWriteRoundTripPP) {
   char buf[128];
   char buf2[64];
