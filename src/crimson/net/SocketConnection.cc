@@ -716,7 +716,7 @@ SocketConnection::handle_connect_reply(msgr_tag_t tag)
                                        h.authorizer->session_key,
                                        features));
         }
-        h.authorizer.reset();
+        h.authorizer = nullptr;
         return seastar::make_ready_future<stop_t>(stop_t::yes);
       });
     break;
@@ -758,23 +758,21 @@ SocketConnection::repeat_connect()
   // this is fyi, actually, server decides!
   h.connect.flags = policy.lossy ? CEPH_MSG_CONNECT_LOSSY : 0;
 
-  return dispatcher.ms_get_authorizer(peer_type)
-    .then([this](auto&& auth) {
-      h.authorizer = std::move(auth);
-      bufferlist bl;
-      if (h.authorizer) {
-        h.connect.authorizer_protocol = h.authorizer->protocol;
-        h.connect.authorizer_len = h.authorizer->bl.length();
-        bl.append(create_static(h.connect));
-        bl.append(h.authorizer->bl);
-      } else {
-        h.connect.authorizer_protocol = 0;
-        h.connect.authorizer_len = 0;
-        bl.append(create_static(h.connect));
-      };
-      return socket->write_flush(std::move(bl));
-    }).then([this] {
-     // read the reply
+  h.authorizer = dispatcher.ms_get_authorizer(peer_type);
+  bufferlist bl;
+  if (h.authorizer) {
+    h.connect.authorizer_protocol = h.authorizer->protocol;
+    h.connect.authorizer_len = h.authorizer->bl.length();
+    bl.append(create_static(h.connect));
+    bl.append(h.authorizer->bl);
+  } else {
+    h.connect.authorizer_protocol = 0;
+    h.connect.authorizer_len = 0;
+    bl.append(create_static(h.connect));
+  }
+  return socket->write_flush(std::move(bl))
+    .then([this] {
+      // read the reply
       return socket->read(sizeof(h.reply));
     }).then([this] (bufferlist bl) {
       auto p = bl.cbegin();
