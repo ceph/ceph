@@ -478,6 +478,8 @@ std::vector<Option> get_global_options() {
     .add_see_also({"setuser", "setgroup"}),
 
     Option("pid_file", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("")
+    .set_daemon_default("$run_dir/$cluster-$name.pid")
     .set_description("path to write a pid file (if any)")
     .add_service({"mon", "mgr", "osd", "mds"})
     .add_tag("service"),
