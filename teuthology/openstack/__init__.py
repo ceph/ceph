@@ -692,7 +692,7 @@ class TeuthologyOpenStack(OpenStack):
                     }
                 }
             }
-            yaml_data = yaml.dump(overrides, default_flow_style=False)
+            yaml_data = yaml.safe_dump(overrides, default_flow_style=False)
             with tempfile.NamedTemporaryFile(mode='w+b',
                                              suffix='-artifact.yaml',
                                              delete=False) as f:
