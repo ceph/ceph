@@ -3628,7 +3628,8 @@ void RGWPutObj::execute()
     op_ret = store->swift_versioning_copy(obj_ctx,
                                           s->bucket_owner.get_id(),
                                           s->bucket_info,
-                                          obj);
+                                          obj,
+                                          this);
     if (op_ret < 0) {
       return;
     }
@@ -4552,7 +4553,7 @@ void RGWDeleteObj::execute()
 
     bool ver_restored = false;
     op_ret = store->swift_versioning_restore(*s->sysobj_ctx, *obj_ctx, s->bucket_owner.get_id(),
-                                             s->bucket_info, obj, ver_restored);
+                                             s->bucket_info, obj, ver_restored, this);
     if (op_ret < 0) {
       return;
     }
@@ -4867,7 +4868,8 @@ void RGWCopyObj::execute()
   op_ret = store->swift_versioning_copy(obj_ctx,
                                         dest_bucket_info.owner,
                                         dest_bucket_info,
-                                        dst_obj);
+                                        dst_obj,
+                                        this);
   if (op_ret < 0) {
     return;
   }
@@ -4896,8 +4898,8 @@ void RGWCopyObj::execute()
 			   (version_id.empty() ? NULL : &version_id),
 			   &s->req_id, /* use req_id as tag */
 			   &etag,
-			   copy_obj_progress_cb, (void *)this
-    );
+			   copy_obj_progress_cb, (void *)this, 
+                           this);
 }
 
 int RGWGetACLs::verify_permission()
