@@ -53,20 +53,38 @@ function TEST_import_after_merge_and_gap() {
 	ceph osd set nodown
 	ceph osd unset nodown
     done
+
+    # poke and prod to ensure last_epech_clean is big, reported to mon, and
+    # the osd is able to trim old maps
+    rados -p foo bench 1 write -b 1024 --no-cleanup || return 1
     wait_for_clean || return 1
-    ceph osd down 0
-    sleep 3
-    wait_for_clean || return 1
+    ceph tell osd.0 send_beacon
+    sleep 5
+    ceph osd set nodown
+    ceph osd unset nodown
+    sleep 5
 
     kill_daemons $dir TERM osd.0 || return 1
 
     # this should fail.. 1.1 still doesn't exist
     ! ceph-objectstore-tool --data-path $dir/0 --op import --pgid 1.1 --file $dir/1.1 || return 1
 
-    # this should not
+    ceph-objectstore-tool --data-path $dir/0 --op export-remove --pgid 1.0 --force --file $dir/1.0.later || return 1
+
+    # this should fail too because of the gap
+    ! ceph-objectstore-tool --data-path $dir/0 --op import --pgid 1.1 --file $dir/1.1 || return 1
+    ! ceph-objectstore-tool --data-path $dir/0 --op import --pgid 1.0 --file $dir/1.0 || return 1
+
+    # we can force it...
+    ceph-objectstore-tool --data-path $dir/0 --op import --pgid 1.1 --file $dir/1.1 --force || return 1
+    ceph-objectstore-tool --data-path $dir/0 --op import --pgid 1.0 --file $dir/1.0 --force || return 1
+
+    # ...but the osd won't start, so remove it again.
     ceph-objectstore-tool --data-path $dir/0 --op remove --pgid 1.0 --force || return 1
-    ceph-objectstore-tool --data-path $dir/0 --op import --pgid 1.1 --file $dir/1.1 || return 1
-    ceph-objectstore-tool --data-path $dir/0 --op import --pgid 1.0 --file $dir/1.0 || return 1
+    ceph-objectstore-tool --data-path $dir/0 --op remove --pgid 1.1 --force || return 1
+
+    ceph-objectstore-tool --data-path $dir/0 --op import --pgid 1.0 --file $dir/1.0.later --force || return 1
+
 
     activate_osd $dir 0 || return 1
 
