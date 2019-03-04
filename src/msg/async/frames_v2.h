@@ -148,6 +148,30 @@ static constexpr uint32_t FRAME_SECURE_EPILOGUE_SIZE =
 
 #define FRAME_FLAGS_LATEABRT      (1<<0)   /* frame was aborted after txing data */
 
+static uint32_t segment_onwire_size(const uint32_t logical_size)
+{
+  return p2roundup(logical_size, CRYPTO_BLOCK_SIZE);
+}
+
+static ceph::bufferlist segment_onwire_bufferlist(ceph::bufferlist&& bl)
+{
+  const auto padding_size = segment_onwire_size(bl.length()) - bl.length();
+  if (padding_size) {
+    bl.append_zero(padding_size);
+  }
+  return bl;
+}
+
+static ceph::bufferlist segment_onwire_bufferlist(const ceph::bufferlist &bl)
+{
+  ceph::bufferlist ret(bl);
+  const auto padding_size = segment_onwire_size(bl.length()) - bl.length();
+  if (padding_size) {
+    ret.append_zero(padding_size);
+  }
+  return ret;
+}
+
 template <class T>
 struct Frame {
 protected:
@@ -389,12 +413,12 @@ struct SignedEncryptedFrame : public PayloadFrame<T, Args...> {
   static T Encode(ceph::crypto::onwire::rxtx_t &session_stream_handlers,
                   const Args &... args) {
     T c = PayloadFrame<T, Args...>::Encode(args...);
-    // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart
-    // from auth tag size
     c.fill_preamble({segment_t{c.payload.length() - FRAME_PREAMBLE_SIZE,
                      segment_t::DEFAULT_ALIGNMENT}});
 
     if (session_stream_handlers.tx) {
+      c.payload = segment_onwire_bufferlist(std::move(c.payload));
+
       epilogue_secure_block_t epilogue;
       ::memset(&epilogue, 0, sizeof(epilogue));
       c.payload.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
@@ -631,7 +655,7 @@ struct MessageHeaderFrame
                                    const ceph::bufferlist& data) {
     MessageHeaderFrame f =
         PayloadFrame<MessageHeaderFrame, ceph_msg_header2>::Encode(msg_header);
-    // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart from auth tag size
+
     f.fill_preamble({
       segment_t{ f.payload.length() - FRAME_PREAMBLE_SIZE,
 		 segment_t::DEFAULT_ALIGNMENT },
@@ -640,16 +664,21 @@ struct MessageHeaderFrame
       segment_t{ data.length(), segment_t::PAGE_SIZE_ALIGNMENT },
     });
 
-    // FIXME: plainsize -> ciphersize; for AES-GCM they are equall apart from auth tag size
     if (session_stream_handlers.tx) {
+      // we're padding segments to biggest cipher's block size. Although
+      // AES-GCM can live without that as it's a stream cipher, we don't
+      // to be fixed to stream ciphers only.
+      f.payload = segment_onwire_bufferlist(std::move(f.payload));
+      auto front_padded = segment_onwire_bufferlist(front);
+      auto middle_padded = segment_onwire_bufferlist(middle);
+      auto data_padded = segment_onwire_bufferlist(data);
+
       // let's cipher allocate one huge buffer for entire ciphertext.
-      // NOTE: ultimately we'll align these sizes to cipher's block size.
-      // AES-GCM can live without that as it's basically stream cipher.
       session_stream_handlers.tx->reset_tx_handler({
         f.payload.length(),
-        front.length(),
-        middle.length(),
-        data.length()
+        front_padded.length(),
+        middle_padded.length(),
+        data_padded.length()
       });
 
       ceph_assert(f.payload.length());
@@ -658,13 +687,13 @@ struct MessageHeaderFrame
 
       // TODO: switch TxHandler from `bl&&` to `const bl&`.
       if (front.length()) {
-        session_stream_handlers.tx->authenticated_encrypt_update(front);
+        session_stream_handlers.tx->authenticated_encrypt_update(front_padded);
       }
       if (middle.length()) {
-        session_stream_handlers.tx->authenticated_encrypt_update(middle);
+        session_stream_handlers.tx->authenticated_encrypt_update(middle_padded);
       }
       if (data.length()) {
-        session_stream_handlers.tx->authenticated_encrypt_update(data);
+        session_stream_handlers.tx->authenticated_encrypt_update(data_padded);
       }
 
       // craft the secure's mode epilogue
