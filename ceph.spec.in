@@ -222,7 +222,9 @@ BuildRequires:  openldap-devel
 BuildRequires:  openssl-devel
 BuildRequires:  CUnit-devel
 BuildRequires:  redhat-lsb-core
-BuildRequires:	Cython%{_python_buildid}
+%if 0%{with python2}
+BuildRequires:	python2-Cython
+%endif
 BuildRequires:	python%{_python_buildid}-prettytable
 BuildRequires:	python%{_python_buildid}-sphinx
 BuildRequires:	lz4-devel >= 1.7
