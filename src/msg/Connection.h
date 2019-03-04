@@ -214,14 +214,18 @@ public:
   }
 
   void post_rx_buffer(ceph_tid_t tid, bufferlist& bl) {
+#if 0
     Mutex::Locker l(lock);
     ++rx_buffers_version;
     rx_buffers[tid] = pair<bufferlist,int>(bl, rx_buffers_version);
+#endif
   }
 
   void revoke_rx_buffer(ceph_tid_t tid) {
+#if 0
     Mutex::Locker l(lock);
     rx_buffers.erase(tid);
+#endif
   }
 
   utime_t get_last_keepalive() const {

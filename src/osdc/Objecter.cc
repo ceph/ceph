@@ -2485,11 +2485,13 @@ int Objecter::op_cancel(OSDSession *s, ceph_tid_t tid, int r)
     return -ENOENT;
   }
 
+#if 0
   if (s->con) {
     ldout(cct, 20) << " revoking rx buffer for " << tid
 		   << " on " << s->con << dendl;
     s->con->revoke_rx_buffer(tid);
   }
+#endif
 
   ldout(cct, 10) << __func__ << " tid " << tid << " in session " << s->osd
 		 << dendl;
@@ -3246,6 +3248,7 @@ void Objecter::_send_op(Op *op)
   ConnectionRef con = op->session->con;
   ceph_assert(con);
 
+#if 0
   // preallocated rx buffer?
   if (op->con) {
     ldout(cct, 20) << " revoking rx buffer for " << op->tid << " on "
@@ -3261,6 +3264,7 @@ void Objecter::_send_op(Op *op)
     op->con = con;
     op->con->post_rx_buffer(op->tid, *op->outbl);
   }
+#endif
 
   op->incarnation = op->session->incarnation;
 
@@ -3450,9 +3454,30 @@ void Objecter::handle_osd_op_reply(MOSDOpReply *m)
 
   // got data?
   if (op->outbl) {
+#if 0
     if (op->con)
       op->con->revoke_rx_buffer(op->tid);
-    m->claim_data(*op->outbl);
+#endif
+    auto& bl = m->get_data();
+    if (op->outbl->length() == bl.length() &&
+	bl.get_num_buffers() <= 1) {
+      // this is here to keep previous users to *relied* on getting data
+      // read into existing buffers happy.  Notably,
+      // libradosstriper::RadosStriperImpl::aio_read().
+      ldout(cct,10) << __func__ << " copying resulting " << bl.length()
+		    << " into existing buffer of length " << op->outbl->length()
+		    << dendl;
+      bufferlist t;
+      t.claim(*op->outbl);
+      t.invalidate_crc();  // we're overwriting the raw buffers via c_str()
+      bl.copy(0, bl.length(), t.c_str());
+      op->outbl->substr_of(t, 0, bl.length());
+    } else {
+      m->claim_data(*op->outbl);
+    }
+    lderr(cct) << __func__ << " data:\n";
+    op->outbl->hexdump(*_dout);
+    *_dout << dendl;
     op->outbl = 0;
   }
 
