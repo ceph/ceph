@@ -9,7 +9,6 @@ import json
 import os
 import pkgutil
 import sys
-from six import add_metaclass
 
 if sys.version_info >= (3, 0):
     from urllib.parse import unquote  # pylint: disable=no-name-in-module,import-error
