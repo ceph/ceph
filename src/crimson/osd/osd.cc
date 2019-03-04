@@ -507,7 +507,8 @@ seastar::future<> OSD::handle_osd_map(ceph::net::ConnectionRef conn,
 
   const auto first = m->get_first();
   const auto last = m->get_last();
-
+  logger().info("handle_osd_map epochs [{}..{}], i have {}, src has [{}..{}]",
+                first, last, superblock.newest_map, m->oldest_map, m->newest_map);
   // make sure there is something new, here, before we bother flushing
   // the queues and such
   if (last <= superblock.newest_map) {
