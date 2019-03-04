@@ -67,10 +67,10 @@ TEST(ReshardWait, wait_yield)
       EXPECT_EQ(0, waiter.wait(optional_yield{context, yield}));
     });
 
+  const ceph::real_time start = ceph::real_clock::now();
   EXPECT_EQ(1u, context.poll()); // spawn
   EXPECT_FALSE(context.stopped());
 
-  const ceph::real_time start = ceph::real_clock::now();
   EXPECT_EQ(1u, context.run_one()); // timeout
   EXPECT_TRUE(context.stopped());
   const ceph::timespan elapsed = ceph::real_clock::now() - start;
