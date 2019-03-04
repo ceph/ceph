@@ -356,6 +356,48 @@ TEST(LibRadosAio, RoundTripSparseReadPP) {
   delete my_completion2;
 }
 
+TEST(LibRadosAioPP, ReadIntoBufferlist) {
+
+  // here we test reading into a non-empty bufferlist referencing existing
+  // buffers
+
+  AioTestDataPP test_data;
+  ASSERT_EQ("", test_data.init());
+  AioCompletion *my_completion = test_data.m_cluster.aio_create_completion(
+	  nullptr, nullptr, nullptr);
+  AioCompletion *my_completion_null = NULL;
+  ASSERT_NE(my_completion, my_completion_null);
+  char buf[128];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, test_data.m_ioctx.aio_write("foo", my_completion,
+					   bl1, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion->wait_for_complete());
+   }
+  ASSERT_EQ(0, my_completion->get_return_value());
+
+  bufferlist bl2;
+  char buf2[sizeof(buf)];
+  memset(buf2, 0xbb, sizeof(buf2));
+  bl2.append(buffer::create_static(sizeof(buf2), buf2));
+  AioCompletion *my_completion2 = test_data.m_cluster.aio_create_completion(
+    nullptr, nullptr, nullptr);
+  ASSERT_NE(my_completion2, my_completion_null);
+  ASSERT_EQ(0, test_data.m_ioctx.aio_read("foo", my_completion2,
+					  &bl2, sizeof(buf), 0));
+  {
+    TestAlarm alarm;
+    ASSERT_EQ(0, my_completion2->wait_for_complete());
+  }
+  ASSERT_EQ((int)sizeof(buf), my_completion2->get_return_value());
+  ASSERT_EQ(0, memcmp(buf, buf2, sizeof(buf)));
+  delete my_completion;
+  delete my_completion2;
+}
+
 TEST(LibRadosAioPP, XattrsRoundTripPP) {
   char buf[128];
   char attr1[] = "attr1";
