@@ -126,19 +126,6 @@ def configure(ctx, config):
         log.info('client={c}'.format(c=client))
         log.info('config={c}'.format(c=config))
         testswift_conf = config['testswift_conf'][client]
-        if properties is not None and 'rgw_server' in properties:
-            host = None
-            for target, roles in zip(ctx.config['targets'].iterkeys(), ctx.config['roles']):
-                log.info('roles: ' + str(roles))
-                log.info('target: ' + str(target))
-                if properties['rgw_server'] in roles:
-                    _, host = split_user(target)
-            assert host is not None, "Invalid client specified as the rgw_server"
-            testswift_conf['func_test']['auth_host'] = host
-        else:
-            testswift_conf['func_test']['auth_host'] = 'localhost'
-
-        log.info(client)
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
             args=[
@@ -237,15 +224,19 @@ def task(ctx, config):
 
     testswift_conf = {}
     for client in clients:
-        endpoint = ctx.rgw.role_endpoints.get(client)
-        assert endpoint, 'swift: no rgw endpoint for {}'.format(client)
+        # use rgw_server endpoint if given, or default to same client
+        target = config[client].get('rgw_server', client)
+
+        endpoint = ctx.rgw.role_endpoints.get(target)
+        assert endpoint, 'swift: no rgw endpoint for {}'.format(target)
 
         testswift_conf[client] = ConfigObj(
                 indent_type='',
                 infile={
                     'func_test':
                         {
-                        'auth_port'      : endpoint.port,
+                        'auth_host' : endpoint.dns_name,
+                        'auth_port' : endpoint.port,
                         'auth_ssl' : 'yes' if endpoint.cert else 'no',
                         'auth_prefix' : '/auth/',
                         },
