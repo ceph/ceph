@@ -418,7 +418,8 @@ int RGWDataAccess::Bucket::get_object(const rgw_obj_key& key,
 }
 
 int RGWDataAccess::Object::put(bufferlist& data,
-			       map<string, bufferlist>& attrs)
+			       map<string, bufferlist>& attrs,
+                               const DoutPrefixProvider *dpp)
 {
   RGWRados *store = sd->store;
   CephContext *cct = store->ctx();
@@ -441,7 +442,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
   AtomicObjectProcessor processor(&aio, store, bucket_info,
                                   nullptr,
                                   owner.get_id(),
-                                  obj_ctx, obj, olh_epoch, req_id);
+                                  obj_ctx, obj, olh_epoch, req_id, dpp);
 
   int ret = processor.prepare();
   if (ret < 0)

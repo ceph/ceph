@@ -120,13 +120,13 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
   const rgw_user& owner;
   RGWObjectCtx& obj_ctx;
   rgw_obj head_obj;
-  const DoutPrefixProvider *dpp;
 
   RadosWriter writer;
   RGWObjManifest manifest;
   RGWObjManifest::generator manifest_gen;
   ChunkProcessor chunk;
   StripeProcessor stripe;
+  const DoutPrefixProvider *dpp;
 
   // implements StripeGenerator
   int next(uint64_t offset, uint64_t *stripe_size) override;
@@ -143,8 +143,7 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
       owner(owner),
       obj_ctx(obj_ctx), head_obj(head_obj),
       writer(aio, store, bucket_info, obj_ctx, head_obj, dpp),
-      dpp(dpp),
-      chunk(&writer, 0), stripe(&chunk, this, 0) {
+      chunk(&writer, 0), stripe(&chunk, this, 0), dpp(dpp) {
         if (ptail_placement_rule) {
           tail_placement_rule = *ptail_placement_rule;
         }
@@ -163,7 +162,6 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
   const std::optional<uint64_t> olh_epoch;
   const std::string unique_tag;
   bufferlist first_chunk; // written with the head in complete()
-  const DoutPrefixProvider *dpp;
 
   int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
  public:
@@ -177,7 +175,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
                         const DoutPrefixProvider *dpp)
     : ManifestObjectProcessor(aio, store, bucket_info, ptail_placement_rule,
                               owner, obj_ctx, head_obj, dpp),
-      olh_epoch(olh_epoch), unique_tag(unique_tag), dpp(dpp)
+      olh_epoch(olh_epoch), unique_tag(unique_tag)
   {}
 
   // prepare a trivial manifest
@@ -202,7 +200,6 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
   const std::string upload_id;
   const int part_num;
   const std::string part_num_str;
-  const DoutPrefixProvider *dpp;
   RGWMPObj mp;
 
   // write the first chunk and wait on aio->drain() for its completion.
@@ -222,7 +219,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
     : ManifestObjectProcessor(aio, store, bucket_info, ptail_placement_rule,
                               owner, obj_ctx, head_obj, dpp),
       target_obj(head_obj), upload_id(upload_id),
-      part_num(part_num), part_num_str(part_num_str), dpp(dpp),
+      part_num(part_num), part_num_str(part_num_str),
       mp(head_obj.key.name, upload_id) 
   {}
 
@@ -247,7 +244,6 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
     uint64_t *cur_accounted_size;
     string cur_etag;
     const std::string unique_tag;
-    const DoutPrefixProvider *dpp;
 
     RGWObjManifest *cur_manifest;
 
@@ -259,7 +255,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                           const rgw_user& owner, RGWObjectCtx& obj_ctx,const rgw_obj& head_obj,
                           const std::string& unique_tag, uint64_t position, uint64_t *cur_accounted_size, const DoutPrefixProvider *dpp)
             : ManifestObjectProcessor(aio, store, bucket_info, ptail_placement_rule, owner, obj_ctx, head_obj, dpp),
-              position(position), cur_size(0), cur_accounted_size(cur_accounted_size), dpp(dpp),
+              position(position), cur_size(0), cur_accounted_size(cur_accounted_size),
               unique_tag(unique_tag), cur_manifest(nullptr)
     {}
     int prepare() override;
