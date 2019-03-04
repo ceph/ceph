@@ -78,6 +78,8 @@ public:
   seastar::future<> read_state(ceph::os::CyanStore* store);
 
   // peering/recovery
+  bool should_send_notify() const;
+  pg_notify_t get_notify(epoch_t query_epoch) const;
   seastar::future<> do_peering_event(std::unique_ptr<PGPeeringEvent> evt);
   seastar::future<> handle_advance_map(cached_map_t next_map);
   seastar::future<> handle_activate_map();
@@ -95,6 +97,7 @@ private:
   epoch_t last_peering_reset = 0;
   epoch_t need_up_thru = 0;
 
+  bool should_notify_primary = false;
 
   // peer_info    -- projected (updates _before_ replicas ack)
   peer_info_t peer_info; //< info from peers (stray or prior)

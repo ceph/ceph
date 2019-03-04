@@ -510,6 +510,20 @@ std::pair<PG::choose_acting_t, pg_shard_t> PG::choose_acting()
   }
 }
 
+bool PG::should_send_notify() const
+{
+  return should_notify_primary && primary.osd >= 0;
+}
+
+pg_notify_t PG::get_notify(epoch_t query_epoch) const
+{
+  return pg_notify_t{primary.shard,
+                     whoami.shard,
+                     query_epoch,
+                     get_osdmap_epoch(),
+                     info};
+}
+
 seastar::future<> PG::do_peering_event(std::unique_ptr<PGPeeringEvent> evt)
 {
   // todo
