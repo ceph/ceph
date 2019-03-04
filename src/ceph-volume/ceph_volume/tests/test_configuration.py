@@ -106,7 +106,7 @@ class TestLoad(object):
         with pytest.raises(RuntimeError):
             configuration.load(ceph_conf)
         stdout, stderr = capsys.readouterr()
-        assert 'File contains no section headers' in stdout
+        assert 'File contains no section headers' in stderr
 
     @pytest.mark.parametrize('commented', ['colon','hash'])
     def test_coment_as_a_value(self, tmpdir, commented):
