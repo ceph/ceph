@@ -728,6 +728,10 @@ public:
       h);
   }
 
+  void skip_rollforward() {
+    log.skip_can_rollback_to_to_head();
+  }
+
   //////////////////// get or set log & missing ////////////////////
 
   void reset_backfill_claim_log(const pg_log_t &o, LogEntryHandler *h) {
