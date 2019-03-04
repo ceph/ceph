@@ -6,6 +6,8 @@ import cherrypy
 from . import Controller, BaseController, Endpoint, ENDPOINT_MAP
 from .. import logger, mgr
 
+from ..tools import str_to_bool
+
 
 @Controller('/docs', secure=False)
 class Docs(BaseController):
@@ -16,7 +18,7 @@ class Docs(BaseController):
         # Scenarios to consider:
         #     * Intentionally make up a new tag name at controller => New tag name displayed.
         #     * Misspell or make up a new tag name at endpoint => Neither tag or endpoint displayed.
-        #     * Misspell tag name at controller (when refering to another controller) =>
+        #     * Misspell tag name at controller (when referring to another controller) =>
         #       Tag displayed but no endpoints assigned
         #     * Description for a tag added at multiple locations => Only one description displayed.
         list_of_ctrl = set()
@@ -80,7 +82,7 @@ class Docs(BaseController):
     @classmethod
     # isinstance doesn't work: input is always <type 'type'>.
     def _type_to_str(cls, type_as_type):
-        """ Used if type is explcitly defined. """
+        """ Used if type is explicitly defined. """
         if type_as_type is str:
             type_as_str = 'string'
         elif type_as_type is int:
@@ -99,17 +101,17 @@ class Docs(BaseController):
     def _add_param_info(cls, parameters, p_info):
         # Cases to consider:
         #     * Parameter name (if not nested) misspelt in decorator => parameter not displayed
-        #     * Sometime a parameter is used for several endpoints (e.g. fs_id in CephFS).
-        #       Currently, there is no possiblity of reuse. Should there be?
+        #     * Sometimes a parameter is used for several endpoints (e.g. fs_id in CephFS).
+        #       Currently, there is no possibility of reuse. Should there be?
         #       But what if there are two parameters with same name but different functionality?
         """
-        Adds explicitly desrcibed information for parameters of an endpoint.
+        Adds explicitly described information for parameters of an endpoint.
 
         There are two cases:
         * Either the parameter in p_info corresponds to an endpoint parameter. Implicit information
         has higher priority, so only information that doesn't already exist is added.
         * Or the parameter in p_info describes a nested parameter inside an endpoint parameter.
-        In that case there is no implcit information at all so all explicitly described info needs
+        In that case there is no implicit information at all so all explicitly described info needs
         to be added.
         """
         for p in p_info:
@@ -306,21 +308,21 @@ class Docs(BaseController):
 
         return paths
 
-    def _gen_spec(self, all_endpoints=False, baseUrl=""):
+    def _gen_spec(self, all_endpoints=False, base_url=""):
         if all_endpoints:
-            baseUrl = ""
+            base_url = ""
 
         host = cherrypy.request.base
         host = host[host.index(':')+3:]
         logger.debug("DOCS: Host: %s", host)
 
-        paths = self._gen_paths(all_endpoints, baseUrl)
+        paths = self._gen_paths(all_endpoints, base_url)
 
-        if not baseUrl:
-            baseUrl = "/"
+        if not base_url:
+            base_url = "/"
 
         scheme = 'https'
-        ssl = mgr.get_localized_module_option('ssl', 'True')
+        ssl = str_to_bool(mgr.get_localized_module_option('ssl', True))
         if not ssl:
             scheme = 'http'
 
@@ -337,8 +339,8 @@ class Docs(BaseController):
                 'title': "Ceph-Dashboard REST API"
             },
             'host': host,
-            'basePath': baseUrl,
-            'servers': [{'url': "{}{}".format(cherrypy.request.base, baseUrl)}],
+            'basePath': base_url,
+            'servers': [{'url': "{}{}".format(cherrypy.request.base, base_url)}],
             'tags': self._gen_tags(all_endpoints),
             'schemes': [scheme],
             'paths': paths,
@@ -380,7 +382,7 @@ class Docs(BaseController):
             if token is not None:
                 jwt_token = token
 
-        apiKeyCallback = """, onComplete: () => {{
+        api_key_callback = """, onComplete: () => {{
                         ui.preauthorizeApiKey('jwt', '{}');
                     }}
         """.format(jwt_token)
@@ -435,7 +437,7 @@ class Docs(BaseController):
         </script>
         </body>
         </html>
-        """.format(spec_url, apiKeyCallback)
+        """.format(spec_url, api_key_callback)
 
         return page
 
