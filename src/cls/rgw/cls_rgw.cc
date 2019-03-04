@@ -705,30 +705,10 @@ int rgw_bucket_prepare_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   info.op = op.op;
   entry.pending_map.insert(pair<string, rgw_bucket_pending_info>(op.tag, info));
 
-  rgw_bucket_dir_header header;
-  rc = read_bucket_header(hctx, &header);
-  if (rc < 0) {
-    CLS_LOG(1, "ERROR: rgw_bucket_prepare_op(): failed to read header\n");
-    return rc;
-  }
-
-  if (op.log_op && !header.syncstopped) {
-    rc = log_index_operation(hctx, op.key, op.op, op.tag, entry.meta.mtime,
-                             entry.ver, info.state, header.ver, header.max_marker, op.bilog_flags, NULL, NULL, &op.zones_trace);
-    if (rc < 0)
-      return rc;
-  }
-
   // write out new key to disk
   bufferlist info_bl;
   encode(entry, info_bl);
-  rc = cls_cxx_map_set_val(hctx, idx, &info_bl);
-  if (rc < 0)
-    return rc;
-
-  if (op.log_op && !header.syncstopped)
-    return write_bucket_header(hctx, &header);
-  return 0;
+  return cls_cxx_map_set_val(hctx, idx, &info_bl);
 }
 
 static void unaccount_entry(rgw_bucket_dir_header& header,
