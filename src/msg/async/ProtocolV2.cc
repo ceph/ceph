@@ -678,8 +678,12 @@ bool ProtocolV2::is_queued() {
   return !out_queue.empty() || connection->is_queued();
 }
 
-uint32_t ProtocolV2::get_onwire_size(uint32_t logical_size) const {
-  return logical_size;
+uint32_t ProtocolV2::get_onwire_size(const uint32_t logical_size) const {
+  if (session_stream_handlers.rx) {
+    return segment_onwire_size(logical_size);
+  } else {
+    return logical_size;
+  }
 }
 
 uint32_t ProtocolV2::get_epilogue_size() const {
@@ -1155,8 +1159,15 @@ CtPtr ProtocolV2::handle_read_frame_segment(char *buffer, int r) {
 
     auto& new_seg = rx_segments_data.back();
     if (new_seg.length()) {
-      new_seg = session_stream_handlers.rx->authenticated_decrypt_update(
+      auto padded = session_stream_handlers.rx->authenticated_decrypt_update(
           std::move(new_seg), segment_t::DEFAULT_ALIGNMENT);
+      const auto idx = rx_segments_data.size() - 1;
+      new_seg.clear();
+      padded.splice(0, rx_segments_desc[idx].length, &new_seg);
+
+      ldout(cct, 20) << __func__
+                     << " unpadded new_seg.length()=" << new_seg.length()
+                     << dendl;
     }
   }
 
