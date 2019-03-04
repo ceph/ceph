@@ -34,19 +34,19 @@ class DocDecoratorsTest(ControllerTestCase):
         cls.setup_controllers([DecoratedController, Docs], "/test")
 
     def test_group_info_attr(self):
-        testCtrl = DecoratedController()
-        self.assertTrue(hasattr(testCtrl, 'doc_info'))
-        self.assertIn('tag_descr', testCtrl.doc_info)
-        self.assertIn('tag', testCtrl.doc_info)
+        test_ctrl = DecoratedController()
+        self.assertTrue(hasattr(test_ctrl, 'doc_info'))
+        self.assertIn('tag_descr', test_ctrl.doc_info)
+        self.assertIn('tag', test_ctrl.doc_info)
 
     def test_endpoint_info_attr(self):
-        testCtrl = DecoratedController()
-        testEndpoint = testCtrl.decorated_func
-        self.assertTrue(hasattr(testEndpoint, 'doc_info'))
-        self.assertIn('summary', testEndpoint.doc_info)
-        self.assertIn('tag', testEndpoint.doc_info)
-        self.assertIn('parameters', testEndpoint.doc_info)
-        self.assertIn('response', testEndpoint.doc_info)
+        test_ctrl = DecoratedController()
+        test_endpoint = test_ctrl.decorated_func
+        self.assertTrue(hasattr(test_endpoint, 'doc_info'))
+        self.assertIn('summary', test_endpoint.doc_info)
+        self.assertIn('tag', test_endpoint.doc_info)
+        self.assertIn('parameters', test_endpoint.doc_info)
+        self.assertIn('response', test_endpoint.doc_info)
 
 
 # To assure functionality of Docs.py
