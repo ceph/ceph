@@ -72,24 +72,6 @@ if(connection->interceptor) { \
 #define INTERCEPT(S)
 #endif
 
-static void alloc_aligned_buffer(bufferlist &data, unsigned len, unsigned off)
-{
-  // create a buffer to read into that matches the data alignment
-  unsigned alloc_len = 0;
-  unsigned left = len;
-  unsigned head = 0;
-  if (off & ~CEPH_PAGE_MASK) {
-    // head
-    alloc_len += CEPH_PAGE_SIZE;
-    head = std::min<uint64_t>(CEPH_PAGE_SIZE - (off & ~CEPH_PAGE_MASK), left);
-    left -= head;
-  }
-  alloc_len += left;
-  bufferptr ptr(buffer::create_small_page_aligned(alloc_len));
-  if (head) ptr.set_offset(CEPH_PAGE_SIZE - head);
-  data.push_back(std::move(ptr));
-}
-
 ProtocolV2::ProtocolV2(AsyncConnection *connection)
     : Protocol(2, connection),
       temp_buffer(nullptr),
@@ -248,6 +230,10 @@ void ProtocolV2::reset_recv_state() {
   sent_tag = static_cast<Tag>(0);
   next_tag = static_cast<Tag>(0);
 
+  reset_throttle();
+}
+
+void ProtocolV2::reset_throttle() {
   if (state > THROTTLE_MESSAGE && state <= THROTTLE_DONE &&
       connection->policy.throttler_messages) {
     ldout(cct, 10) << __func__ << " releasing " << 1
@@ -260,9 +246,9 @@ void ProtocolV2::reset_recv_state() {
   if (state > THROTTLE_BYTES && state <= THROTTLE_DONE) {
     if (connection->policy.throttler_bytes) {
       const uint32_t cur_msg_size = \
-	rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length + \
-	rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length + \
-	rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+	rx_segments_desc[SegmentIndex::Msg::FRONT].length + \
+	rx_segments_desc[SegmentIndex::Msg::MIDDLE].length + \
+	rx_segments_desc[SegmentIndex::Msg::DATA].length;
 
       ldout(cct, 10) << __func__ << " releasing " << cur_msg_size
                      << " bytes to policy throttler "
@@ -273,9 +259,9 @@ void ProtocolV2::reset_recv_state() {
   }
   if (state > THROTTLE_DISPATCH_QUEUE && state <= THROTTLE_DONE) {
     const uint32_t cur_msg_size = \
-      rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length + \
-      rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length + \
-      rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+      rx_segments_desc[SegmentIndex::Msg::FRONT].length + \
+      rx_segments_desc[SegmentIndex::Msg::MIDDLE].length + \
+      rx_segments_desc[SegmentIndex::Msg::DATA].length;
 
     ldout(cct, 10)
         << __func__ << " releasing " << cur_msg_size
@@ -399,7 +385,7 @@ void ProtocolV2::prepare_send_message(uint64_t features,
   }
 
   // encode and copy out of *m
-  m->encode(features, messenger->crcflags);
+  m->encode(features, 0);
 }
 
 void ProtocolV2::send_message(Message *m) {
@@ -509,61 +495,16 @@ ssize_t ProtocolV2::write_message(Message *m, bool more) {
                            header.type,       header.priority,
                            header.version,
                            0,                 header.data_off,
-                           ack_seq,           footer.front_crc,
-                           footer.middle_crc, footer.data_crc,
+                           ack_seq,
                            footer.flags,      header.compat_version,
-                           header.reserved,   0};
+                           header.reserved};
 
-  if (messenger->crcflags & MSG_CRC_HEADER) {
-    header2.header_crc =
-        ceph_crc32c(0, (unsigned char *)&header2,
-                    sizeof(header2) - sizeof(header2.header_crc));
-  }
-
-  auto message = MessageHeaderFrame::Encode(header2,
-                                            m->get_payload().length(),
-                                            m->get_middle().length(),
-                                            m->get_data().length());
-  if (auth_meta->is_mode_secure()) {
-    ceph_assert(session_stream_handlers.tx);
-
-    // let's cipher allocate one huge buffer for entire ciphertext.
-    // NOTE: ultimately we'll align these sizes to cipher's block size.
-    // AES-GCM can live without that as it's basically stream cipher.
-    session_stream_handlers.tx->reset_tx_handler({
-      message.get_buffer().length(),
-      m->get_payload().length(),
-      m->get_middle().length(),
-      m->get_data().length()
-    });
-
-    ceph_assert(message.get_buffer().length());
-    session_stream_handlers.tx->authenticated_encrypt_update(
-      std::move(message.get_buffer()));
-
-    // receiver uses "front" for "payload"
-    // TODO: switch TxHandler from `bl&&` to `const bl&`.
-    if (m->get_payload().length()) {
-      session_stream_handlers.tx->authenticated_encrypt_update(
-	m->get_payload());
-    }
-    if (m->get_middle().length()) {
-      session_stream_handlers.tx->authenticated_encrypt_update(
-	m->get_middle());
-    }
-    if (m->get_data().length()) {
-      session_stream_handlers.tx->authenticated_encrypt_update(
-	m->get_data());
-    }
-
-    auto cipherbl = session_stream_handlers.tx->authenticated_encrypt_final();
-    connection->outcoming_bl.claim_append(cipherbl);
-  } else {
-    connection->outcoming_bl.claim_append(message.get_buffer());
-    connection->outcoming_bl.append(m->get_payload());
-    connection->outcoming_bl.append(m->get_middle());
-    connection->outcoming_bl.append(m->get_data());
-  }
+  auto message = MessageHeaderFrame::Encode(session_stream_handlers,
+			     header2,
+			     m->get_payload(),
+			     m->get_middle(),
+			     m->get_data());
+  connection->outcoming_bl.claim_append(message.get_buffer());
 
   ldout(cct, 5) << __func__ << " sending message m=" << m
                 << " seq=" << m->get_seq() << " " << *m << dendl;
@@ -738,6 +679,18 @@ bool ProtocolV2::is_queued() {
 
 uint32_t ProtocolV2::get_onwire_size(uint32_t logical_size) const {
   return logical_size;
+}
+
+uint32_t ProtocolV2::get_epilogue_size() const {
+  // In secure mode size of epilogue is flexible and depends on particular
+  // cipher implementation. See the comment for epilogue_secure_block_t or
+  // epilogue_plain_block_t.
+  if (session_stream_handlers.rx) {
+    return FRAME_SECURE_EPILOGUE_SIZE + \
+        session_stream_handlers.rx->get_extra_size_at_final();
+  } else {
+    return FRAME_PLAIN_EPILOGUE_SIZE;
+  }
 }
 
 CtPtr ProtocolV2::read(CONTINUATION_PARAM(next, ProtocolV2, char *, int),
@@ -1098,7 +1051,6 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
 
     rx_segments_desc.clear();
     rx_segments_data.clear();
-    next_payload_len = 0;
 
     if (main_preamble.num_segments > MAX_NUM_SEGMENTS) {
       ldout(cct, 30) << __func__
@@ -1111,18 +1063,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
 		     << " len=" << main_preamble.segments[idx].length
 		     << " align=" << main_preamble.segments[idx].alignment
 		     << dendl;
-      rx_segments_desc.emplace_back(onwire_segment_t{
-	get_onwire_size(main_preamble.segments[idx].length),
-	main_preamble.segments[idx]
-      });
-      next_payload_len += rx_segments_desc.back().onwire_length;
-    }
-
-    if (session_stream_handlers.rx) {
-      rx_segments_desc.back().onwire_length += \
-	session_stream_handlers.rx->get_extra_size_at_final();
-      next_payload_len += \
-	session_stream_handlers.rx->get_extra_size_at_final();
+      rx_segments_desc.emplace_back(main_preamble.segments[idx]);
     }
   }
 
@@ -1136,7 +1077,7 @@ CtPtr ProtocolV2::handle_read_frame_preamble_main(char *buffer, int r) {
 }
 
 CtPtr ProtocolV2::handle_read_frame_dispatch() {
-  ldout(cct, 10) << __func__ << " next payload_len=" << next_payload_len
+  ldout(cct, 10) << __func__
                  << " tag=" << static_cast<uint32_t>(next_tag) << dendl;
 
   switch (next_tag) {
@@ -1157,9 +1098,8 @@ CtPtr ProtocolV2::handle_read_frame_dispatch() {
     case Tag::KEEPALIVE2:
     case Tag::KEEPALIVE2_ACK:
     case Tag::ACK:
-      return handle_frame_payload();
     case Tag::WAIT:
-      return handle_wait();
+      return handle_frame_payload();
     case Tag::MESSAGE:
       return handle_message();
     default: {
@@ -1179,24 +1119,15 @@ CtPtr ProtocolV2::read_frame_segment() {
 
   // description of current segment to read
   const auto& cur_rx_desc = rx_segments_desc.at(rx_segments_data.size());
-
-  if (cur_rx_desc.logical.alignment == segment_t::DEFERRED_ALLOCATION) {
-    // This is a special case for the rx_buffers zero-copy optimization
-    // used for Message's data field. It might be dangerous and will be
-    // ultimately replaced by `allocation policies`.
-    rx_segments_data.emplace_back(ceph::bufferlist{});
-    return handle_read_frame_dispatch();
-  }
-
   std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer> rx_buffer;
   try {
     rx_buffer = ceph::buffer::ptr_node::create(buffer::create_aligned(
-      cur_rx_desc.onwire_length, cur_rx_desc.logical.alignment));
+      get_onwire_size(cur_rx_desc.length), cur_rx_desc.alignment));
   } catch (std::bad_alloc&) {
     // Catching because of potential issues with satisfying alignment.
     ldout(cct, 20) << __func__ << " can't allocate aligned rx_buffer "
-		   << " len=" << cur_rx_desc.onwire_length
-		   << " align=" << cur_rx_desc.logical.alignment
+		   << " len=" << get_onwire_size(cur_rx_desc.length)
+		   << " align=" << cur_rx_desc.alignment
 		   << dendl;
     return _fault();
   }
@@ -1216,9 +1147,21 @@ CtPtr ProtocolV2::handle_read_frame_segment(char *buffer, int r) {
     return _fault();
   }
 
+  // decrypt incoming data
+  // FIXME: if (auth_meta->is_mode_secure()) {
+  if (session_stream_handlers.rx) {
+    ceph_assert(session_stream_handlers.rx);
+
+    auto& new_seg = rx_segments_data.back();
+    if (new_seg.length()) {
+      new_seg = session_stream_handlers.rx->authenticated_decrypt_update(
+          std::move(new_seg), segment_t::DEFAULT_ALIGNMENT);
+    }
+  }
+
   if (rx_segments_desc.size() == rx_segments_data.size()) {
-    // OK, all segments planned to read are read. Can go with dispatch.
-    return handle_read_frame_dispatch();
+    // OK, all segments planned to read are read. Can go with epilogue.
+    return READ(get_epilogue_size(), handle_read_frame_epilogue_main);
   } else {
     // TODO: for makeshift only. This will be more generic and throttled
     return read_frame_segment();
@@ -1268,6 +1211,8 @@ CtPtr ProtocolV2::handle_frame_payload() {
       return handle_keepalive2_ack(payload);
     case Tag::ACK:
       return handle_message_ack(payload);
+    case Tag::WAIT:
+      return handle_wait(payload);
     default:
       ceph_abort();
   }
@@ -1308,6 +1253,74 @@ CtPtr ProtocolV2::ready() {
   return CONTINUE(read_frame);
 }
 
+CtPtr ProtocolV2::handle_read_frame_epilogue_main(char *buffer, int r)
+{
+  ldout(cct, 20) << __func__ << " r=" << r << dendl;
+
+  if (r < 0) {
+    ldout(cct, 1) << __func__ << " read data error " << dendl;
+    return _fault();
+  }
+
+  __u8 late_flags;
+
+  // FIXME: if (auth_meta->is_mode_secure()) {
+  if (session_stream_handlers.rx) {
+    ldout(cct, 1) << __func__ << " read frame epilogue bytes="
+                  << get_epilogue_size() << dendl;
+
+    // decrypt epilogue and authenticate entire frame.
+    ceph::bufferlist epilogue_bl;
+    {
+      epilogue_bl.push_back(buffer::create_static(get_epilogue_size(),
+          buffer));
+      try {
+        epilogue_bl =
+            session_stream_handlers.rx->authenticated_decrypt_update_final(
+	        std::move(epilogue_bl), segment_t::DEFAULT_ALIGNMENT);
+      } catch (ceph::crypto::onwire::MsgAuthError &e) {
+        ldout(cct, 5) << __func__ << " message authentication failed: "
+                      << e.what() << dendl;
+        return _fault();
+      }
+    }
+    auto& epilogue =
+        reinterpret_cast<epilogue_plain_block_t&>(*epilogue_bl.c_str());
+    late_flags = epilogue.late_flags;
+  } else {
+    auto& epilogue = reinterpret_cast<epilogue_plain_block_t&>(*buffer);
+
+    for (std::uint8_t idx = 0; idx < rx_segments_data.size(); idx++) {
+      const __u32 expected_crc = epilogue.crc_values[idx];
+      const __u32 calculated_crc = rx_segments_data[idx].crc32c(-1);
+      if (expected_crc != calculated_crc) {
+	ldout(cct, 5) << __func__ << " message integrity check failed: "
+		      << " expected_crc=" << expected_crc
+		      << " calculated_crc=" << calculated_crc
+		      << dendl;
+	return _fault();
+      } else {
+	ldout(cct, 20) << __func__ << " message integrity check success: "
+		       << " expected_crc=" << expected_crc
+		       << " calculated_crc=" << calculated_crc
+		       << dendl;
+      }
+    }
+    late_flags = epilogue.late_flags;
+  }
+
+  // we do have a mechanism that allows transmitter to start sending message
+  // and abort after putting entire data field on wire. This will be used by
+  // the kernel client to avoid unnecessary buffering.
+  if (late_flags & FRAME_FLAGS_LATEABRT) {
+    reset_throttle();
+    state = READY;
+    return CONTINUE(read_frame);
+  } else {
+    return handle_read_frame_dispatch();
+  }
+}
+
 CtPtr ProtocolV2::handle_message() {
   ldout(cct, 20) << __func__ << dendl;
 
@@ -1319,165 +1332,31 @@ CtPtr ProtocolV2::handle_message() {
 #endif
   recv_stamp = ceph_clock_now();
 
-  // TODO: move crypto processing to segment reader
-  if (auth_meta->is_mode_secure()) {
-    ceph_assert(session_stream_handlers.rx);
-
-    rx_segments_data[SegmentIndex::Msg::HEADER] = \
-      session_stream_handlers.rx->authenticated_decrypt_update(
-	std::move(rx_segments_data[SegmentIndex::Msg::HEADER]),
-	segment_t::DEFAULT_ALIGNMENT);
-  }
   auto header_frame = MessageHeaderFrame::Decode(
     std::move(rx_segments_data[SegmentIndex::Msg::HEADER]));
-  ceph_msg_header2 &header = header_frame.header();
+  // XXX: paranoid copy just to avoid oops
+  ceph_msg_header2 current_header = header_frame.header();
 
   ldout(cct, 20) << __func__
-		 << " got envelope type=" << header.type
+		 << " got envelope type=" << current_header.type
 		 << " src " << peer_name
-		 << " off " << header.data_off
+		 << " off " << current_header.data_off
                  << dendl;
-
-  if (messenger->crcflags & MSG_CRC_HEADER) {
-    __u32 header_crc = 0;
-    header_crc = ceph_crc32c(0, (unsigned char *)&header,
-                             sizeof(header) - sizeof(header.header_crc));
-    // verify header crc
-    if (header_crc != header.header_crc) {
-      ldout(cct, 0) << __func__ << " got bad header crc " << header_crc
-                    << " != " << header.header_crc << dendl;
-      return _fault();
-    }
-  }
 
   INTERCEPT(16);
 
-  // Reset state
-  data_buf.clear();
-  front.clear();
-  middle.clear();
-  data.clear();
-  extra.clear();
-  current_header = header;
-
-  // front
-  ceph_assert(!front.length());
-  front = std::move(rx_segments_data[SegmentIndex::Msg::FRONT]);
-
-  // middle
-  ceph_assert(!middle.length());
-  middle = std::move(rx_segments_data[SegmentIndex::Msg::MIDDLE]);
-
-  next_payload_len -= sizeof(ceph_msg_header2);
-  next_payload_len -= front.length();
-  next_payload_len -= middle.length();
-  return read_message_data_prepare();
-}
-
-CtPtr ProtocolV2::read_message_data_prepare() {
-  ldout(cct, 20) << __func__ << dendl;
-
+  const auto front_len = \
+    rx_segments_desc[SegmentIndex::Msg::FRONT].length;
+  const auto middle_len = \
+    rx_segments_desc[SegmentIndex::Msg::MIDDLE].length;
   const auto data_len = \
-    rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
-  const unsigned data_off = le32_to_cpu(current_header.data_off);
-
-  if (data_len) {
-    // get a buffer
-    map<ceph_tid_t, pair<bufferlist, int>>::iterator p =
-        connection->rx_buffers.find(current_header.tid);
-    if (p != connection->rx_buffers.end()) {
-      ldout(cct, 10) << __func__ << " seleting rx buffer v " << p->second.second
-                     << " at offset " << data_off << " len "
-                     << p->second.first.length() << dendl;
-      data_buf = p->second.first;
-      // make sure it's big enough
-      if (data_buf.length() < data_len)
-        data_buf.push_back(buffer::create(data_len - data_buf.length()));
-      data_blp = data_buf.begin();
-    } else {
-      ldout(cct, 20) << __func__ << " allocating new rx buffer at offset "
-                     << data_off << dendl;
-      alloc_aligned_buffer(data_buf, data_len, data_off);
-      data_blp = data_buf.begin();
-    }
-  }
-
-  msg_left = data_len;
-
-  return CONTINUE(read_message_data);
-}
-
-CtPtr ProtocolV2::read_message_data() {
-  ldout(cct, 20) << __func__ << " msg_left=" << msg_left << dendl;
-
-  if (msg_left > 0) {
-    bufferptr bp = data_blp.get_current_ptr();
-    unsigned read_len = std::min(bp.length(), msg_left);
-
-    return READB(read_len, bp.c_str(), handle_message_data);
-  }
-
-  next_payload_len -= rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
-  if (next_payload_len) {
-    // if we still have more bytes to read is because we signed or encrypted
-    // the message payload
-    ldout(cct, 1) << __func__ << " reading message payload extra bytes left="
-                  << next_payload_len << dendl;
-    ceph_assert(session_stream_handlers.rx && session_stream_handlers.tx &&
-		auth_meta->is_mode_secure());
-    extra.push_back(buffer::create(next_payload_len));
-    return READB(next_payload_len, extra.c_str(), handle_message_extra_bytes);
-  }
-
-  state = READ_MESSAGE_COMPLETE;
-  return handle_message_complete();
-}
-
-CtPtr ProtocolV2::handle_message_data(char *buffer, int r) {
-  ldout(cct, 20) << __func__ << " r=" << r << dendl;
-
-  if (r < 0) {
-    ldout(cct, 1) << __func__ << " read data error " << dendl;
-    return _fault();
-  }
-
-  bufferptr bp = data_blp.get_current_ptr();
-  unsigned read_len = std::min(bp.length(), msg_left);
-  ceph_assert(read_len < std::numeric_limits<int>::max());
-  data_blp.advance(read_len);
-  data.append(bp, 0, read_len);
-  msg_left -= read_len;
-
-  return CONTINUE(read_message_data);
-}
-
-CtPtr ProtocolV2::handle_message_extra_bytes(char *buffer, int r) {
-  ldout(cct, 20) << __func__ << " r=" << r << dendl;
-
-  if (r < 0) {
-    ldout(cct, 1) << __func__ << " read message extra bytes error " << dendl;
-    return _fault();
-  }
-
-  state = READ_MESSAGE_COMPLETE;
-  return handle_message_complete();
-}
-
-CtPtr ProtocolV2::handle_message_complete() {
-  ldout(cct, 20) << __func__ << dendl;
+    rx_segments_desc[SegmentIndex::Msg::DATA].length;
 
   ldout(cct, 5) << __func__
-		<< " got " << front.length()
-		<< " + " << middle.length()
-		<< " + " << data.length()
+		<< " got " << front_len
+		<< " + " << middle_len
+		<< " + " << data_len
 		<< " byte message" << dendl;
-
-  const auto front_len = \
-    rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length;
-  const auto middle_len = \
-    rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length;
-  const auto data_len = \
-    rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
 
   ceph_msg_header header{current_header.seq,
                          current_header.tid,
@@ -1492,39 +1371,18 @@ CtPtr ProtocolV2::handle_message_complete() {
                          current_header.compat_version,
                          current_header.reserved,
                          0};
-  ceph_msg_footer footer{current_header.front_crc, current_header.middle_crc,
-                         current_header.data_crc, 0, current_header.flags};
+  ceph_msg_footer footer{0, 0, 0, 0, current_header.flags};
 
-  if (auth_meta->is_mode_secure()) {
-    //msg_payload.claim_append(extra);
-
-    if (front.length()) {
-      front = session_stream_handlers.rx->authenticated_decrypt_update(
-        std::move(front), segment_t::DEFAULT_ALIGNMENT);
-    }
-    if (middle.length()) {
-      middle = session_stream_handlers.rx->authenticated_decrypt_update(
-        std::move(middle), segment_t::DEFAULT_ALIGNMENT);
-    }
-    if (data.length()) {
-      data = session_stream_handlers.rx->authenticated_decrypt_update(
-        std::move(data), segment_t::DEFAULT_ALIGNMENT);
-    }
-    try {
-      session_stream_handlers.rx->authenticated_decrypt_update_final(
-	std::move(extra), segment_t::DEFAULT_ALIGNMENT);
-    } catch (ceph::crypto::onwire::MsgAuthError &e) {
-      ldout(cct, 5) << __func__ << " message authentication failed: "
-		    << e.what() << dendl;
-      return _fault();
-    }
-  }
-
-  Message *message = decode_message(cct, messenger->crcflags, header, footer,
-                                    front, middle, data, connection);
+  Message *message = decode_message(cct, 0, header, footer,
+      rx_segments_data[SegmentIndex::Msg::FRONT],
+      rx_segments_data[SegmentIndex::Msg::MIDDLE],
+      rx_segments_data[SegmentIndex::Msg::DATA],
+      connection);
   if (!message) {
     ldout(cct, 1) << __func__ << " decode message failed " << dendl;
     return _fault();
+  } else {
+    state = READ_MESSAGE_COMPLETE;
   }
 
   INTERCEPT(17);
@@ -1533,9 +1391,9 @@ CtPtr ProtocolV2::handle_message_complete() {
   message->set_message_throttler(connection->policy.throttler_messages);
 
   const uint32_t cur_msg_size = \
-    rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length + \
-    rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length + \
-    rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+    rx_segments_desc[SegmentIndex::Msg::FRONT].length + \
+    rx_segments_desc[SegmentIndex::Msg::MIDDLE].length + \
+    rx_segments_desc[SegmentIndex::Msg::DATA].length;
 
   // store reservation size in message, so we don't get confused
   // by messages entering the dispatch queue through other paths.
@@ -1636,13 +1494,6 @@ CtPtr ProtocolV2::handle_message_complete() {
 
   handle_message_ack(current_header.ack_seq);
 
-  // clean up local buffer references
-  data_buf.clear();
-  front.clear();
-  middle.clear();
-  data.clear();
-  extra.clear();
-
   // we might have been reused by another connection
   // let's check if that is the case
   if (state != READY) {
@@ -1692,9 +1543,9 @@ CtPtr ProtocolV2::throttle_bytes() {
 
   ceph_assert(rx_segments_desc.size() == 4);
   uint32_t cur_msg_size = \
-    rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length + \
-    rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length + \
-    rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+    rx_segments_desc[SegmentIndex::Msg::FRONT].length + \
+    rx_segments_desc[SegmentIndex::Msg::MIDDLE].length + \
+    rx_segments_desc[SegmentIndex::Msg::DATA].length;
   if (cur_msg_size) {
     if (connection->policy.throttler_bytes) {
       ldout(cct, 10) << __func__ << " wants " << cur_msg_size
@@ -1728,9 +1579,9 @@ CtPtr ProtocolV2::throttle_dispatch_queue() {
 
   ceph_assert(rx_segments_desc.size() == 4);
   uint32_t cur_msg_size =
-    rx_segments_desc[SegmentIndex::Msg::FRONT].logical.length + \
-    rx_segments_desc[SegmentIndex::Msg::MIDDLE].logical.length + \
-    rx_segments_desc[SegmentIndex::Msg::DATA].logical.length;
+    rx_segments_desc[SegmentIndex::Msg::FRONT].length + \
+    rx_segments_desc[SegmentIndex::Msg::MIDDLE].length + \
+    rx_segments_desc[SegmentIndex::Msg::DATA].length;
 
   if (cur_msg_size) {
     if (!connection->dispatch_queue->dispatch_throttler.get_or_fail(
@@ -2106,14 +1957,14 @@ CtPtr ProtocolV2::handle_session_retry_global(ceph::bufferlist &payload)
   return send_reconnect();
 }
 
-CtPtr ProtocolV2::handle_wait() {
-  ldout(cct, 20) << __func__ << dendl;
-  ldout(cct, 1) << __func__ << " received WAIT (connection race)" << dendl;
+CtPtr ProtocolV2::handle_wait(ceph::bufferlist &payload) {
+  ldout(cct, 20) << __func__
+		 << " received WAIT (connection race)"
+		 << " payload.length()=" << payload.length()
+		 << dendl;
+
   state = WAIT;
-  ceph_assert(rx_segments_data.size() == 1);
-  ceph_assert(rx_segments_desc.size() == 1);
-  WaitFrame::Decode(session_stream_handlers,
-                    rx_segments_data[SegmentIndex::Frame::PAYLOAD]);
+  WaitFrame::Decode(session_stream_handlers, payload);
   return _fault();
 }
 
