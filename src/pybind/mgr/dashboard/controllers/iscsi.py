@@ -1,6 +1,5 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=too-many-branches
-
 from __future__ import absolute_import
 
 from copy import deepcopy
