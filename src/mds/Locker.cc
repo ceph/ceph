@@ -1005,11 +1005,7 @@ void Locker::eval_gather(SimpleLock *lock, bool first, bool *pneed_issue, MDSCon
       }
     }
 
-    if (pfinishers)
-      lock->take_waiting(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD|SimpleLock::WAIT_XLOCK,
-			 *pfinishers);
-    else
-      lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD|SimpleLock::WAIT_XLOCK);
+    lock_stablized(lock, SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD|SimpleLock::WAIT_XLOCK, 0, pfinishers);
     
     if (caps && in->is_head())
       need_issue = true;
@@ -1699,7 +1695,7 @@ void Locker::_finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue
     if (loner >= 0 && (xlocker < 0 || xlocker == loner)) {
       lock->set_state(LOCK_EXCL);
       lock->get_parent()->auth_unpin(lock);
-      lock->finish_waiters(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD);
+      lock_stablized(lock, SimpleLock::WAIT_STABLE|SimpleLock::WAIT_WR|SimpleLock::WAIT_RD);
       if (lock->get_cap_shift())
 	*pneed_issue = true;
       if (lock->get_parent()->is_auth() &&
@@ -1747,7 +1743,7 @@ void Locker::xlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *m
       mds->send_message_mds(slavereq, auth);
     }
     // others waiting?
-    lock->finish_waiters(SimpleLock::WAIT_STABLE |
+    lock_stablized(lock, SimpleLock::WAIT_STABLE |
 			 SimpleLock::WAIT_WR | 
 			 SimpleLock::WAIT_RD, 0); 
   } else {
@@ -3989,7 +3985,7 @@ void Locker::handle_simple_lock(SimpleLock *lock, const cref_t<MLock> &m)
     ceph_assert(lock->get_state() == LOCK_LOCK);
     lock->decode_locked_state(m->get_data());
     lock->set_state(LOCK_SYNC);
-    lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
+    lock_stablized(lock, SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
     break;
     
   case LOCK_AC_LOCK:
@@ -4195,7 +4191,7 @@ bool Locker::simple_sync(SimpleLock *lock, bool *need_issue)
     send_lock_message(lock, LOCK_AC_SYNC, data);
   }
   lock->set_state(LOCK_SYNC);
-  lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
+  lock_stablized(lock, SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
   if (in && in->is_head()) {
     if (need_issue)
       *need_issue = true;
@@ -4250,7 +4246,7 @@ void Locker::simple_excl(SimpleLock *lock, bool *need_issue)
     lock->get_parent()->auth_pin(lock);
   } else {
     lock->set_state(LOCK_EXCL);
-    lock->finish_waiters(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE);
+    lock_stablized(lock, SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE);
     if (in) {
       if (need_issue)
 	*need_issue = true;
@@ -4341,7 +4337,7 @@ void Locker::simple_lock(SimpleLock *lock, bool *need_issue)
       mds->mdcache->do_file_recover();
   } else {
     lock->set_state(LOCK_LOCK);
-    lock->finish_waiters(ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
+    lock_stablized(lock, ScatterLock::WAIT_XLOCK|ScatterLock::WAIT_WR|ScatterLock::WAIT_STABLE);
   }
 }
 
@@ -4498,7 +4494,7 @@ void Locker::scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut)
   mut->cleanup();
 
   if (lock->is_stable())
-    lock->finish_waiters(ScatterLock::WAIT_STABLE);
+    lock_stablized(lock, ScatterLock::WAIT_STABLE);
 
   //scatter_eval_gather(lock);
 }
@@ -4768,7 +4764,7 @@ void Locker::scatter_tempsync(ScatterLock *lock, bool *need_issue)
   } else {
     // do tempsync
     lock->set_state(LOCK_TSYN);
-    lock->finish_waiters(ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
+    lock_stablized(lock, ScatterLock::WAIT_RD|ScatterLock::WAIT_STABLE);
     if (lock->get_cap_shift()) {
       if (need_issue)
 	*need_issue = true;
@@ -4822,9 +4818,10 @@ void Locker::local_wrlock_finish(const MutationImpl::lock_iterator& it, Mutation
   lock->put_wrlock();
   mut->locks.erase(it);
   if (lock->get_num_wrlocks() == 0) {
-    lock->finish_waiters(SimpleLock::WAIT_STABLE |
-                         SimpleLock::WAIT_WR |
-                         SimpleLock::WAIT_RD);
+    lock_stablized(lock, SimpleLock::WAIT_STABLE |
+			SimpleLock::WAIT_WR |
+			SimpleLock::WAIT_RD);
+
   }
 }
 
@@ -4853,9 +4850,9 @@ void Locker::local_xlock_finish(const MutationImpl::lock_iterator& it, MutationI
   lock->put_xlock();
   mut->locks.erase(it);
 
-  lock->finish_waiters(SimpleLock::WAIT_STABLE | 
-		       SimpleLock::WAIT_WR | 
-		       SimpleLock::WAIT_RD);
+  lock_stablized(lock, SimpleLock::WAIT_STABLE |
+		      SimpleLock::WAIT_WR |
+		      SimpleLock::WAIT_RD);
 }
 
 
@@ -5152,7 +5149,7 @@ void Locker::file_xsyn(SimpleLock *lock, bool *need_issue)
     lock->get_parent()->auth_pin(lock);
   } else {
     lock->set_state(LOCK_XSYN);
-    lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
+    lock_stablized(lock, SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
     if (need_issue)
       *need_issue = true;
     else
@@ -5239,7 +5236,7 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
     lock->get_rdlock();
     if (caps)
       issue_caps(in);
-    lock->finish_waiters(SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
+    lock_stablized(lock, SimpleLock::WAIT_RD|SimpleLock::WAIT_STABLE);
     lock->put_rdlock();
     break;
     
@@ -5261,7 +5258,7 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
     (static_cast<ScatterLock *>(lock))->clear_flushed();
     // wake up scatter_nudge waiters
     if (lock->is_stable())
-      lock->finish_waiters(SimpleLock::WAIT_STABLE);
+      lock_stablized(lock, SimpleLock::WAIT_STABLE);
     break;
     
   case LOCK_AC_MIX:
@@ -5285,7 +5282,7 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
     if (caps)
       issue_caps(in);
     
-    lock->finish_waiters(SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE);
+    lock_stablized(lock, SimpleLock::WAIT_WR|SimpleLock::WAIT_STABLE);
     break;
 
 
@@ -5314,6 +5311,12 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
     if (lock->is_gathering()) {
       dout(7) << "handle_file_lock " << *in << " from " << from
 	      << ", still gathering " << lock->get_gather_set() << dendl;
+
+      if (lock->is_dirty()) {
+        dout(20) << __func__ << " lock " << *lock << " on " << *lock->get_parent()
+          << " pushed to the back of updated_scatterlocks due to quickflush" << dendl;
+        mark_updated_scatterlock(static_cast<ScatterLock*>(lock));
+      }
     } else {
       dout(7) << "handle_file_lock " << *in << " from " << from
 	      << ", last one" << dendl;
@@ -5331,6 +5334,13 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
     if (lock->is_gathering()) {
       dout(7) << "handle_file_lock " << *in << " from " << from
 	      << ", still gathering " << lock->get_gather_set() << dendl;
+
+      if (lock->is_dirty()) {
+        dout(20) << __func__ << " lock " << *lock << " on " << *lock->get_parent()
+          << " pushed to the back of updated_scatterlocks due to quickflush" << dendl;
+        mark_updated_scatterlock(static_cast<ScatterLock*>(lock));
+      }
+
     } else {
       dout(7) << "handle_file_lock " << *in << " from " << from
 	      << ", last one" << dendl;
@@ -5346,6 +5356,12 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
     if (lock->is_gathering()) {
       dout(7) << "handle_file_lock " << *in << " from " << from
 	      << ", still gathering " << lock->get_gather_set() << dendl;
+
+      if (lock->is_dirty()) {
+        dout(20) << __func__ << " lock " << *lock << " on " << *lock->get_parent()
+          << " pushed to the back of updated_scatterlocks due to quickflush" << dendl;
+        mark_updated_scatterlock(static_cast<ScatterLock*>(lock));
+      }
     } else {
       dout(7) << "handle_file_lock " << *in << " from " << from
 	      << ", last one" << dendl;
@@ -5414,3 +5430,17 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
     ceph_abort();
   }  
 }
+
+void Locker::lock_stablized(SimpleLock* lock, uint64_t mask, int r, MDSContext::vec* finishers) {
+  if (lock->get_type() == CEPH_LOCK_INEST && lock->is_dirty()) {
+    dout(20) << __func__ << " lock " << *lock << " on " << *lock->get_parent() 
+    << " pushed to the back of updated_scatterlocks due to quickflush" << dendl;
+    mark_updated_scatterlock(static_cast<ScatterLock*>(lock));
+  }
+
+  if (finishers)
+    lock->take_waiting(mask, *finishers);
+  else
+    lock->finish_waiters(mask, r);
+}
+

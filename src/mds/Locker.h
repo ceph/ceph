@@ -157,6 +157,8 @@ protected:
 
   void scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut);
 
+  void lock_stablized(SimpleLock* lock, uint64_t mask, int r=0, MDSContext::vec* finishers=NULL);
+
   xlist<ScatterLock*> updated_scatterlocks;
 public:
   void mark_updated_scatterlock(ScatterLock *lock);
