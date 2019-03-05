@@ -816,6 +816,29 @@ int cls_rgw_lc_set_entry(IoCtx& io_ctx, const string& oid, const pair<string, in
   return r;
 }
 
+int cls_rgw_lc_get_entry(IoCtx& io_ctx, const string& oid, const std::string& marker, rgw_lc_entry_t& entry)
+{
+  bufferlist in, out;
+  cls_rgw_lc_get_entry_op call{marker};;
+  encode(call, in);
+  int r = io_ctx.exec(oid, RGW_CLASS, RGW_LC_GET_ENTRY, in, out);
+
+  if (r < 0) {
+    return r;
+  }
+
+  cls_rgw_lc_get_entry_ret ret;
+  try {
+    auto iter = out.cbegin();
+    decode(ret, iter);
+  } catch (buffer::error& err) {
+    return -EIO;
+  }
+
+  entry = std::move(ret.entry);
+  return r;
+}
+
 int cls_rgw_lc_list(IoCtx& io_ctx, const string& oid,
                     const string& marker,
                     uint32_t max_entries,
