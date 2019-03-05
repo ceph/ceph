@@ -1672,6 +1672,10 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
                             << existing << ".cseq " << existing->connect_seq
                             << " == " << connect.connect_seq << ", sending WAIT" << dendl;
         assert(peer_addr > async_msgr->get_myaddr());
+        // make sure we follow through with opening the existing
+        // connection (if it isn't yet open) since we know the peer
+        // has something to send to us.
+        existing->send_keepalive();
         existing->lock.unlock();
         return _reply_accept(CEPH_MSGR_TAG_WAIT, connect, reply, authorizer_reply);
       }
@@ -2122,7 +2126,7 @@ void AsyncConnection::fault()
     return ;
   }
   reset_recv_state();
-  if (policy.standby && !is_queued() && state != STATE_WAIT) {
+  if (policy.standby && !is_queued() && state != STATE_WAIT && !keepalive) {
     ldout(async_msgr->cct, 10) << __func__ << " with nothing to send, going to standby" << dendl;
     state = STATE_STANDBY;
     write_lock.unlock();
