@@ -2043,6 +2043,7 @@ void buffer::list::invalidate_crc()
 
 #include "common/ceph_crypto.h"
 using ceph::crypto::SHA1;
+using ceph::crypto::SHA256;
 
 sha1_digest_t buffer::list::sha1()
 {
@@ -2053,6 +2054,17 @@ sha1_digest_t buffer::list::sha1()
   }
   sha1_gen.Final(fingerprint);
   return sha1_digest_t(fingerprint);
+}
+
+sha256_digest_t buffer::list::sha256()
+{
+  unsigned char fingerprint[CEPH_CRYPTO_SHA256_DIGESTSIZE];
+  SHA256 sha;
+  for (auto& p : _buffers) {
+    sha.Update((const unsigned char *)p.c_str(), p.length());
+  }
+  sha.Final(fingerprint);
+  return sha256_digest_t(fingerprint);
 }
 
 /**

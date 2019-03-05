@@ -2905,6 +2905,51 @@ TEST(BufferList, TestSHA1) {
   }
 }
 
+TEST(BufferList, TestSHA256) {
+  {
+    bufferlist bl;
+    sha256_digest_t sha256 = bl.sha256();
+    EXPECT_EQ("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+	      sha256.to_str());
+  }
+  {
+    bufferlist bl;
+    bl.append("");
+    sha256_digest_t sha256 = bl.sha256();
+    EXPECT_EQ("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+	      sha256.to_str());
+  }
+  {
+    bufferlist bl;
+    bl.append("Hello");
+    sha256_digest_t sha256 = bl.sha256();
+    EXPECT_EQ("185f8db32271fe25f561a6fc938b2e264306ec304eda518007d1764826381969",
+	      sha256.to_str());
+  }
+  {
+    bufferlist bl, bl2;
+    bl.append("Hello");
+    bl2.append(", world!");
+    bl.claim_append(bl2);
+    sha256_digest_t sha256 = bl.sha256();
+    EXPECT_EQ("315f5bdb76d078c43b8ac0064e4a0164612b1fce77c869345bfc94c75894edd3", sha256.to_str());
+    bl2.append("  How are you today?");
+    bl.claim_append(bl2);
+    sha256 = bl.sha256();
+    EXPECT_EQ("e85f57f8bb018bd4f7beed6f27488cef22b13d5e06e8b8a27cac8b087c2a549e",
+	      sha256.to_str());
+  }
+  {
+    bufferptr p(65536);
+    memset(p.c_str(), 0, 65536);
+    bufferlist bl;
+    bl.append(p);
+    sha256_digest_t sha256 = bl.sha256();
+    EXPECT_EQ("de2f256064a0af797747c2b97505dc0b9f3df0de4f489eac731c23ae9ca9cc31",
+	      sha256.to_str());
+  }
+}
+
 TEST(BufferHash, all) {
   {
     bufferlist bl;
