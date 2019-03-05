@@ -5858,6 +5858,50 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       }
       rdata.append(ds);
     }
+  } else if (prefix == "osd crush get-device-class") {
+    vector<string> idvec;
+    cmd_getval(cct, cmdmap, "ids", idvec);
+    map<int, string> class_by_osd;
+    for (auto& id : idvec) {
+      ostringstream ts;
+      long osd = parse_osd_id(id.c_str(), &ts);
+      if (osd < 0) {
+        ss << "unable to parse osd id:'" << id << "'";
+        r = -EINVAL;
+        goto reply;
+      }
+      auto device_class = osdmap.crush->get_item_class(osd);
+      if (device_class)
+        class_by_osd[osd] = device_class;
+      else
+        class_by_osd[osd] = ""; // no class
+    }
+    if (f) {
+      f->open_array_section("osd_device_classes");
+      for (auto& i : class_by_osd) {
+        f->open_object_section("osd_device_class");
+        f->dump_int("osd", i.first);
+        f->dump_string("device_class", i.second);
+        f->close_section();
+      }
+      f->close_section();
+      f->flush(rdata);
+    } else {
+      if (class_by_osd.size() == 1) {
+        // for single input, make a clean output
+        ds << class_by_osd.begin()->second;
+      } else {
+        // note that we do not group osds by class here
+        for (auto it = class_by_osd.begin();
+             it != class_by_osd.end();
+             it++) {
+          ds << "osd." << it->first << ' ' << it->second;
+          if (next(it) != class_by_osd.end())
+            ds << '\n';
+        }
+      }
+      rdata.append(ds);
+    }
   } else if (prefix == "osd erasure-code-profile ls") {
     const auto &profiles = osdmap.get_erasure_code_profiles();
     if (f)
