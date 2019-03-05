@@ -372,6 +372,10 @@ AuthAuthorizer* Client::ms_get_authorizer(peer_type_t peer) const
   }
 }
 
+AuthAuthorizer* Client::get_authorizer(peer_type_t peer) const
+{
+  return ms_get_authorizer(peer);
+}
 
 seastar::future<> Client::handle_monmap(ceph::net::ConnectionRef conn,
                                         Ref<MMonMap> m)

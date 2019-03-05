@@ -5,6 +5,7 @@
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
 
+#include "crimson/common/auth_service.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
@@ -306,6 +307,11 @@ seastar::future<> Heartbeat::handle_you_died()
 {
   // TODO: ask for newer osdmap
   return seastar::now();
+}
+
+AuthAuthorizer* Heartbeat::ms_get_authorizer(peer_type_t peer) const
+{
+  return monc.get_authorizer(peer);
 }
 
 seastar::future<> Heartbeat::send_heartbeats()
