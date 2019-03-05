@@ -347,8 +347,8 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
         if (!_.isUndefined(c.pipe)) {
           cellValue = c.pipe.transform(cellValue);
         }
-        if (_.isUndefined(cellValue)) {
-          return;
+        if (_.isUndefined(cellValue) || _.isNull(cellValue)) {
+          return false;
         }
         if (_.isArray(cellValue)) {
           cellValue = cellValue.join(' ');
