@@ -350,7 +350,6 @@ seastar::future<Ref<PG>> OSD::load_pg(spg_t pgid)
 
 seastar::future<> OSD::ms_dispatch(ceph::net::ConnectionRef conn, MessageRef m)
 {
-  logger().info("ms_dispatch {}", *m);
   if (state.is_stopping()) {
     return seastar::now();
   }
