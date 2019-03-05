@@ -175,7 +175,7 @@ class CephFSMount(object):
         ))
         p.wait()
 
-    def open_background(self, basename="background_file"):
+    def open_background(self, basename="background_file", write=True):
         """
         Open a file for writing, then block such that the client
         will hold a capability.
@@ -187,16 +187,25 @@ class CephFSMount(object):
 
         path = os.path.join(self.mountpoint, basename)
 
-        pyscript = dedent("""
-            import time
+        if write:
+            pyscript = dedent("""
+                import time
 
-            f = open("{path}", 'w')
-            f.write('content')
-            f.flush()
-            f.write('content2')
-            while True:
-                time.sleep(1)
-            """).format(path=path)
+                f = open("{path}", 'w')
+                f.write('content')
+                f.flush()
+                f.write('content2')
+                while True:
+                    time.sleep(1)
+                """).format(path=path)
+        else:
+            pyscript = dedent("""
+                import time
+
+                f = open("{path}", 'r')
+                while True:
+                    time.sleep(1)
+                """).format(path=path)
 
         rproc = self._run_python(pyscript)
         self.background_procs.append(rproc)
