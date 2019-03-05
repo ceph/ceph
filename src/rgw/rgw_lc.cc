@@ -347,16 +347,17 @@ int RGWLC::bucket_lc_process(string& shard_id)
   boost::split(result, shard_id, boost::is_any_of(":"));
   string bucket_tenant = result[0];
   string bucket_name = result[1];
-  string bucket_id = result[2];
+  string bucket_marker = result[2];
   int ret = store->get_bucket_info(obj_ctx, bucket_tenant, bucket_name, bucket_info, NULL, &bucket_attrs);
   if (ret < 0) {
     ldout(cct, 0) << "LC:get_bucket_info failed" << bucket_name <<dendl;
     return ret;
   }
 
-  ret = bucket_info.bucket.bucket_id.compare(bucket_id) ;
-  if (ret !=0) {
-    ldout(cct, 0) << "LC:old bucket id find, should be delete" << bucket_name <<dendl;
+  if (bucket_info.bucket.marker != bucket_marker) {
+    ldout(cct, 0) << "LC: deleting stale entry found for bucket=" << bucket_tenant
+                       << ":" << bucket_name << " cur_marker=" << bucket_info.bucket.marker
+                       << " orig_marker=" << bucket_marker << dendl;
     return -ENOENT;
   }
 
