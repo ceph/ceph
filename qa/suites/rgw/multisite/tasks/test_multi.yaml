@@ -7,12 +7,16 @@ tasks:
 - ceph: {cluster: c2}
 - rgw:
     c1.client.0:
+      port: 8000
       valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
     c1.client.1:
+      port: 8001
       valgrind: [--tool=memcheck, --max-threads=1024]
     c2.client.0:
+      port: 8000
       valgrind: [--tool=memcheck, --max-threads=1024]
     c2.client.1:
+      port: 8001
       valgrind: [--tool=memcheck, --max-threads=1024]
 - rgw-multisite:
 - rgw-multisite-tests:
