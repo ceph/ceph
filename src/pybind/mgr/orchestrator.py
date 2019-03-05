@@ -4,7 +4,6 @@ ceph-mgr orchestrator interface
 
 Please see the ceph-mgr module developer's guide for more information.
 """
-import copy
 import sys
 import time
 import fnmatch
@@ -446,6 +445,17 @@ class Orchestrator(object):
 
         Note that this can only remove OSDs that were successfully
         created (i.e. got an OSD ID).
+        """
+        raise NotImplementedError()
+
+    def blink_device_light(self, ident_fault, on, locations):
+        # type: (str, bool, List[DeviceLightLoc]) -> WriteCompletion
+        """
+        Instructs the orchestrator to enable or disable either the ident or the fault LED.
+
+        :param ident_fault: either ``"ident"`` or ``"fault"``
+        :param on: ``True`` = on.
+        :param locations: See :class:`orchestrator.DeviceLightLoc`
         """
         raise NotImplementedError()
 
@@ -942,6 +952,19 @@ class InventoryNode(object):
     def from_nested_items(cls, hosts):
         devs = InventoryDevice.from_ceph_volume_inventory_list
         return [cls(item[0], devs(item[1].data)) for item in hosts]
+
+
+class DeviceLightLoc(namedtuple('DeviceLightLoc', ['host', 'dev'])):
+    """
+    Describes a specific device on a specific host. Used for enabling or disabling LEDs
+    on devices.
+
+    hostname as in :func:`orchestrator.Orchestrator.get_hosts`
+
+    device_id: e.g. ``ABC1234DEF567-1R1234_ABC8DE0Q``.
+       See ``ceph osd metadata | jq '.[].device_ids'``
+    """
+    __slots__ = ()
 
 
 def _mk_orch_methods(cls):
