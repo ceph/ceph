@@ -316,7 +316,6 @@ bool Client::is_hunting() const {
 seastar::future<>
 Client::ms_dispatch(ceph::net::ConnectionRef conn, MessageRef m)
 {
-  logger().info("ms_dispatch {}", *m);
   // we only care about these message types
   switch (m->get_type()) {
   case CEPH_MSG_MON_MAP:
