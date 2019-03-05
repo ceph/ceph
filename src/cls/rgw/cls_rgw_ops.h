@@ -1010,9 +1010,10 @@ struct cls_rgw_lc_get_next_entry_op {
 };
 WRITE_CLASS_ENCODER(cls_rgw_lc_get_next_entry_op)
 
-struct cls_rgw_lc_get_next_entry_ret {
-  pair<string, int> entry;
+using rgw_lc_entry_t = std::pair<std::string, int>;
 
+struct cls_rgw_lc_get_next_entry_ret {
+  rgw_lc_entry_t entry;
   cls_rgw_lc_get_next_entry_ret() {}
 
   void encode(bufferlist& bl) const {
@@ -1031,7 +1032,7 @@ struct cls_rgw_lc_get_next_entry_ret {
 WRITE_CLASS_ENCODER(cls_rgw_lc_get_next_entry_ret)
 
 struct cls_rgw_lc_rm_entry_op {
-  pair<string, int> entry;
+  rgw_lc_entry_t entry;
   cls_rgw_lc_rm_entry_op() {}
 
   void encode(bufferlist& bl) const {
@@ -1049,7 +1050,7 @@ struct cls_rgw_lc_rm_entry_op {
 WRITE_CLASS_ENCODER(cls_rgw_lc_rm_entry_op)
 
 struct cls_rgw_lc_set_entry_op {
-  pair<string, int> entry;
+  rgw_lc_entry_t entry;
   cls_rgw_lc_set_entry_op() {}
 
   void encode(bufferlist& bl) const {
