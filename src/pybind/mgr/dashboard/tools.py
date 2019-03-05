@@ -15,6 +15,12 @@ import fnmatch
 import time
 import threading
 import six
+
+try:
+    from typing import Union, Optional, List, Any
+except ImportError:
+    pass  # just for type checking.
+
 from six.moves import urllib
 import cherrypy
 
@@ -665,6 +671,7 @@ class Task(object):
 
 
 def build_url(host, scheme=None, port=None):
+    # type: (str, Optional[str], Optional[int]) -> str
     """
     Build a valid URL. IPv6 addresses specified in host will be enclosed in brackets
     automatically.
@@ -717,6 +724,7 @@ def prepare_url_prefix(url_prefix):
 
 
 def dict_contains_path(dct, keys):
+    # type: (dict, list) -> bool
     """
     Tests whether the keys exist recursively in `dictionary`.
 
@@ -760,6 +768,7 @@ def getargspec(func):
 
 
 def str_to_bool(val):
+    # type: (Union[str, bool]) -> bool
     """
     Convert a string representation of truth to True or False.
 
@@ -838,6 +847,7 @@ def get_request_body_params(request):
 
 
 def find_object_in_list(key, value, iterable):
+    # type: (str, Any, List[dict]) -> Optional[dict]
     """
     Get the first occurrence of an object within a list with
     the specified key/value.

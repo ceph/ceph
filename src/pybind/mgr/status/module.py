@@ -12,6 +12,11 @@ import prettytable
 import six
 import json
 
+try:
+    from typing import Dict, Any, Tuple
+except ImportError:
+    pass  # only for type checking
+
 from mgr_module import MgrModule
 
 
@@ -50,6 +55,7 @@ class Module(MgrModule):
             return 0
 
     def handle_fs_status(self, cmd):
+        # type: (Dict[str, Any]) -> Tuple[int, str, str]
         output = ""
         json_output = defaultdict(list)
         output_format = cmd.get('format', 'plain')

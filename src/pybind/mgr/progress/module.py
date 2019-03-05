@@ -17,7 +17,7 @@ import json
 ENCODING_VERSION = 2
 
 # keep a global reference to the module so we can use it from Event methods
-_module = None  # type: Optional["Module"]
+_module = None
 
 # if unit test we want MgrModule to be blank
 if 'UNITTEST' in os.environ:
@@ -278,7 +278,7 @@ class PgRecoveryEvent(Event):
                 for pg in missing_pgs:
                     self._pgs.remove(pg)
 
-        complete_accumulate = 0.0
+        complete_accumulate = 0.0  # type: float
 
         # Calculating progress as the number of PGs recovered divided by the
         # original where partially completed PGs count for something
@@ -331,7 +331,7 @@ class PgRecoveryEvent(Event):
                         ratio = 0.5
                     complete_accumulate += ratio
 
-        self._pgs = list(set(self._pgs) ^ complete)
+        self._pgs = list(set(self._pgs) ^ complete)  # type: List[PgId]
         completed_pgs = self._original_pg_count - len(self._pgs)
         self._progress = (completed_pgs + complete_accumulate)\
             / self._original_pg_count

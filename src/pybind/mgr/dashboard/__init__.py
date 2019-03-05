@@ -21,7 +21,7 @@ if 'UNITTEST' not in os.environ:
                 raise AttributeError("global manager module instance not initialized")
             return getattr(self._mgr, item)
 
-    mgr = _ModuleProxy()
+    mgr = _ModuleProxy()  # type: Module
 
     # DO NOT REMOVE: required for ceph-mgr to load a module
     from .module import Module, StandbyModule  # noqa: F401

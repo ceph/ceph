@@ -431,7 +431,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             self.log.debug('pod_osd_ids={0}'.format(pod_osd_ids))
 
             found = []
-            osdmap = self.get("osd_map")
+            osdmap = self.get("osd_map")  # type: Dict[str, list]
             for osd in osdmap['osds']:
                 osd_id = osd['osd']
                 if osd_id not in pod_osd_ids:
@@ -440,7 +440,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 metadata = self.get_metadata('osd', "%s" % osd_id)
                 if metadata and metadata['devices'] in targets:
                     found.append(osd_id)
-                else:
+                elif metadata:
                     self.log.info("ignoring osd {0} {1}".format(
                         osd_id, metadata['devices']
                     ))

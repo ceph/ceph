@@ -278,8 +278,12 @@ class Module(MgrModule, CherryPyConfig):
         self._stopping = threading.Event()
         self.shutdown_event = threading.Event()
 
-        self.ACCESS_CTRL_DB = None
-        self.SSO_DB = None
+        if False:
+            from .services.access_control import AccessControlDB
+            from .services.sso import SsoDB
+
+        self.ACCESS_CTRL_DB = None  # type: AccessControlDB
+        self.SSO_DB = None  # type: SsoDB
 
     @classmethod
     def can_run(cls):

@@ -1,6 +1,11 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+try:
+    from typing import List
+except ImportError:
+    pass  # just type checking
+
 import six
 
 import rbd
@@ -95,7 +100,7 @@ class RbdConfiguration(object):
         return option if option.startswith('conf_') else 'conf_' + option
 
     def list(self):
-        # type: () -> [dict]
+        # type: () -> List[dict]
         def _list(ioctx):
             if self._image_name:  # image config
                 with rbd.Image(ioctx, self._image_name) as image:

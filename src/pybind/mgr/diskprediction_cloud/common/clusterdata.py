@@ -8,6 +8,9 @@ import json
 import rbd
 from mgr_module import CommandResult
 
+if False:
+    from diskprediction_cloud.module import Module
+
 GB = 1024 * 1024 * 1024
 
 
@@ -37,6 +40,7 @@ def differentiate(data1, data2):
 class ClusterAPI(object):
 
     def __init__(self, module_obj):
+        # type: (Module) -> None
         self.module = module_obj
 
     @staticmethod

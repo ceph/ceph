@@ -40,6 +40,7 @@ def bold(msg):
 
 
 def format_units(n, width, colored, decimal):
+    # type: (int, int, bool, int) -> str
     """
     Format a number without units, so as to fit into `width` characters, substituting
     an appropriate unit suffix.
