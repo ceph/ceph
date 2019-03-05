@@ -2007,8 +2007,6 @@ CtPtr ProtocolV1::handle_connect_message_2() {
                     << " existing_state="
                     << connection->get_state_name(existing->state) << dendl;
       reply.global_seq = exproto->peer_global_seq;
-      // make sure we notice if existing connection is no longer functioning
-      existing->send_keepalive();
       existing->lock.unlock();
       return send_connect_message_reply(CEPH_MSGR_TAG_RETRY_GLOBAL, reply,
                                         authorizer_reply);
