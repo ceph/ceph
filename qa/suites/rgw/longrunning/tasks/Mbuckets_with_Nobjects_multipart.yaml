@@ -1,22 +1,22 @@
+# tests s3 objects upload, download and deleting of buckets and objects
+# multipart upload
 tasks:
   - ssh-keys: null
   - ceph-ansible: null
-  - rgw-system-test:
-      test: Mbuckets_with_Nobjects
+  - rgw-longrunning:
+      test: Mbuckets_with_Nobjects_multipart
       script: test_Mbuckets_with_Nobjects.py
-      clients: ['client.0']
       config:
-        user_count: 5
-        bucket_count: 5
-        objects_count: 20
-        objects_size_range:
-          min: 100
-          max: 200
+        user_count: 2
+        bucket_count: 2
+        size_ranges: [50, 100, 250, 500, 1000]
+        local_file_delete: true
         test_ops:
           create_bucket: true
           create_object: true
           download_object: true
           delete_bucket_object: true
+          upload_type: multipart
           sharding:
             enable: false
             max_shards: 0

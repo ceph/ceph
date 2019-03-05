@@ -1,0 +1,19 @@
+# tests version enable, download, suspend_version, and upload after objects after suspending
+tasks:
+  - ssh-keys: null
+  - ceph-ansible: null
+  - rgw-longrunning:
+      test: versioning_ops
+      script: test_versioning_with_objects.py
+      config:
+        user_count: 2
+        bucket_count: 2
+        version_count: 4
+        size_ranges: [50, 100, 250, 500, 1000]
+        local_file_delete: true
+        test_ops:
+          enable_version: true
+          suspend_version: true
+          copy_to_version: false
+          delete_object_versions: false
+          upload_after_suspend: true
