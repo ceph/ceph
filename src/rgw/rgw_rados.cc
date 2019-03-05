@@ -7792,25 +7792,14 @@ int RGWRados::put_bucket_entrypoint_info(const string& tenant_name, const string
 int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
                               real_time mtime, map<string, bufferlist> *pattrs)
 {
-  info.has_instance_obj = true;
-  bufferlist bl;
+  RGWSysObjectCtx obj_ctx = svc.sysobj->init_obj_ctx();
+  auto instance = svc.bucket->instance(obj_ctx, info.bucket.tenant, info.bucket.name);
 
-  encode(info, bl);
-
-  string key = info.bucket.get_key(); /* when we go through meta api, we don't use oid directly */
-  int ret = rgw_bucket_instance_store_info(this, key, bl, exclusive, pattrs, &info.objv_tracker, mtime);
-  if (ret == -EEXIST) {
-    /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
-     * bucket operation on this specific bucket (e.g., being synced from the master), but
-     * since bucket instace meta object is unique for this specific bucket instace, we don't
-     * need to return an error.
-     * A scenario where we'd get -EEXIST here, is in a multi-zone config, we're not on the
-     * master, creating a bucket, sending bucket creation to the master, we create the bucket
-     * locally, while in the sync thread we sync the new bucket.
-     */
-    ret = 0;
-  }
-  return ret;
+  return instance.set_op()
+    .set_exclusive(exclusive)
+    .set_mtime(mtime)
+    .set_attrs(pattrs)
+    .exec();
 }
 
 int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_time mtime, obj_version *pep_objv,

@@ -93,6 +93,10 @@ public:
                          map<string, bufferlist> *pattrs,
                          boost::optional<obj_version> refresh_version);
 
+    int write_bucket_instance_info(RGWBucketInfo& info,
+                                   bool exclusive,
+                                   real_time mtime,
+                                   map<string, bufferlist> *pattrs);
   public:
     Instance(RGWSI_Bucket *_bucket_svc,
          RGWSysObjectCtx& _ctx,
@@ -155,8 +159,40 @@ public:
       int exec();
     };
 
+    struct SetOp {
+      Instance& source;
+
+      ceph::real_time mtime;
+      map<string, bufferlist> *pattrs{nullptr};
+      bool exclusive{false};
+
+
+      SetOp& set_mtime(const ceph::real_time& _mtime) {
+        mtime = _mtime;
+        return *this;
+      }
+
+      SetOp& set_attrs(map<string, bufferlist> *_attrs) {
+        pattrs = _attrs;
+        return *this;
+      }
+
+      SetOp& set_exclusive(bool _exclusive) {
+        exclusive = _exclusive;
+        return *this;
+      }
+
+      SetOp(Instance& _source) : source(_source) {}
+
+      int exec();
+    };
+
     GetOp get_op() {
       return GetOp(*this);
+    }
+
+    SetOp set_op() {
+      return SetOp(*this);
     }
   };
 

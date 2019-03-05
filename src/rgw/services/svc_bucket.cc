@@ -222,6 +222,31 @@ int RGWSI_Bucket::Instance::read_bucket_info(const rgw_bucket& bucket,
   return 0;
 }
 
+int RGWSI_Bucket::Instance::write_bucket_instance_info(RGWBucketInfo& info,
+                                                       bool exclusive,
+                                                       real_time mtime,
+                                                       map<string, bufferlist> *pattrs)
+{
+  info.has_instance_obj = true;
+  bufferlist bl;
+
+  encode(info, bl);
+
+  string key = info.bucket.get_key(); /* when we go through meta api, we don't use oid directly */
+  int ret = rgw_bucket_instance_store_info(this, key, bl, exclusive, pattrs, &info.objv_tracker, mtime);
+  if (ret == -EEXIST) {
+    /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
+     * bucket operation on this specific bucket (e.g., being synced from the master), but
+     * since bucket instace meta object is unique for this specific bucket instace, we don't
+     * need to return an error.
+     * A scenario where we'd get -EEXIST here, is in a multi-zone config, we're not on the
+     * master, creating a bucket, sending bucket creation to the master, we create the bucket
+     * locally, while in the sync thread we sync the new bucket.
+     */
+    ret = 0;
+  }
+  return ret;
+}
 
 int RGWSI_Bucket::Instance::GetOp::exec()
 {
@@ -234,6 +259,18 @@ int RGWSI_Bucket::Instance::GetOp::exec()
 
   if (pinfo) {
     *pinfo = source.bucket_info;
+  }
+
+  return 0;
+}
+
+int RGWSI_Bucket::Instance::SetOp::exec()
+{
+  int r = source.write_bucket_instance_info(source.bucket_info,
+                                            exclusive,
+                                            mtime, pattrs);
+  if (r < 0) {
+    return r;
   }
 
   return 0;
