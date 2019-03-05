@@ -718,6 +718,15 @@ function test_mon_misc()
   ceph --concise osd dump | grep '^epoch'
 
   ceph osd df | grep 'MIN/MAX VAR'
+  osd_class=$(ceph osd crush get-device-class 0)
+  ceph osd df tree class $osd_class | grep 'osd.0'
+  ceph osd crush rm-device-class 0
+  # create class first in case old device class may
+  # have already been automatically destroyed
+  ceph osd crush class create $osd_class
+  ceph osd df tree class $osd_class | expect_false grep 'osd.0'
+  ceph osd crush set-device-class $osd_class 0
+  ceph osd df tree name osd.0 | grep 'osd.0'
 
   # df
   ceph df > $TMPFILE

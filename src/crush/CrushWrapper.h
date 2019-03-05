@@ -735,6 +735,13 @@ public:
    * @return number of items, or error
    */
   int get_children(int id, list<int> *children) const;
+ /**
+   * enumerate all children of given node
+   *
+   * @param id parent bucket or device id
+   * @return number of items, or error
+   */
+  int get_all_children(int id, set<int> *children) const;
   void get_children_of_type(int id,
                             int type,
 			    vector<int> *children,

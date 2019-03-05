@@ -858,6 +858,30 @@ int CrushWrapper::get_children(int id, list<int> *children) const
   return b->size;
 }
 
+int CrushWrapper::get_all_children(int id, set<int> *children) const
+{
+  // leaf?
+  if (id >= 0) {
+    return 0;
+  }
+
+  auto *b = get_bucket(id);
+  if (IS_ERR(b)) {
+    return -ENOENT;
+  }
+
+  int c = 0;
+  for (unsigned n = 0; n < b->size; n++) {
+    children->insert(b->items[n]);
+    c++;
+    auto r = get_all_children(b->items[n], children);
+    if (r < 0)
+      return r;
+    c += r;
+  }
+  return c;
+}
+
 void CrushWrapper::get_children_of_type(int id,
                                         int type,
 					vector<int> *children,

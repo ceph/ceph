@@ -68,7 +68,9 @@ COMMAND("osd perf", \
         "osd", \
         "r")
 COMMAND("osd df " \
-	"name=output_method,type=CephChoices,strings=plain|tree,req=false", \
+        "name=output_method,type=CephChoices,strings=plain|tree,req=false " \
+        "name=filter_by,type=CephChoices,strings=class|name,req=false " \
+        "name=filter,type=CephString,req=false", \
 	"show OSD utilization", "osd", "r")
 COMMAND("osd blocked-by", \
 	"print histogram of which OSDs are blocking their peers", \
