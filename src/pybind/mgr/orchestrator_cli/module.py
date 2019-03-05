@@ -1,14 +1,14 @@
 import errno
 import json
+from functools import wraps
 
 from prettytable import PrettyTable
 
 try:
-    from typing import Dict, List
+    from typing import List, Set
 except ImportError:
     pass  # just for type checking.
 
-from functools import wraps
 
 from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError, \
     DeviceSelection
@@ -48,9 +48,8 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
 
     def __init__(self, *args, **kwargs):
         super(OrchestratorCli, self).__init__(*args, **kwargs)
-        self.ident = set([])
-        self.fault = set([])
-        self.devs = {}
+        self.ident = set()  # type: Set[str]
+        self.fault = set()  # type: Set[str]
         self._load()
         self._refresh_health()
 
@@ -60,7 +59,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             decoded = json.loads(active)
             self.ident = set(decoded.get('ident', []))
             self.fault = set(decoded.get('fault', []))
-        self.log.debug('ident %s, fault %s' % (self.ident, self.fault))
+        self.log.debug('ident {}, fault {}'.format(self.ident, self.fault))
 
     def _save(self):
         encoded = json.dumps({
@@ -76,90 +75,102 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
                 'severity': 'warning',
                 'summary': '%d devices have ident light turned on' % len(
                     self.ident),
-                'detail': ['%s ident light enabled' % d for d in self.ident]
+                'detail': ['{} ident light enabled'.format(d) for d in self.ident]
             }
         if self.fault:
             h['DEVICE_FAULT_ON'] = {
                 'severity': 'warning',
                 'summary': '%d devices have fault light turned on' % len(
                     self.fault),
-                'detail': ['%s fault light enabled' % d for d in self.fault]
+                'detail': ['{} fault light enabled'.format(d) for d in self.ident]
             }
         self.set_health_checks(h)
 
-    def _get_devices(self):
-        d = self.get('devices')
-        dm = {}
-        for i in d['devices']:
-            dm[i['devid']] = i['location']
-        return dm
+    def _get_device_locations(self, dev_id):
+        # type: (str) -> List[orchestrator.DeviceLightLoc]
+        locs = [d['location'] for d in self.get('devices')['devices'] if d['devid'] == dev_id]
+        return [orchestrator.DeviceLightLoc(**l) for l in  sum(locs, [])]
 
-    @CLIReadCommand(prefix='device ls-lights',
-                    desc='List currently active device indicator lights')
-    def _command_ls(self):
+    @_read_cli(prefix='device ls-lights',
+               desc='List currently active device indicator lights')
+    def _device_ls(self):
         return HandleCommandResult(
             stdout=json.dumps({
                 'ident': list(self.ident),
                 'fault': list(self.fault)
                 }, indent=4))
 
-    @CLIWriteCommand(prefix='device fault-light-on',
-                     args='name=devid,type=CephString',
-                     desc='Enable device *fault* light')
-    def _command_fault_on(self, devid):
-        self.log.debug('fault-on %s' % devid)
-        devs = self._get_devices()
-        if devid not in devs:
-            return HandleCommandResult(stderr='device %s not found' % devid,
+    def light_on(self, fault_ident, devid):
+        # type: (str, str) -> HandleCommandResult
+        assert fault_ident in ("fault", "ident")
+        locs = self._get_device_locations(devid)
+        if locs is None:
+            return HandleCommandResult(stderr='device {} not found'.format(devid),
                                        retval=-errno.ENOENT)
-        self.fault.add(devid)
+
+        getattr(self, fault_ident).add(devid)
         self._save()
         self._refresh_health()
-        #self.remote('orchestrator', '_device_fault_on', devs[devid])
-        return HandleCommandResult(stdout='')
+        completion = self.blink_device_light(fault_ident, True, locs)
+        self._orchestrator_wait([completion])
+        return HandleCommandResult(stdout=str(completion.result))
 
-    @CLIWriteCommand(prefix='device ident-light-on',
-                     args='name=devid,type=CephString',
-                     desc='Enable device *ident* light')
-    def _command_ident_on(self, devid):
-        self.log.debug('ident-on %s' % devid)
-        devs = self._get_devices()
-        if devid not in devs:
-            return HandleCommandResult(stderr='device %s not found' % devid,
+    def light_off(self, fault_ident, devid, force):
+        # type: (str, str, bool) -> HandleCommandResult
+        assert fault_ident in ("fault", "ident")
+        locs = self._get_device_locations(devid)
+        if locs is None:
+            return HandleCommandResult(stderr='device {} not found'.format(devid),
                                        retval=-errno.ENOENT)
-        self.ident.add(devid)
-        self._save()
-        self._refresh_health()
-        #self.remote('orchestrator', '_device_ident_on', devs[devid])
-        return HandleCommandResult(stdout='')
 
-    @CLIWriteCommand(prefix='device fault-light-off',
-                     args='name=devid,type=CephString name=force,type=CephBool,req=false',
-                     desc='Disable device *fault* light')
-    def _command_fault_off(self, devid, force=False):
-        self.log.debug('fault-off %s' % devid)
-        devs = self._get_devices()
-#        if devid in devs:
-#            self.remote('orchestrator', '_device_fault_off', devs[devid])
-        if devid in self.fault:
-            self.fault.remove(devid)
-            self._save()
-            self._refresh_health()
-        return HandleCommandResult(stdout='')
+        try:
+            completion = self.blink_device_light(fault_ident, False, locs)
+            self._orchestrator_wait([completion])
 
-    @CLIWriteCommand(prefix='device ident-light-off',
-                     args='name=devid,type=CephString name=force,type=CephBool,req=false',
-                     desc='Disable device *ident* light')
-    def _command_ident_off(self, devid, force=False):
-        self.log.debug('ident-off %s' % devid)
-        devs = self._get_devices()
-#        if devid in devs:
-#            self.remote('orchestrator', '_device_ident_off', devs[devid])
-        if devid in self.ident:
-            self.ident.remove(devid)
-            self._save()
-            self._refresh_health()
-        return HandleCommandResult(stdout='')
+            if devid in getattr(self, fault_ident):
+                getattr(self, fault_ident).remove(devid)
+                self._save()
+                self._refresh_health()
+            return HandleCommandResult(stdout=str(completion.result))
+
+        except:
+            # There are several reasons the try: block might fail:
+            # 1. the device no longer exist
+            # 2. the device is no longer known to Ceph
+            # 3. the host is not reachable
+            if force and devid in getattr(self, fault_ident):
+                getattr(self, fault_ident).remove(devid)
+                self._save()
+                self._refresh_health()
+            raise
+
+
+    @_write_cli(prefix='device fault-light-on',
+                cmd_args='name=devid,type=CephString',
+                desc='Enable device *fault* light')
+    def _device_fault_on(self, devid):
+        return self.light_on('fault', devid)
+
+    @_write_cli(prefix='device ident-light-on',
+                cmd_args='name=devid,type=CephString',
+                desc='Enable device *ident* light')
+    def _device_ident_on(self, devid):
+        return self.light_on('ident', devid)
+
+
+    @_write_cli(prefix='device fault-light-off',
+                cmd_args='name=devid,type=CephString '
+                         'name=force,type=CephBool,req=false',
+                desc='Disable device *fault* light')
+    def _device_fault_off(self, devid, force=False):
+        return self.light_off('fault', devid, force)
+
+    @_write_cli(prefix='device ident-light-off',
+                cmd_args='name=devid,type=CephString '
+                         'name=force,type=CephBool,req=false',
+                desc='Disable device *ident* light')
+    def _device_ident_off(self, devid, force=False):
+        return self.light_off('ident', devid, force)
 
     def _select_orchestrator(self):
         return self.get_module_option("orchestrator")

@@ -182,10 +182,19 @@ Example::
     ^^^^^^^^^^^^^^^^^^^
     ::
 
-        ceph orchestrator device ident-on <host> <devname>
-        ceph orchestrator device ident-off <host> <devname>
-        ceph orchestrator device fault-on <host> <devname>
-        ceph orchestrator device fault-off <host> <devname>
+        ceph orchestrator device ident-on <dev_id>
+        ceph orchestrator device ident-on <dev_name> <host>
+        ceph orchestrator device fault-on <dev_id>
+        ceph orchestrator device fault-on <dev_name> <host>
+
+        ceph orchestrator device ident-off <dev_id> [--force=true]
+        ceph orchestrator device ident-off <dev_id> <host> [--force=true]
+        ceph orchestrator device fault-off <dev_id> [--force=true]
+        ceph orchestrator device fault-off <dev_id> <host> [--force=true]
+
+    where ``dev_id`` is the device id as listed in ``osd metadata``,
+    ``dev_name`` is the name of the device on the system and ``host`` is the host as
+    returned by ``orchestrator host ls``
 
         ceph orchestrator osd ident-on {primary,journal,db,wal,all} <osd-id>
         ceph orchestrator osd ident-off {primary,journal,db,wal,all} <osd-id>
