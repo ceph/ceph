@@ -1958,6 +1958,13 @@ std::vector<Option> get_global_options() {
     .set_flag(Option::FLAG_CLUSTER_CREATE)
     .set_description("do not set any monmap features for new mon clusters"),
 
+    Option("mon_debug_osd_force_is_sure", Option::TYPE_BOOL,
+	   Option::LEVEL_DEV)
+    .set_default(false)
+    .add_service("mon")
+    .set_description("force `is_sure` arguments even "
+		     "if otherwise not needed"),
+
     Option("mon_inject_transaction_delay_max", Option::TYPE_FLOAT, Option::LEVEL_DEV)
     .set_default(10.0)
     .add_service("mon")

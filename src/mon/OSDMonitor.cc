@@ -7364,7 +7364,9 @@ int OSDMonitor::_handle_special_flag(
       return -EINVAL;
     }
 
-    if (!osdmap.get_num_up_osds() && !is_sure) {
+    bool needs_is_sure = g_conf().get_val<bool>(
+	"mon_debug_osd_force_is_sure");
+    if ((needs_is_sure || !osdmap.get_num_up_osds()) && !is_sure) {
       ss << "Not advisable to continue since no OSDs are up. Pass "
 	 << "--yes-i-really-mean-it if you really wish to continue.";
       return -EPERM;

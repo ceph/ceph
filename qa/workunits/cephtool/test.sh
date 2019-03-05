@@ -1526,6 +1526,19 @@ function test_mon_osd()
   done
   [[ $flags_found -eq 0 ]]
 
+  # this is a rather unlikely scenario, but lets try checking whether it
+  # still works when someone doesn't have the required flags in their map
+  # (e.g., from an upgrade or botched osd), and we need to fail setting
+  # pglog_hardlimit.
+  ceph config set mon mon_debug_osd_force_is_sure true
+  expect_false ceph osd set pglog_hardlimit
+  expect_false ceph osd set pglog_hardlimit noout
+  ceph osd set pglog_hardlimit --yes-i-really-mean-it
+  ceph osd set pglog_hardlimit noout --yes-i-really-mean-it
+  ceph osd unset noout
+  expect_false ceph osd unset pglog_hardlimit
+  ceph config set mon mon_debug_osd_force_is_sure false
+
   # these are no-ops but should succeed.
 
   ceph osd set noup
