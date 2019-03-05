@@ -524,6 +524,25 @@ pg_notify_t PG::get_notify(epoch_t query_epoch) const
                      info};
 }
 
+bool PG::is_last_activated_peer(pg_shard_t peer)
+{
+  if (!acting_recovery_backfill.count(peer))
+    return false;
+  if (!peer_activated.insert(peer).second)
+    return false;
+  logger().info("peer osd.{} activated and committed", peer);
+  return peer_activated.size() == acting_recovery_backfill.size();
+}
+
+
+void PG::clear_primary_state()
+{
+  peer_info.clear();
+  want_acting.clear();
+  need_up_thru = 0;
+  peer_activated.clear();
+}
+
 seastar::future<> PG::do_peering_event(std::unique_ptr<PGPeeringEvent> evt)
 {
   // todo
