@@ -1414,64 +1414,6 @@ void MDCache::adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop)
   show_subtrees();
 }
 
-
-void MDCache::get_fullauth_subtrees(set<CDir*>& s)
-{
-  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p) {
-    CDir *root = p->first;
-    if (root->is_full_dir_auth())
-      s.insert(root);
-  }
-}
-void MDCache::get_auth_subtrees(set<CDir*>& s)
-{
-  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p) {
-    CDir *root = p->first;
-    if (root->is_auth())
-      s.insert(root);
-  }
-}
-
-
-// count.
-
-int MDCache::num_subtrees()
-{
-  return subtrees.size();
-}
-
-int MDCache::num_subtrees_fullauth()
-{
-  int n = 0;
-  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p) {
-    CDir *root = p->first;
-    if (root->is_full_dir_auth())
-      n++;
-  }
-  return n;
-}
-
-int MDCache::num_subtrees_fullnonauth()
-{
-  int n = 0;
-  for (map<CDir*,set<CDir*> >::iterator p = subtrees.begin();
-       p != subtrees.end();
-       ++p) {
-    CDir *root = p->first;
-    if (root->is_full_dir_nonauth())
-      n++;
-  }
-  return n;
-}
-
-
-
 // ===================================
 // journal and snap/cow helpers
 
