@@ -3958,7 +3958,7 @@ void Client::_flushed(Inode *in)
 
 
 // checks common to add_update_cap, handle_cap_grant
-void Client::check_cap_issue(Inode *in, Cap *cap, unsigned issued)
+void Client::check_cap_issue(Inode *in, unsigned issued)
 {
   unsigned had = in->caps_issued();
 
@@ -4022,7 +4022,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
     }
   }
 
-  check_cap_issue(in, &cap, issued);
+  check_cap_issue(in, issued);
 
   if (flags & CEPH_CAP_FLAG_AUTH) {
     if (in->auth_cap != &cap &&
@@ -5162,7 +5162,7 @@ void Client::handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const M
   cap->seq = m->get_seq();
   cap->gen = session->cap_gen;
 
-  check_cap_issue(in, cap, new_caps);
+  check_cap_issue(in, new_caps);
 
   // update inode
   int issued;
