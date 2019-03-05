@@ -9,6 +9,7 @@
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDMap.h"
+#include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGNotify.h"
 #include "messages/MPGStats.h"
@@ -364,6 +365,8 @@ seastar::future<> OSD::ms_dispatch(ceph::net::ConnectionRef conn, MessageRef m)
     return handle_osd_map(conn, boost::static_pointer_cast<MOSDMap>(m));
   case MSG_OSD_PG_NOTIFY:
     return handle_pg_notify(conn, boost::static_pointer_cast<MOSDPGNotify>(m));
+  case MSG_OSD_PG_INFO:
+    return handle_pg_info(conn, boost::static_pointer_cast<MOSDPGInfo>(m));
   default:
     return seastar::now();
   }
@@ -723,6 +726,26 @@ seastar::future<> OSD::handle_pg_notify(ceph::net::ConnectionRef conn,
                                                   notify,
                                                   true, // requires_pg
                                                   create_info);
+      return do_peering_event(pgid, std::move(evt));
+  });
+}
+
+seastar::future<> OSD::handle_pg_info(ceph::net::ConnectionRef conn,
+                                      Ref<MOSDPGInfo> m)
+{
+  // assuming all pgs reside in a single shard
+  // see OSD::dequeue_peering_evt()
+  const int from = m->get_source().num();
+  return seastar::parallel_for_each(m->pg_list,
+    [from, this](pair<pg_notify_t, PastIntervals> p) {
+      auto& pg_notify = p.first;
+      spg_t pgid{pg_notify.info.pgid.pgid, pg_notify.to};
+      MInfoRec info{pg_shard_t{from, pg_notify.from},
+                    pg_notify.info,
+                    pg_notify.epoch_sent};
+      auto evt = std::make_unique<PGPeeringEvent>(pg_notify.epoch_sent,
+                                                  pg_notify.query_epoch,
+                                                  std::move(info));
       return do_peering_event(pgid, std::move(evt));
   });
 }
