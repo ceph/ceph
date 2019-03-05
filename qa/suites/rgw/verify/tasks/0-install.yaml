@@ -12,10 +12,8 @@ tasks:
       s3-website.: client.1
 - rgw:
     client.0:
-      port: 80
       dns-name: s3.
     client.1:
-      port: 80
       dns-s3website-name: s3-website.
 
 overrides:
