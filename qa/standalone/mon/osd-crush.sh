@@ -220,7 +220,7 @@ function TEST_crush_ls_node() {
 
 function TEST_crush_reject_empty() {
     local dir=$1
-    run_mon $dir a || return 1
+    run_mon $dir a --osd_pool_default_size=1 || return 1
     # should have at least one OSD
     run_osd $dir 0 || return 1
     create_rbd_pool || return 1
