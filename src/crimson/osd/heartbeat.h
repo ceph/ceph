@@ -44,6 +44,7 @@ public:
   // Dispatcher methods
   seastar::future<> ms_dispatch(ceph::net::ConnectionRef conn,
 				MessageRef m) override;
+  AuthAuthorizer* ms_get_authorizer(peer_type_t peer) const override;
 
 private:
   seastar::future<> handle_osd_ping(ceph::net::ConnectionRef conn,
