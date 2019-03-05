@@ -932,6 +932,7 @@ void Server::find_idle_sessions()
   //  (caps go stale, lease die)
   double queue_max_age = mds->get_dispatch_queue_max_age(ceph_clock_now());
   double cutoff = queue_max_age + mds->mdsmap->get_session_timeout();
+  bool defer_session_stale = g_conf().get_val<bool>("mds_defer_session_stale");
 
   std::vector<Session*> to_evict;
 
@@ -964,7 +965,8 @@ void Server::find_idle_sessions()
 	continue;
       }
 
-      if (!session->is_any_flush_waiter() &&
+      if (defer_session_stale &&
+	  !session->is_any_flush_waiter() &&
 	  !mds->locker->is_revoking_any_caps_from(session->get_client())) {
 	dout(20) << "deferring marking session " << session->info.inst << " stale "
 		    "since it holds no caps" << dendl;
