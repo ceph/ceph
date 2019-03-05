@@ -1250,14 +1250,41 @@ bool DaemonServer::_handle_command(
   } else if (prefix == "osd df") {
     string method;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "output_method", method);
+    string filter_by;
+    string filter;
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "filter_by", filter_by);
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "filter", filter);
+    if (filter_by.empty() != filter.empty()) {
+      cmdctx->reply(-EINVAL, "you must specify both 'filter_by' and 'filter'");
+      return true;
+    }
+    stringstream rs;
     r = cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pgmap) {
+        string class_name;
+        string item_name;
+        // sanity check filter(s)
+        if (filter_by == "class") {
+          if (!osdmap.crush->class_exists(filter)) {
+            rs << "specified class '" << filter << "' does not exist";
+            return -EINVAL;
+          }
+          class_name = filter;
+        }
+        if (filter_by == "name") {
+          if (!osdmap.crush->name_exists(filter)) {
+            rs << "specified name '" << filter << "' does not exist";
+            return -EINVAL;
+          }
+          item_name = filter;
+        }
 	print_osd_utilization(osdmap, pgmap, ss,
-			      f.get(), method == "tree");
+                              f.get(), method == "tree",
+                              class_name, item_name);
 	
 	cmdctx->odata.append(ss);
 	return 0;
       });
-    cmdctx->reply(r, "");
+    cmdctx->reply(r, rs);
     return true;
   } else if (prefix == "osd pool stats") {
     string pool_name;
