@@ -39,7 +39,6 @@ function TEST_osd_pool_get_set() {
 
     setup $dir || return 1
     run_mon $dir a || return 1
-    create_rbd_pool || return 1
     create_pool $TEST_POOL 8
 
     local flag
