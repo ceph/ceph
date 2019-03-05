@@ -1305,7 +1305,7 @@ template<typename F>
 static int guard_lc_modify(RGWRados* store, const rgw_bucket& bucket, const string& cookie, const F& f) {
   CephContext *cct = store->ctx();
 
-  string shard_id = bucket.tenant + ':' + bucket.name + ':' + bucket.bucket_id;  
+  string shard_id = bucket.tenant + ':' + bucket.name + ':' + bucket.marker;
 
   string oid; 
   get_lc_oid(cct, shard_id, &oid);
