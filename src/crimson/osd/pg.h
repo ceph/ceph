@@ -80,6 +80,9 @@ public:
   // peering/recovery
   bool should_send_notify() const;
   pg_notify_t get_notify(epoch_t query_epoch) const;
+  bool is_last_activated_peer(pg_shard_t peer);
+  void clear_primary_state();
+
   seastar::future<> do_peering_event(std::unique_ptr<PGPeeringEvent> evt);
   seastar::future<> handle_advance_map(cached_map_t next_map);
   seastar::future<> handle_activate_map();
@@ -99,8 +102,10 @@ private:
 
   bool should_notify_primary = false;
 
+  using pg_shard_set_t = std::set<pg_shard_t>;
   // peer_info    -- projected (updates _before_ replicas ack)
   peer_info_t peer_info; //< info from peers (stray or prior)
+  pg_shard_set_t peer_activated;
 
   //< pg state
   pg_info_t info;
@@ -108,7 +113,6 @@ private:
   pg_info_t last_written_info;
   PastIntervals past_intervals;
   // primary state
-  using pg_shard_set_t = std::set<pg_shard_t>;
   pg_shard_t primary, up_primary;
   std::vector<int> acting, up;
   pg_shard_set_t actingset, upset;
