@@ -201,6 +201,7 @@ EOF
 if [ x$(uname)x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
         devel/babeltrace \
+        devel/binutils \
         devel/git \
         devel/gperf \
         devel/gmake \
