@@ -1484,14 +1484,15 @@ int RGWBucketAdminOp::limit_check(RGWRados *store,
   formatter->open_array_section("users");
 
   for (const auto& user_id : user_ids) {
+
     formatter->open_object_section("user");
     formatter->dump_string("user_id", user_id);
-    bool done;
     formatter->open_array_section("buckets");
+
+    string marker;
+    bool is_truncated{false};
     do {
       RGWUserBuckets buckets;
-      string marker;
-      bool is_truncated;
 
       ret = rgw_read_user_buckets(store, user_id, buckets,
 				  marker, string(), max_entries, false,
@@ -1566,9 +1567,8 @@ int RGWBucketAdminOp::limit_check(RGWRados *store,
 	  }
 	}
       }
-
-      done = (m_buckets.size() < max_entries);
-    } while (!done); /* foreach: bucket */
+      formatter->flush(cout);
+    } while (is_truncated); /* foreach: bucket */
 
     formatter->close_section();
     formatter->close_section();
