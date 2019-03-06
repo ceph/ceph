@@ -1,0 +1,30 @@
+hr {
+  margin-top: 5px;
+  margin-bottom: 5px;
+}
+
+.control-label {
+  text-align: left;
+}
+
+.checkbox-primary {
+  input {
+    width: 23px;
+    height: 15px;
+    margin-left: 0;
+    cursor: pointer;
+  }
+  label {
+    &:before,
+    &:after {
+      margin-left: 0;
+    }
+    cursor: auto;
+  }
+}
+
+.form-group {
+  .col-sm-6 {
+    padding-top: 7px;
+  }
+}
