@@ -7,6 +7,7 @@
  */
 
 #include <string.h>
+#include <stdbool.h>
 #include "msgr.h"
 
 /*
@@ -395,7 +396,7 @@ static inline int ceph_osd_op_mode_cache(int op)
 {
 	return op & CEPH_OSD_OP_MODE_CACHE;
 }
-static inline int ceph_osd_op_uses_extent(int op)
+static inline bool ceph_osd_op_uses_extent(int op)
 {
 	switch(op) {
 	case CEPH_OSD_OP_READ:
