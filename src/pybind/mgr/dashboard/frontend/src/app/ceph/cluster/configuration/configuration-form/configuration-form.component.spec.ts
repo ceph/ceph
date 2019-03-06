@@ -7,9 +7,9 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { ToastModule } from 'ng2-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { ConfigFormModel } from '../../../../shared/components/config-option/config-option.model';
 import { SharedModule } from '../../../../shared/shared.module';
 import { ConfigurationFormComponent } from './configuration-form.component';
-import { ConfigFormModel } from './configuration-form.model';
 
 describe('ConfigurationFormComponent', () => {
   let component: ConfigurationFormComponent;
@@ -102,63 +102,6 @@ describe('ConfigurationFormComponent', () => {
       expect(ret.length).toBe(3);
       expect(component.minValue).toBe(1.5);
       expect(component.maxValue).toBe(5.2);
-    });
-  });
-
-  describe('getStep', () => {
-    it('should return the correct step for type uint and value 0', () => {
-      const ret = component.getStep('uint', 0);
-      expect(ret).toBe(1);
-    });
-
-    it('should return the correct step for type int and value 1', () => {
-      const ret = component.getStep('int', 1);
-      expect(ret).toBe(1);
-    });
-
-    it('should return the correct step for type int and value null', () => {
-      const ret = component.getStep('int', null);
-      expect(ret).toBe(1);
-    });
-
-    it('should return the correct step for type size and value 2', () => {
-      const ret = component.getStep('size', 2);
-      expect(ret).toBe(1);
-    });
-
-    it('should return the correct step for type secs and value 3', () => {
-      const ret = component.getStep('secs', 3);
-      expect(ret).toBe(1);
-    });
-
-    it('should return the correct step for type float and value 1', () => {
-      const ret = component.getStep('float', 1);
-      expect(ret).toBe(0.1);
-    });
-
-    it('should return the correct step for type float and value 0.1', () => {
-      const ret = component.getStep('float', 0.1);
-      expect(ret).toBe(0.1);
-    });
-
-    it('should return the correct step for type float and value 0.02', () => {
-      const ret = component.getStep('float', 0.02);
-      expect(ret).toBe(0.01);
-    });
-
-    it('should return the correct step for type float and value 0.003', () => {
-      const ret = component.getStep('float', 0.003);
-      expect(ret).toBe(0.001);
-    });
-
-    it('should return the correct step for type float and value null', () => {
-      const ret = component.getStep('float', null);
-      expect(ret).toBe(0.1);
-    });
-
-    it('should return undefined for unknown type', () => {
-      const ret = component.getStep('unknown', 1);
-      expect(ret).toBeUndefined();
     });
   });
 });
