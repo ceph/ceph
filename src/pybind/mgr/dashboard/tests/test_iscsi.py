@@ -443,8 +443,12 @@ class IscsiClientMock(object):
         self.config = {
             "created": "2019/01/17 08:57:16",
             "discovery_auth": {
-                "chap": "",
-                "chap_mutual": ""
+                "username": "",
+                "password": "",
+                "password_encryption_enabled": False,
+                "mutual_username": "",
+                "mutual_password": "",
+                "mutual_password_encryption_enabled": False
             },
             "disks": {},
             "epoch": 0,
@@ -542,8 +546,12 @@ class IscsiClientMock(object):
         target_config = self.config['targets'][target_iqn]
         target_config['clients'][client_iqn] = {
             "auth": {
-                "chap": "",
-                "chap_mutual": ""
+                "username": "",
+                "password": "",
+                "password_encryption_enabled": False,
+                "mutual_username": "",
+                "mutual_password": "",
+                "mutual_password_encryption_enabled": False
             },
             "group_name": "",
             "luns": {}
@@ -553,10 +561,12 @@ class IscsiClientMock(object):
         target_config = self.config['targets'][target_iqn]
         target_config['clients'][client_iqn]['luns'][image_id] = {}
 
-    def create_client_auth(self, target_iqn, client_iqn, chap, chap_mutual):
+    def create_client_auth(self, target_iqn, client_iqn, user, password, m_user, m_password):
         target_config = self.config['targets'][target_iqn]
-        target_config['clients'][client_iqn]['auth']['chap'] = chap
-        target_config['clients'][client_iqn]['auth']['chap_mutual'] = chap_mutual
+        target_config['clients'][client_iqn]['auth']['username'] = user
+        target_config['clients'][client_iqn]['auth']['password'] = password
+        target_config['clients'][client_iqn]['auth']['mutual_username'] = m_user
+        target_config['clients'][client_iqn]['auth']['mutual_password'] = m_password
 
     def create_group(self, target_iqn, group_name, members, image_ids):
         target_config = self.config['targets'][target_iqn]
@@ -597,16 +607,10 @@ class IscsiClientMock(object):
         return {'data': ips[self.gateway_name]}
 
     def update_discoveryauth(self, user, password, mutual_user, mutual_password):
-        chap = ''
-        if user and password:
-            chap = '{}/{}'.format(user, password)
-        chap_mutual = ''
-        if mutual_user and mutual_password:
-            chap_mutual = '{}/{}'.format(mutual_user, mutual_password)
-        self.config['discovery_auth'] = {
-            'chap': chap,
-            'chap_mutual': chap_mutual
-        }
+        self.config['discovery_auth']['username'] = user
+        self.config['discovery_auth']['password'] = password
+        self.config['discovery_auth']['mutual_username'] = mutual_user
+        self.config['discovery_auth']['mutual_password'] = mutual_password
 
     def update_targetauth(self, target_iqn, action):
         self.config['targets'][target_iqn]['acl_enabled'] = (action == 'enable_acl')
