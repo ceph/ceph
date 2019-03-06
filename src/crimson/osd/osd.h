@@ -91,7 +91,7 @@ public:
 
 private:
   seastar::future<> start_boot();
-  seastar::future<> _preboot(version_t newest_osdmap, version_t oldest_osdmap);
+  seastar::future<> _preboot(version_t oldest_osdmap, version_t newest_osdmap);
   seastar::future<> _send_boot();
 
   seastar::future<Ref<PG>> load_pg(spg_t pgid);
