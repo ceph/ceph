@@ -9,10 +9,10 @@ import { mergeMap } from 'rxjs/operators';
 
 import { ConfigurationService } from '../../../../shared/api/configuration.service';
 import { OsdService } from '../../../../shared/api/osd.service';
+import { ConfigOptionTypes } from '../../../../shared/components/config-option/config-option.types';
 import { NotificationType } from '../../../../shared/enum/notification-type.enum';
 import { CdFormGroup } from '../../../../shared/forms/cd-form-group';
 import { NotificationService } from '../../../../shared/services/notification.service';
-import { ConfigOptionTypes } from '../../configuration/configuration-form/configuration-form.types';
 
 @Component({
   selector: 'cd-osd-recv-speed-modal',
