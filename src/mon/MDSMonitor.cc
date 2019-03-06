@@ -278,7 +278,8 @@ bool MDSMonitor::preprocess_query(MonOpRequestRef op)
 {
   op->mark_mdsmon_event(__func__);
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
-  dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
+  dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source()
+	   << " " << m->get_orig_source_addrs() << dendl;
 
   switch (m->get_type()) {
     
@@ -342,7 +343,8 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
   }
 
   dout(5)  << "preprocess_beacon " << *m
-	   << " from " << m->get_orig_source_inst()
+	   << " from " << m->get_orig_source()
+	   << " " << m->get_orig_source_addrs()
 	   << " " << m->get_compat()
 	   << dendl;
 
@@ -354,7 +356,9 @@ bool MDSMonitor::preprocess_beacon(MonOpRequestRef op)
 
   // check compat
   if (!m->get_compat().writeable(fsmap.compat)) {
-    dout(1) << " mds " << m->get_source_inst() << " can't write to fsmap " << fsmap.compat << dendl;
+    dout(1) << " mds " << m->get_orig_source()
+	    << " " << m->get_orig_source_addrs()
+	    << " can't write to fsmap " << fsmap.compat << dendl;
     goto ignore;
   }
 
@@ -529,7 +533,8 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
   op->mark_mdsmon_event(__func__);
   MMDSBeacon *m = static_cast<MMDSBeacon*>(op->get_req());
   // -- this is an update --
-  dout(12) << "prepare_beacon " << *m << " from " << m->get_orig_source_inst() << dendl;
+  dout(12) << "prepare_beacon " << *m << " from " << m->get_orig_source()
+	   << " " << m->get_orig_source_addrs() << dendl;
   entity_addrvec_t addrs = m->get_orig_source_addrs();
   mds_gid_t gid = m->get_global_id();
   MDSMap::DaemonState state = m->get_state();
@@ -557,7 +562,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
 
   for (const auto &new_metric: new_health) {
     if (old_types.count(new_metric.type) == 0) {
-      dout(10) << "MDS health message (" << m->get_orig_source_inst().name
+      dout(10) << "MDS health message (" << m->get_orig_source()
 	       << "): " << new_metric.sev << " " << new_metric.message << dendl;
     }
   }
@@ -566,7 +571,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
   for (const auto &old_metric : old_health) {
     if (new_types.count(old_metric.type) == 0) {
       mon->clog->info() << "MDS health message cleared ("
-        << m->get_orig_source_inst().name << "): " << old_metric.message;
+        << m->get_orig_source() << "): " << old_metric.message;
     }
   }
 
@@ -814,8 +819,9 @@ void MDSMonitor::_updated(MonOpRequestRef op)
   op->mark_mdsmon_event(__func__);
   MMDSBeacon *m = static_cast<MMDSBeacon*>(op->get_req());
   dout(10) << "_updated " << m->get_orig_source() << " " << *m << dendl;
-  mon->clog->debug() << m->get_orig_source_inst() << " "
-	  << ceph_mds_state_name(m->get_state());
+  mon->clog->debug() << m->get_orig_source() << " "
+		     << m->get_orig_source_addrs() << " "
+		     << ceph_mds_state_name(m->get_state());
 
   if (m->get_state() == MDSMap::STATE_STOPPED) {
     // send the map manually (they're out of the map, so they won't get it automatic)
