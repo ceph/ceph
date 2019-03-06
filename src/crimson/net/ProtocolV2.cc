@@ -309,15 +309,110 @@ seastar::future<> ProtocolV2::fault()
   return seastar::now();
 }
 
-seastar::future<> ProtocolV2::banner_exchange()
+void ProtocolV2::dispatch_reset()
 {
-  // 1. <prepare and send banner>
-  // 2. then: <read banner>
-  // 3. then: <process banner and read banner_payload>
-  // 4. then: <process banner_payload and send HelloFrame>
-  // 5. then: <read peer HelloFrame>
-  // 6. then: <process peer HelloFrame>
-  return seastar::now();
+  seastar::with_gate(pending_dispatch, [this] {
+    return dispatcher.ms_handle_reset(
+        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
+    .handle_exception([this] (std::exception_ptr eptr) {
+      logger().error("{} ms_handle_reset caust exception: {}", conn, eptr);
+    });
+  });
+}
+
+seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
+{
+  // 1. prepare and send banner
+  bufferlist banner_payload;
+  encode((uint64_t)CEPH_MSGR2_SUPPORTED_FEATURES, banner_payload, 0);
+  encode((uint64_t)CEPH_MSGR2_REQUIRED_FEATURES, banner_payload, 0);
+
+  bufferlist bl;
+  bl.append(CEPH_BANNER_V2_PREFIX, strlen(CEPH_BANNER_V2_PREFIX));
+  encode((uint16_t)banner_payload.length(), bl, 0);
+  bl.claim_append(banner_payload);
+  return write_flush(std::move(bl))
+    .then([this] {
+      // 2. read peer banner
+      unsigned banner_len = strlen(CEPH_BANNER_V2_PREFIX) + sizeof(__le16);
+      return read_exactly(banner_len); // or read exactly?
+    }).then([this] (auto bl) {
+      // 3. process peer banner and read banner_payload
+      unsigned banner_prefix_len = strlen(CEPH_BANNER_V2_PREFIX);
+
+      if (memcmp(bl.get(), CEPH_BANNER_V2_PREFIX, banner_prefix_len) != 0) {
+        if (memcmp(bl.get(), CEPH_BANNER, strlen(CEPH_BANNER)) == 0) {
+          logger().error("{} peer is using V1 protocol", conn);
+        } else {
+          logger().error("{} peer sent bad banner", conn);
+        }
+        abort_in_fault();
+      }
+      bl.trim_front(banner_prefix_len);
+
+      uint16_t payload_len;
+      bufferlist buf;
+      buf.append(buffer::create(std::move(bl)));
+      auto ti = buf.cbegin();
+      try {
+        decode(payload_len, ti);
+      } catch (const buffer::error &e) {
+        logger().error("{} decode banner payload len failed", conn);
+        abort_in_fault();
+      }
+      return read(payload_len);
+    }).then([this] (bufferlist bl) {
+      // 4. process peer banner_payload and send HelloFrame
+      auto p = bl.cbegin();
+      uint64_t peer_supported_features;
+      uint64_t peer_required_features;
+      try {
+        decode(peer_supported_features, p);
+        decode(peer_required_features, p);
+      } catch (const buffer::error &e) {
+        logger().error("{} decode banner payload failed", conn);
+        abort_in_fault();
+      }
+      logger().debug("{} supported={} required={}",
+                     conn, peer_supported_features, peer_required_features);
+
+      // Check feature bit compatibility
+      uint64_t supported_features = CEPH_MSGR2_SUPPORTED_FEATURES;
+      uint64_t required_features = CEPH_MSGR2_REQUIRED_FEATURES;
+      if ((required_features & peer_supported_features) != required_features) {
+        logger().error("{} peer does not support all required features"
+                       " required={} peer_supported={}",
+                       conn, required_features, peer_supported_features);
+        abort_in_close();
+      }
+      if ((supported_features & peer_required_features) != peer_required_features) {
+        logger().error("{} we do not support all peer required features"
+                       " peer_required={} supported={}",
+                       conn, peer_required_features, supported_features);
+        abort_in_close();
+      }
+      this->peer_required_features = peer_required_features;
+      if (this->peer_required_features == 0) {
+        this->connection_features = msgr2_required;
+      }
+
+      auto hello = HelloFrame::Encode(messenger.get_mytype(),
+                                      conn.target_addr);
+      return write_frame(hello);
+    }).then([this] {
+      //5. read peer HelloFrame
+      return read_main_preamble();
+    }).then([this] (Tag tag) {
+      expect_tag(Tag::HELLO, tag, conn, __func__);
+      return read_frame_payload();
+    }).then([this] {
+      // 6. process peer HelloFrame
+      auto hello = HelloFrame::Decode(rx_segments_data.back());
+      logger().debug("{} received hello: peer_type={} peer_addr_for_me={}",
+                     conn, (int)hello.entity_type(), hello.peer_addr());
+      return seastar::make_ready_future<entity_type_t, entity_addr_t>(
+          hello.entity_type(), hello.peer_addr());
+    });
 }
 
 // CONNECTING state
@@ -429,6 +524,14 @@ void ProtocolV2::execute_connecting()
           return seastar::now();
         }).then([this] {
           return banner_exchange();
+        }).then([this] (entity_type_t _peer_type,
+                        entity_addr_t _peer_addr) {
+          if (conn.peer_type != _peer_type) {
+            logger().debug("{} connection peer type does not match what peer advertises {} != {}",
+                           conn, conn.peer_type, (int)_peer_type);
+            dispatch_reset();
+            abort_in_close();
+          }
         }).then([this] {
           return client_auth();
         }).then([this] {
@@ -585,7 +688,17 @@ void ProtocolV2::execute_accepting()
   trigger_state(state_t::ACCEPTING, write_state_t::none, false);
   seastar::with_gate(pending_dispatch, [this] {
       return banner_exchange()
-        .then([this] {
+        .then([this] (entity_type_t _peer_type,
+                      entity_addr_t _peer_addr) {
+          ceph_assert(conn.get_peer_type() == -1);
+          conn.peer_type = _peer_type;
+
+          // TODO: lossless policy
+          conn.policy = SocketPolicy::stateless_server(0);
+          logger().debug("{} accept of host type {}, lossy={} server={} standby={} resetcheck={}",
+                         conn, (int)_peer_type,
+                         conn.policy.lossy, conn.policy.server,
+                         conn.policy.standby, conn.policy.resetcheck);
           return server_auth();
         }).then([this] {
       //  return read_main_preamble()
