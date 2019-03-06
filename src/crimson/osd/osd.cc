@@ -49,6 +49,7 @@ OSD::OSD(int id, uint32_t nonce,
     cluster_msgr{cluster_msgr},
     public_msgr{public_msgr},
     monc{new ceph::mon::Client{public_msgr}},
+    mgrc{new ceph::mgr::Client{public_msgr, *this}},
     heartbeat{new Heartbeat{whoami, nonce, *this, *monc,
                             hb_front_msgr, hb_back_msgr}},
     heartbeat_timer{[this] { update_heartbeat_peers(); }},
@@ -184,6 +185,7 @@ seastar::future<> OSD::start()
     }
     dispatchers.push_front(this);
     dispatchers.push_front(monc.get());
+    dispatchers.push_front(mgrc.get());
     return seastar::when_all_succeed(
       cluster_msgr.try_bind(pick_addresses(CEPH_PICK_ADDRESS_CLUSTER),
                             local_conf()->ms_bind_port_min,
@@ -194,7 +196,8 @@ seastar::future<> OSD::start()
                            local_conf()->ms_bind_port_max)
         .then([this] { return public_msgr.start(&dispatchers); }));
   }).then([this] {
-    return monc->start();
+    return seastar::when_all_succeed(monc->start(),
+                                     mgrc->start());
   }).then([this] {
     monc->sub_want("osd_pg_creates", last_pg_create_epoch, 0);
     monc->sub_want("mgrmap", 0, 0);
@@ -381,7 +384,7 @@ seastar::future<> OSD::ms_handle_remote_reset(ceph::net::ConnectionRef conn)
   return seastar::now();
 }
 
-MessageRef OSD::get_stats() const
+MessageRef OSD::get_stats()
 {
   // todo: m-to-n: collect stats using map-reduce
   // MPGStats::had_map_for is not used since PGMonitor was removed
