@@ -2299,7 +2299,7 @@ bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
   if (m->get_orig_source().is_osd()) {
     int from = m->get_orig_source().num();
     if (!osdmap.exists(from) ||
-	osdmap.get_addrs(from) != m->get_orig_source_addrs() ||
+	!osdmap.get_addrs(from).legacy_equals(m->get_orig_source_addrs()) ||
 	(osdmap.is_down(from) && m->if_osd_failed())) {
       dout(5) << "preprocess_failure from dead osd." << from
 	      << ", ignoring" << dendl;
@@ -2844,12 +2844,12 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 
   // already booted?
   if (osdmap.is_up(from) &&
-      osdmap.get_addrs(from) == m->get_orig_source_addrs() &&
-      osdmap.get_cluster_addrs(from) == m->cluster_addrs) {
+      osdmap.get_addrs(from).legacy_equals(m->get_orig_source_addrs()) &&
+      osdmap.get_cluster_addrs(from).legacy_equals(m->cluster_addrs)) {
     // yup.
     dout(7) << "preprocess_boot dup from " << m->get_orig_source()
 	    << " " << m->get_orig_source_addrs()
-	    << " == " << osdmap.get_addrs(from) << dendl;
+	    << " =~ " << osdmap.get_addrs(from) << dendl;
     _booted(op, false);
     return true;
   }
@@ -2866,7 +2866,8 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 
   if (osdmap.exists(from) &&
       osdmap.get_info(from).up_from > m->version &&
-      osdmap.get_most_recent_addrs(from) == m->get_orig_source_addrs()) {
+      osdmap.get_most_recent_addrs(from).legacy_equals(
+	m->get_orig_source_addrs())) {
     dout(7) << "prepare_boot msg from before last up_from, ignoring" << dendl;
     send_latest(op, m->sb.current_epoch+1);
     return true;
@@ -2917,8 +2918,9 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
     dout(7) << __func__ << " was up, first marking down osd." << from << " "
 	    << osdmap.get_addrs(from) << dendl;
     // preprocess should have caught these;  if not, assert.
-    ceph_assert(osdmap.get_addrs(from) != m->get_orig_source_addrs() ||
-           osdmap.get_cluster_addrs(from) != m->cluster_addrs);
+    ceph_assert(!osdmap.get_addrs(from).legacy_equals(
+		  m->get_orig_source_addrs()) ||
+		!osdmap.get_cluster_addrs(from).legacy_equals(m->cluster_addrs));
     ceph_assert(osdmap.get_uuid(from) == m->sb.osd_fsid);
 
     if (pending_inc.new_state.count(from) == 0 ||
@@ -3084,9 +3086,10 @@ bool OSDMonitor::preprocess_full(MonOpRequestRef op)
     goto ignore;
   }
   if ((!osdmap.is_up(from) &&
-       osdmap.get_most_recent_addrs(from) == m->get_orig_source_addrs()) ||
+       osdmap.get_most_recent_addrs(from).legacy_equals(
+	 m->get_orig_source_addrs())) ||
       (osdmap.is_up(from) &&
-       osdmap.get_addrs(from) != m->get_orig_source_addrs())) {
+       !osdmap.get_addrs(from).legacy_equals(m->get_orig_source_addrs()))) {
     dout(7) << __func__ << " ignoring full message from down "
 	    << m->get_orig_source_inst() << dendl;
     goto ignore;
@@ -3167,7 +3170,7 @@ bool OSDMonitor::preprocess_alive(MonOpRequestRef op)
   }
 
   if (!osdmap.is_up(from) ||
-      osdmap.get_addrs(from) != m->get_orig_source_addrs()) {
+      !osdmap.get_addrs(from).legacy_equals(m->get_orig_source_addrs())) {
     dout(7) << "preprocess_alive ignoring alive message from down "
 	    << m->get_orig_source() << " " << m->get_orig_source_addrs()
 	    << dendl;
@@ -3246,7 +3249,8 @@ bool OSDMonitor::prepare_pg_created(MonOpRequestRef op)
   auto from = src.num();
   if (!src.is_osd() ||
       !mon->osdmon()->osdmap.is_up(from) ||
-      m->get_orig_source_addrs() != mon->osdmon()->osdmap.get_addrs(from)) {
+      !mon->osdmon()->osdmap.get_addrs(from).legacy_equals(
+	m->get_orig_source_addrs())) {
     dout(1) << __func__ << " ignoring stats from non-active osd." << dendl;
     return false;
   }
@@ -3370,7 +3374,7 @@ bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
   }
 
   if (!osdmap.is_up(from) ||
-      osdmap.get_addrs(from) != m->get_orig_source_addrs()) {
+      !osdmap.get_addrs(from).legacy_equals(m->get_orig_source_addrs())) {
     dout(7) << "ignoring pgtemp message from down "
 	    << m->get_orig_source() << " " << m->get_orig_source_addrs()
 	    << dendl;
@@ -3612,7 +3616,7 @@ bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
 
   if (!src.is_osd() ||
       !osdmap.is_up(from) ||
-      beacon->get_orig_source_addrs() != osdmap.get_addrs(from)) {
+      !osdmap.get_addrs(from).legacy_equals(beacon->get_orig_source_addrs())) {
     if (src.is_osd() && !osdmap.is_up(from)) {
       // share some new maps with this guy in case it may not be
       // aware of its own deadness...
