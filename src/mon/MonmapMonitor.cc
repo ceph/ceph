@@ -751,6 +751,37 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     pending_map.set_rank(name, rank);
     pending_map.last_changed = ceph_clock_now();
     propose = true;
+  } else if (prefix == "mon set-addrs") {
+    string name;
+    string addrs;
+    if (!cmd_getval(g_ceph_context, cmdmap, "name", name) ||
+	!cmd_getval(g_ceph_context, cmdmap, "addrs", addrs)) {
+      err = -EINVAL;
+      goto reply;
+    }
+    if (!pending_map.contains(name)) {
+      ss << "mon." << name << " does not exist";
+      err = -ENOENT;
+      goto reply;
+    }
+    entity_addrvec_t av;
+    if (!av.parse(addrs.c_str(), nullptr)) {
+      ss << "failed to parse addrs '" << addrs << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+    for (auto& a : av.v) {
+      a.set_nonce(0);
+      if (!a.get_port()) {
+	ss << "monitor must bind to a non-zero port, not " << a;
+	err = -EINVAL;
+	goto reply;
+      }
+    }
+    err = 0;
+    pending_map.set_addrvec(name, av);
+    pending_map.last_changed = ceph_clock_now();
+    propose = true;
   } else if (prefix == "mon enable-msgr2") {
     if (!monmap.get_required_features().contains_all(
 	  ceph::features::mon::FEATURE_NAUTILUS)) {
