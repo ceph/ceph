@@ -7360,6 +7360,10 @@ static std::vector<Option> get_immutable_object_cache_options() {
     Option("immutable_object_cache_max_inflight_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(128)
     .set_description("max immutable object caching inflight ops"),
+
+    Option("immutable_object_cache_client_dedicated_thread_num", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(2)
+    .set_description("immutable object cache client dedicated thread number"),
   });
 }
 

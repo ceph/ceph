@@ -55,7 +55,7 @@ class CacheClient {
                         size_t bytes_transferred);
 
  private:
-  CephContext* cct;
+  CephContext* m_cct;
   boost::asio::io_service m_io_service;
   boost::asio::io_service::work m_io_service_work;
   stream_protocol::socket m_dm_socket;
@@ -63,7 +63,6 @@ class CacheClient {
   std::shared_ptr<std::thread> m_io_thread;
   std::atomic<bool> m_session_work;
 
-  bool m_use_dedicated_worker;
   uint64_t m_worker_thread_num;
   boost::asio::io_service* m_worker;
   std::vector<std::thread*> m_worker_threads;
