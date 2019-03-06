@@ -12,7 +12,6 @@
 #include "crimson/common/simple_lru.h"
 #include "crimson/common/shared_lru.h"
 #include "crimson/mgr/client.h"
-#include "crimson/mon/MonClient.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/osd/chained_dispatchers.h"
 #include "crimson/osd/osdmap_service.h"
@@ -25,6 +24,10 @@ class OSDMap;
 class OSDMeta;
 class PG;
 class Heartbeat;
+
+namespace ceph::mon {
+  class Client;
+}
 
 namespace ceph::net {
   class Messenger;
