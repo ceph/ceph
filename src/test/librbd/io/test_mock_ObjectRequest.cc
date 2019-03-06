@@ -884,6 +884,7 @@ TEST_F(TestMockIoObjectRequest, DiscardRemoveTruncate) {
   expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
   expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
   expect_object_may_exist(mock_image_ctx, 0, false);
+  expect_object_map_update(mock_image_ctx, 0, 1, OBJECT_EXISTS, {}, false, 0);
   expect_create(mock_image_ctx, false);
   expect_truncate(mock_image_ctx, 0, 0);
 
@@ -891,8 +892,7 @@ TEST_F(TestMockIoObjectRequest, DiscardRemoveTruncate) {
   auto req = MockObjectDiscardRequest::create_discard(
     &mock_image_ctx, ictx->get_object_name(0), 0, 0,
     mock_image_ctx.get_object_size(), mock_image_ctx.snapc,
-    OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE |
-      OBJECT_DISCARD_FLAG_DISABLE_OBJECT_MAP_UPDATE, {}, &ctx);
+    OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE, {}, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
