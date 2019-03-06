@@ -172,8 +172,25 @@
           </div>
         </div>
 
-        <!-- Initiators -->
+        <!-- acl_enabled -->
         <div class="form-group">
+          <div class="col-sm-offset-3 col-sm-9">
+            <div class="checkbox checkbox-primary">
+              <input type="checkbox"
+                     formControlName="acl_enabled"
+                     name="acl_enabled"
+                     id="acl_enabled">
+              <label for="acl_enabled"
+                     i18n>ACL authentication</label>
+            </div>
+
+            <hr />
+          </div>
+        </div>
+
+        <!-- Initiators -->
+        <div class="form-group"
+             *ngIf="targetForm.getValue('acl_enabled')">
           <label class="control-label col-sm-3"
                  for="initiators"
                  i18n>Initiators</label>
@@ -402,6 +419,7 @@
 
         <!-- Groups -->
         <div class="form-group"
+             *ngIf="targetForm.getValue('acl_enabled')"
              [ngClass]="{'has-error': targetForm.showError('groups', formDir)}">
           <label class="control-label col-sm-3"
                  for="initiators"

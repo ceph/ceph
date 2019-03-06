@@ -174,6 +174,7 @@ describe('IscsiTargetFormComponent', () => {
       disks: [],
       groups: [],
       initiators: [],
+      acl_enabled: false,
       portals: [],
       target_controls: {},
       target_iqn: component.targetForm.value.target_iqn
@@ -218,7 +219,7 @@ describe('IscsiTargetFormComponent', () => {
 
   describe('should test initiators', () => {
     beforeEach(() => {
-      component.targetForm.patchValue({ disks: ['rbd/disk_1'] });
+      component.targetForm.patchValue({ disks: ['rbd/disk_1'], acl_enabled: true });
       component.addGroup().patchValue({ name: 'group_1' });
       component.onImageSelection({ option: { name: 'rbd/disk_1', selected: true } });
 
@@ -317,7 +318,7 @@ describe('IscsiTargetFormComponent', () => {
 
   describe('should submit request', () => {
     beforeEach(() => {
-      component.targetForm.patchValue({ disks: ['rbd/disk_1'] });
+      component.targetForm.patchValue({ disks: ['rbd/disk_1'], acl_enabled: true });
       component.onImageSelection({ option: { name: 'rbd/disk_1', selected: true } });
       component.portals.setValue(['node1:192.168.100.201', 'node2:192.168.100.202']);
       component.addInitiator().patchValue({
@@ -358,7 +359,8 @@ describe('IscsiTargetFormComponent', () => {
           { host: 'node2', ip: '192.168.100.202' }
         ],
         target_controls: {},
-        target_iqn: component.target_iqn
+        target_iqn: component.target_iqn,
+        acl_enabled: true
       });
     });
 
@@ -384,6 +386,27 @@ describe('IscsiTargetFormComponent', () => {
             members: ['iqn.initiator']
           }
         ],
+        portals: [
+          { host: 'node1', ip: '192.168.100.201' },
+          { host: 'node2', ip: '192.168.100.202' }
+        ],
+        target_controls: {},
+        target_iqn: component.targetForm.value.target_iqn,
+        acl_enabled: true
+      });
+    });
+
+    it('should call create with acl_enabled disabled', () => {
+      component.targetForm.patchValue({ acl_enabled: false });
+      component.submit();
+
+      const req = httpTesting.expectOne('api/iscsi/target');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({
+        clients: [],
+        disks: [{ backstore: 'backstore:1', controls: {}, image: 'disk_1', pool: 'rbd' }],
+        groups: [],
+        acl_enabled: false,
         portals: [
           { host: 'node1', ip: '192.168.100.201' },
           { host: 'node2', ip: '192.168.100.202' }
