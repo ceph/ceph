@@ -17,9 +17,8 @@ namespace immutable_obj_cache {
       m_dm_socket(m_io_service), m_ep(stream_protocol::endpoint(file)),
       m_io_thread(nullptr), m_session_work(false), m_writing(false),
       m_reading(false), m_sequence_id(0),
-      m_lock("ceph::cache::cacheclient::m_lock")
-  {
-    // TODO : configure it.
+      m_lock("ceph::cache::cacheclient::m_lock") {
+    // TODO(dehao) : configure it.
     m_use_dedicated_worker = true;
     m_worker_thread_num = 2;
     if (m_use_dedicated_worker) {
@@ -31,14 +30,13 @@ namespace immutable_obj_cache {
       }
     }
     m_bp_header = buffer::create(get_header_size());
-
   }
 
   CacheClient::~CacheClient() {
     stop();
   }
 
-  void CacheClient::run(){
+  void CacheClient::run() {
      m_io_thread.reset(new std::thread([this](){m_io_service.run(); }));
   }
 
@@ -85,11 +83,12 @@ namespace immutable_obj_cache {
     return 0;
   }
 
-  void CacheClient::lookup_object(std::string pool_nspace, uint64_t pool_id, uint64_t snap_id,
-                                  std::string oid, GenContext<ObjectCacheRequest*>* on_finish) {
-
-    ObjectCacheRequest* req = new ObjectCacheReadData(RBDSC_READ, ++m_sequence_id, 0, 0,
-                                                      pool_id, snap_id, oid, pool_nspace);
+  void CacheClient::lookup_object(std::string pool_nspace, uint64_t pool_id,
+                                  uint64_t snap_id, std::string oid,
+                                  GenContext<ObjectCacheRequest*>* on_finish) {
+    ObjectCacheRequest* req = new ObjectCacheReadData(RBDSC_READ,
+                                    ++m_sequence_id, 0, 0,
+                                    pool_id, snap_id, oid, pool_nspace);
     req->process_msg = on_finish;
     req->encode();
 
@@ -160,7 +159,6 @@ namespace immutable_obj_cache {
   }
 
   void CacheClient::read_reply_header() {
-
     /* create new head buffer for every reply */
     bufferptr bp_head(buffer::create(get_header_size()));
     auto raw_ptr = bp_head.c_str();
@@ -175,8 +173,8 @@ namespace immutable_obj_cache {
   }
 
   void CacheClient::handle_reply_header(bufferptr bp_head,
-                                        const boost::system::error_code& ec,
-                                        size_t bytes_transferred) {
+         const boost::system::error_code& ec,
+         size_t bytes_transferred) {
     if (ec || bytes_transferred != get_header_size()) {
       fault(ASIO_ERROR_READ, ec);
       return;
@@ -190,9 +188,9 @@ namespace immutable_obj_cache {
     read_reply_data(std::move(bp_head), std::move(bp_data), data_len);
   }
 
-  void CacheClient::read_reply_data(bufferptr&& bp_head, bufferptr&& bp_data,
+  void CacheClient::read_reply_data(bufferptr&& bp_head,
+                                    bufferptr&& bp_data,
                                     const uint64_t data_len) {
-
     auto raw_ptr = bp_data.c_str();
     boost::asio::async_read(m_dm_socket, boost::asio::buffer(raw_ptr, data_len),
       boost::asio::transfer_exactly(data_len),
@@ -200,10 +198,10 @@ namespace immutable_obj_cache {
                   this, std::move(bp_head), std::move(bp_data), data_len,
                   boost::asio::placeholders::error,
                   boost::asio::placeholders::bytes_transferred));
-
   }
 
-  void CacheClient::handle_reply_data(bufferptr bp_head, bufferptr bp_data,
+  void CacheClient::handle_reply_data(bufferptr bp_head,
+                                      bufferptr bp_data,
                                       const uint64_t data_len,
                                       const boost::system::error_code& ec,
                                       size_t bytes_transferred) {
@@ -233,7 +231,6 @@ namespace immutable_obj_cache {
     if (is_session_work()) {
       receive_message();
     }
-
   }
 
   void CacheClient::process(ObjectCacheRequest* reply, uint64_t seq_id) {
@@ -266,7 +263,8 @@ namespace immutable_obj_cache {
   }
 
   // if there is one request fails, just execute fault, then shutdown RO.
-  void CacheClient::fault(const int err_type, const boost::system::error_code& ec) {
+  void CacheClient::fault(const int err_type,
+                          const boost::system::error_code& ec) {
     ldout(cct, 20) << "fault." << ec.message() << dendl;
 
     if (err_type == ASIO_ERROR_CONNECT) {
@@ -276,7 +274,8 @@ namespace immutable_obj_cache {
                         << ". Immutable-object-cache daemon is down ? "
                         << "Data will be read from ceph cluster " << dendl;
        } else {
-         ldout(cct, 20) << "Connecting RO daemon fails : " << ec.message() << dendl;
+         ldout(cct, 20) << "Connecting RO daemon fails : "
+                        << ec.message() << dendl;
        }
 
        if (m_dm_socket.is_open()) {
@@ -296,11 +295,11 @@ namespace immutable_obj_cache {
       return;
     }
 
-    // when current session don't work, ASIO will don't receive any new request from hook.
-    // On the other hand, for pending request of ASIO, cancle these request, then call their callback.
-    // these request which are cancled by this method, will be re-dispatched to RADOS layer.
-    //
-    // make sure just have one thread to modify execute below code.
+    /* when current session don't work, ASIO will don't receive any new request from hook.
+     * On the other hand, for pending request of ASIO, cancle these request,
+     * then call their callback. these request which are cancled by this method,
+     * will be re-dispatched to RADOS layer.
+     * make sure just have one thread to modify execute below code. */
     m_session_work.store(false);
 
     if (err_type == ASIO_ERROR_MSG_INCOMPLETE) {
@@ -321,7 +320,8 @@ namespace immutable_obj_cache {
     // currently, for any asio error, just shutdown RO.
     close();
 
-    // all pending request, which have entered into ASIO, will be re-dispatched to RADOS.
+    /* all pending request, which have entered into ASIO,
+     * will be re-dispatched to RADOS.*/
     {
       Mutex::Locker locker(m_lock);
       for (auto it : m_seq_to_req) {
@@ -337,7 +337,8 @@ namespace immutable_obj_cache {
   }
 
   int CacheClient::register_client(Context* on_finish) {
-    ObjectCacheRequest* reg_req = new ObjectCacheRegData(RBDSC_REGISTER, m_sequence_id++);
+    ObjectCacheRequest* reg_req = new ObjectCacheRegData(RBDSC_REGISTER,
+                                                         m_sequence_id++);
     reg_req->encode();
 
     bufferlist bl;
@@ -365,7 +366,8 @@ namespace immutable_obj_cache {
     uint64_t data_len = get_data_len(m_bp_header.c_str());
     bufferptr bp_data(buffer::create(data_len));
 
-    ret = boost::asio::read(m_dm_socket, boost::asio::buffer(bp_data.c_str(), data_len), ec);
+    ret = boost::asio::read(m_dm_socket, boost::asio::buffer(bp_data.c_str(),
+                            data_len), ec);
     if (ec || ret != data_len) {
       fault(ASIO_ERROR_READ, ec);
       return -1;
@@ -387,5 +389,5 @@ namespace immutable_obj_cache {
     return 0;
   }
 
-} // namespace immutable_obj_cache
-} // namespace ceph
+}  // namespace immutable_obj_cache
+}  // namespace ceph

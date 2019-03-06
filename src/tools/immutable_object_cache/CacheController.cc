@@ -12,7 +12,8 @@
 namespace ceph {
 namespace immutable_obj_cache {
 
-CacheController::CacheController(CephContext *cct, const std::vector<const char*> &args):
+CacheController::CacheController(CephContext *cct,
+                                 const std::vector<const char*> &args):
   m_args(args), m_cct(cct) {
   ldout(m_cct, 20) << dendl;
 }
@@ -26,7 +27,7 @@ int CacheController::init() {
   ldout(m_cct, 20) << dendl;
 
   m_object_cache_store = new ObjectCacheStore(m_cct);
-  //TODO(): make this configurable
+  // TODO(dehao): make this configurable
   int r = m_object_cache_store->init(true);
   if (r < 0) {
     lderr(m_cct) << "init error\n" << dendl;
@@ -65,7 +66,8 @@ void CacheController::handle_signal(int signum) {
 
 void CacheController::run() {
   try {
-    std::string controller_path = m_cct->_conf.get_val<std::string>("immutable_object_cache_sock");
+    std::string controller_path =
+      m_cct->_conf.get_val<std::string>("immutable_object_cache_sock");
     std::remove(controller_path.c_str());
 
     m_cache_server = new CacheServer(m_cct, controller_path,
@@ -80,14 +82,16 @@ void CacheController::run() {
   }
 }
 
-void CacheController::handle_request(uint64_t session_id, ObjectCacheRequest* req){
+void CacheController::handle_request(uint64_t session_id,
+                                     ObjectCacheRequest* req) {
   ldout(m_cct, 20) << dendl;
 
   switch (req->get_request_type()) {
     case RBDSC_REGISTER: {
-      // TODO(): skip register and allow clients to lookup directly
+      // TODO(dehao): skip register and allow clients to lookup directly
 
-      ObjectCacheRequest* reply = new ObjectCacheRegReplyData(RBDSC_REGISTER_REPLY, req->seq);
+      ObjectCacheRequest* reply = new ObjectCacheRegReplyData(
+        RBDSC_REGISTER_REPLY, req->seq);
       m_cache_server->send(session_id, reply);
       break;
     }
@@ -95,16 +99,15 @@ void CacheController::handle_request(uint64_t session_id, ObjectCacheRequest* re
       // lookup object in local cache store
       std::string cache_path;
       ObjectCacheReadData* req_read_data = (ObjectCacheReadData*)req;
-      int ret = m_object_cache_store->lookup_object(req_read_data->pool_namespace,
-                                                    req_read_data->pool_id,
-                                                    req_read_data->snap_id,
-                                                    req_read_data->oid,
-                                                    cache_path);
+      int ret = m_object_cache_store->lookup_object(
+        req_read_data->pool_namespace, req_read_data->pool_id,
+        req_read_data->snap_id, req_read_data->oid, cache_path);
       ObjectCacheRequest* reply = nullptr;
       if (ret != OBJ_CACHE_PROMOTED) {
         reply = new ObjectCacheReadRadosData(RBDSC_READ_RADOS, req->seq);
       } else {
-        reply = new ObjectCacheReadReplyData(RBDSC_READ_REPLY, req->seq, cache_path);
+        reply = new ObjectCacheReadReplyData(RBDSC_READ_REPLY,
+                                             req->seq, cache_path);
       }
       m_cache_server->send(session_id, reply);
       break;
@@ -115,5 +118,5 @@ void CacheController::handle_request(uint64_t session_id, ObjectCacheRequest* re
   }
 }
 
-} // namespace immutable_obj_cache
-} // namespace ceph
+}  // namespace immutable_obj_cache
+}  // namespace ceph

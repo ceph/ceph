@@ -26,10 +26,10 @@ inline uint32_t get_data_len(char* buf) {
   HeaderHelper* header = (HeaderHelper*)buf;
   return header->len;
 }
-}
+}  //  namespace
 
 class ObjectCacheRequest {
-public:
+ public:
   uint16_t type;
   uint64_t seq;
 
@@ -43,8 +43,8 @@ public:
 
   // encode consists of two steps
   // step 1 : directly encode common bits using encode method of base classs.
-  // step 2 : according to payload_empty, determine whether addtional bits need to
-  //          be encoded which be implements by child class.
+  // step 2 : according to payload_empty, determine whether addtional bits
+  //          need to be encoded which be implements by child class.
   void encode();
   void decode(bufferlist& bl);
   bufferlist get_payload_bufferlist() { return payload; }
@@ -56,7 +56,7 @@ public:
 };
 
 class ObjectCacheRegData : public ObjectCacheRequest {
-public:
+ public:
   ObjectCacheRegData();
   ObjectCacheRegData(uint16_t t, uint64_t s);
   ~ObjectCacheRegData() override;
@@ -67,7 +67,7 @@ public:
 };
 
 class ObjectCacheRegReplyData : public ObjectCacheRequest {
-public:
+ public:
   ObjectCacheRegReplyData();
   ObjectCacheRegReplyData(uint16_t t, uint64_t s);
   ~ObjectCacheRegReplyData() override;
@@ -78,15 +78,17 @@ public:
 };
 
 class ObjectCacheReadData : public ObjectCacheRequest {
-public:
+ public:
   uint64_t read_offset;
   uint64_t read_len;
   uint64_t pool_id;
   uint64_t snap_id;
   std::string oid;
   std::string pool_namespace;
-  ObjectCacheReadData(uint16_t t, uint64_t s, uint64_t read_offset, uint64_t read_len, uint64_t pool_id,
-                      uint64_t snap_id, std::string oid, std::string pool_namespace );
+  ObjectCacheReadData(uint16_t t, uint64_t s, uint64_t read_offset,
+                      uint64_t read_len, uint64_t pool_id,
+                      uint64_t snap_id, std::string oid,
+                      std::string pool_namespace);
   ObjectCacheReadData(uint16_t t, uint64_t s);
   ~ObjectCacheReadData() override;
   void encode_payload() override;
@@ -96,7 +98,7 @@ public:
 };
 
 class ObjectCacheReadReplyData : public ObjectCacheRequest {
-public:
+ public:
   std::string cache_path;
   ObjectCacheReadReplyData(uint16_t t, uint64_t s, std::string cache_path);
   ObjectCacheReadReplyData(uint16_t t, uint64_t s);
@@ -108,7 +110,7 @@ public:
 };
 
 class ObjectCacheReadRadosData : public ObjectCacheRequest {
-public:
+ public:
   ObjectCacheReadRadosData();
   ObjectCacheReadRadosData(uint16_t t, uint64_t s);
   ~ObjectCacheReadRadosData() override;
@@ -120,6 +122,6 @@ public:
 
 ObjectCacheRequest* decode_object_cache_request(bufferlist payload_buffer);
 
-} // namespace immutable_obj_cache
-} // namespace ceph
+}  // namespace immutable_obj_cache
+}  // namespace ceph
 #endif

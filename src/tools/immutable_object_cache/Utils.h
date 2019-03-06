@@ -7,7 +7,6 @@
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
 
-
 namespace ceph {
 namespace immutable_obj_cache {
 namespace detail {
@@ -19,7 +18,7 @@ void rados_callback(rados_completion_t c, void *arg) {
   (obj->*MF)(r);
 }
 
-} // namespace detail
+}  // namespace detail
 
 template <typename T, void(T::*MF)(int)=&T::complete>
 librados::AioCompletion *create_rados_callback(T *obj) {
@@ -27,6 +26,6 @@ librados::AioCompletion *create_rados_callback(T *obj) {
     obj, &detail::rados_callback<T, MF>, nullptr);
 }
 
-} // namespace immutable_obj_cache
-} // namespace ceph
+}  // namespace immutable_obj_cache
+}  // namespace ceph
 #endif

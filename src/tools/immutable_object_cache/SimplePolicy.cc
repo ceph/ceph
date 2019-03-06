@@ -18,19 +18,18 @@ SimplePolicy::SimplePolicy(CephContext *cct, uint64_t cache_size,
   : cct(cct), m_watermark(watermark), m_max_cache_size(cache_size),
     m_cache_map_lock("rbd::cache::SimplePolicy::m_cache_map_lock") {
   ldout(cct, 20) << dendl;
-  m_max_inflight_ops = cct->_conf.get_val<uint64_t>("immutable_object_cache_max_inflight_ops");
+  m_max_inflight_ops = cct->_conf.get_val<uint64_t>(
+    "immutable_object_cache_max_inflight_ops");
   m_cache_size = 0;
 }
 
 SimplePolicy::~SimplePolicy() {
   ldout(cct, 20) << dendl;
 
-  for (auto it: m_cache_map) {
+  for (auto it : m_cache_map) {
     Entry* entry = (it.second);
     delete entry;
   }
-
-
 }
 
 cache_status_t SimplePolicy::alloc_entry(std::string file_name) {
@@ -44,13 +43,14 @@ cache_status_t SimplePolicy::alloc_entry(std::string file_name) {
     return OBJ_CACHE_SKIP;
   }
 
-  if ((m_cache_size < m_max_cache_size) && (inflight_ops < m_max_inflight_ops)) {
+  if ((m_cache_size < m_max_cache_size) &&
+      (inflight_ops < m_max_inflight_ops)) {
     Entry* entry = new Entry();
     ceph_assert(entry != nullptr);
     m_cache_map[file_name] = entry;
     wlocker.unlock();
     update_status(file_name, OBJ_CACHE_SKIP);
-    return OBJ_CACHE_NONE; // start promotion request
+    return OBJ_CACHE_NONE;  // start promotion request
   }
 
   // if there's no free entry, return skip to read from rados
@@ -136,7 +136,6 @@ void SimplePolicy::update_status(std::string file_name,
     m_cache_size -= size;
     return;
   }
-
 }
 
 int SimplePolicy::evict_entry(std::string file_name) {
@@ -165,7 +164,8 @@ void SimplePolicy::get_evict_list(std::list<std::string>* obj_list) {
   RWLock::WLocker locker(m_cache_map_lock);
   // check free ratio, pop entries from LRU
   if ((double)m_cache_size / m_max_cache_size > (1 - m_watermark)) {
-    int evict_num = m_cache_map.size() * 0.1; //TODO(): make this configurable
+    // TODO(dehao): make this configurable
+    int evict_num = m_cache_map.size() * 0.1;
     for (int i = 0; i < evict_num; i++) {
       Entry* entry = reinterpret_cast<Entry*>(m_promoted_lru.lru_expire());
       if (entry == nullptr) {
@@ -173,7 +173,6 @@ void SimplePolicy::get_evict_list(std::list<std::string>* obj_list) {
       }
       std::string file_name = entry->file_name;
       obj_list->push_back(file_name);
-
     }
   }
 }
@@ -206,5 +205,5 @@ std::string SimplePolicy::get_evict_entry() {
   return entry->file_name;
 }
 
-} // namespace immutable_obj_cache
-} // namespace ceph
+}  // namespace immutable_obj_cache
+}  // namespace ceph

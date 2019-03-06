@@ -29,7 +29,8 @@ class CacheServer {
 
  private:
   void accept();
-  void handle_accept(CacheSessionPtr new_session, const boost::system::error_code& error);
+  void handle_accept(CacheSessionPtr new_session,
+                     const boost::system::error_code& error);
 
  private:
   CephContext* cct;
@@ -38,11 +39,11 @@ class CacheServer {
   stream_protocol::endpoint m_local_path;
   stream_protocol::acceptor m_acceptor;
   uint64_t m_session_id = 1;
-  // TODO : need to lock it.
+  // TODO(dehao) : need to lock it.
   std::map<uint64_t, CacheSessionPtr> m_session_map;
 };
 
-} // namespace immutable_obj_cache
-} // namespace ceph
+}  // namespace immutable_obj_cache
+}  // namespace ceph
 
 #endif

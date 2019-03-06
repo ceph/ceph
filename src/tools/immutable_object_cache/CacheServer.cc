@@ -76,7 +76,8 @@ int CacheServer::start_accept() {
 void CacheServer::accept() {
   CacheSessionPtr new_session = nullptr;
 
-  new_session.reset(new CacheSession(m_session_id, m_io_service, m_server_process_msg, cct));
+  new_session.reset(new CacheSession(m_session_id, m_io_service,
+                    m_server_process_msg, cct));
 
   m_acceptor.async_accept(new_session->socket(),
       boost::bind(&CacheServer::handle_accept, this, new_session,
@@ -93,7 +94,7 @@ void CacheServer::handle_accept(CacheSessionPtr new_session,
   }
 
   m_session_map.emplace(m_session_id, new_session);
-  // TODO : session setting
+  // TODO(dehao) : session setting
   new_session->start();
   m_session_id++;
 
@@ -113,5 +114,5 @@ void CacheServer::send(uint64_t session_id, ObjectCacheRequest* msg) {
   }
 }
 
-} // namespace immutable_obj_cache
-} // namespace ceph
+}  // namespace immutable_obj_cache
+}  // namespace ceph

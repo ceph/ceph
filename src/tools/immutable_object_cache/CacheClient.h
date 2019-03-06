@@ -9,6 +9,7 @@
 #include <boost/bind.hpp>
 #include <boost/asio/error.hpp>
 #include <boost/algorithm/string.hpp>
+
 #include "include/ceph_assert.h"
 #include "include/Context.h"
 #include "common/Mutex.h"
@@ -22,8 +23,7 @@ namespace ceph {
 namespace immutable_obj_cache {
 
 class CacheClient {
-public:
-
+ public:
   CacheClient(const std::string& file, CephContext* ceph_ctx);
   ~CacheClient();
   void run();
@@ -31,12 +31,12 @@ public:
   void close();
   int stop();
   int connect();
-  void lookup_object(std::string pool_nspace, uint64_t pool_id, uint64_t snap_id,
-                     std::string oid, GenContext<ObjectCacheRequest*>* on_finish);
+  void lookup_object(std::string pool_nspace, uint64_t pool_id,
+                     uint64_t snap_id, std::string oid,
+                     GenContext<ObjectCacheRequest*>* on_finish);
   int register_client(Context* on_finish);
 
-private:
-
+ private:
   void send_message();
   void try_send();
   void fault(const int err_type, const boost::system::error_code& err);
@@ -45,14 +45,16 @@ private:
   void process(ObjectCacheRequest* reply, uint64_t seq_id);
   void read_reply_header();
   void handle_reply_header(bufferptr bp_head,
-                           const boost::system::error_code& ec, size_t bytes_transferred);
+                           const boost::system::error_code& ec,
+                           size_t bytes_transferred);
   void read_reply_data(bufferptr&& bp_head, bufferptr&& bp_data,
                        const uint64_t data_len);
   void handle_reply_data(bufferptr bp_head, bufferptr bp_data,
                         const uint64_t data_len,
-                        const boost::system::error_code& ec, size_t bytes_transferred);
-private:
+                        const boost::system::error_code& ec,
+                        size_t bytes_transferred);
 
+ private:
   CephContext* cct;
   boost::asio::io_service m_io_service;
   boost::asio::io_service::work m_io_service_work;
@@ -76,6 +78,6 @@ private:
   bufferptr m_bp_header;
 };
 
-} // namespace immutable_obj_cache
-} // namespace ceph
+}  // namespace immutable_obj_cache
+}  // namespace ceph
 #endif
