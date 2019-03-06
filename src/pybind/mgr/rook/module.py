@@ -400,6 +400,16 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             lambda: self.rook_cluster.update_mon_count(num), None,
             "Updating mon count to {0}".format(num))
 
+    def update_stateless_service(self, svc_type, spec):
+        # only nfs is currently supported
+        if svc_type != "nfs":
+            raise NotImplementedError(svc_type)
+
+        num = spec.count
+        return RookWriteCompletion(
+            lambda: self.rook_cluster.update_nfs_count(spec.name, num), None,
+                "Updating NFS server count in {0} to {1}".format(spec.name, num))
+
     def create_osds(self, drive_group, all_hosts):
         # type: (orchestrator.DriveGroupSpec, List[str]) -> RookWriteCompletion
 

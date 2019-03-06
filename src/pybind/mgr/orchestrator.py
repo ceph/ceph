@@ -332,8 +332,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def update_stateless_service(self, service_type, id_, spec):
-        # type: (str, str, StatelessServiceSpec) -> WriteCompletion
+    def update_stateless_service(self, service_type, spec):
+        # type: (str, StatelessServiceSpec) -> WriteCompletion
         """
         This is about changing / redeploying existing services. Like for
         example changing the number of service instances.
@@ -661,9 +661,8 @@ class StatelessServiceSpec(object):
         # within one ceph cluster.
         self.name = ""
 
-        # Minimum and maximum number of service instances
-        self.min_size = 1
-        self.max_size = 1
+        # Count of service instances
+        self.count = 1
 
         # Arbitrary JSON-serializable object.
         # Maybe you're using e.g. kubenetes and you want to pass through
