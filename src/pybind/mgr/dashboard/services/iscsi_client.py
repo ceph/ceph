@@ -149,12 +149,15 @@ class IscsiClient(RestClient):
         })
 
     @RestClient.api_put('/api/clientauth/{target_iqn}/{client_iqn}')
-    def create_client_auth(self, target_iqn, client_iqn, chap, chap_mutual, request=None):
-        logger.debug("iSCSI: Creating client auth: %s/%s/%s/%s",
-                     target_iqn, client_iqn, chap, chap_mutual)
+    def create_client_auth(self, target_iqn, client_iqn, username, password, mutual_username,
+                           mutual_password, request=None):
+        logger.debug("iSCSI: Creating client auth: %s/%s/%s/%s/%s/%s",
+                     target_iqn, client_iqn, username, password, mutual_username, mutual_password)
         return request({
-            'chap': chap,
-            'chap_mutual': chap_mutual
+            'username': username,
+            'password': password,
+            'mutual_username': mutual_username,
+            'mutual_password': mutual_password
         })
 
     @RestClient.api_put('/api/hostgroup/{target_iqn}/{group_name}')
@@ -174,15 +177,11 @@ class IscsiClient(RestClient):
     def update_discoveryauth(self, user, password, mutual_user, mutual_password, request=None):
         logger.debug("iSCSI: Updating discoveryauth: %s/%s/%s/%s", user, password, mutual_user,
                      mutual_password)
-        chap = ''
-        if user and password:
-            chap = '{}/{}'.format(user, password)
-        chap_mutual = ''
-        if mutual_user and mutual_password:
-            chap_mutual = '{}/{}'.format(mutual_user, mutual_password)
         return request({
-            'chap': chap,
-            'chap_mutual': chap_mutual
+            'username': user,
+            'password': password,
+            'mutual_username': mutual_user,
+            'mutual_password': mutual_password
         })
 
     @RestClient.api_put('/api/targetauth/{target_iqn}')

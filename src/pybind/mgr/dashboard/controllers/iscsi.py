@@ -73,16 +73,10 @@ class Iscsi(BaseController):
 
     def _get_discoveryauth(self):
         config = IscsiClient.instance().get_config()
-        user = ''
-        password = ''
-        chap = config['discovery_auth']['chap']
-        if chap:
-            user, password = chap.split('/')
-        mutual_user = ''
-        mutual_password = ''
-        chap_mutual = config['discovery_auth']['chap_mutual']
-        if chap_mutual:
-            mutual_user, mutual_password = chap_mutual.split('/')
+        user = config['discovery_auth']['username']
+        password = config['discovery_auth']['password']
+        mutual_user = config['discovery_auth']['mutual_username']
+        mutual_password = config['discovery_auth']['mutual_password']
         return {
             'user': user,
             'password': password,
@@ -425,12 +419,10 @@ class IscsiTarget(RESTController):
                             target_iqn, client_iqn, image_id)
                     user = client['auth']['user']
                     password = client['auth']['password']
-                    chap = '{}/{}'.format(user, password) if user and password else ''
                     m_user = client['auth']['mutual_user']
                     m_password = client['auth']['mutual_password']
-                    m_chap = '{}/{}'.format(m_user, m_password) if m_user and m_password else ''
                     IscsiClient.instance(gateway_name=gateway_name).create_client_auth(
-                        target_iqn, client_iqn, chap, m_chap)
+                        target_iqn, client_iqn, user, password, m_user, m_password)
                 TaskManager.current_task().inc_progress(task_progress_inc)
             for group in groups:
                 group_id = group['group_id']
@@ -490,14 +482,10 @@ class IscsiTarget(RESTController):
                     'image': image
                 }
                 luns.append(lun)
-            user = None
-            password = None
-            if '/' in client_config['auth']['chap']:
-                user, password = client_config['auth']['chap'].split('/', 1)
-            mutual_user = None
-            mutual_password = None
-            if '/' in client_config['auth']['chap_mutual']:
-                mutual_user, mutual_password = client_config['auth']['chap_mutual'].split('/', 1)
+            user = client_config['auth']['username']
+            password = client_config['auth']['password']
+            mutual_user = client_config['auth']['mutual_username']
+            mutual_password = client_config['auth']['mutual_password']
             client = {
                 'client_iqn': client_iqn,
                 'luns': luns,

@@ -798,9 +798,9 @@
           <context context-type="sourcefile">app/core/auth/user-form/user-form.component.html</context>
           <context context-type="linenumber">42</context>
         </context-group>
-      </trans-unit><trans-unit id="4b2dd8635fba00476da25977e0884969821e62da" datatype="html">
+      </trans-unit><trans-unit id="fdfee5d7a27e1bdd97a176097277bee078de6aaf" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters
-                        and can only contain letters, &apos;@&apos;, &apos;-&apos; or &apos;_&apos;.</source>
+                        and can only contain letters, &apos;@&apos;, &apos;-&apos;, &apos;_&apos; or &apos;/&apos;.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">292</context>
@@ -825,9 +825,9 @@
           <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
           <context context-type="linenumber">98</context>
         </context-group>
-      </trans-unit><trans-unit id="c58e136a292acf8ebccfa6d777fdff9f392b6ee2" datatype="html">
+      </trans-unit><trans-unit id="8406eb7415ee40e54d9ecb209abb056f06e3d666" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and
-                        can only contain letters, &apos;@&apos;, &apos;-&apos; or &apos;_&apos;.</source>
+                        can only contain letters, &apos;@&apos;, &apos;-&apos;, &apos;_&apos; or &apos;/&apos;.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-form/iscsi-target-form.component.html</context>
           <context context-type="linenumber">352</context>
@@ -981,16 +981,16 @@
           <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
           <context context-type="linenumber">88</context>
         </context-group>
-      </trans-unit><trans-unit id="fcbd385c9738f3c376e7f0935c9ac1ae6f863476" datatype="html">
+      </trans-unit><trans-unit id="6682d1c00263bee204583a5d589b308b6be88b0f" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters
-              and can only contain letters, &apos;@&apos;, &apos;-&apos; or &apos;_&apos;.</source>
+              and can only contain letters, &apos;@&apos;, &apos;-&apos;, &apos;_&apos; or &apos;/&apos;.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
           <context context-type="linenumber">64</context>
         </context-group>
-      </trans-unit><trans-unit id="fd0c0472536d61ac9f5bc62d5f9ed01673cf3603" datatype="html">
+      </trans-unit><trans-unit id="8800276925157c666b103c36ff7fe8ffe11980b4" datatype="html">
         <source>Passwords must have a length of 12 to 16 characters and
-              can only contain letters, &apos;@&apos;, &apos;-&apos; or &apos;_&apos;.</source>
+              can only contain letters, &apos;@&apos;, &apos;-&apos;, &apos;_&apos; or &apos;/&apos;.</source>
         <context-group purpose="location">
           <context context-type="sourcefile">app/ceph/block/iscsi-target-discovery-modal/iscsi-target-discovery-modal.component.html</context>
           <context context-type="linenumber">123</context>
