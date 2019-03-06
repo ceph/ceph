@@ -62,6 +62,10 @@ class SocketConnection : public Connection {
   // messages sent, but not yet acked by peer
   std::queue<MessageRef> sent;
 
+  // which of the peer_addrs we're connecting to (as client)
+  // or should reconnect to (as peer)
+  entity_addr_t target_addr;
+
  public:
   SocketConnection(SocketMessenger& messenger,
                    Dispatcher& dispatcher,
