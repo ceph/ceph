@@ -47,12 +47,11 @@ void CacheSession::start() {
 void CacheSession::read_request_header() {
   ldout(cct, 20) << dendl;
   boost::asio::async_read(m_dm_socket,
-                          boost::asio::buffer(m_bp_header.c_str(), get_header_size()),
-                          boost::asio::transfer_exactly(get_header_size()),
-                          boost::bind(&CacheSession::handle_request_header,
-                                      shared_from_this(),
-                                      boost::asio::placeholders::error,
-                                      boost::asio::placeholders::bytes_transferred));
+    boost::asio::buffer(m_bp_header.c_str(), get_header_size()),
+    boost::asio::transfer_exactly(get_header_size()),
+    boost::bind(&CacheSession::handle_request_header,
+     shared_from_this(), boost::asio::placeholders::error,
+     boost::asio::placeholders::bytes_transferred));
 }
 
 void CacheSession::handle_request_header(const boost::system::error_code& err,
@@ -70,12 +69,12 @@ void CacheSession::read_request_data(uint64_t data_len) {
   ldout(cct, 20) << dendl;
   bufferptr bp_data(buffer::create(data_len));
   boost::asio::async_read(m_dm_socket,
-                          boost::asio::buffer(bp_data.c_str(), bp_data.length()),
-                          boost::asio::transfer_exactly(data_len),
-                          boost::bind(&CacheSession::handle_request_data,
-                                      shared_from_this(), bp_data, data_len,
-                                      boost::asio::placeholders::error,
-                                      boost::asio::placeholders::bytes_transferred));
+    boost::asio::buffer(bp_data.c_str(), bp_data.length()),
+    boost::asio::transfer_exactly(data_len),
+    boost::bind(&CacheSession::handle_request_data,
+      shared_from_this(), bp_data, data_len,
+      boost::asio::placeholders::error,
+      boost::asio::placeholders::bytes_transferred));
 }
 
 void CacheSession::handle_request_data(bufferptr bp, uint64_t data_len,
@@ -112,7 +111,8 @@ void CacheSession::send(ObjectCacheRequest* reply) {
   boost::asio::async_write(m_dm_socket,
         boost::asio::buffer(bl.c_str(), bl.length()),
         boost::asio::transfer_exactly(bl.length()),
-        [this, bl, reply](const boost::system::error_code& err, size_t bytes_transferred) {
+        [this, bl, reply](const boost::system::error_code& err,
+          size_t bytes_transferred) {
           if (err || bytes_transferred != bl.length()) {
             fault();
             return;
@@ -123,8 +123,8 @@ void CacheSession::send(ObjectCacheRequest* reply) {
 
 void CacheSession::fault() {
   ldout(cct, 20) << dendl;
-  // TODO
+  // TODO(dehao)
 }
 
-} // namespace immutable_obj_cache
-} // namespace ceph
+}  // namespace immutable_obj_cache
+}  // namespace ceph

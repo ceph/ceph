@@ -18,22 +18,25 @@ namespace ceph {
 namespace immutable_obj_cache {
 
 class CacheSession : public std::enable_shared_from_this<CacheSession> {
-public:
-  CacheSession(uint64_t session_id, io_service& io_service, ProcessMsg process_msg, CephContext* ctx);
+ public:
+  CacheSession(uint64_t session_id, io_service& io_service,
+               ProcessMsg process_msg, CephContext* ctx);
   ~CacheSession();
   stream_protocol::socket& socket();
   void close();
   void start();
   void read_request_header();
-  void handle_request_header(const boost::system::error_code& err, size_t bytes_transferred);
+  void handle_request_header(const boost::system::error_code& err,
+                             size_t bytes_transferred);
   void read_request_data(uint64_t data_len);
   void handle_request_data(bufferptr bp, uint64_t data_len,
-                          const boost::system::error_code& err, size_t bytes_transferred);
+                          const boost::system::error_code& err,
+                          size_t bytes_transferred);
   void process(ObjectCacheRequest* req);
   void fault();
   void send(ObjectCacheRequest* msg);
 
-private:
+ private:
   uint64_t m_session_id;
   stream_protocol::socket m_dm_socket;
   ProcessMsg m_server_process_msg;
@@ -44,7 +47,7 @@ private:
 
 typedef std::shared_ptr<CacheSession> CacheSessionPtr;
 
-} // namespace immutable_obj_cache
-} // namespace ceph
+}  // namespace immutable_obj_cache
+}  // namespace ceph
 
 #endif

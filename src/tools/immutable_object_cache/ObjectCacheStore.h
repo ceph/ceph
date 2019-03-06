@@ -21,43 +21,42 @@ namespace immutable_obj_cache {
 typedef shared_ptr<librados::Rados> RadosRef;
 typedef shared_ptr<librados::IoCtx> IoCtxRef;
 
-class ObjectCacheStore
-{
-  public:
-    ObjectCacheStore(CephContext *cct);
-    ~ObjectCacheStore();
-    int init(bool reset);
-    int shutdown();
-    int init_cache();
-    int lookup_object(std::string pool_nspace,
-                      uint64_t pool_id, uint64_t snap_id,
-                      std::string object_name,
-                      std::string& target_cache_file_path);
+class ObjectCacheStore {
+ public:
+  ObjectCacheStore(CephContext *cct);
+  ~ObjectCacheStore();
+  int init(bool reset);
+  int shutdown();
+  int init_cache();
+  int lookup_object(std::string pool_nspace,
+                    uint64_t pool_id, uint64_t snap_id,
+                    std::string object_name,
+                    std::string& target_cache_file_path);
 
-  private:
-    std::string get_cache_file_name(std::string pool_nspace, uint64_t pool_id,
-                                         uint64_t snap_id, std::string oid);
-    std::string get_cache_file_path(std::string cache_file_name);
-    int evict_objects();
-    int do_promote(std::string pool_nspace, uint64_t pool_id,
-                    uint64_t snap_id, std::string object_name);
-    int promote_object(librados::IoCtx*, std::string object_name,
-                       librados::bufferlist* read_buf,
-                       Context* on_finish);
-   int handle_promote_callback(int, bufferlist*, std::string);
-   int do_evict(std::string cache_file);
+ private:
+  std::string get_cache_file_name(std::string pool_nspace, uint64_t pool_id,
+                                  uint64_t snap_id, std::string oid);
+  std::string get_cache_file_path(std::string cache_file_name);
+  int evict_objects();
+  int do_promote(std::string pool_nspace, uint64_t pool_id,
+                 uint64_t snap_id, std::string object_name);
+  int promote_object(librados::IoCtx*, std::string object_name,
+                     librados::bufferlist* read_buf,
+                     Context* on_finish);
+  int handle_promote_callback(int, bufferlist*, std::string);
+  int do_evict(std::string cache_file);
 
-    CephContext *m_cct;
-    RadosRef m_rados;
-    std::map<uint64_t, librados::IoCtx> m_ioctx_map;
-    Mutex m_ioctx_map_lock;
-    Policy* m_policy;
-    //TODO(): make this configurable
-    int m_dir_num = 10;
-    uint64_t object_cache_max_size;
-    std::string m_cache_root_dir;
+  CephContext *m_cct;
+  RadosRef m_rados;
+  std::map<uint64_t, librados::IoCtx> m_ioctx_map;
+  Mutex m_ioctx_map_lock;
+  Policy* m_policy;
+  // TODO(dehao): make this configurable
+  int m_dir_num = 10;
+  uint64_t object_cache_max_size;
+  std::string m_cache_root_dir;
 };
 
-} // namespace ceph
-} // namespace immutable_obj_cache
+}  // namespace ceph
+}  // namespace immutable_obj_cache
 #endif
