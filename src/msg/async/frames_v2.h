@@ -162,38 +162,41 @@ static ceph::bufferlist segment_onwire_bufferlist(ceph::bufferlist&& bl)
   return bl;
 }
 
-static ceph::bufferlist segment_onwire_bufferlist(const ceph::bufferlist &bl)
-{
-  ceph::bufferlist ret(bl);
-  const auto padding_size = segment_onwire_size(bl.length()) - bl.length();
-  if (padding_size) {
-    ret.append_zero(padding_size);
-  }
-  return ret;
-}
-
 template <class T, __u8 SegmentsNumV>
 struct Frame {
   static_assert(SegmentsNumV > 0 && SegmentsNumV <= MAX_NUM_SEGMENTS);
 protected:
   std::array<ceph::bufferlist, SegmentsNumV> segments;
+
+private:
   ceph::bufferlist::contiguous_filler preamble_filler;
 
   // craft the main preamble. It's always present regardless of the number
   // of segments message is composed from.
-  void fill_preamble(const std::initializer_list<segment_t> main_segments) {
-    ceph_assert(std::size(main_segments) <= MAX_NUM_SEGMENTS);
+  void fill_preamble() {
+    ceph_assert(std::size(segments) <= MAX_NUM_SEGMENTS);
 
     preamble_block_t main_preamble;
-    // TODO: we might fill/pad with pseudo-random data.
     ::memset(&main_preamble, 0, sizeof(main_preamble));
 
-    main_preamble.num_segments = std::size(main_segments);
     main_preamble.tag = static_cast<__u8>(T::tag);
     ceph_assert(main_preamble.tag != 0);
 
-    std::copy(std::cbegin(main_segments), std::cend(main_segments),
-              std::begin(main_preamble.segments));
+    // implementation detail: the first bufferlist of Frame::segments carries
+    // space for preamble. This glueing isn't a part of the onwire format but
+    // just our private detail.
+    main_preamble.segments.front().length =
+        segments.front().length() - FRAME_PREAMBLE_SIZE;
+    main_preamble.segments.front().alignment = segment_t::DEFAULT_ALIGNMENT;
+
+    if constexpr(SegmentsNumV > 1) {
+      for (__u8 idx = 1; idx < std::size(segments); idx++) {
+        main_preamble.segments[idx].length = segments[idx].length();
+        // TODO: arg pack for Frame carrying alignments
+        main_preamble.segments[idx].alignment = segment_t::DEFAULT_ALIGNMENT;
+      }
+    }
+    main_preamble.num_segments = std::size(segments);
 
     main_preamble.crc =
         ceph_crc32c(0, reinterpret_cast<unsigned char *>(&main_preamble),
@@ -201,6 +204,77 @@ protected:
 
     preamble_filler.copy_in(sizeof(main_preamble),
                             reinterpret_cast<const char *>(&main_preamble));
+  }
+
+public:
+  ceph::bufferlist get_buffer(
+    ceph::crypto::onwire::rxtx_t &session_stream_handlers)
+  {
+    fill_preamble();
+    if (session_stream_handlers.tx) {
+      // we're padding segments to biggest cipher's block size. Although
+      // AES-GCM can live without that as it's a stream cipher, we don't
+      // to be fixed to stream ciphers only.
+      for (auto& segment : segments) {
+        segment = segment_onwire_bufferlist(std::move(segment));
+      }
+
+      // let's cipher allocate one huge buffer for entire ciphertext.
+      // TODO: apply some template magic to make this general
+      static_assert(SegmentsNumV == 1 || SegmentsNumV == 4);
+      if constexpr (SegmentsNumV == 1) {
+        session_stream_handlers.tx->reset_tx_handler({
+          segments.front().length(),
+        });
+      } else {
+        session_stream_handlers.tx->reset_tx_handler({
+          segments[0].length(),
+          segments[1].length(),
+          segments[2].length(),
+          segments[3].length(),
+        });
+      }
+
+      for (auto& segment : segments) {
+        if (segment.length()) {
+          session_stream_handlers.tx->authenticated_encrypt_update(
+            std::move(segment));
+        }
+      }
+
+      // in secure mode we craft only the late_flags. Signature (for AES-GCM
+      // called auth tag) will be added by the cipher.
+      {
+        epilogue_secure_block_t epilogue;
+        ::memset(&epilogue, 0, sizeof(epilogue));
+        ceph::bufferlist epilogue_bl;
+        epilogue_bl.append(reinterpret_cast<const char*>(&epilogue),
+                           sizeof(epilogue));
+        session_stream_handlers.tx->authenticated_encrypt_update(epilogue_bl);
+      }
+      return session_stream_handlers.tx->authenticated_encrypt_final();
+    } else {
+      // plain mode
+      epilogue_plain_block_t epilogue;
+      ::memset(&epilogue, 0, sizeof(epilogue));
+
+      ceph::bufferlist::const_iterator hdriter(&segments.front(),
+                                               FRAME_PREAMBLE_SIZE);
+      epilogue.crc_values[SegmentIndex::Control::PAYLOAD] =
+          hdriter.crc32c(hdriter.get_remaining(), -1);
+      if constexpr(SegmentsNumV > 1) {
+        for (__u8 idx = 1; idx < std::size(segments); idx++) {
+          epilogue.crc_values[idx] = segments[idx].crc32c(-1);
+        }
+      }
+
+      ceph::bufferlist ret;
+      for (auto& segment : segments) {
+        ret.claim_append(segment);
+      }
+      ret.append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
+      return ret;
+    }
   }
 
   Frame()
@@ -290,25 +364,6 @@ protected:
   }
 
 public:
-  ceph::bufferlist &get_buffer() {
-    this->fill_preamble({
-      segment_t{ get_payload_segment().length() - FRAME_PREAMBLE_SIZE,
-                 segment_t::DEFAULT_ALIGNMENT}
-    });
-
-    epilogue_plain_block_t epilogue;
-    ::memset(&epilogue, 0, sizeof(epilogue));
-
-    ceph::bufferlist::const_iterator hdriter(&this->get_payload_segment(),
-                                             FRAME_PREAMBLE_SIZE);
-    epilogue.crc_values[SegmentIndex::Control::PAYLOAD] =
-        hdriter.crc32c(hdriter.get_remaining(), -1);
-    get_payload_segment().append(reinterpret_cast<const char*>(&epilogue),
-                                 sizeof(epilogue));
-
-    return get_payload_segment();
-  }
-
   static C Encode(const Args &... args) {
     C c;
     c._encode(args...);
@@ -412,47 +467,6 @@ protected:
 
 template <class T, typename... Args>
 struct SignedEncryptedFrame : public ControlFrame<T, Args...> {
-  ceph::bufferlist &get_buffer() {
-    // In contrast to Frame::get_buffer() we don't fill preamble here.
-    return this->get_payload_segment();
-  }
-
-  static T Encode(ceph::crypto::onwire::rxtx_t &session_stream_handlers,
-                  const Args &... args) {
-    T c = ControlFrame<T, Args...>::Encode(args...);
-    c.fill_preamble({segment_t{c.get_payload_segment().length() - FRAME_PREAMBLE_SIZE,
-                     segment_t::DEFAULT_ALIGNMENT}});
-
-    if (session_stream_handlers.tx) {
-      c.get_payload_segment() = segment_onwire_bufferlist(std::move(c.get_payload_segment()));
-
-      epilogue_secure_block_t epilogue;
-      ::memset(&epilogue, 0, sizeof(epilogue));
-      c.get_payload_segment().append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
-
-      ceph_assert(session_stream_handlers.tx);
-      session_stream_handlers.tx->reset_tx_handler({c.get_payload_segment().length()});
-
-      session_stream_handlers.tx->authenticated_encrypt_update(
-          std::move(c.get_payload_segment()));
-      c.get_payload_segment() = session_stream_handlers.tx->authenticated_encrypt_final();
-    } else {
-      epilogue_plain_block_t epilogue;
-      ::memset(&epilogue, 0, sizeof(epilogue));
-
-      ceph::bufferlist::const_iterator hdriter(&c.get_payload_segment(), FRAME_PREAMBLE_SIZE);
-      epilogue.crc_values[SegmentIndex::Control::PAYLOAD] =
-          hdriter.crc32c(hdriter.get_remaining(), -1);
-      c.get_payload_segment().append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
-    }
-    return c;
-  }
-
-  static T Decode(ceph::crypto::onwire::rxtx_t &session_stream_handlers,
-                  ceph::bufferlist &payload) {
-    return ControlFrame<T, Args...>::Decode(payload);
-  }
-
 protected:
   SignedEncryptedFrame() : ControlFrame<T, Args...>() {}
 };
@@ -608,9 +622,8 @@ struct KeepAliveFrame : public SignedEncryptedFrame<KeepAliveFrame,
   using SignedEncryptedFrame::Encode;
   using SignedEncryptedFrame::Decode;
 
-  static KeepAliveFrame Encode(
-      ceph::crypto::onwire::rxtx_t &session_stream_handlers) {
-    return KeepAliveFrame::Encode(session_stream_handlers, ceph_clock_now());
+  static KeepAliveFrame Encode() {
+    return KeepAliveFrame::Encode(ceph_clock_now());
   }
 
   inline utime_t &timestamp() { return get_val<0>(); }
@@ -650,100 +663,24 @@ struct MessageFrame
     : public Frame<MessageFrame, 4 /* four segments */> {
   static const Tag tag = Tag::MESSAGE;
 
-  ceph::bufferlist &get_payload_segment() {
-    return this->segments[SegmentIndex::Msg::HEADER];
-  }
-
-  ceph::bufferlist &get_buffer() {
-    // In contrast to Frame::get_buffer() we don't fill preamble here.
-    return this->get_payload_segment();
-  }
-
-  static MessageFrame Encode(ceph::crypto::onwire::rxtx_t &session_stream_handlers,
-                             const ceph_msg_header2 &msg_header,
-                             const ceph::bufferlist& front,
-                             const ceph::bufferlist& middle,
-                             const ceph::bufferlist& data) {
+  static MessageFrame Encode(const ceph_msg_header2 &msg_header,
+                             const ceph::bufferlist &front,
+                             const ceph::bufferlist &middle,
+                             const ceph::bufferlist &data) {
     MessageFrame f;
     f.segments[SegmentIndex::Msg::HEADER].append(
         reinterpret_cast<const char*>(&msg_header), sizeof(msg_header));
 
-    f.fill_preamble({
-      segment_t{ f.get_payload_segment().length() - FRAME_PREAMBLE_SIZE,
-		 segment_t::DEFAULT_ALIGNMENT },
-      segment_t{ front.length(), segment_t::DEFAULT_ALIGNMENT },
-      segment_t{ middle.length(), segment_t::DEFAULT_ALIGNMENT },
-      segment_t{ data.length(), segment_t::PAGE_SIZE_ALIGNMENT },
-    });
-
-    if (session_stream_handlers.tx) {
-      // we're padding segments to biggest cipher's block size. Although
-      // AES-GCM can live without that as it's a stream cipher, we don't
-      // to be fixed to stream ciphers only.
-      f.get_payload_segment() =
-          segment_onwire_bufferlist(std::move(f.get_payload_segment()));
-      auto front_padded = segment_onwire_bufferlist(front);
-      auto middle_padded = segment_onwire_bufferlist(middle);
-      auto data_padded = segment_onwire_bufferlist(data);
-
-      // let's cipher allocate one huge buffer for entire ciphertext.
-      session_stream_handlers.tx->reset_tx_handler({
-        f.get_payload_segment().length(),
-        front_padded.length(),
-        middle_padded.length(),
-        data_padded.length()
-      });
-
-      ceph_assert(f.get_payload_segment().length());
-      session_stream_handlers.tx->authenticated_encrypt_update(
-        std::move(f.get_payload_segment()));
-
-      // TODO: switch TxHandler from `bl&&` to `const bl&`.
-      if (front.length()) {
-        session_stream_handlers.tx->authenticated_encrypt_update(front_padded);
-      }
-      if (middle.length()) {
-        session_stream_handlers.tx->authenticated_encrypt_update(middle_padded);
-      }
-      if (data.length()) {
-        session_stream_handlers.tx->authenticated_encrypt_update(data_padded);
-      }
-
-      // craft the secure's mode epilogue
-      {
-        epilogue_secure_block_t epilogue;
-        ::memset(&epilogue, 0, sizeof(epilogue));
-        ceph::bufferlist epilogue_bl;
-        epilogue_bl.append(reinterpret_cast<const char*>(&epilogue),
-                                   sizeof(epilogue));
-        session_stream_handlers.tx->authenticated_encrypt_update(epilogue_bl);
-      }
-
-      // auth tag will be appended at the end
-      f.get_payload_segment() = session_stream_handlers.tx->authenticated_encrypt_final();
-    } else {
-      epilogue_plain_block_t epilogue;
-      ::memset(&epilogue, 0, sizeof(epilogue));
-
-      ceph::bufferlist::const_iterator hdriter(&f.get_payload_segment(), FRAME_PREAMBLE_SIZE);
-      epilogue.crc_values[SegmentIndex::Msg::HEADER] =
-          hdriter.crc32c(hdriter.get_remaining(), -1);
-      epilogue.crc_values[SegmentIndex::Msg::FRONT] = front.crc32c(-1);
-      epilogue.crc_values[SegmentIndex::Msg::MIDDLE] = middle.crc32c(-1);
-      epilogue.crc_values[SegmentIndex::Msg::DATA] = data.crc32c(-1);
-
-      f.get_payload_segment().append(front);
-      f.get_payload_segment().append(middle);
-      f.get_payload_segment().append(data);
-      f.get_payload_segment().append(reinterpret_cast<const char*>(&epilogue), sizeof(epilogue));
-    }
+    f.segments[SegmentIndex::Msg::FRONT] = front;
+    f.segments[SegmentIndex::Msg::MIDDLE] = middle;
+    f.segments[SegmentIndex::Msg::DATA] = data;
 
     return f;
   }
 
-  static MessageFrame Decode(ceph::bufferlist&& text) {
+  static MessageFrame Decode(ceph::bufferlist &&msg_header) {
     MessageFrame f;
-    f.segments[SegmentIndex::Msg::HEADER] = std::move(text);
+    f.segments[SegmentIndex::Msg::HEADER] = std::move(msg_header);
     return f;
   }
 
