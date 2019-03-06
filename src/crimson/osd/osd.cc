@@ -97,7 +97,7 @@ seastar::future<> OSD::mkfs(uuid_d cluster_fsid)
   }).then([cluster_fsid, this] {
     store->write_meta("ceph_fsid", cluster_fsid.to_string());
     store->write_meta("whoami", std::to_string(whoami));
-    return seastar::now();
+    return store->umount();
   });
 }
 
@@ -274,21 +274,6 @@ seastar::future<> OSD::_send_boot()
                                   cluster_msgr->get_myaddrs(),
                                   CEPH_FEATURES_ALL);
   return monc->send_message(m);
-}
-
-seastar::future<> OSD::stop()
-{
-  // see also OSD::shutdown()
-  state.set_stopping();
-  return gate.close().then([this] {
-    return heartbeat->stop();
-  }).then([this] {
-    return monc->stop();
-  }).then([this] {
-    return public_msgr->shutdown();
-  }).then([this] {
-    return cluster_msgr->shutdown();
-  });
 }
 
 seastar::future<> OSD::load_pgs()
@@ -625,7 +610,22 @@ seastar::future<> OSD::shutdown()
   // TODO
   superblock.mounted = boot_epoch;
   superblock.clean_thru = osdmap->get_epoch();
-  return seastar::now();
+
+  state.set_stopping();
+  auto msgr_shutdown = [this]() {
+    return gate.close().then([this] {
+      return heartbeat->stop();
+    }).then([this] {
+      return monc->stop();
+    }).then([this] {
+      return public_msgr->shutdown();
+    }).then([this] {
+      return cluster_msgr->shutdown();
+    });
+  };
+  return seastar::when_all_succeed(msgr_shutdown(),
+                                   store->umount());
+  
 }
 
 seastar::future<> OSD::send_beacon()

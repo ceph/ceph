@@ -47,7 +47,7 @@ int main(int argc, char* argv[])
 
   args.insert(begin(args), argv[0]);
   try {
-    return app.run_deprecated(args.size(), const_cast<char**>(args.data()), [&] {
+    return app.run(args.size(), const_cast<char**>(args.data()), [&] {
       auto& config = app.configuration();
       seastar::engine().at_exit([] {
         return sharded_conf().stop();

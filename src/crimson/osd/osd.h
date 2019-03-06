@@ -87,7 +87,9 @@ public:
   seastar::future<> mkfs(uuid_d fsid);
 
   seastar::future<> start();
-  seastar::future<> stop();
+  seastar::future<> stop(){
+    return seastar::make_ready_future<>();
+  }
 
 private:
   seastar::future<> start_boot();

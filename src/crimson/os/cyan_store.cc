@@ -84,8 +84,7 @@ seastar::future<> CyanStore::mkfs(uuid_d osd_fsid)
   } else if (r < 0) {
     throw std::runtime_error("read_meta");
   } else {
-    logger().error("{} already has fsid {}", __func__, fsid_str);
-    throw std::runtime_error("mkfs");
+    logger().info("{} already has fsid {}", __func__, fsid_str);
   }
 
   string fn = path + "/collections";
