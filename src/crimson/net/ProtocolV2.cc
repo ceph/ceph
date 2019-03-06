@@ -65,6 +65,7 @@ void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
   ceph_assert(state == state_t::NONE);
   ceph_assert(!socket);
   conn.peer_addr = _peer_addr;
+  conn.target_addr = _peer_addr;
   conn.peer_type = _peer_type;
   // TODO: lossless policy
   conn.policy = SocketPolicy::lossy_client(0);
@@ -78,6 +79,7 @@ void ProtocolV2::start_accept(SocketFRef&& sock,
 {
   ceph_assert(state == state_t::NONE);
   ceph_assert(!socket);
+  conn.target_addr = _peer_addr;
   socket = std::move(sock);
   messenger.accept_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
