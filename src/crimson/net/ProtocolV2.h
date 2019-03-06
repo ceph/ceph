@@ -5,6 +5,7 @@
 
 #include "Protocol.h"
 #include "msg/async/frames_v2.h"
+#include "msg/async/crypto_onwire.h"
 
 namespace ceph::net {
 
@@ -60,6 +61,30 @@ class ProtocolV2 : public Protocol {
   void trigger_state(state_t state, write_state_t write_state, bool reentrant);
 
   uint64_t global_seq = 0;
+
+ // TODO: Frame related implementations, probably to a separate class.
+ private:
+  bool record_io = false;
+  ceph::bufferlist rxbuf;
+  ceph::bufferlist txbuf;
+
+  void enable_recording();
+  seastar::future<Socket::tmp_buf> read_exactly(size_t bytes);
+  seastar::future<bufferlist> read(size_t bytes);
+  seastar::future<> write(bufferlist&& buf);
+  seastar::future<> write_flush(bufferlist&& buf);
+
+  ceph::crypto::onwire::rxtx_t session_stream_handlers;
+  boost::container::static_vector<ceph::msgr::v2::segment_t,
+				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_desc;
+  boost::container::static_vector<ceph::bufferlist,
+				  ceph::msgr::v2::MAX_NUM_SEGMENTS> rx_segments_data;
+
+  size_t get_current_msg_size() const;
+  seastar::future<ceph::msgr::v2::Tag> read_main_preamble();
+  seastar::future<> read_frame_payload();
+  template <class F>
+  seastar::future<> write_frame(F &frame, bool flush=true);
 
  private:
   seastar::future<> fault();
