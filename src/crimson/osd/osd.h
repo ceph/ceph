@@ -54,6 +54,7 @@ class OSD : public ceph::net::Dispatcher,
   ceph::net::Messenger& public_msgr;
   ChainedDispatchers dispatchers;
   std::unique_ptr<ceph::mon::Client> monc;
+  std::unique_ptr<ceph::mgr::Client> mgrc;
 
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> heartbeat_timer;
@@ -85,7 +86,7 @@ class OSD : public ceph::net::Dispatcher,
   seastar::future<> ms_handle_reset(ceph::net::ConnectionRef conn) override;
   seastar::future<> ms_handle_remote_reset(ceph::net::ConnectionRef conn) override;
   // mgr::WithStats methods
-  MessageRef get_stats() const override;
+  MessageRef get_stats() override;
 
 public:
   OSD(int id, uint32_t nonce,
