@@ -942,6 +942,8 @@ TEST_F(TestMockIoObjectRequest, DiscardTruncateAssertExists) {
   expect_assert_exists(mock_image_ctx, 0);
   expect_truncate(mock_image_ctx, 0, 0);
 
+  EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx), create(_, _)).Times(0);
+
   C_SaferCond ctx;
   auto req = MockObjectDiscardRequest::create_discard(
     &mock_image_ctx, ictx->get_object_name(0), 0, 0,
@@ -974,6 +976,8 @@ TEST_F(TestMockIoObjectRequest, DiscardTruncate) {
   expect_object_may_exist(mock_image_ctx, 0, true);
   expect_object_map_update(mock_image_ctx, 0, 1, OBJECT_EXISTS, {}, false, 0);
   expect_truncate(mock_image_ctx, 1, 0);
+
+  EXPECT_CALL(get_mock_io_ctx(mock_image_ctx.data_ctx), create(_, _)).Times(0);
 
   C_SaferCond ctx;
   auto req = MockObjectDiscardRequest::create_discard(
