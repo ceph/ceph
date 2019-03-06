@@ -61,7 +61,7 @@ class ProtocolV2 final : public Protocol {
 
   void trigger_state(state_t state, write_state_t write_state, bool reentrant);
 
-  // TODO: the rest of protocol data structures and variables.
+  uint64_t global_seq = 0;
 
  private:
   seastar::future<> fault();
