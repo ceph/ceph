@@ -222,11 +222,11 @@ seastar::future<> OSD::start_boot()
 {
   state.set_preboot();
   return monc->get_version("osdmap").then([this](version_t newest, version_t oldest) {
-    return _preboot(newest, oldest);
+    return _preboot(oldest, newest);
   });
 }
 
-seastar::future<> OSD::_preboot(version_t newest, version_t oldest)
+seastar::future<> OSD::_preboot(version_t oldest, version_t newest)
 {
   logger().info("osd.{}: _preboot", whoami);
   if (osdmap->get_epoch() == 0) {
