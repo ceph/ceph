@@ -19,9 +19,8 @@ describe('TableComponent', () => {
     for (let i = 0; i < n; i++) {
       data.push({
         a: i,
-        b: i * i,
-        c: [-(i % 10), 'score' + ((i % 16) + 6)],
-        d: !(i % 2)
+        b: i * 10,
+        c: !!(i % 2)
       });
     }
     return data;
@@ -39,15 +38,12 @@ describe('TableComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(TableComponent);
     component = fixture.componentInstance;
-  });
 
-  beforeEach(() => {
-    component.data = createFakeData(100);
+    component.data = createFakeData(10);
     component.columns = [
       { prop: 'a', name: 'Index' },
-      { prop: 'b', name: 'Power ofA' },
-      { prop: 'c', name: 'Poker array' },
-      { prop: 'd', name: 'Boolean value' }
+      { prop: 'b', name: 'Index times ten' },
+      { prop: 'c', name: 'Odd?' }
     ];
   });
 
@@ -55,126 +51,144 @@ describe('TableComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  describe('after useData', () => {
-    beforeEach(() => {
+  it('should force an identifier', () => {
+    component.identifier = 'x';
+    component.forceIdentifier = true;
+    component.ngOnInit();
+    expect(component.identifier).toBe('x');
+    expect(component.sorts[0].prop).toBe('a');
+    expect(component.sorts).toEqual(component.createSortingDefinition('a'));
+  });
+
+  it('should have rows', () => {
+    component.useData();
+    expect(component.data.length).toBe(10);
+    expect(component.rows.length).toBe(component.data.length);
+  });
+
+  it('should have an int in setLimit parsing a string', () => {
+    expect(component.limit).toBe(10);
+    expect(component.limit).toEqual(jasmine.any(Number));
+
+    const e = { target: { value: '1' } };
+    component.setLimit(e);
+    expect(component.userConfig.limit).toBe(1);
+    expect(component.userConfig.limit).toEqual(jasmine.any(Number));
+    e.target.value = '-20';
+    component.setLimit(e);
+    expect(component.userConfig.limit).toBe(1);
+  });
+
+  describe('test search', () => {
+    const expectSearch = (keyword: string, expectedResult: object[]) => {
+      component.search = keyword;
+      component.updateFilter();
+      expect(component.rows).toEqual(expectedResult);
+      component.updateFilter(true);
+    };
+
+    it('should find a particular number', () => {
+      expectSearch('5', [{ a: 5, b: 50, c: true }]);
+      expectSearch('9', [{ a: 9, b: 90, c: true }]);
+    });
+
+    it('should find boolean values', () => {
+      expectSearch('true', [
+        { a: 1, b: 10, c: true },
+        { a: 3, b: 30, c: true },
+        { a: 5, b: 50, c: true },
+        { a: 7, b: 70, c: true },
+        { a: 9, b: 90, c: true }
+      ]);
+      expectSearch('false', [
+        { a: 0, b: 0, c: false },
+        { a: 2, b: 20, c: false },
+        { a: 4, b: 40, c: false },
+        { a: 6, b: 60, c: false },
+        { a: 8, b: 80, c: false }
+      ]);
+    });
+
+    it('should test search keyword preparation', () => {
+      const prepare = TableComponent.prepareSearch;
+      const expected = ['a', 'b', 'c'];
+      expect(prepare('a b c')).toEqual(expected);
+      expect(prepare('a,, b,,  c')).toEqual(expected);
+      expect(prepare('a,,,, b,,,     c')).toEqual(expected);
+      expect(prepare('a+b c')).toEqual(['a+b', 'c']);
+      expect(prepare('a,,,+++b,,,     c')).toEqual(['a+++b', 'c']);
+      expect(prepare('"a b c"   "d e  f", "g, h i"')).toEqual(['a+b+c', 'd+e++f', 'g+h+i']);
+    });
+
+    it('should search for multiple values', () => {
+      expectSearch('2 20 false', [{ a: 2, b: 20, c: false }]);
+      expectSearch('false 2', [{ a: 2, b: 20, c: false }]);
+    });
+
+    it('should filter by column', () => {
+      expectSearch('index:5', [{ a: 5, b: 50, c: true }]);
+      expectSearch('times:50', [{ a: 5, b: 50, c: true }]);
+      expectSearch('times:50 index:5', [{ a: 5, b: 50, c: true }]);
+      expectSearch('Odd?:true', [
+        { a: 1, b: 10, c: true },
+        { a: 3, b: 30, c: true },
+        { a: 5, b: 50, c: true },
+        { a: 7, b: 70, c: true },
+        { a: 9, b: 90, c: true }
+      ]);
+      component.data = createFakeData(100);
+      expectSearch('index:1 odd:true times:110', [{ a: 11, b: 110, c: true }]);
+    });
+
+    it('should search through arrays', () => {
+      component.columns = [{ prop: 'a', name: 'Index' }, { prop: 'b', name: 'ArrayColumn' }];
+
+      component.data = [{ a: 1, b: ['foo', 'bar'] }, { a: 2, b: ['baz', 'bazinga'] }];
+      expectSearch('bar', [{ a: 1, b: ['foo', 'bar'] }]);
+      expectSearch('arraycolumn:bar arraycolumn:foo', [{ a: 1, b: ['foo', 'bar'] }]);
+      expectSearch('arraycolumn:baz arraycolumn:inga', [{ a: 2, b: ['baz', 'bazinga'] }]);
+
+      component.data = [{ a: 1, b: [1, 2] }, { a: 2, b: [3, 4] }];
+      expectSearch('arraycolumn:1 arraycolumn:2', [{ a: 1, b: [1, 2] }]);
+    });
+
+    it('should search with spaces', () => {
+      const expectedResult = [{ a: 2, b: 20, c: false }];
+      expectSearch(`'Index times ten':20`, expectedResult);
+      expectSearch('index+times+ten:20', expectedResult);
+    });
+
+    it('should filter results although column name is incomplete', () => {
+      component.data = createFakeData(3);
+      expectSearch(`'Index times ten'`, []);
+      expectSearch(`'Ind'`, []);
+      expectSearch(`'Ind:'`, [
+        { a: 0, b: 0, c: false },
+        { a: 1, b: 10, c: true },
+        { a: 2, b: 20, c: false }
+      ]);
+    });
+
+    it('should search if column name is incomplete', () => {
+      const expectedData = [
+        { a: 0, b: 0, c: false },
+        { a: 1, b: 10, c: true },
+        { a: 2, b: 20, c: false }
+      ];
+      component.data = _.clone(expectedData);
+      expectSearch('inde', []);
+      expectSearch('index:', expectedData);
+      expectSearch('index times te', []);
+    });
+
+    it('should restore full table after search', () => {
       component.useData();
-    });
-
-    it('should force an identifier', () => {
-      component.identifier = 'x';
-      component.forceIdentifier = true;
-      component.ngOnInit();
-      expect(component.identifier).toBe('x');
-      expect(component.sorts[0].prop).toBe('a');
-      expect(component.sorts).toEqual(component.createSortingDefinition('a'));
-    });
-
-    it('should have rows', () => {
-      expect(component.data.length).toBe(100);
-      expect(component.rows.length).toBe(component.data.length);
-    });
-
-    it('should have an int in setLimit parsing a string', () => {
-      expect(component.limit).toBe(10);
-      expect(component.limit).toEqual(jasmine.any(Number));
-
-      const e = { target: { value: '1' } };
-      component.setLimit(e);
-      expect(component.userConfig.limit).toBe(1);
-      expect(component.userConfig.limit).toEqual(jasmine.any(Number));
-      e.target.value = '-20';
-      component.setLimit(e);
-      expect(component.userConfig.limit).toBe(1);
-    });
-
-    it('should force an identifier', () => {
-      clearLocalStorage();
-      component.identifier = 'x';
-      component.forceIdentifier = true;
-      component.ngOnInit();
-      expect(component.identifier).toBe('x');
-      expect(component.sorts[0].prop).toBe('a');
-      expect(component.sorts).toEqual(component.createSortingDefinition('a'));
-    });
-
-    describe('test search', () => {
-      const doSearch = (search: string, expectedLength: number, firstObject?: object) => {
-        component.search = search;
-        component.updateFilter();
-        expect(component.rows.length).toBe(expectedLength);
-        if (firstObject) {
-          expect(component.rows[0]).toEqual(firstObject);
-        }
-      };
-
-      it('should search for 13', () => {
-        doSearch('13', 9, { a: 7, b: 49, c: [-7, 'score13'], d: false });
-        expect(component.rows[1].a).toBe(13);
-        expect(component.rows[8].a).toBe(87);
-      });
-
-      it('should search for true', () => {
-        doSearch('true', 50, { a: 0, b: 0, c: [-0, 'score6'], d: true });
-        expect(component.rows[0].d).toBe(true);
-        expect(component.rows[1].d).toBe(true);
-      });
-
-      it('should search for false', () => {
-        doSearch('false', 50, { a: 1, b: 1, c: [-1, 'score7'], d: false });
-        expect(component.rows[0].d).toBe(false);
-        expect(component.rows[1].d).toBe(false);
-      });
-
-      it('should test search manipulation', () => {
-        let searchTerms = [];
-        spyOn(component, 'subSearch').and.callFake((_d, search) => {
-          expect(search).toEqual(searchTerms);
-        });
-        const searchTest = (s: string, st: string[]) => {
-          component.search = s;
-          searchTerms = st;
-          component.updateFilter();
-        };
-        searchTest('a b c', ['a', 'b', 'c']);
-        searchTest('a+b c', ['a+b', 'c']);
-        searchTest('a,,,, b,,,     c', ['a', 'b', 'c']);
-        searchTest('a,,,+++b,,,     c', ['a+++b', 'c']);
-        searchTest('"a b c"   "d e  f", "g, h i"', ['a+b+c', 'd+e++f', 'g+h+i']);
-      });
-
-      it('should search for multiple values', () => {
-        doSearch('7 5 3', 5, { a: 57, b: 3249, c: [-7, 'score15'], d: false });
-      });
-
-      it('should search with column filter', () => {
-        doSearch('power:1369', 1, { a: 37, b: 1369, c: [-7, 'score11'], d: false });
-        doSearch('ndex:7 ofa:5 poker:3', 3, { a: 71, b: 5041, c: [-1, 'score13'], d: false });
-      });
-
-      it('should search with through array', () => {
-        doSearch('array:score21', 6, { a: 15, b: 225, c: [-5, 'score21'], d: false });
-      });
-
-      it('should search with spaces', () => {
-        doSearch(`'poker array':score21`, 6, { a: 15, b: 225, c: [-5, 'score21'], d: false });
-        doSearch('"poker array":score21', 6, { a: 15, b: 225, c: [-5, 'score21'], d: false });
-        doSearch('poker+array:score21', 6, { a: 15, b: 225, c: [-5, 'score21'], d: false });
-      });
-
-      it('should search if column name is incomplete', () => {
-        doSearch(`'poker array'`, 0);
-        doSearch('pok', 0);
-        doSearch('pok:', 100);
-      });
-
-      it('should restore full table after search', () => {
-        expect(component.rows.length).toBe(100);
-        component.search = '13';
-        component.updateFilter();
-        expect(component.rows.length).toBe(9);
-        component.updateFilter(true);
-        expect(component.rows.length).toBe(100);
-      });
+      expect(component.rows.length).toBe(10);
+      component.search = '3';
+      component.updateFilter();
+      expect(component.rows.length).toBe(1);
+      component.updateFilter(true);
+      expect(component.rows.length).toBe(10);
     });
   });
 
@@ -206,7 +220,7 @@ describe('TableComponent', () => {
     });
 
     it('should have table columns', () => {
-      expect(component.tableColumns.length).toBe(4);
+      expect(component.tableColumns.length).toBe(3);
       expect(component.tableColumns).toEqual(component.columns);
     });
 
@@ -221,7 +235,7 @@ describe('TableComponent', () => {
       expect(component.userConfig.sorts[0].prop).toBe('a');
       toggleColumn('a', false);
       expect(component.userConfig.sorts[0].prop).toBe('b');
-      expect(component.tableColumns.length).toBe(3);
+      expect(component.tableColumns.length).toBe(2);
       equalStorageConfig();
     });
 
@@ -230,8 +244,7 @@ describe('TableComponent', () => {
       toggleColumn('a', false);
       toggleColumn('b', false);
       toggleColumn('c', false);
-      toggleColumn('d', false);
-      expect(component.userConfig.sorts[0].prop).toBe('d');
+      expect(component.userConfig.sorts[0].prop).toBe('c');
       expect(component.tableColumns.length).toBe(1);
       equalStorageConfig();
     });
@@ -241,7 +254,7 @@ describe('TableComponent', () => {
       toggleColumn('a', false);
       toggleColumn('a', true);
       expect(component.userConfig.sorts[0].prop).toBe('b');
-      expect(component.tableColumns.length).toBe(4);
+      expect(component.tableColumns.length).toBe(3);
       equalStorageConfig();
     });
 

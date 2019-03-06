@@ -162,6 +162,16 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
   constructor(private ngZone: NgZone, private cdRef: ChangeDetectorRef) {}
 
+  static prepareSearch(search: string) {
+    search = search.toLowerCase().replace(/,/g, '');
+    if (search.match(/['"][^'"]+['"]/)) {
+      search = search.replace(/['"][^'"]+['"]/g, (match: string) => {
+        return match.replace(/(['"])([^'"]+)(['"])/g, '$2').replace(/ /g, '+');
+      });
+    }
+    return search.split(' ').filter((word) => word);
+  }
+
   ngOnInit() {
     this._addTemplates();
     if (!this.sorts) {
@@ -472,16 +482,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (clearSearch) {
       this.search = '';
     }
-    // prepare search strings
-    let search = this.search.toLowerCase().replace(/,/g, '');
     const columns = this.columns.filter((c) => c.cellTransformation !== CellTemplate.sparkline);
-    if (search.match(/['"][^'"]+['"]/)) {
-      search = search.replace(/['"][^'"]+['"]/g, (match: string) => {
-        return match.replace(/(['"])([^'"]+)(['"])/g, '$2').replace(/ /g, '+');
-      });
-    }
     // update the rows
-    this.rows = this.subSearch(this.data, search.split(' ').filter((s) => s.length > 0), columns);
+    this.rows = this.subSearch(this.data, TableComponent.prepareSearch(this.search), columns);
     // Whenever the filter changes, always go back to the first page
     this.table.offset = 0;
   }
@@ -492,7 +495,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }
     const searchTerms: string[] = currentSearch
       .pop()
-      .replace('+', ' ')
+      .replace(/\+/g, ' ')
       .split(':');
     const columnsClone = [...columns];
     if (searchTerms.length === 2) {
