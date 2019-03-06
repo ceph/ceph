@@ -1827,10 +1827,8 @@ CtPtr ProtocolV1::handle_connect_message_1(char *buffer, int r) {
 
 CtPtr ProtocolV1::wait_connect_message_auth() {
   ldout(cct, 20) << __func__ << dendl;
-
-  if (!authorizer_buf.length()) {
-    authorizer_buf.push_back(buffer::create(connect_msg.authorizer_len));
-  }
+  authorizer_buf.clear();
+  authorizer_buf.push_back(buffer::create(connect_msg.authorizer_len));
   return READB(connect_msg.authorizer_len, authorizer_buf.c_str(),
                handle_connect_message_auth);
 }
@@ -1914,17 +1912,18 @@ CtPtr ProtocolV1::handle_connect_message_2() {
                                       authorizer_reply);
   }
 
+  bufferlist auth_bl_copy = authorizer_buf;
   connection->lock.unlock();
   ldout(cct,10) << __func__ << " authorizor_protocol "
 		<< connect_msg.authorizer_protocol
-		<< " len " << authorizer_buf.length()
+		<< " len " << auth_bl_copy.length()
 		<< dendl;
   bool authorizer_valid;
   bool need_challenge = HAVE_FEATURE(connect_msg.features, CEPHX_V2);
   bool had_challenge = (bool)authorizer_challenge;
   if (!messenger->ms_deliver_verify_authorizer(
           connection, connection->peer_type, connect_msg.authorizer_protocol,
-          authorizer_buf, authorizer_reply, authorizer_valid, session_key,
+          auth_bl_copy, authorizer_reply, authorizer_valid, session_key,
 	  nullptr /* connection_secret */,
           need_challenge ? &authorizer_challenge : nullptr) ||
       !authorizer_valid) {
