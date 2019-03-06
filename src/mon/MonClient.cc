@@ -380,15 +380,6 @@ void MonClient::handle_monmap(MMonMap *m)
   monmap.print(*_dout);
   *_dout << dendl;
 
-  if (monmap.get_epoch() > 0 &&
-      !monmap.get_required_features().contains_all(
-	ceph::features::mon::FEATURE_NAUTILUS) &&
-      cct->_conf.get_val<bool>("ms_bind_msgr2")) {
-    ldout(cct,1) << " disabling ms_bind_msgr2 because monmap does not have"
-		 << " NAUTILUS feature set" << dendl;
-    cct->_conf.set_val("ms_bind_msgr2", "false");
-  }
-
   if (old_name.size() == 0) {
     ldout(cct,10) << " can't identify which mon we were connected to" << dendl;
     _reopen_session();
