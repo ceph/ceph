@@ -1952,10 +1952,12 @@ void MDSRank::rejoin_done()
     return;
   }
 
-  if (replay_queue.empty())
+  if (replay_queue.empty()) {
     request_state(MDSMap::STATE_ACTIVE);
-  else
+  } else {
+    replaying_requests_done = replay_queue.empty();
     request_state(MDSMap::STATE_CLIENTREPLAY);
+  }
 }
 
 void MDSRank::clientreplay_start()
@@ -1968,13 +1970,30 @@ void MDSRank::clientreplay_start()
 
 bool MDSRank::queue_one_replay()
 {
-  if (replay_queue.empty()) {
-    mdlog->wait_for_safe(new C_MDS_VoidFn(this, &MDSRank::clientreplay_done));
-    return false;
+  if (!replay_queue.empty()) {
+    queue_waiter(replay_queue.front());
+    replay_queue.pop_front();
+    return true;
   }
-  queue_waiter(replay_queue.front());
-  replay_queue.pop_front();
-  return true;
+  if (!replaying_requests_done) {
+    replaying_requests_done = true;
+    mdlog->flush();
+  }
+  maybe_clientreplay_done();
+  return false;
+}
+
+void MDSRank::maybe_clientreplay_done()
+{
+  if (is_clientreplay() && get_want_state() == MDSMap::STATE_CLIENTREPLAY) {
+    if (replaying_requests_done) {
+      mdlog->wait_for_safe(new C_MDS_VoidFn(this, &MDSRank::clientreplay_done));
+      return;
+    }
+
+    dout(1) << " still have " << replay_queue.size() + (int)!replaying_requests_done
+	    << " requests need to be replayed, " << dendl;
+  }
 }
 
 void MDSRank::clientreplay_done()
