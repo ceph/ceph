@@ -19,7 +19,7 @@ export class IscsiTargetDiscoveryModalComponent implements OnInit {
   discoveryForm: CdFormGroup;
 
   USER_REGEX = /[\w\.:@_-]{8,64}/;
-  PASSWORD_REGEX = /[\w@\-_]{12,16}/;
+  PASSWORD_REGEX = /[\w@\-_\/]{12,16}/;
 
   constructor(
     public bsModalRef: BsModalRef,
