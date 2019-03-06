@@ -39,6 +39,7 @@ class Messenger {
   {}
   virtual ~Messenger() {}
 
+  int get_mytype() const { return my_name.type(); }
   const entity_name_t& get_myname() const { return my_name; }
   const entity_addrvec_t& get_myaddrs() const { return my_addrs; }
   entity_addr_t get_myaddr() const { return my_addrs.front(); }
