@@ -897,6 +897,60 @@ TEST_F(TestMockIoObjectRequest, DiscardRemoveTruncate) {
   ASSERT_EQ(0, ctx.wait());
 }
 
+TEST_F(TestMockIoObjectRequest, DiscardTruncateAssertExists) {
+  REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
+
+  librbd::Image image;
+  librbd::RBD rbd;
+  ASSERT_EQ(0, rbd.open(m_ioctx, image, m_image_name.c_str(), NULL));
+  ASSERT_EQ(0, image.snap_create("one"));
+  ASSERT_EQ(0, image.snap_protect("one"));
+  uint64_t features;
+  ASSERT_EQ(0, image.features(&features));
+  image.close();
+
+  std::string clone_name = get_temp_image_name();
+  int order = 0;
+  ASSERT_EQ(0, rbd.clone(m_ioctx, m_image_name.c_str(), "one", m_ioctx,
+                         clone_name.c_str(), features, &order));
+  ASSERT_EQ(0, rbd.open(m_ioctx, image, clone_name.c_str(), NULL));
+  ASSERT_EQ(0, image.snap_create("one"));
+  image.close();
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(clone_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  expect_get_object_size(mock_image_ctx);
+
+  MockExclusiveLock mock_exclusive_lock;
+  if (ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+    mock_image_ctx.exclusive_lock = &mock_exclusive_lock;
+    expect_is_lock_owner(mock_exclusive_lock);
+  }
+
+  MockObjectMap mock_object_map;
+  if (ictx->test_features(RBD_FEATURE_OBJECT_MAP)) {
+    mock_image_ctx.object_map = &mock_object_map;
+  }
+
+  InSequence seq;
+  expect_get_parent_overlap(mock_image_ctx, CEPH_NOSNAP, 4096, 0);
+  expect_prune_parent_extents(mock_image_ctx, {{0, 4096}}, 4096, 4096);
+  expect_object_may_exist(mock_image_ctx, 0, true);
+  expect_object_map_update(mock_image_ctx, 0, 1, OBJECT_EXISTS, {}, false, 0);
+  expect_assert_exists(mock_image_ctx, 0);
+  expect_truncate(mock_image_ctx, 0, 0);
+
+  C_SaferCond ctx;
+  auto req = MockObjectDiscardRequest::create_discard(
+    &mock_image_ctx, ictx->get_object_name(0), 0, 0,
+    mock_image_ctx.get_object_size(), mock_image_ctx.snapc,
+    OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE, {}, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+}
+
 TEST_F(TestMockIoObjectRequest, DiscardTruncate) {
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
