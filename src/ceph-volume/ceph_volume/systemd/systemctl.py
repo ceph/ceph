@@ -34,6 +34,22 @@ def is_active(unit):
     )
     return rc == 0
 
+def get_running_osd_ids():
+    out, err, rc = process.call([
+        'systemctl',
+        'show',
+        '--no-pager',
+        '--property=Id',
+        '--state=running',
+        'ceph-osd@*',
+    ])
+    osd_ids = []
+    for line in out:
+        if line:
+            # example line looks like: Id=ceph-osd@1.service
+            osd_id = line.split("@")[1].split(".service")[0]
+            osd_ids.append(osd_id)
+    return osd_ids
 
 def start_osd(id_):
     return start(osd_unit % id_)
