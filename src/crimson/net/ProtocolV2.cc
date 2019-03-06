@@ -215,6 +215,7 @@ void ProtocolV2::execute_connecting()
 {
   trigger_state(state_t::CONNECTING, write_state_t::delay, true);
   seastar::with_gate(pending_dispatch, [this] {
+      global_seq = messenger.get_global_seq();
       return Socket::connect(conn.peer_addr)
         .then([this](SocketFRef sock) {
           socket = std::move(sock);
