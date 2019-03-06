@@ -270,6 +270,10 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def remove_stateless_service(self, service_type, id_):
         pass
 
+    @deferred_write("update_stateless_service")
+    def update_stateless_service(self, service_type, spec):
+        pass
+
     @deferred_read
     def get_hosts(self):
         return [orchestrator.InventoryNode('localhost', [])]

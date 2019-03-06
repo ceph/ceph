@@ -209,7 +209,6 @@ class RookCluster(object):
 
     def add_filesystem(self, spec):
         # TODO use spec.placement
-        # TODO use spec.min_size (and use max_size meaningfully)
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
 
@@ -223,7 +222,7 @@ class RookCluster(object):
             "spec": {
                 "onlyManageDaemons": True,
                 "metadataServer": {
-                    "activeCount": spec.max_size,
+                    "activeCount": spec.count,
                     "activeStandby": True
 
                 }
@@ -235,7 +234,6 @@ class RookCluster(object):
 
     def add_nfsgw(self, spec):
         # TODO use spec.placement
-        # TODO use spec.min_size (and use max_size meaningfully)
         # TODO warn if spec.extended has entries we don't kow how
         #      to action.
 
@@ -251,7 +249,7 @@ class RookCluster(object):
                     "pool": spec.extended["pool"]
                 },
                 "server": {
-                    "active": spec.max_size,
+                    "active": spec.count,
                 }
             }
         }
@@ -263,7 +261,6 @@ class RookCluster(object):
             self.rook_api_post("cephnfses/", body=rook_nfsgw)
 
     def add_objectstore(self, spec):
-  
         rook_os = {
             "apiVersion": ROOK_API_NAME,
             "kind": "CephObjectStore",
@@ -350,6 +347,19 @@ class RookCluster(object):
                 "Failed to update mon count in Cluster CRD: {0}".format(e))
 
         return "Updated mon count to {0}".format(newcount)
+
+    def update_nfs_count(self, svc_id, newcount):
+        patch = [{"op": "replace", "path": "/spec/server/active", "value": newcount}]
+
+        try:
+            self.rook_api_patch(
+                "cephnfses/{0}".format(svc_id),
+                body=patch)
+        except ApiException as e:
+            log.exception("API exception: {0}".format(e))
+            raise ApplyException(
+                "Failed to update NFS server count for {0}: {1}".format(svc_id, e))
+        return "Updated NFS server count for {0} to {1}".format(svc_id, newcount)
 
     def add_osds(self, drive_group, all_hosts):
         # type: (orchestrator.DriveGroupSpec, List[str]) -> None
