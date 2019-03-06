@@ -28,7 +28,7 @@ if [ -e CMakeCache.txt ]; then
   CEPH_ROOT=$(get_cmake_variable ceph_SOURCE_DIR)
   CEPH_BUILD_DIR=`pwd`
   [ -z "$MGR_PYTHON_PATH" ] && MGR_PYTHON_PATH=$CEPH_ROOT/src/pybind/mgr
-  CEPH_MGR_PY_VERSION_MAJOR=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f1)
+  CEPH_MGR_PY_VERSION_MAJOR=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f 1)
   if [ -n "$CEPH_MGR_PY_VERSION_MAJOR" ]; then
       CEPH_PY_VERSION_MAJOR=${CEPH_MGR_PY_VERSION_MAJOR}
   else
@@ -471,7 +471,7 @@ wconf() {
 }
 
 get_pci_selector() {
-    lspci -mm -n -D -d $pci_id | cut -d' ' -f1
+    lspci -mm -n -D -d $pci_id | cut -d ' ' -f 1
 }
 
 prepare_conf() {
