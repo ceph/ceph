@@ -9,6 +9,8 @@
 #include "msg/Dispatcher.h"
 #include "msg/Messenger.h"
 
+#include "auth/DummyAuth.h"
+
 enum class echo_role {
   as_server,
   as_client,
@@ -20,14 +22,18 @@ constexpr int CEPH_OSD_PROTOCOL = 10;
 
 struct Server {
   Server(CephContext* cct, const entity_inst_t& entity)
-    : dispatcher(cct)
+    : dummy_auth(cct), dispatcher(cct)
   {
     msgr.reset(Messenger::create(cct, "async",
                                  entity.name, "pong", entity.addr.get_nonce(), 0));
+    dummy_auth.auth_registry.refresh_config();
     msgr->set_cluster_protocol(CEPH_OSD_PROTOCOL);
     msgr->set_default_policy(Messenger::Policy::stateless_server(0));
+    msgr->set_auth_client(&dummy_auth);
+    msgr->set_auth_server(&dummy_auth);
     dispatcher.ms_set_require_authorizer(false);
   }
+  DummyAuthClientServer dummy_auth;
   unique_ptr<Messenger> msgr;
   struct ServerDispatcher : Dispatcher {
     std::mutex mutex;
@@ -76,15 +82,19 @@ struct Server {
 struct Client {
   unique_ptr<Messenger> msgr;
   Client(CephContext *cct)
-    : dispatcher(cct)
+    : dummy_auth(cct), dispatcher(cct)
   {
     msgr.reset(Messenger::create(cct, "async",
                                  entity_name_t::CLIENT(-1), "ping",
                                  getpid(), 0));
+    dummy_auth.auth_registry.refresh_config();
     msgr->set_cluster_protocol(CEPH_OSD_PROTOCOL);
     msgr->set_default_policy(Messenger::Policy::lossy_client(0));
+    msgr->set_auth_client(&dummy_auth);
+    msgr->set_auth_server(&dummy_auth);
     dispatcher.ms_set_require_authorizer(false);
   }
+  DummyAuthClientServer dummy_auth;
   struct ClientDispatcher : Dispatcher {
     std::mutex mutex;
     std::condition_variable on_reply;
