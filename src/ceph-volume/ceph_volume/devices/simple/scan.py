@@ -7,6 +7,7 @@ import os
 from textwrap import dedent
 from ceph_volume import decorators, terminal, conf
 from ceph_volume.api import lvm
+from ceph_volume.systemd import systemctl
 from ceph_volume.util import arg_validators, system, disk, encryption
 from ceph_volume.util.device import Device
 
@@ -329,25 +330,40 @@ class Scan(object):
             metavar='OSD_PATH',
             type=arg_validators.OSDPath(),
             nargs='?',
+            default=None,
             help='Path to an existing OSD directory or OSD data partition'
         )
 
-        if len(self.argv) == 0:
-            print(sub_command_help)
-            return
-
         args = parser.parse_args(self.argv)
-        device = Device(args.osd_path)
-        if device.is_partition:
-            if device.ceph_disk.type != 'data':
-                label = device.ceph_disk.partlabel
-                msg = 'Device must be the ceph data partition, but PARTLABEL reported: "%s"' % label
-                raise RuntimeError(msg)
+        paths = []
+        if args.osd_path:
+            paths.append(args.osd_path)
+        else:
+            osd_ids = systemctl.get_running_osd_ids()
+            for osd_id in osd_ids:
+                paths.append("/var/lib/ceph/osd/{}-{}".format(
+                    conf.cluster,
+                    osd_id,
+                ))
 
         # Capture some environment status, so that it can be reused all over
         self.device_mounts = system.get_mounts(devices=True)
         self.path_mounts = system.get_mounts(paths=True)
-        self.encryption_metadata = encryption.legacy_encrypted(args.osd_path)
-        self.is_encrypted = self.encryption_metadata['encrypted']
 
-        self.scan(args)
+        for path in paths:
+            args.osd_path = path
+            device = Device(args.osd_path)
+            if device.is_partition:
+                if device.ceph_disk.type != 'data':
+                    label = device.ceph_disk.partlabel
+                    msg = 'Device must be the ceph data partition, but PARTLABEL reported: "%s"' % label
+                    raise RuntimeError(msg)
+
+            self.encryption_metadata = encryption.legacy_encrypted(args.osd_path)
+            self.is_encrypted = self.encryption_metadata['encrypted']
+
+            device = Device(self.encryption_metadata['device'])
+            if not device.is_ceph_disk_member:
+                terminal.warning("Ignoring %s because it's not a ceph-disk created osd." % path)
+            else:
+                self.scan(args)
