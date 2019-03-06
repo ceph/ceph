@@ -32,6 +32,7 @@ tasks:
       - \(SLOW_OPS\)
       - \(TOO_FEW_PGS\)
       - but it is still running
+      - slow request
     conf:
       client.rest0:
         debug ms: 1
