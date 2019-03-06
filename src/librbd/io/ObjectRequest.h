@@ -184,6 +184,7 @@ public:
 
 protected:
   bool m_full_object = false;
+  bool m_copyup_enabled = true;
 
   virtual bool is_no_op_for_nonexistent_object() const {
     return false;
@@ -242,7 +243,6 @@ private:
 
   Extents m_parent_extents;
   bool m_object_may_exist = false;
-  bool m_copyup_enabled = true;
   bool m_copyup_in_progress = false;
   bool m_guarding_migration_write = false;
 
@@ -306,8 +306,12 @@ public:
     if (this->m_full_object) {
       if ((m_discard_flags & OBJECT_DISCARD_FLAG_DISABLE_CLONE_REMOVE) != 0 &&
           this->has_parent()) {
-        // need to hide the parent object instead of child object
-        m_discard_action = DISCARD_ACTION_REMOVE_TRUNCATE;
+        if (!this->m_copyup_enabled) {
+          // need to hide the parent object instead of child object
+          m_discard_action = DISCARD_ACTION_REMOVE_TRUNCATE;
+        } else {
+          m_discard_action = DISCARD_ACTION_TRUNCATE;
+        }
         this->m_object_len = 0;
       } else {
         m_discard_action = DISCARD_ACTION_REMOVE;
