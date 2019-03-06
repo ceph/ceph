@@ -2546,27 +2546,28 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
 struct C_ManifestFlush : public Context {
   PrimaryLogPGRef pg;
   hobject_t oid;
-  epoch_t last_peering_reset;
+  epoch_t lpr;
   ceph_tid_t tid;
   utime_t start;
   uint64_t offset;
   uint64_t last_offset;
-  C_ManifestFlush(PrimaryLogPG *p, hobject_t o, epoch_t lpr)
-    : pg(p), oid(o), last_peering_reset(lpr),
+  C_ManifestFlush(PrimaryLogPG *p, hobject_t o, epoch_t e)
+    : pg(p), oid(o), lpr(e),
       tid(0), start(ceph_clock_now())
   {}
   void finish(int r) override {
     if (r == -ECANCELED)
       return;
     pg->lock();
-    pg->handle_manifest_flush(oid, tid, r, offset, last_offset);
+    pg->handle_manifest_flush(oid, tid, r, offset, last_offset, lpr);
     pg->osd->logger->tinc(l_osd_tier_flush_lat, ceph_clock_now() - start);
     pg->unlock();
   }
 };
 
 void PrimaryLogPG::handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
-					 uint64_t offset, uint64_t last_offset)
+                                         uint64_t offset, uint64_t last_offset,
+                                         epoch_t lpr)
 {
   map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(oid);
   if (p == flush_ops.end()) {
@@ -2585,7 +2586,7 @@ void PrimaryLogPG::handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
     }
   }
   if (p->second->chunks == p->second->io_results.size()) {
-    if (last_peering_reset == get_last_peering_reset()) {
+    if (lpr == get_last_peering_reset()) {
       ceph_assert(p->second->obc);
       finish_manifest_flush(oid, tid, r, p->second->obc, last_offset);
     }
