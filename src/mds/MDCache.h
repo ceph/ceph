@@ -19,6 +19,7 @@
 
 #include <boost/utility/string_view.hpp>
 
+#include "common/DecayCounter.h"
 #include "include/types.h"
 #include "include/filepath.h"
 #include "include/elist.h"
@@ -719,9 +720,9 @@ public:
   size_t get_cache_size() { return lru.lru_get_size(); }
 
   // trimming
-  bool trim(uint64_t count=0);
+  std::pair<bool, uint64_t> trim(uint64_t count=0);
 private:
-  void trim_lru(uint64_t count, map<mds_rank_t, MCacheExpire*>& expiremap);
+  std::pair<bool, uint64_t> trim_lru(uint64_t count, map<mds_rank_t, MCacheExpire*>& expiremap);
   bool trim_dentry(CDentry *dn, map<mds_rank_t, MCacheExpire*>& expiremap);
   void trim_dirfrag(CDir *dir, CDir *con,
 		    map<mds_rank_t, MCacheExpire*>& expiremap);
@@ -758,8 +759,6 @@ public:
 
   void trim_client_leases();
   void check_memory_usage();
-
-  time last_recall_state;
 
   // shutdown
 private:
@@ -1157,6 +1156,10 @@ private:
 				LogSegment *ls, bufferlist *rollback=NULL);
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, list<frag_t>& old_frags);
+
+
+  DecayCounter trim_counter;
+
 public:
   void wait_for_uncommitted_fragment(dirfrag_t dirfrag, MDSInternalContextBase *c) {
     assert(uncommitted_fragments.count(dirfrag));

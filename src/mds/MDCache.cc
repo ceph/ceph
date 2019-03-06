@@ -174,7 +174,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   filer(m->objecter, m->finisher),
   exceeded_size_limit(false),
   recovery_queue(m),
-  stray_manager(m, purge_queue_)
+  stray_manager(m, purge_queue_),
+  trim_counter(ceph_clock_now(), g_conf->get_val<double>("mds_cache_trim_decay_rate"))
 {
   migrator.reset(new Migrator(mds, this));
   root = NULL;
@@ -244,6 +245,9 @@ void MDCache::handle_conf_change(const struct md_config_t *conf,
     cache_health_threshold = g_conf->get_val<double>("mds_health_cache_threshold");
   if (changed.count("mds_cache_mid"))
     lru.lru_set_midpoint(g_conf->get_val<double>("mds_cache_mid"));
+  if (changed.count("mds_cache_trim_decay_rate")) {
+    trim_counter = DecayCounter(ceph_clock_now(), g_conf->get_val<double>("mds_cache_trim_decay_rate"));
+  }
 
   migrator->handle_conf_change(conf, changed, mdsmap);
   mds->balancer->handle_conf_change(conf, changed, mdsmap);
@@ -6494,11 +6498,13 @@ void MDCache::start_recovered_truncates()
 // ================================================================================
 // cache trimming
 
-void MDCache::trim_lru(uint64_t count, map<mds_rank_t, MCacheExpire*> &expiremap)
+std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, map<mds_rank_t, MCacheExpire*> &expiremap)
 {
   bool is_standby_replay = mds->is_standby_replay();
   std::vector<CDentry *> unexpirables;
   uint64_t trimmed = 0;
+
+  auto trim_threshold = g_conf->get_val<uint64_t>("mds_cache_trim_threshold");
 
   dout(7) << "trim_lru trimming " << count
           << " items from LRU"
@@ -6508,7 +6514,11 @@ void MDCache::trim_lru(uint64_t count, map<mds_rank_t, MCacheExpire*> &expiremap
           << " pinned=" << lru.lru_get_num_pinned()
           << dendl;
 
-  for (;;) {
+  const uint64_t trim_counter_start = trim_counter.get(ceph_clock_now());
+  bool throttled = false;
+  while (1) {
+    throttled |= trim_counter_start+trimmed >= trim_threshold;
+    if (throttled) break;
     CDentry *dn = static_cast<CDentry*>(bottom_lru.lru_expire());
     if (!dn)
       break;
@@ -6525,7 +6535,9 @@ void MDCache::trim_lru(uint64_t count, map<mds_rank_t, MCacheExpire*> &expiremap
   unexpirables.clear();
 
   // trim dentries from the LRU until count is reached
-  while (cache_toofull() || count > 0) {
+  while (!throttled && (cache_toofull() || count > 0)) {
+    throttled |= trim_counter_start+trimmed >= trim_threshold;
+    if (throttled) break;
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
     if (!dn) {
       break;
@@ -6540,6 +6552,7 @@ void MDCache::trim_lru(uint64_t count, map<mds_rank_t, MCacheExpire*> &expiremap
       if (count > 0) count--;
     }
   }
+  trim_counter.hit(ceph_clock_now(), trimmed);
 
   for (auto &dn : unexpirables) {
     lru.lru_insert_mid(dn);
@@ -6547,6 +6560,7 @@ void MDCache::trim_lru(uint64_t count, map<mds_rank_t, MCacheExpire*> &expiremap
   unexpirables.clear();
 
   dout(7) << "trim_lru trimmed " << trimmed << " items" << dendl;
+  return std::pair<bool, uint64_t>(throttled, trimmed);
 }
 
 /*
@@ -6555,7 +6569,7 @@ void MDCache::trim_lru(uint64_t count, map<mds_rank_t, MCacheExpire*> &expiremap
  *
  * @param count is number of dentries to try to expire
  */
-bool MDCache::trim(uint64_t count)
+std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
 {
   uint64_t used = cache_size();
   uint64_t limit = cache_memory_limit;
@@ -6569,7 +6583,8 @@ bool MDCache::trim(uint64_t count)
   // process delayed eval_stray()
   stray_manager.advance_delayed();
 
-  trim_lru(count, expiremap);
+  auto result = trim_lru(count, expiremap);
+  auto& trimmed = result.second;
 
   // trim non-auth, non-bound subtrees
   for (auto p = subtrees.begin(); p != subtrees.end();) {
@@ -6585,6 +6600,7 @@ bool MDCache::trim(uint64_t count)
 	  continue;
 
 	migrator->export_empty_import(dir);
+        ++trimmed;
       }
     } else {
       if (!diri->is_auth()) {
@@ -6601,6 +6617,7 @@ bool MDCache::trim(uint64_t count)
 	    rejoin_ack_gather.count(dir->get_dir_auth().first))
 	  continue;
 	trim_dirfrag(dir, 0, expiremap);
+        ++trimmed;
       }
     }
   }
@@ -6611,11 +6628,15 @@ bool MDCache::trim(uint64_t count)
     root->get_dirfrags(ls);
     for (list<CDir*>::iterator p = ls.begin(); p != ls.end(); ++p) {
       CDir *dir = *p;
-      if (dir->get_num_ref() == 1)  // subtree pin
+      if (dir->get_num_ref() == 1) { // subtree pin
 	trim_dirfrag(dir, 0, expiremap);
+        ++trimmed;
+      }
     }
-    if (root->get_num_ref() == 0)
+    if (root->get_num_ref() == 0) {
       trim_inode(0, root, 0, expiremap);
+      ++trimmed;
+    }
   }
 
   std::set<mds_rank_t> stopping;
@@ -6638,11 +6659,15 @@ bool MDCache::trim(uint64_t count)
       list<CDir*> ls;
       mdsdir_in->get_dirfrags(ls);
       for (auto dir : ls) {
-	if (dir->get_num_ref() == 1)  // subtree pin
+	if (dir->get_num_ref() == 1) {  // subtree pin
 	  trim_dirfrag(dir, dir, expiremap);
+          ++trimmed;
+        }
       }
-      if (mdsdir_in->get_num_ref() == 0)
+      if (mdsdir_in->get_num_ref() == 0) {
 	trim_inode(NULL, mdsdir_in, NULL, expiremap);
+        ++trimmed;
+      }
     } else {
       dout(20) << __func__ << ": some unexpirable contents in mdsdir" << dendl;
     }
@@ -6656,6 +6681,7 @@ bool MDCache::trim(uint64_t count)
         dout(20) << __func__ << ": maybe trimming base: " << *(*p) << dendl;
         if ((*p)->get_num_ref() == 0) {
           trim_inode(NULL, *p, NULL, expiremap);
+          ++trimmed;
         }
       }
     }
@@ -6664,7 +6690,7 @@ bool MDCache::trim(uint64_t count)
   // send any expire messages
   send_expire_messages(expiremap);
 
-  return true;
+  return result;
 }
 
 void MDCache::send_expire_messages(map<mds_rank_t, MCacheExpire*>& expiremap)
@@ -7519,8 +7545,7 @@ void MDCache::check_memory_usage()
   mds->mlogger->set(l_mdm_heap, last.get_heap());
 
   if (cache_toofull()) {
-    last_recall_state = clock::now();
-    mds->server->recall_client_state(-1.0, false, nullptr);
+    mds->server->recall_client_state(nullptr);
   }
 
   // If the cache size had exceeded its limit, but we're back in bounds

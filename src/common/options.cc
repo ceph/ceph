@@ -6098,6 +6098,14 @@ std::vector<Option> get_mds_options() {
     .set_default(.7)
     .set_description(""),
 
+    Option("mds_cache_trim_decay_rate", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("decay rate for trimming MDS cache throttle"),
+
+    Option("mds_cache_trim_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(64_K)
+    .set_description("threshold for number of dentries that can be trimmed"),
+
     Option("mds_max_file_recover", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(32)
     .set_description(""),
@@ -6142,9 +6150,29 @@ std::vector<Option> get_mds_options() {
     .set_default(1024)
     .set_description(""),
 
-    Option("mds_recall_state_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(60)
-    .set_description(""),
+    Option("mds_recall_max_caps", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(5000)
+    .set_description("maximum number of caps to recall from client session in single recall"),
+
+    Option("mds_recall_max_decay_rate", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(2.5)
+    .set_description("decay rate for throttle on recalled caps on a session"),
+
+    Option("mds_recall_max_decay_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(16_K)
+    .set_description("decay threshold for throttle on recalled caps on a session"),
+
+    Option("mds_recall_global_max_decay_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(64_K)
+    .set_description("decay threshold for throttle on recalled caps globally"),
+
+    Option("mds_recall_warning_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(32_K)
+    .set_description("decay threshold for warning on slow session cap recall"),
+
+    Option("mds_recall_warning_decay_rate", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(60.0)
+    .set_description("decay rate for warning on slow session cap recall"),
 
     Option("mds_freeze_tree_timeout", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(30)
@@ -6518,9 +6546,10 @@ std::vector<Option> get_mds_options() {
     .set_default(100)
     .set_description("minimum number of capabilities a client may hold"),
 
-    Option("mds_max_ratio_caps_per_client", Option::TYPE_FLOAT, Option::LEVEL_DEV)
-    .set_default(.8)
-    .set_description("maximum ratio of current caps that may be recalled during MDS cache pressure"),
+    Option("mds_max_caps_per_client", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1_M)
+    .set_description("maximum number of capabilities a client may hold"),
+
     Option("mds_hack_allow_loading_invalid_metadata", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
      .set_default(0)
      .set_description("INTENTIONALLY CAUSE DATA LOSS by bypasing checks for invalid metadata on disk. Allows testing repair tools."),
