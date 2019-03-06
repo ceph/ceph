@@ -10,6 +10,7 @@
 #include "messages/MOSDMap.h"
 #include "messages/MPGStats.h"
 
+#include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
 #include "crimson/os/cyan_collection.h"
