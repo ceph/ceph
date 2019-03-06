@@ -92,9 +92,9 @@ class Module(MgrModule):
                     if laggy:
                         state += "(laggy)"
                     if state == "active" and not laggy:
-                        c_state = self.colorize(state, self.GREEN)
+                        c_state = mgr_util.colorize(state, mgr_util.GREEN)
                     else:
-                        c_state = self.colorize(state, self.YELLOW)
+                        c_state = mgr_util.colorize(state, mgr_util.YELLOW)
 
                     # Populate based on context of state, e.g. client
                     # ops for an active daemon, replay progress, reconnect
@@ -110,7 +110,7 @@ class Module(MgrModule):
                     metadata = self.get_metadata('mds', info['name'])
                     mds_versions[metadata.get('ceph_version', "unknown")].append(info['name'])
                     rank_table.add_row([
-                        self.bold(rank.__str__()), c_state, info['name'],
+                        mgr_util.bold(rank.__str__()), c_state, info['name'],
                         activity,
                         mgr_util.format_dimless(dns, 5),
                         mgr_util.format_dimless(inos, 5)
