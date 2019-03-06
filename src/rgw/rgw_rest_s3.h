@@ -737,15 +737,17 @@ static inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
   // This function enforces Amazon's spec for bucket names.
   // (The requirements, not the recommendations.)
   int len = name.size();
+  int max = (relaxed ? 255 : 63);
+
   if (len < 3) {
     // Name too short
     return -ERR_INVALID_BUCKET_NAME;
-  } else if (len > 255) {
+  } else if (len > max) {
     // Name too long
     return -ERR_INVALID_BUCKET_NAME;
   }
 
-  // bucket names must start with a number, letter, or underscore
+  // bucket names must start with a number or letter
   if (!(isalpha(name[0]) || isdigit(name[0]))) {
     if (!relaxed)
       return -ERR_INVALID_BUCKET_NAME;
@@ -753,14 +755,44 @@ static inline int valid_s3_bucket_name(const string& name, bool relaxed=false)
       return -ERR_INVALID_BUCKET_NAME;
   }
 
+  // bucket names must end with a number or letter
+  if (!(isalpha(name[len-1]) || isdigit(name[len-1])))
+    if (!relaxed)
+      return -ERR_INVALID_BUCKET_NAME;
+
   for (const char *s = name.c_str(); *s; ++s) {
     char c = *s;
-    if (isdigit(c) || (c == '.'))
+    if (isdigit(c))
       continue;
-    if (isalpha(c))
+
+    if (isalpha(c)) {
+      // name cannot contain uppercase letters
+      if (relaxed || islower(c))
+	continue;
+    }
+
+    if (c == '_')
+      // name cannot contain underscore
+      if (relaxed)
+	continue;
+
+    if (c == '-')
       continue;
-    if ((c == '-') || (c == '_'))
-      continue;
+
+    if (c == '.') {
+      if (!relaxed && s && *s) {
+	// name cannot have consecutive periods or dashes
+	// adjacent to periods
+	// ensure s is neither the first nor the last character
+	char p = *(s-1);
+	char n = *(s+1);
+	if ((p != '-') && (n != '.') && (n != '-'))
+	  continue;
+      } else {
+	continue;
+      }
+    }
+
     // Invalid character
     return -ERR_INVALID_BUCKET_NAME;
   }
