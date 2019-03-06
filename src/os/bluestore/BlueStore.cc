@@ -4199,11 +4199,11 @@ int BlueStore::_set_cache_sizes()
   cache_autotune = cct->_conf.get_val<bool>("bluestore_cache_autotune");
   cache_autotune_interval =
       cct->_conf.get_val<double>("bluestore_cache_autotune_interval");
-  osd_memory_target = cct->_conf.get_val<uint64_t>("osd_memory_target");
-  osd_memory_base = cct->_conf.get_val<uint64_t>("osd_memory_base");
+  osd_memory_target = cct->_conf.get_val<Option::size_t>("osd_memory_target");
+  osd_memory_base = cct->_conf.get_val<Option::size_t>("osd_memory_base");
   osd_memory_expected_fragmentation =
       cct->_conf.get_val<double>("osd_memory_expected_fragmentation");
-  osd_memory_cache_min = cct->_conf.get_val<uint64_t>("osd_memory_cache_min");
+  osd_memory_cache_min = cct->_conf.get_val<Option::size_t>("osd_memory_cache_min");
   osd_memory_cache_resize_interval = 
       cct->_conf.get_val<double>("osd_memory_cache_resize_interval");
 
