@@ -283,6 +283,8 @@ class MDSRank {
 				waiting_for_reconnect, waiting_for_resolve;
     MDSContext::vec waiting_for_any_client_connection;
     MDSContext::que replay_queue;
+    bool replaying_requests_done = false;
+
     map<mds_rank_t, MDSContext::vec > waiting_for_active_peer;
     map<epoch_t, MDSContext::vec > waiting_for_mdsmap;
 
