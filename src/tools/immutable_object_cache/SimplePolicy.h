@@ -17,15 +17,16 @@ namespace ceph {
 namespace immutable_obj_cache {
 
 class SimplePolicy : public Policy {
-public:
+ public:
   SimplePolicy(CephContext *cct, uint64_t block_num, float watermark);
-  ~SimplePolicy() ;
+  ~SimplePolicy();
 
   cache_status_t lookup_object(std::string file_name);
   cache_status_t get_status(std::string file_name);
 
   void update_status(std::string file_name,
-                     cache_status_t new_status, uint64_t size=0);
+                     cache_status_t new_status,
+                     uint64_t size = 0);
 
   int evict_entry(std::string file_name);
 
@@ -36,15 +37,15 @@ public:
   uint64_t get_promoted_entry_num();
   std::string get_evict_entry();
 
-private:
+ private:
   cache_status_t alloc_entry(std::string file_name);
 
   class Entry : public LRUObject {
-    public:
-      cache_status_t status;
-      Entry() : status(OBJ_CACHE_NONE){}
-      std::string file_name;
-      uint64_t size;
+   public:
+    cache_status_t status;
+    Entry() : status(OBJ_CACHE_NONE) {}
+    std::string file_name;
+    uint64_t size;
   };
 
   CephContext* cct;
@@ -57,7 +58,6 @@ private:
   std::unordered_map<std::string, Entry*> m_cache_map;
   RWLock m_cache_map_lock;
 
-
   std::deque<Entry*> m_free_list;
 
   std::atomic<uint64_t> m_cache_size;
@@ -65,6 +65,6 @@ private:
   LRU m_promoted_lru;
 };
 
-} // namespace immutable_obj_cache
-} // namespace ceph
-#endif // CEPH_CACHE_SIMPLE_POLICY_H
+}  // namespace immutable_obj_cache
+}  // namespace ceph
+#endif  // CEPH_CACHE_SIMPLE_POLICY_H

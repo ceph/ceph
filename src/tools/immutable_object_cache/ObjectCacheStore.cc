@@ -19,7 +19,6 @@ namespace immutable_obj_cache {
 ObjectCacheStore::ObjectCacheStore(CephContext *cct)
       : m_cct(cct), m_rados(new librados::Rados()),
         m_ioctx_map_lock("ceph::cache::ObjectCacheStore::m_ioctx_map_lock") {
-
   object_cache_max_size =
     m_cct->_conf.get_val<Option::size_t>("immutable_object_cache_max_size");
 
@@ -30,7 +29,7 @@ ObjectCacheStore::ObjectCacheStore(CephContext *cct)
     m_cache_root_dir += "/";
   }
 
-  //TODO(): allow to set cache level
+  // TODO(dehao): allow to set cache level
   m_policy = new SimplePolicy(m_cct, object_cache_max_size, 0.1);
 }
 
@@ -48,22 +47,23 @@ int ObjectCacheStore::init(bool reset) {
   }
 
   ret = m_rados->connect();
-  if (ret < 0 ) {
+  if (ret < 0) {
     lderr(m_cct) << "fail to connect to cluster" << dendl;
     return ret;
   }
 
-  //TODO(): fsck and reuse existing cache objects
+  // TODO(dehao): fsck and reuse existing cache objects
   if (reset) {
     std::error_code ec;
     if (efs::exists(m_cache_root_dir)) {
        int dir = m_dir_num - 1;
        while (dir >= 0) {
-         if (!efs::remove_all(m_cache_root_dir + "/" + std::to_string(dir), ec)) {
+         if (!efs::remove_all(
+           m_cache_root_dir + "/" + std::to_string(dir), ec)) {
            lderr(m_cct) << "fail to remove old cache store: " << ec << dendl;
-	   return ec.value();
+           return ec.value();
          }
-         dir --;
+         dir--;
        }
     } else {
       if (!efs::create_directories(m_cache_root_dir, ec)) {
@@ -89,7 +89,7 @@ int ObjectCacheStore::init_cache() {
   int dir = m_dir_num - 1;
   while (dir >= 0) {
     efs::create_directories(cache_dir + "/" + std::to_string(dir));
-    dir --;
+    dir--;
   }
   return 0;
 }
@@ -126,10 +126,10 @@ int ObjectCacheStore::do_promote(std::string pool_nspace,
   librados::bufferlist* read_buf = new librados::bufferlist();
 
   auto ctx = new FunctionContext([this, read_buf, cache_file_name](int ret) {
-      handle_promote_callback(ret, read_buf, cache_file_name);
-   });
+    handle_promote_callback(ret, read_buf, cache_file_name);
+  });
 
-   return promote_object(&ioctx, object_name, read_buf, ctx);
+  return promote_object(&ioctx, object_name, read_buf, ctx);
 }
 
 int ObjectCacheStore::handle_promote_callback(int ret, bufferlist* read_buf,
@@ -186,7 +186,7 @@ int ObjectCacheStore::lookup_object(std::string pool_nspace,
 
   cache_status_t ret = m_policy->lookup_object(cache_file_name);
 
-  switch(ret) {
+  switch (ret) {
     case OBJ_CACHE_NONE: {
       pret = do_promote(pool_nspace, pool_id, snap_id, object_name);
       if (pret < 0) {
@@ -227,7 +227,7 @@ int ObjectCacheStore::evict_objects() {
 
   std::list<std::string> obj_list;
   m_policy->get_evict_list(&obj_list);
-  for (auto& obj: obj_list) {
+  for (auto& obj : obj_list) {
     do_evict(obj);
   }
 }
@@ -243,9 +243,9 @@ int ObjectCacheStore::do_evict(std::string cache_file) {
 
   ldout(m_cct, 20) << "evict cache: " << cache_file_path << dendl;
 
-  // TODO(): possible race on read?
+  // TODO(dehao): possible race on read?
   int ret = std::remove(cache_file_path.c_str());
-   // evict metadata
+  // evict metadata
   if (ret == 0) {
     m_policy->update_status(cache_file, OBJ_CACHE_SKIP);
     m_policy->evict_entry(cache_file);
@@ -263,16 +263,16 @@ std::string ObjectCacheStore::get_cache_file_name(std::string pool_nspace,
 }
 
 std::string ObjectCacheStore::get_cache_file_path(std::string cache_file_name) {
-
   std::string cache_file_dir = "";
   if (m_dir_num > 0) {
     uint32_t crc = 0;
-    crc = ceph_crc32c(0, (unsigned char *)cache_file_name.c_str(), cache_file_name.length());
+    crc = ceph_crc32c(0, (unsigned char *)cache_file_name.c_str(),
+                     cache_file_name.length());
     cache_file_dir = std::to_string(crc % m_dir_num);
   }
 
   return m_cache_root_dir + cache_file_dir + "/" + cache_file_name;
 }
 
-} // namespace immutable_obj_cache
-} // namespace ceph
+}  // namespace immutable_obj_cache
+}  // namespace ceph

@@ -34,7 +34,7 @@ class CacheController {
   ObjectCacheStore *m_object_cache_store;
 };
 
-} // namespace immutable_obj_cache
-} // namespace ceph
+}  // namespace immutable_obj_cache
+}  // namespace ceph
 
 #endif

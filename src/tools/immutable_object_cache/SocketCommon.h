@@ -23,6 +23,6 @@ class ObjectCacheRequest;
 
 typedef std::function<void(uint64_t, ObjectCacheRequest*)> ProcessMsg;
 
-} // namespace immutable_obj_cache
-} // namespace ceph
+}  // namespace immutable_obj_cache
+}  // namespace ceph
 #endif
