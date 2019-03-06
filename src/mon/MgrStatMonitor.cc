@@ -55,7 +55,7 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
       }
       dout(10) << __func__ << " v" << version
 	       << " service_map e" << service_map.epoch
-	       << " " << progress_events.size() << "progress events"
+	       << " " << progress_events.size() << " progress events"
 	       << dendl;
     }
     catch (buffer::error& e) {
