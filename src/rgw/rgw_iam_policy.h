@@ -131,6 +131,8 @@ static const Action_t stsAllValue("111000000000000000000000000000000000000000000
 static const Action_t allValue("1111111111111111111111111111111111111111111111111111111111111111111111111");
 
 namespace {
+// Please update the table in doc/radosgw/s3/authentication.rst if you
+// modify this function.
 inline int op_to_perm(std::uint64_t op) {
   switch (op) {
   case s3GetObject:
