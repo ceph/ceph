@@ -22,12 +22,13 @@
 
 class MMDSMap : public Message {
 private:
-  static constexpr int HEAD_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 public:
   uuid_d fsid;
   epoch_t epoch = 0;
   bufferlist encoded;
+  fs_cluster_id_t map_fsid;
 
   version_t get_epoch() const { return epoch; }
   const bufferlist& get_encoded() const { return encoded; }
@@ -35,9 +36,10 @@ public:
 protected:
   MMDSMap() : 
     Message{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION} {}
-  MMDSMap(const uuid_d &f, const MDSMap &mm) :
+    MMDSMap(const uuid_d &f, const MDSMap &mm,
+            const fs_cluster_id_t mf = FS_CLUSTER_ID_NONE) :
     Message{CEPH_MSG_MDS_MAP, HEAD_VERSION, COMPAT_VERSION},
-    fsid(f) {
+    fsid(f), map_fsid(mf) {
     epoch = mm.get_epoch();
     mm.encode(encoded, -1);  // we will reencode with fewer features as necessary
   }
@@ -55,6 +57,9 @@ public:
     decode(fsid, p);
     decode(epoch, p);
     decode(encoded, p);
+    if (header.version >= 2) {
+      decode(map_fsid, p);
+    }
   }
   void encode_payload(uint64_t features) override {
     using ceph::encode;
@@ -71,6 +76,7 @@ public:
       m.encode(encoded, features);
     }
     encode(encoded, payload);
+    encode(map_fsid, payload);
   }
 private:
   template<class T, typename... Args>

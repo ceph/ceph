@@ -129,6 +129,7 @@ class C_ExecAndReply;
 class MDSRank {
   protected:
     const mds_rank_t whoami;
+    fs_cluster_id_t fsid;
 
     // Incarnation as seen in MDSMap at the point where a rank is
     // assigned.
@@ -144,6 +145,7 @@ class MDSRank {
     friend class C_ScrubControlExecAndReply;
 
     mds_rank_t get_nodeid() const { return whoami; }
+    fs_cluster_id_t get_fsid() const { return fsid; }
     int64_t get_metadata_pool();
 
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
@@ -331,6 +333,7 @@ class MDSRank {
 
     MDSRank(
         mds_rank_t whoami_,
+	fs_cluster_id_t fsid_,
         Mutex &mds_lock_,
         LogChannelRef &clog_,
         SafeTimer &timer_,
@@ -639,6 +642,7 @@ public:
 
   MDSRankDispatcher(
       mds_rank_t whoami_,
+      fs_cluster_id_t fsid_,
       Mutex &mds_lock_,
       LogChannelRef &clog_,
       SafeTimer &timer_,
