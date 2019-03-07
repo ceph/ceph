@@ -41,7 +41,7 @@ def parse_keyring(file_contents):
 
 class Scan(object):
 
-    help = 'Capture metadata from an OSD data partition or directory'
+    help = 'Capture metadata from all running ceph-disk OSDs, OSD data partition or directory'
 
     def __init__(self, argv):
         self.argv = argv
@@ -284,7 +284,7 @@ class Scan(object):
 
     def main(self):
         sub_command_help = dedent("""
-        Scan an OSD directory (or data device) for files and configurations
+        Scan running OSDs, an OSD directory (or data device) for files and configurations
         that will allow to take over the management of the OSD.
 
         Scanned OSDs will get their configurations stored in
@@ -299,13 +299,19 @@ class Scan(object):
 
             /etc/ceph/osd/0-a9d50838-e823-43d6-b01f-2f8d0a77afc2.json
 
-        To a scan an existing, running, OSD:
+        To scan all running OSDs:
+
+            ceph-volume simple scan
+
+        To a scan a specific running OSD:
 
             ceph-volume simple scan /var/lib/ceph/osd/{cluster}-{osd id}
 
         And to scan a device (mounted or unmounted) that has OSD data in it, for example /dev/sda1
 
             ceph-volume simple scan /dev/sda1
+
+        Scanning a device or directory that belongs to an OSD not created by ceph-disk will be ingored.
         """)
         parser = argparse.ArgumentParser(
             prog='ceph-volume simple scan',
