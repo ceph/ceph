@@ -127,8 +127,9 @@ recommend you to update your browser to the latest version.
 Enabling
 --------
 
-If you have installed Ceph from distribution packages, the package management
-system should have taken care of installing all the required dependencies.
+If you have installed ``ceph-mgr-dashboard`` from distribution packages, the
+package management system should have taken care of installing all the required
+dependencies.
 
 If you're installing Ceph from source and want to start the dashboard from your
 development environment, please see the files ``README.rst`` and ``HACKING.rst``
