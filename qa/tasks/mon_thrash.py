@@ -212,7 +212,7 @@ class MonitorThrasher:
 
     def do_thrash(self):
         """
-        Cotinuously loop and thrash the monitors.
+        Continuously loop and thrash the monitors.
         """
         self.log('start thrashing')
         self.log('seed: {s}, revive delay: {r}, thrash delay: {t} '\
