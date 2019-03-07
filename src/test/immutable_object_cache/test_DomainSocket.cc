@@ -42,7 +42,7 @@ public:
   void SetUp() override {
     std::remove(m_local_path.c_str());
     m_cache_server = new CacheServer(g_ceph_context, m_local_path,
-      [this](uint64_t sid, ObjectCacheRequest* req){
+      [this](CacheSession* sid, ObjectCacheRequest* req){
         handle_request(sid, req);
     });
     ASSERT_TRUE(m_cache_server != nullptr);
@@ -77,12 +77,12 @@ public:
     delete srv_thd;
   }
 
-  void handle_request(uint64_t session_id, ObjectCacheRequest* req) {
+  void handle_request(CacheSession* session_id, ObjectCacheRequest* req) {
 
     switch (req->get_request_type()) {
       case RBDSC_REGISTER: {
         ObjectCacheRequest* reply = new ObjectCacheRegReplyData(RBDSC_REGISTER_REPLY, req->seq);
-        m_cache_server->send(session_id, reply);
+        session_id->send(reply);
         break;
       }
       case RBDSC_READ: {
@@ -93,7 +93,7 @@ public:
         } else {
           reply = new ObjectCacheReadReplyData(RBDSC_READ_REPLY, req->seq, "/fakepath");
         }
-        m_cache_server->send(session_id, reply);
+        session_id->send(reply);
         break;
       }
     }

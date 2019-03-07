@@ -71,7 +71,7 @@ void CacheController::run() {
     std::remove(controller_path.c_str());
 
     m_cache_server = new CacheServer(m_cct, controller_path,
-      ([&](uint64_t p, ObjectCacheRequest* s){handle_request(p, s);}));
+      ([&](CacheSession* p, ObjectCacheRequest* s){handle_request(p, s);}));
 
     int ret = m_cache_server->run();
     if (ret != 0) {
@@ -82,7 +82,7 @@ void CacheController::run() {
   }
 }
 
-void CacheController::handle_request(uint64_t session_id,
+void CacheController::handle_request(CacheSession* session,
                                      ObjectCacheRequest* req) {
   ldout(m_cct, 20) << dendl;
 
@@ -92,7 +92,7 @@ void CacheController::handle_request(uint64_t session_id,
 
       ObjectCacheRequest* reply = new ObjectCacheRegReplyData(
         RBDSC_REGISTER_REPLY, req->seq);
-      m_cache_server->send(session_id, reply);
+      session->send(reply);
       break;
     }
     case RBDSC_READ: {
@@ -109,7 +109,7 @@ void CacheController::handle_request(uint64_t session_id,
         reply = new ObjectCacheReadReplyData(RBDSC_READ_REPLY,
                                              req->seq, cache_path);
       }
-      m_cache_server->send(session_id, reply);
+      session->send(reply);
       break;
     }
     default:

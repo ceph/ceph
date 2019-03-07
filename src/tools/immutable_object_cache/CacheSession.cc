@@ -99,7 +99,7 @@ void CacheSession::handle_request_data(bufferptr bp, uint64_t data_len,
 
 void CacheSession::process(ObjectCacheRequest* req) {
   ldout(cct, 20) << dendl;
-  m_server_process_msg(m_session_id, req);
+  m_server_process_msg(this, req);
 }
 
 void CacheSession::send(ObjectCacheRequest* reply) {

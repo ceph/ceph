@@ -25,7 +25,6 @@ class CacheServer {
   int run();
   int start_accept();
   int stop();
-  void send(uint64_t session_id, ObjectCacheRequest* msg);
 
  private:
   void accept();
@@ -39,7 +38,6 @@ class CacheServer {
   stream_protocol::endpoint m_local_path;
   stream_protocol::acceptor m_acceptor;
   uint64_t m_session_id = 1;
-  // TODO(dehao) : need to lock it.
   std::map<uint64_t, CacheSessionPtr> m_session_map;
 };
 
