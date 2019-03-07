@@ -20,8 +20,9 @@ static const int ASIO_ERROR_ACCEPT = 0X04;
 static const int ASIO_ERROR_MSG_INCOMPLETE = 0X05;
 
 class ObjectCacheRequest;
+class CacheSession;
 
-typedef std::function<void(uint64_t, ObjectCacheRequest*)> ProcessMsg;
+typedef std::function<void(CacheSession*, ObjectCacheRequest*)> ProcessMsg;
 
 }  // namespace immutable_obj_cache
 }  // namespace ceph

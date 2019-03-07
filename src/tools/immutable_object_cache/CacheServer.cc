@@ -102,17 +102,5 @@ void CacheServer::handle_accept(CacheSessionPtr new_session,
   accept();
 }
 
-void CacheServer::send(uint64_t session_id, ObjectCacheRequest* msg) {
-  ldout(cct, 20) << dendl;
-
-  auto it = m_session_map.find(session_id);
-  if (it != m_session_map.end()) {
-    it->second->send(msg);
-  } else {
-    ldout(cct, 20) << "missing reply session id" << dendl;
-    ceph_assert(0);
-  }
-}
-
 }  // namespace immutable_obj_cache
 }  // namespace ceph

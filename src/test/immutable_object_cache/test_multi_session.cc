@@ -39,7 +39,7 @@ public:
   void SetUp() override {
     std::remove(m_local_path.c_str());
     m_cache_server = new CacheServer(g_ceph_context, m_local_path,
-      [this](uint64_t session_id, ObjectCacheRequest* req){
+      [this](CacheSession* session_id, ObjectCacheRequest* req){
         server_handle_request(session_id, req);
     });
     ASSERT_TRUE(m_cache_server != nullptr);
@@ -85,19 +85,19 @@ public:
     return cache_client;
   }
 
-  void server_handle_request(uint64_t session_id, ObjectCacheRequest* req) {
+  void server_handle_request(CacheSession* session_id, ObjectCacheRequest* req) {
 
     switch (req->get_request_type()) {
       case RBDSC_REGISTER: {
         ObjectCacheRequest* reply = new ObjectCacheRegReplyData(RBDSC_REGISTER_REPLY,
                                                                 req->seq);
-        m_cache_server->send(session_id, reply);
+        session_id->send(reply);
         break;
       }
       case RBDSC_READ: {
         ObjectCacheRequest* reply = new ObjectCacheReadReplyData(RBDSC_READ_REPLY,
                                                                 req->seq);
-        m_cache_server->send(session_id, reply);
+        session_id->send(reply);
         break;
       }
     }
