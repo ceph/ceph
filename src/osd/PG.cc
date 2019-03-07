@@ -2816,6 +2816,26 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
 	       << pib.first << ", adjusting start backwards" << dendl;
       past_intervals.adjust_start_backwards(info.history.last_epoch_clean);
     }
+
+    // Similarly, if the same_interval_since value is later than
+    // last_epoch_clean, the next interval change will result in a
+    // past_interval start that is later than last_epoch_clean.  This
+    // can happen if we use the pg_history values from the merge
+    // source.  Adjust the same_interval_since value backwards if that
+    // happens.  (We trust the les and lec values more because they came from
+    // the real target, whereas the history value we stole from the source.)
+    if (info.history.last_epoch_started < info.history.same_interval_since) {
+      dout(10) << __func__ << " last_epoch_started "
+	       << info.history.last_epoch_started << " < same_interval_since "
+	       << info.history.same_interval_since
+	       << ", adjusting pg_history backwards" << dendl;
+      info.history.same_interval_since = info.history.last_epoch_clean;
+      // make sure same_{up,primary}_since are <= same_interval_since
+      info.history.same_up_since = std::min(
+	info.history.same_up_since, info.history.same_interval_since);
+      info.history.same_primary_since = std::min(
+	info.history.same_primary_since, info.history.same_interval_since);
+    }
   }
 
   dirty_info = true;
