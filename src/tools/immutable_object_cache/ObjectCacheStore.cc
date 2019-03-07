@@ -28,6 +28,9 @@ ObjectCacheStore::ObjectCacheStore(CephContext *cct)
   m_cache_watermark =
     m_cct->_conf.get_val<double>("immutable_object_cache_watermark");
 
+  m_dir_num =
+    m_cct->_conf.get_val<uint64_t>("immutable_object_cache_dir_num");
+
   if (m_cache_root_dir.back() != '/') {
     m_cache_root_dir += "/";
   }
@@ -233,6 +236,7 @@ int ObjectCacheStore::evict_objects() {
   for (auto& obj : obj_list) {
     do_evict(obj);
   }
+  return 0;
 }
 
 int ObjectCacheStore::do_evict(std::string cache_file) {
