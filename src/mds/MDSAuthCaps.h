@@ -24,6 +24,8 @@
 #include "include/types.h"
 #include "common/debug.h"
 
+#include "mdstypes.h"
+
 // unix-style capabilities
 enum {
   MAY_READ	= (1 << 0),
@@ -95,15 +97,23 @@ struct MDSCapMatch {
   int64_t uid;       // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
   std::vector<gid_t> gids;  // Use these GIDs
   std::string path;  // Require path to be child of this (may be "" or "/" for any)
+  fs_cluster_id_t fsid;
 
-  MDSCapMatch() : uid(MDS_AUTH_UID_ANY) {}
-  MDSCapMatch(int64_t uid_, std::vector<gid_t>& gids_) : uid(uid_), gids(gids_) {}
+  MDSCapMatch() : uid(MDS_AUTH_UID_ANY), fsid(FS_CLUSTER_ID_NONE) {}
+  MDSCapMatch(int64_t uid_, std::vector<gid_t>& gids_)
+    : uid(uid_), gids(gids_), fsid(FS_CLUSTER_ID_NONE) {}
   explicit MDSCapMatch(const std::string &path_)
-    : uid(MDS_AUTH_UID_ANY), path(path_) {
+    : uid(MDS_AUTH_UID_ANY), path(path_), fsid(FS_CLUSTER_ID_NONE) {
     normalize_path();
   }
+
+  explicit MDSCapMatch(fs_cluster_id_t fsid_)
+    : uid(MDS_AUTH_UID_ANY), fsid(fsid_) {
+    normalize_path();
+  }
+
   MDSCapMatch(const std::string& path_, int64_t uid_, std::vector<gid_t>& gids_)
-    : uid(uid_), gids(gids_), path(path_) {
+    : uid(uid_), gids(gids_), path(path_), fsid(FS_CLUSTER_ID_NONE) {
     normalize_path();
   }
 
@@ -178,6 +188,23 @@ public:
 		  unsigned mask, uid_t new_uid, gid_t new_gid,
 		  const entity_addr_t& addr) const;
   bool path_capable(std::string_view inode_path) const;
+  bool fsid_capable(fs_cluster_id_t fsid, unsigned mask) const {
+    if (allow_all()) {
+      return true;
+    }
+    for (const MDSCapGrant &g : grants) {
+      if (g.match.fsid == fsid
+	  || g.match.fsid == FS_CLUSTER_ID_NONE) {
+	if (mask & MAY_READ && g.spec.allow_read()) {
+	  return true;
+	}
+	if (mask & MAY_WRITE && g.spec.allow_write()) {
+	  return true;
+	}
+      }
+    }
+    return false;
+  }
 
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
 };

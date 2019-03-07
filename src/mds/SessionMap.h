@@ -392,6 +392,10 @@ public:
   int check_access(CInode *in, unsigned mask, int caller_uid, int caller_gid,
 		   const vector<uint64_t> *gid_list, int new_uid, int new_gid);
 
+  bool fsid_capable(fs_cluster_id_t fsid, unsigned mask) const {
+    return auth_caps.fsid_capable(fsid, mask);
+  }
+    
   Session() = delete;
   Session(ConnectionRef con) :
     recall_caps(g_conf().get_val<double>("mds_recall_warning_decay_rate")),

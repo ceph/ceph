@@ -420,6 +420,13 @@ void Server::handle_client_reclaim(const cref_t<MClientReclaim> &m)
     return;
   }
 
+  fs_cluster_id_t fsid = mds->get_fsid();
+  if (fsid != FS_CLUSTER_ID_NONE && !session->fsid_capable(fsid, MAY_READ)) {
+    dout(0) << " dropping message not allowed for this fsid: " << *m << dendl;
+    m->put();
+    return;
+  }
+
   if (mds->get_state() < MDSMap::STATE_CLIENTREPLAY) {
     mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
     return;
@@ -442,6 +449,12 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 
   if (!session) {
     dout(0) << " ignoring sessionless msg " << *m << dendl;
+    return;
+  }
+
+  fs_cluster_id_t fsid = mds->get_fsid();
+  if (fsid != FS_CLUSTER_ID_NONE && !session->fsid_capable(fsid, MAY_READ)) {
+    dout(0) << " dropping message not allowed for this fsid: " << *m << dendl;
     return;
   }
 
@@ -2122,6 +2135,12 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
     if (!session) {
       if (req->is_queued_for_replay())
 	mds->queue_one_replay();
+      return;
+    }
+    fs_cluster_id_t fsid = mds->get_fsid();
+    if (fsid != FS_CLUSTER_ID_NONE && !session->fsid_capable(fsid, MAY_READ)) {
+      dout(0) << "unauthorized request from " << req->get_source()
+	      << ", dropping" << dendl;
       return;
     }
   }

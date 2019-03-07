@@ -23,6 +23,7 @@
 
 #include "common/debug.h"
 #include "MDSAuthCaps.h"
+#include "mdstypes.h"
 #include "include/ipaddr.h"
 
 #define dout_subsys ceph_subsys_mds
@@ -66,10 +67,12 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
     uid %= (spaces >> lit("uid") >> lit('=') >> uint_);
     uintlist %= (uint_ % lit(','));
     gidlist %= -(spaces >> lit("gids") >> lit('=') >> uintlist);
+    fsid %= -(spaces >> lit("fsid") >> lit('=') >> int_);
     match = -(
 	     (uid >> gidlist)[_val = phoenix::construct<MDSCapMatch>(_1, _2)] |
 	     (path >> uid >> gidlist)[_val = phoenix::construct<MDSCapMatch>(_1, _2, _3)] |
-             (path)[_val = phoenix::construct<MDSCapMatch>(_1)]);
+             (path)[_val = phoenix::construct<MDSCapMatch>(_1)] |
+             (fsid)[_val = phoenix::construct<MDSCapMatch>(_1)]);
 
     // capspec = * | r[w][p][s]
     capspec = spaces >> (
@@ -99,6 +102,7 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
   qi::rule<Iterator, MDSCapSpec()> capspec;
   qi::rule<Iterator, string()> path;
   qi::rule<Iterator, uint32_t()> uid;
+  qi::rule<Iterator, int32_t()> fsid;
   qi::rule<Iterator, std::vector<uint32_t>() > uintlist;
   qi::rule<Iterator, std::vector<uint32_t>() > gidlist;
   qi::rule<Iterator, MDSCapMatch()> match;

@@ -166,3 +166,25 @@ In this case, the monitor cluster will display information about the MDS
 daemons associated with file system IDs 1 and 2. Standby MDS daemons will
 always be displayed. Note that information about restricted MDS daemons and
 filesystems may become available by other means, such as ``ceph health detail``.
+
+MDS communication restriction
+=============================
+
+By default, user applications may communicate with any MDS, whether or not
+they are allowed to modify data on an associated filesystem (see
+``Path restriction`` above). To restrict communication to MDS daemons
+associated with a particular filesystem (or filesystems), use:
+
+::
+
+ client.0
+     key: AQAz7EVWygILFRAAdIcuJ12opU/JKyfFmxhuaw==
+     caps: [mds] allow rw, allow fsid=1
+     caps: [mon] allow r, allow fsid=1
+     caps: [osd] allow rw tag cephfs data=cephfs_a
+
+In this case, messages to MDS daemons allocated to any filesystem other than
+that with id 1 will be ignored. Standby MDS daemons not associated with a
+filesystem may be contacted. Similarly, the monitor cluster will not report
+the existence of filesystems with other fsids. In this case, the OSD cluster
+will not allow operations on data pools not associated with cephfs_a.
