@@ -3,7 +3,6 @@ from __future__ import absolute_import
 
 import json
 
-
 from . import ApiController, Endpoint, BaseController
 from .. import mgr
 from ..security import Permission, Scope
