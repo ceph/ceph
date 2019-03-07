@@ -359,12 +359,52 @@ public:
   void project_subtree_rename(CInode *diri, CDir *olddir, CDir *newdir);
   void adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop);
 
-  void get_auth_subtrees(set<CDir*>& s);
-  void get_fullauth_subtrees(set<CDir*>& s);
+  auto get_auth_subtrees() {
+    std::vector<CDir*> c;
+    for (auto& p : subtrees) {
+      auto& root = p.first;
+      if (root->is_auth()) {
+        c.push_back(root);
+      }
+    }
+    return c;
+  }
 
-  int num_subtrees();
-  int num_subtrees_fullauth();
-  int num_subtrees_fullnonauth();
+  auto get_fullauth_subtrees() {
+    std::vector<CDir*> c;
+    for (auto& p : subtrees) {
+      auto& root = p.first;
+      if (root->is_full_dir_auth()) {
+        c.push_back(root);
+      }
+    }
+    return c;
+  }
+  auto num_subtrees_fullauth() const {
+    std::size_t n = 0;
+    for (auto& p : subtrees) {
+      auto& root = p.first;
+      if (root->is_full_dir_auth()) {
+        ++n;
+      }
+    }
+    return n;
+  }
+
+  auto num_subtrees_fullnonauth() const {
+    std::size_t n = 0;
+    for (auto& p : subtrees) {
+      auto& root = p.first;
+      if (root->is_full_dir_nonauth()) {
+        ++n;
+      }
+    }
+    return n;
+  }
+
+  auto num_subtrees() const {
+    return subtrees.size();
+  }
 
   
 protected:
