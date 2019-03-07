@@ -40,7 +40,7 @@ class Module(MgrModule):
         {
             'name': 'enabled',
             'type': 'bool',
-            'default': True
+            'default': False
         },
         {
             'name': 'leaderboard',
@@ -77,13 +77,7 @@ class Module(MgrModule):
 
     COMMANDS = [
         {
-            "cmd": "telemetry config-set name=key,type=CephString "
-                   "name=value,type=CephString",
-            "desc": "Set a configuration value",
-            "perm": "rw"
-        },
-        {
-            "cmd": "telemetry config-show",
+            "cmd": "telemetry status",
             "desc": "Show current configuration",
             "perm": "r"
         },
@@ -96,6 +90,16 @@ class Module(MgrModule):
             "cmd": "telemetry show",
             "desc": "Show last report or report to be sent",
             "perm": "r"
+        },
+        {
+            "cmd": "telemetry on",
+            "desc": "Enable telemetry reports from this cluster",
+            "perm": "rw",
+        },
+        {
+            "cmd": "telemetry off",
+            "desc": "Disable telemetry reports from this cluster",
+            "perm": "rw",
         },
     ]
 
@@ -111,65 +115,18 @@ class Module(MgrModule):
         self.last_report = dict()
         self.report_id = None
 
-    @staticmethod
-    def str_to_bool(string):
-        return str(string).lower() in ['true', 'yes', 'on']
-
-    @staticmethod
-    def is_valid_email(email):
-        regexp = "^.+@([?)[a-zA-Z0-9-.]+.([a-zA-Z]{2,3}|[0-9]{1,3})(]?))$"
-        try:
-            if len(email) <= 7 or len(email) > 255:
-                return False
-
-            if not re.match(regexp, email):
-                return False
-
-            return True
-        except:
-            pass
-
-        return False
+    def config_notify(self):
+        for opt in self.MODULE_OPTIONS:
+            setattr(self,
+                    opt['name'],
+                    self.get_module_option(opt['name']))
+            self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
     @staticmethod
     def parse_timestamp(timestamp):
         return datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S.%f')
 
-    def set_config_option(self, option, value):
-        if option not in self.config_keys.keys():
-            raise RuntimeError('{} is a unknown configuration '
-                               'option'.format(option))
-
-        if option == 'interval':
-            try:
-                value = int(value)
-            except (ValueError, TypeError):
-                raise RuntimeError('invalid interval. Please provide a valid '
-                                   'integer')
-
-            if value < 24:
-                raise RuntimeError('interval should be set to at least 24 hours')
-
-        if option in ['leaderboard', 'enabled']:
-            value = self.str_to_bool(value)
-
-        if option == 'contact':
-            if value and not self.is_valid_email(value):
-                raise RuntimeError('{} is not a valid e-mail address as a '
-                                   'contact'.format(value))
-
-        if option in ['description', 'organization']:
-            if value and len(value) > 256:
-                raise RuntimeError('{} should be limited to 256 '
-                                   'characters'.format(option))
-
-        self.config[option] = value
-        return True
-
-    def init_module_config(self):
-        for key, default in self.config_keys.items():
-            self.set_config_option(key, self.get_module_option(key, default))
-
+    def load(self):
         self.last_upload = self.get_store('last_upload', None)
         if self.last_upload is not None:
             self.last_upload = int(self.last_upload)
@@ -227,13 +184,16 @@ class Module(MgrModule):
         return crashdict
 
     def compile_report(self):
-        report = {'leaderboard': False, 'report_version': 1}
+        report = {
+            'leaderboard': False,
+            'report_version': 1
+        }
 
-        if self.str_to_bool(self.config['leaderboard']):
+        if self.leaderboard:
             report['leaderboard'] = True
 
         for option in ['description', 'contact', 'organization']:
-            report[option] = self.config.get(option, None)
+            report[option] = getattr(self, option)
 
         mon_map = self.get('mon_map')
         osd_map = self.get('osd_map')
@@ -296,37 +256,36 @@ class Module(MgrModule):
         return report
 
     def send(self, report):
-        self.log.info('Upload report to: %s', self.config['url'])
+        self.log.info('Upload report to: %s', self.url)
         proxies = dict()
-        if self.config['proxy']:
-            self.log.info('Using HTTP(S) proxy: %s', self.config['proxy'])
-            proxies['http'] = self.config['proxy']
-            proxies['https'] = self.config['proxy']
+        if self.proxy:
+            self.log.info('Using HTTP(S) proxy: %s', self.proxy)
+            proxies['http'] = self.proxy
+            proxies['https'] = self.proxy
 
-        requests.put(url=self.config['url'], json=report, proxies=proxies)
+        requests.put(url=self.url, json=report, proxies=proxies)
 
     def handle_command(self, inbuf, command):
-        if command['prefix'] == 'telemetry config-show':
-            return 0, json.dumps(self.config), ''
-        elif command['prefix'] == 'telemetry config-set':
-            key = command['key']
-            value = command['value']
-            if not value:
-                return -errno.EINVAL, '', 'Value should not be empty or None'
-
-            self.log.debug('Setting configuration option %s to %s', key, value)
-            self.set_config_option(key, value)
-            self.set_module_option(key, value)
-            return 0, 'Configuration option {0} updated'.format(key), ''
+        if command['prefix'] == 'telemetry status':
+            r = {}
+            for opt in self.MODULE_OPTIONS:
+                r[opt['name']] = getattr(self, opt['name'])
+            return 0, json.dumps(r, indent=4), ''
+        elif command['prefix'] == 'telemetry on':
+            self.set_config('active', True)
+            return 0, '', ''
+        elif command['prefix'] == 'telemetry off':
+            self.set_config('active', False)
+            return 0, '', ''
         elif command['prefix'] == 'telemetry send':
             self.last_report = self.compile_report()
             self.send(self.last_report)
-            return 0, 'Report send to {0}'.format(self.config['url']), ''
+            return 0, 'Report send to {0}'.format(self.url), ''
         elif command['prefix'] == 'telemetry show':
             report = self.last_report
             if not report:
                 report = self.compile_report()
-            return 0, json.dumps(report), ''
+            return 0, json.dumps(report, indent=4), ''
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
@@ -344,23 +303,24 @@ class Module(MgrModule):
         self.event.set()
 
     def serve(self):
-        self.init_module_config()
+        self.load()
+        self.config_notify()
         self.run = True
 
         self.log.debug('Waiting for mgr to warm up')
         self.event.wait(10)
 
         while self.run:
-            if not self.config['enabled']:
+            if not self.enabled:
                 self.log.info('Not sending report until configured to do so')
                 self.event.wait(1800)
                 continue
 
             now = int(time.time())
             if not self.last_upload or (now - self.last_upload) > \
-                            self.config['interval'] * 3600:
+                            self.interval * 3600:
                 self.log.info('Compiling and sending report to %s',
-                              self.config['url'])
+                              self.url)
 
                 try:
                     self.last_report = self.compile_report()
