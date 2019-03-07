@@ -37,6 +37,11 @@ Major Changes from Mimic
   * Ceph Manager (ceph-mgr) module management
   * Prometheus alert Management
 
+  Also, the Ceph Dashboard is now split into its own package named
+  ``ceph-mgr-dashboard``. So, you might want to install it separately,
+  if your package management software fails to do so when it installs
+  ``ceph-mgr``.
+
 - *RADOS*:
 
   * The number of placement groups (PGs) per pool can now be decreased
@@ -179,6 +184,12 @@ Instructions
    restarting all manager daemons.  For example,::
 
      # systemctl restart ceph-mgr.target
+
+   Please note, if you are using Ceph Dashboard, you will probably need to
+   install ``ceph-mgr-dashboard`` separately after upgrading ``ceph-mgr``
+   package. The install script of ``ceph-mgr-dashboard`` will restart the
+   manager daemons automatically for you. So in this case, you can just skip
+   the step to restart the daemons.
 
    Verify the ``ceph-mgr`` daemons are running by checking ``ceph
    -s``::
