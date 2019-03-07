@@ -1493,9 +1493,11 @@ inline ostream& operator<<(ostream& out, const OSDMap& m) {
 class PGMap;
 
 void print_osd_utilization(const OSDMap& osdmap,
-			   const PGMap& pgmap,
-			   ostream& out,
-			   Formatter *f,
-			   bool tree);
+                           const PGMap& pgmap,
+                           ostream& out,
+                           Formatter *f,
+                           bool tree,
+                           const string& class_name,
+                           const string& item_name);
 
 #endif

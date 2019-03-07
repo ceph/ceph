@@ -387,8 +387,16 @@ public:
     return pool_stat_t();
   }
 
-  const osd_stat_t& get_osd_sum() const {
-    return osd_sum;
+  osd_stat_t get_osd_sum(const set<int>& osds) const {
+    if (osds.empty()) // all
+      return osd_sum;
+    osd_stat_t sum;
+    for (auto i : osds) {
+      auto os = get_osd_stat(i);
+      if (os)
+        sum.add(*os);
+    }
+    return sum;
   }
 
   const osd_stat_t *get_osd_stat(int osd) const {
