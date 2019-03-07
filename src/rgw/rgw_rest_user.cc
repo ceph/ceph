@@ -921,7 +921,23 @@ void RGWOp_Quota_Set::execute()
       }
 
       RESTArgs::get_int64(s, "max-objects", old_quota->max_objects, &quota.max_objects);
-      RESTArgs::get_int64(s, "max-size", old_quota->max_size, &quota.max_size);
+      
+      std::string max_size_str;
+      bool has_max_size = false;
+      RESTArgs::get_string(s, "max-size", max_size_str, &max_size_str, &has_max_size);
+      if (has_max_size) {
+        std::string err_info;
+        quota.max_size = strict_iec_cast<long long>(max_size_str.c_str(), &err_info);
+        if (!err_info.empty()) {
+          ldout(store->ctx(), 20) << "failed to parse max size: " << err_info << dendl;
+          http_ret = -EINVAL;
+          return;
+        }
+      }
+      else {
+        quota.max_size = old_quota->max_size;
+      }
+
       int64_t max_size_kb;
       bool has_max_size_kb = false;
       RESTArgs::get_int64(s, "max-size-kb", 0, &max_size_kb, &has_max_size_kb);
