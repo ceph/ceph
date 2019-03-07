@@ -342,6 +342,8 @@ public:
 
   static int clear_stale_instances(RGWRados *store, RGWBucketAdminOpState& op_state,
 				   RGWFormatterFlusher& flusher);
+  static int fix_lc_shards(RGWRados *store, RGWBucketAdminOpState& op_state,
+                           RGWFormatterFlusher& flusher);
 };
 
 
