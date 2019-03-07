@@ -32,6 +32,223 @@
 // Constant to limit starting sequence number to 2^31.  Nothing special about it, just a big number.  PLR
 #define SEQ_MASK  0x7fffffff
 
+void WriteQueue::fillin_iovec() {
+  /* Forward to protocol */
+  /* XXX TODO */
+}
+
+void WriteQueue::fillin_bufferlist() {
+  /* Forward to protocol */
+  /* XXX TODO */
+}
+
+bufferlist::buffers_t::const_iterator
+WriteQueue::find_buf(const bufferlist::buffers_t &bufs, unsigned int &pos) {
+  bufferlist::buffers_t::const_iterator it;
+
+  for (it = bufs.begin(); it != bufs.end() && pos; it++) {
+    auto &buf = *it;
+
+    if (pos < buf.length())
+      break;
+
+    pos -= buf.length();
+  }
+
+  return it;
+}
+
+bool WriteQueue::fillin_iovec_from_mem(void *mem,
+				       unsigned int beg,
+				       unsigned int end) {
+  struct iovec *iov = &*iovec_end_it;
+  unsigned int pos, len;
+
+  ceph_assert(MAX_SIZE > iovec_len);
+  pos = msg_end_pos - beg;
+  len = end - msg_end_pos;
+  len = min(len, MAX_SIZE - iovec_len);
+
+  iov->iov_len = len;
+  iov->iov_base = (char *)mem + pos;
+
+  msg_end_pos += len;
+  iovec_len += len;
+  iovec_end_it++;
+
+  return (iovec_end_it != iovec.end() && iovec_len < MAX_SIZE);
+}
+
+bool WriteQueue::fillin_iovec_from_bufl(bufferlist &bufl,
+					unsigned int beg) {
+  bufferlist::buffers_t::const_iterator it;
+  auto &bufs = bufl.buffers();
+  struct iovec *iov = &*iovec_end_it;
+  unsigned int pos, len;
+
+  ceph_assert(MAX_SIZE > iovec_len);
+
+  pos = msg_end_pos - beg;
+  it = find_buf(bufs, pos);
+  ceph_assert(it != bufs.end());
+
+  for (; it != bufs.end(); it++) {
+    auto &buf = *it;
+
+    len = buf.length() - pos;
+    len = min(len, MAX_SIZE - iovec_len);
+
+    iov->iov_base = (char *)(buf.c_str() + pos);
+    iov->iov_len = len;
+    pos = 0;
+
+    msg_end_pos += len;
+    iovec_len += len;
+    iovec_end_it++;
+    if (iovec_end_it == iovec.end() || iovec_len == MAX_SIZE)
+      return false;
+
+    iov = &*iovec_end_it;
+  }
+
+  return true;
+}
+
+bool WriteQueue::fillin_bufl_from_mem(void *mem,
+				      unsigned int beg,
+				      unsigned int end) {
+  unsigned int pos, len;
+
+  ceph_assert(MAX_SIZE > outbl.length());
+  pos = msg_end_pos - beg;
+  len = end - msg_end_pos;
+  len = min(len, MAX_SIZE - outbl.length());
+
+  outbl.append((char *)mem + pos, len);
+  msg_end_pos += len;
+
+  return (outbl.buffers().size() < IOV_NUM && outbl.length() < MAX_SIZE);
+}
+
+bool WriteQueue::fillin_bufl_from_bufl(bufferlist &bufl,
+				       unsigned int beg) {
+  bufferlist::buffers_t::const_iterator it;
+  auto &bufs = bufl.buffers();
+
+  unsigned int len, blen, nr, max_size;
+
+  ceph_assert(MAX_SIZE > outbl.length());
+  /* Relative max size */
+  max_size = MAX_SIZE - outbl.length();
+
+  /*
+   * We need to be sure that we do not exceed max possible buffers number
+   * of bufferlist, which is equal to iovec capacity, thus linear length
+   * count.
+   */
+  nr = outbl.buffers().size();
+  it = bufs.begin();
+
+  for (len = 0; it != bufs.end() && nr < IOV_NUM && len < max_size;
+       it++, nr++) {
+    auto &buf = *it;
+
+    blen = min(buf.length(), max_size - len);
+    msg_end_pos += blen;
+    len += blen;
+  }
+  /*
+   * Important to mention is that after splice @bufl will be shrinked,
+   * thus we always start from off == 0, because we claim buffers.
+   */
+  bufl.splice(0, len, &outbl);
+
+  return (nr < IOV_NUM && len < max_size);
+}
+
+void WriteQueue::advance_iovec(unsigned int size) {
+  unsigned int pos, rest;
+  bool rewind;
+
+  for (pos = 0; iovec_beg_it != iovec_end_it && pos < size; ) {
+    struct iovec *iov;
+
+    iov = *&iovec_beg_it;
+    rest = min(size - pos, (unsigned int)iov->iov_len);
+    iov->iov_len -= rest;
+    pos += rest;
+    if (iov->iov_len)
+      /* Advance pointer in order to repeat send from that position */
+      iov->iov_base = (char *)iov->iov_base + rest;
+    else
+      iovec_beg_it++;
+  }
+  /* The whole size must be consumed, otherwise blame the caller */
+  ceph_assert(pos == size);
+  ceph_assert(iovec_len >= size);
+  iovec_len -= size;
+
+  rewind = false;
+
+  if (iovec.begin() != iovec_beg_it && iovec_beg_it < iovec_end_it &&
+      (iovec.end() - iovec_end_it) < (long int)iovec.size() / 2) {
+    /*
+     * We move the remains to the beginning only if the half
+     * of iovec is left just to minimize possible memcopies.
+     */
+    std::memmove(&*iovec.begin(), &*iovec_beg_it,
+		 sizeof(iovec[0])*(iovec_end_it - iovec_beg_it));
+    rewind = true;
+  } else if (iovec_beg_it == iovec_end_it) {
+    rewind = true;
+  }
+  if (rewind) {
+    /* Rewind to the beginning */
+    iovec_end_it = iovec.begin() + (iovec_end_it - iovec_beg_it);
+    iovec_beg_it = iovec.begin();
+  }
+}
+
+void WriteQueue::advance_msgs(unsigned int size) {
+  unsigned int pos, rest;
+
+  for (pos = 0; msgs_beg_it != msgs.end() && pos < size; ) {
+    QueuedMessage *qmsg;
+
+    qmsg = &*msgs_beg_it;
+    ceph_assert(msg_beg_pos < qmsg->length);
+    rest = qmsg->length - msg_beg_pos;
+    rest = min(size - pos, rest);
+    msg_beg_pos += rest;
+    pos += rest;
+
+    if (msg_beg_pos == qmsg->length) {
+      msg_beg_pos = 0;
+      msgs_beg_it++;
+    }
+  }
+  /* The whole size must be consumed, otherwise blame the caller */
+  ceph_assert(pos == size);
+
+  if (con->policy.lossy) {
+    /*
+     * If we are lossy we are allowed to throw out all sent messages
+     * immediately without acks.
+     */
+    msgs.erase(msgs.begin(), msgs_beg_it);
+  }
+}
+
+void WriteQueue::advance(unsigned int size) {
+  if (iovec_beg_it != iovec_end_it)
+    advance_iovec(size);
+  else
+    /* We expect bufferlist is trimmed correctly by the low-level stack */
+    ;
+
+  advance_msgs(size);
+}
+
 #define dout_subsys ceph_subsys_ms
 #undef dout_prefix
 #define dout_prefix _conn_prefix(_dout)
@@ -142,6 +359,7 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
   } else {
     protocol = std::unique_ptr<Protocol>(new ProtocolV1(this));
   }
+  wqueue = new WriteQueue(this);
   logger->inc(l_msgr_created_connections);
 }
 
@@ -149,6 +367,7 @@ AsyncConnection::~AsyncConnection()
 {
   if (recv_buf)
     delete[] recv_buf;
+  delete wqueue;
   ceph_assert(!delay_state);
 }
 

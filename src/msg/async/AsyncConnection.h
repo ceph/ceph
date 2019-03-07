@@ -36,12 +36,153 @@
 #include "Event.h"
 #include "Stack.h"
 
+class AsyncConnection;
 class AsyncMessenger;
 class DispatchQueue;
 class Worker;
 class Protocol;
 
-static const int ASYNC_IOV_MAX = (IOV_MAX >= 1024 ? IOV_MAX / 4 : IOV_MAX);
+struct QueuedMessage {
+  Message *msg;
+  unsigned int length;
+  unsigned int payload_len = 0; /* Cache length, buffers can be claimed */
+  unsigned int middle_len = 0;
+  unsigned int data_len = 0;
+  bool encoded;
+  char tag;
+  union {
+    ceph_le64 s;
+    struct ceph_timespec ts;
+    ceph_msg_footer_old old_footer;
+  } static_payload;  /* 13 bytes */
+
+  QueuedMessage(Message *msg_, bool encoded_) :
+    msg(msg_),
+    length(0),
+    encoded(encoded_),
+    tag(CEPH_MSGR_TAG_MSG) {
+  }
+
+  QueuedMessage(char tag_, const void *data_, unsigned int len_) :
+    msg(nullptr),
+    length(len_ + sizeof(tag)),
+    encoded(true),
+    tag(tag_) {
+    ceph_assert(len_ <= sizeof(static_payload));
+    if (len_)
+      memcpy(&static_payload, data_, len_);
+  }
+
+  ~QueuedMessage() {
+    if (msg)
+      msg->put();
+  }
+};
+
+struct WriteQueue {
+  AsyncConnection *con;
+
+  /*
+   * Before changing values, please, do appropriate performance
+   * measurements for all possible sets of block sizes. Values
+   * below were not chosen by chance. @IOV_NUM is used for both
+   * iovec and bufferlist.
+   */
+  static const unsigned int IOV_NUM  = 64;
+  static const unsigned int MAX_SIZE = 512<<10;
+
+  std::array<struct iovec, IOV_NUM> iovec;
+  decltype(iovec)::iterator iovec_beg_it;
+  decltype(iovec)::iterator iovec_end_it;
+  unsigned int iovec_len;
+
+  /* Either iovec, either bufferlist. */
+  bufferlist outbl;
+
+  /*
+   * @msgs list holds all queued messages, but among all of them there are
+   * messages which are:
+   *
+   *    1. sent, but not acked yet (!lossy mode):
+   *        [msgs.begin(), msgs_beg_it)
+   *
+   *    2. mapped to outcoming @iovec or @outbl, i.e. are ready to be sent:
+   *        [msgs_beg_it, msgs_end_it)
+   *
+   *    3. picked up from the out_q, not yet mapped:
+   *        [msgs_end_it, msgs.end())
+   *
+   */
+  std::list<QueuedMessage> msgs;
+  decltype(msgs)::iterator msgs_beg_it;
+  decltype(msgs)::iterator msgs_end_it;
+  unsigned int msg_beg_pos;
+  unsigned int msg_end_pos;
+
+  WriteQueue(AsyncConnection *con_) :
+    con(con_),
+    iovec_beg_it(iovec.begin()),
+    iovec_end_it(iovec.begin()),
+    iovec_len(0),
+    msgs_beg_it(msgs.end()),
+    msgs_end_it(msgs.end()),
+    msg_beg_pos(0),
+    msg_end_pos(0)
+  {}
+
+  bool is_outcoming_full() const {
+    return iovec_end_it == iovec.end() ||
+	   iovec_len >= MAX_SIZE ||
+	   outbl.buffers().size() >= IOV_NUM ||
+	   outbl.length() >= MAX_SIZE;
+  }
+
+  bool has_msgs_to_send() const {
+    return msgs_beg_it != msgs.end();
+  }
+
+  bool has_msgs_in_outcoming() const {
+    return msg_beg_pos != msg_end_pos ||
+           msgs_beg_it != msgs_end_it;
+  }
+
+  void enqueue(std::list<QueuedMessage> &list) {
+    std::list<QueuedMessage>::iterator beg_it;
+
+    ceph_assert(!list.empty());
+    beg_it = list.begin();
+    msgs.splice(msgs.end(), list);
+    if (msgs_beg_it == msgs.end())
+      msgs_beg_it = beg_it;
+    if (msgs_end_it == msgs.end())
+      msgs_end_it = beg_it;
+  }
+
+  void enqueue(char tag, void *data, size_t len) {
+    msgs.emplace_back(tag, data, len);
+    if (msgs_beg_it == msgs.end())
+      msgs_beg_it = --msgs.end();
+    if (msgs_end_it == msgs.end())
+      msgs_end_it = --msgs.end();
+  }
+
+  bufferlist::buffers_t::const_iterator
+  find_buf(const bufferlist::buffers_t &bufs,
+	   unsigned int &pos);
+
+  bool fillin_iovec_from_mem(void *mem, unsigned int beg, unsigned int end);
+  bool fillin_iovec_from_bufl(bufferlist &bufl, unsigned int beg);
+  bool fillin_bufl_from_mem(void *mem, unsigned int beg, unsigned int end);
+  bool fillin_bufl_from_bufl(bufferlist &bufl, unsigned int beg);
+
+  void fillin_iovec();
+  void fillin_bufferlist();
+  void advance(unsigned int size);
+
+private:
+  void advance_iovec(unsigned int size);
+  void advance_msgs(unsigned int size);
+};
 
 /*
  * AsyncConnection maintains a logic session between two endpoints. In other
@@ -169,7 +310,7 @@ class AsyncConnection : public Connection {
 
   DispatchQueue *dispatch_queue;
 
-  // lockfree, only used in own thread
+  WriteQueue *wqueue;
   bufferlist outcoming_bl;
   bool open_write = false;
 
@@ -228,6 +369,7 @@ class AsyncConnection : public Connection {
     return logger;
   }
 
+  friend class WriteQueue;
   friend class Protocol;
   friend class ProtocolV1;
   friend class ProtocolV2;
