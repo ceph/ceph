@@ -738,7 +738,7 @@ EOF
 }
 
 start_osd() {
-    for osd in `seq 0 $((CEPH_NUM_OSD-1))`
+    for osd in `seq 0 $(($CEPH_NUM_OSD-1))`
     do
 	    if [ "$new" -eq 1 ]; then
 		    wconf <<EOF
