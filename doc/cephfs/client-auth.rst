@@ -184,3 +184,45 @@ And the client can only see the FS that it has authorization for::
 Standby MDS daemons will always be displayed. Note that the information about
 restricted MDS daemons and file systems may become available by other means,
 such as ``ceph health detail``.
+
+MDS communication restriction
+=============================
+
+By default, user applications may communicate with any MDS, whether or not
+they are allowed to modify data on an associated file system (see
+`Path restriction` above). Client's communication can be restricted to MDS
+daemons associated with particular file system(s) by adding MDS caps for that
+particular file system. Consider the following example where the Ceph cluster
+has 2 FSs::
+
+    $ ceph fs ls
+    name: cephfs, metadata pool: cephfs_metadata, data pools: [cephfs_data ]
+    name: cephfs2, metadata pool: cephfs2_metadata, data pools: [cephfs2_data ]
+
+Client ``someuser`` is authorized only for one FS::
+
+    $ ceph fs authorize cephfs client.someuser / rw
+    [client.someuser]
+        key = AQBPSARfg8hCJRAAEegIxjlm7VkHuiuntm6wsA==
+    $ ceph auth get client.someuser > ceph.client.someuser.keyring
+    exported keyring for client.someuser
+    $ cat ceph.client.someuser.keyring
+    [client.someuser]
+        key = AQBPSARfg8hCJRAAEegIxjlm7VkHuiuntm6wsA==
+        caps mds = "allow rw fsname=cephfs"
+        caps mon = "allow r"
+        caps osd = "allow rw tag cephfs data=cephfs"
+
+Mounting ``cephfs1`` with ``someuser`` works::
+
+    $ sudo ceph-fuse /mnt/cephfs1 -n client.someuser -k ceph.client.someuser.keyring --client-fs=cephfs
+    ceph-fuse[96634]: starting ceph client
+    ceph-fuse[96634]: starting fuse
+    $ mount | grep ceph-fuse
+    ceph-fuse on /mnt/cephfs1 type fuse.ceph-fuse (rw,nosuid,nodev,relatime,user_id=0,group_id=0,allow_other)
+
+But mounting ``cephfs2`` does not::
+
+    $ sudo ceph-fuse /mnt/cephfs2 -n client.someuser -k ceph.client.someuser.keyring --client-fs=cephfs2
+    ceph-fuse[96599]: starting ceph client
+    ceph-fuse[96599]: ceph mount failed with (1) Operation not permitted
