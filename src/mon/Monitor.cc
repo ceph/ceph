@@ -1046,6 +1046,14 @@ void Monitor::wait_for_paxos_write()
 
 void Monitor::respawn()
 {
+  // --- WARNING TO FUTURE COPY/PASTERS ---
+  // You must also add a call like
+  //
+  //   ceph_pthread_setname(pthread_self(), "ceph-mon");
+  //
+  // to main() so that /proc/$pid/stat field 2 contains "(ceph-mon)"
+  // instead of "(exe)", so that killall (and log rotation) will work.
+
   dout(0) << __func__ << dendl;
 
   char *new_argv[orig_argc+1];
