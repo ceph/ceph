@@ -203,6 +203,10 @@ entity_addrvec_t make_mon_addrs(entity_addr_t a)
 
 int main(int argc, const char **argv)
 {
+  // reset our process name, in case we did a respawn, so that it's not
+  // left as "exe".
+  ceph_pthread_setname(pthread_self(), "ceph-mon");
+
   int err;
 
   bool mkfs = false;
