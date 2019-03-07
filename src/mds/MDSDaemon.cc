@@ -1076,6 +1076,14 @@ void MDSDaemon::suicide()
 
 void MDSDaemon::respawn()
 {
+  // --- WARNING TO FUTURE COPY/PASTERS ---
+  // You must also add a call like
+  //
+  //   ceph_pthread_setname(pthread_self(), "ceph-mds");
+  //
+  // to main() so that /proc/$pid/stat field 2 contains "(ceph-mds)"
+  // instead of "(exe)", so that killall (and log rotation) will work.
+
   dout(1) << "respawn!" << dendl;
 
   /* Dump recent in case the MDS was stuck doing something which caused it to

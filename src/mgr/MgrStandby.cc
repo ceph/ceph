@@ -302,6 +302,14 @@ void MgrStandby::shutdown()
 
 void MgrStandby::respawn()
 {
+  // --- WARNING TO FUTURE COPY/PASTERS ---
+  // You must also add a call like
+  //
+  //   ceph_pthread_setname(pthread_self(), "ceph-mgr");
+  //
+  // to main() so that /proc/$pid/stat field 2 contains "(ceph-mgr)"
+  // instead of "(exe)", so that killall (and log rotation) will work.
+
   char *new_argv[orig_argc+1];
   dout(1) << " e: '" << orig_argv[0] << "'" << dendl;
   for (int i=0; i<orig_argc; i++) {
