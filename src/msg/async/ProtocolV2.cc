@@ -859,7 +859,7 @@ CtPtr ProtocolV2::_handle_peer_banner_payload(char *buffer, int r) {
   if ((supported_features & peer_required_features) != peer_required_features) {
     ldout(cct, 1) << __func__ << " we do not support all peer required features"
                   << " required=" << std::hex << peer_required_features
-                  << " supported=" << std::hex << supported_features << dendl;
+                  << " supported=" << supported_features << std::dec << dendl;
     stop();
     connection->dispatch_queue->queue_reset(connection);
     return nullptr;
@@ -2337,7 +2337,7 @@ CtPtr ProtocolV2::handle_reconnect(ceph::bufferlist &payload)
                   << " client cookie mismatch, I must have reseted:"
                   << " cc=" << std::hex << exproto->client_cookie
                   << " rcc=" << reconnect.client_cookie()
-                  << ", reseting client."
+                  << ", reseting client." << std::dec
                   << dendl;
     auto reset = ResetFrame::Encode(session_stream_handlers,
                                     connection->policy.resetcheck);
