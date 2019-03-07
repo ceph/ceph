@@ -123,6 +123,10 @@ enum {
   l_bluestore_read_eio,
   l_bluestore_reads_with_retries,
   l_bluestore_fragmentation,
+  l_bluestore_omap_seek_to_first_lat,
+  l_bluestore_omap_upper_bound_lat,
+  l_bluestore_omap_lower_bound_lat,
+  l_bluestore_omap_next_lat,
   l_bluestore_last
 };
 
@@ -1431,6 +1435,9 @@ public:
     OnodeRef o;
     KeyValueDB::Iterator it;
     string head, tail;
+
+    string _stringify() const;
+
   public:
     OmapIteratorImpl(CollectionRef c, OnodeRef o, KeyValueDB::Iterator it);
     int seek_to_first() override;
@@ -1589,7 +1596,7 @@ public:
     }
 #endif
 
-    void log_state_latency(PerfCounters *logger, int state) {
+    utime_t log_state_latency(PerfCounters *logger, int state) {
       utime_t lat, now = ceph_clock_now();
       lat = now - last_stamp;
       logger->tinc(state, lat);
@@ -1600,6 +1607,7 @@ public:
       }
 #endif
       last_stamp = now;
+      return lat;
     }
 
     CollectionRef ch;
@@ -2654,6 +2662,10 @@ public:
   BlueFS (extents == nullptr) or just return them (non-null extents) provided
   */
   int allocate_bluefs_freespace(uint64_t size, PExtentVector* extents);
+
+  void log_latency_fn(int idx,
+		      const ceph::timespan& lat,
+		      std::function<string (const ceph::timespan& lat)> fn);
 
 private:
   bool _debug_data_eio(const ghobject_t& o) {

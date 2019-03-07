@@ -911,6 +911,7 @@ OPTION(bdev_aio_reap_max, OPT_INT)
 OPTION(bdev_block_size, OPT_INT)
 OPTION(bdev_debug_aio, OPT_BOOL)
 OPTION(bdev_debug_aio_suicide_timeout, OPT_FLOAT)
+OPTION(bdev_debug_aio_log_age, OPT_DOUBLE)
 
 // if yes, osd will unbind all NVMe devices from kernel driver and bind them
 // to the uio_pci_generic driver. The purpose is to prevent the case where
@@ -1066,6 +1067,8 @@ OPTION(bluestore_debug_inject_bug21040, OPT_BOOL)
 OPTION(bluestore_debug_inject_csum_err_probability, OPT_FLOAT)
 OPTION(bluestore_no_per_pool_stats_tolerance, OPT_STR)
 OPTION(bluestore_warn_on_bluefs_spillover, OPT_BOOL)
+OPTION(bluestore_log_op_age, OPT_DOUBLE)
+OPTION(bluestore_log_omap_iterator_age, OPT_DOUBLE)
 
 OPTION(kstore_max_ops, OPT_U64)
 OPTION(kstore_max_bytes, OPT_U64)
