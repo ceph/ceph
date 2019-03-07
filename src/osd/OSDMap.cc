@@ -4843,19 +4843,51 @@ public:
   typedef CrushTreeDumper::Dumper<F> Parent;
 
   OSDUtilizationDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
-		       const PGMap& pgmap_, bool tree_) :
+                       const PGMap& pgmap_, bool tree_,
+                       const string& class_name_,
+                       const string& item_name_) :
     Parent(crush, osdmap_->get_pool_names()),
     osdmap(osdmap_),
     pgmap(pgmap_),
     tree(tree_),
-    average_util(average_utilization()),
+    class_name(class_name_),
+    item_name(item_name_),
     min_var(-1),
     max_var(-1),
     stddev(0),
     sum(0) {
+    if (osdmap->crush->name_exists(item_name)) {
+      // filter out items we are allowed to dump
+      auto item_id = osdmap->crush->get_item_id(item_name);
+      allowed.insert(item_id);
+      osdmap->crush->get_all_children(item_id, &allowed);
+    }
+    average_util = average_utilization();
   }
 
 protected:
+
+  bool should_dump(int id) const {
+    if (!allowed.empty() && !allowed.count(id)) // filter by name
+      return false;
+    if (id >= 0 && !class_name.empty()) {
+      const char* item_class_name = osdmap->crush->get_item_class(id);
+      if (!item_class_name || // not bound to a class yet
+           item_class_name != class_name) // or already bound to
+                                          // a different class
+        return false;
+    }
+    return true;
+  }
+
+  set<int> get_dumped_osds() {
+    if (class_name.empty() && item_name.empty()) {
+      // old way, all
+      return {};
+    }
+    return dumped_osds;
+  }
+
   void dump_stray(F *f) {
     for (int i = 0; i < osdmap->get_max_osd(); i++) {
       if (osdmap->exists(i) && !this->is_touched(i))
@@ -4866,7 +4898,11 @@ protected:
   void dump_item(const CrushTreeDumper::Item &qi, F *f) override {
     if (!tree && qi.is_bucket())
       return;
+    if (!should_dump(qi.id))
+      return;
 
+    if (!qi.is_bucket())
+      dumped_osds.insert(qi.id);
     float reweight = qi.is_bucket() ? -1 : osdmap->get_weightf(qi.id);
     int64_t kb = 0, kb_used = 0, kb_used_data = 0, kb_used_omap = 0,
       kb_used_meta = 0, kb_avail = 0;
@@ -4919,7 +4955,9 @@ protected:
   double average_utilization() {
     int64_t kb = 0, kb_used = 0;
     for (int i = 0; i < osdmap->get_max_osd(); i++) {
-      if (!osdmap->exists(i) || osdmap->get_weight(i) == 0)
+      if (!osdmap->exists(i) ||
+           osdmap->get_weight(i) == 0 ||
+          !should_dump(i))
 	continue;
       int64_t kb_i, kb_used_i, kb_used_data_i, kb_used_omap_i, kb_used_meta_i,
 	kb_avail_i;
@@ -4955,7 +4993,7 @@ protected:
 			      int64_t* kb_used_meta,
 			      int64_t* kb_avail) const {
     if (id >= 0) {
-      if (osdmap->is_out(id)) {
+      if (osdmap->is_out(id) || !should_dump(id)) {
         *kb = 0;
         *kb_used = 0;
 	*kb_used_data = 0;
@@ -4997,11 +5035,15 @@ protected:
   const OSDMap *osdmap;
   const PGMap& pgmap;
   bool tree;
+  const string class_name;
+  const string item_name;
   double average_util;
   double min_var;
   double max_var;
   double stddev;
   double sum;
+  set<int> allowed;
+  set<int> dumped_osds;
 };
 
 
@@ -5010,8 +5052,10 @@ public:
   typedef OSDUtilizationDumper<TextTable> Parent;
 
   OSDUtilizationPlainDumper(const CrushWrapper *crush, const OSDMap *osdmap,
-			    const PGMap& pgmap, bool tree) :
-    Parent(crush, osdmap, pgmap, tree) {}
+                            const PGMap& pgmap, bool tree,
+                            const string& class_name,
+                            const string& item_name) :
+    Parent(crush, osdmap, pgmap, tree, class_name, item_name) {}
 
   void dump(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
@@ -5035,15 +5079,16 @@ public:
 
     dump_stray(tbl);
 
+    auto sum = pgmap.get_osd_sum(get_dumped_osds());
     *tbl << ""
 	 << ""
 	 << "" << "TOTAL"
-	 << byte_u_t(pgmap.get_osd_sum().statfs.total)
-	 << byte_u_t(pgmap.get_osd_sum().statfs.get_used_raw())
-	 << byte_u_t(pgmap.get_osd_sum().statfs.allocated)
-	 << byte_u_t(pgmap.get_osd_sum().statfs.omap_allocated)
-	 << byte_u_t(pgmap.get_osd_sum().statfs.internal_metadata)
-	 << byte_u_t(pgmap.get_osd_sum().statfs.available)
+	 << byte_u_t(sum.statfs.total)
+	 << byte_u_t(sum.statfs.get_used_raw())
+	 << byte_u_t(sum.statfs.allocated)
+	 << byte_u_t(sum.statfs.omap_allocated)
+	 << byte_u_t(sum.statfs.internal_metadata)
+	 << byte_u_t(sum.statfs.available)
 	 << lowprecision_t(average_util)
 	 << ""
 	 << TextTable::endrow;
@@ -5144,8 +5189,10 @@ public:
   typedef OSDUtilizationDumper<Formatter> Parent;
 
   OSDUtilizationFormatDumper(const CrushWrapper *crush, const OSDMap *osdmap,
-			     const PGMap& pgmap, bool tree) :
-    Parent(crush, osdmap, pgmap, tree) {}
+                             const PGMap& pgmap, bool tree,
+                             const string& class_name,
+                             const string& item_name) :
+    Parent(crush, osdmap, pgmap, tree, class_name, item_name) {}
 
   void dump(Formatter *f) {
     f->open_array_section("nodes");
@@ -5199,7 +5246,8 @@ protected:
 public:
   void summary(Formatter *f) {
     f->open_object_section("summary");
-    auto& s = pgmap.get_osd_sum().statfs;
+    auto sum = pgmap.get_osd_sum(get_dumped_osds());
+    auto& s = sum.statfs;
 
     f->dump_int("total_kb", s.kb());
     f->dump_int("total_kb_used", s.kb_used_raw());
@@ -5216,21 +5264,25 @@ public:
 };
 
 void print_osd_utilization(const OSDMap& osdmap,
-			   const PGMap& pgmap,
-			   ostream& out,
-			   Formatter *f,
-			   bool tree)
+                           const PGMap& pgmap,
+                           ostream& out,
+                           Formatter *f,
+                           bool tree,
+                           const string& class_name,
+                           const string& item_name)
 {
   const CrushWrapper *crush = osdmap.crush.get();
   if (f) {
     f->open_object_section("df");
-    OSDUtilizationFormatDumper d(crush, &osdmap, pgmap, tree);
+    OSDUtilizationFormatDumper d(crush, &osdmap, pgmap, tree,
+                                 class_name, item_name);
     d.dump(f);
     d.summary(f);
     f->close_section();
     f->flush(out);
   } else {
-    OSDUtilizationPlainDumper d(crush, &osdmap, pgmap, tree);
+    OSDUtilizationPlainDumper d(crush, &osdmap, pgmap, tree,
+                                class_name, item_name);
     TextTable tbl;
     d.dump(&tbl);
     out << tbl << d.summary() << "\n";

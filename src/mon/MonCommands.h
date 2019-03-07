@@ -694,6 +694,10 @@ COMMAND("osd crush class ls-osd " \
         "name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
         "list all osds belonging to the specific <class>", \
         "osd", "r")
+COMMAND("osd crush get-device-class " \
+        "name=ids,type=CephString,n=N", \
+        "get classes of specified osd(s) <id> [<id>...]", \
+        "osd", "r")
 COMMAND("osd crush weight-set ls",
 	"list crush weight sets",
 	"osd", "r")
