@@ -19,18 +19,21 @@ namespace immutable_obj_cache {
 ObjectCacheStore::ObjectCacheStore(CephContext *cct)
       : m_cct(cct), m_rados(new librados::Rados()),
         m_ioctx_map_lock("ceph::cache::ObjectCacheStore::m_ioctx_map_lock") {
-  object_cache_max_size =
+  m_object_cache_max_size =
     m_cct->_conf.get_val<Option::size_t>("immutable_object_cache_max_size");
 
   m_cache_root_dir =
     m_cct->_conf.get_val<std::string>("immutable_object_cache_path");
 
+  m_cache_watermark =
+    m_cct->_conf.get_val<double>("immutable_object_cache_watermark");
+
   if (m_cache_root_dir.back() != '/') {
     m_cache_root_dir += "/";
   }
 
-  // TODO(dehao): allow to set cache level
-  m_policy = new SimplePolicy(m_cct, object_cache_max_size, 0.1);
+  m_policy = new SimplePolicy(m_cct, m_object_cache_max_size,
+                              m_cache_watermark);
 }
 
 ObjectCacheStore::~ObjectCacheStore() {
