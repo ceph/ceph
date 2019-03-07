@@ -467,25 +467,19 @@ protected:
   using ControlFrame::ControlFrame;
 };
 
-template <class T, typename... Args>
-struct SignedEncryptedFrame : public ControlFrame<T, Args...> {
-protected:
-  SignedEncryptedFrame() : ControlFrame<T, Args...>() {}
-};
-
 struct ClientIdentFrame
-    : public SignedEncryptedFrame<ClientIdentFrame, 
-                                  entity_addrvec_t,  // my addresses
-                                  entity_addr_t,  // target address
-                                  int64_t,  // global_id
-                                  uint64_t,  // global seq
-                                  uint64_t,  // supported features
-                                  uint64_t,  // required features
-                                  uint64_t,  // flags
-                                  uint64_t> {  // client cookie
+    : public ControlFrame<ClientIdentFrame,
+                          entity_addrvec_t,  // my addresses
+                          entity_addr_t,  // target address
+                          int64_t,  // global_id
+                          uint64_t,  // global seq
+                          uint64_t,  // supported features
+                          uint64_t,  // required features
+                          uint64_t,  // flags
+                          uint64_t> {  // client cookie
   static const Tag tag = Tag::CLIENT_IDENT;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
   inline entity_addr_t &target_addr() { return get_val<1>(); }
@@ -497,21 +491,21 @@ struct ClientIdentFrame
   inline uint64_t &cookie() { return get_val<7>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
 struct ServerIdentFrame
-    : public SignedEncryptedFrame<ServerIdentFrame,
-                                  entity_addrvec_t,  // my addresses
-                                  int64_t,  // global_id
-                                  uint64_t,  // global seq
-                                  uint64_t,  // supported features
-                                  uint64_t,  // required features
-                                  uint64_t,  // flags
-                                  uint64_t> {  // server cookie
+    : public ControlFrame<ServerIdentFrame,
+                          entity_addrvec_t,  // my addresses
+                          int64_t,  // global_id
+                          uint64_t,  // global seq
+                          uint64_t,  // supported features
+                          uint64_t,  // required features
+                          uint64_t,  // flags
+                          uint64_t> {  // server cookie
   static const Tag tag = Tag::SERVER_IDENT;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
   inline int64_t &gid() { return get_val<1>(); }
@@ -522,20 +516,20 @@ struct ServerIdentFrame
   inline uint64_t &cookie() { return get_val<6>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
 struct ReconnectFrame
-    : public SignedEncryptedFrame<ReconnectFrame, 
-                                  entity_addrvec_t,  // my addresses
-                                  uint64_t,  // client cookie
-                                  uint64_t,  // server cookie
-                                  uint64_t,  // global sequence
-                                  uint64_t,  // connect sequence
-                                  uint64_t> { // message sequence
+    : public ControlFrame<ReconnectFrame,
+                          entity_addrvec_t,  // my addresses
+                          uint64_t,  // client cookie
+                          uint64_t,  // server cookie
+                          uint64_t,  // global sequence
+                          uint64_t,  // connect sequence
+                          uint64_t> { // message sequence
   static const Tag tag = Tag::SESSION_RECONNECT;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline entity_addrvec_t &addrs() { return get_val<0>(); }
   inline uint64_t &client_cookie() { return get_val<1>(); }
@@ -545,84 +539,84 @@ struct ReconnectFrame
   inline uint64_t &msg_seq() { return get_val<5>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct ResetFrame : public SignedEncryptedFrame<ResetFrame,
-                                                bool> {  // full reset
+struct ResetFrame : public ControlFrame<ResetFrame,
+                                        bool> {  // full reset
   static const Tag tag = Tag::SESSION_RESET;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline bool &full() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct RetryFrame : public SignedEncryptedFrame<RetryFrame,
-                                                uint64_t> {  // connection seq
+struct RetryFrame : public ControlFrame<RetryFrame,
+                                        uint64_t> {  // connection seq
   static const Tag tag = Tag::SESSION_RETRY;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline uint64_t &connect_seq() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct RetryGlobalFrame : public SignedEncryptedFrame<RetryGlobalFrame,
-                                                      uint64_t> { // global seq
+struct RetryGlobalFrame : public ControlFrame<RetryGlobalFrame,
+                                              uint64_t> { // global seq
   static const Tag tag = Tag::SESSION_RETRY_GLOBAL;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline uint64_t &global_seq() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct WaitFrame : public SignedEncryptedFrame<WaitFrame> {
+struct WaitFrame : public ControlFrame<WaitFrame> {
   static const Tag tag = Tag::WAIT;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct ReconnectOkFrame : public SignedEncryptedFrame<ReconnectOkFrame,
-                                                      uint64_t> { // message seq
+struct ReconnectOkFrame : public ControlFrame<ReconnectOkFrame,
+                                              uint64_t> { // message seq
   static const Tag tag = Tag::SESSION_RECONNECT_OK;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline uint64_t &msg_seq() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
 struct IdentMissingFeaturesFrame 
-    : public SignedEncryptedFrame<IdentMissingFeaturesFrame,
-                                  uint64_t> { // missing features mask
+    : public ControlFrame<IdentMissingFeaturesFrame,
+                          uint64_t> { // missing features mask
   static const Tag tag = Tag::IDENT_MISSING_FEATURES;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline uint64_t &features() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct KeepAliveFrame : public SignedEncryptedFrame<KeepAliveFrame,
-                                                    utime_t> {  // timestamp
+struct KeepAliveFrame : public ControlFrame<KeepAliveFrame,
+                                            utime_t> {  // timestamp
   static const Tag tag = Tag::KEEPALIVE2;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   static KeepAliveFrame Encode() {
     return KeepAliveFrame::Encode(ceph_clock_now());
@@ -631,31 +625,31 @@ struct KeepAliveFrame : public SignedEncryptedFrame<KeepAliveFrame,
   inline utime_t &timestamp() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct KeepAliveFrameAck : public SignedEncryptedFrame<KeepAliveFrameAck,
-                                                       utime_t> { // ack timestamp
+struct KeepAliveFrameAck : public ControlFrame<KeepAliveFrameAck,
+                                               utime_t> { // ack timestamp
   static const Tag tag = Tag::KEEPALIVE2_ACK;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline utime_t &timestamp() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
-struct AckFrame : public SignedEncryptedFrame<AckFrame,
-                                              uint64_t> { // message sequence
+struct AckFrame : public ControlFrame<AckFrame,
+                                      uint64_t> { // message sequence
   static const Tag tag = Tag::ACK;
-  using SignedEncryptedFrame::Encode;
-  using SignedEncryptedFrame::Decode;
+  using ControlFrame::Encode;
+  using ControlFrame::Decode;
 
   inline uint64_t &seq() { return get_val<0>(); }
 
 protected:
-  using SignedEncryptedFrame::SignedEncryptedFrame;
+  using ControlFrame::ControlFrame;
 };
 
 // This class is used for encoding/decoding header of the message frame.
