@@ -148,9 +148,7 @@ void MDBalancer::handle_export_pins(void)
     }
   }
 
-  set<CDir *> authsubs;
-  mds->mdcache->get_auth_subtrees(authsubs);
-  for (auto &cd : authsubs) {
+  for (auto &cd : mds->mdcache->get_auth_subtrees()) {
     mds_rank_t export_pin = cd->inode->get_export_pin();
     dout(10) << "auth tree " << *cd << " export_pin=" << export_pin << dendl;
     if (export_pin >= 0 && export_pin != mds->get_nodeid()) {
@@ -366,12 +364,7 @@ void MDBalancer::send_heartbeat()
 
   // import_map -- how much do i import from whom
   map<mds_rank_t, float> import_map;
-  set<CDir*> authsubs;
-  mds->mdcache->get_auth_subtrees(authsubs);
-  for (set<CDir*>::iterator it = authsubs.begin();
-       it != authsubs.end();
-       ++it) {
-    CDir *im = *it;
+  for (auto& im : mds->mdcache->get_auth_subtrees()) {
     mds_rank_t from = im->inode->authority().first;
     if (from == mds->get_nodeid()) continue;
     if (im->get_inode()->is_stray()) continue;
@@ -838,10 +831,8 @@ void MDBalancer::try_rebalance(balance_state_t& state)
   // make a sorted list of my imports
   multimap<double, CDir*> import_pop_map;
   multimap<mds_rank_t, pair<CDir*, double> > import_from_map;
-  set<CDir*> fullauthsubs;
 
-  mds->mdcache->get_fullauth_subtrees(fullauthsubs);
-  for (auto dir : fullauthsubs) {
+  for (auto& dir : mds->mdcache->get_fullauth_subtrees()) {
     CInode *diri = dir->get_inode();
     if (diri->is_mdsdir())
       continue;
