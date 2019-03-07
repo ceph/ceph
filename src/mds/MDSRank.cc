@@ -762,8 +762,6 @@ void MDSRankDispatcher::tick()
 
   if (is_reconnect())
     server->reconnect_tick();
-  if (is_clientreplay())
-    maybe_clientreplay_done();
 
   if (is_active()) {
     balancer->tick();
@@ -1931,10 +1929,12 @@ void MDSRank::rejoin_done()
     return;
   }
 
-  if (replay_queue.empty() && !server->get_num_pending_reclaim())
+  if (replay_queue.empty() && !server->get_num_pending_reclaim()) {
     request_state(MDSMap::STATE_ACTIVE);
-  else
+  } else {
+    replaying_requests_done = replay_queue.empty();
     request_state(MDSMap::STATE_CLIENTREPLAY);
+  }
 }
 
 void MDSRank::clientreplay_start()
@@ -1952,25 +1952,27 @@ bool MDSRank::queue_one_replay()
     replay_queue.pop_front();
     return true;
   }
-  // don't go to active if there are session waiting for being reclaimed
-  if (!server->get_num_pending_reclaim())
-    mdlog->wait_for_safe(new C_MDS_VoidFn(this, &MDSRank::clientreplay_done));
+  if (!replaying_requests_done) {
+    replaying_requests_done = true;
+    mdlog->flush();
+  }
+  maybe_clientreplay_done();
   return false;
 }
 
 void MDSRank::maybe_clientreplay_done()
 {
-  if (is_clientreplay() &&
-      get_want_state() == MDSMap::STATE_CLIENTREPLAY &&
-      replay_queue.empty()) {
-    int num_requests = mdcache->get_num_client_requests();
-    int num_reclaim = server->get_num_pending_reclaim();
-    if (!num_requests && !num_reclaim) {
-      clientreplay_done();
-    } else {
-      dout(1) << " still have " << num_requests << " active replay requests, "
-	      << num_reclaim << " sessions need to be reclaimed" << dendl;
+  if (is_clientreplay() && get_want_state() == MDSMap::STATE_CLIENTREPLAY) {
+
+    // don't go to active if there are session waiting for being reclaimed
+    if (replaying_requests_done && !server->get_num_pending_reclaim()) {
+      mdlog->wait_for_safe(new C_MDS_VoidFn(this, &MDSRank::clientreplay_done));
+      return;
     }
+
+    dout(1) << " still have " << replay_queue.size() + (int)!replaying_requests_done
+	    << " requests need to be replayed, " << server->get_num_pending_reclaim()
+	    << " sessions need to be reclaimed" << dendl;
   }
 }
 
