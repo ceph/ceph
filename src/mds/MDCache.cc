@@ -11489,8 +11489,8 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
     MutationImpl::LockOpVec lov;
     lov.add_wrlock(&diri->dirfragtreelock);
     // prevent a racing gather on any other scatterlocks too
-    lov.add_wrlock(&diri->nestlock);
-    lov.add_wrlock(&diri->filelock);
+    lov.lock_scatter_gather(&diri->nestlock);
+    lov.lock_scatter_gather(&diri->filelock);
     if (!mds->locker->acquire_locks(mdr, lov, NULL, true))
       if (!mdr->aborted)
 	return;
