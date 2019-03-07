@@ -53,7 +53,8 @@ class ObjectCacheStore {
   Policy* m_policy;
   // TODO(dehao): make this configurable
   int m_dir_num = 10;
-  uint64_t object_cache_max_size;
+  uint64_t m_object_cache_max_size;
+  float m_cache_watermark;
   std::string m_cache_root_dir;
 };
 
